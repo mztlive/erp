@@ -19,8 +19,10 @@ API 只能翻译现有业务事实，不得借接口设计改变业务范围、�
 2. [两期数据模型](../erp-data-model.md)：稳定身份、字段、状态、版本、约束、幂等与审计；
 3. [商城数据映射](../erp-mall-data-mapping.md)：旧商城字段和来源接口兼容，不能反向改变规范模型；
 4. [页面与导航地图](../erp-page-map.md)：页面职责、入口、角色和启用阶段；
-5. [页面布局与交互规范](../erp-interaction-spec.md)：页面操作、反馈、批量、并发和异常恢复；
-6. 本目录：把上述事实冻结成前后端 HTTP 契约；下层不一致时修改 API 契约，不静默改变上层事实。
+5. [信息架构与作业流规范](../erp-information-architecture.md)：导航分组、工作区页签、任务接力、
+   命令面板、默认列集和单据视图形态；
+6. [页面布局与交互规范](../erp-interaction-spec.md)：页面操作、反馈、批量、并发和异常恢复；
+7. 本目录：把上述事实冻结成前后端 HTTP 契约；下层不一致时修改 API 契约，不静默改变上层事实。
 
 版本规则：
 
@@ -145,8 +147,23 @@ API 只能翻译现有业务事实，不得借接口设计改变业务范围、�
   `BackgroundJob`；
 - `complete-upload` 是文件状态机例外：返回 `202 FileAsset(status=SCANNING)`，`Location`
   指向 `GET /files/{fileId}` 供轮询，不创建 `BackgroundJob`；
-- 正式动作返回 `FormalActionResult`，固定包含新状态、生成单据或版本、下游任务和下一责任，
-  不能只返回 toast 文案或空响应。
+- 正式动作返回 `FormalActionResult`，固定包含新状态、生成单据或版本、下游任务、下一责任和
+  `nextActions`，不能只返回 toast 文案或空响应。
+
+`FormalActionResult.nextActions` 是任务接力契约，落实信息架构第 3 章。每项固定包含：
+
+| 字段 | 语义 |
+| --- | --- |
+| `actionCode` | 稳定动作码，前端据此选择图标与文案变体，不解析业务含义 |
+| `label` | 服务端下发的具体业务动词，例如"创建采购入库"，不允许"确定"这类无义文案 |
+| `href` | 目标页面的稳定路由，含预填 query；不得指向阶段名或非稳定身份 |
+| `prefill` | 目标页面创建层的预填内容，仅含调用者有权查看的字段 |
+| `enabled` | 当前用户此刻是否可执行 |
+| `blocker` | `enabled=false` 时的稳定阻断码与说明 |
+| `responsibility` | 下一责任部门与责任人；责任人不是当前用户时仍返回，前端禁用而不隐藏 |
+
+`nextActions` 由服务端按阶段、主责、状态、权限、数据范围和岗位分离计算，前端不得自行推导
+后续步骤。空数组表示该动作确实没有后继，前端展示"等待<责任部门>处理"，不展示空白区域。
 
 ### 3.5 状态、动作和阻断
 
@@ -316,9 +333,11 @@ OpenAPI 当前 29 个 path 是诚实、可生成客户端的核心规范；本 c
 
 | 页面/能力 | 查询端点 | 命令端点 | 契约说明 |
 | --- | --- | --- | --- |
-| 应用上下文 | `GET /context` | 无 | 当前用户、角色、权限摘要、业务时区、阶段功能和切换门禁 |
+| 应用上下文 | `GET /context` | 无 | 当前用户、角色、权限摘要、业务时区、阶段功能、切换门禁、导航工作区和命令面板清单 |
 | 全局搜索 | `GET /search` | 无 | 只搜索已授权资源；返回稳定对象类型、ID、编号、标题和可打开页面 |
 | 我的工作 | `GET /workbench` | 无 | 组合待办、预警、最近对象和后台任务，不注册新业务实体 |
+| 我的单据 | `GET /my-documents` | 无 | `ERP-WK-005`；当前用户维度的既有单据只读投影，不注册新实体 |
+| 单据视图 | `GET /{resource}/{id}/document-view` | 无 | 纸质投影所需的正式事实快照，见 5.11 |
 | 统一任务 | `GET /tasks`、`GET /tasks/{workItemId}` | `claim`、`renew-lease`、`release`、`transfer`、`close` | 领取和租约管理任务；正式处理必须调用强类型领域命令 |
 | 统一预警 | `GET /warnings`、`GET /warnings/{warningId}` | `convert-to-task`、`acknowledge` | 预警不直接修改正式业务事实 |
 | 后台任务 | `GET /jobs`、`GET /jobs/{jobId}`、`GET /jobs/{jobId}/items` | `cancel`、`resume` | `resume` 沿用原范围和幂等身份 |
@@ -337,6 +356,50 @@ OpenAPI 当前 29 个 path 是诚实、可生成客户端的核心规范；本 c
 
 页面 `/exceptions` 是 `GET /tasks?taskType=BUSINESS_EXCEPTION` 的固定投影；没有
 `/business-exceptions` CRUD。
+
+#### 5.1.1 导航与命令面板
+
+`GET /context` 除既有内容外返回 `navigation` 和 `commands`，落实信息架构第 2 章和第 4 章：
+
+- `navigation`：当前用户可见的工作区及其页签。每个工作区返回稳定 `workspaceCode`、标题、
+  默认路由和页签数组；每个页签返回页面编号、标题和稳定路由。服务端按角色、权限和阶段计算，
+  不返回无权限或未启用的页签。工作区分组是导航呈现，不是权限边界。
+- `commands`：命令面板的动作与前往清单。每项返回 `commandCode`、分组（`ACTION` 或
+  `NAVIGATE`）、标题、匹配关键词和目标路由。服务端只返回当前用户有权执行的命令，无权限项
+  直接不返回，不返回禁用项。`NAVIGATE` 命令必须覆盖全部有权访问的页面，包括当前角色导航中
+  未显示的页面。
+
+两者体积小且随权限变化，客户端在登录后一次取得并缓存到会话结束；命令面板在本地模糊匹配，
+输入过程不请求服务端。权限或阶段变化时服务端在任意响应的 `meta.warnings` 返回
+`CONTEXT_STALE`，客户端重新取得 `GET /context`。
+
+`ACTION` 命令只负责打开目标页面或确认层，不携带副作用，也不绕过 3.5 节的 `allowedActions`
+与确认层约束。
+
+#### 5.1.2 我的单据
+
+`GET /my-documents` 是当前用户维度的跨资源只读投影，支撑 `ERP-WK-005`：
+
+- `view` 参数固定为 `DRAFT`、`IN_FLIGHT`、`REJECTED`、`PARTICIPATED`；
+- 返回项统一为 `objectType`、稳定 ID、可展示编号、标题、对手方、金额摘要、主状态、
+  `primaryBlocker`、`updatedAt` 和 `href`；
+- 该端点不注册新业务实体，也不提供任何命令。全部动作在目标单据自身的强类型端点上执行；
+- 数据范围与各来源资源一致，不因聚合而放宽。用户看不到的单据不因"我参与过"而可见。
+
+#### 5.1.3 阻塞点
+
+列表摘要在 3.5 节的多轨状态之外增加 `primaryBlocker`，支撑信息架构 §6.3 的阻塞点列：
+
+| 字段 | 语义 |
+| --- | --- |
+| `blockerCode` | 稳定阻断码，与 `actionBlockers` 使用同一码表 |
+| `summary` | 一行阻塞说明 |
+| `responsibleParty` | 责任部门与责任人 |
+| `dueAt` | 该阻塞的到期时间，可为 `null` |
+| `additionalCount` | 同时存在的其他阻塞数量 |
+
+`primaryBlocker` 由服务端从 `actionBlockers` 和 `nextResponsibilities` 计算，取最早到期的一条；
+无阻塞时返回 `null`。它是派生展示字段，不替代多轨状态，客户端不得据此推导可执行动作。
 
 ### 5.2 销售与客户
 
@@ -361,6 +424,7 @@ OpenAPI 当前 29 个 path 是诚实、可生成客户端的核心规范；本 c
 | 采购单 | collection/detail `/purchase-orders`；版本 | `POST /purchase-orders`、`PUT /purchase-orders/{purchaseOrderId}/draft` | `submit-for-review`、`approve`、`reject`、`void-draft` |
 | 采购变更 | collection/detail `/purchase-change-orders` | `POST /purchase-change-orders`、`PUT .../draft` | `submit`、`review-inventory-impact`、`review-financial-impact`、`approve`、`reject` |
 | 采购退货 | collection/detail `/purchase-returns` | `POST /purchase-returns` 仅创建草稿 | `submit`、`post-outbound`、`record-refund`、`complete` |
+| 统一交付队列 | `GET /fulfillment-queue` | 无 | 只读跨资源投影，见下 |
 | 仓发与代发 | `GET /deliveries?deliveryType=WAREHOUSE_SHIP` 或 `GET /deliveries?deliveryType=SUPPLIER_DIRECT`；`GET /deliveries/{deliveryId}` | `POST /deliveries` 仅创建草稿 | `dispatch`、`confirm-delivered`、`reverse` |
 | 电子交付 | collection/detail `/electronic-deliveries` | `POST /electronic-deliveries` 仅创建草稿 | `deliver`、`submit-for-acceptance`、`reverse` |
 | 服务履约 | collection/detail `/service-fulfillments` | `POST /service-fulfillments` 仅创建草稿 | `complete-service`、`submit-for-acceptance`、`reverse` |
@@ -369,6 +433,18 @@ OpenAPI 当前 29 个 path 是诚实、可生成客户端的核心规范；本 c
 
 供应商连接接口只返回密钥管理引用和脱敏健康摘要；供应商协议、签名和真实端点属于
 `supplier-connector-v1.openapi.yaml`，不暴露给浏览器。
+
+`GET /fulfillment-queue` 支撑 `ERP-PUR-022`，落实交互规范 §9.5 中"三种履约方式共用同一流程"
+的既有事实：
+
+- 跨 `deliveries`、`electronic-deliveries`、`service-fulfillments` 和 `purchase-receipts`
+  返回统一的待履约投影，每项含 `objectType`、稳定 ID、`fulfillmentMethod`、来源销售单、
+  客户、SKU 与数量、要求交期、`primaryBlocker`、`allowedActions` 和 `href`；
+- `fulfillmentMethod` 使用既有的 `WAREHOUSE_SHIP`、`SUPPLIER_DIRECT`、`ELECTRONIC`、
+  `SERVICE` 和 `PURCHASE_RECEIPT`，不新增履约方式；
+- 该端点只读，不提供任何命令。履约动作仍调用各自资源上的强类型命令，先款后货门禁、
+  预占校验和事务边界不因聚合入口而改变；
+- 不建立 `fulfillment_queue` 正式实体，也不产生新的稳定业务身份。
 
 ### 5.4 商品与供应
 
@@ -463,6 +539,42 @@ API 不接收玩法规则、卡号、卡密、绑定手机号、生产或激活�
 | 期初迁移 | collection/detail `/initial-migrations`；验证报告 | `validate-in-staging`、`confirm-business-checklist`、`execute-production`、`resume` | 原始 SQL 不进入长期存储或下载 |
 | 接口监控 | `GET /integration-health`、`GET /integration-health/{connectionId}` | `run-diagnostic`、`create-error-task` | 只返回脱敏摘要，不返回密钥或完整报文 |
 | 主责迁移 | 见 5.7 | 见 5.7 | 复用稳定销售单，不复制单号和版本 |
+
+### 5.11 单据视图投影
+
+`GET /{resource}/{id}/document-view` 返回统一的 `DocumentView`，支撑信息架构第 5 章的单据视图、
+对比视图和审批处理台左栏。支持该端点的资源固定为：
+
+`sales-orders`、`sales-change-orders`、`purchase-orders`、`purchase-receipts`、`deliveries`、
+`invoices`、`customer-receipts`、`supplier-payments`、`supplier-settlements`。
+
+`DocumentView` 固定结构：
+
+| 字段 | 语义 |
+| --- | --- |
+| `issuer` | 出具方展示名称；仅用于抬头，不推导签约主体 |
+| `title`、`subtitle` | 单据名称与业务性质说明 |
+| `documentNo`、`revision` | 可展示编号与版本，均不作为路由主键 |
+| `status` | 主状态的展示标签与语义色调 |
+| `parties` | 固定两方，各含角色标签、名称、编号引用和字段数组 |
+| `metadata` | 单据级信息字段数组，例如合同、负责人、履约期限、付款条件 |
+| `lines` | 明细行数组，含服务端已按分舍入的金额 |
+| `columns` | 明细列定义，含标题、对齐和数值标记；按业务性质裁剪 |
+| `totals` | 汇总项数组，含标签、值、口径说明和强调标记 |
+| `remarks` | 备注正文 |
+| `signature`、`seal` | 签署与用章的展示内容 |
+
+约束：
+
+- `DocumentView` 是只读投影，不提供 `POST`、`PUT`、`PATCH`、`DELETE`，也不携带 `allowedActions`；
+  正式动作仍从详情端点取得；
+- 金额、税额、数量、汇总和大小写金额全部由服务端计算并按 3.1 节格式返回；客户端只排版，
+  不重建任何正式口径；
+- 敏感字段沿用 7 节的遮罩规则。银行账号、联系人手机号和税号在 `parties` 中默认遮罩，
+  完整值仍只能通过独立 reveal 命令取得，不因进入打印投影而放宽；
+- 版本对比时对同一资源的两个 `revision` 分别请求，服务端不提供合并差异的投影；差异高亮由
+  客户端按 `lines` 的稳定明细身份比对，不改变任一侧事实；
+- 卡券销售单的 `lines` 恰好一条，且不包含玩法规则、卡号、卡密、绑定手机号和激活字段。
 
 ---
 
