@@ -1,0 +1,256 @@
+"use client"
+
+import * as React from "react"
+import { SlidersHorizontalIcon } from "lucide-react"
+
+import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { Spinner } from "@/components/ui/spinner"
+import {
+  StatusBadge,
+  type StatusTone,
+} from "@/components/ui/status-badge"
+import { cn } from "@/lib/utils"
+
+type BusinessObjectOption = {
+  id: string
+  code: string
+  label: string
+  status: {
+    label: string
+    tone: StatusTone
+  }
+  validUntil?: string
+  description?: string
+}
+
+interface BusinessObjectComboboxProps {
+  items: readonly BusinessObjectOption[]
+  value?: string
+  onValueChange: (id?: string) => void
+  onSearchChange?: (query: string) => void
+  label: string
+  placeholder?: string
+  emptyLabel?: string
+  loading?: boolean
+  disabled?: boolean
+  required?: boolean
+  className?: string
+}
+
+function BusinessObjectCombobox({
+  items,
+  value,
+  onValueChange,
+  onSearchChange,
+  label,
+  placeholder = "搜索名称或编号",
+  emptyLabel = "没有符合条件的对象",
+  loading = false,
+  disabled = false,
+  required = false,
+  className,
+}: BusinessObjectComboboxProps) {
+  const selected = items.find((item) => item.id === value) ?? null
+
+  return (
+    <Combobox
+      items={[...items]}
+      value={selected}
+      onValueChange={(next) => onValueChange(next?.id)}
+      onInputValueChange={(query) => onSearchChange?.(query)}
+      itemToStringLabel={(item) => item.label}
+      itemToStringValue={(item) => item.id}
+      isItemEqualToValue={(item, current) => item.id === current.id}
+      disabled={disabled}
+      required={required}
+    >
+      <div
+        data-slot="business-object-combobox"
+        className={cn("min-w-0", className)}
+      >
+        <ComboboxInput
+          aria-label={label}
+          aria-busy={loading}
+          placeholder={placeholder}
+          showClear
+          disabled={disabled}
+          className="w-full"
+        />
+        <ComboboxContent>
+          <ComboboxEmpty>
+            {loading ? "正在加载…" : emptyLabel}
+          </ComboboxEmpty>
+          <ComboboxList>
+            {items.map((item) => (
+              <ComboboxItem key={item.id} value={item}>
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <span className="truncate font-medium">{item.label}</span>
+                    <StatusBadge
+                      tone={item.status.tone}
+                      label={item.status.label}
+                    />
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                    <span className="num">{item.code}</span>
+                    {item.validUntil ? (
+                      <span className="num">有效至 {item.validUntil}</span>
+                    ) : null}
+                    {item.description ? <span>{item.description}</span> : null}
+                  </div>
+                </div>
+              </ComboboxItem>
+            ))}
+          </ComboboxList>
+        </ComboboxContent>
+      </div>
+    </Combobox>
+  )
+}
+
+type SavedView = {
+  id: string
+  label: string
+  scope: "personal" | "team"
+  readOnly?: boolean
+}
+
+interface SavedViewPickerProps {
+  views: readonly SavedView[]
+  value?: string
+  onValueChange: (id?: string) => void
+  placeholder?: string
+  disabled?: boolean
+  actions?: React.ReactNode
+  className?: string
+}
+
+function SavedViewPicker({
+  views,
+  value,
+  onValueChange,
+  placeholder = "选择保存视图",
+  disabled,
+  actions,
+  className,
+}: SavedViewPickerProps) {
+  return (
+    <div
+      data-slot="saved-view-picker"
+      className={cn("flex items-center gap-2", className)}
+    >
+      <Select
+        items={views.map((view) => ({ value: view.id, label: view.label }))}
+        value={value ?? null}
+        onValueChange={(next) => onValueChange(next ?? undefined)}
+        disabled={disabled}
+      >
+        <SelectTrigger aria-label={placeholder}>
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {views.map((view) => (
+            <SelectItem key={view.id} value={view.id}>
+              <span>{view.label}</span>
+              <Badge variant={view.scope === "team" ? "info" : "neutral"}>
+                {view.scope === "team" ? "团队" : "个人"}
+              </Badge>
+              {view.readOnly ? <span className="sr-only">只读</span> : null}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {actions}
+    </div>
+  )
+}
+
+interface AdvancedFilterSheetProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  title?: React.ReactNode
+  description?: React.ReactNode
+  summary?: React.ReactNode
+  children: React.ReactNode
+  onReset: () => void
+  onApply: () => void
+  applying?: boolean
+}
+
+function AdvancedFilterSheet({
+  open,
+  onOpenChange,
+  title = "高级筛选",
+  description,
+  summary,
+  children,
+  onReset,
+  onApply,
+  applying = false,
+}: AdvancedFilterSheetProps) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" size="preview">
+        <SheetHeader className="border-b">
+          <SheetTitle className="flex items-center gap-2">
+            <SlidersHorizontalIcon className="size-4" aria-hidden="true" />
+            {title}
+          </SheetTitle>
+          {description ? (
+            <SheetDescription>{description}</SheetDescription>
+          ) : null}
+          {summary ? (
+            <div className="pt-2 text-sm text-muted-foreground">{summary}</div>
+          ) : null}
+        </SheetHeader>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-6">
+          {children}
+        </div>
+        <SheetFooter className="border-t">
+          <Button type="button" variant="outline" onClick={onReset}>
+            重置
+          </Button>
+          <Button type="button" onClick={onApply} disabled={applying}>
+            {applying ? <Spinner /> : null}
+            应用筛选
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+export {
+  AdvancedFilterSheet,
+  BusinessObjectCombobox,
+  SavedViewPicker,
+  type AdvancedFilterSheetProps,
+  type BusinessObjectComboboxProps,
+  type BusinessObjectOption,
+  type SavedView,
+  type SavedViewPickerProps,
+}

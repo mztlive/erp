@@ -27,10 +27,10 @@ import { PanelLeftIcon } from "lucide-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
-// 宽度对齐 docs/erp-interaction-spec.md §2.1：展开 208px，折叠 64px。
-const SIDEBAR_WIDTH = "13rem"
-const SIDEBAR_WIDTH_MOBILE = "18rem"
-const SIDEBAR_WIDTH_ICON = "4rem"
+// 宽度来自 globals.css 的应用壳尺寸令牌。
+const SIDEBAR_WIDTH = "var(--spacing-nav)"
+const SIDEBAR_WIDTH_MOBILE = "var(--spacing-nav-mobile)"
+const SIDEBAR_WIDTH_ICON = "var(--spacing-nav-icon)"
 const SIDEBAR_KEYBOARD_SHORTCUT = "b"
 
 type SidebarContextProps = {
@@ -485,7 +485,7 @@ const sidebarMenuButtonVariants = cva(
       variant: {
         default: "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
         outline:
-          "bg-background shadow-[0_0_0_1px_hsl(var(--sidebar-border))] hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_hsl(var(--sidebar-accent))]",
+          "bg-background shadow-none ring-1 ring-sidebar-border hover:bg-sidebar-accent hover:text-sidebar-accent-foreground hover:ring-sidebar-accent",
       },
       size: {
         default: "h-8 text-sm",

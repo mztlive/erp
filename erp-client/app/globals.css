@@ -39,6 +39,7 @@
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
+  --color-overlay: var(--overlay);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
@@ -96,6 +97,7 @@
   --spacing-row-comfortable: 2.75rem; /* 舒适密度行高 44px */
   --spacing-nav: 13rem; /* 左侧导航展开 208px */
   --spacing-nav-icon: 4rem; /* 左侧导航折叠 64px */
+  --spacing-nav-mobile: 18rem; /* 移动端抽屉导航 */
   --spacing-preview: 25rem; /* 右侧快速预览 400px */
   --spacing-shell: 90rem; /* 基准工作宽度 1440px */
 
@@ -175,6 +177,7 @@
   --neutral-border: oklch(0.885 0.008 258);
 
   --border: oklch(0.918 0.007 258);
+  --overlay: oklch(0.205 0.018 258 / 30%);
   --input: oklch(0.895 0.009 258); /* 输入框描边比分隔线略重 */
   --ring: oklch(0.588 0.187 259.5); /* 焦点环，键盘可见性 */
 
@@ -254,6 +257,7 @@
   --neutral-border: oklch(0.38 0.012 258);
 
   --border: oklch(1 0 0 / 11%);
+  --overlay: oklch(0.05 0.01 258 / 55%);
   --input: oklch(1 0 0 / 16%);
   --ring: oklch(0.646 0.142 253.9);
 
@@ -303,9 +307,12 @@
     @apply num text-right;
   }
 
-  /* 列表密度切换：标准 36px / 舒适 44px（§2.1，由用户偏好驱动） */
-  table[data-density="comfortable"] :is(th, td) {
-    height: var(--spacing-row-comfortable);
+  /* 列表密度切换：Table 单元格统一消费此语义尺寸。 */
+  table {
+    --table-row-height: var(--spacing-row);
+  }
+  table[data-density="comfortable"] {
+    --table-row-height: var(--spacing-row-comfortable);
   }
 
   /* 斑马纹按需开启；选中与悬停优先级高于斑马纹 */
