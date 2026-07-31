@@ -95,6 +95,26 @@
   --spacing-tabs: 2.25rem; /* 内部任务页签 36px */
   --spacing-row: 2.25rem; /* 标准列表行高 36px */
   --spacing-row-comfortable: 2.75rem; /* 舒适密度行高 44px */
+  --spacing-table-cell-inline: 0.75rem; /* 表格单元格横向留白 */
+  --spacing-table-cell-block: 0.25rem; /* 高密度单元格纵向留白 */
+  --spacing-table-cell-block-comfortable: 0.5rem; /* 多行单元格纵向留白 */
+  --spacing-table-frame-inset: 1.25rem; /* 内嵌表格与业务卡片边缘距离 */
+  --spacing-table-resize-target: 0.75rem; /* 列宽拖拽命中区 */
+  --spacing-table-column-default: 10rem;
+  --spacing-table-column-default-min: 8rem;
+  --spacing-table-column-selection: 2.5rem;
+  --spacing-table-column-reference: 20rem;
+  --spacing-table-column-reference-min: 16rem;
+  --spacing-table-column-status: 8rem;
+  --spacing-table-column-status-min: 7rem;
+  --spacing-table-column-amount: 11rem;
+  --spacing-table-column-amount-min: 9rem;
+  --spacing-table-column-quantity: 8rem;
+  --spacing-table-column-quantity-min: 7rem;
+  --spacing-table-column-rate: 7rem;
+  --spacing-table-column-rate-min: 6rem;
+  --spacing-table-column-tracks: 18rem;
+  --spacing-table-column-tracks-min: 16rem;
   --spacing-nav: 13rem; /* 左侧导航展开 208px */
   --spacing-nav-icon: 4rem; /* 左侧导航折叠 64px */
   --spacing-nav-mobile: 18rem; /* 移动端抽屉导航 */
@@ -310,9 +330,12 @@
   /* 列表密度切换：Table 单元格统一消费此语义尺寸。 */
   table {
     --table-row-height: var(--spacing-row);
+    --table-cell-inline: var(--spacing-table-cell-inline);
+    --table-cell-block: var(--spacing-table-cell-block);
   }
   table[data-density="comfortable"] {
     --table-row-height: var(--spacing-row-comfortable);
+    --table-cell-block: var(--spacing-table-cell-block-comfortable);
   }
 
   /* 斑马纹按需开启；选中与悬停优先级高于斑马纹 */

@@ -62,6 +62,38 @@ import {
 import { cn } from "@/lib/utils"
 
 type DataTableAlignment = "start" | "center" | "end"
+type DataTableColumnWidth =
+  "default" | "reference" | "status" | "amount" | "quantity" | "rate" | "tracks"
+type DataTableLayout = "inset" | "flush"
+
+const dataTableColumnWidthClasses: Record<DataTableColumnWidth, string> = {
+  default: "w-table-column-default min-w-table-column-default-min",
+  reference: "w-table-column-reference min-w-table-column-reference-min",
+  status: "w-table-column-status min-w-table-column-status-min",
+  amount: "w-table-column-amount min-w-table-column-amount-min",
+  quantity: "w-table-column-quantity min-w-table-column-quantity-min",
+  rate: "w-table-column-rate min-w-table-column-rate-min",
+  tracks: "w-table-column-tracks min-w-table-column-tracks-min",
+}
+
+const emptyColumnSizingInfo: ColumnSizingInfoState = {
+  columnSizingStart: [],
+  deltaOffset: null,
+  deltaPercentage: null,
+  isResizingColumn: false,
+  startOffset: null,
+  startSize: null,
+}
+
+type ColumnResizeSession = {
+  pointerId: number
+  columnId: string
+  startOffset: number
+  startSize: number
+  minSize: number
+  maxSize?: number
+  direction: 1 | -1
+}
 
 const rowInteractiveTargetSelector = [
   "button",
@@ -101,6 +133,8 @@ declare module "@tanstack/react-table" {
     align?: DataTableAlignment
     /** 金额、数量、比例与日期使用等宽数字。 */
     numeric?: boolean
+    /** 只声明业务语义宽度；实际尺寸来自主题 token。 */
+    width?: DataTableColumnWidth
     /** 系统列使用固定的语义布局，不开放业务列尺寸配置。 */
     role?: "selection"
   }
@@ -179,6 +213,8 @@ type DataTableProps<TData> = {
   enableRowSelection?: boolean | ((row: Row<TData>) => boolean)
   enableColumnResizing?: boolean
   enableColumnPinning?: boolean
+  /** inset 自带卡片内距与圆角边框；flush 由外部框架提供边界。 */
+  layout?: DataTableLayout
   density?: "compact" | "comfortable"
   striped?: boolean
   loading?: boolean
@@ -236,6 +272,7 @@ function DataTable<TData>({
   enableRowSelection = false,
   enableColumnResizing = true,
   enableColumnPinning = true,
+  layout = "flush",
   density = "compact",
   striped = false,
   loading = false,
@@ -249,6 +286,8 @@ function DataTable<TData>({
   className,
 }: DataTableProps<TData>) {
   const rowRefs = React.useRef(new Map<string, HTMLTableRowElement>())
+  const tableSurfaceRef = React.useRef<HTMLDivElement>(null)
+  const resizeSessionRef = React.useRef<ColumnResizeSession | null>(null)
 
   const [sorting, setSorting] = useControlledTableState({
     value: controlledSorting,
@@ -287,7 +326,7 @@ function DataTable<TData>({
   })
   const [columnSizingInfo, setColumnSizingInfo] = useControlledTableState({
     value: controlledColumnSizingInfo,
-    defaultValue: {} as ColumnSizingInfoState,
+    defaultValue: emptyColumnSizingInfo,
     onChange: onColumnSizingInfoChange,
   })
   const [columnFilters, setColumnFilters] = useControlledTableState({
@@ -305,7 +344,10 @@ function DataTable<TData>({
     () => ({
       id: "__selection",
       header: ({ table }) => (
-        <div onClick={(event) => event.stopPropagation()}>
+        <div
+          className="flex items-center justify-center"
+          onClick={(event) => event.stopPropagation()}
+        >
           <Checkbox
             checked={table.getIsAllPageRowsSelected()}
             indeterminate={table.getIsSomePageRowsSelected()}
@@ -317,7 +359,10 @@ function DataTable<TData>({
         </div>
       ),
       cell: ({ row }) => (
-        <div onClick={(event) => event.stopPropagation()}>
+        <div
+          className="flex items-center justify-center"
+          onClick={(event) => event.stopPropagation()}
+        >
           <Checkbox
             checked={row.getIsSelected()}
             indeterminate={row.getIsSomeSelected()}
@@ -388,6 +433,184 @@ function DataTable<TData>({
     autoResetPageIndex: false,
   })
 
+  const visibleColumnSignature = table
+    .getVisibleLeafColumns()
+    .map((column) => column.id)
+    .join("|")
+  const pinnedColumnSignature = [
+    table
+      .getLeftLeafColumns()
+      .filter((column) => column.getIsVisible())
+      .map((column) => column.id)
+      .join("|"),
+    table
+      .getRightLeafColumns()
+      .filter((column) => column.getIsVisible())
+      .map((column) => column.id)
+      .join("|"),
+  ].join("::")
+
+  // HTML table 会按容器和内容分配剩余空间。固定列偏移必须读取真实列宽，
+  // 不能使用 TanStack 的逻辑默认宽度，否则窄屏和缩放下会产生间隙或覆盖。
+  React.useLayoutEffect(() => {
+    const surface = tableSurfaceRef.current
+    if (!surface) return
+
+    const observedHeaders = new Set<Element>()
+    const resizeObserver = new ResizeObserver(() => syncPinnedColumnOffsets())
+
+    function observeLeafHeaders() {
+      surface
+        ?.querySelectorAll<HTMLElement>(
+          '[data-column-leaf="true"][data-column-id]'
+        )
+        .forEach((header) => {
+          if (observedHeaders.has(header)) return
+          observedHeaders.add(header)
+          resizeObserver.observe(header)
+        })
+    }
+
+    function syncPinnedColumnOffsets() {
+      if (!surface) return
+
+      const widths = new Map<string, number>()
+      surface
+        .querySelectorAll<HTMLElement>(
+          '[data-column-leaf="true"][data-column-id]'
+        )
+        .forEach((header) => {
+          const columnId = header.dataset.columnId
+          if (columnId)
+            widths.set(columnId, header.getBoundingClientRect().width)
+        })
+
+      const positions = new Map<
+        string,
+        { side: "left" | "right"; offset: number }
+      >()
+      let leftOffset = 0
+      table
+        .getLeftLeafColumns()
+        .filter((column) => column.getIsVisible())
+        .forEach((column) => {
+          positions.set(column.id, { side: "left", offset: leftOffset })
+          leftOffset += widths.get(column.id) ?? 0
+        })
+
+      let rightOffset = 0
+      table
+        .getRightLeafColumns()
+        .filter((column) => column.getIsVisible())
+        .reverse()
+        .forEach((column) => {
+          positions.set(column.id, { side: "right", offset: rightOffset })
+          rightOffset += widths.get(column.id) ?? 0
+        })
+
+      surface
+        .querySelectorAll<HTMLElement>("[data-column-id]")
+        .forEach((element) => {
+          const columnId = element.dataset.columnId
+          const position = columnId ? positions.get(columnId) : undefined
+          element.style.left =
+            position?.side === "left" ? `${position.offset}px` : ""
+          element.style.right =
+            position?.side === "right" ? `${position.offset}px` : ""
+        })
+    }
+
+    const mutationObserver = new MutationObserver(() => {
+      observeLeafHeaders()
+      syncPinnedColumnOffsets()
+    })
+
+    observeLeafHeaders()
+    resizeObserver.observe(surface)
+    mutationObserver.observe(surface, { childList: true, subtree: true })
+    syncPinnedColumnOffsets()
+
+    return () => {
+      resizeObserver.disconnect()
+      mutationObserver.disconnect()
+    }
+  }, [pinnedColumnSignature, table, visibleColumnSignature])
+
+  const beginColumnResize = (
+    event: React.PointerEvent<HTMLDivElement>,
+    column: Column<TData>
+  ) => {
+    if (event.button !== 0) return
+
+    const headerCell = event.currentTarget.closest("th")
+    if (!headerCell) return
+
+    event.preventDefault()
+    event.stopPropagation()
+    event.currentTarget.setPointerCapture(event.pointerId)
+
+    const startSize = headerCell.getBoundingClientRect().width
+    const computedStyle = window.getComputedStyle(headerCell)
+    const parsedMinSize = Number.parseFloat(computedStyle.minWidth)
+    const parsedMaxSize = Number.parseFloat(computedStyle.maxWidth)
+    const direction = computedStyle.direction === "rtl" ? -1 : 1
+
+    resizeSessionRef.current = {
+      pointerId: event.pointerId,
+      columnId: column.id,
+      startOffset: event.clientX,
+      startSize,
+      minSize: Number.isFinite(parsedMinSize) ? parsedMinSize : 0,
+      maxSize: Number.isFinite(parsedMaxSize) ? parsedMaxSize : undefined,
+      direction,
+    }
+    setColumnSizingInfo({
+      columnSizingStart: [[column.id, startSize]],
+      deltaOffset: 0,
+      deltaPercentage: 0,
+      isResizingColumn: column.id,
+      startOffset: event.clientX,
+      startSize,
+    })
+  }
+
+  const updateColumnResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = resizeSessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+
+    const deltaOffset =
+      (event.clientX - session.startOffset) * session.direction
+    const unconstrainedSize = session.startSize + deltaOffset
+    const nextSize = Math.max(
+      session.minSize,
+      session.maxSize === undefined
+        ? unconstrainedSize
+        : Math.min(session.maxSize, unconstrainedSize)
+    )
+
+    setColumnSizing((current) => ({
+      ...current,
+      [session.columnId]: nextSize,
+    }))
+    setColumnSizingInfo({
+      columnSizingStart: [[session.columnId, session.startSize]],
+      deltaOffset,
+      deltaPercentage:
+        session.startSize === 0 ? 0 : deltaOffset / session.startSize,
+      isResizingColumn: session.columnId,
+      startOffset: session.startOffset,
+      startSize: session.startSize,
+    })
+  }
+
+  const endColumnResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    const session = resizeSessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+
+    resizeSessionRef.current = null
+    setColumnSizingInfo(emptyColumnSizingInfo)
+  }
+
   const rows = table.getRowModel().rows
   const visibleColumnCount = table.getVisibleLeafColumns().length
   const interactive = Boolean(onRowPreview || onRowOpen || enableRowSelection)
@@ -400,19 +623,28 @@ function DataTable<TData>({
   return (
     <section
       data-slot="data-table"
-      className={cn("space-y-3", className)}
+      data-layout={layout}
+      className={cn(
+        "space-y-3",
+        layout === "inset" && "p-table-frame-inset",
+        className
+      )}
       aria-busy={loading}
     >
       {renderToolbar || showColumnVisibility ? (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="min-w-0 flex-1">{renderToolbar?.(table)}</div>
-          {showColumnVisibility ? (
-            <DataTableViewOptions table={table} />
-          ) : null}
+          {showColumnVisibility ? <DataTableViewOptions table={table} /> : null}
         </div>
       ) : null}
 
-      <div className="overflow-hidden rounded-lg border bg-card">
+      <div
+        ref={tableSurfaceRef}
+        className={cn(
+          "overflow-hidden bg-card",
+          layout === "inset" ? "rounded-lg border" : "border-y"
+        )}
+      >
         {loading && data.length > 0 ? (
           <div
             role="status"
@@ -426,7 +658,6 @@ function DataTable<TData>({
         <Table
           data-density={density}
           data-striped={striped ? "true" : undefined}
-          className={enableColumnResizing ? "w-max min-w-full" : undefined}
         >
           <TableCaption className="sr-only">{caption}</TableCaption>
           <TableHeader>
@@ -435,6 +666,7 @@ function DataTable<TData>({
                 {headerGroup.headers.map((header) => {
                   const sort = header.column.getIsSorted()
                   const meta = header.column.columnDef.meta
+                  const runtimeWidth = columnSizing[header.column.id]
                   const SortIcon =
                     sort === "asc"
                       ? ArrowUpIcon
@@ -446,18 +678,25 @@ function DataTable<TData>({
                     <TableHead
                       key={header.id}
                       colSpan={header.colSpan}
+                      data-column-id={header.column.id}
+                      data-column-leaf={
+                        header.subHeaders.length === 0 ? "true" : undefined
+                      }
+                      data-column-pinned={
+                        header.column.getIsPinned() || undefined
+                      }
                       data-align={meta?.align === "end" ? "end" : undefined}
                       className={cn(
                         "relative",
                         alignmentClass(meta?.align),
-                        systemColumnClass(meta?.role),
-                        pinningClass(header.column.getIsPinned())
+                        columnWidthClass(meta?.width, meta?.role),
+                        pinningClass(header.column.getIsPinned(), "header")
                       )}
                       style={{
-                        width: enableColumnResizing && !meta?.role
-                          ? header.getSize()
-                          : undefined,
-                        ...pinningStyle(header.column),
+                        width:
+                          enableColumnResizing && !meta?.role
+                            ? runtimeWidth
+                            : undefined,
                       }}
                       aria-sort={
                         sort === "asc"
@@ -474,6 +713,10 @@ function DataTable<TData>({
                           type="button"
                           variant="ghost"
                           size="xs"
+                          className={cn(
+                            "w-full px-0",
+                            sortableHeaderClass(meta?.align)
+                          )}
                           onClick={header.column.getToggleSortingHandler()}
                           aria-label={`按${meta?.label ?? header.column.id}排序`}
                         >
@@ -481,7 +724,7 @@ function DataTable<TData>({
                             header.column.columnDef.header,
                             header.getContext()
                           )}
-                          <SortIcon data-icon="inline-end" aria-hidden="true" />
+                          <SortIcon aria-hidden="true" />
                         </Button>
                       ) : (
                         flexRender(
@@ -495,12 +738,21 @@ function DataTable<TData>({
                           role="separator"
                           aria-label={`调整${meta?.label ?? header.column.id}列宽`}
                           aria-orientation="vertical"
-                          onDoubleClick={() => header.column.resetSize()}
-                          onMouseDown={header.getResizeHandler()}
-                          onTouchStart={header.getResizeHandler()}
+                          onDoubleClick={(event) => {
+                            event.stopPropagation()
+                            header.column.resetSize()
+                          }}
+                          onPointerDown={(event) =>
+                            beginColumnResize(event, header.column)
+                          }
+                          onPointerMove={updateColumnResize}
+                          onPointerUp={endColumnResize}
+                          onPointerCancel={endColumnResize}
+                          onLostPointerCapture={endColumnResize}
                           className={cn(
-                            "absolute inset-y-0 right-0 w-1 cursor-col-resize touch-none select-none hover:bg-ring",
-                            header.column.getIsResizing() && "bg-ring"
+                            "absolute inset-y-0 right-0 z-20 w-table-resize-target cursor-col-resize touch-none select-none after:absolute after:inset-y-0 after:right-0 after:w-px after:bg-transparent hover:after:bg-ring",
+                            columnSizingInfo.isResizingColumn ===
+                              header.column.id && "after:bg-ring"
                           )}
                         />
                       ) : null}
@@ -561,22 +813,27 @@ function DataTable<TData>({
                   >
                     {row.getVisibleCells().map((cell) => {
                       const meta = cell.column.columnDef.meta
+                      const runtimeWidth = columnSizing[cell.column.id]
 
                       return (
                         <TableCell
                           key={cell.id}
+                          data-column-id={cell.column.id}
+                          data-column-pinned={
+                            cell.column.getIsPinned() || undefined
+                          }
                           data-align={meta?.align === "end" ? "end" : undefined}
                           className={cn(
                             alignmentClass(meta?.align),
                             meta?.numeric && "num",
-                            systemColumnClass(meta?.role),
-                            pinningClass(cell.column.getIsPinned())
+                            columnWidthClass(meta?.width, meta?.role),
+                            pinningClass(cell.column.getIsPinned(), "cell")
                           )}
                           style={{
-                            width: enableColumnResizing && !meta?.role
-                              ? cell.column.getSize()
-                              : undefined,
-                            ...pinningStyle(cell.column),
+                            width:
+                              enableColumnResizing && !meta?.role
+                                ? runtimeWidth
+                                : undefined,
                           }}
                         >
                           {flexRender(
@@ -631,9 +888,7 @@ function DataTableViewOptions<TData>({
   return (
     <Popover>
       <PopoverTrigger
-        render={
-          <Button type="button" variant="outline" size="sm" />
-        }
+        render={<Button type="button" variant="outline" size="sm" />}
       >
         <Columns3Icon data-icon="inline-start" aria-hidden="true" />
         列设置
@@ -668,7 +923,11 @@ function DataTableViewOptions<TData>({
                     />
                     <span className="truncate">{label}</span>
                   </label>
-                  <div role="group" aria-label={`${label}列设置`} className="flex">
+                  <div
+                    role="group"
+                    aria-label={`${label}列设置`}
+                    className="flex"
+                  >
                     <Button
                       type="button"
                       variant="ghost"
@@ -750,9 +1009,11 @@ function moveColumn<TData>(
 
   const nextMovableIds = [...reorderedIds]
   table.setColumnOrder(
-    table.getAllLeafColumns().map((column) =>
-      column.getCanHide() ? (nextMovableIds.shift() ?? column.id) : column.id
-    )
+    table
+      .getAllLeafColumns()
+      .map((column) =>
+        column.getCanHide() ? (nextMovableIds.shift() ?? column.id) : column.id
+      )
   )
 }
 
@@ -771,17 +1032,19 @@ function DataTablePagination<TData>({
   return (
     <div
       data-slot="data-table-pagination"
-      className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between"
+      className="grid gap-3 text-sm sm:flex sm:items-center sm:gap-2"
     >
-      <div className="text-muted-foreground">
-        <span className="num">共 {rowCount.toLocaleString("zh-CN")} 条</span>
-        {selectedCount > 0 ? (
-          <span className="num">，已选择 {selectedCount.toLocaleString("zh-CN")} 条</span>
-        ) : null}
-      </div>
+      <div className="flex min-w-0 items-center justify-between gap-3 sm:contents">
+        <div className="min-w-0 text-muted-foreground sm:mr-auto">
+          <span className="num">共 {rowCount.toLocaleString("zh-CN")} 条</span>
+          {selectedCount > 0 ? (
+            <span className="num">
+              ，已选择 {selectedCount.toLocaleString("zh-CN")} 条
+            </span>
+          ) : null}
+        </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2 text-muted-foreground">
+        <label className="flex shrink-0 items-center gap-2 text-muted-foreground">
           每页
           <NativeSelect
             size="sm"
@@ -796,6 +1059,9 @@ function DataTablePagination<TData>({
             ))}
           </NativeSelect>
         </label>
+      </div>
+
+      <div className="flex items-center justify-between gap-3 sm:contents">
         <span className="num min-w-24 text-center text-muted-foreground">
           第 {pageCount === 0 ? 0 : pageIndex + 1} / {pageCount} 页
         </span>
@@ -852,21 +1118,33 @@ function alignmentClass(alignment: DataTableAlignment = "start") {
   return "text-left"
 }
 
-function pinningClass(pinned: false | "left" | "right") {
-  return pinned ? "sticky z-10 bg-inherit" : undefined
-}
-
-function systemColumnClass(role?: "selection") {
-  return role === "selection" ? "w-10 min-w-10 max-w-10" : undefined
-}
-
-function pinningStyle<TData>(column: Column<TData>): React.CSSProperties {
-  const pinned = column.getIsPinned()
-
-  return {
-    left: pinned === "left" ? column.getStart("left") : undefined,
-    right: pinned === "right" ? column.getAfter("right") : undefined,
+function sortableHeaderClass(alignment: DataTableAlignment = "start") {
+  if (alignment === "end") {
+    return "flex-row-reverse justify-start text-right"
   }
+  if (alignment === "center") return "justify-center text-center"
+  return "justify-start text-left"
+}
+
+function pinningClass(
+  pinned: false | "left" | "right",
+  area: "header" | "cell"
+) {
+  if (!pinned) return undefined
+  return area === "header"
+    ? "sticky z-10 bg-table-header"
+    : "sticky z-10 bg-inherit"
+}
+
+function columnWidthClass(
+  width: DataTableColumnWidth = "default",
+  role?: "selection"
+) {
+  if (role === "selection") {
+    return "w-table-column-selection min-w-table-column-selection max-w-table-column-selection"
+  }
+
+  return dataTableColumnWidthClasses[width]
 }
 
 export {
@@ -874,6 +1152,8 @@ export {
   DataTablePagination,
   DataTableViewOptions,
   type DataTableAlignment,
+  type DataTableColumnWidth,
+  type DataTableLayout,
   type DataTableProps,
 }
 

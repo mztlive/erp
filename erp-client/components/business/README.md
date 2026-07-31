@@ -5,7 +5,7 @@
 [页面布局与交互规范](../../../docs/erp-interaction-spec.md) 为依据，不复制业务状态机、金额
 计算、权限判断或网络请求。
 
-运行项目后访问 `/business-components` 可验收全部 63 个公开组件；预览实现见
+运行项目后访问 `/business-components` 可验收全部 64 个公开组件；预览实现见
 [业务组件预览页](../../app/business-components/page.tsx)。主题基础仍在 `/theme` 验收。
 
 ## 分层边界
@@ -31,6 +31,7 @@
 | 选择与筛选 | `BusinessObjectCombobox`、`SavedViewPicker`、`AdvancedFilterSheet` | `selectors.tsx` | 有效业务对象选择、个人/团队视图、高级筛选 |
 | 值与状态 | `BusinessStatusBadge`、`StatusTrackSummary`、`BusinessObjectRef`、`MoneyValue`、`QuantityValue`、`RateValue`、`DocumentTotals` | `values.tsx` | 多维状态、稳定对象引用、精确十进制展示、含税/不含税口径 |
 | 正式单据详情 | `DocumentHeader`、`DocumentSummary`、`DocumentSection`、`RevisionTimeline`、`RelatedDocumentList`、`ResponsibilityPanel` | `document.tsx` | 销售、采购、库存、票款、发票、结算等详情与版本追溯 |
+| 纸质单据预览 | `PaperDocument` | `paper-document.tsx` | 销售、采购、出入库、收付款和发票等正式单据的 A4 风格查看与打印投影 |
 | 单据编辑 | `EditableLineItemTable`、`ApprovalDecisionPanel`、`AllocationWorkspace` | `editor.tsx` | 行项目编辑、审批/确认、回款付款发票等多对多分配 |
 | 附件 | `DocumentAttachmentList` | `attachments.tsx` | 受控上传、扫描状态、必需附件和失败重试 |
 | 正式动作与协作 | `FormalActionConfirmDialog`、`SequentialProcessBar`、`BatchImpactPreview`、`ConflictResolutionDialog`、`EditorPresence` | `workflow.tsx` | 正式提交、连续处理、批量影响预览、ETag 冲突、编辑占用 |
@@ -81,7 +82,11 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 - `getRowId` 必须返回 ERP 不透明稳定 ID，不能使用行号、名称或外部单号；
 - 默认开启服务端分页、排序和筛选，TanStack 的 `pageIndex` 从 `0` 开始，API 的 `page`
   从 `1` 开始，适配只在 feature 查询层完成；
-- 列通过 `meta.label`、`meta.align` 和 `meta.numeric` 声明语义，不传颜色和任意样式；
+- 列通过 `meta.label`、`meta.align`、`meta.numeric` 和 `meta.width` 声明语义；
+  `meta.width` 只能使用 `reference`、`status`、`amount`、`quantity`、`rate`、`tracks`
+  等主题宽度档位，不传颜色、像素宽度或任意样式；
+- `layout="inset"` 用于需要自带业务卡片内距与边界的列表，`layout="flush"` 用于边界已由
+  外部框架提供的场景；多行复合单元格使用 `density="comfortable"`；
 - 页面选择只保存稳定 ID。选择“当前筛选全部结果”时必须调用批量预览 API 冻结选择快照，
   不能把客户端当前页推断为正式批量范围；
 - 正在刷新时保留已有行；初次加载、空态和失败态由业务框架明确区分；
@@ -95,8 +100,10 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
    `SelectionScopeBar` 和 `QuickPreviewSheet`。
 2. 正式详情页使用 `DocumentHeader` + `DocumentSummary` + `DocumentSection`，版本、关联单据和
    并行责任分别使用专用组件，不合并成单一“状态”。
-3. 编辑页把 TanStack Form 字段节点传入 `EditableLineItemTable` 或 `AllocationWorkspace`；
+3. 需要纸张或打印投影时使用 `PaperDocument`；页面必须传入服务端已经确认的行金额、汇总、
+   状态和签章内容，组件不代替后端计算正式结果。
+4. 编辑页把 TanStack Form 字段节点传入 `EditableLineItemTable` 或 `AllocationWorkspace`；
    组件不复制字段状态和校验。
-4. 正式命令先显示 `FormalActionConfirmDialog` 或 `BatchImpactPreview`，成功后固定展示
+5. 正式命令先显示 `FormalActionConfirmDialog` 或 `BatchImpactPreview`，成功后固定展示
    `FormalActionResult`，不能只用瞬时 toast。
-5. 业务异常、财务纠错和接口错误使用其真实任务或强类型事实投影，不创建通用 CRUD 卡片。
+6. 业务异常、财务纠错和接口错误使用其真实任务或强类型事实投影，不创建通用 CRUD 卡片。
