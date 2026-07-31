@@ -4,12 +4,23 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ==========================================================================
+   ERP 商务主题 — 企业标准蓝
+   --------------------------------------------------------------------------
+   色彩在 OKLCH 空间生成，同色相共用 hue，靠 L/C 分级。所有前景/背景组合
+   均按 WCAG 2.1 校验：正文 ≥ 7:1，次要文字与状态徽章 ≥ 4.5:1。
+   图表色板另经色盲（protan/deutan/tritan）分离度校验。
+
+   尺寸令牌来自 docs/erp-interaction-spec.md 第 2.1 节，勿随意改动。
+   ========================================================================== */
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-sans);
   --font-mono: var(--font-geist-mono);
   --font-heading: var(--font-sans);
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -18,15 +29,18 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
+
   --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
   --color-ring: var(--ring);
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -39,82 +53,238 @@
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
+
+  /* 单据状态色 —— 每族 4 个槽：实心底 / 实心字 / 浅底 / 浅底字 + 描边 */
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-success-soft: var(--success-soft);
+  --color-success-soft-foreground: var(--success-soft-foreground);
+  --color-success-border: var(--success-border);
+
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-soft-foreground: var(--warning-soft-foreground);
+  --color-warning-border: var(--warning-border);
+
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-info-soft: var(--info-soft);
+  --color-info-soft-foreground: var(--info-soft-foreground);
+  --color-info-border: var(--info-border);
+
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-soft-foreground: var(--destructive-soft-foreground);
+  --color-destructive-border: var(--destructive-border);
+
+  --color-neutral-soft: var(--neutral-soft);
+  --color-neutral-soft-foreground: var(--neutral-soft-foreground);
+  --color-neutral-border: var(--neutral-border);
+
+  /* 高密度表格与工具条表面 */
+  --color-surface-sunken: var(--surface-sunken);
+  --color-table-header: var(--table-header);
+  --color-row-hover: var(--row-hover);
+  --color-row-selected: var(--row-selected);
+  --color-row-striped: var(--row-striped);
+  --color-grid: var(--grid);
+
+  /* 应用壳尺寸 —— 对应 erp-interaction-spec 2.1 */
+  --spacing-topbar: 3rem; /* 顶部全局栏 48px */
+  --spacing-tabs: 2.25rem; /* 内部任务页签 36px */
+  --spacing-row: 2.25rem; /* 标准列表行高 36px */
+  --spacing-row-comfortable: 2.75rem; /* 舒适密度行高 44px */
+  --spacing-nav: 13rem; /* 左侧导航展开 208px */
+  --spacing-nav-icon: 4rem; /* 左侧导航折叠 64px */
+  --spacing-preview: 25rem; /* 右侧快速预览 400px */
+  --spacing-shell: 90rem; /* 基准工作宽度 1440px */
+
+  /* 圆角 —— 单一旋钮，整体压在 2~8px，保持单据系统的严谨感 */
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  --radius-xl: calc(var(--radius) * 1.25);
+  --radius-2xl: calc(var(--radius) * 1.5);
+  --radius-3xl: calc(var(--radius) * 1.75);
+  --radius-4xl: calc(var(--radius) * 2);
+
+  /* 阴影 —— 带蓝灰底色，避免纯黑阴影在浅蓝界面上发脏 */
+  --shadow-xs: 0 1px 2px 0 oklch(0.205 0.018 258 / 0.05);
+  --shadow-sm:
+    0 1px 2px 0 oklch(0.205 0.018 258 / 0.06),
+    0 1px 3px 0 oklch(0.205 0.018 258 / 0.08);
+  --shadow-md:
+    0 2px 4px -1px oklch(0.205 0.018 258 / 0.06),
+    0 4px 8px -2px oklch(0.205 0.018 258 / 0.1);
+  --shadow-lg:
+    0 4px 8px -2px oklch(0.205 0.018 258 / 0.06),
+    0 12px 20px -4px oklch(0.205 0.018 258 / 0.12);
 }
 
+/* --------------------------------------------------------------------------
+   浅色模式：白底内容区 + 深海军蓝导航
+   -------------------------------------------------------------------------- */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --radius: 0.25rem;
+
+  --background: oklch(0.987 0.002 258); /* #fafbfc 画布 */
+  --foreground: oklch(0.205 0.018 258); /* #12171f */
+  --card: oklch(1 0 0); /* #ffffff 内容面 */
+  --card-foreground: oklch(0.205 0.018 258);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.488 0.243 264.376);
-  --primary-foreground: oklch(0.97 0.014 254.604);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.488 0.243 264.376);
-  --accent-foreground: oklch(0.97 0.014 254.604);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --radius: 0;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.546 0.245 262.881);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --popover-foreground: oklch(0.205 0.018 258);
+
+  --primary: oklch(0.529 0.185 259.5); /* #1c65d4 */
+  --primary-foreground: oklch(1 0 0); /* 5.44:1 */
+  --secondary: oklch(0.962 0.004 258);
+  --secondary-foreground: oklch(0.279 0.021 258); /* 13.09:1 */
+  --muted: oklch(0.962 0.004 258);
+  --muted-foreground: oklch(0.535 0.017 258); /* 4.61:1 on muted */
+
+  /* accent 走浅蓝而非实心主色：下拉/命令面板逐项高亮时不喧宾夺主，
+     实心主色留给页面唯一主动作。 */
+  --accent: oklch(0.938 0.029 259.5); /* #dfebff */
+  --accent-foreground: oklch(0.383 0.132 259.5); /* 8.36:1 */
+
+  --destructive: oklch(0.545 0.205 27.5); /* #cd2121 */
+  --destructive-foreground: oklch(1 0 0); /* 5.48:1 */
+  --destructive-soft: oklch(0.955 0.021 27.5);
+  --destructive-soft-foreground: oklch(0.415 0.115 27.5); /* 7.92:1 */
+  --destructive-border: oklch(0.885 0.059 27.5);
+
+  --success: oklch(0.53 0.16 158); /* #00814f, 白字 4.94:1 */
+  --success-foreground: oklch(1 0 0);
+  --success-soft: oklch(0.955 0.035 158);
+  --success-soft-foreground: oklch(0.415 0.115 158); /* 7.32:1 */
+  --success-border: oklch(0.885 0.065 158);
+
+  --warning: oklch(0.56 0.16 78); /* #996a03, 白字 4.75:1 */
+  --warning-foreground: oklch(1 0 0);
+  --warning-soft: oklch(0.955 0.035 78);
+  --warning-soft-foreground: oklch(0.415 0.115 78); /* 7.65:1 */
+  --warning-border: oklch(0.885 0.065 78);
+
+  --info: oklch(0.56 0.16 259.5);
+  --info-foreground: oklch(1 0 0);
+  --info-soft: oklch(0.955 0.021 259.5);
+  --info-soft-foreground: oklch(0.415 0.115 259.5); /* 7.66:1 */
+  --info-border: oklch(0.885 0.055 259.5);
+
+  --neutral-soft: oklch(0.955 0.004 258);
+  --neutral-soft-foreground: oklch(0.415 0.02 258); /* 7.59:1 */
+  --neutral-border: oklch(0.885 0.008 258);
+
+  --border: oklch(0.918 0.007 258);
+  --input: oklch(0.895 0.009 258); /* 输入框描边比分隔线略重 */
+  --ring: oklch(0.588 0.187 259.5); /* 焦点环，键盘可见性 */
+
+  --surface-sunken: oklch(0.975 0.003 258); /* 筛选条 / 工具条 */
+  --table-header: oklch(0.968 0.004 258);
+  --row-hover: oklch(0.975 0.003 258);
+  --row-selected: oklch(0.955 0.021 259.5); /* 浅蓝，与 accent 同族 */
+  --row-striped: oklch(0.984 0.002 258);
+  --grid: oklch(0.940 0.005 258); /* 单元格内网格线，比 border 更轻 */
+
+  /* 图表分类色板 —— 已验证：色盲最差相邻 ΔE 12.3、常视 20.4、对底 ≥3:1 */
+  --chart-1: oklch(0.529 0.185 259.5); /* 蓝 #1c65d4 */
+  --chart-2: oklch(0.645 0.155 47); /* 橙 #e0662a */
+  --chart-3: oklch(0.615 0.115 175); /* 青 #12a08c */
+  --chart-4: oklch(0.635 0.138 78); /* 琥珀 #c58400 */
+  --chart-5: oklch(0.545 0.155 295); /* 紫 #7d5cc7 */
+
+  /* 深海军蓝导航：浅色模式下也保持深色，压住左侧、拉开与内容区边界 */
+  --sidebar: oklch(0.245 0.038 252); /* #122132 */
+  --sidebar-foreground: oklch(0.845 0.022 252); /* 10.11:1 */
+  --sidebar-primary: oklch(0.529 0.185 259.5); /* 选中项 */
+  --sidebar-primary-foreground: oklch(1 0 0); /* 5.44:1 */
+  --sidebar-accent: oklch(0.305 0.042 252); /* hover */
+  --sidebar-accent-foreground: oklch(0.93 0.02 252); /* 10.94:1 */
+  --sidebar-border: oklch(0.32 0.04 252);
+  --sidebar-ring: oklch(0.646 0.142 253.9);
 }
 
+/* --------------------------------------------------------------------------
+   深色模式：蓝灰底，非纯黑；主色改为浅蓝填充 + 深蓝文字，
+   这样 text-primary 作链接色在暗底上同样达标（6.27:1）。
+   -------------------------------------------------------------------------- */
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.424 0.199 265.638);
-  --primary-foreground: oklch(0.97 0.014 254.604);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.424 0.199 265.638);
-  --accent-foreground: oklch(0.97 0.014 254.604);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.623 0.214 259.815);
-  --sidebar-primary-foreground: oklch(0.97 0.014 254.604);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --background: oklch(0.168 0.016 258); /* #0b0f16 */
+  --foreground: oklch(0.965 0.004 258);
+  --card: oklch(0.212 0.017 258); /* #141921 */
+  --card-foreground: oklch(0.965 0.004 258);
+  --popover: oklch(0.212 0.017 258);
+  --popover-foreground: oklch(0.965 0.004 258);
+
+  --primary: oklch(0.688 0.152 259.5); /* #5f9af8 */
+  --primary-foreground: oklch(0.18 0.035 259.5); /* 6.67:1 */
+  --secondary: oklch(0.258 0.018 258);
+  --secondary-foreground: oklch(0.965 0.004 258);
+  --muted: oklch(0.258 0.018 258);
+  --muted-foreground: oklch(0.715 0.016 258); /* 6.21:1 on muted */
+
+  --accent: oklch(0.305 0.06 259.5);
+  --accent-foreground: oklch(0.885 0.055 259.5); /* 9.54:1 */
+
+  --destructive: oklch(0.66 0.17 27.5);
+  --destructive-foreground: oklch(0.18 0.04 27.5);
+  --destructive-soft: oklch(0.295 0.055 27.5);
+  --destructive-soft-foreground: oklch(0.845 0.09 27.5); /* 8.56:1 */
+  --destructive-border: oklch(0.40 0.09 27.5);
+
+  --success: oklch(0.66 0.15 158);
+  --success-foreground: oklch(0.18 0.04 158);
+  --success-soft: oklch(0.295 0.055 158);
+  --success-soft-foreground: oklch(0.845 0.09 158); /* 8.67:1 */
+  --success-border: oklch(0.40 0.08 158);
+
+  --warning: oklch(0.72 0.145 78);
+  --warning-foreground: oklch(0.18 0.04 78);
+  --warning-soft: oklch(0.295 0.055 78);
+  --warning-soft-foreground: oklch(0.845 0.09 78); /* 8.59:1 */
+  --warning-border: oklch(0.40 0.08 78);
+
+  --info: oklch(0.688 0.152 259.5);
+  --info-foreground: oklch(0.18 0.035 259.5);
+  --info-soft: oklch(0.295 0.055 259.5);
+  --info-soft-foreground: oklch(0.845 0.09 259.5); /* 8.62:1 */
+  --info-border: oklch(0.40 0.08 259.5);
+
+  --neutral-soft: oklch(0.285 0.008 258);
+  --neutral-soft-foreground: oklch(0.83 0.012 258); /* 8.55:1 */
+  --neutral-border: oklch(0.38 0.012 258);
+
+  --border: oklch(1 0 0 / 11%);
+  --input: oklch(1 0 0 / 16%);
+  --ring: oklch(0.646 0.142 253.9);
+
+  --surface-sunken: oklch(0.188 0.016 258);
+  --table-header: oklch(0.238 0.018 258);
+  --row-hover: oklch(0.248 0.018 258);
+  --row-selected: oklch(0.288 0.048 259.5);
+  --row-striped: oklch(0.226 0.017 258);
+  --grid: oklch(1 0 0 / 8%);
+
+  /* 图表色板暗色档 —— 同色相重新取阶，非明暗翻转；已单独验证通过 */
+  --chart-1: oklch(0.63 0.17 259.5); /* #4586ee */
+  --chart-2: oklch(0.655 0.155 47); /* #db6e30 */
+  --chart-3: oklch(0.645 0.115 175); /* #1fa48a */
+  --chart-4: oklch(0.665 0.138 78); /* #c18703 */
+  --chart-5: oklch(0.635 0.155 295); /* #9374dd */
+
+  --sidebar: oklch(0.148 0.015 258);
+  --sidebar-foreground: oklch(0.845 0.022 252);
+  --sidebar-primary: oklch(0.529 0.185 259.5);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.245 0.026 252);
+  --sidebar-accent-foreground: oklch(0.93 0.02 252);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.646 0.142 253.9);
+}
+
+/* 金额、数量、税率、日期用等宽数字，便于纵向核对（交互规范 §19）。 */
+@utility num {
+  font-variant-numeric: tabular-nums lining-nums slashed-zero;
+  font-feature-settings: "tnum" 1, "lnum" 1, "zero" 1;
 }
 
 @layer base {
@@ -126,5 +296,20 @@
   }
   html {
     @apply font-sans;
+  }
+  /* 表格内的数字列默认等宽右对齐，避免逐处标注（金额右对齐见 §4.4） */
+  th[data-align="end"],
+  td[data-align="end"] {
+    @apply num text-right;
+  }
+
+  /* 列表密度切换：标准 36px / 舒适 44px（§2.1，由用户偏好驱动） */
+  table[data-density="comfortable"] :is(th, td) {
+    height: var(--spacing-row-comfortable);
+  }
+
+  /* 斑马纹按需开启；选中与悬停优先级高于斑马纹 */
+  table[data-striped] tbody tr:nth-child(even):not([data-state="selected"]):not(:hover) {
+    background-color: var(--row-striped);
   }
 }
