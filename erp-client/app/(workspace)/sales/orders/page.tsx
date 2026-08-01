@@ -9,8 +9,18 @@ export const metadata: Metadata = {
 export default async function SalesOrdersPage({
   searchParams,
 }: {
-  searchParams: Promise<{ search?: string }>
+  searchParams: Promise<{ search?: string; nature?: string }>
 }) {
-  const { search = "" } = await searchParams
-  return <SalesOrdersListPage key={search} initialSearch={search} />
+  const { search = "", nature } = await searchParams
+  const initialNature =
+    nature === "card_voucher" || nature === "physical_service"
+      ? nature
+      : "all"
+  return (
+    <SalesOrdersListPage
+      key={`${search}:${initialNature}`}
+      initialSearch={search}
+      initialNature={initialNature}
+    />
+  )
 }

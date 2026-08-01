@@ -1,0 +1,219 @@
+/** W06 客户验收 — 类型对齐 docs/ui-workspaces/w06-customer-acceptance.md §8 */
+
+export type FulfillmentFactType =
+  | "WAREHOUSE_SHIP"
+  | "SUPPLIER_DIRECT"
+  | "ELECTRONIC"
+  | "SERVICE"
+
+export type AcceptanceOverallResult =
+  | "PASS"
+  | "SHORT"
+  | "REJECT"
+  | "SERVICE_FAIL"
+
+export type AcceptanceStatus = "DRAFT" | "POSTED" | "REVERSED"
+
+export type AllocationDirection = "APPLY" | "REVERSE"
+
+export type AcceptanceEligibleFact = {
+  fulfillmentLineId: string
+  fulfillmentFactType: FulfillmentFactType
+  fulfillmentNo: string
+  salesOrderLineId: string
+  lineNo: number
+  itemSnapshot: string
+  unitCode: string
+  occurredAt: string
+  /** 服务端扣除冲正后的有效履约数量 */
+  netSuccessfulQuantity: string
+  /** 服务端 APPLY − REVERSE 净分配 */
+  netAcceptedAllocatedQuantity: string
+  /** 服务端守恒：本次最多可验收 */
+  eligibleQuantity: string
+  carrier?: string
+  trackingNo?: string
+}
+
+export type AcceptanceAllocationRecord = {
+  fulfillmentLineId: string
+  fulfillmentNo: string
+  fulfillmentFactType: FulfillmentFactType
+  salesOrderLineId: string
+  direction: AllocationDirection
+  allocatedQuantity: string
+}
+
+export type AcceptanceLineRecord = {
+  salesOrderLineId: string
+  lineNo: number
+  itemSnapshot: string
+  unitCode: string
+  acceptedQuantity: string
+  shortQuantity: string
+  rejectedQuantity: string
+  reason?: string
+  allocations: AcceptanceAllocationRecord[]
+}
+
+export type AcceptanceHistoryItem = {
+  acceptanceId: string
+  acceptanceNo: string
+  status: Extract<AcceptanceStatus, "POSTED" | "REVERSED">
+  acceptedAt: string
+  postedAt: string
+  overallResult: AcceptanceOverallResult
+  lines: AcceptanceLineRecord[]
+  recordedBy: string
+  version: number
+  comment?: string
+  reversalOfAcceptanceId?: string
+  reversedByAcceptanceId?: string
+  /** 结果区文案：仅记录验收事实，不暗示库存/票款 */
+  factOnlyNotice: string
+}
+
+export type AcceptanceDraftLine = {
+  salesOrderLineId: string
+  acceptedQuantity: string
+  shortQuantity: string
+  rejectedQuantity: string
+  reason: string
+  allocations: Array<{
+    fulfillmentLineId: string
+    allocatedQuantity: string
+  }>
+}
+
+export type AcceptanceDraft = {
+  acceptanceDraftId: string
+  draftVersion: number
+  salesOrderId: string
+  acceptedAt: string
+  comment: string
+  lines: AcceptanceDraftLine[]
+  updatedAt: string
+}
+
+export type AcceptanceSalesLineGroup = {
+  salesOrderLineId: string
+  lineNo: number
+  itemSnapshot: string
+  unitCode: string
+  requiredQuantity: string
+  /** 服务端净已验收 */
+  netAcceptedQuantity: string
+  fulfillmentFacts: AcceptanceEligibleFact[]
+}
+
+export type CustomerAcceptanceWorkspaceView = {
+  salesOrder: {
+    id: string
+    salesOrderNo: string
+    businessType: "GOODS_SERVICE" | "CARD_VOUCHER"
+    customerLabel: string
+    commercialStatus: string
+    commercialStatusTone: string
+    fulfillmentProgress: string
+    collectionProgress: string
+    invoiceProgress: string
+    lockVersion: number
+    factsUpdatedAt: string
+  }
+  freshness: {
+    factsUpdatedAt: string
+    state: "fresh" | "syncing" | "failed"
+  }
+  metrics: {
+    eligibleFulfillmentCount: number
+    eligibleQuantityByUnit: Array<{ unitCode: string; quantity: string }>
+    overdueLineCount: number
+  }
+  salesLines: AcceptanceSalesLineGroup[]
+  draft: AcceptanceDraft | null
+  history: AcceptanceHistoryItem[]
+  permissions: {
+    allowedActions: string[]
+    actionBlockers: Array<{ action: string; code: string; message: string }>
+    fieldVisibility: Record<string, "full" | "masked" | "hidden">
+  }
+  /** Q2 未注册时永远不返回 workItem/lease */
+  workItem: null
+  lease: null
+  /** 直接带 workItemId 时的配置阻断（fail-closed） */
+  workItemConfigBlocker: string | null
+}
+
+export type PostAcceptanceInput = {
+  salesOrderId: string
+  acceptanceDraftId: string
+  expectedDraftVersion: number
+  expectedSalesOrderLockVersion: number
+  idempotencyKey: string
+  acceptedAt: string
+  comment: string
+  lines: AcceptanceDraftLine[]
+}
+
+export type PostAcceptanceResult =
+  | {
+      status: "succeeded"
+      acceptanceNo: string
+      acceptanceId: string
+      remainingEligibleCount: number
+      remainingEligibleQuantityLabel: string
+      overallResult: AcceptanceOverallResult
+      factOnlyNotice: string
+    }
+  | {
+      status: "unknown"
+      message: string
+      idempotencyKey: string
+    }
+  | {
+      status: "failed"
+      message: string
+    }
+
+export type ReverseAcceptanceInput = {
+  salesOrderId: string
+  acceptanceId: string
+  expectedAcceptanceVersion: number
+  reasonText: string
+  idempotencyKey: string
+}
+
+export type ReverseAcceptanceResult =
+  | {
+      status: "succeeded"
+      reverseAcceptanceNo: string
+      reverseAcceptanceId: string
+      originalAcceptanceNo: string
+    }
+  | { status: "failed"; message: string }
+
+export type SaveAcceptanceDraftInput = {
+  salesOrderId: string
+  acceptanceDraftId?: string
+  expectedDraftVersion?: number
+  acceptedAt: string
+  comment: string
+  lines: AcceptanceDraftLine[]
+}
+
+export const FULFILLMENT_TYPE_LABEL: Record<FulfillmentFactType, string> = {
+  WAREHOUSE_SHIP: "仓发",
+  SUPPLIER_DIRECT: "代发",
+  ELECTRONIC: "电子交付",
+  SERVICE: "服务履约",
+}
+
+export const OVERALL_RESULT_LABEL: Record<AcceptanceOverallResult, string> = {
+  PASS: "通过",
+  SHORT: "短少",
+  REJECT: "拒收",
+  SERVICE_FAIL: "服务不通过",
+}
+
+export const FACT_ONLY_NOTICE =
+  "本结果仅记录客户验收事实，不表示已退货、已退款、已扣库存或已减少应收。后续处理请从「变更与异常」发起。"

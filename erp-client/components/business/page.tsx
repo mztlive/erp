@@ -117,6 +117,8 @@ export type PageAction = Omit<ButtonProps, "children" | "size"> & {
   label: React.ReactNode
   icon?: LucideIcon
   iconPosition?: "start" | "end"
+  /** 手机端只保留安全的查看/刷新入口，写操作和全量导出应隐藏。 */
+  mobileVisibility?: "show" | "hide"
 }
 
 type LabeledButtonSize = Extract<
@@ -154,11 +156,21 @@ function PageActions({
           label,
           icon: Icon,
           iconPosition = "start",
+          mobileVisibility = "show",
+          className: actionClassName,
           ...buttonProps
         } = action
 
         return (
-          <Button key={actionKey} {...buttonProps} size={size}>
+          <Button
+            key={actionKey}
+            {...buttonProps}
+            size={size}
+            className={cn(
+              mobileVisibility === "hide" && "max-sm:hidden",
+              actionClassName
+            )}
+          >
             {Icon && iconPosition === "start" ? (
               <Icon data-icon="inline-start" aria-hidden="true" />
             ) : null}
@@ -194,16 +206,16 @@ function MetricItem({
   return (
     <div
       data-slot="metric-item"
-      className={cn("min-w-0 bg-card p-4", className)}
+      className={cn("min-w-0 bg-card p-2.5 sm:p-3", className)}
       {...props}
     >
       <span className="block text-sm text-muted-foreground">{label}</span>
       <div className="mt-1">
-        <div className="num text-2xl font-semibold tracking-tight text-foreground">
+        <div className="num text-xl font-semibold tracking-tight text-foreground">
           {value}
         </div>
         {detail || status ? (
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-1.5 flex flex-wrap items-center gap-2">
             {status ? <StatusBadge {...status} /> : null}
             {detail ? (
               <span className="text-xs text-muted-foreground">{detail}</span>
@@ -242,18 +254,18 @@ function MetricFilterItem({
         type="button"
         aria-pressed={active}
         className={cn(
-          "h-full w-full border-l-2 border-transparent p-4 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+          "h-full w-full border-l-2 border-transparent p-2.5 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:p-3 xl:flex xl:items-baseline xl:gap-2",
           active && "border-l-primary bg-accent text-accent-foreground",
           className
         )}
         {...props}
       >
-        <span className="block text-sm text-muted-foreground">{label}</span>
-        <span className="num mt-1 block text-2xl font-semibold tracking-tight text-foreground">
+        <span className="block text-sm text-muted-foreground xl:shrink-0">{label}</span>
+        <span className="num mt-1 block text-xl font-semibold tracking-tight text-foreground xl:mt-0">
           {value}
         </span>
         {detail ? (
-          <span className="mt-1 block text-xs text-muted-foreground">
+          <span className="mt-1 block text-xs text-muted-foreground xl:ml-auto xl:mt-0 xl:truncate">
             {detail}
           </span>
         ) : null}

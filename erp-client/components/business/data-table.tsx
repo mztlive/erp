@@ -641,7 +641,7 @@ function DataTable<TData>({
       <div
         ref={tableSurfaceRef}
         className={cn(
-          "overflow-hidden bg-card",
+          "overflow-x-auto bg-card",
           layout === "inset" ? "rounded-lg border" : "border-y"
         )}
       >
@@ -688,6 +688,7 @@ function DataTable<TData>({
                       data-align={meta?.align === "end" ? "end" : undefined}
                       className={cn(
                         "relative",
+                        header.column.id === "actions" && "max-sm:hidden",
                         alignmentClass(meta?.align),
                         columnWidthClass(meta?.width, meta?.role),
                         pinningClass(header.column.getIsPinned(), "header")
@@ -825,6 +826,7 @@ function DataTable<TData>({
                           data-align={meta?.align === "end" ? "end" : undefined}
                           className={cn(
                             alignmentClass(meta?.align),
+                            cell.column.id === "actions" && "max-sm:hidden",
                             meta?.numeric && "num",
                             columnWidthClass(meta?.width, meta?.role),
                             pinningClass(cell.column.getIsPinned(), "cell")
@@ -888,7 +890,14 @@ function DataTableViewOptions<TData>({
   return (
     <Popover>
       <PopoverTrigger
-        render={<Button type="button" variant="outline" size="sm" />}
+        render={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="max-sm:hidden"
+          />
+        }
       >
         <Columns3Icon data-icon="inline-start" aria-hidden="true" />
         列设置

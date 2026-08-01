@@ -1,0 +1,30 @@
+exit=0
+OK: /workspace not active on /workspace/tasks
+OK: /workspace/tasks active on itself
+OK: /workspace active on exact
+OK: scope slug
+OK: scope label
+OK: url has scope
+OK: url has work item
+OK: url has queue context
+OK: has queue task
+OK: W02 tasks expose specialized handlerHref
+OK: hold reference
+OK: held task remains in active queue
+OK: held task status is 已暂挂
+OK: complete reference
+OK: completed task removed from queue fetch
+OK: acceptance persisted on detail fetch
+OK: acceptance quantity round-trip
+OK: export helper exported
+OK: list has primary action label
+OK: 采购二次确认 opens specialized confirm queue
+OK: W02 role-pool task preserves scope in W07 handler
+OK: W01 mine includes only current viewer tasks
+OK: W01 role pool includes only unassigned tasks
+OK: W07 mine filters responsibility scope
+OK: W07 role pool filters responsibility scope
+OK: W07 today returns only current-date tasks
+OK: W07 overdue returns only overdue tasks
+All P1/P2 fix checks passed
+

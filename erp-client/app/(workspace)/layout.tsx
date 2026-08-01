@@ -1,3 +1,5 @@
+import { Suspense } from "react"
+
 import { WorkspaceShell } from "@/components/layout/workspace-shell"
 
 export default function WorkspaceLayout({
@@ -5,5 +7,9 @@ export default function WorkspaceLayout({
 }: {
   children: React.ReactNode
 }) {
-  return <WorkspaceShell>{children}</WorkspaceShell>
+  return (
+    <Suspense fallback={<div className="min-h-svh bg-background" />}>
+      <WorkspaceShell>{children}</WorkspaceShell>
+    </Suspense>
+  )
 }

@@ -1,0 +1,465 @@
+/**
+ * W25 商城消费订单 · 客户端契约
+ * 对齐 docs/ui-workspaces/w25-mall-consumption-orders.md §5 / §8
+ */
+
+import type { StatusTone } from "@/components/ui/status-badge"
+
+export type FulfillmentChain = "LEGACY_MANUAL" | "ERP_AUTOMATED"
+
+export type AttributionStatus =
+  | "ATTRIBUTED"
+  | "PENDING"
+  | "DIFFERENCE"
+
+export type CostBasis = "ACTUAL" | "STANDARD" | "NONE"
+
+export type PaymentSourceType = "CARD" | "WECHAT"
+
+export type PaymentSourceFilter = PaymentSourceType | "MIXED"
+
+export type DataSource = "REALTIME" | "BACKFILL" | "MIXED"
+
+export type FactType =
+  | "PAYMENT_SUCCEEDED"
+  | "ORDER_CANCELED"
+  | "REFUND_SUCCEEDED"
+  | "ORDER_COMPLETED"
+  | "CARD_BALANCE_RESTORED"
+
+export type SupplierFulfillmentStatus =
+  | "RECEIVED"
+  | "SUBMITTING"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "RESULT_UNKNOWN"
+  | "FULFILLING"
+  | "SHIPPED"
+  | "COMPLETED"
+  | "EXCEPTION"
+
+export type EmptyReason =
+  | "NO_DATA"
+  | "FILTER_EMPTY"
+  | "NO_SCOPE"
+  | "NO_PERMISSION"
+
+export type ListDemoFlag = "no-permission" | "no-scope" | "empty"
+
+export const FULFILLMENT_CHAIN_LABEL: Record<FulfillmentChain, string> = {
+  LEGACY_MANUAL: "原人工履约",
+  ERP_AUTOMATED: "ERP 自动履约",
+}
+
+export const FULFILLMENT_CHAIN_TONE: Record<FulfillmentChain, StatusTone> = {
+  LEGACY_MANUAL: "neutral",
+  ERP_AUTOMATED: "info",
+}
+
+export const ATTRIBUTION_STATUS_LABEL: Record<AttributionStatus, string> = {
+  ATTRIBUTED: "已归集",
+  PENDING: "待归集",
+  DIFFERENCE: "差异",
+}
+
+export const ATTRIBUTION_STATUS_TONE: Record<AttributionStatus, StatusTone> = {
+  ATTRIBUTED: "success",
+  PENDING: "warning",
+  DIFFERENCE: "destructive",
+}
+
+export const COST_BASIS_LABEL: Record<CostBasis, string> = {
+  ACTUAL: "ACTUAL",
+  STANDARD: "STANDARD",
+  NONE: "NONE",
+}
+
+export const COST_BASIS_TONE: Record<CostBasis, StatusTone> = {
+  ACTUAL: "success",
+  STANDARD: "info",
+  NONE: "warning",
+}
+
+export const FACT_TYPE_LABEL: Record<FactType, string> = {
+  PAYMENT_SUCCEEDED: "支付成功",
+  ORDER_CANCELED: "订单已取消",
+  REFUND_SUCCEEDED: "商城退款成功",
+  ORDER_COMPLETED: "商城订单已完成",
+  CARD_BALANCE_RESTORED: "卡券余额已恢复",
+}
+
+export const FACT_TYPE_TONE: Record<FactType, StatusTone> = {
+  PAYMENT_SUCCEEDED: "success",
+  ORDER_CANCELED: "neutral",
+  REFUND_SUCCEEDED: "warning",
+  ORDER_COMPLETED: "info",
+  CARD_BALANCE_RESTORED: "info",
+}
+
+export const SUPPLIER_STATUS_LABEL: Record<SupplierFulfillmentStatus, string> = {
+  RECEIVED: "已接收",
+  SUBMITTING: "下单中",
+  ACCEPTED: "已接单",
+  REJECTED: "已拒单",
+  RESULT_UNKNOWN: "结果未知",
+  FULFILLING: "履约中",
+  SHIPPED: "已发货",
+  COMPLETED: "已完成",
+  EXCEPTION: "异常",
+}
+
+export const DATA_SOURCE_LABEL: Record<DataSource, string> = {
+  REALTIME: "实时",
+  BACKFILL: "历史回填",
+  MIXED: "混合",
+}
+
+export type ActionBlocker = {
+  action: string
+  code: string
+  message: string
+}
+
+export type MallConsumptionOrderListQuery = {
+  q?: string
+  mallIds?: string[]
+  /** 事实发生期间；未配置默认策略时前端可不预填，mock 允许省略 */
+  occurredFrom?: string
+  occurredTo?: string
+  factTypes?: FactType[]
+  fulfillmentChains?: FulfillmentChain[]
+  attributionStatuses?: AttributionStatus[]
+  paymentSources?: PaymentSourceFilter[]
+  supplierStatuses?: string[]
+  costBases?: CostBasis[]
+  dataSources?: Array<"REALTIME" | "BACKFILL">
+  /** 指标快捷：paid | pending_attr | fact_diff | auto_exception | cost_none */
+  metric?: string
+  sort?: string
+  page?: number
+  pageSize?: number
+  demoFlag?: ListDemoFlag
+}
+
+/** W05 卡券销售单只读协同摘要；不参与销售单关闭条件。 */
+export type SalesOrderConsumptionSummary = {
+  salesOrderId: string
+  orderCount: number
+  paidAmount: string
+  refundedAmount: string
+  restoredBalanceAmount: string
+  latestFactAt?: string
+}
+
+export type PaymentComposition = {
+  cardAmount: string
+  wechatAmount: string
+  sourceCount: number
+}
+
+export type FactSummaryItem = {
+  factType: FactType
+  latestOccurredAt: string
+  count: number
+}
+
+export type CostBasisBreakdownItem = {
+  basis: CostBasis
+  lineCount: number
+  /** NONE 时省略，不展示 0 */
+  costAmount?: string
+}
+
+export type SupplierOrderSummary = {
+  total: number
+  statuses: string[]
+  hasException: boolean
+}
+
+export type MallConsumptionOrderRow = {
+  mallOrderId: string
+  mallId: string
+  mallName: string
+  externalOrderNo: string
+  customerId?: string
+  customerLabel: string
+  paidAt: string
+  paidAmount: string
+  paymentComposition: PaymentComposition
+  factSummary: FactSummaryItem[]
+  fulfillmentChain: FulfillmentChain
+  supplierOrderSummary: SupplierOrderSummary
+  attributionStatus: AttributionStatus
+  costBasisBreakdown: CostBasisBreakdownItem[]
+  dataSource: DataSource
+  allowedActions: string[]
+  actionBlockers: ActionBlocker[]
+  costBasisPolicyState: "CONFIGURED" | "UNCONFIGURED"
+  normalizedCostBasis?: CostBasis | "MIXED"
+}
+
+export type MallConsumptionOrderMetricKey =
+  | "paid"
+  | "pending_attr"
+  | "fact_diff"
+  | "auto_exception"
+  | "cost_none"
+
+export type MallConsumptionOrderMetric = {
+  key: MallConsumptionOrderMetricKey
+  label: string
+  value: number
+  detail?: string
+}
+
+export type MallConsumptionOrderListResult = {
+  rows: MallConsumptionOrderRow[]
+  pageInfo: { page: number; pageSize: number; total: number }
+  metrics: MallConsumptionOrderMetric[]
+  malls: Array<{ id: string; name: string }>
+  filterSummary: string
+  emptyReason?: EmptyReason
+  hasModulePermission: boolean
+  hasDataScope: boolean
+  permissionVersion: string
+  dataScopeVersion: string
+  factWatermark: string
+  queriedAt: string
+  /** 事实追溯只读边界说明 */
+  boundaryNotice: string
+}
+
+export type MallOrderFactView = {
+  factId: string
+  factType: FactType
+  businessFactKeySummary: string
+  externalOrderVersion: string
+  afterSalesRequestId?: string
+  originalPaymentFactId?: string
+  occurredAt: string
+  receivedAt: string
+  dataSource: "REALTIME" | "BACKFILL"
+  processingStatus: string
+  resultDetails: Record<string, string | number | null>
+}
+
+export type MallOrderItemView = {
+  mallOrderItemId: string
+  externalItemId: string
+  skuId?: string
+  productPublicationRevisionId?: string
+  supplierOfferingRevisionId?: string
+  nameSnapshot: string
+  specSnapshot: string
+  quantity: string
+  unitPriceGross: string
+  lineGrossAmount: string
+  allocatedDiscountAmount: string
+  allocatedFreightAmount: string
+  paidAmount: string
+  salesTaxRate: string
+  unitCostSnapshot?: string
+  costSnapshotTotal?: string
+  costTaxInclusion?: string
+  costInputTaxRate?: string
+  attributionStatus: AttributionStatus
+}
+
+export type CostAssessmentView = {
+  assessmentId: string
+  assessmentNo: number
+  costBasis: CostBasis
+  basisSourceLabel: string
+  /** NONE 时为空，不展示 0 */
+  grossAmount?: string
+  netAmount?: string
+  taxAmount?: string
+  taxInclusion?: string
+  inputTaxRate?: string
+  assessedAt: string
+  noneReason?: string
+}
+
+export type PaymentSourceView = {
+  paymentSourceId: string
+  sourceNo: number
+  sourceType: PaymentSourceType
+  amount: string
+  /** 短引用；卡实例标注非卡号 */
+  sourceReference: string
+  mallCardInstanceId?: string
+  attributionStatus: AttributionStatus
+  attributionIssue?: {
+    type: "SOURCE_OBJECT_MISSING" | "UNATTRIBUTED" | "BASELINE_CONFLICT"
+    ownerRole: "OPERATIONS" | "FINANCE"
+    workItemId?: string
+    correctionId?: string
+  }
+  origin?: {
+    customerId: string
+    customerLabel: string
+    salesOrderId: string
+    salesOrderNo: string
+    salesOrderLineId: string
+  }
+}
+
+export type FundingAllocation = {
+  mallOrderItemId: string
+  paymentSourceId: string
+  allocatedPaymentAmount: string
+}
+
+export type ConservationResult = {
+  itemRowResults: Array<{
+    mallOrderItemId: string
+    expected: string
+    actual: string
+    valid: boolean
+  }>
+  sourceColumnResults: Array<{
+    paymentSourceId: string
+    expected: string
+    actual: string
+    valid: boolean
+  }>
+  orderTotal: { expected: string; actual: string; valid: boolean }
+}
+
+export type ConsumptionEntryView = {
+  consumptionEntryId: string
+  factId: string
+  itemId: string
+  paymentSourceId: string
+  direction: "CONSUMPTION" | "REVERSAL"
+  amount: string
+  occurredAt: string
+  attributionStatus: AttributionStatus
+  originSalesOrderId?: string
+  reversesConsumptionEntryId?: string
+  currentCostAssessment: CostAssessmentView
+}
+
+export type SupplierOrderView = {
+  supplierFulfillmentOrderId: string
+  fulfillmentOrderNo: string
+  supplierLabel: string
+  itemIds: string[]
+  fulfillmentStatus: SupplierFulfillmentStatus
+  cancelStatus: string
+  refundStatus: string
+  supplierRefundSummary?: {
+    refundFactCount: number
+    costReductionGross: string
+    payableReductionGross: string
+    cashRefundGross: string
+    reversedPaymentAllocationCount: number
+  }
+}
+
+export type MallConsumptionOrderView = {
+  identity: {
+    mallOrderId: string
+    mallId: string
+    mallName: string
+    externalOrderNo: string
+    paymentFactId: string
+  }
+  customer: {
+    sourceCustomerRef: string
+    customerId?: string
+    customerLabel: string
+    attributionStatus: AttributionStatus
+  }
+  orderedAt: string
+  paidAt: string
+  amounts: {
+    gross: string
+    discount: string
+    freight: string
+    paid: string
+    conservationStatus: "VALID" | "DIFFERENCE"
+  }
+  fulfillment: {
+    chain: FulfillmentChain
+    cutoverId: string
+    cutoverAt: string
+    decidedByOccurredAt: string
+    /** T 后供给不足等阻断说明 */
+    autoFulfillmentBlocker?: string
+  }
+  facts: MallOrderFactView[]
+  items: MallOrderItemView[]
+  paymentSources: PaymentSourceView[]
+  fundingAllocations: FundingAllocation[]
+  conservation: ConservationResult
+  consumptionEntries: ConsumptionEntryView[]
+  supplierOrders: SupplierOrderView[]
+  address: { maskedSummary: string; revealAllowed: boolean }
+  phoneMasked: string
+  paymentRefMasked: string
+  freshness: {
+    factWatermark: string
+    attributionUpdatedAt: string
+    supplierUpdatedAt?: string
+    costAssessedAt?: string
+    queriedAt: string
+  }
+  allowedActions: string[]
+  actionBlockers: ActionBlocker[]
+  fieldPermissions: Record<string, "full" | "masked" | "hidden">
+  /** 支付已发生、履约/归集异常时展示 */
+  paymentOccurredAlert?: {
+    title: string
+    message: string
+    severity: "warning" | "destructive"
+  }
+  boundaryNotice: string
+  workItemIds: string[]
+}
+
+export type ExportCommand = {
+  selectionSnapshotId: string
+  fieldSetId: string
+  requestId: string
+  rowCount: number
+  filterSummary: string
+}
+
+export type ExportJobResult = {
+  jobId: string
+  requestId: string
+  rowCount: number
+  permissionVersion: string
+  fieldSetId: string
+  maskDisclaimer: string
+  expiresAt: string
+  downloadLabel: string
+  status: "queued" | "succeeded"
+}
+
+export type ObjectCenterSectionId =
+  | "overview"
+  | "facts"
+  | "items"
+  | "payment"
+  | "origin"
+  | "supplier"
+  | "cost"
+  | "aftersales"
+  | "audit"
+
+export const OBJECT_CENTER_SECTIONS: Array<{
+  id: ObjectCenterSectionId
+  label: string
+}> = [
+  { id: "overview", label: "概览" },
+  { id: "facts", label: "关键事实" },
+  { id: "items", label: "商品明细" },
+  { id: "payment", label: "支付与分摊" },
+  { id: "origin", label: "来源追溯" },
+  { id: "supplier", label: "供应商履约" },
+  { id: "cost", label: "成本口径" },
+  { id: "aftersales", label: "售后结果" },
+  { id: "audit", label: "审计" },
+]

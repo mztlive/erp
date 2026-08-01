@@ -1,0 +1,566 @@
+/**
+ * W26 · 供应商订单 · 客户端契约类型
+ * 对齐 docs/ui-workspaces/w26-supplier-orders.md §5/§7/§8
+ */
+
+import type { StatusTone } from "@/components/ui/status-badge"
+
+/** 履约主状态：九个正式枚举，不得把取消/退款折入 */
+export type SupplierFulfillmentStatus =
+  | "RECEIVED"
+  | "SUBMITTING"
+  | "ACCEPTED"
+  | "REJECTED"
+  | "RESULT_UNKNOWN"
+  | "FULFILLING"
+  | "SHIPPED"
+  | "COMPLETED"
+  | "EXCEPTION"
+
+export type CancelStatus =
+  | "NONE"
+  | "PROCESSING"
+  | "CANCELLED"
+  | "FAILED"
+  | "MANUAL"
+
+export type RefundStatus =
+  | "NONE"
+  | "PROCESSING"
+  | "PARTIAL"
+  | "FULL"
+  | "FAILED"
+  | "MANUAL"
+
+export type ListView = "actionable" | "all" | "recent_completed"
+
+export type DemoRole = "procurement" | "cs" | "ops" | "finance" | "admin"
+
+export type OrderSection =
+  | "overview"
+  | "items"
+  | "fulfillment"
+  | "aftersales"
+  | "costs"
+  | "audit"
+
+export type InvestigationOutcome =
+  | "VERIFIED_TERMINAL"
+  | "VERIFIED_NO_RESULT"
+  | "RESULT_UNKNOWN"
+
+export type ActionBlocker = {
+  action: string
+  code: string
+  message: string
+  destinationWorkspaceId?: string
+}
+
+export const FULFILLMENT_STATUS_LABEL: Record<
+  SupplierFulfillmentStatus,
+  string
+> = {
+  RECEIVED: "已接收",
+  SUBMITTING: "提交中",
+  ACCEPTED: "已接单",
+  REJECTED: "明确拒绝",
+  RESULT_UNKNOWN: "结果未知",
+  FULFILLING: "履约中",
+  SHIPPED: "已发货",
+  COMPLETED: "已完成",
+  EXCEPTION: "异常",
+}
+
+export const FULFILLMENT_STATUS_TONE: Record<
+  SupplierFulfillmentStatus,
+  StatusTone
+> = {
+  RECEIVED: "neutral",
+  SUBMITTING: "info",
+  ACCEPTED: "info",
+  REJECTED: "destructive",
+  RESULT_UNKNOWN: "warning",
+  FULFILLING: "info",
+  SHIPPED: "info",
+  COMPLETED: "success",
+  EXCEPTION: "destructive",
+}
+
+export const CANCEL_STATUS_LABEL: Record<CancelStatus, string> = {
+  NONE: "未发起",
+  PROCESSING: "处理中",
+  CANCELLED: "已取消",
+  FAILED: "失败",
+  MANUAL: "待人工",
+}
+
+export const CANCEL_STATUS_TONE: Record<CancelStatus, StatusTone> = {
+  NONE: "neutral",
+  PROCESSING: "info",
+  CANCELLED: "success",
+  FAILED: "destructive",
+  MANUAL: "warning",
+}
+
+export const REFUND_STATUS_LABEL: Record<RefundStatus, string> = {
+  NONE: "未发起",
+  PROCESSING: "处理中",
+  PARTIAL: "部分",
+  FULL: "全部",
+  FAILED: "失败",
+  MANUAL: "待人工",
+}
+
+export const REFUND_STATUS_TONE: Record<RefundStatus, StatusTone> = {
+  NONE: "neutral",
+  PROCESSING: "info",
+  PARTIAL: "info",
+  FULL: "success",
+  FAILED: "destructive",
+  MANUAL: "warning",
+}
+
+export const VIEW_LABEL: Record<ListView, string> = {
+  actionable: "可操作",
+  all: "全部",
+  recent_completed: "最近完成",
+}
+
+export const DEMO_ROLE_LABEL: Record<DemoRole, string> = {
+  procurement: "采购",
+  cs: "客服",
+  ops: "运营",
+  finance: "财务",
+  admin: "管理员",
+}
+
+export const SECTION_LABEL: Record<OrderSection, string> = {
+  overview: "概览",
+  items: "商品明细",
+  fulfillment: "履约与物流",
+  aftersales: "售后",
+  costs: "成本与结算",
+  audit: "动作与审计",
+}
+
+export const SECTIONS: OrderSection[] = [
+  "overview",
+  "items",
+  "fulfillment",
+  "aftersales",
+  "costs",
+  "audit",
+]
+
+export const FULFILLMENT_STATUSES: SupplierFulfillmentStatus[] = [
+  "RECEIVED",
+  "SUBMITTING",
+  "ACCEPTED",
+  "REJECTED",
+  "RESULT_UNKNOWN",
+  "FULFILLING",
+  "SHIPPED",
+  "COMPLETED",
+  "EXCEPTION",
+]
+
+export const CANCEL_STATUSES: CancelStatus[] = [
+  "NONE",
+  "PROCESSING",
+  "CANCELLED",
+  "FAILED",
+  "MANUAL",
+]
+
+export const REFUND_STATUSES: RefundStatus[] = [
+  "NONE",
+  "PROCESSING",
+  "PARTIAL",
+  "FULL",
+  "FAILED",
+  "MANUAL",
+]
+
+/** 默认可操作视图：结果未知、异常、售后待处理 */
+export const ACTIONABLE_FULFILLMENT: SupplierFulfillmentStatus[] = [
+  "RESULT_UNKNOWN",
+  "EXCEPTION",
+  "REJECTED",
+  "SUBMITTING",
+  "RECEIVED",
+]
+
+export type SupplierOrderListQuery = {
+  view: ListView
+  q?: string
+  supplierId?: string
+  fulfillmentStatuses?: SupplierFulfillmentStatus[]
+  cancelStatuses?: CancelStatus[]
+  refundStatuses?: RefundStatus[]
+  paidFrom?: string
+  paidTo?: string
+  page: number
+  pageSize: number
+  role: DemoRole
+  /** 演示：成本字段强制掩码 */
+  maskCost?: boolean
+  /** 演示：敏感地址无权限 */
+  noSensitive?: boolean
+}
+
+export type SupplierOrderListRow = {
+  orderId: string
+  orderNo: string
+  mallOrderId: string
+  mallOrderNo: string
+  supplierId: string
+  supplierName: string
+  externalOrderNo?: string
+  fulfillmentStatus: SupplierFulfillmentStatus
+  fulfillmentLabel: string
+  fulfillmentTone: StatusTone
+  cancelStatus: CancelStatus
+  cancelLabel: string
+  cancelTone: StatusTone
+  refundStatus: RefundStatus
+  refundLabel: string
+  refundTone: StatusTone
+  paidAt: string
+  updatedAt: string
+  lastBusinessAt: string
+  errorSummary?: string
+  allowedActions: string[]
+  actionBlockers: ActionBlocker[]
+  priority: number
+}
+
+export type SupplierOrderMetric = {
+  key: string
+  label: string
+  value: number
+  detail?: string
+  /** 指标一键筛选：写入 fulfillmentStatuses 或 view */
+  fulfillmentStatus?: SupplierFulfillmentStatus
+  view?: ListView
+  aftersalePending?: boolean
+}
+
+export type SupplierOrderListResult = {
+  rows: SupplierOrderListRow[]
+  pageInfo: { page: number; pageSize: number; total: number }
+  metrics: SupplierOrderMetric[]
+  permissionVersion: string
+  sourceAsOf: string
+  queriedAt: string
+}
+
+export type SupplierOrderItemView = {
+  itemId: string
+  mallLineId: string
+  productName: string
+  skuCode: string
+  quantity: string
+  unit: string
+  externalProductId: string
+  externalProductName: string
+  publicationVersion: string
+  supplyVersion: string
+  /** 下单成本快照；无字段权限时为 null */
+  unitCostGross: string | null
+  unitCostNet: string | null
+  inputTaxRate: string | null
+  /** 快照不可变提示 */
+  snapshotImmutable: true
+}
+
+export type LogisticsView = {
+  carrier?: string
+  trackingNo?: string
+  acceptedAt?: string
+  shippedAt?: string
+  completedAt?: string
+}
+
+export type StatusHistoryItem = {
+  id: string
+  at: string
+  track: "fulfillment" | "cancel" | "refund"
+  fromLabel: string
+  toLabel: string
+  source: string
+  note?: string
+}
+
+export type AfterSalesTrackView = {
+  requestId: string
+  requestNo: string
+  mallRequestRef: string
+  scope: string
+  requestedAt: string
+  /** 商城退款事实 */
+  mallRefund: {
+    status: "NONE" | "PENDING" | "PARTIAL" | "FULL" | "FAILED"
+    statusLabel: string
+    amount?: string | null
+    gapNote?: string
+  }
+  /** 卡券/余额恢复事实 */
+  cardRestore: {
+    status: "NONE" | "PENDING" | "DONE" | "NOT_APPLICABLE" | "FAILED"
+    statusLabel: string
+    gapNote?: string
+  }
+  /** 供应商退款事实 */
+  supplierRefund: {
+    status: RefundStatus
+    statusLabel: string
+    amount?: string | null
+    gapNote?: string
+  }
+  cancelStatus: CancelStatus
+  cancelLabel: string
+  allowedActions: string[]
+  actionBlockers: ActionBlocker[]
+}
+
+export type CostView = {
+  costMasked: boolean
+  cumulativeCostGross: string | null
+  cumulativeCostNet: string | null
+  costSource: string
+  costVariance?: string | null
+  settlementId?: string
+  settlementNo?: string
+  payableEntryLabel?: string
+}
+
+export type SupplierActionView = {
+  actionId: string
+  actionType:
+    | "PLACE"
+    | "QUERY_RESULT"
+    | "REPLAY"
+    | "CANCEL"
+    | "REFUND"
+    | "NOTE"
+  actionLabel: string
+  at: string
+  actor: string
+  outcomeLabel: string
+  outcomeTone: StatusTone
+  /** 幂等键尾部摘要，非完整键 */
+  idempotencyKeyTail: string
+  attemptCount: number
+  /** 技术摘要仅管理员可见；从不展示密钥/完整报文 */
+  techSummary?: string
+  operationId?: string
+}
+
+export type AddressRevealView = {
+  masked: string
+  /** 完整地址仅在短时揭示会话中返回 */
+  revealed?: string
+  phoneMasked: string
+  phoneRevealed?: string
+  recipientMasked: string
+  recipientRevealed?: string
+  canReveal: boolean
+  revealExpiresAt?: string
+  auditNote?: string
+}
+
+export type InvestigationEvidenceView = {
+  evidenceId: string
+  targetSupplierActionId: string
+  outcome: InvestigationOutcome
+  outcomeLabel: string
+  recordedAt: string
+  canSafeRetry: boolean
+  externalOrderNo?: string
+  summary: string
+}
+
+export type WorkItemView = {
+  workItemId: string
+  workItemType: "INTEGRATION_RESULT_UNKNOWN" | "BUSINESS_EXCEPTION"
+  businessObjectType: "SUPPLIER_FULFILLMENT_ORDER"
+  businessObjectId: string
+  subjectVersion: string
+  subjectHash: string
+  completionAction: string
+  allowedTaskActions: string[]
+  workItemStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "TRANSFERRED"
+  claimedBy?: { userId: string; displayName: string }
+  leaseVersion?: number
+  leaseExpiresAt?: string
+  held?: boolean
+}
+
+export type SupplierOrderDetailView = {
+  order: {
+    id: string
+    orderNo: string
+    mallOrderId: string
+    mallOrderNo: string
+    paidAt: string
+    paymentFactKey: string
+    fulfillmentChain: "ERP_AUTOMATED"
+    supplierId: string
+    supplierName: string
+    connectionCode: string
+    connectionEnvironment: string
+    supplyVersion: string
+    publicationVersion: string
+    externalOrderNo?: string
+    fulfillmentStatus: SupplierFulfillmentStatus
+    fulfillmentLabel: string
+    fulfillmentTone: StatusTone
+    cancelStatus: CancelStatus
+    cancelLabel: string
+    cancelTone: StatusTone
+    refundStatus: RefundStatus
+    refundLabel: string
+    refundTone: StatusTone
+    lockVersion: number
+    /** 始终强调：商城支付已发生 */
+    paymentOccurredNotice: string
+    errorSummary?: string
+  }
+  items: SupplierOrderItemView[]
+  logistics: LogisticsView
+  statusHistory: StatusHistoryItem[]
+  afterSales: AfterSalesTrackView[]
+  costs: CostView
+  actions: SupplierActionView[]
+  address: AddressRevealView
+  workItem?: WorkItemView
+  lastInvestigation?: InvestigationEvidenceView
+  /** 原下单动作 id，查询/重放目标 */
+  placeActionId: string
+  allowedActions: string[]
+  actionBlockers: ActionBlocker[]
+  freshness: { updatedAt: string; state: "fresh" | "stale" }
+  role: DemoRole
+}
+
+export type FormalActionResponse<T = unknown> = {
+  status: "succeeded" | "failed" | "unknown" | "blocked"
+  message: string
+  reference?: string
+  operationId?: string
+  data?: T
+}
+
+export type QueryResultInput = {
+  orderId: string
+  expectedLockVersion: number
+  targetSupplierActionId: string
+  operationId: string
+  idempotencyKey: string
+  /** 任务入口时必填 */
+  workItemId?: string
+  claimToken?: string
+  leaseVersion?: number
+  expectedSubjectVersion?: string
+  expectedSubjectHash?: string
+  simulateUnknown?: boolean
+}
+
+export type QueryResultData = {
+  evidence: InvestigationEvidenceView
+  lockVersion: number
+  workItemStatus?: "PENDING" | "IN_PROGRESS"
+  leaseVersion?: number
+  subjectHash?: string
+  allowedActions: string[]
+  actionBlockers: ActionBlocker[]
+}
+
+export type ReplayInput = {
+  orderId: string
+  expectedLockVersion: number
+  targetSupplierActionId: string
+  operationId: string
+  idempotencyKey: string
+  workItemId?: string
+  claimToken?: string
+  leaseVersion?: number
+  expectedSubjectVersion?: string
+  expectedSubjectHash?: string
+}
+
+export type ReplayResultData = {
+  evidence: InvestigationEvidenceView
+  lockVersion: number
+  workItemStatus?: "PENDING" | "IN_PROGRESS"
+  leaseVersion?: number
+  externalOrderNo?: string
+  fulfillmentStatus: SupplierFulfillmentStatus
+  allowedActions: string[]
+  actionBlockers: ActionBlocker[]
+}
+
+export type DeferTaskInput = {
+  orderId: string
+  workItemId: string
+  claimToken: string
+  leaseVersion: number
+  expectedSubjectHash: string
+  reasonCode: string
+  comment?: string
+  queueContextId: string
+  idempotencyKey: string
+}
+
+export type DeferTaskResult = {
+  reasonCode: string
+  queueContextId: string
+  leaseDisposition: "RENEWED" | "RELEASED"
+  nextQueueCursor?: string
+  workItemStatus: "PENDING" | "IN_PROGRESS"
+}
+
+export type AfterSalesActionInput = {
+  orderId: string
+  expectedLockVersion: number
+  action: "CANCEL" | "REFUND"
+  operationId: string
+  idempotencyKey: string
+  afterSalesRequestId: string
+  reasonCode?: string
+  comment?: string
+}
+
+export type AfterSalesActionResult = {
+  lockVersion: number
+  cancelStatus: CancelStatus
+  refundStatus: RefundStatus
+  actionRecordId: string
+  note: string
+}
+
+export type RevealAddressInput = {
+  orderId: string
+  reason: string
+}
+
+export type RevealAddressResult = {
+  address: AddressRevealView
+  auditEventId: string
+}
+
+export type NoteInput = {
+  orderId: string
+  expectedLockVersion: number
+  comment: string
+  idempotencyKey: string
+}
+
+export const DEFER_REASON_OPTIONS = [
+  { value: "WAITING_SUPPLIER", label: "等待供应商回复" },
+  { value: "WAITING_MALL", label: "等待商城协同" },
+  { value: "NEED_CLARIFICATION", label: "需业务澄清" },
+  { value: "OTHER", label: "其他" },
+] as const
+
+export const COST_MASK = "•••"

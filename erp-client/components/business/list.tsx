@@ -64,7 +64,7 @@ function ListToolbar({
       aria-label={ariaLabel}
       data-slot="list-toolbar"
       className={cn(
-        "flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between",
+        "flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between",
         className
       )}
       {...props}
@@ -329,7 +329,7 @@ function BusinessTableFrame({
       className={cn("gap-0 py-0", className)}
       {...props}
     >
-      <CardHeader className="py-5">
+      <CardHeader className="gap-1 py-2">
         <Heading className="font-heading text-base font-medium text-foreground">
           {title}
         </Heading>
@@ -343,7 +343,7 @@ function BusinessTableFrame({
 
       {hasControls ? (
         <>
-          <CardContent className="space-y-3 py-3">
+          <CardContent className="space-y-2 py-1.5">
             {toolbar}
             {selectionBar}
           </CardContent>

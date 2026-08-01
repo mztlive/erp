@@ -1,0 +1,12 @@
+TanStack Query usage:
+ - features/workspace/queries.ts useWorkspaceDashboardQuery
+ - features/sales-orders/queries.ts useSalesOrdersQuery
+ - features/sales-orders/sales-order-detail-page.tsx useQuery detail
+ - features/procurement-confirmation/queries.ts useProcurementConfirmationQuery
+ - features/workspace-kit/queries.ts useWorkspacePageQuery / useMasterDataPageQuery
+
+TanStack Form usage:
+ - features/procurement-confirmation/procurement-confirmation-page.tsx useAppForm reject
+ - features/sales-orders/sales-order-detail-page.tsx useAppForm acceptance
+
+No ad-hoc useEffect+fetch primary data paths on these pages.

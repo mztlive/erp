@@ -48,6 +48,8 @@ interface GlobalSearchBase {
   disabled?: boolean
   onChange?: React.ChangeEventHandler<HTMLInputElement>
   onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>
+  onFocus?: React.FocusEventHandler<HTMLInputElement>
+  onBlur?: React.FocusEventHandler<HTMLInputElement>
 }
 
 export type GlobalSearchConfig = GlobalSearchBase &
@@ -133,6 +135,8 @@ function GlobalTopbar({
             disabled={search.disabled}
             onChange={search.onChange}
             onKeyDown={search.onKeyDown}
+            onFocus={search.onFocus}
+            onBlur={search.onBlur}
           />
           {search.shortcut ? (
             <InputGroupAddon align="inline-end">
@@ -296,9 +300,11 @@ function MaintenanceBanner({
       {...props}
     >
       <Icon aria-hidden="true" />
-      <AlertTitle>{title}</AlertTitle>
+      <AlertTitle className="lg:whitespace-nowrap">{title}</AlertTitle>
       {description ? (
-        <AlertDescription>{description}</AlertDescription>
+        <AlertDescription className="lg:col-start-3 lg:row-start-1 lg:pr-20">
+          {description}
+        </AlertDescription>
       ) : null}
       {actionButton ? <AlertAction>{actionButton}</AlertAction> : null}
     </Alert>

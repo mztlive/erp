@@ -26,6 +26,7 @@ import {
 } from "@/components/ui/table"
 import {
   NATURE_LABEL,
+  ORIGIN_LABEL,
   OWNER_LABEL,
 } from "@/mock/sales-orders"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
@@ -85,14 +86,22 @@ export function SalesOrderPreviewPanel({ order }: SalesOrderPreviewPanelProps) {
             <SectionTitle>商务信息</SectionTitle>
             <div className="mb-2 flex flex-wrap gap-1.5">
               <Badge variant="secondary">{NATURE_LABEL[order.nature]}</Badge>
+              <Badge variant="outline">{ORIGIN_LABEL[order.originSystem]}</Badge>
               <Badge
                 variant={order.ownerSystem === "erp" ? "info" : "secondary"}
               >
                 {OWNER_LABEL[order.ownerSystem]}
               </Badge>
+              {order.originSystem !== order.ownerSystem ? (
+                <Badge variant="warning">主责已迁移</Badge>
+              ) : null}
             </div>
             <DescriptionList columns="one" className="gap-y-2.5">
-              <CompactField label="合同" value={order.contractNumber} numeric />
+              <CompactField
+                label="合同修订"
+                value={order.contractRevisionLabel}
+                numeric
+              />
               <CompactField label="结算主体" value={order.settlementEntity} />
               <CompactField label="付款条件" value={order.paymentTerms} />
               <CompactField
@@ -145,9 +154,41 @@ export function SalesOrderPreviewPanel({ order }: SalesOrderPreviewPanelProps) {
             </div>
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {isCard
-                ? "卡券不走采购履约链；票款与映射在对象中心处理。"
-                : "履约登记、票款核销、变更请在对象中心处理。"}
+                ? "卡券不走采购履约链；票款与映射在对象中心处理。不展示玩法/卡号/卡密。"
+                : "履约登记、票款核销、变更请在对象中心处理；正式单无直接编辑或人工关闭。"}
             </p>
+          </section>
+
+          <Separator />
+
+          <section className="space-y-2" aria-label="关闭条件摘要">
+            <SectionTitle>关闭条件</SectionTitle>
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {order.closeEligibility.note}
+            </p>
+            <div className="flex flex-wrap gap-1.5">
+              <Badge
+                variant={
+                  order.closeEligibility.fulfillmentComplete
+                    ? "success"
+                    : "secondary"
+                }
+              >
+                履约
+                {order.closeEligibility.fulfillmentComplete ? "已完成" : "未完成"}
+              </Badge>
+              <Badge
+                variant={
+                  order.closeEligibility.receivableSettled
+                    ? "success"
+                    : "secondary"
+                }
+              >
+                应收
+                {order.closeEligibility.receivableSettled ? "已结清" : "未结清"}
+              </Badge>
+              <Badge variant="outline">开票不阻塞</Badge>
+            </div>
           </section>
         </div>
       </ScrollArea>
@@ -298,8 +339,9 @@ export function SalesOrderPreviewPanel({ order }: SalesOrderPreviewPanelProps) {
               },
             ]}
             warning={
-              order.nature === "card_voucher" && order.ownerSystem === "mall"
-                ? "卡券商业字段由商城主责；ERP 侧预览只读。"
+              order.commercialReadOnly
+                ? order.commercialReadOnlyReason ??
+                  "商业字段只读；正式变化须走销售变更单。"
                 : undefined
             }
           />

@@ -1,0 +1,35 @@
+exit=0
+stdout:
+OK: W04 default shows all rows
+OK: W04 metric active filters to 有效
+OK: W04 metric active narrows list
+OK: W04 filterLabel 将到期 changes table
+OK: W10 metric zero filters 零可用
+OK: W10 filter 有在途 uses filterTags
+OK: W02 default scope shows all tasks
+OK: W02 待领取 scope filters tasks
+OK: W02 待领取 narrows queue
+OK: W02 团队 scope uses scopeTags
+OK: W03 default scope shows all customers
+OK: W03 协作客户 scope filters list
+OK: W03 协作客户 narrows list
+OK: W03 team scope + search hits 北辰
+OK: W14 sellable-items has rows
+OK: W14 title includes 可销售项目
+OK: W14 products has rows
+OK: W14 title includes 商品与 SKU
+OK: W14 voucher-categories has rows
+OK: W14 title includes 卡券类目
+OK: W14 suppliers has rows
+OK: W14 title includes 供应商与资质
+OK: W14 warehouses has rows
+OK: W14 title includes 仓库
+OK: sellable-items uses SI-* codes
+OK: warehouses uses WH-* codes
+OK: warehouses does not show sellable-item codes
+OK: sellable-items does not show warehouse codes
+OK: products uses SKU codes
+OK: suppliers fixture identity
+All workspace filter + W14 resource checks passed
+
+stderr:

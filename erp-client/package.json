@@ -6,7 +6,10 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "verify:workspaces": "node scripts/verify-workspaces.mjs",
+    "test:filter-orders": "node scripts/test-filter-orders.mjs",
+    "test:workspace-filters": "node scripts/test-workspace-filters.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

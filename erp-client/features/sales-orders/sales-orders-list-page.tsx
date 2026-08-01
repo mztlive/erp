@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import {
   DownloadIcon,
   FilterIcon,
@@ -10,10 +11,12 @@ import {
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 
 import {
+  BackgroundJobProgress,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
   DataTable,
+  FormalActionResult,
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
@@ -41,37 +44,52 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 import {
-  MOCK_SALES_ORDERS,
   NATURE_LABEL,
+  ORIGIN_LABEL,
   OWNER_LABEL,
 } from "@/mock/sales-orders"
 import { SalesOrderPaperDialog } from "@/features/sales-orders/sales-order-paper-dialog"
 import { SalesOrderPreviewPanel } from "@/features/sales-orders/sales-order-preview-panel"
+import {
+  computeSalesOrderMetrics,
+  filterSalesOrders,
+  salesOrderSummaryLabels,
+  type SalesOrderNatureFilter,
+  type SalesOrderOriginFilter,
+  type SalesOrderOwnerFilter,
+  type SalesOrderStatusFilter,
+  type SalesOrderSummaryFilter,
+} from "@/features/sales-orders/filter-orders"
+import {
+  useCreateSalesOrderExportJobMutation,
+  useSalesOrdersQuery,
+} from "@/features/sales-orders/queries"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
+import { PERMISSION_VERSION } from "@/features/sales-orders/api"
 
-type NatureFilter = "all" | "physical_service" | "card_voucher"
-type SummaryFilter = "all" | "pendingConfirm" | "inFulfillment" | "cardVoucher"
-type OwnerFilter = "all" | SalesOrderListItem["ownerSystem"]
-type StatusFilter = "all" | "待二次确认" | "履约中" | "已关闭"
+type NatureFilter = SalesOrderNatureFilter
+type SummaryFilter = SalesOrderSummaryFilter
+type OwnerFilter = SalesOrderOwnerFilter
+type OriginFilter = SalesOrderOriginFilter
+type StatusFilter = SalesOrderStatusFilter
 
-function matchesSearch(order: SalesOrderListItem, query: string) {
-  if (!query) return true
-  const q = query.trim().toLowerCase()
-  return (
-    order.documentNumber.toLowerCase().includes(q) ||
-    order.customerName.toLowerCase().includes(q) ||
-    order.contractNumber.toLowerCase().includes(q) ||
-    order.ownerName.toLowerCase().includes(q)
-  )
-}
-
-export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: string }) {
+export function SalesOrdersListPage({
+  initialSearch = "",
+  initialNature = "all",
+}: {
+  initialSearch?: string
+  initialNature?: NatureFilter
+}) {
+  const ordersQuery = useSalesOrdersQuery()
+  const exportMutation = useCreateSalesOrderExportJobMutation()
+  const allOrders = ordersQuery.data ?? []
   const [search, setSearch] = React.useState(initialSearch)
   const [natureFilter, setNatureFilter] =
-    React.useState<NatureFilter>("all")
+    React.useState<NatureFilter>(initialNature)
   const [summaryFilter, setSummaryFilter] =
     React.useState<SummaryFilter>("all")
   const [ownerFilter, setOwnerFilter] = React.useState<OwnerFilter>("all")
+  const [originFilter, setOriginFilter] = React.useState<OriginFilter>("all")
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all")
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: 0,
@@ -79,6 +97,12 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
   })
   const [previewId, setPreviewId] = React.useState<string | null>(null)
   const [paperId, setPaperId] = React.useState<string | null>(null)
+  const [exportJob, setExportJob] = React.useState<{
+    jobId: string
+    rowCount: number
+    permissionVersion: string
+    downloadLabel: string
+  } | null>(null)
 
   const resetPagination = React.useCallback(() => {
     setPagination((previous) =>
@@ -86,35 +110,26 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
     )
   }, [])
 
-  const filtered = React.useMemo(() => {
-    return MOCK_SALES_ORDERS.filter((order) => {
-      if (natureFilter !== "all" && order.nature !== natureFilter) {
-        return false
-      }
-      if (ownerFilter !== "all" && order.ownerSystem !== ownerFilter) {
-        return false
-      }
-      if (statusFilter !== "all" && order.primaryStatus.label !== statusFilter) {
-        return false
-      }
-      if (
-        summaryFilter === "pendingConfirm" &&
-        order.primaryStatus.label !== "待二次确认"
-      ) {
-        return false
-      }
-      if (
-        summaryFilter === "inFulfillment" &&
-        order.primaryStatus.label !== "履约中"
-      ) {
-        return false
-      }
-      if (summaryFilter === "cardVoucher" && order.nature !== "card_voucher") {
-        return false
-      }
-      return matchesSearch(order, search)
-    })
-  }, [natureFilter, ownerFilter, search, statusFilter, summaryFilter])
+  const filtered = React.useMemo(
+    () =>
+      filterSalesOrders(allOrders, {
+        search,
+        natureFilter,
+        summaryFilter,
+        ownerFilter,
+        originFilter,
+        statusFilter,
+      }),
+    [
+      allOrders,
+      natureFilter,
+      ownerFilter,
+      originFilter,
+      search,
+      statusFilter,
+      summaryFilter,
+    ]
+  )
 
   const pageRows = React.useMemo(() => {
     const start = pagination.pageIndex * pagination.pageSize
@@ -122,33 +137,36 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
   }, [filtered, pagination.pageIndex, pagination.pageSize])
 
   const previewOrder = React.useMemo(
-    () => MOCK_SALES_ORDERS.find((item) => item.id === previewId) ?? null,
-    [previewId]
+    () => allOrders.find((item) => item.id === previewId) ?? null,
+    [allOrders, previewId]
   )
 
   const paperOrder = React.useMemo(
-    () => MOCK_SALES_ORDERS.find((item) => item.id === paperId) ?? null,
-    [paperId]
+    () => allOrders.find((item) => item.id === paperId) ?? null,
+    [allOrders, paperId]
   )
 
-  const metrics = React.useMemo(() => {
-    const all = MOCK_SALES_ORDERS
-    return {
-      total: all.length,
-      pendingConfirm: all.filter(
-        (o) => o.primaryStatus.label === "待二次确认"
-      ).length,
-      inFulfillment: all.filter((o) => o.primaryStatus.label === "履约中")
-        .length,
-      cardVoucher: all.filter((o) => o.nature === "card_voucher").length,
-    }
-  }, [])
+  const metrics = React.useMemo(
+    () => computeSalesOrderMetrics(allOrders),
+    [allOrders]
+  )
 
   const openPaper = React.useCallback((id: string) => {
     setPaperId(id)
   }, [])
 
-  const exportCsv = React.useCallback(() => {
+  /** 诚实客户端导出：当前筛选结果 + 权限版本审计标签，非服务端后台全量。 */
+  const exportCsv = React.useCallback(async () => {
+    const job = await exportMutation.mutateAsync({
+      rowCount: filtered.length,
+    })
+    setExportJob({
+      jobId: job.jobId,
+      rowCount: job.rowCount,
+      permissionVersion: job.permissionVersion,
+      downloadLabel: job.downloadLabel,
+    })
+
     const quote = (value: string) => `"${value.replaceAll('"', '""')}"`
     const rows = filtered.map((order) =>
       [
@@ -157,6 +175,7 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
         order.contractNumber,
         NATURE_LABEL[order.nature],
         order.primaryStatus.label,
+        ORIGIN_LABEL[order.originSystem],
         OWNER_LABEL[order.ownerSystem],
         order.amountGross,
         order.ownerName,
@@ -166,7 +185,8 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
         .join(",")
     )
     const csv = [
-      "销售单号,客户,合同,业务性质,状态,主责系统,成交金额（含税）,负责人,提交时间",
+      `# permissionVersion=${job.permissionVersion}; source=client-filtered; audit=${job.jobId}`,
+      "销售单号,客户,合同,业务性质,状态,创建来源,当前主责,成交金额（含税）,负责人,提交时间",
       ...rows,
     ].join("\n")
     const url = URL.createObjectURL(
@@ -174,10 +194,10 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
     )
     const anchor = document.createElement("a")
     anchor.href = url
-    anchor.download = "销售单列表.csv"
+    anchor.download = `销售单列表_${job.jobId}.csv`
     anchor.click()
     URL.revokeObjectURL(url)
-  }, [filtered])
+  }, [exportMutation, filtered])
 
   const columns = React.useMemo<ColumnDef<SalesOrderListItem>[]>(
     () => [
@@ -200,16 +220,26 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
                 >
                   {row.original.documentNumber}
                 </Button>
-                <BusinessStatusBadge context="list" {...row.original.primaryStatus} />
+                <BusinessStatusBadge
+                  context="list"
+                  {...row.original.primaryStatus}
+                />
               </div>
               <div className="truncate text-xs text-muted-foreground">
                 {row.original.customerName}
               </div>
             </div>
-            <Badge variant="secondary" className="shrink-0">
-              {NATURE_LABEL[row.original.nature]}
-            </Badge>
           </div>
+        ),
+      },
+      {
+        id: "nature",
+        header: "业务性质",
+        meta: { label: "业务性质", width: "status" },
+        cell: ({ row }) => (
+          <Badge variant="secondary">
+            {NATURE_LABEL[row.original.nature]}
+          </Badge>
         ),
       },
       {
@@ -224,9 +254,19 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
         ),
       },
       {
+        id: "originSystem",
+        header: "创建来源",
+        meta: { label: "创建来源", width: "status" },
+        cell: ({ row }) => (
+          <Badge variant="outline">
+            {ORIGIN_LABEL[row.original.originSystem]}
+          </Badge>
+        ),
+      },
+      {
         id: "ownerSystem",
-        header: "主责",
-        meta: { label: "主责系统", width: "status" },
+        header: "当前主责",
+        meta: { label: "当前主责", width: "status" },
         cell: ({ row }) => (
           <Badge
             variant={
@@ -314,6 +354,14 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
               type="button"
               variant="outline"
               size="xs"
+              render={<Link href={`/sales/orders/${row.original.id}`} />}
+            >
+              打开
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
               onClick={() => openPaper(row.original.id)}
             >
               打印
@@ -325,11 +373,16 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
     [openPaper]
   )
 
+  const advancedActive =
+    ownerFilter !== "all" ||
+    originFilter !== "all" ||
+    statusFilter !== "all"
+
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
       <PageHeader
         title="销售单"
-        description="集中核对销售单状态、履约、票款与明细；单击任一行可在当前列表查看完整摘要。"
+        description="卡券与非卡券统一列表；创建来源与当前主责分列。单击行可预览主事实，正式动作在对象中心完成。"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "orders", label: "销售单", current: true },
@@ -339,7 +392,7 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
             updatedAt="刚刚"
             dateTime={new Date().toISOString()}
             state="fresh"
-            label="列表数据"
+            label={`列表 · 权限 ${PERMISSION_VERSION}`}
           />
         }
         actions={
@@ -350,52 +403,95 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
                 label: "导出",
                 icon: DownloadIcon,
                 variant: "outline",
-                disabled: filtered.length === 0,
-                onClick: exportCsv,
+                mobileVisibility: "hide",
+                disabled: filtered.length === 0 || exportMutation.isPending,
+                onClick: () => {
+                  void exportCsv()
+                },
               },
             ]}
           />
         }
       />
 
-      <MetricStrip columns={4} aria-label="销售单快速筛选">
+      {exportJob ? (
+        <div className="space-y-2">
+          <FormalActionResult
+            status="succeeded"
+            title="导出任务已完成（客户端筛选快照）"
+            description={`共 ${exportJob.rowCount} 行，受当前筛选与权限版本约束；目标页打开后应重新查询金额和状态。非服务端全量后台导出。`}
+            reference={exportJob.jobId}
+            facts={[
+              {
+                label: "权限版本",
+                value: exportJob.permissionVersion,
+              },
+              {
+                label: "文件",
+                value: exportJob.downloadLabel,
+              },
+            ]}
+          />
+          <BackgroundJobProgress
+            mode="all-or-nothing"
+            status="succeeded"
+            label="导出作业"
+            description={`审计标签 ${exportJob.jobId} · 客户端筛选快照`}
+            total={exportJob.rowCount}
+            completed={exportJob.rowCount}
+            succeeded={exportJob.rowCount}
+          />
+        </div>
+      ) : null}
+
+      <MetricStrip columns={5} aria-label="销售单快速筛选">
         <MetricFilterItem
-          label="全部销售单"
-          value={metrics.total}
-          detail="当前业务范围"
-          active={summaryFilter === "all"}
+          label="待处理"
+          value={metrics.pending}
+          detail="确认 / 审批 / 驳回"
+          active={summaryFilter === "pending"}
           onClick={() => {
-            setSummaryFilter("all")
+            setSummaryFilter("pending")
             resetPagination()
           }}
         />
         <MetricFilterItem
-          label="待二次确认"
-          value={metrics.pendingConfirm}
-          detail="采购确认闸门"
-          active={summaryFilter === "pendingConfirm"}
+          label="进行中"
+          value={metrics.inProgress}
+          detail="履约中 / 已生效"
+          active={summaryFilter === "inProgress"}
           onClick={() => {
-            setSummaryFilter("pendingConfirm")
+            setSummaryFilter("inProgress")
             resetPagination()
           }}
         />
         <MetricFilterItem
-          label="履约中"
-          value={metrics.inFulfillment}
-          detail="含长期卡券"
-          active={summaryFilter === "inFulfillment"}
+          label="待收款"
+          value={metrics.pendingCollection}
+          detail="未收 / 部分 / 待复核"
+          active={summaryFilter === "pendingCollection"}
           onClick={() => {
-            setSummaryFilter("inFulfillment")
+            setSummaryFilter("pendingCollection")
             resetPagination()
           }}
         />
         <MetricFilterItem
-          label="卡券销售单"
-          value={metrics.cardVoucher}
-          detail="主责系统可能为商城"
-          active={summaryFilter === "cardVoucher"}
+          label="履约异常"
+          value={metrics.fulfillmentException}
+          detail="部分履约等"
+          active={summaryFilter === "fulfillmentException"}
           onClick={() => {
-            setSummaryFilter("cardVoucher")
+            setSummaryFilter("fulfillmentException")
+            resetPagination()
+          }}
+        />
+        <MetricFilterItem
+          label="商城协同"
+          value={metrics.mallCollab}
+          detail="主责或票款复核"
+          active={summaryFilter === "mallCollab"}
+          onClick={() => {
+            setSummaryFilter("mallCollab")
             resetPagination()
           }}
         />
@@ -404,9 +500,13 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
       <BusinessTableFrame
         title="销售单列表"
         description={
-          summaryFilter === "all" && ownerFilter === "all" && statusFilter === "all"
-            ? "按提交时间查看当前业务范围内的销售单。"
-            : `当前筛选：${summaryFilter === "all" ? "全部指标" : summaryFilter === "pendingConfirm" ? "待二次确认" : summaryFilter === "inFulfillment" ? "履约中" : "卡券销售单"} · ${ownerFilter === "all" ? "全部主责" : OWNER_LABEL[ownerFilter]} · ${statusFilter === "all" ? "全部状态" : statusFilter}`
+          summaryFilter === "all" && !advancedActive
+            ? "按提交时间查看当前业务范围内的销售单；业务性质与主责分列。"
+            : `当前筛选：${salesOrderSummaryLabels(summaryFilter)}${
+                advancedActive
+                  ? ` · ${originFilter === "all" ? "全部来源" : ORIGIN_LABEL[originFilter]} · ${ownerFilter === "all" ? "全部主责" : OWNER_LABEL[ownerFilter]} · ${statusFilter === "all" ? "全部状态" : statusFilter}`
+                  : ""
+              }`
         }
         toolbar={
           <ListToolbar
@@ -447,11 +547,13 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
                 </ToggleGroup>
                 <Popover>
                   <PopoverTrigger
-                    render={<Button type="button" variant="outline" size="sm" />}
+                    render={
+                      <Button type="button" variant="outline" size="sm" />
+                    }
                   >
                     <FilterIcon data-icon="inline-start" aria-hidden="true" />
                     高级筛选
-                    {ownerFilter !== "all" || statusFilter !== "all" ? (
+                    {advancedActive ? (
                       <Badge variant="info">已启用</Badge>
                     ) : null}
                   </PopoverTrigger>
@@ -459,11 +561,32 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
                     <div>
                       <div className="font-medium">高级筛选</div>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        组合主责系统与主状态缩小结果范围。
+                        创建来源与当前主责分列筛选；主状态使用服务端枚举文案。
                       </p>
                     </div>
                     <label className="grid gap-1.5 text-sm">
-                      <span>主责系统</span>
+                      <span>创建来源</span>
+                      <NativeSelect
+                        className="w-full"
+                        value={originFilter}
+                        onChange={(event) => {
+                          setOriginFilter(event.target.value as OriginFilter)
+                          resetPagination()
+                        }}
+                      >
+                        <NativeSelectOption value="all">
+                          全部来源
+                        </NativeSelectOption>
+                        <NativeSelectOption value="erp">
+                          创建于 ERP
+                        </NativeSelectOption>
+                        <NativeSelectOption value="mall">
+                          创建于商城
+                        </NativeSelectOption>
+                      </NativeSelect>
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span>当前主责</span>
                       <NativeSelect
                         className="w-full"
                         value={ownerFilter}
@@ -472,9 +595,15 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
                           resetPagination()
                         }}
                       >
-                        <NativeSelectOption value="all">全部主责</NativeSelectOption>
-                        <NativeSelectOption value="erp">主责 ERP</NativeSelectOption>
-                        <NativeSelectOption value="mall">主责商城</NativeSelectOption>
+                        <NativeSelectOption value="all">
+                          全部主责
+                        </NativeSelectOption>
+                        <NativeSelectOption value="erp">
+                          主责 ERP
+                        </NativeSelectOption>
+                        <NativeSelectOption value="mall">
+                          主责商城
+                        </NativeSelectOption>
                       </NativeSelect>
                     </label>
                     <label className="grid gap-1.5 text-sm">
@@ -487,19 +616,44 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
                           resetPagination()
                         }}
                       >
-                        <NativeSelectOption value="all">全部状态</NativeSelectOption>
-                        <NativeSelectOption value="待二次确认">待二次确认</NativeSelectOption>
-                        <NativeSelectOption value="履约中">履约中</NativeSelectOption>
-                        <NativeSelectOption value="已关闭">已关闭</NativeSelectOption>
+                        <NativeSelectOption value="all">
+                          全部状态
+                        </NativeSelectOption>
+                        <NativeSelectOption value="待二次确认">
+                          待二次确认
+                        </NativeSelectOption>
+                        <NativeSelectOption value="待销售处理">
+                          待销售处理
+                        </NativeSelectOption>
+                        <NativeSelectOption value="待销售领导审批">
+                          待销售领导审批
+                        </NativeSelectOption>
+                        <NativeSelectOption value="待运营审批">
+                          待运营审批
+                        </NativeSelectOption>
+                        <NativeSelectOption value="履约中">
+                          履约中
+                        </NativeSelectOption>
+                        <NativeSelectOption value="已生效">
+                          已生效
+                        </NativeSelectOption>
+                        <NativeSelectOption value="已关闭">
+                          已关闭
+                        </NativeSelectOption>
+                        <NativeSelectOption value="草稿">草稿</NativeSelectOption>
+                        <NativeSelectOption value="已作废">
+                          已作废
+                        </NativeSelectOption>
                       </NativeSelect>
                     </label>
                     <Button
                       type="button"
                       variant="ghost"
                       size="sm"
-                      disabled={ownerFilter === "all" && statusFilter === "all"}
+                      disabled={!advancedActive}
                       onClick={() => {
                         setOwnerFilter("all")
+                        setOriginFilter("all")
                         setStatusFilter("all")
                         resetPagination()
                       }}
@@ -556,6 +710,9 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
                 context="preview"
                 {...previewOrder.primaryStatus}
               />
+              <Badge variant="outline">
+                {ORIGIN_LABEL[previewOrder.originSystem]}
+              </Badge>
               <Badge
                 variant={
                   previewOrder.ownerSystem === "erp" ? "info" : "secondary"
@@ -576,6 +733,13 @@ export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: st
                 onClick={() => setPreviewId(null)}
               >
                 关闭
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                render={<Link href={`/sales/orders/${previewOrder.id}`} />}
+              >
+                打开对象中心
               </Button>
               <Button
                 type="button"

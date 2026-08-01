@@ -1,0 +1,62 @@
+WORKSPACE_NAV_GROUPS hrefs:
+ - /workspace
+ - /workspace/tasks
+ - /sales/customers
+ - /sales/contracts
+ - /sales/orders
+ - /procurement/confirm
+ - /procurement/orders
+ - /fulfillment
+ - /inventory
+ - /finance/customer-accounts
+ - /finance/supplier-accounts
+ - /finance/card-funds-review
+ - /master-data/sellable-items
+ - /analytics/customer-quality
+ - /analytics/profit-loss
+ - /analytics/card-business
+ - /commerce/publications
+ - /commerce/execution-projections
+ - /commerce/consumption-orders
+ - /supplier-api/connections
+ - /supplier-api/catalog
+ - /supplier-api/orders
+ - /supplier-api/settlements
+ - /governance/mall-sync
+ - /governance/imports
+ - /governance/ownership-migrations
+ - /governance/integration-errors
+ - /governance/history-backfill
+ - /system/access-audit
+
+Registry navHrefs:
+ - W01: /workspace
+ - W02: /workspace/tasks
+ - W03: /sales/customers
+ - W04: /sales/contracts
+ - W05: /sales/orders
+ - W06: /sales/orders/so_1002?section=acceptance
+ - W07: /procurement/confirm
+ - W08: /procurement/orders
+ - W09: /fulfillment
+ - W10: /inventory
+ - W11: /finance/customer-accounts
+ - W12: /finance/supplier-accounts
+ - W13: /finance/card-funds-review
+ - W14: /master-data/sellable-items
+ - W15: /analytics/customer-quality
+ - W16: /analytics/profit-loss
+ - W17: /governance/mall-sync
+ - W18: /governance/imports
+ - W19: /system/access-audit
+ - W20: /supplier-api/connections
+ - W21: /supplier-api/catalog
+ - W22: /commerce/publications
+ - W23: /commerce/execution-projections
+ - W24: /governance/ownership-migrations
+ - W25: /commerce/consumption-orders
+ - W26: /supplier-api/orders
+ - W27: /supplier-api/settlements
+ - W28: /analytics/card-business
+ - W29: /governance/integration-errors
+ - W30: /governance/history-backfill

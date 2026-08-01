@@ -1,0 +1,14 @@
+exit=0
+stdout:
+OK: mock has orders
+OK: search by document number
+OK: search miss
+OK: pending filter
+OK: pending non-empty
+OK: cardVoucher filter
+OK: customer partial search
+OK: summary label
+OK: default summary label
+All filterSalesOrders checks passed against shipped module
+
+stderr:

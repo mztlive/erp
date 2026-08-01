@@ -1,0 +1,35 @@
+import type { Metadata } from "next"
+import { Suspense } from "react"
+
+import { MasterDataCenterPage } from "@/features/master-data/master-data-center-page"
+
+export const metadata: Metadata = {
+  title: "主数据对象中心",
+}
+
+export default async function Page({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ resource: string; stableId: string }>
+  searchParams: Promise<{ section?: string; revision?: string }>
+}) {
+  const { resource, stableId } = await params
+  const { section } = await searchParams
+  return (
+    <Suspense
+      fallback={
+        <div className="p-5 text-sm text-muted-foreground">
+          正在加载主数据对象…
+        </div>
+      }
+    >
+      <MasterDataCenterPage
+        key={`${resource}-${stableId}-${section ?? "overview"}`}
+        resource={resource}
+        stableId={stableId}
+        section={section}
+      />
+    </Suspense>
+  )
+}

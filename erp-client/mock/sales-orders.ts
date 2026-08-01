@@ -1,15 +1,89 @@
-import type { SalesOrderListItem } from "@/features/sales-orders/types"
+import { buildSalesOrder } from "@/features/sales-orders/build-order"
+import type {
+  CardSalesApproval,
+  ProcurementRejectionResolution,
+  SalesOrderListItem,
+} from "@/features/sales-orders/types"
+
+const SELLER = "某某福利科技有限公司"
+
+const rejectionSo1001: ProcurementRejectionResolution = {
+  rejectedProcurementConfirmationId: "pc_rej_1001",
+  rejectedProcurementWorkItemId: "wi_pc_1001",
+  rejectedSubmissionId: "sub_1001_v1",
+  rejectedSubmissionNo: 1,
+  rejectedSubjectHash: "sha256:9f2c…a81b",
+  rejectReasonCode: "MARGIN_TOO_LOW",
+  rejectComment: "当前采购成本下预计毛利低于公司门槛，请销售改价或走低毛利承接。",
+  rejectedByLabel: "采购 · 陈晨",
+  rejectedAt: "2026-03-28 14:20",
+  reviewStatus: "REJECTED",
+  draftDifference: {
+    changedItemOrService: false,
+    changedSalesPrice: false,
+    commercialTermsUnchanged: true,
+    diffSummary: [
+      {
+        field: "预计毛利",
+        before: "提交时 8.2%",
+        after: "采购更新成本后 3.1%",
+      },
+    ],
+  },
+  estimatedCost: "175200.00",
+  estimatedMarginPercent: "3.10",
+  fixedResolutions: [
+    "RESUBMIT_CHANGED_TERMS",
+    "REQUEST_LOW_MARGIN_ACCEPTANCE",
+    "VOID_AFTER_REJECTION",
+  ],
+  allowedActions: [
+    "RESUBMIT_CHANGED_TERMS",
+    "REQUEST_LOW_MARGIN_ACCEPTANCE",
+    "VOID_AFTER_REJECTION",
+  ],
+  actionBlockers: [
+    {
+      action: "RESUBMIT_CHANGED_TERMS",
+      reason: "草稿相对被驳回提交尚无改品/改价；请先调整明细或价格后再重提。",
+    },
+  ],
+}
+
+const cardApprovalSo1013: CardSalesApproval = {
+  workItemId: "wi_card_mgr_1013",
+  workItemType: "CARD_SALES_MANAGER_APPROVAL",
+  workItemStatus: "UNCLAIMED",
+  subjectVersion: "sub:3",
+  subjectHash: "sha256:c0de…11aa",
+  frozenSubmissionSummary:
+    "卡券类目「中国通」· 800 张 · 面值 1000 · 电子卡 · 履约期限至 2028-06-01 · 含税 800,000.00",
+  expectedReviewStatus: "PENDING_SALES_LEAD",
+  allowedActions: ["CLAIM"],
+  actionBlockers: [
+    {
+      action: "APPROVE",
+      reason: "须先领取任务并取得会话内 claimToken。",
+    },
+    {
+      action: "REJECT",
+      reason: "须先领取任务并取得会话内 claimToken。",
+    },
+  ],
+}
 
 /** 演示数据：仅用于 UI 预览，不代表正式业务口径。 */
 export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
-  {
+  buildSalesOrder({
     id: "so_1001",
     documentNumber: "XS20260328001",
     customerName: "星河制造股份有限公司",
     contractNumber: "HT-2026-0312",
+    contractRevisionLabel: "HT-2026-0312@v3",
     nature: "physical_service",
+    originSystem: "erp",
     ownerSystem: "erp",
-    primaryStatus: { label: "待二次确认", tone: "warning" },
+    primaryStatus: { label: "待销售处理", tone: "warning" },
     fulfillment: { label: "未开始", tone: "neutral" },
     collection: { label: "未收", tone: "neutral" },
     invoicing: { label: "未开", tone: "neutral" },
@@ -21,10 +95,11 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     ownerName: "王敏",
     submittedAt: "2026-03-28 09:42",
     welfareScene: "年节礼包",
-    remark: "客户要求 4 月 10 日前到仓，含定制贺卡",
+    remark: "采购二次确认已驳回 · 仅三条固定出路，无通用重提",
     version: 1,
+    lockVersion: 2,
     settlementEntity: "星河制造股份有限公司",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "货到 30 日内付款",
     fulfillmentDeadline: "明细最晚 2026-04-10",
     customerContact: "张工 · 138****6210",
@@ -58,13 +133,16 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 0,
       invoices: 0,
     },
-  },
-  {
+    procurementRejection: rejectionSo1001,
+  }),
+  buildSalesOrder({
     id: "so_1002",
     documentNumber: "XS20260327018",
     customerName: "青禾科技有限公司",
     contractNumber: "HT-2026-0288",
+    contractRevisionLabel: "HT-2026-0288@v2",
     nature: "physical_service",
+    originSystem: "erp",
     ownerSystem: "erp",
     primaryStatus: { label: "履约中", tone: "info" },
     fulfillment: { label: "部分履约", tone: "warning" },
@@ -80,7 +158,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     welfareScene: "慰问品",
     version: 2,
     settlementEntity: "青禾科技有限公司",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "预付 50%，验收后付清",
     fulfillmentDeadline: "明细最晚 2026-04-20",
     customerContact: "刘婷 · 139****8801",
@@ -114,13 +192,15 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 1,
       invoices: 1,
     },
-  },
-  {
+  }),
+  buildSalesOrder({
     id: "so_1003",
     documentNumber: "XS20260326007",
     customerName: "南湾银行股份有限公司",
     contractNumber: "HT-2026-0199",
+    contractRevisionLabel: "HT-2026-0199@v4",
     nature: "card_voucher",
+    originSystem: "mall",
     ownerSystem: "mall",
     primaryStatus: { label: "履约中", tone: "info" },
     fulfillment: { label: "部分履约", tone: "info" },
@@ -137,7 +217,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     remark: "商城主责 · 票款复核未完成，应收指标仅供参考",
     version: 4,
     settlementEntity: "南湾银行股份有限公司",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "合同签订后 15 日内全额付款",
     fulfillmentDeadline: "2028-03-26",
     customerContact: "陈经理 · 136****2299",
@@ -161,13 +241,15 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 0,
       invoices: 0,
     },
-  },
-  {
+  }),
+  buildSalesOrder({
     id: "so_1004",
     documentNumber: "XS20260325044",
     customerName: "云帆物流集团",
     contractNumber: "HT-2026-0175",
+    contractRevisionLabel: "HT-2026-0175@v1",
     nature: "physical_service",
+    originSystem: "erp",
     ownerSystem: "erp",
     primaryStatus: { label: "已生效", tone: "success" },
     fulfillment: { label: "未开始", tone: "neutral" },
@@ -183,7 +265,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     welfareScene: "餐补",
     version: 1,
     settlementEntity: "云帆物流集团",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "先款后货",
     fulfillmentDeadline: "明细最晚 2026-04-05",
     lineItems: [
@@ -205,13 +287,15 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 1,
       invoices: 0,
     },
-  },
-  {
+  }),
+  buildSalesOrder({
     id: "so_1005",
     documentNumber: "XS20260324012",
     customerName: "北辰地产集团",
     contractNumber: "HT-2026-0150",
+    contractRevisionLabel: "HT-2026-0150@v1",
     nature: "physical_service",
+    originSystem: "erp",
     ownerSystem: "erp",
     primaryStatus: { label: "已关闭", tone: "void" },
     fulfillment: { label: "已完成", tone: "success" },
@@ -227,7 +311,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     welfareScene: "年节礼包",
     version: 1,
     settlementEntity: "北辰地产集团",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "月结 30 天",
     fulfillmentDeadline: "已完成",
     lineItems: [
@@ -249,13 +333,15 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 1,
       invoices: 1,
     },
-  },
-  {
+  }),
+  buildSalesOrder({
     id: "so_1006",
     documentNumber: "XS20260323009",
     customerName: "东海保险有限公司",
     contractNumber: "HT-2025-1208",
+    contractRevisionLabel: "HT-2025-1208@v2",
     nature: "card_voucher",
+    originSystem: "mall",
     ownerSystem: "mall",
     primaryStatus: { label: "已生效", tone: "success" },
     fulfillment: { label: "部分履约", tone: "info" },
@@ -271,7 +357,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     welfareScene: "消费金",
     version: 2,
     settlementEntity: "东海保险有限公司",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "分两期，签约付 50%",
     fulfillmentDeadline: "2028-03-23",
     lineItems: [
@@ -294,13 +380,15 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 1,
       invoices: 1,
     },
-  },
-  {
+  }),
+  buildSalesOrder({
     id: "so_1007",
     documentNumber: "XS20260322031",
     customerName: "启明教育科技",
     contractNumber: "HT-2026-0142",
+    contractRevisionLabel: "HT-2026-0142@v1",
     nature: "physical_service",
+    originSystem: "erp",
     ownerSystem: "erp",
     primaryStatus: { label: "草稿", tone: "neutral" },
     fulfillment: { label: "未开始", tone: "neutral" },
@@ -317,7 +405,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     remark: "草稿未提交，客户尚未最终确认品类",
     version: 1,
     settlementEntity: "启明教育科技",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "待确认",
     fulfillmentDeadline: "待确认",
     lineItems: [
@@ -339,13 +427,15 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 0,
       invoices: 0,
     },
-  },
-  {
+  }),
+  buildSalesOrder({
     id: "so_1008",
     documentNumber: "XS20260321005",
     customerName: "星河制造股份有限公司",
     contractNumber: "HT-2026-0312",
+    contractRevisionLabel: "HT-2026-0312@v2",
     nature: "physical_service",
+    originSystem: "erp",
     ownerSystem: "erp",
     primaryStatus: { label: "履约中", tone: "info" },
     fulfillment: { label: "部分履约", tone: "warning" },
@@ -361,7 +451,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     welfareScene: "慰问品",
     version: 1,
     settlementEntity: "星河制造股份有限公司",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "货到 30 日内付款",
     fulfillmentDeadline: "明细最晚 2026-04-12",
     lineItems: [
@@ -383,13 +473,15 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 1,
       invoices: 1,
     },
-  },
-  {
+  }),
+  buildSalesOrder({
     id: "so_1009",
     documentNumber: "XS20260318022",
     customerName: "青禾科技有限公司",
     contractNumber: "HT-2026-0288",
+    contractRevisionLabel: "HT-2026-0288@v1",
     nature: "card_voucher",
+    originSystem: "mall",
     ownerSystem: "mall",
     primaryStatus: { label: "已作废", tone: "void" },
     fulfillment: { label: "不适用", tone: "neutral" },
@@ -406,7 +498,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     remark: "商城侧作废后同步；ERP 保留正式记录",
     version: 2,
     settlementEntity: "青禾科技有限公司",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "—",
     fulfillmentDeadline: "—",
     lineItems: [
@@ -429,13 +521,15 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 0,
       invoices: 0,
     },
-  },
-  {
+  }),
+  buildSalesOrder({
     id: "so_1010",
     documentNumber: "XS20260315016",
     customerName: "南湾银行股份有限公司",
     contractNumber: "HT-2026-0199",
+    contractRevisionLabel: "HT-2026-0199@v2",
     nature: "physical_service",
+    originSystem: "erp",
     ownerSystem: "erp",
     primaryStatus: { label: "已关闭", tone: "void" },
     fulfillment: { label: "已完成", tone: "success" },
@@ -451,7 +545,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     welfareScene: "年节礼包",
     version: 1,
     settlementEntity: "南湾银行股份有限公司",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "月结 45 天",
     fulfillmentDeadline: "已完成",
     lineItems: [
@@ -484,13 +578,15 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 2,
       invoices: 1,
     },
-  },
-  {
+  }),
+  buildSalesOrder({
     id: "so_1011",
     documentNumber: "XS20260312008",
     customerName: "云帆物流集团",
     contractNumber: "HT-2026-0175",
+    contractRevisionLabel: "HT-2026-0175@v1",
     nature: "physical_service",
+    originSystem: "erp",
     ownerSystem: "erp",
     primaryStatus: { label: "履约中", tone: "info" },
     fulfillment: { label: "未开始", tone: "neutral" },
@@ -506,7 +602,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     welfareScene: "餐补",
     version: 1,
     settlementEntity: "云帆物流集团",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "先款后货",
     fulfillmentDeadline: "明细最晚 2026-04-01",
     lineItems: [
@@ -528,13 +624,15 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 1,
       invoices: 0,
     },
-  },
-  {
+  }),
+  buildSalesOrder({
     id: "so_1012",
     documentNumber: "XS20260308003",
     customerName: "东海保险有限公司",
     contractNumber: "HT-2025-1208",
+    contractRevisionLabel: "HT-2025-1208@v3",
     nature: "card_voucher",
+    originSystem: "mall",
     ownerSystem: "mall",
     primaryStatus: { label: "履约中", tone: "info" },
     fulfillment: { label: "部分履约", tone: "info" },
@@ -550,7 +648,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     welfareScene: "消费金",
     version: 3,
     settlementEntity: "东海保险有限公司",
-    sellerEntity: "某某福利科技有限公司",
+    sellerEntity: SELLER,
     paymentTerms: "全额预付",
     fulfillmentDeadline: "2028-03-08",
     lineItems: [
@@ -573,7 +671,108 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       receipts: 2,
       invoices: 2,
     },
-  },
+  }),
+  /** 二期 ERP 主责卡券：待销售领导审批；每版本恰好一条卡券明细 */
+  buildSalesOrder({
+    id: "so_1013",
+    documentNumber: "XS20260329001",
+    customerName: "启明教育科技",
+    contractNumber: "HT-2026-0142",
+    contractRevisionLabel: "HT-2026-0142@v1",
+    nature: "card_voucher",
+    originSystem: "erp",
+    ownerSystem: "erp",
+    primaryStatus: { label: "待销售领导审批", tone: "warning" },
+    fulfillment: { label: "未开始", tone: "neutral" },
+    collection: { label: "未收", tone: "neutral" },
+    invoicing: { label: "未开", tone: "neutral" },
+    amountGross: "800000.00",
+    amountNet: "754716.98",
+    taxAmount: "45283.02",
+    receivedAmount: "0.00",
+    invoicedAmount: "0.00",
+    ownerName: "王敏",
+    submittedAt: "2026-03-29 10:15",
+    welfareScene: "消费金",
+    remark: "ERP 主责卡券提交 · 领导/运营双审批，对象中心嵌入同一任务处理器",
+    version: 1,
+    lockVersion: 1,
+    settlementEntity: "启明教育科技",
+    sellerEntity: SELLER,
+    paymentTerms: "签约后 10 日内全额付款",
+    fulfillmentDeadline: "2028-06-01",
+    customerContact: "周老师 · 137****4410",
+    lineItems: [
+      {
+        id: "li_1",
+        name: "中国通",
+        sku: "CAT-CN-PASS",
+        quantity: "800",
+        unit: "张",
+        unitPriceGross: "1000.00",
+        amountGross: "800000.00",
+        faceValue: "1000.00",
+        giftRate: "0.00",
+        cardForm: "电子卡",
+      },
+    ],
+    related: {
+      purchaseOrders: 0,
+      fulfillments: 0,
+      receipts: 0,
+      invoices: 0,
+    },
+    activeCardSalesApproval: cardApprovalSo1013,
+  }),
+  /** 二期主责迁移示例：创建来源商城，当前主责 ERP；身份/单号/版本不变 */
+  buildSalesOrder({
+    id: "so_1014",
+    documentNumber: "XS20260215020",
+    customerName: "北辰地产集团",
+    contractNumber: "HT-2026-0088",
+    contractRevisionLabel: "HT-2026-0088@v2",
+    nature: "card_voucher",
+    originSystem: "mall",
+    ownerSystem: "erp",
+    primaryStatus: { label: "履约中", tone: "info" },
+    fulfillment: { label: "部分履约", tone: "info" },
+    collection: { label: "已结清", tone: "success" },
+    invoicing: { label: "部分开票", tone: "warning" },
+    amountGross: "360000.00",
+    amountNet: "339622.64",
+    taxAmount: "20377.36",
+    receivedAmount: "360000.00",
+    invoicedAmount: "180000.00",
+    ownerName: "赵晴",
+    submittedAt: "2026-02-15 16:40",
+    welfareScene: "消费金",
+    remark: "二期主责迁移完成：仅改主责，不换身份、单号或销售版本",
+    version: 2,
+    settlementEntity: "北辰地产集团",
+    sellerEntity: SELLER,
+    paymentTerms: "全额预付",
+    fulfillmentDeadline: "2027-02-15",
+    lineItems: [
+      {
+        id: "li_1",
+        name: "心意卡",
+        sku: "CAT-HEART",
+        quantity: "360",
+        unit: "张",
+        unitPriceGross: "1000.00",
+        amountGross: "360000.00",
+        faceValue: "1000.00",
+        giftRate: "0.00",
+        cardForm: "电子卡",
+      },
+    ],
+    related: {
+      purchaseOrders: 0,
+      fulfillments: 0,
+      receipts: 1,
+      invoices: 1,
+    },
+  }),
 ]
 
 export const NATURE_LABEL: Record<SalesOrderListItem["nature"], string> = {
@@ -584,4 +783,18 @@ export const NATURE_LABEL: Record<SalesOrderListItem["nature"], string> = {
 export const OWNER_LABEL: Record<SalesOrderListItem["ownerSystem"], string> = {
   erp: "主责 ERP",
   mall: "主责商城",
+}
+
+/** 创建来源文案（与当前主责分列） */
+export const ORIGIN_LABEL: Record<SalesOrderListItem["originSystem"], string> = {
+  erp: "创建于 ERP",
+  mall: "创建于商城",
+}
+
+export const CARD_APPROVAL_TYPE_LABEL: Record<
+  CardSalesApproval["workItemType"],
+  string
+> = {
+  CARD_SALES_MANAGER_APPROVAL: "卡券销售领导审批",
+  CARD_SALES_OPERATION_APPROVAL: "卡券销售运营审批",
 }
