@@ -370,6 +370,8 @@ function BusinessTableFrame({
 type SheetProps = React.ComponentProps<typeof Sheet>
 type SheetOpenChangeHandler = NonNullable<SheetProps["onOpenChange"]>
 
+type QuickPreviewSheetSize = "preview" | "detail"
+
 interface QuickPreviewSheetProps
   extends Omit<
     SheetProps,
@@ -386,9 +388,14 @@ interface QuickPreviewSheetProps
   readonly children: React.ReactNode
   readonly footer?: React.ReactNode
   readonly contentClassName?: string
+  /**
+   * preview：窄栏 + 整区滚动，适合轻摘要。
+   * detail：半屏 + 正文区由子树自管滚动，适合双栏读主事实。
+   */
+  readonly size?: QuickPreviewSheetSize
 }
 
-/** 受控的右侧快速预览；正文与页脚均由业务页面注入。 */
+/** 受控的右侧预览抽屉；正文与页脚均由业务页面注入。 */
 function QuickPreviewSheet({
   open,
   onOpenChange,
@@ -399,16 +406,24 @@ function QuickPreviewSheet({
   children,
   footer,
   contentClassName,
+  size = "preview",
   ...props
 }: QuickPreviewSheetProps) {
+  const isDetail = size === "detail"
+
   return (
     <Sheet {...props} open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        size="preview"
+        size={size}
         className={contentClassName}
       >
-        <SheetHeader className="border-b border-border">
+        <SheetHeader
+          className={cn(
+            "shrink-0 border-b border-border",
+            isDetail && "space-y-2 py-4"
+          )}
+        >
           {identity ? (
             <div
               data-slot="quick-preview-identity"
@@ -422,20 +437,37 @@ function QuickPreviewSheet({
             <SheetDescription>{description}</SheetDescription>
           ) : null}
           {summary ? (
-            <div data-slot="quick-preview-summary" className="pt-2">
+            <div data-slot="quick-preview-summary" className="pt-1">
               {summary}
             </div>
           ) : null}
         </SheetHeader>
 
-        <ScrollArea className="min-h-0 flex-1">
-          <div data-slot="quick-preview-content" className="space-y-5 p-6">
+        {isDetail ? (
+          <div
+            data-slot="quick-preview-content"
+            className="flex min-h-0 flex-1 flex-col overflow-hidden"
+          >
             {children}
           </div>
-        </ScrollArea>
+        ) : (
+          <ScrollArea className="min-h-0 flex-1">
+            <div
+              data-slot="quick-preview-content"
+              className="space-y-5 p-6"
+            >
+              {children}
+            </div>
+          </ScrollArea>
+        )}
 
         {footer ? (
-          <SheetFooter className="border-t border-border">
+          <SheetFooter
+            className={cn(
+              "shrink-0 border-t border-border",
+              isDetail && "flex-row flex-wrap justify-end gap-2 py-3"
+            )}
+          >
             {footer}
           </SheetFooter>
         ) : null}
@@ -453,6 +485,7 @@ export {
   type BusinessTableFrameProps,
   type ListToolbarProps,
   type QuickPreviewSheetProps,
+  type QuickPreviewSheetSize,
   type SelectionScope,
   type SelectionScopeBarProps,
   type StatusMatrixItem,

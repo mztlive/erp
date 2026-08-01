@@ -118,7 +118,8 @@
   --spacing-nav: 13rem; /* 左侧导航展开 208px */
   --spacing-nav-icon: 4rem; /* 左侧导航折叠 64px */
   --spacing-nav-mobile: 18rem; /* 移动端抽屉导航 */
-  --spacing-preview: 25rem; /* 右侧快速预览 400px */
+  --spacing-preview: 25rem; /* 右侧轻量预览 400px */
+  --spacing-detail: 48rem; /* 右侧半屏详情抽屉 768px；读完主事实 */
   --spacing-shell: 90rem; /* 基准工作宽度 1440px */
 
   /* 圆角 —— 单一旋钮，整体压在 2~8px，保持单据系统的严谨感 */

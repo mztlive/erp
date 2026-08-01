@@ -47,7 +47,7 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 | --- | --- |
 | `Alert` | 增加 `success`、`warning`、`info` 语义变体，全部读取主题 token |
 | `Checkbox` | 增加部分选择态，支持当前页与全范围选择表达 |
-| `Sheet` | 增加主题化 `preview` 尺寸，用于快速预览和高级筛选 |
+| `Sheet` | 增加主题化 `preview`（轻量 400px）与 `detail`（半屏读主事实 768px）尺寸 |
 | `Table` | 用 `--table-row-height` 消费紧凑/舒适密度 token |
 | `DatePicker`、`DateRangePicker`、`DateTimePicker` | 明确 `YYYY-MM-DD`、秒级时间和业务时区的受控值 |
 | `DescriptionList` | 详情页语义化 `dl/dt/dd` 摘要布局 |
