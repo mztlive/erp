@@ -1556,9 +1556,9 @@ export function ProcurementConfirmationPage() {
                   {(task.decisionSummary.warnings.length > 0
                     ? task.decisionSummary.warnings
                     : []
-                  ).map((w) => (
+                  ).map((w, index) => (
                     <p
-                      key={w.code + (w.lineId ?? "")}
+                      key={`${w.code}-${w.lineId ?? "none"}-${index}`}
                       className="text-xs text-muted-foreground"
                     >
                       警告：{w.message}
