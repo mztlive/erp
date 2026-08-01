@@ -388,6 +388,8 @@ export type SequentialProcessBarProps = Omit<
   processNextLabel?: string
   pending?: boolean
   processDisabled?: boolean
+  /** 主动作会离开当前页面（如跳转专用处理器）时置 false，避免两个同义按钮。 */
+  showProcessNext?: boolean
   onBack: () => void
   onProcess: () => void
   onProcessNext: () => void
@@ -404,6 +406,7 @@ function SequentialProcessBar({
   processNextLabel = "处理并打开下一条",
   pending = false,
   processDisabled = false,
+  showProcessNext = true,
   onBack,
   onProcess,
   onProcessNext,
@@ -480,7 +483,8 @@ function SequentialProcessBar({
 
         <Button
           type="button"
-          variant="secondary"
+          /* 隐藏「并打开下一条」时，本按钮就是唯一主动作 */
+          variant={showProcessNext ? "secondary" : "default"}
           disabled={!canProcess}
           onClick={onProcess}
         >
@@ -495,22 +499,24 @@ function SequentialProcessBar({
           )}
           {pending ? "正在处理" : processLabel}
         </Button>
-        <Button
-          type="button"
-          disabled={!canProcess}
-          onClick={onProcessNext}
-        >
-          {pending ? (
-            <LoaderCircleIcon
-              data-icon="inline-start"
-              aria-hidden="true"
-              className="animate-spin"
-            />
-          ) : (
-            <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />
-          )}
-          {pending ? "正在处理" : processNextLabel}
-        </Button>
+        {showProcessNext ? (
+          <Button
+            type="button"
+            disabled={!canProcess}
+            onClick={onProcessNext}
+          >
+            {pending ? (
+              <LoaderCircleIcon
+                data-icon="inline-start"
+                aria-hidden="true"
+                className="animate-spin"
+              />
+            ) : (
+              <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />
+            )}
+            {pending ? "正在处理" : processNextLabel}
+          </Button>
+        ) : null}
       </div>
     </section>
   )

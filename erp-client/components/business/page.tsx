@@ -40,6 +40,8 @@ export type PageBreadcrumbItem =
       href: string
     }
 
+export type PageHeaderDensity = "default" | "compact"
+
 export type PageHeaderProps = Omit<
   React.ComponentProps<"header">,
   "children" | "title"
@@ -51,6 +53,8 @@ export type PageHeaderProps = Omit<
   status?: SemanticStatus
   metadata?: React.ReactNode
   actions?: React.ReactNode
+  /** compact：标题、状态与 metadata 同排，供高频作业页压缩首屏。 */
+  density?: PageHeaderDensity
 }
 
 function PageHeader({
@@ -61,13 +65,17 @@ function PageHeader({
   status,
   metadata,
   actions,
+  density = "default",
   className,
   ...props
 }: PageHeaderProps) {
+  const compact = density === "compact"
+
   return (
     <header
       data-slot="page-header"
-      className={cn("flex flex-col gap-3", className)}
+      data-density={density}
+      className={cn("flex flex-col", compact ? "gap-2" : "gap-3", className)}
       {...props}
     >
       {breadcrumbs.length > 0 ? (
@@ -89,20 +97,40 @@ function PageHeader({
         </Breadcrumb>
       ) : null}
 
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-start">
+      <div
+        className={cn(
+          "flex flex-col gap-3 lg:flex-row",
+          compact ? "lg:items-center" : "lg:items-start"
+        )}
+      >
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+          <div
+            className={cn(
+              "flex flex-wrap items-center",
+              compact ? "gap-x-3 gap-y-1" : "gap-2"
+            )}
+          >
+            <h1
+              className={cn(
+                "font-semibold tracking-tight text-foreground",
+                compact ? "text-lg" : "text-2xl"
+              )}
+            >
               {title}
             </h1>
             {status ? <StatusBadge {...status} /> : null}
+            {compact && metadata ? (
+              <div className="min-w-0 text-sm text-muted-foreground">
+                {metadata}
+              </div>
+            ) : null}
           </div>
           {description ? (
             <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
               {description}
             </p>
           ) : null}
-          {metadata ? (
+          {!compact && metadata ? (
             <div className="mt-2 text-sm text-muted-foreground">{metadata}</div>
           ) : null}
         </div>

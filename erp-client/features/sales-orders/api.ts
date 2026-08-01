@@ -37,6 +37,11 @@ export type SalesOrderDetailView = SalesOrderListItem & {
   queriedAt: string
 }
 
+export type SalesOrderListView = {
+  rows: SalesOrderListItem[]
+  queriedAt: string
+}
+
 const PERMISSION_VERSION = "pv-w05-demo-1"
 
 function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
@@ -282,9 +287,12 @@ function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
   return next
 }
 
-export async function fetchSalesOrders(): Promise<SalesOrderListItem[]> {
+export async function fetchSalesOrders(): Promise<SalesOrderListView> {
   await mockDelay()
-  return MOCK_SALES_ORDERS.map(mergeSessionOverlay)
+  return {
+    rows: MOCK_SALES_ORDERS.map(mergeSessionOverlay),
+    queriedAt: new Date().toISOString(),
+  }
 }
 
 export async function fetchSalesOrderDetail(

@@ -805,50 +805,38 @@ export function UnifiedTaskQueuePage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <div className="sr-only" aria-live="polite" ref={liveRef} />
 
+      {/* 筛选结果只读给读屏用户；视觉上由工具栏本身表达 */}
+      <p className="sr-only" aria-live="polite">
+        {filterSummary}
+      </p>
+
       <PageHeader
         title="统一待办队列"
-        description="在可恢复的队列上下文中连续处理任务；先读懂对象、原因与影响，再做正式决策。"
-        breadcrumbs={[
-          { id: "work", label: "工作", href: "/workspace" },
-          { id: "tasks", label: "待办队列", current: true },
-        ]}
+        density="compact"
         metadata={
           <DataFreshness
-            updatedAt={
-              queueQuery.isFetching ? "正在刷新" : filterSummary
-            }
+            updatedAt={queueQuery.isFetching ? "正在刷新" : "刚刚"}
             dateTime={queueQuery.data?.freshness.updatedAt}
             state={queueQuery.isFetching ? "syncing" : "fresh"}
-            label="队列"
+            label="数据水位"
           />
         }
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={queueQuery.isFetching}
-              onClick={() => void queueQuery.refetch()}
-            >
-              <RefreshCwIcon data-icon="inline-start" aria-hidden="true" />
-              刷新
-            </Button>
-          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={queueQuery.isFetching}
+            onClick={() => void queueQuery.refetch()}
+          >
+            <RefreshCwIcon data-icon="inline-start" aria-hidden="true" />
+            刷新
+          </Button>
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
-        <span>
-          个人 {queueQuery.data?.counts.mine ?? 0} · 待领取{" "}
-          {queueQuery.data?.counts.rolePool ?? 0} · 超期{" "}
-          {queueQuery.data?.counts.overdue ?? 0}
-        </span>
-        <span className="hidden sm:inline">· 上下文 {queueContextId}</span>
-      </div>
-
-      {/* Toolbar: scope · family · due · search */}
-      <div className="flex flex-col gap-3">
+      {/* Toolbar: scope · family · due · search，单排排布 */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
         <ToggleGroup
           value={[scope]}
           onValueChange={(values) => {
@@ -870,115 +858,120 @@ export function UnifiedTaskQueuePage() {
         >
           {(
             [
-              ["mine", "我的待办"],
-              ["role_pool", "待领取"],
-              ["team", "团队"],
-              ["hold", "已暂挂"],
+              ["mine", "我的待办", queueQuery.data?.counts.mine],
+              ["role_pool", "待领取", queueQuery.data?.counts.rolePool],
+              ["team", "团队", undefined],
+              ["hold", "已暂挂", undefined],
             ] as const
-          ).map(([value, label]) => (
+          ).map(([value, label, count]) => (
             <ToggleGroupItem key={value} value={value}>
               {label}
+              {typeof count === "number" ? (
+                <span className="num ml-1 text-muted-foreground">{count}</span>
+              ) : null}
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-          <ToggleGroup
-            value={family ? [family] : []}
-            onValueChange={(values) => {
-              const next = (values[0] as WorkItemFamily | undefined) ?? null
-              replaceQueueUrl({
-                family: next,
-                currentWorkItemId: null,
-                workItemType: null,
-                converge: false,
-              })
-            }}
-            variant="outline"
-            size="sm"
-            spacing={0}
-            className="w-fit max-w-full flex-wrap"
-          >
-            {(
-              Object.entries(FAMILY_LABELS) as [WorkItemFamily, string][]
-            ).map(([value, label]) => (
+        <ToggleGroup
+          value={family ? [family] : []}
+          onValueChange={(values) => {
+            const next = (values[0] as WorkItemFamily | undefined) ?? null
+            replaceQueueUrl({
+              family: next,
+              currentWorkItemId: null,
+              workItemType: null,
+              converge: false,
+            })
+          }}
+          variant="outline"
+          size="sm"
+          spacing={0}
+          className="w-fit max-w-full flex-wrap"
+        >
+          {(Object.entries(FAMILY_LABELS) as [WorkItemFamily, string][]).map(
+            ([value, label]) => (
               <ToggleGroupItem key={value} value={value}>
                 {label}
               </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
+            )
+          )}
+        </ToggleGroup>
 
-          <ToggleGroup
-            value={due ? [due] : []}
-            onValueChange={(values) => {
-              const next =
-                (values[0] as "today" | "overdue" | undefined) ?? null
-              replaceQueueUrl({ due: next, currentWorkItemId: null })
-            }}
-            variant="outline"
-            size="sm"
-            spacing={0}
-            className="w-fit"
-          >
-            <ToggleGroupItem value="overdue">已超期</ToggleGroupItem>
-            <ToggleGroupItem value="today">今日到期</ToggleGroupItem>
-          </ToggleGroup>
-
-          <form
-            className="flex min-w-0 flex-1 items-center gap-2"
-            onSubmit={(event) => {
-              event.preventDefault()
-              replaceQueueUrl({ q: searchDraft, currentWorkItemId: null })
-            }}
-          >
-            <div className="relative min-w-0 flex-1 max-w-md">
-              <SearchIcon
-                className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <Input
-                value={searchDraft}
-                onChange={(event) => setSearchDraft(event.target.value)}
-                placeholder="搜单号、对象或任务编号"
-                className="pl-8"
-                aria-label="搜索任务"
-              />
-            </div>
-            <Button type="submit" variant="secondary" size="sm">
-              搜索
-            </Button>
-            {q || family || due || workItemType ? (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSearchDraft("")
-                  replaceQueueUrl({
-                    family: null,
-                    due: null,
-                    q: null,
-                    workItemType: null,
-                    converge: false,
-                    currentWorkItemId: null,
-                  })
-                }}
-              >
-                清除筛选
-              </Button>
+        <ToggleGroup
+          value={due ? [due] : []}
+          onValueChange={(values) => {
+            const next = (values[0] as "today" | "overdue" | undefined) ?? null
+            replaceQueueUrl({ due: next, currentWorkItemId: null })
+          }}
+          variant="outline"
+          size="sm"
+          spacing={0}
+          className="w-fit"
+        >
+          <ToggleGroupItem value="overdue">
+            已超期
+            {queueQuery.data?.counts.overdue ? (
+              <span className="num ml-1 text-destructive">
+                {queueQuery.data.counts.overdue}
+              </span>
             ) : null}
-          </form>
-        </div>
+          </ToggleGroupItem>
+          <ToggleGroupItem value="today">今日到期</ToggleGroupItem>
+        </ToggleGroup>
 
-        <p className="text-xs text-muted-foreground" aria-live="polite">
-          {filterSummary}
-          {converge || workItemType
-            ? " · 正式连续处理已收敛到单类型/兼容处理器组"
-            : " · 全部类型找任务视图"}
-          <span className="ml-2 hidden md:inline">
-            快捷键 j/k 切换上下项
-          </span>
-        </p>
+        {converge || workItemType ? (
+          <BusinessStatusBadge
+            context="list"
+            label="已收敛到单类型"
+            tone="info"
+          />
+        ) : null}
+
+        <form
+          className="flex min-w-0 flex-1 basis-64 items-center gap-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            replaceQueueUrl({ q: searchDraft, currentWorkItemId: null })
+          }}
+        >
+          <div className="relative min-w-0 flex-1 max-w-md">
+            <SearchIcon
+              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              value={searchDraft}
+              onChange={(event) => setSearchDraft(event.target.value)}
+              placeholder="搜单号、对象或任务编号"
+              className="pl-8"
+              aria-label="搜索任务"
+            />
+          </div>
+          <Button type="submit" variant="secondary" size="sm">
+            搜索
+          </Button>
+          {q || family || due || workItemType ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchDraft("")
+                replaceQueueUrl({
+                  family: null,
+                  due: null,
+                  q: null,
+                  workItemType: null,
+                  converge: false,
+                  currentWorkItemId: null,
+                })
+              }}
+            >
+              清除筛选
+            </Button>
+          ) : null}
+        </form>
       </div>
 
       {permissionRevoked ? (
@@ -1088,6 +1081,7 @@ export function UnifiedTaskQueuePage() {
               </div>
               <CardDescription>
                 共 {tasks.length} 项 · 当前第 {currentIndex + 1} 项
+                <span className="hidden md:inline"> · j/k 切换上下项</span>
               </CardDescription>
             </CardHeader>
             <CardContent className="max-h-[min(60vh,36rem)] space-y-2 overflow-y-auto lg:max-h-[calc(100vh-16rem)]">
@@ -1178,11 +1172,9 @@ export function UnifiedTaskQueuePage() {
                 processLabel={
                   task.handlerHref ? "打开专用处理器" : "正式完成当前项"
                 }
-                processNextLabel={
-                  task.handlerHref
-                    ? "打开专用处理器"
-                    : "正式完成并打开下一条"
-                }
+                processNextLabel="正式完成并打开下一条"
+                // 跳专用处理器会离开本页，没有「并打开下一条」语义
+                showProcessNext={!task.handlerHref}
                 processDisabled={processDisabled}
                 pending={
                   completeMutation.isPending || actionMutation.isPending

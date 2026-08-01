@@ -73,6 +73,8 @@ type OwnerFilter = SalesOrderOwnerFilter
 type OriginFilter = SalesOrderOriginFilter
 type StatusFilter = SalesOrderStatusFilter
 
+const EMPTY_SALES_ORDERS: readonly SalesOrderListItem[] = []
+
 export function SalesOrdersListPage({
   initialSearch = "",
   initialNature = "all",
@@ -82,7 +84,7 @@ export function SalesOrdersListPage({
 }) {
   const ordersQuery = useSalesOrdersQuery()
   const exportMutation = useCreateSalesOrderExportJobMutation()
-  const allOrders = ordersQuery.data ?? []
+  const allOrders = ordersQuery.data?.rows ?? EMPTY_SALES_ORDERS
   const [search, setSearch] = React.useState(initialSearch)
   const [natureFilter, setNatureFilter] =
     React.useState<NatureFilter>(initialNature)
@@ -389,9 +391,23 @@ export function SalesOrdersListPage({
         ]}
         metadata={
           <DataFreshness
-            updatedAt="刚刚"
-            dateTime={new Date().toISOString()}
-            state="fresh"
+            updatedAt={
+              ordersQuery.isError
+                ? "查询失败"
+                : ordersQuery.data
+                  ? "刚刚"
+                  : "正在查询"
+            }
+            dateTime={ordersQuery.data?.queriedAt}
+            state={
+              ordersQuery.isError
+                ? "failed"
+                : ordersQuery.isFetching
+                  ? "syncing"
+                  : ordersQuery.data
+                    ? "fresh"
+                    : "unknown"
+            }
             label={`列表 · 权限 ${PERMISSION_VERSION}`}
           />
         }
