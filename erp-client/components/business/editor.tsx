@@ -98,6 +98,66 @@ interface EditableLineItemTableProps<TItem>
   ) => readonly React.ReactNode[]
 }
 
+type StickyTotalItem = Readonly<{
+  id: string
+  label: React.ReactNode
+  value: React.ReactNode
+  description?: React.ReactNode
+}>
+
+type StickyTotalBarProps = Omit<
+  React.ComponentPropsWithoutRef<"aside">,
+  "children"
+> & {
+  items: readonly StickyTotalItem[]
+  note?: React.ReactNode
+  actions?: React.ReactNode
+}
+
+/** M5 编辑工作区统一的金额汇总与提交动作条。 */
+function StickyTotalBar({
+  items,
+  note,
+  actions,
+  className,
+  ...props
+}: StickyTotalBarProps) {
+  return (
+    <aside
+      data-slot="sticky-total-bar"
+      className={cn(
+        "sticky bottom-3 z-20 rounded-2xl border border-border bg-background/95 p-3 shadow-lg backdrop-blur supports-[backdrop-filter]:bg-background/85",
+        className
+      )}
+      {...props}
+    >
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+        <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-3">
+          {items.map((item) => (
+            <div key={item.id} className="min-w-0">
+              <div className="text-xs text-muted-foreground">{item.label}</div>
+              <div className="num mt-0.5 font-medium text-foreground">
+                {item.value}
+              </div>
+              {item.description ? (
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  {item.description}
+                </div>
+              ) : null}
+            </div>
+          ))}
+        </div>
+        {note ? (
+          <div className="text-xs text-muted-foreground lg:max-w-sm">{note}</div>
+        ) : null}
+        {actions ? (
+          <div className="flex shrink-0 flex-wrap justify-end gap-2">{actions}</div>
+        ) : null}
+      </div>
+    </aside>
+  )
+}
+
 const alignmentClass: Record<CellAlignment, string> = {
   start: "text-left",
   center: "text-center",
@@ -572,6 +632,7 @@ export {
   AllocationWorkspace,
   ApprovalDecisionPanel,
   EditableLineItemTable,
+  StickyTotalBar,
   type AllocationSummary,
   type AllocationWorkspaceProps,
   type ApprovalDecisionPanelProps,
@@ -582,4 +643,6 @@ export {
   type EditableLineItemContext,
   type EditableLineItemTableProps,
   type LineItemMode,
+  type StickyTotalBarProps,
+  type StickyTotalItem,
 }

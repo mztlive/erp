@@ -1,10 +1,18 @@
 import { mockDelay } from "@/features/workspace-kit/delay"
 import type {
   CardSalesApproval,
+  CreateSalesOrderInput,
+  CreateSalesOrderResult,
   ProcurementRejectionResolution,
+  SalesOrderLineItem,
   SalesOrderListItem,
 } from "@/features/sales-orders/types"
-import { MOCK_SALES_ORDERS } from "@/mock/sales-orders"
+import { buildSalesOrder } from "@/features/sales-orders/build-order"
+import {
+  getMockSalesOrder,
+  listMockSalesOrders,
+  registerMockSalesOrder,
+} from "@/mock/sales-orders"
 import {
   claimW05CardApproval,
   completeW05CardApproval,
@@ -17,6 +25,7 @@ import {
   getW05DraftPriceAdjusted,
   getW05RejectionByIdempotency,
   getW05RejectionOutcome,
+  getW04ContractCenter,
   hasW05DraftPriceAdjusted,
   markW05DraftPriceAdjusted,
   postSalesOrderAcceptance,
@@ -290,7 +299,7 @@ function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
 export async function fetchSalesOrders(): Promise<SalesOrderListView> {
   await mockDelay()
   return {
-    rows: MOCK_SALES_ORDERS.map(mergeSessionOverlay),
+    rows: listMockSalesOrders().map(mergeSessionOverlay),
     queriedAt: new Date().toISOString(),
   }
 }
@@ -299,15 +308,168 @@ export async function fetchSalesOrderDetail(
   id: string
 ): Promise<SalesOrderDetailView | null> {
   await mockDelay()
-  const base = MOCK_SALES_ORDERS.find((item) => item.id === id)
+  const base = getMockSalesOrder(id)
   if (!base) return null
   const order = mergeSessionOverlay(base)
+  const queriedAt = new Date().toISOString()
   return {
     ...order,
     acceptance: getSalesOrderAcceptance(id),
     permissionVersion: PERMISSION_VERSION,
-    sourceAsOf: "2026-03-29T12:00:00+08:00",
-    queriedAt: new Date().toISOString(),
+    sourceAsOf: queriedAt,
+    queriedAt,
+  }
+}
+
+function numericValue(value: string): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function localDateParts(date: Date) {
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date)
+  return Object.fromEntries(parts.map((part) => [part.type, part.value]))
+}
+
+/**
+ * M5 建单 mock：服务端侧重验合同/修订与卡券唯一明细，并重新计算正式金额。
+ */
+export async function createSalesOrder(
+  input: CreateSalesOrderInput
+): Promise<CreateSalesOrderResult> {
+  await mockDelay(180)
+
+  const contract = getW04ContractCenter(input.contractId)
+  if (!contract?.selectableForNewSalesOrder) {
+    throw new Error(contract?.selectableBlocker ?? "CONTRACT_NOT_SELECTABLE")
+  }
+
+  const requestedRevision = input.requestedContractRevisionId
+    ? contract.revisionTimeline.find(
+        (revision) => revision.revisionId === input.requestedContractRevisionId
+      )
+    : contract.revisionTimeline.find((revision) => revision.isCurrent)
+  if (!requestedRevision) throw new Error("CONTRACT_REVISION_NOT_FOUND")
+  if (!requestedRevision.isCurrent) throw new Error("CONTRACT_REVISION_NOT_CURRENT")
+  if (input.lineItems.length === 0) throw new Error("LINE_ITEM_REQUIRED")
+  if (input.nature === "card_voucher" && input.lineItems.length !== 1) {
+    throw new Error("VOUCHER_REQUIRES_EXACTLY_ONE_LINE")
+  }
+
+  const lineItems: SalesOrderLineItem[] = input.lineItems.map((line, index) => {
+    const quantity = numericValue(line.quantity)
+    const unitPriceGross = numericValue(line.unitPriceGross)
+    return {
+      id: `li_${index + 1}`,
+      name: line.name.trim(),
+      sku: line.sku.trim() || undefined,
+      quantity: quantity.toFixed(quantity % 1 === 0 ? 0 : 2),
+      unit: line.unit.trim(),
+      unitPriceGross: unitPriceGross.toFixed(2),
+      amountGross: (quantity * unitPriceGross).toFixed(2),
+      ...(input.nature === "card_voucher"
+        ? {
+            faceValue: numericValue(line.faceValue).toFixed(2),
+            giftRate: numericValue(line.giftRate).toFixed(2),
+            cardForm: line.cardForm.trim(),
+          }
+        : {
+            fulfillmentMode: line.fulfillmentMode.trim(),
+            dueDate: line.dueDate,
+          }),
+    }
+  })
+  const gross = lineItems.reduce(
+    (sum, line) => sum + numericValue(line.amountGross),
+    0
+  )
+  const taxRate = numericValue(input.taxRatePercent)
+  const net = gross / (1 + taxRate / 100)
+  const tax = gross - net
+  const now = new Date()
+  const date = localDateParts(now)
+  const sequence = listMockSalesOrders().length + 1
+  const documentNumber = `XS${date.year}${date.month}${date.day}${String(sequence).padStart(3, "0")}`
+  const salesOrderId = `so_${now.getTime().toString(36)}_${sequence}`
+  const submittedAt = `${date.year}-${date.month}-${date.day} ${date.hour}:${date.minute}`
+  const submitted = input.intent === "SUBMIT"
+
+  const activeCardSalesApproval: CardSalesApproval | null =
+    submitted && input.nature === "card_voucher"
+      ? {
+          workItemId: `wi_card_mgr_${salesOrderId}`,
+          workItemType: "CARD_SALES_MANAGER_APPROVAL",
+          workItemStatus: "UNCLAIMED",
+          subjectVersion: "sub:1",
+          subjectHash: `sha256:${salesOrderId.slice(-10)}…draft`,
+          frozenSubmissionSummary: `${lineItems[0]?.name ?? "卡券"} · ${lineItems[0]?.quantity ?? "0"} 张 · 面值 ${lineItems[0]?.faceValue ?? "0.00"} · ${lineItems[0]?.cardForm ?? "—"} · 履约期限至 ${input.fulfillmentDeadline} · 含税 ${gross.toFixed(2)}`,
+          expectedReviewStatus: "PENDING_SALES_LEAD",
+          allowedActions: ["CLAIM"],
+          actionBlockers: [
+            { action: "APPROVE", reason: "须先领取销售领导审批任务。" },
+            { action: "REJECT", reason: "须先领取销售领导审批任务。" },
+          ],
+        }
+      : null
+
+  const created = registerMockSalesOrder(
+    buildSalesOrder({
+      id: salesOrderId,
+      documentNumber,
+      customerName: contract.customer.displayName,
+      contractNumber: contract.contractNo,
+      contractRevisionLabel: `${contract.contractNo}@v${requestedRevision.revisionNo}`,
+      nature: input.nature,
+      originSystem: "erp",
+      ownerSystem: "erp",
+      primaryStatus: submitted
+        ? input.nature === "card_voucher"
+          ? { label: "待销售领导审批", tone: "warning" }
+          : { label: "待二次确认", tone: "warning" }
+        : { label: "草稿", tone: "neutral" },
+      fulfillment: { label: "未开始", tone: "neutral" },
+      collection: { label: "未收", tone: "neutral" },
+      invoicing: { label: "未开", tone: "neutral" },
+      amountGross: gross.toFixed(2),
+      amountNet: net.toFixed(2),
+      taxAmount: tax.toFixed(2),
+      receivedAmount: "0.00",
+      invoicedAmount: "0.00",
+      ownerName: input.ownerName.trim(),
+      submittedAt,
+      welfareScene: input.welfareScene.trim(),
+      remark: input.remark.trim() || undefined,
+      version: 1,
+      settlementEntity: contract.currentRevision.settlementParty.displayName,
+      sellerEntity: "某某福利科技有限公司",
+      paymentTerms: input.paymentTerms.trim(),
+      fulfillmentDeadline: input.fulfillmentDeadline,
+      lineItems,
+      related: {
+        purchaseOrders: 0,
+        fulfillments: 0,
+        receipts: 0,
+        invoices: 0,
+      },
+      activeCardSalesApproval,
+    }),
+    input.idempotencyKey
+  )
+
+  return {
+    salesOrderId: created.id,
+    documentNumber: created.documentNumber,
+    statusLabel: created.primaryStatus.label,
+    createdAt: now.toISOString(),
+    reference: `SO-CREATE-${created.documentNumber}`,
   }
 }
 

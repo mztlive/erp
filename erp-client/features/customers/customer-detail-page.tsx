@@ -188,7 +188,7 @@ export function CustomerDetailPage({
     customer.currentRevision.shortName || customer.currentRevision.legalName
   const isDisabled = customer.status === "disabled"
   const createContractHref = `/sales/contracts?customerId=${encodeURIComponent(customer.customerId)}`
-  const createSalesOrderHref = `/sales/orders?customerId=${encodeURIComponent(customer.customerId)}`
+  const createSalesOrderHref = `/sales/orders?mode=create&customerId=${encodeURIComponent(customer.customerId)}`
   const receivableHref = `/finance/customer-accounts?customerId=${encodeURIComponent(customer.customerId)}`
   const qualityHref = `/analytics/customer-quality?customerId=${encodeURIComponent(customer.customerId)}`
 

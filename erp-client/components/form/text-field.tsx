@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 
 type TextFieldProps = {
   label: string;
+  hideLabel?: boolean;
   description?: string;
   placeholder?: string;
   type?: React.ComponentProps<"input">["type"];
@@ -28,6 +29,7 @@ type TextFieldProps = {
  */
 export function TextField({
   label,
+  hideLabel = false,
   description,
   placeholder,
   type = "text",
@@ -46,7 +48,9 @@ export function TextField({
       data-invalid={isInvalid || undefined}
       className={cn(className)}
     >
-      <FieldLabel htmlFor={field.name}>{label}</FieldLabel>
+      <FieldLabel htmlFor={field.name} className={hideLabel ? "sr-only" : undefined}>
+        {label}
+      </FieldLabel>
       <Input
         id={field.name}
         name={field.name}

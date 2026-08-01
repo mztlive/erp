@@ -775,6 +775,36 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
   }),
 ]
 
+const sessionSalesOrders = new Map<string, SalesOrderListItem>()
+const sessionSalesOrderByIdempotency = new Map<string, string>()
+
+/** 当前 SPA 会话内的统一销售单读模型；新建草稿排在种子数据之前。 */
+export function listMockSalesOrders(): SalesOrderListItem[] {
+  return [...sessionSalesOrders.values()].reverse().concat(MOCK_SALES_ORDERS)
+}
+
+/** 按稳定 ID 查询种子或当前会话新建的销售单。 */
+export function getMockSalesOrder(id: string): SalesOrderListItem | null {
+  return (
+    sessionSalesOrders.get(id) ??
+    MOCK_SALES_ORDERS.find((order) => order.id === id) ??
+    null
+  )
+}
+
+/** 幂等登记当前会话新建销售单；同一键只返回第一张单。 */
+export function registerMockSalesOrder(
+  order: SalesOrderListItem,
+  idempotencyKey: string
+): SalesOrderListItem {
+  const existingId = sessionSalesOrderByIdempotency.get(idempotencyKey)
+  if (existingId) return sessionSalesOrders.get(existingId) ?? order
+
+  sessionSalesOrders.set(order.id, order)
+  sessionSalesOrderByIdempotency.set(idempotencyKey, order.id)
+  return order
+}
+
 export const NATURE_LABEL: Record<SalesOrderListItem["nature"], string> = {
   physical_service: "实物与服务",
   card_voucher: "卡券",

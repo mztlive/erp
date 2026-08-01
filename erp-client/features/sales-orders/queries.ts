@@ -10,6 +10,7 @@ import {
   adjustProcurementRejectionDraft,
   claimCardSalesApproval,
   completeCardSalesApproval,
+  createSalesOrder,
   createSalesOrderExportJob,
   decideLowMarginManager,
   fetchSalesOrderDetail,
@@ -42,6 +43,19 @@ export function useSalesOrderDetailQuery(salesOrderId: string) {
   return useQuery({
     queryKey: salesOrderKeys.detail(salesOrderId),
     queryFn: () => fetchSalesOrderDetail(salesOrderId),
+  })
+}
+
+export function useCreateSalesOrderMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: createSalesOrder,
+    onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: salesOrderKeys.list() })
+      await queryClient.invalidateQueries({
+        queryKey: salesOrderKeys.detail(data.salesOrderId),
+      })
+    },
   })
 }
 

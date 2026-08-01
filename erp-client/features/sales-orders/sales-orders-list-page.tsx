@@ -5,6 +5,7 @@ import Link from "next/link"
 import {
   DownloadIcon,
   FilterIcon,
+  PlusIcon,
   PrinterIcon,
   SearchIcon,
 } from "lucide-react"
@@ -413,6 +414,12 @@ export function SalesOrdersListPage({
         actions={
           <PageActions
             actions={[
+              {
+                actionKey: "create",
+                label: "新建销售单",
+                icon: PlusIcon,
+                render: <Link href="/sales/orders?mode=create" />,
+              },
               {
                 actionKey: "export",
                 label: "导出",

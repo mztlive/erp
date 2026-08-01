@@ -3,6 +3,46 @@ import type { StatusTone } from "@/components/ui/status-badge"
 export type SalesOrderNature = "physical_service" | "card_voucher"
 export type SalesOrderOwner = "erp" | "mall"
 
+export type SalesOrderCreateIntent = "SAVE_DRAFT" | "SUBMIT"
+
+export type SalesOrderDraftLineInput = {
+  rowKey: string
+  name: string
+  sku: string
+  quantity: string
+  unit: string
+  unitPriceGross: string
+  fulfillmentMode: string
+  dueDate: string
+  faceValue: string
+  giftRate: string
+  cardForm: string
+}
+
+/** M5 建单输入；客户、结算主体与合同修订由服务端按 contractId 重验。 */
+export type CreateSalesOrderInput = {
+  contractId: string
+  requestedContractRevisionId: string
+  nature: SalesOrderNature
+  ownerName: string
+  welfareScene: string
+  paymentTerms: string
+  fulfillmentDeadline: string
+  taxRatePercent: string
+  remark: string
+  lineItems: SalesOrderDraftLineInput[]
+  intent: SalesOrderCreateIntent
+  idempotencyKey: string
+}
+
+export type CreateSalesOrderResult = {
+  salesOrderId: string
+  documentNumber: string
+  statusLabel: string
+  createdAt: string
+  reference: string
+}
+
 export type ProgressTrack = {
   label: string
   tone: StatusTone

@@ -321,11 +321,13 @@ export function ContractDetailPage({
               size="sm"
               render={
                 <Link
-                  href={`/sales/orders?customerId=${encodeURIComponent(
+                  href={`/sales/orders?mode=create&customerId=${encodeURIComponent(
                     contract.customer.id
                   )}&contractId=${encodeURIComponent(
                     contract.contractId
-                  )}&contractRevisionId=${encodeURIComponent(rev.revisionId)}`}
+                  )}&contractRevisionId=${encodeURIComponent(
+                    contract.currentRevision.revisionId
+                  )}`}
                 />
               }
             >
@@ -459,7 +461,7 @@ export function ContractDetailPage({
                 size="sm"
                 render={
                   <Link
-                    href={`/sales/orders?contractId=${encodeURIComponent(
+                    href={`/sales/orders?mode=create&contractId=${encodeURIComponent(
                       contract.contractId
                     )}`}
                   />
