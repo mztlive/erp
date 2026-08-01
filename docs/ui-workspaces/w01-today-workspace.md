@@ -1,9 +1,9 @@
 # W01 · 今日工作台
 
-> 状态：样板  
-> 页面模式：M1 角色工作台  
-> 主要路由：`/workspace`  
-> 主要角色：全部已登录用户；销售与销售领导默认着陆  
+> 状态：样板
+> 页面模式：M1 角色工作台
+> 主要路由：`/workspace`
+> 主要角色：全部已登录用户；销售与销售领导默认着陆
 > 最后更新：2026-08-01
 
 ## 1. 定位与目标
@@ -118,7 +118,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 | 审批与确认 | `PROCUREMENT_CONFIRMATION`、`LOW_MARGIN_MANAGER_CONFIRMATION`、销售审批、采购审核 | 是 |
 | 票款与结算 | `CARD_FUNDS_REVIEW`、`CARD_FUNDS_DELTA_REVIEW`、`SUPPLIER_SETTLEMENT_REVIEW`、财务纠错 | 有任务时展开 |
 | 履约与库存 | 库存调整审核、履约相关 `BUSINESS_EXCEPTION` | 有超期时展开，否则折叠 |
-| 数据治理与异常 | `INTEGRATION_RESULT_UNKNOWN`、映射任务、`BUSINESS_EXCEPTION` | 管理员/责任角色展开，其余按权限隐藏 |
+| 数据治理与异常 | `INTEGRATION_RESULT_UNKNOWN`、`BUSINESS_EXCEPTION` （映射任务使用 `business_object_type=MASTER_MAPPING_TASK`） | 管理员/责任角色展开，其余按权限隐藏 |
 
 组内排序固定为：已超期优先 → `priority` 降序 → `due_at` 升序 → `created_at` 升序。排序由服务端完成，前端不因本地时间差重排正式优先级。
 
@@ -170,7 +170,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 
 - 默认视图：`scope=mine`、`due=all-active`。
 - 默认展示全部有权任务族；无任务的组不渲染空容器。
-- 每组首批返回 5 条，超过时显示“查看该组全部 N 条”并进入 W02。
+- 每组首批数量使用服务端工作台配置 `pagePreviewLimit`，超过时显示“查看该组全部 N 条”并进入 W02。配置尚未提供时可暂用 5 条作为安全展示上限，但必须标记为临时设计参数；该回退值不构成接口或验收的固定数量契约。
 - W01 不做无限滚动；跨组浏览和批量治理进入 W02。
 
 ### 6.2 筛选契约
@@ -198,7 +198,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 | --- | --- | --- | --- | --- | --- |
 | 刷新 | 页头 | W01 可访问 | 无 | 更新投影与任务查询；分别展示两类水位 | 保留旧数据并提供重试 |
 | 指标过滤 | 指标卡 | 对应指标可见 | 无 | 主区在原页过滤 | 请求失败恢复原列表和原筛选 |
-| 处理任务 | 任务条目主按钮 | `PROCESS` 在 `allowedActions` 中，且无 blocker | W01 不确认正式动作 | 打开对应 M3 / M4 / M5 并携带队列上下文 | 导航失败留在 W01；不提前领取或完成任务 |
+| 处理任务 | 任务条目主按钮 | `PROCESS` 在 `allowedActions` 中，且无 blocker | W01 不确认正式动作 | 打开对应 M3 / M4 / M5，并以 `currentWorkItemId=workItemId` 携带 `queueContextId` | 导航失败留在 W01；不提前领取或完成任务 |
 | 查看对象 | 任务条目次入口 | 有对象查看权限 | 无 | 聚焦或创建对象中心页签 | 无权限时转为明确无权限态 |
 | 查看全部待办 | 主区标题 / 组尾 | 有 W02 权限 | 无 | 打开 W02 并携带当前筛选 | 无 W02 权限时不展示入口 |
 | 打开预警 | 预警条目 | 有目标模块权限 | 无 | 打开负责处理该预警的工作面 | 目标权限已变化时显示无权限态 |
@@ -208,6 +208,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 
 - W01 点击“处理”只负责导航，不在后台静默执行正式动作。
 - 是否领取任务由目标 M3 队列在进入时按租约协议完成。
+- 跨工作面队列上下文只使用 `queueContextId`，任务条目身份使用 `workItemId`；目标队列定位当前项时使用 `currentWorkItemId=workItemId`，不接受平行别名。
 - 前端根据服务端返回的 `destinationWorkspaceId` 和稳定对象身份查本地路由注册表；不接受服务端任意 URL，避免开放跳转。
 - 已被他人有效领取的任务仍可按权限查看，但处理按钮禁用并显示领取人和租约状态。
 
@@ -223,14 +224,14 @@ type TodayWorkspaceQuery = {
   due?: "today" | "overdue"
   family?: "approval" | "finance" | "fulfillment" | "exception"
   timezone: string
-  groupLimit: number
 }
 ```
 
 约束：
 
 - `timezone` 使用用户当前已确认工作时区；不能仅依赖浏览器猜测。
-- `groupLimit` 由前后端约定上限，W01 默认 5。
+- `pagePreviewLimit` 由服务端工作台配置随任务组返回，前端不得通过查询参数自行选择，也不得按视口硬编码另一套每组条数。
+- 配置缺失时，前端可使用 5 条作为保守的临时展示回退并暴露配置缺失诊断，但不能把该数字写入正式接口、响应式或验收硬约束。
 - 查询由 TanStack Query 管理；组件内不得裸 `fetch` 或自行维护缓存竞态。
 - Query Key 至少包含用户身份、当前角色、权限版本、数据范围版本、筛选和时区。
 
@@ -260,6 +261,8 @@ type TodayWorkspaceView = {
     family: "approval" | "finance" | "fulfillment" | "exception"
     label: string
     total: number
+    pagePreviewLimit?: number
+    previewLimitSource: "CONFIGURED" | "TEMPORARY_FALLBACK"
     items: WorkspaceWorkItem[]
   }>
   warnings: WorkspaceWarning[]
@@ -275,7 +278,7 @@ type WorkspaceWorkItem = {
   objectTitle: string
   counterpartyName?: string
   subjectVersion?: string
-  status: string
+  status: WorkItemStatus
   statusLabel: string
   priority: number
   createdAt: string
@@ -287,7 +290,7 @@ type WorkspaceWorkItem = {
   allowedActions: Array<"VIEW" | "PROCESS">
   actionBlockers: Array<{ action: "VIEW" | "PROCESS"; code: string; message: string }>
   destinationWorkspaceId: string
-  queueContextId?: string
+  queueContextId: string
 }
 
 type WorkspaceWarning = {
@@ -301,6 +304,8 @@ type WorkspaceWarning = {
   objectId?: string
 }
 ```
+
+`WorkspaceWorkItem.status` 直接复用 W02 `WorkItemStatus`；每条正式待办都返回 `workItemId` 和 `queueContextId`。W01 只把 `workItemId` 映射为目标队列的 `currentWorkItemId`，不创建新的任务身份或队列上下文别名。
 
 ### 8.3 数据新鲜度与计算边界
 
@@ -342,10 +347,10 @@ W01 没有业务写提交接口。
 
 | 视口 | 布局变化 | 必须保留 | 允许降级 |
 | --- | --- | --- | --- |
-| 1440×900 | 侧栏展开；指标四列；主区 62/38 两栏 | 页头水位、全部指标、至少 3 条首组任务、预警 | 无 |
-| 1280×800 | 侧栏可折叠；主区约 60/40 | 任务主操作和截止时间 | 最近打开减少到 4 项 |
+| 1440×900 | 侧栏展开；指标四列；主区 62/38 两栏 | 页头水位、全部指标、首组任务与进入全部入口、预警 | 无 |
+| 1280×800 | 侧栏可折叠；主区约 60/40 | 任务主操作和截止时间 | 最近打开按可用高度收敛，不固定为某一条数 |
 | 1024×768 | 侧栏图标模式；两栏改为约 65/35 | 指标值、超期任务、处理按钮 | 指标说明文案可隐藏，任务原因/影响最多两行 |
-| 768×1024 | 导航抽屉；指标 2×2；右栏移到任务主区之后 | 指标、任务身份、截止、状态、处理 | 最近打开折叠；预警只显示前 3 条 |
+| 768×1024 | 导航抽屉；指标 2×2；右栏移到任务主区之后 | 指标、任务身份、截止、状态、处理 | 最近打开折叠；预警按可用高度收敛并保留“查看全部”入口 |
 | 375×812 | 单列；指标 2×2；任务改紧凑卡片 | 待办查看、简单确认入口、数据水位 | 不显示最近打开；复杂处理进入目标页，W01 不展开详情 |
 
 ### 10.2 键盘与焦点
@@ -362,13 +367,13 @@ W01 没有业务写提交接口。
 
 | 来源 / 去向 | Wxx | 携带上下文 | 返回规则 |
 | --- | --- | --- | --- |
-| 统一待办队列 | W02 | `scope`、`family`、`due`、排序摘要 | 返回保留 W01 筛选 |
-| 销售单 | W05 | 稳定销售单 ID、来源任务 ID | 关闭/返回聚焦原任务 |
-| 二次确认队列 | W07 | `workItemId`、`queueContextId` | 队列页签保留；处理完成可回 W01 |
-| 采购与履约 | W08 / W09 | 采购/履约对象 ID、来源任务 | 返回原任务或 W01 |
-| 客户/供应商往来 | W11 / W12 | 往来主体、应收/应付对象、来源任务 | 正式结果完成后 W01 任务刷新 |
-| 卡券票款复核 | W13 | `workItemId`、客户或销售单上下文 | 队列完成后返回 W01 |
-| 同步与映射 | W17 / W21 / W29 | 异常/映射任务身份、来源快照 | 解决后等待工作台投影刷新 |
+| 统一待办队列 | W02 | `scope`、`family`、`due`；定位任务时传 `currentWorkItemId=workItemId` 与 `queueContextId` | 返回保留 W01 筛选与任务焦点 |
+| 销售单 | W05 | 稳定销售单 ID、来源 `workItemId` | 关闭/返回聚焦原任务 |
+| 二次确认队列 | W07 | `currentWorkItemId=workItemId`、`queueContextId` | 队列页签保留；处理完成可回 W01 |
+| 采购与履约 | W08 / W09 | 采购/履约对象 ID、来源 `workItemId` | 返回原任务或 W01 |
+| 客户/供应商往来 | W11 / W12 | 往来主体、应收/应付对象、来源 `workItemId` | 正式结果完成后 W01 任务刷新 |
+| 卡券票款复核 | W13 | `workItemId`、`queueContextId`、客户或销售单上下文 | 队列完成后返回 W01 |
+| 同步与映射 | W17 / W21 / W29 | 异常/映射 `workItemId`、`queueContextId` | 解决后等待工作台投影刷新 |
 
 跨工作面导航只传稳定身份和筛选上下文，不传金额、状态或权限结论作为事实。
 
@@ -378,7 +383,7 @@ W01 没有业务写提交接口。
 
 - [ ] 销售用户登录后，一次点击可从首条任务进入处理面。
 - [ ] 任一有任务角色从着陆到处理第一条待办不超过两次点击。
-- [ ] 1440×900 下指标、至少 3 条首组任务和首条预警同屏可见。
+- [ ] 1440×900 下指标、首组任务区、进入全部入口和首条预警同屏可见；任务精确条数服从 `pagePreviewLimit`，不作为固定验收数字。
 - [ ] 指标点击后有明确选中态、筛选摘要和正确结果数量。
 - [ ] 任务条目能回答对象、原因、影响、截止、责任方和下一步。
 - [ ] W01 不出现直接通过、驳回、核销或作废等正式动作。
@@ -414,7 +419,7 @@ W01 没有业务写提交接口。
 | Q2 | “今日到期”的工作时区来自用户、组织还是公司统一配置？ | 截止边界、跨时区一致性 | 产品 + 后端负责人 | 使用当前工作角色所属组织的已确认时区，界面明确展示 |
 | Q3 | “最近打开”跨设备同步还是仅保存在当前设备？ | 数据接口、隐私和体验 | 产品 + 安全负责人 | 先做服务端用户偏好，仅保存稳定身份与时间，不保存业务字段快照 |
 | Q4 | 预警是否允许用户订阅/隐藏，还是完全由角色规则决定？ | 右栏内容和设置入口 | 业务负责人 | 正式高风险预警不可隐藏；信息类预警可配置 |
-| Q5 | 每个任务族在 W01 首屏展示 5 条是否适合实际峰值？ | 首屏密度和 W02 导流 | 各业务部门 | 先按 5 条验收，再用真实任务水位校准 |
+| Q5 | 每个任务族的 `pagePreviewLimit` 应如何按实际峰值配置？ | 首屏密度和 W02 导流 | 各业务部门 | 由服务端配置每组预览上限；未确认前仅以 5 条作安全的临时展示参数，精确条数不进入验收硬约束，再用真实任务水位校准 |
 
 待确认事项确认后，应把结论写回对应章节并从本表移除；不得长期保留“建议”与正式规则并存。
 
@@ -426,4 +431,3 @@ W01 没有业务写提交接口。
 - `erp-data-model.md` §5.1 `work_item`：任务类型、对象身份、状态、责任人、优先级、时限、原因、影响、租约和完成审计。
 - `erp-data-model.md` §12：正式待办同步维护，工作台汇总和预警为可重建异步投影。
 - `erp-ui-flows.md`：W01 只作为任务入口，正式处理进入对应 M3、M4 或 M5 工作面。
-
