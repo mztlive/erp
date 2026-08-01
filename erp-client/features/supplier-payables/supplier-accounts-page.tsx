@@ -850,7 +850,6 @@ export function SupplierAccountsPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-2 p-3 md:p-4">
       <PageHeader
         title="供应商往来"
-        description="应付、付款与进项发票三类事实独立查询；付款核销与进项票核销两条轨道互不替代。"
         breadcrumbs={[
           { id: "fin", label: "财务", href: "/finance/supplier-accounts" },
           { id: "ap", label: "供应商往来", current: true },

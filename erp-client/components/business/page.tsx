@@ -53,7 +53,10 @@ export type PageHeaderProps = Omit<
   status?: SemanticStatus
   metadata?: React.ReactNode
   actions?: React.ReactNode
-  /** compact：标题、状态与 metadata 同排，供高频作业页压缩首屏。 */
+  /**
+   * compact（默认）：标题、状态与 metadata 同排，面包屑压到 xs，供高频作业页压缩首屏。
+   * default：标题 text-2xl、metadata 独占一行，用于需要展示语气的落地页。
+   */
   density?: PageHeaderDensity
 }
 
@@ -65,7 +68,7 @@ function PageHeader({
   status,
   metadata,
   actions,
-  density = "default",
+  density = "compact",
   className,
   ...props
 }: PageHeaderProps) {
@@ -79,8 +82,11 @@ function PageHeader({
       {...props}
     >
       {breadcrumbs.length > 0 ? (
-        <Breadcrumb aria-label={breadcrumbLabel}>
-          <BreadcrumbList>
+        <Breadcrumb
+          aria-label={breadcrumbLabel}
+          className={compact ? "text-xs" : undefined}
+        >
+          <BreadcrumbList className={compact ? "gap-1 sm:gap-1.5" : undefined}>
             {breadcrumbs.map((item, index) => (
               <React.Fragment key={item.id}>
                 {index > 0 ? <BreadcrumbSeparator /> : null}

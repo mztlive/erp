@@ -491,7 +491,6 @@ export function ConsumptionOrdersListPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-2.5 p-3 md:p-4">
       <PageHeader
         title="商城消费订单"
-        description="事实追溯视图：支付、退款、完成、余额恢复与分摊守恒。不修改商城订单，不展示商城中间态。"
         breadcrumbs={[
           {
             id: "com",

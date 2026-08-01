@@ -217,11 +217,10 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title={def.title}
-        description={def.description}
         breadcrumbs={breadcrumbs}
         metadata={
           <span className="text-xs text-muted-foreground">
-            当前范围：{scope} · 上下文 {queueContextId} · 截止时间优先
+            {scope} · 截止时间优先
           </span>
         }
       />
@@ -302,6 +301,7 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
                   onClick={() => selectTaskAt(index)}
                 >
                   <WorkTaskItem
+                    density="compact"
                     taskType={item.taskType}
                     businessObject={item.businessObject}
                     counterparty={item.counterparty}
@@ -332,9 +332,9 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
               processLabel={
                 task.handlerHref ? "打开专用处理器" : "完成当前项"
               }
-              processNextLabel={
-                task.handlerHref ? "打开专用处理器" : "完成并打开下一条"
-              }
+              // 本壳没有独立的「并打开下一条」路径，onProcessNext 与 onProcess 同义，
+              // 再渲染一个按钮只会重复且误导。
+              showProcessNext={false}
               processDisabled={completeMutation.isPending}
               onBack={() => {
                 router.push("/workspace")

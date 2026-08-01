@@ -49,6 +49,8 @@ export type WorkTaskStatus = Readonly<{
   tone?: StatusTone;
 }>;
 
+export type WorkTaskItemDensity = "default" | "compact";
+
 export interface WorkTaskItemProps extends Omit<
   React.ComponentProps<typeof Item>,
   "children" | "title"
@@ -65,6 +67,11 @@ export interface WorkTaskItemProps extends Omit<
   impact: React.ReactNode;
   status?: WorkTaskStatus;
   nextAction?: React.ReactNode;
+  /**
+   * compact：只保留任务类型、对象、截止与责任方，省略进入队列时间与原因/影响。
+   * 仅用于右侧已有详情面板的队列选择列表；独立展示的工作台请用 default。
+   */
+  density?: WorkTaskItemDensity;
 }
 
 /**
@@ -83,14 +90,23 @@ export function WorkTaskItem({
   impact,
   status,
   nextAction,
+  density = "default",
   className,
   ...props
 }: WorkTaskItemProps) {
+  const compact = density === "compact";
+  const due = dueDateTime ? (
+    <time dateTime={dueDateTime}>{dueAt}</time>
+  ) : (
+    dueAt
+  );
+
   return (
     <Item
       data-slot="work-task-item"
+      data-density={density}
       variant="outline"
-      size="sm"
+      size={compact ? "xs" : "sm"}
       className={cn("items-start", className)}
       {...props}
     >
@@ -105,42 +121,56 @@ export function WorkTaskItem({
           <span className="font-medium text-foreground">{businessObject}</span>
           {counterparty ? <span>{counterparty}</span> : null}
         </ItemDescription>
-        <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
-          <div className="flex items-baseline gap-1">
-            <dt className="text-muted-foreground">进入队列</dt>
-            <dd className="font-medium text-foreground">
-              {enteredDateTime ? (
-                <time dateTime={enteredDateTime}>{enteredAt}</time>
-              ) : (
-                enteredAt
-              )}
-            </dd>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <dt className="text-muted-foreground">截止</dt>
-            <dd className="font-medium text-foreground">
-              {dueDateTime ? (
-                <time dateTime={dueDateTime}>{dueAt}</time>
-              ) : (
-                dueAt
-              )}
-            </dd>
-          </div>
-          <div className="flex items-baseline gap-1">
-            <dt className="text-muted-foreground">责任方</dt>
-            <dd className="font-medium text-foreground">{responsibleParty}</dd>
-          </div>
-        </dl>
-        <dl className="mt-2 grid gap-1 text-xs">
-          <div className="flex items-start gap-1">
-            <dt className="shrink-0 text-muted-foreground">原因</dt>
-            <dd className="text-foreground">{reason}</dd>
-          </div>
-          <div className="flex items-start gap-1">
-            <dt className="shrink-0 text-muted-foreground">影响</dt>
-            <dd className="text-foreground">{impact}</dd>
-          </div>
-        </dl>
+
+        {compact ? (
+          <dl className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-xs">
+            <div className="flex items-baseline gap-1">
+              <dt className="text-muted-foreground">截止</dt>
+              <dd className="font-medium text-foreground">{due}</dd>
+            </div>
+            <div className="flex min-w-0 items-baseline gap-1">
+              <dt className="sr-only">责任方</dt>
+              <dd className="truncate text-muted-foreground">
+                {responsibleParty}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <>
+            <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              <div className="flex items-baseline gap-1">
+                <dt className="text-muted-foreground">进入队列</dt>
+                <dd className="font-medium text-foreground">
+                  {enteredDateTime ? (
+                    <time dateTime={enteredDateTime}>{enteredAt}</time>
+                  ) : (
+                    enteredAt
+                  )}
+                </dd>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <dt className="text-muted-foreground">截止</dt>
+                <dd className="font-medium text-foreground">{due}</dd>
+              </div>
+              <div className="flex items-baseline gap-1">
+                <dt className="text-muted-foreground">责任方</dt>
+                <dd className="font-medium text-foreground">
+                  {responsibleParty}
+                </dd>
+              </div>
+            </dl>
+            <dl className="mt-2 grid gap-1 text-xs">
+              <div className="flex items-start gap-1">
+                <dt className="shrink-0 text-muted-foreground">原因</dt>
+                <dd className="text-foreground">{reason}</dd>
+              </div>
+              <div className="flex items-start gap-1">
+                <dt className="shrink-0 text-muted-foreground">影响</dt>
+                <dd className="text-foreground">{impact}</dd>
+              </div>
+            </dl>
+          </>
+        )}
       </ItemContent>
       {nextAction ? <ItemActions>{nextAction}</ItemActions> : null}
     </Item>

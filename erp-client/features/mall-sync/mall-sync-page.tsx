@@ -962,7 +962,6 @@ export function MallSyncPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="商城同步与映射"
-        description="治理商城与 ERP 的主责边界、同步水位、来源快照、业务映射与每日核对。第一阶段仅商城 → ERP 商业事实，无 ERP 回写商业修改入口。"
         breadcrumbs={[
           { id: "gov", label: "治理", href: "/governance/mall-sync", current: false },
           { id: "sync", label: "商城同步与映射", current: true },
@@ -1976,6 +1975,8 @@ export function MallSyncPage() {
                     total={mappingIndex.total}
                     leaseStatus={leaseStatus}
                     processLabel="确认映射"
+                    // 没有独立的「并打开下一条」路径：两个 handler 同义
+                    showProcessNext={false}
                     processDisabled={!canConfirmMapping}
                     onBack={() =>
                       router.push(

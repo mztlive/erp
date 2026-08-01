@@ -507,7 +507,6 @@ export function SupplierOrdersListPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="供应商订单"
-        description="查看由商城支付触发的供应商履约子订单；三轨进度正交，结果未知须先查询原结果。"
         breadcrumbs={[
           { id: "api", label: "供应商 API", href: "/supplier-api/orders" },
           { id: "so", label: "供应商订单", current: true },

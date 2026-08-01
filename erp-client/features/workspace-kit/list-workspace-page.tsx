@@ -131,7 +131,6 @@ export function ListWorkspacePage({ def }: { def: WorkspacePageDef }) {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title={def.title}
-        description={def.description}
         breadcrumbs={breadcrumbs}
         metadata={
           <DataFreshness

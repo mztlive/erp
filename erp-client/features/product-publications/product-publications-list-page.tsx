@@ -347,7 +347,6 @@ export function ProductPublicationsListPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:p-5">
       <PageHeader
         title="商品发布"
-        description="管理向目标商城的商品发布修订、生效状态与接收结果。"
         breadcrumbs={[
           { id: "com", label: "商城与发布", href: "/commerce/publications" },
           { id: "pub", label: "商品发布", current: true },

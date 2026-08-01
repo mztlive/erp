@@ -656,7 +656,6 @@ function SettlementList({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="API 供应商结算"
-        description="按供应商与结算期间核对 ERP 金额、供应商账单与差异；确认后形成应付进入 W12。"
         metadata={
           <DataFreshness
             updatedAt={data?.sourceAsOf ? formatTime(data.sourceAsOf) : "—"}

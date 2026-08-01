@@ -864,7 +864,6 @@ export function CardFundsReviewPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="卡券票款复核"
-        description="连续处理期初 OPENING 与同步差额 SYNC_DELTA；登记正式票款事实，禁止覆盖累计字段。"
         breadcrumbs={[
           {
             id: "fin",

@@ -465,7 +465,6 @@ function MasterDataListWorkspace({
 
       <PageHeader
         title={`主数据 · ${resourceLabel(resource)}`}
-        description="稳定身份 + 不可变修订；启停生命周期与修订时序分列展示。待生效不混入启停状态。"
         breadcrumbs={[
           {
             id: "md",

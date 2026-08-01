@@ -898,7 +898,6 @@ export function IntegrationErrorsPage({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="接口错误与对账中心"
-        description="连续处理发送/接收失败、结果未知、回调异常与周期对账差异；结果未知先查询，重放沿服务端锁定原幂等键。"
         breadcrumbs={[
           {
             id: "gov",
@@ -1241,6 +1240,7 @@ export function IntegrationErrorsPage({
                       onClick={() => goToItem(row)}
                     >
                       <WorkTaskItem
+                        density="compact"
                         taskType={row.classification.label}
                         businessObject={row.businessObject.title}
                         counterparty={row.identity.number}

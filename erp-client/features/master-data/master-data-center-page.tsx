@@ -160,7 +160,6 @@ function MasterDataCenterBody({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="主数据对象中心"
-        description="概览 / 版本 / 关系 / 审计。历史版本名称快照不随后续更名变化。"
         breadcrumbs={[
           { id: "md", label: "主数据", href: "/master-data/sellable-items" },
           {

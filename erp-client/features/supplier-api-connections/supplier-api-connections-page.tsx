@@ -551,7 +551,6 @@ function ConnectionList({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
       <PageHeader
         title="API 供应商连接"
-        description="管理供应商 API 连接身份、能力、安全引用与健康；密钥永不展示正文。"
         breadcrumbs={[
           {
             id: "api",

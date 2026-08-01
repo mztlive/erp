@@ -584,7 +584,7 @@ export function PurchaseOrderDetailPage({
             PO · {displayNo}
           </span>
         }
-        description={`${modeLabel} · TaskTab 身份 purchase-order:${order.identity.purchaseOrderId}（查看/编辑/审核同一对象）`}
+        status={{ label: modeLabel, tone: "info" }}
         breadcrumbs={[
           { id: "proc", label: "采购与履约", href: "/procurement/confirm" },
           { id: "orders", label: "采购单", href: "/procurement/orders" },

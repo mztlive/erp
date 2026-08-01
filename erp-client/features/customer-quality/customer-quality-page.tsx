@@ -977,7 +977,6 @@ export function CustomerQualityPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="客户经营质量"
-        description="只读分析客户规模、结构、实际利润贡献与回款风险。成交金额含税；实际盈亏不含税；卡券进入规模与回款，不进入本页实际盈亏。"
         breadcrumbs={[
           { id: "an", label: "分析", href: "/analytics/customer-quality" },
           { id: "cq", label: "客户经营质量", current: true },

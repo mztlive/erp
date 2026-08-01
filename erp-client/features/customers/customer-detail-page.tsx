@@ -185,7 +185,6 @@ export function CustomerDetailPage({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="客户对象中心"
-        description="同一客户上下文中查看身份、联系、合同销售、票款与经营摘要；核销进 W11，分析进 W15。"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "customers", label: "客户中心", href: "/sales/customers" },

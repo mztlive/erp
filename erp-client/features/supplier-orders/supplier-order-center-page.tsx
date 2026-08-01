@@ -458,7 +458,6 @@ export function SupplierOrderCenterPage({
             供应商订单中心
           </span>
         }
-        description="商城支付已发生 · 处理供应商履约、取消与退款三轨进度"
         breadcrumbs={[
           { id: "list", label: "供应商订单", href: "/supplier-api/orders" },
           { id: "order", label: o.orderNo, current: true },

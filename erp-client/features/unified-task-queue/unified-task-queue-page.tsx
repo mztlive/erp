@@ -812,7 +812,6 @@ export function UnifiedTaskQueuePage() {
 
       <PageHeader
         title="统一待办队列"
-        density="compact"
         metadata={
           <DataFreshness
             updatedAt={queueQuery.isFetching ? "正在刷新" : "刚刚"}
@@ -1098,6 +1097,8 @@ export function UnifiedTaskQueuePage() {
                   aria-current={index === currentIndex ? "true" : undefined}
                 >
                   <WorkTaskItem
+                    // 原因/影响右侧详情已完整展示，队列里只留定位信息
+                    density="compact"
                     taskType={item.workItemTypeLabel}
                     businessObject={item.businessObject}
                     counterparty={item.counterparty}

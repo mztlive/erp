@@ -939,7 +939,6 @@ export function FulfillmentOperationsPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:p-5">
       <PageHeader
         title="履约作业"
-        description="同一工作面连续处理入库、公司仓发、供应商直发、电子交付与线下服务；写入强类型履约事实，不把物流签收当作客户验收。"
         breadcrumbs={[
           {
             id: "proc",
@@ -1210,6 +1209,7 @@ export function FulfillmentOperationsPage() {
                   }}
                 >
                   <WorkTaskItem
+                    density="compact"
                     taskType={OPERATION_TYPE_LABEL[item.operationType]}
                     businessObject={`${item.source.salesOrderNo}${
                       item.source.purchaseNo
@@ -1258,7 +1258,8 @@ export function FulfillmentOperationsPage() {
               leaseStatus={leaseStatus}
               leaseStatusLabel={leaseLabel}
               processLabel="确认过账"
-              processNextLabel="确认过账并下一项"
+              // 没有独立的「并下一项」路径：两个 handler 同义，第二个按钮名不副实
+              showProcessNext={false}
               processDisabled={formalPending || !canPost}
               onBack={() => {
                 if (sourceReturnHref) router.push(sourceReturnHref)

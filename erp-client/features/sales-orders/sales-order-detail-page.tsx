@@ -176,7 +176,6 @@ export function SalesOrderDetailPage({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="销售单对象中心"
-        description="核对商业内容、创建来源/主责、多轨进度、驳回出路、审批任务与关闭资格；正式单无直接编辑或人工关闭入口。"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "orders", label: "销售单", href: "/sales/orders" },

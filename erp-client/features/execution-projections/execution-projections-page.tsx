@@ -697,7 +697,6 @@ export function ExecutionProjectionsPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:gap-3.5 md:p-4">
       <PageHeader
         title="执行投影"
-        description="跨单监控卡券销售版本向商城的执行投影投递与确认；非第二张销售单，无新建/编辑/删除入口。"
         breadcrumbs={[
           {
             id: "com",

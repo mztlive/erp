@@ -766,7 +766,6 @@ export function ExternalProductSupplyPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="外部商品映射与供给"
-        description="连续处理已注册 ERROR/STOPPED 异常；新商品与关键供给变化在类型登记前只读浏览并 fail-closed。"
         breadcrumbs={[
           { id: "api", label: "供应商 API", href: "/supplier-api/catalog" },
           { id: "cat", label: "外部商品供给", current: true },
@@ -1063,7 +1062,8 @@ export function ExternalProductSupplyPage() {
                   : "确认停供事实"
                 : "正式确认（不可用）"
             }
-            processNextLabel="确认并准备下一项"
+            // 没有独立的「并准备下一项」路径：两个 handler 同义
+            showProcessNext={false}
             processDisabled={
               formalPending ||
               Boolean(lastResult?.status === "unknown") ||

@@ -266,7 +266,6 @@ export function ContractDetailPage({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title={`合同 · ${contract.contractNo}`}
-        description="稳定合同对象中心：维护草稿、查看版本 diff、打开关联销售单；修订仅在服务端策略允许时可用。"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "contracts", label: "合同", href: "/sales/contracts" },

@@ -901,7 +901,6 @@ export function ProcurementConfirmationPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="采购二次确认"
-        description="连续核对不可变销售提交的供应商、可供数量、成本、税率与交期；通过/驳回/暂挂后无需返回列表。"
         breadcrumbs={[
           {
             id: "procurement",

@@ -1247,7 +1247,6 @@ export function AccessAuditPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-2 p-3 md:p-4">
       <PageHeader
         title={isAudit ? "审计查询" : "权限与数据范围"}
-        description="配置角色、用户授权、数据范围与字段策略；查询追加式审计。有效权限由服务端解释，前端不合并权限集合。"
         metadata={
           <DataFreshness
             label={isAudit ? "审计水位" : "权限配置水位"}

@@ -415,7 +415,6 @@ export function ConsumptionOrderCenterPage({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title={`消费 · ${view.identity.externalOrderNo}`}
-        description="只读事实追溯对象中心 · 页签身份 mall-consumption-order"
         breadcrumbs={[
           {
             id: "com",

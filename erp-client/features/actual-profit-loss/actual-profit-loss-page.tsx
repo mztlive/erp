@@ -842,7 +842,6 @@ export function ActualProfitLossPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title={`实际经营盈亏（${SCOPE_LABEL}）`}
-        description="只读分析：以 ACTUAL/REDUCTION 成本事实与生效销售版本形成经营投影；不含卡券与含税混算。不可在此页改成本、改阶段或改利润。"
         breadcrumbs={[
           { id: "an", label: "分析", href: "/analytics/profit-loss" },
           { id: "pl", label: "实际经营盈亏", current: true },

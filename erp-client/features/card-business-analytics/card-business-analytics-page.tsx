@@ -845,7 +845,6 @@ export function CardBusinessAnalyticsPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="卡券消费台账与经营分析"
-        description="只读经营投影：销售、消费、余额、成本覆盖与当前经营贡献。不在此页改数。"
         breadcrumbs={[
           { id: "an", label: "分析", href: "/analytics/card-business" },
           { id: "cb", label: "卡券经营分析", current: true },

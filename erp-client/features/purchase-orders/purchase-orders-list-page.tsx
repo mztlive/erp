@@ -568,7 +568,6 @@ export function PurchaseOrdersListPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="采购单"
-        description="集中核对采购单状态、供应商、金额、票款与履约；单击行打开 detail 半屏主事实。"
         breadcrumbs={[
           { id: "proc", label: "采购与履约", href: "/procurement/confirm" },
           { id: "orders", label: "采购单", current: true },

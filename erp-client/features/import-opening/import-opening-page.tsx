@@ -396,7 +396,6 @@ function BatchListView({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="导入与期初"
-        description="管理导入批次、期初数据与校验错误；按六段流水线推进安全接收、校验、确认与后台应用。上传成功不等于正式数据已形成。"
         breadcrumbs={[
           { id: "gov", label: "治理", href: "/governance/imports", current: false },
           { id: "imp", label: "导入与期初", current: true },

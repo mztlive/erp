@@ -117,7 +117,6 @@ export function CustomerCenterPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="客户中心"
-        description="围绕稳定企业客户身份，查看负责人、联系结算、合同销售与票款摘要。"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "customers", label: "客户中心", current: true },

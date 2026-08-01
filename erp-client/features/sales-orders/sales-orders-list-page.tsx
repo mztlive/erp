@@ -384,7 +384,6 @@ export function SalesOrdersListPage({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
       <PageHeader
         title="销售单"
-        description="卡券与非卡券统一列表；创建来源与当前主责分列。单击行可预览主事实，正式动作在对象中心完成。"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "orders", label: "销售单", current: true },

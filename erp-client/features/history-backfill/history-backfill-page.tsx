@@ -541,7 +541,6 @@ function JobListView({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="历史消费回填"
-        description="在消费回流启用时间 T 之后，创建并执行覆盖 [requiredHistoryStart, T) 的正式历史回填；只追加缺失事实，T 前支付不创建供应商订单。"
         breadcrumbs={[
           {
             id: "gov",

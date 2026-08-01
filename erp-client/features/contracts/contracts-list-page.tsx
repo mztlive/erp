@@ -412,7 +412,6 @@ export function ContractsListPage({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:gap-3.5 md:p-4">
       <PageHeader
         title="合同"
-        description="查询合同状态、有效期与关联销售单；单击行预览主事实，打开中心后维护草稿与版本。"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "contracts", label: "合同", current: true },

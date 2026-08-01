@@ -482,7 +482,6 @@ function OverviewView({
 
       <PageHeader
         title="主责迁移批次"
-        description="按客户迁移正式存量卡券销售单主责（福利商城 → ERP）；原子提交、职责分离、唯一 T。"
         breadcrumbs={[
           {
             id: "gov",
@@ -2019,7 +2018,6 @@ function CutoverView({
 
       <PageHeader
         title={`消费回流启用 · ${cutover.mallName}`}
-        description="商城级唯一 T：前提检查链尾全部通过后由上线负责人原子登记，不可改删。"
         breadcrumbs={[
           {
             id: "gov",

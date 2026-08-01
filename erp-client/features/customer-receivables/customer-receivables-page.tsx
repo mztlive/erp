@@ -814,7 +814,6 @@ export function CustomerReceivablesPage() {
     <div className="mx-auto flex w-full max-w-shell flex-col gap-2 p-3 md:p-4">
       <PageHeader
         title="客户往来"
-        description="以结算往来主体为上下文查看应收、回款、销项发票与待核销；资金核销与发票分配分轨，余额一律服务端返回。"
         breadcrumbs={[
           { id: "fin", label: "财务", href: "/finance/customer-accounts" },
           { id: "ar", label: "客户往来", current: true },
