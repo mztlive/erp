@@ -13,7 +13,6 @@ import {
 
 import {
   BusinessStatusBadge,
-  DataFreshness,
   DocumentHeader,
   DocumentSection,
   DocumentTotals,
@@ -580,24 +579,22 @@ export function PurchaseOrderDetailPage({
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title={
-          <span ref={titleRef} tabIndex={-1} className="outline-none">
-            PO · {displayNo}
-          </span>
-        }
-        status={{ label: modeLabel, tone: "info" }}
+        variant="object-chrome"
         breadcrumbs={[
           { id: "proc", label: "采购与履约", href: "/procurement/confirm" },
           { id: "orders", label: "采购单", href: "/procurement/orders" },
           { id: "current", label: displayNo, current: true },
         ]}
         metadata={
-          <DataFreshness
-            updatedAt="刚刚"
-            dateTime={new Date().toISOString()}
-            state="fresh"
-            label="对象数据"
-          />
+          <span className="inline-flex items-center gap-2">
+            <span
+              ref={titleRef}
+              tabIndex={-1}
+              className="outline-none font-medium text-foreground"
+            >
+              {modeLabel}
+            </span>
+          </span>
         }
         actions={
           <PageActions
@@ -691,7 +688,8 @@ export function PurchaseOrderDetailPage({
       ) : null}
 
       <DocumentHeader
-        title="采购单"
+        density="compact"
+        title={order.header.supplierSnapshot || "采购单"}
         documentNumber={displayNo}
         primaryStatus={{
           label: order.identity.statusLabel,
@@ -702,23 +700,12 @@ export function PurchaseOrderDetailPage({
             ? order.identity.revisionNo
             : "草稿"
         }
+        meta={
+          <span className="inline-flex flex-wrap items-center gap-x-1.5">
+            <span>来源 {order.header.salesOrderNo}</span>
+          </span>
+        }
         statuses={[
-          {
-            id: "supplier",
-            label: "供应商",
-            status: {
-              label: order.header.supplierSnapshot,
-              tone: "neutral",
-            },
-          },
-          {
-            id: "sales",
-            label: "来源销售",
-            status: {
-              label: order.header.salesOrderNo,
-              tone: "info",
-            },
-          },
           {
             id: "type",
             label: "类型",

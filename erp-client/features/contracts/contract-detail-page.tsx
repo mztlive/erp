@@ -7,14 +7,12 @@ import {
   FilePenLineIcon,
   HistoryIcon,
   LockIcon,
-  PlusIcon,
   PrinterIcon,
   ShieldAlertIcon,
 } from "lucide-react"
 
 import {
   BusinessStatusBadge,
-  DataFreshness,
   DocumentAttachmentList,
   DocumentHeader,
   DocumentSummary,
@@ -265,7 +263,7 @@ export function ContractDetailPage({
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title={`合同 · ${contract.contractNo}`}
+        variant="object-chrome"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "contracts", label: "合同", href: "/sales/contracts" },
@@ -275,14 +273,6 @@ export function ContractDetailPage({
             current: true,
           },
         ]}
-        metadata={
-          <DataFreshness
-            updatedAt="刚刚"
-            dateTime={contract.queriedAt}
-            state="fresh"
-            label="对象数据"
-          />
-        }
         actions={
           <PageActions
             actions={[
@@ -301,32 +291,13 @@ export function ContractDetailPage({
                 disabled: !canPrint,
                 onClick: () => setPaperOpen(true),
               },
-              {
-                actionKey: "create-so",
-                label: "新建销售单",
-                icon: PlusIcon,
-                variant: "outline",
-                disabled: !canCreateSo,
-                onClick: () => {
-                  if (!canCreateSo) return
-                  // 深链到 W05，携带稳定 ID 与当前修订
-                  window.location.assign(
-                    `/sales/orders?customerId=${encodeURIComponent(
-                      contract.customer.id
-                    )}&contractId=${encodeURIComponent(
-                      contract.contractId
-                    )}&contractRevisionId=${encodeURIComponent(
-                      rev.revisionId
-                    )}`
-                  )
-                },
-              },
             ]}
           />
         }
       />
 
       <DocumentHeader
+        density="compact"
         title={contract.customer.displayName}
         documentNumber={contract.contractNo}
         version={rev.revisionNo}

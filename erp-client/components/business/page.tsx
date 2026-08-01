@@ -16,7 +16,36 @@ import {
   StatusBadge,
   type StatusTone,
 } from "@/components/ui/status-badge"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+
+function MetricDetailTooltip({
+  content,
+  children,
+}: {
+  content: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span className="inline-flex cursor-help rounded-sm underline decoration-dotted decoration-muted-foreground/60 underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+          }
+        >
+          {children}
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs text-xs">{content}</TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
 
 type ButtonProps = React.ComponentProps<typeof Button>
 type StatusBadgeProps = React.ComponentProps<typeof StatusBadge>
@@ -42,11 +71,21 @@ export type PageBreadcrumbItem =
 
 export type PageHeaderDensity = "default" | "compact"
 
+/**
+ * page：工作台/列表/治理等「页面级」标题头。
+ * object-chrome：M4 对象中心壳层，只保留面包屑与轻动作；对象身份交给 DocumentHeader，
+ * 禁止再叠一层与 DocumentHeader 重复的大标题。
+ */
+export type PageHeaderVariant = "page" | "object-chrome"
+
 export type PageHeaderProps = Omit<
   React.ComponentProps<"header">,
   "children" | "title"
 > & {
-  title: React.ReactNode
+  /**
+   * page 变体必填；object-chrome 时可选（通常省略，避免与 DocumentHeader 双标题）。
+   */
+  title?: React.ReactNode
   description?: React.ReactNode
   breadcrumbs?: readonly PageBreadcrumbItem[]
   breadcrumbLabel?: string
@@ -56,8 +95,14 @@ export type PageHeaderProps = Omit<
   /**
    * compact（默认）：标题、状态与 metadata 同排，面包屑压到 xs，供高频作业页压缩首屏。
    * default：标题 text-2xl、metadata 独占一行，用于需要展示语气的落地页。
+   * object-chrome 变体始终按 compact 节奏渲染，本 prop 仅影响 page 变体。
    */
   density?: PageHeaderDensity
+  /**
+   * page（默认）：列表/工作台页头。
+   * object-chrome：对象中心导航条（面包屑 + 可选 metadata/返回），不渲染 h1 工作面名。
+   */
+  variant?: PageHeaderVariant
 }
 
 function PageHeader({
@@ -69,79 +114,125 @@ function PageHeader({
   metadata,
   actions,
   density = "compact",
+  variant = "page",
   className,
   ...props
 }: PageHeaderProps) {
-  const compact = density === "compact"
+  const objectChrome = variant === "object-chrome"
+  const compact = objectChrome || density === "compact"
+  const showTitleBlock =
+    !objectChrome &&
+    (title != null ||
+      status != null ||
+      description != null ||
+      metadata != null)
 
   return (
     <header
       data-slot="page-header"
-      data-density={density}
-      className={cn("flex flex-col", compact ? "gap-2" : "gap-3", className)}
+      data-density={objectChrome ? "compact" : density}
+      data-variant={variant}
+      className={cn(
+        "flex flex-col",
+        objectChrome ? "gap-1.5" : compact ? "gap-2" : "gap-3",
+        className
+      )}
       {...props}
     >
-      {breadcrumbs.length > 0 ? (
-        <Breadcrumb
-          aria-label={breadcrumbLabel}
-          className={compact ? "text-xs" : undefined}
+      {breadcrumbs.length > 0 || (objectChrome && (metadata || actions)) ? (
+        <div
+          className={cn(
+            "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between",
+            objectChrome && "min-h-0"
+          )}
         >
-          <BreadcrumbList className={compact ? "gap-1 sm:gap-1.5" : undefined}>
-            {breadcrumbs.map((item, index) => (
-              <React.Fragment key={item.id}>
-                {index > 0 ? <BreadcrumbSeparator /> : null}
-                <BreadcrumbItem>
-                  {item.current ? (
-                    <BreadcrumbPage>{item.label}</BreadcrumbPage>
-                  ) : (
-                    <BreadcrumbLink href={item.href}>{item.label}</BreadcrumbLink>
-                  )}
-                </BreadcrumbItem>
-              </React.Fragment>
-            ))}
-          </BreadcrumbList>
-        </Breadcrumb>
-      ) : null}
-
-      <div
-        className={cn(
-          "flex flex-col gap-3 lg:flex-row",
-          compact ? "lg:items-center" : "lg:items-start"
-        )}
-      >
-        <div className="min-w-0 flex-1">
-          <div
-            className={cn(
-              "flex flex-wrap items-center",
-              compact ? "gap-x-3 gap-y-1" : "gap-2"
-            )}
-          >
-            <h1
-              className={cn(
-                "font-semibold tracking-tight text-foreground",
-                compact ? "text-lg" : "text-2xl"
-              )}
-            >
-              {title}
-            </h1>
-            {status ? <StatusBadge {...status} /> : null}
-            {compact && metadata ? (
-              <div className="min-w-0 text-sm text-muted-foreground">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+            {breadcrumbs.length > 0 ? (
+              <Breadcrumb
+                aria-label={breadcrumbLabel}
+                className={compact ? "text-xs" : undefined}
+              >
+                <BreadcrumbList
+                  className={compact ? "gap-1 sm:gap-1.5" : undefined}
+                >
+                  {breadcrumbs.map((item, index) => (
+                    <React.Fragment key={item.id}>
+                      {index > 0 ? <BreadcrumbSeparator /> : null}
+                      <BreadcrumbItem>
+                        {item.current ? (
+                          <BreadcrumbPage>{item.label}</BreadcrumbPage>
+                        ) : (
+                          <BreadcrumbLink href={item.href}>
+                            {item.label}
+                          </BreadcrumbLink>
+                        )}
+                      </BreadcrumbItem>
+                    </React.Fragment>
+                  ))}
+                </BreadcrumbList>
+              </Breadcrumb>
+            ) : null}
+            {objectChrome && metadata ? (
+              <div className="min-w-0 text-xs text-muted-foreground">
                 {metadata}
               </div>
             ) : null}
           </div>
-          {description ? (
-            <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-              {description}
-            </p>
-          ) : null}
-          {!compact && metadata ? (
-            <div className="mt-2 text-sm text-muted-foreground">{metadata}</div>
+          {objectChrome && actions ? (
+            <div className="shrink-0 sm:ml-auto">{actions}</div>
           ) : null}
         </div>
-        {actions ? <div className="shrink-0 lg:ml-auto">{actions}</div> : null}
-      </div>
+      ) : null}
+
+      {showTitleBlock ? (
+        <div
+          className={cn(
+            "flex flex-col gap-3 lg:flex-row",
+            compact ? "lg:items-center" : "lg:items-start"
+          )}
+        >
+          <div className="min-w-0 flex-1">
+            <div
+              className={cn(
+                "flex flex-wrap items-center",
+                compact ? "gap-x-3 gap-y-1" : "gap-2"
+              )}
+            >
+              {title != null ? (
+                <h1
+                  className={cn(
+                    "font-semibold tracking-tight text-foreground",
+                    compact ? "text-lg" : "text-2xl"
+                  )}
+                >
+                  {title}
+                </h1>
+              ) : null}
+              {status ? <StatusBadge {...status} /> : null}
+              {compact && metadata ? (
+                <div className="min-w-0 text-sm text-muted-foreground">
+                  {metadata}
+                </div>
+              ) : null}
+            </div>
+            {description ? (
+              <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+                {description}
+              </p>
+            ) : null}
+            {!compact && metadata ? (
+              <div className="mt-2 text-sm text-muted-foreground">
+                {metadata}
+              </div>
+            ) : null}
+          </div>
+          {actions ? (
+            <div className="shrink-0 lg:ml-auto">{actions}</div>
+          ) : null}
+        </div>
+      ) : !objectChrome && actions ? (
+        <div className="flex justify-end">{actions}</div>
+      ) : null}
     </header>
   )
 }
@@ -219,6 +310,15 @@ function PageActions({
   )
 }
 
+/**
+ * inline：明细直接占位（列表筛选指标、业务风险信号）。
+ * tooltip：明细仅悬停可见（口径/实现旁白，避免拉高首屏）。
+ * none：忽略 detail（调用方仍可传，便于开关）。
+ */
+export type MetricDetailMode = "inline" | "tooltip" | "none"
+
+export type MetricDensity = "default" | "compact"
+
 export type MetricItemProps = Omit<
   React.ComponentProps<"div">,
   "children" | "title"
@@ -227,6 +327,11 @@ export type MetricItemProps = Omit<
   value: React.ReactNode
   detail?: React.ReactNode
   status?: SemanticStatus
+  /**
+   * 明细展示策略。默认 inline；M4 对象中心建议业务风险用 inline，口径说明用 tooltip/none。
+   */
+  detailMode?: MetricDetailMode
+  density?: MetricDensity
 }
 
 function MetricItem({
@@ -234,24 +339,60 @@ function MetricItem({
   value,
   detail,
   status,
+  detailMode = "inline",
+  density = "default",
   className,
   ...props
 }: MetricItemProps) {
+  const compact = density === "compact"
+  const showInlineDetail = detail != null && detailMode === "inline"
+  const showTooltipDetail = detail != null && detailMode === "tooltip"
+  const labelNode = (
+    <span
+      className={cn(
+        "block text-muted-foreground",
+        compact ? "text-xs" : "text-sm"
+      )}
+    >
+      {label}
+    </span>
+  )
+
   return (
     <div
       data-slot="metric-item"
-      className={cn("min-w-0 bg-card p-2.5 sm:p-3", className)}
+      data-density={density}
+      data-detail-mode={detailMode}
+      className={cn(
+        "min-w-0 bg-card",
+        compact ? "p-2 sm:p-2.5" : "p-2.5 sm:p-3",
+        className
+      )}
       {...props}
     >
-      <span className="block text-sm text-muted-foreground">{label}</span>
-      <div className="mt-1">
-        <div className="num text-xl font-semibold tracking-tight text-foreground">
+      {showTooltipDetail ? (
+        <MetricDetailTooltip content={detail}>{labelNode}</MetricDetailTooltip>
+      ) : (
+        labelNode
+      )}
+      <div className={compact ? "mt-0.5" : "mt-1"}>
+        <div
+          className={cn(
+            "num font-semibold tracking-tight text-foreground",
+            compact ? "text-lg" : "text-xl"
+          )}
+        >
           {value}
         </div>
-        {detail || status ? (
-          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+        {status || showInlineDetail ? (
+          <div
+            className={cn(
+              "flex flex-wrap items-center gap-2",
+              compact ? "mt-1" : "mt-1.5"
+            )}
+          >
             {status ? <StatusBadge {...status} /> : null}
-            {detail ? (
+            {showInlineDetail ? (
               <span className="text-xs text-muted-foreground">{detail}</span>
             ) : null}
           </div>
@@ -271,6 +412,8 @@ export type MetricFilterItemProps = Omit<
   value: React.ReactNode
   detail?: React.ReactNode
   active?: boolean
+  detailMode?: MetricDetailMode
+  density?: MetricDensity
 }
 
 /** 可作为列表/待办过滤器的指标项，提供按钮语义与明确选中态。 */
@@ -279,26 +422,44 @@ function MetricFilterItem({
   value,
   detail,
   active = false,
+  detailMode = "inline",
+  density = "default",
   className,
   ...props
 }: MetricFilterItemProps) {
+  const compact = density === "compact"
+  const showInlineDetail = detail != null && detailMode === "inline"
   return (
     <div className="min-w-0 bg-card">
       <button
         type="button"
         aria-pressed={active}
+        data-density={density}
         className={cn(
-          "h-full w-full border-l-2 border-transparent p-2.5 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset sm:p-3 xl:flex xl:items-baseline xl:gap-2",
+          "h-full w-full border-l-2 border-transparent text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset xl:flex xl:items-baseline xl:gap-2",
+          compact ? "p-2 sm:p-2.5" : "p-2.5 sm:p-3",
           active && "border-l-primary bg-accent text-accent-foreground",
           className
         )}
         {...props}
       >
-        <span className="block text-sm text-muted-foreground xl:shrink-0">{label}</span>
-        <span className="num mt-1 block text-xl font-semibold tracking-tight text-foreground xl:mt-0">
+        <span
+          className={cn(
+            "block text-muted-foreground xl:shrink-0",
+            compact ? "text-xs" : "text-sm"
+          )}
+        >
+          {label}
+        </span>
+        <span
+          className={cn(
+            "num mt-1 block font-semibold tracking-tight text-foreground xl:mt-0",
+            compact ? "text-lg" : "text-xl"
+          )}
+        >
           {value}
         </span>
-        {detail ? (
+        {showInlineDetail ? (
           <span className="mt-1 block text-xs text-muted-foreground xl:ml-auto xl:mt-0 xl:truncate">
             {detail}
           </span>
@@ -322,16 +483,19 @@ export type MetricStripProps = Omit<
   "title"
 > & {
   columns?: MetricStripColumns
+  density?: MetricDensity
 }
 
 function MetricStrip({
   columns = 4,
+  density = "default",
   className,
   ...props
 }: MetricStripProps) {
   return (
     <div
       data-slot="metric-strip"
+      data-density={density}
       className={cn(
         "grid gap-px overflow-hidden rounded-lg border border-grid bg-grid",
         metricColumnClasses[columns],

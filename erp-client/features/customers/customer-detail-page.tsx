@@ -84,6 +84,12 @@ function ownerLabel(customer: CustomerCenterView): string {
   return owner?.userName ?? "—"
 }
 
+function collaboratorCount(customer: CustomerCenterView): number {
+  return customer.assignments.filter(
+    (a) => a.role === "COLLABORATOR" && a.isCurrent
+  ).length
+}
+
 function collaboratorSummary(customer: CustomerCenterView): string {
   const cols = customer.assignments.filter(
     (a) => a.role === "COLLABORATOR" && a.isCurrent
@@ -97,6 +103,14 @@ function collaboratorSummary(customer: CustomerCenterView): string {
       return `${c.userName}（${period}）`
     })
     .join("；")
+}
+
+function collaboratorShortNames(customer: CustomerCenterView): string {
+  const cols = customer.assignments.filter(
+    (a) => a.role === "COLLABORATOR" && a.isCurrent
+  )
+  if (cols.length === 0) return "无"
+  return cols.map((c) => c.userName).join("、")
 }
 
 export function CustomerDetailPage({
@@ -182,10 +196,33 @@ export function CustomerDetailPage({
   const contractBlocked = !can(customer, "CREATE_CONTRACT")
   const salesBlocked = !can(customer, "CREATE_SALES_ORDER")
 
+  const collabCount = collaboratorCount(customer)
+  const identityMeta = (
+    <>
+      <span>
+        负责{" "}
+        <span className="font-medium text-foreground">
+          {ownerLabel(customer)}
+        </span>
+      </span>
+      <span className="text-border" aria-hidden="true">
+        ·
+      </span>
+      <span title={collaboratorSummary(customer)}>
+        协作{" "}
+        <span className="font-medium text-foreground">
+          {collabCount > 0
+            ? `${collabCount} 人（${collaboratorShortNames(customer)}）`
+            : "无"}
+        </span>
+      </span>
+    </>
+  )
+
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title="客户对象中心"
+        variant="object-chrome"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "customers", label: "客户中心", href: "/sales/customers" },
@@ -195,14 +232,6 @@ export function CustomerDetailPage({
             current: true,
           },
         ]}
-        metadata={
-          <DataFreshness
-            updatedAt="业务记录"
-            dateTime={customer.freshness.formalFactsAt}
-            state="fresh"
-            label="客户主数据"
-          />
-        }
         actions={
           <PageActions
             actions={[
@@ -220,10 +249,16 @@ export function CustomerDetailPage({
 
       {/* First screen: identity + owner + metrics + primary actions */}
       <DocumentHeader
+        density="compact"
         title={customer.currentRevision.legalName}
         documentNumber={customer.customerNo}
         version={`v${customer.currentRevision.revisionNo}`}
         primaryStatus={customer.statusLabel}
+        meta={
+          <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            {identityMeta}
+          </span>
+        }
         primaryAction={
           <div className="flex flex-wrap items-center gap-2">
             <GuardedBusinessAction
@@ -265,19 +300,6 @@ export function CustomerDetailPage({
             </GuardedBusinessAction>
           </div>
         }
-        secondaryActions={
-          <div className="flex flex-col items-end gap-1 text-sm text-muted-foreground">
-            <span>
-              负责销售：
-              <span className="font-medium text-foreground">
-                {ownerLabel(customer)}
-              </span>
-            </span>
-            <span className="max-w-xs text-right text-xs">
-              协作：{collaboratorSummary(customer)}
-            </span>
-          </div>
-        }
       />
 
       {isDisabled ? (
@@ -289,30 +311,42 @@ export function CustomerDetailPage({
         </Alert>
       ) : null}
 
-      <MetricStrip columns={4} aria-label="关系指标" aria-live="polite">
+      <MetricStrip
+        columns={4}
+        density="compact"
+        aria-label="关系指标"
+        aria-live="polite"
+      >
         <MetricItem
+          density="compact"
           label="有效合同"
           value={String(customer.metrics.activeContractCount)}
           detail={
             customer.metrics.expiringContractCount
               ? `${customer.metrics.expiringContractCount} 将到期`
-              : "服务端聚合"
+              : undefined
           }
+          detailMode="inline"
         />
         <MetricItem
+          density="compact"
           label="进行中销售单"
           value={String(customer.metrics.inProgressSalesOrderCount)}
           detail="服务端聚合 · 非列表求和"
+          detailMode="tooltip"
         />
         <MetricItem
+          density="compact"
           label="应收余额"
           value={<MoneyValue value={customer.metrics.receivableBalance} />}
-          detail="W11 汇总"
+          detail="客户往来汇总"
+          detailMode="tooltip"
         />
         <MetricItem
+          density="compact"
           label="逾期金额"
           value={<MoneyValue value={customer.metrics.overdueAmount} />}
-          detail="服务端字段"
+          detailMode="none"
         />
       </MetricStrip>
 

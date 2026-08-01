@@ -15,7 +15,6 @@ import {
 } from "lucide-react"
 
 import {
-  DataFreshness,
   DocumentHeader,
   DocumentSection,
   DocumentSummary,
@@ -175,7 +174,7 @@ export function SalesOrderDetailPage({
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title="销售单对象中心"
+        variant="object-chrome"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "orders", label: "销售单", href: "/sales/orders" },
@@ -185,14 +184,6 @@ export function SalesOrderDetailPage({
             current: true,
           },
         ]}
-        metadata={
-          <DataFreshness
-            updatedAt="刚刚"
-            dateTime={order.queriedAt}
-            state="fresh"
-            label="对象数据"
-          />
-        }
         actions={
           <PageActions
             actions={[
@@ -249,7 +240,7 @@ export function SalesOrderDetailPage({
       />
 
       {returnTo && (fromWorkspace === "W07" || fromWorkspace === "W09") ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
           <span className="text-muted-foreground">
             {fromWorkspace === "W09"
               ? "自履约作业打开 · 关闭后可返回原队列位置、类型与筛选"
@@ -261,50 +252,8 @@ export function SalesOrderDetailPage({
         </div>
       ) : null}
 
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm">
-        <span className="text-muted-foreground">
-          票款登记与核销在客户往来完成；本页只读展示回款/开票进度。
-        </span>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          render={
-            <Link
-              href={`/finance/customer-accounts?view=receivable&salesOrderId=${encodeURIComponent(order.id)}&q=${encodeURIComponent(order.documentNumber)}&from=W05&returnTo=${encodeURIComponent(
-                `${baseHref}${activeSection === "overview" ? "" : `?section=${activeSection}`}`
-              )}`}
-            />
-          }
-        >
-          <WalletIcon data-icon="inline-start" aria-hidden="true" />
-          登记回款并核销
-        </Button>
-      </div>
-
-      {order.nature === "physical_service" ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm">
-          <span className="text-muted-foreground">
-            实物/服务履约在履约作业统一队列处理（入库/仓发/代发/电子/服务）；本页不代替过账。
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            render={
-              <Link
-                href={`/fulfillment?scope=mine&salesOrderId=${order.id}&from=W05&returnTo=${encodeURIComponent(
-                  `${baseHref}${activeSection === "overview" ? "" : `?section=${activeSection}`}`
-                )}`}
-              />
-            }
-          >
-            去履约作业
-          </Button>
-        </div>
-      ) : null}
-
       <DocumentHeader
+        density="compact"
         title={order.customerName}
         documentNumber={order.documentNumber}
         version={order.version}
@@ -314,6 +263,41 @@ export function SalesOrderDetailPage({
           { id: "collection", label: "回款", status: order.collection },
           { id: "invoicing", label: "开票", status: order.invoicing },
         ]}
+        secondaryActions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              render={
+                <Link
+                  href={`/finance/customer-accounts?view=receivable&salesOrderId=${encodeURIComponent(order.id)}&q=${encodeURIComponent(order.documentNumber)}&from=W05&returnTo=${encodeURIComponent(
+                    `${baseHref}${activeSection === "overview" ? "" : `?section=${activeSection}`}`
+                  )}`}
+                />
+              }
+            >
+              <WalletIcon data-icon="inline-start" aria-hidden="true" />
+              登记回款
+            </Button>
+            {order.nature === "physical_service" ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                render={
+                  <Link
+                    href={`/fulfillment?scope=mine&salesOrderId=${order.id}&from=W05&returnTo=${encodeURIComponent(
+                      `${baseHref}${activeSection === "overview" ? "" : `?section=${activeSection}`}`
+                    )}`}
+                  />
+                }
+              >
+                去履约
+              </Button>
+            ) : null}
+          </div>
+        }
         primaryAction={
           order.procurementRejection &&
           order.procurementRejection.reviewStatus !== "RESOLVED" &&

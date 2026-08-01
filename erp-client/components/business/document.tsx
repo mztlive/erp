@@ -46,6 +46,8 @@ type DocumentStatusTrack = Readonly<{
   status: DocumentStatus
 }>
 
+type DocumentHeaderDensity = "default" | "compact"
+
 interface DocumentHeaderProps
   extends Omit<React.ComponentProps<"header">, "title"> {
   title: string
@@ -53,8 +55,18 @@ interface DocumentHeaderProps
   primaryStatus: DocumentStatus
   statuses?: readonly DocumentStatusTrack[]
   version?: string | number
+  /**
+   * 身份元信息：负责销售、协作摘要等，渲染在单号/版本同一行。
+   * 避免把长句塞进 secondaryActions 拉高右侧。
+   */
+  meta?: React.ReactNode
   primaryAction?: React.ReactNode
   secondaryActions?: React.ReactNode
+  /**
+   * compact（M4 对象中心推荐）：更小标题与间距，单号/版本/meta 同行。
+   * default：正式单据阅读态，保留更大标题与状态轨留白。
+   */
+  density?: DocumentHeaderDensity
 }
 
 function DocumentHeader({
@@ -63,23 +75,43 @@ function DocumentHeader({
   primaryStatus,
   statuses = [],
   version,
+  meta,
   primaryAction,
   secondaryActions,
+  density = "default",
   className,
   ...props
 }: DocumentHeaderProps) {
   const hasActions = primaryAction != null || secondaryActions != null
+  const compact = density === "compact"
 
   return (
     <header
       data-slot="document-header"
-      className={cn("border-b border-border pb-5", className)}
+      data-density={density}
+      className={cn(
+        "border-b border-border",
+        compact ? "pb-3" : "pb-5",
+        className
+      )}
       {...props}
     >
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0 space-y-2">
+      <div
+        className={cn(
+          "flex flex-col lg:flex-row lg:justify-between",
+          compact
+            ? "gap-3 lg:items-center"
+            : "gap-4 lg:items-start"
+        )}
+      >
+        <div className={cn("min-w-0", compact ? "space-y-1" : "space-y-2")}>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-heading text-2xl font-semibold tracking-tight">
+            <h1
+              className={cn(
+                "font-heading font-semibold tracking-tight",
+                compact ? "text-xl" : "text-2xl"
+              )}
+            >
               {title}
             </h1>
             <StatusBadge
@@ -87,14 +119,28 @@ function DocumentHeader({
               label={primaryStatus.label}
             />
           </div>
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
+          <div
+            className={cn(
+              "flex flex-wrap items-center gap-x-3 gap-y-1 text-muted-foreground",
+              compact ? "text-xs" : "text-sm"
+            )}
+          >
             <span>
-              单号 <span className="num text-foreground">{documentNumber}</span>
+              单号{" "}
+              <span className="num text-foreground">{documentNumber}</span>
             </span>
             {version != null ? (
-              <span className="num rounded-md bg-muted px-2 py-1 text-xs text-foreground">
+              <span
+                className={cn(
+                  "num rounded-md bg-muted text-foreground",
+                  compact ? "px-1.5 py-0.5 text-[11px]" : "px-2 py-1 text-xs"
+                )}
+              >
                 版本 {version}
               </span>
+            ) : null}
+            {meta ? (
+              <span className="min-w-0 text-muted-foreground">{meta}</span>
             ) : null}
           </div>
         </div>
@@ -114,7 +160,10 @@ function DocumentHeader({
         <div
           role="list"
           aria-label="单据并行状态"
-          className="mt-4 flex flex-wrap gap-x-5 gap-y-3 rounded-lg bg-surface-sunken px-4 py-3"
+          className={cn(
+            "flex flex-wrap gap-x-5 gap-y-2 rounded-lg bg-surface-sunken",
+            compact ? "mt-2.5 px-3 py-2" : "mt-4 gap-y-3 px-4 py-3"
+          )}
         >
           {statuses.map((track) => (
             <div
@@ -627,6 +676,7 @@ export {
   ResponsibilityPanel,
   RevisionTimeline,
   type DisplayTime,
+  type DocumentHeaderDensity,
   type DocumentHeaderProps,
   type DocumentSectionProps,
   type DocumentStatus,

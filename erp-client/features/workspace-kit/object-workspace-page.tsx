@@ -5,7 +5,6 @@ import { PlusIcon, SearchIcon } from "lucide-react"
 
 import {
   BusinessStatusBadge,
-  DataFreshness,
   DocumentHeader,
   DocumentSection,
   DocumentSummary,
@@ -90,16 +89,8 @@ export function ObjectWorkspacePage({ def }: { def: WorkspacePageDef }) {
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title={def.title}
+        variant="object-chrome"
         breadcrumbs={breadcrumbs}
-        metadata={
-          <DataFreshness
-            updatedAt="刚刚"
-            dateTime={new Date().toISOString()}
-            state="fresh"
-            label="对象数据"
-          />
-        }
         actions={
           payload.primaryActionLabel ? (
             <PageActions
@@ -199,6 +190,7 @@ export function ObjectWorkspacePage({ def }: { def: WorkspacePageDef }) {
         {selected ? (
           <div className="min-w-0 space-y-4">
             <DocumentHeader
+              density="compact"
               title={selected.title}
               documentNumber={selected.code}
               primaryStatus={selected.status}
@@ -207,6 +199,16 @@ export function ObjectWorkspacePage({ def }: { def: WorkspacePageDef }) {
                   ?.flatMap((section) => section.fields)
                   .find((field) => field.label.includes("版本"))
                   ?.value
+              }
+              meta={
+                selected.owner ? (
+                  <span>
+                    负责{" "}
+                    <span className="font-medium text-foreground">
+                      {selected.owner}
+                    </span>
+                  </span>
+                ) : null
               }
               primaryAction={
                 <Button
@@ -223,23 +225,18 @@ export function ObjectWorkspacePage({ def }: { def: WorkspacePageDef }) {
                   打开关联业务
                 </Button>
               }
-              secondaryActions={
-                selected.owner ? (
-                  <span className="text-sm text-muted-foreground">
-                    负责人 {selected.owner}
-                  </span>
-                ) : null
-              }
             />
 
             {selected.metrics && selected.metrics.length > 0 ? (
               <MetricStrip
+                density="compact"
                 columns={Math.min(4, selected.metrics.length) as 2 | 3 | 4}
                 aria-label="对象指标"
               >
                 {selected.metrics.map((metric) => (
                   <MetricItem
                     key={metric.label}
+                    density="compact"
                     label={metric.label}
                     value={metric.value}
                   />

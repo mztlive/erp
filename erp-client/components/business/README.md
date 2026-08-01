@@ -95,14 +95,22 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 
 ## 组合准则
 
-1. 列表页使用 `PageHeader` + `ListToolbar` + `BusinessTableFrame` + `DataTable`，需要时组合
-   `SelectionScopeBar` 和 `QuickPreviewSheet`。
-2. 正式详情页使用 `DocumentHeader` + `DocumentSummary` + `DocumentSection`，版本、关联单据和
-   并行责任分别使用专用组件，不合并成单一“状态”。
-3. 需要纸张或打印投影时使用 `PaperDocument`；页面必须传入服务端已经确认的行金额、汇总、
+1. 列表页使用 `PageHeader`（`variant="page"`，默认）+ `ListToolbar` + `BusinessTableFrame` +
+   `DataTable`，需要时组合 `SelectionScopeBar` 和 `QuickPreviewSheet`。
+2. **M4 对象中心**使用：
+   - `PageHeader variant="object-chrome"`：仅面包屑 + 轻动作（返回），**不要**再写工作面大标题；
+   - `DocumentHeader density="compact"`：唯一身份头（名称 / 单号 / 版本 / 状态 / 主动作）；
+     负责/协作等放 `meta`，不要塞成长段 `secondaryActions` 文案；
+   - 可选 `MetricStrip density="compact"` + `MetricItem`：业务风险明细用 `detailMode="inline"`，
+     口径旁白用 `tooltip` 或 `none`；
+   - 可选 sticky 分区锚点 + `DocumentSection` 内容。
+   **禁止** `PageHeader(title=…)` 与 `DocumentHeader` 双标题叠放。
+3. 正式详情页的版本、关联单据和并行责任分别使用 `DocumentSummary`、`RelatedDocumentList`、
+   `ResponsibilityPanel` 等专用组件，不合并成单一“状态”。
+4. 需要纸张或打印投影时使用 `PaperDocument`；页面必须传入服务端已经确认的行金额、汇总、
    状态和签章内容，组件不代替后端计算正式结果。
-4. 编辑页把 TanStack Form 字段节点传入 `EditableLineItemTable` 或 `AllocationWorkspace`；
+5. 编辑页把 TanStack Form 字段节点传入 `EditableLineItemTable` 或 `AllocationWorkspace`；
    组件不复制字段状态和校验。
-5. 正式命令先显示 `FormalActionConfirmDialog` 或 `BatchImpactPreview`，成功后固定展示
+6. 正式命令先显示 `FormalActionConfirmDialog` 或 `BatchImpactPreview`，成功后固定展示
    `FormalActionResult`，不能只用瞬时 toast。
-6. 业务异常、财务纠错和接口错误使用其真实任务或强类型事实投影，不创建通用 CRUD 卡片。
+7. 业务异常、财务纠错和接口错误使用其真实任务或强类型事实投影，不创建通用 CRUD 卡片。
