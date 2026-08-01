@@ -1436,18 +1436,32 @@ function SettlementCenter({
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeftIcon className="size-4" />
-          返回列表
-        </Button>
-        <DataFreshness
-          updatedAt={formatTime(detail.freshness.immutableFactsAsOf)}
-          dateTime={detail.freshness.immutableFactsAsOf}
-          label="不可变记录更新时间"
-          state={detailQuery.isFetching ? "stale" : "fresh"}
-        />
-      </div>
+      <PageHeader
+        variant="object-chrome"
+        breadcrumbs={[
+          {
+            id: "api",
+            label: "供应商 API",
+            href: "/supplier-api/settlements",
+          },
+          {
+            id: "list",
+            label: "API 结算",
+            href: "/supplier-api/settlements",
+          },
+          {
+            id: "detail",
+            label: st.statementNo,
+            current: true,
+          },
+        ]}
+        actions={
+          <Button type="button" variant="outline" size="sm" onClick={onBack}>
+            <ArrowLeftIcon className="size-4" />
+            返回列表
+          </Button>
+        }
+      />
 
       <RoleDemoBar
         role={urlState.role}
@@ -1457,10 +1471,36 @@ function SettlementCenter({
       />
 
       <DocumentHeader
+        density="compact"
         title={`${st.supplierName} · ${st.periodLabel}`}
         documentNumber={st.statementNo}
         primaryStatus={{ label: st.statusLabel, tone: st.statusTone }}
         version={st.lockVersion}
+        meta={
+          <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span>
+              经办{" "}
+              <span className="font-medium text-foreground">
+                {st.preparedBy?.displayName ?? "—"}
+              </span>
+            </span>
+            <span className="text-border" aria-hidden="true">
+              ·
+            </span>
+            <span>
+              复核{" "}
+              <span className="font-medium text-foreground">
+                {st.reviewedBy?.displayName ?? "待复核人"}
+              </span>
+            </span>
+            <span className="text-border" aria-hidden="true">
+              ·
+            </span>
+            <span className="text-muted-foreground">
+              记录 {formatTime(detail.freshness.immutableFactsAsOf)}
+            </span>
+          </span>
+        }
         primaryAction={
           <div className="flex flex-wrap gap-2">
             {allowed.has("REFRESH_TRIAL") ? (
@@ -1519,12 +1559,6 @@ function SettlementCenter({
               </Button>
             ) : null}
           </div>
-        }
-        secondaryActions={
-          <span className="text-xs text-muted-foreground">
-            经办 {st.preparedBy?.displayName ?? "—"} · 复核{" "}
-            {st.reviewedBy?.displayName ?? "待复核人"}
-          </span>
         }
       />
 

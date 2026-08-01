@@ -80,8 +80,9 @@ TaskTab 身份为 `mall-consumption-backfill:{jobId}`。同一正式任务重复
 任务中心：
 
 ```text
-┌ DocumentHeader：回填任务号 · 商城 · [rangeStart, T) · 处理状态 / 报告确认状态
-│ 数据来源版本 · 发起人 · 开始/最近进度时间            [续跑/下载报告]
+┌ PageHeader object-chrome：历史回填 › 任务号               [返回列表] ─┐
+├ DocumentHeader compact：回填任务 [处理状态] · 任务号 · 商城 · 范围      │
+│ 数据来源版本 · 发起人 · 开始/最近进度时间            [续跑/下载报告]     │
 ├ ImportStageIndicator：范围确认 → 来源校验 → 事实入库 → 归集评估 → 报告
 ├ BackgroundJobProgress：总数 / 已处理 / 新增 / 去重 / 待归集 / 失败
 ├ CostCoverageNotice：ACTUAL | STANDARD | NONE 金额、笔数与原因
@@ -94,7 +95,7 @@ TaskTab 身份为 `mall-consumption-backfill:{jobId}`。同一正式任务重复
 
 | 区域 | 目的 | 主组件 | 是否固定 |
 | --- | --- | --- | --- |
-| 页头 | 锁定商城、范围、`T` 和任务身份 | `DocumentHeader` `DataFreshness` | 中心顶部固定 |
+| 页头 | 锁定商城、范围、`T` 和任务身份 | `PageHeader object-chrome` + `DocumentHeader density="compact"` `DataFreshness` | 中心顶部固定 |
 | 阶段条 | 说明当前后台处理阶段，不伪装同步完成 | `ImportStageIndicator` | 页头下固定 |
 | 进度区 | 呈现吞吐、心跳、结果分布和预计剩余 | `BackgroundJobProgress` | 执行中保持可见 |
 | 成本覆盖 | 显示 ACTUAL/STANDARD/NONE 构成和风险 | `CostCoverageNotice` | 报告前强制出现 |

@@ -75,7 +75,8 @@ TaskTab 身份为 `supplier-settlement:{statementId}`。相同结算单重复打
 └ 分页
 
 对象中心
-┌ DocumentHeader：结算单号 · 供应商 · 期间 · 状态       [提交复核/确认]
+┌ PageHeader object-chrome：API 结算 › 结算单号              [返回] ─┐
+├ DocumentHeader compact：供应商 [状态] · 结算单号 · 期间  [提交复核/确认]
 ├ 金额摘要：订单 | 运费 | 服务费 | 退款 | ERP金额 | 供应商金额 | 差异
 ├ 概览 | 结算明细 | 差异处理 | 复核记录 | 应付与票款 | 审计
 ├ 明细 / 差异工作区
@@ -89,7 +90,7 @@ TaskTab 身份为 `supplier-settlement:{statementId}`。相同结算单重复打
 | 页头与指标 | 识别结算水位和待处理规模 | `PageHeader` `MetricStrip` `DataFreshness` | 页头固定 |
 | 结算列表 | 按供应商和账期扫读结算状态 | `DataTable` `BusinessTableFrame` | 单号左固定、操作右固定 |
 | detail 预览 | 阅读金额、差异和复核摘要 | `QuickPreviewSheet size="detail"` | 浮层 |
-| 对象头与汇总 | 锁定供应商、期间和金额口径 | `DocumentHeader` `DocumentTotals` | 中心滚动时吸顶 |
+| 对象头与汇总 | 锁定供应商、期间和金额口径 | `PageHeader object-chrome` + `DocumentHeader density="compact"` `DocumentTotals` | 中心滚动时吸顶 |
 | 明细区 | 核对供应商订单、费用、退款 | `DataTable` | 表头吸顶 |
 | 差异区 | 在同一详情完成分类、证据和处理 | `BusinessDiffPanel` | 有差异时默认打开 |
 | 正式结果 | 固定呈现成本调整和应付结果 | `FormalActionResult` | 动作后保持可见 |

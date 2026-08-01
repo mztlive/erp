@@ -84,7 +84,8 @@
 对象中心：
 
 ```text
-┌ DocumentHeader：供应商订单号 · 供应商 · 综合状态 · 外部单号
+┌ PageHeader object-chrome：供应商订单 › 订单号              [返回] ─┐
+├ DocumentHeader compact：供应商 [综合状态] · 订单号 · 外部单号
 │ 履约：[已接单]  取消：[无]  退款：[部分退款]       [查询结果] [更多]
 ├ 异常 / 结果未知 / 能力不足提示
 ├ 概览 | 商品明细 | 履约与物流 | 售后 | 成本与结算 | 动作与审计
@@ -100,7 +101,7 @@
 | 列表工具栏 | 高频查询和 Saved View | `ListToolbar` | 表格滚动时保持可见 |
 | 订单表格 | 扫描身份、三轨状态和下一步 | `BusinessTableFrame` `DataTable` | 订单号左固定，操作右固定 |
 | detail 预览 | 不离开列表核对主事实 | `QuickPreviewSheet size="detail"` | 浮层 |
-| 对象头 | 锁定订单身份、状态、供应商 | `DocumentHeader` `StatusTrackSummary` | 中心滚动时吸顶 |
+| 对象头 | 锁定订单身份、状态、供应商 | `PageHeader object-chrome` + `DocumentHeader density="compact"` `StatusTrackSummary` | 中心滚动时吸顶 |
 | 异常提示 | 解释为何不能继续及正确去向 | `InterfaceErrorResolutionPanel` / `Alert` | 有异常时可见 |
 | 锚点子区 | 组织来源、履约、售后、成本和审计 | `DocumentSection` `RelatedDocumentList` | 子导航吸顶 |
 

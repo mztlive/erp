@@ -88,7 +88,7 @@ TaskTab 身份为 `queue:card-funds-review:{queueContextId}`，标题为 `卡券
 | 区域 | 目的 | 主组件 | 固定规则 |
 | --- | --- | --- | --- |
 | 连续处理条 | 位置、筛选、租约和前后项导航 | `SequentialProcessBar` | 顶部 sticky；对象切换后播报位置 |
-| 对象身份 | 确认正在复核哪张正式销售单和哪个子账 | `DocumentHeader` 精简态 | 销售单号、版本、复核类型不可随滚动消失 |
+| 对象身份 | 确认正在复核哪张正式销售单和哪个子账 | `DocumentHeader density="compact"`（与 M4 对象头密度一致） | 销售单号、版本、复核类型不可随滚动消失 |
 | 票款事实 | 核对当前正式应收、回款和发票 | `MetricStrip` + 紧凑明细 | 金额全由服务端返回；复核前后不本地改写 |
 | 差异区 | 解释为何产生差额复核 | `BusinessDiffPanel` | 仅 `SYNC_DELTA` 展示；左右均为受控事实投影 |
 | 登记区 | 复用 W11 表单和多对多核销 | `AllocationWorkspace` | 保持队列条和对象身份可见；不得变成另一个无上下文菜单 |

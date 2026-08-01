@@ -20,6 +20,12 @@ W 文件不得重定义业务状态机，也不得为了版面方便改变金额
 4. 所有可见操作都要注明权限、可用条件、成功结果和失败恢复。
 5. 未确认业务规则放在“待确认事项”，不得混入正式契约。
 6. 页面实现完成不等于设计完成；必须通过文件内的验收清单。
+7. **M4 对象中心页头契约**（与 `erp-ui-design.md` §4.5.1、代码 `components/business` 对齐，禁止漂移）：
+   - 列表/工作台：`PageHeader variant="page"`（默认）+ 工作面 title。
+   - 对象/批次详情：`PageHeader variant="object-chrome"`（仅面包屑 + 返回/刷新）+ `DocumentHeader density="compact"`（唯一身份 h1）。
+   - **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对象名)`。
+   - 可选指标：`MetricStrip density="compact"`；业务风险 `detailMode="inline"`，实现/口径旁白 `tooltip` 或 `none`。
+   - 线框与区域表必须写明上述 variant/density，不得只写笼统的 `PageHeader` + `DocumentHeader`。
 
 ## 状态定义
 

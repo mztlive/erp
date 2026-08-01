@@ -102,7 +102,9 @@
 ### 4.2 对象中心（1440×900）
 
 ```text
-┌ DocumentHeader：商品名 · SKU · 目标商城 · 发布状态 · 当前商城生效版
+┌ PageHeader object-chrome：商品发布 › SKU                 [返回] [刷新] ─┐
+├ DocumentHeader compact：商品名 [发布状态]                                 │
+│  发布编码 · 最新版本 · SKU · 目标商城 · 商城生效版                        │
 │ 状态轨：发布内容 ── 投递 ── 商城确认              [准备新版本] [更多]
 ├ 锚点：概览 | 发布内容 | 媒体 | 固定供给 | 投递与版本 | 审计
 ├ 概览：商城生效版本、最新待确认版本、安全暂停原因/来源、有效期、责任人、阻塞原因
@@ -117,7 +119,7 @@
 
 | 区域 | 目的 | 主组件 | 是否固定 |
 | --- | --- | --- | --- |
-| 页头与状态轨 | 同时辨认稳定发布、版本和商城确认 | `DocumentHeader` `StatusTrackSummary` | 顶部固定 |
+| 页头与状态轨 | 同时辨认稳定发布、版本和商城确认 | `PageHeader object-chrome` + `DocumentHeader density="compact"` `StatusTrackSummary` | 顶部固定 |
 | 指标与工具栏 | 快速进入当前处理水位 | `MetricStrip` `ListToolbar` | 列表顶部 |
 | 发布内容 | 阅读当前选中修订的完整商城内容 | `DocumentSection` `DocumentSummary` | 否 |
 | 媒体 | 验证安全资产、用途、顺序和替代文本 | 媒体列表 / 预览 | 否 |

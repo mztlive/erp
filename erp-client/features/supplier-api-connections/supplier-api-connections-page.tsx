@@ -1017,15 +1017,28 @@ function ConnectionCenter({
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeftIcon className="size-4" aria-hidden="true" />
-          返回列表
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          页签身份 supplier-connection:{conn.connectionId} · 同连接不复制
-        </span>
-      </div>
+      <PageHeader
+        variant="object-chrome"
+        breadcrumbs={[
+          {
+            id: "api",
+            label: "供应商 API",
+            href: "/supplier-api/connections",
+          },
+          { id: "conn", label: "API 连接", href: "/supplier-api/connections" },
+          {
+            id: "detail",
+            label: conn.connectionCode,
+            current: true,
+          },
+        ]}
+        actions={
+          <Button type="button" variant="outline" size="sm" onClick={onBack}>
+            <ArrowLeftIcon className="size-4" aria-hidden="true" />
+            返回列表
+          </Button>
+        }
+      />
 
       <RoleDemoBar
         role={urlState.role}
@@ -1035,10 +1048,36 @@ function ConnectionCenter({
       />
 
       <DocumentHeader
+        density="compact"
         title={`${conn.connectionCode} · ${conn.supplier.name}`}
         documentNumber={conn.connectionId}
         primaryStatus={{ label: conn.statusLabel, tone: conn.statusTone }}
         version={conn.version}
+        meta={
+          <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span>
+              业务{" "}
+              <span className="font-medium text-foreground">
+                {conn.businessOwner?.label ?? "—"}
+              </span>
+            </span>
+            <span className="text-border" aria-hidden="true">
+              ·
+            </span>
+            <span>
+              技术{" "}
+              <span className="font-medium text-foreground">
+                {conn.technicalOwner?.label ?? "—"}
+              </span>
+            </span>
+            <span className="text-border" aria-hidden="true">
+              ·
+            </span>
+            <span className="text-muted-foreground">
+              配置 {formatTime(conn.updatedAt)}
+            </span>
+          </span>
+        }
         statuses={[
           {
             id: "env",
@@ -1115,20 +1154,6 @@ function ConnectionCenter({
                 停用连接
               </Button>
             ) : null}
-          </div>
-        }
-        secondaryActions={
-          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
-            <span>
-              业务 {conn.businessOwner?.label ?? "—"} · 技术{" "}
-              {conn.technicalOwner?.label ?? "—"}
-            </span>
-            <DataFreshness
-              updatedAt={formatTime(conn.updatedAt)}
-              dateTime={conn.updatedAt}
-              state="fresh"
-              label="配置"
-            />
           </div>
         }
       />

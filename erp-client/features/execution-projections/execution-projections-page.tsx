@@ -1114,6 +1114,7 @@ export function ExecutionProjectionsPage() {
         ) : (
           <div className="flex flex-col gap-4">
             <DocumentHeader
+              density="compact"
               title={detail.identity.salesOrderNo}
               documentNumber={detail.identity.projectionNo}
               version={`数据 v${detail.selectedRevision.revisionNo} · ERP v${detail.selectedRevision.salesOrderRevisionNo}`}
@@ -1121,6 +1122,11 @@ export function ExecutionProjectionsPage() {
                 label: detail.tracks.projectionDelivery.label,
                 tone: detail.tracks.projectionDelivery.tone,
               }}
+              meta={
+                <span className="text-muted-foreground">
+                  {detail.identity.targetMallName}
+                </span>
+              }
               statuses={[
                 {
                   id: "sales-fact",

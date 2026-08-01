@@ -14,7 +14,6 @@ import {
 
 import {
   BusinessStatusBadge,
-  DataFreshness,
   DocumentHeader,
   DocumentSection,
   FormalActionConfirmDialog,
@@ -154,7 +153,7 @@ export function SupplierOrderCenterPage({
   } | null>(null)
   const [replayOpen, setReplayOpen] = React.useState(false)
   const [deferOpen, setDeferOpen] = React.useState(false)
-  const titleRef = React.useRef<HTMLHeadingElement>(null)
+  const titleRef = React.useRef<HTMLSpanElement>(null)
 
   const detail = query.data
 
@@ -453,60 +452,62 @@ export function SupplierOrderCenterPage({
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title={
-          <span ref={titleRef} tabIndex={-1} className="outline-none">
-            供应商订单中心
-          </span>
-        }
+        variant="object-chrome"
         breadcrumbs={[
           { id: "list", label: "供应商订单", href: "/supplier-api/orders" },
-          { id: "order", label: o.orderNo, current: true },
+          {
+            id: "order",
+            label: (
+              <span ref={titleRef} tabIndex={-1} className="outline-none">
+                {o.orderNo}
+              </span>
+            ),
+            current: true,
+          },
         ]}
         actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <DataFreshness
-              updatedAt="刚刚"
-              dateTime={detail.freshness.updatedAt}
-              state={detail.freshness.state}
-              label="对象数据"
-            />
-            {from === "mall-order" && sourceId ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                render={
-                  <Link
-                    href={`/commerce/consumption-orders?q=${encodeURIComponent(o.mallOrderNo)}`}
-                  />
-                }
-              >
-                <ArrowLeftIcon className="size-3.5" />
-                返回商城订单
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                render={<Link href="/supplier-api/orders?view=actionable" />}
-              >
-                <ArrowLeftIcon className="size-3.5" />
-                返回列表
-              </Button>
-            )}
-          </div>
+          from === "mall-order" && sourceId ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              render={
+                <Link
+                  href={`/commerce/consumption-orders?q=${encodeURIComponent(o.mallOrderNo)}`}
+                />
+              }
+            >
+              <ArrowLeftIcon className="size-3.5" />
+              返回商城订单
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              render={<Link href="/supplier-api/orders?view=actionable" />}
+            >
+              <ArrowLeftIcon className="size-3.5" />
+              返回列表
+            </Button>
+          )
         }
       />
 
       <DocumentHeader
-        title="供应商订单"
+        density="compact"
+        title={o.supplierName}
         documentNumber={o.orderNo}
         primaryStatus={{
           label: o.fulfillmentLabel,
           tone: o.fulfillmentTone,
         }}
         version={o.lockVersion}
+        meta={
+          <span className="text-muted-foreground">
+            商城单 {o.mallOrderNo}
+          </span>
+        }
         statuses={[
           {
             id: "ff",

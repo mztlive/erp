@@ -104,7 +104,8 @@
 ### 4.2 外部商品与供给中心
 
 ```text
-┌ DocumentHeader：供应商 · 外部商品/外部 SKU · 状态 · 当前来源版本
+┌ PageHeader object-chrome：外部商品供给 › 外部商品 ID     [返回队列] ─┐
+├ DocumentHeader compact：商品名 [变更类型] · 外部 ID · 版本 · 映射/供给轨
 │ 映射：ERP SKU               供给：版本/有效期          发布：影响摘要
 ├ Alert：停止供应 / 不可供 / 数据陈旧 / 价格待确认 / 发布已暂停
 ├ 锚点：概览 | 来源版本 | 映射历史 | 供给版本 | 发布影响 | 同步记录 | 审计
@@ -119,7 +120,7 @@
 | 区域 | 目的 | 主组件 | 是否固定 |
 | --- | --- | --- | --- |
 | 队列栏 | 连续处理且可恢复上下文 | `SequentialProcessBar` | 顶部固定 |
-| 身份与风险条 | 防止映射错供应商、外部身份或版本 | `DocumentHeader` `Alert` | 队列栏下固定 |
+| 身份与风险条 | 防止映射错供应商、外部身份或版本 | `PageHeader object-chrome` + `DocumentHeader density="compact"` `Alert` | 队列栏下固定 |
 | 来源差异 | 比较当前/新修订的白名单业务字段 | `BusinessDiffPanel` | 主阅读区 |
 | SKU 映射 | 搜索已有 SKU、查看规格与映射历史 | `BusinessObjectCombobox` `DocumentSummary` | 决策侧栏 |
 | 供给编辑 | 确认价格、税率、费用、区域、MOQ、能力和有效期 | TanStack Form + `ValidationSummary` | 有权时可写 |

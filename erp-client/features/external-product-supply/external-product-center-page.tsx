@@ -131,32 +131,27 @@ export function ExternalProductCenterPage({
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title="外部商品与供给中心"
-        description={`角色 ${DEMO_ROLE_LABEL[demoRole]} · 只读中心；写入在待办队列中完成`}
+        variant="object-chrome"
         breadcrumbs={[
           { id: "api", label: "供应商 API", href: "/supplier-api/catalog" },
           { id: "cat", label: "外部商品供给", href: returnTo },
           { id: "obj", label: ep.externalProductId, current: true },
         ]}
         actions={
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              render={<Link href={returnTo} />}
-            >
-              <ArrowLeftIcon className="size-3.5" />
-              返回队列
-            </Button>
-            {queueContextId ? (
-              <Badge variant="outline">上下文 {queueContextId}</Badge>
-            ) : null}
-          </div>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            render={<Link href={returnTo} />}
+          >
+            <ArrowLeftIcon className="size-3.5" />
+            返回队列
+          </Button>
         }
       />
 
       <DocumentHeader
+        density="compact"
         title={rev.name}
         documentNumber={ep.externalProductId}
         version={`r${rev.revisionNo}`}
@@ -169,6 +164,24 @@ export function ExternalProductCenterPage({
                 ? "warning"
                 : "info",
         }}
+        meta={
+          <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span>
+              角色{" "}
+              <span className="font-medium text-foreground">
+                {DEMO_ROLE_LABEL[demoRole]}
+              </span>
+            </span>
+            {queueContextId ? (
+              <>
+                <span className="text-border" aria-hidden="true">
+                  ·
+                </span>
+                <span>上下文 {queueContextId}</span>
+              </>
+            ) : null}
+          </span>
+        }
         statuses={[
           {
             id: "mapping",

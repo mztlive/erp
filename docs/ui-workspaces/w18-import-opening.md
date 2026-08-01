@@ -88,7 +88,9 @@
 ### 4.2 批次中心
 
 ```text
-┌ DocumentHeader：批次号 · 验证/生产 · 对象集合 · 当前阶段 · 规则版本
+┌ PageHeader object-chrome：导入与期初 › 批次号              [返回列表] ─┐
+├ DocumentHeader compact：来源系统名 [批次状态]                           │
+│  批次号 · 版本 · 验证/生产 · 基准日 · 当前阶段 · 规则版本               │
 │ 数据水位 / 后台任务状态                         [阶段主动作]
 ├ ImportStageIndicator
 │ 安全接收 → 结构校验 → 业务校验与试算 → 责任确认 → 后台应用 → 结果
@@ -103,7 +105,7 @@
 
 | 区域 | 目的 | 主组件 | 是否固定 |
 | --- | --- | --- | --- |
-| 批次身份头 | 防止在错误环境或错误基准日操作 | `DocumentHeader` `BusinessStatusBadge` | 顶部固定 |
+| 批次身份头 | 防止在错误环境或错误基准日操作 | `PageHeader object-chrome` + `DocumentHeader density="compact"` `BusinessStatusBadge` | 顶部固定 |
 | 阶段条 | 明确“已上传”不等于“已入账” | `ImportStageIndicator` | 视口内固定 |
 | 试算摘要 | 展示对象数量、冲突、业务影响和依赖 | `MetricStrip` `BusinessDiffPanel` | 当前阶段首屏 |
 | 问题明细 | 按错误码、对象和行列定位合规诊断 | `ImportIssueTable` | 服务端分页 |

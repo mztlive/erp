@@ -250,7 +250,7 @@ Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`Quic
 | 角色工作台 | M1 | 今日工作台、经营首页 | `PageHeader` `MetricStrip` `WorkTaskItem` |
 | 高密度查询列表 | M2 | 单据列表、台账、同步批次 | `ListToolbar` `DataTable` `BusinessTableFrame` `QuickPreviewSheet` |
 | 连续处理队列 | M3 | 二次确认、审批、复核、异常 | `SequentialProcessBar` `WorkTaskItem` |
-| 对象中心（单据枢纽） | M4 | 销售单、采购单、客户、供应商 | `DocumentHeader` `DocumentSection` `RelatedDocumentList` … |
+| 对象中心（单据枢纽） | M4 | 销售单、采购单、客户、供应商 | `PageHeader(object-chrome)` + `DocumentHeader(compact)` `DocumentSection` … |
 | 编辑工作区 | M5 | 建单/改单、行项目、分摊核销 | `EditableLineItemTable` `AllocationWorkspace` |
 | 只读分析 | M6 | 经营质量、盈亏、卡券分析 | `MetricStrip` 图表 + 下钻表 |
 | 治理与导入 | M7 | 映射差异、导入、错误中心 | `ImportStageIndicator` `BusinessDiffPanel` `InterfaceErrorResolutionPanel` |
@@ -387,17 +387,36 @@ detail 预览**不负责**（留给对象中心或队列）：
 
 一张销售单 = 一次客户业务的**单一事实入口**。采购、履约、票款、变更都从这里看见全貌。
 
+#### 4.5.1 页头组合契约（与代码强制对齐）
+
+M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对象名)` 的双标题结构。
+身份只出现一次，由 `DocumentHeader` 承担。
+
 ```
-┌ DocumentHeader
-│  标题 · 单号 · 主状态 · 版本
-│  多轨：履约 | 回款 | 开票（StatusTrackSummary）
-│  主操作（按 allowedActions）· 更多
+┌ PageHeader variant="object-chrome"
+│  面包屑 · 可选轻量 metadata · [返回/刷新]（无工作面大标题、无 h1）
+├ DocumentHeader density="compact"
+│  对象标题 · 主状态
+│  单号 · 版本 · meta（负责/协作等一行摘要）
+│  多轨：履约 | 回款 | 开票（可内嵌 statuses 或独立 StatusTrackSummary）
+│  主操作（allowedActions）· secondary 按钮 · 更多
+├ 可选 MetricStrip density="compact"
+│  业务风险 detailMode="inline"；口径旁白 detailMode="tooltip"|"none"
 ├ 可选：CostCoverageNotice / PrepaymentGate / 主责系统只读标签
 ├ 锚点子导航（横向 sticky）
 │  概览 | 明细 | 履约 | 票款 | 变更与异常 | 协同（二期）| 审计
 ├ 内容区 DocumentSection × N
 └ 底栏（编辑态）：DraftSaveIndicator · 校验摘要 · 提交
 ```
+
+| 组件 | M4 用法 | 禁止 |
+| --- | --- | --- |
+| `PageHeader` | 仅 `variant="object-chrome"`：面包屑 + 返回/刷新 | `title="客户对象中心"` 等与 DocumentHeader 重复的大标题 |
+| `DocumentHeader` | `density="compact"`；唯一 h1；`meta` 放负责/协作/来源 | 把长协作期、实现口径塞进 secondaryActions 文案块 |
+| `MetricStrip` / `MetricItem` | `density="compact"`；风险信号 inline | 首屏默认展示「服务端聚合 / W11」等实现旁白 |
+| 列表/工作台 `PageHeader` | M1/M2/M3/M6/M7 仍用默认 `variant="page"` + 工作面 title | 对象详情误用 page 变体叠双头 |
+
+列表+对象同页的混合壳（如导入批次列表进详情）：**列表态**用 `variant="page"`；**对象/批次详情态**改 `object-chrome` + `DocumentHeader density="compact"`，不得两套 title 并存。
 
 **概览**：`DocumentSummary` + 客户/合同引用 + 责任人 + 关键日期。  
 **明细**：卡券用 `CardVoucherLineItem`（唯一明细）；实物服务用行表。  
@@ -746,10 +765,10 @@ detail 预览**不负责**（留给对象中心或队列）：
 | 需求 | 使用 |
 | --- | --- |
 | 壳与页签 | `ErpAppShell` `GlobalTopbar` `TaskTabs` |
-| 页头指标 | `PageHeader` `PageActions` `MetricStrip` |
+| 页头指标 | `PageHeader`（M1/M2 默认 `page`；M4 必须 `object-chrome`）`PageActions` `MetricStrip` |
 | 列表 | `ListToolbar` `DataTable` `BusinessTableFrame` `QuickPreviewSheet`（单据默认 `size="detail"`） |
 | 状态金额 | `BusinessStatusBadge` / `StatusBadge` `MoneyValue` `QuantityValue` `RateValue` `DocumentTotals` |
-| 单据中心 | `DocumentHeader` `DocumentSummary` `DocumentSection` `RevisionTimeline` |
+| 单据/对象中心 | `DocumentHeader density="compact"` `DocumentSummary` `DocumentSection` `RevisionTimeline`；禁止与 page 大标题叠放 |
 | 纸质投影 | **`PaperDocument`**（宽 Dialog / 打印页，非窄 preview） |
 | 编辑 | `EditableLineItemTable` `AllocationWorkspace` `ApprovalDecisionPanel` |
 | 正式动作 | `FormalActionConfirmDialog` `BatchImpactPreview` `FormalActionResult` |
@@ -766,6 +785,7 @@ detail 预览**不负责**（留给对象中心或队列）：
 
 ### 15.1 体验
 
+- [ ] M4 对象中心无「工作面大标题 + 对象标题」双头；仅 `object-chrome` + compact `DocumentHeader`
 - [ ] 任一角色从着陆到「处理第一条待办」≤ 2 次点击  
 - [ ] 二次确认 / 审核 / 复核 / 审批可连续处理，无需反复回列表  
 - [ ] 销售单中心可见履约与票款进度，无需切换三大菜单拼现状  

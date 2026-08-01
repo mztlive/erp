@@ -93,8 +93,9 @@
 ### 4.2 连接中心
 
 ```text
-┌ DocumentHeader：连接代码 · 供应商 · 环境 · 启用/停用/故障
-│ 最近健康检查 · 配置版本 · 业务影响                  [允许的主动作]
+┌ PageHeader object-chrome：API 连接 › 连接代码              [返回列表] ─┐
+├ DocumentHeader compact：供应商 [启用/停用/故障] · 连接代码 · 环境       │
+│ 最近健康检查 · 配置版本 · 业务负责人/技术负责人      [允许的主动作]     │
 ├ 可选 Alert：鉴权失败 / 目录陈旧 / 能力缺失 / 生产配置不完整
 ├ 锚点：概览 | 能力 | 安全配置引用 | 健康与尝试 | 目录同步 | 关联业务 | 审计
 ├ 概览：业务身份与责任人          │ 可用性与下一步
@@ -107,7 +108,7 @@
 
 | 区域 | 目的 | 主组件 | 是否固定 |
 | --- | --- | --- | --- |
-| 连接身份头 | 防止混淆供应商和测试/生产环境 | `DocumentHeader` `BusinessStatusBadge` | 顶部固定 |
+| 连接身份头 | 防止混淆供应商和测试/生产环境 | `PageHeader object-chrome` + `DocumentHeader density="compact"` `BusinessStatusBadge` | 顶部固定 |
 | 环境与故障警示 | 对生产、高风险故障和陈旧状态给文字提示 | `Alert` `DataFreshness` | 条件常驻 |
 | 能力矩阵 | 展示连接能力与商品级能力的边界 | `DataTable` / 能力卡 | 身份列固定 |
 | 安全配置引用 | 展示引用是否就绪、版本和轮换状态 | `SensitiveValue` 安全元数据 | 有字段权时可见 |

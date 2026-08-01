@@ -120,8 +120,12 @@ detail 必须能读完当前版本主事实；不得只展示三五个摘要字�
 
 ### 4.3 M4 对象中心
 
+遵循 `erp-ui-design.md` §4.5.1：导航壳 `object-chrome`，对象身份仅 `DocumentHeader compact`（标题优先供应商快照，单号/版本/来源销售在 meta）。
+
 ```text
-┌ DocumentHeader：PO… · v2 · 主状态 · 审核/付款/开票/履约进度 ─────────┐
+┌ PageHeader object-chrome：采购 › 采购单 › PO…     [返回] [付款] [履约] ─┐
+├ DocumentHeader compact：供应商快照 [主状态]                              │
+│  PO… · v2 · 来源销售…     类型/履约轨 · [主动作]                         │
 │ 供应商 · 来源销售单 · 采购类型 · 履约责任    [去付款/履约] [更多 ▾]  │
 ├ 概览 | 明细与分配 | 履约 | 应付与票款 | 变更与异常 | 审计 ──────────┤
 │ PrepaymentGate / 审核结果 / 数据水位                                 │

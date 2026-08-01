@@ -91,8 +91,9 @@ W23 对象页签身份为 `sales-projection:{projectionId}`，标题为 `投影 
 ### 4.2 对象中心（1440×900）
 
 ```text
-┌ DocumentHeader：销售单号 · ERP版本 · 投影版本 · 目标商城
+┌ DocumentHeader compact：销售单号 · ERP版本 · 投影版本 · 目标商城
 │ 销售事实：已生效    投影投递：重试中    商城确认：待确认      [查询结果] [更多]
+│ （列表页壳仍为 PageHeader page；侧栏/Sheet 对象头用 compact，不叠第二套工作面 title）
 ├ 关键提示：投影不是销售单副本；失败不回退销售事实或应收
 ├ 锚点：概览 | 执行内容 | 投递历史 | 版本对应 | 差异与错误 | 审计
 ├ 概览：来源销售版本、投影来源、当前商城已确认版、延迟和责任人
@@ -106,7 +107,7 @@ W23 对象页签身份为 `sales-projection:{projectionId}`，标题为 `投影 
 
 | 区域 | 目的 | 主组件 | 是否固定 |
 | --- | --- | --- | --- |
-| 三段状态轨 | 区分 ERP 生效、消息投递和商城确认 | `DocumentHeader` `StatusTrackSummary` | 顶部固定 |
+| 三段状态轨 | 区分 ERP 生效、消息投递和商城确认 | `DocumentHeader density="compact"` `StatusTrackSummary` | 顶部固定 |
 | 非写者提示 | 防止用户把投影当成可改单据 | `Alert` | 存在失败或用户有写权限时固定可见 |
 | 执行内容 | 读取商城真正应接收的白名单字段 | `DocumentSection` | 否 |
 | 版本对应 | 证明一对一来源与当前确认水位 | `RevisionTimeline` | 否 |

@@ -15,7 +15,6 @@ import {
   BusinessFailureState,
   BusinessStatusBadge,
   CostCoverageNotice,
-  DataFreshness,
   DocumentHeader,
   DocumentSection,
   DocumentSummary,
@@ -415,7 +414,7 @@ export function ConsumptionOrderCenterPage({
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title={`消费 · ${view.identity.externalOrderNo}`}
+        variant="object-chrome"
         breadcrumbs={[
           {
             id: "com",
@@ -428,14 +427,6 @@ export function ConsumptionOrderCenterPage({
             current: true,
           },
         ]}
-        metadata={
-          <DataFreshness
-            updatedAt={formatTime(view.freshness.factWatermark)}
-            dateTime={view.freshness.factWatermark}
-            state="fresh"
-            label="记录更新时间"
-          />
-        }
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -461,12 +452,18 @@ export function ConsumptionOrderCenterPage({
       />
 
       <DocumentHeader
+        density="compact"
         title={`${view.identity.mallName} · ${view.customer.customerLabel}`}
         documentNumber={view.identity.externalOrderNo}
         primaryStatus={{
           label: FULFILLMENT_CHAIN_LABEL[view.fulfillment.chain],
           tone: FULFILLMENT_CHAIN_TONE[view.fulfillment.chain],
         }}
+        meta={
+          <span className="text-muted-foreground">
+            记录更新 {formatTime(view.freshness.factWatermark)}
+          </span>
+        }
         statuses={[
           {
             id: "fact",

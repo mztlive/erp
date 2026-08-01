@@ -1150,11 +1150,45 @@ function JobDetailView({
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageHeader
+        variant="object-chrome"
+        breadcrumbs={[
+          {
+            id: "gov",
+            label: "治理",
+            href: "/governance/history-backfill",
+          },
+          {
+            id: "hb",
+            label: "历史消费回填",
+            href: "/governance/history-backfill",
+          },
+          {
+            id: "job",
+            label: currentJob.jobNo,
+            current: true,
+          },
+        ]}
+        actions={
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onBack}>
+              <ArrowLeftIcon className="size-4" />
+              返回任务列表
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void detailQuery.refetch()}
+            >
+              <RefreshCwIcon className="size-4" />
+              刷新
+            </Button>
+          </div>
+        }
+      />
+
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" variant="ghost" size="sm" onClick={onBack}>
-          <ArrowLeftIcon className="size-4" />
-          返回任务列表
-        </Button>
         <RoleDemoBar
           role={role}
           onChange={(r) =>
@@ -1169,22 +1203,20 @@ function JobDetailView({
         >
           下次动作·结果未知
         </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          onClick={() => void detailQuery.refetch()}
-        >
-          <RefreshCwIcon className="size-4" />
-          刷新
-        </Button>
       </div>
 
       <DocumentHeader
-        title="回填任务"
+        density="compact"
+        title={currentJob.mallName}
         documentNumber={currentJob.jobNo}
         primaryStatus={primaryProcessing}
         version={`lv-${currentJob.lockVersion}`}
+        meta={
+          <span className="text-muted-foreground">
+            {ENVIRONMENT_LABEL[currentJob.environment]} · [
+            {formatDay(currentJob.rangeStart)}, {formatDay(currentJob.rangeEnd)})
+          </span>
+        }
         statuses={[
           {
             id: "report",

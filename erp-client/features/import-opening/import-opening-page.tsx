@@ -671,41 +671,60 @@ function BatchDetailView({
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            replaceUrl({
-              ...urlState,
-              batchId: undefined,
-              section: "overview",
-              issueCode: undefined,
-              issueObjectType: undefined,
-              rowStatus: undefined,
-            })
-          }
-        >
-          <ArrowLeftIcon className="size-4" />
-          返回批次列表
-        </Button>
-        <RoleDemoBar
-          role={role}
-          onChange={(r) =>
-            patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
-          }
-        />
-      </div>
+      <PageHeader
+        variant="object-chrome"
+        breadcrumbs={[
+          { id: "gov", label: "治理", href: "/governance/imports" },
+          { id: "imp", label: "导入与期初", href: "/governance/imports" },
+          {
+            id: "batch",
+            label: batch.batchNo,
+            current: true,
+          },
+        ]}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              replaceUrl({
+                ...urlState,
+                batchId: undefined,
+                section: "overview",
+                issueCode: undefined,
+                issueObjectType: undefined,
+                rowStatus: undefined,
+              })
+            }
+          >
+            <ArrowLeftIcon className="size-4" />
+            返回批次列表
+          </Button>
+        }
+      />
+
+      <RoleDemoBar
+        role={role}
+        onChange={(r) =>
+          patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
+        }
+      />
 
       <DocumentHeader
-        title="导入批次"
+        density="compact"
+        title={batch.sourceSystem.name}
         documentNumber={batch.batchNo}
         primaryStatus={{
           label: BATCH_STATUS_LABEL[batch.status],
           tone: BATCH_STATUS_TONE[batch.status],
         }}
         version={batch.version}
+        meta={
+          <span className="text-muted-foreground">
+            {ENVIRONMENT_LABEL[batch.environment]} · 基准日 {batch.baselineDate}
+          </span>
+        }
         statuses={[
           {
             id: "env",

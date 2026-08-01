@@ -100,7 +100,7 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 | 工具栏 | 搜索、筛选、Saved View 和导出 | `ListToolbar` | 表格滚动时固定 |
 | 资源列表 | 扫描启停生命周期、修订时序、版本、有效期和阻塞原因 | `BusinessTableFrame`、`DataTable` | 身份列与行级动作固定 |
 | detail 预览 | 不离开列表核对当前版本和关键关系 | `QuickPreviewSheet size="detail"` | 覆盖式 |
-| 对象中心 | 维护完整版本、关系和审计 | `DocumentHeader`、`DocumentSection`、`RevisionTimeline` | 子导航 sticky |
+| 对象中心 | 维护完整版本、关系和审计 | `PageHeader object-chrome` + `DocumentHeader density="compact"`、`DocumentSection`、`RevisionTimeline`；禁止再叠「主数据对象中心」大标题 | 子导航 sticky |
 | 正式确认 | 预览版本差异和受影响选择器 | `BusinessDiffPanel`、`FormalActionConfirmDialog` | 对话框 |
 
 ### 4.3 资源专属对象中心

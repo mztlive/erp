@@ -6,7 +6,6 @@ import { ArrowLeftIcon, BanIcon, HistoryIcon } from "lucide-react"
 
 import {
   BusinessFailureState,
-  DataFreshness,
   DocumentHeader,
   DocumentSection,
   PageActions,
@@ -159,7 +158,7 @@ function MasterDataCenterBody({
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title="主数据对象中心"
+        variant="object-chrome"
         breadcrumbs={[
           { id: "md", label: "主数据", href: "/master-data/sellable-items" },
           {
@@ -169,14 +168,6 @@ function MasterDataCenterBody({
           },
           { id: "object", label: data.name, current: true },
         ]}
-        metadata={
-          <DataFreshness
-            updatedAt="业务记录"
-            dateTime={data.currentRevision.effectiveFrom}
-            state="fresh"
-            label="对象"
-          />
-        }
         actions={
           <PageActions
             actions={[
@@ -189,28 +180,13 @@ function MasterDataCenterBody({
                   window.location.href = listHref
                 },
               },
-              {
-                actionKey: "revise",
-                label: "形成新版本",
-                icon: HistoryIcon,
-                mobileVisibility: "hide",
-                disabled: !canRevise,
-                onClick: () => setReviseOpen(true),
-              },
-              {
-                actionKey: "disable",
-                label: "停用",
-                icon: BanIcon,
-                variant: "outline",
-                disabled: !canDisable,
-                onClick: () => setDisableOpen(true),
-              },
             ]}
           />
         }
       />
 
       <DocumentHeader
+        density="compact"
         title={data.name}
         documentNumber={data.stableNo}
         version={data.currentRevision.revisionNo}
@@ -218,6 +194,14 @@ function MasterDataCenterBody({
           label: data.lifecycleStatusLabel,
           tone: data.lifecycleTone,
         }}
+        meta={
+          <span className="num text-muted-foreground">
+            {formatEffectiveRange(
+              data.currentRevision.effectiveFrom,
+              data.currentRevision.effectiveTo
+            )}
+          </span>
+        }
         statuses={[
           {
             id: "timing",
@@ -240,13 +224,28 @@ function MasterDataCenterBody({
               ]
             : []),
         ]}
+        primaryAction={
+          <Button
+            type="button"
+            size="sm"
+            disabled={!canRevise}
+            onClick={() => setReviseOpen(true)}
+          >
+            <HistoryIcon data-icon="inline-start" aria-hidden="true" />
+            形成新版本
+          </Button>
+        }
         secondaryActions={
-          <span className="num text-sm text-muted-foreground">
-            {formatEffectiveRange(
-              data.currentRevision.effectiveFrom,
-              data.currentRevision.effectiveTo
-            )}
-          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!canDisable}
+            onClick={() => setDisableOpen(true)}
+          >
+            <BanIcon data-icon="inline-start" aria-hidden="true" />
+            停用
+          </Button>
         }
       />
 

@@ -969,39 +969,66 @@ function BatchWizardView({
         />
       )}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onClick={() =>
-            replaceUrl({
-              ...urlState,
-              panel: "overview",
-              batchId: undefined,
-              stage: undefined,
-            })
-          }
-        >
-          <ArrowLeftIcon className="size-4" />
-          返回总览
-        </Button>
-        <RoleDemoBar
-          role={role}
-          onChange={(r) =>
-            patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
-          }
-        />
-      </div>
+      <PageHeader
+        variant="object-chrome"
+        breadcrumbs={[
+          {
+            id: "gov",
+            label: "治理",
+            href: "/governance/ownership-migrations",
+          },
+          {
+            id: "om",
+            label: "主责迁移",
+            href: "/governance/ownership-migrations",
+          },
+          {
+            id: "batch",
+            label: batch.identity.batchNo,
+            current: true,
+          },
+        ]}
+        actions={
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              replaceUrl({
+                ...urlState,
+                panel: "overview",
+                batchId: undefined,
+                stage: undefined,
+              })
+            }
+          >
+            <ArrowLeftIcon className="size-4" />
+            返回总览
+          </Button>
+        }
+      />
+
+      <RoleDemoBar
+        role={role}
+        onChange={(r) =>
+          patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
+        }
+      />
 
       <DocumentHeader
-        title="主责迁移批次"
+        density="compact"
+        title={batch.identity.customerName}
         documentNumber={batch.identity.batchNo}
         primaryStatus={{
           label: BATCH_STATUS_LABEL[batch.status],
           tone: BATCH_STATUS_TONE[batch.status],
         }}
         version={batch.objectVersion}
+        meta={
+          <span className="text-muted-foreground">
+            来源商城 {batch.identity.sourceMallName}
+          </span>
+        }
         statuses={[
           {
             id: "customer",

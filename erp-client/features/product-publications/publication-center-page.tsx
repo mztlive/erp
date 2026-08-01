@@ -16,7 +16,6 @@ import {
   BusinessEmptyState,
   BusinessFailureState,
   BusinessStatusBadge,
-  DataFreshness,
   DocumentHeader,
   DocumentSection,
   DocumentSummary,
@@ -659,8 +658,7 @@ export function PublicationCenterPage({
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title={`发布 · ${data.identity.skuCode}`}
-        description={`${data.selectedRevision.name} · ${data.identity.targetMallName}`}
+        variant="object-chrome"
         breadcrumbs={[
           { id: "com", label: "商城与发布", href: "/commerce/publications" },
           { id: "list", label: "商品发布", href: "/commerce/publications" },
@@ -670,14 +668,6 @@ export function PublicationCenterPage({
             current: true,
           },
         ]}
-        metadata={
-          <DataFreshness
-            updatedAt="对象"
-            dateTime={data.freshness.queriedAt}
-            state="fresh"
-            label="发布对象"
-          />
-        }
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -795,6 +785,7 @@ export function PublicationCenterPage({
       ) : null}
 
       <DocumentHeader
+        density="compact"
         title={data.selectedRevision.name}
         documentNumber={data.identity.publicationCode}
         primaryStatus={{
@@ -805,6 +796,11 @@ export function PublicationCenterPage({
           data.latestRevisionNo != null
             ? `最新 r${data.latestRevisionNo}`
             : undefined
+        }
+        meta={
+          <span className="text-muted-foreground">
+            {data.identity.skuCode} · {data.identity.targetMallName}
+          </span>
         }
         statuses={[
           {

@@ -122,7 +122,8 @@ Banner 只描述服务端冻结事实，不由浏览器时间或本地开关推�
 ### 4.2 批次向导（1440×900）
 
 ```text
-┌ DocumentHeader：批次号 · 客户 · 来源商城 · 状态 · 冻结提示
+┌ PageHeader object-chrome：主责迁移 › 批次号                [返回总览] ─┐
+├ DocumentHeader compact：客户名 [批次状态] · 批次号 · 商城 · 冻结提示
 ├ ImportStageIndicator：范围清单 → 双确认 → 冻结与最后同步 → 最终基线 → 执行 → 完成
 ├ 固定摘要：scopeHash · 当前销售版本摘要 · 票款摘要 · 卡实例/余额基线 · 最后水位
 ├ 当前阶段主区
