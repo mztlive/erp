@@ -708,7 +708,7 @@ export function ExternalProductSupplyPage() {
         status: "blocked",
         title: "会话草稿已保存",
         description:
-          "草稿仅存于当前会话：未经审核不写 ERP SKU / 商城商品 / 正式供给修订。正式映射与供给类型登记前无写入口。",
+          "草稿仅存于当前会话：未经审核不写 ERP SKU / 商城商品 / 供给修订。映射确认与供给类型登记前无写入口。",
         stayOnItem: true,
         terminal: false,
       })
@@ -773,7 +773,7 @@ export function ExternalProductSupplyPage() {
         metadata={
           <DataFreshness
             state="fresh"
-            label="目录观察水位"
+            label="目录观察更新时间"
             updatedAt={
               context?.filterSummary
                 ? `${context.filterSummary} · ${formatTime(context.queueContextUpdatedAt)}`
@@ -901,7 +901,7 @@ export function ExternalProductSupplyPage() {
           checked={forceUnknownOnce}
           onChange={(e) => setForceUnknownOnce(e.target.checked)}
         />
-        下次正式动作模拟结果未知
+        下次处理动作模拟结果未知
       </label>
 
       {lastResult ? (
@@ -923,7 +923,7 @@ export function ExternalProductSupplyPage() {
                       value: lastResult.outcome.business.auditEventId,
                     },
                     {
-                      label: "对象指纹",
+                      label: "数据版本",
                       value: shortHash(lastResult.outcome.business.subjectHash),
                     },
                     {
@@ -1405,7 +1405,7 @@ export function ExternalProductSupplyPage() {
                         !item.mapping?.skuId
                       }
                     >
-                      去 W22 普通发布
+                      去商品发布
                       <ArrowRightIcon className="size-3.5" />
                     </Button>
                   ) : null}
@@ -1418,7 +1418,7 @@ export function ExternalProductSupplyPage() {
                     aria-disabled="true"
                     title={RECOVERY_BLOCKER_MESSAGE}
                   >
-                    发起 W22 恢复（阻断）
+                    发起商品发布恢复（阻断）
                   </Button>
                 </CardContent>
               </Card>
@@ -1448,7 +1448,7 @@ export function ExternalProductSupplyPage() {
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      尚无有效映射（待审核草稿不影响正式主数据）
+                      尚无有效映射（待审核草稿不影响主数据）
                     </p>
                   )}
 
@@ -1505,7 +1505,7 @@ export function ExternalProductSupplyPage() {
                       variant="secondary"
                       render={<Link href={w14Href} />}
                     >
-                      打开 W14 新建/修订 SKU
+                      打开主数据新建/修订 SKU
                     </Button>
                     {/* 正式确认映射：未登记时禁用且不可聚焦为可用 */}
                     <Button
@@ -1514,7 +1514,7 @@ export function ExternalProductSupplyPage() {
                       disabled
                       tabIndex={-1}
                       aria-disabled="true"
-                      title="WORK_ITEM_TYPE_UNREGISTERED：无正式写入口"
+                      title="WORK_ITEM_TYPE_UNREGISTERED：无写入入口"
                     >
                       确认映射（不可用）
                     </Button>
@@ -1526,7 +1526,7 @@ export function ExternalProductSupplyPage() {
                 <CardHeader className="border-b py-3">
                   <CardTitle className="text-base">供给摘要 / 会话草稿</CardTitle>
                   <CardDescription>
-                    仅会话草稿；正式供给修订类型登记前不可提交
+                    仅会话草稿；供给修订类型登记前不可提交
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
@@ -1555,7 +1555,7 @@ export function ExternalProductSupplyPage() {
                     />
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      尚无正式供给修订
+                      尚无供给修订
                     </p>
                   )}
 
@@ -1620,7 +1620,7 @@ export function ExternalProductSupplyPage() {
                       替代候选（会话内）
                     </CardTitle>
                     <CardDescription>
-                      仅证据准备；正式选定被 RECOVERY_RESPONSIBILITY_UNCONFIRMED
+                      仅证据准备；选定被 RECOVERY_RESPONSIBILITY_UNCONFIRMED
                       阻断
                     </CardDescription>
                   </CardHeader>
@@ -1722,7 +1722,7 @@ export function ExternalProductSupplyPage() {
                       variant="secondary"
                       render={<Link href={w29Href} />}
                     >
-                      进入 W29 技术异常
+                      进入接口错误中心（技术异常）
                     </Button>
                   ) : null}
                   <Button
@@ -1731,7 +1731,7 @@ export function ExternalProductSupplyPage() {
                     variant="ghost"
                     render={<Link href={w20Href} />}
                   >
-                    查看来源连接 W20
+                    查看来源 API 连接
                   </Button>
                   {item.actionBlockers.slice(0, 4).map((b) => (
                     <p
@@ -1896,7 +1896,7 @@ export function ExternalProductSupplyPage() {
         lockedFields={[
           item ? `外部商品 ${item.externalProduct.externalProductId}` : "外部商品",
           `期望修订 r${expectedRevision}`,
-          `subject_hash ${shortHash(subjectHash)}`,
+          `数据版本 ${shortHash(subjectHash)}`,
         ]}
         effects={
           confirmMode?.kind === "confirm_stop"

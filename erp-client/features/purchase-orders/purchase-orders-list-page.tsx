@@ -278,7 +278,7 @@ export function PurchaseOrdersListPage() {
       setActionResult({
         status: "succeeded",
         title: "已创建采购草稿",
-        description: `${result.data.draftLabel} · 已消费创建依据 ${selectedBasisId}，未创建采购建单 work_item。`,
+        description: `${result.data.draftLabel} · 已消费创建依据 ${selectedBasisId}，未创建采购建单任务。`,
         reference: result.reference,
       })
       router.push(
@@ -884,14 +884,14 @@ export function PurchaseOrdersListPage() {
           <DialogHeader>
             <DialogTitle>从采购创建依据建单</DialogTitle>
             <DialogDescription>
-              只消费 W07/W05 采购创建依据，不要求未注册的采购建单 work_item。
+              只消费采购二次确认/销售单的采购创建依据，不要求未注册的采购建单任务。
               同一依据上的拆单维度已固定，不可跨销售单或跨供应商合并。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
             {openBases.length === 0 && !basisFromUrl ? (
               <p className="text-sm text-muted-foreground">
-                当前没有可消费的创建依据。请先在 W07 完成采购二次确认。
+                当前没有可消费的创建依据。请先在采购二次确认完成确认。
               </p>
             ) : (
               <label className="grid gap-1.5 text-sm">
@@ -904,7 +904,7 @@ export function PurchaseOrdersListPage() {
                   {basisFromUrl &&
                   !openBases.some((b) => b.basisId === basisFromUrl) ? (
                     <NativeSelectOption value={basisFromUrl}>
-                      {basisFromUrl} · 来自 W07 固定结果（无 work_item）
+                      {basisFromUrl} · 来自采购二次确认固定结果（无建单任务）
                     </NativeSelectOption>
                   ) : null}
                   {openBases.map((basis) => (

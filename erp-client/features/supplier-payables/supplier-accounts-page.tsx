@@ -859,7 +859,7 @@ export function SupplierAccountsPage() {
             <DataFreshness
               updatedAt={new Date(data.queriedAt).toLocaleString("zh-CN")}
               dateTime={data.queriedAt}
-              label={`正式水位 ${data.dataWatermark} · 查询于`}
+              label={`数据更新时间 ${data.dataWatermark} · 查询于`}
             />
             <p className="text-xs text-muted-foreground">
               策略{" "}

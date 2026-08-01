@@ -259,7 +259,7 @@ export function SupplierOrderCenterPage({
                     href="/governance/integration-errors"
                     className="text-primary underline-offset-2 hover:underline"
                   >
-                    接口错误与对账（W29）
+                    接口错误与对账中心
                   </Link>
                 ),
               },
@@ -586,7 +586,7 @@ export function SupplierOrderCenterPage({
                 variant="outline"
                 render={<Link href="/governance/integration-errors" />}
               >
-                转 W29
+                转接口错误中心
                 <ExternalLinkIcon className="size-3.5" />
               </Button>
             ) : null}
@@ -694,7 +694,7 @@ export function SupplierOrderCenterPage({
               />
             </span>
             <span>
-              指纹 <span className="num">{detail.workItem.subjectHash}</span>
+              版本 <span className="num">{detail.workItem.subjectHash}</span>
             </span>
             <span>完成动作须另行确认可验证终态</span>
           </CardContent>
@@ -734,7 +734,7 @@ export function SupplierOrderCenterPage({
                     />
                   }
                 >
-                  打开结算（W27）
+                  打开 API 结算
                 </Button>
               ) : null}
               <Button
@@ -747,7 +747,7 @@ export function SupplierOrderCenterPage({
                   />
                 }
               >
-                返回商城订单（W25）
+                返回商城消费订单
               </Button>
             </div>
           }
@@ -788,7 +788,7 @@ export function SupplierOrderCenterPage({
               label="支付记录键"
               value={<span className="num">{o.paymentFactKey}</span>}
             />
-            <Item label="对象版本" value={String(o.lockVersion)} />
+            <Item label="版本" value={String(o.lockVersion)} />
           </DescriptionList>
           <p className="mt-3 text-xs text-muted-foreground">
             发布版本、固定供给、商品与成本在下单时固定，不受后续主数据变化影响。
@@ -1134,7 +1134,7 @@ export function SupplierOrderCenterPage({
               variant="outline"
               render={<Link href="/supplier-api/settlements" />}
             >
-              打开 API 结算（W27）
+              打开 API 结算
             </Button>
             <Button
               type="button"
@@ -1142,7 +1142,7 @@ export function SupplierOrderCenterPage({
               variant="outline"
               render={<Link href="/finance/supplier-accounts" />}
             >
-              供应商往来（W12）
+              供应商往来
             </Button>
           </div>
         </DocumentSection>
@@ -1160,7 +1160,7 @@ export function SupplierOrderCenterPage({
                 <TableHead>结果</TableHead>
                 <TableHead>操作人</TableHead>
                 <TableHead>时间</TableHead>
-                <TableHead>幂等尾部</TableHead>
+                <TableHead>任务号尾号</TableHead>
                 <TableHead>尝试</TableHead>
               </TableRow>
             </TableHeader>

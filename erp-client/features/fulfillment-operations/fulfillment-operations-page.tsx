@@ -339,34 +339,34 @@ function impactPreview(task: FulfillmentTask, draft: FulfillmentDraft): string[]
     return [
       `合格 ${qual} 将增加库存并沿采购销售分配建立预占`,
       `不合格 ${rej} 不入库、不建立预占`,
-      "不触发 W06 客户验收",
+      "不触发客户验收",
     ]
   }
   if (draft.type === "WAREHOUSE_SHIP") {
     const qty = draft.lines.reduce((s, l) => s + Number(l.quantity || 0), 0)
     return [
       `发货 ${qty}：消耗本销售明细有效预占并减少自有库存`,
-      "物流签收 ≠ 客户验收；下一步在 W06 登记验收",
+      "物流签收 ≠ 客户验收；下一步在客户验收登记验收",
     ]
   }
   if (draft.type === "SUPPLIER_DIRECT") {
     return [
       "形成供应商直发记录",
       "不影响自有库存流水",
-      "下一步：销售在 W06 客户验收",
+      "下一步：销售在客户验收登记",
     ]
   }
   if (draft.type === "ELECTRONIC") {
     return [
       `电子交付结果：${RESULT_LABEL[draft.result]}`,
       "不改变自有库存；失败不可覆盖，重做新建",
-      "成功后可进入 W06 验收",
+      "成功后可进入客户验收",
     ]
   }
   return [
     `服务结果：${RESULT_LABEL[draft.result]}`,
     "形成服务履约记录，不影响库存",
-    "成功后可进入 W06 验收",
+    "成功后可进入客户验收",
   ]
 }
 
@@ -809,7 +809,7 @@ export function FulfillmentOperationsPage() {
         setLastResult({
           status: "succeeded",
           title: "查询确认：履约已过账",
-          description: "同一任务号返回同一正式记录，未重复改库存/预占。",
+          description: "同一任务号返回同一业务记录，未重复改库存/预占。",
           reference: response.outcome.factNo,
           outcome: response.outcome,
           stayOnItem: !autoNext,
@@ -955,7 +955,7 @@ export function FulfillmentOperationsPage() {
                 context?.snapshotUpdatedAt ?? new Date().toISOString()
               }
               state="fresh"
-              label="数据水位"
+              label="数据更新时间"
             />
             <span className="text-xs text-muted-foreground" aria-live="polite">
               {context?.filterSummary ?? "仅我的"} · 待处理{" "}
@@ -1133,7 +1133,7 @@ export function FulfillmentOperationsPage() {
                       />
                     }
                   >
-                    去 W06 客户验收
+                    去客户验收
                     <ArrowRightIcon data-icon="inline-end" />
                   </Button>
                 ) : null}
@@ -1410,7 +1410,7 @@ export function FulfillmentOperationsPage() {
                               />
                             }
                           >
-                            去 W12 登记付款
+                            去供应商往来登记付款
                           </Button>
                         ) : undefined
                       }
@@ -1439,7 +1439,7 @@ export function FulfillmentOperationsPage() {
                   />
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    客户端预检通过；正式过账仍以服务端守恒与门禁为准。
+                    客户端预检通过；过账仍以服务端守恒与门禁为准。
                   </p>
                 )}
 
@@ -1496,7 +1496,7 @@ export function FulfillmentOperationsPage() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`确认${task ? OPERATION_TYPE_LABEL[task.operationType] : "履约"}过账`}
-        description="将写入正式记录。结果未确定前不会乐观修改库存、预占或队列位置。"
+        description="将写入业务记录。结果未确定前不会乐观修改库存、预占或队列位置。"
         actionLabel="过账"
         confirmLabel="确认过账"
         fromStatus={{ label: "待过账", tone: "warning" }}
@@ -1511,7 +1511,7 @@ export function FulfillmentOperationsPage() {
           "已过账记录不可覆盖；纠错走冲正/退货/新记录",
           "库存与预占仅在处理结果确定后更新",
         ]}
-        nextDepartment="成功后可进入 W06 客户验收（物流≠验收）"
+        nextDepartment="成功后可进入客户验收（物流≠验收）"
         pending={postMutation.isPending}
         onConfirm={async () => {
           await handlePost()
@@ -1807,7 +1807,7 @@ function FulfillmentTypeForm({
       <section className="space-y-3" aria-label="供应商直发表单">
         <h3 className="text-sm font-semibold">供应商直发</h3>
         <p className="text-xs text-muted-foreground">
-          必须引用采购销售分配；正式过账不写自有库存流水。
+          必须引用采购销售分配；过账不写自有库存流水。
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">

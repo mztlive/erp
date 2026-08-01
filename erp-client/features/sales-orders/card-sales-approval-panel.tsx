@@ -108,7 +108,7 @@ export function CardSalesApprovalPanel({
           <Badge variant="secondary">{approval.workItemStatus}</Badge>
         </div>
         <CardDescription>
-          与 W02 共用 handlerKey / CompleteWorkItemEnvelope。对象中心不提供绕过任务的审批按钮；
+          与待办队列共用完成流程。对象中心不提供绕过任务的审批按钮；
           claimToken 仅存会话内存。
         </CardDescription>
       </CardHeader>
@@ -131,7 +131,7 @@ export function CardSalesApprovalPanel({
           <AlertDescription>
             {approval.frozenSubmissionSummary}
             <span className="mt-1 block num text-xs">
-              任务 {approval.workItemId} · 指纹 {approval.subjectHash} · 版本{" "}
+              任务 {approval.workItemId} · 版本 {approval.subjectHash} · 版本{" "}
               {approval.subjectVersion} · 期望状态{" "}
               {approval.expectedReviewStatus}
             </span>

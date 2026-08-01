@@ -67,7 +67,7 @@ export function SalesOrderCollaborationCard({
           <AlertTitle>尚无执行信息</AlertTitle>
           <AlertDescription>
             {data?.note ??
-              "当前销售单尚无执行信息。生效后无需手工新建；跨单监控见 W23。"}
+              "当前销售单尚无执行信息。生效后无需手工新建；跨单监控见执行信息。"}
           </AlertDescription>
         </Alert>
         <div className="mt-3">
@@ -81,7 +81,7 @@ export function SalesOrderCollaborationCard({
               />
             }
           >
-            在 W23 按单号查询
+            在执行信息中按单号查询
           </Button>
         </div>
       </DocumentSection>
@@ -116,7 +116,7 @@ export function SalesOrderCollaborationCard({
               render={<Link href={data.w23Href} />}
             >
               <ExternalLinkIcon data-icon="inline-start" aria-hidden="true" />
-              打开 W23
+              打开执行信息
             </Button>
           ) : null}
         </div>
@@ -309,7 +309,7 @@ export function SalesOrderCollaborationCard({
                 }
               >
                 <ExternalLinkIcon data-icon="inline-start" aria-hidden="true" />
-                打开 W25 消费追溯
+                打开商城消费订单追溯
               </Button>
             </div>
           </CardContent>

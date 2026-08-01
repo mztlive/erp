@@ -607,7 +607,7 @@ export function MallSyncPage() {
     demoRole === "admin" && firstPhase && !policyMissing && !context?.sourceUnavailable
   const manualSyncDisabledReason = !firstPhase
     ? frozen
-      ? "迁移冻结：普通立即增量/按单补拉禁用，请从 W24 批次执行"
+      ? "迁移冻结：普通立即增量/按单补拉禁用，请从主责迁移批次执行"
       : "已封存：无第一期写动作"
     : policyMissing
       ? "MANUAL_GOVERNANCE_POLICY_MISSING：人工策略未配置"
@@ -667,7 +667,7 @@ export function MallSyncPage() {
       },
       {
         id: "wm",
-        header: "水位",
+        header: "同步进度",
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
             {row.original.watermarkAdvanced ? "已安全推进" : "未推进"}
@@ -831,7 +831,7 @@ export function MallSyncPage() {
       },
       {
         id: "wi",
-        header: "正式待办",
+        header: "待办",
         cell: ({ row }) =>
           row.original.ownerRoutingState === "CONFIGURED" ? (
             <span className="font-mono text-xs">
@@ -875,7 +875,7 @@ export function MallSyncPage() {
       },
       {
         id: "fp",
-        header: "指纹",
+        header: "数据版本",
         cell: ({ row }) => (
           <span className="font-mono text-xs text-muted-foreground">
             {row.original.sourceFingerprintShort ?? "—"}
@@ -1049,7 +1049,7 @@ export function MallSyncPage() {
                 <p>
                   封存时间 {formatTime(ownership.sealedAt)}
                   {ownership.finalWatermark
-                    ? ` · 最终水位 ${ownership.finalWatermark}`
+                    ? ` · 最终同步点 ${ownership.finalWatermark}`
                     : ""}
                 </p>
               ) : null}
@@ -1342,12 +1342,12 @@ export function MallSyncPage() {
             <CardHeader>
               <CardTitle>运行摘要</CardTitle>
               <CardDescription>
-                水位证明来源白名单数据已安全捕获，不证明映射或应收已成功。
+                同步进度仅证明来源白名单数据已安全捕获，不证明映射或应收已成功。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between gap-2">
-                <span className="text-muted-foreground">当前水位</span>
+                <span className="text-muted-foreground">当前同步进度</span>
                 <span className="font-mono text-xs">
                   {context?.freshness.currentWatermark ?? "—"}
                 </span>
@@ -1403,7 +1403,7 @@ export function MallSyncPage() {
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,1fr)]">
           <BusinessTableFrame
             title="同步任务"
-            description="基线 / 增量 / 单号补拉。水位不因异步映射失败回退。"
+            description="基线 / 增量 / 单号补拉。同步进度不因异步映射失败回退。"
             table={
               <DataTable
                 data={pageJobs}
@@ -1509,7 +1509,7 @@ export function MallSyncPage() {
                   {data.selectedSnapshot.externalOrderNo}
                 </CardTitle>
                 <CardDescription>
-                  指纹 {data.selectedSnapshot.contentHashShort} · 任务{" "}
+                  版本 {data.selectedSnapshot.contentHashShort} · 任务{" "}
                   {data.selectedSnapshot.syncJobNo}
                 </CardDescription>
               </CardHeader>
@@ -2093,7 +2093,7 @@ export function MallSyncPage() {
             <Alert>
               <AlertTitle>历史只读</AlertTitle>
               <AlertDescription>
-                第一期轮询已封存。当前执行信息、迁移与通用对账请前往 W23 / W24 /
+                第一期轮询已封存。当前执行信息、迁移与通用对账请前往执行信息 / 主责迁移 /
                 W29。
               </AlertDescription>
             </Alert>
@@ -2122,7 +2122,7 @@ export function MallSyncPage() {
           <DialogHeader>
             <DialogTitle>立即执行增量</DialogTitle>
             <DialogDescription>
-              不修改来源；范围由服务端按安全水位计算。禁止客户端移动高水位。
+              不修改来源；范围由服务端按安全同步点计算。禁止客户端改写同步进度。
             </DialogDescription>
           </DialogHeader>
           {policyMissing ? (
@@ -2142,7 +2142,7 @@ export function MallSyncPage() {
               }}
             >
               <p className="text-sm text-muted-foreground">
-                当前水位 {context?.freshness.currentWatermark ?? "—"} · 阶段{" "}
+                当前同步进度 {context?.freshness.currentWatermark ?? "—"} · 阶段{" "}
                 {STAGE_LABEL[stage]}
               </p>
               <incrementalForm.AppField
@@ -2290,10 +2290,10 @@ export function MallSyncPage() {
         actionLabel="确认映射"
         fromStatus={{ label: "待处理", tone: "warning" }}
         toStatus={{ label: "映射已解决", tone: "success" }}
-        description="确认身份关系后，mappingTaskStatus 置为已解决并完成正式待办；不立即形成销售版本。"
+        description="确认身份关系后，映射任务将标为已解决并完成待办；不立即形成销售版本。"
         effects={[
           "追加可审计映射目标",
-          "完成当前 work_item",
+          "完成当前任务",
           "不向商城回写",
           "重新归集为独立下一步",
         ]}

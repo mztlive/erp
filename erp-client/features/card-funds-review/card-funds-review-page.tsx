@@ -673,7 +673,7 @@ export function CardFundsReviewPage() {
       setLastResult({
         status: "succeeded",
         title: "历史回款已登记",
-        description: `已形成正式回款与多对多分配；指纹 ${shortHash(result.subjectHash)}，净已收 ${formatMoney(result.settledTotal)}。未完成复核前指标仍可能不可靠。`,
+        description: `已形成回款与多对多分配；版本 ${shortHash(result.subjectHash)}，净已收 ${formatMoney(result.settledTotal)}。未完成复核前指标仍可能不可靠。`,
         reference: result.fundsFactVersion,
         stayOnItem: true,
       })
@@ -722,7 +722,7 @@ export function CardFundsReviewPage() {
       setLastResult({
         status: "succeeded",
         title: "历史发票已登记",
-        description: `已形成正式发票与分配；指纹 ${shortHash(result.subjectHash)}，净已开票 ${formatMoney(result.invoicedTotal)}。`,
+        description: `已形成发票与分配；版本 ${shortHash(result.subjectHash)}，净已开票 ${formatMoney(result.invoicedTotal)}。`,
         reference: result.fundsFactVersion,
         stayOnItem: true,
       })
@@ -880,7 +880,7 @@ export function CardFundsReviewPage() {
                 context?.queueContextUpdatedAt ?? new Date().toISOString()
               }
               state="fresh"
-              label="队列水位"
+              label="队列更新时间"
             />
             <span className="text-xs text-muted-foreground" aria-live="polite">
               {context?.filterSummary ?? "仅我的"} · 第{" "}
@@ -949,7 +949,7 @@ export function CardFundsReviewPage() {
             checked={simulateHashDrift}
             onChange={(e) => setSimulateHashDrift(e.target.checked)}
           />
-          完成前模拟指纹变化阻断
+          完成前模拟数据变更阻断
         </label>
       </div>
 
@@ -983,7 +983,7 @@ export function CardFundsReviewPage() {
                                   r.outcome.kind === "REJECTED"
                                     ? "rejected"
                                     : "succeeded",
-                                title: "查询到正式终态",
+                                title: "查询到处理结果",
                                 description: "已确认处理结果，可继续下一项。",
                                 reference:
                                   r.outcome.kind === "HELD"
@@ -1153,7 +1153,7 @@ export function CardFundsReviewPage() {
                       },
                       {
                         id: "hash",
-                        label: "当前 subject_hash",
+                        label: "当前数据版本",
                         value: (
                           <span className="num font-mono text-sm">
                             {shortHash(task.workItem.subjectHash)}
@@ -1196,7 +1196,7 @@ export function CardFundsReviewPage() {
                       detail={`可开 ${formatMoney(task.account.openInvoiceableTotal)}`}
                     />
                     <MetricItem
-                      label="指纹状态"
+                      label="版本状态"
                       value={task.fingerprintStatus.label}
                       detail={task.fingerprintStatus.detail}
                       status={{
@@ -1219,12 +1219,12 @@ export function CardFundsReviewPage() {
                       "UNRELIABLE_PENDING_REVIEW"
                         ? "票款指标不可靠（复核未完成）"
                         : task.account.fundsReliability === "STALE_FINGERPRINT"
-                          ? "旧指纹失效 · 指标不可靠"
+                          ? "数据已变更 · 指标不可靠"
                           : "可靠性"}
                     </AlertTitle>
                     <AlertDescription>
                       {task.account.reliabilityNote}
-                      不以 0 值冒充已核实记录。W11/W15 应展示同等标识。
+                      不以 0 值冒充已核实记录。客户往来/经营质量应展示同等标识。
                     </AlertDescription>
                   </Alert>
 
@@ -1247,17 +1247,17 @@ export function CardFundsReviewPage() {
                   <Card size="sm">
                     <CardHeader className="border-b py-3">
                       <CardTitle className="text-base">
-                        正式回款与发票明细
+                        回款与发票明细
                       </CardTitle>
                       <CardDescription>
-                        仅展示 W11 正式记录；登记走多对多分配，禁止累计覆盖字段
+                        仅展示客户往来业务记录；登记走多对多分配，禁止累计覆盖字段
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3 pt-4">
                       {task.receiptFacts.length === 0 &&
                       task.invoiceFacts.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
-                          尚无正式回款/发票。可登记历史记录，或在期初且净额为 0
+                          尚无回款/发票。可登记历史记录，或在期初且净额为 0
                           时确认「从 0 起」（不创建 0 元单据）。
                         </p>
                       ) : null}
@@ -1326,7 +1326,7 @@ export function CardFundsReviewPage() {
                           size="sm"
                           render={<Link href={w11Href} />}
                         >
-                          打开客户往来 W11
+                          打开客户往来
                         </Button>
                       </div>
                     </CardContent>
@@ -1338,8 +1338,8 @@ export function CardFundsReviewPage() {
                         <CardHeader className="border-b py-3">
                           <CardTitle className="text-base">
                             {allocationMode === "receipt"
-                              ? "登记历史回款（W11 内核）"
-                              : "登记历史发票（W11 内核）"}
+                              ? "登记历史回款"
+                              : "登记历史发票"}
                           </CardTitle>
                           <CardDescription>
                             内嵌 AllocationWorkspace；不写累计已收/已开覆盖字段；禁止 0
@@ -1656,7 +1656,7 @@ export function CardFundsReviewPage() {
                         void driftMutation.mutateAsync(task.workItem.workItemId)
                       }}
                     >
-                      演示：外部指纹漂移
+                      演示：外部数据版本变更
                     </Button>
                   </div>
                 </CardContent>
@@ -1709,7 +1709,7 @@ export function CardFundsReviewPage() {
                           {item.reviewerLabel} · {item.completedAt}
                         </p>
                         <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                          指纹 {shortHash(item.subjectHashAtReview)}
+                          版本 {shortHash(item.subjectHashAtReview)}
                           {item.predecessorReviewId
                             ? ` · 前驱 ${item.predecessorReviewId}`
                             : " · 链首"}
@@ -1789,8 +1789,8 @@ export function CardFundsReviewPage() {
         }
         description={
           confirmMode?.kind === "zero"
-            ? `将提交 NO_HISTORY_FROM_ZERO 结论：销售单 ${task?.salesOrder.orderNo ?? ""}、应收 ${task?.account.id ?? ""}。不创建 0 元回款/发票。须证据完整；完成时三方校验 subject_hash。`
-            : `将以 CompleteCardFundsReviewCommand 提交 APPROVED / RECORDED_FACTS_RECONCILED。复核类型 ${task ? REVIEW_TYPE_LABEL[task.reviewType] : ""}，当前指纹 ${task ? shortHash(task.workItem.subjectHash) : ""}。`
+            ? `将提交「期初净额为零、无历史票款」结论：销售单 ${task?.salesOrder.orderNo ?? ""}、应收 ${task?.account.id ?? ""}。不创建 0 元回款/发票。须证据完整；完成时三方校验数据版本。`
+            : `将提交「复核通过并核对票款记录」。复核类型 ${task ? REVIEW_TYPE_LABEL[task.reviewType] : ""}，当前数据版本 ${task ? shortHash(task.workItem.subjectHash) : ""}。`
         }
         actionLabel={
           confirmMode?.kind === "zero" ? "从 0 起并完成" : "复核通过"
@@ -1809,7 +1809,7 @@ export function CardFundsReviewPage() {
             ? [
                 `销售单 ${task.salesOrder.orderNo}`,
                 `应收账户 ${task.account.id}`,
-                `subject_hash ${shortHash(task.workItem.subjectHash)}`,
+                `数据版本 ${shortHash(task.workItem.subjectHash)}`,
                 `复核类型 ${REVIEW_TYPE_LABEL[task.reviewType]}`,
                 `票款版本 ${task.fundsFactVersion}`,
               ]
@@ -1824,7 +1824,7 @@ export function CardFundsReviewPage() {
               ]
             : [
                 "追加复核链尾与 workflow_action",
-                "三方校验 subject_hash（阻断静默通过）",
+                "三方校验数据版本（阻断静默通过）",
                 "同事务完成当前任务",
               ]
         }
@@ -1969,7 +1969,7 @@ function buildResultFacts(
     { label: "workflowActionId", value: biz.workflowActionId },
     { label: "操作号", value: biz.operationId },
     {
-      label: "subject_hash",
+      label: "数据版本",
       value: (
         <span className="font-mono text-xs">{shortHash(biz.subjectHash)}</span>
       ),

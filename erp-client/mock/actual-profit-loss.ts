@@ -21,7 +21,7 @@ export const W16_SCOPE = {
 } as const
 
 export const W16_EXCLUDED_NOTE =
-  "本页仅汇总非卡券业务（GOODS_SERVICE）不含税口径。卡券销售收入、卡券直接履约费用、商城消费成本（MALL_CONSUMPTION）与微信成本（WECHAT_COST）均不进入 W16；卡券消费经营结果见 W28。"
+  "本页仅汇总非卡券业务（GOODS_SERVICE）不含税口径。卡券销售收入、卡券直接履约费用、商城消费成本（MALL_CONSUMPTION）与微信成本（WECHAT_COST）均不进入本页；卡券消费经营结果见卡券经营分析。"
 
 export const W16_FORMULA_TEXT =
   "实际经营盈亏（不含税）= 非卡券不含税销售收入 − 非卡券不含税实际采购成本 − 非卡券不含税实际履约费用（仅 cost_scope=NON_VOUCHER_FULFILLMENT 且 stage∈{ACTUAL,REDUCTION}）"
@@ -39,7 +39,7 @@ export const W16_PERIOD_BASIS_CONFIGURED: ProfitLossPeriodBasisConfig = {
     {
       code: "sales_order_effective_date",
       label: "销售单生效日",
-      explanation: "按销售单正式生效日归属期间。",
+      explanation: "按销售单生效日归属期间。",
     },
     {
       code: "fulfillment_complete_date",
@@ -90,7 +90,7 @@ export const W16_COST_ENTRIES: readonly CostEntryDetail[] = [
     salesOrderLineLabel: "定制礼盒 A × 200",
     voucherSummary: "凭证摘要授权可见 · 借：库存商品 400,000.00",
     correctionHref: "/procurement/orders/po-20260710-01",
-    correctionLabel: "打开采购单（正式变更/冲减）",
+    correctionLabel: "打开采购单（变更/冲减）",
   },
   {
     costEntryId: "ce-act-002",

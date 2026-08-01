@@ -189,7 +189,7 @@ export type RevisionLink = {
   deliveryStatus: DeliveryStatus
   deliveryStatusLabel: string
   mallAckAt?: string
-  /** 历史投影固定来源销售版本，不被 W05 当前版覆盖 */
+  /** 历史投影固定来源销售版本，不被销售单当前版覆盖 */
   sourceSalesRevisionNo: number
   isCurrentSelection: boolean
 }

@@ -432,7 +432,7 @@ export function AllocationSession({
           <DataFreshness
             updatedAt={new Date(session.queriedAt).toLocaleString("zh-CN")}
             dateTime={session.queriedAt}
-            label={`水位 ${session.dataWatermark} · 查询于`}
+            label={`更新于 ${session.dataWatermark} · 查询于`}
             className="text-xs"
           />
         </div>
@@ -451,7 +451,7 @@ export function AllocationSession({
       </div>
 
       {draftHint ? (
-        <p className="text-xs text-muted-foreground">{draftHint}（不形成正式记录）</p>
+        <p className="text-xs text-muted-foreground">{draftHint}（不形成业务记录）</p>
       ) : null}
 
       {policy && policy.state !== "AVAILABLE" ? (
@@ -634,7 +634,7 @@ export function AllocationSession({
                   {track === "payment" ? "本次付款记录" : "本次进项发票记录"}
                 </CardTitle>
                 <CardDescription>
-                  拟分配仅作表单提示；正式未分配余额以提交后服务端结果为准
+                  拟分配仅作表单提示；未分配余额以提交后服务端结果为准
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pt-4">

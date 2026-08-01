@@ -2,8 +2,8 @@
  * W30 session-mock API：queryFn / mutationFn 纯函数。
  * - processingStatus 与 reportReviewStatus 独立
  * - rangeStart 固定 = requiredHistoryStart；覆盖缺口阻断 START
- * - RESUME 复用原 job/范围/幂等命名空间
- * - 禁止重叠正式批次；报告策略缺失时确认 fail-closed
+ * - RESUME 复用原 job/范围/原任务标识
+ * - 禁止重叠业务批次；报告策略缺失时确认 fail-closed
  * - mock 永不返回卡号/卡密/手机/完整地址/原始报文
  */
 
@@ -170,7 +170,7 @@ function getCreateContext(): CreateBackfillContext {
       canCreateDraft: false,
       blockReasons: [
         ...base.blockReasons,
-        `已存在正式任务 ${overlapping.jobNo} 覆盖同一 [requiredHistoryStart, T)，禁止新建重叠批次；请续跑原任务。`,
+        `已存在回填任务 ${overlapping.jobNo} 覆盖同一 [requiredHistoryStart, T)，禁止新建重叠批次；请续跑原任务。`,
       ],
     }
   }
@@ -380,7 +380,7 @@ export async function fetchHistoryBackfillDetail(
         actionBlockers.push({
           action: a,
           code: "ROLE_DENIED",
-          message: "当前演示角色不能执行正式回填/续跑（仅系统管理员）。",
+          message: "当前演示角色不能执行回填/续跑（仅系统管理员）。",
         })
       }
     }
@@ -417,7 +417,7 @@ export async function submitHistoryBackfillCommand(
       status: "RESULT_UNKNOWN",
       title: "结果未知 · 请查询原操作",
       description:
-        "提交超时或响应丢失。请按 operationId 查询，禁止新建第二正式任务。",
+        "提交超时或响应丢失。请按 operationId 查询，禁止新建第二任务。",
       operationId,
       idempotencyKey,
       jobId: input.jobId,
@@ -429,7 +429,7 @@ export async function submitHistoryBackfillCommand(
     if (!roleCanFormal(role)) {
       return {
         status: "BLOCKED",
-        title: "无权限创建正式回填任务",
+        title: "无权限创建回填任务",
         description: "仅系统管理员可创建草稿并启动回填。",
         operationId,
         idempotencyKey,
@@ -440,7 +440,7 @@ export async function submitHistoryBackfillCommand(
     if (!ctx.canCreateDraft) {
       return {
         status: "BLOCKED",
-        title: "无法创建正式回填任务",
+        title: "无法创建回填任务",
         description: ctx.blockReasons.join("；") || "前置条件未满足",
         operationId,
         idempotencyKey,
@@ -463,9 +463,9 @@ export async function submitHistoryBackfillCommand(
     if (!ctx.coverageComplete) {
       return {
         status: "BLOCKED",
-        title: "来源覆盖不足 · 阻断创建正式执行",
+        title: "来源覆盖不足 · 阻断创建执行",
         description:
-          "来源覆盖起点晚于 requiredHistoryStart 或存在区间缺口时不得创建可执行正式任务。",
+          "来源覆盖起点晚于 requiredHistoryStart 或存在区间缺口时不得创建可执行任务。",
         operationId,
         idempotencyKey,
         blockers: ["COVERAGE_INCOMPLETE"],
@@ -498,7 +498,7 @@ export async function submitHistoryBackfillCommand(
       sourceAsOf: nowIso(),
       fulfillmentNote: "历史记录追加写入，不覆盖实时记录",
       scopeNote:
-        "正式范围半开区间 [rangeStart, T)。occurredAt = T 的记录不进入历史回填，按实时/补投契约处理。",
+        "生效范围半开区间 [rangeStart, T)。occurredAt = T 的记录不进入历史回填，按实时/补投契约处理。",
       legacyManualNote:
         "T 前支付只补台账，履约链固定 LEGACY_MANUAL，不创建供应商订单。",
       progress: {
@@ -535,7 +535,7 @@ export async function submitHistoryBackfillCommand(
       jobNo,
       operationId,
       idempotencyKey,
-      nextStep: "完成来源校验后开始正式回填",
+      nextStep: "完成来源校验后开始回填",
     }
     setIdempotencySucceeded(idempotencyKey, IDEM_KIND, result)
     return result
@@ -590,12 +590,12 @@ export async function submitHistoryBackfillCommand(
     const result: HistoryBackfillCommandResult = {
       status: "COMMITTED",
       title: "来源校验通过",
-      description: "五类记录在 [requiredHistoryStart, T) 连续可取，可开始正式回填。",
+      description: "五类记录在 [requiredHistoryStart, T) 连续可取，可开始回填。",
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,
       idempotencyKey,
-      nextStep: "确认后开始正式回填（后台异步）",
+      nextStep: "确认后开始回填（后台异步）",
     }
     setIdempotencySucceeded(idempotencyKey, IDEM_KIND, result)
     return result
@@ -606,7 +606,7 @@ export async function submitHistoryBackfillCommand(
       return {
         status: "BLOCKED",
         title: "无权限开始回填",
-        description: "仅系统管理员可启动正式回填。",
+        description: "仅系统管理员可启动回填。",
         operationId,
         idempotencyKey,
         blockers: ["ROLE_DENIED"],
@@ -694,7 +694,7 @@ export async function submitHistoryBackfillCommand(
 
     const result: HistoryBackfillCommandResult = {
       status: "COMMITTED",
-      title: "正式回填已提交后台",
+      title: "回填已提交后台",
       description: `任务 ${job.jobNo} 已冻结范围 ${formatRange(job.rangeStart, job.rangeEnd)} 并启动异步作业；进度以心跳与任务记录为准，不伪装同步完成。`,
       jobId: job.id,
       jobNo: job.jobNo,
@@ -748,7 +748,7 @@ export async function submitHistoryBackfillCommand(
       }
     }
 
-    // 续跑：同一 job、范围、幂等命名空间
+    // 续跑：同一 job、范围、原任务标识
     jobOverlays.set(job.id, {
       ...jobOverlays.get(job.id),
       processingStatus: "RUNNING",
@@ -772,7 +772,7 @@ export async function submitHistoryBackfillCommand(
     const result: HistoryBackfillCommandResult = {
       status: "COMMITTED",
       title: "已续跑原任务",
-      description: `沿 ${job.jobNo} 原范围 ${formatRange(job.rangeStart, job.rangeEnd)} 与幂等命名空间 ${job.idempotencyNamespace} 续跑；已成功记录不回滚。`,
+      description: `沿 ${job.jobNo} 原范围 ${formatRange(job.rangeStart, job.rangeEnd)} 与原任务标识 ${job.idempotencyNamespace} 续跑；已成功记录不回滚。`,
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,
@@ -807,7 +807,7 @@ export async function submitHistoryBackfillCommand(
       status: "COMMITTED",
       title: "已提交重新归集",
       description:
-        "引用原 mall_order_fact 重新归集并追加成本评估；不复制正式记录、不改写原消费。",
+        "引用原 mall_order_fact 重新归集并追加成本评估；不复制业务记录、不改写原消费。",
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,
@@ -855,9 +855,9 @@ export async function submitHistoryBackfillCommand(
     ) {
       return {
         status: "BLOCKED",
-        title: "报告复核策略未配置 · fail-closed",
+        title: "报告复核策略未配置 · 已阻断",
         description:
-          "策略缺失时服务端不返回确认动作；技术报告仅可下载并固定标「未确认」，不解锁正式下游。",
+          "策略缺失时服务端不返回确认动作；技术报告仅可下载并固定标「未确认」，不解锁下游。",
         operationId,
         idempotencyKey,
         jobId: job.id,
@@ -892,8 +892,8 @@ export async function submitHistoryBackfillCommand(
       operationId,
       idempotencyKey,
       nextStep: job.coverageComplete
-        ? "可在门禁通过后进入正式下游"
-        : "覆盖仍不完整，正式下游保持关闭",
+        ? "可在门禁通过后进入下游"
+        : "覆盖仍不完整，下游功能保持关闭",
     }
     setIdempotencySucceeded(idempotencyKey, IDEM_KIND, result)
     return result

@@ -377,7 +377,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
         dueAt: "2026-08-01T09:00:00+08:00",
         ownerRoleLabel: "财务部",
         reasonLabel: "商城回款与开票金额待与 ERP 应收对齐",
-        impactSummary: "未复核前票款水位不可作为正式经营结果",
+        impactSummary: "未复核前票款数据不可作为经营结果",
         allowedActions: [
             "VIEW",
             "PROCESS"
@@ -617,7 +617,7 @@ function buildMetrics(
             count: exception,
             visible: true,
             tone: exception > 0 ? "warning" : "neutral",
-            detail: "影响数据水位"
+            detail: "影响数据更新时间"
         }
     ];
 }

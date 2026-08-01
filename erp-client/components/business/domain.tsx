@@ -817,7 +817,7 @@ export type CostCoverageNoticeProps = DomainPanelProps & {
   coveragePercent: number
   /** 服务端口径化后的覆盖率文本；组件不重新计算或格式化。 */
   coverageLabel: React.ReactNode
-  /** 服务端判定的正式覆盖状态。 */
+  /** 服务端判定的覆盖状态。 */
   coverageState: "complete" | "partial" | "none"
   breakdown: CostCoverageBreakdown
   profitBasis: React.ReactNode
@@ -1140,7 +1140,7 @@ const interfaceErrorClassPresentation = {
     label: "重复回调",
     tone: "neutral",
     alert: "info",
-    guidance: "该回调应被幂等忽略，不重复形成业务记录或待办。",
+    guidance: "重复回调将忽略，不会重复形成业务记录或待办。",
   },
   "out-of-order-callback": {
     label: "乱序回调",
@@ -1347,7 +1347,7 @@ function InterfaceErrorResolutionPanel({
       </CardContent>
 
       <CardFooter className="border-t border-border text-xs text-muted-foreground">
-        本组件不提供“直接标记成功”；成功必须来自可验证终态或已复核的正式补偿记录。
+        本组件不提供“直接标记成功”；成功必须来自可验证终态或已复核的补偿记录。
       </CardFooter>
     </Card>
   )

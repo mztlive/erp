@@ -288,7 +288,7 @@ export const SEED_STATEMENTS: SeedStatement[] = [
             field: "订单记录",
             before: "已取消 · 金额 0",
             after: "账单仍计 ¥5,000.00",
-            note: "不得用 W26 数据改写历史",
+            note: "不得用供应商订单数据改写历史",
           },
         ],
       },

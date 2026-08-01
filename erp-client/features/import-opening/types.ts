@@ -189,7 +189,7 @@ export const RETENTION_LABEL: Record<RetentionClass, string> = {
 export const WORK_ITEM_TYPE_BLOCKER = {
   code: "IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED" as const,
   message:
-    "权威数据模型尚未登记「导入业务确认/退回」固定 work_item_type；登记前不得启用业务确认入口，也不得借用 BUSINESS_EXCEPTION 伪装正常必经确认。",
+    "导入业务确认/退回任务类型尚未登记；登记前不得启用业务确认入口，也不得借用异常入口伪装正常必经确认。",
   requiredRegistration: [
     "WORK_ITEM_TYPE",
     "OWNER_POOL",
@@ -265,7 +265,7 @@ export type ImportBatchView = Readonly<{
   trialVersion: string
   stage: ImportPipelineStage
   status: ImportBatchStatus
-  /** 上传/扫描成功后仍为 true，直至 RESULT 且成功形成正式对象 */
+  /** 上传/扫描成功后仍为 true，直至 RESULT 且成功形成业务对象 */
   formalDataFormed: boolean
   notFormalDataMessage: string
   inputAsset?: SafeFileAssetView

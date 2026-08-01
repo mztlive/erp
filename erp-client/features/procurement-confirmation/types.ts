@@ -216,7 +216,7 @@ export const NEXT_SALES_RESOLUTION_COPY = [
     code: "RESUBMIT_CHANGED_TERMS" as const,
     title: "改品 / 改价后重提",
     description:
-      "销售与客户重新确认后，在 W05 冻结新提交与新数据版本，再产生全新采购确认任务。",
+      "销售与客户重新确认后，在销售单冻结新提交与新数据版本，再产生全新采购确认任务。",
   },
   {
     code: "REQUEST_LOW_MARGIN_ACCEPTANCE" as const,
@@ -227,6 +227,6 @@ export const NEXT_SALES_RESOLUTION_COPY = [
   {
     code: "VOID_AFTER_REJECTION" as const,
     title: "不做则作废",
-    description: "由销售在 W05 原子作废生效前销售单，不创建后继任务。",
+    description: "由销售在销售单中原子作废生效前订单，不创建后继任务。",
   },
 ] as const

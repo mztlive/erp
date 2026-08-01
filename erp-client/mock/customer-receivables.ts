@@ -114,7 +114,7 @@ export const W11_COUNTERPARTIES = [
   },
 ] as const
 
-/** 指标水位：服务端对授权范围投影，不由前端对列表求和 */
+/** 指标更新时间：服务端对授权范围投影，不由前端对列表求和 */
 export const W11_METRICS_SEED = {
   openReceivableTotal: "520400.00",
   overdueReceivableTotal: "48000.00",
@@ -151,7 +151,7 @@ export const W11_RECEIVABLES: readonly SeedReceivable[] = [
         direction: "increase",
         amountGross: "186000.00",
         dueDate: "2026-04-30",
-        sourceLabel: "销售正式单 v1 · XS20260328001",
+        sourceLabel: "销售已生效单 v1 · XS20260328001",
         postedAt: "2026-03-28T10:00:00+08:00",
       },
     ],
@@ -183,7 +183,7 @@ export const W11_RECEIVABLES: readonly SeedReceivable[] = [
         direction: "increase",
         amountGross: "52000.00",
         dueDate: "2026-05-15",
-        sourceLabel: "销售正式单 v1 · XS20260410008",
+        sourceLabel: "销售已生效单 v1 · XS20260410008",
         postedAt: "2026-04-10T11:20:00+08:00",
       },
     ],
@@ -215,7 +215,7 @@ export const W11_RECEIVABLES: readonly SeedReceivable[] = [
         direction: "increase",
         amountGross: "136000.00",
         dueDate: "2026-03-01",
-        sourceLabel: "销售正式单 v1 · XS20260215003",
+        sourceLabel: "销售已生效单 v1 · XS20260215003",
         postedAt: "2026-02-15T09:00:00+08:00",
       },
     ],
@@ -247,7 +247,7 @@ export const W11_RECEIVABLES: readonly SeedReceivable[] = [
         direction: "increase",
         amountGross: "48000.00",
         dueDate: "2026-03-20",
-        sourceLabel: "销售正式单 v1 · XS20260301012",
+        sourceLabel: "销售已生效单 v1 · XS20260301012",
         postedAt: "2026-03-01T14:00:00+08:00",
       },
     ],
@@ -279,7 +279,7 @@ export const W11_RECEIVABLES: readonly SeedReceivable[] = [
         direction: "increase",
         amountGross: "80000.00",
         dueDate: "2026-08-01",
-        sourceLabel: "卡券销售正式单 · XS20260315020",
+        sourceLabel: "卡券销售已生效单 · XS20260315020",
         postedAt: "2026-03-15T16:00:00+08:00",
       },
     ],
@@ -311,7 +311,7 @@ export const W11_RECEIVABLES: readonly SeedReceivable[] = [
         direction: "increase",
         amountGross: "58400.00",
         dueDate: "2026-05-01",
-        sourceLabel: "销售正式单 v1 · XS20260401005",
+        sourceLabel: "销售已生效单 v1 · XS20260401005",
         postedAt: "2026-04-01T10:30:00+08:00",
       },
     ],

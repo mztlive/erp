@@ -2,7 +2,7 @@
  * W23 session-mock API：queryFn / mutationFn 纯函数。
  * - 结果未知先查询：未明确前不成功、不跳过、不计入已确认
  * - RETRY 沿原投影修订与幂等键，不生成新修订
- * - ESCALATE 只返回 W29 入口，不提供任务租约/领取/完成
+ * - ESCALATE 只返回 接口错误中心入口，不提供任务租约/领取/完成
  * - 批量仅接受显式选择快照（Q3 未确认前拒绝“当前筛选全部”）
  * - 前端不从销售单重组装投影字段
  */
@@ -143,12 +143,12 @@ function recomputeActions(seed: ProjectionSeed): {
       {
         action: "RETRY",
         code: "ESCALATED",
-        message: "已升级人工，对象级重试请在 W29 按原任务号处理。",
+        message: "已升级人工，对象级重试请在接口错误中心按原任务号处理。",
       },
       {
         action: "QUERY_RESULT",
         code: "ESCALATED",
-        message: "已有正式错误对象，请在 W29 处理。",
+        message: "已有错误记录，请在接口错误中心处理。",
       }
     )
   }
@@ -462,7 +462,7 @@ function buildTracks(seed: ProjectionSeed): ExecutionProjectionView["tracks"] {
       description:
         seed.mallAckAt != null
           ? `商城确认时间 ${seed.mallAckAt}`
-          : "无明确商城确认水位",
+          : "尚无明确商城确认时间",
     },
   }
 }
@@ -608,7 +608,7 @@ export async function fetchExecutionProjectionDetail(input: {
     deliveryStatusUpdatedAt: now,
     queriedAt: now,
     boundaryNotice:
-      "数据不是销售单副本。接收失败不回退销售记录、销售版本或应收；业务内容变更须在 W05 走销售变更单形成新版本后自动产生新数据。",
+      "数据不是销售单副本。接收失败不回退销售记录、销售版本或应收；业务内容变更须在销售单走变更单形成新版本后自动产生新数据。",
   }
 }
 
@@ -691,7 +691,7 @@ export async function submitProjectionDeliveryCommand(
   const seed = effectiveSeed(base)
   const version = objectVersionOf(seed)
   if (version !== input.expectedObjectVersion) {
-    throw new Error("对象版本已变化，请刷新后重试")
+    throw new Error("数据版本已变更，请刷新后重试")
   }
 
   const actions = recomputeActions(seed)
@@ -726,7 +726,7 @@ export async function submitProjectionDeliveryCommand(
     if (input.forceStillUnknown || seed.deliveryStatus === "SENDING") {
       result = "STILL_UNKNOWN"
       resultLabel = "结果仍未知"
-      nextAction = "保留当前项，可再次查询或升级到 W29"
+      nextAction = "保留当前项，可再次查询或升级到接口错误中心"
       stillUnknown = true
       // 不得标成功、不得改已确认
       overlay.status = "UNKNOWN"
@@ -739,7 +739,7 @@ export async function submitProjectionDeliveryCommand(
       if (seed.latencyBand === "over_sla" && seed.deliveryStatus === "UNKNOWN") {
         result = "FAILED"
         resultLabel = "查询后明确失败"
-        nextAction = "可对象级重试或升级到 W29"
+        nextAction = "可对象级重试或升级到接口错误中心"
         overlay.status = "FAILED"
         overlay.errorCode = seed.errorCode ?? "QUERIED_FAILED"
         overlay.errorSummary =
@@ -749,7 +749,7 @@ export async function submitProjectionDeliveryCommand(
       } else {
         result = "ACKED"
         resultLabel = "查询后明确确认"
-        nextAction = "可返回列表或查看 W05 协同"
+        nextAction = "可返回列表或查看销售单协同"
         overlay.status = "ACKED"
         overlay.mallAckAt = occurredAt
         overlay.mallExecutionBaseline =
@@ -763,7 +763,7 @@ export async function submitProjectionDeliveryCommand(
     } else if (seed.deliveryStatus === "FAILED") {
       result = "FAILED"
       resultLabel = "查询确认仍为失败"
-      nextAction = "可重试投递或升级到 W29"
+      nextAction = "可重试投递或升级到接口错误中心"
       overlay.lastAttemptAt = occurredAt
     } else {
       result = "STILL_UNKNOWN"
@@ -783,12 +783,12 @@ export async function submitProjectionDeliveryCommand(
     overlay.nextAttemptAt = "约 5 分钟后"
     overlay.errorSummary = seed.errorSummary
   } else {
-    // ESCALATE：幂等创建/复用 W29 对象
+    // ESCALATE：幂等创建/复用 接口错误记录
     workItemId = seed.workItemId ?? `wi_err_${seed.projectionId}`
     errorTaskId = seed.errorTaskId ?? `err_task_${seed.projectionId}`
     result = "ESCALATED"
-    resultLabel = "已升级到 W29"
-    nextAction = "打开 W29 处理正式错误待办；W23 不领取或完成任务"
+    resultLabel = "已升级到接口错误中心"
+    nextAction = "打开接口错误中心处理错误待办；本页不领取或完成任务"
     overlay.status = "ESCALATED_MANUAL"
     overlay.workItemId = workItemId
     overlay.errorTaskId = errorTaskId
@@ -1016,7 +1016,7 @@ export async function submitBulkProjectionCommand(
     finishedAt: formatNowLocal(),
     nextAction:
       stillUnknown > 0
-        ? "存在仍未知项：勿按成功处理，可再次查询或升级 W29"
+        ? "存在仍未知项：勿按成功处理，可再次查询或升级到接口错误中心"
         : "可刷新列表查看逐项状态",
   }
 

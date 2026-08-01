@@ -533,7 +533,7 @@ function MasterDataListWorkspace({
             字段揭示：{permissionDemo.canRevealSensitive ? "可短时" : "禁止"}
           </Badge>
           <Badge variant="outline">
-            动作：{isWarehouse ? "仓库写 fail-closed" : "维护开放"}
+            动作：{isWarehouse ? "仓库写入暂不可用" : "维护开放"}
           </Badge>
           <Badge variant="outline">
             导出：{permissionDemo.canExport ? "授权" : "无"}
@@ -545,7 +545,7 @@ function MasterDataListWorkspace({
         <FormalActionResult
           status="blocked"
           title="仓库写责任未确认（Q1）"
-          description="仓库资料与 SKU 策略可查询；新建、形成版本、停用与策略维护全部 fail-closed。仓储与系统管理员均不可绕过。"
+          description="仓库资料与 SKU 策略可查询；新建、形成版本、停用与策略维护全部暂不可写入。仓储与系统管理员均不可绕过。"
           reference="WAREHOUSE_WRITE_OWNER_UNCONFIRMED"
         />
       ) : null}

@@ -245,7 +245,7 @@ function RoleDemoBar({
         当前：{roleLabel(role)}
         {role === "SYSTEM_ADMIN"
           ? " · 不可代替业务确认"
-          : " · 仅本人责任范围可写（登记 work_item_type 后）"}
+          : " · 仅本人责任范围可写（任务类型登记后）"}
       </span>
     </div>
   )
@@ -805,12 +805,12 @@ function BatchDetailView({
       {!batch.formalDataFormed ? (
         <Alert variant="warning">
           <TriangleAlertIcon />
-          <AlertTitle>尚未形成正式数据</AlertTitle>
+          <AlertTitle>尚未形成业务数据</AlertTitle>
           <AlertDescription>{batch.notFormalDataMessage}</AlertDescription>
         </Alert>
       ) : (
         <Alert variant="success">
-          <AlertTitle>已形成正式对象（部分或全部）</AlertTitle>
+          <AlertTitle>已形成业务对象（部分或全部）</AlertTitle>
           <AlertDescription>{batch.notFormalDataMessage}</AlertDescription>
         </Alert>
       )}
@@ -905,7 +905,7 @@ function BatchDetailView({
           />
           <GateRow
             ok={batch.productionGates.workItemTypeRegistered}
-            label="导入确认 work_item_type 已登记"
+            label="导入确认任务类型已登记"
           />
           {applyBlocked.length > 0 ? (
             <FormalActionResult
@@ -973,7 +973,7 @@ function OverviewSection({
         <CardHeader className="border-b">
           <CardTitle>试算摘要</CardTitle>
           <CardDescription>
-            服务端聚合计数；前端不按当前页问题表求和作为正式成功率。
+            服务端聚合计数；前端不按当前页问题表求和作为成功率。
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-4">
@@ -1025,7 +1025,7 @@ function OverviewSection({
               variant="outline"
               render={<Link href="/finance/card-funds-review" />}
             >
-              前往 W13 票款复核
+              前往卡券票款复核
               <ExternalLinkIcon className="size-4" />
             </Button>
           ) : null}
@@ -1094,7 +1094,7 @@ function FilesSection({ batch }: { batch: ImportBatchView }) {
               />
               {batch.inputAsset.contentHmacShort ? (
                 <Fact
-                  label="审计指纹（短）"
+                  label="校验码（短）"
                   value={batch.inputAsset.contentHmacShort}
                   mono
                 />
@@ -1323,7 +1323,7 @@ function ConfirmSection({
             {
               label: "禁止项",
               value:
-                "不得借用 BUSINESS_EXCEPTION；不得上线页面私有 work_item_type",
+                "不得借用 BUSINESS_EXCEPTION；不得上线页面私有任务类型",
             },
           ]}
         />
@@ -1407,7 +1407,7 @@ function ConfirmSection({
                 {!canAttempt ? (
                   <p className="text-xs text-muted-foreground">
                     {workItemTypeMissing
-                      ? "work_item_type 未登记，入口禁用"
+                      ? "任务类型未登记，入口禁用"
                       : !c.inViewerResponsibility
                         ? role === "SYSTEM_ADMIN"
                           ? "管理员不可代替确认"
@@ -1569,7 +1569,7 @@ function ResultSection({
       ) : null}
 
       <Alert>
-        <AlertTitle>幂等与不可覆盖</AlertTitle>
+        <AlertTitle>防重复与不可覆盖</AlertTitle>
         <AlertDescription>
           已成功对象不会因取消、失败重跑或新文件被直接覆盖、删除或回滚。修复批次仅针对冻结失败范围，已成功项按来源身份跳过。
         </AlertDescription>
@@ -1584,7 +1584,7 @@ function AuditSection({ batch }: { batch: ImportBatchView }) {
       <CardHeader className="border-b">
         <CardTitle>可追溯谱系</CardTitle>
         <CardDescription>
-          来源身份、规则版本、manifest、成功结果与映射谱系可审计；详细事件在 W19。
+          来源身份、规则版本、manifest、成功结果与映射谱系可审计；详细事件在权限与审计中。
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 pt-4 sm:grid-cols-2">
@@ -1595,7 +1595,7 @@ function AuditSection({ batch }: { batch: ImportBatchView }) {
         <Fact label="批次版本" value={batch.version} mono />
         {batch.inputAsset?.contentHmacShort ? (
           <Fact
-            label="输入包指纹"
+            label="数据包校验码"
             value={batch.inputAsset.contentHmacShort}
             mono
           />
@@ -1616,7 +1616,7 @@ function AuditSection({ batch }: { batch: ImportBatchView }) {
               />
             }
           >
-            在 W19 查看审计
+            在权限与审计中查看
             <ExternalLinkIcon className="size-4" />
           </Button>
         </div>

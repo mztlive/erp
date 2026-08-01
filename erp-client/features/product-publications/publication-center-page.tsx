@@ -1007,7 +1007,7 @@ export function PublicationCenterPage({
                 { id: "owner", label: "负责人", value: data.ownerLabel },
                 {
                   id: "objVer",
-                  label: "对象版本",
+                  label: "版本",
                   value: <span className="num">{data.objectVersion}</span>,
                 },
                 {

@@ -97,7 +97,7 @@ function projectBatch(
         action: "CONFIRM_SCOPE",
         code: "IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED",
         message:
-          "权威数据模型尚未登记导入确认 work_item_type；业务确认入口保持实施 blocker。",
+          "导入确认任务类型尚未登记；业务确认入口暂不可用。",
       })
     }
   }
@@ -290,14 +290,14 @@ export async function invalidateTrialByRuleChange(input: {
         action: "CONFIRM_SCOPE",
         code: "IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED",
         message:
-          "权威数据模型尚未登记导入确认 work_item_type；业务确认入口保持实施 blocker。",
+          "导入确认任务类型尚未登记；业务确认入口暂不可用。",
       },
     ],
     status: "AWAITING_CONFIRMATION",
     stage: "CONFIRM",
     formalDataFormed: false,
     notFormalDataMessage:
-      "规则或试算已变化，旧确认全部失效。正式数据尚未形成，禁止按旧版本提交应用。",
+      "规则或试算已变化，旧确认全部失效。业务数据尚未形成，禁止按旧版本提交应用。",
     version: `bv-inv-${Date.now()}`,
     updatedAt: nowIso(),
   })
@@ -344,7 +344,7 @@ export async function openRepairBatch(input: {
   }
 }
 
-/** 上传后仍保持「尚未形成正式数据」提示（演示） */
+/** 上传后仍保持「尚未形成业务数据」提示（演示） */
 export async function acknowledgeUploadReceived(input: {
   batchId: string
 }): Promise<FormalActionResponse> {
@@ -359,12 +359,12 @@ export async function acknowledgeUploadReceived(input: {
     status: "SCANNING",
     formalDataFormed: false,
     notFormalDataMessage:
-      "文件已安全接收并进入扫描；上传成功 ≠ 导入完成。尚未形成正式数据。",
+      "文件已安全接收并进入扫描；上传成功 ≠ 导入完成。尚未形成业务数据。",
     updatedAt: nowIso(),
   })
   return {
     status: "succeeded",
-    message: "已记录安全接收（尚未形成正式数据）",
+    message: "已记录安全接收（尚未形成业务数据）",
     batchId: input.batchId,
     reference: `recv-${input.batchId}`,
   }

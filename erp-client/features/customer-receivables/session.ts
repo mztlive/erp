@@ -1,5 +1,5 @@
 /**
- * W11 客户往来 session mock（草稿 / 正式过账 / 冲正 / 幂等）。
+ * W11 客户往来 session mock（草稿 / 过账 / 冲正 / 幂等）。
  * 不进 query 响应的 claim 类令牌；正式余额由 post 后投影更新。
  */
 
@@ -333,7 +333,7 @@ export function createW11AllocationSession(
     leaseValid: true,
     editVersion: 1,
     note:
-      "核销严格按 counterparty_party_id 锁定；池中仅同主体开放对象。拟分配合计仅作输入提示，不冒充正式核销。",
+      "核销严格按 counterparty_party_id 锁定；池中仅同主体开放对象。拟分配合计仅作输入提示，不冒充核销。",
   }
   sessions.set(draftSessionId, view)
   return view

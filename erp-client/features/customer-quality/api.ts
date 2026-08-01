@@ -315,7 +315,7 @@ export async function fetchCustomerQuality(
           ...m,
           value: "—",
           reliability: "unavailable" as const,
-          explanation: "卡券实际经营结果请前往 W28；本页不显示 ¥0 或无穷大利润率。",
+          explanation: "卡券实际经营结果请前往卡券经营分析；本页不显示 ¥0 或无穷大利润率。",
         }
       }
       return m

@@ -718,7 +718,7 @@ export function ContractsListPage({
           <DialogHeader>
             <DialogTitle>新建合同</DialogTitle>
             <DialogDescription>
-              先建立服务端草稿身份，再以同一合同对象页签进入编辑态。未形成正式记录的草稿可逻辑删除（演示）。
+              先建立服务端草稿身份，再以同一合同对象页签进入编辑态。未形成业务记录的草稿可逻辑删除（演示）。
             </DialogDescription>
           </DialogHeader>
           <form

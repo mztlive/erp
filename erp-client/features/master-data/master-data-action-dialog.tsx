@@ -148,7 +148,7 @@ export function MasterDataCreateDialog({
         <DialogHeader>
           <DialogTitle>新建 · {resourceLabel(resource)}</DialogTitle>
           <DialogDescription>
-            创建稳定身份与 v1 不可变修订；须填写变更原因。仓库在 Q1 未确认前写操作 fail-closed。
+            创建稳定身份与 v1 不可变修订；须填写变更原因。仓库在本期未确认前写操作暂不可用。
           </DialogDescription>
         </DialogHeader>
 

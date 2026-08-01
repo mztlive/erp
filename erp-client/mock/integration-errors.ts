@@ -223,7 +223,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       {
         action: "REPLAY_ORIGINAL",
         code: "MAPPING_BROKEN",
-        message: "映射错误禁止自动重试相同参数；请先在 W21/W17 修复",
+        message: "映射错误禁止自动重试相同参数；请先在外部商品供给/商城同步修复",
       },
       {
         action: "QUERY_ORIGINAL_RESULT",
@@ -239,7 +239,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     repairLinks: [
       {
         workspaceId: "W21",
-        label: "W21 外部商品映射",
+        label: "外部商品供给映射",
         href: "/supplier-api/catalog?changeType=ERROR&q=EP-JD-8821",
       },
       {
@@ -560,7 +560,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       {
         attemptNumber: 1,
         attemptedAt: "2026-08-01T09:20:00+08:00",
-        result: "重复提交已忽略 · 已有正式记录",
+        result: "重复提交已忽略 · 已有业务记录",
         requestSummary: "回调摘要",
         responseSummary: "DUPLICATE_IGNORED",
       },
@@ -703,7 +703,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         at: "2026-07-30T11:00:00+08:00",
         actor: "系统",
         action: "左右证据对照",
-        detail: "水位 2026-07-31T23:59 · 不可变引用",
+        detail: "更新于 2026-07-31T23:59 · 不可变引用",
       },
     ],
     queryStage: null,
@@ -755,7 +755,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       boundary: "单笔记录",
       watermark: "2026-08-01T04:50:00+08:00",
       differenceType: "MISSING_ERP_FACT",
-      differenceSummary: "商城有消费 ERP 无正式记录",
+      differenceSummary: "商城有消费 ERP 无业务记录",
     },
     hasWorkItem: true,
     attempts: [],

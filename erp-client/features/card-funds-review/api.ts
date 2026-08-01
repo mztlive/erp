@@ -381,7 +381,7 @@ function validateDecisionAgainstItem(
       ok: false,
       code: "SUBJECT_HASH_MISMATCH",
       message:
-        "复核对象 subject_hash 已变化（任务/记录/提交三方不一致），已阻断静默通过。请刷新后重新核对。",
+        "复核对象数据已变更（任务/记录/提交不一致），已阻断静默通过。请刷新后重新核对。",
     }
   }
   if (decision.expectedFundsFactVersion !== item.fundsFactVersion) {
@@ -565,7 +565,7 @@ export async function completeCardFundsReview(input: {
       status: "failed",
       code: "SUBJECT_HASH_MISMATCH",
       message:
-        "任务信封 subject_hash 与当前记录不一致，已阻断。请刷新后重审。",
+        "任务数据版本与当前记录不一致，已阻断。请刷新后重审。",
     }
   }
 
@@ -721,7 +721,7 @@ export async function completeCardFundsReview(input: {
 }
 
 /**
- * 登记历史回款：形成正式回款记录 + 多对多分配，不写累计覆盖字段。
+ * 登记历史回款：形成回款记录 + 多对多分配，不写累计覆盖字段。
  * 不创建 0 元回款。返回后刷新金额与 subject_hash。
  */
 export async function registerHistoricalReceipt(input: {
@@ -1074,7 +1074,7 @@ export async function resolveUnknownCardFundsResult(input: {
   return {
     status: "failed",
     code: "NOT_FOUND",
-    message: "未找到该幂等操作",
+    message: "未找到该次操作记录",
   }
 }
 

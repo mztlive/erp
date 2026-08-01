@@ -26,7 +26,7 @@ type SalesOrderPaperDialogProps = {
 }
 
 /**
- * 正式单据纸质投影：宽对话框承载 PaperDocument，供阅读与打印，不塞进窄侧栏。
+ * 已生效单据纸质投影：宽对话框承载 PaperDocument，供阅读与打印，不塞进窄侧栏。
  */
 export function SalesOrderPaperDialog({
   order,
@@ -42,7 +42,7 @@ export function SalesOrderPaperDialog({
         <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
           <DialogTitle>纸质单据预览</DialogTitle>
           <DialogDescription>
-            系统正式数据的打印件。金额与状态均由服务端确认后传入；组件不重新计算。
+            系统业务数据的打印件。金额与状态均由服务端确认后传入；组件不重新计算。
           </DialogDescription>
         </DialogHeader>
 

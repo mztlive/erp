@@ -192,7 +192,7 @@ function mapFreshnessState(
   }
   switch (state) {
     case "stale":
-      return { uiState: "stale", statusLabel: "数据陈旧 · 源水位已超前" }
+      return { uiState: "stale", statusLabel: "数据陈旧 · 来源更新时间已超前" }
     case "rebuilding":
       return { uiState: "syncing", statusLabel: "数据更新中" }
     case "failed":
@@ -857,7 +857,7 @@ export function ActualProfitLossPage() {
                 label="经营汇总"
               />
               <span className="text-xs text-muted-foreground">
-                源水位 {formatDateTime(data.freshness.sourceWatermark)} · 公式{" "}
+                来源更新时间 {formatDateTime(data.freshness.sourceWatermark)} · 公式{" "}
                 {data.formulaVersion}
               </span>
             </div>
@@ -986,7 +986,7 @@ export function ActualProfitLossPage() {
           <AlertTitle>期间归属口径尚未配置</AlertTitle>
           <AlertDescription className="space-y-3">
             <p>
-              服务端未固化正式 periodBasis。请在上方显式选择一个允许值后，才会发起盈亏查询与导出。Q1「当前建议」不是正式配置，前端不会据此静默默认。
+              服务端未固化期间口径。请在上方显式选择一个允许值后，才会发起盈亏查询与导出。Q1「当前建议」不是已生效配置，前端不会据此静默默认。
             </p>
             <p className="text-xs text-muted-foreground">
               公式说明：{W16_FORMULA_HINT}
@@ -1070,7 +1070,7 @@ export function ActualProfitLossPage() {
                   <AlertDescription>
                     {refreshFailed
                       ? "保留上次成功数据供只读查阅；可再次刷新。不会用本地估算覆盖金额。"
-                      : `数据时间落后于源水位。数据 ${formatDateTime(data.freshness.projectedAt)}，源水位 ${formatDateTime(data.freshness.sourceWatermark)}。`}
+                      : `数据时间落后于来源更新时间。数据 ${formatDateTime(data.freshness.projectedAt)}，来源更新时间 ${formatDateTime(data.freshness.sourceWatermark)}。`}
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -1129,7 +1129,7 @@ export function ActualProfitLossPage() {
                       {exportJobQuery.data.watermark.periodBasis} · 公式{" "}
                       {exportJobQuery.data.watermark.formulaVersion} · 覆盖{" "}
                       {exportJobQuery.data.watermark.coverage} · 权限{" "}
-                      {exportJobQuery.data.watermark.permissionVersion} · 水位{" "}
+                      {exportJobQuery.data.watermark.permissionVersion} · 更新于 {" "}
                       {exportJobQuery.data.watermark.projectedAt} ·{" "}
                       {SCOPE_LABEL}
                       {exportJobQuery.data.downloadLabel ? (
@@ -1585,7 +1585,7 @@ export function ActualProfitLossPage() {
               ) : (
                 <BusinessTableFrame
                   title={`明细 · ${DIMENSION_LABEL[dimension]}（${SCOPE_LABEL}）`}
-                  description={`共 ${data.rows.total} 行 · 与指标/图表同一数据范围 · 点击盈亏下钻销售单（W05）· 点击成本金额打开成本记录 detail`}
+                  description={`共 ${data.rows.total} 行 · 与指标/图表同一数据范围 · 点击盈亏下钻销售单· 点击成本金额打开成本记录 detail`}
                   table={
                     <DataTable
                       data={pageRows}
@@ -1614,7 +1614,7 @@ export function ActualProfitLossPage() {
                   演示：来源纠错后等待刷新
                 </Button>
                 <span className="text-xs text-muted-foreground self-center">
-                  纠错后不本地改金额；固定提示等待水位追平。
+                  纠错后不本地改金额；固定提示等待数据追平。
                 </span>
               </div>
             </>
@@ -1655,7 +1655,7 @@ export function ActualProfitLossPage() {
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-2">
             <p className="text-xs text-muted-foreground">
-              不可删除成本或直接改金额；更正请走原业务对象正式变更/冲减。
+              不可删除成本或直接改金额；更正请走原业务对象变更/冲减。
             </p>
             {costDetailRow?.objectId ? (
               <Button type="button" size="sm" variant="outline"
@@ -1666,7 +1666,7 @@ export function ActualProfitLossPage() {
                   />
                 }
               >
-                  打开销售单 W05
+                  打开销售单
                   <ExternalLinkIcon className="ml-1 size-3.5" />
               </Button>
             ) : null}
@@ -1838,7 +1838,7 @@ function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
           <AlertTitle>前往纠错来源</AlertTitle>
           <AlertDescription className="flex flex-col gap-2">
             <span>
-              W16 不执行变更确认。打开原业务对象使用正式变更/冲减流程后，返回本页等待数据刷新。
+              W16 不执行变更确认。打开原业务对象使用变更/冲减流程后，返回本页等待数据刷新。
             </span>
             <Button type="button" size="sm" variant="outline"
               render={<Link href={entry.correctionHref} target="_blank" />}

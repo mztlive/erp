@@ -1,5 +1,5 @@
 /**
- * W21 外部商品映射与供给 · 静态种子。
+ * 外部商品供给映射与供给 · 静态种子。
  * 会话覆盖（领取、暂挂、终结、草稿）在 api / session-state 中投影。
  */
 
@@ -42,7 +42,7 @@ const pauseBase = (
     code: "RECOVERY_RESPONSIBILITY_UNCONFIRMED",
     message: RECOVERY_BLOCKER_MESSAGE,
   },
-  note: "安全暂停已由系统幂等完成；历史已支付订单保留下单记录。供货价变化不自动改商城销售价。",
+  note: "安全暂停已由系统已完成（重复请求不会再次执行）；历史已支付订单保留下单记录。供货价变化不自动改商城销售价。",
 })
 
 const noPause: PublicationImpactView = {
@@ -105,7 +105,7 @@ export const SEED_ERROR: ExternalCatalogItemView = {
       },
     ],
     reason: "来源规格字段缺失且价格口径异常，无法形成结构化白名单字段",
-    impact: "不进入正式商品与发布；可退回技术/数据修复",
+    impact: "不进入商品与发布；可退回技术/数据修复",
     priority: 95,
     handlerKey: "ExternalCatalogErrorHandler",
   },
@@ -731,7 +731,7 @@ export const SEED_CHANGED_PRICE: ExternalCatalogItemView = {
     activePublicationCount: 0,
     pausedPublicationCount: 1,
     historicalPaidOrderCount: 48,
-    note: "供货价/费用变化未确认：系统已安全暂停在售发布。确认新供给也不自动恢复；W22 另形成恢复发布版本。商城销售价不随供货价自动变更；MOQ 不复制为商城最小购买量。",
+    note: "供货价/费用变化未确认：系统已安全暂停在售发布。确认新供给也不自动恢复；商品发布另形成恢复发布版本。商城销售价不随供货价自动变更；MOQ 不复制为商城最小购买量。",
   },
   syncContext: {
     jobId: "sync_job_9012",

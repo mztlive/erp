@@ -646,7 +646,7 @@ export function ProcurementConfirmationPage() {
           status: "rejected",
           title: "采购确认已驳回 · 旧任务已完成",
           description:
-            "已形成本次采购确认的正式 REJECTED 结论；未创建采购单、变更单或后继任务。销售仅能在 W05 选择固定三路。",
+            "已形成本次采购确认的驳回结论；未创建采购单、变更单或后继任务。销售仅能在销售单选择固定三路。",
           reference: outcome.reference,
           outcome,
           stayOnItem: !autoNext,
@@ -917,7 +917,7 @@ export function ProcurementConfirmationPage() {
                 context?.queueContextUpdatedAt ?? new Date().toISOString()
               }
               state="fresh"
-              label="队列水位"
+              label="队列更新时间"
             />
             <span className="text-xs text-muted-foreground" aria-live="polite">
               {context?.filterSummary ?? "仅我的"} · 待处理{" "}
@@ -1065,7 +1065,7 @@ export function ProcurementConfirmationPage() {
                     <span className="num font-mono">
                       {task.salesSubmission.submissionId}
                     </span>
-                    ，指纹{" "}
+                    ，版本{" "}
                     <span className="num font-mono">
                       {task.salesSubmission.subjectHashSummary}
                     </span>
@@ -1591,18 +1591,18 @@ export function ProcurementConfirmationPage() {
                       data-icon="inline-start"
                       aria-hidden="true"
                     />
-                    打开 W05 · {task.salesSubmission.salesOrderNo}
+                    打开销售单 · {task.salesSubmission.salesOrderNo}
                   </Button>
                 </CardContent>
               </Card>
             </aside>
           </div>
 
-          {/* 底栏正式动作 */}
+          {/* 底栏处理动作 */}
           <div
             className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur md:-mx-5 md:px-5"
             role="region"
-            aria-label="正式动作"
+            aria-label="处理动作"
           >
             <Button
               type="button"
@@ -1670,7 +1670,7 @@ export function ProcurementConfirmationPage() {
               "完成当前 PROCUREMENT_CONFIRMATION 任务",
               "生成不可变采购创建依据（不创建采购建单任务）",
             ]}
-            nextDepartment="采购建单（W08 读取创建依据）"
+            nextDepartment="采购建单（读取创建依据）"
             pending={completeMutation.isPending}
             onConfirm={handleApprove}
           />
@@ -1680,7 +1680,7 @@ export function ProcurementConfirmationPage() {
               <DialogHeader>
                 <DialogTitle>驳回采购二次确认</DialogTitle>
                 <DialogDescription>
-                  将形成本次确认的正式 REJECTED 结论并完成当前任务；不创建采购单、变更单或后继任务。销售只能走固定三路。
+                  将形成本次确认的驳回结论并完成当前任务；不创建采购单、变更单或后继任务。销售只能走固定三路。
                 </DialogDescription>
               </DialogHeader>
               <form
@@ -1824,7 +1824,7 @@ function buildResultFacts(
         ),
       },
       {
-        label: "驳回指纹",
+        label: "驳回时数据版本",
         value: (
           <span className="num font-mono text-xs">
             {shortHash(outcome.rejectedSubjectHash)}
@@ -1833,7 +1833,7 @@ function buildResultFacts(
       },
       {
         label: "后继任务",
-        value: "无（本事务不创建任何 work_item）",
+        value: "无（本事务不创建任何任务）",
       },
       {
         label: "驳回原因",
@@ -1970,7 +1970,7 @@ function ProcurementRejectionNextSteps({
             />
           }
         >
-          打开 W05 驳回处理
+          打开销售单驳回处理
           <ArrowRightIcon data-icon="inline-end" aria-hidden="true" />
         </Button>
       </CardContent>

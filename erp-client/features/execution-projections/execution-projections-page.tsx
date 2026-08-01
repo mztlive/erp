@@ -164,7 +164,7 @@ function commandToResultState(
       status: "unknown",
       title: "结果仍未知",
       description:
-        "未明确前不显示成功、不跳过、不计入已确认指标。请再次查询或升级到 W29。",
+        "未明确前不显示成功、不跳过、不计入已确认指标。请再次查询或升级到接口错误中心。",
       reference: result.operationId,
       stayUnknown: true,
       facts: [
@@ -199,7 +199,7 @@ function commandToResultState(
     return {
       status: "blocked",
       title: result.resultLabel,
-      description: "销售记录与应收未回退。可重试投递或升级到 W29。",
+      description: "销售记录与应收未回退。可重试投递或升级到接口错误中心。",
       reference: result.operationId,
       facts: [
         { label: "操作编号", value: result.operationId },
@@ -758,7 +758,7 @@ export function ExecutionProjectionsPage() {
         <AlertTitle>非写者边界</AlertTitle>
         <AlertDescription>
           执行信息由已生效销售版本自动形成。接收失败不回退销售记录、销售版本或应收；
-          内容变化须在 W05 走销售变更单。W23 仅支持查询结果、重试与升级到 W29，
+          内容变化须在销售单走变更单。本页仅支持查询结果、重试与升级到接口错误中心，
           不提供任务领取/完成。任何角色下不展示成交金额、配赠、税率、开票、应收与玩法规则。
         </AlertDescription>
       </Alert>
@@ -778,7 +778,7 @@ export function ExecutionProjectionsPage() {
                   size="sm"
                   render={<Link href={result.w29Href} />}
                 >
-                  打开 W29
+                  打开接口错误中心
                 </Button>
               ) : null
             }
@@ -1006,7 +1006,7 @@ export function ExecutionProjectionsPage() {
 
       <BusinessTableFrame
         title="执行信息列表"
-        description="销售单身份列与操作列固定；每页 6–8 行。指标与行数据同源权限水位。"
+        description="销售单身份列与操作列固定；每页 6–8 行。指标与行数据同源权限范围。"
         table={
           <DataTable
             columns={columns}
@@ -1180,7 +1180,7 @@ export function ExecutionProjectionsPage() {
                       />
                     }
                   >
-                    打开 W05 协同
+                    打开销售单协同
                   </Button>
                   {detail.allowedActions.includes("RETRY") ? (
                     <Button
@@ -1234,7 +1234,7 @@ export function ExecutionProjectionsPage() {
                         )
                       }}
                     >
-                      升级 / 打开 W29
+                      升级 / 打开接口错误中心
                     </Button>
                   ) : null}
                 </>
@@ -1397,7 +1397,7 @@ export function ExecutionProjectionsPage() {
             {objectTab === "versions" ? (
               <DocumentSection
                 title="版本对应"
-                description="历史数据固定显示来源销售版本，不被 W05 当前版覆盖。"
+                description="历史数据固定显示来源销售版本，不被销售单当前版覆盖。"
               >
                 <RevisionTimeline
                   revisions={detail.revisionLinks.map((link) => ({
@@ -1428,7 +1428,7 @@ export function ExecutionProjectionsPage() {
                     reason: (
                       <span>
                         来源销售版本 v{link.sourceSalesRevisionNo}
-                        （历史不被 W05 当前版覆盖）
+                        （历史不被销售单当前版覆盖）
                         {link.isCurrentSelection ? " · 当前查看" : ""}
                       </span>
                     ),
@@ -1455,7 +1455,7 @@ export function ExecutionProjectionsPage() {
                     detail.selectedRevision.salesOrderRevisionNo
                 ) ? (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    提示：W05 当前销售版本可能高于历史数据来源版本；历史内容不被覆盖。
+                    提示：销售单当前版本可能高于历史数据来源版本；历史内容不被覆盖。
                   </p>
                 ) : null}
               </DocumentSection>
@@ -1469,7 +1469,7 @@ export function ExecutionProjectionsPage() {
                     <AlertTitle>版本对账差异</AlertTitle>
                     <AlertDescription>
                       {RECONCILIATION_LABEL.VERSION_MISMATCH}
-                      ：只打开 W29 核对，不在 W23 选择覆盖任一侧记录。
+                      ：只打开接口错误中心 核对，不在本页选择覆盖任一侧记录。
                       <div className="mt-2">
                         <Button
                           type="button"
@@ -1484,7 +1484,7 @@ export function ExecutionProjectionsPage() {
                             />
                           }
                         >
-                          打开 W29 差异任务
+                          打开接口错误差异任务
                         </Button>
                       </div>
                     </AlertDescription>
@@ -1525,7 +1525,7 @@ export function ExecutionProjectionsPage() {
                             data-icon="inline-start"
                             aria-hidden="true"
                           />
-                          在 W29 处理
+                          在接口错误中心处理
                         </Button>
                       </div>
                     ) : null}
@@ -1611,7 +1611,7 @@ export function ExecutionProjectionsPage() {
             : pendingAction?.kind === "RETRY"
               ? "重试投递"
               : pendingAction?.kind === "ESCALATE"
-                ? "升级到 W29"
+                ? "升级到接口错误中心"
                 : pendingAction?.kind === "BULK_QUERY"
                   ? "批量查询结果"
                   : pendingAction?.kind === "BULK_RETRY"
@@ -1637,7 +1637,7 @@ export function ExecutionProjectionsPage() {
                 pendingAction?.kind === "BULK_RETRY"
               ? { label: "按原任务号重试", tone: "info" }
               : pendingAction?.kind === "ESCALATE"
-                ? { label: "W29 正式待办", tone: "warning" }
+                ? { label: "W29 待办", tone: "warning" }
                 : { label: "后台逐项处理", tone: "info" }
         }
         lockedFields={
@@ -1660,7 +1660,7 @@ export function ExecutionProjectionsPage() {
             ? [
                 "未明确前不显示成功",
                 "不跳过、不计入已确认指标",
-                "超时可再次查询或升级 W29",
+                "超时可再次查询或升级到接口错误中心",
               ]
             : pendingAction?.kind === "RETRY"
               ? [
@@ -1670,7 +1670,7 @@ export function ExecutionProjectionsPage() {
                 ]
               : pendingAction?.kind === "ESCALATE"
                 ? [
-                    "幂等创建或复用 W29 错误对象与 work_item",
+                    "创建或复用接口错误待办（不会重复建单）",
                     "W23 只返回入口，不领取/完成任务",
                   ]
                 : pendingAction?.kind === "BULK_RETRY"

@@ -1,6 +1,6 @@
 /**
  * W11 客户往来 API：queryFn / mutationFn 纯函数。
- * 开放余额与净分配一律来自服务端投影，禁止前端拟合计冒充正式结果。
+ * 开放余额与净分配一律来自服务端投影，禁止前端拟合计冒充结果。
  */
 
 import { mockDelay } from "@/features/workspace-kit/delay"

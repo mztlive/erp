@@ -150,7 +150,7 @@ export function AnalyticsWorkspacePage({ def }: { def: WorkspacePageDef }) {
         ) : (
           <Card size="sm">
             <CardHeader className="border-b">
-              <CardTitle>数据水位</CardTitle>
+              <CardTitle>数据更新时间</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
               指标与表格均来自系统最新数据；金额与利润字段按权限展示。

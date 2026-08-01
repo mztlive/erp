@@ -357,7 +357,7 @@ export function UnifiedTaskQueuePage() {
         setConflictOpen(true)
         setLastResult({
           status: "failed",
-          title: "对象版本冲突",
+          title: "数据版本冲突",
           description: error.message,
           reference: item.id,
         })
@@ -515,7 +515,7 @@ export function UnifiedTaskQueuePage() {
           decision: {
             kind: task.completionAction,
             note,
-            summary: `${task.workItemTypeLabel}正式结论与任务完成同一事务`,
+            summary: `${task.workItemTypeLabel}结论与任务完成同一事务`,
           },
           simulateTimeout: options?.simulateTimeout,
         })
@@ -604,7 +604,7 @@ export function UnifiedTaskQueuePage() {
             : pendingIdem.key
         setLastResult({
           status: "succeeded",
-          title: "幂等查询确认成功",
+          title: "已查到原任务处理结果",
           description: "已按原任务号确认终态，现在可以打开下一项。",
           reference: ref,
         })
@@ -817,7 +817,7 @@ export function UnifiedTaskQueuePage() {
             updatedAt={queueQuery.isFetching ? "正在刷新" : "刚刚"}
             dateTime={queueQuery.data?.freshness.updatedAt}
             state={queueQuery.isFetching ? "syncing" : "fresh"}
-            label="数据水位"
+            label="数据更新时间"
           />
         }
         actions={
@@ -1310,7 +1310,7 @@ export function UnifiedTaskQueuePage() {
                     </p>
                   ) : null}
                   <p className="text-xs text-muted-foreground">
-                    对象版本 {task.subjectVersion} · 完成动作{" "}
+                    版本 {task.subjectVersion} · 完成动作{" "}
                     {task.completionAction}
                     {task.closeAllowed
                       ? " · 允许关闭（重复/误派）"
@@ -1500,9 +1500,9 @@ export function UnifiedTaskQueuePage() {
                             })
                             setLastResult({
                               status: "failed",
-                              title: "已模拟对象版本变化",
+                              title: "已模拟数据版本变化",
                               description:
-                                "下次提交将因指纹不匹配被阻止，备注仍保留。",
+                                "下次提交将因数据版本不匹配被阻止，备注仍保留。",
                               reference: next.subjectHash,
                             })
                           })
@@ -1597,7 +1597,7 @@ export function UnifiedTaskQueuePage() {
         confirmLabel="确认完成并打开下一条"
         fromStatus={{ label: task?.status.label ?? "待处理", tone: "warning" }}
         toStatus={{ label: "已完成", tone: "success" }}
-        lockedFields={["对象版本", "当前处理状态", "数据版本"]}
+        lockedFields={["版本", "当前处理状态", "数据版本"]}
         effects={[
           `执行 ${task?.completionAction ?? "领域完成动作"}`,
           "业务记录与任务 COMPLETED 同一事务返回",

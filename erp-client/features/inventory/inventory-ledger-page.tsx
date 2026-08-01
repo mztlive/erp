@@ -950,7 +950,7 @@ export function InventoryLedgerPage() {
         <BusinessFailureState
           kind="permission"
           title="权限已收回"
-          description="当前账号的 W10 访问权限在本会话中被收回。余额、流水、导出结果与展开来源均不可见。"
+          description="当前账号的库存台账访问权限在本会话中被收回。余额、流水、导出结果与展开来源均不可见。"
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重新检查权限
@@ -1021,7 +1021,7 @@ export function InventoryLedgerPage() {
             updatedAt={formatDateTime(data.queriedAt)}
             dateTime={data.queriedAt}
             state="fresh"
-            label="库存记录水位"
+            label="库存记录更新时间"
           />
         }
         actions={
@@ -1282,7 +1282,7 @@ export function InventoryLedgerPage() {
             {view === "balance" ? (
               <span className="text-muted-foreground">
                 {" "}
-                · 数量均带基础单位；可用数量为服务端正式值
+                · 数量均带基础单位；可用数量为服务端返回值
               </span>
             ) : null}
           </span>
@@ -1426,7 +1426,7 @@ export function InventoryLedgerPage() {
               <BusinessEmptyState
                 kind="no-data"
                 title="当前仓库尚无 ERP 自有库存记录"
-                description="期初须经 W18 基准日实盘导入后形成正式流水；旧商城库存字段不会作为记录出现在本台账。"
+                description="期初须经导入与期初的基准日实盘导入后形成流水；旧商城库存字段不会作为记录出现在本台账。"
                 action={
                   <Button
                     type="button"
@@ -1434,7 +1434,7 @@ export function InventoryLedgerPage() {
                     size="sm"
                     render={<Link href="/governance/imports" />}
                   >
-                    前往 W18 期初导入
+                    前往导入与期初
                   </Button>
                 }
               />
@@ -1604,7 +1604,7 @@ export function InventoryLedgerPage() {
                   </span>
                 </div>
                 <div className="text-[10px] text-muted-foreground">
-                  服务端正式值 · 不本地重算
+                  服务端返回值 · 不本地重算
                 </div>
               </div>
             </div>
@@ -1735,7 +1735,7 @@ export function InventoryLedgerPage() {
                           className="mt-1 h-auto px-0"
                           render={<Link href={r.fulfillmentHref} />}
                         >
-                          打开 W09 履约上下文
+                          打开履约作业上下文
                         </Button>
                       ) : null}
                       {/* 无「释放预占」入口 */}
@@ -1769,7 +1769,7 @@ export function InventoryLedgerPage() {
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               锁版本 {detail.balance.lockVersion} · 查询于{" "}
               {formatDateTime(detail.queriedAt)}
-              。页面不提供编辑库存数量或直接释放预占；纠错须走正式调整单。
+              。页面不提供编辑库存数量或直接释放预占；纠错须走调整单。
             </p>
           </div>
         ) : (
@@ -1781,7 +1781,7 @@ export function InventoryLedgerPage() {
         )}
       </QuickPreviewSheet>
 
-      {/* 调整工作区：正式单据，非余额编辑器 */}
+      {/* 调整工作区：已生效单据，非余额编辑器 */}
       <Dialog
         open={adjustDraftId != null}
         onOpenChange={(open) => {
@@ -1792,7 +1792,7 @@ export function InventoryLedgerPage() {
           <DialogHeader>
             <DialogTitle>发起库存调整</DialogTitle>
             <DialogDescription>
-              从当前余额上下文创建正式调整单草稿。提交后进入仓储复核，不会立即改库存。
+              从当前余额上下文创建调整单草稿。提交后进入仓储复核，不会立即改库存。
             </DialogDescription>
           </DialogHeader>
 
@@ -1964,7 +1964,7 @@ export function InventoryLedgerPage() {
         confirmLabel="确认提交"
         fromStatus={{ label: "草稿", tone: "neutral" }}
         toStatus={{ label: "待仓储复核", tone: "warning" }}
-        description="确认后形成正式调整单，进入仓储复核队列。余额在过账前不会变化。"
+        description="确认后形成调整单，进入仓储复核队列。余额在过账前不会变化。"
         lockedFields={[
           adjustMeta
             ? `${adjustMeta.warehouseName} / ${adjustMeta.skuCode}`
@@ -1977,7 +1977,7 @@ export function InventoryLedgerPage() {
           "经办人不得自行复核过账",
         ]}
         nextDepartment="仓储复核"
-        irreversibleEffects={["形成正式调整单号并进入连续队列"]}
+        irreversibleEffects={["形成调整单号并进入连续队列"]}
         pending={submitMutation.isPending}
         onConfirm={() => void doSubmit()}
       />

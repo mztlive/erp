@@ -278,7 +278,7 @@ function TaskGroupSection({
               <p className="text-xs text-muted-foreground">
                 每组预览上限暂为临时设计参数（
                 {previewLimit}
-                条），正式值由服务端 pagePreviewLimit 配置。
+                条），返回值由服务端 pagePreviewLimit 配置。
               </p>
             ) : null}
           </div>
@@ -371,7 +371,7 @@ export function WorkspaceHomePage() {
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <BusinessFailureState
           kind="system"
-          description="今日工作台暂时无法加载，请重试。正式业务记录未被修改。"
+          description="今日工作台暂时无法加载，请重试。业务记录未被修改。"
           action={
             <Button type="button" variant="outline" onClick={refresh}>
               重试
@@ -392,7 +392,7 @@ export function WorkspaceHomePage() {
         <BusinessFailureState
           kind="permission"
           title="无今日工作台权限"
-          description="当前账号没有 W01 模块权限。入口应已隐藏；若通过链接直接访问，请联系管理员开通权限。"
+          description="当前账号没有今日工作台模块权限。入口应已隐藏；若通过链接直接访问，请联系管理员开通权限。"
         />
       </div>
     )
@@ -440,7 +440,7 @@ export function WorkspaceHomePage() {
         metadata={
           <div className="flex flex-col gap-1 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4">
             <DataFreshness
-              label="正式待办"
+              label="待办"
               updatedAt={workItemsFreshness.updatedAtLabel}
               dateTime={workItemsFreshness.dateTime}
               state={workItemsFreshness.state}
@@ -596,7 +596,7 @@ export function WorkspaceHomePage() {
         <div className="space-y-4">
           <Card size="sm">
             <CardHeader className="border-b">
-              <CardTitle>预警与数据水位</CardTitle>
+              <CardTitle>预警与数据新鲜度</CardTitle>
               <CardDescription>
                 只显示需要你关注的异常
                 {projectionFreshness.state === "stale"

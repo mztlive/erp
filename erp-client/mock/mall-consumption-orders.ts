@@ -334,12 +334,12 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
+          message: "本页为记录追溯视图，不提供修改商城订单入口。",
         },
         {
           action: "RETRY_SUPPLIER",
           code: "USE_W26",
-          message: "供应商重试须在 W26 按原任务号处理。",
+          message: "供应商重试须在供应商订单按原任务号处理。",
         },
       ],
       fieldPermissions: {
@@ -572,7 +572,7 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
+          message: "本页为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       fieldPermissions: {
@@ -912,7 +912,7 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
+          message: "本页为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       fieldPermissions: {
@@ -1158,7 +1158,7 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
+          message: "本页为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       fieldPermissions: {
@@ -1212,7 +1212,7 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "RETRY_SUPPLIER",
           code: "USE_W26",
-          message: "结果未知须在 W26 查询原请求，W25 不提供旁路重试。",
+          message: "结果未知须在供应商订单查询原请求，本页不提供旁路重试。",
         },
       ],
       costBasisPolicyState: "UNCONFIGURED",
@@ -1328,7 +1328,7 @@ const seeds: ConsumptionOrderSeed[] = [
             assessmentNo: 1,
             costBasis: "NONE",
             basisSourceLabel: "供应商结果未知 · 无可用成本",
-            noneReason: "供应商下单结果未知，暂无正式成本评估",
+            noneReason: "供应商下单结果未知，暂无成本评估",
             assessedAt: "2026-07-31T18:46:00+08:00",
           }),
         },
@@ -1362,18 +1362,18 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "RETRY_SUPPLIER",
           code: "USE_W26",
-          message: "结果未知须在 W26 查询原请求；W25 无旁路重试。",
+          message: "结果未知须在供应商订单查询原请求；本页无旁路重试。",
         },
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
+          message: "本页为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       paymentOccurredAlert: {
         title: "商城支付已发生，正在处理履约异常",
         message:
-          "支付成功记录已正式保存。供应商下单结果未知：不显示接单成功，也不创建第二张子订单。请进入 W26 查询原请求或 W29 人工处理。",
+          "支付成功记录已保存。供应商下单结果未知：不显示接单成功，也不创建第二张子订单。请进入供应商订单查询原请求或接口错误中心人工处理。",
         severity: "warning",
       },
       fieldPermissions: {
@@ -1557,7 +1557,7 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
+          message: "本页为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       paymentOccurredAlert: {
@@ -1801,13 +1801,13 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
+          message: "本页为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       paymentOccurredAlert: {
         title: "商城支付已发生，正在处理履约异常",
         message:
-          "T 后支付记录已保存；商品发布或固定供给缺失进入差异，不拒收也不复制支付记录。请进入 W29/W21 修复后按原记录键继续归集。",
+          "T 后支付记录已保存；商品发布或固定供给缺失进入差异，不拒收也不复制支付记录。请进入接口错误中心/外部商品供给修复后按原记录键继续归集。",
         severity: "warning",
       },
       fieldPermissions: {
@@ -2038,7 +2038,7 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
+          message: "本页为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       paymentOccurredAlert: {

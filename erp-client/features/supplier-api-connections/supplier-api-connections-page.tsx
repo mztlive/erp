@@ -435,8 +435,8 @@ function ConnectionList({
       {
         id: "catalog",
         accessorFn: (row) => row.catalogLabel,
-        header: "目录水位",
-        meta: { label: "目录水位" },
+        header: "目录同步时间",
+        meta: { label: "目录同步时间" },
         cell: ({ row }) => (
           <span className="text-sm">{row.original.catalogLabel}</span>
         ),
@@ -1369,7 +1369,7 @@ function ConnectionCenter({
             </div>
           </dl>
           <p className="text-xs text-muted-foreground">
-            历史版本与业务记录保留；不暗示删除。替代方案可链到 W21 / W26 / W29。
+            历史版本与业务记录保留；不暗示删除。替代方案可链到外部商品供给 / 供应商订单 / 接口错误中心。
           </p>
           <DialogFooter>
             <Button
@@ -1578,7 +1578,7 @@ function OverviewSection({
           )}
           <Row label="技术负责人" value={conn.technicalOwner?.label ?? "—"} />
           <Row
-            label="目录水位"
+            label="目录同步时间"
             value={`${conn.catalog.stateLabel}${
               conn.catalog.lastSuccessfulAt
                 ? ` · ${formatTime(conn.catalog.lastSuccessfulAt)}`
@@ -1596,14 +1596,14 @@ function OverviewSection({
               href="/supplier-api/catalog"
               className="text-primary underline-offset-2 hover:underline"
             >
-              W21 外部商品
+              外部商品供给
             </Link>
             {" · "}
             <Link
               href="/commerce/publications"
               className="text-primary underline-offset-2 hover:underline"
             >
-              W22 发布
+              商品发布
             </Link>
           </CardDescription>
         </CardHeader>
@@ -1705,7 +1705,7 @@ function CapabilitiesSection({
         meta: { label: "边界" },
         cell: () => (
           <span className="text-xs text-muted-foreground">
-            连接级 ≠ 商品级 · 见 W21/W22
+            连接级 ≠ 商品级 · 见外部商品供给/商品发布
           </span>
         ),
       },
@@ -1755,8 +1755,7 @@ function CapabilitiesSection({
         <AlertTitle>能力边界</AlertTitle>
         <AlertDescription>
           下表为<strong>连接级</strong>
-          统一能力声明，不表示每个外部商品都可用。商品/供给/发布级能力由 W21 /
-          W22 返回。采购确认只追加业务需求与审计，不写能力启停；系统管理员使用独立配置命令。
+          统一能力声明，不表示每个外部商品都可用。商品/供给/发布级能力由外部商品供给 / 商品发布返回。采购确认只追加业务需求与审计，不写能力启停；系统管理员使用独立配置命令。
         </AlertDescription>
       </Alert>
       {can("UPDATE_CAPABILITIES") ? (
@@ -2013,20 +2012,20 @@ function CatalogSection({
     <div className="space-y-3">
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">目录同步水位</CardTitle>
+          <CardTitle className="text-base">目录同步进度</CardTitle>
           <CardDescription>
             与连接状态分开展示 ·{" "}
             <Link
               href={`/supplier-api/catalog?connectionId=${conn.connectionId}`}
               className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
             >
-              打开 W21
+              打开外部商品供给
               <ExternalLinkIcon className="size-3" aria-hidden="true" />
             </Link>
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 text-sm">
-          <Row label="水位状态" value={conn.catalog.stateLabel} />
+          <Row label="同步状态" value={conn.catalog.stateLabel} />
           <Row
             label="最近成功"
             value={formatTime(conn.catalog.lastSuccessfulAt)}
@@ -2045,7 +2044,7 @@ function CatalogSection({
               succeeded={progress.succeeded}
               failed={progress.failed}
               label={`目录同步 ${conn.catalog.activeJobNo ?? ""}`}
-              description="catalog_sync_job 后台执行；同来源批次幂等。"
+              description="目录同步在后台执行；同来源批次不会重复处理。"
             />
           ) : null}
           <div className="flex flex-wrap gap-2">
@@ -2124,7 +2123,7 @@ function AuditSection({ conn }: { conn: ConnectionCenterView }) {
           href={`/system/access-audit?objectId=${conn.connectionId}`}
           className="text-primary underline-offset-2 hover:underline"
         >
-          打开 W19
+          打开权限与审计
         </Link>
       </p>
       <ul className="space-y-2">

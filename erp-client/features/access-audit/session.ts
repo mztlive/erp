@@ -114,7 +114,7 @@ const ROLE_SEED: RoleRow[] = [
     status: "enabled",
     statusLabel: "启用",
     statusTone: "success",
-    permissionSummary: "W03 客户 · W04 合同 · W05 销售单（读/建/提交）",
+    permissionSummary: "客户中心 · 合同 · 销售单（读/建/提交）",
     dataScopeSummary: "本人负责 + 协作参与",
     fieldPolicySummary: "联系方式掩码 · 银行账户隐藏",
     riskFlags: [],
@@ -128,7 +128,7 @@ const ROLE_SEED: RoleRow[] = [
     status: "enabled",
     statusLabel: "启用",
     statusTone: "success",
-    permissionSummary: "W11 应收 · W12 应付 · W13 卡资金复核",
+    permissionSummary: "客户往来 · 供应商往来 · 卡券票款复核",
     dataScopeSummary: "公司级",
     fieldPolicySummary: "银行账户可见 · 证件掩码",
     riskFlags: ["HIGH_PRIVILEGE"],
@@ -142,7 +142,7 @@ const ROLE_SEED: RoleRow[] = [
     status: "enabled",
     statusLabel: "启用",
     statusTone: "success",
-    permissionSummary: "W09 履约 · W10 库存台账",
+    permissionSummary: "履约作业 · 库存台账",
     dataScopeSummary: "指定仓库",
     fieldPolicySummary: "默认字段可见",
     riskFlags: [],
@@ -170,7 +170,7 @@ const ROLE_SEED: RoleRow[] = [
     status: "enabled",
     statusLabel: "启用",
     statusTone: "success",
-    permissionSummary: "W22 刊登 · W23 执行信息",
+    permissionSummary: "商品发布 · 执行信息",
     dataScopeSummary: "空数据范围",
     fieldPolicySummary: "默认",
     riskFlags: ["EMPTY_SCOPE", "PENDING_DISABLE"],
@@ -198,7 +198,7 @@ const ROLE_SEED: RoleRow[] = [
     status: "enabled",
     statusLabel: "启用",
     statusTone: "success",
-    permissionSummary: "W06 采购确认 · W07 采购单",
+    permissionSummary: "客户验收 · 采购二次确认",
     dataScopeSummary: "本人负责 + 团队",
     fieldPolicySummary: "供应商账号掩码",
     riskFlags: [],
@@ -986,7 +986,7 @@ export function buildW19ListView(query: AccessListQuery): AccessListView {
       message: "字段粒度策略未配置：字段策略只读，不可提交变更。",
     })
   }
-  // Q1：命中复核的高风险动作失败关闭，不创建 work_item
+  // Q1：命中复核的高风险动作失败关闭，不创建任务
   actionBlockers.push({
     action: "EXPAND_COMPANY_SCOPE",
     code: "REVIEW_POLICY_UNCONFIGURED",
@@ -1129,7 +1129,7 @@ export function getW19EffectiveAccess(
                 action: "EXPAND_SENSITIVE_FIELD",
                 code: "REVIEW_POLICY_UNCONFIGURED",
                 message:
-                  "Q1 未固化：扩大敏感字段访问需双人复核，当前失败关闭且不创建 work_item。",
+                  "Q1 未固化：扩大敏感字段访问需双人复核，当前失败关闭且不创建任务。",
               },
             ]
           : []),
@@ -1415,7 +1415,7 @@ export function previewW19AccessChange(
             action: command.action,
             code: "REVIEW_POLICY_UNCONFIGURED",
             message:
-              "Q1 决策前：命中复核要求的动作失败关闭，不创建/领取/完成 work_item。",
+              "本期决策前：命中复核要求的动作将拒绝执行，不创建、领取或完成任务。",
           }
         : undefined,
     }
@@ -1656,12 +1656,12 @@ export function submitW19AccessChange(
       outcome: "REJECTED",
       code: "REVIEW_POLICY_UNCONFIGURED",
       message:
-        "Q1 复核策略未固化：本动作失败关闭。W19 不创建、领取或完成 work_item。",
+        "复核策略未固化：本动作已拒绝。权限与审计页不创建、领取或完成任务。",
       actionBlockers: [
         {
           action: command.action,
           code: "REVIEW_POLICY_UNCONFIGURED",
-          message: "待注册固定 work_item_type 并复用 W02 CompleteWorkItemEnvelope。",
+          message: "待注册固定任务类型并复用统一任务完成流程。",
         },
       ],
     }
@@ -1777,7 +1777,7 @@ export function submitW19AccessChange(
   const result: AccessChangeOutcome = {
     outcome: "REJECTED",
     code: "UNSUPPORTED_ACTION",
-    message: `当前演示不支持动作 ${command.action}；且禁止通过 W19 创建 work_item。`,
+    message: `当前演示不支持动作 ${command.action}；且禁止通过权限与审计页创建任务。`,
   }
   idempotencyResults.set(command.idempotencyKey, result)
   return result

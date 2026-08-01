@@ -659,7 +659,7 @@ export function AcceptanceWorkspace({
     <div className="flex min-w-0 flex-col gap-4">
       {view.workItemConfigBlocker ? (
         <Alert variant="warning" role="alert">
-          <AlertTitle>任务入口未启用（fail-closed）</AlertTitle>
+          <AlertTitle>任务入口未启用</AlertTitle>
           <AlertDescription>{view.workItemConfigBlocker}</AlertDescription>
         </Alert>
       ) : null}
@@ -724,7 +724,7 @@ export function AcceptanceWorkspace({
             detail="服务端履约数据"
           />
           <MetricItem
-            label="数据水位"
+            label="数据更新时间"
             value={
               <DataFreshness
                 updatedAt="刚刚"
@@ -809,7 +809,7 @@ export function AcceptanceWorkspace({
         <BusinessEmptyState
           kind="no-data"
           title="当前没有待验收的履约记录"
-          description="请先在 W09 完成仓发、代发、电子交付或服务履约过账；也可查看历史验收。"
+          description="请先在履约作业完成仓发、代发、电子交付或服务履约过账；也可查看历史验收。"
           action={
             <Button render={<Link href="/fulfillment" />} variant="outline">
               去履约作业
@@ -838,7 +838,7 @@ export function AcceptanceWorkspace({
               <CardContent className="max-h-[min(32rem,70vh)] space-y-4 overflow-y-auto pt-4">
                 {view.salesLines.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    筛选条件下无履约记录。可切换「全部历史记录」或去 W09 查看。
+                    筛选条件下无履约记录。可切换「全部历史记录」或去履约作业查看。
                   </p>
                 ) : (
                   view.salesLines.map((line) => (
@@ -857,7 +857,7 @@ export function AcceptanceWorkspace({
                         销售要求 {line.requiredQuantity} {line.unitCode} ·
                         净已验收 {line.netAcceptedQuantity} {line.unitCode}
                         <span className="ms-2 text-[0.65rem] uppercase tracking-wide opacity-70">
-                          来源 sales_order_line / 正式数据
+                          来源 sales_order_line / 业务数据
                         </span>
                       </p>
                       <ul className="space-y-2" role="list">

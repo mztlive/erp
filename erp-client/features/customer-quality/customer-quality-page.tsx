@@ -954,7 +954,7 @@ export function CustomerQualityPage() {
         <BusinessFailureState
           kind="permission"
           title="无客户经营质量权限"
-          description="当前账号缺少 W15 模块权限。敏感明细已不展示。"
+          description="当前账号缺少经营质量模块权限。敏感明细已不展示。"
           action={
             <Button type="button" variant="outline" render={<Link href="/workspace" />}>
               返回工作台
@@ -1001,7 +1001,7 @@ export function CustomerQualityPage() {
               </span>
               <span>· {data.scope.label}</span>
               <span className="num">
-                · 水位 {data.freshness.sourceWatermark}
+                · 来源更新 {data.freshness.sourceWatermark}
               </span>
               {data.period.customerQualityPeriodPolicyId ? (
                 <span className="num">
@@ -1048,7 +1048,7 @@ export function CustomerQualityPage() {
         <Alert variant="warning">
           <AlertTitle>数据可能不是最新</AlertTitle>
           <AlertDescription>
-            最近成功更新 {formatDateTime(data.freshness.projectedAt)}；源水位{" "}
+            最近成功更新 {formatDateTime(data.freshness.projectedAt)}；来源更新时间{" "}
             <span className="num">{data.freshness.sourceWatermark}</span>
             。可刷新；不宣称实时。
           </AlertDescription>
@@ -1058,7 +1058,7 @@ export function CustomerQualityPage() {
         <Alert variant="info">
           <AlertTitle>数据更新中</AlertTitle>
           <AlertDescription>
-            保留最近成功结果供查看。更新期间导出不得标为当前水位。
+            保留最近成功结果供查看。更新期间导出不得标为当前同步进度。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1066,7 +1066,7 @@ export function CustomerQualityPage() {
         <Alert variant="destructive">
           <AlertTitle>刷新失败</AlertTitle>
           <AlertDescription>
-            已保留旧结果。请重试；正式业务记录未被修改。
+            已保留旧结果。请重试；业务记录未被修改。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1312,7 +1312,7 @@ export function CustomerQualityPage() {
                   <span className="num font-medium">
                     {data.coverage.requiredVoucherOrderCount}
                   </span>{" "}
-                  张正式卡券单（
+                  张卡券销售单（
                   {data.coverage.cardFundsReviewRate}）
                 </p>
                 {data.coverage.cardFundsState !== "complete" ? (
@@ -1339,7 +1339,7 @@ export function CustomerQualityPage() {
                           <Link href="/finance/card-funds-review?from=W15" />
                         }
                       >
-                        打开 W13
+                        打开卡券票款复核
                       </Button>
                     </AlertDescription>
                   </Alert>
@@ -1380,7 +1380,7 @@ export function CustomerQualityPage() {
             <Alert variant="info">
               <AlertTitle>业务性质 = 卡券</AlertTitle>
               <AlertDescription>
-                卡券实际经营结果请前往 W28。本页隐藏实际盈亏，不显示 ¥0
+                卡券实际经营结果请前往卡券经营分析。本页隐藏实际盈亏，不显示 ¥0
                 或无穷大利润率。卡券收入仍计入规模与回款分析。
                 <Button
                   type="button"
@@ -1393,7 +1393,7 @@ export function CustomerQualityPage() {
                     />
                   }
                 >
-                  打开 W28
+                  打开卡券经营分析
                 </Button>
               </AlertDescription>
             </Alert>
@@ -1819,7 +1819,7 @@ export function CustomerQualityPage() {
           ) : (
             <BusinessTableFrame
               title="客户明细"
-              description="身份进 W03 · 逾期进 W11 · 实际盈亏进 W16。标签只读（固定规则版本），无人工修改入口。金额口径与指标/图表/导出一致。"
+              description="身份进客户中心 · 逾期进客户往来 · 实际盈亏进实际经营盈亏。标签只读（固定规则版本），无人工修改入口。金额口径与指标/图表/导出一致。"
               table={
                 <DataTable
                   data={pageRows}
@@ -1859,7 +1859,7 @@ export function CustomerQualityPage() {
             <>
               期间 {exportJob.period.from} ~ {exportJob.period.to}。
               {exportJob.filterSummary}。权限版本{" "}
-              <span className="num">{exportJob.permissionVersion}</span>；数据水位{" "}
+              <span className="num">{exportJob.permissionVersion}</span>；数据更新时间{" "}
               <span className="num">{exportJob.projectionWatermark}</span>。
               {exportJob.amountBasisNote}
               {exportJob.downloadLabel ? (

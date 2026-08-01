@@ -1273,7 +1273,7 @@ export const PUBLICATION_SEEDS: PublicationSeed[] = [
       {
         action: "PUBLISH",
         code: "SAFETY_PAUSE_RESULT_UNKNOWN",
-        message: "安全暂停结果未知，本地保持 fail-closed，不可下单。",
+        message: "安全暂停结果未知，暂不可下单。",
       },
     ],
     publishGate: {
@@ -1324,7 +1324,7 @@ export const PUBLICATION_SEEDS: PublicationSeed[] = [
         {
           action: "PUBLISH",
           code: "SAFETY_PAUSE_RESULT_UNKNOWN",
-          message: "安全暂停结果未知，本地保持 fail-closed，不可下单。",
+          message: "安全暂停结果未知，暂不可下单。",
         },
       ],
     },

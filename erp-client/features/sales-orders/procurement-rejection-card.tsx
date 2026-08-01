@@ -116,7 +116,7 @@ export function ProcurementRejectionCard({
         status: "succeeded",
         title: "草稿已改价（会话）",
         description:
-          "相对被驳回提交已有销售价格变化；可走「改品/改价后重提」。仍不会复用旧 W07 任务。",
+          "相对被驳回提交已有销售价格变化；可走「改品/改价后重提」。仍不会复用旧采购二次确认任务。",
         reference: `DRAFT-${order.documentNumber}`,
       })
     },
@@ -329,7 +329,7 @@ export function ProcurementRejectionCard({
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              任务 {rejection.activeLowMarginManagerTask.workItemId} · 指纹{" "}
+              任务 {rejection.activeLowMarginManagerTask.workItemId} · 版本{" "}
               {rejection.activeLowMarginManagerTask.subjectHash}
               {rejection.lowMarginSubmission
                 ? ` · 新提交 #${rejection.lowMarginSubmission.submissionNo}`
@@ -443,12 +443,12 @@ export function ProcurementRejectionCard({
                         "冻结递增提交号的新 sales_order_submission",
                         "计算新 subjectHash",
                         "原子创建唯一新 PROCUREMENT_CONFIRMATION",
-                        "旧提交与旧 W07 任务不变",
+                        "旧提交与旧采购二次确认任务不变",
                       ],
                     })
                   }
                 >
-                  正式重提采购确认
+                  重新提交采购确认
                 </Button>
                 {!canResubmit && resubmitBlocker ? (
                   <p className="text-xs text-warning">{resubmitBlocker.reason}</p>

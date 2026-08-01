@@ -1,5 +1,5 @@
 /**
- * W21 外部商品映射与供给 · 客户端契约类型
+ * 外部商品供给映射与供给 · 客户端契约类型
  * 对齐 docs/ui-workspaces/w21-external-product-supply.md §5/§7/§8
  */
 
@@ -397,9 +397,9 @@ export const RETURN_REASON_OPTIONS = [
 ] as const
 
 export const REGISTRATION_BLOCKER_MESSAGE =
-  "正常外部商品映射/供给复核的固定 work_item_type 尚未登记。当前仅可浏览差异、准备会话草稿或进入 W14 建档；不得领取或提交确认。安全暂停与不可下单状态不受此 blocker 影响。"
+  "外部商品映射/供给复核任务类型尚未登记。当前仅可浏览差异、准备会话草稿或进入主数据建档；不得领取或提交确认。安全暂停与不可下单状态不受影响。"
 
 export const RECOVERY_BLOCKER_MESSAGE =
-  "替代供给选定人与恢复发布责任链尚未确认（Q3）。服务端固定返回 RECOVERY_RESPONSIBILITY_UNCONFIRMED：可准备会话内候选证据，不得选定替代供给或从 W21 发起 W22 恢复发布。"
+  "替代供给选定人与恢复发布责任链尚未确认（Q3）。服务端固定返回 RECOVERY_RESPONSIBILITY_UNCONFIRMED：可准备会话内候选证据，不得选定替代供给或从外部商品供给发起商品发布恢复。"
 
 export const COST_MASK = "***"

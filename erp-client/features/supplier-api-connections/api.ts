@@ -290,7 +290,7 @@ function toCenter(
     capabilities: seed.capabilities.map((c) => ({
       ...c,
       productLevelNote:
-        "连接级能力声明 ≠ 每个商品可用；商品/供给/发布级能力见 W21 / W22",
+        "连接级能力声明 ≠ 每个商品可用；商品/供给/发布级能力见外部商品供给 / 商品发布",
     })),
     lastHealth:
       role === "procurement" && seed.lastHealth
@@ -742,7 +742,7 @@ export async function confirmCapabilityRequirement(input: {
       code: "ROLE_NOT_PROCUREMENT",
       title: "仅采购可确认业务能力需求",
       message:
-        "确认业务能力需求是采购追加式业务确认，不改变能力启停，不创建 work_item",
+        "确认业务能力需求是采购追加式业务确认，不改变能力启停，不创建任务",
     }
   }
   const seed = findSeed(input.connectionId)
@@ -817,7 +817,7 @@ export async function confirmCapabilityRequirement(input: {
     status: "succeeded",
     title: "业务能力需求已确认",
     message:
-      "已追加采购业务确认与审计记录；能力启停状态未变更，未创建或完成 work_item。",
+      "已追加采购业务确认与审计记录；能力启停状态未变更，未创建或完成任务。",
     reference: confirmationId,
     connectionVersion: o.version,
     auditEventId: o.auditEvents[0]?.auditNo,
@@ -1169,7 +1169,7 @@ export async function startCatalogSync(input: {
   return {
     status: "processing",
     title: "目录同步任务已创建",
-    message: `已创建 catalog_sync_job ${jobNo}。可在本页查看进度或进入 W21。`,
+    message: `已创建目录同步任务 ${jobNo}。可在本页查看进度或进入外部商品供给。`,
     jobId,
     jobNo,
   }

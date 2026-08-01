@@ -423,7 +423,7 @@ export function ContractDetailPage({
       {policyMissing ? (
         <Alert variant="warning">
           <ShieldAlertIcon aria-hidden="true" />
-          <AlertTitle>修订策略未配置（fail-closed）</AlertTitle>
+          <AlertTitle>修订策略未配置</AlertTitle>
           <AlertDescription>
             已生效合同保持只读查看。服务端不返回 REVISE，直接请求创建修订工作副本也会被拒绝。配置{" "}
             <span className="num">contractRevisionPolicy</span>{" "}
@@ -585,7 +585,7 @@ export function ContractDetailPage({
             <CardHeader className="border-b">
               <CardTitle>关联销售摘要</CardTitle>
               <CardDescription>
-                金额仅为各销售单摘要，不汇总为合同金额。水位{" "}
+                金额仅为各销售单摘要，不汇总为合同金额。更新于{" "}
                 <span className="num">{contract.relatedSalesOrdersAsOf}</span>
               </CardDescription>
             </CardHeader>
@@ -831,7 +831,7 @@ export function ContractDetailPage({
             <CardHeader className="border-b">
               <CardTitle>审计时间线</CardTitle>
               <CardDescription>
-                创建、修订、生效、终止、附件下载等正式动作。
+                创建、修订、生效、终止、附件下载等处理动作。
               </CardDescription>
             </CardHeader>
             <CardContent>

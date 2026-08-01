@@ -504,7 +504,7 @@ export function ConsumptionOrdersListPage() {
             updatedAt={data ? formatTime(data.factWatermark) : "—"}
             dateTime={data?.factWatermark}
             state={listQuery.isFetching ? "stale" : "fresh"}
-            label={`记录水位 · ${data?.permissionVersion ?? "—"}`}
+            label={`记录更新 · ${data?.permissionVersion ?? "—"}`}
           />
         }
         actions={
@@ -545,7 +545,7 @@ export function ConsumptionOrdersListPage() {
         <AlertTitle className="whitespace-nowrap">只读记录追溯</AlertTitle>
         <AlertDescription className="min-w-0 lg:truncate">
           {data?.boundaryNotice ??
-            "W25 不提供修改支付状态、编辑分摊或旁路重试供应商动作。导出与受控揭示走审计。"}
+            "本页不提供修改支付状态、编辑分摊或旁路重试供应商动作。导出与受控揭示走审计。"}
         </AlertDescription>
         <div className="flex items-center gap-2 text-sm">
           <span className="whitespace-nowrap text-muted-foreground">演示状态</span>

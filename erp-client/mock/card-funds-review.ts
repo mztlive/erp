@@ -51,7 +51,7 @@ export const SEED_OPENING_ZERO: CardFundsReviewItemView = baseItem({
     ],
     actionBlockers: [],
     reason: "期初卡券应收已形成，净已收/已开为 0，须人工确认有无历史票款",
-    impact: "未复核前不得计入已确认经营收入；W11/W15 指标标记不可靠",
+    impact: "未复核前不得计入已确认经营收入；客户往来/经营质量指标标记不可靠",
     priority: 90,
   },
   salesOrder: {
@@ -93,7 +93,7 @@ export const SEED_OPENING_ZERO: CardFundsReviewItemView = baseItem({
   fingerprintStatus: {
     label: "待复核数据版本",
     tone: "warning",
-    detail: "当前 subject_hash 与任务一致；完成时将三方重算校验",
+    detail: "当前数据版本与任务一致；完成时将重新校验",
   },
   currentEvidence: {
     evidenceDocumentIds: [],
@@ -322,7 +322,7 @@ export const SEED_SYNC_DELTA: CardFundsReviewItemView = baseItem({
   fingerprintStatus: {
     label: "数据版本已变化",
     tone: "destructive",
-    detail: "须形成新链尾；禁止复制旧 subject_hash 或沿用旧通过结论",
+    detail: "须形成新链尾；禁止复制旧数据版本或沿用旧通过结论",
   },
   currentEvidence: {
     evidenceDocumentIds: [],

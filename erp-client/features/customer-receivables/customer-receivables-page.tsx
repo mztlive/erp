@@ -821,7 +821,7 @@ export function CustomerReceivablesPage() {
         metadata={
           data ? (
             <DataFreshness
-              updatedAt="正式水位"
+              updatedAt="数据更新时间"
               dateTime={data.queriedAt}
               state="fresh"
               label="客户往来"
@@ -875,7 +875,7 @@ export function CustomerReceivablesPage() {
           <AlertDescription className="flex flex-wrap items-center gap-2">
             已携带来源页签返回上下文
             {salesOrderId ? ` · 销售单 ${salesOrderId}` : ""}
-            。核销完成后可回到 W05。
+            。核销完成后可回到销售单。
             <Button
               type="button"
               size="sm"
@@ -942,7 +942,7 @@ export function CustomerReceivablesPage() {
               <MetricFilterItem
                 label="开放应收"
                 value={<MoneyValue value={metrics.openReceivableTotal} />}
-                detail="服务端水位"
+                detail="服务端更新时间"
                 active={view === "receivable"}
                 onClick={() => {
                   patchUrl({ view: "receivable" })
@@ -1126,7 +1126,7 @@ export function CustomerReceivablesPage() {
                     <h3 className="text-sm font-semibold">
                       待分配回款
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        水位 {metrics?.unallocatedReceiptTotal}
+                        未分配 {metrics?.unallocatedReceiptTotal}
                       </span>
                     </h3>
                     {data.unallocated.receipts.length === 0 ? (
@@ -1155,7 +1155,7 @@ export function CustomerReceivablesPage() {
                     <h3 className="text-sm font-semibold">
                       待分配销项发票
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        水位 {metrics?.unallocatedInvoiceTotal}（不与回款相加）
+                        未分配 {metrics?.unallocatedInvoiceTotal}（不与回款相加）
                       </span>
                     </h3>
                     {data.unallocated.invoices.length === 0 ? (
@@ -1209,7 +1209,7 @@ export function CustomerReceivablesPage() {
                   <BusinessEmptyState
                     kind="no-data"
                     title="当前范围尚无客户往来记录"
-                    description="有权时从销售单链入登记；正式应收形成后刷新。"
+                    description="有权时从销售单链入登记；应收形成后刷新。"
                   />
                 )
               ) : view === "receivable" && data ? (

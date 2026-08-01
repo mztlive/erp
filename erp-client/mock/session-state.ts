@@ -636,7 +636,7 @@ export function completeWorkItemSession(input: {
   if (subject && subject.subjectHash !== input.expectedSubjectHash) {
     throw new WorkItemMockError(
       "VERSION_CONFLICT",
-      "对象版本已变化，完成已阻止。本地输入已保留。"
+      "数据版本已变更，完成已阻止。本地输入已保留。"
     )
   }
 
@@ -718,7 +718,7 @@ export function finalizePendingComplete(input: {
       reference: completionRecordId,
       summary:
         input.decision.summary ??
-        `业务结论「${input.decision.kind}」与任务完成同一事务生效（幂等恢复）`,
+        `业务结论与任务完成已一并生效`,
     },
     subjectVersion: subject?.subjectVersion,
     subjectHash: subject?.subjectHash ?? input.expectedSubjectHash,
@@ -974,7 +974,7 @@ export function resolveW05ProcurementRejection(input: {
       outcome: "CHANGED_TERMS_RESUBMITTED",
       reference: `PR-RESUB-${stamp}`,
       detail:
-        "已冻结新提交与新 subjectHash，并创建唯一新 PROCUREMENT_CONFIRMATION；旧提交与旧 W07 任务保持已完成驳回。",
+        "已冻结新提交与新 subjectHash，并创建唯一新 PROCUREMENT_CONFIRMATION；旧提交与旧采购二次确认任务保持已完成驳回。",
       newSubmissionNo: 2,
       newSubjectHash: `sha256:new…${stamp.slice(0, 4)}`,
       newWorkItemId: `wi_pc_new_${stamp.toLowerCase()}`,
@@ -986,7 +986,7 @@ export function resolveW05ProcurementRejection(input: {
       outcome: "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED",
       reference: `PR-LM-${stamp}`,
       detail:
-        "已冻结新提交/新指纹并创建唯一 LOW_MARGIN_MANAGER_CONFIRMATION；此时不创建采购确认任务，须上级通过后方可进入新 W07。",
+        "已冻结新提交与新数据版本，并创建唯一上级确认任务；此时不创建采购确认任务，须上级通过后方可再次进入采购二次确认。",
       newSubmissionNo: 2,
       newSubjectHash: `sha256:lm…${stamp.slice(0, 4)}`,
       newWorkItemId: `wi_lm_${stamp.toLowerCase()}`,
@@ -1403,7 +1403,7 @@ export function postCustomerAcceptance(
   if (acceptancePermissionRevoked) {
     return {
       status: "failed",
-      message: "权限已收回，正式过账已停止；本地敏感草稿已清理",
+      message: "权限已收回，过账已停止；本地敏感草稿已清理",
     }
   }
 
@@ -3317,7 +3317,7 @@ export function reviewW08PurchaseOrder(input: {
   if (center.identity.lockVersion !== input.expectedLockVersion) {
     throw new WorkItemMockError(
       "VERSION_CONFLICT",
-      "采购对象版本冲突，请刷新当前提交后再审。"
+      "采购数据已变更，请刷新当前提交后再审。"
     )
   }
   if (center.identity.currentSubmissionId !== input.submissionId) {
@@ -3572,7 +3572,7 @@ export function createW08FromBasis(input: {
           unitCostGross: "400.0000",
           inputTaxRate: "0.13",
           expectedDeliveryDate: "2026-04-15",
-          salesAllocationLabel: "销售行 · W07 礼包 ×50",
+          salesAllocationLabel: "销售行 · 二次确认礼包 ×50",
         },
       ],
       estimatedGross: "20000.00",
@@ -3674,7 +3674,7 @@ export function createW08FromBasis(input: {
         actionLabel: "消费创建依据建单",
         actorLabel: "当前用户 · 采购",
         at: new Date().toISOString().slice(0, 16).replace("T", " "),
-        comment: `依据 ${basis.basisId} · 无采购建单 work_item`,
+        comment: `依据 ${basis.basisId} · 无采购建单任务`,
       },
     ],
     allowedActions: ["EDIT", "SUBMIT", "VOID", "OPEN_CENTER"],

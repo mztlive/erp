@@ -457,7 +457,7 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
         confirmLabel="确认完成并打开下一条"
         fromStatus={{ label: task?.status.label ?? "待处理", tone: "warning" }}
         toStatus={{ label: "已完成", tone: "success" }}
-        lockedFields={["对象版本", "当前处理状态"]}
+        lockedFields={["版本", "当前处理状态"]}
         effects={["记录处理结果", "从有效队列移除本项"]}
         nextDepartment="相关责任组"
         onConfirm={async () => {

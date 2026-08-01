@@ -171,7 +171,7 @@ function MasterDataCenterBody({
         ]}
         metadata={
           <DataFreshness
-            updatedAt="正式记录"
+            updatedAt="业务记录"
             dateTime={data.currentRevision.effectiveFrom}
             state="fresh"
             label="对象"
@@ -387,7 +387,7 @@ function MasterDataCenterBody({
                   <Link href={data.warehouseStockSummary.w10Href} />
                 }
               >
-                打开库存台账 W10
+                打开库存台账
               </Button>
             </div>
           ) : null}

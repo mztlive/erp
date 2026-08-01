@@ -213,7 +213,7 @@ function roleActions(
       {
         action: "RESOLVE_DIFFERENCE",
         code: "ROLE_PROCUREMENT",
-        message: "采购只能追加证据与业务意见，不能选择正式差异结论",
+        message: "采购只能追加证据与业务意见，不能选择差异结论",
       },
       {
         action: "SUBMIT_REVIEW",
@@ -267,7 +267,7 @@ function roleActions(
       {
         action: "APPEND_EVIDENCE",
         code: "ROLE_PREP",
-        message: "采购协同证据由被指派采购追加；经办登记正式结论",
+        message: "采购协同证据由被指派采购追加；经办登记结论",
       }
     )
     if (isConfirmed) {
@@ -704,7 +704,7 @@ export async function createSettlementDraft(
       code: "PERIOD_POLICY_STALE",
       title: "期间策略版本过期",
       message:
-        "客户端携带的策略版本与服务端不一致，fail-closed 不创建草稿。请重新加载策略后选择完整周期。",
+        "客户端携带的策略版本与服务端不一致，已拒绝创建草稿。请重新加载策略后选择完整周期。",
     }
   }
   const periodOk = policy.selectablePeriods.some(
@@ -856,7 +856,7 @@ export async function refreshSettlementTrial(
       code: "SNAPSHOT_STALE",
       title: "来源数据已过期",
       message:
-        "expectedSourceSnapshotHash 与当前不一致；旧提交已失效，请使用最新水位重试",
+        "expectedSourceSnapshotHash 与当前不一致；旧提交已失效，请使用最新数据重试",
     }
   }
 
@@ -1015,7 +1015,7 @@ export async function resolveDifference(
     return {
       status: "blocked",
       code: "ROLE_NOT_PREP",
-      title: "仅财务经办可登记正式结论",
+      title: "仅财务经办可登记结论",
       message: "采购证据不能自行改变差异状态或成本基线",
     }
   }
@@ -1070,7 +1070,7 @@ export async function resolveDifference(
       status: "blocked",
       code: "EVIDENCE_REQUIRED",
       title: "缺少采购证据",
-      message: "该差异需采购协同证据齐备后方可登记正式结论",
+      message: "该差异需采购协同证据齐备后方可登记结论",
     }
   }
 
@@ -1285,7 +1285,7 @@ export async function decideSettlementReview(
       status: "blocked",
       code: "ROLE_NOT_REVIEW",
       title: "仅财务复核可决策",
-      message: "确认/驳回须使用完整任务信封，且操作人非经办人",
+      message: "确认/驳回须使用完整任务流程，且操作人非经办人",
     }
   }
   const seed = findSeed(input.statementId)
@@ -1310,7 +1310,7 @@ export async function decideSettlementReview(
       status: "blocked",
       code: "WORK_ITEM_MISMATCH",
       title: "任务不匹配",
-      message: "必须先领取正式 work_item 再用任务信封决策",
+      message: "请先领取任务后再提交结论",
     }
   }
   if (seed.lockVersion !== input.expectedLockVersion) {
@@ -1328,7 +1328,7 @@ export async function decideSettlementReview(
     return {
       status: "failed",
       code: "SUBJECT_HASH_MISMATCH",
-      title: "指纹不一致",
+      title: "数据已变更",
       message: "提交数据已变化，不能静默确认过期试算",
     }
   }
@@ -1456,7 +1456,7 @@ export async function decideSettlementReview(
     status: "succeeded",
     title: "结算已确认",
     message:
-      "同事务已追加成本差额并形成唯一应付。付款、进项发票与核销请进入 W12，本工作面不复制财务流程。",
+      "同事务已追加成本差额并形成唯一应付。付款、进项发票与核销请进入供应商往来，本页不复制财务流程。",
     reference: payableNo,
     statementId: seed.statementId,
     payableNo,

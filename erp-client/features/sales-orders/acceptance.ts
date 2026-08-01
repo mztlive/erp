@@ -112,7 +112,7 @@ export async function fetchCustomerAcceptanceWorkspace(
 
   const permissionRevoked = isAcceptancePermissionRevoked()
   const workItemConfigBlocker = params.workItemId
-    ? "客户验收 work_item_type 尚未在统一模型注册（Q2 未关闭）。不得使用 W01/W02 任务入口或 WORK_ITEM 提交；请从 W05 销售单直接登记验收。"
+    ? "客户验收任务类型尚未注册。请从销售单直接登记验收，不要使用待办队列入口。"
     : null
 
   if (permissionRevoked) {
@@ -204,7 +204,7 @@ export async function fetchCustomerAcceptanceWorkspace(
             action: "CREATE_ACCEPTANCE",
             code: "CARD_VOUCHER_NOT_SUPPORTED",
             message:
-              "卡券销售单不在 W06 登记客户验收；履约完成按销售单履约期限判断。",
+              "卡券销售单不在客户验收登记；履约完成按销售单履约期限判断。",
           },
         ],
         fieldVisibility: { customerName: "full" },

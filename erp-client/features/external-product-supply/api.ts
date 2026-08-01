@@ -118,7 +118,7 @@ function roleBlockers(
         blockers.push({
           action,
           code: "ROLE_PROCUREMENT_ONLY",
-          message: "运营可查看发布准备度并转 W22 普通发布，不能确认映射或供给成本",
+          message: "运营可查看发布准备度并转商品发布，不能确认映射或供给成本",
         })
       }
     }
@@ -797,7 +797,7 @@ export async function resolveUnknownExternalCatalogResult(input: {
     return {
       status: "failed",
       code: "UNKNOWN_PAYLOAD",
-      message: "幂等结果形状无法识别",
+      message: "处理结果格式无法识别",
     }
   }
   if (entry.state === "pending") {
@@ -814,13 +814,13 @@ export async function resolveUnknownExternalCatalogResult(input: {
   }
 }
 
-/** 正式映射/供给确认端点不存在（类型未登记） */
+/** 映射确认/供给确认端点不存在（类型未登记） */
 export async function attemptUnregisteredFormalWrite(): Promise<FormalActionResponse> {
   await mockDelay(40)
   return {
     status: "failed",
     code: "WORK_ITEM_TYPE_UNREGISTERED",
     message:
-      "正常映射/供给类型未登记：不存在可调用的提交入口。请仅使用会话草稿或进入 W14。",
+      "正常映射/供给类型未登记：不存在可调用的提交入口。请仅使用会话草稿或进入主数据。",
   }
 }

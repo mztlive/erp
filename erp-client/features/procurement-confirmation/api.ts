@@ -557,7 +557,7 @@ export async function completeProcurementDecision(input: {
       idempotencyKey: input.idempotencyKey,
       decision: {
         kind: "REJECTED_TO_SALES",
-        summary: `采购确认驳回；无后继任务；销售三路待 W05 处理`,
+        summary: `采购确认驳回；无后继任务；销售三路待销售单处理`,
         note: input.decision.comment,
       },
     })

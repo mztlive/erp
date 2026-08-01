@@ -166,7 +166,7 @@ function PolicyBanner({
       <ShieldAlertIcon aria-hidden="true" />
       <AlertTitle className="flex flex-wrap items-center gap-2">
         治理策略门闩
-        <Badge variant="outline">Q1 无 work_item</Badge>
+        <Badge variant="outline">本期不支持任务流</Badge>
       </AlertTitle>
       <AlertDescription className="grid gap-x-4 gap-y-1 text-xs lg:grid-cols-2 [&_p:not(:last-child)]:mb-0">
         {(view === "users" || view === "roles") && (
@@ -175,7 +175,7 @@ function PolicyBanner({
             {time.state === "MISSING" ? (
               <>
                 <span className="font-mono">{time.blockerCode}</span> ·
-                fail-closed，仅允许立即紧急撤权
+                按保守策略：仅允许立即紧急撤权
               </>
             ) : (
               <>
@@ -1249,7 +1249,7 @@ export function AccessAuditPage() {
         title={isAudit ? "审计查询" : "权限与数据范围"}
         metadata={
           <DataFreshness
-            label={isAudit ? "审计水位" : "权限配置水位"}
+            label={isAudit ? "审计更新时间" : "权限配置更新时间"}
             state="fresh"
             updatedAt={formatDateTime(data.calculatedAt)}
             dateTime={data.calculatedAt}
@@ -1597,7 +1597,7 @@ export function AccessAuditPage() {
         <p className="text-xs text-muted-foreground" aria-live="polite">
           权限版本{" "}
           <span className="font-mono">{data.permissionVersion}</span> ·
-          work_item 支持：{data.workItemSupport === "DISABLED_Q1"
+          任务流：{data.workItemSupport === "DISABLED_Q1"
             ? "Q1 前关闭"
             : data.workItemSupport}
         </p>
@@ -1625,7 +1625,7 @@ export function AccessAuditPage() {
           title={ACCESS_VIEW_LABEL[view]}
           description={
             isAudit && data.auditCoverageFrom && data.auditCoverageTo
-              ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(data.auditCoverageFrom)} ~ ${formatDateTime(data.auditCoverageTo)} · 无记录不等于动作未发生 · 水位 ${data.watermark}`
+              ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(data.auditCoverageFrom)} ~ ${formatDateTime(data.auditCoverageTo)} · 无记录不等于动作未发生 · 更新于 ${data.watermark}`
               : `共 ${rows.length} 条 · 首屏固定身份与操作列`
           }
           table={
@@ -1977,7 +1977,7 @@ export function AccessAuditPage() {
         </div>
       </QuickPreviewSheet>
 
-      {/* 影响预览 + 正式提交 */}
+      {/* 影响预览 + 提交 */}
       <Dialog
         open={changeOpen}
         onOpenChange={(open) => {

@@ -21,7 +21,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
     status: "VALIDATING",
     formalDataFormed: false,
     notFormalDataMessage:
-      "合规包已安全接收并通过扫描，但仍未形成正式记录。须完成结构/业务校验、责任确认与后台应用后，对象才会进入正式记录。",
+      "合规包已安全接收并通过扫描，但仍未形成业务记录。须完成结构/业务校验、责任确认与后台应用后，对象才会进入业务记录。",
     inputAsset: {
       assetId: "fa_in_001",
       fileName: "opening-stock-baseline-20260731.pkg",
@@ -80,7 +80,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
         action: "CONFIRM_SCOPE",
         code: "IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED",
         message:
-          "权威数据模型尚未登记导入确认 work_item_type；业务确认入口保持实施 blocker。",
+          "导入确认任务类型尚未登记；业务确认入口暂不可用。",
       },
     ],
     version: "bv-12",
@@ -100,7 +100,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
     status: "CONFIRMATION_BLOCKED",
     formalDataFormed: false,
     notFormalDataMessage:
-      "试算已完成，但正式数据尚未形成。业务确认入口因 work_item_type 未登记而阻断；确认完成后才可提交生产应用。",
+      "试算已完成，但业务数据尚未形成。业务确认入口因任务类型未登记而阻断；确认完成后才可提交生产应用。",
     inputAsset: {
       assetId: "fa_in_002",
       fileName: "card-opening-ar-v5.pkg",
@@ -146,12 +146,12 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
       {
         objectCode: "CARD_SALES_ORDER",
         message:
-          "仅迁移商城已生效及之后状态且未作废的正式单据；卡券草稿不迁移。",
+          "仅迁移商城已生效及之后状态且未作废的已生效单据；卡券草稿不迁移。",
       },
       {
         objectCode: "CARD_OPENING_AR",
         message:
-          "期初应收由销售单成交金额派生；已收、已开票初始化为 0，后续进入 W13 逐单复核。",
+          "期初应收由销售单成交金额派生；已收、已开票初始化为 0，后续进入卡券票款复核逐单复核。",
       },
       {
         objectCode: "CUSTOMER",
@@ -168,7 +168,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
         action: "CONFIRM_SCOPE",
         code: "IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED",
         message:
-          "权威数据模型尚未登记导入确认 work_item_type；不得用 BUSINESS_EXCEPTION 伪装正常确认，也不得上线页面私有类型。",
+          "导入确认任务类型尚未登记；不得用异常入口伪装正常确认，也不得上线页面私有类型。",
       },
       {
         action: "START_APPLY",
@@ -258,7 +258,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
         action: "CONFIRM_SCOPE",
         code: "IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED",
         message:
-          "权威数据模型尚未登记导入确认 work_item_type；业务确认入口保持实施 blocker。",
+          "导入确认任务类型尚未登记；业务确认入口暂不可用。",
       },
     ],
     version: "bv-30",
@@ -278,7 +278,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
     status: "PARTIAL_SUCCESS",
     formalDataFormed: true,
     notFormalDataMessage:
-      "本批已部分形成正式对象；失败项不会回滚已成功对象，可通过修复批次幂等重跑。",
+      "本批已部分形成业务对象；失败项不会回滚已成功对象，可通过修复批次按原任务重试。",
     inputAsset: {
       assetId: "fa_in_004",
       fileName: "prod-opening-stock.pkg",
@@ -360,8 +360,8 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
       skipped: [
         {
           id: "sk1",
-          label: "WH-华东主仓 · SKU-1001（幂等跳过）",
-          detail: "来源身份已存在正式对象，重跑跳过",
+          label: "WH-华东主仓 · SKU-1001（已处理跳过）",
+          detail: "来源身份已存在业务对象，重跑跳过",
           code: "IDEMPOTENT_SKIP",
         },
         {
@@ -424,7 +424,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
     status: "APPLYING",
     formalDataFormed: false,
     notFormalDataMessage:
-      "修复批次仅针对冻结失败范围；已成功对象按来源身份幂等跳过，不会被覆盖或删除。",
+      "修复批次仅针对冻结失败范围；已成功对象按来源身份已处理跳过，不会被覆盖或删除。",
     inputAsset: {
       assetId: "fa_in_004",
       fileName: "prod-opening-stock.pkg",
@@ -467,7 +467,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
     openingPolicyHints: [
       {
         objectCode: "OPENING_STOCK",
-        message: "修复批次冻结失败范围；禁止用新文件直接覆盖已形成的正式记录。",
+        message: "修复批次冻结失败范围；禁止用新文件直接覆盖已形成的业务记录。",
       },
     ],
     allowedActions: ["CANCEL_PENDING", "VIEW_PROGRESS"],
@@ -497,7 +497,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
     status: "AWAITING_CONFIRMATION",
     formalDataFormed: false,
     notFormalDataMessage:
-      "生产批次尚未形成正式数据。生产应用前必须：关联验证环境通过结果、全部责任确认、无阻塞问题，且导入确认 work_item_type 已登记。",
+      "生产批次尚未形成业务数据。生产应用前必须：关联验证环境通过结果、全部责任确认、无阻塞问题，且导入确认任务类型已登记。",
     inputAsset: {
       assetId: "fa_in_006",
       fileName: "prod-card-ar.pkg",
@@ -533,12 +533,12 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
     openingPolicyHints: [
       {
         objectCode: "CARD_SALES_ORDER",
-        message: "卡券草稿不迁移；仅正式生效单据。",
+        message: "卡券草稿不迁移；仅生效单据。",
       },
       {
         objectCode: "CARD_OPENING_AR",
         message:
-          "期初已收 / 已开票为 0；逐单复核请进入 W13 卡券票款复核。",
+          "期初已收 / 已开票为 0；逐单复核请进入卡券票款复核。",
       },
     ],
     allowedActions: ["VIEW_ISSUES"],
@@ -552,7 +552,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
         action: "CONFIRM_SCOPE",
         code: "IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED",
         message:
-          "权威数据模型尚未登记导入确认 work_item_type；业务确认入口保持实施 blocker。",
+          "导入确认任务类型尚未登记；业务确认入口暂不可用。",
       },
       {
         action: "START_APPLY",
@@ -653,7 +653,7 @@ export const IMPORT_ISSUE_SEEDS: readonly ImportIssueRowView[] = [
     sourceRowNo: 77,
     sourceColumnName: "order_status",
     rowStatus: "SKIPPED",
-    errorDetail: "卡券草稿不迁移；该行已跳过，不进入试算与正式对象。",
+    errorDetail: "卡券草稿不迁移；该行已跳过，不进入试算与业务对象。",
     repairable: false,
   },
   {

@@ -407,7 +407,7 @@ function ApprovalDecisionPanel({
             disabled={isPending || rejectDisabled}
             reason={
               pendingDecision
-                ? "正式决定正在提交"
+                ? "决定正在提交"
                 : rejectDisabledReason
             }
             onClick={onReject}
@@ -428,7 +428,7 @@ function ApprovalDecisionPanel({
             disabled={isPending || approveDisabled}
             reason={
               pendingDecision
-                ? "正式决定正在提交"
+                ? "决定正在提交"
                 : approveDisabledReason
             }
             onClick={onApprove}

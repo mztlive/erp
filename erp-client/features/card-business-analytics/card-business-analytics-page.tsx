@@ -871,7 +871,7 @@ export function CardBusinessAnalyticsPage() {
                 </span>
                 <span aria-hidden>·</span>
                 <span>
-                  正式记录{" "}
+                  业务记录{" "}
                   <time
                     className="num"
                     dateTime={data.freshness.sourceFactWatermark}
@@ -1116,7 +1116,7 @@ export function CardBusinessAnalyticsPage() {
             <Alert>
               <AlertTitle>数据更新中</AlertTitle>
               <AlertDescription>
-                保留最近成功结果只读查看；导出将标注旧数据时间。更新只修复查询数据，不修改正式记录。
+                保留最近成功结果只读查看；导出将标注旧数据时间。更新只修复查询数据，不修改业务记录。
               </AlertDescription>
             </Alert>
           ) : null}
@@ -1125,7 +1125,7 @@ export function CardBusinessAnalyticsPage() {
             <Alert variant="destructive">
               <AlertTitle>数据更新失败</AlertTitle>
               <AlertDescription>
-                经营记录未被修改；展示上次成功数据。可前往 W29 查看数据异常。
+                经营记录未被修改；展示上次成功数据。可前往接口错误中心查看数据异常。
                 <Button
                   type="button"
                   size="sm"
@@ -1135,7 +1135,7 @@ export function CardBusinessAnalyticsPage() {
                     <Link href={data.governanceLinks.integrationErrorsHref} />
                   }
                 >
-                  打开 W29
+                  打开接口错误中心
                 </Button>
               </AlertDescription>
             </Alert>
@@ -1292,7 +1292,7 @@ export function CardBusinessAnalyticsPage() {
                       <Link href={data.governanceLinks.noneCoverageHref} />
                     }
                   >
-                    查看 NONE / 未归集（W29）
+                    查看未归集（接口错误中心）
                   </Button>
                   <Button
                     type="button"
@@ -1300,7 +1300,7 @@ export function CardBusinessAnalyticsPage() {
                     variant="outline"
                     render={<Link href={data.governanceLinks.backfillHref} />}
                   >
-                    历史回填（W30）
+                    历史消费回填
                   </Button>
                 </span>
               </>
@@ -1766,7 +1766,7 @@ export function CardBusinessAnalyticsPage() {
         open={exportPreviewOpen}
         onOpenChange={setExportPreviewOpen}
         title="导出预览"
-        description="导出为当前查询数据记录，非正式台账副本；下载时重新鉴权。"
+        description="导出为当前查询数据记录，非台账副本；下载时重新鉴权。"
       >
         {data ? (
           <div className="space-y-4 text-sm">

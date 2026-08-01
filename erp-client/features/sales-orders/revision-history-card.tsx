@@ -55,7 +55,7 @@ export function RevisionHistoryCard({
                   <div className="flex items-center gap-2">
                     <span className="num font-medium">v{rev.revisionNo}</span>
                     {isCurrent ? (
-                      <Badge variant="info">当前正式</Badge>
+                      <Badge variant="info">当前生效</Badge>
                     ) : (
                       <Badge variant="outline">历史记录</Badge>
                     )}

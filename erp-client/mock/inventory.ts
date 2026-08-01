@@ -22,7 +22,7 @@ export type StockBalanceRow = Readonly<{
   skuName: string
   specSummary: string
   baseUnit: string
-  /** 服务端正式字段，前端不得本地重算 */
+  /** 服务端字段，前端不得本地重算 */
   onHandQuantity: string
   reservedQuantity: string
   availableQuantity: string
@@ -711,12 +711,12 @@ export const INVENTORY_EXCLUDED_FULFILLMENT_KINDS = [
   {
     kind: "CARD_PHYSICAL",
     label: "卡券实体卡",
-    reason: "实体卡不进入 ERP 自有库存，不在 W10 展示卡号/卡密。",
+    reason: "实体卡不进入 ERP 自有库存，不在库存台账展示卡号/卡密。",
   },
   {
     kind: "SUPPLIER_DIRECT",
     label: "供应商直发",
-    reason: "外部供给进入 W21，不与自有库存合并。",
+    reason: "外部供给进入外部商品供给，不与自有库存合并。",
   },
   {
     kind: "ELECTRONIC",
@@ -759,7 +759,7 @@ export function sourceDocumentHref(
         documentType: type,
         documentId,
         documentNo: documentId,
-        label: "期初导入（W18）",
+        label: "期初导入",
         href: `/governance/imports?batchId=${encodeURIComponent(documentId)}`,
         workspaceId: "W18",
       }

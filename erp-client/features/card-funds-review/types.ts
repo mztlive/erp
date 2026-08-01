@@ -326,4 +326,4 @@ export const APPROVE_CONCLUSION_LABEL: Record<ApproveConclusion, string> = {
 }
 
 export const REJECT_FOLLOW_UP_COLLABORATION =
-  "Q5 未决：驳回仅形成本次 REJECTED 复核记录并完成当前任务，不创建或转交后继任务。请人工与财务负责人协作登记固定 work_item_type / 责任池 / handlerKey 后再启用驳回后继。"
+  "Q5 未决：驳回仅形成本次 REJECTED 复核记录并完成当前任务，不创建或转交后继任务。请人工与财务负责人协作登记固定任务类型与责任分工后再启用驳回后继。"

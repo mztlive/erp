@@ -44,7 +44,7 @@ import {
 const PERMISSION_VERSION = "pv-w10-demo-1"
 
 const OPENING_STOCK_NOTE =
-  "期初库存只能通过 W18 基准日实盘导入形成正式流水；旧商城 stock / total_stock 不作为 ERP 库存记录，本台账不会写入或展示旧商城库存字段。"
+  "期初库存只能通过导入与期初的基准日实盘导入形成流水；旧商城 stock / total_stock 不作为 ERP 库存记录，本台账不会写入或展示旧商城库存字段。"
 
 const EXCLUDED_NOTE = INVENTORY_EXCLUDED_FULFILLMENT_KINDS.map(
   (k) => `${k.label}：${k.reason}`

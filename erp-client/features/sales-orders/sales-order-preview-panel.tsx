@@ -155,7 +155,7 @@ export function SalesOrderPreviewPanel({ order }: SalesOrderPreviewPanelProps) {
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               {isCard
                 ? "卡券不走采购履约链；票款与映射在对象中心处理。不展示玩法/卡号/卡密。"
-                : "履约登记、票款核销、变更请在对象中心处理；正式单无直接编辑或人工关闭。"}
+                : "履约登记、票款核销、变更请在对象中心处理；已生效单无直接编辑或人工关闭。"}
             </p>
           </section>
 
@@ -341,7 +341,7 @@ export function SalesOrderPreviewPanel({ order }: SalesOrderPreviewPanelProps) {
             warning={
               order.commercialReadOnly
                 ? order.commercialReadOnlyReason ??
-                  "商业字段只读；正式变化须走销售变更单。"
+                  "商业字段只读；变更须走销售变更单。"
                 : undefined
             }
           />

@@ -27,7 +27,7 @@ export const W14_PERMISSION_DEMO: PermissionDemoSnapshot = {
 /** Warehouse write always fail-closed while Q1 unconfirmed. */
 export const WAREHOUSE_WRITE_CODE = "WAREHOUSE_WRITE_OWNER_UNCONFIRMED"
 export const WAREHOUSE_WRITE_MESSAGE =
-  "Q1 未确认：仓库资料与 SKU 策略写责任未指定。查询可用，全部写操作 fail-closed；仓储与系统管理员均不可维护。"
+  "Q1 未确认：仓库资料与 SKU 策略写责任未指定。查询可用，全部写操作暂不可用；仓储与系统管理员均不可维护。"
 
 export const MOCK_SENSITIVE_REVEALS: Record<string, string> = {
   "reveal:sup_1:bank": "6222 **** **** 0188 · 开户名：鲜果直供供应链有限公司",
@@ -254,7 +254,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
         { label: "基础单位", value: "盒" },
         { label: "规格签名", value: "sig:tea-09@v1" },
       ],
-      primaryBlocker: "基础单位已被正式单据引用，不可在同 SKU 修订中变更",
+      primaryBlocker: "基础单位已被已生效单据引用，不可在同 SKU 修订中变更",
       selectorEligibility: [
         {
           context: "sku_pick",
@@ -269,7 +269,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
           action: "CHANGE_BASE_UNIT",
           code: "BASE_UNIT_LOCKED",
           message:
-            "SKU 已被正式单据使用，不得修改基础单位。请「停用并新建 SKU」。",
+            "SKU 已被已生效单据使用，不得修改基础单位。请「停用并新建 SKU」。",
         },
         {
           action: "CHANGE_SPEC_SIGNATURE",
@@ -504,7 +504,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
         { label: "SKU 预警策略", value: "安全库存 · 默认（只读）" },
         { label: "库存摘要", value: "在库 1,280 · 预占 42" },
       ],
-      primaryBlocker: "写操作 fail-closed（Q1）",
+      primaryBlocker: "写操作暂不可用（本期）",
       selectorEligibility: [
         {
           context: "warehouse_pick",
@@ -537,7 +537,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
         { label: "SKU 预警策略", value: "低周转加强（只读）" },
         { label: "库存摘要", value: "在库 86 · 预占 0" },
       ],
-      primaryBlocker: "写操作 fail-closed（Q1）",
+      primaryBlocker: "写操作暂不可用（本期）",
       selectorEligibility: [
         {
           context: "warehouse_pick",
@@ -993,7 +993,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       {
         action: "CHANGE_BASE_UNIT",
         code: "BASE_UNIT_LOCKED",
-        message: "已被正式单据使用，不得修改基础单位。",
+        message: "已被已生效单据使用，不得修改基础单位。",
       },
     ],
     auditEvents: [],
@@ -1082,7 +1082,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
         action: "CHANGE_BASE_UNIT",
         code: "BASE_UNIT_LOCKED",
         message:
-          "SKU 已被正式单据使用，不得修改基础单位。请「停用并新建 SKU」。",
+          "SKU 已被已生效单据使用，不得修改基础单位。请「停用并新建 SKU」。",
       },
     ],
     auditEvents: [],
@@ -1559,7 +1559,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       },
     ],
     resourceFacts: [
-      { label: "写权限", value: "Q1 未确认 · fail-closed" },
+      { label: "写权限", value: "本期未确认 · 写操作暂不可用" },
       { label: "策略效果", value: "仅预警，不改库存余额" },
     ],
     warehouseStockSummary: {
@@ -1568,7 +1568,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       hasBlockingStock: true,
       w10Href: "/inventory?warehouseId=wh_1",
       policyNote:
-        "仓库 SKU 预警策略只生成预警信号，不写入或调整 W10 库存余额/预占。",
+        "仓库 SKU 预警策略只生成预警信号，不写入或调整库存台账余额/预占。",
     },
     allowedActions: ["VIEW", "EXPORT_ROW"],
     actionBlockers: [
@@ -1667,7 +1667,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       },
     ],
     resourceFacts: [
-      { label: "写权限", value: "Q1 未确认 · fail-closed" },
+      { label: "写权限", value: "本期未确认 · 写操作暂不可用" },
     ],
     warehouseStockSummary: {
       onHandQty: "86",
@@ -1749,13 +1749,13 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       note: "身份保留。",
     },
     sensitiveFields: [],
-    resourceFacts: [{ label: "写权限", value: "Q1 未确认 · fail-closed" }],
+    resourceFacts: [{ label: "写权限", value: "本期未确认 · 写操作暂不可用" }],
     warehouseStockSummary: {
       onHandQty: "0",
       reservedQty: "0",
       hasBlockingStock: false,
       w10Href: "/inventory?warehouseId=wh_3",
-      policyNote: "无库存；写操作仍因 Q1 fail-closed。",
+      policyNote: "无库存；写操作仍因本期策略暂不可用。",
     },
     allowedActions: ["VIEW"],
     actionBlockers: [

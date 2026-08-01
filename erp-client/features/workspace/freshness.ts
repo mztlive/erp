@@ -94,7 +94,7 @@ export function deriveWorkItemsFreshness(
   return {
     state: "fresh",
     updatedAtLabel: formatClock(freshness.workItemsUpdatedAt),
-    statusLabel: "正式待办已更新",
+    statusLabel: "待办已更新",
     dateTime: freshness.workItemsUpdatedAt,
   }
 }

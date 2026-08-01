@@ -346,12 +346,12 @@ export const EXECUTION_PROJECTION_SEEDS: readonly ProjectionSeed[] = [
       {
         action: "RETRY",
         code: "ESCALATED",
-        message: "已升级人工，对象级重试请在 W29 按原任务号处理。",
+        message: "已升级人工，对象级重试请在接口错误中心按原任务号处理。",
       },
       {
         action: "QUERY_RESULT",
         code: "ESCALATED",
-        message: "已有正式错误对象，请在 W29 处理。",
+        message: "已有错误记录，请在接口错误中心处理。",
       },
     ],
   },

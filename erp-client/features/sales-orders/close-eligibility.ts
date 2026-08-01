@@ -49,7 +49,7 @@ export function computeCloseEligibility(input: {
         ? "履约完成且应收已结清，系统已自动关闭。开票状态不影响关闭。"
         : primaryStatusLabel === "已作废"
           ? "作废单保留历史提交与驳回记录，不可关闭也不可恢复。"
-          : "草稿尚未进入正式状态。",
+          : "草稿尚未进入当前状态。",
     }
   }
 
@@ -94,7 +94,7 @@ function parseAmount(value: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
-/** 正式单不可直接编辑；ERP 主责正式单可发起销售变更。 */
+/** 已生效单不可直接编辑；ERP 主责已生效单可发起销售变更。 */
 export function canStartSalesChange(input: {
   ownerSystem: "erp" | "mall"
   primaryStatusLabel: string

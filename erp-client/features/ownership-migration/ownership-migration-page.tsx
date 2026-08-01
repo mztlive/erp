@@ -538,7 +538,7 @@ function OverviewView({
       {data && !data.hasModuleAccess ? (
         <BusinessEmptyState
           kind="no-scope"
-          title="无 W24 管理权限"
+          title="无主责迁移管理权限"
           description="不展示技术批次页。业务用户仍可从全局维护 Banner 查看授权摘要。"
         />
       ) : null}
@@ -575,7 +575,7 @@ function OverviewView({
           <Card size="sm">
             <CardContent className="grid gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-5">
               <Fact
-                label="一期同步水位"
+                label="一期同步进度"
                 value={data.statusSummary.phase1WatermarkLabel}
                 mono
               />
@@ -780,7 +780,7 @@ function OverviewView({
             <ShieldAlertIcon />
             <AlertTitle>范围与职责</AlertTitle>
             <AlertDescription>
-              仅已生效及之后、未作废的正式存量卡券销售单可迁移；商城草稿不入批次与统计。每批仅一位客户。销售 / 财务 / 基线确认职责分离，管理员不可代签。成功仅改主责标记。
+              仅已生效及之后、未作废的已生效存量卡券销售单可迁移；商城草稿不入批次与统计。每批仅一位客户。销售 / 财务 / 基线确认职责分离，管理员不可代签。成功仅改主责标记。
               {data.financeFieldsMasked ? (
                 <span className="mt-1 block font-medium">
                   当前角色票款字段已掩码，仅见确认状态。
@@ -804,7 +804,7 @@ function OverviewView({
             <BusinessEmptyState
               kind="no-data"
               title="尚未建立迁移批次"
-              description="创建批次须明确唯一客户，并完成正式范围预检。商城草稿不会进入批次。"
+              description="创建批次须明确唯一客户，并完成范围预检。商城草稿不会进入批次。"
             />
           ) : data.totalCount === 0 && hasFilters ? (
             <BusinessEmptyState
@@ -1072,7 +1072,7 @@ function BatchWizardView({
           />
           <Fact label="卡实例/余额基线" value={batch.cardBaselineSummary} />
           <Fact
-            label="最后水位"
+            label="最后同步时间"
             value={batch.lastSyncWatermark ?? "—"}
             mono
           />
@@ -1198,7 +1198,7 @@ function ScopeSection({ batch }: { batch: OwnershipMigrationBatchView }) {
         <CardHeader className="border-b">
           <CardTitle>迁移范围</CardTitle>
           <CardDescription>
-            仅已生效及之后、未作废的正式存量卡券销售单；一批仅一位客户。
+            仅已生效及之后、未作废的已生效存量卡券销售单；一批仅一位客户。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 pt-4">
@@ -1222,7 +1222,7 @@ function ScopeSection({ batch }: { batch: OwnershipMigrationBatchView }) {
         <CardHeader className="border-b">
           <CardTitle>排除说明（不入统计）</CardTitle>
           <CardDescription>
-            商城草稿与已作废单不迁移、不补建、不进入正式统计。
+            商城草稿与已作废单不迁移、不补建、不进入统计。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-2 pt-4">
@@ -1298,7 +1298,7 @@ function ConfirmationsSection({
         <BanIcon />
         <AlertTitle>三类确认独立 · 管理员不可代签</AlertTitle>
         <AlertDescription>
-          销售与财务通过 W02 完整任务信封提交；当前演示角色为{" "}
+          销售与财务通过待办队列完整提交；当前演示角色为{" "}
           <strong>{ROLE_LABEL[role]}</strong>
           。scopeHash / 分面变化会使旧确认失效并保留审计。
         </AlertDescription>
@@ -1335,7 +1335,7 @@ function ConfirmationsSection({
           facet="baseline"
           summary={batch.confirmations.baseline}
           scopeHash={batch.scopeHash}
-          objectSummary={`水位 ${batch.lastSyncWatermark ?? "—"} · 须在冻结+同步+核对后确认`}
+          objectSummary={`同步时间 ${batch.lastSyncWatermark ?? "—"} · 须在冻结+同步+核对后确认`}
           canAct={false}
           blockers={[
             {
@@ -1465,7 +1465,7 @@ function FreezeSyncSection({
           }
         />
         <Fact
-          label="最后水位"
+          label="最后同步时间"
           value={batch.lastSyncWatermark ?? "尚未执行最后同步"}
           mono
         />
@@ -1545,7 +1545,7 @@ function BaselineSection({
           <GateRow ok={batch.freeze.active} label="维护冻结已生效" />
           <GateRow
             ok={Boolean(batch.lastSyncWatermark)}
-            label="最后一期同步水位已记录"
+            label="最后一期同步进度已记录"
           />
           <GateRow ok={batch.fullReconcileDone} label="全量核对已完成" />
           <GateRow
@@ -1672,7 +1672,7 @@ function ExecutionSection({
         <TriangleAlertIcon />
         <AlertTitle>原子提交 · 无部分成功</AlertTitle>
         <AlertDescription>
-          任一项失败则全批未提交。进度百分比仅表示后台操作进度，不表示项目已正式迁移。
+          任一项失败则全批未提交。进度百分比仅表示后台操作进度，不表示项目已迁移。
           失败保持冻结并使用原批次续跑。
         </AlertDescription>
       </Alert>
@@ -1704,7 +1704,7 @@ function ExecutionSection({
                 )
               : 0
         }
-        label="迁移后台进度（非正式成功数）"
+        label="迁移后台进度（成功数以外）"
         description={
           job?.progressLabel ??
           "整批原子执行；未提交前所有项均为未迁移。"

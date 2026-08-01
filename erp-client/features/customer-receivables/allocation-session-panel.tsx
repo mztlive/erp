@@ -303,7 +303,7 @@ export function AllocationSessionPanel({
       setResult({
         status: "succeeded",
         title: isReceipt ? "回款已登记并核销" : "销项发票已登记并分配",
-        description: `正式单号 ${res.factNo}。未分配余额 ${res.unallocatedAmount}（服务端返回）。`,
+        description: `已生效单号 ${res.factNo}。未分配余额 ${res.unallocatedAmount}（服务端返回）。`,
         reference: res.operationId,
         facts: [
           { label: isReceipt ? "回款单号" : "发票号码", value: res.factNo },
@@ -396,7 +396,7 @@ export function AllocationSessionPanel({
         <Alert variant="info">
           <AlertTitle>来自销售单票款区</AlertTitle>
           <AlertDescription>
-            完成或取消后可回到 W05 原入口；筛选与主体在本会话内保留。
+            完成或取消后可回到销售单原入口；筛选与主体在本会话内保留。
             <Button
               type="button"
               size="sm"
@@ -601,7 +601,7 @@ export function AllocationSessionPanel({
 
       <AllocationWorkspace
         title="本次分配"
-        description="拟分配合计仅作输入提示，不冒充正式已核销金额。正式净分配由服务端返回。"
+        description="拟分配合计仅作输入提示，不冒充已核销金额。净分配由服务端返回。"
         summary={{
           totalToAllocate: (
             <MoneyValue value={factAmountStr || "0"} taxBasis="gross" />
@@ -746,7 +746,7 @@ export function AllocationSessionPanel({
         }}
         lockedFields={["往来主体", "记录编号（提交后）", "既有分配行"]}
         effects={[
-          "形成正式回款/发票记录与追加式 APPLY 分配",
+          "形成回款/发票记录与追加式 APPLY 分配",
           "同步更新应收开放余额与净分配（服务端）",
           "未分配余额按服务端策略保留并可见",
           "原任务号保证重复提交不重复过账",

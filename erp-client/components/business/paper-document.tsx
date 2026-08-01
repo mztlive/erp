@@ -84,7 +84,7 @@ const alignmentClasses = {
 /**
  * 通用纸质单据投影。
  *
- * 组件只排版调用方传入的正式记录，不计算金额、税额、大小写金额、状态或签章结果。
+ * 组件只排版调用方传入的业务记录，不计算金额、税额、大小写金额、状态或签章结果。
  * 外层在窄屏保留纸张宽度并横向滚动；article/table/thead/footer 提供打印语义。
  */
 function PaperDocument<Row>({
@@ -341,7 +341,7 @@ function PaperDocument<Row>({
         <footer className="mt-12 break-inside-avoid border-t border-border pt-4 text-xs text-muted-foreground">
           {footer ?? (
             <div className="flex items-center justify-between gap-6">
-              <span>此单据为系统正式数据的打印件</span>
+              <span>此单据为系统数据的打印件</span>
               <span>请以系统当前有效版本为准</span>
             </div>
           )}

@@ -256,14 +256,14 @@ export function SalesOrderDetailPage({
               : "自采购二次确认队列打开 · 关闭后可返回原队列位置与筛选"}
           </span>
           <Button type="button" size="sm" variant="outline" render={<Link href={returnTo} />}>
-            {fromWorkspace === "W09" ? "返回 W09 队列" : "返回 W07 队列"}
+            {fromWorkspace === "W09" ? "返回履约作业队列" : "返回二次确认队列"}
           </Button>
         </div>
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm">
         <span className="text-muted-foreground">
-          票款登记与核销在 W11 客户往来完成；本页只读展示回款/开票进度。
+          票款登记与核销在客户往来完成；本页只读展示回款/开票进度。
         </span>
         <Button
           type="button"
@@ -285,7 +285,7 @@ export function SalesOrderDetailPage({
       {order.nature === "physical_service" ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-3 text-sm">
           <span className="text-muted-foreground">
-            实物/服务履约在 W09 统一队列处理（入库/仓发/代发/电子/服务）；本页不代替过账。
+            实物/服务履约在履约作业统一队列处理（入库/仓发/代发/电子/服务）；本页不代替过账。
           </span>
           <Button
             type="button"
@@ -389,7 +389,7 @@ export function SalesOrderDetailPage({
             {order.commercialReadOnlyReason}
             {" "}创建来源 {ORIGIN_LABEL[order.originSystem]}
             ，当前唯一写入主责 {OWNER_LABEL[order.ownerSystem]}
-            。正式单无直接编辑入口。
+            。已生效单无直接编辑入口。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -714,7 +714,7 @@ export function SalesOrderDetailPage({
               </p>
               {isCard ? (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  卡券不因消费汇总提前完成履约或增加关闭条件；消费订单见 W25。
+                  卡券不因消费汇总提前完成履约或增加关闭条件；消费订单见商城消费订单。
                 </p>
               ) : null}
             </DocumentSection>
@@ -742,7 +742,7 @@ export function SalesOrderDetailPage({
         title="发起销售变更单"
         actionLabel="创建变更"
         confirmLabel="确认创建"
-        fromStatus={{ label: `正式 v${order.version}`, tone: "success" }}
+        fromStatus={{ label: `v${order.version}`, tone: "success" }}
         toStatus={{ label: "变更工作副本", tone: "warning" }}
         lockedFields={["销售版本", "业务性质", "稳定销售单号"]}
         effects={[

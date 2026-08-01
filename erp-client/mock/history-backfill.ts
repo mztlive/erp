@@ -12,7 +12,7 @@ import type {
 } from "@/features/history-backfill/types"
 
 const SCOPE_NOTE =
-  "正式范围半开区间 [rangeStart, T)。occurredAt = T 的记录不进入历史回填，按实时/补投契约处理。"
+  "生效范围半开区间 [rangeStart, T)。occurredAt = T 的记录不进入历史回填，按实时/补投契约处理。"
 
 const LEGACY_NOTE =
   "T 前支付只补台账，履约链固定 LEGACY_MANUAL，不创建供应商订单、取消或退款动作。"
@@ -214,7 +214,7 @@ export const JOB_SEEDS: HistoryBackfillJobCore[] = [
       {
         action: "START",
         code: "JOB_ALREADY_EXISTS",
-        message: "禁止新建重叠正式批次；请续跑原任务 HB-20260728-03。",
+        message: "禁止新建重叠业务批次；请续跑原任务 HB-20260728-03。",
       },
     ],
   }),
@@ -279,7 +279,7 @@ export const JOB_SEEDS: HistoryBackfillJobCore[] = [
         action: "CONFIRM_REPORT",
         code: "REPORT_REVIEW_POLICY_MISSING",
         message:
-          "报告复核策略未配置：仅可下载标记为「技术报告 · 未确认」的技术报告，不得宣称全历史完成或解锁正式下游。",
+          "报告复核策略未配置：仅可下载标记为「技术报告 · 未确认」的技术报告，不得宣称全历史完成或解锁下游。",
       },
     ],
   }),
@@ -401,7 +401,7 @@ export const JOB_SEEDS: HistoryBackfillJobCore[] = [
       {
         action: "START",
         code: "JOB_ALREADY_EXISTS",
-        message: "禁止新建重叠正式批次；请续跑原任务并复用原任务号。",
+        message: "禁止新建重叠业务批次；请续跑原任务并复用原任务号。",
       },
     ],
   }),
@@ -560,7 +560,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
       formalFactSummary: "已存在同一业务记录 · 原回填任务写入",
     },
     whitelistFields: [
-      { field: "dedupeNote", label: "去重说明", value: "与原任务重跑重叠，保留首份正式记录" },
+      { field: "dedupeNote", label: "去重说明", value: "与原任务重跑重叠，保留首份业务记录" },
     ],
   },
   // 待归集 → W29

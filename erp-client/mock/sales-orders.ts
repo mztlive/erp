@@ -495,7 +495,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     ownerName: "李哲",
     submittedAt: "2026-03-18 11:02",
     welfareScene: "消费金",
-    remark: "商城侧作废后同步；ERP 保留正式记录",
+    remark: "商城侧作废后同步；ERP 保留业务记录",
     version: 2,
     settlementEntity: "青禾科技有限公司",
     sellerEntity: SELLER,

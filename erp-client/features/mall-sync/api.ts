@@ -360,9 +360,9 @@ function buildOwnership(stage: OwnershipStage) {
           "NECESSARY_MAPPING_REPAIR" as const,
         ],
       },
-      mallWriteBoundary: "商城：冻结范围内业务写入禁用（由 W24 批次约束）",
+      mallWriteBoundary: "商城：冻结范围内业务写入禁用（由主责迁移批次约束）",
       erpWriteBoundary:
-        "ERP：仅允许 W24 授权的最终同步 / 全量核对 / 必要映射修复；禁止普通增量与按单补拉",
+        "ERP：仅允许主责迁移授权的最终同步 / 全量核对 / 必要映射修复；禁止普通增量与按单补拉",
     }
   }
   if (stage === "SECOND_PHASE_ERP_OWNED") {
@@ -377,8 +377,8 @@ function buildOwnership(stage: OwnershipStage) {
       sealedAt: "2026-07-15T18:00:00+08:00",
       finalWatermark: "wm_final_phase1_20260715",
       migrationReference: "W24 · 已封存",
-      mallWriteBoundary: "第一期轮询已封存；商城执行信息见 W23",
-      erpWriteBoundary: "ERP 主责；W17 仅历史只读，当前治理见 W23 / W24 / W29",
+      mallWriteBoundary: "第一期轮询已封存；商城执行信息见执行信息页",
+      erpWriteBoundary: "ERP 主责；商城同步仅历史只读，当前治理见执行信息 / 主责迁移 / 接口错误中心",
     }
   }
   return {
@@ -429,7 +429,7 @@ function metricsForRole(
     {
       key: "lag",
       label: "同步延迟",
-      value: sessionSourceUnavailable ? "水位未推进" : "4 分",
+      value: sessionSourceUnavailable ? "同步进度未推进" : "4 分",
       detail: sessionSourceUnavailable ? "来源不可用" : "最近成功 09:12",
       visible: true,
       targetView: "overview",
@@ -455,7 +455,7 @@ function metricsForRole(
       key: "recon",
       label: "核对差异",
       count: MALL_RECONCILIATION.differenceCount,
-      detail: "完整指纹",
+      detail: "完整版本标识",
       visible: true,
       targetView: "reconciliation",
     },
@@ -508,7 +508,7 @@ export async function fetchMallSyncPage(
       blockers.push({
         action: "RETRY_FAILED_JOB",
         code: "STAGE_NOT_FIRST_PHASE",
-        message: "按单补拉与普通失败重试仅在第一阶段可用；冻结期请回 W24 批次续跑",
+        message: "按单补拉与普通失败重试仅在第一阶段可用；冻结期请回主责迁移批次续跑",
       })
     }
     if (role !== "admin") {
@@ -584,7 +584,7 @@ export async function fetchMallSyncPage(
     metrics: metricsForRole(role, stage, mappingTasks),
     sourceUnavailable: sessionSourceUnavailable,
     sourceUnavailableMessage: sessionSourceUnavailable
-      ? "商城继续运行，ERP 水位未推进。最近成功水位 wm_20260801_080000；恢复后按原水位补齐。"
+      ? "商城继续运行，ERP 同步进度未推进。最近成功同步点 wm_20260801_080000；恢复后按原同步点补齐。"
       : undefined,
     viewerRole: role,
     viewerRoleLabel: DEMO_ROLE_LABEL[role],
@@ -692,7 +692,7 @@ export async function triggerManualIncremental(input: {
     return {
       status: "failed",
       code: "STAGE_NOT_FIRST_PHASE",
-      message: "立即增量仅在第一阶段可用；冻结期请从 W24 当前批次执行最终同步",
+      message: "立即增量仅在第一阶段可用；冻结期请从主责迁移当前批次执行最终同步",
     }
   }
   const missing = assertManualGovernance(policy)
@@ -720,7 +720,7 @@ export async function triggerManualIncremental(input: {
       jobNo,
       jobType: "INCREMENTAL",
       jobTypeLabel: JOB_TYPE_LABEL.INCREMENTAL,
-      rangeStart: "（服务端按安全水位计算）",
+      rangeStart: "（服务端按安全同步点计算）",
       rangeEnd: "（服务端 safeNow）",
       status: "RUNNING",
       statusLabel: "运行中",
@@ -746,7 +746,7 @@ export async function triggerManualIncremental(input: {
     status: "succeeded",
     jobId,
     jobNo,
-    message: `已创建增量任务 ${jobNo}。范围由服务端按水位生成，客户端不可移动高水位。`,
+    message: `已创建增量任务 ${jobNo}。范围由服务端按同步点生成，客户端不可改写同步进度。`,
   }
 }
 
@@ -841,7 +841,7 @@ export async function retryFailedJob(input: {
     return {
       status: "failed",
       code: "STAGE_NOT_FIRST_PHASE",
-      message: "普通失败重试仅第一阶段可用；冻结期回 W24 原批次续跑",
+      message: "普通失败重试仅第一阶段可用；冻结期回主责迁移原批次续跑",
     }
   }
   const job = [...sessionManualJobs, ...MALL_SYNC_JOBS].find(
@@ -854,7 +854,7 @@ export async function retryFailedJob(input: {
     return {
       status: "failed",
       code: "NOT_RETRYABLE",
-      message: "仅失败/部分失败任务可重试；禁止手工标记成功或推进水位",
+      message: "仅失败/部分失败任务可重试；禁止手工标记成功或推进同步进度",
     }
   }
 
@@ -862,7 +862,7 @@ export async function retryFailedJob(input: {
     status: "succeeded",
     jobId: `retry_${job.jobId}`,
     jobNo: `${job.jobNo}-R1`,
-    message: `已关联原任务发起重试。原范围与水位规则不变；不回退已安全捕获水位。`,
+    message: `已关联原任务发起重试。原范围与同步规则不变；不回退已安全捕获的同步进度。`,
   }
 }
 
@@ -1083,7 +1083,7 @@ export async function deferMapping(input: {
     mappingTaskStatus: "PENDING",
     leaseDisposition: "RELEASED",
     message:
-      "已记录暂挂原因。mappingTaskStatus 仍为待处理，不写 paused、不完成任务。",
+      "已记录暂挂原因。映射任务仍为待处理，不会暂停或完成任务。",
   }
 }
 
@@ -1114,7 +1114,7 @@ export async function reapplyMallSnapshot(input: {
     return {
       status: "failed",
       code: "MAPPING_NOT_RESOLVED",
-      message: "仅 mappingTaskStatus=RESOLVED 时可重新归集",
+      message: "仅映射任务已解决时可重新归集",
     }
   }
 

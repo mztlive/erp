@@ -630,7 +630,7 @@ export async function querySupplierResult(
   if (seed.hasQueryCapability === false) {
     return {
       status: "blocked",
-      message: "供应商无查询能力，请进入接口错误与对账（W29）",
+      message: "供应商无查询能力，请进入接口错误与对账中心",
       reference: "W29",
     }
   }

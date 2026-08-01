@@ -347,7 +347,7 @@ export function PurchaseOrderDetailPage({
           "已形成不可修改的采购提交与采购审核任务；编辑已结束。",
         reference: response.reference,
         facts: [
-          { label: "正式编号", value: response.data.purchaseNo },
+          { label: "单据编号", value: response.data.purchaseNo },
           { label: "submissionId", value: response.data.submissionId },
           { label: "subjectHash", value: response.data.subjectHash },
           { label: "审核任务", value: response.data.workItemId },
@@ -433,7 +433,7 @@ export function PurchaseOrderDetailPage({
         status: "rejected",
         title: "财务已驳回",
         description:
-          "已记录正式 REJECTED 结论并完成当前审核任务；不创建替代任务。采购可改草稿后重新提交。",
+          "已记录驳回结论并完成当前审核任务；不创建替代任务。采购可改草稿后重新提交。",
         reference: response.reference,
         facts: [
           {
@@ -909,7 +909,7 @@ export function PurchaseOrderDetailPage({
                             <Link href={w12PayHref} />
                           }
                         >
-                          去 W12 登记付款
+                          去供应商往来登记付款
                         </Button>
                       ) : undefined
                     }
@@ -1000,7 +1000,7 @@ export function PurchaseOrderDetailPage({
               <div className="mt-4 flex flex-wrap gap-2">
                 {canFulfill ? (
                   <Button type="button" render={<Link href="/fulfillment" />}>
-                    去 W09 履约
+                    去履约作业
                   </Button>
                 ) : (
                   <Button type="button" disabled title={fulfillBlocker?.message}>
@@ -1014,7 +1014,7 @@ export function PurchaseOrderDetailPage({
                     variant="outline"
                     render={<Link href={w12PayHref} />}
                   >
-                    先完成 W12 付款
+                    先完成供应商往来付款
                   </Button>
                 ) : null}
               </div>
@@ -1036,7 +1036,7 @@ export function PurchaseOrderDetailPage({
                         size="sm"
                         render={<Link href={w12PayHref} />}
                       >
-                        去 W12
+                        去供应商往来
                       </Button>
                     }
                   />
@@ -1100,7 +1100,7 @@ export function PurchaseOrderDetailPage({
                   disabled={!canPay}
                   render={<Link href={w12PayHref} />}
                 >
-                  去 W12 供应商往来
+                  去供应商往来 供应商往来
                 </Button>
               </div>
             </DocumentSection>
@@ -1197,7 +1197,7 @@ export function PurchaseOrderDetailPage({
         toStatus={{ label: "待财务审核", tone: "warning" }}
         lockedFields={[
           "供应商 / 采购类型 / 履约责任 / 付款条件",
-          "商品行（W07 确认分行）与物流费用",
+          "商品行（二次确认分行）与物流费用",
           "销售分配与服务端金额",
         ]}
         effects={[
@@ -1225,7 +1225,7 @@ export function PurchaseOrderDetailPage({
         ]}
         effects={[
           "形成采购版本与应付原始分录",
-          "完成当前审核 work_item",
+          "完成当前审核任务",
           "不登记实际付款；履约受先款门禁约束",
         ]}
         nextDepartment="履约 / 付款"
@@ -1594,8 +1594,8 @@ function ReviewSurface({
       <CardHeader className="border-b border-border">
         <CardTitle>财务审核视图</CardTitle>
         <CardDescription>
-          采购提交只读；无字段编辑器。正式决策使用简化 mock（非完整 W02
-          envelope 字段回显，但含 submission / lockVersion / 幂等）。
+          采购提交只读；无字段编辑器。决策使用简化演示（非完整待办流程
+          提交字段回显，但含 submission / lockVersion / 任务号）。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-4">

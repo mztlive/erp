@@ -18,7 +18,7 @@ function statusMeta(status: ContractStatus) {
 
 /**
  * 演示合同列表：服务端聚合字段已预计算。
- * 不含“合同金额”——业务模型未定义该正式记录。
+ * 不含“合同金额”——业务模型未定义该业务记录。
  */
 export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
   {

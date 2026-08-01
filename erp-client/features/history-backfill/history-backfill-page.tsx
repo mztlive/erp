@@ -526,7 +526,7 @@ function JobListView({
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
           title="历史消费回填"
-          description="管理 [requiredHistoryStart, T) 正式历史回填任务。"
+          description="管理 [requiredHistoryStart, T) 历史回填任务。"
         />
         <BusinessEmptyState
           kind="no-scope"
@@ -566,7 +566,7 @@ function JobListView({
             className="max-sm:hidden"
             onClick={() => setCreateOpen(true)}
           >
-            创建正式回填任务
+            创建回填任务
           </Button>
         }
       />
@@ -897,7 +897,7 @@ function CreateBackfillSheet({
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" size="detail" className="overflow-y-auto">
         <SheetHeader>
-          <SheetTitle>创建正式回填任务</SheetTitle>
+          <SheetTitle>创建回填任务</SheetTitle>
           <SheetDescription>
             rangeStart 固定等于服务端登记的 requiredHistoryStart，不可改晚。范围半开
             [requiredHistoryStart, T)。
@@ -955,7 +955,7 @@ function CreateBackfillSheet({
 
             {context.coverageGaps.length > 0 ? (
               <Alert variant="destructive">
-                <AlertTitle>覆盖缺口 · 禁止开始正式回填</AlertTitle>
+                <AlertTitle>覆盖缺口 · 禁止开始回填</AlertTitle>
                 <AlertDescription>
                   <ul className="mt-1 list-disc space-y-1 pl-4">
                     {context.coverageGaps.map((g) => (
@@ -983,9 +983,9 @@ function CreateBackfillSheet({
 
             {context.hasOverlappingFormalJob ? (
               <Alert variant="destructive">
-                <AlertTitle>禁止重叠正式批次</AlertTitle>
+                <AlertTitle>禁止重叠业务批次</AlertTitle>
                 <AlertDescription>
-                  已存在正式任务 {context.overlappingJobNo}
+                  已存在回填任务 {context.overlappingJobNo}
                   。修复只能续跑原任务，不能新建覆盖同一 [rangeStart, T) 的批次。
                 </AlertDescription>
               </Alert>
@@ -1212,7 +1212,7 @@ function JobDetailView({
           },
           {
             id: "downstream",
-            label: "正式下游",
+            label: "下游功能",
             status: {
               label: currentJob.formalDownstreamUnlocked ? "已解锁" : "关闭",
               tone: currentJob.formalDownstreamUnlocked ? "success" : "warning",
@@ -1238,7 +1238,7 @@ function JobDetailView({
                 size="sm"
                 onClick={() => setStartOpen(true)}
               >
-                开始正式回填
+                开始回填
               </Button>
             ) : null}
             {canResume ? (
@@ -1279,15 +1279,15 @@ function JobDetailView({
           <AlertDescription>
             processingStatus=COMPLETED 仅表示技术处理完成。当前报告确认状态为「
             {REPORT_REVIEW_STATUS_LABEL[currentJob.reportReviewStatus]}
-            」。正式下游门禁：
-            {currentJob.formalDownstreamUnlocked ? "已解锁" : "fail-closed 关闭"}。
+            」。下游功能门禁：
+            {currentJob.formalDownstreamUnlocked ? "已解锁" : "保持关闭"}。
           </AlertDescription>
         </Alert>
       ) : null}
 
       {!currentJob.coverageComplete ? (
         <Alert variant="destructive">
-          <AlertTitle>全历史覆盖不足 · 阻断正式执行</AlertTitle>
+          <AlertTitle>全历史覆盖不足 · 阻断执行</AlertTitle>
           <AlertDescription>
             requiredHistoryStart={formatDay(currentJob.requiredHistoryStart)}，
             sourceCoverageStart=
@@ -1384,9 +1384,9 @@ function JobDetailView({
       <div className="grid gap-3 rounded-2xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="发起人" value={currentJob.requestedBy} />
         <Fact label="发起时间" value={formatTime(currentJob.requestedAt)} />
-        <Fact label="来源水位" value={formatTime(currentJob.sourceAsOf)} />
+        <Fact label="来来源更新时间" value={formatTime(currentJob.sourceAsOf)} />
         <Fact
-          label="幂等命名空间"
+          label="原任务标识"
           value={currentJob.idempotencyNamespace}
           mono
         />
@@ -1396,7 +1396,7 @@ function JobDetailView({
 
       {startBlockers.length > 0 && !canStart ? (
         <Alert>
-          <AlertTitle>正式动作阻断</AlertTitle>
+          <AlertTitle>处理动作阻断</AlertTitle>
           <AlertDescription>
             <ul className="list-disc pl-4">
               {startBlockers.map((b) => (
@@ -1471,8 +1471,8 @@ function JobDetailView({
       <FormalActionConfirmDialog
         open={startOpen}
         onOpenChange={setStartOpen}
-        actionLabel="开始正式回填"
-        title="确认开始正式历史回填"
+        actionLabel="开始回填"
+        title="确认开始历史回填"
         description="将冻结全历史范围并创建后台任务。只追加缺失记录；T 前支付不下单；不可改范围。"
         fromStatus={{
           label: PROCESSING_STATUS_LABEL[currentJob.processingStatus],
@@ -1490,7 +1490,7 @@ function JobDetailView({
           "成本按 ACTUAL / 时点 STANDARD / NONE 评估",
         ]}
         irreversibleEffects={[
-          "已成功写入的正式记录不因失败或续跑回滚",
+          "已成功写入的业务记录不因失败或续跑回滚",
           "范围冻结后不可修改",
         ]}
         pending={commandMutation.isPending}
@@ -1502,7 +1502,7 @@ function JobDetailView({
         onOpenChange={setResumeOpen}
         actionLabel="续跑原任务"
         title="确认续跑失败/中断任务"
-        description="沿原任务、原范围与原幂等命名空间续跑，不新建重叠正式批次。"
+        description="沿原任务、原范围与原任务标识续跑，不新建重叠业务批次。"
         fromStatus={{
           label: PROCESSING_STATUS_LABEL[currentJob.processingStatus],
           tone: PROCESSING_STATUS_TONE[currentJob.processingStatus],
@@ -1511,7 +1511,7 @@ function JobDetailView({
         lockedFields={[
           `任务 ${currentJob.jobNo}`,
           `范围 [${formatDay(currentJob.rangeStart)}, ${formatDay(currentJob.rangeEnd)})`,
-          `幂等 ${currentJob.idempotencyNamespace}`,
+          `原任务标识 ${currentJob.idempotencyNamespace}`,
           `已成功 ${currentJob.progress.insertedCount} · 待处理剩余项`,
         ]}
         effects={["逐项仍使用相同业务记录键", "已成功记录保持不变"]}
@@ -1813,7 +1813,7 @@ function ItemsTable({
                   variant="outline"
                   className="h-7 text-xs"
                 >
-                  去 W29 处理
+                  去接口错误中心处理
                   <ExternalLinkIcon className="size-3" />
                 </Button>
               </div>
@@ -1993,7 +1993,7 @@ function ReportSection({
               <AlertTitle>技术报告 · 未确认</AlertTitle>
               <AlertDescription>
                 报告复核策略未配置或报告未确认时，下载固定标「技术报告 ·
-                未确认」。确认动作与正式下游门禁 fail-closed；不得仅因技术完成解锁。
+                未确认」。确认动作与下游门禁保持关闭；不得仅因技术完成解锁。
               </AlertDescription>
             </Alert>
           ) : null}
@@ -2009,7 +2009,7 @@ function ReportSection({
             <Alert>
               <AlertTitle>尚未全历史最终完成</AlertTitle>
               <AlertDescription>
-                当前不可宣称「全历史回填最终完成」。正式下游：
+                当前不可宣称「全历史回填最终完成」。下游功能：
                 {job.formalDownstreamUnlocked ? "已解锁" : "关闭"}。
               </AlertDescription>
             </Alert>

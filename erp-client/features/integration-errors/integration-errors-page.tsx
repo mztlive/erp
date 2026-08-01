@@ -451,7 +451,7 @@ export function IntegrationErrorsPage({
   )
 
   const ensureLease = React.useCallback(async (): Promise<SessionLease> => {
-    if (!item?.workItem) throw new Error("当前项无 work_item")
+    if (!item?.workItem) throw new Error("当前项无关联任务")
     const existing = leaseRef.current
     if (
       existing &&
@@ -915,7 +915,7 @@ export function IntegrationErrorsPage({
         metadata={
           <DataFreshness
             state="fresh"
-            label="集成水位"
+            label="集成更新时间"
             updatedAt={formatTime(view?.context.updatedAt)}
             dateTime={view?.context.updatedAt}
           />
@@ -1360,7 +1360,7 @@ export function IntegrationErrorsPage({
                         : "对账差异"}
                       {item.workItem
                         ? ` · workItem ${item.workItem.workItemId}`
-                        : " · 无 work_item（直接对账）"}
+                        : " · 无关联任务（直接对账）"}
                     </CardDescription>
                     <div className="flex flex-wrap gap-2 pt-1">
                       <BusinessStatusBadge
@@ -1411,8 +1411,8 @@ export function IntegrationErrorsPage({
                             ? "不展示密钥或完整签名材料。"
                             : item.classification.errorClass ===
                                 "parameter-or-mapping"
-                              ? "请先到 W21/W17 修复映射。"
-                              : "请进入 W26 售后/补偿路径。"}
+                              ? "请先到外部商品供给/商城同步修复映射。"
+                              : "请进入供应商订单售后/补偿路径。"}
                         </AlertDescription>
                       </Alert>
                     ) : null}
@@ -1477,7 +1477,7 @@ export function IntegrationErrorsPage({
                           },
                           {
                             id: "watermark",
-                            field: "水位",
+                            field: "更新时间",
                             before: formatTime(item.difference.watermark),
                             after: formatTime(item.difference.watermark),
                             note: item.difference.differenceType,
@@ -1694,7 +1694,7 @@ export function IntegrationErrorsPage({
                         rows={2}
                         value={comment}
                         onChange={(e) => setComment(e.target.value)}
-                        placeholder="可选说明（不覆盖正式证据）"
+                        placeholder="可选说明（不覆盖业务证据）"
                       />
                     </div>
 
@@ -1813,7 +1813,7 @@ export function IntegrationErrorsPage({
                     {!item.hasWorkItem ? (
                       <div className="space-y-3 rounded-xl border border-dashed p-3">
                         <p className="text-sm font-medium">
-                          直接对账（无 work_item）
+                          直接对账（无关联任务）
                         </p>
                         <p className="text-xs text-muted-foreground">
                           终结只能「确认无误 / 确认有效差异」，引用原因注册表与受控证据；不得伪造任务 CLOSED。
@@ -1914,7 +1914,7 @@ export function IntegrationErrorsPage({
                           <Alert variant="warning">
                             <AlertTitle>原因注册表未配置</AlertTitle>
                             <AlertDescription>
-                              确认无误/有效差异均禁用；只能补证或转为正式任务。
+                              确认无误/有效差异均禁用；只能补证或转为任务。
                             </AlertDescription>
                           </Alert>
                         )}

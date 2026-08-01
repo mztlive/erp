@@ -283,7 +283,7 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
   },
   sync: {
     title: "来源同步失败",
-    description: "来源数据与现有正式记录已保留，请进入同步任务处理。",
+    description: "来源数据与现有业务记录已保留，请进入同步任务处理。",
     icon: RefreshCwIcon,
     variant: "destructive",
     tone: "destructive",
@@ -291,7 +291,7 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
   },
   integration: {
     title: "外部接口失败",
-    description: "正式业务记录已保留，请进入接口错误中心查看后续处理。",
+    description: "业务记录已保留，请进入接口错误与对账中心查看后续处理。",
     icon: CloudOffIcon,
     variant: "destructive",
     tone: "destructive",
@@ -299,7 +299,7 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
   },
   projection: {
     title: "查询模型更新失败",
-    description: "当前显示的是上次成功数据，正式业务记录未被修改。",
+    description: "当前显示的是上次成功数据，业务记录未被修改。",
     icon: RotateCcwIcon,
     variant: "warning",
     tone: "warning",
@@ -623,7 +623,7 @@ const formalResultPresets: Record<
   FormalResultPreset
 > = {
   succeeded: {
-    title: "正式操作已完成",
+    title: "操作已完成",
     description: "结果已经形成，并可在关联单据与审计记录中追溯。",
     label: "已完成",
     icon: CircleCheckIcon,
@@ -631,7 +631,7 @@ const formalResultPresets: Record<
     tone: "success",
   },
   rejected: {
-    title: "正式操作未通过",
+    title: "操作未通过",
     description: "本次操作未形成目标结果，请根据原因继续处理。",
     label: "未通过",
     icon: CircleXIcon,
@@ -639,7 +639,7 @@ const formalResultPresets: Record<
     tone: "destructive",
   },
   blocked: {
-    title: "正式操作被阻断",
+    title: "操作被阻断",
     description: "当前前置条件尚未满足，本次操作未形成处理结果。",
     label: "已阻断",
     icon: TriangleAlertIcon,
@@ -647,7 +647,7 @@ const formalResultPresets: Record<
     tone: "warning",
   },
   processing: {
-    title: "正式操作正在处理",
+    title: "操作正在处理",
     description: "结果尚未确定，可安全离开并在后台任务中继续查看。",
     label: "处理中",
     icon: LoaderCircleIcon,

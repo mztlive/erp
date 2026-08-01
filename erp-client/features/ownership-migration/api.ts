@@ -217,7 +217,7 @@ function projectBatch(
       code: role === "NO_MODULE" ? "NO_MODULE_ACCESS" : "READ_ONLY",
       message:
         role === "NO_MODULE"
-          ? "无 W24 管理权限；仅可通过维护 Banner 查看授权摘要。"
+          ? "无主责迁移管理权限；仅可通过维护 Banner 查看授权摘要。"
           : "业务用户只读查看本人客户是否在迁移范围。",
     })
   }
@@ -665,7 +665,7 @@ export async function submitMigrationFormal(
       cutoverId: command.cutoverId,
       status: "NOT_COMMITTED",
       nextAction: "无已登记处理结果",
-      message: "未找到对应正式操作记录。",
+      message: "未找到对应操作记录。",
     }
   }
 
@@ -1136,7 +1136,7 @@ export async function submitMigrationFormal(
         status: "COMMITTED",
         enabledAt: cutover.enabledAt,
         nextAction: "只读查看；不可修改 T",
-        message: "T 已登记，返回既有记录（幂等）。",
+        message: "时间点已登记，返回既有记录（未重复创建）。",
       }
     }
     const allPass = cutover.prerequisites.every((p) => p.passed)
@@ -1178,7 +1178,7 @@ export async function submitMigrationFormal(
       status: "COMMITTED",
       enabledAt,
       committedAt: enabledAt,
-      nextAction: "T 后支付进入自动供应商履约；历史回填见 W30",
+      nextAction: "T 后支付进入自动供应商履约；历史回填见历史消费回填",
       message: "唯一 T 已登记，不可修改或删除。",
     }
     formalOps.set(requestId, result)
@@ -1191,7 +1191,7 @@ export async function submitMigrationFormal(
       status: "NOT_COMMITTED",
       nextAction: "使用现有演示批次",
       message:
-        "演示环境使用固定种子批次；创建须明确唯一客户且正式范围已预检。",
+        "演示环境使用固定种子批次；创建须明确唯一客户且生效范围已预检。",
     }
   }
 

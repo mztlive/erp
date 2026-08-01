@@ -204,7 +204,7 @@ function baseAllowed(
       blockers.push({
         action: "CONFIRM_NO_ERROR",
         code: "REASON_REGISTRY_MISSING",
-        message: "对账原因注册表未配置，终结动作 fail-closed",
+        message: "对账原因注册表未配置，终结动作已阻断",
       })
     }
   }
@@ -976,7 +976,7 @@ export async function closeIntegrationTask(
     status: "succeeded",
     title: input.kind === "CLOSE_DUPLICATE" ? "已关闭重复任务" : "已关闭误派",
     description:
-      "CloseWorkItemEnvelope 返回 CLOSED；不写业务解决结论，不影响正式记录。",
+      "CloseWorkItemEnvelope 返回 CLOSED；不写业务解决结论，不影响业务记录。",
     reference: result.closureRecordId,
     outcome:
       input.kind === "CLOSE_DUPLICATE" ? "CLOSED_DUPLICATE" : "CLOSED_MISROUTED",
@@ -1050,9 +1050,9 @@ export async function applyDirectReconciliation(
   if (seed.hasWorkItem || seed.workItem) {
     return {
       status: "rejected",
-      title: "存在 work_item",
+      title: "存在关联任务",
       description:
-        "有任务的差异须走任务信封；直接对账命令不得完成/转交/关闭 work_item。",
+        "有任务的差异须走任务流程；直接对账不得完成、转交或关闭任务。",
       stayOnItem: true,
     }
   }
@@ -1085,7 +1085,7 @@ export async function applyDirectReconciliation(
       status: "succeeded",
       title: "已追加差异处理记录",
       description:
-        "差异保持非终态；未完成/关闭任何 work_item。",
+        "差异保持非终态；未完成或关闭任何任务。",
       reference: input.operationId,
       outcome: "EVIDENCE_ADDED",
       stayOnItem: true,
@@ -1100,7 +1100,7 @@ export async function applyDirectReconciliation(
     return {
       status: "blocked",
       title: "原因注册表未配置",
-      description: "确认无误/有效差异均 fail-closed，不得自由字符串原因。",
+      description: "确认无误/有效差异均已阻断，不得使用自由文本原因。",
       stayOnItem: true,
     }
   }
@@ -1167,7 +1167,7 @@ export async function applyDirectReconciliation(
         ? "已确认无误"
         : "已确认有效差异",
     description:
-      "仅追加 reconciliation_difference_resolution；resultingStatus 非任务 CLOSED，未伪造 work_item 终态。",
+      "仅追加对账处理记录；不会伪造任务完成状态。",
     reference: input.operationId,
     outcome: terminalOutcome,
     stayOnItem: false,
@@ -1197,7 +1197,7 @@ export async function queryIntegrationIdempotency(
     }
     return {
       status: "succeeded",
-      title: "幂等查询已得结果",
+      title: "已查到处理结果",
       description: "请根据结果继续处理；非终结动作不自动下一项。",
       reference: key,
       stayOnItem: true,

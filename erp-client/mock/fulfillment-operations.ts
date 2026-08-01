@@ -278,7 +278,7 @@ export const FULFILLMENT_OPERATIONS_SEED: readonly FulfillmentTask[] = [
       remaining: "40",
     }),
     summary: "供应商直发客户 · 不写自有库存流水",
-    impact: "登记后销售可在 W06 验收；物流签收≠验收",
+    impact: "登记后销售可在客户验收完成登记；物流签收≠验收",
     allowedActions: ["POST", "SAVE", "DEFER"],
     actionBlockers: [],
   },
@@ -413,7 +413,7 @@ export const FULFILLMENT_OPERATIONS_SEED: readonly FulfillmentTask[] = [
     },
     gate: {
       state: "BLOCKED",
-      message: "先款净核销不足，禁止入库过账。请先至 W12 登记有效付款。",
+      message: "先款净核销不足，禁止入库过账。请先至供应商往来登记有效付款。",
       effectivePaidAmount: "5000.00",
       requiredAmount: "28000.00",
     },
@@ -435,7 +435,7 @@ export const FULFILLMENT_OPERATIONS_SEED: readonly FulfillmentTask[] = [
       remaining: "500",
     }),
     summary: "到货待入库 · 付款门禁阻塞",
-    impact: "门禁未满足时正式过账将被服务端拒绝",
+    impact: "门禁未满足时过账将被服务端拒绝",
     allowedActions: ["SAVE", "DEFER"],
     actionBlockers: [
       {

@@ -144,7 +144,7 @@ export const BLOCKER_CODE_LABEL: Record<BlockerCode, string> = {
   SINGLE_LINE: "非唯一卡券明细",
   FINANCE: "票款阻塞",
   CARD_BASELINE: "卡实例/余额基线",
-  SYNC_WATERMARK: "同步水位",
+  SYNC_WATERMARK: "同步进度",
   SCOPE_DRIFT: "范围摘要变化",
 }
 
@@ -384,7 +384,7 @@ export type OwnershipMigrationBatchView = {
   backgroundOperation?: {
     operationId: string
     status: "queued" | "running" | "succeeded" | "failed" | "frozen"
-    /** 仅后台进度标签，不表达正式成功数 */
+    /** 仅后台进度标签，不表达成功数 */
     progressLabel: string
     progressPercent: number
     startedAt?: string

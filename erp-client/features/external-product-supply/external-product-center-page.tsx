@@ -132,7 +132,7 @@ export function ExternalProductCenterPage({
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="外部商品与供给中心"
-        description={`角色 ${DEMO_ROLE_LABEL[demoRole]} · 只读中心；正式写动作在队列完成`}
+        description={`角色 ${DEMO_ROLE_LABEL[demoRole]} · 只读中心；写入在待办队列中完成`}
         breadcrumbs={[
           { id: "api", label: "供应商 API", href: "/supplier-api/catalog" },
           { id: "cat", label: "外部商品供给", href: returnTo },
@@ -430,7 +430,7 @@ export function ExternalProductCenterPage({
               aria-disabled="true"
               title={RECOVERY_BLOCKER_MESSAGE}
             >
-              从中心发起 W22 恢复（阻断）
+              从中心发起商品发布恢复（阻断）
             </Button>
           </CardContent>
         </Card>

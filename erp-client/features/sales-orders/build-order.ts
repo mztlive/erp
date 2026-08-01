@@ -74,7 +74,7 @@ export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
             input.primaryStatus.label === "已作废"
           ? "终态不可直接编辑；历史版本记录不被当前主数据覆盖。"
           : commercialReadOnly
-            ? "正式商业内容只读；变更须走销售变更单。"
+            ? "商业内容只读；变更须走销售变更单。"
             : undefined
 
   const closeEligibility = computeCloseEligibility({

@@ -490,7 +490,7 @@ export function CustomerReviseSheet({
                 <li>
                   服务端信用代码：{result.serverUnifiedCreditCode ?? "—"}
                 </li>
-                <li>本地输入仍保留在表单中，未写入正式记录。</li>
+                <li>本地输入仍保留在表单中，未写入业务记录。</li>
               </ul>
             }
             onReload={() => {

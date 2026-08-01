@@ -432,7 +432,7 @@ export function ConsumptionOrderCenterPage({
             updatedAt={formatTime(view.freshness.factWatermark)}
             dateTime={view.freshness.factWatermark}
             state="fresh"
-            label="记录水位"
+            label="记录更新时间"
           />
         }
         actions={
@@ -538,7 +538,7 @@ export function ConsumptionOrderCenterPage({
                     />
                   }
                 >
-                  打开 W26 子订单
+                  打开供应商子订单
                   <ExternalLinkIcon data-icon="inline-end" />
                 </Button>
               ) : null}
@@ -553,7 +553,7 @@ export function ConsumptionOrderCenterPage({
                     />
                   }
                 >
-                  打开 W29 差异
+                  打开接口错误差异
                   <ExternalLinkIcon data-icon="inline-end" />
                 </Button>
               ) : null}
@@ -950,7 +950,7 @@ export function ConsumptionOrderCenterPage({
                               className="underline"
                               href={`/governance/integration-errors?workItemId=${s.attributionIssue.workItemId}&from=W25`}
                             >
-                              打开 W29 / 复核任务
+                              打开接口错误 / 复核任务
                             </Link>
                           </>
                         ) : null}
@@ -1028,7 +1028,7 @@ export function ConsumptionOrderCenterPage({
             <Alert variant="default">
               <AlertTitle>原人工履约链 · 无供应商子订单</AlertTitle>
               <AlertDescription>
-                T 前支付只显示原人工履约，历史回填只记账。不创建 W26 子订单，也不显示缺单错误。
+                T 前支付只显示原人工履约，历史回填只记账。不创建供应商子订单，也不显示缺单错误。
               </AlertDescription>
             </Alert>
           ) : view.supplierOrders.length === 0 ? (
@@ -1049,7 +1049,7 @@ export function ConsumptionOrderCenterPage({
                         />
                       }
                     >
-                      打开 W29
+                      打开接口错误中心
                     </Button>
                   </div>
                 ) : null}
@@ -1080,8 +1080,7 @@ export function ConsumptionOrderCenterPage({
                           商城支付已发生，正在处理履约异常
                         </AlertTitle>
                         <AlertDescription>
-                          W25 不提供编辑/重试商城订单或旁路供应商动作。请在
-                          W26 按原任务号查询/处理。
+                          本页不提供编辑/重试商城订单或旁路供应商动作。请在供应商订单按原任务号查询/处理。
                         </AlertDescription>
                       </Alert>
                     )}
@@ -1148,7 +1147,7 @@ export function ConsumptionOrderCenterPage({
                         />
                       }
                     >
-                      打开 W26 供应商订单
+                      打开供应商订单
                       <ExternalLinkIcon data-icon="inline-end" />
                     </Button>
                   </CardContent>
@@ -1194,7 +1193,7 @@ export function ConsumptionOrderCenterPage({
             }}
             profitBasis={
               costBasisPrimary === "NONE"
-                ? "禁止按零成本计算利润；经营分析见 W28"
+                ? "禁止按零成本计算利润；经营分析见卡券经营分析"
                 : "利润解读须同时阅读成本覆盖"
             }
             notice={
@@ -1367,7 +1366,7 @@ export function ConsumptionOrderCenterPage({
             items={[
               {
                 id: "f-15241",
-                label: "记录水位",
+                label: "记录更新时间",
                 value: (
                   <span className="num">
                     {formatTime(view.freshness.factWatermark)}
@@ -1427,7 +1426,7 @@ export function ConsumptionOrderCenterPage({
           <Alert variant="default" className="mt-4">
             <AlertTitle>原始记录报文不在本页展示</AlertTitle>
             <AlertDescription>
-              受控排障进入 W29，仍只展示脱敏摘要。
+              受控排障进入接口错误中心，仍只展示脱敏摘要。
               {view.workItemIds[0] ? (
                 <div className="mt-2">
                   <Button
@@ -1440,7 +1439,7 @@ export function ConsumptionOrderCenterPage({
                       />
                     }
                   >
-                    打开 W29
+                    打开接口错误中心
                   </Button>
                 </div>
               ) : null}

@@ -660,7 +660,7 @@ function SettlementList({
           <DataFreshness
             updatedAt={data?.sourceAsOf ? formatTime(data.sourceAsOf) : "—"}
             dateTime={data?.sourceAsOf}
-            label="结算数据水位"
+            label="结算数据更新时间"
             state={listQuery.isFetching ? "stale" : "fresh"}
           />
         }
@@ -699,7 +699,7 @@ function SettlementList({
           <AlertTitle>期间策略未配置（PERIOD_POLICY_UNCONFIGURED）</AlertTitle>
           <AlertDescription>
             {policy.blocker.message}
-            列表仍可显式查询历史结算单，但新建草稿入口已 fail-closed。
+            列表仍可显式查询历史结算单，但新建草稿入口已关闭。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -720,7 +720,7 @@ function SettlementList({
                 size="sm"
                 render={<Link href={result.w12Href} />}
               >
-                打开 W12 应付
+                打开供应商往来应付
                 <ExternalLinkIcon className="size-3.5" />
               </Button>
             ) : null
@@ -729,7 +729,7 @@ function SettlementList({
       ) : null}
 
       {data?.hasModulePermission && data.hasDataScope ? (
-        <MetricStrip columns={4} aria-label="结算水位">
+        <MetricStrip columns={4} aria-label="结算数据更新">
           <MetricFilterItem
             label="待对账"
             value={data.totals.pendingReconcile}
@@ -1108,7 +1108,7 @@ function SettlementList({
           <DialogHeader>
             <DialogTitle>新建结算草稿</DialogTitle>
             <DialogDescription>
-              必须引用服务端当前供应商结算期间策略及版本，并选择其返回的完整周期；策略缺失或版本过期时 fail-closed。
+              必须引用服务端当前供应商结算期间策略及版本，并选择其返回的完整周期；策略缺失或版本过期时将拒绝创建。
             </DialogDescription>
           </DialogHeader>
           {policy?.state !== "CONFIGURED" ? (
@@ -1385,7 +1385,7 @@ function SettlementCenter({
       setResult({
         status: "blocked",
         title: "无复核任务",
-        description: "必须先领取正式 work_item 再用任务信封确认",
+        description: "请先领取任务后再确认",
       })
       return
     }
@@ -1443,7 +1443,7 @@ function SettlementCenter({
         <DataFreshness
           updatedAt={formatTime(detail.freshness.immutableFactsAsOf)}
           dateTime={detail.freshness.immutableFactsAsOf}
-          label="不可变记录水位"
+          label="不可变记录更新时间"
           state={detailQuery.isFetching ? "stale" : "fresh"}
         />
       </div>
@@ -1575,7 +1575,7 @@ function SettlementCenter({
                     size="sm"
                     render={<Link href={result.w12Href} />}
                   >
-                    去 W12 处理应付
+                    去供应商往来 处理应付
                     <ExternalLinkIcon className="size-3.5" />
                   </Button>
                 ) : null}
@@ -1815,7 +1815,7 @@ function SettlementCenter({
             <CardContent className="space-y-2 pt-4 text-sm">
               <p>当前角色：{detail.viewerRoleLabel}</p>
               <p>采购：仅追加证据，不能结论/确认</p>
-              <p>财务经办：正式差异结论与提交复核</p>
+              <p>财务经办：差异结论与提交复核</p>
               <p>财务复核：须为不同人，确认后形成应付</p>
               <p className="text-muted-foreground">
                 前端禁用态仅解释；服务端岗位分离校验为准
@@ -1975,7 +1975,7 @@ function SettlementCenter({
           <CardHeader className="border-b py-3">
             <CardTitle className="text-base">应付与票款</CardTitle>
             <CardDescription>
-              确认后形成唯一应付；付款/进项发票/核销进入 W12，不在 W27 复制
+              确认后形成唯一应付；付款/进项发票/核销进入供应商往来，不在本页复制
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 pt-4">
@@ -2000,7 +2000,7 @@ function SettlementCenter({
                   size="sm"
                   render={<Link href={detail.payable.w12Href} />}
                 >
-                  打开 W12 供应商往来
+                  打开供应商往来
                   <ExternalLinkIcon className="size-3.5" />
                 </Button>
               </>
@@ -2149,7 +2149,7 @@ function SettlementCenter({
         open={submitOpen}
         onOpenChange={setSubmitOpen}
         title="提交复核"
-        description="将按刷新截止策略冻结来源水位、明细与差异结论，并创建唯一复核待办。"
+        description="将按刷新截止策略冻结来来源更新时间、明细与差异结论，并创建唯一复核待办。"
         actionLabel="提交复核"
         confirmLabel="确认提交"
         fromStatus={{ label: st.statusLabel, tone: st.statusTone }}
@@ -2200,7 +2200,7 @@ function SettlementCenter({
           "形成唯一供应商结算应付",
           "锁定处理结果，不可撤回确认",
         ]}
-        irreversibleEffects={["确认后付款/进项发票/核销进入 W12"]}
+        irreversibleEffects={["确认后付款/进项发票/核销进入供应商往来"]}
         nextDepartment="W12 供应商往来"
         pending={decisionMutation.isPending}
         onConfirm={async () => {
@@ -2419,12 +2419,12 @@ function DifferencesWorkspace({
                 allowed.has("RESOLVE_DIFFERENCE") &&
                 activeDiff.status !== "RESOLVED" ? (
                   <Button type="button" size="sm" onClick={onResolve}>
-                    登记正式结论
+                    登记结论
                   </Button>
                 ) : null}
                 {role === "procurement" && !allowed.has("RESOLVE_DIFFERENCE") ? (
                   <span className="text-xs text-muted-foreground">
-                    采购不可选择正式差异结论
+                    采购不可选择差异结论
                   </span>
                 ) : null}
               </div>

@@ -145,7 +145,7 @@ export function submitW22PublishRevision(
     const blocked: PublishRevisionResult = {
       status: "blocked",
       code: "OBJECT_VERSION_CONFLICT",
-      message: "对象版本已变化，请刷新后基于最新基线重新准备。",
+      message: "数据版本已变更，请刷新后基于最新基线重新准备。",
     }
     w22PublishIdempotency.set(command.requestId, blocked)
     return blocked
@@ -362,7 +362,7 @@ export function submitW22ManualPause(
     return {
       status: "blocked",
       code: "OBJECT_VERSION_CONFLICT",
-      message: "对象版本已变化，请刷新后重试。",
+      message: "数据版本已变更，请刷新后重试。",
     }
   }
   if (!seed.allowedActions.includes("PAUSE")) {

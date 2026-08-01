@@ -929,7 +929,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     lockVersion: 2,
     priority: 98,
     errorSummary:
-      "结果未知且供应商无查询能力，请进入接口错误与对账（W29）人工处理。",
+      "结果未知且供应商无查询能力，请进入接口错误与对账中心人工处理。",
     placeActionId: "act-place-nq-01",
     queryPreset: "STILL_UNKNOWN",
     canSafeRetryAfterNoResult: false,

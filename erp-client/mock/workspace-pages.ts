@@ -58,7 +58,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             status: { label: "待处理", tone: "warning" },
             summaryFields: [
               { label: "任务类型", value: "采购二次确认" },
-              { label: "对象版本", value: "v1" },
+              { label: "版本", value: "v1" },
               { label: "优先级", value: "高" },
               { label: "截止", value: "今天 11:30", numeric: true },
             ],
@@ -82,7 +82,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             dueDateTime: "2026-08-01T09:00:00+08:00",
             responsibleParty: "财务部 · 待领取",
             reason: "商城回款与开票金额待与 ERP 应收对齐",
-            impact: "未复核前票款水位不可作为正式经营结果",
+            impact: "未复核前票款数据不可作为经营结果",
             status: { label: "待领取", tone: "info" },
             scopeTags: ["待领取"],
             actionLabel: "去复核卡券票款",
@@ -401,7 +401,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W09",
     title: "履约作业",
     description:
-      "按任务连续处理出库、到货、服务交付等履约作业，记录正式履约记录。",
+      "按任务连续处理出库、到货、服务交付等履约作业，记录履约记录。",
     mode: "M3+M5",
     breadcrumbs: [
       { id: "proc", label: "采购与履约", href: "/procurement/confirm" },
@@ -477,7 +477,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
           { key: "combos", label: "仓库+SKU 组合", value: 1286, detail: "当前筛选" },
           { key: "zero", label: "零可用", value: 42, detail: "需关注补货" },
           { key: "alert", label: "低于预警", value: 19, detail: "策略触发" },
-          { key: "adj", label: "待确认调整", value: 3, detail: "正式调整单" },
+          { key: "adj", label: "待确认调整", value: 3, detail: "调整单" },
         ],
         columns: [
           { key: "sku", header: "SKU / 商品" },
@@ -485,7 +485,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
           { key: "onHand", header: "账面现存", numeric: true },
           { key: "available", header: "可用量", numeric: true },
           { key: "inTransit", header: "在途", numeric: true },
-          { key: "status", header: "水位", status: true },
+          { key: "status", header: "同步进度", status: true },
         ],
         rows: listRows([
           {
@@ -926,7 +926,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W17",
     title: "商城同步与映射",
     description:
-      "治理商城与 ERP 的主责边界、映射任务与同步水位；处理待映射差异。",
+      "治理商城与 ERP 的主责边界、映射任务与同步进度；处理待映射差异。",
     mode: "M7",
     breadcrumbs: [
       { id: "gov", label: "治理", href: "/governance/mall-sync" },
@@ -939,7 +939,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
           { key: "detect", label: "发现差异", status: "complete" },
           { key: "map", label: "映射处理", status: "current" },
           { key: "confirm", label: "确认生效", status: "pending" },
-          { key: "seal", label: "封存水位", status: "pending" },
+          { key: "seal", label: "封存进度", status: "pending" },
         ],
         metrics: [
           { key: "pending", label: "待映射", value: 17, detail: "阻断入账" },
@@ -1025,7 +1025,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
           { key: "upload", label: "上传", status: "complete" },
           { key: "validate", label: "校验", status: "current" },
           { key: "diff", label: "差异确认", status: "pending" },
-          { key: "post", label: "正式过账", status: "pending" },
+          { key: "post", label: "过账", status: "pending" },
         ],
         metrics: [
           { key: "batches", label: "进行中批次", value: 3 },
@@ -1389,7 +1389,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
         batchColumns: [
           { key: "batch", header: "批次编号" },
           { key: "customer", header: "客户范围" },
-          { key: "fingerprint", header: "指纹摘要" },
+          { key: "fingerprint", header: "版本摘要" },
           { key: "status", header: "状态", status: true },
         ],
         batches: listRows([

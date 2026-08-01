@@ -171,7 +171,7 @@ export const FACT_TYPE_LABEL: Record<MallOrderFactType, string> = {
 }
 
 export const ITEM_RESULT_LABEL: Record<ItemResult, string> = {
-  INSERTED: "新增正式记录",
+  INSERTED: "新增业务记录",
   DEDUPLICATED: "重叠去重",
   UNATTRIBUTED: "待归集",
   FAILED: "处理失败",

@@ -1,7 +1,7 @@
 /**
  * W09 session-mock API：queryFn / mutationFn 纯函数。
  * claimToken 仅出现在领取/续租响应；查询 View 不回显令牌。
- * 正式过账后才更新队列完成集合与业务结果；结果未知时不改库存/预占/队列。
+ * 过账后才更新队列完成集合与业务结果；结果未知时不改库存/预占/队列。
  */
 
 import { mockDelay } from "@/features/workspace-kit/delay"
@@ -509,7 +509,7 @@ function buildFormalOutcome(
       remainingByLine,
       acceptanceRequired: false,
       acceptanceNextStep:
-        "入库不触发客户验收。合格量已形成库存与销售预占；后续仓发后再由销售在 W06 验收。",
+        "入库不触发客户验收。合格量已形成库存与销售预占；后续仓发后再由销售在客户验收登记。",
       inventoryImpactSummary: `合格 ${qualTotal} 入库存并建立预占；不合格 ${rejTotal} 不入库、不预占。`,
       reference: `FF-RK-${short}`,
       nextWorkItemId,
@@ -563,7 +563,7 @@ function buildFormalOutcome(
       remainingByLine,
       acceptanceRequired: true,
       acceptanceNextStep:
-        "仓发记录已确认。物流签收不等于客户验收；请销售在 W06 登记客户验收。",
+        "仓发记录已确认。物流签收不等于客户验收；请销售在客户验收登记。",
       inventoryImpactSummary:
         "已消耗本销售明细有效预占，并减少自有库存（不写采购付款流水）。",
       reference: `FF-FH-${short}`,
@@ -598,7 +598,7 @@ function buildFormalOutcome(
       remainingByLine,
       acceptanceRequired: true,
       acceptanceNextStep:
-        "供应商直发记录已确认，不影响自有库存。请销售在 W06 登记客户验收（物流签收≠验收）。",
+        "供应商直发记录已确认，不影响自有库存。请销售在客户验收登记（物流签收≠验收）。",
       inventoryImpactSummary: "不影响自有库存与销售预占流水。",
       reference: `FF-DF-${short}`,
       nextWorkItemId,
@@ -634,7 +634,7 @@ function buildFormalOutcome(
       acceptanceNextStep:
         draft.result === "FAILED"
           ? "电子交付失败已留痕，不可覆盖；重做须新建记录。不进入客户验收。"
-          : "电子交付已确认，不影响自有库存。请销售在 W06 登记客户验收。",
+          : "电子交付已确认，不影响自有库存。请销售在客户验收登记。",
       inventoryImpactSummary: "不影响自有库存。",
       reference: `FF-ED-${short}`,
       nextWorkItemId,
@@ -670,7 +670,7 @@ function buildFormalOutcome(
     acceptanceNextStep:
       draft.result === "FAILED"
         ? "服务失败已留痕，不可覆盖；重做须新建记录。"
-        : "服务履约已确认。请销售在 W06 登记客户验收。",
+        : "服务履约已确认。请销售在客户验收登记。",
     inventoryImpactSummary: "不影响自有库存。",
     reference: `FF-FW-${short}`,
     nextWorkItemId,

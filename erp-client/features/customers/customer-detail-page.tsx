@@ -196,7 +196,7 @@ export function CustomerDetailPage({
         ]}
         metadata={
           <DataFreshness
-            updatedAt="正式记录"
+            updatedAt="业务记录"
             dateTime={customer.freshness.formalFactsAt}
             state="fresh"
             label="客户主数据"
@@ -541,7 +541,7 @@ export function CustomerDetailPage({
       >
         <DocumentSection
           title="合同与销售"
-          description="中心内可发现有效合同与进行中销售单；完整列表带 customerId 进入 W04/W05"
+          description="中心内可发现有效合同与进行中销售单；完整列表带客户筛选进入合同/销售单"
           action={
             <div className="flex flex-wrap gap-2">
               <Button
@@ -608,7 +608,7 @@ export function CustomerDetailPage({
       >
         <DocumentSection
           title="票款摘要"
-          description="只读应收汇总；不在此核销或开票。正式往来进入 W11。"
+          description="只读应收汇总；不在此核销或开票。往来详情进入客户往来。"
           action={
             <Button
               type="button"
@@ -616,7 +616,7 @@ export function CustomerDetailPage({
               variant="outline"
               render={<Link href={receivableHref} />}
             >
-              打开客户往来（W11）
+              打开客户往来
             </Button>
           }
         >
@@ -743,7 +743,7 @@ export function CustomerDetailPage({
               variant="outline"
               render={<Link href={qualityHref} />}
             >
-              打开经营质量（W15）
+              打开经营质量
             </Button>
           }
         >

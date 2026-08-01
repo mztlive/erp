@@ -425,7 +425,7 @@ export async function fetchProfitLossView(
     filterSummary: filterParts.join(" · "),
     excludedNote: W16_EXCLUDED_NOTE,
     correctionPendingNotice: w16CorrectionPending
-      ? "正式记录已更新，经营汇总将在数据追平后刷新。本页不会本地覆盖金额。"
+      ? "业务记录已更新，经营汇总将在数据追平后刷新。本页不会本地覆盖金额。"
       : undefined,
   }
 }
@@ -498,7 +498,7 @@ export async function markSourceCorrectionPending(): Promise<{
   setW16CorrectionPending(true)
   return {
     notice:
-      "正式记录已更新，经营汇总将在数据追平后刷新。本页不会本地覆盖金额。",
+      "业务记录已更新，经营汇总将在数据追平后刷新。本页不会本地覆盖金额。",
   }
 }
 

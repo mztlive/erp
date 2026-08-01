@@ -178,7 +178,7 @@ function buildMetrics(options: {
     taxBasis: "GROSS",
     currency: "CNY",
     valueState: "available",
-    detail: "企业客户正式成交",
+    detail: "企业客户成交",
   }
   const face: AuthorizedCardMetric = {
     key: "cardFaceValueGross",

@@ -112,7 +112,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     processorGroup: "procurement_confirm",
     summaryFields: [
       { label: "任务类型", value: "采购二次确认" },
-      { label: "对象版本", value: "v1" },
+      { label: "版本", value: "v1" },
       { label: "优先级", value: "高" },
       { label: "截止", value: "今天 11:30", numeric: true },
     ],
@@ -154,7 +154,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     processorGroup: "procurement_confirm",
     summaryFields: [
       { label: "任务类型", value: "采购二次确认" },
-      { label: "对象版本", value: "v2" },
+      { label: "版本", value: "v2" },
       { label: "优先级", value: "紧急" },
       { label: "截止", value: "已超期", numeric: true },
     ],
@@ -177,7 +177,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     dueDateTime: "2026-08-01T09:00:00+08:00",
     responsibleParty: "财务部 · 待领取",
     reason: "商城回款与开票金额待与 ERP 应收对齐",
-    impact: "未复核前票款水位不可作为正式经营结果",
+    impact: "未复核前票款数据不可作为经营结果",
     impactSensitive: "待复核回款 " + money(42000),
     statusCode: "UNCLAIMED",
     status: { label: "待领取", tone: "info" },
@@ -229,7 +229,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     processorGroup: "receipt_review",
     summaryFields: [
       { label: "任务类型", value: "回款核对" },
-      { label: "对象版本", value: "v1" },
+      { label: "版本", value: "v1" },
       { label: "优先级", value: "普通" },
       { label: "截止", value: "今天 16:00", numeric: true },
     ],
@@ -301,7 +301,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     processorGroup: "mapping_exception",
     summaryFields: [
       { label: "任务类型", value: "商城同步异常" },
-      { label: "对象版本", value: "v1" },
+      { label: "版本", value: "v1" },
       { label: "优先级", value: "高" },
       { label: "截止", value: "今天 10:21", numeric: true },
     ],
@@ -337,7 +337,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     processorGroup: "fulfillment_exception",
     summaryFields: [
       { label: "任务类型", value: "履约异常" },
-      { label: "对象版本", value: "v1" },
+      { label: "版本", value: "v1" },
       { label: "优先级", value: "紧急" },
       { label: "截止", value: "已超期", numeric: true },
     ],
@@ -373,7 +373,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     processorGroup: "contract_supplement",
     summaryFields: [
       { label: "任务类型", value: "合同信息补全" },
-      { label: "对象版本", value: "v1" },
+      { label: "版本", value: "v1" },
       { label: "优先级", value: "普通" },
       { label: "截止", value: "今天 17:00", numeric: true },
     ],
@@ -410,7 +410,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     processorGroup: "procurement_confirm",
     summaryFields: [
       { label: "任务类型", value: "采购二次确认" },
-      { label: "对象版本", value: "v1" },
+      { label: "版本", value: "v1" },
       { label: "优先级", value: "普通" },
       { label: "截止", value: "今天 15:00", numeric: true },
     ],
@@ -446,7 +446,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     processorGroup: "procurement_confirm",
     summaryFields: [
       { label: "任务类型", value: "采购二次确认" },
-      { label: "对象版本", value: "v1" },
+      { label: "版本", value: "v1" },
       { label: "优先级", value: "普通" },
       { label: "截止", value: "今天 16:30", numeric: true },
     ],
@@ -482,7 +482,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     processorGroup: "low_margin",
     summaryFields: [
       { label: "任务类型", value: "低毛利经理确认" },
-      { label: "对象版本", value: "v1" },
+      { label: "版本", value: "v1" },
       { label: "优先级", value: "高" },
       { label: "截止", value: "今天 17:00", numeric: true },
     ],

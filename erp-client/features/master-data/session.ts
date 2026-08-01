@@ -107,7 +107,7 @@ function rejectWarehouseWrite(): MasterDataMutationResult {
     outcome: "blocked",
     code: WAREHOUSE_WRITE_CODE,
     message: WAREHOUSE_WRITE_MESSAGE,
-    detail: "服务端 fail-closed；仓储与系统管理员均不可作为临时写入人。",
+    detail: "服务端拒绝写入；仓储与系统管理员均不可作为临时写入人。",
   }
 }
 
@@ -339,7 +339,7 @@ export function reviseW14Object(
       outcome: "blocked",
       code: "BASE_UNIT_LOCKED",
       message:
-        "已被正式单据使用的 SKU 不得修改基础单位。请「停用并新建 SKU」。",
+        "已被已生效单据使用的 SKU 不得修改基础单位。请「停用并新建 SKU」。",
       detail: center.productConstraints
         ? `当前基础单位 ${center.productConstraints.baseUnit}`
         : undefined,
@@ -776,7 +776,7 @@ export function queryW14Selector(
   return {
     scene: "warehouse_pick",
     asOf,
-    note: "仓库当前有效且数据范围允许；库存操作另由 W10 校验。",
+    note: "仓库当前有效且数据范围允许；库存操作另由库存台账校验。",
     candidates: pick("warehouses", (row) => ({
       stableId: row.stableId,
       stableNo: row.stableNo,
@@ -786,7 +786,7 @@ export function queryW14Selector(
       eligible: row.lifecycleStatus === "ENABLED",
       reason:
         row.lifecycleStatus === "ENABLED"
-          ? "可查询；写操作 fail-closed"
+          ? "可查询；写操作暂不可用"
           : "当前停用",
     })),
   }

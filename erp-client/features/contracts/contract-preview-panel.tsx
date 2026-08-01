@@ -241,9 +241,9 @@ export function ContractPreviewPanel({
             )}
             {detail?.relatedSalesOrdersAsOf ? (
               <p className="text-[11px] text-muted-foreground">
-                关联销售水位 as-of{" "}
+                关联销售更新时间 as-of{" "}
                 <span className="num">{detail.relatedSalesOrdersAsOf}</span>
-                ，不冒充合同正式字段当前值。
+                ，不冒充合同字段当前值。
               </p>
             ) : null}
           </section>

@@ -144,7 +144,7 @@ export function MasterDataPreviewPanel({
           <Separator />
           <section className="space-y-2">
             <h3 className="text-xs font-medium text-muted-foreground">
-              库存摘要（只读 · W10）
+              库存摘要（只读）
             </h3>
             <p className="text-xs text-muted-foreground">
               {detail.warehouseStockSummary.policyNote}
@@ -168,7 +168,7 @@ export function MasterDataPreviewPanel({
                 <Link href={detail.warehouseStockSummary.w10Href} />
               }
             >
-              打开库存台账 W10
+              打开库存台账
             </Button>
           </section>
         </>
