@@ -69,7 +69,7 @@ export function MasterDataPreviewPanel({
       <Separator />
 
       <section className="space-y-2">
-        <h3 className="text-xs font-medium text-muted-foreground">关键事实</h3>
+        <h3 className="text-xs font-medium text-muted-foreground">关键记录</h3>
         <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1.5">
           {row.keyFacts.map((fact) => (
             <div key={fact.label} className="contents">
@@ -179,7 +179,7 @@ export function MasterDataPreviewPanel({
           <Separator />
           <section className="space-y-2">
             <h3 className="text-xs font-medium text-muted-foreground">
-              版本时间线（历史名称快照）
+              版本时间线（历史名称记录）
             </h3>
             <RevisionTimeline
               revisions={detail.revisionTimeline.map((rev) => ({
@@ -194,7 +194,7 @@ export function MasterDataPreviewPanel({
                 reason: (
                   <div className="space-y-1">
                     <div>
-                      快照名称：<strong>{rev.nameSnapshot}</strong>
+                      记录名称：<strong>{rev.nameSnapshot}</strong>
                     </div>
                     <div className="text-muted-foreground">{rev.changeReason}</div>
                     <div className="flex flex-wrap gap-2">

@@ -221,7 +221,7 @@ export type CardFundsReviewDecision =
       evidenceDocumentIds: string[]
       evidenceReferences: string[]
       comment?: string
-      /** 完成时三方校验：任务信封 / 当前事实 / 提交期望 */
+      /** 完成时三方校验：任务信封 / 当前记录 / 提交期望 */
       expectedSubjectHash: string
     }
   | {
@@ -315,15 +315,15 @@ export const WORK_ITEM_TYPE_LABEL: Record<WorkItemType, string> = {
 
 export const REJECT_REASON_LABEL: Record<RejectReasonCode, string> = {
   EVIDENCE_INSUFFICIENT: "证据不足",
-  FACTS_MISMATCH: "票款事实不一致",
+  FACTS_MISMATCH: "票款记录不一致",
   COUNTERPARTY_UNCLEAR: "往来主体不清",
   OTHER: "其他原因",
 }
 
 export const APPROVE_CONCLUSION_LABEL: Record<ApproveConclusion, string> = {
   NO_HISTORY_FROM_ZERO: "无历史票款，从 0 起",
-  RECORDED_FACTS_RECONCILED: "已登记事实并核对一致",
+  RECORDED_FACTS_RECONCILED: "已登记记录并核对一致",
 }
 
 export const REJECT_FOLLOW_UP_COLLABORATION =
-  "Q5 未决：驳回仅形成本次 REJECTED 复核事实并完成当前任务，不创建或转交后继任务。请人工与财务负责人协作登记固定 work_item_type / 责任池 / handlerKey 后再启用驳回后继。"
+  "Q5 未决：驳回仅形成本次 REJECTED 复核记录并完成当前任务，不创建或转交后继任务。请人工与财务负责人协作登记固定 work_item_type / 责任池 / handlerKey 后再启用驳回后继。"

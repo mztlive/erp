@@ -496,9 +496,9 @@ export async function submitHistoryBackfillCommand(
       requestedBy: "系统管理员 · 演示",
       requestedAt: nowIso(),
       sourceAsOf: nowIso(),
-      fulfillmentNote: "历史事实追加写入，不覆盖实时事实",
+      fulfillmentNote: "历史记录追加写入，不覆盖实时记录",
       scopeNote:
-        "正式范围半开区间 [rangeStart, T)。occurredAt = T 的事实不进入历史回填，按实时/补投契约处理。",
+        "正式范围半开区间 [rangeStart, T)。occurredAt = T 的记录不进入历史回填，按实时/补投契约处理。",
       legacyManualNote:
         "T 前支付只补台账，履约链固定 LEGACY_MANUAL，不创建供应商订单。",
       progress: {
@@ -530,7 +530,7 @@ export async function submitHistoryBackfillCommand(
     const result: HistoryBackfillCommandResult = {
       status: "COMMITTED",
       title: "已创建回填任务草稿",
-      description: `任务 ${jobNo} 范围固定为 ${formatRange(rangeStart, ctx.rangeEnd)}；T 前不下单，只追加缺失事实。`,
+      description: `任务 ${jobNo} 范围固定为 ${formatRange(rangeStart, ctx.rangeEnd)}；T 前不下单，只追加缺失记录。`,
       jobId: id,
       jobNo,
       operationId,
@@ -590,7 +590,7 @@ export async function submitHistoryBackfillCommand(
     const result: HistoryBackfillCommandResult = {
       status: "COMMITTED",
       title: "来源校验通过",
-      description: "五类事实在 [requiredHistoryStart, T) 连续可取，可开始正式回填。",
+      description: "五类记录在 [requiredHistoryStart, T) 连续可取，可开始正式回填。",
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,
@@ -695,7 +695,7 @@ export async function submitHistoryBackfillCommand(
     const result: HistoryBackfillCommandResult = {
       status: "COMMITTED",
       title: "正式回填已提交后台",
-      description: `任务 ${job.jobNo} 已冻结范围 ${formatRange(job.rangeStart, job.rangeEnd)} 并启动异步作业；进度以心跳与任务快照为准，不伪装同步完成。`,
+      description: `任务 ${job.jobNo} 已冻结范围 ${formatRange(job.rangeStart, job.rangeEnd)} 并启动异步作业；进度以心跳与任务记录为准，不伪装同步完成。`,
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,
@@ -764,7 +764,7 @@ export async function submitHistoryBackfillCommand(
         {
           action: "RESUME",
           code: "ALREADY_RUNNING",
-          message: "续跑已提交，沿原事实键处理剩余项。",
+          message: "续跑已提交，沿原记录键处理剩余项。",
         },
       ],
     })
@@ -772,7 +772,7 @@ export async function submitHistoryBackfillCommand(
     const result: HistoryBackfillCommandResult = {
       status: "COMMITTED",
       title: "已续跑原任务",
-      description: `沿 ${job.jobNo} 原范围 ${formatRange(job.rangeStart, job.rangeEnd)} 与幂等命名空间 ${job.idempotencyNamespace} 续跑；已成功事实不回滚。`,
+      description: `沿 ${job.jobNo} 原范围 ${formatRange(job.rangeStart, job.rangeEnd)} 与幂等命名空间 ${job.idempotencyNamespace} 续跑；已成功记录不回滚。`,
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,
@@ -788,7 +788,7 @@ export async function submitHistoryBackfillCommand(
       return {
         status: "FAILED",
         title: "缺少任务 ID",
-        description: "重新归集必须引用原任务与原事实。",
+        description: "重新归集必须引用原任务与原记录。",
         operationId,
         idempotencyKey,
       }
@@ -807,7 +807,7 @@ export async function submitHistoryBackfillCommand(
       status: "COMMITTED",
       title: "已提交重新归集",
       description:
-        "引用原 mall_order_fact 重新归集并追加成本评估；不复制正式事实、不改写原消费。",
+        "引用原 mall_order_fact 重新归集并追加成本评估；不复制正式记录、不改写原消费。",
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,
@@ -886,7 +886,7 @@ export async function submitHistoryBackfillCommand(
       status: "COMMITTED",
       title: "报告已确认",
       description:
-        "仅迁移 reportReviewStatus；不改写已入库事实或 processingStatus。",
+        "仅迁移 reportReviewStatus；不改写已入库记录或 processingStatus。",
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,

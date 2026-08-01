@@ -33,7 +33,7 @@ export const W28_WECHAT_CONSUMPTION_GROSS = "186400.00"
 export const W28_WECHAT_COST_NET = "142200.00"
 
 export const W28_WECHAT_EXCLUDED_NOTE =
-  "微信支付消费与对应成本不进入本页企业卡券消费、覆盖率与利润指标；微信成本仍由供应商结算链路处理。本投影已排除微信支付消费 ¥186,400.00（含税）与成本 ¥142,200.00（不含税）。"
+  "微信支付消费与对应成本不进入本页企业卡券消费、覆盖率与利润指标；微信成本仍由供应商结算链路处理。本数据已排除微信支付消费 ¥186,400.00（含税）与成本 ¥142,200.00（不含税）。"
 
 export const W28_DATE_BASIS_CONFIGURED: DateBasisConfig = {
   configuredDateBasis: "consumption",

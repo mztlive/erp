@@ -190,7 +190,7 @@ function buildFilterSummary(query: CustomerQualityQuery): string {
   const parts = [
     `期间 ${query.from} ~ ${query.to}`,
     `范围 ${DEFAULT_SCOPE.label}`,
-    query.fundsReview === "reviewed_only" ? "仅已复核票款" : "票款全部授权事实",
+    query.fundsReview === "reviewed_only" ? "仅已复核票款" : "票款全部授权记录",
     query.businessType === "VOUCHER"
       ? "业务性质=卡券"
       : query.businessType === "GOODS_SERVICE"
@@ -294,7 +294,7 @@ export async function fetchCustomerQuality(
               ? "¥0.00"
               : "0",
         reliability: "reliable" as const,
-        explanation: "期间内无授权经营事实。",
+        explanation: "期间内无授权经营记录。",
       })),
       customers: { items: [], total: 0, filteredTotal: 0 },
       filterSummary: buildFilterSummary(query),

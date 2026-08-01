@@ -272,7 +272,7 @@ const seeds: ConsumptionOrderSeed[] = [
             assessmentId: "ca-90881-1",
             assessmentNo: 1,
             costBasis: "ACTUAL",
-            basisSourceLabel: "供应商履约成本快照",
+            basisSourceLabel: "下单时履约成本",
             grossAmount: "220.00",
             netAmount: "194.69",
             taxAmount: "25.31",
@@ -295,7 +295,7 @@ const seeds: ConsumptionOrderSeed[] = [
             assessmentId: "ca-90881-2",
             assessmentNo: 1,
             costBasis: "ACTUAL",
-            basisSourceLabel: "供应商履约成本快照",
+            basisSourceLabel: "下单时履约成本",
             grossAmount: "192.00",
             netAmount: "169.91",
             taxAmount: "22.09",
@@ -334,12 +334,12 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为事实追溯视图，不提供修改商城订单入口。",
+          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
         },
         {
           action: "RETRY_SUPPLIER",
           code: "USE_W26",
-          message: "供应商重试须在 W26 沿原幂等键处理。",
+          message: "供应商重试须在 W26 按原任务号处理。",
         },
       ],
       fieldPermissions: {
@@ -351,7 +351,7 @@ const seeds: ConsumptionOrderSeed[] = [
         customer: "full",
       },
       boundaryNotice:
-        "W25 是不可变关键事实形成的追溯视图，不是商城可变员工订单的实时副本。仅展示五类结果事实，不同步商城处理中间态。",
+        "W25 是不可变关键记录形成的追溯视图，不是商城可变员工订单的实时副本。仅展示五类结果记录，不同步商城处理中间态。",
       workItemIds: [],
     },
   },
@@ -572,7 +572,7 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为事实追溯视图，不提供修改商城订单入口。",
+          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       fieldPermissions: {
@@ -584,7 +584,7 @@ const seeds: ConsumptionOrderSeed[] = [
         customer: "full",
       },
       boundaryNotice:
-        "W25 是不可变关键事实形成的追溯视图，不是商城可变员工订单的实时副本。仅展示五类结果事实，不同步商城处理中间态。",
+        "W25 是不可变关键记录形成的追溯视图，不是商城可变员工订单的实时副本。仅展示五类结果记录，不同步商城处理中间态。",
       workItemIds: [],
     },
   },
@@ -912,7 +912,7 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为事实追溯视图，不提供修改商城订单入口。",
+          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       fieldPermissions: {
@@ -1158,7 +1158,7 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为事实追溯视图，不提供修改商城订单入口。",
+          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       fieldPermissions: {
@@ -1170,7 +1170,7 @@ const seeds: ConsumptionOrderSeed[] = [
         customer: "full",
       },
       boundaryNotice:
-        "履约链仅按支付事实发生时间与唯一 T 比较；T 前为原人工履约，不转自动。",
+        "履约链仅按支付记录发生时间与唯一 T 比较；T 前为原人工履约，不转自动。",
       workItemIds: [],
     },
   },
@@ -1367,13 +1367,13 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为事实追溯视图，不提供修改商城订单入口。",
+          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       paymentOccurredAlert: {
         title: "商城支付已发生，正在处理履约异常",
         message:
-          "支付成功事实已正式保存。供应商下单结果未知：不显示接单成功，也不创建第二张子订单。请进入 W26 查询原请求或 W29 人工处理。",
+          "支付成功记录已正式保存。供应商下单结果未知：不显示接单成功，也不创建第二张子订单。请进入 W26 查询原请求或 W29 人工处理。",
         severity: "warning",
       },
       fieldPermissions: {
@@ -1385,7 +1385,7 @@ const seeds: ConsumptionOrderSeed[] = [
         customer: "full",
       },
       boundaryNotice:
-        "支付事实与消费事实保持；履约异常不改变支付已发生事实。",
+        "支付记录与消费记录保持；履约异常不改变支付已发生记录。",
       workItemIds: ["wi-w29-77120"],
     },
   },
@@ -1472,7 +1472,7 @@ const seeds: ConsumptionOrderSeed[] = [
           processingStatus: "COMMITTED",
           resultDetails: {
             paidAmount: "560.00",
-            note: "支付事实与唯一商城订单已保存；归集待处理",
+            note: "支付记录与唯一商城订单已保存；归集待处理",
           },
         }),
       ],
@@ -1557,13 +1557,13 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为事实追溯视图，不提供修改商城订单入口。",
+          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       paymentOccurredAlert: {
-        title: "支付事实已保存 · 待归集",
+        title: "支付记录已保存 · 待归集",
         message:
-          "第一份有效支付已形成唯一商城订单与来源快照；卡实例来源对象缺失，由运营协调补齐后按原 businessFactKey 归集。",
+          "第一份有效支付已形成唯一商城订单与来源记录；卡实例来源对象缺失，由运营协调补齐后按原 businessFactKey 归集。",
         severity: "warning",
       },
       fieldPermissions: {
@@ -1575,7 +1575,7 @@ const seeds: ConsumptionOrderSeed[] = [
         customer: "masked",
       },
       boundaryNotice:
-        "归集条件缺失不删订单；补齐后使用原事实键续归集，不生成第二份订单。",
+        "归集条件缺失不删订单；补齐后使用原记录键续归集，不生成第二份订单。",
       workItemIds: ["wi-w29-6601"],
     },
   },
@@ -1651,7 +1651,7 @@ const seeds: ConsumptionOrderSeed[] = [
         cutoverAt: CUTOVER.cutoverAt,
         decidedByOccurredAt: "2026-08-01T09:10:00+08:00",
         autoFulfillmentBlocker:
-          "自动履约条件不足：商品发布/固定供给缺失 · 进入差异，不拒收支付事实",
+          "自动履约条件不足：商品发布/固定供给缺失 · 进入差异，不拒收支付记录",
       },
       facts: [
         fact({
@@ -1801,13 +1801,13 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为事实追溯视图，不提供修改商城订单入口。",
+          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       paymentOccurredAlert: {
         title: "商城支付已发生，正在处理履约异常",
         message:
-          "T 后支付事实已保存；商品发布或固定供给缺失进入差异，不拒收也不复制支付事实。请进入 W29/W21 修复后按原事实键继续归集。",
+          "T 后支付记录已保存；商品发布或固定供给缺失进入差异，不拒收也不复制支付记录。请进入 W29/W21 修复后按原记录键继续归集。",
         severity: "warning",
       },
       fieldPermissions: {
@@ -2038,7 +2038,7 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "EDIT_MALL_ORDER",
           code: "FACT_TRACE_READONLY",
-          message: "W25 为事实追溯视图，不提供修改商城订单入口。",
+          message: "W25 为记录追溯视图，不提供修改商城订单入口。",
         },
       ],
       paymentOccurredAlert: {

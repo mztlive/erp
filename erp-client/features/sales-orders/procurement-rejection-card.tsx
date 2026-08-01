@@ -221,7 +221,7 @@ export function ProcurementRejectionCard({
             }
           >
             <AlertTitle>
-              正式结果 · {rejection.resolutionOutcome.reference}
+              处理结果 · {rejection.resolutionOutcome.reference}
             </AlertTitle>
             <AlertDescription>
               {rejection.resolutionOutcome.detail}
@@ -246,7 +246,7 @@ export function ProcurementRejectionCard({
               numeric
             />
             <Fact
-              label="内容指纹"
+              label="数据版本"
               value={rejection.rejectedSubjectHash}
               numeric
             />

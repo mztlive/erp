@@ -790,7 +790,7 @@ export async function createSettlementDraft(
   return {
     status: "succeeded",
     title: "结算草稿已创建",
-    message: "已按策略周期冻结来源快照并形成明细试算（演示为空明细可刷新）。",
+    message: "已按策略周期冻结来源数据并形成明细试算（演示为空明细可刷新）。",
     reference: statementNo,
     statementId,
     sourceSnapshotHash: snapshotHash,
@@ -854,7 +854,7 @@ export async function refreshSettlementTrial(
     return {
       status: "failed",
       code: "SNAPSHOT_STALE",
-      title: "来源快照已过期",
+      title: "来源数据已过期",
       message:
         "expectedSourceSnapshotHash 与当前不一致；旧提交已失效，请使用最新水位重试",
     }
@@ -1185,7 +1185,7 @@ export async function submitSettlementReview(
     return {
       status: "failed",
       code: "SUBJECT_HASH_MISMATCH",
-      title: "内容指纹不一致",
+      title: "数据版本不一致",
       message: "subjectHash 不匹配，请刷新后重提",
     }
   }
@@ -1329,7 +1329,7 @@ export async function decideSettlementReview(
       status: "failed",
       code: "SUBJECT_HASH_MISMATCH",
       title: "指纹不一致",
-      message: "提交快照已变化，不能静默确认过期试算",
+      message: "提交数据已变化，不能静默确认过期试算",
     }
   }
   if (
@@ -1349,7 +1349,7 @@ export async function decideSettlementReview(
       status: "unknown",
       title: "确认结果未知",
       message:
-        "不得乐观切换为已确认或重复生成应付。请用同一 operationId/幂等键查询最终结果。",
+        "不得乐观切换为已确认或重复生成应付。请用同一操作号查询最终结果。",
       operationId: input.operationId,
       idempotencyKey: input.idempotencyKey,
       statementId: seed.statementId,
@@ -1485,7 +1485,7 @@ export async function queryFormalByIdempotency(
     return {
       status: "unknown",
       title: "结果仍未知",
-      message: "请稍后再次查询同一幂等键，勿换新键重提。",
+      message: "请稍后按原任务号再次查询，勿换新键重提。",
       idempotencyKey: key,
       operationId: entry.kind,
     }

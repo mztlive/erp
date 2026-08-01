@@ -18,7 +18,7 @@ function statusMeta(status: ContractStatus) {
 
 /**
  * 演示合同列表：服务端聚合字段已预计算。
- * 不含“合同金额”——业务模型未定义该正式事实。
+ * 不含“合同金额”——业务模型未定义该正式记录。
  */
 export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
   {
@@ -145,7 +145,7 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
       {
         action: "PRINT",
         code: "NO_CONFIRMED_REVISION",
-        message: "尚无已确认修订，无法生成纸质投影。",
+        message: "尚无已确认修订，无法生成打印件。",
       },
     ],
   },
@@ -176,7 +176,7 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
       {
         action: "CREATE_SALES_ORDER",
         code: "TERMINATED",
-        message: "已终止合同不可用于新建销售单；历史快照仍可读。",
+        message: "已终止合同不可用于新建销售单；历史记录仍可读。",
       },
       {
         action: "REVISE",
@@ -314,7 +314,7 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
       {
         action: "PRINT",
         code: "NO_CONFIRMED_REVISION",
-        message: "尚无已确认修订，无法生成纸质投影。",
+        message: "尚无已确认修订，无法生成打印件。",
       },
     ],
   },
@@ -345,7 +345,7 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
       {
         action: "CREATE_SALES_ORDER",
         code: "TERMINATED",
-        message: "已终止合同不可用于新建销售单；历史快照仍可读。",
+        message: "已终止合同不可用于新建销售单；历史记录仍可读。",
       },
     ],
   },
@@ -389,7 +389,7 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
       validTo: "2026-12-31",
       signedAt: "2026-01-08",
       effectiveAt: "2026-01-08 10:20",
-      termsSummary: "年度福利采购框架；单笔销售单引用本修订快照。",
+      termsSummary: "年度福利采购框架；单笔销售单引用本修订记录。",
     },
     attachments: [
       {
@@ -809,7 +809,7 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
       {
         action: "PRINT",
         code: "NO_CONFIRMED_REVISION",
-        message: "尚无已确认修订，无法生成纸质投影。",
+        message: "尚无已确认修订，无法生成打印件。",
       },
       {
         action: "REVISE",
@@ -845,11 +845,11 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
       paymentTermSnapshot: {
         label: "月结 30 天",
         days: 30,
-        description: "历史快照，不可再用于新业务。",
+        description: "历史记录，不可再用于新业务。",
       },
       invoiceRequirementSnapshot: {
         titleType: "增值税专用发票",
-        contentSummary: "历史快照。",
+        contentSummary: "历史记录。",
       },
       validFrom: "2025-01-01",
       validTo: "2025-12-31",
@@ -916,7 +916,7 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
       {
         action: "CREATE_SALES_ORDER",
         code: "TERMINATED",
-        message: "已终止合同不可用于新建销售单；历史快照仍可读。",
+        message: "已终止合同不可用于新建销售单；历史记录仍可读。",
       },
       {
         action: "REVISE",
@@ -951,11 +951,11 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
       },
       paymentTermSnapshot: {
         label: "货到付款",
-        description: "历史快照。",
+        description: "历史记录。",
       },
       invoiceRequirementSnapshot: {
         titleType: "增值税普通发票",
-        contentSummary: "历史快照。",
+        contentSummary: "历史记录。",
       },
       validFrom: "2025-02-01",
       validTo: "2025-12-31",
@@ -1249,7 +1249,7 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
       {
         action: "PRINT",
         code: "NO_CONFIRMED_REVISION",
-        message: "尚无已确认修订，无法生成纸质投影。",
+        message: "尚无已确认修订，无法生成打印件。",
       },
     ],
     sourceAsOf: "2026-08-01T08:00:00.000Z",
@@ -1280,11 +1280,11 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
       paymentTermSnapshot: {
         label: "月结 30 天",
         days: 30,
-        description: "历史快照。",
+        description: "历史记录。",
       },
       invoiceRequirementSnapshot: {
         titleType: "增值税专用发票",
-        contentSummary: "历史快照。",
+        contentSummary: "历史记录。",
       },
       validFrom: "2025-03-01",
       validTo: "2026-02-28",

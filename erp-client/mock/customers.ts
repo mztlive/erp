@@ -197,7 +197,7 @@ export const MOCK_CUSTOMER_DETAILS: Readonly<
         fieldVisibility: { accountNumber: "masked" },
       },
     ],
-    settlementNote: "开票资料已确认税务身份；正式销售以合同/销售单快照为准。",
+    settlementNote: "开票资料已确认税务身份；销售以合同/销售单记录为准。",
     metrics: {
       activeContractCount: 3,
       inProgressSalesOrderCount: 8,
@@ -255,7 +255,7 @@ export const MOCK_CUSTOMER_DETAILS: Readonly<
       earliestOverdueDate: "2026-07-15",
       collectionProgressLabel: "部分回款",
       invoicingProgressLabel: "部分开票",
-      reliabilityNote: "金额为服务端已确认应收投影；卡券票款未复核时不可靠。",
+      reliabilityNote: "金额为服务端已确认应收汇总；卡券票款未复核时不可靠。",
     },
     qualitySummary: {
       scaleLabel: "中型",
@@ -647,7 +647,7 @@ export const MOCK_CUSTOMER_DETAILS: Readonly<
       {
         action: "EDIT_CUSTOMER",
         code: "CUSTOMER_DISABLED",
-        message: "客户已停用，不可修订主体；历史身份与单据快照保留。",
+        message: "客户已停用，不可修订主体；历史身份与单据记录保留。",
       },
       {
         action: "CREATE_CONTRACT",

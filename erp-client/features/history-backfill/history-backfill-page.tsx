@@ -112,7 +112,7 @@ import {
 
 const SECTION_TABS: { id: JobSection; label: string }[] = [
   { id: "overview", label: "概览" },
-  { id: "facts", label: "事实结果" },
+  { id: "facts", label: "记录结果" },
   { id: "dedupe", label: "去重" },
   { id: "unattributed", label: "未归集" },
   { id: "cost", label: "成本口径" },
@@ -207,7 +207,7 @@ function FormalResultBanner({
       description={result.description}
       facts={[
         { label: "操作 ID", value: result.operationId },
-        { label: "幂等键", value: result.idempotencyKey },
+        { label: "原任务号", value: result.idempotencyKey },
         ...(result.jobNo
           ? [{ label: "任务号", value: result.jobNo }]
           : []),
@@ -935,7 +935,7 @@ function CreateBackfillSheet({
                 mono
               />
               <Fact
-                label="预计事实数"
+                label="预计记录数"
                 value={context.estimatedFactCount.toLocaleString("zh-CN")}
               />
               <Fact
@@ -1372,7 +1372,7 @@ function JobDetailView({
               ? `${noneRow.consumptionAmountGross} · 成本空（非 0）`
               : "—",
         }}
-        profitBasis="回填成本按逐笔事实：商城成本快照 → 消费时点供给版本 → NONE；禁止当前供给价"
+        profitBasis="回填成本按逐笔记录：商城成本记录 → 消费时点供给版本 → NONE；禁止当前供给价"
         notice={
           <span>
             NONE 成本字段为空而非 0，仅进入消费金额与覆盖率分母。STANDARD
@@ -1473,7 +1473,7 @@ function JobDetailView({
         onOpenChange={setStartOpen}
         actionLabel="开始正式回填"
         title="确认开始正式历史回填"
-        description="将冻结全历史范围并创建后台任务。只追加缺失事实；T 前支付不下单；不可改范围。"
+        description="将冻结全历史范围并创建后台任务。只追加缺失记录；T 前支付不下单；不可改范围。"
         fromStatus={{
           label: PROCESSING_STATUS_LABEL[currentJob.processingStatus],
           tone: PROCESSING_STATUS_TONE[currentJob.processingStatus],
@@ -1485,12 +1485,12 @@ function JobDetailView({
           `商城 ${currentJob.mallName} · ${ENVIRONMENT_LABEL[currentJob.environment]}`,
         ]}
         effects={[
-          "后台异步执行五类关键事实回填",
-          "与实时事实按业务事实键去重",
+          "后台异步执行五类关键记录回填",
+          "与实时记录按业务记录键去重",
           "成本按 ACTUAL / 时点 STANDARD / NONE 评估",
         ]}
         irreversibleEffects={[
-          "已成功写入的正式事实不因失败或续跑回滚",
+          "已成功写入的正式记录不因失败或续跑回滚",
           "范围冻结后不可修改",
         ]}
         pending={commandMutation.isPending}
@@ -1514,8 +1514,8 @@ function JobDetailView({
           `幂等 ${currentJob.idempotencyNamespace}`,
           `已成功 ${currentJob.progress.insertedCount} · 待处理剩余项`,
         ]}
-        effects={["逐项仍使用相同业务事实键", "已成功事实保持不变"]}
-        irreversibleEffects={["不删除已入库事实"]}
+        effects={["逐项仍使用相同业务记录键", "已成功记录保持不变"]}
+        irreversibleEffects={["不删除已入库记录"]}
         pending={commandMutation.isPending}
         onConfirm={() => runCommand("RESUME")}
       />
@@ -1561,7 +1561,7 @@ function ItemFilters({
             </Select>
           </div>
           <div className="space-y-1">
-            <Label className="text-xs">事实类型</Label>
+            <Label className="text-xs">记录类型</Label>
             <Select
               value={urlState.factType ?? "all"}
               onValueChange={(v) => {
@@ -1612,7 +1612,7 @@ function ItemFilters({
         </>
       ) : null}
       <p className="text-xs text-muted-foreground">
-        URL：result / factType / costBasis · 五类事实与多次退款/恢复不合并
+        URL：result / factType / costBasis · 五类记录与多次退款/恢复不合并
       </p>
     </div>
   )
@@ -1657,12 +1657,12 @@ function OverviewSection({
       </Card>
       <Card>
         <CardHeader>
-          <CardTitle>结果快照</CardTitle>
+          <CardTitle>结果记录</CardTitle>
           <CardDescription>服务端统一统计 · 非前端明细求和</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <Fact
-            label="来源事实数"
+            label="来源记录数"
             value={job.progress.totalCount.toLocaleString("zh-CN")}
           />
           <Fact
@@ -1705,14 +1705,14 @@ function ItemsTable({
     () => [
       {
         id: "factType",
-        header: "事实类型",
+        header: "记录类型",
         cell: ({ row }) => (
           <span className="text-sm">{FACT_TYPE_LABEL[row.original.factType]}</span>
         ),
       },
       {
         id: "key",
-        header: "业务事实键摘要",
+        header: "业务记录键摘要",
         cell: ({ row }) => (
           <span className="font-mono text-xs">
             {row.original.businessFactKeySummary}
@@ -1786,8 +1786,8 @@ function ItemsTable({
               <div className="max-w-[16rem] text-xs">
                 <div>
                   {item.dedupeProof.matchedSource === "REALTIME"
-                    ? "命中实时事实"
-                    : "命中原回填事实"}
+                    ? "命中实时记录"
+                    : "命中原回填记录"}
                 </div>
                 <div className="text-muted-foreground">
                   {item.dedupeProof.formalFactSummary}
@@ -1849,7 +1849,7 @@ function ItemsTable({
       <BusinessEmptyState
         kind="no-data"
         title="当前筛选无明细"
-        description="五类关键事实分别保留；同一订单的支付/取消/完成/多次退款/多次余额恢复不会被合并。"
+        description="五类关键记录分别保留；同一订单的支付/取消/完成/多次退款/多次余额恢复不会被合并。"
       />
     )
   }
@@ -1860,12 +1860,12 @@ function ItemsTable({
         section === "dedupe"
           ? "去重证明"
           : section === "unattributed"
-            ? "待归集（原事实已保存）"
+            ? "待归集（原记录已保存）"
             : section === "failures"
               ? "失败诊断"
-              : "事实结果"
+              : "记录结果"
       }
-      description="不含卡号/卡密/手机/完整地址/原始报文 · 商城订单号不是唯一幂等键"
+      description="不含卡号/卡密/手机/完整地址/原始报文 · 商城订单号不是唯一任务号"
       table={
         <DataTable
           data={[...items]}

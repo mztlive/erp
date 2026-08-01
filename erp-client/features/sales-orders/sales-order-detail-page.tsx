@@ -166,7 +166,7 @@ export function SalesOrderDetailPage({
       },
       {
         id: "versions",
-        label: "版本快照",
+        label: "版本记录",
         href: `${baseHref}?section=versions`,
         show: true,
       },
@@ -565,7 +565,7 @@ export function SalesOrderDetailPage({
                 {order.activeChangeOrder.id} ·{" "}
                 {order.activeChangeOrder.statusLabel} · 基准版本 v
                 {order.activeChangeOrder.baseRevisionNo}
-                。历史正式版本继续有效；
+                。历史版本继续有效；
                 {order.activeChangeOrder.impactPath === "operations"
                   ? "卡券须运营执行影响确认后财务复核。"
                   : "非卡券须采购履约影响确认后财务复核。"}
@@ -744,7 +744,7 @@ export function SalesOrderDetailPage({
         confirmLabel="确认创建"
         fromStatus={{ label: `正式 v${order.version}`, tone: "success" }}
         toStatus={{ label: "变更工作副本", tone: "warning" }}
-        lockedFields={["正式销售版本", "业务性质", "稳定销售单号"]}
+        lockedFields={["销售版本", "业务性质", "稳定销售单号"]}
         effects={[
           "创建 sales_change_order 与工作副本",
           "历史版本与既有履约/票款不被覆盖",
@@ -763,7 +763,7 @@ export function SalesOrderDetailPage({
             setResult({
               status: "succeeded",
               title: "销售变更单已创建",
-              description: `${change.id} 已进入「${change.statusLabel}」。原正式版本继续有效。`,
+              description: `${change.id} 已进入「${change.statusLabel}」。原版本继续有效。`,
               reference: change.id,
             })
           } catch {

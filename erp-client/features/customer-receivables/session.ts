@@ -390,7 +390,7 @@ export function postW11Allocation(
     const unknown: PostAllocationResult = {
       status: "unknown",
       message:
-        "提交结果不确定。请用同一幂等键查询最终结果，勿更换键重复过账。",
+        "提交结果不确定。请按原任务号查询最终结果，勿重复过账。",
       idempotencyKey: input.idempotencyKey,
       operationId: `op_pending_${input.idempotencyKey.slice(-8)}`,
     }
@@ -402,7 +402,7 @@ export function postW11Allocation(
     const failed: PostAllocationResult = {
       status: "failed",
       code: "PERMISSION_REVOKED",
-      message: "权限已收回，禁止正式提交。",
+      message: "权限已收回，不能提交。",
     }
     postIdempotency.set(input.idempotencyKey, failed)
     return failed
@@ -486,7 +486,7 @@ export function postW11Allocation(
     return {
       status: "failed",
       code: "INVALID_AMOUNT",
-      message: "事实金额必须为正数。",
+      message: "记录金额必须为正数。",
     }
   }
 
@@ -498,7 +498,7 @@ export function postW11Allocation(
     return {
       status: "failed",
       code: "OVER_ALLOCATE_FACT",
-      message: "拟分配合计超过事实金额。",
+      message: "拟分配合计超过记录金额。",
     }
   }
 
@@ -792,7 +792,7 @@ export function reverseW11Fact(input: ReverseFactInput): ReverseFactResult {
       return {
         status: "failed",
         code: "INVALID_SOURCE",
-        message: "仅可对已过账回款发起冲正/退款，原事实不可编辑删除。",
+        message: "仅可对已过账回款发起冲正/退款，原记录不可编辑删除。",
       }
     }
     // 追加反向分配，不改原 APPLY 行
@@ -835,7 +835,7 @@ export function reverseW11Fact(input: ReverseFactInput): ReverseFactResult {
       baselineVersion: receipt.baselineVersion + 1,
       allocations: [...receipt.allocations, ...reverseAllocs],
     }
-    // 追加反向回款事实（退款/冲正单）
+    // 追加反向回款记录（退款/冲正单）
     const reverseId = `rcpt_rev_${reverseSeq}`
     const reverseNo =
       input.kind === "refund"
@@ -870,8 +870,8 @@ export function reverseW11Fact(input: ReverseFactInput): ReverseFactResult {
       operationId: opId,
       message:
         input.kind === "refund"
-          ? "已追加退款事实与反向分配，原回款保留。"
-          : "已追加回款冲正事实与反向分配，原回款保留。",
+          ? "已追加退款记录与反向分配，原回款保留。"
+          : "已追加回款冲正记录与反向分配，原回款保留。",
     }
     reverseIdempotency.set(input.idempotencyKey, result)
     return result

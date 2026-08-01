@@ -434,7 +434,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
         { label: "资质", value: "将到期" },
         { label: "银行账号", value: "6217 **** **** 5521", sensitive: true },
       ],
-      primaryBlocker: "资质将于 30 日内到期（服务端资格投影）",
+      primaryBlocker: "资质将于 30 日内到期（系统最新数据）",
       selectorEligibility: [
         {
           context: "procurement_supplier",
@@ -671,7 +671,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
         actor: "赵强",
         from: "2025-11-01",
         to: "2025-12-31",
-        reason: "更名典藏款前的历史快照",
+        reason: "更名典藏款前的历史记录",
         isCurrent: false,
         lifecycle: "ENABLED",
       },
@@ -704,7 +704,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     ],
     usageSummary: {
       historicalReferenceCount: 42,
-      note: "历史销售单引用精确修订 ID；当前名称变更不回填历史快照。",
+      note: "历史销售单引用精确修订 ID；当前名称变更不回填历史记录。",
     },
     sensitiveFields: [],
     resourceFacts: [
@@ -956,7 +956,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
         actor: "赵强",
         from: "2025-10-01",
         to: "2025-12-31",
-        reason: "历史名称快照",
+        reason: "历史名称记录",
         isCurrent: false,
         lifecycle: "ENABLED",
       },
@@ -1325,7 +1325,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
         actor: "赵强",
         from: "2025-06-01",
         to: "2025-12-31",
-        reason: "历史名称快照",
+        reason: "历史名称记录",
         isCurrent: false,
         lifecycle: "ENABLED",
       },

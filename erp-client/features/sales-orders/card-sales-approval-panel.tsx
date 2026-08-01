@@ -263,15 +263,15 @@ export function CardSalesApprovalPanel({
                   "原子创建唯一运营审批任务",
                 ]
               : [
-                  "追加运营审批事实与 workflow_action",
-                  "形成首个正式销售版本与应收",
-                  "写入执行投影 outbox",
+                  "追加运营审批记录与 workflow_action",
+                  "形成首个销售版本与应收",
+                  "写入执行信息同步",
                 ]
           }
           nextDepartment={
             approval.workItemType === "CARD_SALES_MANAGER_APPROVAL"
               ? "运营"
-              : "票款与执行投影"
+              : "票款与执行信息"
           }
           onConfirm={async () => {
             const claim = claimRef.current

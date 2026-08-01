@@ -603,7 +603,7 @@ export function AccessAuditPage() {
     }
     setLastResult({
       status: "unknown",
-      title: "正式结果未知",
+      title: "处理结果待确认",
       description: outcome.message,
       pendingIdempotencyKey: outcome.idempotencyKey,
     })
@@ -892,7 +892,7 @@ export function AccessAuditPage() {
               ? ` ~ ${formatDateTime(row.original.effectiveTo)}`
               : " ~ 长期"}
             <span className="mt-0.5 block text-[11px]">
-              （只读事实；策略未配置时不可编辑预约/到期）
+              （只读记录；策略未配置时不可编辑预约/到期）
             </span>
           </span>
         ),
@@ -1992,7 +1992,7 @@ export function AccessAuditPage() {
           <DialogHeader>
             <DialogTitle>授权变更影响预览</DialogTitle>
             <DialogDescription>
-              正式提交前展示变化、受影响主体与服务端风险摘要。使用权限版本与幂等键；冲突不静默覆盖。
+              提交前展示变化、受影响主体与服务端风险摘要。使用权限版本与原任务号；冲突不静默覆盖。
             </DialogDescription>
           </DialogHeader>
 

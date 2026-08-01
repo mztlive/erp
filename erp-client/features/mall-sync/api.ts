@@ -377,7 +377,7 @@ function buildOwnership(stage: OwnershipStage) {
       sealedAt: "2026-07-15T18:00:00+08:00",
       finalWatermark: "wm_final_phase1_20260715",
       migrationReference: "W24 · 已封存",
-      mallWriteBoundary: "第一期轮询已封存；商城执行投影见 W23",
+      mallWriteBoundary: "第一期轮询已封存；商城执行信息见 W23",
       erpWriteBoundary: "ERP 主责；W17 仅历史只读，当前治理见 W23 / W24 / W29",
     }
   }
@@ -389,8 +389,8 @@ function buildOwnership(stage: OwnershipStage) {
     erpOwnedOrderCount: 842,
     syncDirection: "MALL_TO_ERP_COMMERCIAL_FACT" as const,
     firstPhasePollingEnabled: true,
-    mallWriteBoundary: "商城主责商业事实（可继续销售/制卡/绑定/激活/消费）",
-    erpWriteBoundary: "ERP 只读接收商业快照；不向商城回写商业修改",
+    mallWriteBoundary: "商城主责商业记录（可继续销售/制卡/绑定/激活/消费）",
+    erpWriteBoundary: "ERP 只读接收商业数据；不向商城回写商业修改",
   }
 }
 
@@ -986,7 +986,7 @@ export async function confirmMapping(input: {
       return {
         status: "unknown",
         message:
-          "确认映射结果未知。不得在前端标记已解决，停留当前项并用同一幂等键查询。",
+          "确认映射结果未知。不得在前端标记已解决，停留当前项并按原任务号查询。",
         idempotencyKey: input.idempotencyKey,
       }
     }
@@ -1007,7 +1007,7 @@ export async function confirmMapping(input: {
     mappingTargetId,
     recordedAt,
     message:
-      "映射已解决并完成正式待办。尚未形成销售版本；请使用原快照重新归集。",
+      "映射已解决并完成待办任务。尚未形成销售版本；请使用原数据重新归集。",
   }
 
   resolvedMappings.set(input.mappingTaskId, {
@@ -1159,7 +1159,7 @@ export async function reapplyMallSnapshot(input: {
     salesOrderNo,
     salesOrderRevisionId,
     receivableResultReference,
-    message: `已用原快照与原来源身份形成 ${salesOrderNo}，未创建重复销售单。`,
+    message: `已用原数据与原来源身份形成 ${salesOrderNo}，未创建重复销售单。`,
   }
 }
 

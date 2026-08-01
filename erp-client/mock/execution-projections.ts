@@ -346,7 +346,7 @@ export const EXECUTION_PROJECTION_SEEDS: readonly ProjectionSeed[] = [
       {
         action: "RETRY",
         code: "ESCALATED",
-        message: "已升级人工，对象级重试请在 W29 沿原幂等键处理。",
+        message: "已升级人工，对象级重试请在 W29 按原任务号处理。",
       },
       {
         action: "QUERY_RESULT",

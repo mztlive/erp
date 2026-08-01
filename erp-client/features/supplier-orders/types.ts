@@ -297,20 +297,20 @@ export type AfterSalesTrackView = {
   mallRequestRef: string
   scope: string
   requestedAt: string
-  /** 商城退款事实 */
+  /** 商城退款记录 */
   mallRefund: {
     status: "NONE" | "PENDING" | "PARTIAL" | "FULL" | "FAILED"
     statusLabel: string
     amount?: string | null
     gapNote?: string
   }
-  /** 卡券/余额恢复事实 */
+  /** 卡券/余额恢复记录 */
   cardRestore: {
     status: "NONE" | "PENDING" | "DONE" | "NOT_APPLICABLE" | "FAILED"
     statusLabel: string
     gapNote?: string
   }
-  /** 供应商退款事实 */
+  /** 供应商退款记录 */
   supplierRefund: {
     status: RefundStatus
     statusLabel: string

@@ -178,7 +178,7 @@ export function AllocationSessionPanel({
     issues.push({
       id: "over-fact",
       label: "拟分配合计",
-      message: "拟分配合计超过事实金额",
+      message: "拟分配合计超过记录金额",
     })
   }
 
@@ -320,7 +320,7 @@ export function AllocationSessionPanel({
     if (res.status === "unknown") {
       setResult({
         status: "unknown",
-        title: "正式结果不确定",
+        title: "处理结果待确认",
         description: res.message,
         reference: res.operationId,
         pendingKey: res.idempotencyKey,
@@ -456,10 +456,10 @@ export function AllocationSessionPanel({
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="space-y-3 rounded-2xl border bg-card p-4">
           <h3 className="text-sm font-semibold">
-            {isReceipt ? "回款事实" : "销项发票事实"}
+            {isReceipt ? "回款记录" : "销项发票记录"}
           </h3>
           <p className="text-xs text-muted-foreground">
-            已过账事实不可编辑删除；本表仅用于新登记或展示继续核销的未分配余额。
+            已过账记录不可编辑删除；本表仅用于新登记或展示继续核销的未分配余额。
           </p>
           {isReceipt ? (
             <div className="space-y-3">
@@ -737,19 +737,19 @@ export function AllocationSessionPanel({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={isReceipt ? "确认登记回款并核销" : "确认登记销项发票并分配"}
-        actionLabel="正式提交"
+        actionLabel="提交"
         confirmLabel="确认提交"
         fromStatus={{ label: "草稿会话", tone: "warning" }}
         toStatus={{
           label: isReceipt ? "已过账回款" : "已登记发票",
           tone: "success",
         }}
-        lockedFields={["往来主体", "正式事实编号（提交后）", "既有分配行"]}
+        lockedFields={["往来主体", "记录编号（提交后）", "既有分配行"]}
         effects={[
-          "形成正式回款/发票事实与追加式 APPLY 分配",
+          "形成正式回款/发票记录与追加式 APPLY 分配",
           "同步更新应收开放余额与净分配（服务端）",
           "未分配余额按服务端策略保留并可见",
-          "幂等键保证重复提交不二次过账",
+          "原任务号保证重复提交不重复过账",
         ]}
         nextDepartment="财务"
         onConfirm={() => void doPost()}

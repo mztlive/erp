@@ -528,7 +528,7 @@ export async function applyIntegrationTaskAction(
   if (unsafe.originalActionIdempotencyKey) {
     return {
       status: "rejected",
-      title: "禁止客户端传入原幂等键",
+      title: "禁止客户端传入原任务号",
       description:
         "重放必须由服务端读取并沿用锁定的 originalActionIdempotencyKey，客户端不得传入或替换。",
       stayOnItem: true,
@@ -614,7 +614,7 @@ export async function applyIntegrationTaskAction(
         description:
           outcome === "RESULT_UNKNOWN"
             ? "不得按成功处理，不得自动下一项；可再次查询或转交。任务仍为 PENDING/IN_PROGRESS。"
-            : "服务端确认无结果且安全；已开放沿锁定原幂等键的重放。客户端未持有原键。任务仍为 PENDING/IN_PROGRESS。",
+            : "服务端确认无结果且安全；已开放沿锁定原任务号的重放。客户端未持有原任务号。任务仍为 PENDING/IN_PROGRESS。",
         reference: input.operationId,
         outcome,
         nextAllowedActions: next?.allowedActions,
@@ -624,7 +624,7 @@ export async function applyIntegrationTaskAction(
         facts: [
           { label: "查询结果", value: outcome },
           {
-            label: "原幂等键",
+            label: "原任务号",
             value:
               seed.originalAction?.originalActionIdempotencyKeySummary ?? "—",
           },
@@ -664,7 +664,7 @@ export async function applyIntegrationTaskAction(
         status: "succeeded",
         title: "重放已受理",
         description:
-          "服务端已沿锁定原幂等键重放。任务仍为 PENDING/IN_PROGRESS，需显式 RESOLVE 才能完成。",
+          "服务端已沿锁定原任务号重放。任务仍为 PENDING/IN_PROGRESS，需显式 RESOLVE 才能完成。",
         reference: input.operationId,
         outcome: "REPLAY_ACCEPTED",
         workItemStatus: "IN_PROGRESS",
@@ -758,13 +758,13 @@ export async function applyIntegrationTaskAction(
         at: new Date().toISOString(),
         actor: "当前用户",
         action: "重新归集",
-        detail: "复用原业务事实键 · 未复制消费事实",
+        detail: "复用原业务记录键 · 未复制消费记录",
       })
       return {
         status: "succeeded",
         title: "已发起重新归集",
         description:
-          "使用原业务事实键重新归集；任务仍为 PENDING/IN_PROGRESS。",
+          "使用原业务记录键重新归集；任务仍为 PENDING/IN_PROGRESS。",
         reference: input.operationId,
         outcome: "REATTRIBUTED",
         workItemStatus: "IN_PROGRESS",
@@ -976,7 +976,7 @@ export async function closeIntegrationTask(
     status: "succeeded",
     title: input.kind === "CLOSE_DUPLICATE" ? "已关闭重复任务" : "已关闭误派",
     description:
-      "CloseWorkItemEnvelope 返回 CLOSED；不写业务解决结论，不影响正式事实。",
+      "CloseWorkItemEnvelope 返回 CLOSED；不写业务解决结论，不影响正式记录。",
     reference: result.closureRecordId,
     outcome:
       input.kind === "CLOSE_DUPLICATE" ? "CLOSED_DUPLICATE" : "CLOSED_MISROUTED",
@@ -1190,7 +1190,7 @@ export async function queryIntegrationIdempotency(
       return {
         status: "unknown",
         title: "仍无最终结果",
-        description: "请稍后用同一幂等键再查，勿自动下一项。",
+        description: "请稍后用原任务号再查，勿自动下一项。",
         stayOnItem: true,
         pendingIdempotencyKey: key,
       }
@@ -1201,7 +1201,7 @@ export async function queryIntegrationIdempotency(
       description: "请根据结果继续处理；非终结动作不自动下一项。",
       reference: key,
       stayOnItem: true,
-      facts: [{ label: "幂等键", value: key }],
+      facts: [{ label: "原任务号", value: key }],
     }
   } catch (e) {
     return {

@@ -338,7 +338,7 @@ function validateDraft(
   draft: FulfillmentDraft
 ): string | null {
   if (draft.type !== task.operationType) {
-    return "草稿类型与当前作业类型不一致，禁止跨类型生成事实"
+    return "草稿类型与当前作业类型不一致，禁止跨类型生成记录"
   }
   if (task.gate.state === "BLOCKED" && draft.type !== "WAREHOUSE_SHIP") {
     return task.gate.message
@@ -563,7 +563,7 @@ function buildFormalOutcome(
       remainingByLine,
       acceptanceRequired: true,
       acceptanceNextStep:
-        "仓发事实已确认。物流签收不等于客户验收；请销售在 W06 登记客户验收。",
+        "仓发记录已确认。物流签收不等于客户验收；请销售在 W06 登记客户验收。",
       inventoryImpactSummary:
         "已消耗本销售明细有效预占，并减少自有库存（不写采购付款流水）。",
       reference: `FF-FH-${short}`,
@@ -598,7 +598,7 @@ function buildFormalOutcome(
       remainingByLine,
       acceptanceRequired: true,
       acceptanceNextStep:
-        "供应商直发事实已确认，不影响自有库存。请销售在 W06 登记客户验收（物流签收≠验收）。",
+        "供应商直发记录已确认，不影响自有库存。请销售在 W06 登记客户验收（物流签收≠验收）。",
       inventoryImpactSummary: "不影响自有库存与销售预占流水。",
       reference: `FF-DF-${short}`,
       nextWorkItemId,
@@ -725,7 +725,7 @@ export async function postFulfillmentOperation(input: {
         return {
           status: "unknown",
           message:
-            "正式结果尚未确定。请勿假定库存/预占/履约已变更，停留当前项并用同一幂等键查询。",
+            "处理结果尚未确定。请勿假定库存/预占/履约已变更，停留当前项并按原任务号查询。",
           idempotencyKey: input.idempotencyKey,
         }
       }
@@ -734,7 +734,7 @@ export async function postFulfillmentOperation(input: {
       return {
         status: "unknown",
         message:
-          "正式结果尚未确定。请勿假定库存/预占/履约已变更，停留当前项并用同一幂等键查询。",
+          "处理结果尚未确定。请勿假定库存/预占/履约已变更，停留当前项并按原任务号查询。",
         idempotencyKey: input.idempotencyKey,
       }
     }
@@ -750,7 +750,7 @@ export async function postFulfillmentOperation(input: {
     return {
       status: "failed",
       code: "SUBJECT_HASH_MISMATCH",
-      message: "来源版本指纹已变化，请刷新后处理最新上下文",
+      message: "来源版本数据已变化，请刷新后处理最新上下文",
     }
   }
 
@@ -923,14 +923,14 @@ export async function resolveUnknownFulfillmentResult(input: {
   if (entry?.state === "pending") {
     return {
       status: "unknown",
-      message: "仍在处理中，正式结果未知。停留当前项，不移动队列、不改库存。",
+      message: "仍在处理中，处理结果待确认。停留当前项，不移动队列、不改库存。",
       idempotencyKey: input.idempotencyKey,
     }
   }
   return {
     status: "failed",
     code: "NO_PENDING",
-    message: "未找到该幂等键对应的处理中请求",
+    message: "未找到该任务号对应的处理中请求",
   }
 }
 

@@ -177,7 +177,7 @@ export function ContractPreviewPanel({
               </DescriptionList>
             )}
             <p className="text-[11px] leading-relaxed text-muted-foreground">
-              销售单引用具体合同修订时再固定条款快照；本处不汇总为“合同金额”。
+              销售单引用具体合同修订时再固定条款记录；本处不汇总为“合同金额”。
             </p>
           </section>
 

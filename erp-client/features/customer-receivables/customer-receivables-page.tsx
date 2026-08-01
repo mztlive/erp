@@ -369,12 +369,12 @@ export function CustomerReceivablesPage() {
     if (res.status === "succeeded") {
       setLastResult({
         status: "succeeded",
-        title: "反向事实已追加",
+        title: "反向记录已追加",
         description: res.message,
         reference: res.operationId,
         facts: [
           { label: "反向单号", value: res.reverseFactNo },
-          { label: "原事实", value: reverseConfirm.label },
+          { label: "原记录", value: reverseConfirm.label },
         ],
       })
       setReverseConfirm(null)
@@ -842,7 +842,7 @@ export function CustomerReceivablesPage() {
                   setLastResult({
                     status: "succeeded",
                     title: "导出任务已创建",
-                    description: `服务端快照：${data?.filterSummary ?? ""}。7 天内可下载（演示）。`,
+                    description: `服务端筛选结果：${data?.filterSummary ?? ""}。7 天内可下载（演示）。`,
                     reference: `EXP-W11-${Date.now().toString(36)}`,
                   })
                 },
@@ -1184,7 +1184,7 @@ export function CustomerReceivablesPage() {
                 data.emptyReason === "FILTER_NO_RESULT" ? (
                   <BusinessEmptyState
                     kind="filter"
-                    title="无匹配往来事实"
+                    title="无匹配往来记录"
                     description="保留筛选摘要；可清除筛选后重试。"
                     action={
                       <Button
@@ -1208,7 +1208,7 @@ export function CustomerReceivablesPage() {
                 ) : (
                   <BusinessEmptyState
                     kind="no-data"
-                    title="当前范围尚无客户往来事实"
+                    title="当前范围尚无客户往来记录"
                     description="有权时从销售单链入登记；正式应收形成后刷新。"
                   />
                 )
@@ -1507,7 +1507,7 @@ export function CustomerReceivablesPage() {
                   : "发起回款冲正"}
             </DialogTitle>
             <DialogDescription>
-              不编辑、不删除已过账事实与分配；仅追加反向事实。原单{" "}
+              不编辑、不删除已过账记录与分配；仅追加反向记录。原单{" "}
               {reverseConfirm?.label}。
             </DialogDescription>
           </DialogHeader>
@@ -1536,7 +1536,7 @@ export function CustomerReceivablesPage() {
               disabled={reverseMutation.isPending || !reverseReason.trim()}
               onClick={() => void confirmReverse()}
             >
-              确认追加反向事实
+              确认追加反向记录
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1605,7 +1605,7 @@ function ReceiptDetailBody({ row }: { row: ReceiptRow }) {
   return (
     <div className="space-y-5 overflow-auto p-6">
       <Alert variant="info">
-        <AlertTitle>已过账事实只读</AlertTitle>
+        <AlertTitle>已过账记录只读</AlertTitle>
         <AlertDescription>
           canEdit={String(row.canEdit)} · canDelete={String(row.canDelete)}
           。纠错仅能追加退款/冲正。
@@ -1677,7 +1677,7 @@ function InvoiceDetailBody({ row }: { row: SalesInvoiceRow }) {
         <AlertTitle>已登记发票只读</AlertTitle>
         <AlertDescription>
           canEdit={String(row.canEdit)} · canDelete={String(row.canDelete)}
-          。红票为独立事实 + 反向分配。
+          。红票为独立记录 + 反向分配。
         </AlertDescription>
       </Alert>
       <div className="grid grid-cols-2 gap-3">

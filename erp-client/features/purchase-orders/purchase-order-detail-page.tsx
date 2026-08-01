@@ -273,7 +273,7 @@ export function PurchaseOrderDetailPage({
         reference: response.reference,
         facts: [
           { label: "lockVersion", value: String(response.data.lockVersion) },
-          { label: "内容指纹", value: response.data.draftContentHash },
+          { label: "数据版本", value: response.data.draftContentHash },
         ],
       })
       await query.refetch()
@@ -476,7 +476,7 @@ export function PurchaseOrderDetailPage({
         status: "succeeded",
         title: "已创建采购变更工作副本",
         description:
-          "生效字段锁定；不覆盖已发生付款、发票或履约事实。变更以基准版本创建目标提交。",
+          "生效字段锁定；不覆盖已发生付款、发票或履约记录。变更以基准版本创建目标提交。",
         reference: response.reference,
         facts: [
           { label: "变更单", value: response.data.changeId },
@@ -1110,7 +1110,7 @@ export function PurchaseOrderDetailPage({
             <DocumentSection title="变更与异常">
               {order.changes.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  暂无采购变更。生效后变化须走变更，不得在本版本直接覆写付款/发票/履约事实。
+                  暂无采购变更。生效后变化须走变更，不得在本版本直接覆写付款/发票/履约记录。
                 </p>
               ) : (
                 <ul className="space-y-2">
@@ -1224,7 +1224,7 @@ export function PurchaseOrderDetailPage({
           "不可变提交头行与销售分配",
         ]}
         effects={[
-          "形成采购正式版本与应付原始分录",
+          "形成采购版本与应付原始分录",
           "完成当前审核 work_item",
           "不登记实际付款；履约受先款门禁约束",
         ]}
@@ -1246,7 +1246,7 @@ export function PurchaseOrderDetailPage({
         toStatus={{ label: "变更工作副本", tone: "warning" }}
         lockedFields={[
           `基准版本 v${order.identity.revisionNo ?? 1}`,
-          "已发生入库/发货/付款/发票事实不回退",
+          "已发生入库/发货/付款/发票记录不回退",
         ]}
         effects={[
           "创建采购变更工作副本（同对象页签）",

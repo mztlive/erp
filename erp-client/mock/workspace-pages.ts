@@ -105,7 +105,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             dueDateTime: "2026-08-01T18:00:00+08:00",
             responsibleParty: "运营 · 李倩",
             reason: "外部商品缺少可销售项目映射",
-            impact: "阻断 12 条消费订单入账投影",
+            impact: "阻断 12 条消费订单入账",
             status: { label: "处理中", tone: "info" },
             scopeTags: ["团队"],
             actionLabel: "去处理映射异常",
@@ -401,7 +401,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W09",
     title: "履约作业",
     description:
-      "按任务连续处理出库、到货、服务交付等履约作业，记录正式履约事实。",
+      "按任务连续处理出库、到货、服务交付等履约作业，记录正式履约记录。",
     mode: "M3+M5",
     breadcrumbs: [
       { id: "proc", label: "采购与履约", href: "/procurement/confirm" },
@@ -444,7 +444,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             dueAt: "今天 12:00",
             dueDateTime: "2026-08-01T12:00:00+08:00",
             responsibleParty: "履约 · 待领取",
-            reason: "现场服务完成，等待交付事实登记",
+            reason: "现场服务完成，等待交付记录登记",
             impact: "登记后才可进入客户验收",
             status: { label: "待领取", tone: "info" },
             scopeTags: ["待领取"],
@@ -669,7 +669,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W13",
     title: "卡券票款复核",
     description:
-      "连续复核卡券销售单的回款、开票与商城票款事实，确认后方可作为经营结果。",
+      "连续复核卡券销售单的回款、开票与商城票款记录，确认后方可作为经营结果。",
     mode: "M3",
     breadcrumbs: [
       { id: "fin", label: "财务", href: "/finance/card-funds-review" },
@@ -690,7 +690,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             dueAt: "今天 16:00",
             dueDateTime: "2026-08-01T16:00:00+08:00",
             responsibleParty: "财务 · 王敏",
-            reason: "商城支付成功快照与 ERP 应收需人工对齐",
+            reason: "商城支付成功记录与 ERP 应收需人工对齐",
             impact: "未复核前不得计入已确认经营收入",
             status: { label: "待复核", tone: "warning" },
             summaryFields: [
@@ -700,7 +700,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
               { label: "待复核差额", value: money(42000) },
             ],
             checkItems: [
-              "支付成功快照完整",
+              "支付成功记录完整",
               "客户归属正确",
               "回款分配覆盖明细",
             ],
@@ -792,7 +792,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W15",
     title: "客户经营质量",
     description:
-      "只读分析客户规模、利润贡献与回款风险；展示投影更新时间与成本覆盖。",
+      "只读分析客户规模、利润贡献与回款风险；展示数据更新时间与成本覆盖。",
     mode: "M6",
     breadcrumbs: [
       { id: "an", label: "分析", href: "/analytics/customer-quality" },
@@ -806,7 +806,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
           { key: "gmv", label: "成交规模（含税）", value: money(18_640_000) },
           { key: "profit", label: "利润贡献（不含税）", value: money(2_186_400) },
           { key: "risk", label: "高回款风险", value: 9, detail: "需跟进" },
-          { key: "coverage", label: "成本覆盖率", value: "92%", detail: "投影口径" },
+          { key: "coverage", label: "成本覆盖率", value: "92%", detail: "汇总口径" },
         ],
         seriesTitle: "近 6 个月成交规模",
         series: [
@@ -850,7 +850,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
           },
         ]),
         notes: [
-          "经营质量为异步投影，允许最多约 1 分钟延迟。",
+          "经营质量为异步汇总，允许最多约 1 分钟延迟。",
           "利润与成本字段受权限控制；无权时仅显示覆盖等级。",
         ],
       },
@@ -861,7 +861,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W16",
     title: "实际经营盈亏",
     description:
-      "按期间查看实际收入、成本与利润；成本完整性与复核状态作为只读事实展示。",
+      "按期间查看实际收入、成本与利润；成本完整性与复核状态作为只读记录展示。",
     mode: "M6",
     breadcrumbs: [
       { id: "an", label: "分析", href: "/analytics/profit-loss" },
@@ -875,7 +875,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
           { key: "cost", label: "已复核成本", value: money(9_860_000) },
           { key: "profit", label: "经营利润", value: money(2_620_000) },
           { key: "margin", label: "利润率", value: "21.0%" },
-          { key: "integrity", label: "成本完整性", value: "94%", detail: "投影" },
+          { key: "integrity", label: "成本完整性", value: "94%", detail: "汇总" },
         ],
         seriesTitle: "月度利润趋势（万元）",
         series: [
@@ -1307,30 +1307,30 @@ export const WORKSPACE_PAGE_DEFS: Partial<
 
   W23: {
     id: "W23",
-    title: "执行投影",
+    title: "执行信息",
     description:
-      "查询销售单在商城侧的执行投影版本、接收状态与迁移基线。",
+      "查询销售单在商城侧的执行信息版本、接收状态与迁移基线。",
     mode: "M2+M4",
     breadcrumbs: [
       { id: "com", label: "商城与发布", href: "/commerce/execution-projections" },
-      { id: "ep", label: "执行投影" },
+      { id: "ep", label: "执行信息" },
     ],
     shell: {
       kind: "list",
       payload: {
-        searchPlaceholder: "投影编号、销售单、商城",
+        searchPlaceholder: "执行编号、销售单、商城",
         filterLabels: ["全部", "接收中", "已接收", "失败"],
         metrics: [
-          { key: "all", label: "投影", value: 1_024 },
+          { key: "all", label: "执行记录", value: 1_024 },
           { key: "recv", label: "已接收", value: 980 },
           { key: "inflight", label: "接收中", value: 28 },
           { key: "fail", label: "失败", value: 16 },
         ],
         columns: [
-          { key: "code", header: "投影编号" },
+          { key: "code", header: "执行编号" },
           { key: "sales", header: "销售单" },
           { key: "mall", header: "商城" },
-          { key: "version", header: "执行投影版本" },
+          { key: "version", header: "执行信息版本" },
           { key: "status", header: "商城接收状态", status: true },
         ],
         rows: listRows([
@@ -1428,7 +1428,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W25",
     title: "商城消费订单",
     description:
-      "事实追溯：关键事实、支付分摊、来源追溯与供应商履约。专用页 features/mall-consumption-orders。",
+      "记录追溯：关键记录、支付分摊、来源追溯与供应商履约。专用页 features/mall-consumption-orders。",
     mode: "M2+M4",
     breadcrumbs: [
       { id: "com", label: "商城与发布", href: "/commerce/consumption-orders" },
@@ -1442,7 +1442,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
         metrics: [
           { key: "paid", label: "支付成功", value: 8 },
           { key: "pending_attr", label: "待归集", value: 1 },
-          { key: "fact_diff", label: "事实差异", value: 2 },
+          { key: "fact_diff", label: "记录差异", value: 2 },
           { key: "auto_exception", label: "自动履约异常", value: 2 },
           { key: "cost_none", label: "成本未覆盖", value: 3 },
         ],
@@ -1601,7 +1601,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W28",
     title: "卡券消费台账与经营分析",
     description:
-      "分析卡券销售额度、消费进度、退款与成本覆盖；只读经营投影。",
+      "分析卡券销售额度、消费进度、退款与成本覆盖；只读经营汇总。",
     mode: "M6",
     breadcrumbs: [
       { id: "an", label: "分析", href: "/analytics/card-business" },

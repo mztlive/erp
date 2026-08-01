@@ -117,7 +117,7 @@ export function saveW03CustomerRevision(
     const result: CustomerMutationResult = {
       outcome: "unknown",
       message:
-        "提交结果不确定：未确认服务端是否已生成新版本。请查询最终结果后再决定是否重试（同一幂等键）。",
+        "提交结果不确定：未确认服务端是否已生成新版本。请查询最终结果后再决定是否重试（同一任务号）。",
       idempotencyKey: input.idempotencyKey,
     }
     // Do not cache unknown as terminal success — allow re-query.
@@ -193,7 +193,7 @@ export function createW03Customer(
     return {
       outcome: "unknown",
       message:
-        "创建结果不确定：请用同一幂等键查询，勿重复生成主体。",
+        "创建结果不确定：请按原任务号查询，勿重复生成主体。",
       idempotencyKey: input.idempotencyKey,
     }
   }

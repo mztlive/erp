@@ -281,7 +281,7 @@ export interface AuditTimelineProps extends Omit<
   emptyMessage?: React.ReactNode;
 }
 
-/** 审计事实时间线。组件不格式化时间，也不推导操作者或来源。 */
+/** 审计记录时间线。组件不格式化时间，也不推导操作者或来源。 */
 export function AuditTimeline({
   entries,
   emptyMessage = "暂无审计记录",
@@ -404,7 +404,7 @@ const importStatusPresentation: Readonly<
   },
 };
 
-/** 固定顺序展示导入流程；每一步的事实状态由调用方显式传入。 */
+/** 固定顺序展示导入流程；每一步的记录状态由调用方显式传入。 */
 export function ImportStageIndicator({
   stages,
   className,
@@ -471,7 +471,7 @@ export interface ImportIssueTableProps extends Omit<
   emptyMessage?: React.ReactNode;
 }
 
-/** 导入问题明细。可修复标识直接展示调用方事实，不内置修复动作。 */
+/** 导入问题明细。可修复标识直接展示调用方记录，不内置修复动作。 */
 export function ImportIssueTable({
   issues,
   caption = "导入问题明细",

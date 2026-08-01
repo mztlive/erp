@@ -656,7 +656,7 @@ export function MallSyncPage() {
       },
       {
         id: "counts",
-        header: "页/快照/错",
+        header: "页/数据/错",
         meta: { align: "end", numeric: true },
         cell: ({ row }) => (
           <span className="num text-sm">
@@ -717,14 +717,14 @@ export function MallSyncPage() {
       },
       {
         id: "mapping",
-        header: "快照映射状态",
+        header: "数据映射状态",
         cell: ({ row }) => (
           <Badge variant="outline">{row.original.mappingStatusLabel}</Badge>
         ),
       },
       {
         id: "hash",
-        header: "内容指纹",
+        header: "数据标识",
         cell: ({ row }) => (
           <span className="font-mono text-xs text-muted-foreground">
             {row.original.contentHashShort}
@@ -972,7 +972,7 @@ export function MallSyncPage() {
               updatedAt="刚刚"
               dateTime={context?.freshness.viewProjectedAt}
               state={context?.sourceUnavailable ? "stale" : "fresh"}
-              label="同步投影"
+              label="同步数据"
             />
             <Badge variant="outline">
               {context?.sourceSystem.name} · {context?.sourceSystem.environmentLabel}
@@ -1057,14 +1057,14 @@ export function MallSyncPage() {
                 <p>写入冻结自 {formatTime(ownership.writeFrozenAt)}</p>
               ) : null}
               <p className="text-muted-foreground">
-                无「编辑来源快照」「向商城回写商业修改」「手工标记同步成功」入口。
+                无「编辑来源数据」「向商城回写商业修改」「手工标记同步成功」入口。
               </p>
             </div>
           }
           action={
             frozen || sealed
               ? {
-                  label: "前往迁移 / 投影 / 错误中心",
+                  label: "前往迁移 / 执行信息 / 错误中心",
                   onClick: () => {
                     router.push("/governance/ownership-migrations")
                   },
@@ -1077,7 +1077,7 @@ export function MallSyncPage() {
       {(frozen || sealed) && (
         <div className="flex flex-wrap gap-2 text-sm">
           <Button variant="link" size="sm" render={<Link href="/commerce/execution-projections" />}>
-            W23 执行投影
+            W23 执行信息
             <ExternalLinkIcon className="size-3.5" />
           </Button>
           <Button variant="link" size="sm" render={<Link href="/governance/ownership-migrations" />}>
@@ -1342,7 +1342,7 @@ export function MallSyncPage() {
             <CardHeader>
               <CardTitle>运行摘要</CardTitle>
               <CardDescription>
-                水位证明来源白名单快照已安全捕获，不证明映射或应收已成功。
+                水位证明来源白名单数据已安全捕获，不证明映射或应收已成功。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
@@ -1489,7 +1489,7 @@ export function MallSyncPage() {
       {view === "snapshots" ? (
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,1fr)]">
           <BusinessTableFrame
-            title="来源快照"
+            title="来源数据"
             description="仅白名单商业字段。不含玩法、卡号、卡密、绑定手机、连接或密钥。"
             table={
               <DataTable
@@ -1541,7 +1541,7 @@ export function MallSyncPage() {
           ) : (
             <BusinessEmptyState
               kind="no-data"
-              title="选择快照"
+              title="选择结果"
               description="从列表打开白名单 detail"
             />
           )}
@@ -1673,7 +1673,7 @@ export function MallSyncPage() {
                     <div className="grid gap-3 md:grid-cols-2">
                       <div>
                         <h4 className="mb-2 text-sm font-semibold">
-                          来源白名单事实
+                          来源白名单记录
                         </h4>
                         <dl className="space-y-1 text-sm">
                           {mappingTask.sourceEvidence.map((e) => (
@@ -1894,7 +1894,7 @@ export function MallSyncPage() {
                     {mappingTask.mappingTaskStatus === "RESOLVED" ? (
                       <div className="space-y-2 rounded-xl border p-3">
                         <p className="text-sm font-medium">
-                          固定下一步：使用原快照重新归集
+                          固定下一步：使用原数据重新归集
                         </p>
                         {mappingTask.reapplyOperation?.status === "UNKNOWN" ? (
                           <Alert variant="destructive">
@@ -2022,7 +2022,7 @@ export function MallSyncPage() {
                 </Card>
                 <BusinessTableFrame
                   title="核对差异"
-                  description="比较完整商业内容指纹，只产生差异与任务，不直接覆盖事实。"
+                  description="比较完整商业数据标识，只产生差异与任务，不直接覆盖记录。"
                   table={
                     <DataTable
                       data={data.reconciliation.differences}
@@ -2093,7 +2093,7 @@ export function MallSyncPage() {
             <Alert>
               <AlertTitle>历史只读</AlertTitle>
               <AlertDescription>
-                第一期轮询已封存。当前执行投影、迁移与通用对账请前往 W23 / W24 /
+                第一期轮询已封存。当前执行信息、迁移与通用对账请前往 W23 / W24 /
                 W29。
               </AlertDescription>
             </Alert>

@@ -34,12 +34,12 @@ export function RevisionHistoryCard({
       <CardHeader className="border-b">
         <div className="flex flex-wrap items-center gap-2">
           <HistoryIcon className="size-4 text-muted-foreground" aria-hidden="true" />
-          <CardTitle>版本与审计快照</CardTitle>
+          <CardTitle>版本与审计记录</CardTitle>
           <Badge variant="secondary">当前 v{currentVersion}</Badge>
         </div>
         <CardDescription>
           当前合同修订 {contractRevisionLabel}
-          。历史版本保留精确合同/主数据修订与金额快照，不会被当前主数据回填覆盖。
+          。历史版本保留精确合同/主数据修订与金额记录，不会被当前主数据回填覆盖。
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -57,7 +57,7 @@ export function RevisionHistoryCard({
                     {isCurrent ? (
                       <Badge variant="info">当前正式</Badge>
                     ) : (
-                      <Badge variant="outline">历史快照</Badge>
+                      <Badge variant="outline">历史记录</Badge>
                     )}
                     {rev.changeOrderId ? (
                       <span className="num text-xs text-muted-foreground">
@@ -77,11 +77,11 @@ export function RevisionHistoryCard({
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-muted-foreground">客户快照</dt>
+                    <dt className="text-muted-foreground">客户记录</dt>
                     <dd className="font-medium">{rev.customerSnapshot}</dd>
                   </div>
                   <div>
-                    <dt className="text-muted-foreground">含税金额快照</dt>
+                    <dt className="text-muted-foreground">含税金额记录</dt>
                     <dd>
                       <MoneyValue value={rev.amountGross} taxBasis="gross" />
                     </dd>

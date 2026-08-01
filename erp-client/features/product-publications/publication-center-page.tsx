@@ -340,7 +340,7 @@ function RevisionContent({
         </ul>
       </div>
       <p className="text-xs text-muted-foreground">
-        内容指纹 <span className="num">{rev.contentHash}</span> · 历史快照不随后续主档变化覆盖
+        数据版本 <span className="num">{rev.contentHash}</span> · 历史记录不随后续主档变化覆盖
       </p>
     </div>
   )
@@ -776,7 +776,7 @@ export function PublicationCenterPage({
                         status: "succeeded",
                         title: "发布修订已提交，等待商城确认",
                         description:
-                          "演示结算：原幂等键已形成修订。商城确认前不显示商城已生效。",
+                          "演示结算：原任务号已形成修订。商城确认前不显示商城已生效。",
                         facts: [
                           { label: "发布版本", value: `r${r.revisionNo}` },
                           { label: "投递编号", value: r.deliveryId },
@@ -1041,7 +1041,7 @@ export function PublicationCenterPage({
           <DocumentSection
             id="pub-section-content"
             title="发布内容"
-            description="选中修订的完整商城内容快照"
+            description="选中修订的完整商城内容记录"
           >
             {dirty ? (
               <form
@@ -1249,7 +1249,7 @@ export function PublicationCenterPage({
                       variant="outline"
                       onClick={() => selectRevision(r.revisionId)}
                     >
-                      查看快照
+                      查看历史记录
                     </Button>
                   ),
                 }))}

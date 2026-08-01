@@ -360,7 +360,7 @@ export function CustomerReviseSheet({
         <SheetHeader>
           <SheetTitle>修订客户主体</SheetTitle>
           <SheetDescription>
-            生成新 party_revision；历史合同与销售单快照不被覆盖。当前基线 v
+            生成新 party_revision；历史合同与销售单记录不被覆盖。当前基线 v
             {customer.currentRevision.revisionNo} · lock{" "}
             {customer.lockVersion}
           </SheetDescription>
@@ -420,7 +420,7 @@ export function CustomerReviseSheet({
             <FormalActionResult
               status="succeeded"
               title="客户主体已修订"
-              description={`客户号 ${result.customerNo} · 新版本 v${result.revisionNo} · 历史单据快照不变`}
+              description={`客户号 ${result.customerNo} · 新版本 v${result.revisionNo} · 历史单据记录不变`}
               reference={result.reference}
               facts={[
                 { label: "客户号", value: result.customerNo },
@@ -490,7 +490,7 @@ export function CustomerReviseSheet({
                 <li>
                   服务端信用代码：{result.serverUnifiedCreditCode ?? "—"}
                 </li>
-                <li>本地输入仍保留在表单中，未写入正式版本。</li>
+                <li>本地输入仍保留在表单中，未写入正式记录。</li>
               </ul>
             }
             onReload={() => {

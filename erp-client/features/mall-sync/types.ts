@@ -1,6 +1,6 @@
 /**
  * W17 商城同步与映射 · 客户端契约（对齐 docs/ui-workspaces/w17-mall-sync-mapping.md §5/§8）。
- * 第一阶段：商城 → ERP 商业事实单向同步；无 ERP 回写商业修改入口。
+ * 第一阶段：商城 → ERP 商业记录单向同步；无 ERP 回写商业修改入口。
  */
 
 export type MallSyncViewName =
@@ -392,7 +392,7 @@ export type DeferMappingResult =
 export const VIEW_LABEL: Record<MallSyncViewName, string> = {
   overview: "运行总览",
   jobs: "同步任务",
-  snapshots: "来源快照",
+  snapshots: "来源数据",
   mapping: "映射任务",
   reconciliation: "每日核对",
   history: "历史",
@@ -412,7 +412,7 @@ export const STAGE_LABEL: Record<OwnershipStage, string> = {
 }
 
 export const DIRECTION_LABEL: Record<SyncDirection, string> = {
-  MALL_TO_ERP_COMMERCIAL_FACT: "商城 → ERP 商业事实",
+  MALL_TO_ERP_COMMERCIAL_FACT: "商城 → ERP 商业记录",
   FROZEN_FOR_MIGRATION: "迁移冻结待封存",
   SEALED_HISTORY: "已封存 · 历史只读",
 }

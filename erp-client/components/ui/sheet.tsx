@@ -45,7 +45,7 @@ function SheetContent({
   ...props
 }: SheetPrimitive.Popup.Props & {
   side?: "top" | "right" | "bottom" | "left"
-  /** preview=轻量 400px；detail=半屏读主事实 768px（最大 92vw） */
+  /** preview=轻量 400px；detail=半屏读主记录 768px（最大 92vw） */
   size?: "default" | "preview" | "detail"
   showCloseButton?: boolean
 }) {

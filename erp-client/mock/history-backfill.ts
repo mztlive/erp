@@ -12,7 +12,7 @@ import type {
 } from "@/features/history-backfill/types"
 
 const SCOPE_NOTE =
-  "正式范围半开区间 [rangeStart, T)。occurredAt = T 的事实不进入历史回填，按实时/补投契约处理。"
+  "正式范围半开区间 [rangeStart, T)。occurredAt = T 的记录不进入历史回填，按实时/补投契约处理。"
 
 const LEGACY_NOTE =
   "T 前支付只补台账，履约链固定 LEGACY_MANUAL，不创建供应商订单、取消或退款动作。"
@@ -41,7 +41,7 @@ function baseJob(
       partial.coverageComplete &&
       partial.processingStatus === "COMPLETED")
   return {
-    fulfillmentNote: "历史事实追加写入，不覆盖实时事实",
+    fulfillmentNote: "历史记录追加写入，不覆盖实时记录",
     scopeNote: SCOPE_NOTE,
     legacyManualNote: LEGACY_NOTE,
     formalDownstreamUnlocked,
@@ -401,14 +401,14 @@ export const JOB_SEEDS: HistoryBackfillJobCore[] = [
       {
         action: "START",
         code: "JOB_ALREADY_EXISTS",
-        message: "禁止新建重叠正式批次；请续跑原任务并复用原幂等键。",
+        message: "禁止新建重叠正式批次；请续跑原任务并复用原任务号。",
       },
     ],
   }),
 ]
 
 export const ITEM_SEEDS: HistoryBackfillItemView[] = [
-  // 同一商城订单下五类事实 + 多次退款/恢复 —— 不得合并
+  // 同一商城订单下五类记录 + 多次退款/恢复 —— 不得合并
   {
     itemId: "hbi_pay_1001",
     jobId: "hb_job_running_01",
@@ -537,10 +537,10 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
       matchedSource: "REALTIME",
       originalMessageId: "inbox_msg_rt_88921",
       formalFactId: "mof_pay_88921",
-      formalFactSummary: "已存在同一业务事实 · 实时回流支付",
+      formalFactSummary: "已存在同一业务记录 · 实时回流支付",
     },
     whitelistFields: [
-      { field: "dedupeNote", label: "去重说明", value: "与实时事实键命中，不形成第二份" },
+      { field: "dedupeNote", label: "去重说明", value: "与实时记录键命中，不形成第二份" },
     ],
   },
   {
@@ -557,10 +557,10 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
       matchedSource: "PRIOR_BACKFILL",
       originalMessageId: "inbox_msg_bf_4410",
       formalFactId: "mof_complete_4410",
-      formalFactSummary: "已存在同一业务事实 · 原回填任务写入",
+      formalFactSummary: "已存在同一业务记录 · 原回填任务写入",
     },
     whitelistFields: [
-      { field: "dedupeNote", label: "去重说明", value: "与原任务重跑重叠，保留首份正式事实" },
+      { field: "dedupeNote", label: "去重说明", value: "与原任务重跑重叠，保留首份正式记录" },
     ],
   },
   // 待归集 → W29
@@ -676,7 +676,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     consumptionAmountGross: "¥40.00",
     fulfillmentChain: "LEGACY_MANUAL",
     whitelistFields: [
-      { field: "noneReason", label: "NONE 原因", value: "无商城成本快照且无时点供给版本" },
+      { field: "noneReason", label: "NONE 原因", value: "无商城成本记录且无时点供给版本" },
       { field: "costDisplay", label: "成本字段", value: "空（非 0）" },
     ],
   },

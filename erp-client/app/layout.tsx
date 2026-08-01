@@ -21,7 +21,7 @@ export const metadata: Metadata = {
     default: "员工福利 ERP",
     template: "%s · 员工福利 ERP",
   },
-  description: "员工福利 ERP 业务事实、单据流转与经营协同平台",
+  description: "员工福利 ERP 业务记录、单据流转与经营协同平台",
 };
 
 export default function RootLayout({

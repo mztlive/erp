@@ -666,7 +666,7 @@ export function SupplierOrderCenterPage({
         <Alert variant="info">
           <AlertTitle>已完成 + 部分退款</AlertTitle>
           <AlertDescription className="text-xs">
-            履约轨保持「已完成」，退款轨为「部分」。三轨正交，不用单一综合状态覆盖事实。
+            履约轨保持「已完成」，退款轨为「部分」。三轨正交，不用单一综合状态覆盖记录。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -768,7 +768,7 @@ export function SupplierOrderCenterPage({
       </Tabs>
 
       {activeSection === "overview" ? (
-        <DocumentSection title="概览" description="来源支付、供应商与快照版本">
+        <DocumentSection title="概览" description="来源支付、供应商与下单记录版本">
           <DescriptionList className="gap-y-3">
             <Item label="履约链" value="ERP 自动供应商履约" />
             <Item label="供应商" value={o.supplierName} />
@@ -785,13 +785,13 @@ export function SupplierOrderCenterPage({
               value={<span className="num">{o.publicationVersion}</span>}
             />
             <Item
-              label="支付事实键"
+              label="支付记录键"
               value={<span className="num">{o.paymentFactKey}</span>}
             />
             <Item label="对象版本" value={String(o.lockVersion)} />
           </DescriptionList>
           <p className="mt-3 text-xs text-muted-foreground">
-            发布版本、固定供给、商品与成本快照在下单时固定，不受后续主数据变化影响。
+            发布版本、固定供给、商品与成本在下单时固定，不受后续主数据变化影响。
           </p>
         </DocumentSection>
       ) : null}
@@ -799,7 +799,7 @@ export function SupplierOrderCenterPage({
       {activeSection === "items" ? (
         <DocumentSection
           title="商品明细"
-          description="一条商城明细只属于一个供应商子订单；快照不可改供应商"
+          description="一条商城明细只属于一个供应商子订单；下单记录不可改供应商"
         >
           <Table>
             <TableHeader>
@@ -808,7 +808,7 @@ export function SupplierOrderCenterPage({
                 <TableHead>数量</TableHead>
                 <TableHead>外部商品</TableHead>
                 <TableHead>发布/供给</TableHead>
-                <TableHead className="text-right">成本快照（含税）</TableHead>
+                <TableHead className="text-right">下单成本（含税）</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -820,7 +820,7 @@ export function SupplierOrderCenterPage({
                       {item.skuCode}
                     </div>
                     <Badge variant="secondary" className="mt-1 text-[10px]">
-                      快照不可变
+                      下单记录不可变
                     </Badge>
                   </TableCell>
                   <TableCell className="num">
@@ -979,7 +979,7 @@ export function SupplierOrderCenterPage({
       {activeSection === "aftersales" ? (
         <DocumentSection
           title="售后"
-          description="商城售后请求 + 商城退款 / 余额恢复 / 供应商退款三类事实分别展示"
+          description="商城售后请求 + 商城退款 / 余额恢复 / 供应商退款三类记录分别展示"
         >
           {detail.afterSales.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -1228,14 +1228,14 @@ export function SupplierOrderCenterPage({
         open={replayOpen}
         onOpenChange={setReplayOpen}
         actionLabel="安全重放"
-        title="确认沿用原幂等键重放"
+        title="确认沿用原任务号重新提交"
         description="仅在查询明确无结果且服务端确认可安全重试时允许。重放不新建业务订单。"
         fromStatus={{ label: o.fulfillmentLabel, tone: o.fulfillmentTone }}
         toStatus={{ label: "重放后待确认", tone: "info" }}
         effects={[
           `订单 ${o.orderNo}`,
           `供应商 ${o.supplierName}`,
-          "沿用原下单幂等键（服务端）",
+          "沿用原下单任务号（服务端）",
           "任务保持 PENDING/IN_PROGRESS，不自动完成",
         ]}
         irreversibleEffects={["将再次调用供应商下单接口"]}

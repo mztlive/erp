@@ -260,7 +260,7 @@ function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
           activeCardSalesApproval: null,
           commercialReadOnly: true,
           commercialReadOnlyReason:
-            "正式版本只读；商业变化须通过销售变更单并完成影响确认与财务复核。",
+            "版本只读；商业变化须通过销售变更单并完成影响确认与财务复核。",
         }
       } else {
         next = {

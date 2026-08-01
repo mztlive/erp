@@ -188,7 +188,7 @@ function collectValidationIssues(
     issues.push({
       id: "no-source",
       label: "履约来源",
-      message: "请至少选择一条可验收履约事实",
+      message: "请至少选择一条可验收履约记录",
       targetId: "acceptance-fact-pool",
     })
     return issues
@@ -443,9 +443,9 @@ export function AcceptanceWorkspace({
         setFormalResult({
           kind: "post",
           status: "unknown",
-          title: "正式结果未知",
-          description: `${result.message} 未确认前不关闭草稿、不按成功处理；可用同一幂等键查询。`,
-          facts: [{ label: "幂等键", value: result.idempotencyKey }],
+          title: "处理结果待确认",
+          description: `${result.message} 未确认前不关闭草稿、不按成功处理；可用原任务号查询。`,
+          facts: [{ label: "原任务号", value: result.idempotencyKey }],
         })
       } else {
         setFormalResult({
@@ -467,10 +467,10 @@ export function AcceptanceWorkspace({
       setFormalResult({
         kind: "post",
         status: "unknown",
-        title: "正式结果未知",
+        title: "处理结果待确认",
         description:
-          "请求超时或网络中断。不得按成功处理；请查询最终结果或使用同一幂等键重试，避免重复过账。",
-        facts: [{ label: "幂等键", value: idempotencyKey }],
+          "请求超时或网络中断。不得按成功处理；请查询最终结果或使用原任务号重试，避免重复过账。",
+        facts: [{ label: "原任务号", value: idempotencyKey }],
       })
     },
   })
@@ -483,7 +483,7 @@ export function AcceptanceWorkspace({
           kind: "reverse",
           status: "succeeded",
           title: "误录验收已冲正",
-          description: `已新增反向验收事实与 REVERSE 分配；原验收 ${result.originalAcceptanceNo} 保留可追溯。`,
+          description: `已新增反向验收记录与 REVERSE 分配；原验收 ${result.originalAcceptanceNo} 保留可追溯。`,
           reference: result.reverseAcceptanceNo,
           facts: [
             { label: "原验收单号", value: result.originalAcceptanceNo },
@@ -616,7 +616,7 @@ export function AcceptanceWorkspace({
       <BusinessEmptyState
         kind="no-data"
         title="验收工作区加载失败"
-        description="无法获取可验收履约事实。请重试或返回销售单概览。"
+        description="无法获取可验收履约记录。请重试或返回销售单概览。"
         action={
           <Button type="button" onClick={() => void workspaceQuery.refetch()}>
             重试
@@ -689,7 +689,7 @@ export function AcceptanceWorkspace({
                     setConfirmOpen(true)
                   }}
                 >
-                  用同一幂等键重试
+                  用原任务号重试
                 </Button>
               ) : (
                 <Button
@@ -707,11 +707,11 @@ export function AcceptanceWorkspace({
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <MetricStrip columns={4} aria-label="待验收摘要（服务端净事实）">
+        <MetricStrip columns={4} aria-label="待验收摘要（服务端净记录）">
           <MetricItem
             label="待验收批次"
             value={String(view.metrics.eligibleFulfillmentCount)}
-            detail="净可验收履约事实"
+            detail="净可验收履约记录"
           />
           <MetricItem
             label="待验收数量"
@@ -719,9 +719,9 @@ export function AcceptanceWorkspace({
             detail="按单位分组 · 不跨单位相加"
           />
           <MetricItem
-            label="履约进度投影"
+            label="履约进度"
             value={view.salesOrder.fulfillmentProgress}
-            detail="服务端销售履约投影"
+            detail="服务端履约数据"
           />
           <MetricItem
             label="数据水位"
@@ -730,7 +730,7 @@ export function AcceptanceWorkspace({
                 updatedAt="刚刚"
                 dateTime={view.freshness.factsUpdatedAt}
                 state={view.freshness.state}
-                label="履约/验收事实"
+                label="履约/验收记录"
               />
             }
           />
@@ -738,7 +738,7 @@ export function AcceptanceWorkspace({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-muted-foreground">履约事实筛选</span>
+        <span className="text-muted-foreground">履约记录筛选</span>
         <Button
           type="button"
           size="sm"
@@ -753,7 +753,7 @@ export function AcceptanceWorkspace({
           variant={!remainingOnly ? "secondary" : "ghost"}
           onClick={() => setRemainingOnly(false)}
         >
-          全部历史事实
+          全部历史记录
         </Button>
         <span className="ms-auto flex flex-wrap gap-2">
           <Button
@@ -808,7 +808,7 @@ export function AcceptanceWorkspace({
         view.history.length === 0 ? (
         <BusinessEmptyState
           kind="no-data"
-          title="当前没有待验收的履约事实"
+          title="当前没有待验收的履约记录"
           description="请先在 W09 完成仓发、代发、电子交付或服务履约过账；也可查看历史验收。"
           action={
             <Button render={<Link href="/fulfillment" />} variant="outline">
@@ -828,7 +828,7 @@ export function AcceptanceWorkspace({
               <CardHeader className="border-b">
                 <CardTitle className="flex items-center gap-2">
                   <PackageIcon className="size-4" aria-hidden="true" />
-                  可验收履约事实
+                  可验收履约记录
                 </CardTitle>
                 <CardDescription>
                   数量来自服务端净成功履约与净验收分配（APPLY − REVERSE），前端不按表头状态推断。
@@ -838,7 +838,7 @@ export function AcceptanceWorkspace({
               <CardContent className="max-h-[min(32rem,70vh)] space-y-4 overflow-y-auto pt-4">
                 {view.salesLines.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    筛选条件下无履约事实。可切换「全部历史事实」或去 W09 查看。
+                    筛选条件下无履约记录。可切换「全部历史记录」或去 W09 查看。
                   </p>
                 ) : (
                   view.salesLines.map((line) => (
@@ -857,7 +857,7 @@ export function AcceptanceWorkspace({
                         销售要求 {line.requiredQuantity} {line.unitCode} ·
                         净已验收 {line.netAcceptedQuantity} {line.unitCode}
                         <span className="ms-2 text-[0.65rem] uppercase tracking-wide opacity-70">
-                          来源 sales_order_line / 正式投影
+                          来源 sales_order_line / 正式数据
                         </span>
                       </p>
                       <ul className="space-y-2" role="list">
@@ -916,7 +916,7 @@ export function AcceptanceWorkspace({
                                     </div>
                                   ) : null}
                                   <div className="mt-0.5 text-[0.65rem] uppercase tracking-wide opacity-70">
-                                    来源履约事实 · 可验收量=服务端净事实
+                                    来源履约记录 · 可验收量=服务端净记录
                                   </div>
                                 </div>
                                 {checked ? (
@@ -968,7 +968,7 @@ export function AcceptanceWorkspace({
                     销售单 {view.salesOrder.salesOrderNo} ·{" "}
                     {view.salesOrder.customerLabel}
                     <span className="ms-2 text-[0.65rem] uppercase tracking-wide opacity-70">
-                      销售版本投影
+                      销售版本数据
                     </span>
                   </CardDescription>
                 </CardHeader>
@@ -1125,7 +1125,7 @@ export function AcceptanceWorkspace({
                     {hasExceptionResult ? (
                       <Alert variant="warning" role="status">
                         <AlertTitle>
-                          {OVERALL_RESULT_LABEL[overallPreview]}：仅记录验收事实
+                          {OVERALL_RESULT_LABEL[overallPreview]}：仅记录验收记录
                         </AlertTitle>
                         <AlertDescription>{FACT_ONLY_NOTICE}</AlertDescription>
                       </Alert>
@@ -1196,7 +1196,7 @@ export function AcceptanceWorkspace({
                     验收历史
                   </CardTitle>
                   <CardDescription>
-                    已过账不可编辑；误录通过新反向事实与 REVERSE 分配纠正。
+                    已过账不可编辑；误录通过新反向记录与 REVERSE 分配纠正。
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
@@ -1220,7 +1220,7 @@ export function AcceptanceWorkspace({
                                 context="preview"
                                 label={
                                   item.reversalOfAcceptanceId
-                                    ? "冲正事实"
+                                    ? "冲正记录"
                                     : item.status === "REVERSED"
                                       ? "已冲正"
                                       : "已过账"
@@ -1291,7 +1291,7 @@ export function AcceptanceWorkspace({
             <p className="text-sm text-muted-foreground">
               {view.salesOrder.salesOrderNo} · 已选 {selected.size} 个来源 ·
               结果 {OVERALL_RESULT_LABEL[overallPreview]}
-              {hasExceptionResult ? " · 仅记录事实" : ""}
+              {hasExceptionResult ? " · 仅记录结果" : ""}
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1343,16 +1343,16 @@ export function AcceptanceWorkspace({
                 : "destructive",
         }}
         lockedFields={[
-          "履约事实版本",
+          "履约记录版本",
           "净可验收量（服务端）",
           "销售单 lockVersion",
         ]}
         effects={[
           "形成 customer_acceptance / 验收行",
           "写入 acceptance_fulfillment_allocation（APPLY）",
-          "更新销售履约投影",
+          "更新销售履约数据",
           ...(hasExceptionResult
-            ? ["不扣库存、不改应收、不自动退货（仅验收事实）"]
+            ? ["不扣库存、不改应收、不自动退货（仅验收记录）"]
             : []),
         ]}
         nextDepartment={
@@ -1398,10 +1398,10 @@ export function AcceptanceWorkspace({
         actionLabel="冲正"
         confirmLabel="确认冲正"
         fromStatus={{ label: "已过账", tone: "success" }}
-        toStatus={{ label: "已冲正+反向事实", tone: "warning" }}
+        toStatus={{ label: "已冲正+反向记录", tone: "warning" }}
         lockedFields={["原验收单号", "原 APPLY 分配"]}
         effects={[
-          "新增反向验收事实",
+          "新增反向验收记录",
           "写入 REVERSE 分配（不修改原行）",
           "恢复对应履约批次净可验收量",
         ]}
@@ -1433,7 +1433,7 @@ export function AcceptanceWorkspace({
           <CardHeader className="border-b">
             <CardTitle>冲正理由 · {reverseTarget.acceptanceNo}</CardTitle>
             <CardDescription>
-              冲正将新增反向事实，不会删除或改写原验收行。
+              冲正将新增反向记录，不会删除或改写原验收行。
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-4">

@@ -48,7 +48,7 @@ export type FormalResultStatus =
   | "RUNNING"
   | "RESULT_UNKNOWN"
 
-/** 演示角色（URL ?role=，不写入业务事实） */
+/** 演示角色（URL ?role=，不写入业务记录） */
 export type ViewerRoleDemo =
   | "SYSTEM_ADMIN"
   | "CUTOVER_OWNER"
@@ -193,8 +193,8 @@ export type CutoverCheckCode = (typeof CUTOVER_CHECK_CODES)[number]
 
 export const CUTOVER_CHECK_LABEL: Record<CutoverCheckCode, string> = {
   PRODUCT_PUBLICATION: "商品发布",
-  SALES_PROJECTION: "销售投影",
-  MALL_FACT_INTAKE: "商城事实接入",
+  SALES_PROJECTION: "销售执行信息",
+  MALL_FACT_INTAKE: "商城记录接入",
   SUPPLIER_ORDER: "供应商下单",
   SUPPLIER_REJECTION: "供应商拒单",
   AFTER_SALES_CANCEL: "售后取消",

@@ -450,7 +450,7 @@ export function ExternalProductCenterPage({
             </p>
             <p>接收时间 {formatTime(item.syncContext.receivedAt)}</p>
             <p>
-              内容指纹{" "}
+              数据版本{" "}
               {rev.contentFingerprintShort ?? "—"}（无原始报文/密钥）
             </p>
             {related.techExceptions.map((t) => (

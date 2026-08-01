@@ -249,7 +249,7 @@ export type AllocationSessionView = Readonly<{
   /** 已有回款/发票（继续核销） */
   existingFactId?: string
   existingFactNo?: string
-  /** 事实表单草稿 */
+  /** 记录表单草稿 */
   fact: {
     receivedAt?: string
     amount?: string

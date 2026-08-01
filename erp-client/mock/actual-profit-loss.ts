@@ -266,7 +266,7 @@ export const W16_SALES_ORDER_ROWS: readonly ProfitLossRow[] = [
       },
       {
         code: "PENDING_COST_TYPE",
-        message: "待补事实类型：商品 ACTUAL",
+        message: "待补记录类型：商品 ACTUAL",
       },
     ],
     latestCostOccurredAt: "2026-07-30T08:00:00+08:00",
@@ -294,11 +294,11 @@ export const W16_SALES_ORDER_ROWS: readonly ProfitLossRow[] = [
     coverageBlockers: [
       {
         code: "NO_ACTUAL_COST",
-        message: "尚无 ACTUAL/REDUCTION 成本事实归属本销售单",
+        message: "尚无 ACTUAL/REDUCTION 成本记录归属本销售单",
       },
       {
         code: "PENDING_FULFILLMENT",
-        message: "待补事实类型：采购入库、履约发运",
+        message: "待补记录类型：采购入库、履约发运",
       },
     ],
     latestCostOccurredAt: undefined,

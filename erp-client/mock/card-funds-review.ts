@@ -91,7 +91,7 @@ export const SEED_OPENING_ZERO: CardFundsReviewItemView = baseItem({
   invoiceFacts: [],
   reviewType: "OPENING",
   fingerprintStatus: {
-    label: "待复核指纹",
+    label: "待复核数据版本",
     tone: "warning",
     detail: "当前 subject_hash 与任务一致；完成时将三方重算校验",
   },
@@ -127,7 +127,7 @@ export const SEED_OPENING_PARTIAL: CardFundsReviewItemView = baseItem({
         message: "净已收或净已开不为 0，不能使用「从 0 起」结论",
       },
     ],
-    reason: "商城支付成功快照与 ERP 应收需人工对齐，历史上线前已有回款",
+    reason: "商城支付成功记录与 ERP 应收需人工对齐，历史上线前已有回款",
     impact: "未复核前不得计入已确认经营收入",
     priority: 80,
   },
@@ -204,7 +204,7 @@ export const SEED_SYNC_DELTA: CardFundsReviewItemView = baseItem({
         message: "「从 0 起」仅适用于 OPENING 期初任务",
       },
     ],
-    reason: "商城同步版本上升导致成交额与应收变化，上一 OPENING 指纹失效",
+    reason: "商城同步版本上升导致成交额与应收变化，上一复核数据版本失效",
     impact: "旧通过结论不可沿用；须形成新 SYNC_DELTA 链尾",
     priority: 95,
   },
@@ -232,7 +232,7 @@ export const SEED_SYNC_DELTA: CardFundsReviewItemView = baseItem({
     syncedGrossAmount: "142000.00",
     fundsReliability: "STALE_FINGERPRINT",
     reliabilityNote:
-      "上一复核指纹已失效：当前应收/已收/已开票指标在新差额复核完成前不可靠。",
+      "上一复核数据版本已失效：当前应收/已收/已开票指标在新差额复核完成前不可靠。",
   },
   reviewChain: {
     tailReviewId: "rfr_prev_01",
@@ -267,7 +267,7 @@ export const SEED_SYNC_DELTA: CardFundsReviewItemView = baseItem({
     },
   ],
   difference: {
-    title: "上一有效复核 vs 当前事实",
+    title: "上一有效复核 vs 当前记录",
     baselineReviewNo: 1,
     baselineSubjectHash: "sha256:opening_v1_settled86k",
     invalidatedAt: "2026-07-28T14:12:00+08:00",
@@ -312,7 +312,7 @@ export const SEED_SYNC_DELTA: CardFundsReviewItemView = baseItem({
         field: "subject_hash",
         before: "sha256:opening_v1_settled86k",
         after: "sha256:card03_delta_rev5_settled92k",
-        note: "上一有效复核指纹失效",
+        note: "上一有效复核数据版本失效",
         sourceObject: "receivable_funds_review",
         occurredAt: "2026-07-28T14:12:00+08:00",
       },
@@ -320,7 +320,7 @@ export const SEED_SYNC_DELTA: CardFundsReviewItemView = baseItem({
   },
   reviewType: "SYNC_DELTA",
   fingerprintStatus: {
-    label: "指纹已变化",
+    label: "数据版本已变化",
     tone: "destructive",
     detail: "须形成新链尾；禁止复制旧 subject_hash 或沿用旧通过结论",
   },
@@ -360,6 +360,6 @@ export const W11_CARD_FUNDS_RELIABILITY: ReadonlyArray<{
     accountId: "recv_card_03",
     customerName: "星河制造股份有限公司",
     fundsReliability: "STALE_FINGERPRINT",
-    note: "旧复核指纹失效：待差额复核",
+    note: "旧复核数据版本失效：待差额复核",
   },
 ]

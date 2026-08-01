@@ -204,10 +204,10 @@ export function ContractsListPage({
       status: "succeeded",
       title: "导出任务已创建",
       description:
-        "已按当前筛选生成服务端选择快照；下载时将重新鉴权。本演示不把前端当前页 CSV 当作最终合同导出。",
+        "已按当前筛选生成服务端筛选结果；下载时将重新鉴权。本演示不把前端当前页 CSV 当作最终合同导出。",
       reference: job.jobId,
       facts: [
-        { label: "筛选快照", value: job.filterSnapshotLabel },
+        { label: "筛选结果", value: job.filterSnapshotLabel },
         { label: "行数", value: String(job.rowCount) },
         { label: "权限版本", value: job.permissionVersion },
         { label: "下载标签", value: job.downloadLabel },
@@ -481,7 +481,7 @@ export function ContractsListPage({
           label="合同导出任务"
           description={
             <>
-              筛选快照：{exportJob.filterSnapshotLabel}
+              筛选结果：{exportJob.filterSnapshotLabel}
               。任务号 <span className="num">{exportJob.jobId}</span>
               ，结果保留 7 天（演示）。下载将按权限版本{" "}
               <span className="num">{exportJob.permissionVersion}</span>{" "}
@@ -718,7 +718,7 @@ export function ContractsListPage({
           <DialogHeader>
             <DialogTitle>新建合同</DialogTitle>
             <DialogDescription>
-              先建立服务端草稿身份，再以同一合同对象页签进入编辑态。未形成正式事实的草稿可逻辑删除（演示）。
+              先建立服务端草稿身份，再以同一合同对象页签进入编辑态。未形成正式记录的草稿可逻辑删除（演示）。
             </DialogDescription>
           </DialogHeader>
           <form

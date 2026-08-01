@@ -42,7 +42,7 @@ const pauseBase = (
     code: "RECOVERY_RESPONSIBILITY_UNCONFIRMED",
     message: RECOVERY_BLOCKER_MESSAGE,
   },
-  note: "安全暂停已由系统幂等完成；历史已支付订单保留下单快照。供货价变化不自动改商城销售价。",
+  note: "安全暂停已由系统幂等完成；历史已支付订单保留下单记录。供货价变化不自动改商城销售价。",
 })
 
 const noPause: PublicationImpactView = {
@@ -231,7 +231,7 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
       },
     ],
     reason: "供应商停止供应；系统已安全暂停全部受影响在售发布",
-    impact: "不可下单；历史订单快照保留；不得选定替代或恢复发布",
+    impact: "不可下单；历史订单记录保留；不得选定替代或恢复发布",
     priority: 100,
     handlerKey: "ExternalCatalogStopSupplyHandler",
   },

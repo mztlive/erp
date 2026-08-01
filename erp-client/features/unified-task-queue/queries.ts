@@ -303,7 +303,7 @@ export function useQueryIdempotencyMutation() {
       await mockDelay(80)
       const entry = queryIdempotencyResult(input.idempotencyKey)
       if (!entry) {
-        throw new WorkItemMockError("NOT_FOUND", "未找到该幂等键的结果。")
+        throw new WorkItemMockError("NOT_FOUND", "未找到该任务号的结果。")
       }
       if (entry.state === "pending" && input.completeRecovery) {
         return {

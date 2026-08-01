@@ -1174,7 +1174,7 @@ function ConnectionCenter({
       {resultUnknown ? (
         <Alert variant="warning" role="status" aria-live="polite">
           <TriangleAlertIcon aria-hidden="true" />
-          <AlertTitle>正式结果未知</AlertTitle>
+          <AlertTitle>处理结果待确认</AlertTitle>
           <AlertDescription>
             不得按成功或失败处理，不乐观改变启停或引用状态。请按原任务号 /
             operationId 查询最终结论。
@@ -1210,7 +1210,7 @@ function ConnectionCenter({
                     if (r) applyOutcome(r)
                   }}
                 >
-                  按幂等键查询最终结果
+                  按原任务号查询最终结果
                 </Button>
               ) : undefined
             }
@@ -1329,7 +1329,7 @@ function ConnectionCenter({
               {isProd ? "停用生产环境连接" : "停用连接"}
             </DialogTitle>
             <DialogDescription>
-              停用改变治理状态，不删除连接、版本和历史业务快照。
+              停用改变治理状态，不删除连接、版本和历史业务记录。
             </DialogDescription>
           </DialogHeader>
           <BatchImpactPreview
@@ -1369,7 +1369,7 @@ function ConnectionCenter({
             </div>
           </dl>
           <p className="text-xs text-muted-foreground">
-            历史版本与业务快照保留；不暗示删除。替代方案可链到 W21 / W26 / W29。
+            历史版本与业务记录保留；不暗示删除。替代方案可链到 W21 / W26 / W29。
           </p>
           <DialogFooter>
             <Button

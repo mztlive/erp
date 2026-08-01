@@ -21,7 +21,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
     status: "VALIDATING",
     formalDataFormed: false,
     notFormalDataMessage:
-      "合规包已安全接收并通过扫描，但仍未形成正式数据。须完成结构/业务校验、责任确认与后台应用后，对象才会进入正式事实。",
+      "合规包已安全接收并通过扫描，但仍未形成正式记录。须完成结构/业务校验、责任确认与后台应用后，对象才会进入正式记录。",
     inputAsset: {
       assetId: "fa_in_001",
       fileName: "opening-stock-baseline-20260731.pkg",
@@ -151,7 +151,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
       {
         objectCode: "CARD_OPENING_AR",
         message:
-          "期初应收由正式销售单成交金额派生；已收、已开票初始化为 0，后续进入 W13 逐单复核。",
+          "期初应收由销售单成交金额派生；已收、已开票初始化为 0，后续进入 W13 逐单复核。",
       },
       {
         objectCode: "CUSTOMER",
@@ -467,7 +467,7 @@ export const IMPORT_BATCH_SEEDS: readonly ImportBatchView[] = [
     openingPolicyHints: [
       {
         objectCode: "OPENING_STOCK",
-        message: "修复批次冻结失败范围；禁止用新文件直接覆盖已形成正式事实。",
+        message: "修复批次冻结失败范围；禁止用新文件直接覆盖已形成的正式记录。",
       },
     ],
     allowedActions: ["CANCEL_PENDING", "VIEW_PROGRESS"],

@@ -205,7 +205,7 @@ function buildMetrics(options: {
     taxBasis: "GROSS",
     currency: "CNY",
     valueState: "available",
-    detail: "商城余额快照",
+    detail: "商城余额记录",
   }
   const rate: AuthorizedCardMetric = {
     key: "consumptionRate",

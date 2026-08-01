@@ -442,7 +442,7 @@ function SequentialProcessBar({
         />
         {leaseStatus === "lost" ? (
           <span className="text-sm text-destructive">
-            当前输入会保留，重新领取后才能正式提交。
+            当前输入会保留，重新领取后才能提交。
           </span>
         ) : null}
       </div>
@@ -679,7 +679,7 @@ export type ConflictResolutionDialogProps = ControllableDialogProps & {
 function ConflictResolutionDialog({
   trigger,
   title = "发现并发版本冲突",
-  description = "当前正式版本已经变化，本地内容不能直接覆盖。",
+  description = "当前版本已经变化，本地内容不能直接覆盖。",
   currentVersion,
   localBaseline,
   actor,
@@ -865,7 +865,7 @@ function PresenceNames({ users }: { users: readonly EditorPresenceUser[] }) {
 function EditorPresence({
   viewers = [],
   editors = [],
-  reminder = "这是协作提醒，不是业务锁；正式提交仍以服务端版本校验为准。",
+  reminder = "这是协作提醒，不是业务锁；提交仍以服务端版本校验为准。",
   className,
   ...props
 }: EditorPresenceProps) {

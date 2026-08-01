@@ -560,7 +560,7 @@ function MasterDataListWorkspace({
           label="主数据导出任务"
           description={
             <>
-              筛选快照：{exportMeta.filterSnapshotLabel}。任务号{" "}
+              筛选结果：{exportMeta.filterSnapshotLabel}。任务号{" "}
               <span className="num">{exportMeta.jobId}</span>
               ，权限版本{" "}
               <span className="num">{exportMeta.permissionVersion}</span>
@@ -583,7 +583,7 @@ function MasterDataListWorkspace({
             <span className="num">
               {selectorQuery.data.asOf.slice(0, 19)}
             </span>
-            。正式提交时再次校验，不以浏览器缓存决定结果。
+            。提交时再次校验，不以浏览器缓存决定结果。
           </p>
           <ul className="space-y-1">
             {selectorQuery.data.candidates.map((c) => (

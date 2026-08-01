@@ -702,7 +702,7 @@ export function SupplierAccountsPage() {
           <div className="text-end">
             <MoneyValue value={row.original.unallocatedAmount} taxBasis="gross" />
             <div className="text-xs text-muted-foreground">
-              事实 <MoneyValue value={row.original.amount} />
+              记录 <MoneyValue value={row.original.amount} />
             </div>
           </div>
         ),
@@ -805,7 +805,7 @@ export function SupplierAccountsPage() {
         <BusinessEmptyState
           kind="no-scope"
           title="无供应商往来权限"
-          description="权限已收回或未授权。敏感字段与导出结果已清除，禁止正式提交。"
+          description="权限已收回或未授权。敏感字段与导出结果已清除，不能提交。"
           action={
             <Button
               type="button"
@@ -1193,13 +1193,13 @@ export function SupplierAccountsPage() {
       ) : data.emptyReason === "NO_DATA" ? (
         <BusinessEmptyState
           kind="no-data"
-          title="当前范围尚无供应商往来事实"
+          title="当前范围尚无供应商往来记录"
           description="应付形成后刷新；可从采购单或结算来源进入。"
         />
       ) : (
         <BusinessTableFrame
           title={VIEW_LABEL[view]}
-          description={`${data.filterSummary} · 金额与状态均来自服务端投影；付款与进项票轨道独立。`}
+          description={`${data.filterSummary} · 金额与状态均来自系统最新数据；付款与进项票轨道独立。`}
           table={
             <>
           {view === "payable" ? (
@@ -1261,7 +1261,7 @@ export function SupplierAccountsPage() {
           if (!open) closePreview()
         }}
         title="应付预览"
-        description="来源、金额、付款/收票进度与分配关系（服务端投影）"
+        description="来源、金额、付款/收票进度与分配关系（系统最新数据）"
       >
         {detailQuery.isPending ? (
           <div className="h-40 animate-pulse rounded-xl bg-muted" />
@@ -1578,7 +1578,7 @@ export function SupplierAccountsPage() {
                   setReverseReason("")
                 }}
               >
-                确认追加反向事实
+                确认追加反向记录
               </Button>
             </DialogFooter>
           </DialogContent>

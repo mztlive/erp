@@ -264,7 +264,7 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
   },
   {
     id: "W23",
-    name: "执行投影",
+    name: "执行信息",
     mode: "M2+M4",
     mainRoute: "/commerce/execution-projections",
     navHref: "/commerce/execution-projections",
@@ -462,7 +462,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
       {
         id: "W23",
         href: "/commerce/execution-projections",
-        label: "执行投影",
+        label: "执行信息",
         icon: WorkflowIcon,
       },
       {

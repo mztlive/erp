@@ -424,7 +424,7 @@ export const BATCH_SEEDS: OwnershipMigrationBatchView[] = [
     backgroundOperation: {
       operationId: "op_exec_lh_001",
       status: "failed",
-      progressLabel: "后台检查已结束 · 正式结果：本批未提交",
+      progressLabel: "后台检查已结束 · 处理结果：本批未提交",
       progressPercent: 100,
       startedAt: "2026-07-30T21:00:00+08:00",
       lastProgressAt: "2026-07-30T21:02:18+08:00",

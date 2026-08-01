@@ -155,10 +155,10 @@ function freshnessPresentation(
 ): { state: DataFreshnessState; statusLabel: string } {
   if (refreshing) return { state: "syncing", statusLabel: "正在刷新" }
   if (refreshFailed) return { state: "failed", statusLabel: "刷新失败（保留旧数据）" }
-  if (state === "failed") return { state: "failed", statusLabel: "投影失败" }
+  if (state === "failed") return { state: "failed", statusLabel: "数据加载失败" }
   if (state === "rebuilding") return { state: "syncing", statusLabel: "正在重建" }
-  if (state === "stale") return { state: "stale", statusLabel: "投影已陈旧" }
-  return { state: "fresh", statusLabel: "投影已更新" }
+  if (state === "stale") return { state: "stale", statusLabel: "数据可能不是最新" }
+  return { state: "fresh", statusLabel: "数据已更新" }
 }
 
 function buildReturnTo(pathname: string, params: URLSearchParams): string {
@@ -921,7 +921,7 @@ export function CustomerQualityPage() {
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <BusinessFailureState
           kind="projection"
-          title="经营质量投影查询失败"
+          title="经营质量数据加载失败"
           description="无可用缓存。请重试或返回其它模块。"
           action={
             <Button type="button" onClick={() => void viewQuery.refetch()}>
@@ -988,7 +988,7 @@ export function CustomerQualityPage() {
               dateTime={data.freshness.projectedAt}
               state={freshUi.state}
               statusLabel={freshUi.statusLabel}
-              label="经营质量投影"
+              label="经营质量汇总"
             />
             <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
               <span>
@@ -1046,9 +1046,9 @@ export function CustomerQualityPage() {
       {/* Distinct freshness / coverage alerts — not mutually substitutable */}
       {data.freshness.state === "stale" && !data.freshness.refreshFailed ? (
         <Alert variant="warning">
-          <AlertTitle>投影数据陈旧</AlertTitle>
+          <AlertTitle>数据可能不是最新</AlertTitle>
           <AlertDescription>
-            最近成功投影 {formatDateTime(data.freshness.projectedAt)}；源水位{" "}
+            最近成功更新 {formatDateTime(data.freshness.projectedAt)}；源水位{" "}
             <span className="num">{data.freshness.sourceWatermark}</span>
             。可刷新；不宣称实时。
           </AlertDescription>
@@ -1056,9 +1056,9 @@ export function CustomerQualityPage() {
       ) : null}
       {data.freshness.state === "rebuilding" ? (
         <Alert variant="info">
-          <AlertTitle>投影正在重建</AlertTitle>
+          <AlertTitle>数据更新中</AlertTitle>
           <AlertDescription>
-            保留最近成功结果供查看。重建期间导出不得标为当前水位。
+            保留最近成功结果供查看。更新期间导出不得标为当前水位。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1066,13 +1066,13 @@ export function CustomerQualityPage() {
         <Alert variant="destructive">
           <AlertTitle>刷新失败</AlertTitle>
           <AlertDescription>
-            已保留旧结果。请重试；正式业务事实未被修改。
+            已保留旧结果。请重试；正式业务记录未被修改。
           </AlertDescription>
         </Alert>
       ) : null}
       {data.freshness.state === "failed" ? (
         <Alert variant="destructive">
-          <AlertTitle>投影失败</AlertTitle>
+          <AlertTitle>数据加载失败</AlertTitle>
           <AlertDescription>
             显示上次成功数据（若有）。请查看后台任务或稍后重试。
           </AlertDescription>
@@ -1155,7 +1155,7 @@ export function CustomerQualityPage() {
                 }
                 className="w-44"
               >
-                <NativeSelectOption value="all">全部授权事实</NativeSelectOption>
+                <NativeSelectOption value="all">全部授权记录</NativeSelectOption>
                 <NativeSelectOption value="reviewed_only">
                   仅已复核卡券票款
                 </NativeSelectOption>
@@ -1780,7 +1780,7 @@ export function CustomerQualityPage() {
           {data.emptyKind === "no-data" ? (
             <BusinessEmptyState
               kind="no-data"
-              title="期间内无授权经营事实"
+              title="期间内无授权经营记录"
               description="可调整统计期间或数据范围后重查。不把公司级指标显示为业务零成交的误导结论。"
             />
           ) : data.emptyKind === "filter" ? (
@@ -1859,7 +1859,7 @@ export function CustomerQualityPage() {
             <>
               期间 {exportJob.period.from} ~ {exportJob.period.to}。
               {exportJob.filterSummary}。权限版本{" "}
-              <span className="num">{exportJob.permissionVersion}</span>；投影水位{" "}
+              <span className="num">{exportJob.permissionVersion}</span>；数据水位{" "}
               <span className="num">{exportJob.projectionWatermark}</span>。
               {exportJob.amountBasisNote}
               {exportJob.downloadLabel ? (

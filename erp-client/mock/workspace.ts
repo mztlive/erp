@@ -393,7 +393,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
     {
         workItemId: "wi_receipt_01",
         workItemType: "CUSTOMER_RECEIPT_REVIEW",
-        workItemTypeLabel: "回款事实复核",
+        workItemTypeLabel: "回款核对",
         businessObjectType: "SALES_ORDER",
         businessObjectId: "so_1005",
         stableNumber: "XS20260326009",
@@ -465,7 +465,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
         businessObjectId: "sync_017",
         stableNumber: "SYNC-20260801-017",
         objectTitle: "同步批次 · SYNC-20260801-017",
-        counterpartyName: "商城销售单投影",
+        counterpartyName: "商城销售单数据",
         status: "OPEN",
         statusLabel: "同步异常",
         statusTone: "destructive",
@@ -474,7 +474,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
         dueAt: "2026-08-01T10:21:00+08:00",
         ownerRoleLabel: "系统管理员",
         reasonLabel: "2 张卡券销售单的客户映射未命中",
-        impactSummary: "ERP 只读投影延迟，商城原单不受影响",
+        impactSummary: "ERP 数据更新延迟，商城原单不受影响",
         allowedActions: [
             "VIEW",
             "PROCESS"
@@ -505,7 +505,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
         ownerRoleLabel: "运营",
         ownerUserLabel: "李倩",
         reasonLabel: "外部商品缺少可销售项目映射",
-        impactSummary: "阻断 12 条消费订单入账投影",
+        impactSummary: "阻断 12 条消费订单入账",
         allowedActions: [
             "VIEW",
             "PROCESS"
@@ -661,7 +661,7 @@ function buildWarnings(items: readonly WorkspaceWorkItem[]): WorkspaceWarning[] 
             warningId: "alert_sync",
             kind: "PROJECTION_DELAY",
             severity: "warning",
-            title: "商城投影数据延迟",
+            title: "商城数据同步延迟",
             description: `最近成功同步于 09:18，${sync.length} 项映射/同步任务待处理。`,
             occurredAt: "2026-08-01T09:18:00+08:00",
             destinationWorkspaceId: "W17",

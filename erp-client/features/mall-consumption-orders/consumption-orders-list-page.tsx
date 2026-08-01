@@ -376,8 +376,8 @@ export function ConsumptionOrdersListPage() {
       },
       {
         id: "facts",
-        header: "关键事实",
-        meta: { label: "关键事实", width: "default" },
+        header: "关键记录",
+        meta: { label: "关键记录", width: "default" },
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
             {factSummaryLabel(row.original)}
@@ -504,7 +504,7 @@ export function ConsumptionOrdersListPage() {
             updatedAt={data ? formatTime(data.factWatermark) : "—"}
             dateTime={data?.factWatermark}
             state={listQuery.isFetching ? "stale" : "fresh"}
-            label={`事实水位 · ${data?.permissionVersion ?? "—"}`}
+            label={`记录水位 · ${data?.permissionVersion ?? "—"}`}
           />
         }
         actions={
@@ -542,7 +542,7 @@ export function ConsumptionOrdersListPage() {
         variant="info"
         className="gap-2 py-2 lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-center lg:gap-3"
       >
-        <AlertTitle className="whitespace-nowrap">只读事实追溯</AlertTitle>
+        <AlertTitle className="whitespace-nowrap">只读记录追溯</AlertTitle>
         <AlertDescription className="min-w-0 lg:truncate">
           {data?.boundaryNotice ??
             "W25 不提供修改支付状态、编辑分摊或旁路重试供应商动作。导出与受控揭示走审计。"}
@@ -595,7 +595,7 @@ export function ConsumptionOrdersListPage() {
             mode="all-or-nothing"
             status="succeeded"
             label="导出作业"
-            description={`选择快照 · 字段掩码 · ${exportResult.jobId}`}
+            description={`筛选结果 · 字段掩码 · ${exportResult.jobId}`}
             total={exportResult.rowCount}
             completed={exportResult.rowCount}
             succeeded={exportResult.rowCount}
@@ -607,9 +607,9 @@ export function ConsumptionOrdersListPage() {
         <div className="space-y-3 rounded-2xl border border-border p-4">
           <BatchImpactPreview
             title="导出当前筛选全部"
-            description="使用服务端选择快照与字段清单，不把当前页当全量。下载时重新鉴权。"
+            description="使用服务端筛选结果与字段清单，不把当前页当全量。下载时重新鉴权。"
             filterSummary={data?.filterSummary ?? "—"}
-            selectionScope="当前筛选全部 · 服务端选择快照"
+            selectionScope="当前筛选全部 · 服务端筛选结果"
             estimated={data?.pageInfo.total ?? 0}
             processable={data?.pageInfo.total ?? 0}
             skipped={0}
@@ -683,7 +683,7 @@ export function ConsumptionOrdersListPage() {
               }
             />
             <MetricFilterItem
-              label="事实差异"
+              label="记录差异"
               value={metricValue("fact_diff")}
               active={metric === "fact_diff"}
               onClick={() =>
@@ -889,7 +889,7 @@ export function ConsumptionOrdersListPage() {
                 <BusinessEmptyState
                   kind="no-data"
                   title="当前范围没有消费订单"
-                  description="新支付事实到达后将显示。可调整演示状态或来源范围。"
+                  description="新支付记录到达后将显示。可调整演示状态或来源范围。"
                 />
               ) : (
                 <DataTable

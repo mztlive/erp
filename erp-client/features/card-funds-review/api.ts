@@ -124,9 +124,9 @@ function projectItem(
   const fundsChanged = Boolean(overlay)
   const fingerprintStatus = overlay?.forceHashDriftOnComplete
     ? {
-        label: "指纹已漂移",
+        label: "数据版本已变化",
         tone: "destructive" as const,
-        detail: "外部事实变化：完成时须使用最新 subject_hash，旧期望将阻断",
+        detail: "外部记录变化：完成时须使用最新数据版本，旧期望将阻断",
       }
     : fundsChanged
       ? {
@@ -359,7 +359,7 @@ export async function holdCardFundsReview(input: {
       workItemStatus: "IN_PROGRESS",
       heldAt: new Date().toISOString(),
       resumeHint:
-        "任务仍为 PENDING/IN_PROGRESS，已暂挂标记保留在有效队列；可在「已暂挂」范围查看并手动恢复。未形成复核事实。",
+        "任务仍为 PENDING/IN_PROGRESS，已暂挂标记保留在有效队列；可在「已暂挂」范围查看并手动恢复。未形成复核记录。",
       reference: `W13-HOLD-${input.workItemId.toUpperCase()}`,
       nextWorkItemId: input.nextWorkItemId,
     }
@@ -381,14 +381,14 @@ function validateDecisionAgainstItem(
       ok: false,
       code: "SUBJECT_HASH_MISMATCH",
       message:
-        "复核对象 subject_hash 已变化（任务/事实/提交三方不一致），已阻断静默通过。请刷新后重新核对。",
+        "复核对象 subject_hash 已变化（任务/记录/提交三方不一致），已阻断静默通过。请刷新后重新核对。",
     }
   }
   if (decision.expectedFundsFactVersion !== item.fundsFactVersion) {
     return {
       ok: false,
       code: "FUNDS_VERSION_MISMATCH",
-      message: "票款事实版本已变化，请刷新后重审",
+      message: "票款记录版本已变化，请刷新后重审",
     }
   }
   if (
@@ -523,7 +523,7 @@ export async function completeCardFundsReview(input: {
         return {
           status: "unknown",
           message:
-            "正式结果尚未确定。请勿假定已通过或已驳回，停留当前项并用同一幂等键查询。",
+            "处理结果尚未确定。请勿假定已通过或已驳回，停留当前项并按原任务号查询。",
           idempotencyKey: input.idempotencyKey,
         }
       }
@@ -532,7 +532,7 @@ export async function completeCardFundsReview(input: {
       return {
         status: "unknown",
         message:
-          "正式结果尚未确定。请勿假定已通过或已驳回，停留当前项并用同一幂等键查询。",
+          "处理结果尚未确定。请勿假定已通过或已驳回，停留当前项并按原任务号查询。",
         idempotencyKey: input.idempotencyKey,
       }
     }
@@ -549,7 +549,7 @@ export async function completeCardFundsReview(input: {
     return { status: "failed", code: "ALREADY_DONE", message: "任务已完成" }
   }
 
-  // 完成前重新取得当前事实并校验 decision 中的期望指纹
+  // 完成前重新取得当前记录并校验 decision 中的期望指纹
   const validation = validateDecisionAgainstItem(item, input.decision)
   if (!validation.ok) {
     return {
@@ -559,13 +559,13 @@ export async function completeCardFundsReview(input: {
     }
   }
 
-  // 信封层 subject_hash 与当前事实一致
+  // 信封层 subject_hash 与当前记录一致
   if (input.expectedSubjectHash !== item.workItem.subjectHash) {
     return {
       status: "failed",
       code: "SUBJECT_HASH_MISMATCH",
       message:
-        "任务信封 subject_hash 与当前事实不一致，已阻断。请刷新后重审。",
+        "任务信封 subject_hash 与当前记录不一致，已阻断。请刷新后重审。",
     }
   }
 
@@ -646,7 +646,7 @@ export async function completeCardFundsReview(input: {
     }
   }
 
-  // REJECTED — 只形成驳回复核事实并完成当前任务；固定 blocker，不建后继
+  // REJECTED — 只形成驳回复核记录并完成当前任务；固定 blocker，不建后继
   const business = {
     receivableFundsReviewId: reviewId,
     receivableAccountId: item.account.id,
@@ -721,7 +721,7 @@ export async function completeCardFundsReview(input: {
 }
 
 /**
- * 登记历史回款：形成正式回款事实 + 多对多分配，不写累计覆盖字段。
+ * 登记历史回款：形成正式回款记录 + 多对多分配，不写累计覆盖字段。
  * 不创建 0 元回款。返回后刷新金额与 subject_hash。
  */
 export async function registerHistoricalReceipt(input: {

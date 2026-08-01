@@ -58,7 +58,7 @@ export type ImportOpeningUrlState = {
   issueObjectType?: ImportObjectCode
   rowStatus?: IssueRowStatus
   page: number
-  /** Mock 角色演示，不写入业务事实 */
+  /** Mock 角色演示，不写入业务记录 */
   role?: ViewerRoleDemo
 }
 

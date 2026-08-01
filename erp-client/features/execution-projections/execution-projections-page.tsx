@@ -199,7 +199,7 @@ function commandToResultState(
     return {
       status: "blocked",
       title: result.resultLabel,
-      description: "销售事实与应收未回退。可重试投递或升级到 W29。",
+      description: "销售记录与应收未回退。可重试投递或升级到 W29。",
       reference: result.operationId,
       facts: [
         { label: "操作编号", value: result.operationId },
@@ -380,8 +380,8 @@ export function ExecutionProjectionsPage() {
       },
       {
         id: "projVersion",
-        header: "投影版本",
-        meta: { label: "投影版本", width: "status", numeric: true },
+        header: "数据版本",
+        meta: { label: "数据版本", width: "status", numeric: true },
         cell: ({ row }) => (
           <span className="num text-sm">
             v{row.original.projectionRevisionNo}
@@ -647,7 +647,7 @@ export function ExecutionProjectionsPage() {
         facts: [
           { label: "操作编号", value: job.jobId },
           {
-            label: "选择快照",
+            label: "选择结果",
             value: job.selectionSnapshotId,
           },
           {
@@ -675,7 +675,7 @@ export function ExecutionProjectionsPage() {
   if (listQuery.isPending && !view) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
-        <PageHeader title="执行投影" description="正在加载列表…" />
+        <PageHeader title="执行信息" description="正在加载列表…" />
         <div className="h-20 animate-pulse rounded-xl bg-muted" />
         <div className="h-64 animate-pulse rounded-2xl bg-muted" />
       </div>
@@ -685,7 +685,7 @@ export function ExecutionProjectionsPage() {
   if (listQuery.isError) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
-        <PageHeader title="执行投影" description="列表加载失败" />
+        <PageHeader title="执行信息" description="列表加载失败" />
         <Button type="button" onClick={() => void listQuery.refetch()}>
           重试
         </Button>
@@ -696,14 +696,14 @@ export function ExecutionProjectionsPage() {
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:gap-3.5 md:p-4">
       <PageHeader
-        title="执行投影"
+        title="执行信息"
         breadcrumbs={[
           {
             id: "com",
             label: "商城与发布",
             href: "/commerce/execution-projections",
           },
-          { id: "ep", label: "执行投影", current: true },
+          { id: "ep", label: "执行信息", current: true },
         ]}
         metadata={
           <DataFreshness
@@ -757,7 +757,7 @@ export function ExecutionProjectionsPage() {
         <ShieldAlertIcon aria-hidden="true" />
         <AlertTitle>非写者边界</AlertTitle>
         <AlertDescription>
-          投影由已生效销售版本自动形成。接收失败不回退销售事实、销售版本或应收；
+          执行信息由已生效销售版本自动形成。接收失败不回退销售记录、销售版本或应收；
           内容变化须在 W05 走销售变更单。W23 仅支持查询结果、重试与升级到 W29，
           不提供任务领取/完成。任何角色下不展示成交金额、配赠、税率、开票、应收与玩法规则。
         </AlertDescription>
@@ -802,7 +802,7 @@ export function ExecutionProjectionsPage() {
           }
           description={
             <>
-              服务端选择快照{" "}
+              服务端筛选结果{" "}
               <span className="num">{bulkJob.selectionSnapshotId}</span>
               。成功 {bulkJob.succeeded} · 跳过 {bulkJob.skipped} · 仍未知{" "}
               {bulkJob.stillUnknown} · 失败 {bulkJob.failed}。
@@ -814,7 +814,7 @@ export function ExecutionProjectionsPage() {
         />
       ) : null}
 
-      <MetricStrip columns={5} aria-label="执行投影指标筛选">
+      <MetricStrip columns={5} aria-label="执行信息指标筛选">
         {metrics.map((m) => (
           <MetricFilterItem
             key={m.key}
@@ -848,8 +848,8 @@ export function ExecutionProjectionsPage() {
               <InputGroupInput
                 value={searchDraft}
                 onChange={(e) => setSearchDraft(e.target.value)}
-                placeholder="销售单号、投影编号、客户"
-                aria-label="搜索执行投影"
+                placeholder="销售单号、执行编号、客户"
+                aria-label="搜索执行信息"
               />
             </InputGroup>
             <Button type="submit" size="sm" variant="secondary">
@@ -934,7 +934,7 @@ export function ExecutionProjectionsPage() {
               <NativeSelectOption value="MATCHED">版本一致</NativeSelectOption>
             </NativeSelect>
             <NativeSelect
-              aria-label="投影来源"
+              aria-label="数据来源"
               value={source}
               onChange={(e) =>
                 replaceParams({ source: e.target.value, page: "1" })
@@ -968,7 +968,7 @@ export function ExecutionProjectionsPage() {
           <span>
             已显式选择{" "}
             <span className="num font-medium">{selectedIds.length}</span>{" "}
-            项（Q3：不支持当前筛选全部；服务端冻结选择快照）
+            项（Q3：不支持当前筛选全部；服务端冻结筛选结果）
           </span>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -1005,7 +1005,7 @@ export function ExecutionProjectionsPage() {
       ) : null}
 
       <BusinessTableFrame
-        title="执行投影列表"
+        title="执行信息列表"
         description="销售单身份列与操作列固定；每页 6–8 行。指标与行数据同源权限水位。"
         table={
           <DataTable
@@ -1039,7 +1039,7 @@ export function ExecutionProjectionsPage() {
               rows.length === 0 ? (
                 <BusinessEmptyState
                   kind="filter"
-                  title="没有匹配的执行投影"
+                  title="没有匹配的执行信息"
                   description={
                     view?.filterSummary
                       ? `当前筛选：${view.filterSummary}`
@@ -1088,8 +1088,8 @@ export function ExecutionProjectionsPage() {
         size="detail"
         title={
           detail
-            ? `投影 · ${detail.identity.salesOrderNo}`
-            : "执行投影对象"
+            ? `执行信息 · ${detail.identity.salesOrderNo}`
+            : "执行信息对象"
         }
         description={
           detail
@@ -1107,15 +1107,15 @@ export function ExecutionProjectionsPage() {
         ) : detailQuery.isError || !detail ? (
           <BusinessEmptyState
             kind="no-data"
-            title="无法加载投影"
-            description="投影不存在或无权访问。"
+            title="无法加载数据"
+            description="数据不存在或无权访问。"
           />
         ) : (
           <div className="flex flex-col gap-4">
             <DocumentHeader
               title={detail.identity.salesOrderNo}
               documentNumber={detail.identity.projectionNo}
-              version={`投影 v${detail.selectedRevision.revisionNo} · ERP v${detail.selectedRevision.salesOrderRevisionNo}`}
+              version={`数据 v${detail.selectedRevision.revisionNo} · ERP v${detail.selectedRevision.salesOrderRevisionNo}`}
               primaryStatus={{
                 label: detail.tracks.projectionDelivery.label,
                 tone: detail.tracks.projectionDelivery.tone,
@@ -1123,7 +1123,7 @@ export function ExecutionProjectionsPage() {
               statuses={[
                 {
                   id: "sales-fact",
-                  label: "销售事实",
+                  label: "销售记录",
                   status: {
                     label: detail.tracks.salesFact.label,
                     tone: detail.tracks.salesFact.tone,
@@ -1131,7 +1131,7 @@ export function ExecutionProjectionsPage() {
                 },
                 {
                   id: "delivery",
-                  label: "投影投递",
+                  label: "信息投递",
                   status: {
                     label: detail.tracks.projectionDelivery.label,
                     tone: detail.tracks.projectionDelivery.tone,
@@ -1253,7 +1253,7 @@ export function ExecutionProjectionsPage() {
               tracks={[
                 {
                   id: "sales-fact",
-                  label: "销售事实",
+                  label: "销售记录",
                   status: {
                     label: detail.tracks.salesFact.label,
                     tone: detail.tracks.salesFact.tone,
@@ -1262,7 +1262,7 @@ export function ExecutionProjectionsPage() {
                 },
                 {
                   id: "projection-delivery",
-                  label: "投影投递",
+                  label: "信息投递",
                   status: {
                     label: detail.tracks.projectionDelivery.label,
                     tone: detail.tracks.projectionDelivery.tone,
@@ -1303,13 +1303,13 @@ export function ExecutionProjectionsPage() {
                   },
                   {
                     id: "proj-ver",
-                    label: "投影版本",
+                    label: "数据版本",
                     value: `v${detail.selectedRevision.revisionNo}`,
                     numeric: true,
                   },
                   {
                     id: "source",
-                    label: "投影来源",
+                    label: "数据来源",
                     value:
                       SOURCE_LABEL[detail.selectedRevision.projectionSource],
                   },
@@ -1339,7 +1339,7 @@ export function ExecutionProjectionsPage() {
             {objectTab === "content" ? (
               <DocumentSection
                 title="执行内容（服务端白名单）"
-                description="字段仅来自投影修订；前端不重组装。不含成交金额、配赠、税率、开票、应收、玩法规则。"
+                description="字段仅来自数据修订；前端不重组装。不含成交金额、配赠、税率、开票、应收、玩法规则。"
               >
                 <WhitelistContentGrid
                   content={detail.selectedRevision.content}
@@ -1397,7 +1397,7 @@ export function ExecutionProjectionsPage() {
             {objectTab === "versions" ? (
               <DocumentSection
                 title="版本对应"
-                description="历史投影固定显示来源销售版本，不被 W05 当前版覆盖。"
+                description="历史数据固定显示来源销售版本，不被 W05 当前版覆盖。"
               >
                 <RevisionTimeline
                   revisions={detail.revisionLinks.map((link) => ({
@@ -1408,7 +1408,7 @@ export function ExecutionProjectionsPage() {
                       "MIGRATION_BASELINE"
                         ? ("migration-baseline" as const)
                         : ("erp-change" as const),
-                    actor: "系统投影",
+                    actor: "系统",
                     effectiveAt: {
                       dateTime: link.mallAckAt ?? "2026-08-01T00:00:00+08:00",
                       label: link.mallAckAt
@@ -1455,7 +1455,7 @@ export function ExecutionProjectionsPage() {
                     detail.selectedRevision.salesOrderRevisionNo
                 ) ? (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    提示：W05 当前销售版本可能高于历史投影来源版本；历史内容不被覆盖。
+                    提示：W05 当前销售版本可能高于历史数据来源版本；历史内容不被覆盖。
                   </p>
                 ) : null}
               </DocumentSection>
@@ -1469,7 +1469,7 @@ export function ExecutionProjectionsPage() {
                     <AlertTitle>版本对账差异</AlertTitle>
                     <AlertDescription>
                       {RECONCILIATION_LABEL.VERSION_MISMATCH}
-                      ：只打开 W29 核对，不在 W23 选择覆盖任一侧事实。
+                      ：只打开 W29 核对，不在 W23 选择覆盖任一侧记录。
                       <div className="mt-2">
                         <Button
                           type="button"
@@ -1546,7 +1546,7 @@ export function ExecutionProjectionsPage() {
         onOpenChange={(open) => {
           if (!open) setPreviewId(null)
         }}
-        title="投影预览"
+        title="数据预览"
         description="白名单字段、来源版本与最新投递（只读）"
       >
         {previewQuery.data ? (
@@ -1555,7 +1555,7 @@ export function ExecutionProjectionsPage() {
               tracks={[
                 {
                   id: "s",
-                  label: "销售事实",
+                  label: "销售记录",
                   status: {
                     label: previewQuery.data.tracks.salesFact.label,
                     tone: previewQuery.data.tracks.salesFact.tone,
@@ -1563,7 +1563,7 @@ export function ExecutionProjectionsPage() {
                 },
                 {
                   id: "d",
-                  label: "投影投递",
+                  label: "信息投递",
                   status: {
                     label: previewQuery.data.tracks.projectionDelivery.label,
                     tone: previewQuery.data.tracks.projectionDelivery.tone,
@@ -1635,7 +1635,7 @@ export function ExecutionProjectionsPage() {
             ? { label: "明确结果或仍未知", tone: "warning" }
             : pendingAction?.kind === "RETRY" ||
                 pendingAction?.kind === "BULK_RETRY"
-              ? { label: "沿原幂等键重试", tone: "info" }
+              ? { label: "按原任务号重试", tone: "info" }
               : pendingAction?.kind === "ESCALATE"
                 ? { label: "W29 正式待办", tone: "warning" }
                 : { label: "后台逐项处理", tone: "info" }
@@ -1644,14 +1644,14 @@ export function ExecutionProjectionsPage() {
           pendingAction && "row" in pendingAction && pendingAction.row
             ? [
                 `销售版本 v${pendingAction.row.salesOrderRevisionNo}`,
-                `投影修订 v${pendingAction.row.projectionRevisionNo}`,
+                `数据修订 v${pendingAction.row.projectionRevisionNo}`,
                 pendingAction.row.targetMallName,
-                `幂等键 ${pendingAction.row.salesOrderNo}+v${pendingAction.row.salesOrderRevisionNo}+${pendingAction.row.targetMallName}`,
+                `任务号 ${pendingAction.row.salesOrderNo}+v${pendingAction.row.salesOrderRevisionNo}+${pendingAction.row.targetMallName}`,
               ]
             : pendingAction && "ids" in pendingAction
               ? [
                   `显式选择 ${pendingAction.ids.length} 项`,
-                  "服务端选择快照（非当前筛选全部）",
+                  "服务端筛选结果（非当前筛选全部）",
                 ]
               : []
         }
@@ -1664,9 +1664,9 @@ export function ExecutionProjectionsPage() {
               ]
             : pendingAction?.kind === "RETRY"
               ? [
-                  "沿原投影修订继续投递",
-                  "不生成新投影修订",
-                  "不回退销售事实或应收",
+                  "沿原数据修订继续投递",
+                  "不生成新数据修订",
+                  "不回退销售记录或应收",
                 ]
               : pendingAction?.kind === "ESCALATE"
                 ? [
@@ -1675,12 +1675,12 @@ export function ExecutionProjectionsPage() {
                   ]
                 : pendingAction?.kind === "BULK_RETRY"
                   ? [
-                      "服务端冻结选择快照并逐项重验",
+                      "服务端冻结筛选结果并逐项重验",
                       "已确认/结果未知/权限变化项跳过",
                       "展示成功/跳过/失败/仍未知",
                     ]
                   : [
-                      "服务端选择快照逐项查询",
+                      "服务端筛选结果逐项查询",
                       "仍未知不按成功处理",
                     ]
         }
@@ -1770,7 +1770,7 @@ function WhitelistContentGrid({
         <dd className="num">{content.effectiveAt}</dd>
       </div>
       <div>
-        <dt className="text-xs text-muted-foreground">内容指纹</dt>
+        <dt className="text-xs text-muted-foreground">数据版本</dt>
         <dd className="num text-xs">{shortHash(content.contentHash)}</dd>
       </div>
     </dl>

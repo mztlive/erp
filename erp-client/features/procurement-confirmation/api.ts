@@ -428,7 +428,7 @@ export async function completeProcurementDecision(input: {
         return {
           status: "unknown",
           message:
-            "正式结果尚未确定。请勿假定已通过或已驳回，停留当前项并使用同一幂等键查询。",
+            "处理结果尚未确定。请勿假定已通过或已驳回，停留当前项并按原任务号查询。",
           idempotencyKey: input.idempotencyKey,
         }
       }
@@ -437,7 +437,7 @@ export async function completeProcurementDecision(input: {
       return {
         status: "unknown",
         message:
-          "正式结果尚未确定。请勿假定已通过或已驳回，停留当前项并使用同一幂等键查询。",
+          "处理结果尚未确定。请勿假定已通过或已驳回，停留当前项并按原任务号查询。",
         idempotencyKey: input.idempotencyKey,
       }
     }
@@ -455,7 +455,7 @@ export async function completeProcurementDecision(input: {
       return {
         status: "failed",
         code: "SUBJECT_HASH_MISMATCH",
-        message: "销售提交指纹已变化，请刷新后处理最新提交",
+        message: "销售提交数据已变化，请刷新后处理最新提交",
       }
     }
     const projected = projectTask(seed)
@@ -709,14 +709,14 @@ export async function resolveUnknownProcurementResult(input: {
   if (entry?.state === "pending") {
     return {
       status: "unknown",
-      message: "仍在处理中，正式结果未知。停留当前项。",
+      message: "仍在处理中，处理结果待确认。停留当前项。",
       idempotencyKey: input.idempotencyKey,
     }
   }
   return {
     status: "failed",
     code: "NO_PENDING",
-    message: "未找到该幂等键对应的处理中请求",
+    message: "未找到该任务号对应的处理中请求",
   }
 }
 

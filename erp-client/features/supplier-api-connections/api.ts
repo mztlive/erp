@@ -679,7 +679,7 @@ export async function bindCredentialReference(input: {
       status: "unknown",
       title: "密钥引用绑定结果未知",
       message:
-        "不得乐观切换引用显示。请用同一幂等键查询最终结果；失败时保留旧有效引用。",
+        "不得乐观切换引用显示。请按原任务号查询最终结果；失败时保留旧有效引用。",
       operationId: `op_cred_${Date.now()}`,
       idempotencyKey: input.idempotencyKey,
     }
@@ -913,7 +913,7 @@ export async function updateCapabilities(input: {
   const result: FormalOutcome = {
     status: "succeeded",
     title: "能力配置已更新",
-    message: "能力版本已更新并标记为未验证。不直接修改商品/订单/发布快照。",
+    message: "能力版本已更新并标记为未验证。不直接修改商品/订单/发布数据。",
     reference: input.operationId,
     connectionVersion: o.version,
     facts: input.changes.map((c) => ({
@@ -989,7 +989,7 @@ export async function runHealthCheck(input: {
     return {
       status: "unknown",
       title: "健康检查结果未知",
-      message: `任务 ${jobNo} 结果不确定。不得按成功/失败处理；用同一幂等键或任务号查询。`,
+      message: `任务 ${jobNo} 结果不确定。不得按成功/失败处理；用原任务号查询。`,
       operationId: jobId,
       idempotencyKey: input.idempotencyKey,
     }
@@ -1219,18 +1219,18 @@ export async function disableConnection(input: {
       at: now,
       actor: "系统管理员",
       action: "DISABLE",
-      summary: "连接已停用；不删除历史版本与业务快照",
+      summary: "连接已停用；不删除历史版本与业务记录",
       auditNo: `AUD-W20-${Date.now().toString().slice(-4)}`,
     },
     ...(seed.auditEvents ?? []),
   ]
-  o.nextStep = "已停用 · 历史保留 · 不删除版本与业务快照"
+  o.nextStep = "已停用 · 历史保留 · 不删除版本与业务记录"
 
   const result: FormalOutcome = {
     status: "succeeded",
     title: "连接已停用",
     message:
-      "连接状态变为停用。不删除连接、版本和历史业务；发布/订单/同步快照保留。",
+      "连接状态变为停用。不删除连接、版本和历史业务；发布/订单/同步数据保留。",
     reference: input.connectionId,
     connectionVersion: o.version,
     facts: [
@@ -1314,7 +1314,7 @@ export async function queryFormalByIdempotency(
     return {
       status: "unknown",
       title: "结果仍未知",
-      message: "服务端尚未给出最终结论，请稍后用同一幂等键再查。",
+      message: "服务端尚未给出最终结论，请稍后用原任务号再查。",
       operationId: idempotencyKey,
       idempotencyKey,
     }
@@ -1327,7 +1327,7 @@ export async function queryFormalByIdempotency(
     return {
       status: "succeeded",
       title: "操作已完成",
-      message: "按幂等键查询到成功结果",
+      message: "按原任务号查询到成功结果",
       reference: idempotencyKey,
     }
   }
@@ -1335,7 +1335,7 @@ export async function queryFormalByIdempotency(
     status: "failed",
     code: "FAILED",
     title: "操作失败",
-    message: entry.error ?? "按幂等键查询到失败结果",
+    message: entry.error ?? "按原任务号查询到失败结果",
   }
 }
 

@@ -1,6 +1,6 @@
 /**
  * W25 商城消费订单 · session-mock API（queryFn / mutationFn）
- * 只读事实追溯 + 导出任务；无修改商城订单写操作。
+ * 只读记录追溯 + 导出任务；无修改商城订单写操作。
  */
 
 import { mockDelay } from "@/features/workspace-kit/delay"
@@ -31,7 +31,7 @@ import {
 } from "@/mock/mall-consumption-orders"
 
 const BOUNDARY_NOTICE =
-  "W25 是由不可变关键事实形成的追溯视图，不是商城可变员工订单的实时副本，也不是第二个商城订单写入口。仅展示支付成功、取消、退款、完成、余额恢复五类结果事实。"
+  "W25 是由不可变关键记录形成的追溯视图，不是商城可变员工订单的实时副本，也不是第二个商城订单写入口。仅展示支付成功、取消、退款、完成、余额恢复五类结果记录。"
 
 function nowIso() {
   return new Date().toISOString()
@@ -76,7 +76,7 @@ function computeMetrics(
       value: rows.filter((r) =>
         r.factSummary.some((f) => f.factType === "PAYMENT_SUCCEEDED")
       ).length,
-      detail: "有支付事实",
+      detail: "有支付记录",
     },
     {
       key: "pending_attr",
@@ -85,7 +85,7 @@ function computeMetrics(
     },
     {
       key: "fact_diff",
-      label: "事实差异",
+      label: "记录差异",
       value: rows.filter((r) => r.attributionStatus === "DIFFERENCE").length,
     },
     {
@@ -222,7 +222,7 @@ function filterSummary(
     const labels: Record<string, string> = {
       paid: "支付成功",
       pending_attr: "待归集",
-      fact_diff: "事实差异",
+      fact_diff: "记录差异",
       auto_exception: "自动履约异常",
       cost_none: "成本未覆盖",
     }
@@ -275,7 +275,7 @@ export async function fetchConsumptionOrderList(
       metrics: [
         { key: "paid", label: "支付成功", value: 0 },
         { key: "pending_attr", label: "待归集", value: 0 },
-        { key: "fact_diff", label: "事实差异", value: 0 },
+        { key: "fact_diff", label: "记录差异", value: 0 },
         { key: "auto_exception", label: "自动履约异常", value: 0 },
         { key: "cost_none", label: "成本未覆盖", value: 0 },
       ],
@@ -299,7 +299,7 @@ export async function fetchConsumptionOrderList(
       metrics: [
         { key: "paid", label: "支付成功", value: 0 },
         { key: "pending_attr", label: "待归集", value: 0 },
-        { key: "fact_diff", label: "事实差异", value: 0 },
+        { key: "fact_diff", label: "记录差异", value: 0 },
         { key: "auto_exception", label: "自动履约异常", value: 0 },
         { key: "cost_none", label: "成本未覆盖", value: 0 },
       ],
@@ -323,7 +323,7 @@ export async function fetchConsumptionOrderList(
       metrics: [
         { key: "paid", label: "支付成功", value: 0 },
         { key: "pending_attr", label: "待归集", value: 0 },
-        { key: "fact_diff", label: "事实差异", value: 0 },
+        { key: "fact_diff", label: "记录差异", value: 0 },
         { key: "auto_exception", label: "自动履约异常", value: 0 },
         { key: "cost_none", label: "成本未覆盖", value: 0 },
       ],
@@ -410,7 +410,7 @@ export async function createConsumptionOrderExportJob(
     permissionVersion: PERMISSION_VERSION,
     fieldSetId: command.fieldSetId,
     maskDisclaimer:
-      "导出使用服务端选择快照与字段权限掩码：地址、手机号、完整支付引用、卡号/卡密、未授权成本金额不会以明文写入文件。下载时重新鉴权。",
+      "导出使用服务端筛选结果与字段权限掩码：地址、手机号、完整支付引用、卡号/卡密、未授权成本金额不会以明文写入文件。下载时重新鉴权。",
     expiresAt,
     downloadLabel: `商城消费订单_${jobId}.csv`,
     status: "succeeded",

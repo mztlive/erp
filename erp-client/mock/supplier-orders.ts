@@ -79,7 +79,7 @@ export type SeedOrder = {
 }
 
 const paymentNotice =
-  "商城支付已发生，当前处理供应商履约。支付事实与供应商执行结果分别追溯，不回退支付。"
+  "商城支付已发生，当前处理供应商履约。支付记录与供应商执行结果分别追溯，不回退支付。"
 
 export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
   {
@@ -157,7 +157,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     costs: {
       cumulativeCostGross: "570.00",
       cumulativeCostNet: "504.42",
-      costSource: "下单成本快照",
+      costSource: "下单时成本",
     },
     actions: [
       {
@@ -289,7 +289,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     costs: {
       cumulativeCostGross: "75.00",
       cumulativeCostNet: "70.75",
-      costSource: "下单成本快照 − 部分供应商退款",
+      costSource: "下单时成本 − 部分供应商退款",
       costVariance: "-14.15",
       settlementId: "stl-202607",
       settlementNo: "STL-2026-07-SF",
@@ -351,7 +351,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     paymentFactKey: "pay_fact_m91500",
     lockVersion: 5,
     priority: 90,
-    errorSummary: "供应商回报库存不足，履约异常。支付事实保留，可走售后或转人工。",
+    errorSummary: "供应商回报库存不足，履约异常。支付记录保留，可走售后或转人工。",
     placeActionId: "act-place-ex-01",
     hasQueryCapability: true,
     items: [
@@ -425,7 +425,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     costs: {
       cumulativeCostGross: "1200.00",
       cumulativeCostNet: "1061.95",
-      costSource: "下单成本快照",
+      costSource: "下单时成本",
     },
     actions: [
       {
@@ -519,7 +519,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     costs: {
       cumulativeCostGross: "1260.00",
       cumulativeCostNet: "1115.04",
-      costSource: "下单成本快照",
+      costSource: "下单时成本",
       settlementId: "stl-202607",
       settlementNo: "STL-2026-07-SF",
     },
@@ -630,7 +630,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     costs: {
       cumulativeCostGross: "712.00",
       cumulativeCostNet: "630.09",
-      costSource: "下单成本快照（拒单保留，不删除）",
+      costSource: "下单时成本（拒单保留，不删除）",
     },
     actions: [
       {
@@ -684,7 +684,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     paymentFactKey: "pay_fact_m76050",
     lockVersion: 7,
     priority: 85,
-    errorSummary: "取消与退款均失败，需人工协同。三类退款事实分别可见缺口。",
+    errorSummary: "取消与退款均失败，需人工协同。三类退款记录分别可见缺口。",
     placeActionId: "act-place-cf-01",
     hasQueryCapability: true,
     items: [
@@ -768,7 +768,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     costs: {
       cumulativeCostGross: "1360.00",
       cumulativeCostNet: "1203.54",
-      costSource: "下单成本快照",
+      costSource: "下单时成本",
     },
     actions: [
       {
@@ -883,7 +883,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     costs: {
       cumulativeCostGross: "3400.00",
       cumulativeCostNet: "3008.85",
-      costSource: "下单成本快照",
+      costSource: "下单时成本",
     },
     actions: [
       {
@@ -967,7 +967,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     costs: {
       cumulativeCostGross: "1000.00",
       cumulativeCostNet: "943.40",
-      costSource: "下单成本快照",
+      costSource: "下单时成本",
     },
     actions: [
       {

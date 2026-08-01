@@ -371,7 +371,7 @@ export function WorkspaceHomePage() {
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <BusinessFailureState
           kind="system"
-          description="今日工作台暂时无法加载，请重试。正式业务事实未被修改。"
+          description="今日工作台暂时无法加载，请重试。正式业务记录未被修改。"
           action={
             <Button type="button" variant="outline" onClick={refresh}>
               重试
@@ -447,7 +447,7 @@ export function WorkspaceHomePage() {
               statusLabel={workItemsFreshness.statusLabel}
             />
             <DataFreshness
-              label="工作台投影"
+              label="工作台汇总"
               updatedAt={projectionFreshness.updatedAtLabel}
               dateTime={projectionFreshness.dateTime}
               state={projectionFreshness.state}
@@ -481,13 +481,13 @@ export function WorkspaceHomePage() {
           <TriangleAlertIcon aria-hidden="true" />
           <AlertTitle>
             {projectionFreshness.state === "failed"
-              ? "工作台投影重建失败"
-              : "工作台投影已陈旧"}
+              ? "工作台数据更新失败"
+              : "工作台数据可能不是最新"}
           </AlertTitle>
           <AlertDescription>
             {projectionFreshness.state === "failed"
-              ? "指标与预警不得视为实时；正式待办仍可按下方任务列表处理。"
-              : "投影更新已超过 1 分钟，指标与预警不宣称实时。正式待办列表仍按事务内同步结果展示。"}
+              ? "指标与预警不得视为实时；待办任务仍可按下方任务列表处理。"
+              : "数据更新已超过 1 分钟，指标与预警不宣称实时。待办任务列表仍按最新结果展示。"}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -600,7 +600,7 @@ export function WorkspaceHomePage() {
               <CardDescription>
                 只显示需要你关注的异常
                 {projectionFreshness.state === "stale"
-                  ? " · 投影非实时"
+                  ? " · 数据非实时"
                   : null}
               </CardDescription>
             </CardHeader>

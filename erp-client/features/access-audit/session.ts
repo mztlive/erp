@@ -170,7 +170,7 @@ const ROLE_SEED: RoleRow[] = [
     status: "enabled",
     statusLabel: "启用",
     statusTone: "success",
-    permissionSummary: "W22 刊登 · W23 执行投影",
+    permissionSummary: "W22 刊登 · W23 执行信息",
     dataScopeSummary: "空数据范围",
     fieldPolicySummary: "默认",
     riskFlags: ["EMPTY_SCOPE", "PENDING_DISABLE"],
@@ -1092,7 +1092,7 @@ export function getW19EffectiveAccess(
           layer: "OBJECT_STATE",
           layerLabel: "对象状态与业务条件",
           sourceType: "OBJECT_ALLOWED_ACTIONS",
-          sourceLabel: "对象中心投影",
+          sourceLabel: "对象中心数据",
         },
         ...(role.riskFlags.includes("EMPTY_SCOPE")
           ? [
@@ -1324,7 +1324,7 @@ export function previewW19AccessChange(
         {
           id: "d1",
           field: "accessCapabilities",
-          before: "（当前服务端投影）",
+          before: "（当前系统数据）",
           after: caps,
         },
       ],

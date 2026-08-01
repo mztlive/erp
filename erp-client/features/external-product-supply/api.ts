@@ -445,7 +445,7 @@ export async function fetchExternalCatalogCenter(input: {
         {
           id: "ho1",
           label: `历史已支付 ${impact.historicalPaidOrderCount} 笔`,
-          note: "保留下单时商品、销售价、供应商与成本快照，不可改写",
+          note: "保留下单时商品、销售价、供应商与成本记录，不可改写",
         },
       ],
       techExceptions:
@@ -640,7 +640,7 @@ export async function completeExternalCatalogWorkItem(input: {
     return {
       status: "failed",
       code: "DECISION_MISMATCH",
-      message: "确认停供事实仅适用于 STOPPED 项",
+      message: "确认停供记录仅适用于 STOPPED 项",
     }
   }
 
@@ -717,7 +717,7 @@ export async function resolveUnknownExternalCatalogResult(input: {
     return {
       status: "failed",
       code: "UNKNOWN_KEY",
-      message: "找不到该幂等键的结果",
+      message: "找不到该任务号的结果",
     }
   }
   if (entry.state === "succeeded") {
@@ -803,7 +803,7 @@ export async function resolveUnknownExternalCatalogResult(input: {
   if (entry.state === "pending") {
     return {
       status: "unknown",
-      message: "结果仍不确定，请稍后用同一幂等键再查",
+      message: "结果仍不确定，请稍后用原任务号再查",
       idempotencyKey: input.idempotencyKey,
     }
   }
@@ -821,6 +821,6 @@ export async function attemptUnregisteredFormalWrite(): Promise<FormalActionResp
     status: "failed",
     code: "WORK_ITEM_TYPE_UNREGISTERED",
     message:
-      "正常映射/供给类型未登记：不存在可调用正式提交端点。请仅使用会话草稿或进入 W14。",
+      "正常映射/供给类型未登记：不存在可调用的提交入口。请仅使用会话草稿或进入 W14。",
   }
 }

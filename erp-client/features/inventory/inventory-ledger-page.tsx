@@ -467,7 +467,7 @@ export function InventoryLedgerPage() {
     if (result.status === "unknown") {
       setLastResult({
         status: "unknown",
-        title: "正式结果不确定",
+        title: "处理结果待确认",
         description: result.message,
         reference: result.idempotencyKey,
         pendingIdempotencyKey: result.idempotencyKey,
@@ -1021,7 +1021,7 @@ export function InventoryLedgerPage() {
             updatedAt={formatDateTime(data.queriedAt)}
             dateTime={data.queriedAt}
             state="fresh"
-            label="库存事实水位"
+            label="库存记录水位"
           />
         }
         actions={
@@ -1425,8 +1425,8 @@ export function InventoryLedgerPage() {
             ) : (
               <BusinessEmptyState
                 kind="no-data"
-                title="当前仓库尚无 ERP 自有库存事实"
-                description="期初须经 W18 基准日实盘导入后形成正式流水；旧商城库存字段不会作为事实出现在本台账。"
+                title="当前仓库尚无 ERP 自有库存记录"
+                description="期初须经 W18 基准日实盘导入后形成正式流水；旧商城库存字段不会作为记录出现在本台账。"
                 action={
                   <Button
                     type="button"

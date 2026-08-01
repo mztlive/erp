@@ -171,7 +171,7 @@ function MasterDataCenterBody({
         ]}
         metadata={
           <DataFreshness
-            updatedAt="正式事实"
+            updatedAt="正式记录"
             dateTime={data.currentRevision.effectiveFrom}
             state="fresh"
             label="对象"
@@ -286,7 +286,7 @@ function MasterDataCenterBody({
         <DocumentSection
           id="md-section-overview"
           title="概览"
-          description="身份、生命周期、生效区间与资源专属事实"
+          description="身份、生命周期、生效区间与资源专属记录"
         >
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             <div>
@@ -396,7 +396,7 @@ function MasterDataCenterBody({
         <DocumentSection
           id="md-section-versions"
           title="版本"
-          description="RevisionTimeline · 历史名称快照独立于当前名称"
+          description="RevisionTimeline · 历史名称记录独立于当前名称"
         >
           <RevisionTimeline
             revisions={data.revisionTimeline.map((rev) => ({
@@ -411,7 +411,7 @@ function MasterDataCenterBody({
               reason: (
                 <div className="space-y-1">
                   <div>
-                    快照名称：<strong>{rev.nameSnapshot}</strong>
+                    记录名称：<strong>{rev.nameSnapshot}</strong>
                   </div>
                   <div>{rev.changeReason}</div>
                   <div className="flex flex-wrap gap-2">
@@ -432,7 +432,7 @@ function MasterDataCenterBody({
         <DocumentSection
           id="md-section-relations"
           title="关系"
-          description="使用影响与选择器 eligibility（服务端投影）"
+          description="使用影响与选择器 eligibility（系统最新数据）"
         >
           <p className="text-sm">
             历史引用约{" "}

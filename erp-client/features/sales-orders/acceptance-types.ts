@@ -69,7 +69,7 @@ export type AcceptanceHistoryItem = {
   comment?: string
   reversalOfAcceptanceId?: string
   reversedByAcceptanceId?: string
-  /** 结果区文案：仅记录验收事实，不暗示库存/票款 */
+  /** 结果区文案：仅记录验收记录，不暗示库存/票款 */
   factOnlyNotice: string
 }
 
@@ -216,4 +216,4 @@ export const OVERALL_RESULT_LABEL: Record<AcceptanceOverallResult, string> = {
 }
 
 export const FACT_ONLY_NOTICE =
-  "本结果仅记录客户验收事实，不表示已退货、已退款、已扣库存或已减少应收。后续处理请从「变更与异常」发起。"
+  "本结果仅记录客户验收记录，不表示已退货、已退款、已扣库存或已减少应收。后续处理请从「变更与异常」发起。"

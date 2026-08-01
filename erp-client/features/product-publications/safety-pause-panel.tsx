@@ -64,12 +64,12 @@ export function SafetyPausePanel({
                 </dd>
               </div>
               <div>
-                <dt className="text-xs text-muted-foreground">原幂等键</dt>
+                <dt className="text-xs text-muted-foreground">原任务号</dt>
                 <dd className="num break-all">{pause.originalIdempotencyKey}</dd>
               </div>
             </dl>
             <p className="text-xs text-muted-foreground">
-              不展示影响集、提交时间、后续任务或 blocker。请按原幂等键查询，或进入接口错误处理。
+              不展示影响集、提交时间、后续任务。请按原任务号查询，或进入接口错误处理。
             </p>
             <Button
               type="button"

@@ -433,7 +433,7 @@ export function SalesOrdersListPage({
         <div className="space-y-2">
           <FormalActionResult
             status="succeeded"
-            title="导出任务已完成（客户端筛选快照）"
+            title="导出任务已完成（客户端筛选结果）"
             description={`共 ${exportJob.rowCount} 行，受当前筛选与权限版本约束；目标页打开后应重新查询金额和状态。非服务端全量后台导出。`}
             reference={exportJob.jobId}
             facts={[
@@ -451,7 +451,7 @@ export function SalesOrdersListPage({
             mode="all-or-nothing"
             status="succeeded"
             label="导出作业"
-            description={`审计标签 ${exportJob.jobId} · 客户端筛选快照`}
+            description={`审计标签 ${exportJob.jobId} · 客户端筛选结果`}
             total={exportJob.rowCount}
             completed={exportJob.rowCount}
             succeeded={exportJob.rowCount}

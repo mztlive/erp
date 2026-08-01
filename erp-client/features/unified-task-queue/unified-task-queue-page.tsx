@@ -546,7 +546,7 @@ export function UnifiedTaskQueuePage() {
             status: "unknown",
             title: "结果不确定",
             description:
-              "网络超时：未自动跳到下一项。请使用同一幂等键查询最终结果。",
+              "网络超时：未自动跳到下一项。请按原任务号查询最终结果。",
             reference: idempotencyKey,
           })
           return
@@ -605,7 +605,7 @@ export function UnifiedTaskQueuePage() {
         setLastResult({
           status: "succeeded",
           title: "幂等查询确认成功",
-          description: "同一幂等键已确认终态，现在可以打开下一项。",
+          description: "已按原任务号确认终态，现在可以打开下一项。",
           reference: ref,
         })
         const fromId = pendingIdem.workItemId
@@ -622,7 +622,7 @@ export function UnifiedTaskQueuePage() {
         setLastResult({
           status: "unknown",
           title: "仍不确定",
-          description: "服务端尚未返回终态，请稍后用同一幂等键再查。",
+          description: "服务端尚未返回终态，请稍后用原任务号再查。",
           reference: pendingIdem.key,
         })
       }
@@ -661,7 +661,7 @@ export function UnifiedTaskQueuePage() {
       setClaimEpoch((n) => n + 1)
       setLastResult({
         status: "succeeded",
-        title: "任务已关闭（不改业务事实）",
+        title: "任务已关闭（不改业务记录）",
         description: `关闭原因 ${result.reasonCode}；替代任务 ${result.replacementWorkItemId ?? "—"}`,
         reference: result.closureRecordId,
       })
@@ -995,7 +995,7 @@ export function UnifiedTaskQueuePage() {
       {pendingIdem ? (
         <Alert>
           <KeyRoundIcon aria-hidden="true" />
-          <AlertTitle>结果不确定 · 幂等键已保留</AlertTitle>
+          <AlertTitle>结果待确认 · 原任务号已保留</AlertTitle>
           <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <span className="font-mono text-xs break-all">
               {pendingIdem.key}
@@ -1413,7 +1413,7 @@ export function UnifiedTaskQueuePage() {
                       variant="outline"
                       render={<Link href={task.handlerHref} />}
                     >
-                      打开对象/处理器
+                      前往任务页面
                       <ArrowRightIcon
                         data-icon="inline-end"
                         aria-hidden="true"
@@ -1430,9 +1430,9 @@ export function UnifiedTaskQueuePage() {
                       // Instead: DEFER-style leave with note is the safe path; show blocked.
                       setLastResult({
                         status: "rejected",
-                        title: "退回需走领域处理器",
+                        title: "退回需在任务对应页面处理",
                         description:
-                          "统一队列不提供独立“标记退回完成”伪动作；请在专用处理器内提交业务退回，或暂挂后转交。",
+                          "统一队列不提供独立“标记退回完成”伪动作；请前往任务对应页面提交业务退回，或暂挂后转交。",
                         reference: task.id,
                       })
                     }}
@@ -1600,7 +1600,7 @@ export function UnifiedTaskQueuePage() {
         lockedFields={["对象版本", "当前处理状态", "数据版本"]}
         effects={[
           `执行 ${task?.completionAction ?? "领域完成动作"}`,
-          "业务事实与任务 COMPLETED 同一事务返回",
+          "业务记录与任务 COMPLETED 同一事务返回",
           "无独立「标记完成」伪动作",
         ]}
         nextDepartment="相关责任组"
@@ -1618,7 +1618,7 @@ export function UnifiedTaskQueuePage() {
         changedAt="刚刚"
         diff={
           <p className="text-sm">
-            任务针对版本与当前事实不一致。本地决策备注已保留，但不能直接覆盖提交。
+            任务针对版本与当前记录不一致。本地决策备注已保留，但不能直接覆盖提交。
           </p>
         }
         onReload={() => {

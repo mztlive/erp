@@ -116,7 +116,7 @@ export type UserRow = Readonly<{
   statusLabel: string
   statusTone: "success" | "neutral" | "warning" | "destructive" | "info"
   activeRoles: string
-  /** 已有事实只读展示；策略缺失时不开放编辑 */
+  /** 已有记录只读展示；策略缺失时不开放编辑 */
   effectiveFrom?: string
   effectiveTo?: string
   dataScopeSummary: string

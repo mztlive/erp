@@ -143,7 +143,7 @@ function recomputeActions(seed: ProjectionSeed): {
       {
         action: "RETRY",
         code: "ESCALATED",
-        message: "已升级人工，对象级重试请在 W29 沿原幂等键处理。",
+        message: "已升级人工，对象级重试请在 W29 按原任务号处理。",
       },
       {
         action: "QUERY_RESULT",
@@ -439,14 +439,14 @@ function buildTracks(seed: ProjectionSeed): ExecutionProjectionView["tracks"] {
     salesFact: {
       label: seed.salesOrderStatus,
       tone: seed.salesOrderStatusTone,
-      description: `ERP 销售版本 v${seed.salesOrderRevisionNo} 已形成；接收失败不回退销售事实或应收。`,
+      description: `ERP 销售版本 v${seed.salesOrderRevisionNo} 已形成；接收失败不回退销售记录或应收。`,
     },
     projectionDelivery: {
       label: DELIVERY_STATUS_LABEL[delivery],
       tone: DELIVERY_STATUS_TONE[delivery],
       description:
         delivery === "ACKED"
-          ? "投影投递已闭环"
+          ? "信息投递已闭环"
           : delivery === "UNKNOWN"
             ? "结果未知：须先查询，未明确前不显示成功"
             : `尝试 ${seed.attemptCount} 次${seed.nextAttemptAt ? ` · 下次 ${seed.nextAttemptAt}` : ""}`,
@@ -608,7 +608,7 @@ export async function fetchExecutionProjectionDetail(input: {
     deliveryStatusUpdatedAt: now,
     queriedAt: now,
     boundaryNotice:
-      "投影不是销售单副本。接收失败不回退销售事实、销售版本或应收；业务内容变更须在 W05 走销售变更单形成新版本后自动产生新投影。",
+      "数据不是销售单副本。接收失败不回退销售记录、销售版本或应收；业务内容变更须在 W05 走销售变更单形成新版本后自动产生新数据。",
   }
 }
 
@@ -628,7 +628,7 @@ export async function fetchSalesOrderCollaboration(
       salesOrderNo: salesOrderId,
       hasProjection: false,
       historyCount: 0,
-      note: "当前销售单尚无执行投影。卡券销售版本生效后由服务端自动形成投影。",
+      note: "当前销售单尚无执行信息。卡券销售版本生效后由服务端自动形成数据。",
     }
   }
 
@@ -654,7 +654,7 @@ export async function fetchSalesOrderCollaboration(
     historyCount,
     w23Href: `/commerce/execution-projections?projectionId=${seed.projectionId}`,
     historyHref: `/commerce/execution-projections?projectionId=${seed.projectionId}&revision=${seed.projectionRevisionId}`,
-    note: "协同状态读取服务端投影事实；本区只读。变更销售内容请走销售变更单。",
+    note: "协同状态读取服务端数据；本区只读。变更销售内容请走销售变更单。",
   }
 }
 
@@ -686,7 +686,7 @@ export async function submitProjectionDeliveryCommand(
 
   const base = getSeed(input.projectionId)
   if (!base) {
-    throw new Error("投影不存在")
+    throw new Error("数据不存在")
   }
   const seed = effectiveSeed(base)
   const version = objectVersionOf(seed)
@@ -775,7 +775,7 @@ export async function submitProjectionDeliveryCommand(
   } else if (input.action === "RETRY") {
     // 沿原修订继续，不生成新投影修订
     result = "RETRY_SCHEDULED"
-    resultLabel = "已安排沿原幂等键重试"
+    resultLabel = "已安排按原任务号重试"
     nextAction = "等待投递结果；超时请先查询"
     overlay.status = "RETRYING"
     overlay.attemptCount = seed.attemptCount + 1
@@ -870,7 +870,7 @@ export async function submitBulkProjectionCommand(
         salesOrderNo: id,
         deliveryId: `dlv_${id}`,
         outcome: "skipped",
-        reason: "投影不存在或已不在授权范围",
+        reason: "数据不存在或已不在授权范围",
       })
       skipped += 1
       continue
@@ -928,7 +928,7 @@ export async function submitBulkProjectionCommand(
         salesOrderNo: seed.salesOrderNo,
         deliveryId: `dlv_${id}`,
         outcome: "succeeded",
-        reason: "已沿原幂等键安排重试",
+        reason: "已按原任务号安排重试",
       })
       succeeded += 1
     } else {

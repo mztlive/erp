@@ -20,7 +20,7 @@ function formatTime(iso?: string) {
 
 /**
  * 冻结期间挂在 ErpAppShell 顶部：不可忽略、无暂时关闭。
- * 由服务端冻结事实驱动（session-mock）。
+ * 由服务端冻结记录驱动（session-mock）。
  */
 export function OwnershipMigrationGlobalFreezeBanner() {
   const freezeQuery = useMaintenanceFreezeQuery()

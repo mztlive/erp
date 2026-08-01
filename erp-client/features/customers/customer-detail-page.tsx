@@ -196,7 +196,7 @@ export function CustomerDetailPage({
         ]}
         metadata={
           <DataFreshness
-            updatedAt="正式事实"
+            updatedAt="正式记录"
             dateTime={customer.freshness.formalFactsAt}
             state="fresh"
             label="客户主数据"
@@ -306,7 +306,7 @@ export function CustomerDetailPage({
         <MetricItem
           label="应收余额"
           value={<MoneyValue value={customer.metrics.receivableBalance} />}
-          detail="W11 投影"
+          detail="W11 汇总"
         />
         <MetricItem
           label="逾期金额"
@@ -349,7 +349,7 @@ export function CustomerDetailPage({
         }}
         tabIndex={-1}
       >
-        <DocumentSection title="主体身份与客户角色" description="当前主数据版本，不覆盖历史单据快照">
+        <DocumentSection title="主体身份与客户角色" description="当前主数据版本，不覆盖历史单据记录">
           {customer.partitions.identity === "error" ? (
             <BusinessFailureState
               kind="system"
@@ -608,7 +608,7 @@ export function CustomerDetailPage({
       >
         <DocumentSection
           title="票款摘要"
-          description="只读应收投影；不在此核销或开票。正式往来进入 W11。"
+          description="只读应收汇总；不在此核销或开票。正式往来进入 W11。"
           action={
             <Button
               type="button"
@@ -719,7 +719,7 @@ export function CustomerDetailPage({
             <BusinessEmptyState
               kind="no-data"
               title="暂无票款摘要"
-              description="服务端未返回应收投影。"
+              description="服务端未返回应收数据。"
             />
           )}
         </DocumentSection>
@@ -735,7 +735,7 @@ export function CustomerDetailPage({
       >
         <DocumentSection
           title="经营摘要"
-          description="W15 异步投影（允许延迟）；标签为服务端字段，前端不计算。"
+          description="W15 异步汇总（允许延迟）；标签为服务端字段，前端不计算。"
           action={
             <Button
               type="button"
@@ -751,7 +751,7 @@ export function CustomerDetailPage({
             status={
               customer.partitions.quality === "error" ? "error" : "success"
             }
-            error="经营投影分区暂时不可用。已确认的客户主体与其它分区不受影响。"
+            error="经营数据分区暂时不可用。已确认的客户主体与其它分区不受影响。"
             errorKind="projection"
             retryAction={
               <Button type="button" size="sm" onClick={() => void query.refetch()}>
@@ -788,7 +788,7 @@ export function CustomerDetailPage({
                 />
                 <DataFreshness
                   updatedAt={
-                    customer.qualitySummary.isStale ? "投影可能陈旧" : "投影"
+                    customer.qualitySummary.isStale ? "数据可能不是最新" : "数据"
                   }
                   dateTime={customer.qualitySummary.projectionAt}
                   state={customer.qualitySummary.isStale ? "stale" : "fresh"}
@@ -799,7 +799,7 @@ export function CustomerDetailPage({
               <BusinessEmptyState
                 kind="no-data"
                 title="暂无经营摘要"
-                description="投影尚未生成。"
+                description="数据尚未生成。"
               />
             ) : null}
           </AsyncSectionState>
@@ -856,7 +856,7 @@ export function CustomerDetailPage({
                 <CardHeader>
                   <CardTitle className="text-sm">修订时间线</CardTitle>
                   <CardDescription>
-                    新版本不覆盖历史合同/销售单快照
+                    新版本不覆盖历史合同/销售单记录
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2 text-sm">

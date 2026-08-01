@@ -39,7 +39,7 @@ export type ItemResult =
   | "UNATTRIBUTED"
   | "FAILED"
 
-/** 五类关键事实，同一订单下不得合并 */
+/** 五类关键记录，同一订单下不得合并 */
 export type MallOrderFactType =
   | "PAYMENT_SUCCEEDED"
   | "ORDER_CANCELED"
@@ -99,7 +99,7 @@ export const PIPELINE_TO_INDICATOR: Record<
 export const PIPELINE_STAGE_LABEL: Record<BackfillPipelineStage, string> = {
   SCOPE: "范围确认",
   VALIDATE_SOURCE: "来源校验",
-  INGEST: "事实入库",
+  INGEST: "记录入库",
   ATTRIBUTE: "归集评估",
   REPORT: "报告",
   DONE: "完成",
@@ -171,7 +171,7 @@ export const FACT_TYPE_LABEL: Record<MallOrderFactType, string> = {
 }
 
 export const ITEM_RESULT_LABEL: Record<ItemResult, string> = {
-  INSERTED: "新增正式事实",
+  INSERTED: "新增正式记录",
   DEDUPLICATED: "重叠去重",
   UNATTRIBUTED: "待归集",
   FAILED: "处理失败",

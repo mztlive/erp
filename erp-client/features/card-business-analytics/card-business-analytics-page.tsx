@@ -219,7 +219,7 @@ function mapFreshnessUi(
   options?: { refreshFailed?: boolean; refreshing?: boolean; breached?: boolean }
 ): { uiState: DataFreshnessState; statusLabel: string } {
   if (options?.refreshing) {
-    return { uiState: "syncing", statusLabel: "正在刷新投影" }
+    return { uiState: "syncing", statusLabel: "正在刷新数据" }
   }
   if (options?.refreshFailed) {
     return { uiState: "failed", statusLabel: "刷新失败 · 保留旧数据" }
@@ -232,11 +232,11 @@ function mapFreshnessUi(
   }
   switch (state) {
     case "rebuilding":
-      return { uiState: "syncing", statusLabel: "投影重建中" }
+      return { uiState: "syncing", statusLabel: "数据更新中" }
     case "failed":
-      return { uiState: "failed", statusLabel: "投影失败" }
+      return { uiState: "failed", statusLabel: "数据更新失败" }
     default:
-      return { uiState: "fresh", statusLabel: "投影已更新" }
+      return { uiState: "fresh", statusLabel: "数据已更新" }
   }
 }
 
@@ -857,11 +857,11 @@ export function CardBusinessAnalyticsPage() {
                 dateTime={data.freshness.projectionUpdatedAt}
                 state={freshnessUi.uiState}
                 statusLabel={freshnessUi.statusLabel}
-                label="分析投影"
+                label="分析汇总"
               />
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <span>
-                  Outbox 水位{" "}
+                  Outbox 同步{" "}
                   <time
                     className="num"
                     dateTime={data.freshness.consumedOutboxWatermark}
@@ -871,7 +871,7 @@ export function CardBusinessAnalyticsPage() {
                 </span>
                 <span aria-hidden>·</span>
                 <span>
-                  正式事实{" "}
+                  正式记录{" "}
                   <time
                     className="num"
                     dateTime={data.freshness.sourceFactWatermark}
@@ -883,7 +883,7 @@ export function CardBusinessAnalyticsPage() {
                   <>
                     <span aria-hidden>·</span>
                     <span>
-                      余额快照{" "}
+                      余额记录{" "}
                       <time
                         className="num"
                         dateTime={data.freshness.balanceSnapshotAt}
@@ -891,7 +891,7 @@ export function CardBusinessAnalyticsPage() {
                         {formatDateTime(data.freshness.balanceSnapshotAt)}
                       </time>
                       <span className="ml-1 text-muted-foreground">
-                        （独立，不参与投影 SLA）
+                        （独立，不参与更新时效）
                       </span>
                     </span>
                   </>
@@ -1083,7 +1083,7 @@ export function CardBusinessAnalyticsPage() {
       {viewQuery.isError && !data ? (
         <BusinessFailureState
           kind="system"
-          title="卡券经营投影加载失败"
+          title="卡券经营数据加载失败"
           description="当前无缓存结果可展示。请重试或调整筛选。"
           action={
             <Button type="button" onClick={() => void viewQuery.refetch()}>
@@ -1102,30 +1102,30 @@ export function CardBusinessAnalyticsPage() {
               <AlertTitle>
                 {refreshFailed
                   ? "刷新失败"
-                  : "投影陈旧 · SLA 超时 · 非实时"}
+                  : "数据陈旧 · 更新超时 · 非实时"}
               </AlertTitle>
               <AlertDescription>
                 {refreshFailed
-                  ? "保留上次成功投影供只读查阅。不会用本地估算覆盖金额。"
-                  : `lagSeconds=${data.freshness.lagSeconds} 超过固定 SLA ${data.freshness.maxLagSeconds}s（${data.freshness.slaState}）。投影 ${formatDateTime(data.freshness.projectionUpdatedAt)}，Outbox ${formatDateTime(data.freshness.consumedOutboxWatermark)}。余额快照独立显示，不合并为「实时」。`}
+                  ? "保留上次成功数据供只读查阅。不会用本地估算覆盖金额。"
+                  : `更新延迟 ${data.freshness.lagSeconds}s 超过固定上限 ${data.freshness.maxLagSeconds}s（${data.freshness.slaState}）。数据 ${formatDateTime(data.freshness.projectionUpdatedAt)}，同步 ${formatDateTime(data.freshness.consumedOutboxWatermark)}。余额记录独立显示，不合并为「实时」。`}
               </AlertDescription>
             </Alert>
           ) : null}
 
           {data.freshness.state === "rebuilding" ? (
             <Alert>
-              <AlertTitle>投影重建中</AlertTitle>
+              <AlertTitle>数据更新中</AlertTitle>
               <AlertDescription>
-                保留最近成功结果只读查看；导出将标注旧水位。重建只修复查询投影，不修改正式事实。
+                保留最近成功结果只读查看；导出将标注旧数据时间。更新只修复查询数据，不修改正式记录。
               </AlertDescription>
             </Alert>
           ) : null}
 
           {data.freshness.state === "failed" ? (
             <Alert variant="destructive">
-              <AlertTitle>投影重建失败</AlertTitle>
+              <AlertTitle>数据更新失败</AlertTitle>
               <AlertDescription>
-                经营事实未被修改；展示上次成功投影。可前往 W29 查看投影异常。
+                经营记录未被修改；展示上次成功数据。可前往 W29 查看数据异常。
                 <Button
                   type="button"
                   size="sm"
@@ -1165,16 +1165,16 @@ export function CardBusinessAnalyticsPage() {
                 <>
                   口径/筛选：{exportJobQuery.data.watermark.filterSummary}
                   <span className="mt-1 block">
-                    覆盖率 {exportJobQuery.data.watermark.coverageRate ?? "—"} ·
-                    投影{" "}
-                    {formatDateTime(
-                      exportJobQuery.data.watermark.projectionUpdatedAt
-                    )}{" "}
-                    · Outbox{" "}
-                    {formatDateTime(
-                      exportJobQuery.data.watermark.consumedOutboxWatermark
-                    )}{" "}
-                    · lag {exportJobQuery.data.watermark.lagSeconds}s
+                  覆盖率 {exportJobQuery.data.watermark.coverageRate ?? "—"} ·
+                  数据{" "}
+                  {formatDateTime(
+                    exportJobQuery.data.watermark.projectionUpdatedAt
+                  )}{" "}
+                  · 同步{" "}
+                  {formatDateTime(
+                    exportJobQuery.data.watermark.consumedOutboxWatermark
+                  )}{" "}
+                  · 延迟 {exportJobQuery.data.watermark.lagSeconds}s
                   </span>
                   <span className="mt-1 block text-xs">
                     {exportJobQuery.data.watermark.taxDisclaimer}
@@ -1201,7 +1201,7 @@ export function CardBusinessAnalyticsPage() {
 
           {/* Shared filter summary */}
           <Alert>
-            <AlertTitle>当前筛选与水位</AlertTitle>
+            <AlertTitle>当前筛选与数据时间</AlertTitle>
             <AlertDescription className="text-xs leading-relaxed">
               {data.filterSummary}
               <span className="mt-1 block">
@@ -1682,7 +1682,7 @@ export function CardBusinessAnalyticsPage() {
           {data.rows.total === 0 ? (
             <BusinessEmptyState
               kind="filter"
-              title="当前筛选无卡券经营事实"
+              title="当前筛选无卡券经营记录"
               description="请调整期间、客户或成本口径。"
             />
           ) : (
@@ -1766,7 +1766,7 @@ export function CardBusinessAnalyticsPage() {
         open={exportPreviewOpen}
         onOpenChange={setExportPreviewOpen}
         title="导出预览"
-        description="导出为查询投影快照，非正式台账副本；下载时重新鉴权。"
+        description="导出为当前查询数据记录，非正式台账副本；下载时重新鉴权。"
       >
         {data ? (
           <div className="space-y-4 text-sm">
@@ -1783,13 +1783,13 @@ export function CardBusinessAnalyticsPage() {
                   {data.filterSummary}
                 </p>
                 <p>
-                  <strong>水位：</strong>
-                  投影 {formatDateTime(data.freshness.projectionUpdatedAt)} ·
-                  Outbox{" "}
+                  <strong>数据时间：</strong>
+                  数据 {formatDateTime(data.freshness.projectionUpdatedAt)} ·
+                  同步{" "}
                   {formatDateTime(data.freshness.consumedOutboxWatermark)} ·
-                  余额快照{" "}
-                  {formatDateTime(data.freshness.balanceSnapshotAt)} · lag{" "}
-                  {data.freshness.lagSeconds}s / SLA{" "}
+                  余额记录{" "}
+                  {formatDateTime(data.freshness.balanceSnapshotAt)} · 延迟{" "}
+                  {data.freshness.lagSeconds}s / 上限{" "}
                   {data.freshness.maxLagSeconds}s
                 </p>
                 <p>

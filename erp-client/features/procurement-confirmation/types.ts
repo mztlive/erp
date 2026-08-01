@@ -216,7 +216,7 @@ export const NEXT_SALES_RESOLUTION_COPY = [
     code: "RESUBMIT_CHANGED_TERMS" as const,
     title: "改品 / 改价后重提",
     description:
-      "销售与客户重新确认后，在 W05 冻结新提交与新指纹，再产生全新采购确认任务。",
+      "销售与客户重新确认后，在 W05 冻结新提交与新数据版本，再产生全新采购确认任务。",
   },
   {
     code: "REQUEST_LOW_MARGIN_ACCEPTANCE" as const,

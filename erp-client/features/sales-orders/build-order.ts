@@ -52,7 +52,7 @@ type BuildInput = {
 }
 
 /**
- * 统一装配列表/对象事实：创建来源与主责分列、关闭资格、只读边界与允许动作。
+ * 统一装配列表/对象记录：创建来源与主责分列、关闭资格、只读边界与允许动作。
  */
 export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
   const commercialReadOnly =
@@ -69,10 +69,10 @@ export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
     input.ownerSystem === "mall"
       ? "当前由商城主责：一期卡券商业字段在 ERP 只读，二期迁移仅改主责不换单号/版本。"
       : input.activeCardSalesApproval
-        ? "卡券销售审批进行中：冻结提交只读，须通过任务处理器决定。"
+        ? "卡券销售审批进行中：冻结提交只读，须通过任务处理页决定。"
         : input.primaryStatus.label === "已关闭" ||
             input.primaryStatus.label === "已作废"
-          ? "正式终态不可直接编辑；历史版本快照不被当前主数据覆盖。"
+          ? "终态不可直接编辑；历史版本记录不被当前主数据覆盖。"
           : commercialReadOnly
             ? "正式商业内容只读；变更须走销售变更单。"
             : undefined
@@ -225,7 +225,7 @@ function defaultRevisions(input: {
           : input.submittedAt.replace(/\d{2}:\d{2}$/, "09:00"),
       contractRevisionLabel:
         input.contractRevisionLabel ?? `${input.contractNumber}@v${n}`,
-      customerSnapshot: `${input.customerName}（修订 v${n} 快照）`,
+      customerSnapshot: `${input.customerName}（修订 v${n} 记录）`,
       amountGross: input.amountGross,
       lineSummary:
         n === input.version
@@ -234,7 +234,7 @@ function defaultRevisions(input: {
       changeOrderId: n > 1 ? `SCO-${n - 1}` : undefined,
       note:
         n === 1
-          ? "首个正式销售版本：合同与主数据以本修订精确快照为准。"
+          ? "首个销售版本：合同与主数据以本修订精确记录为准。"
           : `销售变更生效形成 v${n}；既有履约/票款不被覆盖。`,
     })
   }

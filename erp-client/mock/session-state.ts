@@ -501,7 +501,7 @@ export function applyWorkItemActionSession(input: {
   if (existingIdem?.state === "pending") {
     throw new WorkItemMockError(
       "TIMEOUT",
-      "上次动作结果仍不确定，请用同一幂等键查询最终结果。"
+      "上次动作结果仍不确定，请按原任务号查询最终结果。"
     )
   }
 
@@ -509,7 +509,7 @@ export function applyWorkItemActionSession(input: {
     setIdempotencyPending(input.idempotencyKey, input.action.kind)
     throw new WorkItemMockError(
       "TIMEOUT",
-      "网络超时：任务状态未在本地变更，请用同一幂等键查询最终结果。"
+      "网络超时：任务状态未在本地变更，请按原任务号查询最终结果。"
     )
   }
 
@@ -528,7 +528,7 @@ export function applyWorkItemActionSession(input: {
   if (subject && subject.subjectHash !== input.expectedSubjectHash) {
     throw new WorkItemMockError(
       "VERSION_CONFLICT",
-      "对象版本或内容指纹已变化，请刷新比较后再提交。"
+      "版本或数据版本已变化，请刷新比较后再提交。"
     )
   }
 
@@ -578,7 +578,7 @@ export function resolvePendingIdempotencyAsSuccess(input: {
 }): unknown {
   const entry = idempotencyStore.get(input.idempotencyKey)
   if (!entry) {
-    throw new WorkItemMockError("NOT_FOUND", "未找到该幂等键的待查结果。")
+    throw new WorkItemMockError("NOT_FOUND", "未找到该任务号的待查结果。")
   }
   if (entry.state === "succeeded") return entry.payload
   if (entry.state === "failed") {
@@ -614,7 +614,7 @@ export function completeWorkItemSession(input: {
   if (existingIdem?.state === "pending") {
     throw new WorkItemMockError(
       "TIMEOUT",
-      "上次完成结果仍不确定，请用同一幂等键查询，勿跳到下一项。"
+      "上次完成结果仍不确定，请按原任务号查询，勿跳到下一项。"
     )
   }
 
@@ -622,7 +622,7 @@ export function completeWorkItemSession(input: {
     setIdempotencyPending(input.idempotencyKey, "COMPLETE")
     throw new WorkItemMockError(
       "TIMEOUT",
-      "网络超时：未写入完成态，请用同一幂等键查询最终结果。"
+      "网络超时：未写入完成态，请按原任务号查询最终结果。"
     )
   }
 
@@ -1200,7 +1200,7 @@ export function completeW05CardApproval(input: {
       outcome: "OPERATIONS_APPROVED_AND_EFFECTIVE",
       reference: `CARD-OPS-${stamp}`,
       detail:
-        "运营已通过；同事务形成首个正式销售版本、应收与执行投影 outbox，销售单生效。",
+        "运营已通过；同事务形成首个销售版本、应收与执行信息同步，销售单生效。",
       primaryStatusLabel: "已生效",
     }
   }
@@ -1511,7 +1511,7 @@ export function reverseCustomerAcceptance(
   const list = acceptanceHistoryByOrder.get(input.salesOrderId) ?? []
   const original = list.find((item) => item.acceptanceId === input.acceptanceId)
   if (!original) {
-    return { status: "failed", message: "未找到原验收事实" }
+    return { status: "failed", message: "未找到原验收记录" }
   }
   if (original.status !== "POSTED") {
     return { status: "failed", message: "仅已过账且未完整冲正的验收可冲正" }
@@ -1965,7 +1965,7 @@ export function submitW10Adjustment(input: {
     return {
       status: "unknown",
       message:
-        "正式结果尚未确定。请勿假定余额已变化，停留当前调整并使用同一幂等键查询。",
+        "处理结果尚未确定。请勿假定余额已变化，停留当前调整并按原任务号查询。",
       idempotencyKey: input.idempotencyKey,
     }
   }
@@ -2079,14 +2079,14 @@ export function resolveW10AdjustmentUnknown(input: {
   if (w10InFlight.has(input.idempotencyKey)) {
     return {
       status: "unknown",
-      message: "仍在处理中，正式结果未知。余额未本地修改。",
+      message: "仍在处理中，处理结果待确认。余额未本地修改。",
       idempotencyKey: input.idempotencyKey,
     }
   }
   return {
     status: "failed",
     code: "NO_PENDING",
-    message: "未找到该幂等键对应的处理中请求",
+    message: "未找到该任务号对应的处理中请求",
   }
 }
 
@@ -2325,7 +2325,7 @@ export function createW04ContractDraft(input: {
       {
         action: "PRINT",
         code: "NO_CONFIRMED_REVISION",
-        message: "尚无已确认修订，无法生成纸质投影。",
+        message: "尚无已确认修订，无法生成打印件。",
       },
     ],
   }
@@ -2378,7 +2378,7 @@ export function activateW04Contract(input: {
       ...center.currentRevision,
       revisionNo: nextRevision,
       effectiveAt: effectiveAt.slice(0, 16).replace("T", " "),
-      termsSummary: "已生效修订；新销售单将固定本修订快照。",
+      termsSummary: "已生效修订；新销售单将固定本修订记录。",
     },
     revisionTimeline: [
       {
@@ -2546,7 +2546,7 @@ export function createW04ExportJob(input: {
     permissionVersion: input.permissionVersion,
     filterSnapshotLabel: input.filterSnapshotLabel,
     createdAt: new Date().toISOString(),
-    downloadLabel: `合同导出_${jobId}.csv（服务端选择快照·重新鉴权）`,
+    downloadLabel: `合同导出_${jobId}.csv（服务端筛选结果·重新鉴权）`,
   }
   w04ExportJobs.set(jobId, job)
   return job
@@ -3052,7 +3052,7 @@ export function saveW08PurchaseOrderDraft(input: {
   if (w08PendingUnknown.has(input.idempotencyKey)) {
     throw new WorkItemMockError(
       "TIMEOUT",
-      "上次保存结果仍不确定，请用同一幂等键查询。"
+      "上次保存结果仍不确定，请按原任务号查询。"
     )
   }
 
@@ -3161,7 +3161,7 @@ export function submitW08PurchaseOrder(input: {
     w08PendingUnknown.add(input.idempotencyKey)
     throw new WorkItemMockError(
       "TIMEOUT",
-      "提交结果未知：不得切到待审核态，请按幂等键查询。"
+      "提交结果未知：不得切到待审核态，请按原任务号查询。"
     )
   }
 
@@ -3178,7 +3178,7 @@ export function submitW08PurchaseOrder(input: {
   if (draft && draft.draftContentHash !== input.expectedDraftContentHash) {
     throw new WorkItemMockError(
       "VERSION_CONFLICT",
-      "草稿内容指纹不匹配，请保存后再提交。"
+      "草稿数据版本不匹配，请保存后再提交。"
     )
   }
 
@@ -4211,7 +4211,7 @@ function projectPaymentRow(p: SeedPayment): PaymentRow {
             {
               action: "EDIT",
               code: "POSTED_IMMUTABLE",
-              message: "已过账事实不可编辑删除，请通过冲正追加反向事实。",
+              message: "已过账记录不可编辑删除，请通过冲正追加反向记录。",
             },
           ],
     reversedByPaymentId: p.reversedByPaymentId,
@@ -4990,7 +4990,7 @@ export function postW12Payment(input: PostPaymentInput): FormalSubmitResult {
       status: "unknown",
       title: "结果不确定",
       description:
-        "提交超时，未确认付款是否过账。请用同一操作号查询最终结果，勿更换幂等键重复付款。",
+        "提交超时，未确认付款是否过账。请用同一操作号查询最终结果，勿重复付款。",
       operationId: `op_w12_${input.idempotencyKey.slice(0, 12)}`,
       reference: input.idempotencyKey,
     }
@@ -5187,7 +5187,7 @@ export function postW12Invoice(input: PostInvoiceInput): FormalSubmitResult {
       status: "unknown",
       title: "结果不确定",
       description:
-        "提交超时，未确认进项发票是否登记。请用同一操作号查询，勿更换幂等键。",
+        "提交超时，未确认进项发票是否登记。请用同一操作号查询，勿重复提交。",
       operationId: `op_w12_inv_${input.idempotencyKey.slice(0, 10)}`,
       reference: input.idempotencyKey,
     }

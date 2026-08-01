@@ -83,7 +83,7 @@ export type ProfitLossRow = Readonly<{
   coverageBlockers: readonly CoverageBlocker[]
   latestCostOccurredAt?: string
   allowedDrilldowns: readonly string[]
-  /** 关联成本事实 id，供 detail 下钻 */
+  /** 关联成本记录 id，供 detail 下钻 */
   costEntryIds: readonly string[]
 }>
 

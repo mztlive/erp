@@ -668,7 +668,7 @@ export function ExternalProductSupplyPage() {
           title:
             decisionKind === "CONFIRM_ERROR_RESOLVED"
               ? "异常已解决 · 任务已终结"
-              : "停供事实已确认 · 任务已终结",
+              : "停供记录已确认 · 任务已终结",
           description:
             "FormalActionResult 固定展示后，可按自动下一项偏好或手动继续。不包含替代供给选定或恢复发布。",
           reference:
@@ -968,7 +968,7 @@ export function ExternalProductSupplyPage() {
                                 r.outcome.kind === "COMPLETED"
                                   ? "succeeded"
                                   : "blocked",
-                              title: "查询到正式结果",
+                              title: "查询到处理结果",
                               description:
                                 r.outcome.kind === "COMPLETED"
                                   ? "终结决策已确认。"
@@ -1059,7 +1059,7 @@ export function ExternalProductSupplyPage() {
               isRegistered
                 ? item.changeType === "ERROR"
                   ? "确认异常已解决"
-                  : "确认停供事实"
+                  : "确认停供记录"
                 : "确认（不可用）"
             }
             // 没有独立的「并准备下一项」路径：两个 handler 同义
@@ -1190,7 +1190,7 @@ export function ExternalProductSupplyPage() {
                   原因：{item.publicationImpact.safetyPauseReasons.join("、")} ·
                   已暂停发布 {item.publicationImpact.pausedPublicationCount} ·
                   历史已支付{" "}
-                  {item.publicationImpact.historicalPaidOrderCount} 笔快照保留
+                  {item.publicationImpact.historicalPaidOrderCount} 笔历史记录保留
                 </p>
                 {item.publicationImpact.recoveryBlocker ? (
                   <p className="font-medium">
@@ -1296,7 +1296,7 @@ export function ExternalProductSupplyPage() {
                       },
                       {
                         id: "fp",
-                        label: "内容指纹（短）",
+                        label: "数据版本（短）",
                         value:
                           item.externalProduct.incomingRevision
                             ?.contentFingerprintShort ??
@@ -1381,7 +1381,7 @@ export function ExternalProductSupplyPage() {
                     <li>
                       历史已支付订单{" "}
                       {item.publicationImpact.historicalPaidOrderCount}{" "}
-                      （快照只读）
+                      （记录只读）
                     </li>
                   </ul>
                   {item.publicationImpact.pauseSubResults.map((p) => (
@@ -1710,7 +1710,7 @@ export function ExternalProductSupplyPage() {
                         <CircleCheckIcon className="size-3.5" />
                         {item.changeType === "ERROR"
                           ? "确认异常已解决"
-                          : "确认停供事实"}
+                          : "确认停供记录"}
                       </Button>
                     </>
                   ) : null}
@@ -1882,11 +1882,11 @@ export function ExternalProductSupplyPage() {
         title={
           confirmMode?.kind === "confirm_error"
             ? "确认异常已解决"
-            : "确认停止供应事实"
+            : "确认停止供应记录"
         }
         description={
           confirmMode?.kind === "confirm_stop"
-            ? "安全暂停已先发生。本动作仅确认停供事实与任务终态，不包含替代供给选定或恢复发布。"
+            ? "安全暂停已先发生。本动作仅确认停供记录与任务终态，不包含替代供给选定或恢复发布。"
             : "须存在数据修复证据边界；不写正常映射或供给修订。"
         }
         actionLabel="提交终结决策"
@@ -1901,7 +1901,7 @@ export function ExternalProductSupplyPage() {
         effects={
           confirmMode?.kind === "confirm_stop"
             ? [
-                "写入停供事实结论与审计",
+                "写入停供记录结论与审计",
                 "完成 BUSINESS_EXCEPTION 任务",
                 "不选定替代供给、不恢复上架",
               ]

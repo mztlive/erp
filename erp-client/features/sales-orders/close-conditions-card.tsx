@@ -64,7 +64,7 @@ export function CloseConditionsCard({ order }: CloseConditionsCardProps) {
             detail={
               isCard
                 ? `期限 ${order.fulfillmentDeadline} · 当前 ${order.fulfillment.label}`
-                : `验收/履约投影 · 当前 ${order.fulfillment.label}`
+                : `验收/履约进度 · 当前 ${order.fulfillment.label}`
             }
           />
           <ConditionRow

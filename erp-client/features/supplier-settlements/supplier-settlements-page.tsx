@@ -1095,7 +1095,7 @@ function SettlementList({
               ) : null}
             </div>
             <p className="text-xs text-muted-foreground">
-              键盘：列表 Enter 打开预览；对象中心可继续提交复核并查询正式结果。
+              键盘：列表 Enter 打开预览；对象中心可继续提交复核并查询处理结果。
             </p>
           </div>
         ) : (
@@ -1443,7 +1443,7 @@ function SettlementCenter({
         <DataFreshness
           updatedAt={formatTime(detail.freshness.immutableFactsAsOf)}
           dateTime={detail.freshness.immutableFactsAsOf}
-          label="不可变事实水位"
+          label="不可变记录水位"
           state={detailQuery.isFetching ? "stale" : "fresh"}
         />
       </div>
@@ -1593,11 +1593,11 @@ function SettlementCenter({
                       else
                         setResult({
                           ...result,
-                          description: "仍未知，请稍后用同一幂等键再查。",
+                          description: "仍未知，请稍后用原任务号再查。",
                         })
                     }}
                   >
-                    查询正式结果
+                    查询处理结果
                   </Button>
                 ) : null}
               </div>
@@ -1724,7 +1724,7 @@ function SettlementCenter({
       </Card>
 
       <div className="rounded-xl border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        <span className="font-medium text-foreground">来源快照 </span>
+        <span className="font-medium text-foreground">来源数据 </span>
         sourceAsOf={formatTime(st.sourceAsOf)} · sourceSnapshotHash=
         <span className="num font-mono">{st.sourceSnapshotHash}</span>
         {st.subjectHash ? (
@@ -1741,7 +1741,7 @@ function SettlementCenter({
           </>
         ) : null}
         <span className="ml-2">
-          W26 投影仅展示（
+          W26 数据仅展示（
           {formatTime(detail.freshness.w26ProjectionUpdatedAt)}
           ），不参与正式取数
         </span>
@@ -1773,7 +1773,7 @@ function SettlementCenter({
             </CardHeader>
             <CardContent className="space-y-2 pt-4 text-sm">
               <p>
-                供应商：{st.supplierName}（快照，不受后续更名影响）
+                供应商：{st.supplierName}（记录时，不受后续更名影响）
               </p>
               <p className="num">
                 期间：{st.periodStart} ~ {st.periodEnd}
@@ -1830,7 +1830,7 @@ function SettlementCenter({
           <CardHeader className="border-b py-3">
             <CardTitle className="text-base">结算明细</CardTitle>
             <CardDescription>
-              冻结快照 + 不可变完成/取消/退款事实 · 金额只读（canEditBillOrOrder=
+              冻结数据 + 不可变完成/取消/退款记录 · 金额只读（canEditBillOrOrder=
               {String(detail.canEditBillOrOrder)}）
             </CardDescription>
           </CardHeader>
@@ -1841,7 +1841,7 @@ function SettlementCenter({
                   <th className="px-2 py-2">供应商订单</th>
                   <th className="px-2 py-2">外部单号</th>
                   <th className="px-2 py-2">商品</th>
-                  <th className="px-2 py-2">事实</th>
+                  <th className="px-2 py-2">记录</th>
                   <th className="px-2 py-2 text-right">订单</th>
                   <th className="px-2 py-2 text-right">运费</th>
                   <th className="px-2 py-2 text-right">服务费</th>
@@ -1899,14 +1899,14 @@ function SettlementCenter({
                       colSpan={10}
                       className="px-2 py-6 text-center text-muted-foreground"
                     >
-                      暂无明细；可在草稿态刷新试算纳入不可变事实
+                      暂无明细；可在草稿态刷新试算纳入不可变记录
                     </td>
                   </tr>
                 ) : null}
               </tbody>
             </table>
             <p className="mt-2 text-xs text-muted-foreground">
-              输入控件未提供金额编辑路径；账单原值与订单事实不可覆盖。
+              输入控件未提供金额编辑路径；账单原值与订单记录不可覆盖。
             </p>
           </CardContent>
         </Card>
@@ -2162,7 +2162,7 @@ function SettlementCenter({
             ? `截止策略 ${detail.refreshCutoffPolicy.policyId}@${detail.refreshCutoffPolicy.policyVersion}`
             : "截止策略未配置",
         ]}
-        effects={["冻结来源快照与差异结论", "创建 SUPPLIER_SETTLEMENT_REVIEW 待办"]}
+        effects={["冻结来源数据与差异结论", "创建 SUPPLIER_SETTLEMENT_REVIEW 待办"]}
         pending={submitMutation.isPending}
         onConfirm={async () => {
           await onSubmitReview()
@@ -2184,7 +2184,7 @@ function SettlementCenter({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="确认结算（不可逆）"
-        description="同事务追加成本差额、形成唯一应付并锁定正式结果。经办人不可确认本单。"
+        description="同事务追加成本差额、形成唯一应付并锁定处理结果。经办人不可确认本单。"
         actionLabel="确认结算"
         confirmLabel="确认结算"
         fromStatus={{ label: "待复核", tone: "warning" }}
@@ -2198,7 +2198,7 @@ function SettlementCenter({
         effects={[
           "追加成本差额 cost_entry",
           "形成唯一供应商结算应付",
-          "锁定正式结果，不可撤回确认",
+          "锁定处理结果，不可撤回确认",
         ]}
         irreversibleEffects={["确认后付款/进项发票/核销进入 W12"]}
         nextDepartment="W12 供应商往来"

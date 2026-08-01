@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { ExecutionProjectionsPage } from "@/features/execution-projections/execution-projections-page"
 
 export const metadata: Metadata = {
-  title: "执行投影",
+  title: "执行信息",
 }
 
 function ExecutionProjectionsFallback() {

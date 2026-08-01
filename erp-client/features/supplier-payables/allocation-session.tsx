@@ -259,7 +259,7 @@ export function AllocationSession({
     issues.push({
       id: "over",
       label: "拟分配",
-      message: "拟分配合计超过本次事实金额（前端仅提示，服务端将再次校验）",
+      message: "拟分配合计超过本次记录金额（前端仅提示，服务端将再次校验）",
     })
   }
   for (const id of selected) {
@@ -451,7 +451,7 @@ export function AllocationSession({
       </div>
 
       {draftHint ? (
-        <p className="text-xs text-muted-foreground">{draftHint}（不形成正式事实）</p>
+        <p className="text-xs text-muted-foreground">{draftHint}（不形成正式记录）</p>
       ) : null}
 
       {policy && policy.state !== "AVAILABLE" ? (
@@ -631,7 +631,7 @@ export function AllocationSession({
             <Card>
               <CardHeader className="border-b border-border">
                 <CardTitle className="text-base">
-                  {track === "payment" ? "本次付款事实" : "本次进项发票事实"}
+                  {track === "payment" ? "本次付款记录" : "本次进项发票记录"}
                 </CardTitle>
                 <CardDescription>
                   拟分配仅作表单提示；正式未分配余额以提交后服务端结果为准
@@ -754,7 +754,7 @@ export function AllocationSession({
 
                 <dl className="grid grid-cols-3 gap-2 text-sm">
                   <div>
-                    <dt className="text-xs text-muted-foreground">事实金额</dt>
+                    <dt className="text-xs text-muted-foreground">记录金额</dt>
                     <dd>
                       <MoneyValue value={factAmount || "0"} />
                     </dd>
@@ -842,7 +842,7 @@ export function AllocationSession({
         onOpenChange={setConfirmOpen}
         actionLabel={track === "payment" ? "登记付款并核销" : "登记进项发票并核销"}
         title={track === "payment" ? "确认登记付款并核销" : "确认登记进项发票并核销"}
-        description="正式提交后形成不可编辑事实；纠错须追加冲正/红票。服务端将校验供应商一致、余额与策略版本。"
+        description="提交后形成不可编辑记录；纠错须追加冲正/红票。服务端将校验供应商一致、余额与策略版本。"
         confirmLabel="确认提交"
         fromStatus={{ label: "草稿会话", tone: "neutral" }}
         toStatus={{ label: "已过账", tone: "success" }}
@@ -859,7 +859,7 @@ export function AllocationSession({
           "未分配余额保留在待核销视图",
           "来源页须重查付款门禁，未核销付款不满足",
         ]}
-        irreversibleEffects={["已过账事实不可编辑删除，纠错追加反向事实"]}
+        irreversibleEffects={["已过账记录不可编辑删除，纠错追加反向记录"]}
         pending={submitPayment.isPending || submitInvoice.isPending}
         onConfirm={() => void doSubmit()}
       />

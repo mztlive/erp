@@ -694,7 +694,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     ownerName: "王敏",
     submittedAt: "2026-03-29 10:15",
     welfareScene: "消费金",
-    remark: "ERP 主责卡券提交 · 领导/运营双审批，对象中心嵌入同一任务处理器",
+    remark: "ERP 主责卡券提交 · 领导/运营双审批，对象中心嵌入同一任务处理页",
     version: 1,
     lockVersion: 1,
     settlementEntity: "启明教育科技",

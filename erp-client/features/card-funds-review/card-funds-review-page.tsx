@@ -479,7 +479,7 @@ export function CardFundsReviewPage() {
         if (response.status === "unknown") {
           setLastResult({
             status: "unknown",
-            title: "正式结果未知",
+            title: "处理结果待确认",
             description: response.message,
             pendingIdempotencyKey: response.idempotencyKey,
             stayOnItem: true,
@@ -565,7 +565,7 @@ export function CardFundsReviewPage() {
         if (response.status === "unknown") {
           setLastResult({
             status: "unknown",
-            title: "正式结果未知",
+            title: "处理结果待确认",
             description: response.message,
             pendingIdempotencyKey: response.idempotencyKey,
             stayOnItem: true,
@@ -984,7 +984,7 @@ export function CardFundsReviewPage() {
                                     ? "rejected"
                                     : "succeeded",
                                 title: "查询到正式终态",
-                                description: "已确认正式结果，可继续下一项。",
+                                description: "已确认处理结果，可继续下一项。",
                                 reference:
                                   r.outcome.kind === "HELD"
                                     ? r.outcome.reference
@@ -1174,7 +1174,7 @@ export function CardFundsReviewPage() {
                     ]}
                   />
 
-                  <MetricStrip columns={5} aria-label="票款事实指标">
+                  <MetricStrip columns={5} aria-label="票款记录指标">
                     <MetricItem
                       label="同步成交额"
                       value={formatMoney(task.account.syncedGrossAmount)}
@@ -1224,14 +1224,14 @@ export function CardFundsReviewPage() {
                     </AlertTitle>
                     <AlertDescription>
                       {task.account.reliabilityNote}
-                      不以 0 值冒充已核实事实。W11/W15 应展示同等标识。
+                      不以 0 值冒充已核实记录。W11/W15 应展示同等标识。
                     </AlertDescription>
                   </Alert>
 
                   {task.reviewType === "SYNC_DELTA" && task.difference ? (
                     <BusinessDiffPanel
                       title={task.difference.title}
-                      caption="上一有效复核与当前事实对比（服务端投影）"
+                      caption="上一有效复核与当前记录对比（系统最新数据）"
                       changes={task.difference.changes.map((c) => ({
                         id: c.id,
                         field: c.field,
@@ -1250,14 +1250,14 @@ export function CardFundsReviewPage() {
                         正式回款与发票明细
                       </CardTitle>
                       <CardDescription>
-                        仅展示 W11 正式事实；登记走多对多分配，禁止累计覆盖字段
+                        仅展示 W11 正式记录；登记走多对多分配，禁止累计覆盖字段
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3 pt-4">
                       {task.receiptFacts.length === 0 &&
                       task.invoiceFacts.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
-                          尚无正式回款/发票。可登记历史事实，或在期初且净额为 0
+                          尚无正式回款/发票。可登记历史记录，或在期初且净额为 0
                           时确认「从 0 起」（不创建 0 元单据）。
                         </p>
                       ) : null}
@@ -1844,7 +1844,7 @@ export function CardFundsReviewPage() {
           if (!open) setConfirmMode(null)
         }}
         title="暂挂当前复核任务"
-        description="暂挂后任务仍为 PENDING/IN_PROGRESS，保留在有效队列与「已暂挂」范围；不形成复核事实、不自动视为完成。可手动浏览下一项。"
+        description="暂挂后任务仍为 PENDING/IN_PROGRESS，保留在有效队列与「已暂挂」范围；不形成复核记录、不自动视为完成。可手动浏览下一项。"
         actionLabel="暂挂"
         confirmLabel="确认暂挂"
         fromStatus={{ label: "处理中", tone: "info" }}
@@ -1868,7 +1868,7 @@ export function CardFundsReviewPage() {
           <DialogHeader>
             <DialogTitle>驳回复核</DialogTitle>
             <DialogDescription>
-              仅形成本次 REJECTED 复核事实并完成当前任务。Q5 未决期间不创建后继任务；结果固定显示配置 blocker 与协作说明。
+              仅形成本次 REJECTED 复核记录并完成当前任务。Q5 未决期间不创建后继任务；结果固定显示配置 blocker 与协作说明。
             </DialogDescription>
           </DialogHeader>
           <form

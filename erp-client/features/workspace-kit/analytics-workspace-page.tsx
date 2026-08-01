@@ -96,7 +96,7 @@ export function AnalyticsWorkspacePage({ def }: { def: WorkspacePageDef }) {
             updatedAt="今天 09:30"
             dateTime="2026-08-01T09:30:00+08:00"
             state="fresh"
-            label="分析投影"
+            label="分析汇总"
           />
         }
       />
@@ -119,7 +119,7 @@ export function AnalyticsWorkspacePage({ def }: { def: WorkspacePageDef }) {
         <Card size="sm">
           <CardHeader className="border-b">
             <CardTitle>{payload.seriesTitle}</CardTitle>
-            <CardDescription>只读投影，不可在此页改数。</CardDescription>
+            <CardDescription>只读汇总，不可在此页改数。</CardDescription>
           </CardHeader>
           <CardContent className="pt-4">
             <ChartContainer config={chartConfig} className="aspect-[16/9] w-full">
@@ -153,7 +153,7 @@ export function AnalyticsWorkspacePage({ def }: { def: WorkspacePageDef }) {
               <CardTitle>数据水位</CardTitle>
             </CardHeader>
             <CardContent className="text-sm text-muted-foreground">
-              指标与表格均来自服务端投影；金额与利润字段按权限展示。
+              指标与表格均来自系统最新数据；金额与利润字段按权限展示。
             </CardContent>
           </Card>
         )}
@@ -161,7 +161,7 @@ export function AnalyticsWorkspacePage({ def }: { def: WorkspacePageDef }) {
 
       <BusinessTableFrame
         title={payload.tableTitle}
-        description="下钻明细仅展示授权范围内的投影结果。"
+        description="下钻明细仅展示授权范围内的数据。"
         table={
           <DataTable
             data={pageRows}

@@ -123,7 +123,7 @@ export type ActionBlocker = {
 export type MallConsumptionOrderListQuery = {
   q?: string
   mallIds?: string[]
-  /** 事实发生期间；未配置默认策略时前端可不预填，mock 允许省略 */
+  /** 记录发生期间；未配置默认策略时前端可不预填，mock 允许省略 */
   occurredFrom?: string
   occurredTo?: string
   factTypes?: FactType[]
@@ -225,7 +225,7 @@ export type MallConsumptionOrderListResult = {
   dataScopeVersion: string
   factWatermark: string
   queriedAt: string
-  /** 事实追溯只读边界说明 */
+  /** 记录追溯只读边界说明 */
   boundaryNotice: string
 }
 
@@ -454,7 +454,7 @@ export const OBJECT_CENTER_SECTIONS: Array<{
   label: string
 }> = [
   { id: "overview", label: "概览" },
-  { id: "facts", label: "关键事实" },
+  { id: "facts", label: "关键记录" },
   { id: "items", label: "商品明细" },
   { id: "payment", label: "支付与分摊" },
   { id: "origin", label: "来源追溯" },

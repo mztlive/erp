@@ -49,7 +49,7 @@ export function computeCloseEligibility(input: {
         ? "履约完成且应收已结清，系统已自动关闭。开票状态不影响关闭。"
         : primaryStatusLabel === "已作废"
           ? "作废单保留历史提交与驳回记录，不可关闭也不可恢复。"
-          : "草稿尚未进入正式状态机。",
+          : "草稿尚未进入正式状态。",
     }
   }
 

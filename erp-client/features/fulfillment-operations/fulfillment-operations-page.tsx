@@ -283,11 +283,11 @@ function clientValidation(
 function buildPostedFacts(outcome: FulfillmentFormalOutcome) {
   const facts: { label: string; value: string }[] = [
     {
-      label: "事实类型",
+      label: "记录类型",
       value: FACT_TYPE_LABEL[outcome.factType],
     },
-    { label: "事实编号", value: outcome.factNo },
-    { label: "正式状态", value: outcome.formalStatus },
+    { label: "记录编号", value: outcome.factNo },
+    { label: "当前状态", value: outcome.formalStatus },
     { label: "库存/预占影响", value: outcome.inventoryImpactSummary },
   ]
   if (outcome.inventoryDelta.length > 0) {
@@ -351,7 +351,7 @@ function impactPreview(task: FulfillmentTask, draft: FulfillmentDraft): string[]
   }
   if (draft.type === "SUPPLIER_DIRECT") {
     return [
-      "形成供应商直发事实",
+      "形成供应商直发记录",
       "不影响自有库存流水",
       "下一步：销售在 W06 客户验收",
     ]
@@ -365,7 +365,7 @@ function impactPreview(task: FulfillmentTask, draft: FulfillmentDraft): string[]
   }
   return [
     `服务结果：${RESULT_LABEL[draft.result]}`,
-    "形成服务履约事实，不影响库存",
+    "形成服务履约记录，不影响库存",
     "成功后可进入 W06 验收",
   ]
 }
@@ -677,7 +677,7 @@ export function FulfillmentOperationsPage() {
       if (response.status === "unknown") {
         setLastResult({
           status: "unknown",
-          title: "正式结果未知",
+          title: "处理结果待确认",
           description: response.message,
           pendingIdempotencyKey: response.idempotencyKey,
           stayOnItem: true,
@@ -695,8 +695,8 @@ export function FulfillmentOperationsPage() {
         status: "succeeded",
         title: `${OPERATION_TYPE_LABEL[response.outcome.operationType]}已过账`,
         description: autoNext
-          ? "强类型事实已写入会话 mock；将打开同筛选下一项。"
-          : "强类型事实已写入。可核对库存/预占影响后再继续。",
+          ? "强类型记录已写入会话 mock；将打开同筛选下一项。"
+          : "强类型记录已写入。可核对库存/预占影响后再继续。",
         reference: response.outcome.factNo,
         outcome: response.outcome,
         stayOnItem: !autoNext,
@@ -794,7 +794,7 @@ export function FulfillmentOperationsPage() {
       if (response.status === "unknown") {
         setLastResult({
           status: "unknown",
-          title: "正式结果仍未知",
+          title: "处理结果仍待确认",
           description: response.message,
           pendingIdempotencyKey: response.idempotencyKey,
           stayOnItem: true,
@@ -809,7 +809,7 @@ export function FulfillmentOperationsPage() {
         setLastResult({
           status: "succeeded",
           title: "查询确认：履约已过账",
-          description: "同一幂等键返回同一正式事实，未重复改库存/预占。",
+          description: "同一任务号返回同一正式记录，未重复改库存/预占。",
           reference: response.outcome.factNo,
           outcome: response.outcome,
           stayOnItem: !autoNext,
@@ -1496,7 +1496,7 @@ export function FulfillmentOperationsPage() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`确认${task ? OPERATION_TYPE_LABEL[task.operationType] : "履约"}过账`}
-        description="将写入强类型正式事实。结果未确定前不会乐观修改库存、预占或队列位置。"
+        description="将写入正式记录。结果未确定前不会乐观修改库存、预占或队列位置。"
         actionLabel="过账"
         confirmLabel="确认过账"
         fromStatus={{ label: "待过账", tone: "warning" }}
@@ -1508,8 +1508,8 @@ export function FulfillmentOperationsPage() {
         ]}
         effects={task && draft ? impactPreview(task, draft) : []}
         irreversibleEffects={[
-          "已过账事实不可覆盖；纠错走冲正/退货/新事实",
-          "库存与预占仅在正式结果确定后更新",
+          "已过账记录不可覆盖；纠错走冲正/退货/新记录",
+          "库存与预占仅在处理结果确定后更新",
         ]}
         nextDepartment="成功后可进入 W06 客户验收（物流≠验收）"
         pending={postMutation.isPending}

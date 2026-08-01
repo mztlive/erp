@@ -343,7 +343,7 @@ export function MasterDataReviseDialog({
         <DialogHeader>
           <DialogTitle>形成新版本</DialogTitle>
           <DialogDescription>
-            追加不可变修订并保留原因、操作者与时间。当前名称变化不改写历史快照。
+            追加不可变修订并保留原因、操作者与时间。当前名称变化不改写历史记录。
             {target ? (
               <>
                 {" "}
@@ -556,7 +556,7 @@ export function MasterDataDisableDialog({
         <DialogHeader>
           <DialogTitle>停用主数据</DialogTitle>
           <DialogDescription>
-            停用不是删除：形成停用版本，历史引用与版本快照永久保留。
+            停用不是删除：形成停用版本，历史引用与版本记录永久保留。
             {target ? (
               <>
                 {" "}

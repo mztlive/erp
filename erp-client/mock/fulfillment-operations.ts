@@ -381,7 +381,7 @@ export const FULFILLMENT_OPERATIONS_SEED: readonly FulfillmentTask[] = [
       purchaseLineSalesAllocationId: "plsa_2015_01",
       remaining: "1",
     }),
-    summary: "线下服务完成，等待服务履约事实登记",
+    summary: "线下服务完成，等待服务履约记录登记",
     impact: "登记后才可进入客户验收",
     allowedActions: ["POST", "SAVE", "DEFER"],
     actionBlockers: [],

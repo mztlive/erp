@@ -199,7 +199,7 @@ export function ContractDetailPage({
             : "生效失败",
         description:
           message === "VERSION_CONFLICT"
-            ? "服务端 lockVersion 已变化，请刷新后重做。未乐观改正式状态。"
+            ? "服务端版本已变化，请刷新后重做。未乐观改当前状态。"
             : `服务端拒绝生效（${message}）。`,
         reference: `ERR-${message}`,
         facts: [
@@ -614,7 +614,7 @@ export function ContractDetailPage({
           <CardHeader className="border-b">
             <CardTitle>结算与开票</CardTitle>
             <CardDescription>
-              当前合同修订的结构化快照；销售单使用时再固定具体版本。
+              当前合同修订的结构化记录；销售单使用时再固定具体版本。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -884,7 +884,7 @@ export function ContractDetailPage({
         effects={[
           "生成不可变合同修订并固定结果",
           rev.termsSummary,
-          "新销售单可引用当前修订快照",
+          "新销售单可引用当前修订记录",
         ]}
         irreversibleEffects={["生效后历史销售引用的旧修订不会被替换"]}
         pending={activateMutation.isPending}
@@ -895,7 +895,7 @@ export function ContractDetailPage({
         open={reviseConfirmOpen}
         onOpenChange={setReviseConfirmOpen}
         title="确认创建新修订"
-        description="将按已配置策略在同一合同页签建立可编辑工作副本；历史销售单快照不受影响。"
+        description="将按已配置策略在同一合同页签建立可编辑工作副本；历史销售单记录不受影响。"
         actionLabel="创建修订"
         confirmLabel="创建工作副本"
         fromStatus={{ label: contract.statusLabel, tone: contract.statusTone }}
@@ -909,7 +909,7 @@ export function ContractDetailPage({
         ]}
         effects={[
           "在同一合同页签建立可编辑工作副本",
-          "历史销售单快照不受影响",
+          "历史销售单记录不受影响",
           contract.contractRevisionPolicy
             ? `必需证据：${contract.contractRevisionPolicy.requiredEvidenceCodes.join("、")}`
             : "无策略",

@@ -390,7 +390,7 @@ interface QuickPreviewSheetProps
   readonly contentClassName?: string
   /**
    * preview：窄栏 + 整区滚动，适合轻摘要。
-   * detail：半屏 + 正文区由子树自管滚动，适合双栏读主事实。
+   * detail：半屏 + 正文区由子树自管滚动，适合双栏读主记录。
    */
   readonly size?: QuickPreviewSheetSize
 }

@@ -553,7 +553,7 @@ export function ProcurementConfirmationPage() {
       if (response.status === "unknown") {
         setLastResult({
           status: "unknown",
-          title: "正式结果未知",
+          title: "处理结果待确认",
           description: response.message,
           pendingIdempotencyKey: response.idempotencyKey,
           stayOnItem: true,
@@ -573,8 +573,8 @@ export function ProcurementConfirmationPage() {
         status: "succeeded",
         title: "采购确认已通过 · 销售单已生效",
         description: advanceAfterConfirm && autoNext
-          ? "正式结果已记录；队列将打开下一条。"
-          : "正式结果已记录。可核对采购创建依据后再打开下一条。",
+          ? "处理结果已记录；队列将打开下一条。"
+          : "处理结果已记录。可核对采购创建依据后再打开下一条。",
         reference: outcome.reference,
         outcome,
         stayOnItem: !(advanceAfterConfirm && autoNext),
@@ -627,7 +627,7 @@ export function ProcurementConfirmationPage() {
         if (response.status === "unknown") {
           setLastResult({
             status: "unknown",
-            title: "正式结果未知",
+            title: "处理结果待确认",
             description: response.message,
             pendingIdempotencyKey: response.idempotencyKey,
             stayOnItem: true,
@@ -756,7 +756,7 @@ export function ProcurementConfirmationPage() {
       if (response.status === "unknown") {
         setLastResult({
           status: "unknown",
-          title: "正式结果仍未知",
+          title: "处理结果仍待确认",
           description: response.message,
           pendingIdempotencyKey: response.idempotencyKey,
           stayOnItem: true,
@@ -772,7 +772,7 @@ export function ProcurementConfirmationPage() {
         setLastResult({
           status: "succeeded",
           title: "查询确认：采购确认已通过",
-          description: "幂等键返回同一正式结果，未重复推进销售状态。",
+          description: "原任务号返回同一处理结果，未重复推进销售状态。",
           reference: outcome.reference,
           outcome,
           stayOnItem: !autoNext,
@@ -1128,7 +1128,7 @@ export function ProcurementConfirmationPage() {
                       },
                       {
                         id: "subjectHash",
-                        label: "内容指纹 subjectHash",
+                        label: "数据版本",
                         value: (
                           <span className="num font-mono text-sm">
                             {task.salesSubmission.subjectHashSummary}
@@ -1140,7 +1140,7 @@ export function ProcurementConfirmationPage() {
                       },
                       {
                         id: "contract",
-                        label: "合同（提交快照）",
+                        label: "合同（提交记录）",
                         value:
                           task.salesSubmission.contractSnapshot ?? "—",
                       },
@@ -1665,8 +1665,8 @@ export function ProcurementConfirmationPage() {
               "确认分行供应商/数量/成本/交期",
             ]}
             effects={[
-              "形成采购确认通过事实与确认分行",
-              "销售提交原样形成正式版本并生效、形成应收",
+              "形成采购确认通过记录与确认分行",
+              "销售提交原样形成版本并生效、形成应收",
               "完成当前 PROCUREMENT_CONFIRMATION 任务",
               "生成不可变采购创建依据（不创建采购建单任务）",
             ]}
@@ -1803,7 +1803,7 @@ function buildResultFacts(
         ),
       },
       {
-        label: "销售正式版本",
+        label: "销售版本",
         value: (
           <span className="num font-mono text-xs">
             {outcome.salesOrderRevisionId}
@@ -1888,7 +1888,7 @@ function ResultActions({
           disabled={resolving}
           onClick={onSettleUnknown}
         >
-          同幂等键完成（演示）
+          同任务号完成（演示）
         </Button>
       </>
     )

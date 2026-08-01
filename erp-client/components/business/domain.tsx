@@ -764,7 +764,7 @@ function AfterSalesTrackPanel({
     {
       key: "refund",
       label: "商城取消或退款",
-      boundary: "仅展示商城实际完成的取消或退款结果事实。",
+      boundary: "仅展示商城实际完成的取消或退款结果记录。",
       track: refund,
     },
     {
@@ -1110,13 +1110,13 @@ const interfaceErrorClassPresentation = {
     label: "供应商业务拒绝",
     tone: "destructive",
     alert: "destructive",
-    guidance: "保留拒绝事实，并进入退款、恢复或替代履约流程。",
+    guidance: "保留拒绝记录，并进入退款、恢复或替代履约流程。",
   },
   "network-timeout": {
     label: "网络超时",
     tone: "warning",
     alert: "warning",
-    guidance: "先查询原结果；确认无结果后才允许沿用原幂等键重试。",
+    guidance: "先查询原结果；确认无结果后才允许沿用原任务号重试。",
   },
   "result-unknown": {
     label: "结果未知",
@@ -1140,7 +1140,7 @@ const interfaceErrorClassPresentation = {
     label: "重复回调",
     tone: "neutral",
     alert: "info",
-    guidance: "该回调应被幂等忽略，不重复形成业务事实或待办。",
+    guidance: "该回调应被幂等忽略，不重复形成业务记录或待办。",
   },
   "out-of-order-callback": {
     label: "乱序回调",
@@ -1328,7 +1328,7 @@ function InterfaceErrorResolutionPanel({
               action={queryOriginalAction}
             />
             <ResolutionActionSlot
-              title="使用原幂等键重试"
+              title="使用原任务号重试"
               description="仅在服务端确认原请求无结果且可安全重试时使用。"
               action={retrySameKeyAction}
             />
@@ -1339,7 +1339,7 @@ function InterfaceErrorResolutionPanel({
             />
             <ResolutionActionSlot
               title="关闭任务"
-              description="仅关闭重复、误派或已有终态证据的任务，不改变业务事实。"
+              description="仅关闭重复、误派或已有终态证据的任务，不改变业务记录。"
               action={closeAction}
             />
           </ItemGroup>
@@ -1347,7 +1347,7 @@ function InterfaceErrorResolutionPanel({
       </CardContent>
 
       <CardFooter className="border-t border-border text-xs text-muted-foreground">
-        本组件不提供“直接标记成功”；成功必须来自可验证终态或已复核的正式补偿事实。
+        本组件不提供“直接标记成功”；成功必须来自可验证终态或已复核的正式补偿记录。
       </CardFooter>
     </Card>
   )

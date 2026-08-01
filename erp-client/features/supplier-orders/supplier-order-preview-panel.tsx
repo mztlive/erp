@@ -170,7 +170,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
           <Separator />
 
           <section className="space-y-2" aria-label="商品摘要">
-            <SectionTitle>商品明细（快照）</SectionTitle>
+            <SectionTitle>商品明细（下单时）</SectionTitle>
             <ul className="space-y-2">
               {order.items.map((item) => (
                 <li
@@ -195,7 +195,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                     )}
                   </div>
                   <Badge variant="secondary" className="mt-1 text-[10px]">
-                    下单快照不可变
+                    下单记录不可变
                   </Badge>
                 </li>
               ))}
@@ -214,7 +214,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                   </span>
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  幂等键尾部 {lastAction.idempotencyKeyTail} · 尝试{" "}
+                  任务号尾部 {lastAction.idempotencyKeyTail} · 尝试{" "}
                   {lastAction.attemptCount}
                 </p>
               </section>
@@ -233,10 +233,10 @@ function seedError(order: SupplierOrderDetailView): string {
     return blockers ?? "结果未知，请先查询原结果。"
   }
   if (order.order.fulfillmentStatus === "REJECTED") {
-    return "供应商明确拒单。支付与成本事实保留，不自动重试。"
+    return "供应商明确拒单。支付与成本记录保留，不自动重试。"
   }
   if (order.order.fulfillmentStatus === "EXCEPTION") {
-    return "履约异常。支付与消费事实不删除，请按售后或转人工处理。"
+    return "履约异常。支付与消费记录不删除，请按售后或转人工处理。"
   }
   return blockers ?? "无额外异常说明。"
 }

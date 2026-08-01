@@ -432,7 +432,7 @@ export function ConsumptionOrderCenterPage({
             updatedAt={formatTime(view.freshness.factWatermark)}
             dateTime={view.freshness.factWatermark}
             state="fresh"
-            label="事实水位"
+            label="记录水位"
           />
         }
         actions={
@@ -469,7 +469,7 @@ export function ConsumptionOrderCenterPage({
         statuses={[
           {
             id: "fact",
-            label: "关键事实",
+            label: "关键记录",
             status: {
                             label: `${view.facts.length} 条`,
               tone: "info",
@@ -489,7 +489,7 @@ export function ConsumptionOrderCenterPage({
         tracks={[
           {
             id: "fact",
-            label: "关键事实",
+            label: "关键记录",
             status: {
                             label: `${view.facts.length} 条`,
               tone: "info",
@@ -563,11 +563,11 @@ export function ConsumptionOrderCenterPage({
       ) : null}
 
       <Alert variant="info">
-        <AlertTitle>事实追溯边界</AlertTitle>
+        <AlertTitle>记录追溯边界</AlertTitle>
         <AlertDescription>
           {view.boundaryNotice}
           <span className="mt-1 block text-xs text-muted-foreground">
-            不提供修改商城订单、补支付事实、编辑分摊或旁路重试供应商动作。
+            不提供修改商城订单、补支付记录、编辑分摊或旁路重试供应商动作。
           </span>
         </AlertDescription>
       </Alert>
@@ -724,7 +724,7 @@ export function ConsumptionOrderCenterPage({
 
       {section === "facts" ? (
         <DocumentSection
-          title="五类关键事实时间线"
+          title="五类关键记录时间线"
           description="以 occurredAt 为业务时间，同时展示 receivedAt。多次部分退款与余额恢复逐笔展示，不按订单号合并。"
         >
           <div className="grid gap-3 lg:grid-cols-2">
@@ -739,12 +739,12 @@ export function ConsumptionOrderCenterPage({
           </div>
           <div className="mt-4">
             <AuditTimeline
-              aria-label="关键事实时间线"
-              emptyMessage="暂无关键事实"
+              aria-label="关键记录时间线"
+              emptyMessage="暂无关键记录"
               entries={sortedFacts.map((f) => ({
                 id: f.factId,
                 action: FACT_TYPE_LABEL[f.factType],
-                operator: "商城结果事实",
+                operator: "商城结果记录",
                 occurredAt: f.occurredAt,
                 occurredAtLabel: (
                   <span>
@@ -768,7 +768,7 @@ export function ConsumptionOrderCenterPage({
       ) : null}
 
       {section === "items" ? (
-        <DocumentSection title="商品明细快照">
+        <DocumentSection title="商品明细（下单时）">
           <div className="space-y-3">
             {view.items.map((item) => (
               <Card key={item.mallOrderItemId}>
@@ -853,7 +853,7 @@ export function ConsumptionOrderCenterPage({
                       },
                       {
                         id: "f-25032",
-                        label: "商城成本快照",
+                        label: "下单时商城成本",
                         value:
                           view.fieldPermissions.cost === "masked" ? (
                             "****"
@@ -1036,7 +1036,7 @@ export function ConsumptionOrderCenterPage({
               <AlertTitle>未形成供应商子订单</AlertTitle>
               <AlertDescription>
                 {view.fulfillment.autoFulfillmentBlocker ??
-                  "自动履约条件不足或归集未完成。支付事实已保留，进入差异而非拒收。"}
+                  "自动履约条件不足或归集未完成。支付记录已保留，进入差异而非拒收。"}
                 {view.workItemIds[0] ? (
                   <div className="mt-2">
                     <Button
@@ -1081,7 +1081,7 @@ export function ConsumptionOrderCenterPage({
                         </AlertTitle>
                         <AlertDescription>
                           W25 不提供编辑/重试商城订单或旁路供应商动作。请在
-                          W26 沿原幂等键查询/处理。
+                          W26 按原任务号查询/处理。
                         </AlertDescription>
                       </Alert>
                     )}
@@ -1091,7 +1091,7 @@ export function ConsumptionOrderCenterPage({
                         items={[
                           {
                             id: "f-40005",
-                            label: "供应商退款事实数",
+                            label: "供应商退款记录数",
                             value: String(
                               so.supplierRefundSummary.refundFactCount
                             ),
@@ -1207,7 +1207,7 @@ export function ConsumptionOrderCenterPage({
           <div className="mt-4 space-y-3">
             {view.consumptionEntries.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                尚无消费条目成本评估（待归集时常见）。支付事实与订单仍保留。
+                尚无消费条目成本评估（待归集时常见）。支付记录与订单仍保留。
               </p>
             ) : (
               view.consumptionEntries.map((entry) => {
@@ -1300,7 +1300,7 @@ export function ConsumptionOrderCenterPage({
                   view.facts.filter((f) => f.factType === "REFUND_SUCCEEDED")
                     .length
                 }{" "}
-                笔事实（逐笔展示）
+                笔记录（逐笔展示）
               </CardContent>
             </Card>
             <Card>
@@ -1314,7 +1314,7 @@ export function ConsumptionOrderCenterPage({
                     (f) => f.factType === "CARD_BALANCE_RESTORED"
                   ).length
                 }{" "}
-                笔事实（与退款分轨）
+                笔记录（与退款分轨）
               </CardContent>
             </Card>
             <Card>
@@ -1367,7 +1367,7 @@ export function ConsumptionOrderCenterPage({
             items={[
               {
                 id: "f-15241",
-                label: "事实水位",
+                label: "记录水位",
                 value: (
                   <span className="num">
                     {formatTime(view.freshness.factWatermark)}
@@ -1425,7 +1425,7 @@ export function ConsumptionOrderCenterPage({
             )}
           </div>
           <Alert variant="default" className="mt-4">
-            <AlertTitle>原始事实报文不在本页展示</AlertTitle>
+            <AlertTitle>原始记录报文不在本页展示</AlertTitle>
             <AlertDescription>
               受控排障进入 W29，仍只展示脱敏摘要。
               {view.workItemIds[0] ? (

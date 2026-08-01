@@ -699,7 +699,7 @@ export function IntegrationErrorsPage({
       return {
         stage: "closable" as const,
         terminalBasis: "verified-terminal" as const,
-        terminalEvidence: "已关联原消费事实核验",
+        terminalEvidence: "已关联原消费记录核验",
         close: (
           <Button
             type="button"
@@ -1171,7 +1171,7 @@ export function IntegrationErrorsPage({
                       .then(afterResult)
                   }}
                 >
-                  用同一幂等键查询最终结果
+                  用原任务号查询最终结果
                 </Button>
               ) : lastResult.terminal && !autoNext ? (
                 <Button
@@ -1431,7 +1431,7 @@ export function IntegrationErrorsPage({
                             value={item.originalAction.actionLabel}
                           />
                           <Fact
-                            label="原幂等键摘要"
+                            label="原任务号摘要"
                             value={
                               item.originalAction
                                 .originalActionIdempotencyKeySummary

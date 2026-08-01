@@ -564,7 +564,7 @@ export const SEED_CONNECTIONS: SeedConnection[] = [
         at: "2026-07-15T11:00:00+08:00",
         actor: "系统管理员",
         action: "DISABLE",
-        summary: "停用连接；历史版本与业务快照保留",
+        summary: "停用连接；历史版本与业务记录保留",
         auditNo: "AUD-W20-7100",
       },
     ],
@@ -769,7 +769,7 @@ export const SEED_CONNECTIONS: SeedConnection[] = [
         severity: "warning",
         title: "健康检查结果未知",
         description:
-          "正式结果不确定时不乐观改变启停或引用状态。请用原任务号 / operationId 查询最终结论。",
+          "处理结果不确定时不乐观改变启停或引用状态。请用原任务号查询最终结论。",
       },
     ],
   },

@@ -1,5 +1,5 @@
 /**
- * W06 可验收履约事实基线（演示）。
+ * W06 可验收履约记录基线（演示）。
  * 净可验收量由 session-state 在 APPLY/REVERSE 后重算，不在此文件写死最终 eligible。
  */
 

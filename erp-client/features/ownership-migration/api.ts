@@ -664,7 +664,7 @@ export async function submitMigrationFormal(
       batchId: command.batchId,
       cutoverId: command.cutoverId,
       status: "NOT_COMMITTED",
-      nextAction: "无已登记正式结果",
+      nextAction: "无已登记处理结果",
       message: "未找到对应正式操作记录。",
     }
   }
@@ -696,7 +696,7 @@ export async function submitMigrationFormal(
       status: "COMMITTED",
       committedAt: nowIso(),
       nextAction: "全局维护 Banner 已生效；执行最后同步与基线确认",
-      message: "维护冻结已写入服务端事实，不可由浏览器忽略。",
+      message: "维护冻结已写入服务端记录，不可由浏览器忽略。",
     }
     formalOps.set(requestId, result)
     return result
@@ -1019,7 +1019,7 @@ export async function submitMigrationFormal(
       backgroundOperation: {
         operationId: `op_exec_${Date.now()}`,
         status: "succeeded",
-        progressLabel: "后台执行结束 · 正式结果：全批已提交（非项目级部分成功）",
+        progressLabel: "后台执行结束 · 处理结果：全批已提交（非项目级部分成功）",
         progressPercent: 100,
         startedAt: nowIso(),
         lastProgressAt: nowIso(),

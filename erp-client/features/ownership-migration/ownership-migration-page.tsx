@@ -177,7 +177,7 @@ function RoleDemoBar({
         </SelectContent>
       </Select>
       <span className="text-xs text-muted-foreground">
-        角色仅影响 allowedActions / 掩码，不写入业务事实
+        角色仅影响 allowedActions / 掩码，不写入业务记录
       </span>
     </div>
   )
@@ -467,7 +467,7 @@ function OverviewView({
                 冻结动作：{freeze.frozenActions.join("、")}
               </p>
               <p className="font-medium">
-                本 Banner 由服务端冻结事实驱动，不可忽略或暂时关闭。
+                本 Banner 由服务端冻结记录驱动，不可忽略或暂时关闭。
               </p>
             </div>
           }
@@ -1452,7 +1452,7 @@ function FreezeSyncSection({
       <CardHeader className="border-b">
         <CardTitle>冻结与最后同步</CardTitle>
         <CardDescription>
-          冻结写入服务端事实后全局 Banner 生效；失败不得显示已冻结。
+          冻结写入服务端记录后全局 Banner 生效；失败不得显示已冻结。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 pt-4">
@@ -1538,7 +1538,7 @@ function BaselineSection({
         <CardHeader className="border-b">
           <CardTitle>最终权威基线</CardTitle>
           <CardDescription>
-            基线登记不生成新销售版本；迁移执行基线为第一份投影修订。
+            基线登记不生成新销售版本；迁移执行基线为第一份数据修订。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 pt-4">
@@ -1618,7 +1618,7 @@ function BaselineSection({
           <p>
             每项迁移关联的{" "}
             <code className="text-xs">baselineProjectionRevisionId</code>{" "}
-            是第一份执行投影修订，不是新销售版本。
+            是第一份执行数据修订，不是新销售版本。
           </p>
           <p className="text-muted-foreground">
             示例：{batch.items.find((i) => i.baselineProjectionRevisionId)
@@ -1851,7 +1851,7 @@ function ItemsTable({ batch }: { batch: OwnershipMigrationBatchView }) {
               销售版本 {row.original.baselineSalesOrderRevisionId ?? "—"}
             </div>
             <div className="font-mono text-muted-foreground">
-              投影修订 {row.original.baselineProjectionRevisionId ?? "—"}
+              数据修订 {row.original.baselineProjectionRevisionId ?? "—"}
             </div>
           </div>
         ),

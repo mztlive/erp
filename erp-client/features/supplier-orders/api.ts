@@ -638,7 +638,7 @@ export async function querySupplierResult(
   if (input.simulateUnknown) {
     const res: FormalActionResponse<QueryResultData> = {
       status: "unknown",
-      message: "查询请求超时，结果未知。请用同一幂等键查询，勿直接重放。",
+      message: "查询请求超时，结果未知。请按原任务号查询，勿重复提交。",
       operationId: input.operationId,
     }
     investigationIdem.set(input.idempotencyKey, res)
@@ -657,7 +657,7 @@ export async function querySupplierResult(
     canSafeRetry = Boolean(seed.canSafeRetryAfterNoResult)
     outcomeLabel = "明确无结果"
     summary = canSafeRetry
-      ? "供应商确认无对应订单，服务端允许沿用原幂等键安全重放。"
+      ? "供应商确认无对应订单，服务端允许沿用原任务号重新提交。"
       : "供应商确认无对应订单，但当前不可安全重试。"
   } else if (preset === "VERIFIED_TERMINAL") {
     outcome = "VERIFIED_TERMINAL"
@@ -791,7 +791,7 @@ export async function replaySupplierOrder(
     recordedAt: now,
     canSafeRetry: false,
     externalOrderNo,
-    summary: "沿用原供应商幂等键重放成功，已取得外部单号。任务仍待确认终态。",
+    summary: "沿用原任务号重新提交成功，已取得外部单号。任务仍待确认终态。",
   }
   session.lastInvestigation = evidence
   session.actionsExtra = [

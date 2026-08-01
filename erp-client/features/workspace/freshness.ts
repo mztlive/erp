@@ -37,7 +37,7 @@ export function deriveProjectionFreshness(
     return {
       state: "failed",
       updatedAtLabel: formatClock(freshness.projectionUpdatedAt),
-      statusLabel: "投影重建失败",
+      statusLabel: "数据更新失败",
       dateTime: freshness.projectionUpdatedAt,
     }
   }
@@ -46,7 +46,7 @@ export function deriveProjectionFreshness(
     return {
       state: "syncing",
       updatedAtLabel: formatClock(freshness.projectionUpdatedAt),
-      statusLabel: "投影重建中",
+      statusLabel: "数据更新中",
       dateTime: freshness.projectionUpdatedAt,
     }
   }
@@ -60,7 +60,7 @@ export function deriveProjectionFreshness(
     return {
       state: "stale",
       updatedAtLabel: formatClock(freshness.projectionUpdatedAt),
-      statusLabel: "投影已陈旧（>1 分钟）",
+      statusLabel: "数据可能不是最新（>1 分钟）",
       dateTime: freshness.projectionUpdatedAt,
     }
   }
@@ -68,7 +68,7 @@ export function deriveProjectionFreshness(
   return {
     state: "fresh",
     updatedAtLabel: formatClock(freshness.projectionUpdatedAt),
-    statusLabel: "投影已更新",
+    statusLabel: "数据已更新",
     dateTime: freshness.projectionUpdatedAt,
   }
 }

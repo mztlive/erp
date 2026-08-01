@@ -1462,7 +1462,7 @@ function ProgressSection({ batch }: { batch: ImportBatchView }) {
         label={`后台任务 ${job.jobId}`}
         description={
           <span>
-            最近进度 {formatTime(job.updatedAt)} · 允许部分成功；已形成正式结果不会因同批其它失败而回退。
+            最近进度 {formatTime(job.updatedAt)} · 允许部分成功；已形成的处理结果不会因同批其它失败而回退。
           </span>
         }
       />

@@ -185,7 +185,7 @@ function mapFreshnessState(
   statusLabel: string
 } {
   if (options?.refreshing) {
-    return { uiState: "syncing", statusLabel: "正在刷新投影" }
+    return { uiState: "syncing", statusLabel: "正在刷新数据" }
   }
   if (options?.refreshFailed) {
     return { uiState: "failed", statusLabel: "刷新失败 · 保留旧数据" }
@@ -194,11 +194,11 @@ function mapFreshnessState(
     case "stale":
       return { uiState: "stale", statusLabel: "数据陈旧 · 源水位已超前" }
     case "rebuilding":
-      return { uiState: "syncing", statusLabel: "投影重建中" }
+      return { uiState: "syncing", statusLabel: "数据更新中" }
     case "failed":
-      return { uiState: "failed", statusLabel: "投影重建失败" }
+      return { uiState: "failed", statusLabel: "数据更新失败" }
     default:
-      return { uiState: "fresh", statusLabel: "投影已更新" }
+      return { uiState: "fresh", statusLabel: "数据已更新" }
   }
 }
 
@@ -854,7 +854,7 @@ export function ActualProfitLossPage() {
                 dateTime={data.freshness.projectedAt}
                 state={freshnessUi.uiState}
                 statusLabel={freshnessUi.statusLabel}
-                label="经营投影"
+                label="经营汇总"
               />
               <span className="text-xs text-muted-foreground">
                 源水位 {formatDateTime(data.freshness.sourceWatermark)} · 公式{" "}
@@ -865,7 +865,7 @@ export function ActualProfitLossPage() {
             <DataFreshness
               updatedAt="—"
               state="unknown"
-              label="经营投影"
+              label="经营汇总"
               statusLabel="待选择口径"
             />
           )
@@ -1019,7 +1019,7 @@ export function ActualProfitLossPage() {
           <CardHeader>
             <CardTitle>公式与边界（查询阻断中）</CardTitle>
             <CardDescription>
-              不展示金额 Skeleton 冒充查询中；选定口径后加载投影。
+              不展示金额 Skeleton 冒充查询中；选定口径后加载数据。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
@@ -1050,7 +1050,7 @@ export function ActualProfitLossPage() {
           {viewQuery.isError && !data ? (
             <BusinessFailureState
               kind="system"
-              title="盈亏投影加载失败"
+              title="盈亏数据加载失败"
               description="当前无缓存结果可展示。请重试或返回其他模块。"
               action={
                 <Button type="button" onClick={() => void viewQuery.refetch()}>
@@ -1069,26 +1069,26 @@ export function ActualProfitLossPage() {
                   </AlertTitle>
                   <AlertDescription>
                     {refreshFailed
-                      ? "保留上次成功投影供只读查阅；可再次刷新。不会用本地估算覆盖金额。"
-                      : `投影时间落后于源水位。投影 ${formatDateTime(data.freshness.projectedAt)}，源水位 ${formatDateTime(data.freshness.sourceWatermark)}。`}
+                      ? "保留上次成功数据供只读查阅；可再次刷新。不会用本地估算覆盖金额。"
+                      : `数据时间落后于源水位。数据 ${formatDateTime(data.freshness.projectedAt)}，源水位 ${formatDateTime(data.freshness.sourceWatermark)}。`}
                   </AlertDescription>
                 </Alert>
               ) : null}
 
               {data.freshness.state === "rebuilding" ? (
                 <Alert>
-                  <AlertTitle>投影重建中</AlertTitle>
+                  <AlertTitle>数据更新中</AlertTitle>
                   <AlertDescription>
-                    保留最近成功结果只读查看；导出将标注旧水位。重建完成后水位追平。
+                    保留最近成功结果只读查看；导出将标注旧数据时间。更新完成后时间追平。
                   </AlertDescription>
                 </Alert>
               ) : null}
 
               {data.freshness.state === "failed" ? (
                 <Alert variant="destructive">
-                  <AlertTitle>投影重建失败</AlertTitle>
+                  <AlertTitle>数据更新失败</AlertTitle>
                   <AlertDescription>
-                    经营事实未被修改；展示上次成功投影并标记失败。请联系管理员排查后台任务。
+                    经营记录未被修改；展示上次成功数据并标记失败。请联系管理员排查后台任务。
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -1585,7 +1585,7 @@ export function ActualProfitLossPage() {
               ) : (
                 <BusinessTableFrame
                   title={`明细 · ${DIMENSION_LABEL[dimension]}（${SCOPE_LABEL}）`}
-                  description={`共 ${data.rows.total} 行 · 与指标/图表同一数据范围 · 点击盈亏下钻销售单（W05）· 点击成本金额打开成本事实 detail`}
+                  description={`共 ${data.rows.total} 行 · 与指标/图表同一数据范围 · 点击盈亏下钻销售单（W05）· 点击成本金额打开成本记录 detail`}
                   table={
                     <DataTable
                       data={pageRows}
@@ -1611,7 +1611,7 @@ export function ActualProfitLossPage() {
                     void markCorrection.mutateAsync()
                   }}
                 >
-                  演示：来源纠错后等待投影
+                  演示：来源纠错后等待刷新
                 </Button>
                 <span className="text-xs text-muted-foreground self-center">
                   纠错后不本地改金额；固定提示等待水位追平。
@@ -1631,7 +1631,7 @@ export function ActualProfitLossPage() {
           }
         }}
         size="detail"
-        title="成本事实 detail"
+        title="成本记录 detail"
         description="只读 · NON_VOUCHER_FULFILLMENT · 不含税金额为利润口径；含税仅作税额展示，不与不含税混算。"
         identity={
           costDetailRow ? (
@@ -1715,7 +1715,7 @@ export function ActualProfitLossPage() {
             </>
           ) : (
             <p className="text-sm text-muted-foreground">
-              当前行无可查看的成本事实（无权限或完全未覆盖）。
+              当前行无可查看的成本记录（无权限或完全未覆盖）。
             </p>
           )}
         </div>
@@ -1838,7 +1838,7 @@ function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
           <AlertTitle>前往纠错来源</AlertTitle>
           <AlertDescription className="flex flex-col gap-2">
             <span>
-              W16 不执行变更确认。打开原业务对象使用正式变更/冲减流程后，返回本页等待投影刷新。
+              W16 不执行变更确认。打开原业务对象使用正式变更/冲减流程后，返回本页等待数据刷新。
             </span>
             <Button type="button" size="sm" variant="outline"
               render={<Link href={entry.correctionHref} target="_blank" />}

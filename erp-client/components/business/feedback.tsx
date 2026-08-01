@@ -283,7 +283,7 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
   },
   sync: {
     title: "来源同步失败",
-    description: "来源快照与现有正式事实已保留，请进入同步任务处理。",
+    description: "来源数据与现有正式记录已保留，请进入同步任务处理。",
     icon: RefreshCwIcon,
     variant: "destructive",
     tone: "destructive",
@@ -291,7 +291,7 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
   },
   integration: {
     title: "外部接口失败",
-    description: "正式业务事实已保留，请进入接口错误中心查看后续处理。",
+    description: "正式业务记录已保留，请进入接口错误中心查看后续处理。",
     icon: CloudOffIcon,
     variant: "destructive",
     tone: "destructive",
@@ -299,7 +299,7 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
   },
   projection: {
     title: "查询模型更新失败",
-    description: "当前显示的是上次成功数据，正式业务事实未被修改。",
+    description: "当前显示的是上次成功数据，正式业务记录未被修改。",
     icon: RotateCcwIcon,
     variant: "warning",
     tone: "warning",
@@ -640,7 +640,7 @@ const formalResultPresets: Record<
   },
   blocked: {
     title: "正式操作被阻断",
-    description: "当前前置条件尚未满足，本次操作未形成正式结果。",
+    description: "当前前置条件尚未满足，本次操作未形成处理结果。",
     label: "已阻断",
     icon: TriangleAlertIcon,
     variant: "warning",
@@ -655,7 +655,7 @@ const formalResultPresets: Record<
     tone: "info",
   },
   unknown: {
-    title: "正式结果未知",
+    title: "处理结果待确认",
     description: "不得按成功处理，请等待核对或进入异常处理流程。",
     label: "结果未知",
     icon: TriangleAlertIcon,
