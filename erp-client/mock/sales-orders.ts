@@ -1,4 +1,4 @@
-import type { SalesOrderListItem } from "./types"
+import type { SalesOrderListItem } from "@/features/sales-orders/types"
 
 /** 演示数据：仅用于 UI 预览，不代表正式业务口径。 */
 export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [

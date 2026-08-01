@@ -27,7 +27,7 @@ import {
 import {
   NATURE_LABEL,
   OWNER_LABEL,
-} from "@/features/sales-orders/mock-data"
+} from "@/mock/sales-orders"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import { cn } from "@/lib/utils"
 

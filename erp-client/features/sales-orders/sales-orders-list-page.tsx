@@ -4,19 +4,19 @@ import * as React from "react"
 import {
   DownloadIcon,
   FilterIcon,
-  PlusIcon,
   PrinterIcon,
   SearchIcon,
 } from "lucide-react"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 
 import {
-  BusinessObjectRef,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
   DataTable,
   ListToolbar,
+  MetricFilterItem,
+  MetricStrip,
   MoneyValue,
   PageActions,
   PageHeader,
@@ -32,15 +32,27 @@ import {
 } from "@/components/ui/input-group"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
+  NativeSelect,
+  NativeSelectOption,
+} from "@/components/ui/native-select"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
+import {
   MOCK_SALES_ORDERS,
   NATURE_LABEL,
   OWNER_LABEL,
-} from "@/features/sales-orders/mock-data"
+} from "@/mock/sales-orders"
 import { SalesOrderPaperDialog } from "@/features/sales-orders/sales-order-paper-dialog"
 import { SalesOrderPreviewPanel } from "@/features/sales-orders/sales-order-preview-panel"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 
 type NatureFilter = "all" | "physical_service" | "card_voucher"
+type SummaryFilter = "all" | "pendingConfirm" | "inFulfillment" | "cardVoucher"
+type OwnerFilter = "all" | SalesOrderListItem["ownerSystem"]
+type StatusFilter = "all" | "待二次确认" | "履约中" | "已关闭"
 
 function matchesSearch(order: SalesOrderListItem, query: string) {
   if (!query) return true
@@ -53,30 +65,56 @@ function matchesSearch(order: SalesOrderListItem, query: string) {
   )
 }
 
-export function SalesOrdersListPage() {
-  const [search, setSearch] = React.useState("")
+export function SalesOrdersListPage({ initialSearch = "" }: { initialSearch?: string }) {
+  const [search, setSearch] = React.useState(initialSearch)
   const [natureFilter, setNatureFilter] =
     React.useState<NatureFilter>("all")
+  const [summaryFilter, setSummaryFilter] =
+    React.useState<SummaryFilter>("all")
+  const [ownerFilter, setOwnerFilter] = React.useState<OwnerFilter>("all")
+  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all")
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: 0,
     pageSize: 20,
   })
   const [previewId, setPreviewId] = React.useState<string | null>(null)
   const [paperId, setPaperId] = React.useState<string | null>(null)
-  const [openNotice, setOpenNotice] = React.useState<string | null>(null)
+
+  const resetPagination = React.useCallback(() => {
+    setPagination((previous) =>
+      previous.pageIndex === 0 ? previous : { ...previous, pageIndex: 0 }
+    )
+  }, [])
 
   const filtered = React.useMemo(() => {
     return MOCK_SALES_ORDERS.filter((order) => {
       if (natureFilter !== "all" && order.nature !== natureFilter) {
         return false
       }
+      if (ownerFilter !== "all" && order.ownerSystem !== ownerFilter) {
+        return false
+      }
+      if (statusFilter !== "all" && order.primaryStatus.label !== statusFilter) {
+        return false
+      }
+      if (
+        summaryFilter === "pendingConfirm" &&
+        order.primaryStatus.label !== "待二次确认"
+      ) {
+        return false
+      }
+      if (
+        summaryFilter === "inFulfillment" &&
+        order.primaryStatus.label !== "履约中"
+      ) {
+        return false
+      }
+      if (summaryFilter === "cardVoucher" && order.nature !== "card_voucher") {
+        return false
+      }
       return matchesSearch(order, search)
     })
-  }, [natureFilter, search])
-
-  React.useEffect(() => {
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-  }, [search, natureFilter])
+  }, [natureFilter, ownerFilter, search, statusFilter, summaryFilter])
 
   const pageRows = React.useMemo(() => {
     const start = pagination.pageIndex * pagination.pageSize
@@ -106,14 +144,40 @@ export function SalesOrdersListPage() {
     }
   }, [])
 
-  const openCenter = React.useCallback((documentNumber: string) => {
-    setOpenNotice(documentNumber)
-    setPreviewId(null)
-  }, [])
-
   const openPaper = React.useCallback((id: string) => {
     setPaperId(id)
   }, [])
+
+  const exportCsv = React.useCallback(() => {
+    const quote = (value: string) => `"${value.replaceAll('"', '""')}"`
+    const rows = filtered.map((order) =>
+      [
+        order.documentNumber,
+        order.customerName,
+        order.contractNumber,
+        NATURE_LABEL[order.nature],
+        order.primaryStatus.label,
+        OWNER_LABEL[order.ownerSystem],
+        order.amountGross,
+        order.ownerName,
+        order.submittedAt,
+      ]
+        .map((value) => quote(String(value)))
+        .join(",")
+    )
+    const csv = [
+      "销售单号,客户,合同,业务性质,状态,主责系统,成交金额（含税）,负责人,提交时间",
+      ...rows,
+    ].join("\n")
+    const url = URL.createObjectURL(
+      new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" })
+    )
+    const anchor = document.createElement("a")
+    anchor.href = url
+    anchor.download = "销售单列表.csv"
+    anchor.click()
+    URL.revokeObjectURL(url)
+  }, [filtered])
 
   const columns = React.useMemo<ColumnDef<SalesOrderListItem>[]>(
     () => [
@@ -123,14 +187,29 @@ export function SalesOrdersListPage() {
         header: "销售单",
         meta: { label: "销售单", width: "reference" },
         cell: ({ row }) => (
-          <BusinessObjectRef
-            objectType={NATURE_LABEL[row.original.nature]}
-            stableNumber={row.original.documentNumber}
-            title={row.original.customerName}
-            status={row.original.primaryStatus}
-            onOpen={() => setPreviewId(row.original.id)}
-            openLabel={`预览 ${row.original.documentNumber}`}
-          />
+          <div className="flex min-w-0 items-center gap-2">
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="link"
+                  size="xs"
+                  className="num px-0"
+                  aria-label={`预览 ${row.original.documentNumber}`}
+                  onClick={() => setPreviewId(row.original.id)}
+                >
+                  {row.original.documentNumber}
+                </Button>
+                <BusinessStatusBadge context="list" {...row.original.primaryStatus} />
+              </div>
+              <div className="truncate text-xs text-muted-foreground">
+                {row.original.customerName}
+              </div>
+            </div>
+            <Badge variant="secondary" className="shrink-0">
+              {NATURE_LABEL[row.original.nature]}
+            </Badge>
+          </div>
         ),
       },
       {
@@ -165,6 +244,7 @@ export function SalesOrdersListPage() {
         cell: ({ row }) => (
           <StatusTrackSummary
             variant="inline"
+            className="flex-nowrap gap-x-2 gap-y-0"
             tracks={[
               {
                 id: "fulfillment",
@@ -219,7 +299,7 @@ export function SalesOrdersListPage() {
       {
         id: "actions",
         header: "操作",
-        meta: { label: "操作", width: "status", align: "end" },
+        meta: { label: "操作", width: "default", align: "end" },
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
             <Button
@@ -234,22 +314,22 @@ export function SalesOrdersListPage() {
               type="button"
               variant="outline"
               size="xs"
-              onClick={() => openCenter(row.original.documentNumber)}
+              onClick={() => openPaper(row.original.id)}
             >
-              中心
+              打印
             </Button>
           </div>
         ),
       },
     ],
-    [openCenter]
+    [openPaper]
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-5 p-4 md:p-6">
+    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
         title="销售单"
-        description="单击行打开半屏详情预览（左右分栏读主事实）；纸质投影用 PaperDocument；对象中心仅用于履约/票款等作业。"
+        description="集中核对销售单状态、履约、票款与明细；单击任一行可在当前列表查看完整摘要。"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "orders", label: "销售单", current: true },
@@ -270,58 +350,64 @@ export function SalesOrdersListPage() {
                 label: "导出",
                 icon: DownloadIcon,
                 variant: "outline",
-              },
-              {
-                actionKey: "create",
-                label: "新建销售单",
-                icon: PlusIcon,
+                disabled: filtered.length === 0,
+                onClick: exportCsv,
               },
             ]}
           />
         }
       />
 
-      <div className="grid gap-px overflow-hidden rounded-lg border border-grid bg-grid sm:grid-cols-2 lg:grid-cols-4">
-        <MetricCard label="全部销售单" value={metrics.total} />
-        <MetricCard
+      <MetricStrip columns={4} aria-label="销售单快速筛选">
+        <MetricFilterItem
+          label="全部销售单"
+          value={metrics.total}
+          detail="当前业务范围"
+          active={summaryFilter === "all"}
+          onClick={() => {
+            setSummaryFilter("all")
+            resetPagination()
+          }}
+        />
+        <MetricFilterItem
           label="待二次确认"
           value={metrics.pendingConfirm}
-          hint="采购闸门"
+          detail="采购确认闸门"
+          active={summaryFilter === "pendingConfirm"}
+          onClick={() => {
+            setSummaryFilter("pendingConfirm")
+            resetPagination()
+          }}
         />
-        <MetricCard
+        <MetricFilterItem
           label="履约中"
           value={metrics.inFulfillment}
-          hint="含长期卡券"
+          detail="含长期卡券"
+          active={summaryFilter === "inFulfillment"}
+          onClick={() => {
+            setSummaryFilter("inFulfillment")
+            resetPagination()
+          }}
         />
-        <MetricCard
+        <MetricFilterItem
           label="卡券销售单"
           value={metrics.cardVoucher}
-          hint="一期主责商城"
+          detail="主责系统可能为商城"
+          active={summaryFilter === "cardVoucher"}
+          onClick={() => {
+            setSummaryFilter("cardVoucher")
+            resetPagination()
+          }}
         />
-      </div>
-
-      {openNotice ? (
-        <div
-          role="status"
-          className="rounded-lg border border-info-border bg-info-soft px-4 py-3 text-sm text-info-soft-foreground"
-        >
-          演示环境：对象中心「{openNotice}」尚未接入。核对与打印请用侧栏预览 /
-          纸质投影。
-          <Button
-            type="button"
-            variant="link"
-            size="xs"
-            className="ml-2"
-            onClick={() => setOpenNotice(null)}
-          >
-            关闭
-          </Button>
-        </div>
-      ) : null}
+      </MetricStrip>
 
       <BusinessTableFrame
         title="销售单列表"
-        description="服务端分页形态预览；当前使用本地演示数据。"
+        description={
+          summaryFilter === "all" && ownerFilter === "all" && statusFilter === "all"
+            ? "按提交时间查看当前业务范围内的销售单。"
+            : `当前筛选：${summaryFilter === "all" ? "全部指标" : summaryFilter === "pendingConfirm" ? "待二次确认" : summaryFilter === "inFulfillment" ? "履约中" : "卡券销售单"} · ${ownerFilter === "all" ? "全部主责" : OWNER_LABEL[ownerFilter]} · ${statusFilter === "all" ? "全部状态" : statusFilter}`
+        }
         toolbar={
           <ListToolbar
             search={
@@ -331,7 +417,10 @@ export function SalesOrdersListPage() {
                 </InputGroupAddon>
                 <InputGroupInput
                   value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  onChange={(event) => {
+                    setSearch(event.target.value)
+                    resetPagination()
+                  }}
                   placeholder="单号、客户、合同、负责人"
                   aria-label="搜索销售单"
                 />
@@ -344,6 +433,7 @@ export function SalesOrdersListPage() {
                   onValueChange={(values) => {
                     const next = values[0] as NatureFilter | undefined
                     setNatureFilter(next ?? "all")
+                    resetPagination()
                   }}
                   variant="outline"
                   size="sm"
@@ -355,14 +445,73 @@ export function SalesOrdersListPage() {
                   </ToggleGroupItem>
                   <ToggleGroupItem value="card_voucher">卡券</ToggleGroupItem>
                 </ToggleGroup>
-                <Button type="button" variant="outline" size="sm">
-                  <FilterIcon data-icon="inline-start" aria-hidden="true" />
-                  高级筛选
-                </Button>
+                <Popover>
+                  <PopoverTrigger
+                    render={<Button type="button" variant="outline" size="sm" />}
+                  >
+                    <FilterIcon data-icon="inline-start" aria-hidden="true" />
+                    高级筛选
+                    {ownerFilter !== "all" || statusFilter !== "all" ? (
+                      <Badge variant="info">已启用</Badge>
+                    ) : null}
+                  </PopoverTrigger>
+                  <PopoverContent align="end" className="w-80">
+                    <div>
+                      <div className="font-medium">高级筛选</div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        组合主责系统与主状态缩小结果范围。
+                      </p>
+                    </div>
+                    <label className="grid gap-1.5 text-sm">
+                      <span>主责系统</span>
+                      <NativeSelect
+                        className="w-full"
+                        value={ownerFilter}
+                        onChange={(event) => {
+                          setOwnerFilter(event.target.value as OwnerFilter)
+                          resetPagination()
+                        }}
+                      >
+                        <NativeSelectOption value="all">全部主责</NativeSelectOption>
+                        <NativeSelectOption value="erp">主责 ERP</NativeSelectOption>
+                        <NativeSelectOption value="mall">主责商城</NativeSelectOption>
+                      </NativeSelect>
+                    </label>
+                    <label className="grid gap-1.5 text-sm">
+                      <span>主状态</span>
+                      <NativeSelect
+                        className="w-full"
+                        value={statusFilter}
+                        onChange={(event) => {
+                          setStatusFilter(event.target.value as StatusFilter)
+                          resetPagination()
+                        }}
+                      >
+                        <NativeSelectOption value="all">全部状态</NativeSelectOption>
+                        <NativeSelectOption value="待二次确认">待二次确认</NativeSelectOption>
+                        <NativeSelectOption value="履约中">履约中</NativeSelectOption>
+                        <NativeSelectOption value="已关闭">已关闭</NativeSelectOption>
+                      </NativeSelect>
+                    </label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={ownerFilter === "all" && statusFilter === "all"}
+                      onClick={() => {
+                        setOwnerFilter("all")
+                        setStatusFilter("all")
+                        resetPagination()
+                      }}
+                    >
+                      清除高级筛选
+                    </Button>
+                  </PopoverContent>
+                </Popover>
               </>
             }
             actions={
-              <span className="text-xs text-muted-foreground">
+              <span className="text-xs text-muted-foreground" aria-live="polite">
                 共 {filtered.length.toLocaleString("zh-CN")} 条
               </span>
             }
@@ -377,7 +526,8 @@ export function SalesOrdersListPage() {
             pagination={pagination}
             onPaginationChange={setPagination}
             layout="flush"
-            density="comfortable"
+            density="compact"
+            defaultColumnPinning={{ left: ["document"], right: ["actions"] }}
             onRowPreview={(row) => setPreviewId(row.id)}
             onRowOpen={(row) => setPreviewId(row.id)}
           />
@@ -413,9 +563,7 @@ export function SalesOrdersListPage() {
               >
                 {OWNER_LABEL[previewOrder.ownerSystem]}
               </Badge>
-              <span className="text-xs text-muted-foreground">
-                半屏详情 · 左右分栏
-              </span>
+              <span className="text-xs text-muted-foreground">销售单详情</span>
             </div>
           ) : null
         }
@@ -437,12 +585,6 @@ export function SalesOrdersListPage() {
                 <PrinterIcon data-icon="inline-start" aria-hidden="true" />
                 纸质预览
               </Button>
-              <Button
-                type="button"
-                onClick={() => openCenter(previewOrder.documentNumber)}
-              >
-                打开中心
-              </Button>
             </>
           ) : null
         }
@@ -459,28 +601,6 @@ export function SalesOrdersListPage() {
           if (!open) setPaperId(null)
         }}
       />
-    </div>
-  )
-}
-
-function MetricCard({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: number
-  hint?: string
-}) {
-  return (
-    <div className="bg-card p-4">
-      <div className="text-sm text-muted-foreground">{label}</div>
-      <div className="num mt-1 text-2xl font-semibold tracking-tight text-foreground">
-        {value.toLocaleString("zh-CN")}
-      </div>
-      {hint ? (
-        <div className="mt-1 text-xs text-muted-foreground">{hint}</div>
-      ) : null}
     </div>
   )
 }

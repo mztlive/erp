@@ -197,8 +197,8 @@ function MetricItem({
       className={cn("min-w-0 bg-card p-4", className)}
       {...props}
     >
-      <dt className="text-sm text-muted-foreground">{label}</dt>
-      <dd className="mt-1">
+      <span className="block text-sm text-muted-foreground">{label}</span>
+      <div className="mt-1">
         <div className="num text-2xl font-semibold tracking-tight text-foreground">
           {value}
         </div>
@@ -210,12 +210,57 @@ function MetricItem({
             ) : null}
           </div>
         ) : null}
-      </dd>
+      </div>
     </div>
   )
 }
 
 export type MetricStripColumns = 1 | 2 | 3 | 4 | 5 | 6
+
+export type MetricFilterItemProps = Omit<
+  React.ComponentProps<"button">,
+  "children" | "value"
+> & {
+  label: React.ReactNode
+  value: React.ReactNode
+  detail?: React.ReactNode
+  active?: boolean
+}
+
+/** 可作为列表/待办过滤器的指标项，提供按钮语义与明确选中态。 */
+function MetricFilterItem({
+  label,
+  value,
+  detail,
+  active = false,
+  className,
+  ...props
+}: MetricFilterItemProps) {
+  return (
+    <div className="min-w-0 bg-card">
+      <button
+        type="button"
+        aria-pressed={active}
+        className={cn(
+          "h-full w-full border-l-2 border-transparent p-4 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+          active && "border-l-primary bg-accent text-accent-foreground",
+          className
+        )}
+        {...props}
+      >
+        <span className="block text-sm text-muted-foreground">{label}</span>
+        <span className="num mt-1 block text-2xl font-semibold tracking-tight text-foreground">
+          {value}
+        </span>
+        {detail ? (
+          <span className="mt-1 block text-xs text-muted-foreground">
+            {detail}
+          </span>
+        ) : null}
+      </button>
+    </div>
+  )
+}
 
 const metricColumnClasses: Record<MetricStripColumns, string> = {
   1: "grid-cols-1",
@@ -227,7 +272,7 @@ const metricColumnClasses: Record<MetricStripColumns, string> = {
 }
 
 export type MetricStripProps = Omit<
-  React.ComponentProps<"dl">,
+  React.ComponentProps<"div">,
   "title"
 > & {
   columns?: MetricStripColumns
@@ -239,7 +284,7 @@ function MetricStrip({
   ...props
 }: MetricStripProps) {
   return (
-    <dl
+    <div
       data-slot="metric-strip"
       className={cn(
         "grid gap-px overflow-hidden rounded-lg border border-grid bg-grid",
@@ -317,6 +362,7 @@ function DataFreshness({
 export {
   DataFreshness,
   MetricItem,
+  MetricFilterItem,
   MetricStrip,
   PageActions,
   PageHeader,

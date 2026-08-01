@@ -1,20 +1,13 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 import {
-  BarChart3Icon,
-  BoxesIcon,
   Building2Icon,
   ClipboardCheckIcon,
-  FileTextIcon,
   LayoutDashboardIcon,
-  PackageIcon,
-  ReceiptIcon,
-  Settings2Icon,
   ShoppingCartIcon,
-  UsersIcon,
-  WalletIcon,
   type LucideIcon,
 } from "lucide-react"
 
@@ -40,7 +33,6 @@ type NavItem = {
   label: string
   icon: LucideIcon
   badge?: string
-  enabled?: boolean
 }
 
 type NavGroup = {
@@ -54,29 +46,16 @@ const NAV_GROUPS: readonly NavGroup[] = [
     items: [
       { href: "/workspace", label: "今日工作台", icon: LayoutDashboardIcon },
       {
-        href: "/workspace/todos",
-        label: "待办队列",
+        href: "/procurement/confirm",
+        label: "采购待办",
         icon: ClipboardCheckIcon,
-        badge: "6",
-        enabled: false,
+        badge: "3",
       },
     ],
   },
   {
     label: "销售",
     items: [
-      {
-        href: "/sales/customers",
-        label: "客户中心",
-        icon: UsersIcon,
-        enabled: false,
-      },
-      {
-        href: "/sales/contracts",
-        label: "合同",
-        icon: FileTextIcon,
-        enabled: false,
-      },
       {
         href: "/sales/orders",
         label: "销售单",
@@ -91,58 +70,6 @@ const NAV_GROUPS: readonly NavGroup[] = [
         href: "/procurement/confirm",
         label: "二次确认",
         icon: ClipboardCheckIcon,
-        enabled: false,
-      },
-      {
-        href: "/procurement/orders",
-        label: "采购单",
-        icon: PackageIcon,
-        enabled: false,
-      },
-      {
-        href: "/fulfillment",
-        label: "履约作业",
-        icon: BoxesIcon,
-        enabled: false,
-      },
-    ],
-  },
-  {
-    label: "票款",
-    items: [
-      {
-        href: "/finance/ar",
-        label: "客户往来",
-        icon: WalletIcon,
-        enabled: false,
-      },
-      {
-        href: "/finance/ap",
-        label: "供应商往来",
-        icon: ReceiptIcon,
-        enabled: false,
-      },
-    ],
-  },
-  {
-    label: "经营",
-    items: [
-      {
-        href: "/analytics/customers",
-        label: "客户经营质量",
-        icon: BarChart3Icon,
-        enabled: false,
-      },
-    ],
-  },
-  {
-    label: "系统",
-    items: [
-      {
-        href: "/system/settings",
-        label: "权限与审计",
-        icon: Settings2Icon,
-        enabled: false,
       },
     ],
   },
@@ -162,22 +89,15 @@ function AppSidebarNav() {
               {group.items.map((item) => {
                 const Icon = item.icon
                 const isActive =
-                  item.enabled !== false &&
                   (pathname === item.href ||
                     pathname.startsWith(`${item.href}/`))
-                const disabled = item.enabled === false
 
                 return (
                   <SidebarMenuItem key={item.href}>
                     <SidebarMenuButton
                       isActive={isActive}
                       tooltip={item.label}
-                      disabled={disabled}
-                      render={
-                        disabled ? undefined : (
-                          <Link href={item.href} />
-                        )
-                      }
+                      render={<Link href={item.href} />}
                     >
                       <Icon aria-hidden="true" />
                       <span>{item.label}</span>
@@ -203,12 +123,48 @@ function AppSidebarNav() {
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  const isSalesOrders = pathname.startsWith("/sales/orders")
+  const router = useRouter()
+  const [search, setSearch] = React.useState("")
+  const [sidebarOpen, setSidebarOpen] = React.useState(false)
+  const activeTab = pathname.startsWith("/sales/orders")
+    ? "sales-orders"
+    : pathname.startsWith("/procurement/confirm")
+      ? "procurement-confirm"
+      : "workspace"
+
+  React.useEffect(() => {
+    const media = window.matchMedia("(min-width: 1280px)")
+    const syncSidebar = () => setSidebarOpen(media.matches)
+    syncSidebar()
+    media.addEventListener("change", syncSidebar)
+    return () => media.removeEventListener("change", syncSidebar)
+  }, [])
+
+  React.useEffect(() => {
+    const focusGlobalSearch = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault()
+        document
+          .querySelector<HTMLInputElement>('input[aria-label="全局搜索"]')
+          ?.focus()
+      }
+    }
+    window.addEventListener("keydown", focusGlobalSearch)
+    return () => window.removeEventListener("keydown", focusGlobalSearch)
+  }, [])
+
+  const submitSearch = React.useCallback(() => {
+    const query = search.trim()
+    if (!query) return
+    router.push(`/sales/orders?search=${encodeURIComponent(query)}`)
+  }, [router, search])
 
   return (
     <ErpAppShell
       className="min-h-svh"
       contentLabel="主工作区"
+      sidebarOpen={sidebarOpen}
+      onSidebarOpenChange={setSidebarOpen}
       sidebarHeader={
         <div className="flex items-center gap-2 px-2 py-1.5">
           <div className="flex size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
@@ -246,13 +202,18 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             ariaLabel: "全局搜索",
             placeholder: "单号、客户、合同…",
             shortcut: "⌘K",
-            defaultValue: "",
+            value: search,
+            onChange: (event) => setSearch(event.target.value),
+            onKeyDown: (event) => {
+              if (event.key === "Enter") submitSearch()
+            },
           }}
           actions={[
             {
               actionKey: "todos",
               label: "待办",
-              badge: { label: "6", variant: "secondary" },
+              badge: { label: "3", variant: "secondary" },
+              onClick: () => router.push("/procurement/confirm"),
             },
           ]}
           trailing={
@@ -264,7 +225,13 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       }
       taskTabs={
         <TaskTabs
-          defaultValue={isSalesOrders ? "sales-orders" : "workspace"}
+          value={activeTab}
+          onValueChange={(value) => {
+            if (value === "sales-orders") router.push("/sales/orders")
+            else if (value === "procurement-confirm") {
+              router.push("/procurement/confirm")
+            } else router.push("/workspace")
+          }}
           items={[
             {
               value: "workspace",
@@ -275,8 +242,16 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               value: "sales-orders",
               label: "销售单",
               icon: ShoppingCartIcon,
-              badge: isSalesOrders
+              badge: activeTab === "sales-orders"
                 ? { label: "当前", variant: "secondary" }
+                : undefined,
+            },
+            {
+              value: "procurement-confirm",
+              label: "二次确认",
+              icon: ClipboardCheckIcon,
+              badge: activeTab === "procurement-confirm"
+                ? { label: "3", variant: "secondary" }
                 : undefined,
             },
           ]}
