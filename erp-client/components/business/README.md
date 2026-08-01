@@ -1,9 +1,8 @@
 # ERP 业务组件目录
 
-本目录把 [108 个稳定页面](../../../docs/erp-page-map.md) 归并为可复用的页面模式，作为
-`erp-client` 的业务展示层。组件实现以
-[页面布局与交互规范](../../../docs/erp-interaction-spec.md) 为依据，不复制业务状态机、金额
-计算、权限判断或网络请求。
+本目录把 [UI 工作面与七种页面模式](../../../docs/erp-ui-design.md) 落成可复用的业务展示层。
+组件实现以该设计文档与 [关键流程交互说明](../../../docs/erp-ui-flows.md) 为依据，不复制业务
+状态机、金额计算、权限判断或网络请求。
 
 运行项目后访问 `/business-components` 可验收全部 64 个公开组件；预览实现见
 [业务组件预览页](../../app/business-components/page.tsx)。主题基础仍在 `/theme` 验收。
