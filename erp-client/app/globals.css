@@ -343,4 +343,12 @@
   table[data-striped] tbody tr:nth-child(even):not([data-state="selected"]):not(:hover) {
     background-color: var(--row-striped);
   }
+
+  /* 冻结列在斑马纹行也需不透明底，避免与横向滚动文字重叠 */
+  table[data-striped]
+    tbody
+    tr:nth-child(even):not([data-state="selected"]):not(:hover)
+    td[data-column-pinned] {
+    background-color: var(--row-striped);
+  }
 }

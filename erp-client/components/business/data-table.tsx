@@ -1140,9 +1140,11 @@ function pinningClass(
   area: "header" | "cell"
 ) {
   if (!pinned) return undefined
+  // 冻结列必须用不透明底，否则横向滚动时非冻结列文字会从下方透出。
+  // 表体默认跟卡片面；悬停/选中跟随行状态（TableRow 提供 group/row）。
   return area === "header"
     ? "sticky z-10 bg-table-header"
-    : "sticky z-10 bg-inherit"
+    : "sticky z-10 bg-card group-hover/row:bg-row-hover group-data-[state=selected]/row:bg-row-selected"
 }
 
 function columnWidthClass(
