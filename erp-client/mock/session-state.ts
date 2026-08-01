@@ -414,7 +414,7 @@ export function claimWorkItemSession(input: {
   ) {
     throw new WorkItemMockError(
       "LEASE_CONFLICT",
-      "任务已被其他用户领取，有效租约期内不能同时处理。"
+      "任务已被其他用户领取，正在处理中，不能同时处理。"
     )
   }
 
@@ -452,33 +452,33 @@ function requireValidLease(input: {
     workItemLeases.delete(input.workItemId)
     throw new WorkItemMockError(
       "PERMISSION_REVOKED",
-      "权限已收回：敏感快照与租约令牌已清除，不能提交。"
+      "权限已收回：临时信息已清除，不能提交。"
     )
   }
   const lease = workItemLeases.get(input.workItemId)
   if (!lease) {
     throw new WorkItemMockError(
       "LEASE_LOST",
-      "处理租约已丢失，本地输入可保留但不能提交。请重新领取。"
+      "操作已失效，本地输入可保留但不能提交。请重新领取。"
     )
   }
   if (lease.claimToken !== input.claimToken) {
     throw new WorkItemMockError(
       "LEASE_LOST",
-      "租约令牌无效或已失效，不能提交。"
+      "操作已失效或过期，不能提交。"
     )
   }
   if (lease.leaseVersion !== input.leaseVersion) {
     throw new WorkItemMockError(
       "LEASE_CONFLICT",
-      "租约版本冲突，请刷新后重新领取。"
+      "版本冲突，请刷新后重新领取。"
     )
   }
   if (new Date(lease.leaseExpiresAt).getTime() <= Date.now()) {
     workItemLeases.delete(input.workItemId)
     throw new WorkItemMockError(
       "LEASE_LOST",
-      "处理租约已过期，本地输入可保留但不能提交。"
+      "操作已过期，本地输入可保留但不能提交。"
     )
   }
   return lease
@@ -636,7 +636,7 @@ export function completeWorkItemSession(input: {
   if (subject && subject.subjectHash !== input.expectedSubjectHash) {
     throw new WorkItemMockError(
       "VERSION_CONFLICT",
-      "对象版本或内容指纹已变化，正式完成已阻止。本地输入已保留。"
+      "对象版本已变化，完成已阻止。本地输入已保留。"
     )
   }
 
@@ -2990,7 +2990,7 @@ export function acquireW08DraftEditToken(purchaseOrderId: string): {
   if (!editable) {
     throw new WorkItemMockError(
       "ACTION_NOT_ALLOWED",
-      "仅草稿或被驳回待修改可领取编辑租约"
+      "仅草稿或被驳回待修改可进入编辑"
     )
   }
   const token = `det_${purchaseOrderId}_${Math.random().toString(36).slice(2, 10)}`
@@ -3010,7 +3010,7 @@ function requireDraftToken(
   if (!held || held.token !== draftEditToken) {
     throw new WorkItemMockError(
       "LEASE_LOST",
-      "草稿编辑租约无效或已失效，输入已保留，请重新进入编辑。"
+      "编辑已失效，输入已保留，请重新进入编辑。"
     )
   }
   const center = getW08PurchaseOrderCenter(purchaseOrderId)

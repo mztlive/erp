@@ -796,7 +796,7 @@ export async function applyIntegrationTaskAction(
         title: input.kind === "DEFER" ? "已暂挂" : "已跳过当前项",
         description:
           input.kind === "DEFER"
-            ? "任务仍在有效队列（PENDING），未完成。租约已释放；可稍后继续。"
+            ? "任务仍在待处理队列，未完成。本次处理已结束；可稍后继续。"
             : "已记录跳过；任务仍为 PENDING/IN_PROGRESS，未终结。",
         reference: input.operationId,
         outcome: input.kind === "DEFER" ? "DEFERRED" : "SKIPPED",

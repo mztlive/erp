@@ -120,7 +120,7 @@ function projectTask(seed: FulfillmentTask): FulfillmentTask | null {
 
 function filterSummary(filters: FulfillmentQueueFilters): string {
   const parts = [
-    filters.scope === "mine" ? "仅我的" : "角色池",
+    filters.scope === "mine" ? "仅我的" : "团队",
     filters.operationTypes && filters.operationTypes.length > 0
       ? filters.operationTypes.map((t) => OPERATION_TYPE_SHORT[t]).join("/")
       : "全部类型",
@@ -941,7 +941,7 @@ export async function renewFulfillmentLease(input: {
   await mockDelay(60)
   const existing = getSessionLease(input.workItemId)
   if (!existing || existing.claimToken !== input.claimToken) {
-    throw new Error("租约无效，请重新领取")
+    throw new Error("操作已失效，请重新领取")
   }
   clearSessionLease(input.workItemId)
   return claimFulfillmentWorkItem(input.workItemId)

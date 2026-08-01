@@ -211,7 +211,7 @@ export function SupplierOrderCenterPage({
         facts: res.data
           ? [
               { label: "任务状态", value: res.data.workItemStatus },
-              { label: "租约处置", value: res.data.leaseDisposition },
+              { label: "处理状态", value: res.data.leaseDisposition },
               { label: "原因", value: res.data.reasonCode },
             ]
           : undefined,

@@ -180,7 +180,7 @@ function commandToResultState(
     return {
       status: "succeeded",
       title: "已升级到错误中心",
-      description: "正式 work_item 仅在 W29 领取与完成；W23 不提供任务租约 UI。",
+      description: "处理任务仅在错误中心领取与完成；本页不提供任务处理。",
       reference: result.operationId,
       facts: [
         { label: "操作编号", value: result.operationId },

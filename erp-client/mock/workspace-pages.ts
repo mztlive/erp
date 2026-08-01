@@ -67,7 +67,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
               "成本覆盖全部明细",
               "交付方式与客户要求一致",
             ],
-            actionLabel: "打开专用处理器",
+            actionLabel: "去确认采购计划",
             handlerHref: "/procurement/confirm?scope=mine&currentWorkItemId=wi_pc_01",
             scopeTags: ["我的待办", "团队"],
           },
@@ -85,7 +85,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             impact: "未复核前票款水位不可作为正式经营结果",
             status: { label: "待领取", tone: "info" },
             scopeTags: ["待领取"],
-            actionLabel: "打开专用处理器",
+            actionLabel: "去复核卡券票款",
             handlerHref: "/finance/card-funds-review",
             summaryFields: [
               { label: "任务类型", value: "卡券票款复核" },
@@ -108,7 +108,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             impact: "阻断 12 条消费订单入账投影",
             status: { label: "处理中", tone: "info" },
             scopeTags: ["团队"],
-            actionLabel: "打开专用处理器",
+            actionLabel: "去处理映射异常",
             handlerHref: "/governance/mall-sync",
             summaryFields: [
               { label: "任务类型", value: "映射异常" },

@@ -589,7 +589,7 @@ function buildMetrics(
     return [
         {
             key: "mine",
-            label: scope === "mine" ? "待我处理" : "角色池待领取",
+            label: scope === "mine" ? "待我处理" : "团队待认领",
             count: mine,
             visible: true,
             tone: "neutral",

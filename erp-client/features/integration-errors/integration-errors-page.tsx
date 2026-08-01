@@ -1288,7 +1288,7 @@ export function IntegrationErrorsPage({
                   leaseStatus={leaseStatus}
                   leaseStatusLabel={
                     !item.hasWorkItem
-                      ? "直接对账（无任务租约）"
+                      ? "直接对账（无处理任务）"
                       : leaseActive
                         ? `已领取 · 至 ${formatTime(activeLease?.expiresAt)}`
                         : "未领取"

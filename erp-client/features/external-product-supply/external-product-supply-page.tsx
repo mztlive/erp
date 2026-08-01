@@ -1051,16 +1051,16 @@ export function ExternalProductSupplyPage() {
             leaseStatusLabel={
               isRegistered
                 ? leaseActive
-                  ? "异常任务租约有效"
+                  ? "异常任务处理中"
                   : "异常任务待领取"
-                : "正常类型未登记 · 无租约"
+                : "正常类型未登记 · 无处理任务"
             }
             processLabel={
               isRegistered
                 ? item.changeType === "ERROR"
                   ? "确认异常已解决"
                   : "确认停供事实"
-                : "正式确认（不可用）"
+                : "确认（不可用）"
             }
             // 没有独立的「并准备下一项」路径：两个 handler 同义
             showProcessNext={false}

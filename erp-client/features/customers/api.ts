@@ -79,7 +79,7 @@ export async function revealCustomerSensitiveField(
   await mockDelay(80)
   const value = MOCK_SENSITIVE_REVEALS[revealToken]
   if (!value) {
-    throw new Error("无权揭示或令牌已失效")
+    throw new Error("无权查看或权限已失效")
   }
   return value
 }

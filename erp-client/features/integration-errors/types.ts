@@ -440,7 +440,7 @@ export const ENV_LABEL: Record<IntegrationEnvironment | "all", string> = {
 
 export const OWNER_LABEL: Record<IntegrationOwnerFilter, string> = {
   me: "我领取的",
-  role_pool: "角色池",
+  role_pool: "团队",
   claimed: "已领取",
   all: "全部责任",
 }

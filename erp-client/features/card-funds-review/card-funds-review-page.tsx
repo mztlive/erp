@@ -1545,7 +1545,7 @@ export function CardFundsReviewPage() {
                                 }
                               }}
                             >
-                              正式提交分配
+                              提交分配
                             </Button>
                           </>
                         }
@@ -1746,7 +1746,7 @@ export function CardFundsReviewPage() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    快捷键：j/k 上下项 · ⌘↵ 正式确认 · Esc 不关闭页签
+                    快捷键：j/k 上下项 · ⌘↵ 确认 · Esc 不关闭页签
                   </p>
                 </CardContent>
               </Card>

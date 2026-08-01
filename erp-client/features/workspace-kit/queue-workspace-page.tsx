@@ -167,7 +167,7 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
         outcome,
       })
       const titles = {
-        succeeded: "正式处理已完成",
+        succeeded: "处理已完成",
         blocked: "当前项已暂挂",
         rejected: "已退回补充",
       } as const
@@ -326,11 +326,11 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
               leaseStatus="active"
               leaseStatusLabel={
                 completeMutation.isPending
-                  ? "正在提交正式结果…"
-                  : "处理租约有效 · 会话内"
+                  ? "正在提交处理结果…"
+                  : "正在处理中 · 请勿重复打开"
               }
               processLabel={
-                task.handlerHref ? "打开专用处理器" : "完成当前项"
+                task.handlerHref ? "前往处理" : "完成当前项"
               }
               // 本壳没有独立的「并打开下一条」路径，onProcessNext 与 onProcess 同义，
               // 再渲染一个按钮只会重复且误导。
@@ -436,7 +436,7 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
                     onClick={onPrimaryAction}
                   >
                     {task.actionLabel ??
-                      (task.handlerHref ? "打开专用处理器" : "正式处理")}
+                      (task.handlerHref ? "前往处理" : "处理")}
                     <ArrowRightIcon
                       data-icon="inline-end"
                       aria-hidden="true"
@@ -457,8 +457,8 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
         confirmLabel="确认完成并打开下一条"
         fromStatus={{ label: task?.status.label ?? "待处理", tone: "warning" }}
         toStatus={{ label: "已完成", tone: "success" }}
-        lockedFields={["对象版本", "当前任务租约"]}
-        effects={["记录正式处理结果", "从有效队列移除本项"]}
+        lockedFields={["对象版本", "当前处理状态"]}
+        effects={["记录处理结果", "从有效队列移除本项"]}
         nextDepartment="相关责任组"
         onConfirm={async () => {
           await applyOutcome("succeeded")

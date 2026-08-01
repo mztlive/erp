@@ -173,7 +173,7 @@ function projectTask(
 
 function filterSummary(filters: QueueFilters): string {
   const parts = [
-    filters.scope === "mine" ? "仅我的" : "角色池",
+    filters.scope === "mine" ? "仅我的" : "团队",
     filters.due === "overdue"
       ? "已超期"
       : filters.due === "today"
@@ -319,7 +319,7 @@ export async function renewProcurementWorkItem(input: {
   if (!seed) throw new Error("任务不存在")
   const existing = getSessionLease(input.workItemId)
   if (!existing || existing.claimToken !== input.claimToken) {
-    throw new Error("租约无效，请重新领取")
+    throw new Error("操作已失效，请重新领取")
   }
   // 续租 = 同用户再次 claim，签发新 token / 升 leaseVersion
   clearSessionLease(input.workItemId)

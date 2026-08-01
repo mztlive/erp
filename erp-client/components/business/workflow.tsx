@@ -352,22 +352,22 @@ const sequentialLeaseStatus = {
     icon: CircleDashedIcon,
   },
   active: {
-    label: "处理租约有效",
+    label: "正在处理中",
     tone: "success",
     icon: ShieldCheckIcon,
   },
   renewing: {
-    label: "处理租约续期中",
+    label: "处理时间已延长",
     tone: "info",
     icon: RefreshCwIcon,
   },
   lost: {
-    label: "处理租约已丢失",
+    label: "操作已失效",
     tone: "destructive",
     icon: ShieldAlertIcon,
   },
   released: {
-    label: "处理租约已释放",
+    label: "本次处理已结束",
     tone: "neutral",
     icon: CircleDashedIcon,
   },

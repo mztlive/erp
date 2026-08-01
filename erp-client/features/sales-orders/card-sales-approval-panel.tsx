@@ -142,7 +142,7 @@ export function CardSalesApprovalPanel({
           <p className="text-xs text-muted-foreground">
             领取人 {approval.claimedByLabel}
             {approval.leaseExpiresAt
-              ? ` · 租约至 ${new Date(approval.leaseExpiresAt).toLocaleString("zh-CN")}`
+              ? ` · 处理有效期至 ${new Date(approval.leaseExpiresAt).toLocaleString("zh-CN")}`
               : null}
           </p>
         ) : (
@@ -170,7 +170,7 @@ export function CardSalesApprovalPanel({
                   status: "succeeded",
                   title: "任务已领取",
                   description:
-                    "claimToken 已写入会话内存，未进入 URL。请在租约有效期内完成决定。",
+                    "处理信息已保存在当前页面，未进入 URL。请在处理有效期内完成决定。",
                   reference: `CLAIM-${approval.workItemId}`,
                 })
               }}
@@ -254,7 +254,7 @@ export function CardSalesApprovalPanel({
                 : "已生效",
             tone: "success",
           }}
-          lockedFields={["冻结提交", "subjectHash", "任务租约"]}
+          lockedFields={["冻结提交", "提交版本", "处理状态"]}
           effects={
             approval.workItemType === "CARD_SALES_MANAGER_APPROVAL"
               ? [
@@ -298,7 +298,7 @@ export function CardSalesApprovalPanel({
             } catch {
               setResult({
                 status: "blocked",
-                title: "租约失效或冲突",
+                title: "操作已失效或冲突",
                 description: "请重新领取任务并重查冻结提交与版本，勿本地推进状态。",
                 reference: approval.workItemId,
               })
@@ -344,8 +344,8 @@ export function CardSalesApprovalPanel({
             } catch {
               setResult({
                 status: "blocked",
-                title: "租约失效或冲突",
-                description: "结果未知期间不移动任务；请用原幂等键查询。",
+                title: "操作已失效或冲突",
+                description: "结果未知期间不移动任务；请用原任务号查询。",
                 reference: approval.workItemId,
               })
             }

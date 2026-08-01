@@ -132,7 +132,7 @@ function projectItem(
       ? {
           label: "票款已更新",
           tone: "warning" as const,
-          detail: "登记后已重算指纹与金额；请核对后再正式完成",
+          detail: "登记后已重算金额；请核对后再完成",
         }
       : seed.fingerprintStatus
 
@@ -191,7 +191,7 @@ function projectItem(
 
 function filterSummary(q: CardFundsReviewQueueQuery): string {
   const parts = [
-    q.scope === "mine" ? "仅我的" : "角色池",
+    q.scope === "mine" ? "仅我的" : "团队",
     q.type === "opening"
       ? "期初 OPENING"
       : q.type === "delta"

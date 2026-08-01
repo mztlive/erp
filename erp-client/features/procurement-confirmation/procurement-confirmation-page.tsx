@@ -705,7 +705,7 @@ export function ProcurementConfirmationPage() {
         status: "blocked",
         title: "当前项已暂挂",
         description:
-          "任务仍保留在有效队列（PENDING/IN_PROGRESS），未形成通过或驳回结论。已释放租约并打开下一条。",
+          "任务仍保留在待处理队列，未形成通过或驳回结论。本次已结束并打开下一条。",
         reference: response.outcome.reference,
         outcome: response.outcome,
       })
@@ -872,7 +872,7 @@ export function ProcurementConfirmationPage() {
         : "unclaimed"
 
   const leaseLabel = activeLease
-    ? `已领取 · 租约 v${activeLease.leaseVersion}`
+    ? "已领取 · 处理中"
     : claimMutation.isPending
       ? "正在取得处理权…"
       : "待领取"
@@ -1847,8 +1847,8 @@ function buildResultFacts(
       value: outcome.workItemStatus,
     },
     {
-      label: "租约处置",
-      value: outcome.leaseDisposition === "RELEASED" ? "已释放" : "保留",
+      label: "处理状态",
+      value: outcome.leaseDisposition === "RELEASED" ? "已结束" : "保留",
     },
   ]
 }

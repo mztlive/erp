@@ -758,7 +758,7 @@ export function FulfillmentOperationsPage() {
             response.outcome.reasonNote
               ? ` · ${response.outcome.reasonNote}`
               : ""
-          }。任务仍在有效队列，未写入 paused 业务状态；已释放租约并推进游标。`,
+          }。任务仍在待处理队列；本次处理已结束并进入下一条。`,
           reference: response.outcome.reference,
           outcome: response.outcome,
         })
@@ -906,7 +906,7 @@ export function FulfillmentOperationsPage() {
         : "unclaimed"
 
   const leaseLabel = activeLease
-    ? `已领取 · 租约 v${activeLease.leaseVersion}`
+    ? "已领取 · 处理中"
     : claimMutation.isPending
       ? "正在取得处理权…"
       : "待领取"
@@ -1092,8 +1092,8 @@ export function FulfillmentOperationsPage() {
                         value: lastResult.outcome.workItemStatus,
                       },
                       {
-                        label: "租约",
-                        value: "已释放（不写 paused 状态）",
+                        label: "处理状态",
+                        value: "本次已结束（未写暂停状态）",
                       },
                     ]
                   : undefined

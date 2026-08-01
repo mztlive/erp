@@ -499,7 +499,7 @@ export function MallSyncPage() {
 
   async function handleDefer(reasonCode: string, note?: string) {
     if (mappingTask?.ownerRoutingState !== "CONFIGURED" || !sessionLease) {
-      setActionError("请先领取任务租约")
+      setActionError("请先领取任务")
       return
     }
     const key = `idem_defer_${mappingTask.mappingTaskId}_${Date.now()}`

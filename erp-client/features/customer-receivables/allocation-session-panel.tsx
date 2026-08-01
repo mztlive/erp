@@ -154,8 +154,8 @@ export function AllocationSessionPanel({
   if (!session.leaseValid) {
     issues.push({
       id: "lease",
-      label: "会话租约",
-      message: "权限已收回或租约失效，禁止正式提交",
+      label: "处理状态",
+      message: "权限已收回或处理已失效，禁止提交",
     })
   }
   for (const line of allocations) {

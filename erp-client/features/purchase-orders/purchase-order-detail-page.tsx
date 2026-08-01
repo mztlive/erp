@@ -195,7 +195,7 @@ export function PurchaseOrderDetailPage({
     }).catch((error: Error) => {
       setResult({
         status: "blocked",
-        title: "无法取得编辑租约",
+        title: "无法进入编辑",
         description: error.message,
       })
     })
@@ -344,7 +344,7 @@ export function PurchaseOrderDetailPage({
         status: "succeeded",
         title: "已提交财务审核",
         description:
-          "已形成不可变采购提交与 PURCHASE_ORDER_REVIEW 任务；编辑租约结束。",
+          "已形成不可修改的采购提交与采购审核任务；编辑已结束。",
         reference: response.reference,
         facts: [
           { label: "正式编号", value: response.data.purchaseNo },
@@ -1201,9 +1201,9 @@ export function PurchaseOrderDetailPage({
           "销售分配与服务端金额",
         ]}
         effects={[
-          "形成不可变 purchase_order_submission 与 subject_hash",
-          "创建 PURCHASE_ORDER_REVIEW 任务",
-          "结束草稿编辑租约；中心转等待审核态",
+          "形成不可修改的采购提交与数据版本",
+          "创建采购审核任务",
+          "结束草稿编辑；中心转等待审核态",
         ]}
         nextDepartment="财务审核"
         pending={submitMutation.isPending || saveMutation.isPending}
@@ -1388,14 +1388,14 @@ function EditSurface({
       <CardContent className="space-y-4 pt-4">
         {!draftEditToken ? (
           <Alert variant="warning">
-            <AlertTitle>正在领取编辑租约…</AlertTitle>
+            <AlertTitle>正在进入编辑…</AlertTitle>
             <AlertDescription>
-              draftEditToken 仅存会话内存，不进入 URL。
+              编辑信息仅保存在当前页面，不进入 URL。
             </AlertDescription>
           </Alert>
         ) : (
           <p className="text-xs text-muted-foreground">
-            编辑租约有效 · lockVersion {order.identity.lockVersion}
+            正在编辑中 · 版本 {order.identity.lockVersion}
           </p>
         )}
 

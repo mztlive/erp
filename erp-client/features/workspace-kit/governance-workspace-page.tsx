@@ -172,7 +172,7 @@ export function GovernanceWorkspacePage({ def }: { def: WorkspacePageDef }) {
 
       <BusinessTableFrame
         title="批次与任务"
-        description="按阶段推进；正式确认前展示差异与校验问题。"
+        description="按阶段推进；确认前展示差异与校验问题。"
         table={
           <DataTable
             data={pageRows}

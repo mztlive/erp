@@ -343,7 +343,7 @@ export function UnifiedTaskQueuePage() {
         setClaimEpoch((n) => n + 1)
         setLastResult({
           status: "failed",
-          title: "租约无效",
+          title: "操作已失效",
           description: error.message,
           reference: item.id,
         })
@@ -370,7 +370,7 @@ export function UnifiedTaskQueuePage() {
           status: "failed",
           title: "权限已收回",
           description:
-            "敏感快照与租约令牌已清除。仅保留任务编号与返回上下文。",
+            "临时信息已清除。仅保留任务编号与返回上下文。",
           reference: item.id,
         })
         return
@@ -524,7 +524,7 @@ export function UnifiedTaskQueuePage() {
         setPendingIdem(null)
         setLastResult({
           status: "succeeded",
-          title: "正式完成已生效",
+          title: "完成已生效",
           description: result.businessResult.summary,
           reference: result.completionRecordId,
         })
@@ -978,7 +978,7 @@ export function UnifiedTaskQueuePage() {
           <ShieldAlertIcon aria-hidden="true" />
           <AlertTitle>权限已收回</AlertTitle>
           <AlertDescription>
-            当前处理器中的敏感快照与租约令牌已清除，仅保留任务编号与返回上下文。
+            当前页面中的临时信息已清除，仅保留任务编号与返回上下文。
             <Button
               type="button"
               variant="outline"
@@ -1161,19 +1161,19 @@ export function UnifiedTaskQueuePage() {
                 leaseStatus={leaseStatus}
                 leaseStatusLabel={
                   permissionRevoked
-                    ? "权限已收回 · 令牌已清除"
+                    ? "权限已收回 · 临时信息已清除"
                     : activeClaim
-                      ? `处理租约有效 · v${activeClaim.leaseVersion}`
+                      ? `正在处理中 · 请勿重复打开`
                       : leaseStatus === "unclaimed"
                         ? "任务待领取"
                         : leaseStatus === "lost"
-                          ? "处理租约已丢失"
+                          ? "操作已失效，请刷新后重新处理"
                           : "可领取后处理"
                 }
                 processLabel={
-                  task.handlerHref ? "打开专用处理器" : "正式完成当前项"
+                  task.handlerHref ? "前往处理" : "完成当前项"
                 }
-                processNextLabel="正式完成并打开下一条"
+                processNextLabel="完成并打开下一条"
                 // 跳专用处理器会离开本页，没有「并打开下一条」语义
                 showProcessNext={!task.handlerHref}
                 processDisabled={processDisabled}
@@ -1207,7 +1207,7 @@ export function UnifiedTaskQueuePage() {
                       status: "succeeded",
                       title: "已重新领取",
                       description:
-                        "租约令牌仅存于当前会话内存，未写入 URL 或查询视图。",
+                        "处理进度仅保存在当前页面，未写入 URL 或查询视图。",
                       reference: task.id,
                     })
                   }).catch((error) => handleMockError(error, task))
@@ -1246,9 +1246,9 @@ export function UnifiedTaskQueuePage() {
               <CardContent className="space-y-5">
                 {task.effectiveStatusCode === "UNCLAIMED" && !activeClaim ? (
                   <Alert>
-                    <AlertTitle>角色池任务待领取</AlertTitle>
+                    <AlertTitle>团队任务待认领</AlertTitle>
                     <AlertDescription className="flex flex-wrap items-center gap-2">
-                      领取后取得租约方可正式处理。
+                      领取任务后即可开始处理。
                       <Button
                         type="button"
                         size="sm"
@@ -1344,7 +1344,7 @@ export function UnifiedTaskQueuePage() {
                       {(field) => (
                         <field.TextareaField
                           label="备注"
-                          placeholder="租约丢失或版本冲突时备注仍保留，但不能提交"
+                          placeholder="操作已失效或版本冲突时备注仍保留，但不能提交"
                           rows={3}
                           disabled={permissionRevoked}
                         />
@@ -1452,7 +1452,7 @@ export function UnifiedTaskQueuePage() {
                     }}
                   >
                     {task.actionLabel ??
-                      (task.handlerHref ? "打开专用处理器" : "正式处理")}
+                      (task.handlerHref ? "前往处理" : "处理")}
                     <ArrowRightIcon
                       data-icon="inline-end"
                       aria-hidden="true"
@@ -1476,15 +1476,15 @@ export function UnifiedTaskQueuePage() {
                           setClaimEpoch((n) => n + 1)
                           setLastResult({
                             status: "failed",
-                            title: "已模拟租约丢失",
+                            title: "已模拟操作失效",
                             description:
-                              "本地备注仍保留，正式提交已阻止，请重新领取。",
+                              "本地备注仍保留，提交已阻止，请重新领取。",
                             reference: task.id,
                           })
                         })
                       }
                     >
-                      模拟租约丢失
+                      模拟操作失效
                     </Button>
                     <Button
                       type="button"
@@ -1593,11 +1593,11 @@ export function UnifiedTaskQueuePage() {
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title={`确认处理：${task?.workItemTypeLabel ?? ""}`}
-        actionLabel="正式完成"
+        actionLabel="完成"
         confirmLabel="确认完成并打开下一条"
         fromStatus={{ label: task?.status.label ?? "待处理", tone: "warning" }}
         toStatus={{ label: "已完成", tone: "success" }}
-        lockedFields={["对象版本", "当前任务租约", "内容指纹"]}
+        lockedFields={["对象版本", "当前处理状态", "数据版本"]}
         effects={[
           `执行 ${task?.completionAction ?? "领域完成动作"}`,
           "业务事实与任务 COMPLETED 同一事务返回",

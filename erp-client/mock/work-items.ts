@@ -121,7 +121,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       "成本覆盖全部明细",
       "交付方式与客户要求一致",
     ],
-    actionLabel: "打开专用处理器",
+    actionLabel: "去确认采购计划",
   },
   {
     id: "wi_pc_02",
@@ -159,7 +159,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "截止", value: "已超期", numeric: true },
     ],
     checkItems: ["交付批次与客户承诺对齐", "供应商产能可覆盖"],
-    actionLabel: "打开专用处理器",
+    actionLabel: "去确认采购计划",
   },
   {
     id: "wi_card_01",
@@ -233,7 +233,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "优先级", value: "普通" },
       { label: "截止", value: "今天 16:00", numeric: true },
     ],
-    actionLabel: "正式复核通过",
+    actionLabel: "复核通过",
   },
   {
     id: "wi_map_01",
@@ -269,7 +269,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "责任角色", value: "运营映射" },
       { label: "截止", value: "今天 18:00", numeric: true },
     ],
-    actionLabel: "打开专用处理器",
+    actionLabel: "去处理映射异常",
   },
   {
     id: "wi_sync_01",
@@ -305,7 +305,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "优先级", value: "高" },
       { label: "截止", value: "今天 10:21", numeric: true },
     ],
-    actionLabel: "打开专用处理器",
+    actionLabel: "去处理同步异常",
   },
   {
     id: "wi_ful_01",
@@ -414,7 +414,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "优先级", value: "普通" },
       { label: "截止", value: "今天 15:00", numeric: true },
     ],
-    actionLabel: "打开专用处理器",
+    actionLabel: "去确认采购计划",
   },
   {
     id: "wi_pc_04",
@@ -450,7 +450,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "优先级", value: "普通" },
       { label: "截止", value: "今天 16:30", numeric: true },
     ],
-    actionLabel: "打开专用处理器",
+    actionLabel: "去确认采购计划",
   },
   {
     id: "wi_margin_01",
@@ -486,7 +486,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "优先级", value: "高" },
       { label: "截止", value: "今天 17:00", numeric: true },
     ],
-    actionLabel: "正式确认",
+    actionLabel: "确认",
   },
   {
     id: "wi_dup_01",

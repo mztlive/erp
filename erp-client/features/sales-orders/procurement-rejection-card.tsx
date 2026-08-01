@@ -534,10 +534,10 @@ export function ProcurementRejectionCard({
             if (!open) setConfirm(null)
           }}
           title={confirm?.title ?? "确认操作"}
-          actionLabel="提交正式动作"
+          actionLabel="提交处理结果"
           confirmLabel="确认执行"
           fromStatus={{ label: "采购已驳回", tone: "warning" }}
-          toStatus={{ label: "正式处理中", tone: "info" }}
+          toStatus={{ label: "处理中", tone: "info" }}
           lockedFields={[
             "被驳回提交号",
             "subjectHash",
