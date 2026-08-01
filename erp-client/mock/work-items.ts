@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/components/ui/status-badge"
+import { actionLabels } from "@/lib/ui-text"
 
 /**
  * W02 domain fixtures — formal work_item projections for the unified queue.
@@ -121,7 +122,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       "成本覆盖全部明细",
       "交付方式与客户要求一致",
     ],
-    actionLabel: "去确认采购计划",
+    actionLabel: actionLabels.confirmProcurement,
   },
   {
     id: "wi_pc_02",
@@ -159,7 +160,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "截止", value: "已超期", numeric: true },
     ],
     checkItems: ["交付批次与客户承诺对齐", "供应商产能可覆盖"],
-    actionLabel: "去确认采购计划",
+    actionLabel: actionLabels.confirmProcurement,
   },
   {
     id: "wi_card_01",
@@ -269,7 +270,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "责任角色", value: "运营映射" },
       { label: "截止", value: "今天 18:00", numeric: true },
     ],
-    actionLabel: "去处理映射异常",
+    actionLabel: actionLabels.handleMappingException,
   },
   {
     id: "wi_sync_01",
@@ -414,7 +415,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "优先级", value: "普通" },
       { label: "截止", value: "今天 15:00", numeric: true },
     ],
-    actionLabel: "去确认采购计划",
+    actionLabel: actionLabels.confirmProcurement,
   },
   {
     id: "wi_pc_04",
@@ -450,7 +451,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "优先级", value: "普通" },
       { label: "截止", value: "今天 16:30", numeric: true },
     ],
-    actionLabel: "去确认采购计划",
+    actionLabel: actionLabels.confirmProcurement,
   },
   {
     id: "wi_margin_01",

@@ -1,5 +1,6 @@
 import type { WorkspacePageDef } from "@/features/workspace-kit/types"
 import type { WorkspaceId } from "@/lib/workspace-registry"
+import { actionLabels, freshnessText, sequentialText } from "@/lib/ui-text"
 
 const money = (n: number) =>
   new Intl.NumberFormat("zh-CN", {
@@ -67,7 +68,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
               "成本覆盖全部明细",
               "交付方式与客户要求一致",
             ],
-            actionLabel: "去确认采购计划",
+            actionLabel: actionLabels.confirmProcurement,
             handlerHref: "/procurement/confirm?scope=mine&currentWorkItemId=wi_pc_01",
             scopeTags: ["我的待办", "团队"],
           },
@@ -85,7 +86,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             impact: "未复核前票款数据不可作为经营结果",
             status: { label: "待领取", tone: "info" },
             scopeTags: ["待领取"],
-            actionLabel: "去复核卡券票款",
+            actionLabel: actionLabels.reviewCardFunds,
             handlerHref: "/finance/card-funds-review",
             summaryFields: [
               { label: "任务类型", value: "卡券票款复核" },
@@ -108,7 +109,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             impact: "阻断 12 条消费订单入账",
             status: { label: "处理中", tone: "info" },
             scopeTags: ["团队"],
-            actionLabel: "去处理映射异常",
+            actionLabel: actionLabels.handleMappingException,
             handlerHref: "/governance/mall-sync",
             summaryFields: [
               { label: "任务类型", value: "映射异常" },
@@ -410,7 +411,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     shell: {
       kind: "queue",
       payload: {
-        scopeLabels: ["待我处理", "待领取", "已暂挂"],
+        scopeLabels: [sequentialText.minePending, "待领取", "已暂挂"],
         tasks: [
           {
             id: "ff_01",
@@ -425,7 +426,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             reason: "采购到货已入库，客户要求今日发货",
             impact: "延迟将影响客户验收窗口",
             status: { label: "待处理", tone: "warning" },
-            scopeTags: ["待我处理", "已暂挂"],
+            scopeTags: [sequentialText.minePending, "已暂挂"],
             summaryFields: [
               { label: "仓库", value: "华东一号仓" },
               { label: "SKU 行数", value: "6" },
@@ -485,7 +486,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
           { key: "onHand", header: "账面现存", numeric: true },
           { key: "available", header: "可用量", numeric: true },
           { key: "inTransit", header: "在途", numeric: true },
-          { key: "status", header: "同步进度", status: true },
+          { key: "status", header: freshnessText.syncProgress, status: true },
         ],
         rows: listRows([
           {
@@ -1673,7 +1674,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
         metrics: [
           { key: "errors", label: "开放错误", value: 23 },
           { key: "diff", label: "对账差异", value: 8 },
-          { key: "mine", label: "待我处理", value: 6 },
+          { key: "mine", label: sequentialText.minePending, value: 6 },
           { key: "critical", label: "阻断级", value: 2 },
         ],
         batchColumns: [

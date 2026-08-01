@@ -68,6 +68,7 @@ import {
 } from "@/features/sales-orders/acceptance-types"
 import { salesOrderKeys } from "@/features/sales-orders/queries"
 import { cn } from "@/lib/utils"
+import { freshnessText, resultText } from "@/lib/ui-text"
 
 const draftHeaderSchema = z.object({
   acceptedAt: z.string().min(1, "请填写客户验收时间"),
@@ -443,9 +444,9 @@ export function AcceptanceWorkspace({
         setFormalResult({
           kind: "post",
           status: "unknown",
-          title: "处理结果待确认",
+          title: resultText.unknown,
           description: `${result.message} 未确认前不关闭草稿、不按成功处理；可用原任务号查询。`,
-          facts: [{ label: "原任务号", value: result.idempotencyKey }],
+          facts: [{ label: resultText.originalTaskNo, value: result.idempotencyKey }],
         })
       } else {
         setFormalResult({
@@ -467,10 +468,10 @@ export function AcceptanceWorkspace({
       setFormalResult({
         kind: "post",
         status: "unknown",
-        title: "处理结果待确认",
+        title: resultText.unknown,
         description:
           "请求超时或网络中断。不得按成功处理；请查询最终结果或使用原任务号重试，避免重复过账。",
-        facts: [{ label: "原任务号", value: idempotencyKey }],
+        facts: [{ label: resultText.originalTaskNo, value: idempotencyKey }],
       })
     },
   })
@@ -724,7 +725,7 @@ export function AcceptanceWorkspace({
             detail="服务端履约数据"
           />
           <MetricItem
-            label="数据更新时间"
+            label={freshnessText.dataUpdatedAt}
             value={
               <DataFreshness
                 updatedAt="刚刚"

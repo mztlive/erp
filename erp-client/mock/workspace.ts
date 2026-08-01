@@ -1,4 +1,5 @@
 import type { StatusTone } from "@/components/ui/status-badge"
+import { sequentialText } from "@/lib/ui-text"
 import type { WorkspaceId } from "@/lib/workspace-registry"
 
 export type WorkspaceDueFilter = "today" | "overdue"
@@ -589,7 +590,10 @@ function buildMetrics(
     return [
         {
             key: "mine",
-            label: scope === "mine" ? "待我处理" : "团队待认领",
+            label:
+              scope === "mine"
+                ? sequentialText.minePending
+                : sequentialText.teamUnclaimed,
             count: mine,
             visible: true,
             tone: "neutral",

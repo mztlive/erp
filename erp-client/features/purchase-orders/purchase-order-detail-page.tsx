@@ -75,6 +75,7 @@ import {
   PURCHASE_TYPE_LABEL,
   REJECT_REASON_LABEL,
 } from "@/features/purchase-orders/types"
+import { leaseText, versionText, workspaceLabel } from "@/lib/ui-text"
 
 type SectionId =
   | "overview"
@@ -195,7 +196,7 @@ export function PurchaseOrderDetailPage({
     }).catch((error: Error) => {
       setResult({
         status: "blocked",
-        title: "无法进入编辑",
+        title: leaseText.cannotEdit,
         description: error.message,
       })
     })
@@ -273,7 +274,7 @@ export function PurchaseOrderDetailPage({
         reference: response.reference,
         facts: [
           { label: "lockVersion", value: String(response.data.lockVersion) },
-          { label: "数据版本", value: response.data.draftContentHash },
+          { label: versionText.dataVersion, value: response.data.draftContentHash },
         ],
       })
       await query.refetch()
@@ -1100,7 +1101,7 @@ export function PurchaseOrderDetailPage({
                   disabled={!canPay}
                   render={<Link href={w12PayHref} />}
                 >
-                  去供应商往来 供应商往来
+                  去{workspaceLabel("W12")}
                 </Button>
               </div>
             </DocumentSection>

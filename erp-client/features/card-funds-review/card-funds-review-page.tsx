@@ -89,6 +89,7 @@ import {
   useResolveUnknownCardFundsMutation,
   useSaveCardFundsEvidenceMutation,
 } from "@/features/card-funds-review/queries"
+import { freshnessText, openWorkspaceLabel, resultText, versionText } from "@/lib/ui-text"
 
 const money = new Intl.NumberFormat("zh-CN", {
   style: "currency",
@@ -479,7 +480,7 @@ export function CardFundsReviewPage() {
         if (response.status === "unknown") {
           setLastResult({
             status: "unknown",
-            title: "处理结果待确认",
+            title: resultText.unknown,
             description: response.message,
             pendingIdempotencyKey: response.idempotencyKey,
             stayOnItem: true,
@@ -565,7 +566,7 @@ export function CardFundsReviewPage() {
         if (response.status === "unknown") {
           setLastResult({
             status: "unknown",
-            title: "处理结果待确认",
+            title: resultText.unknown,
             description: response.message,
             pendingIdempotencyKey: response.idempotencyKey,
             stayOnItem: true,
@@ -880,7 +881,7 @@ export function CardFundsReviewPage() {
                 context?.queueContextUpdatedAt ?? new Date().toISOString()
               }
               state="fresh"
-              label="队列更新时间"
+              label={freshnessText.queueUpdatedAt}
             />
             <span className="text-xs text-muted-foreground" aria-live="polite">
               {context?.filterSummary ?? "仅我的"} · 第{" "}
@@ -1020,7 +1021,7 @@ export function CardFundsReviewPage() {
                     variant="outline"
                     render={<Link href={w05Href} />}
                   >
-                    打开销售单
+                    {openWorkspaceLabel("W05")}
                   </Button>
                 ) : null}
               </div>
@@ -1196,7 +1197,7 @@ export function CardFundsReviewPage() {
                       detail={`可开 ${formatMoney(task.account.openInvoiceableTotal)}`}
                     />
                     <MetricItem
-                      label="版本状态"
+                      label={versionText.versionStatus}
                       value={task.fingerprintStatus.label}
                       detail={task.fingerprintStatus.detail}
                       status={{
@@ -1326,7 +1327,7 @@ export function CardFundsReviewPage() {
                           size="sm"
                           render={<Link href={w11Href} />}
                         >
-                          打开客户往来
+                          {openWorkspaceLabel("W11")}
                         </Button>
                       </div>
                     </CardContent>
@@ -1742,7 +1743,7 @@ export function CardFundsReviewPage() {
                       size="sm"
                       render={<Link href={w11Href} />}
                     >
-                      打开客户往来
+                      {openWorkspaceLabel("W11")}
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
@@ -1969,7 +1970,7 @@ function buildResultFacts(
     { label: "workflowActionId", value: biz.workflowActionId },
     { label: "操作号", value: biz.operationId },
     {
-      label: "数据版本",
+      label: versionText.dataVersion,
       value: (
         <span className="font-mono text-xs">{shortHash(biz.subjectHash)}</span>
       ),

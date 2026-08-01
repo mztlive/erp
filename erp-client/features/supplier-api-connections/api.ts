@@ -39,6 +39,7 @@ import {
   setIdempotencyPending,
   setIdempotencySucceeded,
 } from "@/mock/session-state"
+import { resultText } from "@/lib/ui-text"
 
 const WORKSPACE = "W20"
 
@@ -1326,7 +1327,7 @@ export async function queryFormalByIdempotency(
     }
     return {
       status: "succeeded",
-      title: "操作已完成",
+      title: resultText.operationSucceeded,
       message: "按原任务号查询到成功结果",
       reference: idempotencyKey,
     }

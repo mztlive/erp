@@ -60,6 +60,7 @@ import {
   SUPPLIER_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
 import { cn } from "@/lib/utils"
+import { openWorkspaceLabel } from "@/lib/ui-text"
 
 function formatTime(iso?: string) {
   if (!iso) return "—"
@@ -1004,7 +1005,7 @@ export function ConsumptionOrderCenterPage({
                                 />
                               }
                             >
-                              打开销售单
+                              {openWorkspaceLabel("W05")}
                             </Button>
                           ),
                         },
@@ -1049,7 +1050,7 @@ export function ConsumptionOrderCenterPage({
                         />
                       }
                     >
-                      打开接口错误中心
+                      {openWorkspaceLabel("W29")}
                     </Button>
                   </div>
                 ) : null}
@@ -1439,7 +1440,7 @@ export function ConsumptionOrderCenterPage({
                       />
                     }
                   >
-                    打开接口错误中心
+                    {openWorkspaceLabel("W29")}
                   </Button>
                 </div>
               ) : null}

@@ -106,6 +106,7 @@ import {
   parseConnectionsSearchParams,
   type ConnectionsUrlState,
 } from "@/features/supplier-api-connections/url-state"
+import { freshnessText } from "@/lib/ui-text"
 
 type ResultState = {
   status: "succeeded" | "failed" | "blocked" | "rejected" | "unknown" | "processing"
@@ -435,8 +436,8 @@ function ConnectionList({
       {
         id: "catalog",
         accessorFn: (row) => row.catalogLabel,
-        header: "目录同步时间",
-        meta: { label: "目录同步时间" },
+        header: freshnessText.catalogSyncAt,
+        meta: { label: freshnessText.catalogSyncAt },
         cell: ({ row }) => (
           <span className="text-sm">{row.original.catalogLabel}</span>
         ),
@@ -1578,7 +1579,7 @@ function OverviewSection({
           )}
           <Row label="技术负责人" value={conn.technicalOwner?.label ?? "—"} />
           <Row
-            label="目录同步时间"
+            label={freshnessText.catalogSyncAt}
             value={`${conn.catalog.stateLabel}${
               conn.catalog.lastSuccessfulAt
                 ? ` · ${formatTime(conn.catalog.lastSuccessfulAt)}`

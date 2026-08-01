@@ -75,6 +75,7 @@ import {
   SOURCE_LABEL,
 } from "@/features/execution-projections/types"
 import { cn } from "@/lib/utils"
+import { openWorkspaceLabel, resultText, versionText } from "@/lib/ui-text"
 
 type ResultState = {
   status: "succeeded" | "blocked" | "unknown" | "processing"
@@ -380,8 +381,8 @@ export function ExecutionProjectionsPage() {
       },
       {
         id: "projVersion",
-        header: "数据版本",
-        meta: { label: "数据版本", width: "status", numeric: true },
+        header: versionText.dataVersion,
+        meta: { label: versionText.dataVersion, width: "status", numeric: true },
         cell: ({ row }) => (
           <span className="num text-sm">
             v{row.original.projectionRevisionNo}
@@ -610,7 +611,7 @@ export function ExecutionProjectionsPage() {
     } catch (err) {
       setResult({
         status: "blocked",
-        title: "操作被阻断",
+        title: resultText.operationBlocked,
         description: err instanceof Error ? err.message : "请刷新后重试",
         reference: row.projectionNo,
         facts: [
@@ -778,7 +779,7 @@ export function ExecutionProjectionsPage() {
                   size="sm"
                   render={<Link href={result.w29Href} />}
                 >
-                  打开接口错误中心
+                  {openWorkspaceLabel("W29")}
                 </Button>
               ) : null
             }
@@ -1303,7 +1304,7 @@ export function ExecutionProjectionsPage() {
                   },
                   {
                     id: "proj-ver",
-                    label: "数据版本",
+                    label: versionText.dataVersion,
                     value: `v${detail.selectedRevision.revisionNo}`,
                     numeric: true,
                   },

@@ -99,6 +99,7 @@ import {
   DIMENSION_LABEL,
 } from "@/features/actual-profit-loss/types"
 import type { DataFreshnessState } from "@/components/business/page"
+import { openWorkspaceLabel } from "@/lib/ui-text"
 
 const SCOPE_LABEL = "非卡券 · 不含税"
 
@@ -1666,7 +1667,7 @@ export function ActualProfitLossPage() {
                   />
                 }
               >
-                  打开销售单
+                  {openWorkspaceLabel("W05")}
                   <ExternalLinkIcon className="ml-1 size-3.5" />
               </Button>
             ) : null}

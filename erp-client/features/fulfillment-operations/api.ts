@@ -42,6 +42,7 @@ import {
   setIdempotencySucceeded,
   WorkItemMockError,
 } from "@/mock/session-state"
+import { leaseText } from "@/lib/ui-text"
 
 export type FulfillmentQueueFilters = {
   scope: "mine" | "role_pool"
@@ -941,7 +942,7 @@ export async function renewFulfillmentLease(input: {
   await mockDelay(60)
   const existing = getSessionLease(input.workItemId)
   if (!existing || existing.claimToken !== input.claimToken) {
-    throw new Error("操作已失效，请重新领取")
+    throw new Error(leaseText.reclaimed)
   }
   clearSessionLease(input.workItemId)
   return claimFulfillmentWorkItem(input.workItemId)

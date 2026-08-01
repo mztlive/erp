@@ -29,6 +29,7 @@ import {
   DELIVERY_STATUS_LABEL,
   RECONCILIATION_LABEL,
 } from "@/features/execution-projections/types"
+import { openWorkspaceLabel } from "@/lib/ui-text"
 
 /**
  * W05 协同子区：单张销售单当前执行信息与商城接收状态（只读）。
@@ -116,7 +117,7 @@ export function SalesOrderCollaborationCard({
               render={<Link href={data.w23Href} />}
             >
               <ExternalLinkIcon data-icon="inline-start" aria-hidden="true" />
-              打开执行信息
+              {openWorkspaceLabel("W23")}
             </Button>
           ) : null}
         </div>

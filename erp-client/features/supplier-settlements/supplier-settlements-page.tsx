@@ -115,6 +115,7 @@ import {
   parseSettlementsSearchParams,
   type SettlementsUrlState,
 } from "@/features/supplier-settlements/url-state"
+import { openWorkspaceLabel } from "@/lib/ui-text"
 
 type ResultState = {
   status:
@@ -2000,7 +2001,7 @@ function SettlementCenter({
                   size="sm"
                   render={<Link href={detail.payable.w12Href} />}
                 >
-                  打开供应商往来
+                  {openWorkspaceLabel("W12")}
                   <ExternalLinkIcon className="size-3.5" />
                 </Button>
               </>

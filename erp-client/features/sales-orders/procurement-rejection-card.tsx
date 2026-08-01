@@ -39,6 +39,7 @@ import type {
   ProcurementRejectionResolution,
   SalesOrderListItem,
 } from "@/features/sales-orders/types"
+import { resultText, versionText } from "@/lib/ui-text"
 
 const priceSchema = z.object({
   unitPriceGross: z
@@ -246,7 +247,7 @@ export function ProcurementRejectionCard({
               numeric
             />
             <Fact
-              label="数据版本"
+              label={versionText.dataVersion}
               value={rejection.rejectedSubjectHash}
               numeric
             />
@@ -575,7 +576,7 @@ export function ProcurementRejectionCard({
                 error instanceof Error ? error.message : "操作失败"
               setResult({
                 status: "blocked",
-                title: "操作被阻断",
+                title: resultText.operationBlocked,
                 description:
                   message === "NO_COMMERCIAL_CHANGE"
                     ? "内容未发生改品/改价，不得冒充此路径。请先调整草稿。"

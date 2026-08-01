@@ -84,6 +84,7 @@ import {
   ACCESS_LAYER_HELP,
   ACCESS_VIEW_LABEL,
 } from "@/features/access-audit/types"
+import { resultText } from "@/lib/ui-text"
 
 function parseView(raw: string | null): AccessView {
   if (
@@ -603,7 +604,7 @@ export function AccessAuditPage() {
     }
     setLastResult({
       status: "unknown",
-      title: "处理结果待确认",
+      title: resultText.unknown,
       description: outcome.message,
       pendingIdempotencyKey: outcome.idempotencyKey,
     })

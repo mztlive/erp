@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { documentText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
 type PaperDocumentStatus = Readonly<{
@@ -341,8 +342,8 @@ function PaperDocument<Row>({
         <footer className="mt-12 break-inside-avoid border-t border-border pt-4 text-xs text-muted-foreground">
           {footer ?? (
             <div className="flex items-center justify-between gap-6">
-              <span>此单据为系统数据的打印件</span>
-              <span>请以系统当前有效版本为准</span>
+              <span>{documentText.printFooter}</span>
+              <span>{documentText.effectiveVersionNote}</span>
             </div>
           )}
         </footer>

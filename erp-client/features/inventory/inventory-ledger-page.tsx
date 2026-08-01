@@ -83,6 +83,7 @@ import {
   VIEW_LABEL,
 } from "@/features/inventory/types"
 import { bumpInventoryBalanceLock } from "@/mock/session-state"
+import { resultText } from "@/lib/ui-text"
 
 function parseView(raw: string | null): InventoryView {
   if (
@@ -467,7 +468,7 @@ export function InventoryLedgerPage() {
     if (result.status === "unknown") {
       setLastResult({
         status: "unknown",
-        title: "处理结果待确认",
+        title: resultText.unknown,
         description: result.message,
         reference: result.idempotencyKey,
         pendingIdempotencyKey: result.idempotencyKey,

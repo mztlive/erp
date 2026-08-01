@@ -46,6 +46,7 @@ import {
   transferWorkItemSession,
   WorkItemMockError,
 } from "@/mock/session-state"
+import { resultText } from "@/lib/ui-text"
 
 const WS = "W29"
 
@@ -624,7 +625,7 @@ export async function applyIntegrationTaskAction(
         facts: [
           { label: "查询结果", value: outcome },
           {
-            label: "原任务号",
+            label: resultText.originalTaskNo,
             value:
               seed.originalAction?.originalActionIdempotencyKeySummary ?? "—",
           },
@@ -1197,11 +1198,11 @@ export async function queryIntegrationIdempotency(
     }
     return {
       status: "succeeded",
-      title: "已查到处理结果",
+      title: resultText.querySucceeded,
       description: "请根据结果继续处理；非终结动作不自动下一项。",
       reference: key,
       stayOnItem: true,
-      facts: [{ label: "原任务号", value: key }],
+      facts: [{ label: resultText.originalTaskNo, value: key }],
     }
   } catch (e) {
     return {

@@ -95,6 +95,7 @@ import {
   parseImportOpeningSearchParams,
   type ImportOpeningUrlState,
 } from "@/features/import-opening/url-state"
+import { versionText } from "@/lib/ui-text"
 
 const SECTION_TABS: { id: BatchSection; label: string }[] = [
   { id: "overview", label: "概览" },
@@ -1094,7 +1095,7 @@ function FilesSection({ batch }: { batch: ImportBatchView }) {
               />
               {batch.inputAsset.contentHmacShort ? (
                 <Fact
-                  label="校验码（短）"
+                  label={versionText.checksumShort}
                   value={batch.inputAsset.contentHmacShort}
                   mono
                 />
@@ -1595,7 +1596,7 @@ function AuditSection({ batch }: { batch: ImportBatchView }) {
         <Fact label="批次版本" value={batch.version} mono />
         {batch.inputAsset?.contentHmacShort ? (
           <Fact
-            label="数据包校验码"
+            label={versionText.packageChecksum}
             value={batch.inputAsset.contentHmacShort}
             mono
           />

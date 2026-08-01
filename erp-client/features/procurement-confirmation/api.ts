@@ -37,6 +37,7 @@ import {
   setProcurementBusinessOutcome,
   WorkItemMockError,
 } from "@/mock/session-state"
+import { leaseText } from "@/lib/ui-text"
 
 export type QueueFilters = {
   scope: "mine" | "role_pool"
@@ -319,7 +320,7 @@ export async function renewProcurementWorkItem(input: {
   if (!seed) throw new Error("任务不存在")
   const existing = getSessionLease(input.workItemId)
   if (!existing || existing.claimToken !== input.claimToken) {
-    throw new Error("操作已失效，请重新领取")
+    throw new Error(leaseText.reclaimed)
   }
   // 续租 = 同用户再次 claim，签发新 token / 升 leaseVersion
   clearSessionLease(input.workItemId)

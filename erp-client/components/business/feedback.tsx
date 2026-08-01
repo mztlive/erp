@@ -54,6 +54,12 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import {
+  freshnessText,
+  resultText,
+  versionText,
+  workspaceLabel,
+} from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
 type GuardedBusinessActionProps = Omit<
@@ -266,7 +272,7 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
     label: "权限限制",
   },
   conflict: {
-    title: "数据版本已变化",
+    title: versionText.versionChanged,
     description: "服务端数据已更新，请比较差异后重新处理。",
     icon: GitCompareArrowsIcon,
     variant: "warning",
@@ -291,7 +297,7 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
   },
   integration: {
     title: "外部接口失败",
-    description: "业务记录已保留，请进入接口错误与对账中心查看后续处理。",
+    description: `业务记录已保留，请进入${workspaceLabel("W29")}查看后续处理。`,
     icon: CloudOffIcon,
     variant: "destructive",
     tone: "destructive",
@@ -299,7 +305,7 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
   },
   projection: {
     title: "查询模型更新失败",
-    description: "当前显示的是上次成功数据，业务记录未被修改。",
+    description: freshnessText.lastSuccessKept,
     icon: RotateCcwIcon,
     variant: "warning",
     tone: "warning",
@@ -623,7 +629,7 @@ const formalResultPresets: Record<
   FormalResultPreset
 > = {
   succeeded: {
-    title: "操作已完成",
+    title: resultText.operationSucceeded,
     description: "结果已经形成，并可在关联单据与审计记录中追溯。",
     label: "已完成",
     icon: CircleCheckIcon,
@@ -631,7 +637,7 @@ const formalResultPresets: Record<
     tone: "success",
   },
   rejected: {
-    title: "操作未通过",
+    title: resultText.operationRejected,
     description: "本次操作未形成目标结果，请根据原因继续处理。",
     label: "未通过",
     icon: CircleXIcon,
@@ -639,7 +645,7 @@ const formalResultPresets: Record<
     tone: "destructive",
   },
   blocked: {
-    title: "操作被阻断",
+    title: resultText.operationBlocked,
     description: "当前前置条件尚未满足，本次操作未形成处理结果。",
     label: "已阻断",
     icon: TriangleAlertIcon,
@@ -647,7 +653,7 @@ const formalResultPresets: Record<
     tone: "warning",
   },
   processing: {
-    title: "操作正在处理",
+    title: resultText.operationProcessing,
     description: "结果尚未确定，可安全离开并在后台任务中继续查看。",
     label: "处理中",
     icon: LoaderCircleIcon,
@@ -655,7 +661,7 @@ const formalResultPresets: Record<
     tone: "info",
   },
   unknown: {
-    title: "处理结果待确认",
+    title: resultText.unknown,
     description: "不得按成功处理，请等待核对或进入异常处理流程。",
     label: "结果未知",
     icon: TriangleAlertIcon,

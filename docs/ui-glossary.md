@@ -229,8 +229,27 @@ rg -n "专用处理器|租约|令牌|角色池|幂等|投影|正式结果|正式
 ### 5.3 新增文案守则
 
 - 新写用户可见文案前查本表；命中禁用词一律改写。
+- **跨页复用文案**优先从 `erp-client/lib/ui-text.ts` 引用（`leaseText` / `sequentialText` / `resultText` / `versionText` / `freshnessText` / `workspaceLabel` / `actionLabelForWorkItemType`），禁止各页手写「正在处理中 · 请勿重复打开」等同义变体。
+- 页面专属业务说明可继续写在组件内；一旦第二处复用，抽到 `ui-text.ts`。
 - W 系列工作面文档 §12 验收清单已有对应条目，评审时逐页核对。
 - 内部概念如需在界面表达，先找业务等价词，找不到就**不表达**（用户不需要知道）。
+
+### 5.4 `lib/ui-text.ts` 使用说明
+
+| 导出 | 用途 |
+| --- | --- |
+| `leaseText` | 处理权状态条、领取/失效提示 |
+| `sequentialText` | 连续处理条按钮与提交中 |
+| `resultText` | 操作结果 / 结果未知 / 按原任务号查询 |
+| `versionText` | 数据版本标签与变更提示 |
+| `freshnessText` | 数据更新时间 / 同步进度 |
+| `workspaceLabel(id)` | 跨页跳转中文名（禁止 Wxx） |
+| `openWorkspaceLabel` / `goToWorkspaceLabel` | 「打开…」「前往…」 |
+| `actionLabelForWorkItemType` | 任务类型 → 主按钮文案 |
+| `documentText` | 打印件页脚 |
+| `uiText` | 上述分组的聚合导出 |
+
+完整路由显示名仍以 `lib/workspace-registry.ts` 为准；`workspaceLabel` 提供**提示语短名**（如「待办队列」而非「待办队列（统一）」）。
 
 ## 6. 待确认事项
 
@@ -239,5 +258,5 @@ rg -n "专用处理器|租约|令牌|角色池|幂等|投影|正式结果|正式
 | G1 | 「暂挂」是否保留？（业务半术语，意为"先跳过稍后处理"） | 20+ 处按钮与提示 | — | 建议保留，P 系列文案已口语化 |
 | G2 | 「核销」是否保留？（财务专业词，目标用户为财务） | 付款/回款核销界面 | — | 建议保留 |
 | G3 | 「履约」是否保留？（电商通用词） | 多处状态列 | — | 建议保留 |
-| G4 | 术语表是否需要落在代码层（`lib/ui-text.ts` 常量） | 防止再次漂移 | — | 建议第 4 轮后引入 |
+| G4 | 术语表是否需要落在代码层（`lib/ui-text.ts` 常量） | 防止再次漂移 | — | **已落地** `erp-client/lib/ui-text.ts`；共享组件与队列页已接入，新跨页文案优先引用 |
 | G5 | 「过账」是否保留？（仓储/财务半术语） | 履约、付款 | — | 建议保留；与「草稿」对比时不必加「正式」 |

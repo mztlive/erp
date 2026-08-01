@@ -80,6 +80,7 @@ import {
   useResolveUnknownProcurementMutation,
   useSaveProcurementConfirmationMutation,
 } from "@/features/procurement-confirmation/queries"
+import { freshnessText, resultText, versionText } from "@/lib/ui-text"
 
 const rejectSchema = z.object({
   reasonCode: z.enum([
@@ -553,7 +554,7 @@ export function ProcurementConfirmationPage() {
       if (response.status === "unknown") {
         setLastResult({
           status: "unknown",
-          title: "处理结果待确认",
+          title: resultText.unknown,
           description: response.message,
           pendingIdempotencyKey: response.idempotencyKey,
           stayOnItem: true,
@@ -627,7 +628,7 @@ export function ProcurementConfirmationPage() {
         if (response.status === "unknown") {
           setLastResult({
             status: "unknown",
-            title: "处理结果待确认",
+            title: resultText.unknown,
             description: response.message,
             pendingIdempotencyKey: response.idempotencyKey,
             stayOnItem: true,
@@ -917,7 +918,7 @@ export function ProcurementConfirmationPage() {
                 context?.queueContextUpdatedAt ?? new Date().toISOString()
               }
               state="fresh"
-              label="队列更新时间"
+              label={freshnessText.queueUpdatedAt}
             />
             <span className="text-xs text-muted-foreground" aria-live="polite">
               {context?.filterSummary ?? "仅我的"} · 待处理{" "}
@@ -1128,7 +1129,7 @@ export function ProcurementConfirmationPage() {
                       },
                       {
                         id: "subjectHash",
-                        label: "数据版本",
+                        label: versionText.dataVersion,
                         value: (
                           <span className="num font-mono text-sm">
                             {task.salesSubmission.subjectHashSummary}
@@ -1824,7 +1825,7 @@ function buildResultFacts(
         ),
       },
       {
-        label: "驳回时数据版本",
+        label: versionText.rejectAtVersion,
         value: (
           <span className="num font-mono text-xs">
             {shortHash(outcome.rejectedSubjectHash)}

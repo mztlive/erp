@@ -91,6 +91,7 @@ import {
   useSaveFulfillmentMutation,
 } from "@/features/fulfillment-operations/queries"
 import { cn } from "@/lib/utils"
+import { freshnessText, resultText } from "@/lib/ui-text"
 
 type SessionLease = {
   workItemId: string
@@ -677,7 +678,7 @@ export function FulfillmentOperationsPage() {
       if (response.status === "unknown") {
         setLastResult({
           status: "unknown",
-          title: "处理结果待确认",
+          title: resultText.unknown,
           description: response.message,
           pendingIdempotencyKey: response.idempotencyKey,
           stayOnItem: true,
@@ -955,7 +956,7 @@ export function FulfillmentOperationsPage() {
                 context?.snapshotUpdatedAt ?? new Date().toISOString()
               }
               state="fresh"
-              label="数据更新时间"
+              label={freshnessText.dataUpdatedAt}
             />
             <span className="text-xs text-muted-foreground" aria-live="polite">
               {context?.filterSummary ?? "仅我的"} · 待处理{" "}

@@ -1,10 +1,12 @@
 /** Map Chinese scope labels ↔ URL scope slugs (W02 contract). */
 
+import { sequentialText } from "@/lib/ui-text"
+
 const DEFAULT_SLUG_BY_LABEL: Record<string, string> = {
   我的待办: "mine",
   待领取: "role_pool",
   团队: "team",
-  待我处理: "mine",
+  [sequentialText.minePending]: "mine",
   已暂挂: "hold",
   待复核: "review",
   有差异: "diff",

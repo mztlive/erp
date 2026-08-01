@@ -7,6 +7,7 @@ import type {
   CardFundsReviewItemView,
   ReviewHistoryItem,
 } from "@/features/card-funds-review/types"
+import { versionText } from "@/lib/ui-text"
 
 const chainOpeningNone: ReviewHistoryItem[] = []
 
@@ -320,7 +321,7 @@ export const SEED_SYNC_DELTA: CardFundsReviewItemView = baseItem({
   },
   reviewType: "SYNC_DELTA",
   fingerprintStatus: {
-    label: "数据版本已变化",
+    label: versionText.versionChanged,
     tone: "destructive",
     detail: "须形成新链尾；禁止复制旧数据版本或沿用旧通过结论",
   },

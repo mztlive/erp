@@ -95,6 +95,7 @@ import {
   useTriggerSingleOrderMutation,
 } from "@/features/mall-sync/queries"
 import { cn } from "@/lib/utils"
+import { freshnessText, versionText } from "@/lib/ui-text"
 
 const VIEWS: MallSyncViewName[] = [
   "overview",
@@ -667,7 +668,7 @@ export function MallSyncPage() {
       },
       {
         id: "wm",
-        header: "同步进度",
+        header: freshnessText.syncProgress,
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
             {row.original.watermarkAdvanced ? "已安全推进" : "未推进"}
@@ -875,7 +876,7 @@ export function MallSyncPage() {
       },
       {
         id: "fp",
-        header: "数据版本",
+        header: versionText.dataVersion,
         cell: ({ row }) => (
           <span className="font-mono text-xs text-muted-foreground">
             {row.original.sourceFingerprintShort ?? "—"}

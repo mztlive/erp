@@ -4,6 +4,7 @@
  */
 
 import type { ImportStageKey } from "@/components/business"
+import { freshnessText } from "@/lib/ui-text"
 
 /** 批次向导六阶段（文档 §4.2） */
 export type MigrationWizardStage =
@@ -144,7 +145,7 @@ export const BLOCKER_CODE_LABEL: Record<BlockerCode, string> = {
   SINGLE_LINE: "非唯一卡券明细",
   FINANCE: "票款阻塞",
   CARD_BASELINE: "卡实例/余额基线",
-  SYNC_WATERMARK: "同步进度",
+  SYNC_WATERMARK: freshnessText.syncProgress,
   SCOPE_DRIFT: "范围摘要变化",
 }
 

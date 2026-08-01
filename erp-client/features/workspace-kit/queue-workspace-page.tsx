@@ -35,6 +35,7 @@ import {
   scopeLabelToSlug,
   scopeSlugToLabel,
 } from "@/features/workspace-kit/queue-scope"
+import { leaseText, sequentialText } from "@/lib/ui-text"
 import {
   useCompleteQueueTaskMutation,
   useWorkspaceQueueQuery,
@@ -326,11 +327,13 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
               leaseStatus="active"
               leaseStatusLabel={
                 completeMutation.isPending
-                  ? "正在提交处理结果…"
-                  : "正在处理中 · 请勿重复打开"
+                  ? sequentialText.submittingResult
+                  : leaseText.activeDoNotReopen
               }
               processLabel={
-                task.handlerHref ? "前往处理" : "完成当前项"
+                task.handlerHref
+                  ? sequentialText.goProcess
+                  : sequentialText.completeCurrent
               }
               // 本壳没有独立的「并打开下一条」路径，onProcessNext 与 onProcess 同义，
               // 再渲染一个按钮只会重复且误导。
@@ -436,7 +439,7 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
                     onClick={onPrimaryAction}
                   >
                     {task.actionLabel ??
-                      (task.handlerHref ? "前往处理" : "处理")}
+                      (task.handlerHref ? sequentialText.goProcess : "处理")}
                     <ArrowRightIcon
                       data-icon="inline-end"
                       aria-hidden="true"
@@ -457,7 +460,7 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
         confirmLabel="确认完成并打开下一条"
         fromStatus={{ label: task?.status.label ?? "待处理", tone: "warning" }}
         toStatus={{ label: "已完成", tone: "success" }}
-        lockedFields={["版本", "当前处理状态"]}
+        lockedFields={["版本", leaseText.currentProcessState]}
         effects={["记录处理结果", "从有效队列移除本项"]}
         nextDepartment="相关责任组"
         onConfirm={async () => {

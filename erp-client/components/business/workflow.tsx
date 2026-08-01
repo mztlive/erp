@@ -65,6 +65,7 @@ import {
   StatusBadge,
   type StatusTone,
 } from "@/components/ui/status-badge"
+import { leaseText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
 type ControllableDialogProps = {
@@ -347,27 +348,27 @@ export type SequentialLeaseStatus =
 
 const sequentialLeaseStatus = {
   unclaimed: {
-    label: "任务待领取",
+    label: leaseText.unclaimed,
     tone: "neutral",
     icon: CircleDashedIcon,
   },
   active: {
-    label: "正在处理中",
+    label: leaseText.active,
     tone: "success",
     icon: ShieldCheckIcon,
   },
   renewing: {
-    label: "处理时间已延长",
+    label: leaseText.renewing,
     tone: "info",
     icon: RefreshCwIcon,
   },
   lost: {
-    label: "操作已失效",
+    label: leaseText.lost,
     tone: "destructive",
     icon: ShieldAlertIcon,
   },
   released: {
-    label: "本次处理已结束",
+    label: leaseText.released,
     tone: "neutral",
     icon: CircleDashedIcon,
   },

@@ -76,6 +76,7 @@ import type {
   SalesInvoiceRow,
 } from "@/features/customer-receivables/types"
 import { DUE_LABEL, VIEW_LABEL } from "@/features/customer-receivables/types"
+import { freshnessText } from "@/lib/ui-text"
 
 function parseView(raw: string | null): CustomerAccountsView {
   if (
@@ -821,7 +822,7 @@ export function CustomerReceivablesPage() {
         metadata={
           data ? (
             <DataFreshness
-              updatedAt="数据更新时间"
+              updatedAt={freshnessText.dataUpdatedAt}
               dateTime={data.queriedAt}
               state="fresh"
               label="客户往来"

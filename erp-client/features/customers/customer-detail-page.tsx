@@ -47,6 +47,7 @@ import type {
   CustomerCenterView,
   CustomerSectionId,
 } from "@/features/customers/types"
+import { openWorkspaceLabel } from "@/lib/ui-text"
 
 const SECTION_NAV: readonly {
   id: CustomerSectionId
@@ -616,7 +617,7 @@ export function CustomerDetailPage({
               variant="outline"
               render={<Link href={receivableHref} />}
             >
-              打开客户往来
+              {openWorkspaceLabel("W11")}
             </Button>
           }
         >

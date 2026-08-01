@@ -44,6 +44,7 @@ import {
   setW13FundsOverlay,
   WorkItemMockError,
 } from "@/mock/session-state"
+import { resultText, versionText } from "@/lib/ui-text"
 
 function moneyNum(v: string): number {
   return Number(v) || 0
@@ -124,7 +125,7 @@ function projectItem(
   const fundsChanged = Boolean(overlay)
   const fingerprintStatus = overlay?.forceHashDriftOnComplete
     ? {
-        label: "数据版本已变化",
+        label: versionText.versionChanged,
         tone: "destructive" as const,
         detail: "外部记录变化：完成时须使用最新数据版本，旧期望将阻断",
       }
@@ -1074,7 +1075,7 @@ export async function resolveUnknownCardFundsResult(input: {
   return {
     status: "failed",
     code: "NOT_FOUND",
-    message: "未找到该次操作记录",
+    message: resultText.queryNotFound,
   }
 }
 

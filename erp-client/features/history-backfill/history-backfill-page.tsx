@@ -109,6 +109,7 @@ import {
   parseHistoryBackfillSearchParams,
   type HistoryBackfillUrlState,
 } from "@/features/history-backfill/url-state"
+import { resultText } from "@/lib/ui-text"
 
 const SECTION_TABS: { id: JobSection; label: string }[] = [
   { id: "overview", label: "概览" },
@@ -207,7 +208,7 @@ function FormalResultBanner({
       description={result.description}
       facts={[
         { label: "操作 ID", value: result.operationId },
-        { label: "原任务号", value: result.idempotencyKey },
+        { label: resultText.originalTaskNo, value: result.idempotencyKey },
         ...(result.jobNo
           ? [{ label: "任务号", value: result.jobNo }]
           : []),
@@ -1386,7 +1387,7 @@ function JobDetailView({
         <Fact label="发起时间" value={formatTime(currentJob.requestedAt)} />
         <Fact label="来来源更新时间" value={formatTime(currentJob.sourceAsOf)} />
         <Fact
-          label="原任务标识"
+          label={resultText.originalTaskId}
           value={currentJob.idempotencyNamespace}
           mono
         />

@@ -82,6 +82,7 @@ import {
   useSaveExternalCatalogDraftMutation,
 } from "@/features/external-product-supply/queries"
 import { cn } from "@/lib/utils"
+import { versionText } from "@/lib/ui-text"
 
 type SessionLease = {
   workItemId: string
@@ -923,7 +924,7 @@ export function ExternalProductSupplyPage() {
                       value: lastResult.outcome.business.auditEventId,
                     },
                     {
-                      label: "数据版本",
+                      label: versionText.dataVersion,
                       value: shortHash(lastResult.outcome.business.subjectHash),
                     },
                     {

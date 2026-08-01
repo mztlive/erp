@@ -46,6 +46,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { FAMILY_LABELS, type WorkItemFamily } from "@/mock/work-items"
 import type { SessionLease } from "@/mock/session-state"
 
+import { freshnessText, leaseText, resultText, sequentialText, versionText } from "@/lib/ui-text"
 import {
   buildFilterSummary,
   filterAndSortWorkItems,
@@ -343,7 +344,7 @@ export function UnifiedTaskQueuePage() {
         setClaimEpoch((n) => n + 1)
         setLastResult({
           status: "failed",
-          title: "操作已失效",
+          title: leaseText.lost,
           description: error.message,
           reference: item.id,
         })
@@ -604,7 +605,7 @@ export function UnifiedTaskQueuePage() {
             : pendingIdem.key
         setLastResult({
           status: "succeeded",
-          title: "已查到原任务处理结果",
+          title: resultText.querySucceededOriginal,
           description: "已按原任务号确认终态，现在可以打开下一项。",
           reference: ref,
         })
@@ -817,7 +818,7 @@ export function UnifiedTaskQueuePage() {
             updatedAt={queueQuery.isFetching ? "正在刷新" : "刚刚"}
             dateTime={queueQuery.data?.freshness.updatedAt}
             state={queueQuery.isFetching ? "syncing" : "fresh"}
-            label="数据更新时间"
+            label={freshnessText.dataUpdatedAt}
           />
         }
         actions={
@@ -1161,19 +1162,21 @@ export function UnifiedTaskQueuePage() {
                 leaseStatus={leaseStatus}
                 leaseStatusLabel={
                   permissionRevoked
-                    ? "权限已收回 · 临时信息已清除"
+                    ? leaseText.permissionRevokedCleared
                     : activeClaim
-                      ? `正在处理中 · 请勿重复打开`
+                      ? leaseText.activeDoNotReopen
                       : leaseStatus === "unclaimed"
-                        ? "任务待领取"
+                        ? leaseText.unclaimed
                         : leaseStatus === "lost"
-                          ? "操作已失效，请刷新后重新处理"
-                          : "可领取后处理"
+                          ? leaseText.lostRefresh
+                          : leaseText.reclaimAfterLost
                 }
                 processLabel={
-                  task.handlerHref ? "前往处理" : "完成当前项"
+                  task.handlerHref
+                    ? sequentialText.goProcess
+                    : sequentialText.completeCurrent
                 }
-                processNextLabel="完成并打开下一条"
+                processNextLabel={sequentialText.completeAndOpenNext}
                 // 跳专用处理器会离开本页，没有「并打开下一条」语义
                 showProcessNext={!task.handlerHref}
                 processDisabled={processDisabled}
@@ -1248,7 +1251,7 @@ export function UnifiedTaskQueuePage() {
                   <Alert>
                     <AlertTitle>团队任务待认领</AlertTitle>
                     <AlertDescription className="flex flex-wrap items-center gap-2">
-                      领取任务后即可开始处理。
+                      {leaseText.reclaimHint}。
                       <Button
                         type="button"
                         size="sm"
@@ -1452,7 +1455,9 @@ export function UnifiedTaskQueuePage() {
                     }}
                   >
                     {task.actionLabel ??
-                      (task.handlerHref ? "前往处理" : "处理")}
+                      (task.handlerHref
+                        ? sequentialText.goProcess
+                        : sequentialText.process)}
                     <ArrowRightIcon
                       data-icon="inline-end"
                       aria-hidden="true"
@@ -1597,7 +1602,11 @@ export function UnifiedTaskQueuePage() {
         confirmLabel="确认完成并打开下一条"
         fromStatus={{ label: task?.status.label ?? "待处理", tone: "warning" }}
         toStatus={{ label: "已完成", tone: "success" }}
-        lockedFields={["版本", "当前处理状态", "数据版本"]}
+        lockedFields={[
+          versionText.version,
+          leaseText.currentProcessState,
+          versionText.dataVersion,
+        ]}
         effects={[
           `执行 ${task?.completionAction ?? "领域完成动作"}`,
           "业务记录与任务 COMPLETED 同一事务返回",

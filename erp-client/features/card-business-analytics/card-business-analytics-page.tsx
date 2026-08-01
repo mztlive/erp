@@ -97,6 +97,7 @@ import {
   DATE_BASIS_LABEL,
   DIMENSION_LABEL,
 } from "@/features/card-business-analytics/types"
+import { openWorkspaceLabel } from "@/lib/ui-text"
 
 const consumptionChartConfig = {
   sales: { label: "销售(含税)", color: "var(--chart-1)" },
@@ -1135,7 +1136,7 @@ export function CardBusinessAnalyticsPage() {
                     <Link href={data.governanceLinks.integrationErrorsHref} />
                   }
                 >
-                  打开接口错误中心
+                  {openWorkspaceLabel("W29")}
                 </Button>
               </AlertDescription>
             </Alert>

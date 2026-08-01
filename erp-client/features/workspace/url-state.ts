@@ -4,6 +4,7 @@ import type {
   WorkspaceFamilyFilter,
   WorkspaceMetricKey,
 } from "@/mock/workspace"
+import { sequentialText } from "@/lib/ui-text"
 
 const DUE_VALUES = new Set<WorkspaceDueFilter>(["today", "overdue"])
 const FAMILY_VALUES = new Set<WorkspaceFamilyFilter>([
@@ -144,7 +145,7 @@ export function buildGroupAllHref(
 }
 
 export const FILTER_SUMMARY: Record<WorkspaceMetricKey, string> = {
-  mine: "待我处理",
+  mine: sequentialText.minePending,
   due_today: "今日到期",
   overdue: "已超期",
   exception: "同步异常",

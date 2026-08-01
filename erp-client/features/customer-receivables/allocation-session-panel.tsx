@@ -38,6 +38,7 @@ import type {
   AllocationTarget,
   PostAllocationResult,
 } from "@/features/customer-receivables/types"
+import { resultText } from "@/lib/ui-text"
 
 const factFormSchema = z.object({
   receivedAt: z.string(),
@@ -320,7 +321,7 @@ export function AllocationSessionPanel({
     if (res.status === "unknown") {
       setResult({
         status: "unknown",
-        title: "处理结果待确认",
+        title: resultText.unknown,
         description: res.message,
         reference: res.operationId,
         pendingKey: res.idempotencyKey,

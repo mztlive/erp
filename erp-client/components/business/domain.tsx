@@ -7,6 +7,7 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert"
+
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
@@ -40,6 +41,7 @@ import {
   StatusBadge,
   type StatusTone,
 } from "@/components/ui/status-badge"
+import { interfaceText, resultText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
 type CardProps = React.ComponentProps<typeof Card>
@@ -1140,7 +1142,7 @@ const interfaceErrorClassPresentation = {
     label: "重复回调",
     tone: "neutral",
     alert: "info",
-    guidance: "重复回调将忽略，不会重复形成业务记录或待办。",
+    guidance: interfaceText.duplicateCallbackIgnored,
   },
   "out-of-order-callback": {
     label: "乱序回调",
@@ -1328,7 +1330,7 @@ function InterfaceErrorResolutionPanel({
               action={queryOriginalAction}
             />
             <ResolutionActionSlot
-              title="使用原任务号重试"
+              title={resultText.useOriginalTaskNoRetry}
               description="仅在服务端确认原请求无结果且可安全重试时使用。"
               action={retrySameKeyAction}
             />

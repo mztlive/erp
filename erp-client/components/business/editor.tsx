@@ -39,6 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { GuardedBusinessAction } from "@/components/business/feedback"
+import { sequentialText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
 type LineItemMode = "view" | "edit"
@@ -407,7 +408,7 @@ function ApprovalDecisionPanel({
             disabled={isPending || rejectDisabled}
             reason={
               pendingDecision
-                ? "决定正在提交"
+                ? sequentialText.decisionSubmitting
                 : rejectDisabledReason
             }
             onClick={onReject}
@@ -428,7 +429,7 @@ function ApprovalDecisionPanel({
             disabled={isPending || approveDisabled}
             reason={
               pendingDecision
-                ? "决定正在提交"
+                ? sequentialText.decisionSubmitting
                 : approveDisabledReason
             }
             onClick={onApprove}

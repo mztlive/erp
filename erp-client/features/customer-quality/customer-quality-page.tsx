@@ -91,6 +91,7 @@ import type {
   PeriodSelectionSource,
 } from "@/features/customer-quality/types"
 import type { DataFreshnessState } from "@/components/business/page"
+import { openWorkspaceLabel } from "@/lib/ui-text"
 
 const chartConfig = {
   value: { label: "数值", color: "var(--chart-1)" },
@@ -1339,7 +1340,7 @@ export function CustomerQualityPage() {
                           <Link href="/finance/card-funds-review?from=W15" />
                         }
                       >
-                        打开卡券票款复核
+                        {openWorkspaceLabel("W13")}
                       </Button>
                     </AlertDescription>
                   </Alert>
@@ -1393,7 +1394,7 @@ export function CustomerQualityPage() {
                     />
                   }
                 >
-                  打开卡券经营分析
+                  {openWorkspaceLabel("W28")}
                 </Button>
               </AlertDescription>
             </Alert>
