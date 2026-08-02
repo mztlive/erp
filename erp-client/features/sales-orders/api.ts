@@ -36,6 +36,14 @@ import {
   uploadW04ContractPdf,
   verifyW05CardClaim,
 } from "@/mock/session-state"
+import {
+  canonicalDecimal,
+  compareDecimal,
+  multiplyFixed,
+  normalizeFixed,
+  splitGrossByPercentRate,
+  sumFixed,
+} from "@/lib/fixed-decimal"
 
 export type SalesOrderDetailView = SalesOrderListItem & {
   acceptance?: {
@@ -324,11 +332,6 @@ export async function fetchSalesOrderDetail(
   }
 }
 
-function numericValue(value: string): number {
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : 0
-}
-
 function localDateParts(date: Date) {
   const parts = new Intl.DateTimeFormat("zh-CN", {
     timeZone: "Asia/Shanghai",
@@ -354,15 +357,30 @@ export async function createSalesOrder(
   if (input.nature === "card_voucher" && input.lineItems.length !== 1) {
     throw new Error("VOUCHER_REQUIRES_EXACTLY_ONE_LINE")
   }
+  let decimalInputsValid = true
+  try {
+    for (const line of input.lineItems) {
+      decimalInputsValid &&= compareDecimal(line.quantity, "0", 6) > 0
+      decimalInputsValid &&= compareDecimal(line.unitPriceGross, "0", 4) > 0
+      if (input.nature === "card_voucher") {
+        decimalInputsValid &&= compareDecimal(line.faceValue, "0", 2) > 0
+        canonicalDecimal(line.giftRate || "0", { maxScale: 6 })
+      }
+    }
+    const taxRate = canonicalDecimal(input.taxRatePercent, { maxScale: 6 })
+    decimalInputsValid &&= compareDecimal(taxRate, "0", 6) >= 0
+    decimalInputsValid &&= compareDecimal(taxRate, "100", 6) <= 0
+  } catch {
+    decimalInputsValid = false
+  }
+
   if (
+    !decimalInputsValid ||
     input.lineItems.some(
       (line) =>
         !line.name.trim() ||
         !line.unit.trim() ||
-        numericValue(line.quantity) <= 0 ||
-        numericValue(line.unitPriceGross) <= 0 ||
-        (input.nature === "card_voucher" &&
-          (!line.cardForm.trim() || numericValue(line.faceValue) <= 0)) ||
+        (input.nature === "card_voucher" && !line.cardForm.trim()) ||
         (input.nature === "physical_service" &&
           (!line.fulfillmentMode.trim() || !line.dueDate))
     )
@@ -407,21 +425,30 @@ export async function createSalesOrder(
   if (!requestedRevision) throw new Error("CONTRACT_REVISION_NOT_FOUND")
   if (!requestedRevision.isCurrent) throw new Error("CONTRACT_REVISION_NOT_CURRENT")
 
-  const lineItems: SalesOrderLineItem[] = input.lineItems.map((line, index) => {
-    const quantity = numericValue(line.quantity)
-    const unitPriceGross = numericValue(line.unitPriceGross)
-    return {
+  const computedLines = input.lineItems.map((line, index) => {
+    const quantity = canonicalDecimal(line.quantity, { maxScale: 6 })
+    const unitPriceGross = canonicalDecimal(line.unitPriceGross, { maxScale: 4 })
+    const amountGross = multiplyFixed(quantity, unitPriceGross, {
+      leftMaxScale: 6,
+      rightMaxScale: 4,
+      outputScale: 2,
+    })
+    const amounts = splitGrossByPercentRate(amountGross, input.taxRatePercent)
+    const item: SalesOrderLineItem = {
       id: `li_${index + 1}`,
       name: line.name.trim(),
       sku: line.sku.trim() || undefined,
-      quantity: quantity.toFixed(quantity % 1 === 0 ? 0 : 2),
+      quantity,
       unit: line.unit.trim(),
-      unitPriceGross: unitPriceGross.toFixed(2),
-      amountGross: (quantity * unitPriceGross).toFixed(2),
+      unitPriceGross,
+      amountGross,
       ...(input.nature === "card_voucher"
         ? {
-            faceValue: numericValue(line.faceValue).toFixed(2),
-            giftRate: numericValue(line.giftRate).toFixed(2),
+            faceValue: normalizeFixed(line.faceValue, {
+              maxScale: 2,
+              outputScale: 2,
+            }),
+            giftRate: canonicalDecimal(line.giftRate || "0", { maxScale: 6 }),
             cardForm: line.cardForm.trim(),
           }
         : {
@@ -429,14 +456,21 @@ export async function createSalesOrder(
             dueDate: line.dueDate,
           }),
     }
+    return { item, amounts }
   })
-  const gross = lineItems.reduce(
-    (sum, line) => sum + numericValue(line.amountGross),
-    0
+  const lineItems = computedLines.map(({ item }) => item)
+  const gross = sumFixed(
+    computedLines.map(({ amounts }) => amounts.gross),
+    { maxScale: 2, outputScale: 2 }
   )
-  const taxRate = numericValue(input.taxRatePercent)
-  const net = gross / (1 + taxRate / 100)
-  const tax = gross - net
+  const net = sumFixed(
+    computedLines.map(({ amounts }) => amounts.net),
+    { maxScale: 2, outputScale: 2 }
+  )
+  const tax = sumFixed(
+    computedLines.map(({ amounts }) => amounts.tax),
+    { maxScale: 2, outputScale: 2 }
+  )
   const now = new Date()
   const date = localDateParts(now)
   const sequence = listMockSalesOrders().length + 1
@@ -453,7 +487,7 @@ export async function createSalesOrder(
           workItemStatus: "UNCLAIMED",
           subjectVersion: "sub:1",
           subjectHash: `sha256:${salesOrderId.slice(-10)}…draft`,
-          frozenSubmissionSummary: `${lineItems[0]?.name ?? "卡券"} · ${lineItems[0]?.quantity ?? "0"} 张 · 面值 ${lineItems[0]?.faceValue ?? "0.00"} · ${lineItems[0]?.cardForm ?? "—"} · 履约期限至 ${input.fulfillmentDeadline} · 含税 ${gross.toFixed(2)}`,
+          frozenSubmissionSummary: `${lineItems[0]?.name ?? "卡券"} · ${lineItems[0]?.quantity ?? "0"} 张 · 面值 ${lineItems[0]?.faceValue ?? "0.00"} · ${lineItems[0]?.cardForm ?? "—"} · 履约期限至 ${input.fulfillmentDeadline} · 含税 ${gross}`,
           expectedReviewStatus: "PENDING_SALES_LEAD",
           allowedActions: ["CLAIM"],
           actionBlockers: [
@@ -481,9 +515,9 @@ export async function createSalesOrder(
       fulfillment: { label: "未开始", tone: "neutral" },
       collection: { label: "未收", tone: "neutral" },
       invoicing: { label: "未开", tone: "neutral" },
-      amountGross: gross.toFixed(2),
-      amountNet: net.toFixed(2),
-      taxAmount: tax.toFixed(2),
+      amountGross: gross,
+      amountNet: net,
+      taxAmount: tax,
       receivedAmount: "0.00",
       invoicedAmount: "0.00",
       ownerName: input.ownerName.trim(),

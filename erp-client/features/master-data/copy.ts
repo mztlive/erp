@@ -108,7 +108,7 @@ export const masterDataCopy = {
   fieldDisableReason: "停用原因",
   fieldResourceSection: "资源专属信息",
   fieldIdentitySection: "商品信息",
-  fieldCatalogSection: "分类与供应",
+  fieldCatalogSection: "分类与品牌",
   fieldMediaSection: "商品图片（SPU）",
   fieldSpecSection: "规格",
   fieldSkuSection: "SKU（由规格组合生成）",
@@ -126,15 +126,6 @@ export const masterDataCopy = {
   fSalePrice: "销售价",
   fMarketPrice: "市场价",
   fProductCode: "产品编码",
-  fFulfillmentResponsibility: "履约方式",
-  fInputTaxRate: "进项税率",
-  fDropshipCostPrice: "一件代发成本价（含税运）",
-  fDropshipFloorPrice: "一件代发底价（含税运）",
-  fDropshipExpress: "一件代发快递",
-  fDropshipMoq: "一件代发起订量",
-  fBulkCostPrice: "集采成本价（含税）",
-  fBulkFloorPrice: "集采底价（含税）",
-  fBulkMoq: "集采起订量",
   fSpecName: "规格名",
   fSpecValues: "规格取值",
   fSpecLabel: "规格",
@@ -147,13 +138,11 @@ export const masterDataCopy = {
   productCreateDesc:
     "以 SPU 维护商品，配置规格后组合生成 SKU。主图在 SKU；轮播图与详情图在商品（SPU）。保存后进入同一详情页继续维护。",
   productEditDesc:
-    "详情页可直接修改并保存：保存即生成新版本。规格取值变更会重建 SKU 组合，已有主图/价格/供给尽量按规格匹配保留。",
+    "详情页可直接修改并保存：保存即生成新版本。规格取值变更会重建 SKU 组合，已有主图和参考价格尽量按规格匹配保留。",
   productSpecsHint:
     "添加规格维度（如颜色、规格），填写取值后自动组合出 SKU。无规格时保留一个默认 SKU。",
   productSkuHint:
-    "产品编码默认生成可改；一件代发与集采供给分列维护（含税口径不同）；进项税率归供给/采购；库存仍由台账独立维护。",
-  productSupplyHint:
-    "底价为供应商给我们的底价。一件代发起订量固定为 1；集采起订量可填。正式供给版本在外部商品供给确认后生效。",
+    "SKU 只维护身份、主图与参考售价；供应商、供给方式、成本、税费和起订量在 W21 独立维护，库存由库存台账独立维护。",
   productAddSpec: "添加规格",
   productRemoveSpec: "移除规格",
   productRebuildSkus: "按规格重新生成 SKU",

@@ -44,6 +44,15 @@ import {
   PO_STATUS_TONE,
 } from "@/features/purchase-orders/types"
 import {
+  canonicalDecimal,
+  compareDecimal,
+  multiplyFixed,
+  normalizeFixed,
+  parseDecimal,
+  splitGrossByFractionRate,
+  sumFixed,
+} from "@/lib/fixed-decimal"
+import {
   MOCK_CREATION_BASES,
   MOCK_PURCHASE_ORDER_SEEDS,
   buildLines,
@@ -2001,8 +2010,14 @@ export function submitW10Adjustment(input: {
     }
   }
 
-  const qty = Number(input.quantity)
-  if (!Number.isFinite(qty) || qty <= 0) {
+  let quantityValid = false
+  try {
+    parseDecimal(input.quantity, { maxScale: 6 })
+    quantityValid = compareDecimal(input.quantity, "0", 6) > 0
+  } catch {
+    quantityValid = false
+  }
+  if (!quantityValid) {
     return {
       status: "failed",
       code: "VALIDATION",
@@ -2560,34 +2575,41 @@ function recomputeLine(
     logisticsFeeReason?: string
   }
 ): PurchaseOrderLineView {
-  const rate = Number(patch.inputTaxRate)
-  const unit = Number(patch.unitCostGross ?? line.unitCostGross)
+  const unit = canonicalDecimal(patch.unitCostGross ?? line.unitCostGross, {
+    maxScale: 4,
+  })
   if (line.lineType === "LOGISTICS_FEE") {
-    const gross = Math.round(unit * 100) / 100
-    const net = Math.round((gross / (1 + rate)) * 100) / 100
-    const tax = Math.round((gross - net) * 100) / 100
+    const unitAmount = normalizeFixed(unit, { maxScale: 4, outputScale: 2 })
+    const amounts = splitGrossByFractionRate(unitAmount, patch.inputTaxRate)
     return {
       ...line,
-      unitCostGross: unit.toFixed(2),
+      unitCostGross: unitAmount,
       inputTaxRate: patch.inputTaxRate,
       logisticsFeeReason: patch.logisticsFeeReason ?? line.logisticsFeeReason,
-      grossAmount: gross.toFixed(2),
-      netAmount: net.toFixed(2),
-      taxAmount: tax.toFixed(2),
+      grossAmount: amounts.gross,
+      netAmount: amounts.net,
+      taxAmount: amounts.tax,
     }
   }
-  const qty = Number(patch.quantity ?? line.quantity ?? "0")
-  const gross = Math.round(qty * unit * 100) / 100
-  const net = Math.round((gross / (1 + rate)) * 100) / 100
-  const tax = Math.round((gross - net) * 100) / 100
+  const quantity = canonicalDecimal(patch.quantity ?? line.quantity ?? "0", {
+    maxScale: 6,
+  })
+  const amounts = splitGrossByFractionRate(
+    multiplyFixed(quantity, unit, {
+      leftMaxScale: 6,
+      rightMaxScale: 4,
+      outputScale: 2,
+    }),
+    patch.inputTaxRate
+  )
   return {
     ...line,
-    quantity: qty.toFixed(0),
-    unitCostGross: unit.toFixed(4),
+    quantity,
+    unitCostGross: unit,
     inputTaxRate: patch.inputTaxRate,
-    grossAmount: gross.toFixed(2),
-    netAmount: net.toFixed(2),
-    taxAmount: tax.toFixed(2),
+    grossAmount: amounts.gross,
+    netAmount: amounts.net,
+    taxAmount: amounts.tax,
   }
 }
 
@@ -3518,9 +3540,13 @@ export function createW08FromBasis(input: {
       progressTone: "neutral",
       inboundQty: "0",
       shippedQty: "0",
-      remainingQty: basis.lines
-        .reduce((s, l) => s + Number(l.quantity), 0)
-        .toFixed(0),
+      remainingQty: canonicalDecimal(
+        sumFixed(
+          basis.lines.map((line) => line.quantity),
+          { maxScale: 6, outputScale: 6 }
+        ),
+        { maxScale: 6 }
+      ),
     },
     changes: [],
     workflow: [
@@ -3744,6 +3770,7 @@ export class SupplierPayablesMockError extends Error {
   }
 }
 
+// W12 still uses integer cents internally; its broader refactor is outside this W05/W08/W10 pass.
 function w12Cents(s: string): number {
   const n = Number(s)
   if (!Number.isFinite(n)) return 0
@@ -3755,15 +3782,19 @@ function w12FromCents(c: number): string {
 }
 
 function w12Add(a: string, b: string): string {
-  return w12FromCents(w12Cents(a) + w12Cents(b))
+  return sumFixed([a, b], { maxScale: 2, outputScale: 2 })
 }
 
 function w12Sub(a: string, b: string): string {
-  return w12FromCents(w12Cents(a) - w12Cents(b))
+  return sumFixed([a, `-${b}`], {
+    maxScale: 2,
+    outputScale: 2,
+    allowNegative: true,
+  })
 }
 
 function w12Max0(a: string): string {
-  return w12Cents(a) < 0 ? "0.00" : a
+  return compareDecimal(a, "0", 2) < 0 ? "0.00" : a
 }
 
 type W12PayableOverlay = {

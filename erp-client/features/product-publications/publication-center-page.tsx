@@ -62,6 +62,7 @@ import {
   SALE_STATUS_LABEL,
 } from "@/features/product-publications/types"
 import { cn } from "@/lib/utils"
+import { compareDecimal } from "@/lib/fixed-decimal"
 
 const SECTIONS = [
   { id: "overview", label: "概览" },
@@ -98,7 +99,7 @@ type SessionEdit = {
   salesTaxRate: string
   saleStatus: SaleStatus
   baseUnitCode: string
-  salesRegionLabel: string
+  salesRegion: string[]
   categoryId: string
   skuRevisionId: string
   supplierOfferingRevisionId: string
@@ -119,16 +120,52 @@ type ResultState =
     }
   | null
 
+const publishDecimal = (label: string, maxScale: number, positive = false) =>
+  z
+    .string()
+    .trim()
+    .regex(
+      new RegExp(`^\\d+(?:\\.\\d{1,${maxScale}})?$`),
+      `${label}最多保留 ${maxScale} 位小数`
+    )
+    .refine((value) => !positive || /[1-9]/.test(value), `${label}必须大于 0`)
+
+function decimalAtMost(value: string, maximum: string, maxScale: number) {
+  try {
+    return compareDecimal(value, maximum, maxScale) <= 0
+  } catch {
+    return false
+  }
+}
+
 const publishSchema = z.object({
   name: z.string().trim().min(1, "请填写展示名称"),
   specification: z.string().trim().min(1, "请填写规格"),
   salesDescription: z.string().trim().min(1, "销售说明必填"),
-  minimumPurchaseQuantity: z
-    .string()
-    .trim()
-    .refine((v) => Number(v) > 0, "最小购买量必须大于 0"),
-  salesPriceGross: z.string().trim().min(1, "请填写含税销售价"),
-  salesTaxRate: z.string().trim().min(1, "请填写销项税率"),
+  minimumPurchaseQuantity: publishDecimal("最小购买量", 6, true),
+  salesPriceGross: publishDecimal("含税销售价", 4, true),
+  salesTaxRate: publishDecimal("销项税率", 6).refine(
+    (value) => decimalAtMost(value, "1", 6),
+    "销项税率必须为 0 到 1 的十进制数"
+  ),
+  categoryId: z.string().trim().min(1, "请填写商城类目 ID"),
+  skuRevisionId: z.string().trim().min(1, "请填写 SKU 修订 ID"),
+  supplierOfferingRevisionId: z.string().trim().min(1, "请选择固定供给修订"),
+  baseUnitCode: z.string().trim().min(1, "请填写基础单位代码"),
+  salesRegionText: z.string().trim().min(1, "请填写可销售区域"),
+  productCapabilitiesText: z.string(),
+  validFrom: z.string().min(1, "请选择生效时间"),
+  validTo: z.string(),
+  media: z
+    .array(
+      z.object({
+        fileAssetId: z.string().min(1),
+        mediaRole: z.enum(["MAIN", "CAROUSEL", "DETAIL"]),
+        sortNo: z.number().int().nonnegative(),
+        altText: z.string().trim().min(1, "图片说明必填"),
+      })
+    )
+    .min(1, "至少需要一张图片"),
   saleStatus: z.enum(["ON_SALE", "OFF_SALE", "PAUSED"]),
 })
 
@@ -395,6 +432,20 @@ export function PublicationCenterPage({
       minimumPurchaseQuantity: "1",
       salesPriceGross: "",
       salesTaxRate: "0.13",
+      categoryId: "",
+      skuRevisionId: "",
+      supplierOfferingRevisionId: "",
+      baseUnitCode: "",
+      salesRegionText: "",
+      productCapabilitiesText: "",
+      validFrom: "",
+      validTo: "",
+      media: [] as Array<{
+        fileAssetId: string
+        mediaRole: "MAIN" | "CAROUSEL" | "DETAIL"
+        sortNo: number
+        altText: string
+      }>,
       saleStatus: "ON_SALE" as SaleStatus,
     },
     validators: { onChange: publishSchema },
@@ -416,7 +467,9 @@ export function PublicationCenterPage({
       salesTaxRate: base.salesTaxRate,
       saleStatus: base.saleStatus === "PAUSED" ? "PAUSED" : base.saleStatus,
       baseUnitCode: base.baseUnitCode,
-      salesRegionLabel: base.salesRegionLabel,
+      salesRegion:
+        base.salesRegion ??
+        base.salesRegionLabel.split(/[、，,]/).map((entry) => entry.trim()).filter(Boolean),
       categoryId: base.categoryId,
       skuRevisionId: base.skuRevisionId,
       supplierOfferingRevisionId: base.supplierOfferingRevisionId,
@@ -425,14 +478,29 @@ export function PublicationCenterPage({
       media: base.media.map((m) => ({ ...m })),
     }
     setSessionEdit(edit)
-    form.reset()
-    form.setFieldValue("name", edit.name)
-    form.setFieldValue("specification", edit.specification)
-    form.setFieldValue("salesDescription", edit.salesDescription)
-    form.setFieldValue("minimumPurchaseQuantity", edit.minimumPurchaseQuantity)
-    form.setFieldValue("salesPriceGross", edit.salesPriceGross)
-    form.setFieldValue("salesTaxRate", edit.salesTaxRate)
-    form.setFieldValue("saleStatus", edit.saleStatus)
+    form.reset({
+      name: edit.name,
+      specification: edit.specification,
+      salesDescription: edit.salesDescription,
+      minimumPurchaseQuantity: edit.minimumPurchaseQuantity,
+      salesPriceGross: edit.salesPriceGross,
+      salesTaxRate: edit.salesTaxRate,
+      categoryId: edit.categoryId,
+      skuRevisionId: edit.skuRevisionId,
+      supplierOfferingRevisionId: edit.supplierOfferingRevisionId,
+      baseUnitCode: edit.baseUnitCode,
+      salesRegionText: edit.salesRegion.join("、"),
+      productCapabilitiesText: edit.productCapabilities.join("、"),
+      validFrom: edit.validFrom,
+      validTo: edit.validTo ?? "",
+      media: edit.media.map((media) => ({
+        fileAssetId: media.fileAssetId,
+        mediaRole: media.mediaRole,
+        sortNo: media.sortNo,
+        altText: media.altText,
+      })),
+      saleStatus: edit.saleStatus,
+    })
     setLastResult(null)
     requestIdRef.current = null
   }, [data, form])
@@ -486,22 +554,28 @@ export function PublicationCenterPage({
       requestId: requestIdRef.current,
       forceUnknown: forceUnknownOnce,
       content: {
-        skuRevisionId: sessionEdit.skuRevisionId,
-        supplierOfferingRevisionId: sessionEdit.supplierOfferingRevisionId,
-        categoryId: sessionEdit.categoryId,
+        skuRevisionId: values.skuRevisionId.trim(),
+        supplierOfferingRevisionId: values.supplierOfferingRevisionId.trim(),
+        categoryId: values.categoryId.trim(),
         name: values.name.trim(),
         specification: values.specification.trim(),
         salesDescription: values.salesDescription.trim(),
         minimumPurchaseQuantity: values.minimumPurchaseQuantity.trim(),
         salesPriceGross: values.salesPriceGross.trim(),
         salesTaxRate: values.salesTaxRate.trim(),
-        baseUnitCode: sessionEdit.baseUnitCode,
-        salesRegionLabel: sessionEdit.salesRegionLabel,
+        baseUnitCode: values.baseUnitCode.trim(),
+        salesRegion: values.salesRegionText
+          .split(/[、，,]/)
+          .map((entry) => entry.trim())
+          .filter(Boolean),
         saleStatus: values.saleStatus,
-        productCapabilities: sessionEdit.productCapabilities,
-        validFrom: sessionEdit.validFrom,
-        validTo: sessionEdit.validTo,
-        media: sessionEdit.media.map((m) => ({
+        productCapabilities: values.productCapabilitiesText
+          .split(/[、，,]/)
+          .map((entry) => entry.trim())
+          .filter(Boolean),
+        validFrom: values.validFrom,
+        validTo: values.validTo || undefined,
+        media: values.media.map((m) => ({
           fileAssetId: m.fileAssetId,
           mediaRole: m.mediaRole,
           sortNo: m.sortNo,
@@ -1116,19 +1190,49 @@ export function PublicationCenterPage({
                     )}
                   </form.AppField>
                 </div>
-                {sessionEdit ? (
-                  <p className="text-xs text-muted-foreground">
-                    固定供给{" "}
-                    <span className="num">
-                      {sessionEdit.supplierOfferingRevisionId}
-                    </span>
-                    {" · 供应商起订 "}
-                    <span className="num">
-                      {data.selectedRevision.fixedOffering.supplierMoq ?? "—"}
-                    </span>
-                    （只读展示，不复制到最小购买量）
-                  </p>
-                ) : null}
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <form.AppField name="skuRevisionId">
+                    {(field) => <field.TextField label="SKU 修订 ID" />}
+                  </form.AppField>
+                  <form.AppField name="categoryId">
+                    {(field) => <field.TextField label="商城类目 ID" />}
+                  </form.AppField>
+                  <form.AppField name="supplierOfferingRevisionId">
+                    {(field) => <field.TextField label="唯一固定供给修订 ID" />}
+                  </form.AppField>
+                  <form.AppField name="baseUnitCode">
+                    {(field) => <field.TextField label="基础单位代码" />}
+                  </form.AppField>
+                  <form.AppField name="salesRegionText">
+                    {(field) => <field.TextField label="可销售区域（顿号/逗号分隔）" />}
+                  </form.AppField>
+                  <form.AppField name="productCapabilitiesText">
+                    {(field) => <field.TextField label="商品能力（顿号/逗号分隔）" />}
+                  </form.AppField>
+                  <form.AppField name="validFrom">
+                    {(field) => <field.TextField label="生效时间" />}
+                  </form.AppField>
+                  <form.AppField name="validTo">
+                    {(field) => <field.TextField label="失效时间（可空）" />}
+                  </form.AppField>
+                </div>
+                <div className="space-y-2 rounded-lg border p-3">
+                  <div className="text-sm font-medium">发布媒体快照</div>
+                  {sessionEdit?.media.map((media, index) => (
+                    <div key={media.fileAssetId} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_2fr]">
+                      <div className="text-xs text-muted-foreground">
+                        {media.mediaRole} · {media.fileAssetId} · 顺序 {media.sortNo}
+                      </div>
+                      <form.AppField name={`media[${index}].altText`}>
+                        {(field) => <field.TextField label="图片说明" />}
+                      </form.AppField>
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  供应商起订 {data.selectedRevision.fixedOffering.supplierMoq ?? "—"}
+                  （只读展示，不复制到商城最小购买量）。供给修订、区域、能力和媒体变化都会形成新发布修订。
+                </p>
                 <div className="flex flex-wrap gap-2">
                   <form.AppForm>
                     <form.SubmitButton label="核对并提交发布" />
@@ -1464,7 +1568,7 @@ export function PublicationCenterPage({
                 `目标商城 ${data.identity.targetMallName}`,
                 `含税销售价 ¥${form.state.values.salesPriceGross}`,
                 `销售状态 ${SALE_STATUS_LABEL[form.state.values.saleStatus]}`,
-                `固定供给 ${sessionEdit.supplierOfferingRevisionId}`,
+                `固定供给 ${form.state.values.supplierOfferingRevisionId}`,
                 `最小购买量 ${form.state.values.minimumPurchaseQuantity}`,
                 `发布检查：${data.publishGate.kind}`,
               ]

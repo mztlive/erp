@@ -20,31 +20,48 @@ import {
   PURCHASE_TYPE_LABEL,
   REVIEW_STATUS_LABEL,
 } from "@/features/purchase-orders/types"
+import {
+  canonicalDecimal,
+  multiplyFixed,
+  normalizeFixed,
+  splitGrossByFractionRate,
+  sumFixed,
+} from "@/lib/fixed-decimal"
 
 function lineAmounts(
-  qty: number,
-  unitGross: number,
-  taxRate: number
+  qty: string,
+  unitGross: string,
+  taxRate: string
 ): Pick<PurchaseOrderLineView, "grossAmount" | "netAmount" | "taxAmount"> {
-  // 定点：行先舍入到分（演示固定算法，与页面只读服务端结果一致）
-  const gross = Math.round(qty * unitGross * 100) / 100
-  const net = Math.round((gross / (1 + taxRate)) * 100) / 100
-  const tax = Math.round((gross - net) * 100) / 100
+  const amounts = splitGrossByFractionRate(
+    multiplyFixed(qty, unitGross, {
+      leftMaxScale: 6,
+      rightMaxScale: 4,
+      outputScale: 2,
+    }),
+    taxRate
+  )
   return {
-    grossAmount: gross.toFixed(2),
-    netAmount: net.toFixed(2),
-    taxAmount: tax.toFixed(2),
+    grossAmount: amounts.gross,
+    netAmount: amounts.net,
+    taxAmount: amounts.tax,
   }
 }
 
 function sumLines(lines: readonly PurchaseOrderLineView[]) {
-  const gross = lines.reduce((s, l) => s + Number(l.grossAmount), 0)
-  const net = lines.reduce((s, l) => s + Number(l.netAmount), 0)
-  const tax = lines.reduce((s, l) => s + Number(l.taxAmount), 0)
   return {
-    gross: gross.toFixed(2),
-    net: net.toFixed(2),
-    tax: tax.toFixed(2),
+    gross: sumFixed(lines.map((line) => line.grossAmount), {
+      maxScale: 2,
+      outputScale: 2,
+    }),
+    net: sumFixed(lines.map((line) => line.netAmount), {
+      maxScale: 2,
+      outputScale: 2,
+    }),
+    tax: sumFixed(lines.map((line) => line.taxAmount), {
+      maxScale: 2,
+      outputScale: 2,
+    }),
   }
 }
 
@@ -65,22 +82,25 @@ type SeedLine = {
 
 function buildLines(raw: SeedLine[]): PurchaseOrderLineView[] {
   return raw.map((r) => {
-    const rate = Number(r.inputTaxRate)
     if (r.lineType === "LOGISTICS_FEE") {
-      const unit = Number(r.unitCostGross)
-      const amounts = lineAmounts(1, unit, rate)
+      const unit = normalizeFixed(r.unitCostGross, {
+        maxScale: 4,
+        outputScale: 2,
+      })
+      const amounts = lineAmounts("1", unit, r.inputTaxRate)
       return {
         ...r,
-        unitCostGross: Number(r.unitCostGross).toFixed(2),
+        unitCostGross: unit,
         ...amounts,
       }
     }
-    const qty = Number(r.quantity ?? "0")
-    const unit = Number(r.unitCostGross)
-    const amounts = lineAmounts(qty, unit, rate)
+    const qty = canonicalDecimal(r.quantity ?? "0", { maxScale: 6 })
+    const unit = canonicalDecimal(r.unitCostGross, { maxScale: 4 })
+    const amounts = lineAmounts(qty, unit, r.inputTaxRate)
     return {
       ...r,
-      unitCostGross: unit.toFixed(4),
+      quantity: qty,
+      unitCostGross: unit,
       ...amounts,
     }
   })

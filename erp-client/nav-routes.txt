@@ -13,6 +13,8 @@ WORKSPACE_NAV_GROUPS hrefs:
  - /finance/card-funds-review
  - /master-data/sellable-items
  - /master-data/products
+ - /master-data/categories
+ - /master-data/brands
  - /master-data/voucher-categories
  - /master-data/suppliers
  - /master-data/warehouses

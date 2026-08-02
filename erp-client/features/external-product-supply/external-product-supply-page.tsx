@@ -53,7 +53,6 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
   DemoRole,
@@ -76,6 +75,7 @@ import {
   useSaveExternalCatalogDraftMutation,
 } from "@/features/external-product-supply/queries"
 import { cn } from "@/lib/utils"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import { versionText } from "@/lib/ui-text"
 
 type SessionLease = {
@@ -129,6 +129,43 @@ const completeSchema = z.object({
   comment: z.string().trim().min(4, "请填写至少 4 个字的结论说明"),
 })
 
+const decimalString = (label: string, maxScale: number, positive = false) =>
+  z
+    .string()
+    .trim()
+    .regex(
+      new RegExp(`^\\d+(?:\\.\\d{1,${maxScale}})?$`),
+      `${label}最多保留 ${maxScale} 位小数`
+    )
+    .refine((value) => !positive || /[1-9]/.test(value), `${label}必须大于 0`)
+
+function decimalAtMost(value: string, maximum: string, maxScale: number) {
+  try {
+    return compareDecimal(value, maximum, maxScale) <= 0
+  } catch {
+    return false
+  }
+}
+
+const offeringDraftSchema = z.object({
+  supplyMode: z.enum(["DROPSHIP", "BULK"]),
+  supplyPriceGross: decimalString("含税供货价", 4, true),
+  floorPriceGross: decimalString("含税底价", 4),
+  dropshipExpress: z.string(),
+  inputTaxRate: decimalString("进项税率", 6).refine(
+    (value) => decimalAtMost(value, "1", 6),
+    "进项税率必须为 0 到 1 的十进制数"
+  ),
+  freightAmount: decimalString("运费", 2),
+  serviceFeeAmount: decimalString("服务费", 2),
+  minimumOrderQuantity: decimalString("最小起订量", 6, true),
+  supplyRegionText: z.string().trim().min(1, "请填写可供区域"),
+  productCapabilitiesText: z.string(),
+  validFrom: z.string().min(1, "请选择生效日期"),
+  validTo: z.string(),
+  note: z.string(),
+})
+
 function formatTime(iso?: string) {
   if (!iso) return "—"
   try {
@@ -167,6 +204,15 @@ export function ExternalProductSupplyPage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const mode: "list" | "queue" =
+    searchParams.get("mode") === "list" ? "list" : "queue"
+  const skuId = searchParams.get("skuId") ?? undefined
+  const returnToParam = searchParams.get("returnTo")
+  const safeReturnTo =
+    returnToParam?.startsWith("/master-data/products/") ||
+    returnToParam === "/master-data/products"
+      ? returnToParam
+      : undefined
 
   const changeTypeParam = searchParams.get("changeType")
   const changeType: ExternalCatalogQueueQueryChangeType =
@@ -176,7 +222,9 @@ export function ExternalProductSupplyPage() {
     changeTypeParam === "ERROR" ||
     changeTypeParam === "all"
       ? changeTypeParam
-      : "actionable"
+      : mode === "list"
+        ? "all"
+        : "actionable"
 
   const statusParam = searchParams.get("status")
   const status: "pending" | "held" =
@@ -198,7 +246,7 @@ export function ExternalProductSupplyPage() {
     searchParams.get("currentWorkItemId") ?? undefined
   const queueContextId =
     searchParams.get("queueContextId") ??
-    `queue:W21:${demoRole}:${changeType}`
+    `queue:W21:${demoRole}:${changeType}:${skuId ?? "all"}`
 
   const autoNextExplicit = searchParams.get("autoNext")
   const [sessionAutoNext, setSessionAutoNext] = React.useState(true)
@@ -211,6 +259,8 @@ export function ExternalProductSupplyPage() {
 
   const filters = React.useMemo(
     () => ({
+      mode,
+      skuId,
       changeType,
       status,
       demoRole,
@@ -221,6 +271,8 @@ export function ExternalProductSupplyPage() {
       queueContextId,
     }),
     [
+      mode,
+      skuId,
       changeType,
       status,
       demoRole,
@@ -268,9 +320,7 @@ export function ExternalProductSupplyPage() {
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const [selectedSkuId, setSelectedSkuId] = React.useState<string>("")
-  const [draftNote, setDraftNote] = React.useState("")
   const [substituteIds, setSubstituteIds] = React.useState<string[]>([])
-  const [moqDraft, setMoqDraft] = React.useState("")
   const [searchInput, setSearchInput] = React.useState(q ?? "")
 
   const headingRef = React.useRef<HTMLHeadingElement>(null)
@@ -279,21 +329,104 @@ export function ExternalProductSupplyPage() {
   const [activeLease, setActiveLease] = React.useState<SessionLease | null>(null)
   const idempotencyRef = React.useRef<Record<string, string>>({})
 
+  const offeringForm = useAppForm({
+    defaultValues: {
+      supplyMode: "BULK" as "DROPSHIP" | "BULK",
+      supplyPriceGross: "",
+      floorPriceGross: "",
+      dropshipExpress: "",
+      inputTaxRate: "",
+      freightAmount: "0.00",
+      serviceFeeAmount: "0.00",
+      minimumOrderQuantity: "",
+      supplyRegionText: "",
+      productCapabilitiesText: "",
+      validFrom: "",
+      validTo: "",
+      note: "",
+    },
+    validators: { onChange: offeringDraftSchema },
+    onSubmit: async ({ value }) => {
+      if (!item?.offering?.proposedDefaults) return
+      try {
+        await saveDraftMutation.mutateAsync({
+          externalProductId: item.externalProduct.id,
+          selectedSkuId: selectedSkuId || undefined,
+          offeringDraft: {
+            supplyMode: value.supplyMode,
+            supplyPriceGross: value.supplyPriceGross,
+            floorPriceGross: value.floorPriceGross,
+            dropshipExpress:
+              value.supplyMode === "DROPSHIP"
+                ? value.dropshipExpress.trim() || undefined
+                : undefined,
+            inputTaxRate: value.inputTaxRate,
+            freightAmount: value.freightAmount,
+            serviceFeeAmount: value.serviceFeeAmount,
+            minimumOrderQuantity: value.minimumOrderQuantity,
+            supplyRegion: value.supplyRegionText
+              .split(/[，,]/)
+              .map((entry) => entry.trim())
+              .filter(Boolean),
+            productCapabilities: value.productCapabilitiesText
+              .split(/[，,]/)
+              .map((entry) => entry.trim())
+              .filter(Boolean),
+            validFrom: value.validFrom,
+            validTo: value.validTo || undefined,
+            sessionDraftOnly: true,
+          },
+          substituteCandidateSkuIds: substituteIds,
+          note: value.note.trim() || undefined,
+        })
+        setLastResult({
+          status: "blocked",
+          title: "会话草稿已保存",
+          description:
+            "草稿仅存于当前会话：未经审核不写 ERP SKU / 商城商品 / 供给修订。映射确认与供给类型登记前无写入口。",
+          stayOnItem: true,
+          terminal: false,
+        })
+      } catch (error) {
+        setActionError(error instanceof Error ? error.message : "保存草稿失败")
+      }
+    },
+  })
+
   // 切换队列项时重置会话草稿 UI（与 W13 等队列页同一模式）
    
   React.useEffect(() => {
     if (!item) return
     const proposed = item.offering?.proposedDefaults
+    const contextSkuId =
+      skuId &&
+      (item.mapping?.skuId === skuId ||
+        item.skuCandidates.some((candidate) => candidate.skuId === skuId))
+        ? skuId
+        : undefined
     setSelectedSkuId(
-      item.mapping?.skuId ?? item.skuCandidates[0]?.skuId ?? ""
+      contextSkuId ?? item.mapping?.skuId ?? item.skuCandidates[0]?.skuId ?? ""
     )
-    setMoqDraft(proposed?.minimumOrderQuantity ?? "")
-    setDraftNote("")
+    offeringForm.reset({
+      supplyMode: proposed?.supplyMode ?? "BULK",
+      supplyPriceGross: proposed?.supplyPriceGross ?? "",
+      floorPriceGross: proposed?.floorPriceGross ?? "",
+      dropshipExpress: proposed?.dropshipExpress ?? "",
+      inputTaxRate: proposed?.inputTaxRate ?? "",
+      freightAmount: proposed?.freightAmount ?? "0.00",
+      serviceFeeAmount: proposed?.serviceFeeAmount ?? "0.00",
+      minimumOrderQuantity: proposed?.minimumOrderQuantity ?? "",
+      supplyRegionText: proposed?.supplyRegion.join("、") ?? "",
+      productCapabilitiesText: proposed?.productCapabilities.join("、") ?? "",
+      validFrom: proposed?.validFrom ?? "",
+      validTo: proposed?.validTo ?? "",
+      note: "",
+    })
     setSubstituteIds([])
     setActionError(null)
     idempotencyRef.current = {}
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅按外部商品身份重置草稿
-  }, [item?.externalProduct.id])
+  }, [item?.externalProduct.id, skuId])
    
 
   // URL defaults
@@ -372,7 +505,10 @@ export function ExternalProductSupplyPage() {
         if (value == null || value === "") params.delete(key)
         else params.set(key, value)
       }
-      if (!params.has("queueContextId")) {
+      if (
+        !params.has("queueContextId") &&
+        !Object.prototype.hasOwnProperty.call(patch, "queueContextId")
+      ) {
         params.set("queueContextId", queueContextId)
       }
       const qs = params.toString()
@@ -682,41 +818,11 @@ export function ExternalProductSupplyPage() {
     },
   })
 
-  const onSaveDraft = async () => {
-    if (!item) return
-    const proposed = item.offering?.proposedDefaults
-    try {
-      await saveDraftMutation.mutateAsync({
-        externalProductId: item.externalProduct.id,
-        selectedSkuId: selectedSkuId || undefined,
-        offeringDraft: proposed
-          ? {
-              ...proposed,
-              minimumOrderQuantity: moqDraft || proposed.minimumOrderQuantity,
-              sessionDraftOnly: true,
-            }
-          : undefined,
-        substituteCandidateSkuIds: substituteIds,
-        note: draftNote || undefined,
-      })
-      setLastResult({
-        status: "blocked",
-        title: "会话草稿已保存",
-        description:
-          "草稿仅存于当前会话：未经审核不写 ERP SKU / 商城商品 / 供给修订。映射确认与供给类型登记前无写入口。",
-        stayOnItem: true,
-        terminal: false,
-      })
-    } catch (e) {
-      setActionError(e instanceof Error ? e.message : "保存草稿失败")
-    }
-  }
-
   const w14Href = item
-    ? `/master-data/sku?from=W21&externalProductId=${encodeURIComponent(item.externalProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}&queueContextId=${encodeURIComponent(queueContextId)}`
+    ? `/master-data/products?from=W21&externalProductId=${encodeURIComponent(item.externalProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}&queueContextId=${encodeURIComponent(queueContextId)}`
     : "/master-data"
-  const w22Href = item?.mapping?.skuId
-    ? `/commerce/publications?from=W21&skuId=${encodeURIComponent(item.mapping.skuId)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}&queueContextId=${encodeURIComponent(queueContextId)}`
+  const w22Href = item?.mapping?.skuId && item.offering?.currentRevision
+    ? `/commerce/publications?from=W21&skuId=${encodeURIComponent(item.mapping.skuId)}&supplierOfferingRevisionId=${encodeURIComponent(item.offering.currentRevision.offeringRevisionId)}&externalProductId=${encodeURIComponent(item.externalProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}&queueContextId=${encodeURIComponent(queueContextId)}`
     : "/commerce/publications"
   const w20Href = item
     ? `/supplier-api/connections?connectionId=${encodeURIComponent(item.externalProduct.connection.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
@@ -777,9 +883,36 @@ export function ExternalProductSupplyPage() {
             dateTime={context?.queueContextUpdatedAt}
           />
         }
+        actions={
+          safeReturnTo ? (
+            <Button variant="outline" size="sm" render={<Link href={safeReturnTo} />}>
+              返回商品与 SKU
+            </Button>
+          ) : undefined
+        }
       />
 
       <div className="flex flex-wrap items-center gap-2">
+        {skuId ? (
+          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1">
+            <Badge variant="outline">SKU {skuId}</Badge>
+            <Button
+              type="button"
+              variant="ghost"
+              size="xs"
+              onClick={() =>
+                replaceUrl({
+                  skuId: null,
+                  currentExternalProductId: null,
+                  currentWorkItemId: null,
+                  queueContextId: null,
+                })
+              }
+            >
+              清除 SKU 筛选
+            </Button>
+          </div>
+        ) : null}
         <ToggleGroup
           value={[changeType]}
           onValueChange={(v) => {
@@ -1536,6 +1669,17 @@ export function ExternalProductSupplyPage() {
                           numeric: true,
                         },
                         {
+                          id: "floor",
+                          label: "含税底价",
+                          value: item.offering.currentRevision.floorPriceGross ?? "—",
+                          numeric: true,
+                        },
+                        {
+                          id: "mode",
+                          label: "供给模式 / 快递",
+                          value: `${item.offering.currentRevision.supplyMode === "DROPSHIP" ? "一件代发" : "集采"} / ${item.offering.currentRevision.dropshipExpress ?? "—"}`,
+                        },
+                        {
                           id: "moq",
                           label: "MOQ（供给）",
                           value: item.offering.currentRevision.minimumOrderQuantity,
@@ -1550,56 +1694,96 @@ export function ExternalProductSupplyPage() {
                   )}
 
                   {item.offering?.proposedDefaults ? (
-                    <div className="space-y-2 rounded-lg border border-dashed px-3 py-2">
+                    <form
+                      className="space-y-3 rounded-lg border border-dashed px-3 py-3"
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        void offeringForm.handleSubmit()
+                      }}
+                    >
                       <p className="text-xs font-medium">
-                        拟生效草稿（会话）· 含税{" "}
-                        {item.offering.proposedDefaults.supplyPriceGross}
+                        拟生效供给草稿（会话）· 完整字段仅作为正式确认候选
                       </p>
-                      <div className="space-y-1">
-                        <Label htmlFor="moq-draft">草稿 MOQ</Label>
-                        <Input
-                          id="moq-draft"
-                          value={moqDraft}
-                          onChange={(e) => setMoqDraft(e.target.value)}
-                          className="h-8"
-                          disabled={demoRole !== "procurement"}
-                        />
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <offeringForm.AppField name="supplyMode">
+                          {(field) => (
+                            <div className="space-y-1.5">
+                              <Label>供给模式</Label>
+                              <OptionCombobox
+                                value={field.state.value}
+                                onValueChange={(value) =>
+                                  field.handleChange(
+                                    (value ?? "BULK") as "DROPSHIP" | "BULK"
+                                  )
+                                }
+                                options={[
+                                  { value: "DROPSHIP", label: "一件代发（含税运）" },
+                                  { value: "BULK", label: "集采（含税）" },
+                                ]}
+                                allowClear={false}
+                                disabled={demoRole !== "procurement"}
+                                className="w-full"
+                              />
+                            </div>
+                          )}
+                        </offeringForm.AppField>
+                        <offeringForm.AppField name="supplyPriceGross">
+                          {(field) => <field.TextField label="含税供货价" />}
+                        </offeringForm.AppField>
+                        <offeringForm.AppField name="floorPriceGross">
+                          {(field) => <field.TextField label="含税底价（控价参考）" />}
+                        </offeringForm.AppField>
+                        <offeringForm.AppField name="inputTaxRate">
+                          {(field) => <field.TextField label="进项税率（如 0.13）" />}
+                        </offeringForm.AppField>
+                        <offeringForm.AppField name="freightAmount">
+                          {(field) => <field.TextField label="运费" />}
+                        </offeringForm.AppField>
+                        <offeringForm.AppField name="serviceFeeAmount">
+                          {(field) => <field.TextField label="服务费" />}
+                        </offeringForm.AppField>
+                        <offeringForm.AppField name="minimumOrderQuantity">
+                          {(field) => <field.TextField label="最小起订量（基础单位）" />}
+                        </offeringForm.AppField>
+                        <offeringForm.AppField name="dropshipExpress">
+                          {(field) => <field.TextField label="一件代发快递" />}
+                        </offeringForm.AppField>
+                        <offeringForm.AppField name="supplyRegionText">
+                          {(field) => <field.TextField label="可供区域（逗号分隔）" />}
+                        </offeringForm.AppField>
+                        <offeringForm.AppField name="productCapabilitiesText">
+                          {(field) => <field.TextField label="商品能力（逗号分隔）" />}
+                        </offeringForm.AppField>
+                        <offeringForm.AppField name="validFrom">
+                          {(field) => <field.TextField label="生效日期" />}
+                        </offeringForm.AppField>
+                        <offeringForm.AppField name="validTo">
+                          {(field) => <field.TextField label="失效日期（可空）" />}
+                        </offeringForm.AppField>
                       </div>
-                      <div className="space-y-1">
-                        <Label htmlFor="draft-note">草稿备注</Label>
-                        <Textarea
-                          id="draft-note"
-                          value={draftNote}
-                          onChange={(e) => setDraftNote(e.target.value)}
-                          rows={2}
-                          disabled={demoRole !== "procurement"}
-                        />
+                      <offeringForm.AppField name="note">
+                        {(field) => <field.TextareaField label="草稿备注" rows={2} />}
+                      </offeringForm.AppField>
+                      <div className="flex flex-wrap gap-2">
+                        <offeringForm.AppForm>
+                          <offeringForm.SubmitButton
+                            label="保存完整会话草稿"
+                            disabled={demoRole !== "procurement"}
+                          />
+                        </offeringForm.AppForm>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled
+                          tabIndex={-1}
+                          aria-disabled="true"
+                          title="尚未开放，需先登记供给修订类型"
+                        >
+                          确认供给版本（不可用）
+                        </Button>
                       </div>
-                    </div>
+                    </form>
                   ) : null}
-
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    disabled={
-                      demoRole !== "procurement" || saveDraftMutation.isPending
-                    }
-                    onClick={() => void onSaveDraft()}
-                  >
-                    保存会话草稿
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="ml-2"
-                    disabled
-                    tabIndex={-1}
-                    aria-disabled="true"
-                    title="尚未开放，需先登记供给修订类型"
-                  >
-                    确认供给版本（不可用）
-                  </Button>
                 </CardContent>
               </Card>
 

@@ -150,6 +150,8 @@ export type RevisionTimelineEntry = Readonly<{
   changeReason: string
   isCurrent: boolean
   lifecycleAtRevision: LifecycleStatus
+  /** 商品修订的完整 SPU/SKU/价格快照；历史查看不得回填当前主档。 */
+  productSnapshot?: ProductDetailView
 }>
 
 export type MasterDataCenterView = Readonly<{
@@ -224,21 +226,12 @@ export type ProductSpecDimension = Readonly<{
 }>
 
 /**
- * 履约责任（采购「是否自营」）：
- * - COMPANY_WAREHOUSE：公司仓发（自营）
- * - SUPPLIER_DIRECT：供应商直发
- */
-export type FulfillmentResponsibility =
-  | "COMPANY_WAREHOUSE"
-  | "SUPPLIER_DIRECT"
-
-/**
- * SKU 行：主图、条码、参考售价/市场价 + 供给拆分草稿。
+ * SKU 行：只保存商品身份、媒体与非正式参考价格。
  * 规格取值由 SPU 规格维度组合得出。
  *
- * 供给字段在 W14 维护为采购候选；正式供货价 / 底价 / 起订量 / 进项税
- * 写入 `supplier_offering_revision`（W21），不作为 SKU 正式过账事实。
- * 一件代发起订量固定为 1；集采起订量可填。
+ * 供应商、供给模式、供货价、底价、进项税、费用、MOQ、区域、能力与
+ * 有效期全部归 W21 `supplier_offering` / `supplier_offering_revision`；
+ * 不得嵌入 SKU 修订形成第二份供给事实或草稿。
  */
 export type ProductSkuFields = Readonly<{
   skuId?: string
@@ -258,37 +251,20 @@ export type ProductSkuFields = Readonly<{
   salePrice?: string
   /** 市场价（参考展示，非正式发布价）。 */
   marketPrice?: string
-  /** 履约责任：公司仓发 / 供应商直发。 */
-  fulfillmentResponsibility?: FulfillmentResponsibility
-  /**
-   * 进项税率（供应商开票）→ 供给 / 采购。
-   * 不得当作销项税率使用。
-   */
-  inputTaxRate?: string
-  /** 一件代发成本价（含税运）。 */
-  dropshipCostPrice?: string
-  /** 一件代发底价（含税运）— 供应商给我们的底价。 */
-  dropshipFloorPrice?: string
-  /** 一件代发快递（自由文本）。 */
-  dropshipExpress?: string
-  /** 集采成本价（含税）。 */
-  bulkCostPrice?: string
-  /** 集采底价（含税）— 供应商给我们的底价。 */
-  bulkFloorPrice?: string
-  /** 集采起订量（按基础单位）；一件代发固定为 1，不在此字段维护。 */
-  bulkMoq?: string
-  supplier?: string
   baseUnit?: string
   lifecycleStatus: LifecycleStatus
 }>
 
 /** 商品（SPU）可写字段：规格组合出 SKU；无「规格标识」手填字段。 */
 export type ProductFields = Readonly<{
+  /** `unit_of_measure` 稳定身份与代码；`baseUnit` 仅为显示快照。 */
+  baseUnitId: string
+  baseUnitCode: string
   baseUnit: string
+  categoryId: string
   category: string
+  brandId: string
   brand: string
-  /** 默认/主供应商（可下沉到新建 SKU）。 */
-  supplier?: string
   /** SPU 轮播图（多张，可空）。 */
   carouselImages: readonly string[]
   /** SPU 详情图（多张，可空）。 */
@@ -299,10 +275,13 @@ export type ProductFields = Readonly<{
 
 /** 对象中心展示用的商品详情投影。 */
 export type ProductDetailView = Readonly<{
+  baseUnitId: string
+  baseUnitCode: string
   baseUnit: string
+  categoryId: string
   category: string
+  brandId: string
   brand: string
-  supplier?: string
   carouselImages: readonly string[]
   detailImages: readonly string[]
   specs: readonly ProductSpecDimension[]
@@ -456,4 +435,3 @@ export type MasterDataMutationResult =
       message: string
       idempotencyKey: string
     }
-

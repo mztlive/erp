@@ -20,10 +20,25 @@ function rev(
   return partial
 }
 
-function offering(
-  partial: SupplierOfferingRevisionView
-): SupplierOfferingRevisionView {
-  return { ...partial, immutable: true as const }
+type OfferingSeed = Omit<
+  SupplierOfferingRevisionView,
+  "offeringRevisionId" | "floorPriceGross" | "supplyMode" | "dropshipExpress"
+> &
+  Partial<
+    Pick<
+      SupplierOfferingRevisionView,
+      "floorPriceGross" | "supplyMode" | "dropshipExpress"
+    >
+  >
+
+function offering(partial: OfferingSeed): SupplierOfferingRevisionView {
+  return {
+    offeringRevisionId: `${partial.offeringId}_r${partial.revisionNo}`,
+    floorPriceGross: partial.supplyPriceGross,
+    supplyMode: "BULK",
+    ...partial,
+    immutable: true as const,
+  }
 }
 
 const pauseBase = (
@@ -500,6 +515,8 @@ export const SEED_NEW: ExternalCatalogItemView = {
     revisionHistory: [],
     proposedDefaults: {
       supplyPriceGross: "420.00",
+      floorPriceGross: "398.00",
+      supplyMode: "BULK",
       inputTaxRate: "0.13",
       freightAmount: "18.00",
       serviceFeeAmount: "5.00",
@@ -705,6 +722,9 @@ export const SEED_CHANGED_PRICE: ExternalCatalogItemView = {
     ],
     proposedDefaults: {
       supplyPriceGross: "96.00",
+      floorPriceGross: "92.00",
+      supplyMode: "DROPSHIP",
+      dropshipExpress: "顺丰速运",
       inputTaxRate: "0.13",
       freightAmount: "6.00",
       serviceFeeAmount: "2.00",
@@ -904,12 +924,12 @@ export const SEED_CHANGED_STOCK: ExternalCatalogItemView = {
   },
   publicationImpact: {
     ...pauseBase(
-      ["ZERO_STOCK"],
+      ["ZERO_INVENTORY"],
       [
         {
           id: "ps_z1",
           publicationId: "PUB-20260720-009",
-          reason: "ZERO_STOCK",
+          reason: "ZERO_INVENTORY",
           outboxId: "obx_pause_509",
           status: "PAUSED",
         },

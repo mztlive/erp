@@ -53,6 +53,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -80,7 +81,12 @@ import {
   REASON_TYPE_OPTIONS,
   VIEW_LABEL,
 } from "@/features/inventory/types"
+import {
+  decodeInventoryCursor,
+  encodeInventoryCursor,
+} from "@/features/inventory/cursor"
 import { bumpInventoryBalanceLock } from "@/mock/session-state"
+import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
 import { resultText } from "@/lib/ui-text"
 
 function parseView(raw: string | null): InventoryView {
@@ -105,6 +111,53 @@ function parseAvailability(raw: string | null): InventoryAvailability {
     return raw
   }
   return "all"
+}
+
+const MOVEMENT_FROM_DEFAULT = "2026-07-03"
+const MOVEMENT_TO_DEFAULT = "2026-08-02"
+
+const MOVEMENT_TYPE_OPTIONS = [
+  { value: "PURCHASE_RECEIPT", label: "采购入库" },
+  { value: "WAREHOUSE_DISPATCH", label: "仓库发出" },
+  { value: "RESERVATION_ESTABLISH", label: "建立预占" },
+  { value: "RESERVATION_CONSUME", label: "消耗预占" },
+  { value: "STOCK_ADJUSTMENT", label: "库存调整" },
+  { value: "OPENING_IMPORT", label: "期初导入" },
+] as const
+
+function defaultSortValue(view: InventoryView): string {
+  if (view === "balance") return "warehouseCode:asc,skuCode:asc"
+  if (view === "movement") return "occurredAt:desc,movementId:desc"
+  if (view === "reservation") {
+    return "establishedAt:desc,reservationId:desc"
+  }
+  return "createdAt:desc,adjustmentId:desc"
+}
+
+function sortOptions(view: InventoryView) {
+  if (view === "balance") {
+    return [
+      { value: "warehouseCode:asc,skuCode:asc", label: "仓库 / SKU" },
+      { value: "lastMovementAt:desc,skuCode:asc", label: "最近变动" },
+    ]
+  }
+  if (view === "movement") {
+    return [
+      { value: "occurredAt:desc,movementId:desc", label: "发生时间（新到旧）" },
+      { value: "occurredAt:asc,movementId:asc", label: "发生时间（旧到新）" },
+      { value: "recordedAt:desc,movementId:desc", label: "记录时间（新到旧）" },
+    ]
+  }
+  if (view === "reservation") {
+    return [
+      { value: "establishedAt:desc,reservationId:desc", label: "建立时间" },
+      { value: "salesOrderNo:asc,reservationId:asc", label: "销售单号" },
+    ]
+  }
+  return [
+    { value: "createdAt:desc,adjustmentId:desc", label: "创建时间" },
+    { value: "adjustmentNo:asc,adjustmentId:asc", label: "调整单号" },
+  ]
 }
 
 function formatQty(value: string, unit: string) {
@@ -140,8 +193,12 @@ const adjustSchema = z.object({
     .trim()
     .min(1, "请填写调整数量")
     .refine((v) => {
-      const n = Number(v)
-      return Number.isFinite(n) && n > 0
+      try {
+        parseDecimal(v, { maxScale: 6 })
+        return compareDecimal(v, "0", 6) > 0
+      } catch {
+        return false
+      }
     }, "数量必须为正数"),
   note: z.string().trim().min(2, "请填写至少 2 个字的原因说明"),
   occurredAt: z.string().min(1, "请填写业务发生时间"),
@@ -180,12 +237,31 @@ export function InventoryLedgerPage() {
   const availability = parseAvailability(searchParams.get("availability"))
   const balanceIdParam = searchParams.get("balanceId") ?? undefined
   const adjustmentIdParam = searchParams.get("adjustmentId") ?? undefined
+  const movementTypeParam = searchParams.get("movementType") ?? ""
+  const movementType = React.useMemo(
+    () => movementTypeParam.split(",").filter(Boolean),
+    [movementTypeParam]
+  )
+  const occurredFrom =
+    searchParams.get("occurredFrom") ??
+    (view === "movement" ? MOVEMENT_FROM_DEFAULT : undefined)
+  const occurredTo =
+    searchParams.get("occurredTo") ??
+    (view === "movement" ? MOVEMENT_TO_DEFAULT : undefined)
+  const sortValue = searchParams.get("sort") ?? defaultSortValue(view)
+  const pageSizeParam = Number(searchParams.get("pageSize") ?? "20")
+  const pageSize =
+    Number.isSafeInteger(pageSizeParam) && pageSizeParam > 0
+      ? Math.min(pageSizeParam, 100)
+      : 20
+  const cursorParam = searchParams.get("cursor") ?? undefined
+  const cursorOffset = decodeInventoryCursor(cursorParam, view)
 
   const [searchInput, setSearchInput] = React.useState(qParam)
   const searchInputRef = React.useRef<HTMLInputElement | null>(null)
   const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 20,
+    pageIndex: Math.floor(cursorOffset / pageSize),
+    pageSize,
   })
   const [previewBalanceId, setPreviewBalanceId] = React.useState<string | null>(
     balanceIdParam ?? null
@@ -275,6 +351,12 @@ export function InventoryLedgerPage() {
       skuId,
       salesOrderLineId,
       availability,
+      movementType,
+      occurredFrom,
+      occurredTo,
+      cursor: cursorParam,
+      pageSize: pagination.pageSize,
+      sort: sortValue.split(",").filter(Boolean),
       balanceId: balanceIdParam,
       adjustmentId: adjustmentIdParam,
     }),
@@ -285,6 +367,12 @@ export function InventoryLedgerPage() {
       skuId,
       salesOrderLineId,
       availability,
+      movementType,
+      occurredFrom,
+      occurredTo,
+      cursorParam,
+      pagination.pageSize,
+      sortValue,
       balanceIdParam,
       adjustmentIdParam,
     ]
@@ -309,6 +397,9 @@ export function InventoryLedgerPage() {
       if (value == null || value === "") next.delete(key)
       else next.set(key, value)
     }
+    if (!("cursor" in patch) && !("pageSize" in patch)) {
+      next.delete("cursor")
+    }
     // Always keep view
     if (!next.get("view")) next.set("view", view)
     const qs = next.toString()
@@ -320,6 +411,32 @@ export function InventoryLedgerPage() {
   const resetPagination = React.useCallback(() => {
     setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
   }, [])
+
+  const handlePaginationChange = React.useCallback(
+    (next: PaginationState) => {
+      setPagination(next)
+      const offset = next.pageIndex * next.pageSize
+      patchUrl(
+        {
+          cursor:
+            offset === 0 ? null : encodeInventoryCursor(view, offset),
+          pageSize: String(next.pageSize),
+        },
+        { replace: true }
+      )
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl uses the current URL snapshot
+    [pathname, searchParams, view]
+  )
+
+  React.useEffect(() => {
+    const expectedPageIndex = Math.floor(cursorOffset / pageSize)
+    setPagination((current) =>
+      current.pageIndex === expectedPageIndex && current.pageSize === pageSize
+        ? current
+        : { pageIndex: expectedPageIndex, pageSize }
+    )
+  }, [cursorOffset, pageSize])
 
   // Restore focus after detail/adjust close
   React.useEffect(() => {
@@ -361,6 +478,7 @@ export function InventoryLedgerPage() {
   const closeDetail = React.useCallback(() => {
     setPreviewBalanceId(null)
     patchUrl({ balanceId: null }, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl uses the current URL snapshot
   }, [searchParams, pathname, view])
 
   const startAdjustment = React.useCallback(
@@ -977,17 +1095,16 @@ export function InventoryLedgerPage() {
   }
 
   const pageRows = (() => {
-    const start = pagination.pageIndex * pagination.pageSize
     if (view === "balance") {
-      return data.balances.slice(start, start + pagination.pageSize)
+      return data.balances
     }
     if (view === "movement") {
-      return data.movements.slice(start, start + pagination.pageSize)
+      return data.movements
     }
     if (view === "reservation") {
-      return data.reservations.slice(start, start + pagination.pageSize)
+      return data.reservations
     }
-    return data.adjustments.slice(start, start + pagination.pageSize)
+    return data.adjustments
   })()
 
   const metricActive =
@@ -1359,10 +1476,82 @@ export function InventoryLedgerPage() {
                     />
                   </label>
                 ) : null}
+                {view === "movement" ? (
+                  <>
+                    <label className="flex items-center gap-1.5 text-sm">
+                      <span className="sr-only">流水类型</span>
+                      <OptionCombobox
+                        className="w-32"
+                        value={movementType[0] ?? "all"}
+                        onValueChange={(value) => {
+                          patchUrl({
+                            movementType:
+                              value && value !== "all" ? value : null,
+                          })
+                          resetPagination()
+                        }}
+                        options={[
+                          { value: "all", label: "全部流水" },
+                          ...MOVEMENT_TYPE_OPTIONS,
+                        ]}
+                        size="sm"
+                        allowClear={false}
+                        aria-label="筛选流水类型"
+                        placeholder="全部流水"
+                      />
+                    </label>
+                    <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      发生日期
+                      <Input
+                        type="date"
+                        className="h-8 w-32"
+                        value={occurredFrom ?? ""}
+                        max={occurredTo}
+                        onChange={(event) => {
+                          patchUrl({ occurredFrom: event.target.value })
+                          resetPagination()
+                        }}
+                        aria-label="发生日期起"
+                      />
+                      <span>至</span>
+                      <Input
+                        type="date"
+                        className="h-8 w-32"
+                        value={occurredTo ?? ""}
+                        min={occurredFrom}
+                        onChange={(event) => {
+                          patchUrl({ occurredTo: event.target.value })
+                          resetPagination()
+                        }}
+                        aria-label="发生日期止"
+                      />
+                    </label>
+                  </>
+                ) : null}
+                <label className="flex items-center gap-1.5 text-sm">
+                  <span className="sr-only">排序</span>
+                  <OptionCombobox
+                    className="w-40"
+                    value={sortValue}
+                    onValueChange={(value) => {
+                      patchUrl({ sort: value ?? defaultSortValue(view) })
+                      resetPagination()
+                    }}
+                    options={sortOptions(view)}
+                    size="sm"
+                    allowClear={false}
+                    aria-label="排序方式"
+                    placeholder="排序"
+                  />
+                </label>
                 {(qParam ||
                   warehouseId ||
                   (availability !== "all" && view === "balance") ||
-                  skuId) && (
+                  skuId ||
+                  movementType.length > 0 ||
+                  searchParams.has("occurredFrom") ||
+                  searchParams.has("occurredTo") ||
+                  searchParams.has("sort")) && (
                   <Button
                     type="button"
                     variant="ghost"
@@ -1375,6 +1564,10 @@ export function InventoryLedgerPage() {
                         availability: "all",
                         skuId: null,
                         balanceId: null,
+                        movementType: null,
+                        occurredFrom: null,
+                        occurredTo: null,
+                        sort: null,
                       })
                       resetPagination()
                     }}
@@ -1442,7 +1635,7 @@ export function InventoryLedgerPage() {
               getRowId={(row) => row.balanceId}
               rowCount={data.total}
               pagination={pagination}
-              onPaginationChange={setPagination}
+              onPaginationChange={handlePaginationChange}
               layout="flush"
               density="compact"
               defaultColumnPinning={{
@@ -1459,7 +1652,7 @@ export function InventoryLedgerPage() {
               getRowId={(row) => row.movementId}
               rowCount={data.total}
               pagination={pagination}
-              onPaginationChange={setPagination}
+              onPaginationChange={handlePaginationChange}
               layout="flush"
               density="compact"
               defaultColumnPinning={{ left: ["identity"] }}
@@ -1471,7 +1664,7 @@ export function InventoryLedgerPage() {
               getRowId={(row) => row.reservationId}
               rowCount={data.total}
               pagination={pagination}
-              onPaginationChange={setPagination}
+              onPaginationChange={handlePaginationChange}
               layout="flush"
               density="compact"
               defaultColumnPinning={{
@@ -1486,7 +1679,7 @@ export function InventoryLedgerPage() {
               getRowId={(row) => row.adjustmentId}
               rowCount={data.total}
               pagination={pagination}
-              onPaginationChange={setPagination}
+              onPaginationChange={handlePaginationChange}
               layout="flush"
               density="compact"
               defaultColumnPinning={{ left: ["doc"] }}

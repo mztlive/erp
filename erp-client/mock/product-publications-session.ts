@@ -11,6 +11,8 @@ import type {
   ResolvePublishUnknownCommand,
   RetryDeliveryCommand,
   RetryDeliveryResult,
+  SystemSafetyPauseOperationView,
+  SystemSafetyPauseTrigger,
 } from "@/features/product-publications/types"
 import {
   DELIVERY_STATUS_LABEL,
@@ -23,11 +25,17 @@ import {
   PUBLICATION_SEEDS,
   type PublicationSeed,
 } from "@/mock/product-publications"
+import { EXTERNAL_PRODUCT_SUPPLY_SEED } from "@/mock/external-product-supply"
+import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
 
 const w22Overrides = new Map<string, PublicationSeed>()
 const w22SessionCreated: PublicationSeed[] = []
 const w22PublishIdempotency = new Map<string, PublishRevisionResult>()
 const w22PendingPublish = new Map<string, PublishRevisionCommand>()
+const w22SafetyPauseIdempotency = new Map<
+  string,
+  SystemSafetyPauseOperationView
+>()
 let w22RevSeq = 100
 let w22DlvSeq = 100
 let w22OpSeq = 100
@@ -47,6 +55,106 @@ function baseOrOverride(publicationId: string): PublicationSeed | null {
     (s) => s.row.publicationId === publicationId
   )
   return seed ? cloneSeed(seed) : null
+}
+
+function resolveFixedOffering(
+  seed: PublicationSeed,
+  offeringRevisionId: string
+): PublicationSeed["row"]["fixedOffering"] | null {
+  for (const revision of seed.revisions) {
+    if (revision.fixedOffering.offeringRevisionId === offeringRevisionId) {
+      return structuredClone(revision.fixedOffering)
+    }
+  }
+  for (const item of EXTERNAL_PRODUCT_SUPPLY_SEED) {
+    const offering = item.offering
+    if (!offering) continue
+    const revision = [
+      ...(offering.currentRevision ? [offering.currentRevision] : []),
+      ...offering.revisionHistory,
+    ].find((candidate) => candidate.offeringRevisionId === offeringRevisionId)
+    if (!revision) continue
+    return {
+      offeringRevisionId,
+      supplierName: item.externalProduct.supplier.name,
+      availability: revision.availabilityStatus.toLowerCase(),
+      availabilityLabel:
+        revision.availabilityStatus === "AVAILABLE"
+          ? "可供"
+          : revision.availabilityStatus === "STALE"
+            ? "数据过期"
+            : "不可供",
+      supplyPriceVisible: revision.supplyPriceGross != null,
+      supplyPriceGross: revision.supplyPriceGross ?? undefined,
+      supplierMoq: revision.minimumOrderQuantity,
+    }
+  }
+  return null
+}
+
+function validatePublishContent(
+  seed: PublicationSeed,
+  command: PublishRevisionCommand,
+  fixedOffering: PublicationSeed["row"]["fixedOffering"] | null
+): string | null {
+  const content = command.content
+  if (!seed.allowedActions.includes("PUBLISH")) return "当前对象无发布权限。"
+  if (
+    !content.skuRevisionId.trim() ||
+    !content.categoryId.trim() ||
+    !content.name.trim() ||
+    !content.specification.trim() ||
+    !content.salesDescription.trim() ||
+    !content.baseUnitCode.trim()
+  ) {
+    return "商品修订、类目、名称、规格、销售说明和基础单位均为必填。"
+  }
+  if (!fixedOffering) return "固定供给修订不存在或当前无权使用。"
+  if (
+    content.saleStatus === "ON_SALE" &&
+    fixedOffering.availability !== "available"
+  ) {
+    return "固定供给当前不可供或数据过期，不能提交上架。"
+  }
+  if (content.salesRegion.length === 0) return "至少选择一个可销售区域。"
+  if (!content.validFrom.trim()) return "发布生效时间为必填。"
+  if (content.validTo && content.validTo <= content.validFrom) {
+    return "发布失效时间必须晚于生效时间。"
+  }
+  try {
+    parseDecimal(content.minimumPurchaseQuantity, { maxScale: 6 })
+    parseDecimal(content.salesPriceGross, { maxScale: 4 })
+    parseDecimal(content.salesTaxRate, { maxScale: 6 })
+    if (compareDecimal(content.minimumPurchaseQuantity, "0", 6) <= 0) {
+      return "最小购买量必须大于 0。"
+    }
+    if (compareDecimal(content.salesPriceGross, "0", 4) <= 0) {
+      return "含税销售价必须大于 0。"
+    }
+    if (
+      compareDecimal(content.salesTaxRate, "0", 6) < 0 ||
+      compareDecimal(content.salesTaxRate, "1", 6) > 0
+    ) {
+      return "销项税率必须为 0 到 1 的十进制数。"
+    }
+  } catch {
+    return "价格、税率或最小购买量不是合法定点小数。"
+  }
+
+  const mainMedia = content.media.filter((media) => media.mediaRole === "MAIN")
+  if (mainMedia.length !== 1 || content.media.some((media) => !media.altText.trim())) {
+    return "必须提供恰好一张主图，且每张图片都要有图片说明。"
+  }
+  const knownMedia = seed.revisions.flatMap((revision) => revision.media)
+  if (
+    content.media.some((media) => {
+      const asset = knownMedia.find((candidate) => candidate.fileAssetId === media.fileAssetId)
+      return !asset || asset.securityScanStatus !== "PASSED"
+    })
+  ) {
+    return "存在未通过安全扫描或不在当前授权范围内的媒体。"
+  }
+  return null
 }
 
 export function listW22SessionPublications(): PublicationSeed[] {
@@ -151,6 +259,17 @@ export function submitW22PublishRevision(
     return blocked
   }
 
+  if (seed.publishGate.gateVersion !== command.expectedPublishGateVersion) {
+    const blocked: PublishRevisionResult = {
+      status: "blocked",
+      code: "GATE_VERSION_MISMATCH",
+      message: "发布门禁版本已变化，请刷新后重新核对。",
+      publishGate: seed.publishGate,
+    }
+    w22PublishIdempotency.set(command.requestId, blocked)
+    return blocked
+  }
+
   const gate = recomputePublishGate(seed, command.content)
   if (gate.kind === "REVIEW_POLICY_UNCONFIGURED") {
     const blocked: PublishRevisionResult = {
@@ -183,30 +302,16 @@ export function submitW22PublishRevision(
     return blocked
   }
 
-  if (!command.content.salesDescription.trim()) {
+  const fixedOffering = resolveFixedOffering(
+    seed,
+    command.content.supplierOfferingRevisionId
+  )
+  const validationMessage = validatePublishContent(seed, command, fixedOffering)
+  if (validationMessage) {
     const blocked: PublishRevisionResult = {
       status: "blocked",
       code: "VALIDATION_FAILED",
-      message: "销售说明为必填。",
-    }
-    w22PublishIdempotency.set(command.requestId, blocked)
-    return blocked
-  }
-  if (Number(command.content.minimumPurchaseQuantity) <= 0) {
-    const blocked: PublishRevisionResult = {
-      status: "blocked",
-      code: "VALIDATION_FAILED",
-      message: "最小购买量必须大于 0。",
-    }
-    w22PublishIdempotency.set(command.requestId, blocked)
-    return blocked
-  }
-  const mainMedia = command.content.media.filter((m) => m.mediaRole === "MAIN")
-  if (mainMedia.length !== 1 || !mainMedia[0]?.altText.trim()) {
-    const blocked: PublishRevisionResult = {
-      status: "blocked",
-      code: "VALIDATION_FAILED",
-      message: "必须提供恰好一张主图且含图片说明。",
+      message: validationMessage,
     }
     w22PublishIdempotency.set(command.requestId, blocked)
     return blocked
@@ -219,22 +324,14 @@ export function submitW22PublishRevision(
   const operationId = `op_pub_${++w22OpSeq}`
   const committedAt = new Date().toISOString()
 
-  const baselineOffering =
-    seed.revisions.find((r) => r.revisionId === seed.row.latestRevisionId)
-      ?.fixedOffering ?? seed.row.fixedOffering
-
   const newRevision = {
     revisionId,
     revisionNo,
     skuRevisionId: command.content.skuRevisionId,
     supplierOfferingRevisionId: command.content.supplierOfferingRevisionId,
-    fixedOffering: {
-      ...baselineOffering,
-      offeringRevisionId: command.content.supplierOfferingRevisionId,
-    },
+    fixedOffering: fixedOffering!,
     categoryId: command.content.categoryId,
-    categoryLabel:
-      seed.revisions[seed.revisions.length - 1]?.categoryLabel ?? "未分类",
+    categoryLabel: `类目 ${command.content.categoryId}`,
     name: command.content.name,
     specification: command.content.specification,
     salesDescription: command.content.salesDescription,
@@ -244,7 +341,8 @@ export function submitW22PublishRevision(
     salesPriceGross: command.content.salesPriceGross,
     salesTaxRate: command.content.salesTaxRate,
     baseUnitCode: command.content.baseUnitCode,
-    salesRegionLabel: command.content.salesRegionLabel,
+    salesRegion: [...command.content.salesRegion],
+    salesRegionLabel: command.content.salesRegion.join("、"),
     saleStatus: command.content.saleStatus,
     saleStatusLabel: SALE_STATUS_LABEL[command.content.saleStatus],
     productCapabilities: command.content.productCapabilities,
@@ -518,4 +616,261 @@ export function submitW22RetryDelivery(
     attemptCount,
     deliveryStatus: "RETRYING",
   }
+}
+
+function unknownSafetyPause(
+  command: SystemSafetyPauseTrigger,
+  operationId: string
+): SystemSafetyPauseOperationView {
+  return {
+    operationId,
+    resultStatus: "UNKNOWN",
+    cause: command.cause,
+    sourceObjectType: command.sourceObjectType,
+    sourceObjectId: command.sourceObjectId,
+    sourceVersion: command.sourceVersion,
+    subjectHash: command.subjectHash,
+    originalIdempotencyKey: command.idempotencyKey,
+    availabilityEffect: "FAIL_CLOSED_PENDING_RESULT",
+  }
+}
+
+/**
+ * 模拟服务端领域事件处理器：一次事件要么暂停全部发布对象，要么一个都不写入。
+ * 页面不得直接构造该命令；测试或上游 mock API 可用它验证安全暂停闭环。
+ */
+export function triggerW22SystemSafetyPause(
+  command: SystemSafetyPauseTrigger
+): SystemSafetyPauseOperationView {
+  const cached = w22SafetyPauseIdempotency.get(command.idempotencyKey)
+  if (cached) return cached
+
+  const operationId = `op_safety_${++w22OpSeq}`
+  const publicationIds = [...new Set(command.affectedPublicationIds)]
+  const seeds = publicationIds.map(baseOrOverride)
+  const invalidCommand =
+    !command.idempotencyKey.trim() ||
+    !command.sourceObjectId.trim() ||
+    !command.sourceVersion.trim() ||
+    !command.subjectHash.trim() ||
+    !command.occurredAt.trim() ||
+    publicationIds.length === 0 ||
+    seeds.some((seed) => seed == null) ||
+    seeds.some(
+      (seed) =>
+        seed?.row.publicationStatus !== "SAFETY_PAUSED" &&
+        seed?.revisions.length === 0
+    )
+
+  if (invalidCommand) {
+    const unknown = unknownSafetyPause(command, operationId)
+    w22SafetyPauseIdempotency.set(command.idempotencyKey, unknown)
+    return unknown
+  }
+
+  const resolvedSeeds = seeds as PublicationSeed[]
+  const alreadySafe = resolvedSeeds.every(
+    (seed) => seed.row.publicationStatus === "SAFETY_PAUSED"
+  )
+  const prepared = resolvedSeeds.map((seed) => {
+    const existingArtifact =
+      seed.row.safetyPause?.resultStatus !== "UNKNOWN"
+        ? seed.row.safetyPause?.affectedPublications.find(
+            (affected) => affected.publicationId === seed.row.publicationId
+          )
+        : undefined
+    if (seed.row.publicationStatus === "SAFETY_PAUSED") {
+      return {
+        seed,
+        artifact:
+          existingArtifact ??
+          ({
+            publicationId: seed.row.publicationId,
+            pauseArtifactKind: "ACTION" as const,
+            pauseActionId: `act_already_safe_${seed.row.publicationId}`,
+            deliveryId:
+              seed.row.latestDelivery?.deliveryId ??
+              `dlv_already_safe_${seed.row.publicationId}`,
+            outboxMessageId: `obx_already_safe_${seed.row.publicationId}`,
+          } as const),
+      }
+    }
+
+    const revisionNo =
+      Math.max(...seed.revisions.map((revision) => revision.revisionNo), 0) + 1
+    const revisionId = `rev_safety_${++w22RevSeq}`
+    const deliveryId = `dlv_safety_${++w22DlvSeq}`
+    return {
+      seed,
+      revisionNo,
+      revisionId,
+      deliveryId,
+      outboxMessageId: `obx_safety_${w22DlvSeq}`,
+      artifact: {
+        publicationId: seed.row.publicationId,
+        pauseArtifactKind: "REVISION" as const,
+        pauseRevisionId: revisionId,
+        deliveryId,
+        outboxMessageId: `obx_safety_${w22DlvSeq}`,
+      },
+    }
+  })
+
+  const affectedPublications = prepared.map((item) => item.artifact) as [
+    (typeof prepared)[number]["artifact"],
+    ...(typeof prepared)[number]["artifact"][],
+  ]
+  const common = {
+    operationId,
+    resultStatus: alreadySafe ? ("ALREADY_SAFE" as const) : ("COMMITTED" as const),
+    sourceObjectType: command.sourceObjectType,
+    sourceObjectId: command.sourceObjectId,
+    sourceVersion: command.sourceVersion,
+    subjectHash: command.subjectHash,
+    availabilityEffect: "PAUSED" as const,
+    affectedPublications,
+    committedAt: command.occurredAt,
+  }
+
+  let operation: SystemSafetyPauseOperationView
+  if (command.cause === "SUPPLIER_STOPPED") {
+    operation = {
+      ...common,
+      cause: command.cause,
+      followUpWorkItem: {
+        workItemId: `wi_safety_${w22OpSeq}`,
+        workItemType: "BUSINESS_EXCEPTION" as const,
+        businessObjectType: command.sourceObjectType,
+        businessObjectId: command.sourceObjectId,
+        subjectVersion: command.sourceVersion,
+        subjectHash: command.subjectHash,
+        handlerKey: "W21.supplierExternalProduct.exception",
+      },
+    }
+  } else if (
+    command.cause === "ZERO_INVENTORY" ||
+    command.cause === "SUPPLY_UNAVAILABLE" ||
+    command.cause === "AVAILABILITY_STALE"
+  ) {
+    operation = {
+      ...common,
+      cause: command.cause,
+      followUpBlocker: {
+        code: "NO_MANUAL_FOLLOW_UP_TASK_BY_CURRENT_POLICY" as const,
+        message:
+          "安全暂停已提交；当前政策不创建人工后续任务，来源恢复也不会自动上架。",
+        evidenceReference: `ev-safety-${w22OpSeq}`,
+      },
+    }
+  } else {
+    operation = {
+      ...common,
+      cause: command.cause,
+      followUpBlocker: {
+        code: "NORMAL_REVIEW_WORK_ITEM_TYPE_UNREGISTERED" as const,
+        message:
+          "正常复核任务类型尚未登记；已安全暂停并保留 blocker，未伪造人工任务。",
+        evidenceReference: `ev-safety-${w22OpSeq}`,
+      },
+    }
+  }
+
+  // operation 与全部写入内容都准备完成后再统一提交，模拟同一事务边界。
+  for (const item of prepared) {
+    if (item.seed.row.publicationStatus === "SAFETY_PAUSED") continue
+    if (
+      item.revisionNo == null ||
+      !item.revisionId ||
+      !item.deliveryId ||
+      !item.outboxMessageId
+    ) {
+      continue
+    }
+    const baseline =
+      item.seed.revisions.find(
+        (revision) => revision.revisionId === item.seed.row.latestRevisionId
+      ) ?? item.seed.revisions[item.seed.revisions.length - 1]
+    const revision = {
+      ...baseline,
+      revisionId: item.revisionId,
+      revisionNo: item.revisionNo,
+      saleStatus: "PAUSED" as const,
+      saleStatusLabel: SALE_STATUS_LABEL.PAUSED,
+      contentHash: `ch-safety-${command.subjectHash}-${item.revisionNo}`,
+      createdAt: command.occurredAt,
+      createdBy: "系统",
+    }
+    const next: PublicationSeed = {
+      ...item.seed,
+      objectVersion: `ov-safety-${command.sourceVersion}-${item.revisionNo}`,
+      publishGate: {
+        kind: "RECOVERY_RESPONSIBILITY_UNCONFIRMED",
+        gateVersion: `pg-safety-${command.sourceVersion}-${item.revisionNo}`,
+        submissionKind: "RECOVERY",
+        blocker: {
+          code: "RECOVERY_RESPONSIBILITY_UNCONFIRMED",
+          message: "安全暂停后的恢复责任未确认，不能恢复上架。",
+        },
+      },
+      revisions: [...item.seed.revisions, revision],
+      deliveries: [
+        ...item.seed.deliveries,
+        {
+          deliveryId: item.deliveryId,
+          revisionId: item.revisionId,
+          revisionNo: item.revisionNo,
+          targetMallId: item.seed.row.targetMallId,
+          status: "PENDING_SEND",
+          statusLabel: DELIVERY_STATUS_LABEL.PENDING_SEND,
+          statusTone: DELIVERY_STATUS_TONE.PENDING_SEND,
+          attemptCount: 0,
+        },
+      ],
+      allowedActions: ["QUERY_RESULT"],
+      actionBlockers: [
+        ...item.seed.actionBlockers.filter(
+          (blocker) => blocker.action !== "PUBLISH"
+        ),
+        {
+          action: "PUBLISH",
+          code: "RECOVERY_RESPONSIBILITY_UNCONFIRMED",
+          message: "安全暂停后的恢复责任未确认，不能恢复上架。",
+        },
+      ],
+      row: {
+        ...item.seed.row,
+        publicationStatus: "SAFETY_PAUSED",
+        publicationStatusLabel: PUBLICATION_STATUS_LABEL.SAFETY_PAUSED,
+        publicationStatusTone: PUBLICATION_STATUS_TONE.SAFETY_PAUSED,
+        latestRevisionId: item.revisionId,
+        latestRevisionNo: item.revisionNo,
+        hasPendingConfirmation: true,
+        safetyPause: operation,
+        latestDelivery: {
+          deliveryId: item.deliveryId,
+          status: "PENDING_SEND",
+          statusLabel: DELIVERY_STATUS_LABEL.PENDING_SEND,
+          statusTone: DELIVERY_STATUS_TONE.PENDING_SEND,
+          attemptCount: 0,
+        },
+        ownerLabel: "系统",
+        updatedAt: command.occurredAt,
+        allowedActions: ["QUERY_RESULT"],
+        actionBlockers: [
+          ...item.seed.row.actionBlockers.filter(
+            (blocker) => blocker.action !== "PUBLISH"
+          ),
+          {
+            action: "PUBLISH",
+            code: "RECOVERY_RESPONSIBILITY_UNCONFIRMED",
+            message: "安全暂停后的恢复责任未确认，不能恢复上架。",
+          },
+        ],
+      },
+    }
+    w22Overrides.set(item.seed.row.publicationId, next)
+  }
+
+  w22SafetyPauseIdempotency.set(command.idempotencyKey, operation)
+  return operation
 }

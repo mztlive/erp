@@ -165,6 +165,8 @@ export type SaleStatus = "ON_SALE" | "OFF_SALE" | "PAUSED"
 
 export type ProductPublicationListQuery = {
   q?: string
+  skuId?: string
+  supplierOfferingRevisionId?: string
   mallId?: string
   /** 发布状态：默认有效对象 */
   publicationStatus?: string
@@ -280,6 +282,8 @@ export type ProductPublicationRevisionView = {
   salesPriceGross: string
   salesTaxRate: string
   baseUnitCode: string
+  /** 新修订使用结构化区域；旧种子可仅保留 label 兼容展示。 */
+  salesRegion?: string[]
   salesRegionLabel: string
   saleStatus: SaleStatus
   saleStatusLabel: string
@@ -374,14 +378,14 @@ export type PublishRevisionCommand = {
     salesPriceGross: string
     salesTaxRate: string
     baseUnitCode: string
-    salesRegionLabel: string
+    salesRegion: string[]
     saleStatus: SaleStatus
     productCapabilities: string[]
     validFrom: string
     validTo?: string
     media: Array<{
       fileAssetId: string
-      mediaRole: string
+      mediaRole: "MAIN" | "CAROUSEL" | "DETAIL"
       sortNo: number
       altText: string
     }>
@@ -456,6 +460,18 @@ export type RetryDeliveryResult =
 export type ResolvePublishUnknownCommand = {
   requestId: string
   settle?: boolean
+}
+
+/** 仅供 mock 领域事件处理器调用；浏览器页面不得构造。 */
+export type SystemSafetyPauseTrigger = {
+  cause: SafetyPauseCause
+  sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
+  sourceObjectId: string
+  sourceVersion: string
+  subjectHash: string
+  affectedPublicationIds: string[]
+  occurredAt: string
+  idempotencyKey: string
 }
 
 export const PUBLICATION_STATUS_LABEL: Record<PublicationStatus, string> = {

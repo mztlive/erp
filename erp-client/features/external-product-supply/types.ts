@@ -65,10 +65,14 @@ export type SupplierProductMappingView = Readonly<{
 
 export type SupplierOfferingRevisionView = Readonly<{
   offeringId: string
+  offeringRevisionId: string
   revisionNo: number
   status: "ACTIVE" | "PAUSED" | "STOPPED" | "PENDING_CONFIRM"
   supplyPriceGross: string | null
   supplyPriceNet: string | null
+  floorPriceGross: string | null
+  supplyMode: "DROPSHIP" | "BULK"
+  dropshipExpress?: string
   inputTaxRate: string | null
   freightAmount: string | null
   serviceFeeAmount: string | null
@@ -85,6 +89,9 @@ export type SupplierOfferingRevisionView = Readonly<{
 
 export type SafeOfferingDraftView = Readonly<{
   supplyPriceGross: string
+  floorPriceGross: string
+  supplyMode: "DROPSHIP" | "BULK"
+  dropshipExpress?: string
   inputTaxRate: string
   freightAmount: string
   serviceFeeAmount: string
@@ -228,6 +235,8 @@ export type ExternalCatalogQueueQuery = {
   mode?: "queue" | "list"
   supplierId?: string
   connectionId?: string
+  /** 从 W14 进入时，限定到与该稳定 SKU 已映射或候选关联的供给 */
+  skuId?: string
   changeType?: "actionable" | "NEW" | "CHANGED" | "STOPPED" | "ERROR" | "all"
   mappingStatus?: string
   offeringStatus?: string

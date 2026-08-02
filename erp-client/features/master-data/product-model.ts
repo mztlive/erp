@@ -4,37 +4,11 @@
  */
 
 import type {
-  FulfillmentResponsibility,
   ProductFields,
   ProductSkuFields,
   ProductSpecDimension,
 } from "@/features/master-data/types"
-
-/** 一件代发起订量固定为 1（不按 SKU 编辑）。 */
-export const DROPSHIP_MOQ = "1"
-
-export const FULFILLMENT_RESPONSIBILITY_OPTIONS = [
-  {
-    value: "COMPANY_WAREHOUSE" as const,
-    label: "公司仓发",
-    description: "自营：由公司仓库发货",
-  },
-  {
-    value: "SUPPLIER_DIRECT" as const,
-    label: "供应商直发",
-    description: "非自营：供应商直接履约发货",
-  },
-] as const
-
-export function fulfillmentResponsibilityLabel(
-  value: FulfillmentResponsibility | undefined
-): string {
-  if (!value) return "—"
-  return (
-    FULFILLMENT_RESPONSIBILITY_OPTIONS.find((o) => o.value === value)?.label ??
-    value
-  )
-}
+import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
 
 /** 笛卡尔积生成规格取值组合。无规格时返回单行空组合。 */
 export function cartesianSpecValues(
@@ -83,7 +57,6 @@ export function rebuildSkusFromSpecs(input: {
   specs: readonly ProductSpecDimension[]
   existing: readonly ProductSkuFields[]
   baseUnit: string
-  supplier?: string
   skuNoPrefix?: string
 }): ProductSkuFields[] {
   const combos = cartesianSpecValues(input.specs)
@@ -109,15 +82,6 @@ export function rebuildSkusFromSpecs(input: {
       mainImage: matched?.mainImage ?? "",
       salePrice: matched?.salePrice,
       marketPrice: matched?.marketPrice,
-      fulfillmentResponsibility: matched?.fulfillmentResponsibility,
-      inputTaxRate: matched?.inputTaxRate,
-      dropshipCostPrice: matched?.dropshipCostPrice,
-      dropshipFloorPrice: matched?.dropshipFloorPrice,
-      dropshipExpress: matched?.dropshipExpress,
-      bulkCostPrice: matched?.bulkCostPrice,
-      bulkFloorPrice: matched?.bulkFloorPrice,
-      bulkMoq: matched?.bulkMoq,
-      supplier: matched?.supplier ?? input.supplier,
       baseUnit: matched?.baseUnit ?? input.baseUnit,
       lifecycleStatus: matched?.lifecycleStatus ?? "ENABLED",
     }
@@ -134,10 +98,13 @@ function sameAttributeValues(
 
 export function emptyProductFields(): ProductFields {
   return {
+    baseUnitId: "",
+    baseUnitCode: "",
     baseUnit: "",
+    categoryId: "",
     category: "",
+    brandId: "",
     brand: "",
-    supplier: undefined,
     carouselImages: [],
     detailImages: [],
     specs: [],
@@ -187,7 +154,6 @@ export function productListFacts(fields: ProductFields): ReadonlyArray<{
     { label: "分类", value: fields.category },
     { label: "品牌", value: fields.brand },
   ]
-  if (fields.supplier) facts.push({ label: "供应商", value: fields.supplier })
   facts.push({
     label: "规格",
     value: productSpecsSummary(fields.specs),
@@ -210,14 +176,32 @@ export function productListFacts(fields: ProductFields): ReadonlyArray<{
 
 /** 校验：每个启用 SKU 必须有主图；SPU 级字段完整。 */
 export function validateProductFields(fields: ProductFields): string | null {
-  if (!fields.baseUnit.trim()) return "请选择基础单位"
-  if (!fields.category.trim()) return "请选择分类"
-  if (!fields.brand.trim()) return "请选择品牌"
+  if (!fields.baseUnitId.trim() || !fields.baseUnitCode.trim() || !fields.baseUnit.trim()) {
+    return "请选择有效的基础单位"
+  }
+  if (!fields.categoryId.trim() || !fields.category.trim()) return "请选择有效分类"
+  if (!fields.brandId.trim() || !fields.brand.trim()) return "请选择有效品牌"
   if (fields.skus.length === 0) return "请至少生成一个 SKU"
+  const skuNos = new Set<string>()
   for (const sku of fields.skus) {
     if (!sku.skuNo.trim()) return "SKU 编号不能为空"
+    if (skuNos.has(sku.skuNo.trim())) return `SKU 编号「${sku.skuNo.trim()}」重复`
+    skuNos.add(sku.skuNo.trim())
     if (sku.lifecycleStatus === "ENABLED" && !sku.mainImage.trim()) {
       return `启用中的 SKU「${sku.skuNo}」必须上传主图`
+    }
+    const moneyFields: Array<[string, string | undefined]> = [
+      ["参考销售价", sku.salePrice],
+      ["市场价", sku.marketPrice],
+    ]
+    try {
+      for (const [label, value] of moneyFields) {
+        if (!value) continue
+        parseDecimal(value, { maxScale: 4 })
+        if (compareDecimal(value, "0", 4) < 0) return `${label}不得为负数`
+      }
+    } catch {
+      return `SKU「${sku.skuNo}」的参考价格格式不正确`
     }
   }
   const names = new Set<string>()

@@ -51,21 +51,23 @@ export const SUPPLIER_CAPABILITY_OPTIONS = [
   "印刷",
 ] as const
 
-/** SKU 基础计量单位字典（演示静态；正式由 unit_of_measure 维护）。 */
-export const BASE_UNIT_OPTIONS = [
-  "件",
-  "个",
-  "盒",
-  "套",
-  "箱",
-  "瓶",
-  "袋",
-  "份",
-  "张",
-  "篮",
-  "kg",
-  "g",
+/** mock API 返回的启用计量单位字典；表单提交稳定 ID/代码与显示快照。 */
+export const BASE_UNIT_DICTIONARY = [
+  { id: "uom_piece", code: "EA", label: "件" },
+  { id: "uom_item", code: "ITEM", label: "个" },
+  { id: "uom_box", code: "BOX", label: "盒" },
+  { id: "uom_set", code: "SET", label: "套" },
+  { id: "uom_case", code: "CASE", label: "箱" },
+  { id: "uom_bottle", code: "BTL", label: "瓶" },
+  { id: "uom_bag", code: "BAG", label: "袋" },
+  { id: "uom_portion", code: "PORTION", label: "份" },
+  { id: "uom_card", code: "CARD", label: "张" },
+  { id: "uom_basket", code: "BASKET", label: "篮" },
+  { id: "uom_kg", code: "KG", label: "kg" },
+  { id: "uom_g", code: "G", label: "g" },
 ] as const
+
+export const BASE_UNIT_OPTIONS = BASE_UNIT_DICTIONARY.map((item) => item.label)
 
 export const PRODUCT_KIND_OPTIONS = [
   "实物",
@@ -97,15 +99,6 @@ export const BRAND_OPTIONS = [
   "礼遇",
   "企业优选",
   "无品牌",
-] as const
-
-/**
- * SKU 供应商下拉选项（演示，仅启用供应商）。
- * 正式环境从 `suppliers` 资源当前启用修订查询；此处与种子数据名称对齐。
- */
-export const SUPPLIER_OPTIONS = [
-  "鲜果直供供应链",
-  "礼遇包装工坊",
 ] as const
 
 export type ResourceFieldKind =
@@ -202,14 +195,6 @@ export const RESOURCE_FIELDS: Readonly<
       kind: "select",
       options: BRAND_OPTIONS,
       required: true,
-      listFact: true,
-      section: "catalog",
-    },
-    {
-      key: "supplier",
-      label: masterDataCopy.fSupplier,
-      kind: "select",
-      options: SUPPLIER_OPTIONS,
       listFact: true,
       section: "catalog",
     },
@@ -562,10 +547,13 @@ export function buildResourceFields(
     case "products":
       // 商品完整字段由商品表单页直接组装 ProductFields；此处仅兜底空结构。
       return {
+        baseUnitId: "",
+        baseUnitCode: "",
         baseUnit: pickField(values, "baseUnit") ?? "",
+        categoryId: "",
         category: pickField(values, "category") ?? "",
+        brandId: "",
         brand: pickField(values, "brand") ?? "",
-        supplier: pickField(values, "supplier"),
         carouselImages: [],
         detailImages: [],
         specs: [],

@@ -151,6 +151,15 @@ export async function fetchPublicationList(
       ])
     )
   }
+  if (query.skuId) {
+    rows = rows.filter((row) => row.skuId === query.skuId)
+  }
+  if (query.supplierOfferingRevisionId) {
+    rows = rows.filter(
+      (row) =>
+        row.fixedOffering.offeringRevisionId === query.supplierOfferingRevisionId
+    )
+  }
   if (query.mallId) {
     rows = rows.filter((r) => r.targetMallId === query.mallId)
   }

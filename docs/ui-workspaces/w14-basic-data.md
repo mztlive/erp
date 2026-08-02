@@ -13,7 +13,7 @@
 用户在一个工作面内维护和核对会被销售、采购、履约及库存共同引用的基础资料族：
 
 - 可销售项目；
-- 商品与 SKU（含主图/轮播/详情媒体、参考销售价/市场价、一件代发与集采供给拆分）；
+- 商品与 SKU（含主图/轮播/详情媒体、参考销售价/市场价；供给仅展示 W21 关联入口）；
 - 商品分类；
 - 品牌；
 - 卡券类目；
@@ -103,7 +103,7 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 
 | 资源 | 入口 | 布局 |
 | --- | --- | --- |
-| 商品与 SKU | **详情页即查看也是编辑**（`/products/new` 与 `/products/:id`） | SPU 信息 \| 规格维度（组合 SKU）\| SPU 轮播/详情图 \| SKU 表（产品编码/主图/条码/销售价/市场价/履约方式/进项税/一件代发与集采供给）；页底变更历史/引用/审计 |
+| 商品与 SKU | **详情页即查看也是编辑**（`/products/new` 与 `/products/:id`） | SPU 信息 \| 规格维度（组合 SKU）\| SPU 轮播/详情图 \| SKU 表（产品编码/主图/条码/参考销售价/市场价、W21 供给入口、W10 库存入口）；页底变更历史/引用/审计 |
 | 商品分类 | **树形维护**（`/master-data/categories`） | 左侧可展开树 + 右侧节点详情；「新建根分类」/ 选中后「新建子分类」/「更新资料」/「停用」；**无生效期间、无打开完整资料**；上级不可选自身与子树（防环） |
 | 品牌 | 列表 + 标准对话框（`/master-data/brands`） | **无侧栏 sheet**；行点击/更新直接开对话框；字段：名称、品牌代码、**Logo（1:1 正方形）**；**无生效期间** |
 | 其他资源 | 标准对话框（约 `max-w-lg`） | 单列资源专属字段 |
@@ -124,7 +124,7 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 | 资源 | 必须包含的子区 |
 | --- | --- |
 | 可销售项目 | 对应 SKU、参考供应商/成本、服务区域、交期、允许履约方式、有效期、被销售单引用摘要 |
-| 商品与 SKU | SPU 身份、规格维度（组合生成 SKU）、基础单位（下拉）、分类/品牌/供应商、SPU 轮播/详情图、SKU 主图/条码/参考售价与市场价/履约方式/进项税/一件代发与集采供给草稿、正式业务引用 |
+| 商品与 SKU | SPU 身份、规格维度（组合生成 SKU）、基础单位（下拉）、分类/品牌、SPU 轮播/详情图、SKU 主图/条码/参考售价与市场价、按稳定 SKU 进入 W21 的供给入口、正式业务引用 |
 | 商品分类 | **树形维护页**：左侧分类树 + 右侧节点摘要；稳定分类代码、名称、上级分类、适用商品类型、启停与版本；支持新建根/子分类；被 SKU 引用摘要 |
 | 品牌 | **列表维护页**（标准 M2）：稳定品牌代码、名称、启停与版本；被 SKU 引用摘要 |
 | 卡券类目 | 卡券 SKU 身份、类目描述、启停和版本；明确“不含商城玩法” |
@@ -154,7 +154,7 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 | 资源 | 列表关键字段 | 对象中心关键事实 | 数据来源 | 口径 / 新鲜度 | 权限规则 |
 | --- | --- | --- | --- | --- | --- |
 | 可销售项目 | 项目编号、SKU、参考供应商、参考含税成本、服务区域、交期、有效期、启停状态、修订时序 | 精确 `sellable_item_revision_id`、税率、允许履约方式、资质校验摘要 | 稳定对象、不可变修订及服务端资格投影 | 金额明确含税；资格返回 `eligibilityAsOf` | 销售可选字段与采购成本字段分权 |
-| 商品与 SKU | 商品编号（SPU）、名称、规格摘要、SKU 数、分类、品牌、供应商、基础单位、启停状态、修订时序 | 规格维度与取值、SKU 列表（产品编码/规格文案/主图/条码/销售价/市场价/履约方式/进项税率/一件代发与集采供给）、SPU 轮播图与详情图、历史引用 | 商品（SPU）稳定对象 + 下属 SKU；分类/品牌/供应商引用字典稳定 ID；供给草稿确认后进 W21 | 版本按 `effectiveAt`；媒体变化形成新修订；关系摘要带 `relationshipAsOf` | 运营/采购维护；销售只读 |
+| 商品与 SKU | 商品编号（SPU）、名称、规格摘要、SKU 数、分类、品牌、基础单位、启停状态、修订时序 | 规格维度与取值、SKU 列表（产品编码/规格文案/主图/条码/参考销售价/市场价、W21 供给入口、W10 库存入口）、SPU 轮播图与详情图、历史引用 | 商品（SPU）稳定对象 + 下属 SKU；分类/品牌引用字典稳定 ID；供给由 W21 按 `skuId` 独立查询 | 版本按 `effectiveAt`；媒体变化形成新修订；关系摘要带 `relationshipAsOf` | 运营/采购维护；销售只读 |
 | 商品分类 | 分类编号、代码、名称、上级、适用类型、启停状态、修订时序 | 稳定 `category_code`、父子关系、适用 `product_kind`、被 SKU 引用数 | `product_category` 及修订 | 停用后仍可被历史 SKU 修订引用；新建 SKU 下拉仅启用项 | 运营/采购维护 |
 | 品牌 | 品牌编号、代码、名称、启停状态、修订时序 | 稳定 `brand_code`、被 SKU 引用数 | `product_brand` 及修订 | 停用不删除历史引用；新建 SKU 下拉仅启用项 | 运营/采购维护 |
 | 卡券类目 | 类目编号、名称、启停状态、修订时序、有效期 | `product_kind=VOUCHER` 的 SKU、ERP 类目描述；不展示或保存玩法字段 | ERP 卡券类目修订 | 仅销售项口径，按有效时点 | 运营维护；不返回商城玩法字段 |
@@ -170,7 +170,6 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 | 商品信息 | 名称 | 文本 | 是 | SPU | 商品族名称 |
 | 商品信息 | 基础单位 | **下拉** | 是 | SPU（下沉 SKU） | 已被正式单据引用后不可改 |
 | 商品信息 | 分类 / 品牌 | **`CategoryCombobox` / `BrandCombobox`** | 是 | SPU | 字典稳定身份；分类展示层级路径；数据来自 W14 当前启用字典 |
-| 商品信息 | 供应商 | **下拉** | 否 | SPU 默认 | 可下沉到新建 SKU |
 | 规格 | 规格名 + 取值列表 | 多组 | 否 | SPU | 如「颜色：红、蓝」；无规格时保留一个默认 SKU |
 | SPU 媒体 | 轮播图 | 多图上传 | 否 | **SPU** | 允许为空 |
 | SPU 媒体 | 详情图 | 多图上传 | 否 | **SPU** | 允许为空 |
@@ -179,18 +178,10 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 | SKU 表 | **主图** | 单图上传 | 启用时是 | **SKU** | 恰好一张；跟随 SKU |
 | SKU 表 | 条码 | 文本 | 否 | SKU | 冲突进入人工差异 |
 | SKU 表 | 销售价 / 市场价 | 金额文本 | 否 | SKU | 参考价，非正式发布价 |
-| SKU 表 | 履约方式 | 下拉 | 否 | SKU | **公司仓发**（自营）/ **供应商直发**；对应采购「是否自营」 |
-| SKU 表 | 进项税率 | 文本 | 否 | SKU → 供给/采购 | 供应商开票进项税；不得当销项税 |
-| SKU 表 | 一件代发成本价（含税运） | 金额 | 否 | SKU 供给草稿 → `supplier_offering_revision` | 含税运 |
-| SKU 表 | 一件代发底价（含税运） | 金额 | 否 | 同上 | 供应商给我们的底价 |
-| SKU 表 | 一件代发快递 | 文本 | 否 | 同上 | 自由输入 |
-| SKU 表 | 一件代发起订量 | 只读 | — | 同上 | **固定为 1** |
-| SKU 表 | 集采成本价（含税） | 金额 | 否 | 同上 | 含税（不含运口径与一件代发区分） |
-| SKU 表 | 集采底价（含税） | 金额 | 否 | 同上 | 供应商给我们的底价 |
-| SKU 表 | 集采起订量 | 数量 | 否 | 同上 | 按基础单位；仅集采可填 |
+| SKU 表 | 供给 | 链接 | — | W21 | 已保存 SKU 按稳定 `skuId` 进入供给列表；不在 W14 编辑供应商、供给模式、价格、税费或 MOQ |
 | SKU 表 | 库存 | 链接 | — | W10 | 独立台账，不在商品主数据写余额 |
 
-**供给拆分**：一件代发与集采分列维护，W14 保存为供给候选；正式供货价 / 底价 / 起订量 / 进项税写入 `supplier_offering_revision`（W21），不替代正式过账。食品产品有效期、生产批次本期不进商品主数据。
+**供给边界**：W14 不保存默认供应商或供给候选。一件代发 / 集采、供货价、底价、快递、起订量、进项税率、费用、区域、能力和有效期统一由 W21 的 `supplier_offering_revision` 独立维护；同一 SKU 可关联多个供应商外部商品。食品产品有效期、生产批次本期不进商品主数据。
 
 媒体：主图跟随 SKU；轮播图、详情图跟随 SPU；除主图外均支持多张。媒体变更形成新修订，不得把短期签名 URL 当作长期业务值。
 
@@ -382,7 +373,7 @@ type MasterDataRevisionResult = {
 }
 ```
 
-正式 API 必须按资源使用强类型字段，不得直接采用示例中的通用 `Record` 作为长期契约。商品与 SKU 的 `fields` 至少包含：`spu`、`baseUnit`（单位字典 ID/代码）、`categoryId`、`brandId`、`supplierId`（默认供应商）、规格维度、`skus[]`；每个 SKU 含 `skuNo`（产品编码，系统生成可覆盖）、`mainImage`、可选 `barcode`、可选参考 `salePrice` / `marketPrice`、可选 `fulfillmentResponsibility`（`COMPANY_WAREHOUSE` | `SUPPLIER_DIRECT`）、可选 `inputTaxRate`（进项）、一件代发供给草稿（`dropshipCostPrice` / `dropshipFloorPrice` / `dropshipExpress`，起订量固定 1）、集采供给草稿（`bulkCostPrice` / `bulkFloorPrice` / `bulkMoq`）、可选 `carouselImages` / `detailImages`（SPU）。分类字段含 `code`、可选 `parent` / `productKind`；品牌字段含 `code`。供应商 `fields` 至少包含：`company`（企业主体）、`contactName` / `contactPhone` / `address`、`settlement` / `capability` / `businessCategory` / `signingEntity` / `paymentEntity`、`qualification` / `contractFile` / `authorizationFile` / `foodLicense` / `legalPersonIdCard` 及对应合同与授权有效期、`taxNo` / `bankName` / `bankAccount` / `invoiceType` / `invoiceTaxRate`、`initialScore` / `supplierRating` / `currentScore`。所有表单使用 TanStack Form；生效区间、规格身份、基础单位、分类/品牌/供应商启用状态、主图完整性、供应商能力/资质及仓库占用由服务端最终校验。
+正式 API 必须按资源使用强类型字段，不得直接采用示例中的通用 `Record` 作为长期契约。商品与 SKU 的 `fields` 至少包含：`spu`、`baseUnit`（单位字典 ID/代码）、`categoryId`、`brandId`、规格维度、`skus[]`；每个 SKU 含稳定 `skuId`（保存后）、`skuNo`（产品编码，系统生成可覆盖）、`mainImage`、可选 `barcode`、可选参考 `salePrice` / `marketPrice`，SPU 可含 `carouselImages` / `detailImages`。商品与 SKU 契约**不得**包含默认 `supplierId`、`fulfillmentResponsibility`、`inputTaxRate`、`dropship*` 或 `bulk*` 供给字段；这些字段只进入 W21 的强类型 `supplier_offering` 契约，W14 仅以 `skuId` 查询或跳转。分类字段含 `code`、可选 `parent` / `productKind`；品牌字段含 `code`。供应商 `fields` 至少包含：`company`（企业主体）、`contactName` / `contactPhone` / `address`、`settlement` / `capability` / `businessCategory` / `signingEntity` / `paymentEntity`、`qualification` / `contractFile` / `authorizationFile` / `foodLicense` / `legalPersonIdCard` 及对应合同与授权有效期、`taxNo` / `bankName` / `bankAccount` / `invoiceType` / `invoiceTaxRate`、`initialScore` / `supplierRating` / `currentScore`。所有表单使用 TanStack Form；生效区间、规格身份、基础单位、分类/品牌启用状态、主图完整性、供应商能力/资质及仓库占用由服务端最终校验。
 
 当 `objectType/resource="warehouses"` 时，Q1 未确认期间查询契约不变，但 `allowedActions` 不得包含创建、形成版本、停用或策略维护；所有仓库写命令由服务端以 `WAREHOUSE_WRITE_OWNER_UNCONFIRMED` fail-closed。客户端不能通过通用 `CreateMasterDataRevisionCommand`、管理员身份或隐藏入口绕过该门禁。
 
@@ -443,7 +434,7 @@ type MasterDataRevisionResult = {
 | 销售单 | W05 | 精确 `sellableItemRevisionId` / `skuId` / 卡券类目 SKU ID | 返回时重新校验可选主数据，不传当前名称作为事实 |
 | 二次确认 / 采购单 | W07 / W08 | 供应商、能力、资质和 SKU 稳定身份及使用版本 | 返回保持采购上下文 |
 | 库存台账 | W10 | `warehouseId`、`skuId` | W10 返回恢复仓库对象 |
-| 外部商品与供给 | W20 / W21 | 正式 SKU、供应商稳定身份 | 外部映射不能直接覆盖 W14 当前版本 |
+| 外部商品与供给 | W20 / W21 | W14 → W21 只传稳定 `skuId`、`returnTo`；W21 自行查询供应商外部商品和供给版本 | W21 返回时聚焦原 SKU；映射与供给不得覆盖 W14 当前版本 |
 | 商品发布 | W22 | 商品/SKU 与发布修订关系 | 发布新版本后 W14 只刷新关联摘要 |
 | 导入与期初 | W18 | 来源身份、导入批次、候选对象 | 业务确认后形成 W14 正式身份/版本 |
 | 权限与审计 | W19 | 对象类型、稳定 ID、审计时间范围 | 返回原对象审计子区 |
@@ -458,7 +449,7 @@ type MasterDataRevisionResult = {
 - [x] 列表能同时识别稳定身份、当前版本、启停生命周期、修订时序、生效区间和主要阻塞原因；“待生效”不会混入启停状态。
 - [x] 新建、更新资料（形成新版本）和停用均保留原因、操作者、时间与正式结果。
 - [x] 历史版本可读，当前名称变化不改变历史单据快照。
-- [x] 商品与 SKU 使用详情页维护；基础单位 / 分类 / 品牌 / 供应商为下拉；主图必填，轮播图与详情图允许空；可维护参考销售价/市场价，以及一件代发/集采供给拆分（成本价、底价、快递/起订量）与进项税率。
+- [x] 商品与 SKU 使用详情页维护；基础单位 / 分类 / 品牌为下拉；主图必填，轮播图与详情图允许空；仅维护参考销售价/市场价，每个已保存 SKU 提供按 `skuId` 进入 W21 的供给入口，W14 无默认供应商或供给编辑字段。
 - [x] 商品分类、品牌可在 W14 独立维护，并作为 SKU 下拉数据源。
 - [x] 商品分类采用树形维护（父子关系、路径、防环）；业务组件提供 `CategoryCombobox`、`BrandCombobox`。
 - [ ] 有效期重叠、SKU 规格身份变化、基础单位变更和有库存仓库停用均被阻断并解释。

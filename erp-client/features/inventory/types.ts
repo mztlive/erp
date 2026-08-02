@@ -15,6 +15,12 @@ export type InventoryQuery = {
   skuId?: string
   salesOrderLineId?: string
   availability?: InventoryAvailability
+  movementType?: string[]
+  occurredFrom?: string
+  occurredTo?: string
+  cursor?: string
+  pageSize: number
+  sort: string[]
   adjustmentId?: string
   balanceId?: string
 }
@@ -153,6 +159,12 @@ export type InventoryListView = Readonly<{
   reservations: readonly StockReservationRow[]
   adjustments: readonly StockAdjustmentRow[]
   total: number
+  /** 当前服务端快照中的游标；空字符串表示第一页。 */
+  cursor: string
+  nextCursor?: string
+  previousCursor?: string
+  pageSize: number
+  sort: readonly string[]
   filterSummary: string
   permissionVersion: string
   dataWatermark: string

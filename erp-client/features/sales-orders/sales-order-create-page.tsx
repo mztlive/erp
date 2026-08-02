@@ -28,6 +28,12 @@ import {
   paymentTermLabel,
 } from "@/lib/business-options"
 import {
+  compareDecimal,
+  multiplyFixed,
+  splitGrossByPercentRate,
+  sumFixed,
+} from "@/lib/fixed-decimal"
+import {
   Alert,
   AlertDescription,
   AlertTitle,
@@ -62,20 +68,38 @@ import type {
   SalesOrderNature,
 } from "@/features/sales-orders/types"
 
-const positiveDecimal = (label: string) =>
+const decimalInput = (
+  label: string,
+  maxScale: number,
+  options: { positive?: boolean } = {}
+) =>
   z
     .string()
     .trim()
-    .regex(/^\d+(?:\.\d{1,2})?$/, `${label}最多保留两位小数`)
-    .refine((value) => Number(value) > 0, `${label}必须大于 0`)
+    .regex(
+      new RegExp(`^\\d+(?:\\.\\d{1,${maxScale}})?$`),
+      `${label}最多保留 ${maxScale} 位小数`
+    )
+    .refine(
+      (value) => !options.positive || /[1-9]/.test(value),
+      `${label}必须大于 0`
+    )
+
+function decimalAtMost(value: string, maximum: string, maxScale: number) {
+  try {
+    return compareDecimal(value, maximum, maxScale) <= 0
+  } catch {
+    return false
+  }
+}
 
 const draftLineSchema = z.object({
   rowKey: z.string().min(1),
   name: z.string().trim().min(1, "请输入销售项目"),
   sku: z.string(),
-  quantity: positiveDecimal("数量"),
+  quantity: decimalInput("数量", 6, { positive: true }),
   unit: z.string().trim().min(1, "请输入单位"),
-  unitPriceGross: positiveDecimal("含税单价"),
+  unitPriceGross: decimalInput("含税单价", 4, { positive: true }),
   fulfillmentMode: z.string(),
   dueDate: z.string(),
   faceValue: z.string(),
@@ -104,8 +128,8 @@ const createSalesOrderSchema = z
     welfareScene: z.string().trim().min(1, "请输入福利场景"),
     paymentTerms: z.string().trim().min(1, "请选择付款条件"),
     fulfillmentDeadline: z.string().min(1, "请选择履约期限"),
-    taxRatePercent: positiveDecimal("税率").refine(
-      (value) => Number(value) <= 100,
+    taxRatePercent: decimalInput("税率", 6).refine(
+      (value) => decimalAtMost(value, "100", 6),
       "税率不能超过 100%"
     ),
     remark: z.string(),
@@ -193,7 +217,7 @@ const createSalesOrderSchema = z
     }
     value.lineItems.forEach((line, index) => {
       if (value.nature === "card_voucher") {
-        if (!line.faceValue.trim() || Number(line.faceValue) <= 0) {
+        if (!/^\d+(?:\.\d{1,2})?$/.test(line.faceValue) || !/[1-9]/.test(line.faceValue)) {
           context.addIssue({
             code: "custom",
             path: ["lineItems", index, "faceValue"],
@@ -273,20 +297,22 @@ function calculateTotals(
   lineItems: readonly SalesOrderDraftLineInput[],
   taxRatePercent: string
 ) {
-  const gross = lineItems.reduce((sum, line) => {
-    const quantity = Number(line.quantity)
-    const unitPrice = Number(line.unitPriceGross)
-    return sum +
-      (Number.isFinite(quantity) && Number.isFinite(unitPrice)
-        ? quantity * unitPrice
-        : 0)
-  }, 0)
-  const taxRate = Number(taxRatePercent)
-  const net = gross / (1 + (Number.isFinite(taxRate) ? taxRate : 0) / 100)
-  return {
-    gross: gross.toFixed(2),
-    net: net.toFixed(2),
-    tax: (gross - net).toFixed(2),
+  try {
+    const lines = lineItems.map((line) => {
+      const gross = multiplyFixed(line.quantity || "0", line.unitPriceGross || "0", {
+        leftMaxScale: 6,
+        rightMaxScale: 4,
+        outputScale: 2,
+      })
+      return splitGrossByPercentRate(gross, taxRatePercent || "0")
+    })
+    return {
+      gross: sumFixed(lines.map((line) => line.gross), { maxScale: 2, outputScale: 2 }),
+      net: sumFixed(lines.map((line) => line.net), { maxScale: 2, outputScale: 2 }),
+      tax: sumFixed(lines.map((line) => line.tax), { maxScale: 2, outputScale: 2 }),
+    }
+  } catch {
+    return { gross: "0.00", net: "0.00", tax: "0.00" }
   }
 }
 
@@ -1073,9 +1099,7 @@ export function SalesOrderCreatePage({
                       align: "end",
                       renderValue: ({ item }) => (
                         <MoneyValue
-                          value={(
-                            Number(item.quantity || 0) * Number(item.unitPriceGross || 0)
-                          ).toFixed(2)}
+                          value={calculateTotals([item], values.taxRatePercent).gross}
                           taxBasis="gross"
                         />
                       ),

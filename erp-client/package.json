@@ -10,7 +10,8 @@
     "verify:workspaces": "node scripts/verify-workspaces.mjs",
     "test:filter-orders": "node scripts/test-filter-orders.mjs",
     "test:contract-pdf": "node scripts/test-contract-pdf.mjs",
-    "test:workspace-filters": "node scripts/test-workspace-filters.mjs"
+    "test:workspace-filters": "node scripts/test-workspace-filters.mjs",
+    "test:inventory-pricing-contracts": "node scripts/test-inventory-pricing-contracts.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

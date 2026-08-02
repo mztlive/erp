@@ -74,6 +74,7 @@ function maskOffering(
     ...o,
     supplyPriceGross: maskCostValue(o.supplyPriceGross),
     supplyPriceNet: maskCostValue(o.supplyPriceNet),
+    floorPriceGross: maskCostValue(o.floorPriceGross),
     inputTaxRate: maskCostValue(o.inputTaxRate),
     freightAmount: maskCostValue(o.freightAmount),
     serviceFeeAmount: maskCostValue(o.serviceFeeAmount),
@@ -217,6 +218,7 @@ function projectItem(
               ? {
                   ...offering.proposedDefaults,
                   supplyPriceGross: COST_MASK,
+                  floorPriceGross: COST_MASK,
                   inputTaxRate: COST_MASK,
                   freightAmount: COST_MASK,
                   serviceFeeAmount: COST_MASK,
@@ -279,6 +281,7 @@ function filterSummary(q: ExternalCatalogQueueQuery): string {
     DEMO_ROLE_LABEL[resolveRole(q.demoRole)],
   ]
   if (q.q) parts.push(`搜索 ${q.q}`)
+  if (q.skuId) parts.push(`SKU ${q.skuId}`)
   if (q.maskCost) parts.push("成本掩码")
   return parts.join(" · ")
 }
@@ -325,6 +328,14 @@ export async function fetchExternalCatalogQueue(
     items = items.filter((i) => i.changeType === query.changeType)
   }
 
+  if (query.skuId) {
+    items = items.filter(
+      (i) =>
+        i.mapping?.skuId === query.skuId ||
+        i.skuCandidates.some((candidate) => candidate.skuId === query.skuId)
+    )
+  }
+
   if (query.status === "held") {
     items = items.filter(
       (i) =>
@@ -350,7 +361,8 @@ export async function fetchExternalCatalogQueue(
   items = sortItems(items)
 
   const queueContextId =
-    query.queueContextId ?? `queue:W21:${role}:${query.changeType ?? "actionable"}`
+    query.queueContextId ??
+    `queue:W21:${role}:${query.changeType ?? "actionable"}:${query.skuId ?? "all"}`
 
   let position = 0
   let current = items[0]

@@ -21,6 +21,7 @@ import type {
   MasterDataListResult,
   MasterDataMutationResult,
   MasterDataResource,
+  ProductDetailView,
   ProductFields,
 } from "@/features/master-data/types"
 import { productListFacts } from "@/features/master-data/product-model"
@@ -67,6 +68,38 @@ const idempotencyResults = new Map<string, MasterDataMutationResult>()
 
 const ACTOR = "当前用户"
 
+function cloneProductDetail(detail: ProductDetailView): ProductDetailView {
+  return {
+    ...detail,
+    carouselImages: [...detail.carouselImages],
+    detailImages: [...detail.detailImages],
+    specs: detail.specs.map((spec) => ({
+      name: spec.name,
+      values: [...spec.values],
+    })),
+    skus: detail.skus.map((sku) => ({
+      ...sku,
+      attributeValues: [...sku.attributeValues],
+    })),
+  }
+}
+
+function productSnapshot(fields: ProductFields): ProductDetailView {
+  return cloneProductDetail({
+    baseUnitId: fields.baseUnitId,
+    baseUnitCode: fields.baseUnitCode,
+    baseUnit: fields.baseUnit,
+    categoryId: fields.categoryId,
+    category: fields.category,
+    brandId: fields.brandId,
+    brand: fields.brand,
+    carouselImages: fields.carouselImages,
+    detailImages: fields.detailImages,
+    specs: fields.specs,
+    skus: fields.skus,
+  })
+}
+
 function listKey(resource: MasterDataResource, stableId: string) {
   return `${resource}:${stableId}`
 }
@@ -94,7 +127,17 @@ export function getW14Center(
   if (overlay) return overlay
   const seed = MASTER_DATA_CENTER_SEEDS[stableId]
   if (!seed || seed.resource !== resource) return null
-  return seed
+  if (!seed.productDetail) return seed
+  return {
+    ...seed,
+    productDetail: cloneProductDetail(seed.productDetail),
+    revisionTimeline: seed.revisionTimeline.map((entry) => ({
+      ...entry,
+      // Older fixture revisions still receive their own immutable object copy.
+      // Session revisions below preserve the exact submitted content per version.
+      productSnapshot: cloneProductDetail(entry.productSnapshot ?? seed.productDetail!),
+    })),
+  }
 }
 
 export function buildW14ListResult(
@@ -278,6 +321,7 @@ export function createW14Object(
         changeReason: input.changeReason.trim() || "新建",
         isCurrent: true,
         lifecycleAtRevision: "ENABLED",
+        productSnapshot: productFields ? productSnapshot(productFields) : undefined,
       },
     ],
     selectorEligibility: listItem.selectorEligibility,
@@ -294,24 +338,7 @@ export function createW14Object(
           skuCount: productFields.skus.length,
         }
       : undefined,
-    productDetail: productFields
-      ? {
-          baseUnit: productFields.baseUnit,
-          category: productFields.category,
-          brand: productFields.brand,
-          supplier: productFields.supplier,
-          carouselImages: [...productFields.carouselImages],
-          detailImages: [...productFields.detailImages],
-          specs: productFields.specs.map((s) => ({
-            name: s.name,
-            values: [...s.values],
-          })),
-          skus: productFields.skus.map((sku) => ({
-            ...sku,
-            attributeValues: [...sku.attributeValues],
-          })),
-        }
-      : undefined,
+    productDetail: productFields ? productSnapshot(productFields) : undefined,
     allowedActions: ["VIEW", "CREATE_REVISION", "DISABLE"],
     actionBlockers: [],
     auditEvents: [
@@ -493,9 +520,15 @@ export function reviseW14Object(
         changeReason,
         isCurrent: !isFuture,
         lifecycleAtRevision: center.lifecycleStatus,
+        productSnapshot: productFields ? productSnapshot(productFields) : undefined,
       },
       ...center.revisionTimeline.map((entry) => ({
         ...entry,
+        productSnapshot:
+          entry.productSnapshot ??
+          (entry.isCurrent && center.productDetail
+            ? cloneProductDetail(center.productDetail)
+            : undefined),
         isCurrent: isFuture ? entry.isCurrent : false,
         revisionTiming: isFuture
           ? entry.revisionTiming
@@ -530,22 +563,7 @@ export function reviseW14Object(
         : center.productConstraints,
     productDetail:
       !isFuture && productFields
-        ? {
-            baseUnit: productFields.baseUnit,
-            category: productFields.category,
-            brand: productFields.brand,
-            supplier: productFields.supplier,
-            carouselImages: [...productFields.carouselImages],
-            detailImages: [...productFields.detailImages],
-            specs: productFields.specs.map((s) => ({
-              name: s.name,
-              values: [...s.values],
-            })),
-            skus: productFields.skus.map((sku) => ({
-              ...sku,
-              attributeValues: [...sku.attributeValues],
-            })),
-          }
+        ? productSnapshot(productFields)
         : center.productDetail,
   }
 

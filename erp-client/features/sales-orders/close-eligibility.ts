@@ -3,6 +3,7 @@ import type {
   ProgressTrack,
   SalesOrderNature,
 } from "@/features/sales-orders/types"
+import { compareDecimal } from "@/lib/fixed-decimal"
 
 /**
  * 关闭规则（W05 §5.3 / §12）：
@@ -59,7 +60,7 @@ export function computeCloseEligibility(input: {
 
   const receivableSettled =
     collection.label === "已结清" ||
-    parseAmount(receivedAmount) >= parseAmount(amountGross) - 0.005
+    amountAtLeast(receivedAmount, amountGross)
 
   const invoiceComplete = invoicing.label === "已完成"
   const blockers: string[] = []
@@ -89,9 +90,18 @@ export function computeCloseEligibility(input: {
   }
 }
 
-function parseAmount(value: string): number {
-  const n = Number.parseFloat(value.replace(/,/g, ""))
-  return Number.isFinite(n) ? n : 0
+function amountAtLeast(receivedAmount: string, amountGross: string): boolean {
+  try {
+    return (
+      compareDecimal(
+        receivedAmount.replaceAll(",", ""),
+        amountGross.replaceAll(",", ""),
+        2
+      ) >= 0
+    )
+  } catch {
+    return false
+  }
 }
 
 /** 已生效单不可直接编辑；ERP 主责已生效单可发起销售变更。 */

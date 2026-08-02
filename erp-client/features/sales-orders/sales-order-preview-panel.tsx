@@ -31,6 +31,7 @@ import {
 } from "@/mock/sales-orders"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import { cn } from "@/lib/utils"
+import { sumFixed } from "@/lib/fixed-decimal"
 
 type SalesOrderPreviewPanelProps = {
   order: SalesOrderListItem
@@ -404,10 +405,15 @@ function RelatedPill({
   )
 }
 
-/** 演示用：用字符串金额做粗减，仅展示不入账。 */
+/** 只读展示也沿用定点金额，避免与正式口径出现浮点尾差。 */
 function formatRemaining(gross: string, received: string) {
-  const g = Number(gross)
-  const r = Number(received)
-  if (Number.isNaN(g) || Number.isNaN(r)) return gross
-  return (g - r).toFixed(2)
+  try {
+    return sumFixed([gross, `-${received}`], {
+      maxScale: 2,
+      outputScale: 2,
+      allowNegative: true,
+    })
+  } catch {
+    return gross
+  }
 }

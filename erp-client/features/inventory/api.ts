@@ -4,6 +4,10 @@
  */
 
 import { mockDelay } from "@/features/workspace-kit/delay"
+import {
+  decodeInventoryCursor,
+  encodeInventoryCursor,
+} from "@/features/inventory/cursor"
 import type {
   AdjustmentDraftView,
   AdjustmentReasonType,
@@ -153,8 +157,44 @@ function filterSummary(query: InventoryQuery, total: number): string {
   ]
   if (query.q?.trim()) parts.push(`搜索「${query.q.trim()}」`)
   if (query.skuId) parts.push(`SKU ${query.skuId}`)
+  if (query.movementType?.length) {
+    parts.push(`流水类型 ${query.movementType.join("、")}`)
+  }
+  if (query.view === "movement" && query.occurredFrom && query.occurredTo) {
+    parts.push(`${query.occurredFrom} 至 ${query.occurredTo}`)
+  }
   parts.push(`${total} 条`)
   return parts.join(" · ")
+}
+
+function sortRows<T>(
+  rows: readonly T[],
+  sort: readonly string[],
+  valueOf: (row: T, field: string) => string | number | undefined
+): T[] {
+  return [...rows].sort((left, right) => {
+    for (const token of sort) {
+      const [field, rawDirection] = token.split(":")
+      const direction = rawDirection === "desc" ? -1 : 1
+      const leftValue = valueOf(left, field)
+      const rightValue = valueOf(right, field)
+      if (leftValue == null && rightValue == null) continue
+      if (leftValue == null) return 1
+      if (rightValue == null) return -1
+      if (leftValue < rightValue) return -1 * direction
+      if (leftValue > rightValue) return 1 * direction
+    }
+    return 0
+  })
+}
+
+function defaultSort(view: InventoryQuery["view"]): string[] {
+  if (view === "balance") return ["warehouseCode:asc", "skuCode:asc"]
+  if (view === "movement") return ["occurredAt:desc", "movementId:desc"]
+  if (view === "reservation") {
+    return ["establishedAt:desc", "reservationId:desc"]
+  }
+  return ["createdAt:desc", "adjustmentId:desc"]
 }
 
 /**
@@ -202,6 +242,9 @@ export async function fetchInventoryList(
       reservations: [],
       adjustments: [],
       total: 0,
+      cursor: "",
+      pageSize: query.pageSize,
+      sort: query.sort,
       filterSummary: "权限已收回",
       permissionVersion: PERMISSION_VERSION,
       dataWatermark: "",
@@ -232,6 +275,9 @@ export async function fetchInventoryList(
       reservations: [],
       adjustments: [],
       total: 0,
+      cursor: "",
+      pageSize: query.pageSize,
+      sort: query.sort,
       filterSummary: "未配置仓库数据范围",
       permissionVersion: PERMISSION_VERSION,
       dataWatermark: "",
@@ -287,6 +333,11 @@ export async function fetchInventoryList(
       query.warehouseId ||
       query.skuId ||
       query.balanceId ||
+      query.salesOrderLineId ||
+      query.adjustmentId ||
+      query.movementType?.length ||
+      query.occurredFrom ||
+      query.occurredTo ||
       (query.availability && query.availability !== "all")
   )
 
@@ -310,6 +361,20 @@ export async function fetchInventoryList(
   }
   if (query.balanceId) {
     movements = movements.filter((m) => m.balanceId === query.balanceId)
+  }
+  if (query.movementType?.length) {
+    const types = new Set(query.movementType)
+    movements = movements.filter((movement) => types.has(movement.movementType))
+  }
+  if (query.occurredFrom) {
+    movements = movements.filter(
+      (movement) => movement.occurredAt.slice(0, 10) >= query.occurredFrom!
+    )
+  }
+  if (query.occurredTo) {
+    movements = movements.filter(
+      (movement) => movement.occurredAt.slice(0, 10) <= query.occurredTo!
+    )
   }
 
   let reservations = INVENTORY_RESERVATION_SEED.map(projectReservation)
@@ -379,6 +444,32 @@ export async function fetchInventoryList(
     })
   )
 
+  const sort = query.sort.length > 0 ? query.sort : defaultSort(query.view)
+  balances = sortRows(balances, sort, (row, field) => {
+    if (field === "warehouseCode") return row.warehouseCode
+    if (field === "skuCode") return row.skuCode
+    if (field === "lastMovementAt") return row.lastMovementAt
+    return undefined
+  })
+  movements = sortRows(movements, sort, (row, field) => {
+    if (field === "occurredAt") return row.occurredAt
+    if (field === "recordedAt") return row.recordedAt
+    if (field === "movementId") return row.movementId
+    return undefined
+  })
+  reservations = sortRows(reservations, sort, (row, field) => {
+    if (field === "establishedAt") return row.establishedAt
+    if (field === "reservationId") return row.reservationId
+    if (field === "salesOrderNo") return row.salesOrderNo
+    return undefined
+  })
+  adjustments = sortRows(adjustments, sort, (row, field) => {
+    if (field === "createdAt") return row.createdAt
+    if (field === "adjustmentId") return row.adjustmentId
+    if (field === "adjustmentNo") return row.adjustmentNo
+    return undefined
+  })
+
   let total = 0
   switch (query.view) {
     case "balance":
@@ -406,14 +497,50 @@ export async function fetchInventoryList(
   const lastMovementWatermark =
     INVENTORY_MOVEMENT_SEED.map((m) => m.recordedAt).sort().at(-1) ?? ""
 
+  const pageSize = Math.min(100, Math.max(1, Math.trunc(query.pageSize)))
+  const requestedOffset = decodeInventoryCursor(query.cursor, query.view)
+  const offset = requestedOffset < total ? requestedOffset : 0
+  const cursor = offset === 0 ? "" : encodeInventoryCursor(query.view, offset)
+  const nextOffset = offset + pageSize
+  const nextCursor =
+    nextOffset < total
+      ? encodeInventoryCursor(query.view, nextOffset)
+      : undefined
+  const previousOffset = Math.max(0, offset - pageSize)
+  const previousCursor =
+    offset > 0
+      ? previousOffset === 0
+        ? ""
+        : encodeInventoryCursor(query.view, previousOffset)
+      : undefined
+
+  // 只返回当前视图的服务端页，避免浏览器拿到其它视图全量数据再本地切页。
+  const pageBalances =
+    query.view === "balance" ? balances.slice(offset, offset + pageSize) : []
+  const pageMovements =
+    query.view === "movement" ? movements.slice(offset, offset + pageSize) : []
+  const pageReservations =
+    query.view === "reservation"
+      ? reservations.slice(offset, offset + pageSize)
+      : []
+  const pageAdjustments =
+    query.view === "adjustment"
+      ? adjustments.slice(offset, offset + pageSize)
+      : []
+
   return {
     view: query.view,
     metrics,
-    balances,
-    movements,
-    reservations,
-    adjustments,
+    balances: pageBalances,
+    movements: pageMovements,
+    reservations: pageReservations,
+    adjustments: pageAdjustments,
     total,
+    cursor,
+    nextCursor,
+    previousCursor,
+    pageSize,
+    sort,
     filterSummary: filterSummary(query, total),
     permissionVersion: PERMISSION_VERSION,
     dataWatermark: lastMovementWatermark,

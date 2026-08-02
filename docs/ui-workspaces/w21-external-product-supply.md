@@ -161,6 +161,8 @@
 
 同一外部商品同一时点只能有一个有效 ERP SKU 映射；一个 ERP SKU 可关联多个供应商外部商品。变更映射不得反写已支付订单的 SKU 快照。
 
+W21 是供应商供给草稿和正式供给修订的唯一写入工作面。供应商、供给模式、价格、税费、费用、MOQ、区域、能力和有效期不得写回 W14 的商品或 SKU 修订；W14 只按稳定 `skuId` 进入本页并读取关联投影。
+
 ### 5.3 供给版本与影响
 
 | 字段 | 用户文案 | 数据来源 | 口径 / 格式 | 权限规则 |
@@ -197,6 +199,7 @@
 | --- | --- | --- | --- |
 | 模式 | 待处理队列 | `mode=queue/list` | 队列用于处理；列表用于全量查询和中心入口 |
 | 供应商/连接 | 全部有权范围 | `supplierId/connectionId` | 选择稳定对象，不自由输入内部 ID |
+| ERP SKU | 全部有权范围 | `skuId` | 从 W14 进入时按稳定 SKU 筛选已映射或候选关联的外部商品；不接收 W14 传入价格或供应商快照 |
 | 变化类型 | 需处理 | `changeType` | 新增、关键变化、停止供应、异常；无变化默认隐藏 |
 | 映射状态 | 待审核 + 冲突 | `mappingStatus` | 可查已生效/停用历史 |
 | 供给状态 | 全部 | `offeringStatus` | 启用、暂停、停止、待确认 |
@@ -233,8 +236,10 @@
 
 ```ts
 type ExternalCatalogQueueQuery = {
+  mode?: "queue" | "list"
   supplierId?: string
   connectionId?: string
+  skuId?: string
   changeTypes?: Array<"NEW" | "CHANGED" | "STOPPED" | "ERROR" | "UNCHANGED">
   mappingStatuses?: string[]
   offeringStatuses?: string[]
@@ -257,6 +262,45 @@ type ExternalCatalogRegistrationBlocker = {
 type ExternalCatalogExceptionWorkItem = QueueWorkItemDetail & {
   workItemType: "BUSINESS_EXCEPTION"
   businessObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
+}
+
+type SupplierOfferingRevisionView = {
+  offeringRevisionId: string
+  offeringId: string
+  revisionNo: number
+  status: string
+  supplyPriceGross: string | null
+  supplyPriceNet: string | null
+  floorPriceGross: string | null
+  supplyMode: "DROPSHIP" | "BULK"
+  dropshipExpress?: string
+  inputTaxRate: string | null
+  freightAmount: string | null
+  serviceFeeAmount: string | null
+  minimumOrderQuantity: string
+  supplyRegion: string[]
+  availabilityStatus: string
+  availableQuantity: string
+  productCapabilities: string[]
+  validFrom: string
+  validTo?: string
+  immutable: true
+}
+
+type SafeOfferingDraftView = {
+  supplyPriceGross: string
+  floorPriceGross: string
+  supplyMode: "DROPSHIP" | "BULK"
+  dropshipExpress?: string
+  inputTaxRate: string
+  freightAmount: string
+  serviceFeeAmount: string
+  minimumOrderQuantity: string
+  supplyRegion: string[]
+  productCapabilities: string[]
+  validFrom: string
+  validTo?: string
+  sessionDraftOnly: true
 }
 
 type ExternalCatalogItemBase = {
@@ -350,6 +394,9 @@ type ExternalCatalogOfferingDecision = {
   expectedOfferingRevision?: string
   offeringDraft: {
     supplyPriceGross: string
+    floorPriceGross: string
+    supplyMode: "DROPSHIP" | "BULK"
+    dropshipExpress?: string
     inputTaxRate: string
     freightAmount: string
     serviceFeeAmount: string
@@ -449,7 +496,7 @@ type CompleteExternalCatalogWorkItemResult = CompleteWorkItemResult<ExternalCata
 | 来源 / 去向 | Wxx | 携带上下文 | 返回规则 |
 | --- | --- | --- | --- |
 | 今日工作台 / 待办 | W01 / W02 | 已注册来源 `ERROR` 或 `STOPPED` 异常的 `currentWorkItemId=workItemId`、`queueContextId` | 非终结动作后仍为原 `PENDING` / `IN_PROGRESS` 任务；终结成功后回任务结果或继续队列 |
-| 商品/SKU/供应商基础资料 | W14 | 外部商品 ID、来源修订、拟建 SKU 上下文 | 建档后回 W21 并重新选择稳定 SKU |
+| 商品/SKU/供应商基础资料 | W14 | W14 → W21 传稳定 `skuId`、`mode=list`、`returnTo`；W21 → W14 建档时传外部商品 ID、来源修订、拟建 SKU 上下文 | 查看供给后按 `returnTo` 回原 SKU；新建 SKU 后回 W21 并重新选择稳定身份，不传价格/供应商快照 |
 | API 供应商连接 | W20 | 连接 ID、目录同步任务 ID、能力摘要 | 返回当前项并刷新水位 |
 | 商品发布 | W22 | 普通发布只传 SKU ID、已确认供给修订 ID、发布 blocker 与来源项 ID；安全暂停恢复在 Q3 确认前禁止跳转 | 普通发布后回中心“发布影响”；恢复 blocker 不得被导航规避 |
 | 商城消费/供应商订单 | W25 / W26 | 历史订单快照或供给引用（只读） | 返回原供给版本，不允许改历史 |
@@ -483,7 +530,7 @@ type CompleteExternalCatalogWorkItemResult = CompleteWorkItemResult<ExternalCata
 - [x] 采购负责映射和供给；运营负责 W22 发布；管理员/运维只处理技术异常。
 - [x] 供货价变化不自动修改商城销售价；`minimumOrderQuantity` 不自动复制为商城最小购买量。
 - [ ] 每个发布版本只绑定一个明确供给修订，不存在自动动态供应商路由。
-- [ ] `STOPPED`、不可供、零库存、数据过期或成本/关键供给变化未确认时，系统不等待人工即幂等形成全部暂停子结果/投递/outbox。仅 `STOPPED` 按来源对象/原因/版本创建/复用一个 `BUSINESS_EXCEPTION`；其它原因只返回 blocker/证据，不得借异常类型伪装正常映射/供给复核。
+- [x] `STOPPED`、不可供、零库存、数据过期或成本/关键供给变化未确认时，mock 领域事件处理器不等待人工即幂等形成全部暂停子结果/投递/outbox。仅 `STOPPED` 按来源对象/原因/版本创建/复用一个 `BUSINESS_EXCEPTION`；其它原因只返回 blocker/证据，不得借异常类型伪装正常映射/供给复核。
 - [ ] 开放正常目录映射/供给复核队列前，已在 `erp-data-model.md` 登记固定 `work_item_type` 并同步 W01/W02 handler；登记前只允许已注册的异常任务，正常确认入口保持 blocker。
 - [ ] 人工任务无人领取、租约丢失或处理失败时，商品都不会恢复可下单；替代供给选定/恢复责任未确认时固定返回 `RECOVERY_RESPONSIBILITY_UNCONFIRMED`，不得从 W21 发起 W22 恢复链。
 - [ ] 已支付订单永久保留下单时商品、销售价、供应商和成本快照。

@@ -79,6 +79,9 @@ export function ProductPublicationsListPage() {
   const searchParams = useSearchParams()
 
   const qParam = searchParams.get("q") ?? ""
+  const skuId = searchParams.get("skuId") ?? undefined
+  const supplierOfferingRevisionId =
+    searchParams.get("supplierOfferingRevisionId") ?? undefined
   const mallId = searchParams.get("mall") ?? undefined
   const publicationStatus = searchParams.get("publicationStatus") ?? "all"
   const deliveryStatus = searchParams.get("deliveryStatus") ?? "all"
@@ -125,6 +128,8 @@ export function ProductPublicationsListPage() {
 
   const query: ProductPublicationListQuery = {
     q: qParam || undefined,
+    skuId,
+    supplierOfferingRevisionId,
     mallId,
     publicationStatus:
       publicationStatus === "all" ? undefined : publicationStatus,
