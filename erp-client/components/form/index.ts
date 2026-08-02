@@ -11,6 +11,7 @@ import { TextField } from "@/components/form/text-field";
 import { TextareaField } from "@/components/form/textarea-field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { SelectField } from "@/components/form/select-field";
+import { PdfUploadField } from "@/components/form/pdf-upload-field";
 
 /**
  * 应用统一表单入口：
@@ -27,6 +28,7 @@ export const { useAppForm, withForm, withFieldGroup } = createFormHook({
     TextField,
     TextareaField,
     SelectField,
+    PdfUploadField,
   },
   formComponents: {
     SubmitButton,
@@ -41,4 +43,5 @@ export {
   SelectField,
   type SelectFieldOption,
 } from "@/components/form/select-field";
+export { PdfUploadField } from "@/components/form/pdf-upload-field";
 export { toFieldErrors } from "@/components/form/utils";

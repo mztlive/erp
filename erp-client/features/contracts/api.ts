@@ -1,21 +1,19 @@
 import { mockDelay } from "@/features/workspace-kit/delay"
 import type {
-  ActivateContractResult,
   ContractCenterView,
   ContractExportJob,
   ContractListRow,
-  CreateContractDraftResult,
-  ReviseContractResult,
+  UploadContractPdfInput,
+  UploadContractPdfResult,
 } from "@/features/contracts/types"
 import {
-  activateW04Contract,
-  createW04ContractDraft,
   createW04ExportJob,
   getW04ContractCenter,
   listW04Contracts,
-  reviseW04Contract,
+  uploadW04ContractPdf,
 } from "@/mock/session-state"
 import { listContractsSelectableForNewSalesOrder } from "@/mock/contracts"
+import { contractPdfError } from "@/features/contracts/pdf"
 
 export const CONTRACT_PERMISSION_VERSION = "pv-w04-demo-1"
 
@@ -47,33 +45,13 @@ export async function fetchContractsForNewSalesOrder(): Promise<
   })
 }
 
-export async function createContractDraft(input: {
-  customerName: string
-  settlementPartyName: string
-  validFrom: string
-  validTo: string
-  idempotencyKey: string
-}): Promise<CreateContractDraftResult> {
+export async function uploadContractPdf(
+  input: UploadContractPdfInput
+): Promise<UploadContractPdfResult> {
   await mockDelay(160)
-  return createW04ContractDraft(input)
-}
-
-export async function activateContract(input: {
-  contractId: string
-  expectedLockVersion: number
-  idempotencyKey: string
-}): Promise<ActivateContractResult> {
-  await mockDelay(200)
-  return activateW04Contract(input)
-}
-
-export async function reviseContract(input: {
-  contractId: string
-  expectedLockVersion: number
-  idempotencyKey: string
-}): Promise<ReviseContractResult> {
-  await mockDelay(200)
-  return reviseW04Contract(input)
+  const fileError = contractPdfError(input.pdfFile)
+  if (fileError) throw new Error(fileError)
+  return uploadW04ContractPdf(input)
 }
 
 export async function createContractExportJob(input: {

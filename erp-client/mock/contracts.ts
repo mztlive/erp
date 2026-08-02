@@ -44,13 +44,7 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
     ownerLabel: "王敏 · 当前客户负责人",
     ownerKind: "current_customer_owner",
     allowedActions: ["PRINT", "CREATE_SALES_ORDER", "TERMINATE"],
-    actionBlockers: [
-      {
-        action: "REVISE",
-        code: "REVISION_POLICY_MISSING",
-        message: "修订规则尚未配置，已生效合同只读查看。",
-      },
-    ],
+    actionBlockers: [],
   },
   {
     contractId: "ct_0288",
@@ -76,11 +70,6 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
     ownerKind: "current_customer_owner",
     allowedActions: ["PRINT", "CREATE_SALES_ORDER"],
     actionBlockers: [
-      {
-        action: "REVISE",
-        code: "REVISION_POLICY_MISSING",
-        message: "修订规则尚未配置，已生效合同只读查看。",
-      },
       {
         action: "TERMINATE",
         code: "NEEDS_LEADER",
@@ -110,8 +99,7 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
     activeSalesOrderCount: 1,
     ownerLabel: "李倩 · 当前客户负责人",
     ownerKind: "current_customer_owner",
-    // 演示：唯一已配置修订策略的合同
-    allowedActions: ["PRINT", "CREATE_SALES_ORDER", "REVISE", "TERMINATE"],
+    allowedActions: ["PRINT", "CREATE_SALES_ORDER", "TERMINATE"],
     actionBlockers: [],
   },
   {
@@ -126,8 +114,9 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
       partyId: "sp_beichen",
       displayName: "北辰能源集团",
     },
-    ...statusMeta("DRAFT"),
-    revisionNo: 0,
+    ...statusMeta("EFFECTIVE"),
+    revisionNo: 1,
+    signedAt: "2026-07-20",
     validFrom: "2026-04-01",
     validTo: "2027-03-31",
     expiringWithin30Days: false,
@@ -135,19 +124,8 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
     activeSalesOrderCount: 0,
     ownerLabel: "李倩 · 当前客户负责人",
     ownerKind: "current_customer_owner",
-    allowedActions: ["EDIT_DRAFT", "ACTIVATE", "UPLOAD_ATTACHMENT"],
-    actionBlockers: [
-      {
-        action: "CREATE_SALES_ORDER",
-        code: "NOT_EFFECTIVE",
-        message: "草稿合同不可用于新建销售单。",
-      },
-      {
-        action: "PRINT",
-        code: "NO_CONFIRMED_REVISION",
-        message: "尚无已确认修订，无法生成打印件。",
-      },
-    ],
+    allowedActions: ["PRINT", "CREATE_SALES_ORDER", "TERMINATE"],
+    actionBlockers: [],
   },
   {
     contractId: "ct_1190",
@@ -177,11 +155,6 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
         action: "CREATE_SALES_ORDER",
         code: "TERMINATED",
         message: "已终止合同不可用于新建销售单；历史记录仍可读。",
-      },
-      {
-        action: "REVISE",
-        code: "TERMINATED",
-        message: "已终止合同不可创建新修订。",
       },
     ],
   },
@@ -214,11 +187,6 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
         code: "EXPIRED",
         message: "已到期合同不可用于新建销售单；历史版本仍可追溯。",
       },
-      {
-        action: "REVISE",
-        code: "EXPIRED",
-        message: "已到期合同不可创建新修订。",
-      },
     ],
   },
   {
@@ -244,13 +212,7 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
     ownerLabel: "王敏 · 当前客户负责人",
     ownerKind: "current_customer_owner",
     allowedActions: ["PRINT", "CREATE_SALES_ORDER"],
-    actionBlockers: [
-      {
-        action: "REVISE",
-        code: "REVISION_POLICY_MISSING",
-        message: "修订规则尚未配置，已生效合同只读查看。",
-      },
-    ],
+    actionBlockers: [],
   },
   {
     contractId: "ct_0220",
@@ -275,13 +237,7 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
     ownerLabel: "赵宇 · 当前客户负责人",
     ownerKind: "current_customer_owner",
     allowedActions: ["PRINT", "CREATE_SALES_ORDER"],
-    actionBlockers: [
-      {
-        action: "REVISE",
-        code: "REVISION_POLICY_MISSING",
-        message: "修订规则尚未配置，已生效合同只读查看。",
-      },
-    ],
+    actionBlockers: [],
   },
   {
     contractId: "ct_0412",
@@ -295,8 +251,9 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
       partyId: "sp_huaxia",
       displayName: "华夏礼品贸易有限公司",
     },
-    ...statusMeta("DRAFT"),
-    revisionNo: 0,
+    ...statusMeta("EFFECTIVE"),
+    revisionNo: 1,
+    signedAt: "2026-07-28",
     validFrom: "2026-06-01",
     validTo: "2027-05-31",
     expiringWithin30Days: false,
@@ -304,19 +261,8 @@ export const MOCK_CONTRACT_LIST: readonly ContractListRow[] = [
     activeSalesOrderCount: 0,
     ownerLabel: "赵宇 · 当前客户负责人",
     ownerKind: "current_customer_owner",
-    allowedActions: ["EDIT_DRAFT", "ACTIVATE", "UPLOAD_ATTACHMENT"],
-    actionBlockers: [
-      {
-        action: "CREATE_SALES_ORDER",
-        code: "NOT_EFFECTIVE",
-        message: "草稿合同不可用于新建销售单。",
-      },
-      {
-        action: "PRINT",
-        code: "NO_CONFIRMED_REVISION",
-        message: "尚无已确认修订，无法生成打印件。",
-      },
-    ],
+    allowedActions: ["PRINT", "CREATE_SALES_ORDER", "TERMINATE"],
+    actionBlockers: [],
   },
   {
     contractId: "ct_1105",
@@ -488,10 +434,10 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
     auditTimeline: [
       {
         id: "au_0312_1",
-        action: "ACTIVATE",
+        action: "UPLOAD_CONTRACT_PDF",
         actorLabel: "王敏",
         at: "2026-01-08 10:20",
-        summary: "合同修订 v3 生效",
+        summary: "上传并归档合同 PDF v3",
       },
       {
         id: "au_0312_2",
@@ -501,16 +447,8 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
         summary: "下载附件（短时链接已审计）",
       },
     ],
-    // fail-closed：无 policy
-    contractRevisionPolicy: undefined,
     allowedActions: ["PRINT", "CREATE_SALES_ORDER", "TERMINATE"],
-    actionBlockers: [
-      {
-        action: "REVISE",
-        code: "REVISION_POLICY_MISSING",
-        message: "修订规则尚未配置，已生效合同只读查看。",
-      },
-    ],
+    actionBlockers: [],
     sourceAsOf: "2026-08-01T08:00:00.000Z",
     relatedSalesOrdersAsOf: "2026-08-01T07:55:00.000Z",
     queriedAt: nowIso(),
@@ -597,20 +535,14 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
     auditTimeline: [
       {
         id: "au_0288_1",
-        action: "ACTIVATE",
+        action: "UPLOAD_CONTRACT_PDF",
         actorLabel: "王敏",
         at: "2026-03-01 15:40",
-        summary: "合同修订 v2 生效",
+        summary: "上传并归档合同 PDF v2",
       },
     ],
-    contractRevisionPolicy: undefined,
     allowedActions: ["PRINT", "CREATE_SALES_ORDER"],
     actionBlockers: [
-      {
-        action: "REVISE",
-        code: "REVISION_POLICY_MISSING",
-        message: "修订规则尚未配置，已生效合同只读查看。",
-      },
       {
         action: "TERMINATE",
         code: "NEEDS_LEADER",
@@ -670,8 +602,8 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
       },
       {
         id: "fa_0088_2",
-        name: "scan-补件.jpg",
-        contentType: "image/jpeg",
+        name: "HT-2026-0088-补充协议.pdf",
+        contentType: "application/pdf",
         revisionNo: 3,
         uploadedBy: "李倩",
         uploadedAt: "2026-01-14 18:22",
@@ -738,18 +670,13 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
     auditTimeline: [
       {
         id: "au_0088_1",
-        action: "ACTIVATE",
+        action: "UPLOAD_CONTRACT_PDF",
         actorLabel: "李倩",
         at: "2026-01-15 09:30",
-        summary: "合同修订 v3 生效",
+        summary: "上传并归档合同 PDF v3",
       },
     ],
-    contractRevisionPolicy: {
-      policyVersion: "crp-2026.1",
-      mode: "DIRECT_REVISION",
-      requiredEvidenceCodes: ["SIGNED_SCAN", "CHANGE_REASON"],
-    },
-    allowedActions: ["PRINT", "CREATE_SALES_ORDER", "REVISE", "TERMINATE"],
+    allowedActions: ["PRINT", "CREATE_SALES_ORDER", "TERMINATE"],
     actionBlockers: [],
     sourceAsOf: "2026-08-01T08:00:00.000Z",
     relatedSalesOrdersAsOf: "2026-08-01T07:55:00.000Z",
@@ -759,7 +686,7 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
   ct_0401: {
     contractId: "ct_0401",
     contractNo: "HT-2026-0401",
-    ...statusMeta("DRAFT"),
+    ...statusMeta("EFFECTIVE"),
     lockVersion: 1,
     customer: {
       id: "cu_beichen",
@@ -769,59 +696,65 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
     ownerLabel: "李倩 · 当前客户负责人",
     ownerKind: "current_customer_owner",
     currentRevision: {
-      revisionId: "ctr_0401_draft",
-      revisionNo: 0,
+      revisionId: "ctr_0401_v1",
+      revisionNo: 1,
       settlementParty: {
         id: "sp_beichen",
         displayName: "北辰能源集团",
       },
       paymentTermSnapshot: {
-        label: "待确认",
-        description: "草稿未确认付款条件。",
+        label: "月结 30 天",
+        description: "付款条件摘要随合同 PDF 归档。",
       },
       invoiceRequirementSnapshot: {
-        titleType: "待确认",
-        contentSummary: "草稿未确认开票要求。",
+        titleType: "增值税专用发票",
+        contentSummary: "完整开票约定以合同 PDF 为准。",
       },
       validFrom: "2026-04-01",
       validTo: "2027-03-31",
-      termsSummary: "草稿条款，生效前可继续编辑。",
+      signedAt: "2026-07-20",
+      effectiveAt: "2026-07-20 11:18",
+      termsSummary: "签署合同 PDF 已归档；销售单引用时固定本版本。",
     },
-    attachments: [],
+    attachments: [
+      {
+        id: "fa_0401_1",
+        name: "HT-2026-0401.pdf",
+        contentType: "application/pdf",
+        revisionNo: 1,
+        uploadedBy: "李倩",
+        uploadedAt: "2026-07-20 11:18",
+        securityState: "done",
+        canDownload: true,
+      },
+    ],
     relatedSalesOrders: [],
-    revisionTimeline: [],
+    revisionTimeline: [
+      {
+        revisionId: "ctr_0401_v1",
+        revisionNo: 1,
+        validFrom: "2026-04-01",
+        validTo: "2027-03-31",
+        changeReason: "上传签署合同 PDF",
+        effectiveAt: "2026-07-20 11:18",
+        isCurrent: true,
+      },
+    ],
     auditTimeline: [
       {
         id: "au_0401_1",
-        action: "CREATE",
+        action: "UPLOAD_CONTRACT_PDF",
         actorLabel: "李倩",
         at: "2026-07-20 11:18",
-        summary: "创建合同草稿",
+        summary: "上传并归档合同 PDF v1",
       },
     ],
-    allowedActions: ["EDIT_DRAFT", "ACTIVATE", "UPLOAD_ATTACHMENT"],
-    actionBlockers: [
-      {
-        action: "CREATE_SALES_ORDER",
-        code: "NOT_EFFECTIVE",
-        message: "草稿合同不可用于新建销售单。",
-      },
-      {
-        action: "PRINT",
-        code: "NO_CONFIRMED_REVISION",
-        message: "尚无已确认修订，无法生成打印件。",
-      },
-      {
-        action: "REVISE",
-        code: "NOT_EFFECTIVE",
-        message: "仅已生效合同可创建新修订。",
-      },
-    ],
+    allowedActions: ["PRINT", "CREATE_SALES_ORDER", "TERMINATE"],
+    actionBlockers: [],
     sourceAsOf: "2026-08-01T08:00:00.000Z",
     relatedSalesOrdersAsOf: "2026-08-01T07:55:00.000Z",
     queriedAt: nowIso(),
-    selectableForNewSalesOrder: false,
-    selectableBlocker: "草稿合同不可用于新建销售单。",
+    selectableForNewSalesOrder: true,
   },
   ct_1190: {
     contractId: "ct_1190",
@@ -917,11 +850,6 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
         action: "CREATE_SALES_ORDER",
         code: "TERMINATED",
         message: "已终止合同不可用于新建销售单；历史记录仍可读。",
-      },
-      {
-        action: "REVISE",
-        code: "TERMINATED",
-        message: "已终止合同不可创建新修订。",
       },
     ],
     sourceAsOf: "2026-08-01T08:00:00.000Z",
@@ -1083,21 +1011,14 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
     auditTimeline: [
       {
         id: "au_0355_1",
-        action: "ACTIVATE",
+        action: "UPLOAD_CONTRACT_PDF",
         actorLabel: "王敏",
         at: "2026-05-12 14:00",
-        summary: "合同修订 v1 生效",
+        summary: "上传并归档合同 PDF v1",
       },
     ],
-    contractRevisionPolicy: undefined,
     allowedActions: ["PRINT", "CREATE_SALES_ORDER"],
-    actionBlockers: [
-      {
-        action: "REVISE",
-        code: "REVISION_POLICY_MISSING",
-        message: "修订规则尚未配置，已生效合同只读查看。",
-      },
-    ],
+    actionBlockers: [],
     sourceAsOf: "2026-08-01T08:00:00.000Z",
     relatedSalesOrdersAsOf: "2026-08-01T07:55:00.000Z",
     queriedAt: nowIso(),
@@ -1176,21 +1097,14 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
     auditTimeline: [
       {
         id: "au_0220_1",
-        action: "ACTIVATE",
+        action: "UPLOAD_CONTRACT_PDF",
         actorLabel: "赵宇",
         at: "2026-02-18 16:00",
-        summary: "合同修订 v1 生效",
+        summary: "上传并归档合同 PDF v1",
       },
     ],
-    contractRevisionPolicy: undefined,
     allowedActions: ["PRINT", "CREATE_SALES_ORDER"],
-    actionBlockers: [
-      {
-        action: "REVISE",
-        code: "REVISION_POLICY_MISSING",
-        message: "修订规则尚未配置，已生效合同只读查看。",
-      },
-    ],
+    actionBlockers: [],
     sourceAsOf: "2026-08-01T08:00:00.000Z",
     relatedSalesOrdersAsOf: "2026-08-01T07:55:00.000Z",
     queriedAt: nowIso(),
@@ -1199,7 +1113,7 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
   ct_0412: {
     contractId: "ct_0412",
     contractNo: "HT-2026-0412",
-    ...statusMeta("DRAFT"),
+    ...statusMeta("EFFECTIVE"),
     lockVersion: 1,
     customer: {
       id: "cu_huaxia",
@@ -1209,54 +1123,65 @@ export const MOCK_CONTRACT_CENTERS: Record<string, ContractCenterView> = {
     ownerLabel: "赵宇 · 当前客户负责人",
     ownerKind: "current_customer_owner",
     currentRevision: {
-      revisionId: "ctr_0412_draft",
-      revisionNo: 0,
+      revisionId: "ctr_0412_v1",
+      revisionNo: 1,
       settlementParty: {
         id: "sp_huaxia",
         displayName: "华夏礼品贸易有限公司",
       },
       paymentTermSnapshot: {
-        label: "待确认",
-        description: "草稿未确认。",
+        label: "验收后 30 日内付款",
+        description: "付款条件摘要随合同 PDF 归档。",
       },
       invoiceRequirementSnapshot: {
-        titleType: "待确认",
-        contentSummary: "草稿未确认。",
+        titleType: "增值税专用发票",
+        contentSummary: "完整开票约定以合同 PDF 为准。",
       },
       validFrom: "2026-06-01",
       validTo: "2027-05-31",
-      termsSummary: "草稿。",
+      signedAt: "2026-07-28",
+      effectiveAt: "2026-07-28 10:00",
+      termsSummary: "签署合同 PDF 已归档；销售单引用时固定本版本。",
     },
-    attachments: [],
+    attachments: [
+      {
+        id: "fa_0412_1",
+        name: "HT-2026-0412.pdf",
+        contentType: "application/pdf",
+        revisionNo: 1,
+        uploadedBy: "赵宇",
+        uploadedAt: "2026-07-28 10:00",
+        securityState: "done",
+        canDownload: true,
+      },
+    ],
     relatedSalesOrders: [],
-    revisionTimeline: [],
+    revisionTimeline: [
+      {
+        revisionId: "ctr_0412_v1",
+        revisionNo: 1,
+        validFrom: "2026-06-01",
+        validTo: "2027-05-31",
+        changeReason: "上传签署合同 PDF",
+        effectiveAt: "2026-07-28 10:00",
+        isCurrent: true,
+      },
+    ],
     auditTimeline: [
       {
         id: "au_0412_1",
-        action: "CREATE",
+        action: "UPLOAD_CONTRACT_PDF",
         actorLabel: "赵宇",
         at: "2026-07-28 10:00",
-        summary: "创建合同草稿",
+        summary: "上传并归档合同 PDF v1",
       },
     ],
-    allowedActions: ["EDIT_DRAFT", "ACTIVATE", "UPLOAD_ATTACHMENT"],
-    actionBlockers: [
-      {
-        action: "CREATE_SALES_ORDER",
-        code: "NOT_EFFECTIVE",
-        message: "草稿合同不可用于新建销售单。",
-      },
-      {
-        action: "PRINT",
-        code: "NO_CONFIRMED_REVISION",
-        message: "尚无已确认修订，无法生成打印件。",
-      },
-    ],
+    allowedActions: ["PRINT", "CREATE_SALES_ORDER", "TERMINATE"],
+    actionBlockers: [],
     sourceAsOf: "2026-08-01T08:00:00.000Z",
     relatedSalesOrdersAsOf: "2026-08-01T07:55:00.000Z",
     queriedAt: nowIso(),
-    selectableForNewSalesOrder: false,
-    selectableBlocker: "草稿合同不可用于新建销售单。",
+    selectableForNewSalesOrder: true,
   },
   ct_1105: {
     contractId: "ct_1105",

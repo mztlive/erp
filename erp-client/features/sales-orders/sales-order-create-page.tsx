@@ -30,10 +30,13 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { useContractCenterQuery, useContractsForNewSalesOrderQuery } from "@/features/contracts/queries"
+import { contractPdfError } from "@/features/contracts/pdf"
+import { useCustomerCenterQuery } from "@/features/customers/queries"
 import { useCreateSalesOrderMutation } from "@/features/sales-orders/queries"
 import type {
   CreateSalesOrderInput,
   SalesOrderCreateIntent,
+  SalesOrderContractSource,
   SalesOrderDraftLineInput,
   SalesOrderNature,
 } from "@/features/sales-orders/types"
@@ -61,11 +64,17 @@ const draftLineSchema = z.object({
 
 const createSalesOrderSchema = z
   .object({
-    contractId: z.string().min(1, "请选择有效合同"),
-    requestedContractRevisionId: z.string().min(1, "合同修订尚未加载完成"),
-    contractRevisionLabel: z.string().min(1, "合同修订尚未加载完成"),
-    customerName: z.string().min(1, "客户尚未加载完成"),
-    settlementEntity: z.string().min(1, "结算主体尚未加载完成"),
+    contractSource: z.enum(["existing", "upload_pdf"]),
+    contractId: z.string(),
+    requestedContractRevisionId: z.string(),
+    contractRevisionLabel: z.string(),
+    contractPdf: z.custom<File | null>(),
+    uploadedContractNo: z.string(),
+    uploadedSignedAt: z.string(),
+    uploadedValidFrom: z.string(),
+    uploadedValidTo: z.string(),
+    customerName: z.string(),
+    settlementEntity: z.string(),
     nature: z.enum(["physical_service", "card_voucher"]),
     ownerName: z.string().trim().min(1, "请输入负责销售"),
     welfareScene: z.string().trim().min(1, "请输入福利场景"),
@@ -79,6 +88,78 @@ const createSalesOrderSchema = z
     lineItems: z.array(draftLineSchema).min(1, "至少需要一条销售明细"),
   })
   .superRefine((value, context) => {
+    if (value.contractSource === "existing") {
+      if (!value.contractId) {
+        context.addIssue({
+          code: "custom",
+          path: ["contractId"],
+          message: "请选择已有有效合同",
+        })
+      }
+      if (!value.requestedContractRevisionId || !value.contractRevisionLabel) {
+        context.addIssue({
+          code: "custom",
+          path: ["contractId"],
+          message: "合同版本尚未加载完成",
+        })
+      }
+    } else {
+      const fileError = contractPdfError(value.contractPdf)
+      if (fileError) {
+        context.addIssue({
+          code: "custom",
+          path: ["contractPdf"],
+          message: fileError,
+        })
+      }
+      if (!value.uploadedContractNo.trim()) {
+        context.addIssue({
+          code: "custom",
+          path: ["uploadedContractNo"],
+          message: "请填写合同编号",
+        })
+      }
+      if (!value.uploadedSignedAt) {
+        context.addIssue({
+          code: "custom",
+          path: ["uploadedSignedAt"],
+          message: "请选择签订日期",
+        })
+      }
+      if (!value.uploadedValidFrom || !value.uploadedValidTo) {
+        context.addIssue({
+          code: "custom",
+          path: ["uploadedValidFrom"],
+          message: "请填写合同有效期",
+        })
+      } else if (value.uploadedValidTo < value.uploadedValidFrom) {
+        context.addIssue({
+          code: "custom",
+          path: ["uploadedValidTo"],
+          message: "有效期止不能早于有效期起",
+        })
+      }
+    }
+    if (!value.customerName.trim()) {
+      context.addIssue({
+        code: "custom",
+        path: ["customerName"],
+        message:
+          value.contractSource === "existing"
+            ? "客户尚未加载完成"
+            : "请填写客户名称",
+      })
+    }
+    if (!value.settlementEntity.trim()) {
+      context.addIssue({
+        code: "custom",
+        path: ["settlementEntity"],
+        message:
+          value.contractSource === "existing"
+            ? "结算主体尚未加载完成"
+            : "请填写结算主体",
+      })
+    }
     if (value.nature === "card_voucher" && value.lineItems.length !== 1) {
       context.addIssue({
         code: "custom",
@@ -126,6 +207,11 @@ type CreateSalesOrderFormValues = z.input<typeof createSalesOrderSchema>
 const NATURE_OPTIONS = [
   { value: "physical_service", label: "实物与服务" },
   { value: "card_voucher", label: "卡券" },
+] as const
+
+const CONTRACT_SOURCE_OPTIONS = [
+  { value: "existing", label: "选择已有合同" },
+  { value: "upload_pdf", label: "同步上传合同 PDF" },
 ] as const
 
 const FULFILLMENT_OPTIONS = [
@@ -186,7 +272,10 @@ function errorMessage(error: unknown): string {
     CONTRACT_NOT_SELECTABLE: "所选合同已不可用于新建销售单，请刷新后重选。",
     CONTRACT_REVISION_NOT_FOUND: "所选合同修订不存在，请刷新合同后重试。",
     CONTRACT_REVISION_NOT_CURRENT: "新销售单只能引用合同当前有效修订。",
+    CONTRACT_NO_EXISTS: "该合同编号已存在，请改为选择已有合同。",
+    CONTRACT_VALIDITY_INVALID: "合同有效期填写有误，请检查后重试。",
     LINE_ITEM_REQUIRED: "至少需要一条销售明细。",
+    LINE_ITEM_INVALID: "销售明细不完整，请检查项目、数量、单位和价格。",
     VOUCHER_REQUIRES_EXACTLY_ONE_LINE: "卡券销售单必须恰好一条明细。",
   }
   return messages[error.message] ?? error.message
@@ -205,6 +294,7 @@ export function SalesOrderCreatePage({
 }) {
   const router = useRouter()
   const contractsQuery = useContractsForNewSalesOrderQuery()
+  const customerQuery = useCustomerCenterQuery(initialCustomerId)
   const createMutation = useCreateSalesOrderMutation()
   const [selectedContractId, setSelectedContractId] =
     React.useState(initialContractId)
@@ -214,9 +304,15 @@ export function SalesOrderCreatePage({
 
   const form = useAppForm({
     defaultValues: {
+      contractSource: "existing" as SalesOrderContractSource,
       contractId: initialContractId,
       requestedContractRevisionId: initialContractRevisionId,
       contractRevisionLabel: "",
+      contractPdf: null as File | null,
+      uploadedContractNo: "",
+      uploadedSignedAt: "2026-08-02",
+      uploadedValidFrom: "2026-08-02",
+      uploadedValidTo: "2027-08-01",
       customerName: "",
       settlementEntity: "",
       nature: initialNature,
@@ -232,9 +328,26 @@ export function SalesOrderCreatePage({
       onSubmit: createSalesOrderSchema,
     },
     onSubmit: async ({ value }) => {
+      if (value.contractSource === "upload_pdf" && !value.contractPdf) return
       const command: CreateSalesOrderInput = {
-        contractId: value.contractId,
-        requestedContractRevisionId: value.requestedContractRevisionId,
+        contract:
+          value.contractSource === "existing"
+            ? {
+                source: "existing",
+                contractId: value.contractId,
+                requestedContractRevisionId: value.requestedContractRevisionId,
+              }
+            : {
+                source: "upload_pdf",
+                pdfFile: value.contractPdf!,
+                contractNo: value.uploadedContractNo.trim(),
+                customerId: initialCustomerId || undefined,
+                customerName: value.customerName.trim(),
+                settlementPartyName: value.settlementEntity.trim(),
+                signedAt: value.uploadedSignedAt,
+                validFrom: value.uploadedValidFrom,
+                validTo: value.uploadedValidTo,
+              },
         nature: value.nature,
         ownerName: value.ownerName,
         welfareScene: value.welfareScene,
@@ -256,22 +369,17 @@ export function SalesOrderCreatePage({
 
   const contractOptions = React.useMemo(
     () =>
-      (contractsQuery.data ?? []).map((contract) => ({
-        value: contract.contractId,
-        label: `${contract.contractNo} · ${contract.customer.displayName} · v${contract.revisionNo}`,
-      })),
-    [contractsQuery.data]
+      (contractsQuery.data ?? [])
+        .filter(
+          (contract) =>
+            !initialCustomerId || contract.customer.customerId === initialCustomerId
+        )
+        .map((contract) => ({
+          value: contract.contractId,
+          label: `${contract.contractNo} · ${contract.customer.displayName} · v${contract.revisionNo}`,
+        })),
+    [contractsQuery.data, initialCustomerId]
   )
-
-  React.useEffect(() => {
-    if (selectedContractId || !initialCustomerId || !contractsQuery.data) return
-    const candidate = contractsQuery.data.find(
-      (contract) => contract.customer.customerId === initialCustomerId
-    )
-    if (!candidate) return
-    setSelectedContractId(candidate.contractId)
-    form.setFieldValue("contractId", candidate.contractId)
-  }, [contractsQuery.data, form, initialCustomerId, selectedContractId])
 
   React.useEffect(() => {
     const contract = contractQuery.data
@@ -317,6 +425,26 @@ export function SalesOrderCreatePage({
     [form]
   )
 
+  const handleContractSourceChange = React.useCallback(
+    (source: string) => {
+      if (source === "upload_pdf") {
+        preferredRevisionRef.current = ""
+        setSelectedContractId("")
+        form.setFieldValue("contractId", "")
+        form.setFieldValue("requestedContractRevisionId", "")
+        form.setFieldValue("contractRevisionLabel", "")
+        const customerName =
+          customerQuery.data?.currentRevision.legalName ?? ""
+        form.setFieldValue("customerName", customerName)
+        form.setFieldValue("settlementEntity", customerName)
+        form.setFieldValue("paymentTerms", "")
+      } else {
+        form.setFieldValue("contractPdf", null)
+      }
+    },
+    [customerQuery.data, form]
+  )
+
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 pb-6 md:p-4">
       <PageHeader
@@ -343,7 +471,9 @@ export function SalesOrderCreatePage({
         <Alert variant="destructive">
           <CircleAlertIcon aria-hidden="true" />
           <AlertTitle>有效合同加载失败</AlertTitle>
-          <AlertDescription>暂时不能创建销售单，请刷新后重试。</AlertDescription>
+          <AlertDescription>
+            暂时不能选择已有合同；仍可切换为同步上传合同 PDF。
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -373,42 +503,98 @@ export function SalesOrderCreatePage({
           <CardContent>
             <DocumentSection
               title="客户与合同"
-              description="只有当前仍可用于新建销售单的有效合同会出现在候选中。"
+              description="选择已有有效合同，或随本单同步上传一份签署合同 PDF。"
             >
-              <div className="grid gap-4 lg:grid-cols-2">
-                <form.AppField name="contractId">
-                  {(field) => (
-                    <field.SelectField
-                      label="有效合同"
-                      placeholder={
-                        contractsQuery.isPending ? "正在加载有效合同…" : "请选择合同"
-                      }
-                      options={contractOptions}
-                      disabled={contractsQuery.isPending || contractsQuery.isError}
-                      onValueChange={handleContractChange}
-                    />
-                  )}
-                </form.AppField>
-                <form.AppField name="contractRevisionLabel">
-                  {(field) => (
-                    <field.TextField
-                      label="合同精确修订"
-                      disabled
-                      description={
-                        contractQuery.data
-                          ? `${contractQuery.data.contractNo} · 当前引用修订由合同中心校验`
-                          : "选择合同后自动带出精确修订"
-                      }
-                    />
-                  )}
-                </form.AppField>
-                <form.AppField name="customerName">
-                  {(field) => <field.TextField label="客户" disabled />}
-                </form.AppField>
-                <form.AppField name="settlementEntity">
-                  {(field) => <field.TextField label="结算主体" disabled />}
-                </form.AppField>
-              </div>
+              <form.AppField name="contractSource">
+                {(field) => (
+                  <field.SelectField
+                    label="合同来源"
+                    options={CONTRACT_SOURCE_OPTIONS}
+                    onValueChange={handleContractSourceChange}
+                    description="两种方式互斥；上传成功后合同档案与销售单一次完成关联。"
+                  />
+                )}
+              </form.AppField>
+              <form.Subscribe selector={(state) => state.values.contractSource}>
+                {(contractSource) =>
+                  contractSource === "existing" ? (
+                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                      <form.AppField name="contractId">
+                        {(field) => (
+                          <field.SelectField
+                            label="已有有效合同"
+                            placeholder={
+                              contractsQuery.isPending
+                                ? "正在加载有效合同…"
+                                : contractOptions.length > 0
+                                  ? "请选择合同"
+                                  : "当前客户暂无可用合同"
+                            }
+                            options={contractOptions}
+                            disabled={
+                              contractsQuery.isPending || contractsQuery.isError
+                            }
+                            onValueChange={handleContractChange}
+                          />
+                        )}
+                      </form.AppField>
+                      <form.AppField name="contractRevisionLabel">
+                        {(field) => (
+                          <field.TextField
+                            label="合同精确版本"
+                            disabled
+                            description={
+                              contractQuery.data
+                                ? `${contractQuery.data.contractNo} · 当前版本由合同中心校验`
+                                : "选择合同后自动带出"
+                            }
+                          />
+                        )}
+                      </form.AppField>
+                      <form.AppField name="customerName">
+                        {(field) => <field.TextField label="客户" disabled />}
+                      </form.AppField>
+                      <form.AppField name="settlementEntity">
+                        {(field) => <field.TextField label="结算主体" disabled />}
+                      </form.AppField>
+                    </div>
+                  ) : (
+                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                      <div className="lg:col-span-2">
+                        <form.AppField name="contractPdf">
+                          {(field) => (
+                            <field.PdfUploadField label="合同电子档" />
+                          )}
+                        </form.AppField>
+                      </div>
+                      <form.AppField name="uploadedContractNo">
+                        {(field) => <field.TextField label="合同编号" />}
+                      </form.AppField>
+                      <form.AppField name="uploadedSignedAt">
+                        {(field) => (
+                          <field.TextField label="签订日期" type="date" />
+                        )}
+                      </form.AppField>
+                      <form.AppField name="customerName">
+                        {(field) => <field.TextField label="客户" />}
+                      </form.AppField>
+                      <form.AppField name="settlementEntity">
+                        {(field) => <field.TextField label="结算主体" />}
+                      </form.AppField>
+                      <form.AppField name="uploadedValidFrom">
+                        {(field) => (
+                          <field.TextField label="合同有效期起" type="date" />
+                        )}
+                      </form.AppField>
+                      <form.AppField name="uploadedValidTo">
+                        {(field) => (
+                          <field.TextField label="合同有效期止" type="date" />
+                        )}
+                      </form.AppField>
+                    </div>
+                  )
+                }
+              </form.Subscribe>
             </DocumentSection>
 
             <DocumentSection

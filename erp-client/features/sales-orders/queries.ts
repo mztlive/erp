@@ -55,6 +55,7 @@ export function useCreateSalesOrderMutation() {
       await queryClient.invalidateQueries({
         queryKey: salesOrderKeys.detail(data.salesOrderId),
       })
+      await queryClient.invalidateQueries({ queryKey: ["contracts"] })
     },
   })
 }

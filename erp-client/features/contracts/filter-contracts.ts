@@ -5,7 +5,6 @@ export type ContractMetricFilter =
   | "effective"
   | "expiring_30d"
   | "expired"
-  | "draft"
   | "terminated"
 
 export type ContractStatusFilter = "all" | ContractStatus
@@ -32,9 +31,6 @@ export function filterContracts(
         break
       case "expired":
         if (row.status !== "EXPIRED") return false
-        break
-      case "draft":
-        if (row.status !== "DRAFT") return false
         break
       case "terminated":
         if (row.status !== "TERMINATED") return false
@@ -65,8 +61,6 @@ export function contractMetricLabel(key: ContractMetricFilter): string {
       return "30 天内到期"
     case "expired":
       return "已到期"
-    case "draft":
-      return "草稿"
     case "terminated":
       return "已终止"
     default:
@@ -82,7 +76,6 @@ export function computeContractMetrics(rows: readonly ContractListRow[]) {
       (r) => r.status === "EFFECTIVE" && r.expiringWithin30Days
     ).length,
     expired: rows.filter((r) => r.status === "EXPIRED").length,
-    draft: rows.filter((r) => r.status === "DRAFT").length,
     terminated: rows.filter((r) => r.status === "TERMINATED").length,
   }
 }

@@ -2,18 +2,13 @@ import type { StatusTone } from "@/components/ui/status-badge"
 
 /** 合同主状态：由服务端返回，前端不推导。 */
 export type ContractStatus =
-  | "DRAFT"
   | "EFFECTIVE"
   | "TERMINATED"
   | "EXPIRED"
 
 export type ContractAction =
-  | "CREATE_CONTRACT"
-  | "EDIT_DRAFT"
-  | "ACTIVATE"
-  | "REVISE"
+  | "UPLOAD_CONTRACT_PDF"
   | "TERMINATE"
-  | "UPLOAD_ATTACHMENT"
   | "PRINT"
   | "CREATE_SALES_ORDER"
   | "EXPORT"
@@ -140,15 +135,6 @@ export type ContractCenterView = {
   relatedSalesOrders: RelatedSalesOrderSummary[]
   revisionTimeline: ContractRevisionSummary[]
   auditTimeline: AuditEventView[]
-  /**
-   * 缺失时 fail-closed：allowedActions 不含 REVISE。
-   * 前端不得自行选择修订模式。
-   */
-  contractRevisionPolicy?: {
-    policyVersion: string
-    mode: "DIRECT_REVISION" | "CHANGE_REQUEST"
-    requiredEvidenceCodes: string[]
-  }
   allowedActions: ContractAction[]
   actionBlockers: ActionBlocker[]
   sourceAsOf: string
@@ -159,31 +145,27 @@ export type ContractCenterView = {
   selectableBlocker?: string
 }
 
-export type CreateContractDraftResult = {
-  contractId: string
+export type UploadContractPdfInput = {
+  pdfFile: File
   contractNo: string
-  revisionNo: number
-  createdAt: string
-  reference: string
+  customerId?: string
+  customerName: string
+  settlementPartyName: string
+  signedAt: string
+  validFrom: string
+  validTo: string
+  paymentTerms: string
+  idempotencyKey: string
 }
 
-export type ActivateContractResult = {
+export type UploadContractPdfResult = {
   contractId: string
   contractNo: string
+  revisionId: string
   revisionNo: number
-  effectiveAt: string
+  uploadedAt: string
+  fileName: string
   reference: string
-  nextStep: string
-}
-
-export type ReviseContractResult = {
-  contractId: string
-  contractNo: string
-  workingRevisionNo: number
-  baseRevisionNo: number
-  createdAt: string
-  reference: string
-  nextStep: string
 }
 
 export type ContractExportJob = {
@@ -197,14 +179,12 @@ export type ContractExportJob = {
 }
 
 export const CONTRACT_STATUS_LABEL: Record<ContractStatus, string> = {
-  DRAFT: "草稿",
   EFFECTIVE: "生效",
   TERMINATED: "终止",
   EXPIRED: "到期",
 }
 
 export const CONTRACT_STATUS_TONE: Record<ContractStatus, StatusTone> = {
-  DRAFT: "neutral",
   EFFECTIVE: "success",
   TERMINATED: "neutral",
   EXPIRED: "warning",

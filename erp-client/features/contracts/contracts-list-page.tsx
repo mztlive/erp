@@ -4,7 +4,7 @@ import * as React from "react"
 import Link from "next/link"
 import {
   DownloadIcon,
-  PlusIcon,
+  FileUpIcon,
   PrinterIcon,
   SearchIcon,
 } from "lucide-react"
@@ -56,23 +56,43 @@ import {
   type ContractMetricFilter,
   type ContractStatusFilter,
 } from "@/features/contracts/filter-contracts"
+import { contractPdfError } from "@/features/contracts/pdf"
 import {
   useContractCenterQuery,
   useContractsQuery,
-  useCreateContractDraftMutation,
   useCreateContractExportJobMutation,
+  useUploadContractPdfMutation,
 } from "@/features/contracts/queries"
 import type {
   ContractExportJob,
   ContractListRow,
 } from "@/features/contracts/types"
+import { useCustomerCenterQuery } from "@/features/customers/queries"
 
-const createSchema = z.object({
-  customerName: z.string().trim().min(2, "请填写客户名称"),
-  settlementPartyName: z.string().trim().min(2, "请填写结算主体"),
-  validFrom: z.string().min(1, "请填写有效期起"),
-  validTo: z.string().min(1, "请填写有效期止"),
-})
+const uploadSchema = z
+  .object({
+    pdfFile: z.custom<File | null>(),
+    contractNo: z.string().trim().min(1, "请填写合同编号"),
+    customerName: z.string().trim().min(2, "请填写客户名称"),
+    settlementPartyName: z.string().trim().min(2, "请填写结算主体"),
+    paymentTerms: z.string().trim().min(1, "请填写付款条件摘要"),
+    signedAt: z.string().min(1, "请填写签订日期"),
+    validFrom: z.string().min(1, "请填写有效期起"),
+    validTo: z.string().min(1, "请填写有效期止"),
+  })
+  .superRefine((value, context) => {
+    const fileError = contractPdfError(value.pdfFile)
+    if (fileError) {
+      context.addIssue({ code: "custom", path: ["pdfFile"], message: fileError })
+    }
+    if (value.validFrom && value.validTo && value.validTo < value.validFrom) {
+      context.addIssue({
+        code: "custom",
+        path: ["validTo"],
+        message: "有效期止不能早于有效期起",
+      })
+    }
+  })
 
 export function ContractsListPage({
   initialSearch = "",
@@ -82,7 +102,12 @@ export function ContractsListPage({
   initialCustomerId?: string
 }) {
   const contractsQuery = useContractsQuery()
-  const allRows = contractsQuery.data ?? []
+  const customerQuery = useCustomerCenterQuery(initialCustomerId)
+  const allRows = React.useMemo(
+    () => contractsQuery.data ?? [],
+    [contractsQuery.data]
+  )
+  const seededCustomerRef = React.useRef(false)
 
   const [search, setSearch] = React.useState(initialSearch)
   const [metricKey, setMetricKey] =
@@ -95,7 +120,7 @@ export function ContractsListPage({
   })
   const [previewId, setPreviewId] = React.useState<string | null>(null)
   const [paperId, setPaperId] = React.useState<string | null>(null)
-  const [createOpen, setCreateOpen] = React.useState(false)
+  const [uploadOpen, setUploadOpen] = React.useState(Boolean(initialCustomerId))
   const [exportJob, setExportJob] = React.useState<ContractExportJob | null>(
     null
   )
@@ -108,7 +133,7 @@ export function ContractsListPage({
     nextHref?: string
   } | null>(null)
 
-  const createMutation = useCreateContractDraftMutation()
+  const uploadMutation = useUploadContractPdfMutation()
   const exportMutation = useCreateContractExportJobMutation()
 
   const resetPagination = React.useCallback(() => {
@@ -147,41 +172,64 @@ export function ContractsListPage({
   const previewDetailQuery = useContractCenterQuery(previewId ?? "")
   const paperDetailQuery = useContractCenterQuery(paperId ?? "")
 
-  const createForm = useAppForm({
+  const uploadForm = useAppForm({
     defaultValues: {
+      pdfFile: null as File | null,
+      contractNo: "",
       customerName: "",
       settlementPartyName: "",
-      validFrom: "2026-08-01",
-      validTo: "2027-07-31",
+      paymentTerms: "",
+      signedAt: "2026-08-02",
+      validFrom: "2026-08-02",
+      validTo: "2027-08-01",
     },
-    validators: { onChange: createSchema },
+    validators: { onChange: uploadSchema },
     onSubmit: async ({ value }) => {
-      const result = await createMutation.mutateAsync({
+      if (!value.pdfFile) return
+      const result = await uploadMutation.mutateAsync({
+        pdfFile: value.pdfFile,
+        contractNo: value.contractNo.trim(),
+        customerId: initialCustomerId || undefined,
         customerName: value.customerName.trim(),
         settlementPartyName: value.settlementPartyName.trim(),
+        paymentTerms: value.paymentTerms.trim(),
+        signedAt: value.signedAt,
         validFrom: value.validFrom,
         validTo: value.validTo,
-        idempotencyKey: `create-${Date.now().toString(36)}`,
+        idempotencyKey: `upload-${Date.now().toString(36)}`,
       })
-      setCreateOpen(false)
+      setUploadOpen(false)
+      uploadForm.reset()
       setActionResult({
         status: "succeeded",
-        title: "合同草稿已创建",
-        description: "已建立服务端草稿身份，请进入同一对象页签继续编辑并生效。",
+        title: "合同 PDF 已归档",
+        description: "已形成可追溯的合同版本，可直接选择用于新建销售单。",
         reference: result.reference,
         facts: [
           { label: "合同号", value: result.contractNo },
           { label: "修订", value: `v${result.revisionNo}` },
+          { label: "文件", value: result.fileName },
           {
-            label: "创建时间",
-            value: result.createdAt.slice(0, 19).replace("T", " "),
+            label: "上传时间",
+            value: result.uploadedAt.slice(0, 19).replace("T", " "),
           },
-          { label: "下一步", value: "打开合同中心完善条款并提交生效" },
+          { label: "下一步", value: "打开合同中心核对或新建销售单" },
         ],
         nextHref: `/sales/contracts/${result.contractId}`,
       })
     },
   })
+
+  React.useEffect(() => {
+    const customer = customerQuery.data
+    if (!customer || seededCustomerRef.current) return
+    seededCustomerRef.current = true
+    uploadForm.setFieldValue("customerName", customer.currentRevision.legalName)
+    uploadForm.setFieldValue(
+      "settlementPartyName",
+      customer.currentRevision.legalName
+    )
+  }, [customerQuery.data, uploadForm])
 
   const filterSnapshotLabel = React.useMemo(() => {
     const parts = [
@@ -439,16 +487,35 @@ export function ContractsListPage({
                 },
               },
               {
-                actionKey: "create",
-                label: "新建合同",
-                icon: PlusIcon,
+                actionKey: "upload",
+                label: "上传合同 PDF",
+                icon: FileUpIcon,
                 mobileVisibility: "hide",
-                onClick: () => setCreateOpen(true),
+                onClick: () => setUploadOpen(true),
               },
             ]}
           />
         }
       />
+
+      {uploadMutation.isError ? (
+        <FormalActionResult
+          status="blocked"
+          title="合同 PDF 未归档"
+          description={
+            uploadMutation.error instanceof Error &&
+            uploadMutation.error.message === "CONTRACT_NO_EXISTS"
+              ? "该合同编号已存在，请打开已有合同；如为新签署版本，应归档到原合同。"
+              : uploadMutation.error instanceof Error &&
+                  uploadMutation.error.message === "CONTRACT_VALIDITY_INVALID"
+                ? "有效期止不能早于有效期起。"
+                : uploadMutation.error instanceof Error
+                  ? uploadMutation.error.message
+                  : "上传失败，请使用原幂等操作重试。"
+          }
+          reference="CONTRACT-PDF-NOT-COMMITTED"
+        />
+      ) : null}
 
       {actionResult ? (
         <FormalActionResult
@@ -528,12 +595,12 @@ export function ContractsListPage({
           }}
         />
         <MetricFilterItem
-          label="草稿"
-          value={metrics.draft}
-          detail="可继续编辑"
-          active={metricKey === "draft"}
+          label="已到期"
+          value={metrics.expired}
+          detail="历史可追溯"
+          active={metricKey === "expired"}
           onClick={() => {
-            setMetricKey("draft")
+            setMetricKey("expired")
             resetPagination()
           }}
         />
@@ -581,7 +648,6 @@ export function ContractsListPage({
                 >
                   <ToggleGroupItem value="all">全部状态</ToggleGroupItem>
                   <ToggleGroupItem value="EFFECTIVE">生效</ToggleGroupItem>
-                  <ToggleGroupItem value="DRAFT">草稿</ToggleGroupItem>
                   <ToggleGroupItem value="EXPIRED">到期</ToggleGroupItem>
                   <ToggleGroupItem value="TERMINATED">终止</ToggleGroupItem>
                 </ToggleGroup>
@@ -713,48 +779,71 @@ export function ContractsListPage({
         }}
       />
 
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>新建合同</DialogTitle>
+      <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+        <DialogContent className="flex max-h-[calc(100dvh-2rem)] flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="px-6 pt-6">
+            <DialogTitle>上传合同 PDF</DialogTitle>
             <DialogDescription>
-              先建立服务端草稿身份，再以同一合同对象页签进入编辑态。未形成业务记录的草稿可逻辑删除（演示）。
+              ERP 不新建或编辑合同正文。上传已签署电子档并补充检索元数据后，形成可引用的合同版本。
             </DialogDescription>
           </DialogHeader>
           <form
-            className="grid gap-3"
+            className="flex min-h-0 flex-1 flex-col"
             onSubmit={(event) => {
               event.preventDefault()
-              void createForm.handleSubmit()
+              void uploadForm.handleSubmit()
             }}
           >
-            <createForm.AppField
-              name="customerName"
-              children={(field) => <field.TextField label="客户名称" />}
-            />
-            <createForm.AppField
-              name="settlementPartyName"
-              children={(field) => <field.TextField label="结算主体" />}
-            />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <createForm.AppField
-                name="validFrom"
-                children={(field) => <field.TextField label="有效期起" />}
+            <div className="grid min-h-0 flex-1 gap-3 overflow-y-auto px-6 py-4">
+              <uploadForm.AppField
+                name="pdfFile"
+                children={(field) => <field.PdfUploadField label="合同电子档" />}
               />
-              <createForm.AppField
-                name="validTo"
-                children={(field) => <field.TextField label="有效期止" />}
+              <uploadForm.AppField
+                name="contractNo"
+                children={(field) => <field.TextField label="合同编号" />}
               />
+              <uploadForm.AppField
+                name="customerName"
+                children={(field) => <field.TextField label="客户名称" />}
+              />
+              <uploadForm.AppField
+                name="settlementPartyName"
+                children={(field) => <field.TextField label="结算主体" />}
+              />
+              <uploadForm.AppField
+                name="paymentTerms"
+                children={(field) => (
+                  <field.TextField
+                    label="付款条件摘要"
+                    description="用于销售单快速带出；完整条款以 PDF 为准。"
+                  />
+                )}
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <uploadForm.AppField
+                  name="signedAt"
+                  children={(field) => <field.TextField label="签订日期" type="date" />}
+                />
+                <uploadForm.AppField
+                  name="validFrom"
+                  children={(field) => <field.TextField label="有效期起" type="date" />}
+                />
+                <uploadForm.AppField
+                  name="validTo"
+                  children={(field) => <field.TextField label="有效期止" type="date" />}
+                />
+              </div>
             </div>
-            <DialogFooter>
+            <DialogFooter className="shrink-0 border-t px-6 py-4">
               <DialogClose render={<Button type="button" variant="outline" />}>
                 取消
               </DialogClose>
-              <createForm.AppForm>
-                <createForm.SubmitButton
-                  label={createMutation.isPending ? "创建中…" : "确认创建"}
+              <uploadForm.AppForm>
+                <uploadForm.SubmitButton
+                  label={uploadMutation.isPending ? "上传中…" : "上传并归档"}
                 />
-              </createForm.AppForm>
+              </uploadForm.AppForm>
             </DialogFooter>
           </form>
         </DialogContent>

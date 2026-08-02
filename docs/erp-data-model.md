@@ -874,9 +874,11 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | --- | --- |
 | `contract_no` | 合同编号 |
 | `customer_id` | 客户 |
-| `status` | 草稿、生效、终止、到期 |
+| `status` | 生效、终止、到期；ERP 不产生空合同草稿 |
 | `current_revision_id` | 当前合同版本 |
 | `revision_no` | 合同版本 |
+| `contract_pdf_file_id` | 本版本已签署合同 PDF；每个版本恰好一份正文 PDF |
+| `archive_source` | `CONTRACT_CENTER` 或 `SALES_ORDER_CREATE` |
 | `settlement_party_id` | 结算主体 |
 | `payment_term_snapshot` | 结构化付款条件快照 |
 | `invoice_requirement_snapshot` | 结构化开票要求快照 |
@@ -888,6 +890,9 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 - `contract_no` 唯一；
 - `(contract_id, revision_no)` 唯一；
 - `customer_id + status + valid_to` 查询索引；
+- 合同只能通过上传已签署 PDF 归档，不提供正文新建、编辑、空草稿或提交生效；
+- PDF 扩展名、MIME、内容签名、20 MB 上限和安全扫描由服务端复验，正式版本不得关联非 PDF 正文；
+- W05 随单上传时，合同身份、首个不可变版本、PDF 正式关联和销售单草稿由同一幂等业务操作提交；建单失败不得留下可选的半成品合同；
 - 销售单保存具体 `contract_revision_id` 和关键结构化快照；
 - 一个合同允许关联多张销售单。
 

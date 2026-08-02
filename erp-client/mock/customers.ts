@@ -271,7 +271,7 @@ export const MOCK_CUSTOMER_DETAILS: Readonly<
     },
     allowedActions: [
       "EDIT_CUSTOMER",
-      "CREATE_CONTRACT",
+      "UPLOAD_CONTRACT_PDF",
       "CREATE_SALES_ORDER",
       "OPEN_RECEIVABLE",
       "OPEN_QUALITY",
@@ -420,7 +420,7 @@ export const MOCK_CUSTOMER_DETAILS: Readonly<
     },
     allowedActions: [
       "EDIT_CUSTOMER",
-      "CREATE_CONTRACT",
+      "UPLOAD_CONTRACT_PDF",
       "CREATE_SALES_ORDER",
       "OPEN_RECEIVABLE",
       "OPEN_QUALITY",
@@ -537,17 +537,17 @@ export const MOCK_CUSTOMER_DETAILS: Readonly<
       formalFactsAt: "2026-07-20T09:00:00+08:00",
       qualityProjectionAt: "2026-07-20T09:30:00+08:00",
     },
-    allowedActions: ["OPEN_RECEIVABLE", "OPEN_QUALITY", "CREATE_CONTRACT"],
+    allowedActions: [
+      "OPEN_RECEIVABLE",
+      "OPEN_QUALITY",
+      "UPLOAD_CONTRACT_PDF",
+      "CREATE_SALES_ORDER",
+    ],
     actionBlockers: [
       {
         action: "EDIT_CUSTOMER",
         code: "NOT_OWNER",
         message: "当前用户非负责销售，不可修订主体。",
-      },
-      {
-        action: "CREATE_SALES_ORDER",
-        code: "NO_ACTIVE_CONTRACT_READY",
-        message: "请先确认有效合同后再建销售单。",
       },
     ],
     revisionTimeline: [
@@ -650,9 +650,9 @@ export const MOCK_CUSTOMER_DETAILS: Readonly<
         message: "客户已停用，不可修订主体；历史身份与单据记录保留。",
       },
       {
-        action: "CREATE_CONTRACT",
+        action: "UPLOAD_CONTRACT_PDF",
         code: "CUSTOMER_DISABLED",
-        message: "客户已停用，不可新建合同。",
+        message: "客户已停用，不可上传合同 PDF。",
       },
       {
         action: "CREATE_SALES_ORDER",

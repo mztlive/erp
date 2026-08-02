@@ -187,13 +187,13 @@ export function CustomerDetailPage({
   const displayName =
     customer.currentRevision.shortName || customer.currentRevision.legalName
   const isDisabled = customer.status === "disabled"
-  const createContractHref = `/sales/contracts?customerId=${encodeURIComponent(customer.customerId)}`
+  const uploadContractHref = `/sales/contracts?customerId=${encodeURIComponent(customer.customerId)}`
   const createSalesOrderHref = `/sales/orders?mode=create&customerId=${encodeURIComponent(customer.customerId)}`
   const receivableHref = `/finance/customer-accounts?customerId=${encodeURIComponent(customer.customerId)}`
   const qualityHref = `/analytics/customer-quality?customerId=${encodeURIComponent(customer.customerId)}`
 
   const editBlocked = !can(customer, "EDIT_CUSTOMER")
-  const contractBlocked = !can(customer, "CREATE_CONTRACT")
+  const contractBlocked = !can(customer, "UPLOAD_CONTRACT_PDF")
   const salesBlocked = !can(customer, "CREATE_SALES_ORDER")
 
   const collabCount = collaboratorCount(customer)
@@ -264,15 +264,15 @@ export function CustomerDetailPage({
             <GuardedBusinessAction
               size="sm"
               disabled={contractBlocked}
-              reason={blocker(customer, "CREATE_CONTRACT")}
+              reason={blocker(customer, "UPLOAD_CONTRACT_PDF")}
               render={
                 contractBlocked ? undefined : (
-                  <Link href={createContractHref} />
+                  <Link href={uploadContractHref} />
                 )
               }
             >
               <FilePlus2Icon data-icon="inline-start" aria-hidden="true" />
-              新建合同
+              上传合同 PDF
             </GuardedBusinessAction>
             <GuardedBusinessAction
               size="sm"
@@ -306,7 +306,7 @@ export function CustomerDetailPage({
         <Alert variant="warning">
           <AlertTitle>客户已停用</AlertTitle>
           <AlertDescription>
-            稳定身份、历史修订与已引用单据保留。新建合同/销售单已禁用；可继续查看历史与票款摘要。
+            稳定身份、历史修订与已引用单据保留。上传合同和新建销售单已禁用；可继续查看历史与票款摘要。
           </AlertDescription>
         </Alert>
       ) : null}

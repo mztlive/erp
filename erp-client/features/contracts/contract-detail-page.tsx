@@ -4,11 +4,8 @@ import * as React from "react"
 import Link from "next/link"
 import {
   ArrowLeftIcon,
-  FilePenLineIcon,
   HistoryIcon,
-  LockIcon,
   PrinterIcon,
-  ShieldAlertIcon,
 } from "lucide-react"
 
 import {
@@ -16,17 +13,10 @@ import {
   DocumentAttachmentList,
   DocumentHeader,
   DocumentSummary,
-  FormalActionConfirmDialog,
-  FormalActionResult,
   MoneyValue,
   PageActions,
   PageHeader,
 } from "@/components/business"
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -45,11 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
-import {
-  useActivateContractMutation,
-  useContractCenterQuery,
-  useReviseContractMutation,
-} from "@/features/contracts/queries"
+import { useContractCenterQuery } from "@/features/contracts/queries"
 
 type SectionId =
   | "overview"
@@ -78,21 +64,9 @@ export function ContractDetailPage({
   section?: string
 }) {
   const query = useContractCenterQuery(contractId)
-  const activateMutation = useActivateContractMutation()
-  const reviseMutation = useReviseContractMutation()
 
   const activeSection = resolveSection(section)
   const [paperOpen, setPaperOpen] = React.useState(false)
-  const [activateConfirmOpen, setActivateConfirmOpen] = React.useState(false)
-  const [reviseConfirmOpen, setReviseConfirmOpen] = React.useState(false)
-  const [result, setResult] = React.useState<{
-    status: "succeeded" | "blocked" | "rejected"
-    title: string
-    description: string
-    reference: string
-    facts: Array<{ label: string; value: string }>
-    nextStep?: string
-  } | null>(null)
 
   const contract = query.data
 
@@ -119,19 +93,11 @@ export function ContractDetailPage({
   }
 
   const baseHref = `/sales/contracts/${contract.contractId}`
-  const canActivate = contract.allowedActions.includes("ACTIVATE")
-  const canRevise = contract.allowedActions.includes("REVISE")
   const canCreateSo = contract.allowedActions.includes("CREATE_SALES_ORDER")
   const canPrint = contract.allowedActions.includes("PRINT")
-  const reviseBlocker = contract.actionBlockers.find((b) => b.action === "REVISE")
   const soBlocker = contract.actionBlockers.find(
     (b) => b.action === "CREATE_SALES_ORDER"
   )
-  const activateBlocker = contract.actionBlockers.find(
-    (b) => b.action === "ACTIVATE"
-  )
-  const policyMissing =
-    contract.status === "EFFECTIVE" && !contract.contractRevisionPolicy
 
   const navItems: {
     id: SectionId
@@ -160,103 +126,6 @@ export function ContractDetailPage({
       href: `${baseHref}?section=versions`,
     },
   ]
-
-  const handleActivate = async () => {
-    try {
-      const data = await activateMutation.mutateAsync({
-        contractId: contract.contractId,
-        expectedLockVersion: contract.lockVersion,
-        idempotencyKey: `act-${contract.contractId}-${contract.lockVersion}`,
-      })
-      setActivateConfirmOpen(false)
-      setResult({
-        status: "succeeded",
-        title: "合同已生效",
-        description: data.nextStep,
-        reference: data.reference,
-        facts: [
-          { label: "合同号", value: data.contractNo },
-          { label: "修订号", value: `v${data.revisionNo}` },
-          {
-            label: "生效时间",
-            value: data.effectiveAt.slice(0, 19).replace("T", " "),
-          },
-          { label: "下一步", value: data.nextStep },
-        ],
-        nextStep: data.nextStep,
-      })
-    } catch (error) {
-      setActivateConfirmOpen(false)
-      const message =
-        error instanceof Error ? error.message : "ACTIVATE_FAILED"
-      setResult({
-        status: message === "VERSION_CONFLICT" ? "blocked" : "rejected",
-        title:
-          message === "VERSION_CONFLICT"
-            ? "版本冲突，未生效"
-            : "生效失败",
-        description:
-          message === "VERSION_CONFLICT"
-            ? "服务端版本已变化，请刷新后重做。未乐观改当前状态。"
-            : `服务端拒绝生效（${message}）。`,
-        reference: `ERR-${message}`,
-        facts: [
-          { label: "合同号", value: contract.contractNo },
-          { label: "期望版本", value: String(contract.lockVersion) },
-        ],
-      })
-    }
-  }
-
-  const handleRevise = async () => {
-    try {
-      const data = await reviseMutation.mutateAsync({
-        contractId: contract.contractId,
-        expectedLockVersion: contract.lockVersion,
-        idempotencyKey: `rev-${contract.contractId}-${contract.lockVersion}`,
-      })
-      setReviseConfirmOpen(false)
-      setResult({
-        status: "succeeded",
-        title: "修订工作副本已建立",
-        description: data.nextStep,
-        reference: data.reference,
-        facts: [
-          { label: "合同号", value: data.contractNo },
-          { label: "基线修订", value: `v${data.baseRevisionNo}` },
-          { label: "工作副本", value: `v${data.workingRevisionNo}` },
-          {
-            label: "创建时间",
-            value: data.createdAt.slice(0, 19).replace("T", " "),
-          },
-          { label: "下一步", value: data.nextStep },
-        ],
-        nextStep: data.nextStep,
-      })
-    } catch (error) {
-      setReviseConfirmOpen(false)
-      const message =
-        error instanceof Error ? error.message : "REVISE_FAILED"
-      setResult({
-        status: "blocked",
-        title: "无法创建修订",
-        description:
-          message === "REVISION_POLICY_MISSING"
-            ? "修订规则尚未配置：已生效合同保持只读，服务端拒绝创建工作副本。"
-            : `服务端拒绝修订（${message}）。`,
-        reference: `ERR-${message}`,
-        facts: [
-          { label: "合同号", value: contract.contractNo },
-          {
-            label: "策略",
-            value: contract.contractRevisionPolicy
-              ? contract.contractRevisionPolicy.policyVersion
-              : "未配置",
-          },
-        ],
-      })
-    }
-  }
 
   const rev = contract.currentRevision
 
@@ -306,16 +175,7 @@ export function ContractDetailPage({
           tone: contract.statusTone,
         }}
         primaryAction={
-          canActivate ? (
-            <Button
-              type="button"
-              size="sm"
-              disabled={activateMutation.isPending}
-              onClick={() => setActivateConfirmOpen(true)}
-            >
-              提交生效
-            </Button>
-          ) : canCreateSo ? (
+          canCreateSo ? (
             <Button
               type="button"
               size="sm"
@@ -340,31 +200,16 @@ export function ContractDetailPage({
           )
         }
         secondaryActions={
-          <>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={!canRevise || reviseMutation.isPending}
-              title={reviseBlocker?.message}
-              onClick={() => {
-                if (canRevise) setReviseConfirmOpen(true)
-              }}
-            >
-              <FilePenLineIcon data-icon="inline-start" aria-hidden="true" />
-              创建新修订
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={!canPrint}
-              onClick={() => setPaperOpen(true)}
-            >
-              <PrinterIcon data-icon="inline-start" aria-hidden="true" />
-              纸质预览
-            </Button>
-          </>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={!canPrint}
+            onClick={() => setPaperOpen(true)}
+          >
+            <PrinterIcon data-icon="inline-start" aria-hidden="true" />
+            纸质预览
+          </Button>
         }
       />
 
@@ -377,33 +222,8 @@ export function ContractDetailPage({
         </span>
         <span>·</span>
         <span>{contract.ownerLabel}</span>
-        {policyMissing ? (
-          <Badge variant="warning">
-            <LockIcon data-icon="inline-start" aria-hidden="true" />
-            修订规则尚未配置
-          </Badge>
-        ) : null}
-        {contract.contractRevisionPolicy ? (
-          <Badge variant="info">
-            修订策略 {contract.contractRevisionPolicy.policyVersion} ·{" "}
-            {contract.contractRevisionPolicy.mode === "DIRECT_REVISION"
-              ? "直接修订"
-              : "变更申请"}
-          </Badge>
-        ) : null}
+        <Badge variant="info">PDF 电子档归档</Badge>
       </div>
-
-      {policyMissing ? (
-        <Alert variant="warning">
-          <ShieldAlertIcon aria-hidden="true" />
-          <AlertTitle>修订策略未配置</AlertTitle>
-          <AlertDescription>
-            已生效合同保持只读查看。服务端不返回 REVISE，直接请求创建修订工作副本也会被拒绝。配置{" "}
-            <span className="num">contractRevisionPolicy</span>{" "}
-            并重新返回 REVISE 后才开放。
-          </AlertDescription>
-        </Alert>
-      ) : null}
 
       {!canCreateSo && soBlocker ? (
         <p className="text-xs text-muted-foreground">
@@ -411,17 +231,6 @@ export function ContractDetailPage({
         </p>
       ) : null}
 
-      {!canActivate && activateBlocker && contract.status === "DRAFT" ? (
-        <p className="text-xs text-muted-foreground">
-          生效不可用：{activateBlocker.message}
-        </p>
-      ) : null}
-
-      {!canRevise && reviseBlocker ? (
-        <p className="text-xs text-muted-foreground">
-          修订不可用：{reviseBlocker.message}
-        </p>
-      ) : null}
 
       <nav
         aria-label="对象分区"
@@ -446,42 +255,6 @@ export function ContractDetailPage({
           )
         })}
       </nav>
-
-      {result ? (
-        <FormalActionResult
-          status={result.status}
-          title={result.title}
-          description={result.description}
-          reference={result.reference}
-          facts={result.facts}
-          actions={
-            result.status === "succeeded" && canCreateSo ? (
-              <Button
-                type="button"
-                size="sm"
-                render={
-                  <Link
-                    href={`/sales/orders?mode=create&contractId=${encodeURIComponent(
-                      contract.contractId
-                    )}`}
-                  />
-                }
-              >
-                新建销售单
-              </Button>
-            ) : (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => void query.refetch()}
-              >
-                刷新对象
-              </Button>
-            )
-          }
-        />
-      ) : null}
 
       {activeSection === "overview" ? (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -633,8 +406,7 @@ export function ContractDetailPage({
 
       {activeSection === "attachments" ? (
         <DocumentAttachmentList
-          title="合同附件"
-          uploadDisabled={!contract.allowedActions.includes("UPLOAD_ATTACHMENT")}
+          title="合同 PDF 电子档"
           attachments={contract.attachments.map((file) => ({
             id: file.id,
             name: file.name,
@@ -744,10 +516,10 @@ export function ContractDetailPage({
                   className="size-4 text-muted-foreground"
                   aria-hidden="true"
                 />
-                <CardTitle>版本时间线</CardTitle>
+              <CardTitle>版本时间线</CardTitle>
               </div>
               <CardDescription>
-                历史修订不可编辑；销售单链接的版本可在关联列表中对照。
+                每个版本对应已上传的签署 PDF；销售单链接的版本可在关联列表中对照。
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -804,7 +576,7 @@ export function ContractDetailPage({
             <CardHeader className="border-b">
               <CardTitle>审计时间线</CardTitle>
               <CardDescription>
-                创建、修订、生效、终止、附件下载等处理动作。
+                PDF 上传、版本归档、终止与下载等处理动作。
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -837,58 +609,6 @@ export function ContractDetailPage({
         contract={contract}
         open={paperOpen}
         onOpenChange={setPaperOpen}
-      />
-
-      <FormalActionConfirmDialog
-        open={activateConfirmOpen}
-        onOpenChange={setActivateConfirmOpen}
-        title="确认将合同内容生效"
-        description="生效后将生成不可变合同修订并固定结果。请核对客户、版本、有效期与条款摘要。"
-        actionLabel="生效"
-        confirmLabel="确认生效"
-        fromStatus={{ label: contract.statusLabel, tone: contract.statusTone }}
-        toStatus={{ label: "生效", tone: "success" }}
-        lockedFields={[
-          `合同号 ${contract.contractNo}`,
-          `客户 ${contract.customer.displayName}`,
-          `版本 ${rev.revisionNo <= 0 ? "草稿 → v1" : `v${rev.revisionNo}`}`,
-          `有效期 ${rev.validFrom} ~ ${rev.validTo}`,
-        ]}
-        effects={[
-          "生成不可变合同修订并固定结果",
-          rev.termsSummary,
-          "新销售单可引用当前修订记录",
-        ]}
-        irreversibleEffects={["生效后历史销售引用的旧修订不会被替换"]}
-        pending={activateMutation.isPending}
-        onConfirm={handleActivate}
-      />
-
-      <FormalActionConfirmDialog
-        open={reviseConfirmOpen}
-        onOpenChange={setReviseConfirmOpen}
-        title="确认创建新修订"
-        description="将按已配置策略在同一合同页签建立可编辑工作副本；历史销售单记录不受影响。"
-        actionLabel="创建修订"
-        confirmLabel="创建工作副本"
-        fromStatus={{ label: contract.statusLabel, tone: contract.statusTone }}
-        toStatus={{ label: "修订工作副本", tone: "info" }}
-        lockedFields={[
-          `合同号 ${contract.contractNo}`,
-          `当前修订 v${rev.revisionNo}`,
-          contract.contractRevisionPolicy
-            ? `策略 ${contract.contractRevisionPolicy.policyVersion} · ${contract.contractRevisionPolicy.mode}`
-            : "策略未配置（应已阻断）",
-        ]}
-        effects={[
-          "在同一合同页签建立可编辑工作副本",
-          "历史销售单记录不受影响",
-          contract.contractRevisionPolicy
-            ? `必需证据：${contract.contractRevisionPolicy.requiredEvidenceCodes.join("、")}`
-            : "无策略",
-        ]}
-        pending={reviseMutation.isPending}
-        onConfirm={handleRevise}
       />
     </div>
   )

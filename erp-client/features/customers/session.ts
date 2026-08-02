@@ -279,16 +279,11 @@ export function createW03Customer(
     freshness: { formalFactsAt: now },
     allowedActions: [
       "EDIT_CUSTOMER",
-      "CREATE_CONTRACT",
+      "UPLOAD_CONTRACT_PDF",
+      "CREATE_SALES_ORDER",
       "OPEN_RECEIVABLE",
     ],
-    actionBlockers: [
-      {
-        action: "CREATE_SALES_ORDER",
-        code: "NO_ACTIVE_CONTRACT",
-        message: "请先新建有效合同后再建销售单。",
-      },
-    ],
+    actionBlockers: [],
     revisionTimeline: [
       {
         id: `rev_${customerId}_1`,

@@ -8,6 +8,7 @@ import type {
   SalesOrderListItem,
 } from "@/features/sales-orders/types"
 import { buildSalesOrder } from "@/features/sales-orders/build-order"
+import { contractPdfError } from "@/features/contracts/pdf"
 import {
   getMockSalesOrder,
   listMockSalesOrders,
@@ -27,10 +28,12 @@ import {
   getW05RejectionOutcome,
   getW04ContractCenter,
   hasW05DraftPriceAdjusted,
+  linkW04SalesOrder,
   markW05DraftPriceAdjusted,
   postSalesOrderAcceptance,
   resolveW05ProcurementRejection,
   startW05SalesChangeOrder,
+  uploadW04ContractPdf,
   verifyW05CardClaim,
 } from "@/mock/session-state"
 
@@ -340,29 +343,69 @@ function localDateParts(date: Date) {
 }
 
 /**
- * M5 建单 mock：服务端侧重验合同/修订与卡券唯一明细，并重新计算正式金额。
+ * M5 建单 mock：选择已有合同，或在同一幂等操作中上传 PDF、归档合同并建单。
  */
 export async function createSalesOrder(
   input: CreateSalesOrderInput
 ): Promise<CreateSalesOrderResult> {
   await mockDelay(180)
 
-  const contract = getW04ContractCenter(input.contractId)
-  if (!contract?.selectableForNewSalesOrder) {
-    throw new Error(contract?.selectableBlocker ?? "CONTRACT_NOT_SELECTABLE")
-  }
-
-  const requestedRevision = input.requestedContractRevisionId
-    ? contract.revisionTimeline.find(
-        (revision) => revision.revisionId === input.requestedContractRevisionId
-      )
-    : contract.revisionTimeline.find((revision) => revision.isCurrent)
-  if (!requestedRevision) throw new Error("CONTRACT_REVISION_NOT_FOUND")
-  if (!requestedRevision.isCurrent) throw new Error("CONTRACT_REVISION_NOT_CURRENT")
   if (input.lineItems.length === 0) throw new Error("LINE_ITEM_REQUIRED")
   if (input.nature === "card_voucher" && input.lineItems.length !== 1) {
     throw new Error("VOUCHER_REQUIRES_EXACTLY_ONE_LINE")
   }
+  if (
+    input.lineItems.some(
+      (line) =>
+        !line.name.trim() ||
+        !line.unit.trim() ||
+        numericValue(line.quantity) <= 0 ||
+        numericValue(line.unitPriceGross) <= 0 ||
+        (input.nature === "card_voucher" &&
+          (!line.cardForm.trim() || numericValue(line.faceValue) <= 0)) ||
+        (input.nature === "physical_service" &&
+          (!line.fulfillmentMode.trim() || !line.dueDate))
+    )
+  ) {
+    throw new Error("LINE_ITEM_INVALID")
+  }
+
+  let contractId: string
+  let requestedRevisionId: string
+  if (input.contract.source === "existing") {
+    contractId = input.contract.contractId
+    requestedRevisionId = input.contract.requestedContractRevisionId
+  } else {
+    const fileError = contractPdfError(input.contract.pdfFile)
+    if (fileError) throw new Error(fileError)
+    const uploaded = uploadW04ContractPdf({
+      pdfFile: input.contract.pdfFile,
+      contractNo: input.contract.contractNo,
+      customerId: input.contract.customerId,
+      customerName: input.contract.customerName,
+      settlementPartyName: input.contract.settlementPartyName,
+      signedAt: input.contract.signedAt,
+      validFrom: input.contract.validFrom,
+      validTo: input.contract.validTo,
+      paymentTerms: input.paymentTerms,
+      idempotencyKey: `${input.idempotencyKey}:contract-pdf`,
+    })
+    contractId = uploaded.contractId
+    requestedRevisionId = uploaded.revisionId
+  }
+
+  const contract = getW04ContractCenter(contractId)
+  if (!contract?.selectableForNewSalesOrder) {
+    throw new Error(contract?.selectableBlocker ?? "CONTRACT_NOT_SELECTABLE")
+  }
+
+  const requestedRevision = requestedRevisionId
+    ? contract.revisionTimeline.find(
+        (revision) => revision.revisionId === requestedRevisionId
+      )
+    : contract.revisionTimeline.find((revision) => revision.isCurrent)
+  if (!requestedRevision) throw new Error("CONTRACT_REVISION_NOT_FOUND")
+  if (!requestedRevision.isCurrent) throw new Error("CONTRACT_REVISION_NOT_CURRENT")
 
   const lineItems: SalesOrderLineItem[] = input.lineItems.map((line, index) => {
     const quantity = numericValue(line.quantity)
@@ -463,6 +506,17 @@ export async function createSalesOrder(
     }),
     input.idempotencyKey
   )
+
+  linkW04SalesOrder({
+    contractId: contract.contractId,
+    salesOrderId: created.id,
+    documentNumber: created.documentNumber,
+    natureLabel: input.nature === "card_voucher" ? "卡券" : "实物与服务",
+    contractRevisionNo: requestedRevision.revisionNo,
+    statusLabel: created.primaryStatus.label,
+    statusTone: created.primaryStatus.tone,
+    amountGross: created.amountGross,
+  })
 
   return {
     salesOrderId: created.id,

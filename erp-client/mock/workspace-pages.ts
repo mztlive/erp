@@ -254,7 +254,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
   W04: {
     id: "W04",
     title: "合同",
-    description: "查询合同状态、有效期与关联销售单；打开对象中心核对商务条款。",
+    description: "上传和查询合同 PDF、有效期与关联销售单；对象中心只读核对归档版本。",
     mode: "M2+M4",
     breadcrumbs: [
       { id: "sales", label: "销售", href: "/sales/orders" },
@@ -264,7 +264,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
       kind: "list",
       payload: {
         searchPlaceholder: "合同号、客户、结算主体",
-        primaryActionLabel: "新建合同",
+        primaryActionLabel: "上传合同 PDF",
         filterLabels: ["全部", "有效", "将到期", "已终止"],
         metrics: [
           { key: "all", label: "全部合同", value: 24, detail: "当前业务范围" },

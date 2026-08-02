@@ -40,7 +40,7 @@ Rules applied:
 | W03 | Object route `/sales/customers/:customerId` + section | no §12 line | Route exists; acceptance list has no matching checkbox |
 | W03 | Related-object actions open W04/W05 with customerId | no §12 line | Links shipped; W05 list still ignores customerId (still_open) |
 | W04 | 1440×900 density 6–8×36px rows | left open | **verify.rejected** — no viewport measurement |
-| W04 | Keyboard list → detail → center → edit/submit | left open | **verify.rejected** — partial hooks only; no EDIT_DRAFT editor |
+| W04 | Keyboard list → upload PDF → detail → center | implementation updated | 合同仅 PDF 归档；浏览器键盘与响应式验证待完成 |
 | W04 | 销售单保存 `contractRevisionId` / 附件短链审计 / 自动保存指纹 / 保存失败保留输入 / §9§10 | left open | Not in verify.confirmed (or incomplete vs still_open) |
 | W08 | Draft save/submit + FormalActionResult retain | `- [ ]` 保存、提交、**审核、作废**和变更… | Subset of longer multi-action line; 作废 formal not shipped |
 | W08 | Finance audit read-only pass/reject | `- [ ]` …完整使用 W02 `CompleteWorkItemEnvelope` | Honest mock only; envelope still open |
@@ -78,7 +78,7 @@ Rules applied:
 - [x] 一份合同可关联多张销售单，但 UI 不自行创造“合同金额”事实。
 - [x] 合同到期/终止后不进新销售单选择器，历史销售快照和合同版本仍可追溯。
 - [x] 列表导出使用服务端选择快照与下载重新鉴权，不用前端当前页拼出全量结果。
-- [x] `contractRevisionPolicy` 缺失时已生效合同只读，`REVISE` 不出现在允许动作中，深链或直接请求也不能创建修订工作副本。
+- [x] W04 不提供合同正文新建、编辑、空草稿或创建修订工作副本；新合同和后续版本都只能上传签署 PDF。
 - [x] 正式动作成功固定展示合同号、修订号、时间和下一步，不只靠 toast。
 
 ### W08 (`w08-purchase-orders.md`)
@@ -123,7 +123,7 @@ Rules applied:
 ### W04
 
 1. **1440×900 density: header + metrics + toolbar + pagination still show 6–8×36px rows** — Compact density and seed rows exist; no viewport measurement / acceptance artifact.
-2. **Keyboard: list search → detail → open center → edit/submit validation** — Partial DataTable/form hooks only; no draft EDIT_DRAFT editor on object center; full path not shipped.
+2. **Keyboard: list search → upload PDF → detail → open center** — 表单和对象中心已改为 PDF 归档；完整键盘与响应式路径仍待浏览器验证。
 
 ### W09
 

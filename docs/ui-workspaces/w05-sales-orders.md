@@ -13,7 +13,7 @@
 - 销售在一个工作面查询、新建和跟进卡券与非卡券销售单，不记两套路由和两套编号。
 - 经办人在对象中心一屏判断当前商业版本、主责系统、履约、回款和开票三轨进度，以及下一责任方。
 - 协同角色从待办、客户、合同、采购、履约、票款或分析下钻后，直接落到同一张销售单的对应子区。
-- 创建者在一个 M5 会话内完成客户、合同、销售内容、金额、证据和提交，不依靠多个孤立页面拼单。
+- 创建者在一个 M5 会话内选择已有合同或同步上传合同 PDF，再完成销售内容、金额、证据和提交，不依靠多个孤立页面拼单。
 - 销售领导与运营可在销售单对象中心嵌入处理固定的卡券销售审批任务；即使不返回 W02，也沿用同一任务、领取租约和正式完成信封。
 - 采购二次确认驳回后，销售在对象中心只看到三条固定出路：改品/改价后重提、照原条件申请低毛利承接、确认不做并作废。
 
@@ -62,7 +62,7 @@
 | --- | --- | --- | --- |
 | 侧栏查询 | 销售 > 销售单 | `/sales/orders`，复用固定列表页签 | 保留筛选、滚动和选中行 |
 | 打开对象 | 列表 detail、全局搜索、关联对象 | `/sales/orders/:salesOrderId`，相同稳定 ID 只聚焦已有页签 | 关闭后回来源触发点 |
-| 新建销售单 | W05、W03、W04 | 服务端先创建草稿 ID，再在同一对象页签进入 M5 | 取消后回原客户/合同或列表 |
+| 新建销售单 | W05、W03、W04 | 进入 M5；合同来源可选择已有有效版本，或同步上传签署 PDF | 取消后回原客户/合同或列表；未提交的临时文件不形成合同 |
 | 处理卡券销售审批 | W01 / W02 或对象中心待处理提示 | `/sales/orders/:salesOrderId?section=approval&workItemId=...&queueContextId=...`，嵌入 W02 注册的同一处理器 | 完成后刷新主状态；从队列进入时按 `queueContextId` 返回/继续 |
 | 处理采购驳回 | W07 固定驳回结果 / W01 提示 | `/sales/orders/:salesOrderId?section=procurement-rejection&rejectedConfirmationId=...`；只携稳定驳回身份，页面重查当前可用出路 | 完成重提/低毛利申请/作废后留在固定结果，或进入相应任务 |
 | 处理低毛利承接确认 | W01 / W02 或对象中心待处理提示 | `/sales/orders/:salesOrderId?section=procurement-rejection&workItemId=...&queueContextId=...`，嵌入已注册 `LOW_MARGIN_MANAGER_CONFIRMATION` 处理器 | 决定后刷新驳回处理链；通过时可打开新 W07 任务，驳回时返回销售处理 |
@@ -117,7 +117,7 @@
 
 ```text
 ┌ 草稿身份 + 自动保存 + 租约/版本 + 校验摘要                         ┐
-├ 客户与合同 ─ 业务性质（创建后锁定） ─ 负责人                       ┤
+├ 合同来源（选择已有 / 同步上传 PDF）─ 客户与结算主体 ─ 负责人         ┤
 ├ 销售内容：非卡券多明细 / 卡券恰好一条版本明细                     ┤
 ├ 金额、税务、履约约定、证据与内部说明                              ┤
 ├ sticky TotalBar：含税 / 不含税 / 税额 / 预计口径说明               ┤
@@ -161,7 +161,7 @@
 
 | 类型 | 必须展示 | 数据来源 / 口径 | 可写边界 |
 | --- | --- | --- | --- |
-| 两类共有 | 客户、合同修订、负责人、业务场景、有效期、币种、税务与含税/不含税/税额 | 初始销售草稿、销售变更工作副本或不可变销售版本；合同和主数据保存精确修订与快照 | 仅 ERP 主责可编辑初始草稿或销售变更工作副本；正式版本永远只读 |
+| 两类共有 | 合同来源、客户、合同精确版本、负责人、业务场景、有效期、币种、税务与含税/不含税/税额 | 初始销售草稿、销售变更工作副本或不可变销售版本；已有合同按 ID 查询，随单上传先形成合同 PDF 版本 | 仅 ERP 主责可编辑初始草稿或销售变更工作副本；正式版本永远只读 |
 | 非卡券 | 一条或多条可销售项目、数量、单位、单价、税率、履约方式与验收要求 | W14 精确可销售项目修订；服务端金额和资格 | 生效前经 W07 二次确认；生效后走正式变更，不回旧确认 |
 | 卡券 | 卡券类目、面值、张数、卡形态、履约期限和商城外部身份 | 每个销售版本恰好一条卡券明细；不含玩法、卡号或卡密 | 一期商城主责只读；二期 ERP 主责必须经卡券销售变更单的运营确认和财务复核 |
 
@@ -212,7 +212,7 @@
 
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
-| 新建销售单 | 页头、W03、W04 | `CREATE`；客户有效；服务端允许业务性质 | 创建草稿无需正式确认 | 返回草稿 ID，打开同一对象页签 | 未创建则保留选择；结果未知查原请求 |
+| 新建销售单 | 页头、W03、W04 | `CREATE`；客户有效；服务端允许业务性质；合同来源满足已有版本或合法 PDF 之一 | 创建草稿无需正式确认 | 已有合同直接固定版本；随单上传路径原子形成合同档案、v1 与销售单关联 | 失败保留选择和文件，不留下空合同；结果未知查原请求 |
 | 保存草稿 | M5 | 编辑租约、草稿版本、字段校验 | 无 | 返回新 `draftVersion`、指纹与保存时间 | 保留输入，处理冲突后重试 |
 | 提交非卡券确认 | M5 | ERP 主责、非卡券、校验通过 | 展示客户、合同、金额、履约摘要 | 冻结提交版本并形成 W07 任务 | 不乐观生效；同幂等键查结果 |
 | 改品/改价后重提 | 采购驳回处理卡 | 当前为采购驳回后的销售处理态；无有效后继任务；草稿相对被驳回提交至少有商品/服务或销售价格变化；客户已重新确认 | 展示旧/新结构化 diff、原驳回原因和“将创建全新采购确认任务” | `ResolveProcurementRejectionCommand` 原子冻结新提交/新指纹并创建唯一新 `PROCUREMENT_CONFIRMATION`；旧提交、确认和任务不变 | 冲突时刷新旧/新 diff；结果未知按原操作查询，不重复生成提交或任务 |
@@ -378,6 +378,32 @@ type ProcurementRejectionResolutionView = {
 ### 8.3 提交
 
 ```ts
+type SalesOrderContractInput =
+  | {
+      source: "EXISTING"
+      contractId: string
+      contractRevisionId: string
+    }
+  | {
+      source: "UPLOAD_PDF"
+      pdfFile: File
+      contractNo: string
+      customerId: string
+      settlementPartyId: string
+      signedAt: string
+      validFrom: string
+      validTo: string
+    }
+
+type CreateSalesOrderCommand = {
+  contract: SalesOrderContractInput
+  businessType: "VOUCHER" | "GOODS_SERVICE"
+  lines: SalesOrderLineInput[]
+  paymentTerms: string
+  fulfillmentDeadline: string
+  idempotencyKey: string
+}
+
 type SaveSalesOrderDraftCommand = {
   salesOrderId: string
   expectedLockVersion: number
@@ -606,6 +632,8 @@ type CompleteCardSalesApprovalResult =
   CompleteWorkItemResult<CardSalesApprovalBusinessResult>
 ```
 
+`CreateSalesOrderCommand.contract` 是强判别联合，两个分支互斥。`EXISTING` 分支由服务端重验合同当前可选资格和精确版本；`UPLOAD_PDF` 分支复用 W04 的 PDF 类型、20 MB、安全扫描、合同号唯一和有效期校验。随单上传可以先把文件放入临时安全区，但合同身份、首个不可变版本、PDF 正式关联和销售单草稿必须由同一幂等业务操作提交；销售单创建失败时不得留下空合同或可被其他销售单选择的半成品版本。
+
 初始提交响应固定返回操作号、销售单号、冻结提交、当前状态、形成的待办以及下一步。销售变更必须保存 `sales_change_order`、不可变提交、基准版本和同一内容指纹；实物与服务由采购确认履约影响，卡券由运营确认商城执行影响，之后均由财务复核，生效事务才形成新销售版本和应收差额。`SalesChangeFormalCommand` 只处理销售变更单，不得用于初始卡券销售审批。
 
 `ResolveProcurementRejectionCommand` 的三个分支必须以服务端当前驳回事实强判别，并各自在一个事务内完成：
@@ -717,6 +745,8 @@ type CompleteCardSalesApprovalResult =
 - [x] 非卡券以验收完成履约；卡券以履约期限到期完成，不因已消费完提前完成。
 - [x] 履约完成且应收结清才能关闭；开票未完成不阻塞关闭。
 - [x] 二期卡券单协同子区展示消费汇总与 W25 入口，但消费、退款或余额恢复不增加第三个关闭条件。
+- [x] 新建销售单可互斥选择已有合同或同步上传单个合同 PDF；无已有合同时不阻断进入 M5。
+- [x] 随单上传与销售单创建共享幂等业务操作，失败不留下空合同或半成品版本。
 - [x] 历史销售版本保存精确合同/主数据修订和关键快照，不被当前值覆盖。
 - [ ] 正式销售单没有直接编辑或人工关闭入口；商业变化必须通过销售变更单并按业务类型完成影响确认和财务复核。
 - [ ] `CARD_SALES_MANAGER_APPROVAL` 与 `CARD_SALES_OPERATION_APPROVAL` 在 W02/W05 共用处理器和完成信封；对象中心不存在绕过任务的审批按钮。

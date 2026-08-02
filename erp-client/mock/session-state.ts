@@ -52,12 +52,11 @@ import {
   type SeedPO,
 } from "@/mock/purchase-orders"
 import type {
-  ActivateContractResult,
   ContractExportJob,
   ContractListRow,
   ContractCenterView,
-  CreateContractDraftResult,
-  ReviseContractResult,
+  UploadContractPdfInput,
+  UploadContractPdfResult,
 } from "@/features/contracts/types"
 import {
   CONTRACT_STATUS_LABEL,
@@ -2149,14 +2148,8 @@ export function getW10ExportJob(jobId: string): W10ExportJob | null {
 
 const w04CreatedContracts = new Map<string, ContractListRow>()
 const w04CenterOverrides = new Map<string, ContractCenterView>()
-const w04ActivateIdempotency = new Map<string, ActivateContractResult>()
-const w04ReviseIdempotency = new Map<string, ReviseContractResult>()
-const w04CreateIdempotency = new Map<string, CreateContractDraftResult>()
+const w04UploadIdempotency = new Map<string, UploadContractPdfResult>()
 const w04ExportJobs = new Map<string, ContractExportJob>()
-const w04WorkingRevisions = new Map<
-  string,
-  { baseRevisionNo: number; workingRevisionNo: number; createdAt: string }
->()
 
 export function listW04Contracts(): ContractListRow[] {
   const base = [...MOCK_CONTRACT_LIST]
@@ -2188,349 +2181,211 @@ export function getW04ContractCenter(
     return { ...override, queriedAt: new Date().toISOString() }
   }
   const base = MOCK_CONTRACT_CENTERS[contractId]
-  if (!base) {
-    const created = w04CreatedContracts.get(contractId)
-    if (!created) return null
-    return buildDraftCenterFromListRow(created)
-  }
-  const working = w04WorkingRevisions.get(contractId)
-  if (working) {
-    return {
-      ...base,
-      queriedAt: new Date().toISOString(),
-      currentRevision: {
-        ...base.currentRevision,
-        revisionNo: working.workingRevisionNo,
-        termsSummary: `工作副本 v${working.workingRevisionNo}（基于 v${working.baseRevisionNo}，尚未生效）`,
-      },
-      allowedActions: [
-        ...base.allowedActions.filter((a) => a !== "REVISE"),
-        "EDIT_DRAFT",
-        "ACTIVATE",
-      ],
-    }
-  }
+  if (!base) return null
   return { ...base, queriedAt: new Date().toISOString() }
 }
 
-function buildDraftCenterFromListRow(row: ContractListRow): ContractCenterView {
-  return {
-    contractId: row.contractId,
-    contractNo: row.contractNo,
-    status: row.status,
-    statusLabel: row.statusLabel,
-    statusTone: row.statusTone,
-    lockVersion: 1,
-    customer: {
-      id: row.customer.customerId,
-      displayName: row.customer.displayName,
-      reference: row.customer.customerNo,
-    },
-    ownerLabel: row.ownerLabel,
-    ownerKind: row.ownerKind,
-    currentRevision: {
-      revisionId: `${row.contractId}_draft`,
-      revisionNo: 0,
-      settlementParty: {
-        id: row.settlementParty.partyId,
-        displayName: row.settlementParty.displayName,
-      },
-      paymentTermSnapshot: {
-        label: "待确认",
-        description: "草稿未确认付款条件。",
-      },
-      invoiceRequirementSnapshot: {
-        titleType: "待确认",
-        contentSummary: "草稿未确认开票要求。",
-      },
-      validFrom: row.validFrom,
-      validTo: row.validTo,
-      signedAt: row.signedAt,
-      termsSummary: "会话内新建草稿，可继续编辑后生效。",
-    },
-    attachments: [],
-    relatedSalesOrders: [],
-    revisionTimeline: [],
-    auditTimeline: [
-      {
-        id: `au_${row.contractId}_create`,
-        action: "CREATE",
-        actorLabel: "当前用户",
-        at: new Date().toISOString().slice(0, 16).replace("T", " "),
-        summary: "创建合同草稿",
-      },
-    ],
-    allowedActions: row.allowedActions,
-    actionBlockers: row.actionBlockers,
-    sourceAsOf: new Date().toISOString(),
-    relatedSalesOrdersAsOf: new Date().toISOString(),
-    queriedAt: new Date().toISOString(),
-    selectableForNewSalesOrder: false,
-    selectableBlocker: "草稿合同不可用于新建销售单。",
-  }
-}
-
-export function createW04ContractDraft(input: {
-  customerName: string
-  settlementPartyName: string
-  validFrom: string
-  validTo: string
-  idempotencyKey: string
-}): CreateContractDraftResult {
-  const cached = w04CreateIdempotency.get(input.idempotencyKey)
+/** 上传签署合同 PDF 并归档为可引用的首个不可变版本。 */
+export function uploadW04ContractPdf(
+  input: UploadContractPdfInput
+): UploadContractPdfResult {
+  const cached = w04UploadIdempotency.get(input.idempotencyKey)
   if (cached) return cached
 
+  const contractNo = input.contractNo.trim()
+  if (
+    listW04Contracts().some(
+      (row) => row.contractNo.toLocaleLowerCase() === contractNo.toLocaleLowerCase()
+    )
+  ) {
+    throw new Error("CONTRACT_NO_EXISTS")
+  }
+  if (input.validTo < input.validFrom) {
+    throw new Error("CONTRACT_VALIDITY_INVALID")
+  }
+
   const stamp = Date.now().toString(36).toUpperCase()
-  const contractId = `ct_new_${stamp.toLowerCase()}`
-  const contractNo = `HT-2026-${stamp.slice(-4)}`
-  const createdAt = new Date().toISOString()
-  const result: CreateContractDraftResult = {
+  const contractId = `ct_upload_${stamp.toLowerCase()}`
+  const revisionId = `${contractId}_v1`
+  const uploadedAt = new Date().toISOString()
+  const knownCustomer = MOCK_CONTRACT_LIST.find(
+    (row) => row.customer.customerId === input.customerId
+  )?.customer
+  const customerId = input.customerId || `cu_upload_${stamp.toLowerCase()}`
+  const customerNo = knownCustomer?.customerNo ?? `KH-U${stamp.slice(-4)}`
+  const settlementPartyId = `sp_upload_${stamp.toLowerCase()}`
+  const result: UploadContractPdfResult = {
     contractId,
     contractNo,
-    revisionNo: 0,
-    createdAt,
-    reference: `CT-NEW-${stamp}`,
+    revisionId,
+    revisionNo: 1,
+    uploadedAt,
+    fileName: input.pdfFile.name,
+    reference: `CT-UPLOAD-${stamp}`,
   }
 
   const row: ContractListRow = {
     contractId,
     contractNo,
     customer: {
-      customerId: `cu_new_${stamp.toLowerCase()}`,
-      customerNo: `KH-N${stamp.slice(-4)}`,
-      displayName: input.customerName,
+      customerId,
+      customerNo,
+      displayName: input.customerName.trim(),
     },
     settlementParty: {
-      partyId: `sp_new_${stamp.toLowerCase()}`,
-      displayName: input.settlementPartyName,
+      partyId: settlementPartyId,
+      displayName: input.settlementPartyName.trim(),
     },
-    status: "DRAFT",
-    statusLabel: CONTRACT_STATUS_LABEL.DRAFT,
-    statusTone: CONTRACT_STATUS_TONE.DRAFT,
-    revisionNo: 0,
+    status: "EFFECTIVE",
+    statusLabel: CONTRACT_STATUS_LABEL.EFFECTIVE,
+    statusTone: CONTRACT_STATUS_TONE.EFFECTIVE,
+    revisionNo: 1,
+    signedAt: input.signedAt,
     validFrom: input.validFrom,
     validTo: input.validTo,
-    expiringWithin30Days: false,
+    expiringWithin30Days:
+      new Date(input.validTo).getTime() - Date.now() <= 30 * 24 * 60 * 60 * 1000,
     salesOrderCount: 0,
     activeSalesOrderCount: 0,
     ownerLabel: "当前用户 · 当前客户负责人",
     ownerKind: "current_customer_owner",
-    allowedActions: ["EDIT_DRAFT", "ACTIVATE", "UPLOAD_ATTACHMENT"],
-    actionBlockers: [
-      {
-        action: "CREATE_SALES_ORDER",
-        code: "NOT_EFFECTIVE",
-        message: "草稿合同不可用于新建销售单。",
-      },
-      {
-        action: "PRINT",
-        code: "NO_CONFIRMED_REVISION",
-        message: "尚无已确认修订，无法生成打印件。",
-      },
-    ],
+    allowedActions: ["PRINT", "CREATE_SALES_ORDER", "TERMINATE"],
+    actionBlockers: [],
   }
   w04CreatedContracts.set(contractId, row)
-  w04CreateIdempotency.set(input.idempotencyKey, result)
-  return result
-}
-
-export function activateW04Contract(input: {
-  contractId: string
-  expectedLockVersion: number
-  idempotencyKey: string
-}): ActivateContractResult {
-  const cached = w04ActivateIdempotency.get(input.idempotencyKey)
-  if (cached) return cached
-
-  const center = getW04ContractCenter(input.contractId)
-  if (!center) {
-    throw new Error("CONTRACT_NOT_FOUND")
-  }
-  if (!center.allowedActions.includes("ACTIVATE")) {
-    throw new Error("ACTIVATE_NOT_ALLOWED")
-  }
-  if (center.lockVersion !== input.expectedLockVersion) {
-    throw new Error("VERSION_CONFLICT")
-  }
-
-  const effectiveAt = new Date().toISOString()
-  const nextRevision =
-    center.currentRevision.revisionNo <= 0
-      ? 1
-      : center.currentRevision.revisionNo
-  const stamp = Date.now().toString(36).toUpperCase()
-  const result: ActivateContractResult = {
-    contractId: center.contractId,
-    contractNo: center.contractNo,
-    revisionNo: nextRevision,
-    effectiveAt,
-    reference: `CT-ACT-${stamp}`,
-    nextStep: "可从合同中心新建销售单，或返回列表继续查询。",
-  }
-
-  const activated: ContractCenterView = {
-    ...center,
+  const center: ContractCenterView = {
+    contractId,
+    contractNo,
     status: "EFFECTIVE",
     statusLabel: CONTRACT_STATUS_LABEL.EFFECTIVE,
     statusTone: CONTRACT_STATUS_TONE.EFFECTIVE,
-    lockVersion: center.lockVersion + 1,
-    currentRevision: {
-      ...center.currentRevision,
-      revisionNo: nextRevision,
-      effectiveAt: effectiveAt.slice(0, 16).replace("T", " "),
-      termsSummary: "已生效修订；新销售单将固定本修订记录。",
+    lockVersion: 1,
+    customer: {
+      id: customerId,
+      displayName: input.customerName.trim(),
+      reference: customerNo,
     },
+    ownerLabel: row.ownerLabel,
+    ownerKind: row.ownerKind,
+    currentRevision: {
+      revisionId,
+      revisionNo: 1,
+      settlementParty: {
+        id: settlementPartyId,
+        displayName: input.settlementPartyName.trim(),
+      },
+      paymentTermSnapshot: {
+        label: input.paymentTerms.trim(),
+        description: "随签署合同 PDF 归档的付款条件摘要。",
+      },
+      invoiceRequirementSnapshot: {
+        titleType: "合同约定",
+        contentSummary: "完整开票约定以当前合同 PDF 为准。",
+      },
+      validFrom: input.validFrom,
+      validTo: input.validTo,
+      signedAt: input.signedAt,
+      effectiveAt: uploadedAt.slice(0, 16).replace("T", " "),
+      termsSummary: "签署合同 PDF 已归档；销售单引用时固定本版本。",
+    },
+    attachments: [
+      {
+        id: `fa_${stamp.toLowerCase()}`,
+        name: input.pdfFile.name,
+        contentType: "application/pdf",
+        revisionNo: 1,
+        uploadedBy: "当前用户",
+        uploadedAt: uploadedAt.slice(0, 16).replace("T", " "),
+        securityState: "done",
+        canDownload: true,
+      },
+    ],
+    relatedSalesOrders: [],
     revisionTimeline: [
       {
-        revisionId: `${center.contractId}_v${nextRevision}`,
-        revisionNo: nextRevision,
-        validFrom: center.currentRevision.validFrom,
-        validTo: center.currentRevision.validTo,
-        changeReason: "草稿生效",
-        effectiveAt: effectiveAt.slice(0, 16).replace("T", " "),
+        revisionId,
+        revisionNo: 1,
+        validFrom: input.validFrom,
+        validTo: input.validTo,
+        changeReason: "上传签署合同 PDF",
+        effectiveAt: uploadedAt.slice(0, 16).replace("T", " "),
         isCurrent: true,
       },
-      ...center.revisionTimeline.map((r) => ({ ...r, isCurrent: false })),
     ],
     auditTimeline: [
       {
-        id: `au_act_${stamp}`,
-        action: "ACTIVATE",
+        id: `au_upload_${stamp}`,
+        action: "UPLOAD_CONTRACT_PDF",
         actorLabel: "当前用户",
-        at: effectiveAt.slice(0, 16).replace("T", " "),
-        summary: `合同修订 v${nextRevision} 生效`,
-      },
-      ...center.auditTimeline,
-    ],
-    allowedActions: ["PRINT", "CREATE_SALES_ORDER"],
-    actionBlockers: [
-      {
-        action: "REVISE",
-        code: "REVISION_POLICY_MISSING",
-        message: "修订规则尚未配置，已生效合同只读查看。",
-      },
-      {
-        action: "ACTIVATE",
-        code: "ALREADY_EFFECTIVE",
-        message: "合同已生效。",
+        at: uploadedAt.slice(0, 16).replace("T", " "),
+        summary: `上传并归档合同 PDF v1：${input.pdfFile.name}`,
       },
     ],
+    allowedActions: row.allowedActions,
+    actionBlockers: [],
+    sourceAsOf: uploadedAt,
+    relatedSalesOrdersAsOf: uploadedAt,
+    queriedAt: uploadedAt,
     selectableForNewSalesOrder: true,
-    selectableBlocker: undefined,
-    contractRevisionPolicy: center.contractRevisionPolicy,
   }
+  w04CenterOverrides.set(contractId, center)
+  w04UploadIdempotency.set(input.idempotencyKey, result)
+  return result
+}
 
-  // 若原中心已有 policy，保留 REVISE
-  if (center.contractRevisionPolicy) {
-    activated.allowedActions = [
-      "PRINT",
-      "CREATE_SALES_ORDER",
-      "REVISE",
-      "TERMINATE",
-    ]
-    activated.actionBlockers = activated.actionBlockers.filter(
-      (b) => b.action !== "REVISE"
+/** 把新建销售单关联回合同档案；重复调用不重复计数。 */
+export function linkW04SalesOrder(input: {
+  contractId: string
+  salesOrderId: string
+  documentNumber: string
+  natureLabel: string
+  contractRevisionNo: number
+  statusLabel: string
+  statusTone: ContractCenterView["statusTone"]
+  amountGross: string
+}) {
+  const center = getW04ContractCenter(input.contractId)
+  if (!center) return
+  if (
+    center.relatedSalesOrders.some(
+      (order) => order.salesOrderId === input.salesOrderId
     )
+  ) {
+    return
   }
 
-  w04CenterOverrides.set(input.contractId, activated)
-  w04WorkingRevisions.delete(input.contractId)
+  const now = new Date().toISOString()
+  w04CenterOverrides.set(input.contractId, {
+    ...center,
+    relatedSalesOrders: [
+      {
+        salesOrderId: input.salesOrderId,
+        documentNumber: input.documentNumber,
+        natureLabel: input.natureLabel,
+        contractRevisionNo: input.contractRevisionNo,
+        primaryStatus: {
+          label: input.statusLabel,
+          tone: input.statusTone,
+        },
+        amountGross: input.amountGross,
+        fulfillmentLabel: "未开始",
+        collectionLabel: "未收",
+        invoicingLabel: "未开",
+      },
+      ...center.relatedSalesOrders,
+    ],
+    relatedSalesOrdersAsOf: now,
+    queriedAt: now,
+  })
 
   const created = w04CreatedContracts.get(input.contractId)
   if (created) {
     w04CreatedContracts.set(input.contractId, {
       ...created,
-      status: "EFFECTIVE",
-      statusLabel: CONTRACT_STATUS_LABEL.EFFECTIVE,
-      statusTone: CONTRACT_STATUS_TONE.EFFECTIVE,
-      revisionNo: nextRevision,
-      allowedActions: activated.allowedActions,
-      actionBlockers: activated.actionBlockers,
+      salesOrderCount: created.salesOrderCount + 1,
+      activeSalesOrderCount: created.activeSalesOrderCount + 1,
     })
   }
-
-  w04ActivateIdempotency.set(input.idempotencyKey, result)
-  return result
-}
-
-export function reviseW04Contract(input: {
-  contractId: string
-  expectedLockVersion: number
-  idempotencyKey: string
-}): ReviseContractResult {
-  const cached = w04ReviseIdempotency.get(input.idempotencyKey)
-  if (cached) return cached
-
-  const center = getW04ContractCenter(input.contractId)
-  if (!center) {
-    throw new Error("CONTRACT_NOT_FOUND")
-  }
-  // fail-closed：无 policy 或无 REVISE 一律拒绝
-  if (!center.contractRevisionPolicy) {
-    throw new Error("REVISION_POLICY_MISSING")
-  }
-  if (!center.allowedActions.includes("REVISE")) {
-    throw new Error("REVISE_NOT_ALLOWED")
-  }
-  if (center.lockVersion !== input.expectedLockVersion) {
-    throw new Error("VERSION_CONFLICT")
-  }
-
-  const baseRevisionNo = center.currentRevision.revisionNo
-  const workingRevisionNo = baseRevisionNo + 1
-  const createdAt = new Date().toISOString()
-  const stamp = Date.now().toString(36).toUpperCase()
-  const result: ReviseContractResult = {
-    contractId: center.contractId,
-    contractNo: center.contractNo,
-    workingRevisionNo,
-    baseRevisionNo,
-    createdAt,
-    reference: `CT-REV-${stamp}`,
-    nextStep: "在同一对象页签编辑工作副本，确认后提交生效。",
-  }
-
-  w04WorkingRevisions.set(input.contractId, {
-    baseRevisionNo,
-    workingRevisionNo,
-    createdAt,
-  })
-
-  const next: ContractCenterView = {
-    ...center,
-    lockVersion: center.lockVersion + 1,
-    currentRevision: {
-      ...center.currentRevision,
-      revisionNo: workingRevisionNo,
-      termsSummary: `工作副本 v${workingRevisionNo}（基于 v${baseRevisionNo}，尚未生效）`,
-    },
-    allowedActions: ["EDIT_DRAFT", "ACTIVATE", "PRINT", "UPLOAD_ATTACHMENT"],
-    actionBlockers: [
-      {
-        action: "REVISE",
-        code: "WORKING_COPY_OPEN",
-        message: "已有进行中的修订工作副本。",
-      },
-      {
-        action: "CREATE_SALES_ORDER",
-        code: "WORKING_COPY_OPEN",
-        message: "请先完成或放弃修订工作副本后再建销售单（演示）。",
-      },
-    ],
-    auditTimeline: [
-      {
-        id: `au_rev_${stamp}`,
-        action: "REVISE",
-        actorLabel: "当前用户",
-        at: createdAt.slice(0, 16).replace("T", " "),
-        summary: `基于 v${baseRevisionNo} 创建工作副本 v${workingRevisionNo}`,
-      },
-      ...center.auditTimeline,
-    ],
-  }
-  w04CenterOverrides.set(input.contractId, next)
-  w04ReviseIdempotency.set(input.idempotencyKey, result)
-  return result
 }
 
 export function createW04ExportJob(input: {

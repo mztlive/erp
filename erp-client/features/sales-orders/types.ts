@@ -4,6 +4,7 @@ export type SalesOrderNature = "physical_service" | "card_voucher"
 export type SalesOrderOwner = "erp" | "mall"
 
 export type SalesOrderCreateIntent = "SAVE_DRAFT" | "SUBMIT"
+export type SalesOrderContractSource = "existing" | "upload_pdf"
 
 export type SalesOrderDraftLineInput = {
   rowKey: string
@@ -19,10 +20,27 @@ export type SalesOrderDraftLineInput = {
   cardForm: string
 }
 
-/** M5 建单输入；客户、结算主体与合同修订由服务端按 contractId 重验。 */
+export type SalesOrderContractInput =
+  | {
+      source: "existing"
+      contractId: string
+      requestedContractRevisionId: string
+    }
+  | {
+      source: "upload_pdf"
+      pdfFile: File
+      contractNo: string
+      customerId?: string
+      customerName: string
+      settlementPartyName: string
+      signedAt: string
+      validFrom: string
+      validTo: string
+    }
+
+/** M5 建单输入；合同来源为选择已有版本或随单上传签署 PDF，二者互斥。 */
 export type CreateSalesOrderInput = {
-  contractId: string
-  requestedContractRevisionId: string
+  contract: SalesOrderContractInput
   nature: SalesOrderNature
   ownerName: string
   welfareScene: string

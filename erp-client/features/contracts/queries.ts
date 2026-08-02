@@ -7,13 +7,11 @@ import {
 } from "@tanstack/react-query"
 
 import {
-  activateContract,
-  createContractDraft,
   createContractExportJob,
   fetchContractCenter,
   fetchContracts,
   fetchContractsForNewSalesOrder,
-  reviseContract,
+  uploadContractPdf,
 } from "@/features/contracts/api"
 
 export const contractKeys = {
@@ -46,41 +44,18 @@ export function useContractsForNewSalesOrderQuery(enabled = true) {
   })
 }
 
-export function useCreateContractDraftMutation() {
+export function useUploadContractPdfMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: createContractDraft,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: contractKeys.list() })
-    },
-  })
-}
-
-export function useActivateContractMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: activateContract,
+    mutationFn: uploadContractPdf,
     onSuccess: async (data) => {
+      await queryClient.invalidateQueries({ queryKey: contractKeys.list() })
       await queryClient.invalidateQueries({
         queryKey: contractKeys.detail(data.contractId),
       })
-      await queryClient.invalidateQueries({ queryKey: contractKeys.list() })
       await queryClient.invalidateQueries({
         queryKey: contractKeys.selectable(),
       })
-    },
-  })
-}
-
-export function useReviseContractMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: reviseContract,
-    onSuccess: async (data) => {
-      await queryClient.invalidateQueries({
-        queryKey: contractKeys.detail(data.contractId),
-      })
-      await queryClient.invalidateQueries({ queryKey: contractKeys.list() })
     },
   })
 }
