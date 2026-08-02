@@ -504,6 +504,130 @@ export function OwnerCombobox({
 }
 
 // ---------------------------------------------------------------------------
+// 品牌
+// ---------------------------------------------------------------------------
+
+export type BrandComboboxItem = Readonly<{
+  brandId: string
+  brandCode: string
+  brandName: string
+  statusLabel?: string
+  statusTone?: StatusTone
+  description?: string
+}>
+
+export type BrandComboboxProps = EntityComboboxBaseProps & {
+  brands: readonly BrandComboboxItem[]
+}
+
+/** 品牌字典选择：搜索品牌代码与名称；仅应由 feature 注入当前可选项。 */
+export function BrandCombobox({
+  brands,
+  placeholder = "搜索品牌代码或名称",
+  emptyLabel = "没有符合条件的品牌",
+  ...props
+}: BrandComboboxProps) {
+  const items = React.useMemo(
+    () =>
+      mapToOptions(
+        brands.map((b) => ({
+          id: b.brandId,
+          code: b.brandCode,
+          label: b.brandName,
+          status: {
+            label: b.statusLabel ?? "启用",
+            tone: b.statusTone ?? "success",
+          },
+          description: b.description,
+        }))
+      ),
+    [brands]
+  )
+
+  return (
+    <BusinessObjectCombobox
+      {...props}
+      items={items}
+      label="品牌"
+      placeholder={placeholder}
+      emptyLabel={emptyLabel}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 商品分类（树形字典）
+// ---------------------------------------------------------------------------
+
+export type CategoryComboboxItem = Readonly<{
+  categoryId: string
+  categoryCode: string
+  categoryName: string
+  /** 根到当前节点的路径文案，如「礼品 / 礼盒」。 */
+  pathLabel?: string
+  /** 树深度，0 为根；用于缩进展示。 */
+  depth?: number
+  parentId?: string
+  statusLabel?: string
+  statusTone?: StatusTone
+  description?: string
+  /** 为 true 时不可选（例如选上级时排除自身与子树）。 */
+  disabled?: boolean
+}>
+
+export type CategoryComboboxProps = EntityComboboxBaseProps & {
+  categories: readonly CategoryComboboxItem[]
+}
+
+/** 商品分类选择：搜索代码、名称与路径；展示层级路径。 */
+export function CategoryCombobox({
+  categories,
+  placeholder = "搜索分类代码、名称或路径",
+  emptyLabel = "没有符合条件的分类",
+  ...props
+}: CategoryComboboxProps) {
+  const items = React.useMemo(
+    () =>
+      mapToOptions(
+        categories
+          .filter((c) => !c.disabled)
+          .map((c) => {
+            const depth = c.depth ?? 0
+            const indent = depth > 0 ? `${"— ".repeat(depth)}` : ""
+            return {
+              id: c.categoryId,
+              code: c.categoryCode,
+              label: `${indent}${c.categoryName}`,
+              status: {
+                label: c.statusLabel ?? "启用",
+                tone: c.statusTone ?? "success",
+              },
+              description: [
+                c.pathLabel && c.pathLabel !== c.categoryName
+                  ? c.pathLabel
+                  : null,
+                c.description,
+              ]
+                .filter(Boolean)
+                .join(" · "),
+            }
+          })
+      ),
+    [categories]
+  )
+
+  return (
+    <BusinessObjectCombobox
+      {...props}
+      items={items}
+      label="商品分类"
+      placeholder={placeholder}
+      emptyLabel={emptyLabel}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
 // 枚举 / 筛选便捷封装（固定 options 的命名别名场景）
 // ---------------------------------------------------------------------------
 

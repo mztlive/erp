@@ -26,7 +26,9 @@ import {
 } from "lucide-react"
 
 import {
+  BrandCombobox,
   BusinessFailureState,
+  CategoryCombobox,
   DocumentSection,
   FormalActionResult,
   OptionCombobox,
@@ -55,9 +57,11 @@ import { MasterDataDisableDialog } from "@/features/master-data/master-data-acti
 import { masterDataCopy } from "@/features/master-data/copy"
 import { formatEffectiveRange } from "@/features/master-data/filter"
 import {
+  toBrandComboboxItems,
+  toCategoryComboboxItems,
+} from "@/features/master-data/category-tree-model"
+import {
   BASE_UNIT_OPTIONS,
-  BRAND_OPTIONS,
-  CATEGORY_OPTIONS,
   SUPPLIER_OPTIONS,
 } from "@/features/master-data/resource-fields"
 import {
@@ -69,6 +73,7 @@ import {
   useCreateMasterDataMutation,
   useCreateRevisionMutation,
   useMasterDataCenterQuery,
+  useMasterDataListQuery,
 } from "@/features/master-data/queries"
 import type {
   MasterDataCenterView,
@@ -398,6 +403,24 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
   const detailQuery = useMasterDataCenterQuery(
     "products",
     isCreate ? "" : stableId,
+  )
+  const categoryListQuery = useMasterDataListQuery({
+    resource: "categories",
+    lifecycleStatus: "enabled",
+    revisionTiming: "current",
+  })
+  const brandListQuery = useMasterDataListQuery({
+    resource: "brands",
+    lifecycleStatus: "enabled",
+    revisionTiming: "current",
+  })
+  const categoryOptions = React.useMemo(
+    () => toCategoryComboboxItems(categoryListQuery.data?.rows ?? []),
+    [categoryListQuery.data?.rows],
+  )
+  const brandOptions = React.useMemo(
+    () => toBrandComboboxItems(brandListQuery.data?.rows ?? []),
+    [brandListQuery.data?.rows],
   )
   const createMutation = useCreateMasterDataMutation()
   const reviseMutation = useCreateRevisionMutation()
@@ -1106,36 +1129,53 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                       </div>
                       <div className="space-y-1.5">
                         <Label>{masterDataCopy.fCategory}</Label>
-                        <OptionCombobox
-                          value={fields.category || null}
-                          onValueChange={(v) =>
+                        <CategoryCombobox
+                          categories={categoryOptions}
+                          value={
+                            categoryOptions.find(
+                              (c) =>
+                                c.categoryId === fields.category ||
+                                c.categoryName === fields.category,
+                            )?.categoryId
+                          }
+                          onValueChange={(id) => {
+                            const hit = categoryOptions.find(
+                              (c) => c.categoryId === id,
+                            )
                             setFields((prev) => ({
                               ...prev,
-                              category: v ?? "",
+                              category: hit?.categoryName ?? id ?? "",
                             }))
-                          }
-                          options={CATEGORY_OPTIONS.map((o) => ({
-                            value: o,
-                            label: o,
-                          }))}
-                          allowClear={false}
+                          }}
+                          loading={categoryListQuery.isPending}
                           placeholder="请选择分类"
+                          emptyLabel="暂无可用分类，请先在商品分类中维护"
                           className="w-full"
                         />
                       </div>
                       <div className="space-y-1.5">
                         <Label>{masterDataCopy.fBrand}</Label>
-                        <OptionCombobox
-                          value={fields.brand || null}
-                          onValueChange={(v) =>
-                            setFields((prev) => ({ ...prev, brand: v ?? "" }))
+                        <BrandCombobox
+                          brands={brandOptions}
+                          value={
+                            brandOptions.find(
+                              (b) =>
+                                b.brandId === fields.brand ||
+                                b.brandName === fields.brand,
+                            )?.brandId
                           }
-                          options={BRAND_OPTIONS.map((o) => ({
-                            value: o,
-                            label: o,
-                          }))}
-                          allowClear={false}
+                          onValueChange={(id) => {
+                            const hit = brandOptions.find(
+                              (b) => b.brandId === id,
+                            )
+                            setFields((prev) => ({
+                              ...prev,
+                              brand: hit?.brandName ?? id ?? "",
+                            }))
+                          }}
+                          loading={brandListQuery.isPending}
                           placeholder="请选择品牌"
+                          emptyLabel="暂无可用品牌，请先在品牌中维护"
                           className="w-full"
                         />
                       </div>

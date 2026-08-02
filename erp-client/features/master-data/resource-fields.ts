@@ -92,6 +92,7 @@ export type ResourceFieldKind =
   | "text"
   | "textarea"
   | "select"
+  | "category-parent"
   | "media"
   | "media-list"
 
@@ -201,11 +202,11 @@ export const RESOURCE_FIELDS: Readonly<
       listFact: true,
     },
     {
-      key: "parent",
+      key: "parentId",
       label: masterDataCopy.fParentCategory,
-      kind: "select",
-      options: CATEGORY_OPTIONS,
+      kind: "category-parent",
       listFact: true,
+      aliases: ["上级分类"],
     },
     {
       key: "productKind",
@@ -222,6 +223,14 @@ export const RESOURCE_FIELDS: Readonly<
       kind: "text",
       required: true,
       listFact: true,
+    },
+    {
+      key: "logo",
+      label: masterDataCopy.fBrandLogo,
+      kind: "media",
+      listFact: true,
+      hint: masterDataCopy.brandLogoHint,
+      aliases: ["Logo", "品牌 Logo"],
     },
   ],
   "voucher-categories": [
@@ -279,8 +288,19 @@ export type ResourceFormValues = {
   [field: string]: string
 }
 
+/**
+ * 品牌 / 商品分类为即时字典，表单不收集生效期间；
+ * 提交时由服务端/会话层默认「立即生效」。
+ */
+export function usesEffectivePeriod(resource: MasterDataResource): boolean {
+  return resource !== "brands" && resource !== "categories"
+}
+
 /** 通用基础字段 + 当前资源专属字段（必填规则），供新建 / 更新表单共用。 */
-export function buildResourceSchema(defs: readonly ResourceFieldDef[]) {
+export function buildResourceSchema(
+  resource: MasterDataResource,
+  defs: readonly ResourceFieldDef[]
+) {
   const dynamic: Record<string, z.ZodString> = {}
   for (const def of defs) {
     if (def.kind === "media" && def.required) {
@@ -293,11 +313,18 @@ export function buildResourceSchema(defs: readonly ResourceFieldDef[]) {
   }
   return z.object({
     name: z.string().trim().min(2, "请填写名称"),
-    effectiveFrom: z.string().min(1, "请填写生效开始日期"),
+    effectiveFrom: usesEffectivePeriod(resource)
+      ? z.string().min(1, "请填写生效开始日期")
+      : z.string(),
     effectiveTo: z.string(),
     changeReason: z.string().trim().min(2, "请填写变更原因"),
     ...dynamic,
   })
+}
+
+/** 字典类资源默认立即生效的业务日。 */
+export function defaultImmediateEffectiveFrom(): string {
+  return new Date().toISOString().slice(0, 10)
 }
 
 export function emptyResourceFieldValues(
@@ -324,6 +351,27 @@ export function currentResourceFieldValues(
   const byLabel = new Map(facts.map((fact) => [fact.label, fact.value]))
   const out: ResourceFieldValues = {}
   for (const def of RESOURCE_FIELDS[resource]) {
+    // 分类上级存稳定 ID；展示事实是名称，优先从列表行回填
+    if (def.key === "parentId" && !("currentRevision" in target)) {
+      out.parentId = target.parentStableId ?? ""
+      continue
+    }
+    if (
+      def.key === "code" &&
+      !("currentRevision" in target) &&
+      target.dictionaryCode
+    ) {
+      out.code = target.dictionaryCode
+      continue
+    }
+    if (
+      def.key === "productKind" &&
+      !("currentRevision" in target) &&
+      target.productKind
+    ) {
+      out.productKind = target.productKind
+      continue
+    }
     const matched =
       byLabel.get(def.label) ??
       def.aliases
@@ -333,9 +381,18 @@ export function currentResourceFieldValues(
     // 展示事实可能带「（N 张）」摘要后缀，回填表单时去掉
     if (def.kind === "media-list") {
       out[def.key] = matched.replace(/（\d+\s*张）\s*$/, "").trim()
+    } else if (def.key === "parentId") {
+      out.parentId = matched === "（根分类）" ? "" : matched
     } else {
       out[def.key] = matched
     }
+  }
+  if (
+    resource === "categories" &&
+    !("currentRevision" in target) &&
+    target.parentStableId !== undefined
+  ) {
+    out.parentId = target.parentStableId
   }
   return out
 }
@@ -379,12 +436,14 @@ export function buildResourceFields(
     case "categories":
       return {
         code: pickField(values, "code") ?? "",
+        parentId: pickField(values, "parentId") || undefined,
         parent: pickField(values, "parent"),
         productKind: pickField(values, "productKind"),
       }
     case "brands":
       return {
         code: pickField(values, "code") ?? "",
+        logo: pickField(values, "logo"),
       }
     case "voucher-categories":
       return {

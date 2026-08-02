@@ -11,6 +11,8 @@ import {
   resourceLabel,
 } from "@/features/master-data/data"
 import type {
+  BrandFields,
+  CategoryFields,
   CreateMasterDataInput,
   CreateRevisionInput,
   DisableMasterDataInput,
@@ -19,6 +21,7 @@ import type {
   MasterDataListResult,
   MasterDataMutationResult,
   MasterDataResource,
+  ProductFields,
 } from "@/features/master-data/types"
 import { productListFacts } from "@/features/master-data/product-model"
 import {
@@ -26,7 +29,37 @@ import {
   resourceFieldsToFacts,
   resourceFieldsToListFacts,
 } from "@/features/master-data/resource-fields"
-import type { ProductFields } from "@/features/master-data/types"
+
+function resolveCategoryParentName(parentId?: string): string {
+  if (!parentId) return "（根分类）"
+  const parent = listW14Rows("categories").find((row) => row.stableId === parentId)
+  return parent?.name ?? "（未知上级）"
+}
+
+/** 分类/品牌字典事实：用业务文案而非原始 ID。 */
+function dictionaryFacts(
+  resource: MasterDataResource,
+  fields: CreateMasterDataInput["fields"]
+): ReadonlyArray<{ label: string; value: string }> {
+  if (resource === "categories") {
+    const f = fields as CategoryFields
+    return [
+      { label: "分类代码", value: f.code },
+      { label: "上级分类", value: resolveCategoryParentName(f.parentId) },
+      ...(f.productKind
+        ? [{ label: "适用商品类型", value: f.productKind }]
+        : []),
+    ]
+  }
+  if (resource === "brands") {
+    const f = fields as BrandFields
+    return [
+      { label: "品牌代码", value: f.code },
+      ...(f.logo ? [{ label: "品牌 Logo", value: f.logo }] : []),
+    ]
+  }
+  return resourceFieldsToFacts(resource, fields)
+}
 const listOverlays = new Map<string, MasterDataListItem>()
 const centerOverlays = new Map<string, MasterDataCenterView>()
 const createdIdsByResource = new Map<MasterDataResource, string[]>()
@@ -152,12 +185,22 @@ export function createW14Object(
     input.resource === "products"
       ? (input.fields as ProductFields)
       : undefined
+  const categoryFields =
+    input.resource === "categories"
+      ? (input.fields as CategoryFields)
+      : undefined
+  const brandFields =
+    input.resource === "brands" ? (input.fields as BrandFields) : undefined
   const listFacts = productFields
     ? productListFacts(productFields)
-    : resourceFieldsToListFacts(input.resource, input.fields)
+    : input.resource === "categories" || input.resource === "brands"
+      ? dictionaryFacts(input.resource, input.fields)
+      : resourceFieldsToListFacts(input.resource, input.fields)
   const revisionFacts = productFields
     ? productListFacts(productFields)
-    : resourceFieldsToFacts(input.resource, input.fields)
+    : input.resource === "categories" || input.resource === "brands"
+      ? dictionaryFacts(input.resource, input.fields)
+      : resourceFieldsToFacts(input.resource, input.fields)
   const listItem: MasterDataListItem = {
     objectType: input.resource,
     stableId,
@@ -193,6 +236,9 @@ export function createW14Object(
     lockVersion: 1,
     ownerName: ACTOR,
     metricTags: ["enabled"],
+    dictionaryCode: categoryFields?.code ?? brandFields?.code,
+    parentStableId: categoryFields?.parentId,
+    productKind: categoryFields?.productKind,
   }
 
   const center: MasterDataCenterView = {
@@ -374,9 +420,17 @@ export function reviseW14Object(
     input.resource === "products"
       ? (input.fields as ProductFields)
       : undefined
+  const categoryFields =
+    input.resource === "categories"
+      ? (input.fields as CategoryFields)
+      : undefined
+  const brandFields =
+    input.resource === "brands" ? (input.fields as BrandFields) : undefined
   const revisionFacts = productFields
     ? productListFacts(productFields)
-    : resourceFieldsToFacts(input.resource, input.fields)
+    : input.resource === "categories" || input.resource === "brands"
+      ? dictionaryFacts(input.resource, input.fields)
+      : resourceFieldsToFacts(input.resource, input.fields)
   /**
    * 提交字段（含清空）覆盖旧值；仅保留不在表单字段集合内的历史事实
    * （如 seed 中的“product_kind”“边界”等表单未覆盖标签），避免误清。
@@ -502,7 +556,9 @@ export function reviseW14Object(
   if (listRow) {
     const nextListFacts = productFields
       ? productListFacts(productFields)
-      : resourceFieldsToListFacts(input.resource, input.fields)
+      : input.resource === "categories" || input.resource === "brands"
+        ? dictionaryFacts(input.resource, input.fields)
+        : resourceFieldsToListFacts(input.resource, input.fields)
     const nextList: MasterDataListItem = {
       ...listRow,
       name: isFuture ? listRow.name : nameSnapshot,
@@ -522,6 +578,17 @@ export function reviseW14Object(
       metricTags: isFuture
         ? Array.from(new Set([...listRow.metricTags, "pending"]))
         : listRow.metricTags,
+      dictionaryCode: isFuture
+        ? listRow.dictionaryCode
+        : (categoryFields?.code ?? brandFields?.code ?? listRow.dictionaryCode),
+      parentStableId: isFuture
+        ? listRow.parentStableId
+        : categoryFields
+          ? categoryFields.parentId
+          : listRow.parentStableId,
+      productKind: isFuture
+        ? listRow.productKind
+        : (categoryFields?.productKind ?? listRow.productKind),
     }
     listOverlays.set(listKey(input.resource, input.stableId), nextList)
   }

@@ -88,6 +88,18 @@ export type MasterDataListItem = Readonly<{
   lockVersion: number
   ownerName?: string
   metricTags: readonly string[]
+  /**
+   * 字典稳定代码（分类代码 / 品牌代码等）。
+   * 列表与 Combobox 共用，避免只从 keyFacts 反解析。
+   */
+  dictionaryCode?: string
+  /**
+   * 商品分类树：上级分类稳定 ID；根节点为空。
+   * 仅 `categories` 资源使用。
+   */
+  parentStableId?: string
+  /** 分类适用商品类型（实物 / 虚拟 / 服务 / 卡券）。 */
+  productKind?: string
 }>
 
 export type MasterDataListQuery = Readonly<{
@@ -271,16 +283,21 @@ export type VoucherCategoryFields = Readonly<{
   description?: string
 }>
 
-/** 商品分类字典：稳定代码 + 名称（name 在通用字段）。 */
+/** 商品分类字典：稳定代码 + 名称（name 在通用字段）+ 可选上级。 */
 export type CategoryFields = Readonly<{
   code: string
+  /** 上级分类稳定 ID；根分类为空。 */
+  parentId?: string
+  /** 兼容旧表单/展示：上级分类名称。 */
   parent?: string
   productKind?: string
 }>
 
-/** 品牌字典：稳定代码 + 名称（name 在通用字段）。 */
+/** 品牌字典：稳定代码 + 名称（name 在通用字段）+ 可选 Logo。 */
 export type BrandFields = Readonly<{
   code: string
+  /** 品牌 Logo 文件名（演示）；正式为 file_asset 引用。 */
+  logo?: string
 }>
 
 export type SupplierFields = Readonly<{

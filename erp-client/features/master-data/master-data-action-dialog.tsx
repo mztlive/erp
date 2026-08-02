@@ -4,7 +4,11 @@ import * as React from "react"
 import { ImageIcon, XIcon } from "lucide-react"
 import { z } from "zod"
 
-import { FormalActionResult, OptionCombobox } from "@/components/business"
+import {
+  CategoryCombobox,
+  FormalActionResult,
+  OptionCombobox,
+} from "@/components/business"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -33,17 +37,25 @@ import {
   buildResourceFields,
   buildResourceSchema,
   currentResourceFieldValues,
+  defaultImmediateEffectiveFrom,
   emptyResourceFieldValues,
   joinMediaList,
   parseMediaList,
+  usesEffectivePeriod,
   usesWideDialog,
   type ResourceFieldDef,
   type ResourceFormValues,
 } from "@/features/master-data/resource-fields"
 import {
+  collectDescendantIds,
+  buildCategoryForest,
+  toCategoryComboboxItems,
+} from "@/features/master-data/category-tree-model"
+import {
   useCreateMasterDataMutation,
   useCreateRevisionMutation,
   useDisableMasterDataMutation,
+  useMasterDataListQuery,
 } from "@/features/master-data/queries"
 import type {
   MasterDataCenterView,
@@ -83,18 +95,28 @@ function MediaSingleField({
   hint,
   value,
   onChange,
+  required,
+  selectedHint = "已选择",
+  /** 品牌 Logo 等固定为正方形预览与上传区。 */
+  aspectRatio,
 }: {
   label: string
   hint?: string
   value: string
   onChange: (next: string) => void
+  required?: boolean
+  selectedHint?: string
+  aspectRatio?: "1:1"
 }) {
+  const isSquare = aspectRatio === "1:1"
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
         <Label className="text-sm font-medium">
           {label}
-          <span className="ml-1 text-destructive">*</span>
+          {required ? (
+            <span className="ml-1 text-destructive">*</span>
+          ) : null}
         </Label>
         {value ? (
           <Button
@@ -108,15 +130,32 @@ function MediaSingleField({
         ) : null}
       </div>
       {value ? (
-        <div className="flex items-center gap-3 rounded-md border border-border bg-surface-sunken px-3 py-2">
-          <div className="flex size-10 items-center justify-center rounded-md bg-muted">
-            <ImageIcon className="size-5 text-muted-foreground" aria-hidden />
+        isSquare ? (
+          <div className="flex items-start gap-3">
+            <div
+              className="flex size-24 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-surface-sunken aspect-square"
+              aria-label={`${label} 预览 1:1`}
+            >
+              <ImageIcon className="size-8 text-muted-foreground" aria-hidden />
+              <span className="text-[10px] text-muted-foreground">1:1</span>
+            </div>
+            <div className="min-w-0 flex-1 pt-1">
+              <div className="truncate text-sm font-medium">{value}</div>
+              <div className="text-xs text-muted-foreground">{selectedHint}</div>
+              <div className="mt-1 text-xs text-muted-foreground">比例 1:1</div>
+            </div>
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-sm font-medium">{value}</div>
-            <div className="text-xs text-muted-foreground">主图 · 已选择</div>
+        ) : (
+          <div className="flex items-center gap-3 rounded-md border border-border bg-surface-sunken px-3 py-2">
+            <div className="flex size-10 items-center justify-center rounded-md bg-muted">
+              <ImageIcon className="size-5 text-muted-foreground" aria-hidden />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium">{value}</div>
+              <div className="text-xs text-muted-foreground">{selectedHint}</div>
+            </div>
           </div>
-        </div>
+        )
       ) : (
         <FileUpload
           accept="image/jpeg,image/png,image/webp"
@@ -127,7 +166,10 @@ function MediaSingleField({
             const file = files[0]
             if (file) onChange(file.name)
           }}
-          className="p-4"
+          className={cn(
+            "p-4",
+            isSquare && "mx-auto aspect-square max-w-[10rem] justify-center"
+          )}
         />
       )}
     </div>
@@ -202,7 +244,13 @@ function MediaListField({
   )
 }
 
-function renderStandardField(def: ResourceFieldDef, field: FieldApi) {
+function renderStandardField(
+  def: ResourceFieldDef,
+  field: FieldApi,
+  extras?: {
+    categoryParentOptions?: ReturnType<typeof toCategoryComboboxItems>
+  }
+) {
   if (def.kind === "textarea") {
     return <field.TextareaField label={def.label} />
   }
@@ -219,6 +267,24 @@ function renderStandardField(def: ResourceFieldDef, field: FieldApi) {
       />
     )
   }
+  if (def.kind === "category-parent") {
+    return (
+      <div className="space-y-1.5">
+        <Label className="text-sm font-medium">{def.label}</Label>
+        <CategoryCombobox
+          categories={extras?.categoryParentOptions ?? []}
+          value={field.state.value || undefined}
+          onValueChange={(id) => field.handleChange(id ?? "")}
+          placeholder="可选上级；空为根分类"
+          emptyLabel="没有可选上级分类"
+          className="w-full"
+        />
+        <p className="text-xs text-muted-foreground">
+          留空表示根分类；不可选择自身或下级。
+        </p>
+      </div>
+    )
+  }
   if (def.kind === "media") {
     return (
       <MediaSingleField
@@ -226,6 +292,11 @@ function renderStandardField(def: ResourceFieldDef, field: FieldApi) {
         hint={def.hint}
         value={field.state.value}
         onChange={(next) => field.handleChange(next)}
+        required={def.required}
+        selectedHint={
+          def.key === "logo" ? "Logo · 1:1 · 已选择" : "主图 · 已选择"
+        }
+        aspectRatio={def.key === "logo" ? "1:1" : undefined}
       />
     )
   }
@@ -247,13 +318,31 @@ function ResourceFieldsSection({
   form,
   resource,
   wide,
+  excludeCategoryIds,
 }: {
   form: ResourceFormApp
   resource: MasterDataResource
   wide?: boolean
+  /** 更新分类时排除自身与子树，避免成环。 */
+  excludeCategoryIds?: ReadonlySet<string>
 }) {
+  const categoryListQuery = useMasterDataListQuery({
+    resource: "categories",
+    lifecycleStatus: "all",
+    revisionTiming: "all",
+  })
+  const categoryParentOptions = React.useMemo(() => {
+    if (resource !== "categories") return []
+    return toCategoryComboboxItems(categoryListQuery.data?.rows ?? [], {
+      excludeIds: excludeCategoryIds,
+      enabledOnly: false,
+    })
+  }, [categoryListQuery.data?.rows, excludeCategoryIds, resource])
+
   const defs = RESOURCE_FIELDS[resource]
   if (defs.length === 0) return null
+
+  const fieldExtras = { categoryParentOptions }
 
   if (!wide || resource !== "products") {
     return (
@@ -265,7 +354,7 @@ function ResourceFieldsSection({
           <form.AppField
             key={def.key}
             name={def.key}
-            children={(field) => renderStandardField(def, field)}
+            children={(field) => renderStandardField(def, field, fieldExtras)}
           />
         ))}
       </fieldset>
@@ -384,10 +473,13 @@ export function MasterDataCreateDialog({
   open,
   onOpenChange,
   resource,
+  defaultFieldValues,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   resource: MasterDataResource
+  /** 预填资源专属字段（如新建子分类时的 parentId）。 */
+  defaultFieldValues?: Partial<Record<string, string>>
 }) {
   const mutation = useCreateMasterDataMutation()
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
@@ -400,24 +492,34 @@ export function MasterDataCreateDialog({
 
   const isWarehouse = resource === "warehouses"
   const wide = usesWideDialog(resource)
+  const showEffectivePeriod = usesEffectivePeriod(resource)
 
   const defaults: ResourceFormValues = {
     name: "",
-    effectiveFrom: "2026-08-01",
+    effectiveFrom: showEffectivePeriod
+      ? "2026-08-01"
+      : defaultImmediateEffectiveFrom(),
     effectiveTo: "",
     changeReason: "",
     ...emptyResourceFieldValues(resource),
+    ...defaultFieldValues,
   }
 
   const form = useAppForm({
     defaultValues: defaults,
-    validators: { onChange: buildResourceSchema(RESOURCE_FIELDS[resource]) },
+    validators: {
+      onChange: buildResourceSchema(resource, RESOURCE_FIELDS[resource]),
+    },
     onSubmit: async ({ value }) => {
       const response = await mutation.mutateAsync({
         resource,
         name: value.name.trim(),
-        effectiveFrom: value.effectiveFrom,
-        effectiveTo: value.effectiveTo.trim() || undefined,
+        effectiveFrom: showEffectivePeriod
+          ? value.effectiveFrom
+          : defaultImmediateEffectiveFrom(),
+        effectiveTo: showEffectivePeriod
+          ? value.effectiveTo.trim() || undefined
+          : undefined,
         changeReason: value.changeReason.trim(),
         fields: buildResourceFields(resource, value),
         idempotencyKey,
@@ -497,20 +599,26 @@ export function MasterDataCreateDialog({
                 resource={resource}
                 wide={wide}
               />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <form.AppField
-                  name="effectiveFrom"
-                  children={(field) => (
-                    <field.TextField label={masterDataCopy.fieldEffectiveFrom} />
-                  )}
-                />
-                <form.AppField
-                  name="effectiveTo"
-                  children={(field) => (
-                    <field.TextField label={masterDataCopy.fieldEffectiveTo} />
-                  )}
-                />
-              </div>
+              {showEffectivePeriod ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <form.AppField
+                    name="effectiveFrom"
+                    children={(field) => (
+                      <field.TextField
+                        label={masterDataCopy.fieldEffectiveFrom}
+                      />
+                    )}
+                  />
+                  <form.AppField
+                    name="effectiveTo"
+                    children={(field) => (
+                      <field.TextField
+                        label={masterDataCopy.fieldEffectiveTo}
+                      />
+                    )}
+                  />
+                </div>
+              ) : null}
               <form.AppField
                 name="changeReason"
                 children={(field) => (
@@ -519,7 +627,7 @@ export function MasterDataCreateDialog({
                   />
                 )}
               />
-              {!isWarehouse ? (
+              {!isWarehouse && showEffectivePeriod ? (
                 <div className="space-y-2">
                   <Label htmlFor="create-sim">
                     {masterDataCopy.demoSimulateLabel}
@@ -604,6 +712,7 @@ export function MasterDataReviseDialog({
 
   const isWarehouse = resource === "warehouses"
   const wide = usesWideDialog(resource)
+  const showEffectivePeriod = usesEffectivePeriod(resource)
   const stableId = target && "stableId" in target ? target.stableId : ""
   const baseRevisionId =
     target && "currentRevisionId" in target
@@ -614,9 +723,22 @@ export function MasterDataReviseDialog({
   const lockVersion = target?.lockVersion ?? 0
   const nameDefault = target?.name ?? ""
 
+  const categoryListQuery = useMasterDataListQuery({
+    resource: "categories",
+    lifecycleStatus: "all",
+    revisionTiming: "all",
+  })
+  const excludeCategoryIds = React.useMemo(() => {
+    if (resource !== "categories" || !stableId) return undefined
+    const forest = buildCategoryForest(categoryListQuery.data?.rows ?? [])
+    return collectDescendantIds(forest, stableId)
+  }, [categoryListQuery.data?.rows, resource, stableId])
+
   const defaults: ResourceFormValues = {
     name: nameDefault,
-    effectiveFrom: "2026-08-15",
+    effectiveFrom: showEffectivePeriod
+      ? "2026-08-15"
+      : defaultImmediateEffectiveFrom(),
     effectiveTo: "",
     changeReason: "",
     ...emptyResourceFieldValues(resource),
@@ -624,7 +746,9 @@ export function MasterDataReviseDialog({
 
   const form = useAppForm({
     defaultValues: defaults,
-    validators: { onChange: buildResourceSchema(RESOURCE_FIELDS[resource]) },
+    validators: {
+      onChange: buildResourceSchema(resource, RESOURCE_FIELDS[resource]),
+    },
     onSubmit: async ({ value }) => {
       if (!stableId || !baseRevisionId) return
       const response = await mutation.mutateAsync({
@@ -633,8 +757,12 @@ export function MasterDataReviseDialog({
         baseRevisionId,
         expectedLockVersion: lockVersion,
         name: value.name.trim(),
-        effectiveFrom: value.effectiveFrom,
-        effectiveTo: value.effectiveTo.trim() || undefined,
+        effectiveFrom: showEffectivePeriod
+          ? value.effectiveFrom
+          : defaultImmediateEffectiveFrom(),
+        effectiveTo: showEffectivePeriod
+          ? value.effectiveTo.trim() || undefined
+          : undefined,
         changeReason: value.changeReason.trim(),
         fields: buildResourceFields(resource, value),
         idempotencyKey,
@@ -737,21 +865,28 @@ export function MasterDataReviseDialog({
                 form={form}
                 resource={resource}
                 wide={wide}
+                excludeCategoryIds={excludeCategoryIds}
               />
-              <div className="grid gap-3 sm:grid-cols-2">
-                <form.AppField
-                  name="effectiveFrom"
-                  children={(field) => (
-                    <field.TextField label={masterDataCopy.fieldEffectiveFrom} />
-                  )}
-                />
-                <form.AppField
-                  name="effectiveTo"
-                  children={(field) => (
-                    <field.TextField label={masterDataCopy.fieldEffectiveTo} />
-                  )}
-                />
-              </div>
+              {showEffectivePeriod ? (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <form.AppField
+                    name="effectiveFrom"
+                    children={(field) => (
+                      <field.TextField
+                        label={masterDataCopy.fieldEffectiveFrom}
+                      />
+                    )}
+                  />
+                  <form.AppField
+                    name="effectiveTo"
+                    children={(field) => (
+                      <field.TextField
+                        label={masterDataCopy.fieldEffectiveTo}
+                      />
+                    )}
+                  />
+                </div>
+              ) : null}
               <form.AppField
                 name="changeReason"
                 children={(field) => (
@@ -760,7 +895,7 @@ export function MasterDataReviseDialog({
                   />
                 )}
               />
-              {!isWarehouse ? (
+              {!isWarehouse && showEffectivePeriod ? (
                 <div className="space-y-2">
                   <Label htmlFor="rev-sim">
                     {masterDataCopy.demoSimulateLabel}

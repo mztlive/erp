@@ -705,10 +705,12 @@ erDiagram
 | 字段 | 说明 |
 | --- | --- |
 | `category_code` | 稳定分类代码 |
-| `parent_category_id` | 父分类，可空 |
+| `parent_category_id` | 父分类，可空（空表示根分类） |
 | `name` | 分类名称 |
 | `product_kind` | 允许的实物、虚拟、服务或卡券类型 |
 | `status` | 启用/停用 |
+
+W14 以**树形维护页**管理分类：父子关系不得成环；停用后仍可被历史 SKU 修订引用，新建/选品 Combobox 仅返回当前启用节点并展示根到叶路径。
 
 `product_brand`：
 

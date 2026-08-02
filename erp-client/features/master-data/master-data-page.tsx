@@ -41,6 +41,7 @@ import {
 import { masterDataCopy } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
 import { formatEffectiveRange } from "@/features/master-data/filter"
+import { CategoryTreePage } from "@/features/master-data/category-tree-page"
 import {
   MasterDataCreateDialog,
   MasterDataDisableDialog,
@@ -140,6 +141,11 @@ export function MasterDataPage({ resource }: { resource: string }) {
     )
   }
 
+  /** 商品分类：树形维护，不走扁平列表。 */
+  if (resource === "categories") {
+    return <CategoryTreePage navRef={navRef} />
+  }
+
   return (
     <MasterDataListWorkspace
       resource={resource}
@@ -167,6 +173,11 @@ function MasterDataListWorkspace({
   const router = useRouter()
   /** 商品（SPU）走详情页，不用侧边 sheet。 */
   const isProductResource = resource === "products"
+  /** 品牌：列表 + 对话框维护，不使用侧栏预览 sheet。 */
+  const isBrandResource = resource === "brands"
+  const skipPreviewSheet = isProductResource || isBrandResource
+  /** 品牌 / 分类字典不展示生效期间列。 */
+  const showEffectiveColumn = resource !== "brands"
   const [search, setSearch] = React.useState("")
   const [lifecycleStatus, setLifecycleStatus] = React.useState<
     "enabled" | "disabled" | "all"
@@ -328,19 +339,25 @@ function MasterDataListWorkspace({
           </Badge>
         ),
       },
-      {
-        id: "period",
-        header: masterDataCopy.colEffective,
-        meta: { label: masterDataCopy.colEffective },
-        cell: ({ row }) => (
-          <span className="num text-xs">
-            {formatEffectiveRange(
-              row.original.effectiveFrom,
-              row.original.effectiveTo
-            )}
-          </span>
-        ),
-      },
+    ...(showEffectiveColumn
+      ? [
+          {
+            id: "period",
+            header: masterDataCopy.colEffective,
+            meta: {
+              label: masterDataCopy.colEffective,
+            },
+            cell: ({ row }: { row: { original: MasterDataListItem } }) => (
+              <span className="num text-xs">
+                {formatEffectiveRange(
+                  row.original.effectiveFrom,
+                  row.original.effectiveTo
+                )}
+              </span>
+            ),
+          } satisfies ColumnDef<MasterDataListItem>,
+        ]
+      : []),
       {
         id: "blocker",
         header: masterDataCopy.colBlocker,
@@ -370,24 +387,26 @@ function MasterDataListWorkspace({
           )
           return (
             <div className="flex flex-wrap gap-1">
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  lastFocusedRowId.current = item.stableId
-                  if (isProductResource) {
-                    router.push(
-                      `/master-data/products/${item.stableId}?section=overview`
-                    )
-                  } else {
-                    setPreviewId(item.stableId)
-                  }
-                }}
-              >
-                {masterDataCopy.actionView}
-              </Button>
+              {!isBrandResource ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    lastFocusedRowId.current = item.stableId
+                    if (isProductResource) {
+                      router.push(
+                        `/master-data/products/${item.stableId}?section=overview`
+                      )
+                    } else {
+                      setPreviewId(item.stableId)
+                    }
+                  }}
+                >
+                  {masterDataCopy.actionView}
+                </Button>
+              ) : null}
               <Button
                 type="button"
                 size="xs"
@@ -428,7 +447,7 @@ function MasterDataListWorkspace({
         },
       },
     ],
-    [isProductResource, router]
+    [isBrandResource, isProductResource, router, showEffectiveColumn]
   )
 
   const isWarehouse = resource === "warehouses"
@@ -522,6 +541,12 @@ function MasterDataListWorkspace({
           title={masterDataCopy.warehouseWriteTitle}
           description={masterDataCopy.warehouseWriteBody}
         />
+      ) : null}
+
+      {resource === "brands" ? (
+        <p className="text-sm text-muted-foreground">
+          {masterDataCopy.brandListHint}
+        </p>
       ) : null}
 
       {exportMeta ? (
@@ -671,12 +696,18 @@ function MasterDataListWorkspace({
                 router.push(
                   `/master-data/products/${row.stableId}?section=overview`
                 )
+              } else if (isBrandResource) {
+                setReviseTarget(row)
               } else {
                 setPreviewId(row.stableId)
               }
             }}
             onRowOpen={(row) => {
               lastFocusedRowId.current = row.stableId
+              if (isBrandResource) {
+                setReviseTarget(row)
+                return
+              }
               router.push(
                 `/master-data/${resource}/${row.stableId}?section=overview`
               )
@@ -685,7 +716,7 @@ function MasterDataListWorkspace({
         }
       />
 
-      {!isProductResource ? (
+      {!skipPreviewSheet ? (
         <QuickPreviewSheet
           open={previewRow != null}
           onOpenChange={(open) => {
