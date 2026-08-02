@@ -545,7 +545,7 @@ export function SalesOrderCreatePage({
                             disabled
                             description={
                               contractQuery.data
-                                ? `${contractQuery.data.contractNo} · 当前版本由合同中心校验`
+                                ? `${contractQuery.data.contractNo} · 当前版本已通过合同校验`
                                 : "选择合同后自动带出"
                             }
                           />

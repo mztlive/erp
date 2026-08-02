@@ -108,7 +108,7 @@ export function SalesOrderDetailPage({
   if (query.isPending) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="销售单" description="正在加载对象中心…" />
+        <PageHeader title="销售单" description="正在加载详情…" />
       </div>
     )
   }

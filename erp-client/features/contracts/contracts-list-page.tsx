@@ -213,7 +213,7 @@ export function ContractsListPage({
             label: "上传时间",
             value: result.uploadedAt.slice(0, 19).replace("T", " "),
           },
-          { label: "下一步", value: "打开合同中心核对或新建销售单" },
+          { label: "下一步", value: "查看详情核对或新建销售单" },
         ],
         nextHref: `/sales/contracts/${result.contractId}`,
       })
@@ -531,7 +531,7 @@ export function ContractsListPage({
                 size="sm"
                 render={<Link href={actionResult.nextHref} />}
               >
-                打开合同中心
+                查看详情
               </Button>
             ) : null
           }
@@ -756,7 +756,7 @@ export function ContractsListPage({
                   <Link href={`/sales/contracts/${previewRow.contractId}`} />
                 }
               >
-                打开合同中心
+                查看详情
               </Button>
             </>
           ) : null

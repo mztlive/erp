@@ -1569,7 +1569,7 @@ export function ProcurementConfirmationPage() {
 
               <Card size="sm">
                 <CardHeader className="border-b">
-                  <CardTitle>打开销售单中心</CardTitle>
+                  <CardTitle>销售单详情</CardTitle>
                   <CardDescription>
                     深挖后返回仍恢复队列位置、筛选与当前项。
                   </CardDescription>
@@ -1905,7 +1905,7 @@ function ResultActions({
             <Link href={w05Href(taskSalesOrderId, returnTo)} />
           }
         >
-          打开销售单中心
+          查看详情
         </Button>
       ) : null}
       {lastResult.outcome?.kind === "APPROVED_AND_SALES_EFFECTIVE" ? (

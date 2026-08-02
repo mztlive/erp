@@ -817,7 +817,7 @@ function MasterDataListWorkspace({
                   />
                 }
               >
-                打开对象中心
+                查看详情
               </Button>
             </>
           ) : null

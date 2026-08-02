@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { MasterDataCenterPage } from "@/features/master-data/master-data-center-page"
 
 export const metadata: Metadata = {
-  title: "主数据对象中心",
+  title: "主数据详情",
 }
 
 export default async function Page({

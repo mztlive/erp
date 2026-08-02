@@ -761,7 +761,7 @@ export function SalesOrdersListPage({
                 variant="outline"
                 render={<Link href={`/sales/orders/${previewOrder.id}`} />}
               >
-                打开对象中心
+                查看详情
               </Button>
               <Button
                 type="button"

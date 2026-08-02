@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { PurchaseOrderDetailPage } from "@/features/purchase-orders/purchase-order-detail-page"
 
 export const metadata: Metadata = {
-  title: "采购单对象中心",
+  title: "采购单详情",
 }
 
 export default async function PurchaseOrderObjectPage({

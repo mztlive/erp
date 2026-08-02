@@ -1255,7 +1255,7 @@ export function ExecutionProjectionsPage() {
             </Alert>
 
             <StatusTrackSummary
-              aria-label="对象中心三轨状态"
+              aria-label="详情三轨状态"
               variant="table"
               tracks={[
                 {
@@ -1599,7 +1599,7 @@ export function ExecutionProjectionsPage() {
                 if (id) replaceParams({ projectionId: id })
               }}
             >
-              打开对象中心
+              查看详情
             </Button>
           </div>
         ) : (

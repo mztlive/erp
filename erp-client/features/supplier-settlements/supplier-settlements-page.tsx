@@ -1077,7 +1077,7 @@ function SettlementList({
                 type="button"
                 onClick={() => onOpen(previewRow.statementId)}
               >
-                打开对象中心
+                查看详情
               </Button>
               {previewRow.unresolvedDifferenceCount > 0 ? (
                 <Button
@@ -1096,7 +1096,7 @@ function SettlementList({
               ) : null}
             </div>
             <p className="text-xs text-muted-foreground">
-              键盘：列表 Enter 打开预览；对象中心可继续提交复核并查询处理结果。
+              键盘：列表 Enter 打开预览；详情页可继续提交复核并查询处理结果。
             </p>
           </div>
         ) : (

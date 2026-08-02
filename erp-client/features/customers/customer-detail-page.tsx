@@ -140,7 +140,7 @@ export function CustomerDetailPage({
   if (query.isPending) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="客户中心" description="正在加载客户对象…" />
+        <PageHeader title="客户详情" description="正在加载客户…" />
         <div className="space-y-3" aria-busy="true" aria-label="加载中">
           <div className="h-16 animate-pulse rounded-lg bg-muted" />
           <div className="h-20 animate-pulse rounded-lg bg-muted" />
@@ -153,10 +153,10 @@ export function CustomerDetailPage({
   if (query.isError) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="客户中心" />
+        <PageHeader title="客户详情" />
         <BusinessFailureState
           kind="system"
-          description="加载客户对象失败。"
+          description="加载客户失败。"
           action={
             <Button type="button" onClick={() => void query.refetch()}>
               重试
@@ -576,7 +576,7 @@ export function CustomerDetailPage({
       >
         <DocumentSection
           title="合同与销售"
-          description="中心内可发现有效合同与进行中销售单；完整列表带客户筛选进入合同/销售单"
+          description="本页可发现有效合同与进行中销售单；完整列表带客户筛选进入合同/销售单"
           action={
             <div className="flex flex-wrap gap-2">
               <Button

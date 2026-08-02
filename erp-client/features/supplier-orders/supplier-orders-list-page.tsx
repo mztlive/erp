@@ -919,7 +919,7 @@ export function SupplierOrdersListPage() {
                   />
                 }
               >
-                打开订单中心
+                查看详情
               </Button>
               {previewQuery.data.allowedActions.includes("QUERY_RESULT") ? (
                 <Button

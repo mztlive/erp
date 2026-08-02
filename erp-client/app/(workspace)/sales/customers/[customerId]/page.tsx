@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { CustomerDetailPage } from "@/features/customers/customer-detail-page"
 
 export const metadata: Metadata = {
-  title: "客户对象中心",
+  title: "客户详情",
 }
 
 export default async function Page({

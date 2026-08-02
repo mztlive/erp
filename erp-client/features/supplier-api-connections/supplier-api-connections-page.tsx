@@ -855,7 +855,7 @@ function ConnectionList({
           <DialogHeader>
             <DialogTitle>新建连接身份</DialogTitle>
             <DialogDescription>
-              创建全局唯一连接代码（环境不是唯一键组成部分）。成功后打开连接中心完成配置。
+              创建全局唯一连接代码（环境不是唯一键组成部分）。成功后打开连接详情完成配置。
             </DialogDescription>
           </DialogHeader>
           <form
@@ -983,7 +983,7 @@ function ConnectionCenter({
       <div className="mx-auto flex w-full max-w-shell p-5">
         <BusinessFailureState
           kind="system"
-          title="连接中心加载失败"
+          title="连接详情加载失败"
           description="请重试"
           action={
             <Button type="button" onClick={() => void centerQuery.refetch()}>

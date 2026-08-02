@@ -825,7 +825,7 @@ export function PurchaseOrdersListPage() {
                   />
                 }
               >
-                打开中心
+                查看详情
               </Button>
               {previewQuery.data.allowedActions.includes("EDIT") ? (
                 <Button

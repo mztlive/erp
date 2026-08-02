@@ -1175,7 +1175,7 @@ export function ExternalProductSupplyPage() {
                 variant="outline"
                 render={<Link href={centerHref} />}
               >
-                在中心打开
+                查看详情
                 <ExternalLinkIcon className="size-3.5" />
               </Button>
             </CardContent>

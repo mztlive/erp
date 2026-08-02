@@ -254,7 +254,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
   W04: {
     id: "W04",
     title: "合同",
-    description: "上传和查询合同 PDF、有效期与关联销售单；对象中心只读核对归档版本。",
+    description: "上传和查询合同 PDF、有效期与关联销售单；详情页只读核对归档版本。",
     mode: "M2+M4",
     breadcrumbs: [
       { id: "sales", label: "销售", href: "/sales/orders" },
@@ -330,7 +330,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W08",
     title: "采购单",
     description:
-      "集中核对采购单状态、供应商、金额与审核进度；支持预览与进入对象中心。",
+      "集中核对采购单状态、供应商、金额与审核进度；支持预览与查看详情。",
     mode: "M2+M4+M5",
     breadcrumbs: [
       { id: "proc", label: "采购与履约", href: "/procurement/confirm" },
@@ -1153,7 +1153,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W20",
     title: "API 供应商连接",
     description:
-      "管理供应商 API 连接、环境、健康检查与责任人；打开对象中心查看配置。",
+      "管理供应商 API 连接、环境、健康检查与责任人；查看详情完成配置。",
     mode: "M2+M4",
     breadcrumbs: [
       { id: "api", label: "供应商 API", href: "/supplier-api/connections" },
@@ -1213,7 +1213,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W21",
     title: "外部商品映射与供给",
     description:
-      "连续处理外部商品观察、映射与固定供给；进入对象中心维护供给条件。",
+      "连续处理外部商品观察、映射与固定供给；在详情页维护供给条件。",
     mode: "M3+M4",
     breadcrumbs: [
       { id: "api", label: "供应商 API", href: "/supplier-api/catalog" },

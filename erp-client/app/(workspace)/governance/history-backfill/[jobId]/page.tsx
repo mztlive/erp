@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { HistoryBackfillPage } from "@/features/history-backfill/history-backfill-page"
 
 export const metadata: Metadata = {
-  title: "回填任务中心",
+  title: "回填任务详情",
 }
 
 function HistoryBackfillJobFallback() {

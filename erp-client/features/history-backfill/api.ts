@@ -700,7 +700,7 @@ export async function submitHistoryBackfillCommand(
       jobNo: job.jobNo,
       operationId,
       idempotencyKey,
-      nextStep: "在任务中心查看 BackgroundJobProgress",
+      nextStep: "在任务详情查看处理进度",
     }
     setIdempotencySucceeded(idempotencyKey, IDEM_KIND, result)
     return result

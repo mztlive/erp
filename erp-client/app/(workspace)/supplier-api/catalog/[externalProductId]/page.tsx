@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { ExternalProductCenterPage } from "@/features/external-product-supply/external-product-center-page"
 
 export const metadata: Metadata = {
-  title: "外部商品与供给中心",
+  title: "外部商品与供给详情",
 }
 
 export default async function Page({

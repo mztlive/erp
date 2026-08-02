@@ -836,7 +836,7 @@ export function ConsumptionOrdersListPage() {
 
           <BusinessTableFrame
             title="消费订单列表"
-            description="商城订单与操作列固定；金额为人民币含税实付。Enter 打开对象中心。"
+            description="商城订单与操作列固定；金额为人民币含税实付。Enter 查看详情。"
             table={
               listQuery.isPending ? (
                 <div

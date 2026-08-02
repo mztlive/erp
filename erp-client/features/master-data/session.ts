@@ -268,7 +268,7 @@ export function createW14Object(
     actor: ACTOR,
     changeReason: input.changeReason.trim() || "新建",
     reference: `MD-CREATE-${stableNo}`,
-    nextActions: ["打开对象中心", "形成新版本"],
+    nextActions: ["查看详情", "形成新版本"],
   }
   idempotencyResults.set(input.idempotencyKey, result)
   return result

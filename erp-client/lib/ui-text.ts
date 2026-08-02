@@ -196,6 +196,17 @@ export const interfaceText = {
     "重复回调将忽略，不会重复形成业务记录或待办。",
 } as const
 
+// ─── 导航 / 详情入口（禁止「打开中心 / 对象中心」） ───────────────────────────
+
+export const navigationText = {
+  /** 列表预览 → 完整详情页的统一入口文案 */
+  viewDetails: "查看详情",
+  loading: "正在加载…",
+  loadingDetails: "正在加载详情…",
+  details: "详情",
+  detailPage: "详情页",
+} as const
+
 // ─── 纸质单据 / 通用页脚 ─────────────────────────────────────────────────────
 
 export const documentText = {
@@ -212,6 +223,7 @@ export const uiText = {
   version: versionText,
   freshness: freshnessText,
   interface: interfaceText,
+  navigation: navigationText,
   document: documentText,
   workspaceLabel,
   openWorkspaceLabel,

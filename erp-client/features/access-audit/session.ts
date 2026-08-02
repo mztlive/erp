@@ -1092,7 +1092,7 @@ export function getW19EffectiveAccess(
           layer: "OBJECT_STATE",
           layerLabel: "对象状态与业务条件",
           sourceType: "OBJECT_ALLOWED_ACTIONS",
-          sourceLabel: "对象中心数据",
+          sourceLabel: "详情页数据",
         },
         ...(role.riskFlags.includes("EMPTY_SCOPE")
           ? [
@@ -1220,7 +1220,7 @@ export function getW19EffectiveAccess(
         layer: "OBJECT_STATE",
         layerLabel: "对象状态与业务条件",
         sourceType: "OBJECT_ALLOWED_ACTIONS",
-        sourceLabel: "对象中心",
+        sourceLabel: "详情页",
       },
     ],
     permissionVersion: pv,

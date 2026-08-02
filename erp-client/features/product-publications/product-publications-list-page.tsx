@@ -690,7 +690,7 @@ export function ProductPublicationsListPage() {
                 />
               }
             >
-              进入发布对象中心
+              查看详情
             </Button>
           </div>
         ) : null}

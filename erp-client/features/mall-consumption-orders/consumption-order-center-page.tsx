@@ -353,7 +353,7 @@ export function ConsumptionOrderCenterPage({
         <BusinessFailureState
           kind="system"
           title="加载失败"
-          description="无法读取消费订单对象中心。"
+          description="无法读取消费订单详情。"
           action={
             <Button
               type="button"

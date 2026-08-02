@@ -107,7 +107,7 @@ function MasterDataCenterBody({
   if (query.isPending) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="主数据对象中心" description="正在加载…" />
+        <PageHeader title="主数据详情" description="正在加载…" />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
       </div>
     )
@@ -116,7 +116,7 @@ function MasterDataCenterBody({
   if (query.isError) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="主数据对象中心" />
+        <PageHeader title="主数据详情" />
         <BusinessFailureState
           kind="system"
           description="加载对象失败。"
@@ -261,7 +261,7 @@ function MasterDataCenterBody({
       ) : null}
 
       <nav
-        aria-label="对象中心子区"
+        aria-label="详情子区"
         className="sticky top-0 z-10 flex flex-wrap gap-2 border-b border-border bg-background/95 py-2 backdrop-blur"
       >
         {SECTION_NAV.map((item) => {

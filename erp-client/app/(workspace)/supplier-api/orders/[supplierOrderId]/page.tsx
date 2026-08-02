@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { SupplierOrderCenterPage } from "@/features/supplier-orders/supplier-order-center-page"
 
 export const metadata: Metadata = {
-  title: "供应商订单中心",
+  title: "供应商订单详情",
 }
 
 /**

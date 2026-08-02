@@ -500,7 +500,7 @@ export function PurchaseOrderDetailPage({
   if (query.isPending) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="采购单" description="正在加载对象中心…" />
+        <PageHeader title="采购单" description="正在加载详情…" />
       </div>
     )
   }
@@ -574,7 +574,7 @@ export function PurchaseOrderDetailPage({
         : "采购草稿编辑"
       : mode === "review"
         ? "财务审核（只读）"
-        : "对象中心"
+        : "详情"
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
@@ -774,7 +774,7 @@ export function PurchaseOrderDetailPage({
 
       <nav
         className="flex flex-wrap gap-1 border-b border-border pb-2"
-        aria-label="对象中心子区"
+        aria-label="详情子区"
       >
         {navItems.map((item) => (
           <Button
