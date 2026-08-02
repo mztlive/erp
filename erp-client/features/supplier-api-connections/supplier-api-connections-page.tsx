@@ -30,6 +30,7 @@ import {
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
+  OptionCombobox,
   PageActions,
   PageHeader,
 } from "@/components/business"
@@ -62,13 +63,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   useBindCredentialMutation,
@@ -249,38 +243,36 @@ function RoleDemoBar({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-sm">
       <span className="text-muted-foreground">角色演示</span>
-      <Select
+      <OptionCombobox
         value={role}
         onValueChange={(v) => {
           if (v == null) return
           onRole(v as DemoRole)
         }}
-      >
-        <SelectTrigger className="h-8 w-[9rem]" size="sm">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="procurement">采购</SelectItem>
-          <SelectItem value="ops">研发运维</SelectItem>
-          <SelectItem value="admin">系统管理员</SelectItem>
-        </SelectContent>
-      </Select>
-      <Select
+        options={[
+          { value: "procurement", label: "采购" },
+          { value: "ops", label: "研发运维" },
+          { value: "admin", label: "系统管理员" },
+        ]}
+        className="w-[9rem]"
+        size="sm"
+        allowClear={false}
+      />
+      <OptionCombobox
         value={demoFlag ?? "normal"}
         onValueChange={(v) => {
           if (v == null || v === "normal") onFlag(undefined)
           else onFlag(v as "no-permission" | "no-scope")
         }}
-      >
-        <SelectTrigger className="h-8 w-[11rem]" size="sm">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="normal">正常权限</SelectItem>
-          <SelectItem value="no-permission">无模块权限</SelectItem>
-          <SelectItem value="no-scope">无数据范围</SelectItem>
-        </SelectContent>
-      </Select>
+        options={[
+          { value: "normal", label: "正常权限" },
+          { value: "no-permission", label: "无模块权限" },
+          { value: "no-scope", label: "无数据范围" },
+        ]}
+        className="w-[11rem]"
+        size="sm"
+        allowClear={false}
+      />
       <span className="text-xs text-muted-foreground">
         当前：{DEMO_ROLE_LABEL[role]}
         {role === "procurement"
@@ -709,7 +701,7 @@ function ConnectionList({
             }
             filters={
               <div className="flex flex-wrap items-center gap-2">
-                <Select
+                <OptionCombobox
                   value={urlState.environment}
                   onValueChange={(v) => {
                     if (v == null) return
@@ -718,18 +710,18 @@ function ConnectionList({
                       page: 1,
                     })
                   }}
-                >
-                  <SelectTrigger className="h-8 w-[7.5rem]" size="sm">
-                    <SelectValue placeholder="环境" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ALL">全部环境</SelectItem>
-                    <SelectItem value="PRODUCTION">生产</SelectItem>
-                    <SelectItem value="STAGING">测试</SelectItem>
-                    <SelectItem value="DEVELOPMENT">开发</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select
+                  options={[
+                    { value: "ALL", label: "全部环境" },
+                    { value: "PRODUCTION", label: "生产" },
+                    { value: "STAGING", label: "测试" },
+                    { value: "DEVELOPMENT", label: "开发" },
+                  ]}
+                  className="w-[7.5rem]"
+                  size="sm"
+                  placeholder="环境"
+                  allowClear={false}
+                />
+                <OptionCombobox
                   value={urlState.status ?? "default"}
                   onValueChange={(v) => {
                     if (v == null || v === "default") {
@@ -743,19 +735,19 @@ function ConnectionList({
                       patchUrl({ status: v, page: 1 })
                     }
                   }}
-                >
-                  <SelectTrigger className="h-8 w-[8rem]" size="sm">
-                    <SelectValue placeholder="状态" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="default">启用+故障+待配置</SelectItem>
-                    <SelectItem value="all">全部状态</SelectItem>
-                    <SelectItem value="ENABLED">启用</SelectItem>
-                    <SelectItem value="FAULTED">故障</SelectItem>
-                    <SelectItem value="DISABLED">停用</SelectItem>
-                    <SelectItem value="PENDING_CONFIG">待配置</SelectItem>
-                  </SelectContent>
-                </Select>
+                  options={[
+                    { value: "default", label: "启用+故障+待配置" },
+                    { value: "all", label: "全部状态" },
+                    { value: "ENABLED", label: "启用" },
+                    { value: "FAULTED", label: "故障" },
+                    { value: "DISABLED", label: "停用" },
+                    { value: "PENDING_CONFIG", label: "待配置" },
+                  ]}
+                  className="w-[8rem]"
+                  size="sm"
+                  placeholder="状态"
+                  allowClear={false}
+                />
                 <Button
                   type="button"
                   size="sm"
@@ -882,21 +874,18 @@ function ConnectionList({
               children={(field) => (
                 <div className="space-y-1.5">
                   <Label>环境</Label>
-                  <Select
+                  <OptionCombobox
                     value={field.state.value}
                     onValueChange={(v) => {
                       if (v) field.handleChange(v as typeof field.state.value)
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="PRODUCTION">生产</SelectItem>
-                      <SelectItem value="STAGING">测试</SelectItem>
-                      <SelectItem value="DEVELOPMENT">开发</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    options={[
+                      { value: "PRODUCTION", label: "生产" },
+                      { value: "STAGING", label: "测试" },
+                      { value: "DEVELOPMENT", label: "开发" },
+                    ]}
+                    allowClear={false}
+                  />
                   {field.state.value === "PRODUCTION" ? (
                     <p className="text-xs text-destructive" role="status">
                       正在创建生产环境连接身份
@@ -1441,23 +1430,21 @@ function ConnectionCenter({
           </DialogHeader>
           <div className="space-y-3">
             <Label htmlFor="opaque-ref">密钥管理引用</Label>
-            <Select
-              value={selectedRef}
+            <OptionCombobox
+              id="opaque-ref"
+              value={selectedRef || null}
               onValueChange={(v) => {
                 if (v) setSelectedRef(v)
               }}
-            >
-              <SelectTrigger id="opaque-ref">
-                <SelectValue placeholder="选择不透明引用" />
-              </SelectTrigger>
-              <SelectContent>
-                {(listQuery.data?.credentialOpaqueOptions ?? []).map((o) => (
-                  <SelectItem key={o.referenceId} value={o.referenceId}>
-                    {o.alias} · {o.version}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={(listQuery.data?.credentialOpaqueOptions ?? []).map(
+                (o) => ({
+                  value: o.referenceId,
+                  label: `${o.alias} · ${o.version}`,
+                })
+              )}
+              placeholder="选择不透明引用"
+              allowClear={false}
+            />
             <p className="text-xs text-muted-foreground">
               当前状态：
               {REFERENCE_STATE_LABEL[conn.safeReferences.credential.state]}

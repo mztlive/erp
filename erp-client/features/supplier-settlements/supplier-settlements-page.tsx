@@ -35,9 +35,11 @@ import {
   MetricFilterItem,
   MetricStrip,
   MoneyValue,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
+  SupplierCombobox,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import {
@@ -68,17 +70,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -280,40 +271,38 @@ function RoleDemoBar({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-sm">
       <span className="text-muted-foreground">角色演示</span>
-      <Select
+      <OptionCombobox
         value={role}
         onValueChange={(v) => {
           if (v == null) return
           onRole(v as DemoRole)
         }}
-      >
-        <SelectTrigger className="h-8 w-[10rem]" size="sm">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="finance_prep">财务经办</SelectItem>
-          <SelectItem value="finance_review">财务复核</SelectItem>
-          <SelectItem value="procurement">采购</SelectItem>
-          <SelectItem value="manager">管理层只读</SelectItem>
-        </SelectContent>
-      </Select>
-      <Select
+        options={[
+          { value: "finance_prep", label: "财务经办" },
+          { value: "finance_review", label: "财务复核" },
+          { value: "procurement", label: "采购" },
+          { value: "manager", label: "管理层只读" },
+        ]}
+        className="w-[10rem]"
+        size="sm"
+        allowClear={false}
+      />
+      <OptionCombobox
         value={demoFlag ?? "normal"}
         onValueChange={(v) => {
           if (v == null || v === "normal") onFlag(undefined)
           else onFlag(v as SettlementsUrlState["demoFlag"])
         }}
-      >
-        <SelectTrigger className="h-8 w-[12rem]" size="sm">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="normal">正常权限</SelectItem>
-          <SelectItem value="no-permission">无模块权限</SelectItem>
-          <SelectItem value="no-scope">无数据范围</SelectItem>
-          <SelectItem value="policy-missing">期间策略缺失</SelectItem>
-        </SelectContent>
-      </Select>
+        options={[
+          { value: "normal", label: "正常权限" },
+          { value: "no-permission", label: "无模块权限" },
+          { value: "no-scope", label: "无数据范围" },
+          { value: "policy-missing", label: "期间策略缺失" },
+        ]}
+        className="w-[12rem]"
+        size="sm"
+        allowClear={false}
+      />
       <span className="text-xs text-muted-foreground">
         当前：{DEMO_ROLE_LABEL[role]}
         {role === "procurement"
@@ -833,72 +822,75 @@ function SettlementList({
                     ))}
                   </TabsList>
                 </Tabs>
-                <NativeSelect
-                  value={urlState.supplierId ?? ""}
-                  onChange={(e) =>
+                <OptionCombobox
+                  value={urlState.supplierId || null}
+                  onValueChange={(v) =>
                     patchUrl({
-                      supplierId: e.target.value || undefined,
+                      supplierId: v || undefined,
                       page: 1,
                     })
                   }
-                  className="h-8 w-[10rem]"
+                  options={[
+                    { value: "", label: "全部供应商" },
+                    ...(data?.suppliers ?? []).map((s) => ({
+                      value: s.supplierId,
+                      label: s.supplierName,
+                    })),
+                  ]}
+                  className="w-[10rem]"
+                  size="sm"
                   aria-label="供应商"
-                >
-                  <NativeSelectOption value="">全部供应商</NativeSelectOption>
-                  {(data?.suppliers ?? []).map((s) => (
-                    <NativeSelectOption
-                      key={s.supplierId}
-                      value={s.supplierId}
-                    >
-                      {s.supplierName}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-                <NativeSelect
-                  value={urlState.status ?? ""}
-                  onChange={(e) =>
+                  allowClear={false}
+                />
+                <OptionCombobox
+                  value={urlState.status || null}
+                  onValueChange={(v) =>
                     patchUrl({
-                      status: e.target.value || undefined,
+                      status: v || undefined,
                       page: 1,
                     })
                   }
-                  className="h-8 w-[9rem]"
+                  options={[
+                    { value: "", label: "全部状态" },
+                    ...(
+                      Object.keys(STATUS_LABEL) as Array<
+                        keyof typeof STATUS_LABEL
+                      >
+                    ).map((k) => ({
+                      value: k,
+                      label: STATUS_LABEL[k],
+                    })),
+                  ]}
+                  className="w-[9rem]"
+                  size="sm"
                   aria-label="状态"
-                >
-                  <NativeSelectOption value="">全部状态</NativeSelectOption>
-                  {(
-                    Object.keys(STATUS_LABEL) as Array<
-                      keyof typeof STATUS_LABEL
-                    >
-                  ).map((k) => (
-                    <NativeSelectOption key={k} value={k}>
-                      {STATUS_LABEL[k]}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-                <NativeSelect
-                  value={urlState.differenceType ?? ""}
-                  onChange={(e) =>
+                  allowClear={false}
+                />
+                <OptionCombobox
+                  value={urlState.differenceType || null}
+                  onValueChange={(v) =>
                     patchUrl({
-                      differenceType: (e.target.value ||
+                      differenceType: (v ||
                         undefined) as SettlementsUrlState["differenceType"],
                       page: 1,
                     })
                   }
-                  className="h-8 w-[9rem]"
+                  options={[
+                    { value: "", label: "全部差异" },
+                    ...(
+                      Object.keys(DIFF_TYPE_LABEL) as Array<
+                        keyof typeof DIFF_TYPE_LABEL
+                      >
+                    ).map((k) => ({
+                      value: k,
+                      label: DIFF_TYPE_LABEL[k],
+                    })),
+                  ]}
+                  className="w-[9rem]"
+                  size="sm"
                   aria-label="差异类型"
-                >
-                  <NativeSelectOption value="">全部差异</NativeSelectOption>
-                  {(
-                    Object.keys(DIFF_TYPE_LABEL) as Array<
-                      keyof typeof DIFF_TYPE_LABEL
-                    >
-                  ).map((k) => (
-                    <NativeSelectOption key={k} value={k}>
-                      {DIFF_TYPE_LABEL[k]}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  allowClear={false}
+                />
                 <Button
                   type="button"
                   size="sm"
@@ -1132,21 +1124,12 @@ function SettlementList({
                 children={(field) => (
                   <div className="space-y-1.5">
                     <Label htmlFor="supplierId">供应商</Label>
-                    <NativeSelect
-                      id="supplierId"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                    >
-                      <NativeSelectOption value="">请选择</NativeSelectOption>
-                      {(data?.suppliers ?? []).map((s) => (
-                        <NativeSelectOption
-                          key={s.supplierId}
-                          value={s.supplierId}
-                        >
-                          {s.supplierName}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                    <SupplierCombobox
+                      value={field.state.value || undefined}
+                      onValueChange={(id) => field.handleChange(id ?? "")}
+                      suppliers={data?.suppliers ?? []}
+                      placeholder="请选择供应商"
+                    />
                   </div>
                 )}
               />
@@ -1155,21 +1138,20 @@ function SettlementList({
                 children={(field) => (
                   <div className="space-y-1.5">
                     <Label htmlFor="periodKey">结算期间（策略周期）</Label>
-                    <NativeSelect
+                    <OptionCombobox
                       id="periodKey"
-                      value={field.state.value}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                    >
-                      <NativeSelectOption value="">请选择</NativeSelectOption>
-                      {policy.selectablePeriods.map((p) => (
-                        <NativeSelectOption
-                          key={`${p.periodStart}|${p.periodEnd}`}
-                          value={`${p.periodStart}|${p.periodEnd}`}
-                        >
-                          {p.label}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                      value={field.state.value || null}
+                      onValueChange={(v) => field.handleChange(v ?? "")}
+                      options={[
+                        { value: "", label: "请选择" },
+                        ...policy.selectablePeriods.map((p) => ({
+                          value: `${p.periodStart}|${p.periodEnd}`,
+                          label: p.label,
+                        })),
+                      ]}
+                      placeholder="请选择"
+                      allowClear={false}
+                    />
                     <p className="text-xs text-muted-foreground">
                       策略 {policy.policyId}@{policy.policyVersion} ·{" "}
                       {policy.timezone}
@@ -2089,40 +2071,35 @@ function SettlementCenter({
           <div className="space-y-3">
             <div className="space-y-1.5">
               <Label>受控结论</Label>
-              <NativeSelect
+              <OptionCombobox
                 value={resolution}
-                onChange={(e) =>
-                  setResolution(e.target.value as DifferenceResolution)
-                }
-              >
-                {(
+                onValueChange={(v) => {
+                  if (v) setResolution(v as DifferenceResolution)
+                }}
+                options={(
                   Object.keys(RESOLUTION_LABEL) as DifferenceResolution[]
-                ).map((k) => (
-                  <NativeSelectOption key={k} value={k}>
-                    {RESOLUTION_LABEL[k]}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                ).map((k) => ({
+                  value: k,
+                  label: RESOLUTION_LABEL[k],
+                }))}
+                allowClear={false}
+              />
             </div>
             <div className="space-y-1.5">
               <Label>原因码</Label>
-              <NativeSelect
+              <OptionCombobox
                 value={reasonCode}
-                onChange={(e) => setReasonCode(e.target.value)}
-              >
-                <NativeSelectOption value="BILL_ALIGNED">
-                  账单已对齐
-                </NativeSelectOption>
-                <NativeSelectOption value="ACCEPT_BILL">
-                  接受供应商账单
-                </NativeSelectOption>
-                <NativeSelectOption value="NO_BUSINESS_IMPACT">
-                  无需业务调整
-                </NativeSelectOption>
-                <NativeSelectOption value="COMPENSATED_ELSEWHERE">
-                  已另行补偿
-                </NativeSelectOption>
-              </NativeSelect>
+                onValueChange={(v) => {
+                  if (v) setReasonCode(v)
+                }}
+                options={[
+                  { value: "BILL_ALIGNED", label: "账单已对齐" },
+                  { value: "ACCEPT_BILL", label: "接受供应商账单" },
+                  { value: "NO_BUSINESS_IMPACT", label: "无需业务调整" },
+                  { value: "COMPENSATED_ELSEWHERE", label: "已另行补偿" },
+                ]}
+                allowClear={false}
+              />
             </div>
           </div>
           <DialogFooter>
@@ -2251,19 +2228,18 @@ function SettlementCenter({
           </DialogHeader>
           <div className="space-y-1.5">
             <Label>原因码</Label>
-            <NativeSelect
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-            >
-              <NativeSelectOption value="">请选择</NativeSelectOption>
-              <NativeSelectOption value="NEEDS_MORE_EVIDENCE">
-                证据不足
-              </NativeSelectOption>
-              <NativeSelectOption value="AMOUNT_MISMATCH">
-                金额仍不一致
-              </NativeSelectOption>
-              <NativeSelectOption value="OTHER">其他</NativeSelectOption>
-            </NativeSelect>
+            <OptionCombobox
+              value={rejectReason || null}
+              onValueChange={(v) => setRejectReason(v ?? "")}
+              options={[
+                { value: "", label: "请选择" },
+                { value: "NEEDS_MORE_EVIDENCE", label: "证据不足" },
+                { value: "AMOUNT_MISMATCH", label: "金额仍不一致" },
+                { value: "OTHER", label: "其他" },
+              ]}
+              placeholder="请选择"
+              allowClear={false}
+            />
           </div>
           <DialogFooter>
             <Button

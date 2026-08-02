@@ -21,6 +21,7 @@ import {
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -32,10 +33,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   buildMasterDataExportCsv,
@@ -677,25 +674,25 @@ function MasterDataListWorkspace({
                   <ToggleGroupItem value="enabled">当前启用</ToggleGroupItem>
                   <ToggleGroupItem value="disabled">当前停用</ToggleGroupItem>
                 </ToggleGroup>
-                <NativeSelect
+                <OptionCombobox
                   className="w-[9.5rem]"
                   value={revisionTiming}
                   aria-label="修订时序"
-                  onChange={(e) => {
+                  onValueChange={(v) => {
                     setRevisionTiming(
-                      e.target.value as typeof revisionTiming
+                      (v ?? "all") as typeof revisionTiming
                     )
                     resetPagination()
                   }}
-                >
-                  <NativeSelectOption value="all">时序：全部</NativeSelectOption>
-                  <NativeSelectOption value="current">
-                    时序：当前
-                  </NativeSelectOption>
-                  <NativeSelectOption value="future">
-                    时序：待生效
-                  </NativeSelectOption>
-                </NativeSelect>
+                  options={[
+                    { value: "all", label: "时序：全部" },
+                    { value: "current", label: "时序：当前" },
+                    { value: "future", label: "时序：待生效" },
+                  ]}
+                  size="sm"
+                  allowClear={false}
+                  placeholder="时序：全部"
+                />
               </>
             }
             actions={

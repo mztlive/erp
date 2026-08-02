@@ -27,6 +27,7 @@ import {
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -46,10 +47,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -860,95 +857,112 @@ export function ExecutionProjectionsPage() {
         }
         filters={
           <div className="flex flex-wrap items-center gap-2">
-            <NativeSelect
+            <OptionCombobox
               aria-label="目标商城"
               value={mallId}
-              onChange={(e) =>
-                replaceParams({ mall: e.target.value, page: "1" })
+              onValueChange={(v) =>
+                replaceParams({ mall: v ?? "all", page: "1" })
               }
-            >
-              <NativeSelectOption value="all">全部商城</NativeSelectOption>
-              {(view?.malls ?? []).map((m) => (
-                <NativeSelectOption key={m.id} value={m.id}>
-                  {m.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            <NativeSelect
+              options={[
+                { value: "all", label: "全部商城" },
+                ...(view?.malls ?? []).map((m) => ({
+                  value: m.id,
+                  label: m.name,
+                })),
+              ]}
+              className="w-[9rem]"
+              size="sm"
+              allowClear={false}
+              placeholder="全部商城"
+            />
+            <OptionCombobox
               aria-label="接收状态"
               value={deliveryStatus}
-              onChange={(e) =>
+              onValueChange={(v) =>
                 replaceParams({
-                  deliveryStatus: e.target.value,
+                  deliveryStatus: v ?? "all",
                   page: "1",
                 })
               }
-            >
-              <NativeSelectOption value="all">全部接收状态</NativeSelectOption>
-              {(
-                [
-                  "UNKNOWN",
-                  "FAILED",
-                  "ESCALATED_MANUAL",
-                  "RETRYING",
-                  "SENDING",
-                  "PENDING",
-                  "ACKED",
-                ] as DeliveryStatus[]
-              ).map((s) => (
-                <NativeSelectOption key={s} value={s}>
-                  {DELIVERY_STATUS_LABEL[s]}
-                </NativeSelectOption>
-              ))}
-              <NativeSelectOption value="UNKNOWN,FAILED,ESCALATED_MANUAL">
-                未知+失败+转人工
-              </NativeSelectOption>
-            </NativeSelect>
-            <NativeSelect
+              options={[
+                { value: "all", label: "全部接收状态" },
+                ...(
+                  [
+                    "UNKNOWN",
+                    "FAILED",
+                    "ESCALATED_MANUAL",
+                    "RETRYING",
+                    "SENDING",
+                    "PENDING",
+                    "ACKED",
+                  ] as DeliveryStatus[]
+                ).map((s) => ({
+                  value: s,
+                  label: DELIVERY_STATUS_LABEL[s],
+                })),
+                {
+                  value: "UNKNOWN,FAILED,ESCALATED_MANUAL",
+                  label: "未知+失败+转人工",
+                },
+              ]}
+              className="w-[11rem]"
+              size="sm"
+              allowClear={false}
+              placeholder="全部接收状态"
+            />
+            <OptionCombobox
               aria-label="延迟分组"
               value={latency}
-              onChange={(e) =>
-                replaceParams({ latency: e.target.value, page: "1" })
+              onValueChange={(v) =>
+                replaceParams({ latency: v ?? "all", page: "1" })
               }
-            >
-              <NativeSelectOption value="all">延迟：全部</NativeSelectOption>
-              {(Object.keys(LATENCY_LABEL) as LatencyBand[]).map((k) => (
-                <NativeSelectOption key={k} value={k}>
-                  {LATENCY_LABEL[k]}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            <NativeSelect
+              options={[
+                { value: "all", label: "延迟：全部" },
+                ...(Object.keys(LATENCY_LABEL) as LatencyBand[]).map((k) => ({
+                  value: k,
+                  label: LATENCY_LABEL[k],
+                })),
+              ]}
+              className="w-[9rem]"
+              size="sm"
+              allowClear={false}
+              placeholder="延迟：全部"
+            />
+            <OptionCombobox
               aria-label="版本差异"
               value={reconciliation}
-              onChange={(e) =>
+              onValueChange={(v) =>
                 replaceParams({
-                  reconciliation: e.target.value,
+                  reconciliation: v ?? "all",
                   page: "1",
                 })
               }
-            >
-              <NativeSelectOption value="all">对账：全部</NativeSelectOption>
-              <NativeSelectOption value="VERSION_MISMATCH">
-                仅版本差异
-              </NativeSelectOption>
-              <NativeSelectOption value="MATCHED">版本一致</NativeSelectOption>
-            </NativeSelect>
-            <NativeSelect
+              options={[
+                { value: "all", label: "对账：全部" },
+                { value: "VERSION_MISMATCH", label: "仅版本差异" },
+                { value: "MATCHED", label: "版本一致" },
+              ]}
+              className="w-[9rem]"
+              size="sm"
+              allowClear={false}
+              placeholder="对账：全部"
+            />
+            <OptionCombobox
               aria-label="数据来源"
               value={source}
-              onChange={(e) =>
-                replaceParams({ source: e.target.value, page: "1" })
+              onValueChange={(v) =>
+                replaceParams({ source: v ?? "all", page: "1" })
               }
-            >
-              <NativeSelectOption value="all">来源：全部</NativeSelectOption>
-              <NativeSelectOption value="ERP_SALES_REVISION">
-                ERP 销售版本
-              </NativeSelectOption>
-              <NativeSelectOption value="MIGRATION_BASELINE">
-                迁移基线
-              </NativeSelectOption>
-            </NativeSelect>
+              options={[
+                { value: "all", label: "来源：全部" },
+                { value: "ERP_SALES_REVISION", label: "ERP 销售版本" },
+                { value: "MIGRATION_BASELINE", label: "迁移基线" },
+              ]}
+              className="w-[10rem]"
+              size="sm"
+              allowClear={false}
+              placeholder="来源：全部"
+            />
           </div>
         }
         actions={

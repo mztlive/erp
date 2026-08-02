@@ -19,6 +19,7 @@ import {
   FormalActionConfirmDialog,
   FormalActionResult,
   MoneyValue,
+  OptionCombobox,
   PageActions,
   PageHeader,
   PrepaymentGate,
@@ -47,10 +48,6 @@ import {
   DescriptionTerm,
 } from "@/components/ui/description-list"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import {
   Table,
@@ -1409,30 +1406,24 @@ function EditSurface({
             <Label htmlFor="payment-term">付款条件</Label>
             <draftForm.AppField name="paymentTermCode">
               {(field) => (
-                <NativeSelect
+                <OptionCombobox
                   id="payment-term"
                   className="w-full"
                   value={String(field.state.value ?? "")}
-                  onChange={(event) =>
-                    field.handleChange(event.target.value)
+                  onValueChange={(v) =>
+                    field.handleChange(v ?? String(field.state.value ?? ""))
                   }
-                >
-                  <NativeSelectOption value="PREPAY_100">
-                    先款 100%
-                  </NativeSelectOption>
-                  <NativeSelectOption value="PREPAY_50">
-                    先款 50%
-                  </NativeSelectOption>
-                  <NativeSelectOption value="PREPAY_30">
-                    先款 30%
-                  </NativeSelectOption>
-                  <NativeSelectOption value="POSTPAY_NET15">
-                    货到 15 天
-                  </NativeSelectOption>
-                  <NativeSelectOption value="POSTPAY_NET30">
-                    货到 30 天
-                  </NativeSelectOption>
-                </NativeSelect>
+                  options={[
+                    { value: "PREPAY_100", label: "先款 100%" },
+                    { value: "PREPAY_50", label: "先款 50%" },
+                    { value: "PREPAY_30", label: "先款 30%" },
+                    { value: "POSTPAY_NET15", label: "货到 15 天" },
+                    { value: "POSTPAY_NET30", label: "货到 30 天" },
+                  ]}
+                  allowClear={false}
+                  aria-label="付款条件"
+                  placeholder="付款条件"
+                />
               )}
             </draftForm.AppField>
           </div>
@@ -1651,20 +1642,23 @@ function ReviewSurface({
             <Label htmlFor="reject-reason">原因</Label>
             <reviewForm.AppField name="reasonCode">
               {(field) => (
-                <NativeSelect
+                <OptionCombobox
                   id="reject-reason"
                   className="w-full"
                   value={String(field.state.value ?? "")}
-                  onChange={(event) =>
-                    field.handleChange(event.target.value)
+                  onValueChange={(v) =>
+                    field.handleChange(v ?? String(field.state.value ?? ""))
                   }
-                >
-                  {Object.entries(REJECT_REASON_LABEL).map(([code, label]) => (
-                    <NativeSelectOption key={code} value={code}>
-                      {label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  options={Object.entries(REJECT_REASON_LABEL).map(
+                    ([code, label]) => ({
+                      value: code,
+                      label,
+                    })
+                  )}
+                  allowClear={false}
+                  aria-label="原因"
+                  placeholder="选择原因"
+                />
               )}
             </reviewForm.AppField>
           </div>

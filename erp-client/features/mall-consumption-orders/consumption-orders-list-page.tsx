@@ -27,6 +27,7 @@ import {
   MetricFilterItem,
   MetricStrip,
   MoneyValue,
+  OptionCombobox,
   PageActions,
   PageHeader,
 } from "@/components/business"
@@ -42,10 +43,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import {
   useConsumptionOrderExportMutation,
   useConsumptionOrderListQuery,
@@ -549,22 +546,26 @@ export function ConsumptionOrdersListPage() {
         </AlertDescription>
         <div className="flex items-center gap-2 text-sm">
           <span className="whitespace-nowrap text-muted-foreground">演示状态</span>
-          <NativeSelect
+          <OptionCombobox
             value={demoFlag ?? "normal"}
-            onChange={(e) => {
-              const v = e.target.value
+            onValueChange={(v) => {
+              const next = v ?? "normal"
               replaceParams({
-                demo: v === "normal" ? undefined : v,
+                demo: next === "normal" ? undefined : next,
               })
             }}
+            options={[
+              { value: "normal", label: "正常数据范围" },
+              { value: "no-permission", label: "无模块权限" },
+              { value: "no-scope", label: "无数据范围" },
+              { value: "empty", label: "空数据" },
+            ]}
             className="w-40"
+            size="sm"
+            allowClear={false}
             aria-label="演示空态"
-          >
-            <NativeSelectOption value="normal">正常数据范围</NativeSelectOption>
-            <NativeSelectOption value="no-permission">无模块权限</NativeSelectOption>
-            <NativeSelectOption value="no-scope">无数据范围</NativeSelectOption>
-            <NativeSelectOption value="empty">空数据</NativeSelectOption>
-          </NativeSelect>
+            placeholder="演示空态"
+          />
         </div>
       </Alert>
 
@@ -737,88 +738,99 @@ export function ConsumptionOrdersListPage() {
             }
             filters={
               <>
-                <NativeSelect
+                <OptionCombobox
                   value={mallId}
-                  onChange={(e) =>
-                    replaceParams({ mall: e.target.value || undefined })
+                  onValueChange={(v) =>
+                    replaceParams({ mall: v || undefined })
                   }
+                  options={[
+                    { value: "all", label: "全部商城" },
+                    ...(data?.malls ?? []).map((m) => ({
+                      value: m.id,
+                      label: m.name,
+                    })),
+                  ]}
                   className="w-44"
+                  size="sm"
+                  allowClear={false}
                   aria-label="来源商城"
-                >
-                  <NativeSelectOption value="all">全部商城</NativeSelectOption>
-                  {(data?.malls ?? []).map((m) => (
-                    <NativeSelectOption key={m.id} value={m.id}>
-                      {m.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
-                <NativeSelect
+                  placeholder="全部商城"
+                />
+                <OptionCombobox
                   value={fulfillmentChain}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     replaceParams({
-                      fulfillmentChain: e.target.value || undefined,
+                      fulfillmentChain: v || undefined,
                     })
                   }
+                  options={[
+                    { value: "all", label: "履约链" },
+                    { value: "LEGACY_MANUAL", label: "原人工" },
+                    { value: "ERP_AUTOMATED", label: "ERP 自动" },
+                  ]}
                   className="w-36"
+                  size="sm"
+                  allowClear={false}
                   aria-label="履约链"
-                >
-                  <NativeSelectOption value="all">履约链</NativeSelectOption>
-                  <NativeSelectOption value="LEGACY_MANUAL">
-                    原人工
-                  </NativeSelectOption>
-                  <NativeSelectOption value="ERP_AUTOMATED">
-                    ERP 自动
-                  </NativeSelectOption>
-                </NativeSelect>
-                <NativeSelect
+                  placeholder="履约链"
+                />
+                <OptionCombobox
                   value={attributionStatus}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     replaceParams({
-                      attributionStatus: e.target.value || undefined,
+                      attributionStatus: v || undefined,
                     })
                   }
+                  options={[
+                    { value: "all", label: "归集" },
+                    { value: "ATTRIBUTED", label: "已归集" },
+                    { value: "PENDING", label: "待归集" },
+                    { value: "DIFFERENCE", label: "差异" },
+                  ]}
                   className="w-32"
+                  size="sm"
+                  allowClear={false}
                   aria-label="归集状态"
-                >
-                  <NativeSelectOption value="all">归集</NativeSelectOption>
-                  <NativeSelectOption value="ATTRIBUTED">
-                    已归集
-                  </NativeSelectOption>
-                  <NativeSelectOption value="PENDING">待归集</NativeSelectOption>
-                  <NativeSelectOption value="DIFFERENCE">差异</NativeSelectOption>
-                </NativeSelect>
-                <NativeSelect
+                  placeholder="归集"
+                />
+                <OptionCombobox
                   value={paymentSource}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     replaceParams({
-                      paymentSource: e.target.value || undefined,
+                      paymentSource: v || undefined,
                     })
                   }
+                  options={[
+                    { value: "all", label: "支付方式" },
+                    { value: "CARD", label: "卡券" },
+                    { value: "WECHAT", label: "微信" },
+                    { value: "MIXED", label: "组合" },
+                  ]}
                   className="w-32"
+                  size="sm"
+                  allowClear={false}
                   aria-label="支付方式"
-                >
-                  <NativeSelectOption value="all">支付方式</NativeSelectOption>
-                  <NativeSelectOption value="CARD">卡券</NativeSelectOption>
-                  <NativeSelectOption value="WECHAT">微信</NativeSelectOption>
-                  <NativeSelectOption value="MIXED">组合</NativeSelectOption>
-                </NativeSelect>
-                <NativeSelect
+                  placeholder="支付方式"
+                />
+                <OptionCombobox
                   value={costBasis}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     replaceParams({
-                      costBasis: e.target.value || undefined,
+                      costBasis: v || undefined,
                     })
                   }
+                  options={[
+                    { value: "all", label: "成本口径" },
+                    { value: "ACTUAL", label: "ACTUAL" },
+                    { value: "STANDARD", label: "STANDARD" },
+                    { value: "NONE", label: "NONE" },
+                  ]}
                   className="w-32"
+                  size="sm"
+                  allowClear={false}
                   aria-label="成本口径"
-                >
-                  <NativeSelectOption value="all">成本口径</NativeSelectOption>
-                  <NativeSelectOption value="ACTUAL">ACTUAL</NativeSelectOption>
-                  <NativeSelectOption value="STANDARD">
-                    STANDARD
-                  </NativeSelectOption>
-                  <NativeSelectOption value="NONE">NONE</NativeSelectOption>
-                </NativeSelect>
+                  placeholder="成本口径"
+                />
               </>
             }
             actions={

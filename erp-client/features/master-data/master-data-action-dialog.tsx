@@ -3,7 +3,7 @@
 import * as React from "react"
 import { z } from "zod"
 
-import { FormalActionResult } from "@/components/business"
+import { FormalActionResult, OptionCombobox } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -21,10 +21,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import {
   useCreateMasterDataMutation,
   useCreateRevisionMutation,
@@ -216,25 +212,31 @@ export function MasterDataCreateDialog({
             {!isWarehouse ? (
               <div className="space-y-2">
                 <Label htmlFor="create-sim">演示校验（会话）</Label>
-                <NativeSelect
+                <OptionCombobox
                   id="create-sim"
                   value={simulate}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     setSimulate(
-                      e.target.value as "ok" | "overlap" | "sku_signature"
+                      (v ?? "ok") as "ok" | "overlap" | "sku_signature"
                     )
                   }
-                >
-                  <NativeSelectOption value="ok">正常成功</NativeSelectOption>
-                  <NativeSelectOption value="overlap">
-                    有效期重叠阻断
-                  </NativeSelectOption>
-                  {resource === "products" ? (
-                    <NativeSelectOption value="sku_signature">
-                      SKU 规格身份阻断
-                    </NativeSelectOption>
-                  ) : null}
-                </NativeSelect>
+                  options={[
+                    { value: "ok", label: "正常成功" },
+                    { value: "overlap", label: "有效期重叠阻断" },
+                    ...(resource === "products"
+                      ? [
+                          {
+                            value: "sku_signature",
+                            label: "SKU 规格身份阻断",
+                          },
+                        ]
+                      : []),
+                  ]}
+                  className="w-full"
+                  allowClear={false}
+                  aria-label="演示校验（会话）"
+                  placeholder="演示校验"
+                />
               </div>
             ) : null}
             <DialogFooter>
@@ -432,12 +434,12 @@ export function MasterDataReviseDialog({
             {!isWarehouse ? (
               <div className="space-y-2">
                 <Label htmlFor="rev-sim">演示校验（会话）</Label>
-                <NativeSelect
+                <OptionCombobox
                   id="rev-sim"
                   value={simulate}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     setSimulate(
-                      e.target.value as
+                      (v ?? "ok") as
                         | "ok"
                         | "overlap"
                         | "sku_signature"
@@ -445,25 +447,28 @@ export function MasterDataReviseDialog({
                         | "conflict"
                     )
                   }
-                >
-                  <NativeSelectOption value="ok">正常成功</NativeSelectOption>
-                  <NativeSelectOption value="overlap">
-                    有效期重叠阻断
-                  </NativeSelectOption>
-                  {resource === "products" ? (
-                    <>
-                      <NativeSelectOption value="sku_signature">
-                        SKU 规格身份阻断
-                      </NativeSelectOption>
-                      <NativeSelectOption value="base_unit">
-                        基础单位变更阻断
-                      </NativeSelectOption>
-                    </>
-                  ) : null}
-                  <NativeSelectOption value="conflict">
-                    版本冲突
-                  </NativeSelectOption>
-                </NativeSelect>
+                  options={[
+                    { value: "ok", label: "正常成功" },
+                    { value: "overlap", label: "有效期重叠阻断" },
+                    ...(resource === "products"
+                      ? [
+                          {
+                            value: "sku_signature",
+                            label: "SKU 规格身份阻断",
+                          },
+                          {
+                            value: "base_unit",
+                            label: "基础单位变更阻断",
+                          },
+                        ]
+                      : []),
+                    { value: "conflict", label: "版本冲突" },
+                  ]}
+                  className="w-full"
+                  allowClear={false}
+                  aria-label="演示校验（会话）"
+                  placeholder="演示校验"
+                />
               </div>
             ) : null}
             <DialogFooter>
@@ -628,18 +633,23 @@ export function MasterDataDisableDialog({
             {!isWarehouse ? (
               <div className="space-y-2">
                 <Label htmlFor="dis-sim">演示结果</Label>
-                <NativeSelect
+                <OptionCombobox
                   id="dis-sim"
                   value={simulate}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     setSimulate(
-                      e.target.value as "ok" | "warehouse_stock" | "conflict"
+                      (v ?? "ok") as "ok" | "warehouse_stock" | "conflict"
                     )
                   }
-                >
-                  <NativeSelectOption value="ok">正常停用</NativeSelectOption>
-                  <NativeSelectOption value="conflict">版本冲突</NativeSelectOption>
-                </NativeSelect>
+                  options={[
+                    { value: "ok", label: "正常停用" },
+                    { value: "conflict", label: "版本冲突" },
+                  ]}
+                  className="w-full"
+                  allowClear={false}
+                  aria-label="演示结果"
+                  placeholder="演示结果"
+                />
               </div>
             ) : null}
             <DialogFooter>

@@ -40,9 +40,9 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table"
 
+import { OptionCombobox } from "@/components/business/option-combobox"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import { NativeSelect, NativeSelectOption } from "@/components/ui/native-select"
 import {
   Popover,
   PopoverContent,
@@ -1055,18 +1055,21 @@ function DataTablePagination<TData>({
 
         <label className="flex shrink-0 items-center gap-2 text-muted-foreground">
           每页
-          <NativeSelect
+          <OptionCombobox
             size="sm"
             value={String(pageSize)}
-            onChange={(event) => table.setPageSize(Number(event.target.value))}
+            onValueChange={(next) => {
+              if (next == null) return
+              table.setPageSize(Number(next))
+            }}
+            options={pageSizeOptions.map((size) => ({
+              value: String(size),
+              label: String(size),
+            }))}
+            allowClear={false}
             aria-label="每页记录数"
-          >
-            {pageSizeOptions.map((size) => (
-              <NativeSelectOption key={size} value={size}>
-                {size}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            className="w-[5.5rem]"
+          />
         </label>
       </div>
 

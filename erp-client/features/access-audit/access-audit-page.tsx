@@ -25,6 +25,7 @@ import {
   DataTable,
   FormalActionResult,
   ListToolbar,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -51,10 +52,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -1382,43 +1379,44 @@ export function AccessAuditPage() {
           <>
             {!isAudit ? (
               <>
-                <NativeSelect
+                <OptionCombobox
                   value={status ?? "all"}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     patchUrl({
-                      status:
-                        e.target.value === "all" ? null : e.target.value,
+                      status: (v ?? "all") === "all" ? null : (v ?? "all"),
                     })
                   }
+                  options={[
+                    { value: "all", label: "全部状态" },
+                    { value: "enabled", label: "启用" },
+                    { value: "disabled", label: "停用" },
+                  ]}
+                  className="w-[8rem]"
+                  size="sm"
+                  allowClear={false}
                   aria-label="状态"
-                >
-                  <NativeSelectOption value="all">全部状态</NativeSelectOption>
-                  <NativeSelectOption value="enabled">启用</NativeSelectOption>
-                  <NativeSelectOption value="disabled">停用</NativeSelectOption>
-                </NativeSelect>
-                <NativeSelect
+                  placeholder="全部状态"
+                />
+                <OptionCombobox
                   value={risk ?? "all"}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     patchUrl({
-                      risk: e.target.value === "all" ? null : e.target.value,
+                      risk: (v ?? "all") === "all" ? null : (v ?? "all"),
                     })
                   }
+                  options={[
+                    { value: "all", label: "全部风险" },
+                    { value: "HIGH_PRIVILEGE", label: "高权限" },
+                    { value: "EMPTY_SCOPE", label: "空数据范围" },
+                    { value: "EXPIRING_SOON", label: "即将过期" },
+                    { value: "ACCESS_ADMIN", label: "权限管理" },
+                  ]}
+                  className="w-[9rem]"
+                  size="sm"
+                  allowClear={false}
                   aria-label="权限风险"
-                >
-                  <NativeSelectOption value="all">全部风险</NativeSelectOption>
-                  <NativeSelectOption value="HIGH_PRIVILEGE">
-                    高权限
-                  </NativeSelectOption>
-                  <NativeSelectOption value="EMPTY_SCOPE">
-                    空数据范围
-                  </NativeSelectOption>
-                  <NativeSelectOption value="EXPIRING_SOON">
-                    即将过期
-                  </NativeSelectOption>
-                  <NativeSelectOption value="ACCESS_ADMIN">
-                    权限管理
-                  </NativeSelectOption>
-                </NativeSelect>
+                  placeholder="全部风险"
+                />
               </>
             ) : (
               <>
@@ -1434,49 +1432,59 @@ export function AccessAuditPage() {
                     aria-label="操作者"
                   />
                 </InputGroup>
-                <NativeSelect
+                <OptionCombobox
                   value={action ?? "all"}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     patchUrl({
-                      action:
-                        e.target.value === "all" ? null : e.target.value,
+                      action: (v ?? "all") === "all" ? null : (v ?? "all"),
                     })
                   }
+                  options={[
+                    { value: "all", label: "全部动作" },
+                    {
+                      value: "UPDATE_ROLE_PERMISSIONS",
+                      label: "修改模块权限",
+                    },
+                    {
+                      value: "EMERGENCY_REVOKE_USER_ROLE",
+                      label: "紧急撤权",
+                    },
+                    {
+                      value: "UPDATE_FIELD_POLICY",
+                      label: "修改字段策略",
+                    },
+                    {
+                      value: "MANAGE_DATA_SCOPE",
+                      label: "修改数据范围",
+                    },
+                    { value: "QUERY_AUDIT", label: "查询审计" },
+                  ]}
+                  className="w-[10rem]"
+                  size="sm"
+                  allowClear={false}
                   aria-label="动作"
-                >
-                  <NativeSelectOption value="all">全部动作</NativeSelectOption>
-                  <NativeSelectOption value="UPDATE_ROLE_PERMISSIONS">
-                    修改模块权限
-                  </NativeSelectOption>
-                  <NativeSelectOption value="EMERGENCY_REVOKE_USER_ROLE">
-                    紧急撤权
-                  </NativeSelectOption>
-                  <NativeSelectOption value="UPDATE_FIELD_POLICY">
-                    修改字段策略
-                  </NativeSelectOption>
-                  <NativeSelectOption value="MANAGE_DATA_SCOPE">
-                    修改数据范围
-                  </NativeSelectOption>
-                  <NativeSelectOption value="QUERY_AUDIT">
-                    查询审计
-                  </NativeSelectOption>
-                </NativeSelect>
-                <NativeSelect
+                  placeholder="全部动作"
+                />
+                <OptionCombobox
                   value={resultFilter ?? "all"}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     patchUrl({
-                      result:
-                        e.target.value === "all" ? null : e.target.value,
+                      result: (v ?? "all") === "all" ? null : (v ?? "all"),
                     })
                   }
+                  options={[
+                    { value: "all", label: "全部结果" },
+                    { value: "SUCCESS", label: "成功" },
+                    { value: "DENIED", label: "拒绝" },
+                    { value: "FAILED", label: "失败" },
+                    { value: "UNKNOWN", label: "未知" },
+                  ]}
+                  className="w-[8rem]"
+                  size="sm"
+                  allowClear={false}
                   aria-label="结果"
-                >
-                  <NativeSelectOption value="all">全部结果</NativeSelectOption>
-                  <NativeSelectOption value="SUCCESS">成功</NativeSelectOption>
-                  <NativeSelectOption value="DENIED">拒绝</NativeSelectOption>
-                  <NativeSelectOption value="FAILED">失败</NativeSelectOption>
-                  <NativeSelectOption value="UNKNOWN">未知</NativeSelectOption>
-                </NativeSelect>
+                  placeholder="全部结果"
+                />
                 <details className="group relative">
                   <summary className="flex h-8 cursor-pointer list-none items-center rounded-lg border px-3 text-sm [&::-webkit-details-marker]:hidden">
                     高级筛选
@@ -1528,31 +1536,28 @@ export function AccessAuditPage() {
           <details className="group relative text-xs text-muted-foreground">
             <summary className="cursor-pointer">演示状态</summary>
             <div className="absolute right-0 z-30 mt-2 flex w-72 flex-col gap-2 rounded-xl border bg-popover p-3 shadow-lg">
-              <NativeSelect
+              <OptionCombobox
                 value="none"
-                onChange={(e) => {
-                  const v = e.target.value
+                onValueChange={(v) => {
+                  const next = v ?? "none"
                   void demoMutation.mutateAsync({
                     emptyReason:
-                      v === "none" ? null : (v as AccessEmptyReason),
+                      next === "none" ? null : (next as AccessEmptyReason),
                   })
                 }}
+                options={[
+                  { value: "none", label: "正常" },
+                  { value: "NO_MODULE_PERMISSION", label: "无模块权限" },
+                  { value: "NO_DATA_SCOPE", label: "无数据范围" },
+                  { value: "NO_RECORDS_IN_SCOPE", label: "范围内无记录" },
+                  { value: "FIELD_MASKED", label: "字段掩码" },
+                ]}
+                className="w-full"
+                size="sm"
+                allowClear={false}
                 aria-label="演示空态"
-              >
-                <NativeSelectOption value="none">正常</NativeSelectOption>
-                <NativeSelectOption value="NO_MODULE_PERMISSION">
-                  无模块权限
-                </NativeSelectOption>
-                <NativeSelectOption value="NO_DATA_SCOPE">
-                  无数据范围
-                </NativeSelectOption>
-                <NativeSelectOption value="NO_RECORDS_IN_SCOPE">
-                  范围内无记录
-                </NativeSelectOption>
-                <NativeSelectOption value="FIELD_MASKED">
-                  字段掩码
-                </NativeSelectOption>
-              </NativeSelect>
+                placeholder="演示空态"
+              />
               <Button
                 type="button"
                 size="sm"
@@ -2075,23 +2080,25 @@ export function AccessAuditPage() {
                     <form.AppField
                       name="reasonCode"
                       children={(field) => (
-                        <NativeSelect
+                        <OptionCombobox
                           id="w19-reason"
                           value={field.state.value}
-                          onChange={(e) =>
-                            field.handleChange(e.target.value)
+                          onValueChange={(v) =>
+                            field.handleChange(v ?? field.state.value)
                           }
-                        >
-                          <NativeSelectOption value="SECURITY_OPS">
-                            安全运维
-                          </NativeSelectOption>
-                          <NativeSelectOption value="EMERGENCY_STOP_LOSS">
-                            紧急止损
-                          </NativeSelectOption>
-                          <NativeSelectOption value="ORG_CHANGE">
-                            组织调整
-                          </NativeSelectOption>
-                        </NativeSelect>
+                          options={[
+                            { value: "SECURITY_OPS", label: "安全运维" },
+                            {
+                              value: "EMERGENCY_STOP_LOSS",
+                              label: "紧急止损",
+                            },
+                            { value: "ORG_CHANGE", label: "组织调整" },
+                          ]}
+                          className="w-full"
+                          allowClear={false}
+                          aria-label="变更原因"
+                          placeholder="变更原因"
+                        />
                       )}
                     />
                   </div>

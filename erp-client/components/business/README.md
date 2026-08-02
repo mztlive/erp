@@ -27,7 +27,7 @@
 | 页面公共区 | `PageHeader`（`page` / `object-chrome`）、`PageActions`、`MetricStrip`、`MetricItem`（`detailMode`）、`DataFreshness` | `page.tsx` | 面包屑、标题、动作、工作台统计、数据水位；M4 只用 object-chrome |
 | 高密度列表 | `DataTable`、`DataTableViewOptions`、`DataTablePagination` | `data-table.tsx` | 服务端分页、排序、筛选、显隐、固定、调宽、跨页稳定选择和键盘行导航 |
 | 列表编排 | `ListToolbar`、`SelectionScopeBar`、`StatusMatrix`、`BusinessTableFrame`、`QuickPreviewSheet` | `list.tsx` | 常驻筛选、选择范围、多轨状态、加载/空态/失败、右侧快速预览 |
-| 选择与筛选 | `BusinessObjectCombobox`、`SavedViewPicker`、`AdvancedFilterSheet` | `selectors.tsx` | 有效业务对象选择、个人/团队视图、高级筛选 |
+| 选择与筛选 | `OptionCombobox`、`BusinessObjectCombobox`、业务实体 Combobox（合同/销售单/客户/采购单/供应商/商品）、`SavedViewPicker`、`AdvancedFilterSheet` | `option-combobox.tsx`、`entity-comboboxes.tsx`、`selectors.tsx` | 可搜索枚举/筛选、有效业务对象选择、个人/团队视图、高级筛选；**禁止**在业务页继续使用 `Select` / `NativeSelect` |
 | 值与状态 | `BusinessStatusBadge`、`StatusTrackSummary`、`BusinessObjectRef`、`MoneyValue`、`QuantityValue`、`RateValue`、`DocumentTotals` | `values.tsx` | 多维状态、稳定对象引用、精确十进制展示、含税/不含税口径 |
 | 正式单据/对象详情 | `DocumentHeader`（M4 用 `density="compact"` + `meta`）、`DocumentSummary`、`DocumentSection`、`RevisionTimeline`、`RelatedDocumentList`、`ResponsibilityPanel` | `document.tsx` | 销售、采购、客户、票款、发票、结算等详情与版本追溯；唯一身份头 |
 | 纸质单据预览 | `PaperDocument` | `paper-document.tsx` | 销售、采购、出入库、收付款和发票等正式单据的 A4 风格查看与打印投影 |
@@ -92,6 +92,50 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 - 单击非交互区域用于快速预览；`Enter` 优先打开详情，未配置详情动作时回退到快速预览；
   业务列中的明确按钮/链接提供鼠标详情入口。上下方向键在当前结果行间移动，行内交互控件
   不会冒泡触发行级动作。
+
+## 可搜索 Combobox 约定
+
+筛选条、表单枚举与业务对象选择统一使用 Combobox（基于 `components/ui/combobox`），**不要**再使用
+`Select` / `NativeSelect`。
+
+| 场景 | 组件 | 说明 |
+| --- | --- | --- |
+| 状态/环境/角色等枚举与筛选 | `OptionCombobox` | `{ value, label }[]`，内置搜索；`allowClear={false}` 用于必选筛选 |
+| 有效合同 / 销售单 / 客户 / 采购单 / 供应商 / 商品 | `ContractCombobox` 等 | 展示编号、状态与摘要；数据由 feature Query 注入，组件本身不请求 |
+| 通用带状态业务对象 | `BusinessObjectCombobox` | 上述实体 Combobox 的底层 |
+| TanStack Form 枚举字段 | `field.SelectField` / `ComboboxField` | 已绑定 `OptionCombobox` |
+
+```tsx
+// 筛选条
+<OptionCombobox
+  value={status}
+  onValueChange={(v) => setStatus(v ?? "all")}
+  options={[
+    { value: "all", label: "全部状态" },
+    { value: "EFFECTIVE", label: "生效" },
+  ]}
+  size="sm"
+  className="w-[10rem]"
+  allowClear={false}
+  aria-label="状态"
+/>
+
+// 业务实体（Query 结果映射后传入）
+<ContractCombobox
+  contracts={rows.map((r) => ({
+    contractId: r.contractId,
+    contractNo: r.contractNo,
+    customerName: r.customer.displayName,
+    statusLabel: r.statusLabel,
+    statusTone: r.statusTone,
+    revisionNo: r.revisionNo,
+    validTo: r.validTo,
+  }))}
+  value={contractId}
+  onValueChange={setContractId}
+  loading={query.isPending}
+/>
+```
 
 ## 组合准则
 

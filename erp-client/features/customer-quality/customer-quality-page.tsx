@@ -33,6 +33,7 @@ import {
   MetricItem,
   MetricStrip,
   MoneyValue,
+  OptionCombobox,
   PageActions,
   PageHeader,
 } from "@/components/business"
@@ -70,10 +71,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   useCustomerQualityExportJobQuery,
@@ -1121,90 +1118,98 @@ export function CustomerQualityPage() {
             {periodPolicy?.presets?.length ? (
               <div className="space-y-1.5">
                 <Label htmlFor="cq-preset">快捷期间</Label>
-                <NativeSelect
+                <OptionCombobox
                   id="cq-preset"
                   value={periodPreset ?? ""}
-                  onChange={(e) => {
-                    const id = e.target.value
+                  onValueChange={(v) => {
+                    const id = v ?? ""
                     const preset = periodPolicy.presets?.find((p) => p.id === id)
                     if (preset) applyPreset(preset.id, preset.from, preset.to)
                     else patchUrl({ periodPreset: null })
                   }}
+                  options={[
+                    { value: "", label: "自定义" },
+                    ...periodPolicy.presets.map((p) => ({
+                      value: p.id,
+                      label: p.label,
+                    })),
+                  ]}
                   className="w-40"
-                >
-                  <NativeSelectOption value="">自定义</NativeSelectOption>
-                  {periodPolicy.presets.map((p) => (
-                    <NativeSelectOption key={p.id} value={p.id}>
-                      {p.label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  size="sm"
+                  allowClear={false}
+                  aria-label="快捷期间"
+                  placeholder="自定义"
+                />
               </div>
             ) : null}
             <div className="space-y-1.5">
               <Label htmlFor="cq-funds">票款口径</Label>
-              <NativeSelect
+              <OptionCombobox
                 id="cq-funds"
                 value={fundsReview}
-                onChange={(e) =>
+                onValueChange={(v) =>
                   patchUrl({
                     fundsReview:
-                      e.target.value === "reviewed_only"
+                      (v ?? "all") === "reviewed_only"
                         ? "reviewed_only"
                         : null,
                   })
                 }
+                options={[
+                  { value: "all", label: "全部授权记录" },
+                  { value: "reviewed_only", label: "仅已复核卡券票款" },
+                ]}
                 className="w-44"
-              >
-                <NativeSelectOption value="all">全部授权记录</NativeSelectOption>
-                <NativeSelectOption value="reviewed_only">
-                  仅已复核卡券票款
-                </NativeSelectOption>
-              </NativeSelect>
+                size="sm"
+                allowClear={false}
+                aria-label="票款口径"
+                placeholder="票款口径"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cq-nature">业务性质</Label>
-              <NativeSelect
+              <OptionCombobox
                 id="cq-nature"
                 value={businessType ?? ""}
-                onChange={(e) =>
+                onValueChange={(v) =>
                   patchUrl({
-                    businessType: e.target.value || null,
+                    businessType: v || null,
                   })
                 }
+                options={[
+                  { value: "", label: "全部" },
+                  { value: "VOUCHER", label: "卡券" },
+                  { value: "GOODS_SERVICE", label: "非卡券" },
+                ]}
                 className="w-36"
-              >
-                <NativeSelectOption value="">全部</NativeSelectOption>
-                <NativeSelectOption value="VOUCHER">卡券</NativeSelectOption>
-                <NativeSelectOption value="GOODS_SERVICE">
-                  非卡券
-                </NativeSelectOption>
-              </NativeSelect>
+                size="sm"
+                allowClear={false}
+                aria-label="业务性质"
+                placeholder="全部"
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cq-sort">排序</Label>
-              <NativeSelect
+              <OptionCombobox
                 id="cq-sort"
                 value={sort}
-                onChange={(e) => patchUrl({ sort: e.target.value })}
+                onValueChange={(v) => patchUrl({ sort: v ?? sort })}
+                options={[
+                  { value: "salesGrossAmount:desc", label: "成交金额降序" },
+                  {
+                    value: "actualProfitLossNet:desc",
+                    label: "实际盈亏降序",
+                  },
+                  { value: "overdueGross:desc", label: "逾期金额降序" },
+                  { value: "costCoverageRate:asc", label: "覆盖率升序" },
+                  { value: "latestBusinessAt:desc", label: "最近业务" },
+                ]}
                 className="w-44"
-              >
-                <NativeSelectOption value="salesGrossAmount:desc">
-                  成交金额降序
-                </NativeSelectOption>
-                <NativeSelectOption value="actualProfitLossNet:desc">
-                  实际盈亏降序
-                </NativeSelectOption>
-                <NativeSelectOption value="overdueGross:desc">
-                  逾期金额降序
-                </NativeSelectOption>
-                <NativeSelectOption value="costCoverageRate:asc">
-                  覆盖率升序
-                </NativeSelectOption>
-                <NativeSelectOption value="latestBusinessAt:desc">
-                  最近业务
-                </NativeSelectOption>
-              </NativeSelect>
+                size="sm"
+                allowClear={false}
+                aria-label="排序"
+                placeholder="排序"
+              />
             </div>
             <div className="min-w-[12rem] flex-1 space-y-1.5">
               <Label htmlFor="cq-q">搜索客户</Label>

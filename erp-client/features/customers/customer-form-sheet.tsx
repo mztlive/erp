@@ -6,14 +6,11 @@ import { z } from "zod"
 import {
   ConflictResolutionDialog,
   FormalActionResult,
+  OptionCombobox,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import {
   Sheet,
   SheetContent,
@@ -177,21 +174,21 @@ export function CustomerCreateSheet({
 
           <div className="space-y-2">
             <Label htmlFor="create-simulate">演示结果（会话模拟）</Label>
-            <NativeSelect
+            <OptionCombobox
               id="create-simulate"
               value={simulate}
-              onChange={(e) =>
-                setSimulate(e.target.value as "ok" | "conflict" | "unknown")
+              onValueChange={(v) =>
+                setSimulate((v ?? "ok") as "ok" | "conflict" | "unknown")
               }
-            >
-              <NativeSelectOption value="ok">正常成功</NativeSelectOption>
-              <NativeSelectOption value="conflict">
-                重复候选冲突（保留输入）
-              </NativeSelectOption>
-              <NativeSelectOption value="unknown">
-                结果不确定（保留输入）
-              </NativeSelectOption>
-            </NativeSelect>
+              options={[
+                { value: "ok", label: "正常成功" },
+                { value: "conflict", label: "重复候选冲突（保留输入）" },
+                { value: "unknown", label: "结果不确定（保留输入）" },
+              ]}
+              allowClear={false}
+              aria-label="演示结果（会话模拟）"
+              placeholder="请选择演示结果"
+            />
           </div>
 
           {result?.outcome === "succeeded" ? (
@@ -399,21 +396,21 @@ export function CustomerReviseSheet({
 
           <div className="space-y-2">
             <Label htmlFor="revise-simulate">演示结果（会话模拟）</Label>
-            <NativeSelect
+            <OptionCombobox
               id="revise-simulate"
               value={simulate}
-              onChange={(e) =>
-                setSimulate(e.target.value as "ok" | "conflict" | "unknown")
+              onValueChange={(v) =>
+                setSimulate((v ?? "ok") as "ok" | "conflict" | "unknown")
               }
-            >
-              <NativeSelectOption value="ok">正常成功</NativeSelectOption>
-              <NativeSelectOption value="conflict">
-                版本冲突（保留输入）
-              </NativeSelectOption>
-              <NativeSelectOption value="unknown">
-                结果不确定（保留输入）
-              </NativeSelectOption>
-            </NativeSelect>
+              options={[
+                { value: "ok", label: "正常成功" },
+                { value: "conflict", label: "版本冲突（保留输入）" },
+                { value: "unknown", label: "结果不确定（保留输入）" },
+              ]}
+              allowClear={false}
+              aria-label="演示结果（会话模拟）"
+              placeholder="请选择演示结果"
+            />
           </div>
 
           {result?.outcome === "succeeded" ? (

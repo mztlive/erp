@@ -20,6 +20,7 @@ import {
   MetricFilterItem,
   MetricStrip,
   MoneyValue,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -41,10 +42,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { PurchaseOrderPreviewPanel } from "@/features/purchase-orders/purchase-order-preview-panel"
 import {
@@ -896,29 +893,31 @@ export function PurchaseOrdersListPage() {
             ) : (
               <label className="grid gap-1.5 text-sm">
                 <span>选择创建依据</span>
-                <NativeSelect
+                <OptionCombobox
                   className="w-full"
                   value={selectedBasisId}
-                  onChange={(event) => setSelectedBasisId(event.target.value)}
-                >
-                  {basisFromUrl &&
-                  !openBases.some((b) => b.basisId === basisFromUrl) ? (
-                    <NativeSelectOption value={basisFromUrl}>
-                      {basisFromUrl} · 来自采购二次确认固定结果（无建单任务）
-                    </NativeSelectOption>
-                  ) : null}
-                  {openBases.map((basis) => (
-                    <NativeSelectOption
-                      key={basis.basisId}
-                      value={basis.basisId}
-                    >
-                      {basis.basisId} · {basis.salesOrderNo} ·{" "}
-                      {basis.supplierName} ·{" "}
-                      {PURCHASE_TYPE_LABEL[basis.purchaseType]} · 估{" "}
-                      {basis.estimatedGross}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  onValueChange={(v) =>
+                    setSelectedBasisId(v ?? selectedBasisId)
+                  }
+                  options={[
+                    ...(basisFromUrl &&
+                    !openBases.some((b) => b.basisId === basisFromUrl)
+                      ? [
+                          {
+                            value: basisFromUrl,
+                            label: `${basisFromUrl} · 来自采购二次确认固定结果（无建单任务）`,
+                          },
+                        ]
+                      : []),
+                    ...openBases.map((basis) => ({
+                      value: basis.basisId,
+                      label: `${basis.basisId} · ${basis.salesOrderNo} · ${basis.supplierName} · ${PURCHASE_TYPE_LABEL[basis.purchaseType]} · 估 ${basis.estimatedGross}`,
+                    })),
+                  ]}
+                  allowClear={false}
+                  aria-label="选择创建依据"
+                  placeholder="选择创建依据"
+                />
               </label>
             )}
             {selectedBasisId

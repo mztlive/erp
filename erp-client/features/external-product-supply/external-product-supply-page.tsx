@@ -21,6 +21,7 @@ import {
   DocumentSummary,
   FormalActionConfirmDialog,
   FormalActionResult,
+  OptionCombobox,
   PageHeader,
   RevisionTimeline,
   SequentialProcessBar,
@@ -51,13 +52,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -826,27 +820,26 @@ export function ExternalProductSupplyPage() {
           <ToggleGroupItem value="pending">待处理</ToggleGroupItem>
           <ToggleGroupItem value="held">已暂挂</ToggleGroupItem>
         </ToggleGroup>
-        <Select
+        <OptionCombobox
           value={demoRole}
-          onValueChange={(v) =>
+          onValueChange={(v) => {
+            if (!v) return
             replaceUrl({
               demoRole: v === "procurement" ? null : v,
               currentExternalProductId: null,
               currentWorkItemId: null,
             })
-          }
-        >
-          <SelectTrigger className="w-[9rem]" size="sm" aria-label="演示角色">
-            <SelectValue placeholder="角色" />
-          </SelectTrigger>
-          <SelectContent>
-            {(Object.keys(DEMO_ROLE_LABEL) as DemoRole[]).map((r) => (
-              <SelectItem key={r} value={r}>
-                {DEMO_ROLE_LABEL[r]}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          }}
+          options={(Object.keys(DEMO_ROLE_LABEL) as DemoRole[]).map((r) => ({
+            value: r,
+            label: DEMO_ROLE_LABEL[r],
+          }))}
+          className="w-[9rem]"
+          size="sm"
+          allowClear={false}
+          aria-label="演示角色"
+          placeholder="角色"
+        />
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
             type="checkbox"
@@ -1777,23 +1770,18 @@ export function ExternalProductSupplyPage() {
               {(field) => (
                 <div className="space-y-1">
                   <Label>原因</Label>
-                  <Select
+                  <OptionCombobox
                     value={field.state.value}
                     onValueChange={(v) =>
-                      field.handleChange(v as typeof field.state.value)
+                      field.handleChange(
+                        (v ?? field.state.value) as typeof field.state.value
+                      )
                     }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {HOLD_REASON_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={HOLD_REASON_OPTIONS}
+                    allowClear={false}
+                    aria-label="暂挂原因"
+                    placeholder="请选择原因"
+                  />
                 </div>
               )}
             </holdForm.AppField>
@@ -1837,23 +1825,18 @@ export function ExternalProductSupplyPage() {
               {(field) => (
                 <div className="space-y-1">
                   <Label>原因</Label>
-                  <Select
+                  <OptionCombobox
                     value={field.state.value}
                     onValueChange={(v) =>
-                      field.handleChange(v as typeof field.state.value)
+                      field.handleChange(
+                        (v ?? field.state.value) as typeof field.state.value
+                      )
                     }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {RETURN_REASON_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={RETURN_REASON_OPTIONS}
+                    allowClear={false}
+                    aria-label="退回原因"
+                    placeholder="请选择原因"
+                  />
                 </div>
               )}
             </returnForm.AppField>

@@ -32,6 +32,7 @@ import {
   ListToolbar,
   MetricItem,
   MetricStrip,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -68,10 +69,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -916,11 +913,11 @@ export function ActualProfitLossPage() {
         <CardContent className="flex flex-col gap-3 pt-4 sm:flex-row sm:flex-wrap sm:items-end">
           <div className="space-y-1.5">
             <Label htmlFor="period-preset">期间快捷</Label>
-            <NativeSelect
+            <OptionCombobox
               id="period-preset"
               value={periodPreset}
-              onChange={(e) => {
-                const preset = parsePreset(e.target.value)
+              onValueChange={(v) => {
+                const preset = parsePreset(v ?? "month-to-date")
                 const range = resolvePeriod(preset)
                 patchUrl({
                   periodPreset: preset,
@@ -929,15 +926,17 @@ export function ActualProfitLossPage() {
                 })
                 setPagination((p) => ({ ...p, pageIndex: 0 }))
               }}
-            >
-              <NativeSelectOption value="month-to-date">
-                本月迄今
-              </NativeSelectOption>
-              <NativeSelectOption value="last-month">上月</NativeSelectOption>
-              <NativeSelectOption value="quarter-to-date">
-                本季迄今
-              </NativeSelectOption>
-            </NativeSelect>
+              options={[
+                { value: "month-to-date", label: "本月迄今" },
+                { value: "last-month", label: "上月" },
+                { value: "quarter-to-date", label: "本季迄今" },
+              ]}
+              className="w-[10rem]"
+              size="sm"
+              allowClear={false}
+              aria-label="期间快捷"
+              placeholder="期间快捷"
+            />
           </div>
           <div className="space-y-1.5">
             <Label>已解析期间</Label>
@@ -947,29 +946,35 @@ export function ActualProfitLossPage() {
           </div>
           <div className="min-w-[16rem] flex-1 space-y-1.5">
             <Label htmlFor="period-basis">期间归属口径 periodBasis</Label>
-            <NativeSelect
+            <OptionCombobox
               id="period-basis"
               value={periodBasisUrl || ""}
-              onChange={(e) => {
-                const v = e.target.value
+              onValueChange={(v) => {
                 patchUrl({ periodBasis: v || null })
                 setPagination((p) => ({ ...p, pageIndex: 0 }))
               }}
-            >
-              <NativeSelectOption value="">
-                {basisConfig.configuredPeriodBasis
-                  ? "请确认归属口径"
-                  : "请显式选择归属口径（未配置）"}
-              </NativeSelectOption>
-              {basisConfig.allowedPeriodBases.map((opt) => (
-                <NativeSelectOption key={opt.code} value={opt.code}>
-                  {opt.label}
-                  {basisConfig.configuredPeriodBasis === opt.code
-                    ? "（服务端配置）"
-                    : ""}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              options={[
+                {
+                  value: "",
+                  label: basisConfig.configuredPeriodBasis
+                    ? "请确认归属口径"
+                    : "请显式选择归属口径（未配置）",
+                },
+                ...basisConfig.allowedPeriodBases.map((opt) => ({
+                  value: opt.code,
+                  label:
+                    opt.label +
+                    (basisConfig.configuredPeriodBasis === opt.code
+                      ? "（服务端配置）"
+                      : ""),
+                })),
+              ]}
+              className="w-full min-w-[16rem]"
+              size="sm"
+              allowClear={false}
+              aria-label="期间归属口径 periodBasis"
+              placeholder="请选择归属口径"
+            />
           </div>
           {periodBasisValid ? (
             <Badge variant="secondary">
@@ -1521,24 +1526,29 @@ export function ActualProfitLossPage() {
                     <Label htmlFor="coverage-filter" className="sr-only">
                       成本覆盖
                     </Label>
-                    <NativeSelect
+                    <OptionCombobox
                       id="coverage-filter"
                       value={coverage}
-                      onChange={(e) => {
+                      onValueChange={(v) => {
                         patchUrl({
-                          coverage: e.target.value as ProfitLossCoverage,
+                          coverage: (v ?? coverage) as ProfitLossCoverage,
                         })
                         setPagination((p) => ({ ...p, pageIndex: 0 }))
                       }}
-                    >
-                      {(
-                        Object.keys(COVERAGE_FILTER_LABEL) as ProfitLossCoverage[]
-                      ).map((key) => (
-                        <NativeSelectOption key={key} value={key}>
-                          {COVERAGE_FILTER_LABEL[key]}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                      options={(
+                        Object.keys(
+                          COVERAGE_FILTER_LABEL
+                        ) as ProfitLossCoverage[]
+                      ).map((key) => ({
+                        value: key,
+                        label: COVERAGE_FILTER_LABEL[key],
+                      }))}
+                      className="w-[10rem]"
+                      size="sm"
+                      allowClear={false}
+                      aria-label="成本覆盖"
+                      placeholder="成本覆盖"
+                    />
                   </div>
                 }
               />

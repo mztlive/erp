@@ -23,6 +23,7 @@ import {
   FormalActionResult,
   MetricItem,
   MetricStrip,
+  OptionCombobox,
   PageHeader,
   SequentialProcessBar,
 } from "@/components/business"
@@ -52,13 +53,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
@@ -1884,25 +1878,20 @@ export function CardFundsReviewPage() {
               children={(field) => (
                 <div className="space-y-1.5">
                   <Label>驳回原因</Label>
-                  <Select
+                  <OptionCombobox
                     value={field.state.value}
                     onValueChange={(v) =>
                       field.handleChange(v as RejectReasonCode)
                     }
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(
-                        Object.keys(REJECT_REASON_LABEL) as RejectReasonCode[]
-                      ).map((code) => (
-                        <SelectItem key={code} value={code}>
-                          {REJECT_REASON_LABEL[code]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={(
+                      Object.keys(REJECT_REASON_LABEL) as RejectReasonCode[]
+                    ).map((code) => ({
+                      value: code,
+                      label: REJECT_REASON_LABEL[code],
+                    }))}
+                    className="w-full"
+                    allowClear={false}
+                  />
                 </div>
               )}
             />

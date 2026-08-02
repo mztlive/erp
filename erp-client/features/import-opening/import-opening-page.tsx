@@ -28,6 +28,7 @@ import {
   ListToolbar,
   MetricItem,
   MetricStrip,
+  OptionCombobox,
   PageHeader,
   type ImportStageStates,
 } from "@/components/business"
@@ -47,13 +48,6 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatObjectSet } from "@/features/import-opening/api"
@@ -226,22 +220,21 @@ function RoleDemoBar({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-sm">
       <span className="text-muted-foreground">角色演示</span>
-      <Select
+      <OptionCombobox
         value={role}
         onValueChange={(v) => {
           if (v == null) return
           onChange(v as ViewerRoleDemo)
         }}
-      >
-        <SelectTrigger className="h-8 w-[11rem]" size="sm">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="SYSTEM_ADMIN">系统管理员</SelectItem>
-          <SelectItem value="WAREHOUSE_CONFIRMER">仓储确认人</SelectItem>
-          <SelectItem value="FINANCE_CONFIRMER">财务确认人</SelectItem>
-        </SelectContent>
-      </Select>
+        options={[
+          { value: "SYSTEM_ADMIN", label: "系统管理员" },
+          { value: "WAREHOUSE_CONFIRMER", label: "仓储确认人" },
+          { value: "FINANCE_CONFIRMER", label: "财务确认人" },
+        ]}
+        className="w-[11rem]"
+        size="sm"
+        allowClear={false}
+      />
       <span className="text-xs text-muted-foreground">
         当前：{roleLabel(role)}
         {role === "SYSTEM_ADMIN"
@@ -466,7 +459,7 @@ function BatchListView({
           <div className="flex flex-wrap items-end gap-2">
             <div className="space-y-1">
               <Label className="text-xs">对象集合</Label>
-              <Select
+              <OptionCombobox
                 value={urlState.objectType ?? "all"}
                 onValueChange={(v) => {
                   if (v == null) return
@@ -476,25 +469,24 @@ function BatchListView({
                     page: 1,
                   })
                 }}
-              >
-                <SelectTrigger className="h-8 w-[10rem]" size="sm">
-                  <SelectValue placeholder="全部" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部对象</SelectItem>
-                  {(
+                options={[
+                  { value: "all", label: "全部对象" },
+                  ...(
                     Object.keys(OBJECT_CODE_LABEL) as ImportObjectCode[]
-                  ).map((code) => (
-                    <SelectItem key={code} value={code}>
-                      {OBJECT_CODE_LABEL[code]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  ).map((code) => ({
+                    value: code,
+                    label: OBJECT_CODE_LABEL[code],
+                  })),
+                ]}
+                className="w-[10rem]"
+                size="sm"
+                placeholder="全部"
+                allowClear={false}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">状态</Label>
-              <Select
+              <OptionCombobox
                 value={urlState.status ?? "all"}
                 onValueChange={(v) => {
                   if (v == null) return
@@ -503,21 +495,20 @@ function BatchListView({
                     page: 1,
                   })
                 }}
-              >
-                <SelectTrigger className="h-8 w-[11rem]" size="sm">
-                  <SelectValue placeholder="全部状态" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部状态</SelectItem>
-                  {(
+                options={[
+                  { value: "all", label: "全部状态" },
+                  ...(
                     Object.keys(BATCH_STATUS_LABEL) as ImportBatchStatus[]
-                  ).map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {BATCH_STATUS_LABEL[s]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  ).map((s) => ({
+                    value: s,
+                    label: BATCH_STATUS_LABEL[s],
+                  })),
+                ]}
+                className="w-[11rem]"
+                size="sm"
+                placeholder="全部状态"
+                allowClear={false}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">批次号</Label>
@@ -1194,7 +1185,7 @@ function TrialSection({
       <div className="flex flex-wrap items-end gap-2">
         <div className="space-y-1">
           <Label className="text-xs">错误码</Label>
-          <Select
+          <OptionCombobox
             value={urlState.issueCode ?? "all"}
             onValueChange={(v) => {
               if (v == null) return
@@ -1203,25 +1194,23 @@ function TrialSection({
                 section: "trial",
               })
             }}
-          >
-            <SelectTrigger className="h-8 w-[12rem]" size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部错误码</SelectItem>
-              {(Object.keys(ISSUE_CODE_LABEL) as ImportIssueCode[]).map(
-                (code) => (
-                  <SelectItem key={code} value={code}>
-                    {code} · {ISSUE_CODE_LABEL[code]}
-                  </SelectItem>
-                )
-              )}
-            </SelectContent>
-          </Select>
+            options={[
+              { value: "all", label: "全部错误码" },
+              ...(Object.keys(ISSUE_CODE_LABEL) as ImportIssueCode[]).map(
+                (code) => ({
+                  value: code,
+                  label: `${code} · ${ISSUE_CODE_LABEL[code]}`,
+                })
+              ),
+            ]}
+            className="w-[12rem]"
+            size="sm"
+            allowClear={false}
+          />
         </div>
         <div className="space-y-1">
           <Label className="text-xs">对象</Label>
-          <Select
+          <OptionCombobox
             value={urlState.issueObjectType ?? "all"}
             onValueChange={(v) => {
               if (v == null) return
@@ -1231,23 +1220,21 @@ function TrialSection({
                 section: "trial",
               })
             }}
-          >
-            <SelectTrigger className="h-8 w-[10rem]" size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部对象</SelectItem>
-              {batch.sourceObjectSet.map((code) => (
-                <SelectItem key={code} value={code}>
-                  {OBJECT_CODE_LABEL[code]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={[
+              { value: "all", label: "全部对象" },
+              ...batch.sourceObjectSet.map((code) => ({
+                value: code,
+                label: OBJECT_CODE_LABEL[code],
+              })),
+            ]}
+            className="w-[10rem]"
+            size="sm"
+            allowClear={false}
+          />
         </div>
         <div className="space-y-1">
           <Label className="text-xs">处理状态</Label>
-          <Select
+          <OptionCombobox
             value={urlState.rowStatus ?? "all"}
             onValueChange={(v) => {
               if (v == null) return
@@ -1256,19 +1243,19 @@ function TrialSection({
                 section: "trial",
               })
             }}
-          >
-            <SelectTrigger className="h-8 w-[10rem]" size="sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部状态</SelectItem>
-              {(Object.keys(ROW_STATUS_LABEL) as IssueRowStatus[]).map((s) => (
-                <SelectItem key={s} value={s}>
-                  {ROW_STATUS_LABEL[s]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={[
+              { value: "all", label: "全部状态" },
+              ...(Object.keys(ROW_STATUS_LABEL) as IssueRowStatus[]).map(
+                (s) => ({
+                  value: s,
+                  label: ROW_STATUS_LABEL[s],
+                })
+              ),
+            ]}
+            className="w-[10rem]"
+            size="sm"
+            allowClear={false}
+          />
         </div>
         <Button
           type="button"

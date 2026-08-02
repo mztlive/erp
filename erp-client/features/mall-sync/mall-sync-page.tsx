@@ -25,6 +25,7 @@ import {
   MaintenanceBanner,
   MetricFilterItem,
   MetricStrip,
+  OptionCombobox,
   PageHeader,
   SequentialProcessBar,
 } from "@/components/business"
@@ -54,13 +55,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -1155,7 +1149,7 @@ export function MallSyncPage() {
         <CardContent className="flex flex-wrap items-end gap-4 pt-3">
           <div className="space-y-1">
             <Label className="text-xs">演示角色</Label>
-            <Select
+            <OptionCombobox
               value={demoRole}
               onValueChange={(v) => {
                 const role = parseRole(v)
@@ -1166,22 +1160,19 @@ export function MallSyncPage() {
                   view: view === "overview" && role !== "admin" ? defaultView : view,
                 })
               }}
-            >
-              <SelectTrigger className="w-40">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {(Object.keys(DEMO_ROLE_LABEL) as DemoRole[]).map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {DEMO_ROLE_LABEL[r]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={(Object.keys(DEMO_ROLE_LABEL) as DemoRole[]).map(
+                (r) => ({
+                  value: r,
+                  label: DEMO_ROLE_LABEL[r],
+                })
+              )}
+              className="w-40"
+              allowClear={false}
+            />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">主责阶段</Label>
-            <Select
+            <OptionCombobox
               value={stage}
               onValueChange={(v) => {
                 const s = parseStage(v) ?? "FIRST_PHASE_MALL_OWNED"
@@ -1191,20 +1182,20 @@ export function MallSyncPage() {
                   view: s === "SECOND_PHASE_ERP_OWNED" ? "history" : view,
                 })
               }}
-            >
-              <SelectTrigger className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="FIRST_PHASE_MALL_OWNED">
-                  第一阶段 · 商城主责
-                </SelectItem>
-                <SelectItem value="MIGRATION_FROZEN">迁移冻结</SelectItem>
-                <SelectItem value="SECOND_PHASE_ERP_OWNED">
-                  已封存 · ERP 主责
-                </SelectItem>
-              </SelectContent>
-            </Select>
+              options={[
+                {
+                  value: "FIRST_PHASE_MALL_OWNED",
+                  label: "第一阶段 · 商城主责",
+                },
+                { value: "MIGRATION_FROZEN", label: "迁移冻结" },
+                {
+                  value: "SECOND_PHASE_ERP_OWNED",
+                  label: "已封存 · ERP 主责",
+                },
+              ]}
+              className="w-48"
+              allowClear={false}
+            />
           </div>
           <div className="flex items-center gap-2">
             <Switch
@@ -2240,7 +2231,7 @@ export function MallSyncPage() {
               children={(field) => (
                 <div className="space-y-1.5">
                   <Label>原因</Label>
-                  <Select
+                  <OptionCombobox
                     value={field.state.value}
                     onValueChange={(v) => {
                       if (v)
@@ -2252,18 +2243,12 @@ export function MallSyncPage() {
                             | "OTHER"
                         )
                     }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DEFER_REASON_OPTIONS.map((o) => (
-                        <SelectItem key={o.value} value={o.value}>
-                          {o.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    options={DEFER_REASON_OPTIONS.map((o) => ({
+                      value: o.value,
+                      label: o.label,
+                    }))}
+                    allowClear={false}
+                  />
                 </div>
               )}
             />

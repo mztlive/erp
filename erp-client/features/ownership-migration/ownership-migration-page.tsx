@@ -27,6 +27,7 @@ import {
   MaintenanceBanner,
   MetricItem,
   MetricStrip,
+  OptionCombobox,
   PageHeader,
   type ImportStageStates,
 } from "@/components/business"
@@ -46,13 +47,6 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useIsMobile } from "@/hooks/use-mobile"
@@ -158,24 +152,20 @@ function RoleDemoBar({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-sm">
       <span className="text-muted-foreground">演示角色</span>
-      <Select
+      <OptionCombobox
         value={role}
         onValueChange={(v) => {
           if (v == null) return
           onChange(v as ViewerRoleDemo)
         }}
-      >
-        <SelectTrigger className="h-8 w-[14rem]" size="sm">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {(Object.keys(ROLE_LABEL) as ViewerRoleDemo[]).map((r) => (
-            <SelectItem key={r} value={r}>
-              {ROLE_LABEL[r]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        options={(Object.keys(ROLE_LABEL) as ViewerRoleDemo[]).map((r) => ({
+          value: r,
+          label: ROLE_LABEL[r],
+        }))}
+        className="w-[14rem]"
+        size="sm"
+        allowClear={false}
+      />
       <span className="text-xs text-muted-foreground">
         角色仅影响 allowedActions / 掩码，不写入业务记录
       </span>
@@ -613,20 +603,17 @@ function OverviewView({
               <div className="flex flex-wrap items-end gap-2">
                 <div className="space-y-1">
                   <Label className="text-xs">来源商城</Label>
-                  <Select
+                  <OptionCombobox
                     value={urlState.mall ?? MALL.id}
                     onValueChange={(v) => {
                       if (v == null) return
                       patchUrl({ mall: v, page: 1 })
                     }}
-                  >
-                    <SelectTrigger className="h-8 w-[12rem]" size="sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value={MALL.id}>{MALL.name}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    options={[{ value: MALL.id, label: MALL.name }]}
+                    className="w-[12rem]"
+                    size="sm"
+                    allowClear={false}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">客户</Label>
@@ -655,7 +642,7 @@ function OverviewView({
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">批次状态</Label>
-                  <Select
+                  <OptionCombobox
                     value={urlState.status ?? "open"}
                     onValueChange={(v) => {
                       if (v == null) return
@@ -664,25 +651,23 @@ function OverviewView({
                         page: 1,
                       })
                     }}
-                  >
-                    <SelectTrigger className="h-8 w-[11rem]" size="sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="open">未完成与失败</SelectItem>
-                      {(
+                    options={[
+                      { value: "open", label: "未完成与失败" },
+                      ...(
                         Object.keys(BATCH_STATUS_LABEL) as BatchStatus[]
-                      ).map((s) => (
-                        <SelectItem key={s} value={s}>
-                          {BATCH_STATUS_LABEL[s]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                      ).map((s) => ({
+                        value: s,
+                        label: BATCH_STATUS_LABEL[s],
+                      })),
+                    ]}
+                    className="w-[11rem]"
+                    size="sm"
+                    allowClear={false}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">确认状态</Label>
-                  <Select
+                  <OptionCombobox
                     value={urlState.confirmation ?? "all"}
                     onValueChange={(v) => {
                       if (v == null) return
@@ -694,22 +679,22 @@ function OverviewView({
                         page: 1,
                       })
                     }}
-                  >
-                    <SelectTrigger className="h-8 w-[10rem]" size="sm">
-                      <SelectValue placeholder="全部" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">全部确认</SelectItem>
-                      <SelectItem value="pending_sales">待销售</SelectItem>
-                      <SelectItem value="pending_finance">待财务</SelectItem>
-                      <SelectItem value="pending_baseline">待基线</SelectItem>
-                      <SelectItem value="invalidated">确认失效</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    options={[
+                      { value: "all", label: "全部确认" },
+                      { value: "pending_sales", label: "待销售" },
+                      { value: "pending_finance", label: "待财务" },
+                      { value: "pending_baseline", label: "待基线" },
+                      { value: "invalidated", label: "确认失效" },
+                    ]}
+                    className="w-[10rem]"
+                    size="sm"
+                    placeholder="全部"
+                    allowClear={false}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">阻塞类型</Label>
-                  <Select
+                  <OptionCombobox
                     value={urlState.blocker ?? "all"}
                     onValueChange={(v) => {
                       if (v == null) return
@@ -719,21 +704,20 @@ function OverviewView({
                         page: 1,
                       })
                     }}
-                  >
-                    <SelectTrigger className="h-8 w-[10rem]" size="sm">
-                      <SelectValue placeholder="全部" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">全部阻塞</SelectItem>
-                      {(Object.keys(BLOCKER_CODE_LABEL) as BlockerCode[]).map(
-                        (code) => (
-                          <SelectItem key={code} value={code}>
-                            {BLOCKER_CODE_LABEL[code]}
-                          </SelectItem>
-                        )
-                      )}
-                    </SelectContent>
-                  </Select>
+                    options={[
+                      { value: "all", label: "全部阻塞" },
+                      ...(Object.keys(BLOCKER_CODE_LABEL) as BlockerCode[]).map(
+                        (code) => ({
+                          value: code,
+                          label: BLOCKER_CODE_LABEL[code],
+                        })
+                      ),
+                    ]}
+                    className="w-[10rem]"
+                    size="sm"
+                    placeholder="全部"
+                    allowClear={false}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">搜索</Label>

@@ -25,6 +25,7 @@ import {
   MetricFilterItem,
   MetricStrip,
   MoneyValue,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -50,10 +51,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -1054,49 +1051,52 @@ export function CustomerReceivablesPage() {
                       <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
                         往来主体
                       </span>
-                      <NativeSelect
+                      <OptionCombobox
                         value={counterpartyPartyId ?? ""}
-                        onChange={(e) => {
+                        onValueChange={(v) => {
                           patchUrl({
-                            counterpartyId: e.target.value || null,
+                            counterpartyId: v || null,
                           })
                           setPagination((p) => ({ ...p, pageIndex: 0 }))
                         }}
+                        options={[
+                          { value: "", label: "全部主体" },
+                          ...counterparties.map((c) => ({
+                            value: c.counterpartyPartyId,
+                            label: c.counterpartyPartyName,
+                          })),
+                        ]}
                         className="w-52"
+                        size="sm"
+                        allowClear={false}
                         aria-label="筛选往来主体"
-                      >
-                        <NativeSelectOption value="">全部主体</NativeSelectOption>
-                        {counterparties.map((c) => (
-                          <NativeSelectOption
-                            key={c.counterpartyPartyId}
-                            value={c.counterpartyPartyId}
-                          >
-                            {c.counterpartyPartyName}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                        placeholder="全部主体"
+                      />
                     </label>
                     {view === "receivable" ? (
                       <label className="flex items-center gap-1.5 text-sm">
                         <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
                           到期
                         </span>
-                        <NativeSelect
+                        <OptionCombobox
                           value={due ?? "all"}
-                          onChange={(e) => {
-                            const v = e.target.value
-                            patchUrl({ due: v === "all" ? null : v })
+                          onValueChange={(v) => {
+                            const next = v ?? "all"
+                            patchUrl({ due: next === "all" ? null : next })
                             setPagination((p) => ({ ...p, pageIndex: 0 }))
                           }}
+                          options={(Object.keys(DUE_LABEL) as DueFilter[]).map(
+                            (k) => ({
+                              value: k,
+                              label: DUE_LABEL[k],
+                            })
+                          )}
                           className="w-32"
+                          size="sm"
+                          allowClear={false}
                           aria-label="筛选到期"
-                        >
-                          {(Object.keys(DUE_LABEL) as DueFilter[]).map((k) => (
-                            <NativeSelectOption key={k} value={k}>
-                              {DUE_LABEL[k]}
-                            </NativeSelectOption>
-                          ))}
-                        </NativeSelect>
+                          placeholder="到期"
+                        />
                       </label>
                     ) : null}
                   </>
@@ -1451,21 +1451,22 @@ export function CustomerReceivablesPage() {
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="pick-party">往来主体</Label>
-            <NativeSelect
+            <OptionCombobox
               id="pick-party"
               value={selectedPartyId}
-              onChange={(e) => setSelectedPartyId(e.target.value)}
-            >
-              <NativeSelectOption value="">请选择</NativeSelectOption>
-              {counterparties.map((c) => (
-                <NativeSelectOption
-                  key={c.counterpartyPartyId}
-                  value={c.counterpartyPartyId}
-                >
-                  {c.counterpartyPartyName}（{c.customerName}）
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              onValueChange={(v) => setSelectedPartyId(v ?? "")}
+              options={[
+                { value: "", label: "请选择" },
+                ...counterparties.map((c) => ({
+                  value: c.counterpartyPartyId,
+                  label: `${c.counterpartyPartyName}（${c.customerName}）`,
+                })),
+              ]}
+              className="w-full"
+              allowClear={false}
+              aria-label="往来主体"
+              placeholder="请选择"
+            />
           </div>
           <DialogFooter>
             <Button

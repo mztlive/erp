@@ -24,6 +24,7 @@ import {
   MetricFilterItem,
   MetricStrip,
   MoneyValue,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -55,10 +56,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -1070,62 +1067,71 @@ export function SupplierAccountsPage() {
           <div className="flex flex-wrap items-end gap-2">
             <div>
               <Label className="sr-only">供应商</Label>
-              <NativeSelect
+              <OptionCombobox
                 value={supplierId ?? ""}
-                onChange={(e) => {
+                onValueChange={(v) => {
                   setPagination((p) => ({ ...p, pageIndex: 0 }))
-                  patchUrl({ supplierId: e.target.value || null })
+                  patchUrl({ supplierId: v || null })
                 }}
-              >
-                <NativeSelectOption value="">全部供应商</NativeSelectOption>
-                {data.suppliers.map((s) => (
-                  <NativeSelectOption
-                    key={s.supplierId}
-                    value={s.supplierId}
-                  >
-                    {s.supplierName}
-                  </NativeSelectOption>
-                ))}
-              </NativeSelect>
+                options={[
+                  { value: "", label: "全部供应商" },
+                  ...data.suppliers.map((s) => ({
+                    value: s.supplierId,
+                    label: s.supplierName,
+                  })),
+                ]}
+                className="w-[10rem]"
+                size="sm"
+                allowClear={false}
+                aria-label="供应商"
+                placeholder="全部供应商"
+              />
             </div>
             {view === "payable" ? (
               <>
                 <div>
                   <Label className="sr-only">来源类型</Label>
-                  <NativeSelect
+                  <OptionCombobox
                     value={sourceType ?? ""}
-                    onChange={(e) => {
+                    onValueChange={(v) => {
                       setPagination((p) => ({ ...p, pageIndex: 0 }))
-                      patchUrl({ sourceType: e.target.value || null })
+                      patchUrl({ sourceType: v || null })
                     }}
-                  >
-                    <NativeSelectOption value="">全部来源</NativeSelectOption>
-                    <NativeSelectOption value="PURCHASE_ORDER">
-                      采购单
-                    </NativeSelectOption>
-                    <NativeSelectOption value="SUPPLIER_SETTLEMENT">
-                      供应商结算单
-                    </NativeSelectOption>
-                  </NativeSelect>
+                    options={[
+                      { value: "", label: "全部来源" },
+                      { value: "PURCHASE_ORDER", label: "采购单" },
+                      {
+                        value: "SUPPLIER_SETTLEMENT",
+                        label: "供应商结算单",
+                      },
+                    ]}
+                    className="w-[9rem]"
+                    size="sm"
+                    allowClear={false}
+                    aria-label="来源类型"
+                    placeholder="全部来源"
+                  />
                 </div>
                 <div>
                   <Label className="sr-only">状态</Label>
-                  <NativeSelect
+                  <OptionCombobox
                     value={status ?? ""}
-                    onChange={(e) => {
+                    onValueChange={(v) => {
                       setPagination((p) => ({ ...p, pageIndex: 0 }))
-                      patchUrl({ status: e.target.value || null })
+                      patchUrl({ status: v || null })
                     }}
-                  >
-                    <NativeSelectOption value="">全部状态</NativeSelectOption>
-                    <NativeSelectOption value="OPEN">未结</NativeSelectOption>
-                    <NativeSelectOption value="PARTIAL">
-                      部分结清
-                    </NativeSelectOption>
-                    <NativeSelectOption value="SETTLED">
-                      已结清
-                    </NativeSelectOption>
-                  </NativeSelect>
+                    options={[
+                      { value: "", label: "全部状态" },
+                      { value: "OPEN", label: "未结" },
+                      { value: "PARTIAL", label: "部分结清" },
+                      { value: "SETTLED", label: "已结清" },
+                    ]}
+                    className="w-[8rem]"
+                    size="sm"
+                    allowClear={false}
+                    aria-label="状态"
+                    placeholder="全部状态"
+                  />
                 </div>
               </>
             ) : null}
@@ -1469,16 +1475,18 @@ export function SupplierAccountsPage() {
           </DialogHeader>
           <div className="space-y-2">
             <Label>供应商</Label>
-            <NativeSelect
+            <OptionCombobox
               value={pickSupplierId}
-              onChange={(e) => setPickSupplierId(e.target.value)}
-            >
-              {data.suppliers.map((s) => (
-                <NativeSelectOption key={s.supplierId} value={s.supplierId}>
-                  {s.supplierName}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              onValueChange={(v) => setPickSupplierId(v ?? "")}
+              options={data.suppliers.map((s) => ({
+                value: s.supplierId,
+                label: s.supplierName,
+              }))}
+              className="w-full"
+              allowClear={false}
+              aria-label="供应商"
+              placeholder="选择供应商"
+            />
           </div>
           <DialogFooter>
             <Button

@@ -1,5 +1,6 @@
 "use client"
 
+import { OptionCombobox } from "@/components/business/option-combobox"
 import { useFieldContext } from "@/components/form/form-context"
 import { toFieldErrors } from "@/components/form/utils"
 import {
@@ -8,17 +9,17 @@ import {
   FieldError,
   FieldLabel,
 } from "@/components/ui/field"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { cn } from "@/lib/utils"
 
 export type SelectFieldOption = Readonly<{
   value: string
   label: string
   disabled?: boolean
+  keywords?: string
 }>
+
+/** @deprecated 使用 SelectFieldOption；保留别名兼容既有 import。 */
+export type ComboboxFieldOption = SelectFieldOption
 
 type SelectFieldProps = {
   label: string
@@ -28,11 +29,17 @@ type SelectFieldProps = {
   disabled?: boolean
   hideLabel?: boolean
   className?: string
+  /** 输入框宽度等；历史 prop 名 selectClassName 仍可用 */
   selectClassName?: string
+  inputClassName?: string
+  allowClear?: boolean
   onValueChange?: (value: string) => void
 }
 
-/** 绑定 TanStack Form field 的原生选择器；动态业务选项由 Query 结果注入。 */
+/**
+ * 绑定 TanStack Form field 的可搜索 Combobox。
+ * 动态业务选项由 Query 结果注入；业务实体优先用 ContractCombobox 等专用组件。
+ */
 export function SelectField({
   label,
   options,
@@ -42,6 +49,8 @@ export function SelectField({
   hideLabel = false,
   className,
   selectClassName,
+  inputClassName,
+  allowClear = true,
   onValueChange,
 }: SelectFieldProps) {
   const field = useFieldContext<string>()
@@ -53,35 +62,28 @@ export function SelectField({
       <FieldLabel htmlFor={field.name} className={hideLabel ? "sr-only" : undefined}>
         {label}
       </FieldLabel>
-      <NativeSelect
+      <OptionCombobox
         id={field.name}
-        name={field.name}
-        value={field.state.value ?? ""}
+        options={options}
+        value={field.state.value || null}
         disabled={disabled}
+        placeholder={placeholder ?? "请选择"}
+        allowClear={allowClear}
+        aria-label={label}
         aria-invalid={isInvalid || undefined}
-        className={cn("w-full", selectClassName)}
+        inputClassName={cn("w-full", selectClassName, inputClassName)}
         onBlur={field.handleBlur}
-        onChange={(event) => {
-          const value = event.target.value
+        onValueChange={(next) => {
+          const value = next ?? ""
           field.handleChange(value)
           onValueChange?.(value)
         }}
-      >
-        {placeholder ? (
-          <NativeSelectOption value="">{placeholder}</NativeSelectOption>
-        ) : null}
-        {options.map((option) => (
-          <NativeSelectOption
-            key={option.value}
-            value={option.value}
-            disabled={option.disabled}
-          >
-            {option.label}
-          </NativeSelectOption>
-        ))}
-      </NativeSelect>
+      />
       {description ? <FieldDescription>{description}</FieldDescription> : null}
       {isInvalid ? <FieldError errors={errors} /> : null}
     </Field>
   )
 }
+
+/** 与 SelectField 相同；推荐新代码使用此命名。 */
+export const ComboboxField = SelectField

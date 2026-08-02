@@ -21,6 +21,7 @@ import {
   InterfaceErrorResolutionPanel,
   MetricItem,
   MetricStrip,
+  OptionCombobox,
   PageHeader,
   SequentialProcessBar,
   WorkTaskItem,
@@ -44,13 +45,6 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -987,7 +981,7 @@ export function IntegrationErrorsPage({
             ))}
           </ToggleGroup>
 
-          <Select
+          <OptionCombobox
             value={urlState.mode}
             onValueChange={(v) =>
               replaceUrl({
@@ -996,22 +990,16 @@ export function IntegrationErrorsPage({
                 differenceId: null,
               })
             }
-          >
-            <SelectTrigger className="w-[8rem]" size="sm" aria-label="模式">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]).map(
-                (m) => (
-                  <SelectItem key={m} value={m}>
-                    {MODE_LABEL[m]}
-                  </SelectItem>
-                )
-              )}
-            </SelectContent>
-          </Select>
+            options={(
+              Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]
+            ).map((m) => ({ value: m, label: MODE_LABEL[m] }))}
+            className="w-[8rem]"
+            size="sm"
+            aria-label="模式"
+            allowClear={false}
+          />
 
-          <Select
+          <OptionCombobox
             value={urlState.environment}
             onValueChange={(v) =>
               replaceUrl({
@@ -1020,22 +1008,16 @@ export function IntegrationErrorsPage({
                 differenceId: null,
               })
             }
-          >
-            <SelectTrigger className="w-[7rem]" size="sm" aria-label="环境">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(ENV_LABEL) as (keyof typeof ENV_LABEL)[]).map(
-                (e) => (
-                  <SelectItem key={e} value={e}>
-                    {ENV_LABEL[e]}
-                  </SelectItem>
-                )
-              )}
-            </SelectContent>
-          </Select>
+            options={(Object.keys(ENV_LABEL) as (keyof typeof ENV_LABEL)[]).map(
+              (e) => ({ value: e, label: ENV_LABEL[e] })
+            )}
+            className="w-[7rem]"
+            size="sm"
+            aria-label="环境"
+            allowClear={false}
+          />
 
-          <Select
+          <OptionCombobox
             value={urlState.errorClass ?? "all"}
             onValueChange={(v) =>
               replaceUrl({
@@ -1044,21 +1026,21 @@ export function IntegrationErrorsPage({
                 differenceId: null,
               })
             }
-          >
-            <SelectTrigger className="w-[10rem]" size="sm" aria-label="错误类别">
-              <SelectValue placeholder="错误类别" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">全部类别</SelectItem>
-              {Object.entries(ERROR_CLASS_LABEL).map(([k, label]) => (
-                <SelectItem key={k} value={k}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            options={[
+              { value: "all", label: "全部类别" },
+              ...Object.entries(ERROR_CLASS_LABEL).map(([k, label]) => ({
+                value: k,
+                label,
+              })),
+            ]}
+            className="w-[10rem]"
+            size="sm"
+            aria-label="错误类别"
+            placeholder="错误类别"
+            allowClear={false}
+          />
 
-          <Select
+          <OptionCombobox
             value={urlState.owner}
             onValueChange={(v) =>
               replaceUrl({
@@ -1067,20 +1049,14 @@ export function IntegrationErrorsPage({
                 differenceId: null,
               })
             }
-          >
-            <SelectTrigger className="w-[8rem]" size="sm" aria-label="责任人">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {(Object.keys(OWNER_LABEL) as (keyof typeof OWNER_LABEL)[]).map(
-                (o) => (
-                  <SelectItem key={o} value={o}>
-                    {OWNER_LABEL[o]}
-                  </SelectItem>
-                )
-              )}
-            </SelectContent>
-          </Select>
+            options={(
+              Object.keys(OWNER_LABEL) as (keyof typeof OWNER_LABEL)[]
+            ).map((o) => ({ value: o, label: OWNER_LABEL[o] }))}
+            className="w-[8rem]"
+            size="sm"
+            aria-label="责任人"
+            allowClear={false}
+          />
 
           <div className="flex items-center gap-2">
             <Label htmlFor="w29-auto-next" className="text-xs text-muted-foreground">
@@ -1820,30 +1796,21 @@ export function IntegrationErrorsPage({
                         </p>
                         {item.reconciliationReasonRegistry ? (
                           <>
-                            <Select
-                              value={reconReasonId}
+                            <OptionCombobox
+                              value={reconReasonId || null}
                               onValueChange={(v) => setReconReasonId(v ?? "")}
-                            >
-                              <SelectTrigger
-                                className="w-full max-w-md"
-                                size="sm"
-                                aria-label="注册原因"
-                              >
-                                <SelectValue placeholder="选择注册原因" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {item.reconciliationReasonRegistry.registeredReasons.map(
-                                  (r) => (
-                                    <SelectItem
-                                      key={r.registeredReasonId}
-                                      value={r.registeredReasonId}
-                                    >
-                                      {r.label}
-                                    </SelectItem>
-                                  )
-                                )}
-                              </SelectContent>
-                            </Select>
+                              options={item.reconciliationReasonRegistry.registeredReasons.map(
+                                (r) => ({
+                                  value: r.registeredReasonId,
+                                  label: r.label,
+                                })
+                              )}
+                              className="w-full max-w-md"
+                              size="sm"
+                              aria-label="注册原因"
+                              placeholder="选择注册原因"
+                              allowClear={false}
+                            />
                             <div className="flex flex-wrap gap-2">
                               <Button
                                 type="button"

@@ -19,6 +19,7 @@ import {
   FormalActionConfirmDialog,
   FormalActionResult,
   MoneyValue,
+  OptionCombobox,
   PageHeader,
   StatusTrackSummary,
 } from "@/components/business"
@@ -44,10 +45,6 @@ import {
   DescriptionTerm,
 } from "@/components/ui/description-list"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import {
   Table,
@@ -1266,19 +1263,20 @@ export function SupplierOrderCenterPage({
                   <deferForm.AppField
                     name="reasonCode"
                     children={(field) => (
-                      <NativeSelect
+                      <OptionCombobox
                         value={field.state.value}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                      >
-                        {DEFER_REASON_OPTIONS.map((opt) => (
-                          <NativeSelectOption
-                            key={opt.value}
-                            value={opt.value}
-                          >
-                            {opt.label}
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                        onValueChange={(v) =>
+                          field.handleChange(v ?? field.state.value)
+                        }
+                        options={DEFER_REASON_OPTIONS.map((opt) => ({
+                          value: opt.value,
+                          label: opt.label,
+                        }))}
+                        className="w-full"
+                        allowClear={false}
+                        aria-label="原因"
+                        placeholder="选择原因"
+                      />
                     )}
                   />
                 </div>

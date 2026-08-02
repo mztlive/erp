@@ -20,6 +20,7 @@ import {
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
+  OptionCombobox,
   PageHeader,
   QuickPreviewSheet,
 } from "@/components/business"
@@ -35,10 +36,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import { MALLS } from "@/features/product-publications/api"
 import { usePublicationListQuery } from "@/features/product-publications/queries"
@@ -473,62 +470,70 @@ export function ProductPublicationsListPage() {
         }
         filters={
           <div className="flex flex-wrap items-center gap-2">
-            <NativeSelect
+            <OptionCombobox
               value={mallId ?? "all"}
-              onChange={(e) =>
+              onValueChange={(v) => {
+                const next = v ?? "all"
                 replaceParams({
-                  mall:
-                    e.target.value === "all" ? undefined : e.target.value,
+                  mall: next === "all" ? undefined : next,
                 })
-              }
+              }}
+              options={[
+                { value: "all", label: "全部商城" },
+                ...MALLS.map((m) => ({
+                  value: m.id,
+                  label: m.name,
+                })),
+              ]}
               className="w-36"
+              size="sm"
+              allowClear={false}
               aria-label="目标商城"
-            >
-              <NativeSelectOption value="all">全部商城</NativeSelectOption>
-              {MALLS.map((m) => (
-                <NativeSelectOption key={m.id} value={m.id}>
-                  {m.name}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            <NativeSelect
+              placeholder="全部商城"
+            />
+            <OptionCombobox
               value={publicationStatus}
-              onChange={(e) =>
-                replaceParams({ publicationStatus: e.target.value })
+              onValueChange={(v) =>
+                replaceParams({ publicationStatus: v ?? "all" })
               }
+              options={[
+                { value: "all", label: "发布状态" },
+                ...(
+                  Object.keys(PUBLICATION_STATUS_LABEL) as Array<
+                    keyof typeof PUBLICATION_STATUS_LABEL
+                  >
+                ).map((k) => ({
+                  value: k,
+                  label: PUBLICATION_STATUS_LABEL[k],
+                })),
+              ]}
               className="w-36"
+              size="sm"
+              allowClear={false}
               aria-label="发布状态"
-            >
-              <NativeSelectOption value="all">发布状态</NativeSelectOption>
-              {(
-                Object.keys(PUBLICATION_STATUS_LABEL) as Array<
-                  keyof typeof PUBLICATION_STATUS_LABEL
-                >
-              ).map((k) => (
-                <NativeSelectOption key={k} value={k}>
-                  {PUBLICATION_STATUS_LABEL[k]}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
-            <NativeSelect
+              placeholder="发布状态"
+            />
+            <OptionCombobox
               value={deliveryStatus}
-              onChange={(e) =>
+              onValueChange={(v) =>
                 replaceParams({
-                  deliveryStatus: e.target.value,
+                  deliveryStatus: v ?? "all",
                   metric: undefined,
                 })
               }
+              options={[
+                { value: "all", label: "投递状态" },
+                { value: "pending_confirm", label: "待商城确认" },
+                { value: "failed", label: "失败" },
+                { value: "handoff", label: "转人工" },
+                { value: "acked", label: "已确认" },
+              ]}
               className="w-40"
+              size="sm"
+              allowClear={false}
               aria-label="投递状态"
-            >
-              <NativeSelectOption value="all">投递状态</NativeSelectOption>
-              <NativeSelectOption value="pending_confirm">
-                待商城确认
-              </NativeSelectOption>
-              <NativeSelectOption value="failed">失败</NativeSelectOption>
-              <NativeSelectOption value="handoff">转人工</NativeSelectOption>
-              <NativeSelectOption value="acked">已确认</NativeSelectOption>
-            </NativeSelect>
+              placeholder="投递状态"
+            />
             {(qParam ||
               mallId ||
               publicationStatus !== "all" ||

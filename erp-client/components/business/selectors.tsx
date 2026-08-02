@@ -3,7 +3,6 @@
 import * as React from "react"
 import { SlidersHorizontalIcon } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Combobox,
@@ -13,13 +12,7 @@ import {
   ComboboxItem,
   ComboboxList,
 } from "@/components/ui/combobox"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { OptionCombobox } from "@/components/business/option-combobox"
 import {
   Sheet,
   SheetContent,
@@ -85,6 +78,21 @@ function BusinessObjectCombobox({
       itemToStringLabel={(item) => item.label}
       itemToStringValue={(item) => item.id}
       isItemEqualToValue={(item, current) => item.id === current.id}
+      filter={(item, query) => {
+        const q = query.trim().toLowerCase()
+        if (!q) return true
+        const haystack = [
+          item.label,
+          item.code,
+          item.description,
+          item.validUntil,
+          item.status.label,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+        return haystack.includes(q)
+      }}
       disabled={disabled}
       required={required}
     >
@@ -158,32 +166,33 @@ function SavedViewPicker({
   actions,
   className,
 }: SavedViewPickerProps) {
+  const options = React.useMemo(
+    () =>
+      views.map((view) => ({
+        value: view.id,
+        label: `${view.label}${view.scope === "team" ? " · 团队" : " · 个人"}${
+          view.readOnly ? " · 只读" : ""
+        }`,
+        keywords: view.label,
+      })),
+    [views]
+  )
+
   return (
     <div
       data-slot="saved-view-picker"
       className={cn("flex items-center gap-2", className)}
     >
-      <Select
-        items={views.map((view) => ({ value: view.id, label: view.label }))}
+      <OptionCombobox
+        options={options}
         value={value ?? null}
         onValueChange={(next) => onValueChange(next ?? undefined)}
+        placeholder={placeholder}
         disabled={disabled}
-      >
-        <SelectTrigger aria-label={placeholder}>
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {views.map((view) => (
-            <SelectItem key={view.id} value={view.id}>
-              <span>{view.label}</span>
-              <Badge variant={view.scope === "team" ? "info" : "neutral"}>
-                {view.scope === "team" ? "团队" : "个人"}
-              </Badge>
-              {view.readOnly ? <span className="sr-only">只读</span> : null}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        allowClear
+        aria-label={placeholder}
+        className="min-w-[12rem]"
+      />
       {actions}
     </div>
   )

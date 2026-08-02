@@ -11,6 +11,7 @@ import {
   DataFreshness,
   ListToolbar,
   MoneyValue,
+  OptionCombobox,
   PageActions,
   PageHeader,
 } from "@/components/business"
@@ -28,10 +29,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { CustomerCreateSheet } from "@/features/customers/customer-form-sheet"
 import {
@@ -182,20 +179,24 @@ export function CustomerCenterPage() {
                 </ToggleGroupItem>
               ))}
             </ToggleGroup>
-            <NativeSelect
+            <OptionCombobox
               aria-label="客户状态"
               value={status}
-              onChange={(e) =>
+              onValueChange={(v) =>
                 pushState({
-                  status: e.target.value as "active" | "disabled" | "all",
+                  status: (v ?? "active") as "active" | "disabled" | "all",
                 })
               }
-              className="w-auto"
-            >
-              <NativeSelectOption value="active">启用</NativeSelectOption>
-              <NativeSelectOption value="disabled">停用</NativeSelectOption>
-              <NativeSelectOption value="all">全部状态</NativeSelectOption>
-            </NativeSelect>
+              options={[
+                { value: "active", label: "启用" },
+                { value: "disabled", label: "停用" },
+                { value: "all", label: "全部状态" },
+              ]}
+              className="w-[7.5rem]"
+              size="sm"
+              allowClear={false}
+              placeholder="客户状态"
+            />
             <Button
               type="button"
               size="sm"

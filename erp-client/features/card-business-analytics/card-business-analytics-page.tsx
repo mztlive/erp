@@ -35,6 +35,7 @@ import {
   MetricItem,
   MetricStrip,
   MoneyValue,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -67,10 +68,6 @@ import {
   DescriptionTerm,
 } from "@/components/ui/description-list"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   useCardBusinessAnalyticsQuery,
@@ -806,19 +803,22 @@ export function CardBusinessAnalyticsPage() {
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="w28-dateBasis">日期口径</Label>
-                <NativeSelect
+                <OptionCombobox
                   id="w28-dateBasis"
                   value={explicitDateBasis}
-                  onChange={(e) =>
-                    setExplicitDateBasis(e.target.value as DateBasis)
+                  onValueChange={(v) =>
+                    setExplicitDateBasis((v ?? explicitDateBasis) as DateBasis)
                   }
-                >
-                  {(basisConfig?.allowedDateBases ?? []).map((b) => (
-                    <NativeSelectOption key={b.code} value={b.code}>
-                      {b.label}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  options={(basisConfig?.allowedDateBases ?? []).map((b) => ({
+                    value: b.code,
+                    label: b.label,
+                  }))}
+                  className="w-full"
+                  size="sm"
+                  allowClear={false}
+                  aria-label="日期口径"
+                  placeholder="日期口径"
+                />
               </div>
             </div>
             <Button
@@ -950,15 +950,23 @@ export function CardBusinessAnalyticsPage() {
         <CardContent className="flex flex-col gap-3 pt-4 sm:flex-row sm:flex-wrap sm:items-end">
           <div className="space-y-1.5">
             <Label htmlFor="w28-preset">期间快捷</Label>
-            <NativeSelect
+            <OptionCombobox
               id="w28-preset"
               value={periodFromUrl ? periodPreset : periodPreset}
-              onChange={(e) => applyPreset(e.target.value as PeriodPreset)}
-            >
-              <NativeSelectOption value="month-to-date">本月至今</NativeSelectOption>
-              <NativeSelectOption value="last-month">上月</NativeSelectOption>
-              <NativeSelectOption value="quarter-to-date">本季至今</NativeSelectOption>
-            </NativeSelect>
+              onValueChange={(v) =>
+                applyPreset((v ?? periodPreset) as PeriodPreset)
+              }
+              options={[
+                { value: "month-to-date", label: "本月至今" },
+                { value: "last-month", label: "上月" },
+                { value: "quarter-to-date", label: "本季至今" },
+              ]}
+              className="w-[10rem]"
+              size="sm"
+              allowClear={false}
+              aria-label="期间快捷"
+              placeholder="期间快捷"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="w28-filter-from">从</Label>
@@ -986,17 +994,22 @@ export function CardBusinessAnalyticsPage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="w28-filter-basis">日期口径</Label>
-            <NativeSelect
+            <OptionCombobox
               id="w28-filter-basis"
               value={dateBasisUrl}
-              onChange={(e) => patchUrl({ dateBasis: e.target.value })}
-            >
-              {(basisConfig?.allowedDateBases ?? []).map((b) => (
-                <NativeSelectOption key={b.code} value={b.code}>
-                  {b.label}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              onValueChange={(v) =>
+                patchUrl({ dateBasis: v ?? dateBasisUrl })
+              }
+              options={(basisConfig?.allowedDateBases ?? []).map((b) => ({
+                value: b.code,
+                label: b.label,
+              }))}
+              className="w-[12rem]"
+              size="sm"
+              allowClear={false}
+              aria-label="日期口径"
+              placeholder="日期口径"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="w28-customer">客户 ID</Label>
@@ -1024,51 +1037,64 @@ export function CardBusinessAnalyticsPage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="w28-costBasis">成本口径</Label>
-            <NativeSelect
+            <OptionCombobox
               id="w28-costBasis"
               value={costBasis?.join(",") ?? ""}
-              onChange={(e) =>
-                patchUrl({ costBasis: e.target.value || null })
-              }
-            >
-              <NativeSelectOption value="">全部</NativeSelectOption>
-              <NativeSelectOption value="ACTUAL">ACTUAL</NativeSelectOption>
-              <NativeSelectOption value="STANDARD">STANDARD</NativeSelectOption>
-              <NativeSelectOption value="NONE">NONE</NativeSelectOption>
-              <NativeSelectOption value="ACTUAL,STANDARD">
-                ACTUAL+STANDARD
-              </NativeSelectOption>
-            </NativeSelect>
+              onValueChange={(v) => patchUrl({ costBasis: v || null })}
+              options={[
+                { value: "", label: "全部" },
+                { value: "ACTUAL", label: "ACTUAL" },
+                { value: "STANDARD", label: "STANDARD" },
+                { value: "NONE", label: "NONE" },
+                { value: "ACTUAL,STANDARD", label: "ACTUAL+STANDARD" },
+              ]}
+              className="w-[11rem]"
+              size="sm"
+              allowClear={false}
+              aria-label="成本口径"
+              placeholder="成本口径"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="w28-expiry">履约期限</Label>
-            <NativeSelect
+            <OptionCombobox
               id="w28-expiry"
               value={expiryState}
-              onChange={(e) =>
-                patchUrl({ expiryState: e.target.value || null })
+              onValueChange={(v) =>
+                patchUrl({ expiryState: (v ?? "all") || null })
               }
-            >
-              <NativeSelectOption value="all">全部</NativeSelectOption>
-              <NativeSelectOption value="active">未到期</NativeSelectOption>
-              <NativeSelectOption value="expired">已到期</NativeSelectOption>
-            </NativeSelect>
+              options={[
+                { value: "all", label: "全部" },
+                { value: "active", label: "未到期" },
+                { value: "expired", label: "已到期" },
+              ]}
+              className="w-[8rem]"
+              size="sm"
+              allowClear={false}
+              aria-label="履约期限"
+              placeholder="履约期限"
+            />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="w28-dimension">分析视角</Label>
-            <NativeSelect
+            <OptionCombobox
               id="w28-dimension"
               value={dimension}
-              onChange={(e) => patchUrl({ dimension: e.target.value })}
-            >
-              {(
+              onValueChange={(v) =>
+                patchUrl({ dimension: v ?? dimension })
+              }
+              options={(
                 Object.keys(DIMENSION_LABEL) as CardBusinessDimension[]
-              ).map((k) => (
-                <NativeSelectOption key={k} value={k}>
-                  {DIMENSION_LABEL[k]}
-                </NativeSelectOption>
-              ))}
-            </NativeSelect>
+              ).map((k) => ({
+                value: k,
+                label: DIMENSION_LABEL[k],
+              }))}
+              className="w-[10rem]"
+              size="sm"
+              allowClear={false}
+              aria-label="分析视角"
+              placeholder="分析视角"
+            />
           </div>
         </CardContent>
       </Card>

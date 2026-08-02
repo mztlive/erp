@@ -22,6 +22,7 @@ import {
   MetricFilterItem,
   MetricStrip,
   MoneyValue,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -35,10 +36,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import {
   Popover,
   PopoverContent,
@@ -588,85 +585,64 @@ export function SalesOrdersListPage({
                     </div>
                     <label className="grid gap-1.5 text-sm">
                       <span>创建来源</span>
-                      <NativeSelect
-                        className="w-full"
+                      <OptionCombobox
                         value={originFilter}
-                        onChange={(event) => {
-                          setOriginFilter(event.target.value as OriginFilter)
+                        onValueChange={(v) => {
+                          setOriginFilter((v ?? "all") as OriginFilter)
                           resetPagination()
                         }}
-                      >
-                        <NativeSelectOption value="all">
-                          全部来源
-                        </NativeSelectOption>
-                        <NativeSelectOption value="erp">
-                          创建于 ERP
-                        </NativeSelectOption>
-                        <NativeSelectOption value="mall">
-                          创建于商城
-                        </NativeSelectOption>
-                      </NativeSelect>
+                        options={[
+                          { value: "all", label: "全部来源" },
+                          { value: "erp", label: "创建于 ERP" },
+                          { value: "mall", label: "创建于商城" },
+                        ]}
+                        allowClear={false}
+                        aria-label="创建来源"
+                        placeholder="创建来源"
+                      />
                     </label>
                     <label className="grid gap-1.5 text-sm">
                       <span>当前主责</span>
-                      <NativeSelect
-                        className="w-full"
+                      <OptionCombobox
                         value={ownerFilter}
-                        onChange={(event) => {
-                          setOwnerFilter(event.target.value as OwnerFilter)
+                        onValueChange={(v) => {
+                          setOwnerFilter((v ?? "all") as OwnerFilter)
                           resetPagination()
                         }}
-                      >
-                        <NativeSelectOption value="all">
-                          全部主责
-                        </NativeSelectOption>
-                        <NativeSelectOption value="erp">
-                          主责 ERP
-                        </NativeSelectOption>
-                        <NativeSelectOption value="mall">
-                          主责商城
-                        </NativeSelectOption>
-                      </NativeSelect>
+                        options={[
+                          { value: "all", label: "全部主责" },
+                          { value: "erp", label: "主责 ERP" },
+                          { value: "mall", label: "主责商城" },
+                        ]}
+                        allowClear={false}
+                        aria-label="当前主责"
+                        placeholder="当前主责"
+                      />
                     </label>
                     <label className="grid gap-1.5 text-sm">
                       <span>主状态</span>
-                      <NativeSelect
-                        className="w-full"
+                      <OptionCombobox
                         value={statusFilter}
-                        onChange={(event) => {
-                          setStatusFilter(event.target.value as StatusFilter)
+                        onValueChange={(v) => {
+                          setStatusFilter((v ?? "all") as StatusFilter)
                           resetPagination()
                         }}
-                      >
-                        <NativeSelectOption value="all">
-                          全部状态
-                        </NativeSelectOption>
-                        <NativeSelectOption value="待二次确认">
-                          待二次确认
-                        </NativeSelectOption>
-                        <NativeSelectOption value="待销售处理">
-                          待销售处理
-                        </NativeSelectOption>
-                        <NativeSelectOption value="待销售领导审批">
-                          待销售领导审批
-                        </NativeSelectOption>
-                        <NativeSelectOption value="待运营审批">
-                          待运营审批
-                        </NativeSelectOption>
-                        <NativeSelectOption value="履约中">
-                          履约中
-                        </NativeSelectOption>
-                        <NativeSelectOption value="已生效">
-                          已生效
-                        </NativeSelectOption>
-                        <NativeSelectOption value="已关闭">
-                          已关闭
-                        </NativeSelectOption>
-                        <NativeSelectOption value="草稿">草稿</NativeSelectOption>
-                        <NativeSelectOption value="已作废">
-                          已作废
-                        </NativeSelectOption>
-                      </NativeSelect>
+                        options={[
+                          { value: "all", label: "全部状态" },
+                          { value: "待二次确认", label: "待二次确认" },
+                          { value: "待销售处理", label: "待销售处理" },
+                          { value: "待销售领导审批", label: "待销售领导审批" },
+                          { value: "待运营审批", label: "待运营审批" },
+                          { value: "履约中", label: "履约中" },
+                          { value: "已生效", label: "已生效" },
+                          { value: "已关闭", label: "已关闭" },
+                          { value: "草稿", label: "草稿" },
+                          { value: "已作废", label: "已作废" },
+                        ]}
+                        allowClear={false}
+                        aria-label="主状态"
+                        placeholder="主状态"
+                      />
                     </label>
                     <Button
                       type="button"

@@ -21,6 +21,7 @@ import {
   DocumentSummary,
   FormalActionConfirmDialog,
   FormalActionResult,
+  OptionCombobox,
   PageHeader,
   RevisionTimeline,
   StatusTrackSummary,
@@ -41,10 +42,6 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import {
   useManualPauseMutation,
@@ -1082,23 +1079,33 @@ export function PublicationCenterPage({
                     {(field) => (
                       <div className="space-y-1.5">
                         <Label htmlFor="saleStatus">商城销售状态</Label>
-                        <NativeSelect
+                        <OptionCombobox
                           id="saleStatus"
                           value={field.state.value}
-                          onChange={(e) =>
-                            field.handleChange(e.target.value as SaleStatus)
+                          onValueChange={(v) =>
+                            field.handleChange(
+                              (v ?? field.state.value) as SaleStatus
+                            )
                           }
-                        >
-                          <NativeSelectOption value="ON_SALE">
-                            {SALE_STATUS_LABEL.ON_SALE}
-                          </NativeSelectOption>
-                          <NativeSelectOption value="OFF_SALE">
-                            {SALE_STATUS_LABEL.OFF_SALE}
-                          </NativeSelectOption>
-                          <NativeSelectOption value="PAUSED">
-                            {SALE_STATUS_LABEL.PAUSED}
-                          </NativeSelectOption>
-                        </NativeSelect>
+                          options={[
+                            {
+                              value: "ON_SALE",
+                              label: SALE_STATUS_LABEL.ON_SALE,
+                            },
+                            {
+                              value: "OFF_SALE",
+                              label: SALE_STATUS_LABEL.OFF_SALE,
+                            },
+                            {
+                              value: "PAUSED",
+                              label: SALE_STATUS_LABEL.PAUSED,
+                            },
+                          ]}
+                          className="w-full"
+                          allowClear={false}
+                          aria-label="商城销售状态"
+                          placeholder="商城销售状态"
+                        />
                         {data.status === "SAFETY_PAUSED" &&
                         field.state.value === "ON_SALE" ? (
                           <p className="text-xs text-destructive">

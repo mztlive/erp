@@ -26,6 +26,7 @@ import {
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -52,10 +53,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
@@ -1313,55 +1310,55 @@ export function InventoryLedgerPage() {
                   <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
                     仓库
                   </span>
-                  <NativeSelect
+                  <OptionCombobox
                     className="w-36"
                     value={warehouseId ?? "all"}
-                    onChange={(e) => {
-                      const v = e.target.value
+                    onValueChange={(v) => {
+                      const next = v ?? "all"
                       patchUrl({
-                        warehouseId: v === "all" ? null : v,
+                        warehouseId: next === "all" ? null : next,
                       })
                       resetPagination()
                     }}
+                    options={[
+                      { value: "all", label: "全部仓库" },
+                      ...data.warehouses.map((w) => ({
+                        value: w.id,
+                        label: w.name,
+                      })),
+                    ]}
+                    size="sm"
+                    allowClear={false}
                     aria-label="筛选仓库"
-                  >
-                    <NativeSelectOption value="all">全部仓库</NativeSelectOption>
-                    {data.warehouses.map((w) => (
-                      <NativeSelectOption key={w.id} value={w.id}>
-                        {w.name}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
+                    placeholder="全部仓库"
+                  />
                 </label>
                 {view === "balance" ? (
                   <label className="flex items-center gap-1.5 text-sm">
                     <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
                       可用状态
                     </span>
-                    <NativeSelect
+                    <OptionCombobox
                       className="w-28"
                       value={availability}
-                      onChange={(e) => {
+                      onValueChange={(v) => {
                         patchUrl({
-                          availability: e.target.value as InventoryAvailability,
+                          availability: (v ??
+                            "all") as InventoryAvailability,
                         })
                         resetPagination()
                       }}
+                      options={(
+                        ["all", "positive", "zero", "reserved"] as const
+                      ).map((a) => ({
+                        value: a,
+                        label: AVAILABILITY_LABEL[a],
+                      }))}
+                      size="sm"
+                      allowClear={false}
                       aria-label="筛选可用状态"
-                    >
-                      {(
-                        [
-                          "all",
-                          "positive",
-                          "zero",
-                          "reserved",
-                        ] as const
-                      ).map((a) => (
-                        <NativeSelectOption key={a} value={a}>
-                          {AVAILABILITY_LABEL[a]}
-                        </NativeSelectOption>
-                      ))}
-                    </NativeSelect>
+                      placeholder="可用状态"
+                    />
                   </label>
                 ) : null}
                 {(qParam ||
@@ -1856,22 +1853,25 @@ export function InventoryLedgerPage() {
                   <form.AppField
                     name="reasonType"
                     children={(field) => (
-                      <NativeSelect
+                      <OptionCombobox
                         id="reasonType"
                         value={field.state.value}
-                        onChange={(e) => {
+                        onValueChange={(v) => {
                           field.handleChange(
-                            e.target.value as AdjustmentReasonType
+                            (v ?? field.state.value) as AdjustmentReasonType
                           )
                         }}
-                      >
-                        {REASON_TYPE_OPTIONS.map((opt) => (
-                          <NativeSelectOption key={opt.value} value={opt.value}>
-                            {opt.label}（
-                            {opt.direction === "increase" ? "增加" : "减少"}）
-                          </NativeSelectOption>
-                        ))}
-                      </NativeSelect>
+                        options={REASON_TYPE_OPTIONS.map((opt) => ({
+                          value: opt.value,
+                          label: `${opt.label}（${
+                            opt.direction === "increase" ? "增加" : "减少"
+                          }）`,
+                        }))}
+                        className="w-full"
+                        allowClear={false}
+                        aria-label="原因类型"
+                        placeholder="原因类型"
+                      />
                     )}
                   />
                 </div>

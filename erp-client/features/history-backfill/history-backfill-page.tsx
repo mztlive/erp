@@ -28,6 +28,7 @@ import {
   ListToolbar,
   MetricItem,
   MetricStrip,
+  OptionCombobox,
   PageHeader,
   type ImportStageStates,
 } from "@/components/business"
@@ -47,13 +48,6 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import {
   Sheet,
   SheetContent,
@@ -243,24 +237,20 @@ function RoleDemoBar({
   return (
     <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-sm">
       <span className="text-muted-foreground">演示角色</span>
-      <Select
+      <OptionCombobox
         value={role}
         onValueChange={(v) => {
           if (v == null) return
           onChange(v as ViewerRoleDemo)
         }}
-      >
-        <SelectTrigger className="h-8 w-[12rem]" size="sm">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {(Object.keys(ROLE_LABEL) as ViewerRoleDemo[]).map((r) => (
-            <SelectItem key={r} value={r}>
-              {ROLE_LABEL[r]}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
+        options={(Object.keys(ROLE_LABEL) as ViewerRoleDemo[]).map((r) => ({
+          value: r,
+          label: ROLE_LABEL[r],
+        }))}
+        className="w-[12rem]"
+        size="sm"
+        allowClear={false}
+      />
     </div>
   )
 }
@@ -645,7 +635,7 @@ function JobListView({
           <div className="flex flex-wrap items-end gap-2">
             <div className="space-y-1">
               <Label className="text-xs">商城</Label>
-              <Select
+              <OptionCombobox
                 value={urlState.mallId ?? "all"}
                 onValueChange={(v) => {
                   if (v == null) return
@@ -654,23 +644,19 @@ function JobListView({
                     page: 1,
                   })
                 }}
-              >
-                <SelectTrigger className="h-8 w-[10rem]" size="sm">
-                  <SelectValue placeholder="全部商城" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部商城</SelectItem>
-                  {malls.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>
-                      {m.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={[
+                  { value: "all", label: "全部商城" },
+                  ...malls.map((m) => ({ value: m.id, label: m.name })),
+                ]}
+                className="w-[10rem]"
+                size="sm"
+                placeholder="全部商城"
+                allowClear={false}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">环境</Label>
-              <Select
+              <OptionCombobox
                 value={urlState.environment ?? "all"}
                 onValueChange={(v) => {
                   if (v == null) return
@@ -682,20 +668,20 @@ function JobListView({
                     page: 1,
                   })
                 }}
-              >
-                <SelectTrigger className="h-8 w-[9rem]" size="sm">
-                  <SelectValue placeholder="全部环境" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部环境</SelectItem>
-                  <SelectItem value="production">生产环境</SelectItem>
-                  <SelectItem value="verification">验证环境</SelectItem>
-                </SelectContent>
-              </Select>
+                options={[
+                  { value: "all", label: "全部环境" },
+                  { value: "production", label: "生产环境" },
+                  { value: "verification", label: "验证环境" },
+                ]}
+                className="w-[9rem]"
+                size="sm"
+                placeholder="全部环境"
+                allowClear={false}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">处理状态</Label>
-              <Select
+              <OptionCombobox
                 value={urlState.processingStatus ?? "all"}
                 onValueChange={(v) => {
                   if (v == null) return
@@ -707,27 +693,26 @@ function JobListView({
                     page: 1,
                   })
                 }}
-              >
-                <SelectTrigger className="h-8 w-[11rem]" size="sm">
-                  <SelectValue placeholder="全部" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部处理状态</SelectItem>
-                  {(
+                options={[
+                  { value: "all", label: "全部处理状态" },
+                  ...(
                     Object.keys(
                       PROCESSING_STATUS_LABEL
                     ) as HistoryBackfillProcessingStatus[]
-                  ).map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {PROCESSING_STATUS_LABEL[s]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  ).map((s) => ({
+                    value: s,
+                    label: PROCESSING_STATUS_LABEL[s],
+                  })),
+                ]}
+                className="w-[11rem]"
+                size="sm"
+                placeholder="全部"
+                allowClear={false}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">报告确认</Label>
-              <Select
+              <OptionCombobox
                 value={urlState.reportReviewStatus ?? "all"}
                 onValueChange={(v) => {
                   if (v == null) return
@@ -739,27 +724,26 @@ function JobListView({
                     page: 1,
                   })
                 }}
-              >
-                <SelectTrigger className="h-8 w-[11rem]" size="sm">
-                  <SelectValue placeholder="全部" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部确认状态</SelectItem>
-                  {(
+                options={[
+                  { value: "all", label: "全部确认状态" },
+                  ...(
                     Object.keys(
                       REPORT_REVIEW_STATUS_LABEL
                     ) as HistoryBackfillReportReviewStatus[]
-                  ).map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {REPORT_REVIEW_STATUS_LABEL[s]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                  ).map((s) => ({
+                    value: s,
+                    label: REPORT_REVIEW_STATUS_LABEL[s],
+                  })),
+                ]}
+                className="w-[11rem]"
+                size="sm"
+                placeholder="全部"
+                allowClear={false}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">成本口径</Label>
-              <Select
+              <OptionCombobox
                 value={urlState.basis ?? "all"}
                 onValueChange={(v) => {
                   if (v == null) return
@@ -768,17 +752,17 @@ function JobListView({
                     page: 1,
                   })
                 }}
-              >
-                <SelectTrigger className="h-8 w-[10rem]" size="sm">
-                  <SelectValue placeholder="全部" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">全部口径</SelectItem>
-                  <SelectItem value="ACTUAL">ACTUAL</SelectItem>
-                  <SelectItem value="STANDARD">STANDARD</SelectItem>
-                  <SelectItem value="NONE">NONE</SelectItem>
-                </SelectContent>
-              </Select>
+                options={[
+                  { value: "all", label: "全部口径" },
+                  { value: "ACTUAL", label: "ACTUAL" },
+                  { value: "STANDARD", label: "STANDARD" },
+                  { value: "NONE", label: "NONE" },
+                ]}
+                className="w-[10rem]"
+                size="sm"
+                placeholder="全部"
+                allowClear={false}
+              />
             </div>
             <div className="space-y-1">
               <Label className="text-xs">搜索</Label>
@@ -1571,7 +1555,7 @@ function ItemFilters({
         <>
           <div className="space-y-1">
             <Label className="text-xs">结果</Label>
-            <Select
+            <OptionCombobox
               value={urlState.result ?? "all"}
               onValueChange={(v) => {
                 if (v == null) return
@@ -1579,23 +1563,23 @@ function ItemFilters({
                   result: v === "all" ? undefined : (v as ItemResult),
                 })
               }}
-            >
-              <SelectTrigger className="h-8 w-[10rem]" size="sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部结果</SelectItem>
-                {(Object.keys(ITEM_RESULT_LABEL) as ItemResult[]).map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {ITEM_RESULT_LABEL[r]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              options={[
+                { value: "all", label: "全部结果" },
+                ...(Object.keys(ITEM_RESULT_LABEL) as ItemResult[]).map(
+                  (r) => ({
+                    value: r,
+                    label: ITEM_RESULT_LABEL[r],
+                  })
+                ),
+              ]}
+              className="w-[10rem]"
+              size="sm"
+              allowClear={false}
+            />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">记录类型</Label>
-            <Select
+            <OptionCombobox
               value={urlState.factType ?? "all"}
               onValueChange={(v) => {
                 if (v == null) return
@@ -1604,25 +1588,23 @@ function ItemFilters({
                     v === "all" ? undefined : (v as MallOrderFactType),
                 })
               }}
-            >
-              <SelectTrigger className="h-8 w-[12rem]" size="sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部五类</SelectItem>
-                {(Object.keys(FACT_TYPE_LABEL) as MallOrderFactType[]).map(
-                  (t) => (
-                    <SelectItem key={t} value={t}>
-                      {FACT_TYPE_LABEL[t]}
-                    </SelectItem>
-                  )
-                )}
-              </SelectContent>
-            </Select>
+              options={[
+                { value: "all", label: "全部五类" },
+                ...(Object.keys(FACT_TYPE_LABEL) as MallOrderFactType[]).map(
+                  (t) => ({
+                    value: t,
+                    label: FACT_TYPE_LABEL[t],
+                  })
+                ),
+              ]}
+              className="w-[12rem]"
+              size="sm"
+              allowClear={false}
+            />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">成本口径</Label>
-            <Select
+            <OptionCombobox
               value={urlState.costBasis ?? "all"}
               onValueChange={(v) => {
                 if (v == null) return
@@ -1630,17 +1612,16 @@ function ItemFilters({
                   costBasis: v === "all" ? undefined : (v as CostBasis),
                 })
               }}
-            >
-              <SelectTrigger className="h-8 w-[9rem]" size="sm">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="ACTUAL">ACTUAL</SelectItem>
-                <SelectItem value="STANDARD">STANDARD</SelectItem>
-                <SelectItem value="NONE">NONE</SelectItem>
-              </SelectContent>
-            </Select>
+              options={[
+                { value: "all", label: "全部" },
+                { value: "ACTUAL", label: "ACTUAL" },
+                { value: "STANDARD", label: "STANDARD" },
+                { value: "NONE", label: "NONE" },
+              ]}
+              className="w-[9rem]"
+              size="sm"
+              allowClear={false}
+            />
           </div>
         </>
       ) : null}

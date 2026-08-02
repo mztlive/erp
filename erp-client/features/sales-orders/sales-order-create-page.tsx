@@ -7,6 +7,7 @@ import { CircleAlertIcon, FilePlus2Icon, PlusIcon } from "lucide-react"
 import { z } from "zod"
 
 import {
+  ContractCombobox,
   DocumentSection,
   EditableLineItemTable,
   MoneyValue,
@@ -14,7 +15,7 @@ import {
   StickyTotalBar,
   type EditableLineItemColumn,
 } from "@/components/business"
-import { useAppForm } from "@/components/form"
+import { toFieldErrors, useAppForm } from "@/components/form"
 import {
   Alert,
   AlertDescription,
@@ -29,6 +30,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Field,
+  FieldError,
+  FieldLabel,
+} from "@/components/ui/field"
 import { useContractCenterQuery, useContractsForNewSalesOrderQuery } from "@/features/contracts/queries"
 import { contractPdfError } from "@/features/contracts/pdf"
 import { useCustomerCenterQuery } from "@/features/customers/queries"
@@ -367,16 +373,23 @@ export function SalesOrderCreatePage({
     },
   })
 
-  const contractOptions = React.useMemo(
+  const contractComboboxItems = React.useMemo(
     () =>
       (contractsQuery.data ?? [])
         .filter(
           (contract) =>
-            !initialCustomerId || contract.customer.customerId === initialCustomerId
+            !initialCustomerId ||
+            contract.customer.customerId === initialCustomerId
         )
-        .map((contract) => ({
-          value: contract.contractId,
-          label: `${contract.contractNo} · ${contract.customer.displayName} · v${contract.revisionNo}`,
+        .map((c) => ({
+          contractId: c.contractId,
+          contractNo: c.contractNo,
+          customerName: c.customer.displayName,
+          statusLabel: c.statusLabel,
+          statusTone: c.statusTone,
+          revisionNo: c.revisionNo,
+          validTo: c.validTo,
+          settlementPartyName: c.settlementParty.displayName,
         })),
     [contractsQuery.data, initialCustomerId]
   )
@@ -520,23 +533,47 @@ export function SalesOrderCreatePage({
                   contractSource === "existing" ? (
                     <div className="mt-4 grid gap-4 lg:grid-cols-2">
                       <form.AppField name="contractId">
-                        {(field) => (
-                          <field.SelectField
-                            label="已有有效合同"
-                            placeholder={
-                              contractsQuery.isPending
-                                ? "正在加载有效合同…"
-                                : contractOptions.length > 0
-                                  ? "请选择合同"
-                                  : "当前客户暂无可用合同"
-                            }
-                            options={contractOptions}
-                            disabled={
-                              contractsQuery.isPending || contractsQuery.isError
-                            }
-                            onValueChange={handleContractChange}
-                          />
-                        )}
+                        {(field) => {
+                          const isInvalid =
+                            field.state.meta.isTouched && !field.state.meta.isValid
+                          const errors = toFieldErrors(field.state.meta.errors)
+                          return (
+                            <Field data-invalid={isInvalid || undefined}>
+                              <FieldLabel htmlFor="contractId">
+                                已有有效合同
+                              </FieldLabel>
+                              <ContractCombobox
+                                value={field.state.value || undefined}
+                                onValueChange={(id) => {
+                                  const next = id ?? ""
+                                  field.handleChange(next)
+                                  handleContractChange(next)
+                                }}
+                                contracts={contractComboboxItems}
+                                disabled={
+                                  contractsQuery.isPending ||
+                                  contractsQuery.isError
+                                }
+                                loading={contractsQuery.isPending}
+                                placeholder={
+                                  contractsQuery.isPending
+                                    ? "正在加载有效合同…"
+                                    : contractComboboxItems.length > 0
+                                      ? "搜索合同编号或客户"
+                                      : "当前客户暂无可用合同"
+                                }
+                                emptyLabel={
+                                  contractComboboxItems.length > 0
+                                    ? "没有符合条件的合同"
+                                    : "当前客户暂无可用合同"
+                                }
+                              />
+                              {isInvalid ? (
+                                <FieldError errors={errors} />
+                              ) : null}
+                            </Field>
+                          )
+                        }}
                       </form.AppField>
                       <form.AppField name="contractRevisionLabel">
                         {(field) => (

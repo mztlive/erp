@@ -21,6 +21,7 @@ import {
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
+  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -42,10 +43,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
 import { ContractPreviewPanel } from "@/features/contracts/contract-preview-panel"
@@ -651,22 +648,24 @@ export function ContractsListPage({
                   <ToggleGroupItem value="EXPIRED">到期</ToggleGroupItem>
                   <ToggleGroupItem value="TERMINATED">终止</ToggleGroupItem>
                 </ToggleGroup>
-                <NativeSelect
+                <OptionCombobox
                   className="w-[9.5rem]"
                   value={metricKey}
                   aria-label="有效期视图"
-                  onChange={(event) => {
-                    setMetricKey(event.target.value as ContractMetricFilter)
+                  onValueChange={(v) => {
+                    setMetricKey((v ?? "all") as ContractMetricFilter)
                     resetPagination()
                   }}
-                >
-                  <NativeSelectOption value="all">有效期：全部</NativeSelectOption>
-                  <NativeSelectOption value="expiring_30d">
-                    30 天内到期
-                  </NativeSelectOption>
-                  <NativeSelectOption value="expired">已到期</NativeSelectOption>
-                  <NativeSelectOption value="terminated">已终止</NativeSelectOption>
-                </NativeSelect>
+                  options={[
+                    { value: "all", label: "有效期：全部" },
+                    { value: "expiring_30d", label: "30 天内到期" },
+                    { value: "expired", label: "已到期" },
+                    { value: "terminated", label: "已终止" },
+                  ]}
+                  size="sm"
+                  allowClear={false}
+                  placeholder="有效期视图"
+                />
               </>
             }
             actions={

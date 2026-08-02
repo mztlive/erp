@@ -19,6 +19,7 @@ import {
   FormalActionResult,
   MetricFilterItem,
   MetricStrip,
+  OptionCombobox,
   PageHeader,
   PrepaymentGate,
   SequentialProcessBar,
@@ -52,13 +53,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
@@ -1540,23 +1534,22 @@ export function FulfillmentOperationsPage() {
               children={(field) => (
                 <div className="space-y-2">
                   <Label htmlFor="defer-reason">暂挂原因</Label>
-                  <Select
+                  <OptionCombobox
+                    id="defer-reason"
                     value={field.state.value}
-                    onValueChange={(v) => field.handleChange(v as DeferReasonCode)}
-                  >
-                    <SelectTrigger id="defer-reason">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(
-                        Object.keys(DEFER_REASON_LABEL) as DeferReasonCode[]
-                      ).map((code) => (
-                        <SelectItem key={code} value={code}>
-                          {DEFER_REASON_LABEL[code]}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                    onValueChange={(v) =>
+                      field.handleChange((v ?? field.state.value) as DeferReasonCode)
+                    }
+                    options={(
+                      Object.keys(DEFER_REASON_LABEL) as DeferReasonCode[]
+                    ).map((code) => ({
+                      value: code,
+                      label: DEFER_REASON_LABEL[code],
+                    }))}
+                    allowClear={false}
+                    aria-label="暂挂原因"
+                    placeholder="请选择暂挂原因"
+                  />
                 </div>
               )}
             />
@@ -1906,25 +1899,28 @@ function FulfillmentTypeForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="el-result">履约结果</Label>
-            <Select
+            <OptionCombobox
+              id="el-result"
               value={draft.result}
               onValueChange={(v) =>
                 onChange({
                   ...draft,
-                  result: v as "SUCCESS" | "PARTIAL" | "FAILED",
+                  result: (v ?? draft.result) as
+                    | "SUCCESS"
+                    | "PARTIAL"
+                    | "FAILED",
                 })
               }
+              options={[
+                { value: "SUCCESS", label: "成功" },
+                { value: "PARTIAL", label: "部分成功" },
+                { value: "FAILED", label: "失败" },
+              ]}
+              allowClear={false}
               disabled={disabled}
-            >
-              <SelectTrigger id="el-result">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="SUCCESS">成功</SelectItem>
-                <SelectItem value="PARTIAL">部分成功</SelectItem>
-                <SelectItem value="FAILED">失败</SelectItem>
-              </SelectContent>
-            </Select>
+              aria-label="履约结果"
+              placeholder="请选择履约结果"
+            />
           </div>
         </div>
         {draft.lines.map((line, i) => (
@@ -1998,25 +1994,28 @@ function FulfillmentTypeForm({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="svc-result">履约结果</Label>
-          <Select
+          <OptionCombobox
+            id="svc-result"
             value={draft.result}
             onValueChange={(v) =>
               onChange({
                 ...draft,
-                result: v as "SUCCESS" | "PARTIAL" | "FAILED",
+                result: (v ?? draft.result) as
+                  | "SUCCESS"
+                  | "PARTIAL"
+                  | "FAILED",
               })
             }
+            options={[
+              { value: "SUCCESS", label: "成功" },
+              { value: "PARTIAL", label: "部分成功" },
+              { value: "FAILED", label: "失败" },
+            ]}
+            allowClear={false}
             disabled={disabled}
-          >
-            <SelectTrigger id="svc-result">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="SUCCESS">成功</SelectItem>
-              <SelectItem value="PARTIAL">部分成功</SelectItem>
-              <SelectItem value="FAILED">失败</SelectItem>
-            </SelectContent>
-          </Select>
+            aria-label="履约结果"
+            placeholder="请选择履约结果"
+          />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="service-note">完成说明</Label>

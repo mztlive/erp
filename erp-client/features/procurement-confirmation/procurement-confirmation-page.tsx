@@ -22,6 +22,7 @@ import {
   DocumentSummary,
   FormalActionConfirmDialog,
   FormalActionResult,
+  OptionCombobox,
   PageHeader,
   SequentialProcessBar,
   ValidationSummary,
@@ -52,13 +53,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import type {
@@ -1368,7 +1362,7 @@ export function ProcurementConfirmationPage() {
                                         />
                                       </td>
                                       <td className="px-3 py-2">
-                                        <Select
+                                        <OptionCombobox
                                           value={line.fulfillmentMode}
                                           onValueChange={(value) => {
                                             if (!value) return
@@ -1377,29 +1371,21 @@ export function ProcurementConfirmationPage() {
                                                 value as FulfillmentMode,
                                             })
                                           }}
+                                          options={(
+                                            Object.keys(
+                                              FULFILLMENT_MODE_LABEL
+                                            ) as FulfillmentMode[]
+                                          ).map((mode) => ({
+                                            value: mode,
+                                            label: FULFILLMENT_MODE_LABEL[mode],
+                                          }))}
+                                          size="sm"
+                                          allowClear={false}
                                           disabled={formalPending}
-                                        >
-                                          <SelectTrigger
-                                            size="sm"
-                                            aria-label="履约方式"
-                                          >
-                                            <SelectValue />
-                                          </SelectTrigger>
-                                          <SelectContent>
-                                            {(
-                                              Object.keys(
-                                                FULFILLMENT_MODE_LABEL
-                                              ) as FulfillmentMode[]
-                                            ).map((mode) => (
-                                              <SelectItem
-                                                key={mode}
-                                                value={mode}
-                                              >
-                                                {FULFILLMENT_MODE_LABEL[mode]}
-                                              </SelectItem>
-                                            ))}
-                                          </SelectContent>
-                                        </Select>
+                                          aria-label="履约方式"
+                                          placeholder="履约方式"
+                                          className="min-w-[8rem]"
+                                        />
                                       </td>
                                       <td className="px-3 py-2">
                                         <BusinessStatusBadge
@@ -1695,27 +1681,23 @@ export function ProcurementConfirmationPage() {
                   <Label htmlFor="reject-reason-code">驳回原因</Label>
                   <rejectForm.AppField name="reasonCode">
                     {(field) => (
-                      <Select
+                      <OptionCombobox
+                        id="reject-reason-code"
                         value={field.state.value}
                         onValueChange={(value) => {
-                          if (value) field.handleChange(value as RejectReasonCode)
+                          if (value)
+                            field.handleChange(value as RejectReasonCode)
                         }}
-                      >
-                        <SelectTrigger id="reject-reason-code" className="w-full">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {(
-                            Object.keys(
-                              REJECT_REASON_LABEL
-                            ) as RejectReasonCode[]
-                          ).map((code) => (
-                            <SelectItem key={code} value={code}>
-                              {REJECT_REASON_LABEL[code]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                        options={(
+                          Object.keys(REJECT_REASON_LABEL) as RejectReasonCode[]
+                        ).map((code) => ({
+                          value: code,
+                          label: REJECT_REASON_LABEL[code],
+                        }))}
+                        allowClear={false}
+                        aria-label="驳回原因"
+                        placeholder="请选择驳回原因"
+                      />
                     )}
                   </rejectForm.AppField>
                 </div>

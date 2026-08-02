@@ -20,6 +20,7 @@ import {
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
+  OptionCombobox,
   PageHeader,
   QuickPreviewSheet,
   StatusTrackSummary,
@@ -31,10 +32,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { listSupplierOptions } from "@/features/supplier-orders/api"
 import {
@@ -519,20 +516,24 @@ export function SupplierOrdersListPage() {
               state={listQuery.isFetching ? "syncing" : "fresh"}
               label="列表数据"
             />
-            <NativeSelect
+            <OptionCombobox
               value={url.role}
-              onChange={(e) =>
-                pushUrl({ role: e.target.value as DemoRole, page: 1 })
+              onValueChange={(v) =>
+                pushUrl({ role: (v ?? url.role) as DemoRole, page: 1 })
               }
+              options={[
+                { value: "procurement", label: "采购" },
+                { value: "cs", label: "客服" },
+                { value: "ops", label: "运营" },
+                { value: "finance", label: "财务" },
+                { value: "admin", label: "管理员" },
+              ]}
               aria-label="演示角色"
               className="w-[7.5rem]"
-            >
-              <NativeSelectOption value="procurement">采购</NativeSelectOption>
-              <NativeSelectOption value="cs">客服</NativeSelectOption>
-              <NativeSelectOption value="ops">运营</NativeSelectOption>
-              <NativeSelectOption value="finance">财务</NativeSelectOption>
-              <NativeSelectOption value="admin">管理员</NativeSelectOption>
-            </NativeSelect>
+              size="sm"
+              allowClear={false}
+              placeholder="演示角色"
+            />
             <Button
               type="button"
               variant="outline"
@@ -661,84 +662,96 @@ export function SupplierOrdersListPage() {
                   ))}
                 </ToggleGroup>
 
-                <NativeSelect
+                <OptionCombobox
                   value={url.supplierId ?? ""}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     pushUrl({
-                      supplierId: e.target.value || undefined,
+                      supplierId: v || undefined,
                       page: 1,
                     })
                   }
+                  options={[
+                    { value: "", label: "全部供应商" },
+                    ...suppliers.map((s) => ({
+                      value: s.id,
+                      label: s.name,
+                    })),
+                  ]}
                   aria-label="供应商"
                   className="w-[9rem]"
-                >
-                  <NativeSelectOption value="">全部供应商</NativeSelectOption>
-                  {suppliers.map((s) => (
-                    <NativeSelectOption key={s.id} value={s.id}>
-                      {s.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  size="sm"
+                  allowClear={false}
+                  placeholder="全部供应商"
+                />
 
-                <NativeSelect
+                <OptionCombobox
                   value={url.fulfillmentStatus ?? ""}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     pushUrl({
-                      fulfillmentStatus: (e.target.value ||
+                      fulfillmentStatus: (v ||
                         undefined) as SupplierFulfillmentStatus | undefined,
                       page: 1,
                     })
                   }
+                  options={[
+                    { value: "", label: "履约·全部" },
+                    ...FULFILLMENT_STATUSES.map((s) => ({
+                      value: s,
+                      label: FULFILLMENT_STATUS_LABEL[s],
+                    })),
+                  ]}
                   aria-label="履约状态"
                   className="w-[8.5rem]"
-                >
-                  <NativeSelectOption value="">履约·全部</NativeSelectOption>
-                  {FULFILLMENT_STATUSES.map((s) => (
-                    <NativeSelectOption key={s} value={s}>
-                      {FULFILLMENT_STATUS_LABEL[s]}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  size="sm"
+                  allowClear={false}
+                  placeholder="履约·全部"
+                />
 
-                <NativeSelect
+                <OptionCombobox
                   value={url.cancelStatus ?? ""}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     pushUrl({
-                      cancelStatus: (e.target.value ||
+                      cancelStatus: (v ||
                         undefined) as CancelStatus | undefined,
                       page: 1,
                     })
                   }
+                  options={[
+                    { value: "", label: "取消·全部" },
+                    ...CANCEL_STATUSES.map((s) => ({
+                      value: s,
+                      label: CANCEL_STATUS_LABEL[s],
+                    })),
+                  ]}
                   aria-label="取消状态"
                   className="w-[7.5rem]"
-                >
-                  <NativeSelectOption value="">取消·全部</NativeSelectOption>
-                  {CANCEL_STATUSES.map((s) => (
-                    <NativeSelectOption key={s} value={s}>
-                      {CANCEL_STATUS_LABEL[s]}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  size="sm"
+                  allowClear={false}
+                  placeholder="取消·全部"
+                />
 
-                <NativeSelect
+                <OptionCombobox
                   value={url.refundStatus ?? ""}
-                  onChange={(e) =>
+                  onValueChange={(v) =>
                     pushUrl({
-                      refundStatus: (e.target.value ||
+                      refundStatus: (v ||
                         undefined) as RefundStatus | undefined,
                       page: 1,
                     })
                   }
+                  options={[
+                    { value: "", label: "退款·全部" },
+                    ...REFUND_STATUSES.map((s) => ({
+                      value: s,
+                      label: REFUND_STATUS_LABEL[s],
+                    })),
+                  ]}
                   aria-label="退款状态"
                   className="w-[7.5rem]"
-                >
-                  <NativeSelectOption value="">退款·全部</NativeSelectOption>
-                  {REFUND_STATUSES.map((s) => (
-                    <NativeSelectOption key={s} value={s}>
-                      {REFUND_STATUS_LABEL[s]}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                  size="sm"
+                  allowClear={false}
+                  placeholder="退款·全部"
+                />
 
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
                   支付自
