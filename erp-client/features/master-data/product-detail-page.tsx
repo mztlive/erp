@@ -65,7 +65,9 @@ import {
   SUPPLIER_OPTIONS,
 } from "@/features/master-data/resource-fields"
 import {
+  DROPSHIP_MOQ,
   emptyProductFields,
+  FULFILLMENT_RESPONSIBILITY_OPTIONS,
   rebuildSkusFromSpecs,
   validateProductFields,
 } from "@/features/master-data/product-model"
@@ -76,6 +78,7 @@ import {
   useMasterDataListQuery,
 } from "@/features/master-data/queries"
 import type {
+  FulfillmentResponsibility,
   MasterDataCenterView,
   MasterDataMutationResult,
   ProductDetailView,
@@ -101,8 +104,11 @@ type ProductEditorFormValues = Readonly<{
   changeReason: string
   fields: ProductFields
   specDrafts: readonly ProductSpecDraft[]
-  bulkCostPrice: string
   bulkSalePrice: string
+  bulkMarketPrice: string
+  bulkInputTaxRate: string
+  bulkDropshipCostPrice: string
+  bulkBulkCostPrice: string
 }>
 
 type ProductEditorSectionId =
@@ -114,10 +120,37 @@ const PRODUCT_EDITOR_SECTIONS: ReadonlyArray<{
 }> = [
   { id: "basic", label: "基础信息" },
   { id: "media", label: "图文信息" },
-  { id: "sku", label: "价格与库存" },
+  { id: "sku", label: "SKU 与供给" },
   { id: "effective", label: "生效信息" },
   { id: "history", label: "历史与引用" },
 ]
+
+function MoneyInput({
+  value,
+  onChange,
+  "aria-label": ariaLabel,
+}: {
+  value: string
+  onChange: (next: string) => void
+  "aria-label": string
+}) {
+  const showPrefix = !value.trim().startsWith("¥")
+  return (
+    <div className="relative">
+      {showPrefix ? (
+        <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
+          ¥
+        </span>
+      ) : null}
+      <Input
+        className={cn("h-8", showPrefix && "pl-6")}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={ariaLabel}
+      />
+    </div>
+  )
+}
 
 function applySpecsFromDrafts(
   drafts: readonly ProductSpecDraft[],
@@ -363,6 +396,14 @@ function SkuMainImageField({
   )
 }
 
+const EMPTY_BULK_PRICE_FIELDS = {
+  bulkSalePrice: "",
+  bulkMarketPrice: "",
+  bulkInputTaxRate: "",
+  bulkDropshipCostPrice: "",
+  bulkBulkCostPrice: "",
+} as const
+
 function hydrateFromCenter(
   data: MasterDataCenterView,
 ): ProductEditorFormValues {
@@ -379,8 +420,7 @@ function hydrateFromCenter(
       name: s.name,
       values: [...s.values],
     })),
-    bulkCostPrice: "",
-    bulkSalePrice: "",
+    ...EMPTY_BULK_PRICE_FIELDS,
   }
 }
 
@@ -392,8 +432,7 @@ function createProductDefaults(isCreate: boolean): ProductEditorFormValues {
     changeReason: isCreate ? "新建商品" : "",
     fields: emptyProductFields(),
     specDrafts: [],
-    bulkCostPrice: "",
-    bulkSalePrice: "",
+    ...EMPTY_BULK_PRICE_FIELDS,
   }
 }
 
@@ -700,17 +739,33 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
             spec.name.trim() && spec.values.some((value) => value.trim()),
         )
         const applyBulkPrices = () => {
-          if (!values.bulkCostPrice.trim() && !values.bulkSalePrice.trim()) {
-            return
-          }
+          const hasAny =
+            values.bulkSalePrice.trim() ||
+            values.bulkMarketPrice.trim() ||
+            values.bulkInputTaxRate.trim() ||
+            values.bulkDropshipCostPrice.trim() ||
+            values.bulkBulkCostPrice.trim()
+          if (!hasAny) return
           setFields((previous) => ({
             ...previous,
             skus: previous.skus.map((sku) => ({
               ...sku,
-              costPrice:
-                values.bulkCostPrice.trim() || sku.costPrice || undefined,
               salePrice:
                 values.bulkSalePrice.trim() || sku.salePrice || undefined,
+              marketPrice:
+                values.bulkMarketPrice.trim() || sku.marketPrice || undefined,
+              inputTaxRate:
+                values.bulkInputTaxRate.trim() ||
+                sku.inputTaxRate ||
+                undefined,
+              dropshipCostPrice:
+                values.bulkDropshipCostPrice.trim() ||
+                sku.dropshipCostPrice ||
+                undefined,
+              bulkCostPrice:
+                values.bulkBulkCostPrice.trim() ||
+                sku.bulkCostPrice ||
+                undefined,
             })),
           }))
         }
@@ -1409,21 +1464,25 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                     disabled={!canRevise}
                   >
                     <legend className="px-1 text-base font-semibold">
-                      价格与库存（SKU）
+                      SKU 与供给
                     </legend>
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <p className="text-xs text-muted-foreground">
-                        价格、主图、编码仍保存到现有 SKU
-                        字段；库存由库存台账独立维护。
-                      </p>
+                      <div className="min-w-0 space-y-1">
+                        <p className="text-xs text-muted-foreground">
+                          {masterDataCopy.productSkuHint}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {masterDataCopy.productSupplyHint}
+                        </p>
+                      </div>
                       <Badge variant="success">
                         {fields.skus.length} / {fields.skus.length} 行已生成
                       </Badge>
                     </div>
-                    <div className="grid gap-2 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
+                    <div className="grid gap-2 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-[repeat(5,minmax(0,1fr))_auto_auto]">
                       <div className="space-y-1">
                         <Label htmlFor="bulk-sale-price" className="text-xs">
-                          批量售价
+                          批量销售价
                         </Label>
                         <Input
                           id="bulk-sale-price"
@@ -1435,24 +1494,78 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                               event.target.value,
                             )
                           }
-                          placeholder="填写后批量覆盖"
+                          placeholder="可选"
                         />
                       </div>
                       <div className="space-y-1">
-                        <Label htmlFor="bulk-cost-price" className="text-xs">
-                          批量成本价
+                        <Label htmlFor="bulk-market-price" className="text-xs">
+                          批量市场价
                         </Label>
                         <Input
-                          id="bulk-cost-price"
+                          id="bulk-market-price"
                           className="h-8 bg-background"
-                          value={values.bulkCostPrice}
+                          value={values.bulkMarketPrice}
                           onChange={(event) =>
                             form.setFieldValue(
-                              "bulkCostPrice",
+                              "bulkMarketPrice",
                               event.target.value,
                             )
                           }
                           placeholder="可选"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="bulk-input-tax" className="text-xs">
+                          批量进项税率
+                        </Label>
+                        <Input
+                          id="bulk-input-tax"
+                          className="h-8 bg-background"
+                          value={values.bulkInputTaxRate}
+                          onChange={(event) =>
+                            form.setFieldValue(
+                              "bulkInputTaxRate",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="如 13%"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label
+                          htmlFor="bulk-dropship-cost"
+                          className="text-xs"
+                        >
+                          批量一件代发成本
+                        </Label>
+                        <Input
+                          id="bulk-dropship-cost"
+                          className="h-8 bg-background"
+                          value={values.bulkDropshipCostPrice}
+                          onChange={(event) =>
+                            form.setFieldValue(
+                              "bulkDropshipCostPrice",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="含税运"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="bulk-bulk-cost" className="text-xs">
+                          批量集采成本
+                        </Label>
+                        <Input
+                          id="bulk-bulk-cost"
+                          className="h-8 bg-background"
+                          value={values.bulkBulkCostPrice}
+                          onChange={(event) =>
+                            form.setFieldValue(
+                              "bulkBulkCostPrice",
+                              event.target.value,
+                            )
+                          }
+                          placeholder="含税"
                         />
                       </div>
                       <Button
@@ -1462,7 +1575,10 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                         className="self-end"
                         disabled={
                           !values.bulkSalePrice.trim() &&
-                          !values.bulkCostPrice.trim()
+                          !values.bulkMarketPrice.trim() &&
+                          !values.bulkInputTaxRate.trim() &&
+                          !values.bulkDropshipCostPrice.trim() &&
+                          !values.bulkBulkCostPrice.trim()
                         }
                         onClick={applyBulkPrices}
                       >
@@ -1484,43 +1600,118 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                       </p>
                     ) : (
                       <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border">
-                        <table className="w-full min-w-[78rem] border-collapse text-sm">
+                        <table className="w-full min-w-[120rem] border-collapse text-sm">
                           <thead className="bg-surface-sunken">
+                            <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                              {activeSpecs.length > 0 ? (
+                                <th
+                                  colSpan={activeSpecs.length}
+                                  className="px-3 py-2 font-medium"
+                                >
+                                  规格
+                                </th>
+                              ) : (
+                                <th className="px-3 py-2 font-medium">规格</th>
+                              )}
+                              <th
+                                colSpan={3}
+                                className="border-l border-border px-3 py-2 font-medium"
+                              >
+                                身份
+                              </th>
+                              <th
+                                colSpan={2}
+                                className="border-l border-border px-3 py-2 font-medium"
+                              >
+                                参考售价
+                              </th>
+                              <th
+                                colSpan={2}
+                                className="border-l border-border px-3 py-2 font-medium"
+                              >
+                                履约与税率
+                              </th>
+                              <th
+                                colSpan={4}
+                                className="border-l border-border px-3 py-2 font-medium"
+                              >
+                                一件代发供给
+                              </th>
+                              <th
+                                colSpan={3}
+                                className="border-l border-border px-3 py-2 font-medium"
+                              >
+                                集采供给
+                              </th>
+                              <th
+                                colSpan={2}
+                                className="border-l border-border px-3 py-2 font-medium"
+                              >
+                                状态
+                              </th>
+                            </tr>
                             <tr className="border-b border-border text-left text-xs text-muted-foreground">
                               {activeSpecs.length > 0 ? (
                                 activeSpecs.map((spec) => (
                                   <th
                                     key={spec.name}
-                                    className="min-w-28 px-3 py-2.5 font-medium"
+                                    className="min-w-24 px-3 py-2 font-medium"
                                   >
                                     {spec.name}
                                   </th>
                                 ))
                               ) : (
-                                <th className="min-w-28 px-3 py-2.5 font-medium">
-                                  规格
+                                <th className="min-w-24 px-3 py-2 font-medium">
+                                  —
                                 </th>
                               )}
-                              <th className="min-w-36 px-3 py-2.5 font-medium">
-                                * 销售价
+                              <th className="min-w-36 border-l border-border px-3 py-2 font-medium">
+                                {masterDataCopy.fProductCode}
                               </th>
-                              <th className="min-w-32 px-3 py-2.5 font-medium">
+                              <th className="min-w-32 px-3 py-2 font-medium">
+                                {masterDataCopy.fBarcode}
+                              </th>
+                              <th className="min-w-44 px-3 py-2 font-medium">
+                                {masterDataCopy.fMainImage}
+                              </th>
+                              <th className="min-w-28 border-l border-border px-3 py-2 font-medium">
+                                {masterDataCopy.fSalePrice}
+                              </th>
+                              <th className="min-w-28 px-3 py-2 font-medium">
+                                {masterDataCopy.fMarketPrice}
+                              </th>
+                              <th className="min-w-36 border-l border-border px-3 py-2 font-medium">
+                                {masterDataCopy.fFulfillmentResponsibility}
+                              </th>
+                              <th className="min-w-24 px-3 py-2 font-medium">
+                                {masterDataCopy.fInputTaxRate}
+                              </th>
+                              <th className="min-w-32 border-l border-border px-3 py-2 font-medium">
+                                成本价（含税运）
+                              </th>
+                              <th className="min-w-32 px-3 py-2 font-medium">
+                                底价（含税运）
+                              </th>
+                              <th className="min-w-28 px-3 py-2 font-medium">
+                                快递
+                              </th>
+                              <th className="min-w-20 px-3 py-2 font-medium">
+                                起订量
+                              </th>
+                              <th className="min-w-32 border-l border-border px-3 py-2 font-medium">
+                                成本价（含税）
+                              </th>
+                              <th className="min-w-32 px-3 py-2 font-medium">
+                                底价（含税）
+                              </th>
+                              <th className="min-w-24 px-3 py-2 font-medium">
+                                起订量
+                              </th>
+                              <th className="min-w-28 border-l border-border px-3 py-2 font-medium">
                                 库存
                               </th>
-                              <th className="min-w-36 px-3 py-2.5 font-medium">
-                                成本价
-                              </th>
-                              <th className="min-w-40 px-3 py-2.5 font-medium">
-                                SKU 编号
-                              </th>
-                              <th className="min-w-40 px-3 py-2.5 font-medium">
-                                条形码
-                              </th>
-                              <th className="min-w-48 px-3 py-2.5 font-medium">
-                                SKU 主图
-                              </th>
-                              <th className="min-w-28 px-3 py-2.5 font-medium">
-                                SKU 状态
+                              <th className="min-w-24 px-3 py-2 font-medium">
+                                启用
                               </th>
                             </tr>
                           </thead>
@@ -1548,74 +1739,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     </Badge>
                                   </td>
                                 )}
-                                <td className="px-3 py-3">
-                                  <div className="relative">
-                                    {!sku.salePrice?.trim().startsWith("¥") ? (
-                                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                                        ¥
-                                      </span>
-                                    ) : null}
-                                    <Input
-                                      className={cn(
-                                        "h-8",
-                                        !sku.salePrice
-                                          ?.trim()
-                                          .startsWith("¥") && "pl-6",
-                                      )}
-                                      value={sku.salePrice ?? ""}
-                                      onChange={(event) =>
-                                        updateSku(index, {
-                                          salePrice:
-                                            event.target.value || undefined,
-                                        })
-                                      }
-                                      aria-label={`${sku.specLabel} 售价`}
-                                    />
-                                  </div>
-                                </td>
-                                <td className="px-3 py-3">
-                                  <div className="space-y-1">
-                                    <Badge variant="outline">独立台账</Badge>
-                                    {sku.skuId ? (
-                                      <Link
-                                        className="block text-xs text-primary hover:underline"
-                                        href={`/inventory?view=balance&skuId=${encodeURIComponent(sku.skuId)}`}
-                                      >
-                                        查看库存
-                                      </Link>
-                                    ) : (
-                                      <span className="block text-xs text-muted-foreground">
-                                        保存后维护
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-3 py-3">
-                                  <div className="relative">
-                                    {!sku.costPrice?.trim().startsWith("¥") ? (
-                                      <span className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">
-                                        ¥
-                                      </span>
-                                    ) : null}
-                                    <Input
-                                      className={cn(
-                                        "h-8",
-                                        !sku.costPrice
-                                          ?.trim()
-                                          .startsWith("¥") && "pl-6",
-                                      )}
-                                      value={sku.costPrice ?? ""}
-                                      onChange={(event) =>
-                                        updateSku(index, {
-                                          costPrice:
-                                            event.target.value || undefined,
-                                        })
-                                      }
-                                      aria-label={`${sku.specLabel} 成本价`}
-                                    />
-                                  </div>
-                                </td>
-                                <td className="px-3 py-3">
+                                <td className="border-l border-border px-3 py-3">
                                   <Input
                                     className="h-8"
                                     value={sku.skuNo}
@@ -1624,7 +1748,8 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                         skuNo: event.target.value,
                                       })
                                     }
-                                    aria-label={`${sku.specLabel} SKU 编号`}
+                                    aria-label={`${sku.specLabel} 产品编码`}
+                                    title="系统默认生成，可手动覆盖"
                                   />
                                 </td>
                                 <td className="px-3 py-3">
@@ -1647,6 +1772,165 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                       updateSku(index, { mainImage })
                                     }
                                   />
+                                </td>
+                                <td className="border-l border-border px-3 py-3">
+                                  <MoneyInput
+                                    value={sku.salePrice ?? ""}
+                                    onChange={(next) =>
+                                      updateSku(index, {
+                                        salePrice: next || undefined,
+                                      })
+                                    }
+                                    aria-label={`${sku.specLabel} 销售价`}
+                                  />
+                                </td>
+                                <td className="px-3 py-3">
+                                  <MoneyInput
+                                    value={sku.marketPrice ?? ""}
+                                    onChange={(next) =>
+                                      updateSku(index, {
+                                        marketPrice: next || undefined,
+                                      })
+                                    }
+                                    aria-label={`${sku.specLabel} 市场价`}
+                                  />
+                                </td>
+                                <td className="border-l border-border px-3 py-3">
+                                  <OptionCombobox
+                                    value={
+                                      sku.fulfillmentResponsibility ?? null
+                                    }
+                                    onValueChange={(v) =>
+                                      updateSku(index, {
+                                        fulfillmentResponsibility: (v ??
+                                          undefined) as
+                                          | FulfillmentResponsibility
+                                          | undefined,
+                                      })
+                                    }
+                                    options={FULFILLMENT_RESPONSIBILITY_OPTIONS.map(
+                                      (o) => ({
+                                        value: o.value,
+                                        label: o.label,
+                                      }),
+                                    )}
+                                    placeholder="选择履约方式"
+                                    allowClear
+                                    aria-label={`${sku.specLabel} 履约方式`}
+                                  />
+                                </td>
+                                <td className="px-3 py-3">
+                                  <Input
+                                    className="h-8"
+                                    value={sku.inputTaxRate ?? ""}
+                                    onChange={(event) =>
+                                      updateSku(index, {
+                                        inputTaxRate:
+                                          event.target.value || undefined,
+                                      })
+                                    }
+                                    placeholder="13%"
+                                    aria-label={`${sku.specLabel} 进项税率`}
+                                  />
+                                </td>
+                                <td className="border-l border-border px-3 py-3">
+                                  <MoneyInput
+                                    value={sku.dropshipCostPrice ?? ""}
+                                    onChange={(next) =>
+                                      updateSku(index, {
+                                        dropshipCostPrice: next || undefined,
+                                      })
+                                    }
+                                    aria-label={`${sku.specLabel} 一件代发成本价`}
+                                  />
+                                </td>
+                                <td className="px-3 py-3">
+                                  <MoneyInput
+                                    value={sku.dropshipFloorPrice ?? ""}
+                                    onChange={(next) =>
+                                      updateSku(index, {
+                                        dropshipFloorPrice: next || undefined,
+                                      })
+                                    }
+                                    aria-label={`${sku.specLabel} 一件代发底价`}
+                                  />
+                                </td>
+                                <td className="px-3 py-3">
+                                  <Input
+                                    className="h-8"
+                                    value={sku.dropshipExpress ?? ""}
+                                    onChange={(event) =>
+                                      updateSku(index, {
+                                        dropshipExpress:
+                                          event.target.value || undefined,
+                                      })
+                                    }
+                                    placeholder="如 中通快递"
+                                    aria-label={`${sku.specLabel} 一件代发快递`}
+                                  />
+                                </td>
+                                <td className="px-3 py-3">
+                                  <div className="flex h-8 items-center">
+                                    <Badge
+                                      variant="outline"
+                                      title="一件代发起订量固定为 1"
+                                    >
+                                      {DROPSHIP_MOQ}
+                                    </Badge>
+                                  </div>
+                                </td>
+                                <td className="border-l border-border px-3 py-3">
+                                  <MoneyInput
+                                    value={sku.bulkCostPrice ?? ""}
+                                    onChange={(next) =>
+                                      updateSku(index, {
+                                        bulkCostPrice: next || undefined,
+                                      })
+                                    }
+                                    aria-label={`${sku.specLabel} 集采成本价`}
+                                  />
+                                </td>
+                                <td className="px-3 py-3">
+                                  <MoneyInput
+                                    value={sku.bulkFloorPrice ?? ""}
+                                    onChange={(next) =>
+                                      updateSku(index, {
+                                        bulkFloorPrice: next || undefined,
+                                      })
+                                    }
+                                    aria-label={`${sku.specLabel} 集采底价`}
+                                  />
+                                </td>
+                                <td className="px-3 py-3">
+                                  <Input
+                                    className="h-8"
+                                    value={sku.bulkMoq ?? ""}
+                                    onChange={(event) =>
+                                      updateSku(index, {
+                                        bulkMoq:
+                                          event.target.value || undefined,
+                                      })
+                                    }
+                                    placeholder="按基础单位"
+                                    aria-label={`${sku.specLabel} 集采起订量`}
+                                  />
+                                </td>
+                                <td className="border-l border-border px-3 py-3">
+                                  <div className="space-y-1">
+                                    <Badge variant="outline">独立台账</Badge>
+                                    {sku.skuId ? (
+                                      <Link
+                                        className="block text-xs text-primary hover:underline"
+                                        href={`/inventory?view=balance&skuId=${encodeURIComponent(sku.skuId)}`}
+                                      >
+                                        查看库存
+                                      </Link>
+                                    ) : (
+                                      <span className="block text-xs text-muted-foreground">
+                                        保存后维护
+                                      </span>
+                                    )}
+                                  </div>
                                 </td>
                                 <td className="px-3 py-3">
                                   <div className="flex items-center gap-2">

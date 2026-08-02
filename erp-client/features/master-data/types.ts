@@ -223,9 +223,29 @@ export type ProductSpecDimension = Readonly<{
   values: readonly string[]
 }>
 
-/** SKU 行：主图、条码、参考价等归属 SKU；规格取值由 SPU 规格维度组合得出。 */
+/**
+ * 履约责任（采购「是否自营」）：
+ * - COMPANY_WAREHOUSE：公司仓发（自营）
+ * - SUPPLIER_DIRECT：供应商直发
+ */
+export type FulfillmentResponsibility =
+  | "COMPANY_WAREHOUSE"
+  | "SUPPLIER_DIRECT"
+
+/**
+ * SKU 行：主图、条码、参考售价/市场价 + 供给拆分草稿。
+ * 规格取值由 SPU 规格维度组合得出。
+ *
+ * 供给字段在 W14 维护为采购候选；正式供货价 / 底价 / 起订量 / 进项税
+ * 写入 `supplier_offering_revision`（W21），不作为 SKU 正式过账事实。
+ * 一件代发起订量固定为 1；集采起订量可填。
+ */
 export type ProductSkuFields = Readonly<{
   skuId?: string
+  /**
+   * 产品编码 = `sku_no`。
+   * 系统按规格组合默认生成，允许手动覆盖。
+   */
   skuNo: string
   /** 与 specs 顺序对齐的属性取值。 */
   attributeValues: readonly string[]
@@ -234,8 +254,29 @@ export type ProductSkuFields = Readonly<{
   barcode?: string
   /** SKU 主图（单张）。 */
   mainImage: string
-  costPrice?: string
+  /** 参考销售价（选品提示，非正式发布价）。 */
   salePrice?: string
+  /** 市场价（参考展示，非正式发布价）。 */
+  marketPrice?: string
+  /** 履约责任：公司仓发 / 供应商直发。 */
+  fulfillmentResponsibility?: FulfillmentResponsibility
+  /**
+   * 进项税率（供应商开票）→ 供给 / 采购。
+   * 不得当作销项税率使用。
+   */
+  inputTaxRate?: string
+  /** 一件代发成本价（含税运）。 */
+  dropshipCostPrice?: string
+  /** 一件代发底价（含税运）— 供应商给我们的底价。 */
+  dropshipFloorPrice?: string
+  /** 一件代发快递（自由文本）。 */
+  dropshipExpress?: string
+  /** 集采成本价（含税）。 */
+  bulkCostPrice?: string
+  /** 集采底价（含税）— 供应商给我们的底价。 */
+  bulkFloorPrice?: string
+  /** 集采起订量（按基础单位）；一件代发固定为 1，不在此字段维护。 */
+  bulkMoq?: string
   supplier?: string
   baseUnit?: string
   lifecycleStatus: LifecycleStatus

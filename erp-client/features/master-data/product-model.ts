@@ -4,10 +4,37 @@
  */
 
 import type {
+  FulfillmentResponsibility,
   ProductFields,
   ProductSkuFields,
   ProductSpecDimension,
 } from "@/features/master-data/types"
+
+/** 一件代发起订量固定为 1（不按 SKU 编辑）。 */
+export const DROPSHIP_MOQ = "1"
+
+export const FULFILLMENT_RESPONSIBILITY_OPTIONS = [
+  {
+    value: "COMPANY_WAREHOUSE" as const,
+    label: "公司仓发",
+    description: "自营：由公司仓库发货",
+  },
+  {
+    value: "SUPPLIER_DIRECT" as const,
+    label: "供应商直发",
+    description: "非自营：供应商直接履约发货",
+  },
+] as const
+
+export function fulfillmentResponsibilityLabel(
+  value: FulfillmentResponsibility | undefined
+): string {
+  if (!value) return "—"
+  return (
+    FULFILLMENT_RESPONSIBILITY_OPTIONS.find((o) => o.value === value)?.label ??
+    value
+  )
+}
 
 /** 笛卡尔积生成规格取值组合。无规格时返回单行空组合。 */
 export function cartesianSpecValues(
@@ -51,7 +78,7 @@ export function formatSpecLabel(
     .join(" / ")
 }
 
-/** 按当前规格维度重建 SKU 行；尽量按属性取值匹配保留已有主图/价格等。 */
+/** 按当前规格维度重建 SKU 行；尽量按属性取值匹配保留已有主图/价格/供给等。 */
 export function rebuildSkusFromSpecs(input: {
   specs: readonly ProductSpecDimension[]
   existing: readonly ProductSkuFields[]
@@ -74,13 +101,22 @@ export function rebuildSkusFromSpecs(input: {
 
     return {
       skuId: matched?.skuId,
+      /** 系统默认生成；已有编号或用户覆盖则保留。 */
       skuNo: matched?.skuNo || `${prefix}-${String(index + 1).padStart(2, "0")}`,
       attributeValues: [...attributeValues],
       specLabel,
       barcode: matched?.barcode,
       mainImage: matched?.mainImage ?? "",
-      costPrice: matched?.costPrice,
       salePrice: matched?.salePrice,
+      marketPrice: matched?.marketPrice,
+      fulfillmentResponsibility: matched?.fulfillmentResponsibility,
+      inputTaxRate: matched?.inputTaxRate,
+      dropshipCostPrice: matched?.dropshipCostPrice,
+      dropshipFloorPrice: matched?.dropshipFloorPrice,
+      dropshipExpress: matched?.dropshipExpress,
+      bulkCostPrice: matched?.bulkCostPrice,
+      bulkFloorPrice: matched?.bulkFloorPrice,
+      bulkMoq: matched?.bulkMoq,
       supplier: matched?.supplier ?? input.supplier,
       baseUnit: matched?.baseUnit ?? input.baseUnit,
       lifecycleStatus: matched?.lifecycleStatus ?? "ENABLED",

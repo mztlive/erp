@@ -791,8 +791,24 @@ W14 以**树形维护页**管理分类：父子关系不得成环；停用后仍
 | `category_id` / `brand_id` | 修订表 | ERP 分类和品牌 |
 | `barcode` | `sku_revision` | 条码原值；冲突时进入人工差异，不据此自动合并 SKU |
 | `weight_kg` / `volume_m3` | `sku_revision` | 定点数物流属性，单位固定为千克和立方米 |
+| `reference_sale_price` / `market_price` | `sku_revision` | W14 参考销售价与市场价；非正式发布价 |
+| `fulfillment_responsibility` | `sku_revision` | 履约责任偏好：`COMPANY_WAREHOUSE`（公司仓发/自营）或 `SUPPLIER_DIRECT`（供应商直发） |
 | `status` | 稳定表/修订表 | 启用、停用 |
 | `effective_from` / `effective_to` | 修订表 | 生效区间 |
+
+`sku_no` 对应采购「产品编码」：系统按规格组合默认生成，允许业务手动覆盖；仍须全局唯一。
+
+W14 还可维护 **供给拆分草稿**（一件代发 / 集采），确认后写入 `supplier_offering_revision`，不作为 SKU 正式过账字段：
+
+| 草稿字段 | 供给模式 | 正式去向 |
+| --- | --- | --- |
+| 成本价（一件代发含税运 / 集采含税） | 两套独立供给 | `supply_price_gross`（含税口径在修订备注或费用拆分中保留） |
+| 底价（供应商给我们的底价） | 两套独立供给 | `floor_price_gross`（供给修订扩展；仅参考控价，非正式结算事实） |
+| 一件代发快递 | 一件代发 | 供给修订扩展文本或履约说明 |
+| 起订量 | 一件代发固定 1；集采可填 | `minimum_order_quantity` |
+| 进项税率 | 两套供给共用或分修订 | `input_tax_rate`（进项，不得当销项） |
+
+食品产品有效期、生产批次不进入 `product` / `sku` 主数据（批次事实走入库/库存域，本期不做）。
 
 必需约束与索引：
 
@@ -808,7 +824,7 @@ W14 以**树形维护页**管理分类：父子关系不得成环；停用后仍
 - 非空条码使用规范化精确查询索引；同一条码出现多个在用 SKU 时阻断正式启用并转人工，
   不把来源条码当内部稳定身份；
 - `weight_kg`、`volume_m3` 必须使用定点小数且非负，禁止把旧 `double` 原样复制；
-- 正式商城销售价、供应商供给成本、库存、销量、利润标记不写入 `product` 或 `sku` 当前主表的“正式交易字段”；W14 可在 SKU 修订上维护**参考成本价 / 参考销售价**，仅用于资料维护与选品提示，不替代 W21 供给价或 W22 发布价。
+- 正式商城销售价、供应商供给成本、库存、销量、利润标记不写入 `product` 或 `sku` 当前主表的“正式交易字段”；W14 可在 SKU 修订上维护**参考销售价 / 市场价**及**一件代发/集采供给草稿**，仅用于资料维护与选品提示，不替代 W21 正式供给价或 W22 发布价。
 - W14 商品与 SKU 表单的基础单位、分类、品牌必须分别引用 `unit_of_measure`、`product_category`、`product_brand` 的启用字典项（下拉），不得自由文本冒充字典身份。
 
 `product_revision_media`（SPU 级媒体）与 SKU 主图：
@@ -2310,9 +2326,12 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | `status` | 启用、暂停、停止 |
 | `current_revision_id` | 当前供给版本 |
 | `revision_no` | 修订号 |
-| `supply_price_gross` / `supply_price_net` / `input_tax_rate` | 供货价 |
+| `supply_price_gross` / `supply_price_net` / `input_tax_rate` | 供货价（含税/不含税）与进项税率 |
+| `floor_price_gross` | 供应商给我们的底价（含税）；控价参考，非正式结算事实 |
+| `supply_mode` | 供给模式：`DROPSHIP`（一件代发，价含税运）/ `BULK`（集采，价含税）；同一 SKU 可对应多条供给 |
+| `dropship_express` | 一件代发快递说明（自由文本）；仅 `DROPSHIP` |
 | `freight_amount` / `service_fee_amount` | 费用 |
-| `minimum_order_quantity` | 供应商在本供给版本下确认的最小起订量，按 ERP 基本单位 |
+| `minimum_order_quantity` | 供应商在本供给版本下确认的最小起订量，按 ERP 基本单位；一件代发默认 1 |
 | `supply_region` | 可供区域 |
 | `availability_status` / `available_quantity` | 可供状态 |
 | `product_capabilities` | 商品级取消、退款、物流等能力 |
