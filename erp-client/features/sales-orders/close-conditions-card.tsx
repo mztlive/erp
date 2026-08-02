@@ -51,9 +51,9 @@ export function CloseConditionsCard({ order }: CloseConditionsCardProps) {
         </div>
         <CardDescription>
           {isCard
-            ? "卡券以履约期限到期完成履约，不因已消费完提前完成。"
+            ? "卡券以履约期限到期视为履约完成。"
             : "非卡券以客户验收完成履约。"}
-          {" "}开票未完成不阻塞关闭；页面不提供人工关闭入口。
+          {" "}开票未完成不阻塞关闭；页面不提供人工关闭。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

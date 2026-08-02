@@ -1049,7 +1049,7 @@ export function PublicationCenterPage({
                   <AlertDescription>
                     基线修订{" "}
                     <span className="num">{sessionEdit?.baselineRevisionId}</span>
-                    。最小购买量请运营确认填写，不会从供应商起订量自动带入；销售价与供货价分离。
+                    。最小购买量需运营确认填写，不随供应商起订量带入；销售价与供货价分开填写。
                   </AlertDescription>
                 </Alert>
                 <form.AppField name="name">
@@ -1109,7 +1109,7 @@ export function PublicationCenterPage({
                         {data.status === "SAFETY_PAUSED" &&
                         field.state.value === "ON_SALE" ? (
                           <p className="text-xs text-destructive">
-                            安全暂停对象提交上架将被 RECOVERY_RESPONSIBILITY_UNCONFIRMED 阻断。
+                            安全暂停中的对象提交上架会被系统阻断。
                           </p>
                         ) : null}
                       </div>
@@ -1211,7 +1211,7 @@ export function PublicationCenterPage({
                       : "—"}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  每个发布修订恰好绑定一条固定供给修订；图片、固定供给、价格或销售状态变化均形成新修订，不覆盖历史。
+                  每次发布对应一个固定供给版本；修改图片、供给、价格或销售状态都会形成新版本，不覆盖历史。
                 </p>
               </CardContent>
             </Card>
@@ -1455,7 +1455,7 @@ export function PublicationCenterPage({
         actionLabel="提交发布"
         confirmLabel="确认提交"
         title="确认提交发布"
-        description="将形成不可变发布修订并投递目标商城。提交成功后进入「等待商城确认」，不会立即显示商城已生效。"
+        description="提交后将形成新发布版本并投递目标商城，进入「等待商城确认」。"
         fromStatus={{ label: "会话编辑", tone: "warning" }}
         toStatus={{ label: "待商城确认", tone: "info" }}
         lockedFields={
@@ -1466,7 +1466,7 @@ export function PublicationCenterPage({
                 `销售状态 ${SALE_STATUS_LABEL[form.state.values.saleStatus]}`,
                 `固定供给 ${sessionEdit.supplierOfferingRevisionId}`,
                 `最小购买量 ${form.state.values.minimumPurchaseQuantity}`,
-                `闸门 ${data.publishGate.kind}`,
+                `发布检查：${data.publishGate.kind}`,
               ]
             : []
         }

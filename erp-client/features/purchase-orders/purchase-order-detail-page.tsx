@@ -266,7 +266,7 @@ export function PurchaseOrderDetailPage({
       setResult({
         status: "succeeded",
         title: "草稿已保存",
-        description: `服务端已规范化金额：含税 ${response.data.totals.gross} / 不含税 ${response.data.totals.net} / 税额 ${response.data.totals.tax}`,
+        description: `金额已按系统规范计算：含税 ${response.data.totals.gross} / 不含税 ${response.data.totals.net} / 税额 ${response.data.totals.tax}`,
         reference: response.reference,
         facts: [
           { label: "lockVersion", value: String(response.data.lockVersion) },
@@ -852,12 +852,6 @@ export function PurchaseOrderDetailPage({
                   </DescriptionDetails>
                 </DescriptionItem>
                 <DescriptionItem>
-                  <DescriptionTerm>拆单约束</DescriptionTerm>
-                  <DescriptionDetails className="text-sm">
-                    1 销售单 × 1 供应商 × 1 类型 × 1 付款条件 × 1 履约责任
-                  </DescriptionDetails>
-                </DescriptionItem>
-                <DescriptionItem>
                   <DescriptionTerm>内容来源</DescriptionTerm>
                   <DescriptionDetails>
                     {order.currentContent.source}
@@ -1367,7 +1361,7 @@ function EditSurface({
           {order.header.creationBasisId
             ? ` · 创建依据 ${order.header.creationBasisId}`
             : ""}
-          。⌘S 保存 · ⌘↵ 打开提交确认。拆单维度变更需提示影响（演示中付款条件可改）。
+          。⌘S 保存 · ⌘↵ 打开提交确认。拆单维度变更需提示影响。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
@@ -1386,7 +1380,7 @@ function EditSurface({
 
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>供应商（只读 · 拆单维度）</Label>
+            <Label>供应商（只读）</Label>
             <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
               {order.header.supplierSnapshot}
             </div>
@@ -1432,7 +1426,7 @@ function EditSurface({
         <Separator />
 
         <div className="space-y-2">
-          <h3 className="text-sm font-semibold">明细（服务端舍入）</h3>
+          <h3 className="text-sm font-semibold">明细（系统计算）</h3>
           <div className="overflow-hidden rounded-lg border border-border">
             <Table data-density="compact">
               <TableHeader>
@@ -1573,16 +1567,14 @@ function ReviewSurface({
       <CardHeader className="border-b border-border">
         <CardTitle>财务审核视图</CardTitle>
         <CardDescription>
-          采购提交只读；无字段编辑器。决策使用简化演示（非完整待办流程
-          提交字段回显，但含 submission / lockVersion / 任务号）。
+          以下为采购提交的只读回显，不可修改
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
         <Alert>
           <AlertTitle>不可变提交</AlertTitle>
           <AlertDescription>
-            submissionId {order.identity.currentSubmissionId ?? "—"} ·
-            subjectHash {order.identity.subjectHash ?? "—"} · 经办{" "}
+            submissionId {order.identity.currentSubmissionId ?? "—"} · 经办{" "}
             {order.header.submittedBy ?? "—"} · 提交于{" "}
             {order.header.submittedAt ?? "—"}
           </AlertDescription>

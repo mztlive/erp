@@ -825,7 +825,7 @@ export function ActualProfitLossPage() {
         <BusinessFailureState
           kind="system"
           title="期间归属口径配置读取失败"
-          description="无法读取服务端 periodBasis 配置，分析查询与导出均已阻断。"
+          description="无法读取期间归属口径配置，分析与导出已暂停。"
           action={
             <Button type="button" onClick={() => void basisQuery.refetch()}>
               重试
@@ -855,8 +855,7 @@ export function ActualProfitLossPage() {
                 label="经营汇总"
               />
               <span className="text-xs text-muted-foreground">
-                来源更新时间 {formatDateTime(data.freshness.sourceWatermark)} · 公式{" "}
-                {data.formulaVersion}
+                公式版本 {data.formulaVersion}
               </span>
             </div>
           ) : (
@@ -907,7 +906,7 @@ export function ActualProfitLossPage() {
         <CardHeader className="border-b">
           <CardTitle>统计期间与归属口径</CardTitle>
           <CardDescription>
-            查询与导出仅使用已解析的 from/to 与明确 periodBasis；前端不静默默认期间归属。
+            查询与导出仅按此处明确的期间与归属口径执行。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3 pt-4 sm:flex-row sm:flex-wrap sm:items-end">
@@ -945,7 +944,7 @@ export function ActualProfitLossPage() {
             </p>
           </div>
           <div className="min-w-[16rem] flex-1 space-y-1.5">
-            <Label htmlFor="period-basis">期间归属口径 periodBasis</Label>
+            <Label htmlFor="period-basis">期间归属口径</Label>
             <OptionCombobox
               id="period-basis"
               value={periodBasisUrl || ""}
@@ -965,14 +964,14 @@ export function ActualProfitLossPage() {
                   label:
                     opt.label +
                     (basisConfig.configuredPeriodBasis === opt.code
-                      ? "（服务端配置）"
+                      ? "（默认口径）"
                       : ""),
                 })),
               ]}
               className="w-full min-w-[16rem]"
               size="sm"
               allowClear={false}
-              aria-label="期间归属口径 periodBasis"
+              aria-label="期间归属口径"
               placeholder="请选择归属口径"
             />
           </div>
@@ -992,7 +991,7 @@ export function ActualProfitLossPage() {
           <AlertTitle>期间归属口径尚未配置</AlertTitle>
           <AlertDescription className="space-y-3">
             <p>
-              服务端未固化期间口径。请在上方显式选择一个允许值后，才会发起盈亏查询与导出。Q1「当前建议」不是已生效配置，前端不会据此静默默认。
+              尚未设置默认归属口径，请选择上方任一口径后开始分析。
             </p>
             <p className="text-xs text-muted-foreground">
               公式说明：{W16_FORMULA_HINT}
@@ -1024,15 +1023,12 @@ export function ActualProfitLossPage() {
         <Card size="sm">
           <CardHeader>
             <CardTitle>公式与边界（查询阻断中）</CardTitle>
-            <CardDescription>
-              不展示金额 Skeleton 冒充查询中；选定口径后加载数据。
-            </CardDescription>
+            <CardDescription>选定口径后加载数据。</CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 text-sm text-muted-foreground">
             <p>{W16_FORMULA_HINT}</p>
             <p>
-              仅 NON_VOUCHER_FULFILLMENT 的 ACTUAL / REDUCTION 进入实际值；EXPECTED /
-              CONFIRMED 仅作对照。卡券与消费成本不在本页。
+              公式仅统计实际发生成本（冲减计入）；计划与已确认金额仅作对照。卡券与消费成本不在本页。
             </p>
           </CardContent>
         </Card>
@@ -1076,7 +1072,7 @@ export function ActualProfitLossPage() {
                   <AlertDescription>
                     {refreshFailed
                       ? "保留上次成功数据供只读查阅；可再次刷新。不会用本地估算覆盖金额。"
-                      : `数据时间落后于来源更新时间。数据 ${formatDateTime(data.freshness.projectedAt)}，来源更新时间 ${formatDateTime(data.freshness.sourceWatermark)}。`}
+                      : `数据更新于 ${formatDateTime(data.freshness.projectedAt)}，来源已于 ${formatDateTime(data.freshness.sourceWatermark)} 更新。`}
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -1085,7 +1081,7 @@ export function ActualProfitLossPage() {
                 <Alert>
                   <AlertTitle>数据更新中</AlertTitle>
                   <AlertDescription>
-                    保留最近成功结果只读查看；导出将标注旧数据时间。更新完成后时间追平。
+                    更新中，已保留上次成功结果；导出将标注旧数据时间。
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -1130,14 +1126,10 @@ export function ActualProfitLossPage() {
                   label={`导出任务 ${exportJobQuery.data.jobId}`}
                   description={
                     <>
-                      水印：期间 {exportJobQuery.data.watermark.periodFrom}~
-                      {exportJobQuery.data.watermark.periodTo} · 归属{" "}
-                      {exportJobQuery.data.watermark.periodBasis} · 公式{" "}
-                      {exportJobQuery.data.watermark.formulaVersion} · 覆盖{" "}
-                      {exportJobQuery.data.watermark.coverage} · 权限{" "}
-                      {exportJobQuery.data.watermark.permissionVersion} · 更新于 {" "}
-                      {exportJobQuery.data.watermark.projectedAt} ·{" "}
-                      {SCOPE_LABEL}
+                      期间 {exportJobQuery.data.watermark.periodFrom}~
+                      {exportJobQuery.data.watermark.periodTo} · 归属口径{" "}
+                      {exportJobQuery.data.watermark.periodBasis} · 数据更新于{" "}
+                      {exportJobQuery.data.watermark.projectedAt}
                       {exportJobQuery.data.downloadLabel ? (
                         <span className="mt-1 block font-medium">
                           可下载：{exportJobQuery.data.downloadLabel}
@@ -1211,7 +1203,7 @@ export function ActualProfitLossPage() {
                     </div>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    缺失成本显示未覆盖与原因，不按零成本生成利润。默认「成本完整」仅含可靠比较结果；切换「全部」时不可靠部分标 partial。
+                    缺失成本显示为未覆盖并注明原因，不会按零成本计利润。
                   </p>
                 </AlertDescription>
               </Alert>
@@ -1220,7 +1212,6 @@ export function ActualProfitLossPage() {
                 <MetricItem
                   label="不含税销售收入"
                   value={formatMoneyDisplay(data.totals.netSalesRevenue)}
-                  detail={SCOPE_LABEL}
                 />
                 <MetricItem
                   label="实际采购成本"
@@ -1229,7 +1220,7 @@ export function ActualProfitLossPage() {
                       ? formatMoneyDisplay(data.totals.actualProcurementCostNet)
                       : "无权限"
                   }
-                  detail="ACTUAL+REDUCTION · 不含税"
+                  detail="实际发生+冲减 · 不含税"
                 />
                 <MetricItem
                   label="实际履约费用"
@@ -1249,7 +1240,7 @@ export function ActualProfitLossPage() {
                   }
                   detail={
                     data.coverage.reliability === "partial"
-                      ? "partial · 仅可靠子集"
+                      ? "部分覆盖 · 仅可靠子集"
                       : SCOPE_LABEL
                   }
                   status={
@@ -1289,7 +1280,7 @@ export function ActualProfitLossPage() {
                   <CardHeader className="border-b">
                     <CardTitle>盈亏趋势（{SCOPE_LABEL} · 万元）</CardTitle>
                     <CardDescription>
-                      收入 / 实际成本 / 实际盈亏；图表与汇总同一数据范围。仅展示用坐标缩放，不覆盖服务端总计。
+                      收入 / 实际成本 / 实际盈亏，与汇总同范围。
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-4">
@@ -1376,7 +1367,7 @@ export function ActualProfitLossPage() {
                       </>
                     ) : (
                       <p className="text-sm text-muted-foreground">
-                        无利润字段权限；趋势图不展示以免通过序列位置泄露。
+                        无利润查看权限，趋势图暂不展示。
                       </p>
                     )}
                   </CardContent>
@@ -1386,7 +1377,7 @@ export function ActualProfitLossPage() {
                   <CardHeader className="border-b">
                     <CardTitle>成本构成（{SCOPE_LABEL}）</CardTitle>
                     <CardDescription>
-                      仅 ACTUAL/REDUCTION；返点等冲减显式为反向贡献。
+                      仅统计实际成本与冲减；返点等冲减显示为负值贡献。
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-4">
@@ -1643,7 +1634,7 @@ export function ActualProfitLossPage() {
         }}
         size="detail"
         title="成本记录 detail"
-        description="只读 · NON_VOUCHER_FULFILLMENT · 不含税金额为利润口径；含税仅作税额展示，不与不含税混算。"
+        description="只读 · 不含税；含税仅作税额展示。"
         identity={
           costDetailRow ? (
             <span>

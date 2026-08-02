@@ -177,7 +177,7 @@ export function ContractPreviewPanel({
               </DescriptionList>
             )}
             <p className="text-[11px] leading-relaxed text-muted-foreground">
-              销售单引用具体合同修订时再固定条款记录；本处不汇总为“合同金额”。
+              本页不汇总合同金额；金额以各销售单为准。
             </p>
           </section>
 
@@ -236,14 +236,14 @@ export function ContractPreviewPanel({
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
-                当前合同尚无关联销售单（服务端聚合）。
+                当前合同尚无关联销售单。
               </p>
             )}
             {detail?.relatedSalesOrdersAsOf ? (
               <p className="text-[11px] text-muted-foreground">
-                关联销售更新时间 as-of{" "}
+                关联销售统计截至{" "}
                 <span className="num">{detail.relatedSalesOrdersAsOf}</span>
-                ，不冒充合同字段当前值。
+                。
               </p>
             ) : null}
           </section>

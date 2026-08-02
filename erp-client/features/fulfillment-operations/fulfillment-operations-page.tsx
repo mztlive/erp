@@ -695,8 +695,8 @@ export function FulfillmentOperationsPage() {
         status: "succeeded",
         title: `${OPERATION_TYPE_LABEL[response.outcome.operationType]}已过账`,
         description: autoNext
-          ? "强类型记录已写入会话 mock；将打开同筛选下一项。"
-          : "强类型记录已写入。可核对库存/预占影响后再继续。",
+          ? "记录已保存（当前会话），将自动打开筛选范围内的下一项。"
+          : "记录已保存。可核对库存/预占影响后再继续。",
         reference: response.outcome.factNo,
         outcome: response.outcome,
         stayOnItem: !autoNext,
@@ -1058,13 +1058,13 @@ export function FulfillmentOperationsPage() {
               checked={forceUnknownOnce}
               onChange={(e) => setForceUnknownOnce(e.target.checked)}
             />
-            下次过账模拟结果未知
+            模拟：过账结果不确定（仅演示）
           </label>
         </div>
       </div>
 
       <Alert>
-        <AlertTitle>边界说明</AlertTitle>
+        <AlertTitle>注意事项</AlertTitle>
         <AlertDescription className="space-y-1">
           <p>{NOT_ACCEPTANCE_NOTICE}</p>
           <p className="text-muted-foreground">{CORRECTION_NOTICE}</p>
@@ -1439,7 +1439,7 @@ export function FulfillmentOperationsPage() {
                   />
                 ) : (
                   <p className="text-xs text-muted-foreground">
-                    客户端预检通过；过账仍以服务端守恒与门禁为准。
+                    页面检查已通过；最终结果以系统复核为准。
                   </p>
                 )}
 
@@ -1886,7 +1886,7 @@ function FulfillmentTypeForm({
       <section className="space-y-3" aria-label="电子交付表单">
         <h3 className="text-sm font-semibold">电子交付</h3>
         <p className="text-xs text-muted-foreground">
-          交付对象仅展示掩码；明文不进入日志/普通 Query 缓存。失败不可覆盖。
+          交付信息仅显示打码内容，不会完整保存；失败记录不可被覆盖。
         </p>
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">

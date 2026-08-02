@@ -836,7 +836,7 @@ export function CustomerQualityPage() {
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
           title="客户经营质量"
-          description="服务端未配置默认统计期间。请显式选择起止日期后开始分析；不会自动采用本自然年。"
+          description="未配置默认统计期间，请选择起止日期后开始分析。"
           breadcrumbs={[
             { id: "an", label: "分析", href: "/analytics/customer-quality" },
             { id: "cq", label: "客户经营质量", current: true },
@@ -846,15 +846,14 @@ export function CustomerQualityPage() {
           <CalendarRangeIcon aria-hidden="true" />
           <AlertTitle>请选择统计期间</AlertTitle>
           <AlertDescription>
-            默认期间配置缺失（customerQualityPeriodPolicy
-            不可用）。指标、图表与明细在选定期间前不会发起查询。
+            尚未设置默认统计期间。选定期间后才会显示指标、图表与明细。
           </AlertDescription>
         </Alert>
         <Card size="sm">
           <CardHeader className="border-b">
             <CardTitle>显式期间</CardTitle>
             <CardDescription>
-              选定后写入 URL 的 from/to，并作为全部查询的唯一期间。
+              选定后作为本页所有统计的唯一期间。
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 pt-4 sm:flex-row sm:items-end">
@@ -885,7 +884,7 @@ export function CustomerQualityPage() {
           {periodPolicy?.presets && periodPolicy.presets.length > 0 ? (
             <CardContent className="border-t pt-4">
               <p className="mb-2 text-sm text-muted-foreground">
-                或选择已配置快捷项（仍会归一化为明确 from/to）：
+                或选择快捷期间：
               </p>
               <div className="flex flex-wrap gap-2">
                 {periodPolicy.presets.map((p) => (
@@ -991,15 +990,6 @@ export function CustomerQualityPage() {
                     : " · 显式选择"}
               </span>
               <span>· {data.scope.label}</span>
-              <span className="num">
-                · 来源更新 {data.freshness.sourceWatermark}
-              </span>
-              {data.period.customerQualityPeriodPolicyId ? (
-                <span className="num">
-                  · 策略 {data.period.customerQualityPeriodPolicyId}@
-                  {data.period.customerQualityPeriodPolicyVersion}
-                </span>
-              ) : null}
             </div>
           </div>
         }
@@ -1041,7 +1031,7 @@ export function CustomerQualityPage() {
           <AlertDescription>
             最近成功更新 {formatDateTime(data.freshness.projectedAt)}；来源更新时间{" "}
             <span className="num">{data.freshness.sourceWatermark}</span>
-            。可刷新；不宣称实时。
+            。数据可能不是最新，可点击刷新。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1049,7 +1039,7 @@ export function CustomerQualityPage() {
         <Alert variant="info">
           <AlertTitle>数据更新中</AlertTitle>
           <AlertDescription>
-            保留最近成功结果供查看。更新期间导出不得标为当前同步进度。
+            更新中，已保留最近成功结果。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1271,7 +1261,7 @@ export function CustomerQualityPage() {
         <BusinessEmptyState
           kind="no-scope"
           title="当前角色无客户数据范围"
-          description="不展示公司级 0 指标或构成。请查看当前范围或申请权限。"
+          description="当前角色无客户数据范围，请申请权限。"
         />
       ) : (
         <>
@@ -1350,7 +1340,7 @@ export function CustomerQualityPage() {
                 STANDARD: "—",
                 NONE: data.coverage.costUncoveredNetRevenue,
               }}
-              profitBasis="非卡券净收入 − ACTUAL/REDUCTION 净成本（不含税）；卡券不进入"
+              profitBasis="非卡券净收入 − 实际净成本（不含税）；卡券不计入"
               notice={
                 <>
                   成本覆盖收入{" "}
@@ -1371,10 +1361,9 @@ export function CustomerQualityPage() {
 
           {isVoucherOnly ? (
             <Alert variant="info">
-              <AlertTitle>业务性质 = 卡券</AlertTitle>
+              <AlertTitle>业务性质：卡券</AlertTitle>
               <AlertDescription>
-                卡券实际经营结果请前往卡券经营分析。本页隐藏实际盈亏，不显示 ¥0
-                或无穷大利润率。卡券收入仍计入规模与回款分析。
+                卡券实际经营结果请前往卡券经营分析；本页不显示卡券实际盈亏，卡券收入仍计入规模与回款分析。
                 <Button
                   type="button"
                   size="sm"
@@ -1455,9 +1444,9 @@ export function CustomerQualityPage() {
                 <CardDescription>
                   点击柱形筛选明细
                   {scaleDimension?.ruleVersion
-                    ? ` · 规则 ${scaleDimension.ruleVersion}`
+                    ? ` · 标签规则版本 v${scaleDimension.ruleVersion}`
                     : ""}
-                  。颜色非唯一读数方式，见下方数据表。
+                  。柱形颜色仅作区分，具体数值见下方表格。
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pt-4">
@@ -1573,7 +1562,7 @@ export function CustomerQualityPage() {
                 <CardDescription>
                   仅成本完整非卡券；卡券收入不进入利润标签
                   {profitDimension?.ruleVersion
-                    ? ` · 规则 ${profitDimension.ruleVersion}`
+                    ? ` · 标签规则版本 v${profitDimension.ruleVersion}`
                     : ""}
                 </CardDescription>
               </CardHeader>
@@ -1774,7 +1763,7 @@ export function CustomerQualityPage() {
             <BusinessEmptyState
               kind="no-data"
               title="期间内无授权经营记录"
-              description="可调整统计期间或数据范围后重查。不把公司级指标显示为业务零成交的误导结论。"
+              description="可调整统计期间或数据范围后重查。"
             />
           ) : data.emptyKind === "filter" ? (
             <BusinessEmptyState
@@ -1812,7 +1801,7 @@ export function CustomerQualityPage() {
           ) : (
             <BusinessTableFrame
               title="客户明细"
-              description="身份进客户中心 · 逾期进客户往来 · 实际盈亏进实际经营盈亏。标签只读（固定规则版本），无人工修改入口。金额口径与指标/图表/导出一致。"
+              description="点击客户进入客户中心；逾期与实际盈亏可分别下钻。金额口径与指标、图表、导出一致。"
               table={
                 <DataTable
                   data={pageRows}

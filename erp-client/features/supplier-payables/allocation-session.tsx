@@ -259,7 +259,7 @@ export function AllocationSession({
     issues.push({
       id: "over",
       label: "拟分配",
-      message: "拟分配合计超过本次记录金额（前端仅提示，服务端将再次校验）",
+      message: "拟分配合计超过本次记录金额，最终以系统校验为准",
     })
   }
   for (const id of selected) {
@@ -471,7 +471,7 @@ export function AllocationSession({
           <AlertDescription>
             {fromWorkspace ? `来自 ${fromWorkspace}` : null}
             {purchaseOrderId ? ` · 采购单 ${purchaseOrderId}` : null}
-            。完成后请返回来源页，由服务端重新查询付款门禁；未核销付款不算满足。
+            。完成后请返回来源页，将重新校验付款条件；未核销付款不满足先款要求。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -593,7 +593,7 @@ export function AllocationSession({
                             </div>
                             <div className="mt-1 flex flex-wrap items-center justify-between gap-2 text-sm">
                               <span className="text-muted-foreground">
-                                开放余额（服务端）
+                                开放余额
                               </span>
                               <MoneyValue value={open} taxBasis="gross" />
                             </div>
@@ -634,7 +634,7 @@ export function AllocationSession({
                   {track === "payment" ? "本次付款记录" : "本次进项发票记录"}
                 </CardTitle>
                 <CardDescription>
-                  拟分配仅作表单提示；未分配余额以提交后服务端结果为准
+                  未分配余额以提交后的系统结果为准
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pt-4">
@@ -842,7 +842,7 @@ export function AllocationSession({
         onOpenChange={setConfirmOpen}
         actionLabel={track === "payment" ? "登记付款并核销" : "登记进项发票并核销"}
         title={track === "payment" ? "确认登记付款并核销" : "确认登记进项发票并核销"}
-        description="提交后形成不可编辑记录；纠错须追加冲正/红票。服务端将校验供应商一致、余额与策略版本。"
+        description="提交后形成不可编辑记录；纠错须追加冲正/红票。提交时系统将校验供应商、余额与策略版本。"
         confirmLabel="确认提交"
         fromStatus={{ label: "草稿会话", tone: "neutral" }}
         toStatus={{ label: "已过账", tone: "success" }}
@@ -855,7 +855,7 @@ export function AllocationSession({
           track === "payment"
             ? "形成供应商付款单与有效 APPLY 分配"
             : "形成进项发票与有效 APPLY 分配",
-          "同步更新应付开放余额（服务端）",
+          "同步更新应付开放余额",
           "未分配余额保留在待核销视图",
           "来源页须重查付款门禁，未核销付款不满足",
         ]}

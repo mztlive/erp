@@ -542,7 +542,7 @@ export function ConsumptionOrdersListPage() {
         <AlertTitle className="whitespace-nowrap">只读记录追溯</AlertTitle>
         <AlertDescription className="min-w-0 lg:truncate">
           {data?.boundaryNotice ??
-            "本页不提供修改支付状态、编辑分摊或旁路重试供应商动作。导出与受控揭示走审计。"}
+            "本页只读：不修改支付状态、不编辑分摊、不重试供应商动作；导出与信息揭示均有审计。"}
         </AlertDescription>
         <div className="flex items-center gap-2 text-sm">
           <span className="whitespace-nowrap text-muted-foreground">演示状态</span>
@@ -608,9 +608,9 @@ export function ConsumptionOrdersListPage() {
         <div className="space-y-3 rounded-2xl border border-border p-4">
           <BatchImpactPreview
             title="导出当前筛选全部"
-            description="使用服务端筛选结果与字段清单，不把当前页当全量。下载时重新鉴权。"
+            description="按当前筛选结果导出，不限于当前页；下载时将重新校验权限。"
             filterSummary={data?.filterSummary ?? "—"}
-            selectionScope="当前筛选全部 · 服务端筛选结果"
+            selectionScope="当前筛选全部"
             estimated={data?.pageInfo.total ?? 0}
             processable={data?.pageInfo.total ?? 0}
             skipped={0}
@@ -618,11 +618,11 @@ export function ConsumptionOrdersListPage() {
             sensitiveFields={[
               "收货地址",
               "手机号",
-              "完整支付引用",
+              "完整支付流水号",
               "卡号/卡密（永不导出）",
               "未授权成本金额",
             ]}
-            skippedReason="无权限字段按掩码规则跳过明文"
+            skippedReason="无权限字段以掩码形式导出"
           />
           <div className="flex flex-wrap gap-2">
             <Button
@@ -651,13 +651,13 @@ export function ConsumptionOrdersListPage() {
         <BusinessEmptyState
           kind="no-scope"
           title="无模块权限"
-          description="当前角色无权访问商城消费订单。不展示全局 0 指标。"
+          description="当前角色无权访问商城消费订单。不显示无权限范围的指标。"
         />
       ) : empty === "NO_SCOPE" ? (
         <BusinessEmptyState
           kind="no-scope"
           title="无数据范围"
-          description="你可进入此页面，但授权商城/客户范围内没有可查看消费订单。不显示 0 订单指标。"
+          description="你可进入此页面，但授权商城/客户范围内没有可查看消费订单。不显示无权限范围的指标。"
         />
       ) : (
         <>
@@ -875,7 +875,7 @@ export function ConsumptionOrdersListPage() {
                 <BusinessEmptyState
                   kind="filter"
                   title="当前筛选无结果"
-                  description="调整期间、商城、履约链或归集状态后重试。"
+                  description="调整商城、履约链或归集状态后重试。"
                   action={
                     <Button
                       type="button"
@@ -901,7 +901,7 @@ export function ConsumptionOrdersListPage() {
                 <BusinessEmptyState
                   kind="no-data"
                   title="当前范围没有消费订单"
-                  description="新支付记录到达后将显示。可调整演示状态或来源范围。"
+                  description="新支付记录到达后会自动显示。"
                 />
               ) : (
                 <DataTable
@@ -930,8 +930,8 @@ export function ConsumptionOrdersListPage() {
           />
 
           <div className="flex flex-wrap gap-2">
-            <Badge variant="secondary">CARD / WECHAT 仅两支付来源</Badge>
-            <Badge variant="outline">无福利账户分支</Badge>
+            <Badge variant="secondary">仅支持卡券与微信两种支付来源</Badge>
+            <Badge variant="outline">无福利账户支付</Badge>
             <Badge variant="outline">
               列表 {data?.pageInfo.total ?? 0} 条 · 页长 {pagination.pageSize}
             </Badge>

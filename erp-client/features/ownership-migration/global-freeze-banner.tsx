@@ -45,7 +45,7 @@ export function OwnershipMigrationGlobalFreezeBanner() {
             冻结：{freeze.frozenActions.slice(0, 4).join("、")}
             {freeze.frozenActions.length > 4 ? "…" : ""}
           </p>
-          <p className="font-medium">不可忽略 · 不可暂时关闭</p>
+          <p className="font-medium">此冻结为全局状态，无法关闭或跳过</p>
         </div>
       }
       action={{

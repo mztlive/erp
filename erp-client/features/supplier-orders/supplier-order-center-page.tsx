@@ -560,8 +560,8 @@ export function SupplierOrderCenterPage({
                 }}
                 title={
                   canReplay
-                    ? "查询已明确无结果，可安全重放"
-                    : "须先查询明确无结果且服务端确认可安全重试"
+                    ? "已确认无结果，可安全重试"
+                    : "需先查询确认无结果后，方可重试"
                 }
               >
                 安全重放
@@ -630,7 +630,7 @@ export function SupplierOrderCenterPage({
       <Alert variant="info">
         <AlertTitle>商城支付已发生</AlertTitle>
         <AlertDescription className="text-xs leading-relaxed">
-          {o.paymentOccurredNotice} 支付键摘要{" "}
+          {o.paymentOccurredNotice} 支付凭证{" "}
           <span className="num">{o.paymentFactKey}</span> · 支付时间{" "}
           <span className="num">{formatTime(o.paidAt)}</span>
         </AlertDescription>
@@ -639,7 +639,7 @@ export function SupplierOrderCenterPage({
       {isResultUnknown ? (
         <Alert variant="warning" aria-live="polite">
           <TriangleAlertIcon />
-          <AlertTitle>结果未知 — 唯一主路径是查询原结果</AlertTitle>
+          <AlertTitle>结果未知 — 请先查询原结果</AlertTitle>
           <AlertDescription className="text-xs leading-relaxed">
             不得把结果未知直接改成成功，也不得在未查询前直接再次下单。
             {detail.lastInvestigation ? (
@@ -652,7 +652,7 @@ export function SupplierOrderCenterPage({
               </span>
             ) : (
               <span className="mt-1 block">
-                尚未查询。主按钮仅「查询原结果」；「安全重放」在明确无结果且可安全重试前保持禁用。
+                尚未查询。主按钮仅「查询原结果」；重试按钮在确认无结果前保持禁用。
               </span>
             )}
           </AlertDescription>
@@ -664,7 +664,7 @@ export function SupplierOrderCenterPage({
         <Alert variant="info">
           <AlertTitle>已完成 + 部分退款</AlertTitle>
           <AlertDescription className="text-xs">
-            履约轨保持「已完成」，退款轨为「部分」。三轨正交，不用单一综合状态覆盖记录。
+            履约与退款状态独立记录，互不覆盖
           </AlertDescription>
         </Alert>
       ) : null}
@@ -690,9 +690,6 @@ export function SupplierOrderCenterPage({
                     : "info"
                 }
               />
-            </span>
-            <span>
-              版本 <span className="num">{detail.workItem.subjectHash}</span>
             </span>
             <span>完成动作须另行确认可验证终态</span>
           </CardContent>
@@ -1169,7 +1166,7 @@ export function SupplierOrderCenterPage({
                     <div>{a.actionLabel}</div>
                     {a.techSummary ? (
                       <div className="text-[11px] text-muted-foreground">
-                        技术摘要：{a.techSummary}
+                        摘要：{a.techSummary}
                       </div>
                     ) : null}
                   </TableCell>
@@ -1233,8 +1230,8 @@ export function SupplierOrderCenterPage({
         effects={[
           `订单 ${o.orderNo}`,
           `供应商 ${o.supplierName}`,
-          "沿用原下单任务号（服务端）",
-          "任务保持 PENDING/IN_PROGRESS，不自动完成",
+          "沿用原下单任务号",
+          "任务保持待处理，不会自动完成",
         ]}
         irreversibleEffects={["将再次调用供应商下单接口"]}
         pending={replayMutation.isPending}

@@ -61,7 +61,7 @@ export function SharedWorkspacePage({
     default:
       return (
         <div className="p-5">
-          <PageHeader title={meta.name} description="未识别的页面模式。" />
+          <PageHeader title={meta.name} description="页面暂不可用。" />
           <Button type="button" onClick={() => void query.refetch()}>
             重试
           </Button>

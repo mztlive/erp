@@ -359,7 +359,7 @@ function MasterDataCenterBody({
                 <span className="num">{data.productConstraints.baseUnit}</span>
               </p>
               <p className="mt-1 text-muted-foreground">
-                规格身份变化须新建 SKU；已引用 SKU 不得改基础单位（演示阻断见形成新版本）。
+                规格身份变化需新建 SKU；已被引用的 SKU 不可修改基础单位。
               </p>
             </div>
           ) : null}
@@ -395,7 +395,7 @@ function MasterDataCenterBody({
         <DocumentSection
           id="md-section-versions"
           title="版本"
-          description="RevisionTimeline · 历史名称记录独立于当前名称"
+          description="版本时间线：历史名称记录独立于当前名称"
         >
           <RevisionTimeline
             revisions={data.revisionTimeline.map((rev) => ({
@@ -431,7 +431,7 @@ function MasterDataCenterBody({
         <DocumentSection
           id="md-section-relations"
           title="关系"
-          description="使用影响与选择器 eligibility（系统最新数据）"
+          description="使用影响与业务选择器可用性（系统最新数据）"
         >
           <p className="text-sm">
             历史引用约{" "}

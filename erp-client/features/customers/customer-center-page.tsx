@@ -219,7 +219,7 @@ export function CustomerCenterPage() {
         <BusinessEmptyState
           kind="no-scope"
           title="当前角色无客户范围"
-          description="你可以进入客户中心，但当前权限与数据范围内没有任何客户。这与「尚未创建客户」不同。"
+          description="当前权限与数据范围内没有客户；不代表系统尚无客户。"
         />
       ) : data && data.totalInScope === 0 && !q.trim() && status === "active" ? (
         <BusinessEmptyState
@@ -252,7 +252,7 @@ export function CustomerCenterPage() {
             <CardDescription>
               共 {items.length} 家 · {SCOPE_LABELS[scope]}
               {status !== "active" ? ` · ${status === "disabled" ? "停用" : "全部状态"}` : ""}
-              。本页是进入稳定客户对象的选择器，不是第二套全功能客户表。
+              。本页用于选择客户并进入其详情。
             </CardDescription>
           </CardHeader>
           <CardContent className="divide-y p-0" role="list" aria-label="客户列表">

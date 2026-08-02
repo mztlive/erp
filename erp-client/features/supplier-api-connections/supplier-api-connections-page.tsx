@@ -1220,8 +1220,7 @@ function ConnectionCenter({
           <TriangleAlertIcon aria-hidden="true" />
           <AlertTitle>处理结果待确认</AlertTitle>
           <AlertDescription>
-            不得按成功或失败处理，不乐观改变启停或引用状态。请按原任务号 /
-            operationId 查询最终结论。
+            不得按成功或失败处理，不乐观改变启停或引用状态。请按原任务号查询最终结论。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1280,7 +1279,7 @@ function ConnectionCenter({
               succeeded={result.status === "succeeded" ? 4 : 0}
               failed={result.status === "failed" ? 1 : 0}
               label={`后台任务 ${result.jobNo}`}
-              description="健康检查 / 目录同步以任务号固定结果；HTTP 返回不等于业务完成。"
+              description="请求成功返回不代表业务处理完成，请以任务号查询最终结果。"
             />
           ) : null}
         </div>
@@ -1389,7 +1388,7 @@ function ConnectionCenter({
             processable={1}
             skipped={0}
             background={false}
-            sensitiveFields={["密钥正文", "签名材料"]}
+            sensitiveFields={["密钥配置", "签名材料"]}
             skippedReason={undefined}
           />
           <dl className="grid gap-2 text-sm sm:grid-cols-3">
@@ -1582,7 +1581,7 @@ function OverviewSection({
           <CardTitle className="text-base">技术就绪</CardTitle>
           <CardDescription>
             {role === "procurement"
-              ? "采购仅见就绪摘要，不显示引用别名"
+              ? "采购角色仅查看就绪状态"
               : "地址/密钥引用与适配器"}
           </CardDescription>
         </CardHeader>
@@ -2150,7 +2149,7 @@ function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
         </Card>
       ))}
       <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
-        跨工作面只传连接稳定身份；目标页重新查询健康与能力，不信任来源布尔值。
+        进入相关工作面时将重新获取最新状态。
       </p>
     </div>
   )
@@ -2160,7 +2159,7 @@ function AuditSection({ conn }: { conn: ConnectionCenterView }) {
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
-        配置变更与业务确认追加式只读 ·{" "}
+        配置变更与业务确认均保留审计记录 ·{" "}
         <Link
           href={`/system/access-audit?objectId=${conn.connectionId}`}
           className="text-primary underline-offset-2 hover:underline"

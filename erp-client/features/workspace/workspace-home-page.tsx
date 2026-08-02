@@ -274,13 +274,6 @@ function TaskGroupSection({
                 </Button>
               </div>
             ) : null}
-            {group.previewLimitSource === "TEMPORARY_FALLBACK" ? (
-              <p className="text-xs text-muted-foreground">
-                每组预览上限暂为临时设计参数（
-                {previewLimit}
-                条），返回值由服务端 pagePreviewLimit 配置。
-              </p>
-            ) : null}
           </div>
         </CollapsibleContent>
       </div>
@@ -487,7 +480,7 @@ export function WorkspaceHomePage() {
           <AlertDescription>
             {projectionFreshness.state === "failed"
               ? "指标与预警不得视为实时；待办任务仍可按下方任务列表处理。"
-              : "数据更新已超过 1 分钟，指标与预警不宣称实时。待办任务列表仍按最新结果展示。"}
+              : "数据更新已超过 1 分钟，指标可能不是最新；待办任务仍可按下方列表处理。"}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -513,8 +506,6 @@ export function WorkspaceHomePage() {
               {hasActiveFilter
                 ? `当前筛选「${filterLabel}」共 ${visibleCount} 项`
                 : `当前共 ${visibleCount} 项待办，按超期、优先级与截止时间展示`}
-              {refreshing ? " · 正在刷新" : null}
-              {dashboardQuery.isError ? " · 刷新失败，仍显示上次内容" : null}
             </CardDescription>
             <CardAction className="flex flex-wrap gap-1">
               {hasActiveFilter ? (
@@ -545,7 +536,7 @@ export function WorkspaceHomePage() {
           <CardContent>
             <AsyncSectionState
               status={asyncStatus}
-              refreshingLabel="正在更新任务，当前仍显示上次筛选结果"
+              refreshingLabel="正在刷新，仍显示上次结果"
               error="工作台任务刷新失败，已保留上次成功内容。"
               errorKind={dashboardQuery.isError ? "projection" : "system"}
               retryAction={
@@ -558,7 +549,7 @@ export function WorkspaceHomePage() {
                 <BusinessEmptyState
                   kind="no-tasks"
                   title="当前没有待处理事项"
-                  description="当前工作范围内没有需要你处理的任务。可查看最近打开或进入有权限的业务模块。"
+                  description="当前没有待处理事项。可查看最近打开记录或进入其它业务模块。"
                 />
               ) : null}
 
@@ -566,7 +557,7 @@ export function WorkspaceHomePage() {
                 <BusinessEmptyState
                   kind="filter"
                   title="当前筛选无结果"
-                  description={`没有符合「${filterLabel}」的待办。可清除筛选查看全部有效任务。`}
+                  description={`没有符合「${filterLabel}」的待办。可清除筛选查看全部任务。`}
                   action={
                     <Button type="button" variant="outline" onClick={clearFilters}>
                       清除筛选
@@ -599,9 +590,6 @@ export function WorkspaceHomePage() {
               <CardTitle>预警与数据新鲜度</CardTitle>
               <CardDescription>
                 只显示需要你关注的异常
-                {projectionFreshness.state === "stale"
-                  ? " · 数据非实时"
-                  : null}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -654,7 +642,7 @@ export function WorkspaceHomePage() {
             <CardHeader className="border-b">
               <CardTitle>最近打开</CardTitle>
               <CardDescription>
-                继续上次的核对与处理上下文（非正式业务数据）。
+                快速回到上次处理的任务。
               </CardDescription>
             </CardHeader>
             <CardContent>

@@ -217,7 +217,7 @@ export function ObjectWorkspacePage({ def }: { def: WorkspacePageDef }) {
                   onClick={() => {
                     setActionResult({
                       title: "已打开关联业务入口",
-                      description: `对象 ${selected.code} 的关联业务导航已记录（演示）。`,
+                      description: "关联业务导航已记录（演示）。",
                       reference: `REL-${selected.id.toUpperCase()}`,
                     })
                   }}
@@ -275,7 +275,7 @@ export function ObjectWorkspacePage({ def }: { def: WorkspacePageDef }) {
           <DialogHeader>
             <DialogTitle>{payload.primaryActionLabel ?? "新建"}</DialogTitle>
             <DialogDescription>
-              创建新对象草稿并返回可追踪编号（演示会话内结果）。
+              将创建一条草稿记录（演示环境）。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -288,7 +288,7 @@ export function ObjectWorkspacePage({ def }: { def: WorkspacePageDef }) {
                 const reference = `OBJ-${def.id}-${Date.now().toString(36).toUpperCase()}`
                 setActionResult({
                   title: `${payload.primaryActionLabel ?? "新建"}已提交`,
-                  description: "草稿对象已生成，可继续补全主数据字段。",
+                  description: "草稿已创建，可继续补全资料字段。",
                   reference,
                 })
                 setCreateOpen(false)

@@ -438,7 +438,7 @@ export function SalesOrdersListPage({
           <FormalActionResult
             status="succeeded"
             title="导出任务已完成（客户端筛选结果）"
-            description={`共 ${exportJob.rowCount} 行，受当前筛选与权限版本约束；目标页打开后应重新查询金额和状态。非服务端全量后台导出。`}
+            description={`共 ${exportJob.rowCount} 行，仅包含当前筛选结果；导出后金额与状态以列表页最新数据为准。`}
             reference={exportJob.jobId}
             facts={[
               {
@@ -580,7 +580,7 @@ export function SalesOrdersListPage({
                     <div>
                       <div className="font-medium">高级筛选</div>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        创建来源与当前主责分列筛选；主状态使用服务端枚举文案。
+                        创建来源与当前主责分列筛选；主状态按系统状态清单展示。
                       </p>
                     </div>
                     <label className="grid gap-1.5 text-sm">

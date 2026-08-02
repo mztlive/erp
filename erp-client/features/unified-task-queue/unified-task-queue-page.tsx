@@ -623,7 +623,7 @@ export function UnifiedTaskQueuePage() {
         setLastResult({
           status: "unknown",
           title: "仍不确定",
-          description: "服务端尚未返回终态，请稍后用原任务号再查。",
+          description: "系统仍在处理中，请稍后使用原任务编号查询结果。",
           reference: pendingIdem.key,
         })
       }
@@ -923,7 +923,7 @@ export function UnifiedTaskQueuePage() {
         {converge || workItemType ? (
           <BusinessStatusBadge
             context="list"
-            label="已收敛到单类型"
+            label="已筛选为单一类型"
             tone="info"
           />
         ) : null}
@@ -1342,7 +1342,7 @@ export function UnifiedTaskQueuePage() {
 
                 <decisionForm.AppForm>
                   <div className="space-y-2">
-                    <p className="text-sm font-medium">决策备注（本地保留）</p>
+                    <p className="text-sm font-medium">决策备注</p>
                     <decisionForm.AppField name="note">
                       {(field) => (
                         <field.TextareaField
@@ -1483,7 +1483,7 @@ export function UnifiedTaskQueuePage() {
                             status: "failed",
                             title: "已模拟操作失效",
                             description:
-                              "本地备注仍保留，提交已阻止，请重新领取。",
+                              "备注仍保留，但任务已被他人处理，请重新打开任务。",
                             reference: task.id,
                           })
                         })
@@ -1627,7 +1627,7 @@ export function UnifiedTaskQueuePage() {
         changedAt="刚刚"
         diff={
           <p className="text-sm">
-            任务针对版本与当前记录不一致。本地决策备注已保留，但不能直接覆盖提交。
+            任务信息已更新，无法直接提交。你填写的备注已保留，请刷新后重新提交。
           </p>
         }
         onReload={() => {
@@ -1647,8 +1647,8 @@ export function UnifiedTaskQueuePage() {
           setConflictOpen(false)
           setLastResult({
             status: "blocked",
-            title: "本地备忘已保留",
-            description: "已保存本地备注副本，请刷新版本后重新领取再提交。",
+            title: "备注已自动保留",
+            description: "请重新打开任务后提交。",
             reference: task?.id ?? "—",
           })
         }}

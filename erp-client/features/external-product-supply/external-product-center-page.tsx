@@ -115,7 +115,7 @@ export function ExternalProductCenterPage({
         <BusinessEmptyState
           kind="no-data"
           title="未找到外部商品"
-          description={`稳定身份 ${externalProductId} 不在当前目录观察范围。`}
+          description={`外部商品 ${externalProductId} 不在当前目录范围内。`}
           action={
             <Button render={<Link href={returnTo} />}>返回队列</Button>
           }
@@ -177,7 +177,7 @@ export function ExternalProductCenterPage({
                 <span className="text-border" aria-hidden="true">
                   ·
                 </span>
-                <span>上下文 {queueContextId}</span>
+                <span>队列 {queueContextId}</span>
               </>
             ) : null}
           </span>
@@ -251,7 +251,7 @@ export function ExternalProductCenterPage({
       {item.changeType === "NEW" || item.changeType === "CHANGED" ? (
         <Alert>
           <TriangleAlertIcon aria-hidden="true" />
-          <AlertTitle>WORK_ITEM_TYPE_UNREGISTERED</AlertTitle>
+          <AlertTitle>任务类型尚未登记</AlertTitle>
           <AlertDescription>
             {item.registrationBlocker?.message}
           </AlertDescription>
@@ -259,7 +259,7 @@ export function ExternalProductCenterPage({
       ) : null}
 
       {costFieldVisibility === "masked" ? (
-        <Badge variant="outline">价格/税率/费用字段已按权限掩码</Badge>
+        <Badge variant="outline">价格/税率/费用字段已按权限隐藏</Badge>
       ) : null}
 
       <Tabs value={section} onValueChange={setSection}>
@@ -336,7 +336,7 @@ export function ExternalProductCenterPage({
           <CardHeader className="border-b py-3">
             <CardTitle className="text-base">映射历史</CardTitle>
             <CardDescription>
-              同一时点仅一个有效映射；历史不原位覆盖
+              同一时间仅一个有效映射；历史记录不会被覆盖
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-2 pt-4 text-sm">
@@ -364,9 +364,6 @@ export function ExternalProductCenterPage({
         <Card size="sm">
           <CardHeader className="border-b py-3">
             <CardTitle className="text-base">供给版本</CardTitle>
-            <CardDescription>
-              不可变修订时间线；供货价变化不覆盖旧版、不自动改商城销售价
-            </CardDescription>
           </CardHeader>
           <CardContent className="pt-4">
             {item.offering?.revisionHistory?.length ? (
@@ -464,7 +461,7 @@ export function ExternalProductCenterPage({
             <p>接收时间 {formatTime(item.syncContext.receivedAt)}</p>
             <p>
               数据版本{" "}
-              {rev.contentFingerprintShort ?? "—"}（无原始报文/密钥）
+              {rev.contentFingerprintShort ?? "—"}（不含源数据原文）
             </p>
             {related.techExceptions.map((t) => (
               <Button
@@ -480,8 +477,7 @@ export function ExternalProductCenterPage({
             {item.changeType === "ERROR" || item.changeType === "STOPPED" ? (
               <p>
                 聚合任务 {item.workItem.workItemId} ·{" "}
-                {item.workItem.workItemType} · handler{" "}
-                {item.workItem.handlerKey}
+                {item.workItem.workItemType}
               </p>
             ) : null}
           </CardContent>

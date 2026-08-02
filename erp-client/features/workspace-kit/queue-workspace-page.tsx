@@ -173,10 +173,9 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
         rejected: "已退回补充",
       } as const
       const descriptions = {
-        succeeded: "终局成功已写入会话队列状态；刷新后该项不再出现在有效队列。",
-        blocked:
-          "暂挂已标记为「已暂挂」并仍保留在有效队列；可在「已暂挂」范围查看。已打开下一条。",
-        rejected: "退回结论已记录并从有效队列移除（再入列由服务端负责）。",
+        succeeded: "已完成，刷新后该项不再出现在队列中。",
+        blocked: "已暂挂，仍保留在队列；已打开下一条。",
+        rejected: "已退回并移出队列。",
       } as const
       setLastResult({
         status: outcome,

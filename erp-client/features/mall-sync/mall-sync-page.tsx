@@ -1141,9 +1141,9 @@ export function MallSyncPage() {
       {/* 演示控制：角色 / 阶段 / 策略 / 来源（mock） */}
       <Card size="sm">
         <CardHeader className="border-b py-3">
-          <CardTitle className="text-sm">演示控制（会话 mock）</CardTitle>
+          <CardTitle className="text-sm">演示控制（仅当前会话生效）</CardTitle>
           <CardDescription>
-            切换角色与主责阶段以验证分权、冻结与封存；不写入服务端配置。
+            切换角色与阶段可查看不同阶段的分工与冻结状态；变更仅本次会话有效。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-4 pt-3">
@@ -1557,7 +1557,7 @@ export function MallSyncPage() {
               }
               description={
                 data.emptyReason === "FILTER_NO_RESULT"
-                  ? "清除筛选或切换角色查看其它责任范围"
+                  ? "清除筛选或切换角色后查看其它任务。"
                   : "新任务到达后刷新"
               }
             />
@@ -1824,7 +1824,7 @@ export function MallSyncPage() {
                             onCheckedChange={setForceUnknown}
                           />
                           <Label htmlFor="force-unk" className="text-xs">
-                            演示：提交后结果未知
+                            模拟结果不确定（仅演示）
                           </Label>
                         </div>
                         <div className="flex flex-wrap gap-2">
@@ -1878,7 +1878,7 @@ export function MallSyncPage() {
                           指派业务责任人
                         </Button>
                         <p className="w-full text-xs text-muted-foreground">
-                          管理员不能确认映射（CONFIRM_TARGET 已阻断）。
+                          管理员不能确认映射，需指派给业务责任人后由其确认。
                         </p>
                       </div>
                     ) : null}
@@ -1929,7 +1929,7 @@ export function MallSyncPage() {
                                   variant="outline"
                                   onClick={() => void handleReapply(true)}
                                 >
-                                  演示结果未知
+                                  模拟结果不确定（仅演示）
                                 </Button>
                               </>
                             ) : null}
@@ -2073,7 +2073,7 @@ export function MallSyncPage() {
             <BusinessEmptyState
               kind="no-scope"
               title="当前角色无核对范围"
-              description="按数据范围过滤后的 mock 演示"
+              description="当前角色没有可核对的任务，可切换角色或清除筛选后重试。"
             />
           )}
         </div>
@@ -2085,8 +2085,7 @@ export function MallSyncPage() {
             <Alert>
               <AlertTitle>历史只读</AlertTitle>
               <AlertDescription>
-                第一期轮询已封存。当前执行信息、迁移与通用对账请前往执行信息 / 主责迁移 /
-                W29。
+                第一期同步已完成归档。请前往执行信息、主责迁移与对账工作区查看后续内容。
               </AlertDescription>
             </Alert>
           ) : null}
@@ -2134,7 +2133,7 @@ export function MallSyncPage() {
               }}
             >
               <p className="text-sm text-muted-foreground">
-                当前同步进度 {context?.freshness.currentWatermark ?? "—"} · 阶段{" "}
+                同步至 {context?.freshness.currentWatermark ?? "—"} · 阶段{" "}
                 {STAGE_LABEL[stage]}
               </p>
               <incrementalForm.AppField

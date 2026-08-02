@@ -114,7 +114,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
         <Alert variant="destructive" role="alert">
           <AlertTitle>分摊不守恒</AlertTitle>
           <AlertDescription>
-            服务端行列校验存在差异，高亮无效单元格。前端不猜测优惠、运费或分摊。
+            系统校验与页面存在差异时高亮无效单元格；页面不推算优惠、运费或分摊。
           </AlertDescription>
         </Alert>
       ) : (
@@ -676,9 +676,7 @@ export function ConsumptionOrderCenterPage({
               <Alert variant="default" className="mt-3">
                 <AlertTitle>原人工履约链</AlertTitle>
                 <AlertDescription>
-                  支付发生在唯一主责切换时点 T（
-                  <span className="num">{formatTime(view.fulfillment.cutoverAt)}</span>
-                  ）之前。历史回填只记账，不创建供应商子订单，不显示缺单错误。
+                  该支付发生在履约主责切换之前，仅作历史记录，不创建供应商子订单。
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -714,7 +712,7 @@ export function ConsumptionOrderCenterPage({
               ]}
             />
             <p className="mt-2 text-xs text-muted-foreground">
-              地址短时揭示需 REVEAL_ADDRESS 权限与审计；离开页面或权限收回立即清除。卡号/卡密永不展示。
+              地址仅短暂显示，需授权并记录审计；离开页面后立即清除。卡号与卡密永不展示。
             </p>
           </DocumentSection>
         </div>
@@ -723,7 +721,7 @@ export function ConsumptionOrderCenterPage({
       {section === "facts" ? (
         <DocumentSection
           title="五类关键记录时间线"
-          description="以 occurredAt 为业务时间，同时展示 receivedAt。多次部分退款与余额恢复逐笔展示，不按订单号合并。"
+          description="以业务发生时间排序，并展示接收时间。多次部分退款与余额恢复逐笔展示，不按订单号合并。"
         >
           <div className="grid gap-3 lg:grid-cols-2">
             {sortedFacts.map((fact) => (
@@ -873,7 +871,7 @@ export function ConsumptionOrderCenterPage({
       {section === "payment" ? (
         <DocumentSection
           title="支付与分摊"
-          description="商品 × 支付来源守恒矩阵；合计与有效性完全采用服务端结果。"
+          description="商品与支付来源的守恒校验；合计与状态以系统结果为准。"
         >
           <div className="mb-4 flex flex-wrap gap-2">
             {view.paymentSources.map((s) => (
@@ -890,7 +888,7 @@ export function ConsumptionOrderCenterPage({
       {section === "origin" ? (
         <DocumentSection
           title="来源追溯"
-          description="卡实例短引用（非卡号）→ 客户 → 原销售单 → 唯一卡券明细。永不展示卡号/卡密。"
+          description="从卡实例引用可追溯到客户、原销售单与对应卡券明细；不展示卡号与卡密。"
         >
           <div className="space-y-3">
             {view.paymentSources.map((s) => (
@@ -917,7 +915,7 @@ export function ConsumptionOrderCenterPage({
                     <Alert variant="info">
                       <AlertTitle>微信支付不挂企业卡券收入归属</AlertTitle>
                       <AlertDescription>
-                        微信来源仅短支付引用，不关联卡实例或销售单卡券明细。
+                        微信支付仅显示支付摘要，不关联卡实例或卡券明细。
                       </AlertDescription>
                     </Alert>
                   ) : null}
@@ -931,7 +929,7 @@ export function ConsumptionOrderCenterPage({
                     >
                       <AlertTitle>
                         {s.attributionIssue.type === "BASELINE_CONFLICT"
-                          ? "基线冲突，禁止覆盖"
+                          ? "数据版本冲突，禁止覆盖"
                           : s.attributionIssue.type === "SOURCE_OBJECT_MISSING"
                             ? "来源对象缺失 · 待归集"
                             : "未归属 · 待归集"}
@@ -1010,7 +1008,7 @@ export function ConsumptionOrderCenterPage({
                     />
                   ) : s.sourceType === "CARD" ? (
                     <p className="text-sm text-muted-foreground">
-                      卡实例基线或客户尚未归集，保留稳定来源引用，不猜测补值。
+                      卡实例或客户尚未归集，保留原始引用，不补充猜测值。
                     </p>
                   ) : null}
                 </CardContent>
@@ -1034,7 +1032,7 @@ export function ConsumptionOrderCenterPage({
               <AlertTitle>未形成供应商子订单</AlertTitle>
               <AlertDescription>
                 {view.fulfillment.autoFulfillmentBlocker ??
-                  "自动履约条件不足或归集未完成。支付记录已保留，进入差异而非拒收。"}
+                  "自动履约条件不足或归集未完成；支付记录已保留，标记为差异。"}
                 {view.workItemIds[0] ? (
                   <div className="mt-2">
                     <Button
@@ -1078,7 +1076,7 @@ export function ConsumptionOrderCenterPage({
                           商城支付已发生，正在处理履约异常
                         </AlertTitle>
                         <AlertDescription>
-                          本页不提供编辑/重试商城订单或旁路供应商动作。请在供应商订单按原任务号查询/处理。
+                          本页不支持编辑或重试商城订单，也不直接操作供应商订单；请前往供应商订单按原任务号处理。
                         </AlertDescription>
                       </Alert>
                     )}
@@ -1126,7 +1124,7 @@ export function ConsumptionOrderCenterPage({
                           },
                           {
                             id: "f-22899",
-                            label: "付款分配反向数",
+                            label: "付款分配冲正数",
                             value: String(
                               so.supplierRefundSummary
                                 .reversedPaymentAllocationCount
@@ -1159,7 +1157,7 @@ export function ConsumptionOrderCenterPage({
       {section === "cost" ? (
         <DocumentSection
           title="成本口径"
-          description="NONE 显示为空与原因，不按零成本进入利润暗示。成本不与支付矩阵混写。"
+          description="无成本时仅显示原因，不按零成本计入利润。"
         >
           <CostCoverageNotice
             basis={costBasisPrimary}
@@ -1191,7 +1189,7 @@ export function ConsumptionOrderCenterPage({
             }}
             profitBasis={
               costBasisPrimary === "NONE"
-                ? "禁止按零成本计算利润；经营分析见卡券经营分析"
+                ? "无成本数据时不计入利润；经营分析见「卡券经营分析」"
                 : "利润解读须同时阅读成本覆盖"
             }
             notice={
@@ -1269,7 +1267,7 @@ export function ConsumptionOrderCenterPage({
                       {ca.costBasis === "NONE" ? (
                         <p className="mt-2 text-sm text-warning-foreground">
                           {ca.noneReason ??
-                            "无可用成本来源 · 金额为空 · 不进入利润"}
+                            "无可用成本来源，金额为空，不计入利润"}
                         </p>
                       ) : null}
                     </CardContent>
@@ -1284,7 +1282,7 @@ export function ConsumptionOrderCenterPage({
       {section === "aftersales" ? (
         <DocumentSection
           title="售后结果分轨"
-          description="商城退款只冲减消费；卡券余额恢复只记余额回补；供应商退款分列未付应付与已付现金，不替代商城退款。"
+          description="商城退款仅冲减消费，卡券余额恢复仅记回补，供应商退款另行分列，不替代商城退款。"
         >
           <div className="grid gap-3 md:grid-cols-3">
             <Card>
@@ -1401,7 +1399,7 @@ export function ConsumptionOrderCenterPage({
             ]}
           />
           <div className="mt-4 space-y-2">
-            <p className="text-sm font-medium">动作阻断（服务端）</p>
+            <p className="text-sm font-medium">动作阻断</p>
             {view.actionBlockers.length === 0 ? (
               <p className="text-sm text-muted-foreground">无额外阻断</p>
             ) : (
@@ -1422,9 +1420,9 @@ export function ConsumptionOrderCenterPage({
             )}
           </div>
           <Alert variant="default" className="mt-4">
-            <AlertTitle>原始记录报文不在本页展示</AlertTitle>
+            <AlertTitle>原始记录内容不在本页展示</AlertTitle>
             <AlertDescription>
-              受控排障进入接口错误中心，仍只展示脱敏摘要。
+              如需排障，请前往接口错误中心查看脱敏摘要。
               {view.workItemIds[0] ? (
                 <div className="mt-2">
                   <Button

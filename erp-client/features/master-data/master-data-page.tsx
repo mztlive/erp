@@ -519,7 +519,7 @@ function MasterDataListWorkspace({
       {permissionDemo ? (
         <div
           className="flex flex-wrap gap-2 text-xs text-muted-foreground"
-          aria-label="五层权限演示摘要"
+          aria-label="权限摘要"
         >
           <Badge variant="outline">模块：有权</Badge>
           <Badge variant="outline">
@@ -542,7 +542,7 @@ function MasterDataListWorkspace({
         <FormalActionResult
           status="blocked"
           title="仓库写责任未确认（Q1）"
-          description="仓库资料与 SKU 策略可查询；新建、形成版本、停用与策略维护全部暂不可写入。仓储与系统管理员均不可绕过。"
+          description="仓库资料与 SKU 策略仅可查看；新建、改版、停用等功能暂不可用，任何角色都无法操作。"
           reference="WAREHOUSE_WRITE_OWNER_UNCONFIRMED"
         />
       ) : null}
@@ -570,17 +570,17 @@ function MasterDataListWorkspace({
       {selectorDemoOpen && selectorQuery.data ? (
         <section
           className="rounded-xl border border-border bg-card p-3 text-sm"
-          aria-label="业务选择器 eligibility 演示"
+          aria-label="业务选择器影响演示"
         >
           <h2 className="mb-1 text-sm font-medium">
             选择器影响摘要 · {selectorQuery.data.scene}
           </h2>
           <p className="mb-2 text-xs text-muted-foreground">
-            {selectorQuery.data.note} asOf{" "}
+            {selectorQuery.data.note}（数据截至{" "}
             <span className="num">
               {selectorQuery.data.asOf.slice(0, 19)}
             </span>
-            。提交时再次校验，不以浏览器缓存决定结果。
+            ）。提交时以最新数据为准。
           </p>
           <ul className="space-y-1">
             {selectorQuery.data.candidates.map((c) => (
@@ -634,7 +634,7 @@ function MasterDataListWorkspace({
 
       <BusinessTableFrame
         title={`${resourceLabel(resource)}列表`}
-        description={`共 ${rows.length} 条 · 启停与修订时序分列 · 键盘 / 聚焦搜索 · Enter 打开 detail`}
+        description={`共 ${rows.length} 条 · 支持按启停状态与修订时序筛选 · 按 / 可快速搜索 · 回车打开详情`}
         toolbar={
           <ListToolbar
             search={

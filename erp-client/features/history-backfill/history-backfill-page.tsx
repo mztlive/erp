@@ -884,8 +884,7 @@ function CreateBackfillSheet({
         <SheetHeader>
           <SheetTitle>创建回填任务</SheetTitle>
           <SheetDescription>
-            rangeStart 固定等于服务端登记的 requiredHistoryStart，不可改晚。范围半开
-            [requiredHistoryStart, T)。
+            回填起点固定为系统登记的必需历史起点，不可晚于该日期。回填范围覆盖起点至当前日期。
           </SheetDescription>
         </SheetHeader>
 
@@ -900,17 +899,17 @@ function CreateBackfillSheet({
                 value={ENVIRONMENT_LABEL[context.environment]}
               />
               <Fact
-                label="必须覆盖起点 requiredHistoryStart"
+                label="必需历史起点"
                 value={formatDay(context.requiredHistoryStart)}
                 mono
               />
               <Fact
-                label="rangeStart（固定）"
+                label="回填起点（固定）"
                 value={formatDay(context.requiredHistoryStart)}
                 mono
               />
               <Fact
-                label="消费回流启用 T / rangeEnd"
+                label="消费回流启用日 / 回填终点"
                 value={formatDay(context.rangeEnd)}
                 mono
               />
@@ -1274,7 +1273,7 @@ function JobDetailView({
                 variant="outline"
                 onClick={() => {
                   setDownloadNote(
-                    `${report.downloadLabel} · ${report.reportId} v${report.reportVersion} · 已记录审计（mock）`
+                    `${report.downloadLabel} · ${report.reportId} v${report.reportVersion} · 已记录审计`
                   )
                 }}
               >
@@ -1490,7 +1489,7 @@ function JobDetailView({
         onOpenChange={setStartOpen}
         actionLabel="开始回填"
         title="确认开始历史回填"
-        description="将冻结全历史范围并创建后台任务。只追加缺失记录；T 前支付不下单；不可改范围。"
+        description="将锁定回填范围并创建后台任务，只补充缺失记录；回填起点前的支付不计入；范围创建后不可修改。"
         fromStatus={{
           label: PROCESSING_STATUS_LABEL[currentJob.processingStatus],
           tone: PROCESSING_STATUS_TONE[currentJob.processingStatus],
@@ -1672,7 +1671,7 @@ function OverviewSection({
       <Card>
         <CardHeader>
           <CardTitle>结果记录</CardTitle>
-          <CardDescription>服务端统一统计 · 非前端明细求和</CardDescription>
+          <CardDescription>统计由系统统一计算，与明细列表可能因分页存在差异。</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <Fact

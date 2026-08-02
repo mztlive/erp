@@ -81,7 +81,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
               ]}
             />
             <p className="text-[11px] text-muted-foreground">
-              三轨正交：部分退款不会回退履约「已完成」状态。
+              部分退款不会影响履约「已完成」状态。
             </p>
           </section>
 
@@ -134,10 +134,9 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
               <Alert variant="warning">
                 <AlertTitle>结果未知</AlertTitle>
                 <AlertDescription className="text-xs leading-relaxed">
-                  唯一主路径是「查询原结果」。在取得明确无结果且服务端确认可安全重试前，不可直接重放或再次下单。
+                  请先「查询原结果」；确认无结果且系统允许重试前，不要再次下单。
                   {order.lastInvestigation ? (
                     <span className="mt-1 block">
-                      最近查询：{order.lastInvestigation.outcomeLabel} —{" "}
                       {order.lastInvestigation.summary}
                     </span>
                   ) : null}

@@ -41,7 +41,7 @@ export function ContractPaperDialog({
         <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
           <DialogTitle>合同纸质预览</DialogTitle>
           <DialogDescription>
-            系统已确认修订的打印件。条款、状态与签章位均由服务端返回；组件不重算或拼凑正文。
+            系统已确认修订的打印件；条款、状态与签章位以系统记录为准。
           </DialogDescription>
         </DialogHeader>
 
@@ -194,15 +194,15 @@ function ContractPaperDocument({
         {
           id: "note",
           label: "金额说明",
-          value: "本合同不汇总“合同金额”；金额以各销售单含税金额为准。",
+          value: "金额以各销售单含税金额为准，不设合同级金额。",
         },
       ]}
       remarks={
         rev.invoiceRequirementSnapshot.remark
           ? `开票备注：${rev.invoiceRequirementSnapshot.remark}`
-          : "历史销售单仍按引用当时的合同修订记录履约与结算。"
+          : "历史销售单按签订时的合同版本履约与结算。"
       }
-      signature="（签章位由服务端打印视图定义）"
+      signature="（签章位以系统打印版式为准）"
       seal="公章"
       footer={`${contract.contractNo} · 修订 v${rev.revisionNo} · 状态 ${contract.statusLabel}`}
     />

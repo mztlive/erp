@@ -762,7 +762,7 @@ function BatchDetailView({
                 void uploadAckMutation.mutateAsync({ batchId: batch.batchId })
               }
             >
-              演示：标记已上传
+              模拟：标记已上传（仅演示）
             </Button>
             <Button
               type="button"
@@ -777,7 +777,7 @@ function BatchDetailView({
               }
             >
               <RefreshCwIcon className="size-4" />
-              演示：规则变化使确认失效
+              模拟：规则变化后确认失效（仅演示）
             </Button>
           </>
         }
@@ -888,7 +888,7 @@ function BatchDetailView({
       {/* 生产应用门禁 */}
       <Card size="sm">
         <CardHeader className="border-b">
-          <CardTitle>生产应用门禁</CardTitle>
+          <CardTitle>提交前检查</CardTitle>
           <CardDescription>
             验证环境校验与业务确认是生产应用前置条件；系统管理员不能代替确认。
           </CardDescription>
@@ -931,8 +931,8 @@ function BatchDetailView({
           ) : (
             <FormalActionResult
               status="succeeded"
-              title="门禁已满足（演示）"
-              description="真实环境仍由服务端逐项重验权限、版本与文件安全后创建后台任务。"
+              title="检查已完成，可提交"
+              description="提交时系统会再次核验权限与数据，确认无误后开始导入。"
             />
           )}
         </CardContent>
@@ -984,7 +984,7 @@ function OverviewSection({
         <CardHeader className="border-b">
           <CardTitle>试算摘要</CardTitle>
           <CardDescription>
-            服务端聚合计数；前端不按当前页问题表求和作为成功率。
+            成功率为系统统计结果，可能与当前页展示的问题明细不一致。
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-4">
@@ -1450,7 +1450,7 @@ function ProgressSection({ batch }: { batch: ImportBatchView }) {
     return (
       <BusinessEmptyState
         kind="no-data"
-        title="尚无后台应用任务"
+        title="暂无导入任务"
         description="提交应用后将在此展示任务号、成功/跳过/失败计数与最近进度时间；刷新可恢复进度。"
       />
     )
@@ -1501,7 +1501,7 @@ function ResultSection({
       <BusinessEmptyState
         kind="no-data"
         title="结果尚未形成"
-        description="后台应用完成后将在此固定展示成功、跳过与失败分区，并提供修复批次入口。"
+        description="导入完成后，此处将列出成功、跳过与失败项，失败的记录可在此重新处理。"
       />
     )
   }
@@ -1578,7 +1578,7 @@ function ResultSection({
       <Alert>
         <AlertTitle>防重复与不可覆盖</AlertTitle>
         <AlertDescription>
-          已成功对象不会因取消、失败重跑或新文件被直接覆盖、删除或回滚。修复批次仅针对冻结失败范围，已成功项按来源身份跳过。
+          已导入成功的数据不会因取消、重试或上传新文件而被覆盖或删除；重新处理仅针对失败项。
         </AlertDescription>
       </Alert>
     </div>

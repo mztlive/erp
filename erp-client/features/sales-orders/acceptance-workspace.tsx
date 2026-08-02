@@ -445,7 +445,7 @@ export function AcceptanceWorkspace({
           kind: "post",
           status: "unknown",
           title: resultText.unknown,
-          description: `${result.message} 未确认前不关闭草稿、不按成功处理；可用原任务号查询。`,
+          description: `${result.message} 未确认前不关闭草稿、不按成功处理；可用原提交编号查询。`,
           facts: [{ label: resultText.originalTaskNo, value: result.idempotencyKey }],
         })
       } else {
@@ -470,7 +470,7 @@ export function AcceptanceWorkspace({
         status: "unknown",
         title: resultText.unknown,
         description:
-          "请求超时或网络中断。不得按成功处理；请查询最终结果或使用原任务号重试，避免重复过账。",
+          "请求超时或网络中断，结果未确认；请查询最终结果或重试，避免重复过账。",
         facts: [{ label: resultText.originalTaskNo, value: idempotencyKey }],
       })
     },
@@ -484,7 +484,7 @@ export function AcceptanceWorkspace({
           kind: "reverse",
           status: "succeeded",
           title: "误录验收已冲正",
-          description: `已新增反向验收记录与 REVERSE 分配；原验收 ${result.originalAcceptanceNo} 保留可追溯。`,
+          description: `已新增反向验收记录；原验收 ${result.originalAcceptanceNo} 保留可追溯。`,
           reference: result.reverseAcceptanceNo,
           facts: [
             { label: "原验收单号", value: result.originalAcceptanceNo },
@@ -690,7 +690,7 @@ export function AcceptanceWorkspace({
                     setConfirmOpen(true)
                   }}
                 >
-                  用原任务号重试
+                  用原提交编号重试
                 </Button>
               ) : (
                 <Button
@@ -1398,11 +1398,11 @@ export function AcceptanceWorkspace({
         actionLabel="冲正"
         confirmLabel="确认冲正"
         fromStatus={{ label: "已过账", tone: "success" }}
-        toStatus={{ label: "已冲正+反向记录", tone: "warning" }}
-        lockedFields={["原验收单号", "原 APPLY 分配"]}
+        toStatus={{ label: "已冲正（新增反向记录）", tone: "warning" }}
+        lockedFields={["原验收单号", "原分配明细"]}
         effects={[
           "新增反向验收记录",
-          "写入 REVERSE 分配（不修改原行）",
+          "写入反向分配（不修改原记录）",
           "恢复对应履约批次净可验收量",
         ]}
         nextDepartment="销售"

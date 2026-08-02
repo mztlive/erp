@@ -934,11 +934,11 @@ export function ProcurementConfirmationPage() {
             aria-describedby="auto-next-hint"
           />
           <span id="auto-next-hint" className="sr-only">
-            仅写入显式 URL 与当前会话，未配置 preferenceScope 时不持久化
+            该偏好仅在本次会话内生效
           </span>
         </div>
         <Badge variant="outline" className="font-normal">
-          偏好范围：未配置（会话临时）
+          该偏好仅在本次会话内生效
         </Badge>
         <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
           <input
@@ -1056,7 +1056,7 @@ export function ProcurementConfirmationPage() {
                       : "改品/改价后新提交 · 须重新确认"}
                   </AlertTitle>
                   <AlertDescription>
-                    新 submissionId{" "}
+                    新提交编号{" "}
                     <span className="num font-mono">
                       {task.salesSubmission.submissionId}
                     </span>
@@ -1113,7 +1113,7 @@ export function ProcurementConfirmationPage() {
                     items={[
                       {
                         id: "submissionId",
-                        label: "提交身份 submissionId",
+                        label: "提交编号",
                         value: (
                           <span className="num font-mono text-sm">
                             {task.salesSubmission.submissionId}
@@ -1664,7 +1664,7 @@ export function ProcurementConfirmationPage() {
               "形成采购确认通过记录与确认分行",
               "销售提交原样形成版本并生效、形成应收",
               "完成当前 PROCUREMENT_CONFIRMATION 任务",
-              "生成不可变采购创建依据（不创建采购建单任务）",
+              "生成采购创建依据（无需单独建单）",
             ]}
             nextDepartment="采购建单（读取创建依据）"
             pending={completeMutation.isPending}

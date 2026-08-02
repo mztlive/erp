@@ -129,7 +129,7 @@ export function GovernanceWorkspacePage({ def }: { def: WorkspacePageDef }) {
       <Card size="sm">
         <CardHeader className="border-b">
           <CardTitle>治理阶段</CardTitle>
-          <CardDescription>当前批次所处阶段与导入流水线对齐展示。</CardDescription>
+          <CardDescription>当前批次所处阶段。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4 pt-4">
           <div className="flex flex-wrap gap-2">
@@ -193,7 +193,12 @@ export function GovernanceWorkspacePage({ def }: { def: WorkspacePageDef }) {
             id: issue.id,
             rowNumber: issue.objectLabel ?? index + 1,
             field: issue.field ?? "—",
-            errorCode: issue.severity.toUpperCase(),
+            errorCode:
+              issue.severity === "error"
+                ? "错误"
+                : issue.severity === "warning"
+                  ? "警告"
+                  : "提示",
             message: issue.message,
             repairable: issue.severity !== "error",
           }))}

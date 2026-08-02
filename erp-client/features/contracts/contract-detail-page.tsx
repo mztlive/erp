@@ -262,7 +262,7 @@ export function ContractDetailPage({
             <CardHeader className="border-b">
               <CardTitle>概览</CardTitle>
               <CardDescription>
-                合同身份、客户、状态、版本与有效期。不展示未定义的“合同金额”。
+                展示合同身份、客户、状态、版本与有效期；不含合同级金额。
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -339,7 +339,7 @@ export function ContractDetailPage({
               <p className="text-sm">
                 关联 {contract.relatedSalesOrders.length} 张
                 {contract.relatedSalesOrders.length > 0
-                  ? "（下列为服务端返回明细）"
+                  ? "（下列为关联明细）"
                   : "。"}
               </p>
               <Button
@@ -360,7 +360,7 @@ export function ContractDetailPage({
           <CardHeader className="border-b">
             <CardTitle>结算与开票</CardTitle>
             <CardDescription>
-              当前合同修订的结构化记录；销售单使用时再固定具体版本。
+              当前合同修订的结构化记录；销售单关联时锁定该版本。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -437,8 +437,8 @@ export function ContractDetailPage({
           <CardHeader className="border-b">
             <CardTitle>关联销售单</CardTitle>
             <CardDescription>
-              追溯哪张单使用哪个合同版本。金额只作单据摘要。
-              as-of{" "}
+              追溯每张销售单使用的合同版本；金额仅作单据摘要。
+              统计截至{" "}
               <span className="num">{contract.relatedSalesOrdersAsOf}</span>
             </CardDescription>
           </CardHeader>
@@ -519,7 +519,7 @@ export function ContractDetailPage({
               <CardTitle>版本时间线</CardTitle>
               </div>
               <CardDescription>
-                每个版本对应已上传的签署 PDF；销售单链接的版本可在关联列表中对照。
+                每个版本对应已上传的签署 PDF。
               </CardDescription>
             </CardHeader>
             <CardContent>

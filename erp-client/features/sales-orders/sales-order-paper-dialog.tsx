@@ -42,7 +42,7 @@ export function SalesOrderPaperDialog({
         <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
           <DialogTitle>纸质单据预览</DialogTitle>
           <DialogDescription>
-            系统业务数据的打印件。金额与状态均由服务端确认后传入；组件不重新计算。
+            系统业务数据的打印件；金额与状态以系统记录为准。
           </DialogDescription>
         </DialogHeader>
 
@@ -294,7 +294,7 @@ function SalesOrderPaperDocument({ order }: { order: SalesOrderListItem }) {
       remarks={
         order.remark ??
         (isCard
-          ? "卡券履约在福利商城执行；本单据仅展示 ERP 商业数据。"
+          ? "卡券履约在福利商城执行；本单据仅展示系统内的销售数据。"
           : undefined)
       }
       signature={

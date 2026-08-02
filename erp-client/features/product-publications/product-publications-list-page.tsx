@@ -562,7 +562,7 @@ export function ProductPublicationsListPage() {
 
       <BusinessTableFrame
         title="发布列表"
-        description="SKU 与操作列固定；默认紧凑行高以在 1440×900 露出更多行。"
+        description="SKU 与操作列固定；列表采用紧凑行距。"
         table={
           listQuery.isPending ? (
             <div className="h-64 animate-pulse rounded-lg bg-muted" aria-busy />

@@ -171,7 +171,7 @@ export function AllocationSessionPanel({
       issues.push({
         id: `over-${line.lineKey}`,
         label: line.label,
-        message: `拟分配不可超过开放余额 ${line.openAmount}（服务端口径）`,
+        message: `拟分配不可超过开放余额 ${line.openAmount}`,
       })
     }
   }
@@ -192,7 +192,7 @@ export function AllocationSessionPanel({
   function addFromPool(target: AllocationTarget) {
     if (allocations.some((a) => a.targetId === target.targetId)) return
     if (target.counterpartyPartyId !== session.counterpartyPartyId) {
-      setActionError("跨主体目标不得进入分配（前端拦截 + 服务端再拒）。")
+      setActionError("跨主体目标不能分配，请选择同主体目标。")
       return
     }
     setAllocations((prev) => [
@@ -304,7 +304,7 @@ export function AllocationSessionPanel({
       setResult({
         status: "succeeded",
         title: isReceipt ? "回款已登记并核销" : "销项发票已登记并分配",
-        description: `已生效单号 ${res.factNo}。未分配余额 ${res.unallocatedAmount}（服务端返回）。`,
+        description: `已生效单号 ${res.factNo}。未分配余额 ${res.unallocatedAmount}。`,
         reference: res.operationId,
         facts: [
           { label: isReceipt ? "回款单号" : "发票号码", value: res.factNo },
@@ -379,9 +379,8 @@ export function AllocationSessionPanel({
             核销 · {session.counterpartyPartyName}
           </h2>
           <p className="text-sm text-muted-foreground">
-            模式：{isReceipt ? "回款核销" : "发票核销"} · 会话{" "}
-            <span className="num">{session.draftSessionId}</span>
-            {existing ? ` · 继续 ${session.existingFactNo}` : null}
+            模式：{isReceipt ? "回款核销" : "发票核销"}
+            {existing ? ` · 继续单号 ${session.existingFactNo}` : null}
             {draftSavedAt ? ` · 草稿已保存` : " · 未保存草稿"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{session.note}</p>
@@ -460,7 +459,7 @@ export function AllocationSessionPanel({
             {isReceipt ? "回款记录" : "销项发票记录"}
           </h3>
           <p className="text-xs text-muted-foreground">
-            已过账记录不可编辑删除；本表仅用于新登记或展示继续核销的未分配余额。
+            已过账记录不可编辑删除；此处仅用于新登记或继续核销。
           </p>
           {isReceipt ? (
             <div className="space-y-3">
@@ -550,10 +549,7 @@ export function AllocationSessionPanel({
             </span>
           </h3>
           <p className="text-xs text-muted-foreground">
-            {isReceipt
-              ? "回款分配目标为 receivable_entry"
-              : "发票分配目标为 receivable_account"}
-            ；跨主体即使同名客户也不返回。
+            仅同主体的开放应收可分配；跨主体即使同名客户也不返回。
           </p>
           <ul className="max-h-72 space-y-2 overflow-auto">
             {session.pool.length === 0 ? (
@@ -600,7 +596,7 @@ export function AllocationSessionPanel({
 
       <AllocationWorkspace
         title="本次分配"
-        description="拟分配合计仅作输入提示，不冒充已核销金额。净分配由服务端返回。"
+        description="拟分配金额仅供参考，以提交后结果为准。"
         summary={{
           totalToAllocate: (
             <MoneyValue value={factAmountStr || "0"} taxBasis="gross" />
@@ -709,7 +705,7 @@ export function AllocationSessionPanel({
       />
 
       <div className="flex flex-wrap items-center gap-4 rounded-xl border border-dashed p-3 text-xs text-muted-foreground">
-        <span>演示恢复路径：</span>
+        <span>演示选项：</span>
         <label className="flex items-center gap-2">
           <Checkbox
             checked={forceUnknown}
@@ -727,7 +723,7 @@ export function AllocationSessionPanel({
         <Field className="max-w-xs">
           <FieldLabel className="text-xs">主体锁定</FieldLabel>
           <FieldDescription>
-            会话创建后不可更换 counterparty_party_id
+            会话创建后不可更换往来主体
           </FieldDescription>
         </Field>
       </div>
@@ -745,10 +741,10 @@ export function AllocationSessionPanel({
         }}
         lockedFields={["往来主体", "记录编号（提交后）", "既有分配行"]}
         effects={[
-          "形成回款/发票记录与追加式 APPLY 分配",
+          "形成回款/发票记录与追加式分配明细",
           "同步更新应收开放余额与净分配（服务端）",
           "未分配余额按服务端策略保留并可见",
-          "原任务号保证重复提交不重复过账",
+          "重复提交不会重复生成记录",
         ]}
         nextDepartment="财务"
         onConfirm={() => void doPost()}

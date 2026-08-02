@@ -69,7 +69,7 @@ export function SafetyPausePanel({
               </div>
             </dl>
             <p className="text-xs text-muted-foreground">
-              不展示影响集、提交时间、后续任务。请按原任务号查询，或进入接口错误处理。
+              不显示受影响发布、提交时间与后续任务；请按原任务号查询。
             </p>
             <Button
               type="button"
@@ -103,7 +103,7 @@ export function SafetyPausePanel({
       <AlertDescription>
         <div className="space-y-3 text-sm">
           <p>
-            本地已不可下单。安全暂停由目录/供给事件触发，不依赖人工领取任务。
+            此发布已不可下单；安全暂停由商品目录或供给变动触发。
           </p>
           <dl className="grid gap-2 sm:grid-cols-2">
             <div>
@@ -129,7 +129,7 @@ export function SafetyPausePanel({
           {!compact ? (
             <div>
               <div className="mb-1 text-xs font-medium text-muted-foreground">
-                受影响发布（原子提交）
+                受影响发布
               </div>
               <ul className="space-y-1">
                 {pause.affectedPublications.map((ap) => (
@@ -197,7 +197,7 @@ export function SafetyPausePanel({
 
           {"followUpBlocker" in pause && pause.followUpBlocker ? (
             <div className="rounded-md border border-border bg-muted/40 p-2">
-              <div className="text-xs font-medium">后续阻断（不伪造任务）</div>
+              <div className="text-xs font-medium">后续阻断</div>
               <p className="mt-1 text-xs">
                 <Badge variant="outline" className="mr-1 font-mono text-[10px]">
                   {pause.followUpBlocker.code}
@@ -214,7 +214,7 @@ export function SafetyPausePanel({
           ) : null}
 
           <p className="text-xs text-muted-foreground">
-            来源恢复可用也不会自动上架；恢复责任未确认前任何上架提交将被阻断。
+            来源恢复后也不会自动上架；恢复未确认前，上架操作会被系统阻断。
           </p>
         </div>
       </AlertDescription>

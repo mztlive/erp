@@ -39,7 +39,7 @@ export function RevisionHistoryCard({
         </div>
         <CardDescription>
           当前合同修订 {contractRevisionLabel}
-          。历史版本保留精确合同/主数据修订与金额记录，不会被当前主数据回填覆盖。
+          。历史版本保留当时的合同、客户修订与金额记录，不受当前修改影响。
         </CardDescription>
       </CardHeader>
       <CardContent>

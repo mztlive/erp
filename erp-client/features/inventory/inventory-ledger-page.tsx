@@ -944,7 +944,7 @@ export function InventoryLedgerPage() {
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
           title="库存台账"
-          description="模块权限已收回，已清除余额、流水与导出缓存。"
+          description="模块权限已收回，相关数据已不再展示。"
         />
         <BusinessFailureState
           kind="permission"
@@ -1131,7 +1131,7 @@ export function InventoryLedgerPage() {
                       })
                   }}
                 >
-                  完成并确认结果（演示）
+                  完成并确认结果（仅演示）
                 </Button>
               </div>
             ) : undefined
@@ -1159,7 +1159,7 @@ export function InventoryLedgerPage() {
           label={`导出任务 ${exportJob.jobId}`}
           description={
             <>
-              范围：{exportJob.filterSummary}。导出由后台生成并保留，不在浏览器拼全量数据。
+              范围：{exportJob.filterSummary}。导出文件由系统生成，完成后可在此下载。
               {exportJob.downloadLabel ? (
                 <span className="mt-1 block font-medium">
                   可下载：{exportJob.downloadLabel}
@@ -1238,7 +1238,7 @@ export function InventoryLedgerPage() {
         <MetricFilterItem
           label="待处理调整"
           value={data.metrics.pendingAdjustmentCount}
-          detail="未到终态"
+          detail="处理中"
           active={metricActive === "pending"}
           onClick={() => {
             patchUrl({
@@ -1281,7 +1281,7 @@ export function InventoryLedgerPage() {
             {view === "balance" ? (
               <span className="text-muted-foreground">
                 {" "}
-                · 数量均带基础单位；可用数量为服务端返回值
+                · 数量均带基础单位；可用数量以系统数据为准
               </span>
             ) : null}
           </span>
@@ -1422,7 +1422,7 @@ export function InventoryLedgerPage() {
               <BusinessEmptyState
                 kind="no-data"
                 title="当前仓库尚无 ERP 自有库存记录"
-                description="期初须经导入与期初的基准日实盘导入后形成流水；旧商城库存字段不会作为记录出现在本台账。"
+                description="期初库存需在「导入与期初」完成导入后才会形成流水；商城旧库存不会自动显示在此。"
                 action={
                   <Button
                     type="button"
@@ -1600,7 +1600,7 @@ export function InventoryLedgerPage() {
                   </span>
                 </div>
                 <div className="text-[10px] text-muted-foreground">
-                  服务端返回值 · 不本地重算
+                  系统计算
                 </div>
               </div>
             </div>
@@ -1763,7 +1763,7 @@ export function InventoryLedgerPage() {
             ) : null}
 
             <p className="text-[11px] leading-relaxed text-muted-foreground">
-              锁版本 {detail.balance.lockVersion} · 查询于{" "}
+              查询于{" "}
               {formatDateTime(detail.queriedAt)}
               。页面不提供编辑库存数量或直接释放预占；纠错须走调整单。
             </p>
@@ -1814,7 +1814,6 @@ export function InventoryLedgerPage() {
                     <span className="num text-foreground">
                       {adjustMeta.available} {adjustMeta.baseUnit}
                     </span>
-                    <span className="ml-1">（服务端）</span>
                   </div>
                   <div>
                     草稿号{" "}
@@ -1903,9 +1902,7 @@ export function InventoryLedgerPage() {
                     <li>不会直接修改账面或可用数量</li>
                     <li>经办与复核岗位分离，提交后待仓储复核</li>
                     <li>
-                      使用余额 lockVersion=
-                      <span className="num text-foreground">{adjustLockVersion}</span>
-                      ，冲突时保留输入并刷新基线
+                      按当前余额版本提交；若已被他人修改，将提示冲突并保留你的输入。
                     </li>
                   </ul>
                 </div>
@@ -1917,7 +1914,7 @@ export function InventoryLedgerPage() {
                       checked={forceUnknownOnce}
                       onChange={(e) => setForceUnknownOnce(e.target.checked)}
                     />
-                    演示：强制结果不确定
+                    演示：强制结果不确定（仅演示）
                   </label>
                   <Button
                     type="button"
@@ -1925,16 +1922,16 @@ export function InventoryLedgerPage() {
                     variant="ghost"
                     onClick={() => {
                       if (!adjustBalanceId) return
-                      const next = bumpInventoryBalanceLock(
+                      bumpInventoryBalanceLock(
                         adjustBalanceId,
                         adjustSeedLock
                       )
                       setActionError(
-                        `已模拟并发变更：服务端 lockVersion 现为 ${next}。提交时将冲突并保留输入。`
+                        `已模拟他人同时修改库存，本次提交将发生冲突（仅演示）。`
                       )
                     }}
                   >
-                    演示：模拟余额并发变更
+                    演示：模拟余额并发变更（仅演示）
                   </Button>
                 </div>
 

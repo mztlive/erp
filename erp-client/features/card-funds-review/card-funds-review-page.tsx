@@ -493,7 +493,7 @@ export function CardFundsReviewPage() {
         setLastResult({
           status: "succeeded",
           title: `复核通过 · 复核号 ${biz.reviewNo}`,
-          description: `${APPROVE_CONCLUSION_LABEL[biz.conclusion as ApproveConclusion]} · workflow ${biz.workflowActionId} · 先固定展示本结果再${advance && autoNext ? "自动下一项" : "手动继续"}`,
+          description: `${APPROVE_CONCLUSION_LABEL[biz.conclusion as ApproveConclusion]} · 操作编号 ${biz.workflowActionId} · ${advance && autoNext ? "自动下一项" : "手动继续"}`,
           reference: biz.reference,
           outcome: response.outcome,
           stayOnItem: !(advance && autoNext),
@@ -669,7 +669,7 @@ export function CardFundsReviewPage() {
       setLastResult({
         status: "succeeded",
         title: "历史回款已登记",
-        description: `已形成回款与多对多分配；版本 ${shortHash(result.subjectHash)}，净已收 ${formatMoney(result.settledTotal)}。未完成复核前指标仍可能不可靠。`,
+        description: `已形成回款与分配；净已收 ${formatMoney(result.settledTotal)}。复核完成前指标仍可能不可靠。`,
         reference: result.fundsFactVersion,
         stayOnItem: true,
       })
@@ -899,8 +899,8 @@ export function CardFundsReviewPage() {
           aria-label="任务类型"
         >
           <ToggleGroupItem value="all">全部类型</ToggleGroupItem>
-          <ToggleGroupItem value="opening">期初 OPENING</ToggleGroupItem>
-          <ToggleGroupItem value="delta">差额 SYNC_DELTA</ToggleGroupItem>
+          <ToggleGroupItem value="opening">期初</ToggleGroupItem>
+          <ToggleGroupItem value="delta">同步差额</ToggleGroupItem>
         </ToggleGroup>
         <ToggleGroup
           value={[status]}
@@ -936,7 +936,7 @@ export function CardFundsReviewPage() {
             checked={forceUnknownOnce}
             onChange={(e) => setForceUnknownOnce(e.target.checked)}
           />
-          下次完成模拟结果未知
+          演示：下次完成模拟结果未知
         </label>
         <label className="flex items-center gap-2 text-xs text-muted-foreground">
           <input
@@ -945,7 +945,7 @@ export function CardFundsReviewPage() {
             checked={simulateHashDrift}
             onChange={(e) => setSimulateHashDrift(e.target.checked)}
           />
-          完成前模拟数据变更阻断
+          演示：完成前模拟数据变更阻断
         </label>
       </div>
 
@@ -1131,7 +1131,7 @@ export function CardFundsReviewPage() {
                     ) : null}
                   </div>
                   <CardDescription>
-                    同步版本 r{task.salesOrder.revisionNo} ·{" "}
+                    数据版本 r{task.salesOrder.revisionNo} · 同步于{" "}
                     {task.salesOrder.snapshotAt} ·{" "}
                     {task.account.mallName} · 往来{" "}
                     {task.account.counterpartyPartyName}
@@ -1220,7 +1220,7 @@ export function CardFundsReviewPage() {
                     </AlertTitle>
                     <AlertDescription>
                       {task.account.reliabilityNote}
-                      不以 0 值冒充已核实记录。客户往来/经营质量应展示同等标识。
+                      复核未完成前，指标不可视为已核实。
                     </AlertDescription>
                   </Alert>
 
@@ -1246,15 +1246,15 @@ export function CardFundsReviewPage() {
                         回款与发票明细
                       </CardTitle>
                       <CardDescription>
-                        仅展示客户往来业务记录；登记走多对多分配，禁止累计覆盖字段
+                        仅展示客户往来业务记录；登记为追加式分配，不覆盖已有金额
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3 pt-4">
                       {task.receiptFacts.length === 0 &&
                       task.invoiceFacts.length === 0 ? (
                         <p className="text-sm text-muted-foreground">
-                          尚无回款/发票。可登记历史记录，或在期初且净额为 0
-                          时确认「从 0 起」（不创建 0 元单据）。
+                          尚无回款/发票。可登记历史记录，或确认期初净额为 0
+                          时选择从 0 起。
                         </p>
                       ) : null}
                       {task.receiptFacts.map((r) => (
@@ -1338,7 +1338,7 @@ export function CardFundsReviewPage() {
                               : "登记历史发票"}
                           </CardTitle>
                           <CardDescription>
-                            内嵌 AllocationWorkspace；不写累计已收/已开覆盖字段；禁止 0
+                            登记为追加式分配，不覆盖已有金额；禁止 0
                             元单据
                           </CardDescription>
                         </CardHeader>
@@ -1555,8 +1555,7 @@ export function CardFundsReviewPage() {
                 <CardHeader className="border-b py-3">
                   <CardTitle className="text-base">结论区</CardTitle>
                   <CardDescription>
-                    CompleteWorkItemEnvelope
-                    &lt;CardFundsReviewDecision&gt;；账户/链尾/版本均在 decision
+                    提交时将核对账户、复核链与数据版本。
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
@@ -1648,7 +1647,7 @@ export function CardFundsReviewPage() {
                         void driftMutation.mutateAsync(task.workItem.workItemId)
                       }}
                     >
-                      演示：外部数据版本变更
+                      演示：外部数据版本变更（仅演示）
                     </Button>
                   </div>
                 </CardContent>
@@ -1726,7 +1725,7 @@ export function CardFundsReviewPage() {
                       size="sm"
                       render={<Link href={w05Href} />}
                     >
-                      打开销售单（保留 queueContextId）
+                      打开销售单
                     </Button>
                     <Button
                       type="button"
@@ -1738,7 +1737,7 @@ export function CardFundsReviewPage() {
                     </Button>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    快捷键：j/k 上下项 · ⌘↵ 确认 · Esc 不关闭页签
+                    快捷键：j/k 切换任务 · ⌘↵ 确认
                   </p>
                 </CardContent>
               </Card>
@@ -1781,7 +1780,7 @@ export function CardFundsReviewPage() {
         }
         description={
           confirmMode?.kind === "zero"
-            ? `将提交「期初净额为零、无历史票款」结论：销售单 ${task?.salesOrder.orderNo ?? ""}、应收 ${task?.account.id ?? ""}。不创建 0 元回款/发票。须证据完整；完成时三方校验数据版本。`
+            ? `将提交「期初净额为零、无历史票款」结论：销售单 ${task?.salesOrder.orderNo ?? ""}、应收 ${task?.account.id ?? ""}。不创建 0 元回款/发票。须证据完整；提交时将核对数据版本。`
             : `将提交「复核通过并核对票款记录」。复核类型 ${task ? REVIEW_TYPE_LABEL[task.reviewType] : ""}，当前数据版本 ${task ? shortHash(task.workItem.subjectHash) : ""}。`
         }
         actionLabel={
@@ -1801,22 +1800,22 @@ export function CardFundsReviewPage() {
             ? [
                 `销售单 ${task.salesOrder.orderNo}`,
                 `应收账户 ${task.account.id}`,
-                `数据版本 ${shortHash(task.workItem.subjectHash)}`,
+                "数据版本（短校验码）",
                 `复核类型 ${REVIEW_TYPE_LABEL[task.reviewType]}`,
-                `票款版本 ${task.fundsFactVersion}`,
+                "票款版本（仅显示，不可改）",
               ]
             : []
         }
         effects={
           confirmMode?.kind === "zero"
             ? [
-                "追加 OPENING 通过链尾，结论 NO_HISTORY_FROM_ZERO",
+                "记录期初通过结论：无历史票款",
                 "不创建 0 元回款单或 0 元发票",
-                "同事务 workflow_action + 完成任务",
+                "追加复核记录并完成任务",
               ]
             : [
-                "追加复核链尾与 workflow_action",
-                "三方校验数据版本（阻断静默通过）",
+                "追加复核链尾并完成任务",
+                "提交时核对数据版本，不一致将阻断",
                 "同事务完成当前任务",
               ]
         }
@@ -1836,14 +1835,14 @@ export function CardFundsReviewPage() {
           if (!open) setConfirmMode(null)
         }}
         title="暂挂当前复核任务"
-        description="暂挂后任务仍为 PENDING/IN_PROGRESS，保留在有效队列与「已暂挂」范围；不形成复核记录、不自动视为完成。可手动浏览下一项。"
+        description="暂挂后任务仍保留在有效队列与「已暂挂」范围；不生成复核记录。可手动浏览下一项。"
         actionLabel="暂挂"
         confirmLabel="确认暂挂"
         fromStatus={{ label: "处理中", tone: "info" }}
         toStatus={{ label: "已暂挂（仍在队列）", tone: "warning" }}
         effects={[
-          "任务保持 PENDING/IN_PROGRESS",
-          "不写 receivable_funds_review",
+          "任务保留在有效队列",
+          "不生成复核记录",
           "不自动下一项成功语义",
         ]}
         pending={holdMutation.isPending}
@@ -1860,7 +1859,7 @@ export function CardFundsReviewPage() {
           <DialogHeader>
             <DialogTitle>驳回复核</DialogTitle>
             <DialogDescription>
-              仅形成本次 REJECTED 复核记录并完成当前任务。Q5 未决期间不创建后继任务；结果固定显示配置 blocker 与协作说明。
+              仅记录本次驳回并完成任务；未决问题不会自动创建后续任务。
             </DialogDescription>
           </DialogHeader>
           <form
@@ -1953,7 +1952,7 @@ function buildResultFacts(
           ? "驳回"
           : APPROVE_CONCLUSION_LABEL[biz.conclusion as ApproveConclusion],
     },
-    { label: "workflowActionId", value: biz.workflowActionId },
+    { label: "操作编号", value: biz.workflowActionId },
     { label: "操作号", value: biz.operationId },
     {
       label: versionText.dataVersion,

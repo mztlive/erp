@@ -211,7 +211,7 @@ export function ListWorkspacePage({ def }: { def: WorkspacePageDef }) {
         title={`${def.title}列表`}
         description={
           filterLabel === (payload.filterLabels?.[0] ?? "全部")
-            ? "按默认视图查看当前业务范围内的记录。"
+            ? null
             : `当前筛选：${filterLabel}`
         }
         toolbar={
@@ -279,7 +279,7 @@ export function ListWorkspacePage({ def }: { def: WorkspacePageDef }) {
           <DialogHeader>
             <DialogTitle>{payload.primaryActionLabel ?? "新建"}</DialogTitle>
             <DialogDescription>
-              将创建一条可追踪的草稿记录（演示环境写入页面结果区，不调用真实后端）。
+              将创建一条草稿记录（演示环境，不写入真实数据）。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -292,7 +292,7 @@ export function ListWorkspacePage({ def }: { def: WorkspacePageDef }) {
                 const reference = `NEW-${def.id}-${Date.now().toString(36).toUpperCase()}`
                 setActionResult({
                   title: `${payload.primaryActionLabel ?? "新建"}已提交`,
-                  description: "草稿身份已生成，可在结果区核对编号后继续业务录入。",
+                  description: "草稿已创建，可继续业务录入。",
                   reference,
                 })
                 setCreateOpen(false)
@@ -310,7 +310,7 @@ export function ListWorkspacePage({ def }: { def: WorkspacePageDef }) {
 export function ListWorkspaceLoading({ title }: { title: string }) {
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-      <PageHeader title={title} description="正在加载列表数据…" />
+      <PageHeader title={title} />
       <div className="rounded-lg border border-border bg-card p-8 text-sm text-muted-foreground">
         加载中
       </div>

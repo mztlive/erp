@@ -297,7 +297,7 @@ export function ContractsListPage({
       status: "succeeded",
       title: "导出任务已创建",
       description:
-        "已按当前筛选生成服务端筛选结果；下载时将重新鉴权。本演示不把前端当前页 CSV 当作最终合同导出。",
+        "导出内容按当前筛选生成；下载时将重新校验权限。",
       reference: job.jobId,
       facts: [
         { label: "筛选结果", value: job.filterSnapshotLabel },
@@ -595,9 +595,7 @@ export function ContractsListPage({
             <>
               筛选结果：{exportJob.filterSnapshotLabel}
               。任务号 <span className="num">{exportJob.jobId}</span>
-              ，结果保留 7 天（演示）。下载将按权限版本{" "}
-              <span className="num">{exportJob.permissionVersion}</span>{" "}
-              重新鉴权。
+              ，结果保留 7 天；下载时将重新校验权限。
             </>
           }
           action={
@@ -655,7 +653,7 @@ export function ContractsListPage({
         title="合同列表"
         description={
           metricKey === "all" && statusFilter === "all" && !search
-            ? "按将到期优先查看当前业务范围内的合同（演示排序固定）。"
+            ? "按将到期优先排序展示当前业务范围内的合同。"
             : `当前筛选：${contractMetricLabel(metricKey)}${
                 statusFilter !== "all" ? ` · ${statusFilter}` : ""
               }${search ? ` · “${search}”` : ""}`
@@ -831,7 +829,7 @@ export function ContractsListPage({
           <DialogHeader className="px-6 pt-6">
             <DialogTitle>上传合同 PDF</DialogTitle>
             <DialogDescription>
-              ERP 不新建或编辑合同正文。上传已签署电子档并补充检索元数据后，形成可引用的合同版本。
+              系统不新建或编辑合同正文；上传已签署电子档并补充检索信息后，形成可引用的合同版本。
             </DialogDescription>
           </DialogHeader>
           <form

@@ -454,7 +454,7 @@ export function SupplierOrdersListPage() {
               ) : null}
               {r.fulfillmentStatus === "RESULT_UNKNOWN" && !canReplay ? (
                 <span className="sr-only">
-                  重放不可用：须先查询明确无结果且可安全重试
+                  不可重试：需先查询确认无结果且系统允许重试
                 </span>
               ) : null}
             </div>
@@ -615,7 +615,7 @@ export function SupplierOrdersListPage() {
 
       <BusinessTableFrame
         title="供应商订单列表"
-        description="身份列与操作列固定；履约/取消/退款三轨正交展示。"
+        description="身份列与操作列固定；履约/取消/退款三种状态独立展示。"
         toolbar={
           <ListToolbar
             search={

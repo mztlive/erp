@@ -84,7 +84,7 @@ export function MasterDataPreviewPanel({
 
       <section className="space-y-2">
         <h3 className="text-xs font-medium text-muted-foreground">
-          选择器影响（服务端 eligibility）
+          业务选择器可用性（以系统数据为准）
         </h3>
         <ul className="space-y-1.5">
           {row.selectorEligibility.map((s) => (
@@ -113,7 +113,7 @@ export function MasterDataPreviewPanel({
           <Separator />
           <section className="space-y-2">
             <h3 className="text-xs font-medium text-muted-foreground">
-              敏感字段（掩码 / 短时揭示）
+              敏感字段（打码显示，可短时查看）
             </h3>
             <ul className="space-y-2">
               {detail.sensitiveFields.map((field) => (

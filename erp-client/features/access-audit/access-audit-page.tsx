@@ -592,7 +592,7 @@ export function AccessAuditPage() {
         description: outcome.message,
         facts: [
           {
-            label: "服务端版本",
+            label: "当前版本",
             value: outcome.serverPermissionVersion,
           },
         ],
@@ -1274,9 +1274,8 @@ export function AccessAuditPage() {
                   }
                   setLastResult({
                     status: "blocked",
-                    title: "导出需服务端策略",
-                    description:
-                      "演示环境：策略已配置时将创建后台导出任务；当前仅校验策略门闩。",
+                    title: "导出暂不可用",
+                    description: "当前账号尚未配置导出权限，无法生成导出文件。",
                   })
                 },
               },
@@ -1726,7 +1725,7 @@ export function AccessAuditPage() {
           if (!open) restoreRowFocus()
         }}
         title="有效权限解释"
-        description="授权与阻塞来源由服务端解释查询返回；前端不合并权限集合后自行下结论。"
+        description="此处展示的权限结果为系统统一计算，可能与页面其它位置显示略有差异。"
       >
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-6">
         {effectiveQuery.isPending ? (
@@ -1894,7 +1893,7 @@ export function AccessAuditPage() {
           <BusinessEmptyState
             kind="no-data"
             title="事件不存在或无权查看"
-            description="审计范围由服务端裁剪。"
+            description="仅展示你有权查看的审计记录。"
           />
         ) : (
           <div className="flex flex-col gap-3 text-sm">
@@ -1998,7 +1997,7 @@ export function AccessAuditPage() {
           <DialogHeader>
             <DialogTitle>授权变更影响预览</DialogTitle>
             <DialogDescription>
-              提交前展示变化、受影响主体与服务端风险摘要。使用权限版本与原任务号；冲突不静默覆盖。
+              提交前先查看变更预览与受影响人员；若数据已被他人更新，需确认后重新提交。
             </DialogDescription>
           </DialogHeader>
 

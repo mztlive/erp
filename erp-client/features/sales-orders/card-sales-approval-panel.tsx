@@ -108,8 +108,7 @@ export function CardSalesApprovalPanel({
           <Badge variant="secondary">{approval.workItemStatus}</Badge>
         </div>
         <CardDescription>
-          与待办队列共用完成流程。详情页不提供绕过任务的审批按钮；
-          claimToken 仅存会话内存。
+          审批须在待办队列中完成；本页仅展示任务状态，不提供跳过审批的操作。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">

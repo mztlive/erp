@@ -115,9 +115,9 @@ export function ProcurementRejectionCard({
       })
       setResult({
         status: "succeeded",
-        title: "草稿已改价（会话）",
+        title: "草稿已改价",
         description:
-          "相对被驳回提交已有销售价格变化；可走「改品/改价后重提」。仍不会复用旧采购二次确认任务。",
+          "已相对被驳回提交修改销售价格，可「改品/改价后重提」。",
         reference: `DRAFT-${order.documentNumber}`,
       })
     },
@@ -132,8 +132,8 @@ export function ProcurementRejectionCard({
         action: "REQUEST_LOW_MARGIN_ACCEPTANCE",
         title: "确认申请照原条件低毛利承接",
         effects: [
-          "冻结新提交与新 subjectHash",
-          "创建唯一 LOW_MARGIN_MANAGER_CONFIRMATION",
+          "冻结新提交并记录提交内容版本",
+          "申请低毛利上级确认",
           "此时不创建采购确认任务、不使销售生效",
         ],
       })
@@ -191,9 +191,7 @@ export function ProcurementRejectionCard({
           </Badge>
         </div>
         <CardDescription>
-          仅提供改品/改价重提、照原条件低毛利承接、不做并作废三条互斥出路；不存在通用重提或恢复旧
-          W07 任务入口。旧任务 {rejection.rejectedProcurementWorkItemId}{" "}
-          仅作历史引用。
+          仅提供改品/改价重提、照原条件低毛利承接、不做并作废三条出路；旧任务仅作历史引用。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -323,7 +321,7 @@ export function ProcurementRejectionCard({
             <div className="flex flex-wrap items-center gap-2">
               <CircleDollarSignIcon className="size-4" aria-hidden="true" />
               <h3 className="text-sm font-semibold">
-                低毛利上级确认（LOW_MARGIN_MANAGER_CONFIRMATION）
+                低毛利上级确认
               </h3>
               <Badge variant="info">
                 {rejection.activeLowMarginManagerTask.workItemStatus}
@@ -441,9 +439,9 @@ export function ProcurementRejectionCard({
                       action: "RESUBMIT_CHANGED_TERMS",
                       title: "确认改品/改价后重提",
                       effects: [
-                        "冻结递增提交号的新 sales_order_submission",
-                        "计算新 subjectHash",
-                        "原子创建唯一新 PROCUREMENT_CONFIRMATION",
+                        "冻结递增提交号并创建新的采购确认",
+                        "记录提交内容版本",
+                        "创建唯一新采购确认",
                         "旧提交与旧采购二次确认任务不变",
                       ],
                     })
@@ -541,7 +539,7 @@ export function ProcurementRejectionCard({
           toStatus={{ label: "处理中", tone: "info" }}
           lockedFields={[
             "被驳回提交号",
-            "subjectHash",
+            "提交内容版本",
             "采购确认身份",
           ]}
           effects={confirm?.effects ?? []}
@@ -579,7 +577,7 @@ export function ProcurementRejectionCard({
                 title: resultText.operationBlocked,
                 description:
                   message === "NO_COMMERCIAL_CHANGE"
-                    ? "内容未发生改品/改价，不得冒充此路径。请先调整草稿。"
+                    ? "尚未修改商品或价格，无法按此路径重提；请先调整草稿。"
                     : message,
                 reference: idempotencyKey,
               })

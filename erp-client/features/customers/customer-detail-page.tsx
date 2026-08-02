@@ -172,7 +172,7 @@ export function CustomerDetailPage({
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
           title="客户不存在或无权访问"
-          description={`未找到客户 ${customerId}。可能是错误 ID、已删除的临时草稿，或当前角色无此客户范围。`}
+          description={`未找到客户 ${customerId}。可能编号有误，或当前角色无权访问该客户。`}
           actions={
             <Button render={<Link href="/sales/customers" />}>
               返回客户选择
@@ -576,7 +576,7 @@ export function CustomerDetailPage({
       >
         <DocumentSection
           title="合同与销售"
-          description="本页可发现有效合同与进行中销售单；完整列表带客户筛选进入合同/销售单"
+          description="以下列出有效合同与进行中销售单。"
           action={
             <div className="flex flex-wrap gap-2">
               <Button
@@ -716,7 +716,7 @@ export function CustomerDetailPage({
                   <CardHeader>
                     <CardTitle className="text-sm">银行账户（掩码）</CardTitle>
                     <CardDescription>
-                      默认末四位；完整揭示需授权且记审计
+                      默认显示末四位；完整显示需授权并记录审计。
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
@@ -770,7 +770,7 @@ export function CustomerDetailPage({
       >
         <DocumentSection
           title="经营摘要"
-          description="W15 异步汇总（允许延迟）；标签为服务端字段，前端不计算。"
+          description="数据由系统异步汇总；标签以系统返回为准。"
           action={
             <Button
               type="button"
@@ -849,7 +849,7 @@ export function CustomerDetailPage({
         }}
         tabIndex={-1}
       >
-        <DocumentSection title="归属与审计" description="OWNER 唯一；协作销售显示有效期">
+        <DocumentSection title="归属与审计" description="每位客户只有一位负责销售；协作销售显示有效期">
           {customer.partitions.audit === "error" ? (
             <BusinessFailureState
               kind="system"

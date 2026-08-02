@@ -49,7 +49,7 @@ export function SalesOrderCollaborationCard({
     return (
       <DocumentSection
         title="商城执行协同"
-        description="正在读取服务端执行信息摘要…"
+        description="正在读取执行信息…"
       >
         <div className="h-24 animate-pulse rounded-xl bg-muted" />
       </DocumentSection>
@@ -95,7 +95,7 @@ export function SalesOrderCollaborationCard({
   return (
     <DocumentSection
       title="商城执行协同"
-      description="读取系统数据：销售生效、信息投递与商城确认相互独立。本区只读。"
+      description="销售生效、信息投递与商城确认为独立环节；本区只读。"
       action={
         <div className="flex flex-wrap gap-2">
           {data.historyHref ? (
@@ -230,7 +230,7 @@ export function SalesOrderCollaborationCard({
           <CardHeader className="border-b">
             <CardTitle className="text-sm">执行字段（白名单）</CardTitle>
             <CardDescription>
-              服务端数据修订字段；不含成交金额/配赠/税率/开票/应收/玩法。
+              字段以系统数据修订为准，不含金额、配赠、税率、开票、应收与玩法。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -267,7 +267,7 @@ export function SalesOrderCollaborationCard({
           <CardHeader className="border-b">
             <CardTitle className="text-sm">商城消费汇总</CardTitle>
             <CardDescription>
-              支付、退款和余额恢复是独立记录，仅供追溯，不增加销售单第三个关闭条件。
+              支付、退款与余额恢复仅为追溯记录，不影响销售单关闭条件。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -297,7 +297,7 @@ export function SalesOrderCollaborationCard({
             )}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                最近记录 {consumptionQuery.data?.latestFactAt ?? "暂无"}；履约关闭仍只看既定履约与票款条件。
+                最近记录 {consumptionQuery.data?.latestFactAt ?? "暂无"}；履约关闭仍以履约与票款条件为准。
               </p>
               <Button
                 type="button"

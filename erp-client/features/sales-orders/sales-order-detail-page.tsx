@@ -353,7 +353,7 @@ export function SalesOrderDetailPage({
           {OWNER_LABEL[order.ownerSystem]}
         </Badge>
         {order.originSystem !== order.ownerSystem ? (
-          <Badge variant="warning">主责已迁移 · 身份未变</Badge>
+          <Badge variant="warning">当前处理责任已变更，销售单身份不变</Badge>
         ) : null}
         {order.commercialReadOnly ? (
           <Badge variant="secondary">商业字段只读</Badge>
@@ -487,7 +487,7 @@ export function SalesOrderDetailPage({
           <Alert variant="warning">
             <AlertTitle>卡券不适用客户验收</AlertTitle>
             <AlertDescription>
-              卡券以履约期限到期完成履约，不因已消费完提前完成，也不登记客户验收。
+              卡券以履约期限到期视为履约完成，不登记客户验收。
               请查看关闭条件与履约期限 {order.fulfillmentDeadline}。
             </AlertDescription>
           </Alert>
@@ -698,7 +698,7 @@ export function SalesOrderDetailPage({
               </p>
               {isCard ? (
                 <p className="mt-2 text-xs text-muted-foreground">
-                  卡券不因消费汇总提前完成履约或增加关闭条件；消费订单见商城消费订单。
+                  卡券履约不受消费进度影响，也不增加关闭条件。
                 </p>
               ) : null}
             </DocumentSection>

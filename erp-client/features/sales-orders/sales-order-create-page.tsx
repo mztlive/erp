@@ -603,7 +603,7 @@ export function SalesOrderCreatePage({
           <CardHeader className="border-b border-border">
             <CardTitle>销售单草稿</CardTitle>
             <CardDescription>
-              合同、客户和结算主体按精确修订保存快照；金额由提交接口重新计算。
+              提交时按所选合同、客户与结算主体版本记录；金额以提交后系统计算为准。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1134,7 +1134,7 @@ export function SalesOrderCreatePage({
                           <AlertDescription>
                             {nature === "card_voucher"
                               ? "依次由销售领导和运营审批；运营通过后才生效并形成应收。"
-                              : "提交会冻结当前内容并创建采购二次确认任务，不会在前端乐观标记生效。"}
+                              : "提交后内容锁定，进入采购二次确认；生效以确认通过为准。"}
                           </AlertDescription>
                         </Alert>
                       </div>
@@ -1158,7 +1158,7 @@ export function SalesOrderCreatePage({
                             value: <MoneyValue value={totals.tax} />,
                           },
                         ]}
-                        note={`按税率 ${values.taxRatePercent || "0"}% 预估；正式金额由提交接口重算。`}
+                        note={`按税率 ${values.taxRatePercent || "0"}% 预估；正式金额以提交后系统计算为准。`}
                         actions={
                           <form.AppForm>
                             <Button

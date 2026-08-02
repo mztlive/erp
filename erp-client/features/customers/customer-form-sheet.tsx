@@ -139,7 +139,7 @@ export function CustomerCreateSheet({
         <SheetHeader>
           <SheetTitle>新建客户</SheetTitle>
           <SheetDescription>
-            同事务建立主体、首版修订、客户角色与当前 OWNER。名称相似只提示候选，不自动合并。
+            创建客户主体与首版资料；名称相似只提示候选，不自动合并。
           </SheetDescription>
         </SheetHeader>
 
@@ -183,7 +183,7 @@ export function CustomerCreateSheet({
           />
 
           <div className="space-y-2">
-            <Label htmlFor="create-simulate">演示结果（会话模拟）</Label>
+            <Label htmlFor="create-simulate">演示结果</Label>
             <OptionCombobox
               id="create-simulate"
               value={simulate}
@@ -196,7 +196,7 @@ export function CustomerCreateSheet({
                 { value: "unknown", label: "结果不确定（保留输入）" },
               ]}
               allowClear={false}
-              aria-label="演示结果（会话模拟）"
+              aria-label="演示结果"
               placeholder="请选择演示结果"
             />
           </div>
@@ -280,7 +280,7 @@ export function CustomerCreateSheet({
             changedAt={result.changedAt}
             diff={
               <p className="text-sm">
-                法定名称：{result.serverLegalName || "（候选）"}。前端不执行主体合并。
+                法定名称：{result.serverLegalName || "（候选）"}。系统不会自动合并主体。
               </p>
             }
             onReload={() => {
@@ -367,9 +367,8 @@ export function CustomerReviseSheet({
         <SheetHeader>
           <SheetTitle>修订客户主体</SheetTitle>
           <SheetDescription>
-            生成新 party_revision；历史合同与销售单记录不被覆盖。当前基线 v
-            {customer.currentRevision.revisionNo} · lock{" "}
-            {customer.lockVersion}
+            将生成新客户版本；历史合同与销售单记录不被覆盖。当前版本 v
+            {customer.currentRevision.revisionNo}
           </SheetDescription>
         </SheetHeader>
 
@@ -405,7 +404,7 @@ export function CustomerReviseSheet({
           />
 
           <div className="space-y-2">
-            <Label htmlFor="revise-simulate">演示结果（会话模拟）</Label>
+            <Label htmlFor="revise-simulate">演示结果</Label>
             <OptionCombobox
               id="revise-simulate"
               value={simulate}
@@ -418,7 +417,7 @@ export function CustomerReviseSheet({
                 { value: "unknown", label: "结果不确定（保留输入）" },
               ]}
               allowClear={false}
-              aria-label="演示结果（会话模拟）"
+              aria-label="演示结果"
               placeholder="请选择演示结果"
             />
           </div>
@@ -432,7 +431,7 @@ export function CustomerReviseSheet({
               facts={[
                 { label: "客户号", value: result.customerNo },
                 { label: "新版本", value: `v${result.revisionNo}` },
-                { label: "lockVersion", value: String(result.lockVersion) },
+                { label: "版本号", value: String(result.lockVersion) },
                 { label: "时间", value: result.occurredAt },
               ]}
             />

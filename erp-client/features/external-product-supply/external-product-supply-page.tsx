@@ -1216,7 +1216,7 @@ export function ExternalProductSupplyPage() {
             <div className="min-w-0 space-y-4">
               <BusinessDiffPanel
                 title="来源版本差异（当前 vs 新修订）"
-                caption="白名单业务字段对比；成本字段按权限掩码"
+                caption="业务字段对比；成本字段按权限隐藏"
                 changes={item.sourceDiff.map((c) => ({
                   id: c.id,
                   field: c.field,
@@ -1230,7 +1230,7 @@ export function ExternalProductSupplyPage() {
                 <CardHeader className="border-b py-3">
                   <CardTitle className="text-base">外部修订暂存</CardTitle>
                   <CardDescription>
-                    先进入 supplier_external_product 不可变修订区；未经映射与审核不修改
+                    先写入不可变的外部商品修订记录，未经映射与审核不修改
                     ERP SKU 或商城商品
                   </CardDescription>
                 </CardHeader>
@@ -1350,10 +1350,7 @@ export function ExternalProductSupplyPage() {
                       }))}
                     />
                     <p className="mt-3 text-xs text-muted-foreground">
-                      供给 MOQ 是供应商约束，不等于商城最小购买量（
-                      {String(item.publicationImpact.moqCopiedToMallMinPurchase)}{" "}
-                      自动复制）。商城销售价自动更新：
-                      {String(item.publicationImpact.mallSalePriceAutoUpdate)}。
+                      供货 MOQ 是供应商约束，不会自动复制为商城最小购买量；商城销售价将自动更新。
                     </p>
                   </CardContent>
                 </Card>
@@ -1383,8 +1380,7 @@ export function ExternalProductSupplyPage() {
                       key={p.id}
                       className="rounded-lg border px-3 py-2 text-xs"
                     >
-                      {p.publicationId} · {p.reason} · outbox {p.outboxId} ·{" "}
-                      {p.status}
+                      {p.publicationId} · {p.reason} · {p.status}
                     </div>
                   ))}
                   {demoRole === "operations" ? (
@@ -1424,7 +1420,7 @@ export function ExternalProductSupplyPage() {
                 <CardHeader className="border-b py-3">
                   <CardTitle className="text-base">ERP SKU 映射</CardTitle>
                   <CardDescription>
-                    同一外部商品同时点仅一个有效映射；一 SKU 可有多外部供给
+                    同一外部商品同一时间仅一个有效映射；一个 SKU 可有多个外部供给
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
@@ -1508,7 +1504,7 @@ export function ExternalProductSupplyPage() {
                       disabled
                       tabIndex={-1}
                       aria-disabled="true"
-                      title="WORK_ITEM_TYPE_UNREGISTERED：无写入入口"
+                      title="确认入口尚未开放，请先完成映射与供给修订登记"
                     >
                       确认映射（不可用）
                     </Button>
@@ -1600,7 +1596,7 @@ export function ExternalProductSupplyPage() {
                     disabled
                     tabIndex={-1}
                     aria-disabled="true"
-                    title="WORK_ITEM_TYPE_UNREGISTERED"
+                    title="尚未开放，需先登记供给修订类型"
                   >
                     确认供给版本（不可用）
                   </Button>
@@ -1614,8 +1610,7 @@ export function ExternalProductSupplyPage() {
                       替代候选（会话内）
                     </CardTitle>
                     <CardDescription>
-                      仅证据准备；选定被 RECOVERY_RESPONSIBILITY_UNCONFIRMED
-                      阻断
+                      当前仅可准备候选证据，暂不能选定替代供给
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2 pt-4">
@@ -1756,7 +1751,7 @@ export function ExternalProductSupplyPage() {
           <DialogHeader>
             <DialogTitle>暂挂当前异常任务</DialogTitle>
             <DialogDescription>
-              使用 WorkItemActionEnvelope；成功后任务仍为 PENDING/IN_PROGRESS，不自动下一项。
+              暂挂后任务保留在待处理队列，不会自动进入下一项
             </DialogDescription>
           </DialogHeader>
           <form
@@ -1886,16 +1881,16 @@ export function ExternalProductSupplyPage() {
           confirmMode?.kind === "confirm_stop"
             ? [
                 "写入停供记录结论与审计",
-                "完成 BUSINESS_EXCEPTION 任务",
+                "结束当前异常处理任务",
                 "不选定替代供给、不恢复上架",
               ]
             : [
                 "写入异常已解决结论与审计",
-                "完成 BUSINESS_EXCEPTION 任务",
+                "结束当前异常处理任务",
                 "不写正常映射或供给修订",
               ]
         }
-        irreversibleEffects={["任务终态不可撤销（演示会话内）"]}
+        irreversibleEffects={["处理结果不可撤销（演示会话内）"]}
         pending={completeMutation.isPending}
         onConfirm={async () => {
           await completeForm.handleSubmit()

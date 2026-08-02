@@ -778,7 +778,7 @@ export function CardBusinessAnalyticsPage() {
         <BusinessFailureState
           kind="system"
           title="日期口径配置加载失败"
-          description="无法取得服务端默认日期口径。请重试；不会静默采用「本月/消费发生日」。"
+          description="无法取得服务端默认日期口径。请重试；不会自动采用本月或消费发生日。"
           action={
             <Button
               type="button"
@@ -798,7 +798,7 @@ export function CardBusinessAnalyticsPage() {
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
           title="卡券消费台账与经营分析"
-          description="服务端未配置默认日期口径（DATE_BASIS_DEFAULT_UNCONFIGURED）。请显式选择期间与日期口径后开始分析；不会自动采用本月或消费发生日，也不会显示虚假 0 指标。"
+          description="系统尚未配置默认日期口径。请显式选择期间与日期口径后再开始分析。"
           breadcrumbs={[
             { id: "an", label: "分析", href: "/analytics/card-business" },
             { id: "cb", label: "卡券经营分析", current: true },
@@ -808,15 +808,14 @@ export function CardBusinessAnalyticsPage() {
           <CalendarRangeIcon aria-hidden="true" />
           <AlertTitle>请选择期间与日期口径</AlertTitle>
           <AlertDescription>
-            指标、图表与明细在完整 from / to / dateBasis 写入 URL
-            前不会发起查询。
+            选择完整的期间与日期口径后才会发起查询；该选择将作用于全部指标与图表。
           </AlertDescription>
         </Alert>
         <Card size="sm">
           <CardHeader className="border-b">
             <CardTitle>显式期间与日期口径</CardTitle>
             <CardDescription>
-              选定后写入 URL 的 from/to/dateBasis，并作为全部查询的唯一上下文。
+              选择完整的期间与日期口径后才会发起查询；该选择将作用于全部指标与图表。
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4 pt-4">
@@ -896,7 +895,7 @@ export function CardBusinessAnalyticsPage() {
               />
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <span>
-                  Outbox 同步{" "}
+                  数据同步时间{" "}
                   <time
                     className="num"
                     dateTime={data.freshness.consumedOutboxWatermark}
@@ -939,8 +938,8 @@ export function CardBusinessAnalyticsPage() {
                       : "num"
                   }
                 >
-                  lag {data.freshness.lagSeconds}s / SLA{" "}
-                  {data.freshness.maxLagSeconds}s · {data.freshness.slaState}
+                  延迟 {data.freshness.lagSeconds} 秒（上限{" "}
+                  {data.freshness.maxLagSeconds} 秒）
                 </span>
               </div>
             </div>
@@ -1165,7 +1164,7 @@ export function CardBusinessAnalyticsPage() {
               </AlertTitle>
               <AlertDescription>
                 {refreshFailed
-                  ? "保留上次成功数据供只读查阅。不会用本地估算覆盖金额。"
+                  ? "保留上次成功数据供只读查阅。不覆盖金额。"
                   : `更新延迟 ${data.freshness.lagSeconds}s 超过固定上限 ${data.freshness.maxLagSeconds}s（${data.freshness.slaState}）。数据 ${formatDateTime(data.freshness.projectionUpdatedAt)}，同步 ${formatDateTime(data.freshness.consumedOutboxWatermark)}。余额记录独立显示，不合并为「实时」。`}
               </AlertDescription>
             </Alert>
@@ -1265,8 +1264,7 @@ export function CardBusinessAnalyticsPage() {
               {data.filterSummary}
               <span className="mt-1 block">
                 权限版本 {data.scope.permissionVersion} · 时区{" "}
-                {data.scope.timezone} · 筛选摘要 digest{" "}
-                <span className="num">{data.scope.filterDigest.slice(0, 48)}…</span>
+                {data.scope.timezone} · 筛选摘要（部分省略）
               </span>
               <span className="mt-1 block text-muted-foreground">
                 {data.wechatExcludedNote}
@@ -1328,12 +1326,12 @@ export function CardBusinessAnalyticsPage() {
                   {data.coverage.byBasis.find((b) => b.basis === "NONE")
                     ?.shareLabel ?? "—"}
                   <span className="block text-xs text-muted-foreground">
-                    无可用成本 · 不显示 ¥0 · 不进利润
+                    无可用成本，不显示金额，不计入利润
                   </span>
                 </span>
               ),
             }}
-            profitBasis="不含税 · 当前经营贡献 ≠ 最终利润；须同屏未履约余额"
+            profitBasis="不含税；当前经营贡献不等于最终利润，须结合未履约余额查看。"
             notice={
               <>
                 {data.coverage.notice}
@@ -1519,7 +1517,7 @@ export function CardBusinessAnalyticsPage() {
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
                     <caption className="mb-2 text-left text-muted-foreground">
-                      成本口径构成数据表（名称 · 金额 · 占比 · 成本，非仅颜色）
+                      成本口径构成数据表（名称 · 金额 · 占比 · 成本）
                     </caption>
                     <thead>
                       <tr className="border-b text-muted-foreground">
@@ -1747,7 +1745,7 @@ export function CardBusinessAnalyticsPage() {
           ) : (
             <BusinessTableFrame
               title="下钻明细"
-              description={`客户 / 销售单 / 稳定卡实例引用 / 消费 / 成本口径 / 覆盖。无卡号、卡密、绑定手机号字段。共 ${data.rows.total} 行 · ${data.filterSummary}`}
+              description={`客户 / 销售单 / 卡实例引用 / 消费 / 成本口径 / 覆盖。不包含卡号、卡密与绑定手机号。共 ${data.rows.total} 行 · ${data.filterSummary}`}
               table={
                 <DataTable
                   columns={columns}
@@ -1790,9 +1788,7 @@ export function CardBusinessAnalyticsPage() {
             <DescriptionItem>
               <DescriptionTerm>成本三分法</DescriptionTerm>
               <DescriptionDetails>
-                ACTUAL 进入利润；STANDARD
-                按消费时点有效供给价估算（不得写「实际」）；NONE
-                只计入消费额与覆盖率分母，不显示成本 0，不进入利润。
+                实际成本计入利润；标准成本按消费时点的有效供给价估算；无成本仅计入消费额与覆盖率，不显示为零成本，也不计入利润。
               </DescriptionDetails>
             </DescriptionItem>
             <DescriptionItem>
@@ -1813,7 +1809,7 @@ export function CardBusinessAnalyticsPage() {
                 {Object.entries(DATE_BASIS_LABEL)
                   .map(([k, v]) => `${v}（${k}）`)
                   .join("；")}
-                。Q2 未配置时必须显式选择，禁止静默采用本月/消费发生日。
+                。未配置默认口径时须显式选择，不会自动采用本月或消费发生日。
               </DescriptionDetails>
             </DescriptionItem>
           </DescriptionList>
@@ -1834,8 +1830,7 @@ export function CardBusinessAnalyticsPage() {
               <AlertDescription className="space-y-2 text-xs">
                 <p>
                   <strong>口径：</strong>
-                  销售/面值/消费/余额为含税（GROSS）；成本/毛差/经营贡献为不含税（NET）。NONE
-                  不按零成本计入利润。
+                  销售/面值/消费/余额为含税（GROSS）；成本/毛差/经营贡献为不含税（NET）。无成本数据不计入利润。
                 </p>
                 <p>
                   <strong>筛选：</strong>

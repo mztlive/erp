@@ -578,7 +578,7 @@ function SettlementList({
           status: "blocked",
           title: "期间策略未配置",
           description:
-            "PERIOD_POLICY_UNCONFIGURED：不得新建草稿。请先完成供应商结算期间策略配置。",
+            "结算期间策略未配置，暂不能新建草稿。请先完成供应商结算期间策略配置。",
         })
         return
       }
@@ -686,7 +686,7 @@ function SettlementList({
 
       {policy?.state === "UNCONFIGURED" ? (
         <Alert variant="warning">
-          <AlertTitle>期间策略未配置（PERIOD_POLICY_UNCONFIGURED）</AlertTitle>
+          <AlertTitle>期间策略未配置</AlertTitle>
           <AlertDescription>
             {policy.blocker.message}
             列表仍可显式查询历史结算单，但新建草稿入口已关闭。
@@ -1106,7 +1106,7 @@ function SettlementList({
             <Alert variant="destructive">
               <AlertTitle>无法创建</AlertTitle>
               <AlertDescription>
-                PERIOD_POLICY_UNCONFIGURED 或策略不可用，不创建草稿。
+                结算期间策略未配置，暂不能新建草稿。
               </AlertDescription>
             </Alert>
           ) : (
@@ -1608,7 +1608,7 @@ function SettlementCenter({
                       else
                         setResult({
                           ...result,
-                          description: "仍未知，请稍后用原任务号再查。",
+                          description: "结果仍未返回，请稍后重试。",
                         })
                     }}
                   >
@@ -1626,7 +1626,7 @@ function SettlementCenter({
           <CardTitle className="text-base">金额摘要</CardTitle>
           <CardDescription>
             订单 / 运费 / 服务费 / 退款 + ERP vs 供应商 + 差异方向 · 全部
-            {detail.totals.taxBasisLabel} · 服务端舍入，前端不重算
+            {detail.totals.taxBasisLabel}
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-4">
@@ -1740,26 +1740,14 @@ function SettlementCenter({
 
       <div className="rounded-xl border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">来源数据 </span>
-        sourceAsOf={formatTime(st.sourceAsOf)} · sourceSnapshotHash=
-        <span className="num font-mono">{st.sourceSnapshotHash}</span>
-        {st.subjectHash ? (
-          <>
-            {" "}
-            · subjectHash=
-            <span className="num font-mono">{st.subjectHash}</span>
-          </>
-        ) : null}
+        更新时间 {formatTime(st.sourceAsOf)}
         {st.externalBillNo ? (
           <>
             {" "}
             · 账单 {st.externalBillNo}@{st.externalBillVersion}
           </>
         ) : null}
-        <span className="ml-2">
-          W26 数据仅展示（
-          {formatTime(detail.freshness.w26ProjectionUpdatedAt)}
-          ），不参与正式取数
-        </span>
+        <span className="ml-2">以下数据仅供参考，不参与正式结算</span>
       </div>
 
       <Tabs
@@ -1833,7 +1821,7 @@ function SettlementCenter({
               <p>财务经办：差异结论与提交复核</p>
               <p>财务复核：须为不同人，确认后形成应付</p>
               <p className="text-muted-foreground">
-                前端禁用态仅解释；服务端岗位分离校验为准
+                系统将按岗位权限最终校验
               </p>
             </CardContent>
           </Card>
@@ -1845,8 +1833,7 @@ function SettlementCenter({
           <CardHeader className="border-b py-3">
             <CardTitle className="text-base">结算明细</CardTitle>
             <CardDescription>
-              冻结数据 + 不可变完成/取消/退款记录 · 金额只读（canEditBillOrOrder=
-              {String(detail.canEditBillOrOrder)}）
+              冻结数据 + 不可变完成/取消/退款记录 · 金额只读，不可修改
             </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto pt-0">
@@ -2172,7 +2159,7 @@ function SettlementCenter({
             ? `截止策略 ${detail.refreshCutoffPolicy.policyId}@${detail.refreshCutoffPolicy.policyVersion}`
             : "截止策略未配置",
         ]}
-        effects={["冻结来源数据与差异结论", "创建 SUPPLIER_SETTLEMENT_REVIEW 待办"]}
+        effects={["冻结来源数据与差异结论", "创建结算复核待办"]}
         pending={submitMutation.isPending}
         onConfirm={async () => {
           await onSubmitReview()
@@ -2206,7 +2193,7 @@ function SettlementCenter({
           `经办 ${st.preparedBy?.displayName ?? "—"}`,
         ]}
         effects={[
-          "追加成本差额 cost_entry",
+          "追加成本差额记录",
           "形成唯一供应商结算应付",
           "锁定处理结果，不可撤回确认",
         ]}

@@ -275,7 +275,7 @@ export function PurchaseOrdersListPage() {
       setActionResult({
         status: "succeeded",
         title: "已创建采购草稿",
-        description: `${result.data.draftLabel} · 已消费创建依据 ${selectedBasisId}，未创建采购建单任务。`,
+        description: `${result.data.draftLabel} · 已使用创建依据 ${selectedBasisId}`,
         reference: result.reference,
       })
       router.push(
@@ -681,7 +681,7 @@ export function PurchaseOrdersListPage() {
         title="采购单列表"
         description={
           metricKey === "all" && statusFilter === "all"
-            ? "1440×900 紧凑密度；采购单号与行级操作列固定。键盘 j/k 移动，Enter 预览，/ 搜索。"
+            ? "紧凑布局；采购单号与行级操作列固定。键盘 j/k 移动，Enter 预览，/ 搜索。"
             : `当前筛选：${metricKey} · ${statusFilter}`
         }
         toolbar={
@@ -881,7 +881,7 @@ export function PurchaseOrdersListPage() {
           <DialogHeader>
             <DialogTitle>从采购创建依据建单</DialogTitle>
             <DialogDescription>
-              只消费采购二次确认/销售单的采购创建依据，不要求未注册的采购建单任务。
+              仅使用采购二次确认产生的创建依据，无需额外建单任务。
               同一依据上的拆单维度已固定，不可跨销售单或跨供应商合并。
             </DialogDescription>
           </DialogHeader>
@@ -905,7 +905,7 @@ export function PurchaseOrdersListPage() {
                       ? [
                           {
                             value: basisFromUrl,
-                            label: `${basisFromUrl} · 来自采购二次确认固定结果（无建单任务）`,
+                            label: `${basisFromUrl} · 来自采购二次确认的固定结果`,
                           },
                         ]
                       : []),

@@ -55,7 +55,7 @@ export function PurchaseOrderPreviewPanel({
       <ScrollArea className="min-h-0 max-h-[40vh] border-b border-border lg:max-h-none lg:w-[min(20rem,38%)] lg:shrink-0 lg:border-r lg:border-b-0">
         <div className="space-y-4 p-4 md:p-5">
           <section className="space-y-2" aria-label="进度">
-            <SectionTitle>审核 / 付款 / 开票 / 履约</SectionTitle>
+            <SectionTitle>进度</SectionTitle>
             <StatusTrackSummary
               variant="table"
               className="sm:grid-cols-1 lg:grid-cols-1"
@@ -306,13 +306,13 @@ export function PurchaseOrderPreviewPanel({
             </div>
             {costMasked ? (
               <p className="text-[11px] text-muted-foreground">
-                当前角色无成本字段权限：金额标签保留，值已掩码（不返回原值）。
+                当前角色无成本字段权限：金额已隐藏。
               </p>
             ) : null}
           </section>
 
           <DocumentTotals
-            title="金额合计（服务端舍入）"
+            title="金额合计（系统计算）"
             className="max-w-md self-end"
             items={[
               {

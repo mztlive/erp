@@ -915,7 +915,7 @@ export function SupplierAccountsPage() {
           <AlertDescription>
             {fromWorkspace ? `来源 ${fromWorkspace}` : null}
             {purchaseOrderId ? ` · 采购单 ${purchaseOrderId}` : null}
-            。完成付款核销后请返回来源页重查门禁；附件或未核销付款不满足先款条件。
+            。完成付款核销后请返回来源页重新校验付款条件；未核销付款不满足先款要求。
             {returnTo ? (
               <>
                 {" "}
@@ -970,7 +970,7 @@ export function SupplierAccountsPage() {
         <MetricFilterItem
           label="开放应付"
           value={<MoneyValue value={data.metrics.openPayableTotal} />}
-          detail="服务端口径"
+          detail="系统口径"
           active={view === "payable" && !status}
           onClick={() => {
             setPagination((p) => ({ ...p, pageIndex: 0 }))
@@ -1332,7 +1332,7 @@ export function SupplierAccountsPage() {
 
             {detailQuery.data.payable.paymentGateSummary ? (
               <Alert>
-                <AlertTitle>付款门禁（服务端）</AlertTitle>
+                <AlertTitle>付款条件（系统校验）</AlertTitle>
                 <AlertDescription>
                   {detailQuery.data.payable.paymentGateSummary.message} · 已核销{" "}
                   {detailQuery.data.payable.paymentGateSummary.allocated} / 门槛{" "}

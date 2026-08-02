@@ -477,7 +477,7 @@ function OverviewView({
                 冻结动作：{freeze.frozenActions.join("、")}
               </p>
               <p className="font-medium">
-                本 Banner 由服务端冻结记录驱动，不可忽略或暂时关闭。
+                维护冻结期间，相关操作暂不可用。
               </p>
             </div>
           }
@@ -1069,7 +1069,7 @@ function BatchWizardView({
                 disabled={formalMutation.isPending}
                 onClick={() => void runFormal("DEMO_INVALIDATE_SCOPE")}
               >
-                演示：scopeHash 变化使确认失效
+                演示：变更范围后原确认失效
               </Button>
             </>
           ) : null
@@ -1236,7 +1236,7 @@ function ScopeSection({ batch }: { batch: OwnershipMigrationBatchView }) {
             />
           </MetricStrip>
           <p className="text-xs text-muted-foreground">
-            「已迁移」仅在全批原子提交后计数；检查通过 ≠ 已提交。
+            「已迁移」只有整批确认完成后才计数；检查通过不等于已迁移。
           </p>
         </CardContent>
       </Card>
@@ -1320,7 +1320,7 @@ function ConfirmationsSection({
         <BanIcon />
         <AlertTitle>三类确认独立 · 管理员不可代签</AlertTitle>
         <AlertDescription>
-          销售与财务通过待办队列完整提交；当前演示角色为{" "}
+          销售与财务需在待办队列中完成提交；当前角色为{" "}
           <strong>{ROLE_LABEL[role]}</strong>
           。scopeHash / 分面变化会使旧确认失效并保留审计。
         </AlertDescription>
@@ -1474,7 +1474,7 @@ function FreezeSyncSection({
       <CardHeader className="border-b">
         <CardTitle>冻结与最后同步</CardTitle>
         <CardDescription>
-          冻结写入服务端记录后全局 Banner 生效；失败不得显示已冻结。
+          冻结成功后将全站显示维护横幅；失败时不会误显示。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 pt-4">
@@ -1522,7 +1522,7 @@ function FreezeSyncSection({
         )}
         {!can("START_FREEZE") && !batch.freeze.active ? (
           <p className="text-xs text-muted-foreground">
-            启动冻结由上线窗口与服务端权限控制（演示可在有权角色下执行）。
+            启动冻结需在上线窗口内且具备相应权限；当前演示环境可按角色执行。
           </p>
         ) : null}
       </CardContent>
@@ -1692,10 +1692,9 @@ function ExecutionSection({
     <div className="space-y-4">
       <Alert variant="warning">
         <TriangleAlertIcon />
-        <AlertTitle>原子提交 · 无部分成功</AlertTitle>
+        <AlertTitle>整批确认，无部分成功</AlertTitle>
         <AlertDescription>
-          任一项失败则全批未提交。进度百分比仅表示后台操作进度，不表示项目已迁移。
-          失败保持冻结并使用原批次续跑。
+          任一项失败则整批不生效，进度百分比不代表迁移完成；失败后可续跑原批次。
         </AlertDescription>
       </Alert>
 
@@ -1917,7 +1916,7 @@ function ItemsTable({ batch }: { batch: OwnershipMigrationBatchView }) {
   return (
     <BusinessTableFrame
       title="迁移项"
-      description="检查通过不等于已提交；仅全批事务提交后显示「已迁移」。不含商城草稿统计。"
+      description="不含商城草稿统计。"
       table={
         <DataTable
           data={[...batch.items]}

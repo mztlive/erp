@@ -891,8 +891,7 @@ export function CustomerReceivablesPage() {
         <Alert variant="info">
           <AlertTitle>客户筛选</AlertTitle>
           <AlertDescription>
-            已按经营归属客户过滤（customerId={customerId}
-            ）。核销相等键仍为 counterparty_party_id。
+             已按经营归属客户过滤。核销仍以结算主体为准。
             <Button
               type="button"
               size="sm"
@@ -1025,7 +1024,7 @@ export function CustomerReceivablesPage() {
                 {data ? (
                   <span className="text-muted-foreground">
                     {" "}
-                    · 提交策略：{data.submitPolicy.label}
+                    · 提交方式：{data.submitPolicy.label}
                   </span>
                 ) : null}
               </span>
@@ -1157,7 +1156,7 @@ export function CustomerReceivablesPage() {
                     <h3 className="text-sm font-semibold">
                       待分配销项发票
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        未分配 {metrics?.unallocatedInvoiceTotal}（不与回款相加）
+                        未分配 {metrics?.unallocatedInvoiceTotal}（独立统计）
                       </span>
                     </h3>
                     {data.unallocated.invoices.length === 0 ? (
@@ -1187,7 +1186,7 @@ export function CustomerReceivablesPage() {
                   <BusinessEmptyState
                     kind="filter"
                     title="无匹配往来记录"
-                    description="保留筛选摘要；可清除筛选后重试。"
+                    description="无匹配记录，可清除筛选后重试。"
                     action={
                       <Button
                         type="button"
@@ -1211,7 +1210,7 @@ export function CustomerReceivablesPage() {
                   <BusinessEmptyState
                     kind="no-data"
                     title="当前范围尚无客户往来记录"
-                    description="有权时从销售单链入登记；应收形成后刷新。"
+                    description="可从销售单进入登记；登记后刷新查看。"
                   />
                 )
               ) : view === "receivable" && data ? (
@@ -1446,7 +1445,7 @@ export function CustomerReceivablesPage() {
                 : "登记销项发票 — 选择往来主体"}
             </DialogTitle>
             <DialogDescription>
-              核销会话创建后锁定 counterparty_party_id，中途不可更换主体。
+              核销会话创建后锁定往来主体，中途不可更换。
               经营客户与结算主体可能不同。
             </DialogDescription>
           </DialogHeader>
@@ -1576,7 +1575,7 @@ function ReceivableDetailBody({ row }: { row: ReceivableAccountRow }) {
         <Fact label="复核" value={row.reviewStatusLabel} />
       </div>
       <p className="text-xs text-muted-foreground">
-        回款进度与开票进度独立；不可用开票状态推断结清。金额均为服务端返回。
+        回款进度与开票进度独立；不可用开票状态推断结清。
       </p>
       <section>
         <h4 className="mb-2 text-sm font-semibold">不可变分录</h4>
@@ -1610,8 +1609,7 @@ function ReceiptDetailBody({ row }: { row: ReceiptRow }) {
       <Alert variant="info">
         <AlertTitle>已过账记录只读</AlertTitle>
         <AlertDescription>
-          canEdit={String(row.canEdit)} · canDelete={String(row.canDelete)}
-          。纠错仅能追加退款/冲正。
+          已过账记录不可编辑、不可删除；纠错仅能追加退款/冲正。
         </AlertDescription>
       </Alert>
       <div className="grid grid-cols-2 gap-3">
@@ -1679,8 +1677,7 @@ function InvoiceDetailBody({ row }: { row: SalesInvoiceRow }) {
       <Alert variant="info">
         <AlertTitle>已登记发票只读</AlertTitle>
         <AlertDescription>
-          canEdit={String(row.canEdit)} · canDelete={String(row.canDelete)}
-          。红票为独立记录 + 反向分配。
+          已登记发票不可编辑、不可删除；红票为独立记录加反向分配。
         </AlertDescription>
       </Alert>
       <div className="grid grid-cols-2 gap-3">

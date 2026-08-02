@@ -755,9 +755,7 @@ export function ExecutionProjectionsPage() {
         <ShieldAlertIcon aria-hidden="true" />
         <AlertTitle>非写者边界</AlertTitle>
         <AlertDescription>
-          执行信息由已生效销售版本自动形成。接收失败不回退销售记录、销售版本或应收；
-          内容变化须在销售单走变更单。本页仅支持查询结果、重试与升级到接口错误中心，
-          不提供任务领取/完成。任何角色下不展示成交金额、配赠、税率、开票、应收与玩法规则。
+          执行信息由已生效销售版本自动形成；接收失败不影响销售记录与应收，内容变更须走销售变更单。本页支持查询结果、重试与升级到接口错误中心，不展示金额、税率、开票、应收与玩法等销售明细。
         </AlertDescription>
       </Alert>
 
@@ -981,9 +979,9 @@ export function ExecutionProjectionsPage() {
           className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-muted/40 px-3 py-2 text-sm"
         >
           <span>
-            已显式选择{" "}
+            已选择{" "}
             <span className="num font-medium">{selectedIds.length}</span>{" "}
-            项（Q3：不支持当前筛选全部；服务端冻结筛选结果）
+            项（批量操作仅作用于显式选择，不含当前筛选全部）
           </span>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -1021,7 +1019,7 @@ export function ExecutionProjectionsPage() {
 
       <BusinessTableFrame
         title="执行信息列表"
-        description="销售单身份列与操作列固定；每页 6–8 行。指标与行数据同源权限范围。"
+        description="销售单身份列与操作列固定；每页 6–8 行。指标与列表数据均受权限范围控制。"
         table={
           <DataTable
             columns={columns}
@@ -1089,8 +1087,7 @@ export function ExecutionProjectionsPage() {
       />
 
       <p className="text-xs text-muted-foreground">
-        列表约 6–8 行/页（当前 pageSize={pageSize}
-        ）。销售单列与操作列固定。结果未知不计入「已确认」指标。
+        结果未知不计入「已确认」指标。
         {view?.defaultViewNote}
       </p>
 
@@ -1359,8 +1356,8 @@ export function ExecutionProjectionsPage() {
 
             {objectTab === "content" ? (
               <DocumentSection
-                title="执行内容（服务端白名单）"
-                description="字段仅来自数据修订；前端不重组装。不含成交金额、配赠、税率、开票、应收、玩法规则。"
+                title="执行内容"
+                description="字段以系统数据修订为准。不含成交金额、配赠、税率、开票、应收、玩法规则。"
               >
                 <WhitelistContentGrid
                   content={detail.selectedRevision.content}
@@ -1449,7 +1446,6 @@ export function ExecutionProjectionsPage() {
                     reason: (
                       <span>
                         来源销售版本 v{link.sourceSalesRevisionNo}
-                        （历史不被销售单当前版覆盖）
                         {link.isCurrentSelection ? " · 当前查看" : ""}
                       </span>
                     ),
@@ -1470,15 +1466,6 @@ export function ExecutionProjectionsPage() {
                     ),
                   }))}
                 />
-                {detail.revisionLinks.some(
-                  (l) =>
-                    l.sourceSalesRevisionNo !==
-                    detail.selectedRevision.salesOrderRevisionNo
-                ) ? (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    提示：销售单当前版本可能高于历史数据来源版本；历史内容不被覆盖。
-                  </p>
-                ) : null}
               </DocumentSection>
             ) : null}
 
@@ -1490,7 +1477,7 @@ export function ExecutionProjectionsPage() {
                     <AlertTitle>版本对账差异</AlertTitle>
                     <AlertDescription>
                       {RECONCILIATION_LABEL.VERSION_MISMATCH}
-                      ：只打开接口错误中心 核对，不在本页选择覆盖任一侧记录。
+                      。请前往接口错误中心核对；本页不提供覆盖任一侧记录。
                       <div className="mt-2">
                         <Button
                           type="button"
@@ -1517,7 +1504,7 @@ export function ExecutionProjectionsPage() {
                 )}
                 {detail.deliveries[0]?.errorSummary ? (
                   <div className="rounded-xl border p-3 text-sm">
-                    <div className="font-medium">失败摘要（脱敏）</div>
+                    <div className="font-medium">失败摘要</div>
                     <p className="mt-1 text-muted-foreground">
                       {detail.deliveries[0].errorCode
                         ? `${detail.deliveries[0].errorCode} · `
@@ -1527,7 +1514,7 @@ export function ExecutionProjectionsPage() {
                     {detail.deliveries[0].workItemId ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <Badge variant="secondary">
-                          workItem {detail.deliveries[0].workItemId}
+                          任务 {detail.deliveries[0].workItemId}
                         </Badge>
                         <Button
                           type="button"
@@ -1553,7 +1540,7 @@ export function ExecutionProjectionsPage() {
                   </div>
                 ) : null}
                 <p className="mt-3 text-xs text-muted-foreground">
-                  W23 不提供领取、续租、转交、关闭或完成任务动作。
+                  本页不支持领取、转交或完成处理任务。
                 </p>
               </DocumentSection>
             ) : null}
@@ -1656,7 +1643,7 @@ export function ExecutionProjectionsPage() {
             ? { label: "明确结果或仍未知", tone: "warning" }
             : pendingAction?.kind === "RETRY" ||
                 pendingAction?.kind === "BULK_RETRY"
-              ? { label: "按原任务号重试", tone: "info" }
+              ? { label: "按原记录重试", tone: "info" }
               : pendingAction?.kind === "ESCALATE"
                 ? { label: "W29 待办", tone: "warning" }
                 : { label: "后台逐项处理", tone: "info" }
@@ -1667,7 +1654,7 @@ export function ExecutionProjectionsPage() {
                 `销售版本 v${pendingAction.row.salesOrderRevisionNo}`,
                 `数据修订 v${pendingAction.row.projectionRevisionNo}`,
                 pendingAction.row.targetMallName,
-                `任务号 ${pendingAction.row.salesOrderNo}+v${pendingAction.row.salesOrderRevisionNo}+${pendingAction.row.targetMallName}`,
+                `销售单 ${pendingAction.row.salesOrderNo} · v${pendingAction.row.salesOrderRevisionNo} · ${pendingAction.row.targetMallName}`,
               ]
             : pendingAction && "ids" in pendingAction
               ? [
@@ -1706,7 +1693,7 @@ export function ExecutionProjectionsPage() {
                     ]
         }
         nextDepartment={
-          pendingAction?.kind === "ESCALATE" ? "W29 错误中心" : "运营 / 系统"
+          pendingAction?.kind === "ESCALATE" ? "接口错误中心" : "运营 / 系统"
         }
         pending={commandMutation.isPending || bulkMutation.isPending}
         onConfirm={async () => {
@@ -1756,7 +1743,7 @@ function WhitelistContentGrid({
           {content.customerExternalIdentity}
           {!content.customerExternalIdentityCopyable ? (
             <span className="ml-2 text-xs font-normal text-muted-foreground">
-              短引用·不可复制完整值
+              仅显示引用摘要，不可复制完整值
             </span>
           ) : null}
         </dd>

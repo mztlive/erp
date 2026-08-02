@@ -622,7 +622,7 @@ export function IntegrationErrorsPage({
               disabled={!leaseActive || formalPending}
               onClick={() => void runTaskAction("REPLAY_ORIGINAL")}
             >
-              重放（服务端锁定原键）
+              重新提交（保持原请求编号）
             </Button>
           ),
         }
@@ -1415,7 +1415,7 @@ export function IntegrationErrorsPage({
                             }
                             mono
                           />
-                          <Fact label="原键锁定" value="是（仅服务端）" />
+                          <Fact label="请求编号" value="已保留" />
                         </>
                       ) : null}
                       {item.message ? (
@@ -1692,7 +1692,7 @@ export function IntegrationErrorsPage({
                           disabled={!leaseActive || formalPending}
                           onClick={() => void runTaskAction("REPLAY_ORIGINAL")}
                         >
-                          重放（服务端原键）
+                          重新提交
                         </Button>
                       ) : null}
                       {can("ADD_EVIDENCE") && item.workItem ? (

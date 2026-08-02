@@ -144,7 +144,7 @@ export function MasterDataCreateDialog({
         <DialogHeader>
           <DialogTitle>新建 · {resourceLabel(resource)}</DialogTitle>
           <DialogDescription>
-            创建稳定身份与 v1 不可变修订；须填写变更原因。仓库在本期未确认前写操作暂不可用。
+            创建后将生成稳定编号与首个版本；名称与版本历史不可修改，须填写变更原因。
           </DialogDescription>
         </DialogHeader>
 
@@ -159,7 +159,7 @@ export function MasterDataCreateDialog({
           <FormalActionResult
             status="succeeded"
             title="主数据已创建"
-            description="稳定编号与 v1 已形成；历史单据不会引用本会话新建对象的演示数据。"
+            description="已创建稳定编号与首个版本；历史单据不会引用新创建的对象。"
             reference={result.reference}
             facts={resultFacts(result)}
           />
@@ -211,7 +211,7 @@ export function MasterDataCreateDialog({
             />
             {!isWarehouse ? (
               <div className="space-y-2">
-                <Label htmlFor="create-sim">演示校验（会话）</Label>
+                <Label htmlFor="create-sim">模拟校验（仅演示）</Label>
                 <OptionCombobox
                   id="create-sim"
                   value={simulate}
@@ -234,8 +234,8 @@ export function MasterDataCreateDialog({
                   ]}
                   className="w-full"
                   allowClear={false}
-                  aria-label="演示校验（会话）"
-                  placeholder="演示校验"
+                  aria-label="模拟校验（仅演示）"
+                  placeholder="模拟校验"
                 />
               </div>
             ) : null}
@@ -366,7 +366,7 @@ export function MasterDataReviseDialog({
           <FormalActionResult
             status="succeeded"
             title="新版本已形成"
-            description="不可变修订已追加；即时生效时更新当前指针，待生效不提前切换。"
+            description="新版本已创建；即时生效的版本立即应用，待生效的版本到生效日自动切换。"
             reference={result.reference}
             facts={resultFacts(result)}
           />
@@ -433,7 +433,7 @@ export function MasterDataReviseDialog({
             />
             {!isWarehouse ? (
               <div className="space-y-2">
-                <Label htmlFor="rev-sim">演示校验（会话）</Label>
+                <Label htmlFor="rev-sim">模拟校验（仅演示）</Label>
                 <OptionCombobox
                   id="rev-sim"
                   value={simulate}
@@ -466,8 +466,8 @@ export function MasterDataReviseDialog({
                   ]}
                   className="w-full"
                   allowClear={false}
-                  aria-label="演示校验（会话）"
-                  placeholder="演示校验"
+                  aria-label="模拟校验（仅演示）"
+                  placeholder="模拟校验"
                 />
               </div>
             ) : null}
@@ -561,7 +561,7 @@ export function MasterDataDisableDialog({
         <DialogHeader>
           <DialogTitle>停用主数据</DialogTitle>
           <DialogDescription>
-            停用不是删除：形成停用版本，历史引用与版本记录永久保留。
+            停用不等于删除：对象仍可查询，历史记录永久保留。
             {target ? (
               <>
                 {" "}
@@ -632,7 +632,7 @@ export function MasterDataDisableDialog({
             />
             {!isWarehouse ? (
               <div className="space-y-2">
-                <Label htmlFor="dis-sim">演示结果</Label>
+                <Label htmlFor="dis-sim">模拟结果（仅演示）</Label>
                 <OptionCombobox
                   id="dis-sim"
                   value={simulate}
@@ -647,8 +647,8 @@ export function MasterDataDisableDialog({
                   ]}
                   className="w-full"
                   allowClear={false}
-                  aria-label="演示结果"
-                  placeholder="演示结果"
+                  aria-label="模拟结果（仅演示）"
+                  placeholder="模拟结果"
                 />
               </div>
             ) : null}
