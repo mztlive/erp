@@ -140,7 +140,7 @@ export function saveW03CustomerRevision(
   ) {
     const result: CustomerMutationResult = {
       outcome: "conflict",
-      message: "主数据版本已变化，禁止静默覆盖。请查看服务端新版本后重做。",
+      message: "基础资料版本已变化，禁止静默覆盖。请查看服务端新版本后重做。",
       serverLockVersion: detail.lockVersion,
       serverRevisionNo: detail.currentRevision.revisionNo,
       serverLegalName: detail.currentRevision.legalName,

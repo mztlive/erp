@@ -384,7 +384,7 @@ export function CustomerDetailPage({
         }}
         tabIndex={-1}
       >
-        <DocumentSection title="主体身份与客户角色" description="当前主数据版本，不覆盖历史单据记录">
+        <DocumentSection title="主体身份与客户角色" description="当前基础资料版本，不覆盖历史单据记录">
           {customer.partitions.identity === "error" ? (
             <BusinessFailureState
               kind="system"
@@ -423,7 +423,7 @@ export function CustomerDetailPage({
                 },
                 {
                   id: "revision",
-                  label: "主数据版本",
+                  label: "基础资料版本",
                   value: `v${customer.currentRevision.revisionNo} · ${customer.currentRevision.effectiveFrom.slice(0, 10)} 生效`,
                 },
                 {

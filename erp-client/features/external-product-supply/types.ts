@@ -385,7 +385,7 @@ export const DEMO_ROLE_LABEL: Record<DemoRole, string> = {
 export const HOLD_REASON_OPTIONS = [
   { value: "NEED_CLARIFICATION", label: "需澄清规格/映射" },
   { value: "WAITING_SOURCE", label: "等待来源修复" },
-  { value: "WAITING_MASTER_DATA", label: "等待主数据" },
+  { value: "WAITING_MASTER_DATA", label: "等待基础资料" },
   { value: "OTHER", label: "其他" },
 ] as const
 
@@ -397,7 +397,7 @@ export const RETURN_REASON_OPTIONS = [
 ] as const
 
 export const REGISTRATION_BLOCKER_MESSAGE =
-  "外部商品映射/供给复核任务类型尚未登记。当前仅可浏览差异、准备会话草稿或进入主数据建档；不得领取或提交确认。安全暂停与不可下单状态不受影响。"
+  "外部商品映射/供给复核任务类型尚未登记。当前仅可浏览差异、准备会话草稿或进入基础资料建档；不得领取或提交确认。安全暂停与不可下单状态不受影响。"
 
 export const RECOVERY_BLOCKER_MESSAGE =
   "替代供给选定人与恢复发布责任链尚未确认（Q3）。服务端固定返回 RECOVERY_RESPONSIBILITY_UNCONFIRMED：可准备会话内候选证据，不得选定替代供给或从外部商品供给发起商品发布恢复。"

@@ -786,7 +786,7 @@ export function SupplierOrderCenterPage({
             <Item label="版本" value={String(o.lockVersion)} />
           </DescriptionList>
           <p className="mt-3 text-xs text-muted-foreground">
-            发布版本、固定供给、商品与成本在下单时固定，不受后续主数据变化影响。
+            发布版本、固定供给、商品与成本在下单时固定，不受后续基础资料变化影响。
           </p>
         </DocumentSection>
       ) : null}

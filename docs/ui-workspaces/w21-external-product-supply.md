@@ -26,7 +26,7 @@
 ### 1.3 不在本工作面完成
 
 - 不维护 Supplier Connector、地址或密钥引用；进入 W20。
-- 不在 W21 编辑 ERP SKU 正式主数据全文；关联已有 SKU，或保留队列上下文进入 W14 新建/修订。
+- 不在 W21 编辑 ERP SKU 正式基础资料全文；关联已有 SKU，或保留队列上下文进入 W14 新建/修订。
 - 不在 W21 设置商城销售价、最小购买量、展示图文和最终上下架版本；进入 W22。
 - 不在供应商间自动比价、评分、拆量或运行动态路由；供应商切换由有权人员明确确认。
 - 不在责任链确认前由页面假定“采购选定替代供给、运营恢复发布”为已生效规则。
@@ -154,7 +154,7 @@
 | --- | --- | --- | --- | --- |
 | `mappingStatus` | 映射状态 | `supplier_product_mapping` | 待审核、已生效、冲突、停用 | 服务端状态 |
 | `skuId/skuCode` | ERP SKU | `sku` | 稳定身份和代码 | 按 W14 对象权限 |
-| `skuRevisionId` | 当前 SKU 版本 | `sku_revision` | 映射确认时展示的当前修订 | 无主数据查看权只显示安全摘要 |
+| `skuRevisionId` | 当前 SKU 版本 | `sku_revision` | 映射确认时展示的当前修订 | 无基础资料查看权只显示安全摘要 |
 | `skuName/specification/baseUnit` | ERP 名称 / 规格 / 基本单位 | SKU 当前修订 | 与来源字段并列 diff | 按字段权限 |
 | `approvedBy/At/reason` | 映射确认 | 映射记录 | 确认人、时间、结构化依据 | 审计范围内可见 |
 | `mappingHistory` | 映射历史 | 映射版本/审计投影 | 保留失效和冲突记录，不原位覆盖 | 只读 |
@@ -411,7 +411,7 @@ type CompleteExternalCatalogWorkItemResult = CompleteWorkItemResult<ExternalCata
 | 筛选无结果 | 展示筛选摘要 | 清除筛选 | 返回待处理全量 |
 | 无数据范围 | 不显示 0 项 | 查看供应商/品类范围或申请权限 | 权限更新后重查 |
 | 查询失败 | 无缓存显示 `BusinessFailureState`；有缓存保留当前项并标陈旧 | 重试；正式动作禁用 | 查询恢复 |
-| 正常类型未注册 | 新商品、映射或供给复核可只读查看 diff，并显示 `WORK_ITEM_TYPE_UNREGISTERED` blocker | 准备草稿、进入 W14 补主数据；不能领取或提交正式确认 | 权威注册表、W01/W02 handler 与共享信封处理器全部登记后重新查询 |
+| 正常类型未注册 | 新商品、映射或供给复核可只读查看 diff，并显示 `WORK_ITEM_TYPE_UNREGISTERED` blocker | 准备草稿、进入 W14 补基础资料；不能领取或提交正式确认 | 权威注册表、W01/W02 handler 与共享信封处理器全部登记后重新查询 |
 | 无 SKU 候选 | 显示“没有合适的现有 SKU” | 打开 W14 新建；不允许随便选近似项 | 建档后返回重查 |
 | 被他人领取 | 显示领取人、租约到期和只读内容 | 在中心查看、稍后重试 | 租约释放/转交 |
 | 租约丢失 | 保留本地输入但禁用正式动作 | 复制安全备注、重新领取并重新校验 | 获得新租约 |
@@ -449,7 +449,7 @@ type CompleteExternalCatalogWorkItemResult = CompleteWorkItemResult<ExternalCata
 | 来源 / 去向 | Wxx | 携带上下文 | 返回规则 |
 | --- | --- | --- | --- |
 | 今日工作台 / 待办 | W01 / W02 | 已注册来源 `ERROR` 或 `STOPPED` 异常的 `currentWorkItemId=workItemId`、`queueContextId` | 非终结动作后仍为原 `PENDING` / `IN_PROGRESS` 任务；终结成功后回任务结果或继续队列 |
-| 商品/SKU/供应商主数据 | W14 | 外部商品 ID、来源修订、拟建 SKU 上下文 | 建档后回 W21 并重新选择稳定 SKU |
+| 商品/SKU/供应商基础资料 | W14 | 外部商品 ID、来源修订、拟建 SKU 上下文 | 建档后回 W21 并重新选择稳定 SKU |
 | API 供应商连接 | W20 | 连接 ID、目录同步任务 ID、能力摘要 | 返回当前项并刷新水位 |
 | 商品发布 | W22 | 普通发布只传 SKU ID、已确认供给修订 ID、发布 blocker 与来源项 ID；安全暂停恢复在 Q3 确认前禁止跳转 | 普通发布后回中心“发布影响”；恢复 blocker 不得被导航规避 |
 | 商城消费/供应商订单 | W25 / W26 | 历史订单快照或供给引用（只读） | 返回原供给版本，不允许改历史 |

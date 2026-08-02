@@ -205,7 +205,7 @@ export function CustomerCreateSheet({
             <FormalActionResult
               status="succeeded"
               title="客户已创建"
-              description={`客户号 ${result.customerNo} · 主数据版本 v${result.revisionNo}`}
+              description={`客户号 ${result.customerNo} · 基础资料版本 v${result.revisionNo}`}
               reference={result.reference}
               facts={[
                 { label: "客户号", value: result.customerNo },

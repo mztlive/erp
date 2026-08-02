@@ -158,7 +158,7 @@ export function MasterDataCreateDialog({
         {result?.outcome === "succeeded" ? (
           <FormalActionResult
             status="succeeded"
-            title="主数据已创建"
+            title="基础资料已创建"
             description="已创建稳定编号与首个版本；历史单据不会引用新创建的对象。"
             reference={result.reference}
             facts={resultFacts(result)}
@@ -559,7 +559,7 @@ export function MasterDataDisableDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>停用主数据</DialogTitle>
+          <DialogTitle>停用基础资料</DialogTitle>
           <DialogDescription>
             停用不等于删除：对象仍可查询，历史记录永久保留。
             {target ? (

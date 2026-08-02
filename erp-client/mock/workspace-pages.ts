@@ -164,7 +164,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
                   { label: "客户简称", value: "东方企业" },
                   { label: "统一社会信用代码", value: "91310000MA1KXXXX1X" },
                   { label: "默认付款条件", value: "货到 30 日内付款" },
-                  { label: "主数据版本", value: "v4 · 2026-07-01 生效" },
+                  { label: "基础资料版本", value: "v4 · 2026-07-01 生效" },
                 ],
               },
               {
@@ -713,12 +713,12 @@ export const WORKSPACE_PAGE_DEFS: Partial<
 
   W14: {
     id: "W14",
-    title: "主数据",
+    title: "基础资料",
     description:
       "维护可销售项目、商品、卡券类目、供应商与仓库；版本变更可追溯。",
     mode: "M2+M4",
     breadcrumbs: [
-      { id: "md", label: "主数据", href: "/master-data/sellable-items" },
+      { id: "md", label: "基础资料", href: "/master-data" },
       { id: "resource", label: "可销售项目" },
     ],
     shell: {
@@ -2116,12 +2116,12 @@ export function getMasterDataPageDef(
   const fixture = MASTER_DATA_FIXTURES[resource]
   return {
     id: "W14",
-    title: `主数据 · ${label}`,
+    title: `基础资料 · ${label}`,
     description:
       "维护可销售项目、商品、卡券类目、供应商与仓库；版本变更可追溯。",
     mode: "M2+M4",
     breadcrumbs: [
-      { id: "md", label: "主数据", href: "/master-data/sellable-items" },
+      { id: "md", label: "基础资料", href: "/master-data" },
       { id: "resource", label },
     ],
     shell: {

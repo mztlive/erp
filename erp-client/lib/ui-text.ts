@@ -121,7 +121,7 @@ const WORKSPACE_SHORT_LABEL: Partial<Record<WorkspaceId, string>> = {
   W11: "客户往来",
   W12: "供应商往来",
   W13: "卡券票款复核",
-  W14: "主数据",
+  W14: "基础资料",
   W15: "客户经营质量",
   W16: "实际经营盈亏",
   W17: "商城同步与映射",

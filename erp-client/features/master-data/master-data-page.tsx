@@ -73,7 +73,7 @@ function ResourceNav({
   return (
     <nav
       ref={navRef}
-      aria-label="主数据资源"
+      aria-label="基础资料资源"
       role="tablist"
       className="flex flex-wrap gap-2 border-b border-border pb-3"
     >
@@ -132,7 +132,7 @@ export function MasterDataPage({ resource }: { resource: string }) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
-          title="主数据资源不存在"
+          title="基础资料资源不存在"
           description={`未知资源 “${resource}”。请从已注册资源中选择。`}
         />
         <ResourceNav resource="" navRef={navRef} />
@@ -253,7 +253,7 @@ function MasterDataListWorkspace({
       filterSnapshotLabel,
       listQuery.data.permissionVersion
     )
-    downloadCsv(csv, `主数据-${resourceLabel(resource)}-导出`)
+    downloadCsv(csv, `基础资料-${resourceLabel(resource)}-导出`)
     setExportMeta({
       jobId: `EXP-W14-${Date.now().toString(36)}`,
       rowCount: rows.length,
@@ -435,7 +435,7 @@ function MasterDataListWorkspace({
   if (listQuery.isPending) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title={`主数据 · ${resourceLabel(resource)}`} />
+        <PageHeader title={`基础资料 · ${resourceLabel(resource)}`} />
         <ResourceNav resource={resource} navRef={navRef} />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
       </div>
@@ -445,7 +445,7 @@ function MasterDataListWorkspace({
   if (listQuery.isError || !listQuery.data) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title={`主数据 · ${resourceLabel(resource)}`} />
+        <PageHeader title={`基础资料 · ${resourceLabel(resource)}`} />
         <ResourceNav resource={resource} navRef={navRef} />
         <Button type="button" onClick={() => void listQuery.refetch()}>
           重试
@@ -461,12 +461,12 @@ function MasterDataListWorkspace({
       </div>
 
       <PageHeader
-        title={`主数据 · ${resourceLabel(resource)}`}
+        title={`基础资料 · ${resourceLabel(resource)}`}
         breadcrumbs={[
           {
             id: "md",
-            label: "主数据",
-            href: "/master-data/sellable-items",
+            label: "基础资料",
+            href: "/master-data",
           },
           {
             id: "resource",
@@ -479,7 +479,7 @@ function MasterDataListWorkspace({
             updatedAt="刚刚"
             dateTime={listQuery.data.queriedAt}
             state="fresh"
-            label="主数据列表"
+            label="基础资料列表"
           />
         }
         actions={
@@ -554,7 +554,7 @@ function MasterDataListWorkspace({
           total={exportMeta.rowCount}
           completed={exportMeta.rowCount}
           succeeded={exportMeta.rowCount}
-          label="主数据导出任务"
+          label="基础资料导出任务"
           description={
             <>
               筛选结果：{exportMeta.filterSnapshotLabel}。任务号{" "}
@@ -650,7 +650,7 @@ function MasterDataListWorkspace({
                     resetPagination()
                   }}
                   placeholder="稳定编号、名称、SKU/供应商/仓库代码"
-                  aria-label="搜索主数据"
+                  aria-label="搜索基础资料"
                 />
               </InputGroup>
             }
@@ -743,7 +743,7 @@ function MasterDataListWorkspace({
           }
         }}
         size="detail"
-        title={previewRow?.name ?? "主数据预览"}
+        title={previewRow?.name ?? "基础资料预览"}
         identity={
           previewRow ? (
             <span className="num">

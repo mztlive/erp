@@ -172,7 +172,7 @@ detail 必须能读完当前版本主事实；不得只展示三五个摘要字�
 | 身份 | `revisionNo` | 当前版本 | `purchase_order_revision.revision_no` | 草稿无正式版本时明确“草稿” | 同上 |
 | 状态 | `status` | 主状态 | `purchase_order.status` | 固定状态机文案 | 同上 |
 | 状态 | `reviewStatus` | 财务审核 | `purchase_order.review_status` | 与主状态分轨 | 同上 |
-| 主体 | `supplierSnapshot` | 供应商 | 当前提交/版本快照 | 历史版本不跟随主数据改名 | 销售/仓储可按权限只见简称 |
+| 主体 | `supplierSnapshot` | 供应商 | 当前提交/版本快照 | 历史版本不跟随基础资料改名 | 销售/仓储可按权限只见简称 |
 | 来源 | `salesOrderNo` | 来源销售单 | `purchase_order.sales_order_id` + 注册表投影 | 可钻取 W05 | 按来源对象权限 |
 | 分类 | `purchaseType` | 采购类型 | `purchase_order.purchase_type` | 实物 / 虚拟 / 线下服务 | 同上 |
 | 分类 | `fulfillmentResponsibility` | 履约责任 | `purchase_order.fulfillment_responsibility` | 入仓 / 供应商直发 / 电子交付 / 线下服务 | 同上 |
@@ -201,7 +201,7 @@ detail 必须能读完当前版本主事实；不得只展示三五个摘要字�
 | --- | --- | --- | --- |
 | `lineType` | 商品/服务成本 / 物流费用 | 采购提交/版本行 | 两类行分开展示和计税 |
 | `procurementConfirmationLineId` | 来源采购确认 | W07 确认分行 | 首次商品/服务行必填；物流费用为空 |
-| `itemSnapshot` | 商品/服务、规格、单位 | 销售提交、SKU/采购结构化快照 | 历史版本不追随主数据变化 |
+| `itemSnapshot` | 商品/服务、规格、单位 | 销售提交、SKU/采购结构化快照 | 历史版本不追随基础资料变化 |
 | `quantity` / `baseUnitCode` | 采购数量 / 单位 | 采购提交/版本行 | 商品行 >0，最多 6 位；费用行无数量 |
 | `unitCostGross` | 含税采购单价 | 采购提交/版本行 | 最多 4 位小数 |
 | `inputTaxRate` | 进项税率 | 采购提交/版本行 | 与销项税率分离 |
@@ -556,7 +556,7 @@ type DeferPurchaseOrderReviewResult =
 | 履约作业 | W09 | 采购单/版本/行、履约责任、来源 `workItemId` | 返回 W08 履约子区并刷新事实 |
 | 库存台账 | W10 | 入仓采购、仓库、预占稳定 ID | 只读钻取，返回采购中心 |
 | 供应商往来 | W12 | 供应商、应付、采购单、付款门禁来源 | 返回刷新付款/发票/门禁，不传旧金额结论 |
-| 主数据 | W14 | 供应商及能力/资质、SKU、仓库 | 返回编辑时重验版本，不静默替换快照 |
+| 基础资料 | W14 | 供应商及能力/资质、SKU、仓库 | 返回编辑时重验版本，不静默替换快照 |
 | 权限与审计 | W19 | 单据、提交、工作流动作、任务、请求追踪号 | 只读返回原对象 |
 
 第二期 API 供应商履约订单属于 W26，不并入 W08 采购单；W08 继续承载第一期实物与服务销售的人工采购链路。

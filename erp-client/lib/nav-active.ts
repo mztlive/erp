@@ -7,9 +7,6 @@ export function isNavItemActive(
   href: string,
   allHrefs: readonly string[]
 ): boolean {
-  if (href.includes("/master-data/")) {
-    return pathname === href || pathname.startsWith("/master-data/")
-  }
   const exactOrChild =
     pathname === href || pathname.startsWith(`${href}/`)
   if (!exactOrChild) return false

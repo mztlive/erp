@@ -301,7 +301,7 @@ export function reviseW14Object(
   ) {
     const result: MasterDataMutationResult = {
       outcome: "conflict",
-      message: "主数据版本已变化，禁止静默覆盖。请刷新基准后重做。",
+      message: "基础资料版本已变化，禁止静默覆盖。请刷新基准后重做。",
       serverLockVersion: center.lockVersion,
       serverRevisionNo: center.currentRevision.revisionNo,
     }
@@ -521,7 +521,7 @@ export function disableW14Object(
   ) {
     const result: MasterDataMutationResult = {
       outcome: "conflict",
-      message: "主数据版本已变化，禁止静默覆盖。",
+      message: "基础资料版本已变化，禁止静默覆盖。",
       serverLockVersion: center.lockVersion,
       serverRevisionNo: center.currentRevision.revisionNo,
     }

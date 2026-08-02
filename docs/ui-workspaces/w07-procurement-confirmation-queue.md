@@ -166,7 +166,7 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 | `salesOrderNo` | 销售单号 | `sales_order` | 可打开 W05 |
 | `submissionNo` | 第 N 次提交 | `sales_order_submission.submission_no` | 确认针对该不可变提交 |
 | `submittedAt` / `submittedBy` | 提交时间 / 提交人 | 销售提交 | 与当前销售草稿修改时间分开 |
-| `customerSnapshot` | 客户 | 提交快照 | 不追随主数据变化 |
+| `customerSnapshot` | 客户 | 提交快照 | 不追随基础资料变化 |
 | `contractSnapshot` | 合同 | 提交快照 | 提供只读钻取 |
 | `paymentTermSnapshot` | 客户付款条件 | 销售提交表头 | 采购确认不修改 |
 | `grossAmount` | 销售含税金额 | 销售提交行汇总 | 金额等宽右齐、明确含税 |
@@ -555,7 +555,7 @@ type CompleteProcurementConfirmationResult =
 | 销售单 | W05 | 销售单 ID、提交 ID、来源 `workItemId`；驳回后只传稳定确认/提交身份 | W07 页签和队列位置保持；销售在 W05 选择固定三路，新任务形成后以新提交/新指纹重新进入 W07 |
 | 采购单 | W08 | 通过结果中的销售单版本、确认分行与采购创建依据稳定 ID；不携采购建单 `workItemId` | 建单完成可回 W07 固定结果或继续队列 |
 | 履约作业 | W09 | 确认履约方式仅作为采购建单依据 | W07 不直接创建履约事实 |
-| 可销售项目/供应商 | W14 | 供应商、能力/资质版本、可销售项目 | 只读钻取；修改主数据后返回必须重验 |
+| 可销售项目/供应商 | W14 | 供应商、能力/资质版本、可销售项目 | 只读钻取；修改基础资料后返回必须重验 |
 | 权限与审计 | W19 | 工作流动作、任务、处理人和请求追踪号 | 只读返回原确认结果 |
 
 跨工作面只传稳定身份与来源上下文；提交字段、成本、资质、权限和状态在目标工作面重新查询。W07 驳回结果不跨页传“允许重提”布尔值，也不把旧 `workItemId` 当后继任务；W05 与 W02 的正式事务返回新 `submissionId`、新 `subjectHash` 和新任务身份后，W07 才能查询并处理。

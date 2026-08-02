@@ -12,6 +12,10 @@ WORKSPACE_NAV_GROUPS hrefs:
  - /finance/supplier-accounts
  - /finance/card-funds-review
  - /master-data/sellable-items
+ - /master-data/products
+ - /master-data/voucher-categories
+ - /master-data/suppliers
+ - /master-data/warehouses
  - /analytics/customer-quality
  - /analytics/profit-loss
  - /analytics/card-business

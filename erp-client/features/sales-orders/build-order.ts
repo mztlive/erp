@@ -72,7 +72,7 @@ export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
         ? "卡券销售审批进行中：冻结提交只读，须通过任务处理页决定。"
         : input.primaryStatus.label === "已关闭" ||
             input.primaryStatus.label === "已作废"
-          ? "终态不可直接编辑；历史版本记录不被当前主数据覆盖。"
+          ? "终态不可直接编辑；历史版本记录不被当前基础资料覆盖。"
           : commercialReadOnly
             ? "商业内容只读；变更须走销售变更单。"
             : undefined
@@ -230,11 +230,11 @@ function defaultRevisions(input: {
       lineSummary:
         n === input.version
           ? lineSummary
-          : `${lineSummary}（历史口径保留，不被当前主数据覆盖）`,
+          : `${lineSummary}（历史口径保留，不被当前基础资料覆盖）`,
       changeOrderId: n > 1 ? `SCO-${n - 1}` : undefined,
       note:
         n === 1
-          ? "首个销售版本：合同与主数据以本修订精确记录为准。"
+          ? "首个销售版本：合同与基础资料以本修订精确记录为准。"
           : `销售变更生效形成 v${n}；既有履约/票款不被覆盖。`,
     })
   }

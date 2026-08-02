@@ -609,7 +609,7 @@ export const IMPORT_ISSUE_SEEDS: readonly ImportIssueRowView[] = [
     sourceRowNo: 55,
     sourceColumnName: "external_sku",
     rowStatus: "CONFLICT",
-    errorDetail: "外部身份映射冲突，需在主数据修订后重新校验。",
+    errorDetail: "外部身份映射冲突，需在基础资料修订后重新校验。",
     repairable: false,
   },
   {

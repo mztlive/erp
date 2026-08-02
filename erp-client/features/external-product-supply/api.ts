@@ -821,6 +821,6 @@ export async function attemptUnregisteredFormalWrite(): Promise<FormalActionResp
     status: "failed",
     code: "WORK_ITEM_TYPE_UNREGISTERED",
     message:
-      "正常映射/供给类型未登记：不存在可调用的提交入口。请仅使用会话草稿或进入主数据。",
+      "正常映射/供给类型未登记：不存在可调用的提交入口。请仅使用会话草稿或进入基础资料。",
   }
 }

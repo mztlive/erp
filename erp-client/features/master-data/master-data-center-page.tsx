@@ -61,11 +61,11 @@ export function MasterDataCenterPage({
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
-          title="主数据资源不存在"
+          title="基础资料资源不存在"
           description={`未知资源 “${resource}”。`}
           actions={
-            <Button render={<Link href="/master-data/sellable-items" />}>
-              返回主数据
+            <Button render={<Link href="/master-data" />}>
+              返回基础资料
             </Button>
           }
         />
@@ -107,7 +107,7 @@ function MasterDataCenterBody({
   if (query.isPending) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="主数据详情" description="正在加载…" />
+        <PageHeader title="基础资料详情" description="正在加载…" />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
       </div>
     )
@@ -116,7 +116,7 @@ function MasterDataCenterBody({
   if (query.isError) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="主数据详情" />
+        <PageHeader title="基础资料详情" />
         <BusinessFailureState
           kind="system"
           description="加载对象失败。"
@@ -160,7 +160,7 @@ function MasterDataCenterBody({
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
-          { id: "md", label: "主数据", href: "/master-data/sellable-items" },
+          { id: "md", label: "基础资料", href: "/master-data" },
           {
             id: "resource",
             label: resourceLabel(resource),

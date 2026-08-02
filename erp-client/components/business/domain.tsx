@@ -1106,7 +1106,7 @@ const interfaceErrorClassPresentation = {
     label: "参数或映射错误",
     tone: "destructive",
     alert: "destructive",
-    guidance: "先修复参数或主数据映射，当前请求不可直接重试。",
+    guidance: "先修复参数或基础资料映射，当前请求不可直接重试。",
   },
   "business-rejected": {
     label: "供应商业务拒绝",

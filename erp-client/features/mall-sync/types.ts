@@ -445,6 +445,6 @@ export const JOB_TYPE_LABEL: Record<MallSyncJobRow["jobType"], string> = {
 export const DEFER_REASON_OPTIONS = [
   { value: "WAITING_SOURCE", label: "等待来源修复" },
   { value: "NEED_CLARIFICATION", label: "需业务澄清" },
-  { value: "WAITING_MASTER_DATA", label: "等待主数据就绪" },
+  { value: "WAITING_MASTER_DATA", label: "等待基础资料就绪" },
   { value: "OTHER", label: "其他" },
 ] as const

@@ -189,7 +189,7 @@ URL 不包含地址、联系人、物流号、数量、权限结论、租约令�
 | 租约 | `claimedBy` / `leaseExpiresAt` | 处理人 / 占用到期 | 任务租约 | 不显示令牌 | 当前查看者 |
 | 来源 | `purchaseNo` / `salesOrderNo` | 采购单 / 销售单 | `business_document` 与强类型表 | 稳定业务号，可钻取 | 按对象权限 |
 | 来源 | `sourceRevision` | 来源版本 | 采购/销售当前有效版本 | 过账时重验 | 同上 |
-| 主体 | `supplierSnapshot` / `customerSnapshot` | 供应商 / 客户 | 正式版本快照 | 不追随当前主数据改名 | 字段权限裁剪 |
+| 主体 | `supplierSnapshot` / `customerSnapshot` | 供应商 / 客户 | 正式版本快照 | 不追随当前基础资料改名 | 字段权限裁剪 |
 | 数量 | `remainingQuantity` | 待处理数量 | 服务端按有效事实/冲正/变更计算 | 基础单位；不跨单位求和 | 执行角色 |
 | 门禁 | `prepaymentGate` | 付款条件 | 采购版本快照 + 有效付款净核销 | 服务端 SATISFIED/BLOCKED/NA | 金额可掩码但 blocker 可见 |
 
@@ -752,7 +752,7 @@ type DomainOperationFulfillmentFormalResultCandidate = FulfillmentFormalResultBa
 | 采购单 | W08 | 采购单/版本/行、付款门禁、履约责任 | 返回 W08 履约子区并重查正式进度 |
 | 库存台账 | W10 | 仓库、SKU、库存余额、预占稳定 ID | 返回 W09 重取库存/预占，不用旧数量提交 |
 | 供应商往来 | W12 | 供应商、采购应付、门禁来源 | 返回重查有效付款净核销和租约 |
-| 主数据 | W14 | 仓库、SKU、供应商能力/资质 | 返回作业时重验版本和权限 |
+| 基础资料 | W14 | 仓库、SKU、供应商能力/资质 | 返回作业时重验版本和权限 |
 | 权限与审计 | W19 | 正式事实、请求追踪号、处理人、租约审计 | 只读返回原作业 |
 | API 供应商订单 | W26 | 第二期商城消费订单/供应商子订单身份 | 仅关联钻取；不把 W26 自动履约任务纳入 W09 |
 

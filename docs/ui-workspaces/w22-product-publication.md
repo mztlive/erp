@@ -496,7 +496,7 @@ type ProductPublicationView = {
 }
 ```
 
-`ProductPublicationRevisionView` 必须包含 §5.2、§5.3 的完整快照、唯一 `supplierOfferingRevisionId`、媒体列表和内容指纹。页面切换历史修订时不得以当前主数据补写缺失值。
+`ProductPublicationRevisionView` 必须包含 §5.2、§5.3 的完整快照、唯一 `supplierOfferingRevisionId`、媒体列表和内容指纹。页面切换历史修订时不得以当前基础资料补写缺失值。
 
 ### 8.3 提交
 

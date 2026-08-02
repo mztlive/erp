@@ -8,6 +8,17 @@ export const MASTER_DATA_RESOURCES = [
   { key: "warehouses", label: "仓库" },
 ] as const
 
+/** W14 角色默认落地资源（对齐 docs/ui-workspaces/w14-basic-data.md §2）。 */
+export const MASTER_DATA_ROLE_DEFAULT: Readonly<
+  Record<string, MasterDataResource>
+> = {
+  procurement: "sellable-items",
+  operations: "voucher-categories",
+  warehouse: "warehouses",
+  finance: "suppliers",
+  sales: "sellable-items",
+}
+
 export type MasterDataResource =
   (typeof MASTER_DATA_RESOURCES)[number]["key"]
 

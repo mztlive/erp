@@ -9,6 +9,15 @@ import type {
   MasterDataResource,
   PermissionDemoSnapshot,
 } from "@/features/master-data/types"
+import { MASTER_DATA_ROLE_DEFAULT } from "@/features/master-data/types"
+
+/** 按演示角色解析默认落地资源；未知或缺失回落到采购默认。 */
+export function resolveMasterDataRoleDefault(
+  role?: string | null
+): MasterDataResource {
+  const resource = role ? MASTER_DATA_ROLE_DEFAULT[role] : undefined
+  return resource ?? "sellable-items"
+}
 
 export const W14_PERMISSION_DEMO: PermissionDemoSnapshot = {
   hasModuleAccess: true,

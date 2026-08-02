@@ -20,7 +20,7 @@
 
 ### 1.1 规范模型与兼容层必须隔离
 
-商城存量表普遍把主数据、当前状态、展示配置、汇总指标、外部供应商信息和商城玩法放在同一张表中。ERP 不复制这种结构，而是分为两层：
+商城存量表普遍把基础资料、当前状态、展示配置、汇总指标、外部供应商信息和商城玩法放在同一张表中。ERP 不复制这种结构，而是分为两层：
 
 | 层次 | 作用 | 数据责任 |
 | --- | --- | --- |
@@ -34,8 +34,8 @@
 | 来源表 | 在兼容层中的定位 | 进入 ERP 的方式 |
 | --- | --- | --- |
 | `pay_card_sell` | 一期卡券销售单商业事实来源 | 通过来源销售单身份、完整快照、内容指纹和映射校验形成 ERP 卡券销售单及版本 |
-| `erp_customer` | 客户主数据候选来源 | 经客户去重、身份确认和联系人拆分后形成客户及历史版本 |
-| `erp_supplier` | 供应商主数据、旧结算配置和旧汇总数据候选来源 | 供应商、联系人、能力、资质、结算条款分别映射；余额和累计值不得直接形成资金台账 |
+| `erp_customer` | 客户基础资料候选来源 | 经客户去重、身份确认和联系人拆分后形成客户及历史版本 |
+| `erp_supplier` | 供应商基础资料、旧结算配置和旧汇总数据候选来源 | 供应商、联系人、能力、资质、结算条款分别映射；余额和累计值不得直接形成资金台账 |
 | `product_spu` | 商城商品聚合信息和陈列信息来源 | 进入商品暂存，拆分为商品族、商城发布内容和供应商外部商品候选关系 |
 | `product_sku` | 商城可售规格、价格库存缓存和供应商 SKU 候选来源 | 进入 SKU 暂存，经规格、单位和供应关系确认后形成 ERP SKU |
 
@@ -79,7 +79,7 @@
 一个 `party`，再分别创建客户和供应商角色。来源 `tax_no` 经格式校验和业务确认确为
 统一社会信用代码时，同时写入 `party.unified_credit_code` 和 `party_tax_profile`；
 不能确认时只进入税务档案候选，不占用统一信用代码唯一键。旧授信额度、可用额度、
-预付款和累计金额不属于当前两期规范主数据，也不生成期初资金事实。
+预付款和累计金额不属于当前两期规范基础资料，也不生成期初资金事实。
 
 ### 2.2 商品、SKU 与供应关系
 
@@ -257,7 +257,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | `sell_order` | `sales_order.order_no`、`external_identity_map.external_id` | 一期使用“来源商城 + 来源销售单号”映射同一张 ERP 销售单；按 `utf8_bin` 原值做唯一判断，只移除协议明确禁止的首尾空白，不做大小写折叠 |
 | `sell_status` | `sales_order.source_status_code`，以及经字典证明的 `commercial_status` | 先原样保存来源代码，再分别转换 ERP 商业状态；不得用它覆盖履约、回款、开票和关闭进度 |
 | `company_id`、`parent_company_id` | 客户、结算主体候选外部身份 | 两者的实际业务关系必须用数据字典和样本确认，禁止直接把母公司当结算主体 |
-| `company_name`、`company_address`、`company_person`、`company_mobile` | 销售单客户快照 | 与已确认客户映射同时保存，不反向覆盖客户主数据 |
+| `company_name`、`company_address`、`company_person`、`company_mobile` | 销售单客户快照 | 与已确认客户映射同时保存，不反向覆盖客户基础资料 |
 | `sales_id`、`sales_name` | 来源销售主管及 `document_participant` 候选 | DDL 注释为“销售主管”；确认人员身份和历史职责后记录相应参与角色，不自动改成客户负责人或负责销售 |
 | `entry_name`、`sell_msg`、`project_remark` | `sales_order_revision.project_name` / `business_remark` | 按明确的长度和合并规则进入正式商业版本，并纳入 `content_hash`；附件只保存另有文件证据的内容 |
 | `card_type_id`、`category_id`、`card_name` | 卡券类目候选 | 三者语义可能重叠，确认实际主键、枚举和历史变化方式后才能建立卡券类目映射 |
@@ -358,7 +358,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | `status` | `customer_account.status` | 使用客户专用状态字典，不与其他表的 `status` 共用转换 |
 | `remark` | 来源业务备注 | 在明确用途前只保留在清洗后的导入证据，不承载结构化分类和结算规则 |
 | `creator`、`updater`、`create_time`、`update_time` | 来源审计 | 原样留痕并与 ERP 操作人分开 |
-| `deleted`、`tenant_id`、`sort` | 来源状态和展示信息 | 不作为客户稳定身份；删除转停用或差异处理，排序不进入核心主数据 |
+| `deleted`、`tenant_id`、`sort` | 来源状态和展示信息 | 不作为客户稳定身份；删除转停用或差异处理，排序不进入核心基础资料 |
 
 ### 5.2 拒绝照搬
 
@@ -398,7 +398,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | `bank_name`、`bank_account`、`bank_address` | `party_bank_account` | 通过专用安全导入通道加密保存并记录访问审计 |
 | `type` | `supplier_capability_revision` 候选 | “普通、云仓、核销”不能直接替代 ERP 的多选能力，需业务映射表和采购确认 |
 | `reconciliation_period`、`settlement_type`、`settlement_period` | `supplier_commercial_profile_revision` | 经采购和财务确认后形成版本化商务条款 |
-| `credit_status`、`credit_amount` | 来源财务核对字段 | 当前两期不建设供应商授信协议；仅在财务专用清洗结果中核对，不进入规范主数据或余额台账 |
+| `credit_status`、`credit_amount` | 来源财务核对字段 | 当前两期不建设供应商授信协议；仅在财务专用清洗结果中核对，不进入规范基础资料或余额台账 |
 | 五类证照字段 | `supplier_qualification_revision`、`supplier_qualification_capability` 和附件 | 解析 JSON 后拆分；补充证书编号、机构、生失效日期和适用能力 |
 | `summary_time` | 旧汇总快照时间 | 只辅助解释旧累计字段 |
 | `creator`、`updater`、`create_time`、`update_time` | 来源审计 | 与 ERP 操作审计分开 |
@@ -406,7 +406,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 
 ### 6.2 拒绝照搬
 
-以下字段是旧系统预警设置或汇总快照，不进入供应商核心主数据：
+以下字段是旧系统预警设置或汇总快照，不进入供应商核心基础资料：
 
 - `low_balance_warning`
 - `balance_available_warning`
@@ -458,7 +458,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | `delivery_types`、`delivery_template_id`、`use_delivery_template`、`express_area_ids`、`city_template_id` | 发布能力和 `product_publication_revision.sales_region` 候选 | 运营确认后，区域进入发布版本，能够准确对应的配送能力进入 `product_capabilities`；旧模板 ID 和无法映射的代码只留白名单暂存，不新增旧模板影子表 |
 | `supplier_spu_id`、`supplier_type`、`third_channel_id` | 外部供给关系候选 | 进入供应商商品暂存；确认供应商连接和外部商品身份后才能建立供应关系 |
 | `category_tax_rate_id` | 来源税收分类引用候选 | 五张表没有被引用对象，必须补充旧税收分类字典并经财务确认；不得把旧 ID 直接认作 ERP 税务分类 |
-| `supplier_tax_rate` | 供应关系税率候选 | 不放商品主数据，写入供应关系或采购条款版本 |
+| `supplier_tax_rate` | 供应关系税率候选 | 不放商品基础资料，写入供应关系或采购条款版本 |
 | `create_time`、`update_time`、`creator`、`updater` | 来源审计 | 与 ERP 审核和发布审计分开 |
 | `deleted`、`tenant_id` | 来源状态 | 不直接删除 ERP 商品或决定公司身份 |
 
@@ -643,7 +643,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
   只有新快照与当前 ERP 销售版本指纹相同时才不生成新版本。
 - 映射失败不阻断商城执行，但不得生成客户应收、收入和经营结果。
 - 商城支付、绑定、激活、卡号、卡密和玩法不进入 ERP 第一期主流程。
-- 客户、供应商、SPU 和 SKU 存量表可进入主数据暂存，但只有经责任部门确认的数据才能成为 ERP 正式主数据。
+- 客户、供应商、SPU 和 SKU 存量表可进入基础资料暂存，但只有经责任部门确认的数据才能成为 ERP 正式基础资料。
 - 商品和 SKU 的正式库存以基准日仓库实盘为准，不采用商城库存字段。
 
 ### 10.2 第二期主责迁移
@@ -799,7 +799,7 @@ ERP 先用 `external_identity_map` 解析原销售单，再写 `mall_card_instan
   金额，全部支付来源合计等于订单实付。
 
 商城负责提供实际优惠、运费和支付分摊结果；ERP 不按订单金额比例推测任一矩阵。
-主数据、卡实例或成本暂时无法归集时，验签和基本守恒通过的事实仍先保存并标记待归集，
+基础资料、卡实例或成本暂时无法归集时，验签和基本守恒通过的事实仍先保存并标记待归集，
 不得丢弃、拒收或生成第二份事实。
 
 #### 10.4.4 取消、退款、完成与余额恢复
@@ -984,7 +984,7 @@ API 供应商原始目录、订单、动作结果、退款和账单必须逐项�
 - 联系方式只接收业务所需字段。
 - 银行账户不进入普通来源快照；通过专用加密导入通道写入银行账户版本。
 - 证照字段只接收结构化元数据和受控附件引用，不在日志打印原始 JSON 或文件内容。
-- 旧余额、授信和累计金额只能进入财务专用核对区，不能在普通主数据页面批量展示。
+- 旧余额、授信和累计金额只能进入财务专用核对区，不能在普通基础资料页面批量展示。
 
 ### 12.4 商品与 SKU
 

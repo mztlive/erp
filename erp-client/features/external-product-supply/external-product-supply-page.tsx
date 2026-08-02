@@ -1438,7 +1438,7 @@ export function ExternalProductSupplyPage() {
                     </div>
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      尚无有效映射（待审核草稿不影响主数据）
+                      尚无有效映射（待审核草稿不影响基础资料）
                     </p>
                   )}
 
@@ -1495,7 +1495,7 @@ export function ExternalProductSupplyPage() {
                       variant="secondary"
                       render={<Link href={w14Href} />}
                     >
-                      打开主数据新建/修订 SKU
+                      打开基础资料新建/修订 SKU
                     </Button>
                     {/* 正式确认映射：未登记时禁用且不可聚焦为可用 */}
                     <Button

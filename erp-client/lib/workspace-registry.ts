@@ -21,6 +21,7 @@ import {
   ShoppingBagIcon,
   ShoppingCartIcon,
   StoreIcon,
+  TicketIcon,
   TruckIcon,
   UploadIcon,
   UsersIcon,
@@ -417,13 +418,37 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
     ],
   },
   {
-    label: "主数据",
+    label: "基础资料",
     items: [
       {
         id: "W14",
         href: "/master-data/sellable-items",
-        label: "主数据",
+        label: "可销售项目",
         icon: BoxesIcon,
+      },
+      {
+        id: "W14",
+        href: "/master-data/products",
+        label: "商品与 SKU",
+        icon: PackageIcon,
+      },
+      {
+        id: "W14",
+        href: "/master-data/voucher-categories",
+        label: "卡券类目",
+        icon: TicketIcon,
+      },
+      {
+        id: "W14",
+        href: "/master-data/suppliers",
+        label: "供应商与资质",
+        icon: HandshakeIcon,
+      },
+      {
+        id: "W14",
+        href: "/master-data/warehouses",
+        label: "仓库",
+        icon: WarehouseIcon,
       },
     ],
   },

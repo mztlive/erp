@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { MasterDataCenterPage } from "@/features/master-data/master-data-center-page"
 
 export const metadata: Metadata = {
-  title: "主数据详情",
+  title: "基础资料详情",
 }
 
 export default async function Page({
@@ -20,7 +20,7 @@ export default async function Page({
     <Suspense
       fallback={
         <div className="p-5 text-sm text-muted-foreground">
-          正在加载主数据对象…
+          正在加载基础资料对象…
         </div>
       }
     >
