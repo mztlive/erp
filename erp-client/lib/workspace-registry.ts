@@ -253,7 +253,7 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
   },
   {
     id: "W21",
-    name: "外部商品映射与供给",
+    name: "商品供给管理",
     mode: "M3+M4",
     mainRoute: "/supplier-api/catalog",
     navHref: "/supplier-api/catalog",
@@ -524,7 +524,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
       {
         id: "W21",
         href: "/supplier-api/catalog",
-        label: "外部商品供给",
+        label: "商品供给",
         icon: PackageSearchIcon,
       },
       {

@@ -76,19 +76,19 @@ const skuCandidatesCommon = [
   {
     skuId: "sku_ny_box_01",
     skuCode: "SKU-NY-BOX-01",
-    skuName: "坚果礼盒 A 款",
-    specification: "混合坚果 1.2kg / 礼盒装",
-    baseUnit: "盒",
-    revisionNo: 4,
+    skuName: "新春坚果礼盒 · 典藏款",
+    specification: "规格：典藏款",
+    baseUnit: "套",
+    revisionNo: 6,
     similarityLabel: "名称+规格高度相似",
   },
   {
     skuId: "sku_ny_box_02",
     skuCode: "SKU-NY-BOX-02",
-    skuName: "坚果礼盒 B 款",
-    specification: "混合坚果 0.8kg / 简装",
-    baseUnit: "盒",
-    revisionNo: 2,
+    skuName: "新春坚果礼盒 · 典藏款",
+    specification: "规格：轻享款",
+    baseUnit: "套",
+    revisionNo: 6,
     similarityLabel: "品类相近",
   },
 ]
@@ -262,8 +262,8 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
       externalRevisionToken: "src_tok_21",
       sourceUpdatedAt: "2026-07-20T14:00:00+08:00",
       syncedAt: "2026-07-20T14:02:00+08:00",
-      name: "绿茶礼盒 典藏版",
-      specification: "明前龙井 250g×2",
+      name: "礼盒红茶 250g 铁罐装",
+      specification: "净含量：250g / 包装：铁罐",
       category: "茶饮",
       supplyPriceGross: "268.00",
       inputTaxRate: "0.13",
@@ -282,8 +282,8 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
       externalRevisionToken: "src_tok_22",
       sourceUpdatedAt: "2026-08-01T07:00:00+08:00",
       syncedAt: "2026-08-01T07:01:00+08:00",
-      name: "绿茶礼盒 典藏版",
-      specification: "明前龙井 250g×2",
+      name: "礼盒红茶 250g 铁罐装",
+      specification: "净含量：250g / 包装：铁罐",
       category: "茶饮",
       supplyPriceGross: "268.00",
       inputTaxRate: "0.13",
@@ -300,11 +300,11 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
   },
   mapping: {
     mappingStatus: "ACTIVE",
-    skuId: "sku_tea_09",
-    skuCode: "SKU-TEA-09",
-    skuName: "绿茶礼盒 典藏版",
-    skuRevisionId: "sku_rev_tea_09_r7",
-    specification: "明前龙井 250g×2",
+    skuId: "sku_tea_04",
+    skuCode: "SKU-TEA-250-TIN",
+    skuName: "礼盒红茶",
+    skuRevisionId: "prd_2_r3:sku_tea_04",
+    specification: "净含量：250g / 包装：铁罐",
     baseUnit: "盒",
     approvedBy: "采购 · 周然",
     approvedAt: "2026-06-01T11:00:00+08:00",
@@ -313,7 +313,7 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
     history: [
       {
         id: "mh1",
-        skuCode: "SKU-TEA-09",
+        skuCode: "SKU-TEA-250-TIN",
         status: "已生效",
         at: "2026-06-01",
         note: "当前唯一有效映射",
@@ -329,10 +329,10 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
   },
   skuCandidates: [
     {
-      skuId: "sku_tea_09",
-      skuCode: "SKU-TEA-09",
-      skuName: "绿茶礼盒 典藏版",
-      specification: "明前龙井 250g×2",
+      skuId: "sku_tea_04",
+      skuCode: "SKU-TEA-250-TIN",
+      skuName: "礼盒红茶",
+      specification: "净含量：250g / 包装：铁罐",
       baseUnit: "盒",
       revisionNo: 7,
       similarityLabel: "当前映射",
@@ -344,7 +344,7 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
       specification: "雨前龙井 200g×2",
       baseUnit: "盒",
       revisionNo: 3,
-      similarityLabel: "会话内替代候选（非正式）",
+      similarityLabel: "替代供应商候选",
     },
   ],
   offering: {
@@ -539,7 +539,7 @@ export const SEED_NEW: ExternalCatalogItemView = {
       field: "名称",
       before: "（无）",
       after: "坚果礼盒 A 款",
-      note: "新外部商品修订暂存",
+      note: "供应商新商品资料已保存，尚未关联 ERP 商品",
     },
     {
       id: "n2",
@@ -751,7 +751,7 @@ export const SEED_CHANGED_PRICE: ExternalCatalogItemView = {
     activePublicationCount: 0,
     pausedPublicationCount: 1,
     historicalPaidOrderCount: 48,
-    note: "供货价/费用变化未确认：系统已安全暂停在售发布。确认新供给也不自动恢复；商品发布另形成恢复发布版本。商城销售价不随供货价自动变更；MOQ 不复制为商城最小购买量。",
+    note: "供货价或费用变化尚未确认，相关商城商品已暂停销售。确认新的供货条件后也不会自动恢复销售；商城销售价不会随供货价自动变更，最小起订量也不会复制为商城最小购买量。",
   },
   syncContext: {
     jobId: "sync_job_9012",
@@ -764,7 +764,7 @@ export const SEED_CHANGED_PRICE: ExternalCatalogItemView = {
       field: "含税供货价",
       before: "88.00",
       after: "96.00",
-      note: "形成拟生效供给草稿，不覆盖旧修订",
+      note: "新的供货条件将作为草稿保存，原记录保持不变",
       costSensitive: true,
     },
     {
@@ -940,7 +940,7 @@ export const SEED_CHANGED_STOCK: ExternalCatalogItemView = {
       code: "RECOVERY_RESPONSIBILITY_UNCONFIRMED",
       message: RECOVERY_BLOCKER_MESSAGE,
     },
-    note: "零库存已触发安全暂停；不创建 BUSINESS_EXCEPTION 伪装正常复核。重新可供也不自动上架。",
+    note: "可供数量为零，相关商城商品已暂停销售。供应商恢复供货后也不会自动重新上架。",
   },
   syncContext: {
     jobId: "sync_job_9100",
@@ -978,5 +978,251 @@ export const SEED_CHANGED_STOCK: ExternalCatalogItemView = {
   costFieldVisibility: "visible",
 }
 
-export const EXTERNAL_PRODUCT_SUPPLY_SEED: readonly ExternalCatalogItemView[] =
-  [SEED_STOPPED, SEED_ERROR, SEED_CHANGED_PRICE, SEED_NEW, SEED_CHANGED_STOCK]
+type ActiveSupplySeedInput = {
+  id: string
+  supplierId: string
+  supplierName: string
+  connectionId: string
+  connectionCode: string
+  externalSkuId: string
+  externalName: string
+  category: string
+  skuId: string
+  skuCode: string
+  productName: string
+  productRevisionId: string
+  specification: string
+  baseUnit: string
+  priceGross: string
+  priceNet: string
+  minimumOrderQuantity: string
+  supplyRegion: string[]
+}
+
+/** 已生效供给用于商品中心关系视图；正常数据不进入待处理队列。 */
+function activeSupplySeed(input: ActiveSupplySeedInput): ExternalCatalogItemView {
+  const offeringId = `off_${input.id}`
+  const revision = offering({
+    offeringId,
+    revisionNo: 1,
+    status: "ACTIVE",
+    supplyPriceGross: input.priceGross,
+    supplyPriceNet: input.priceNet,
+    inputTaxRate: "0.13",
+    freightAmount: "0.00",
+    serviceFeeAmount: "0.00",
+    minimumOrderQuantity: input.minimumOrderQuantity,
+    supplyRegion: input.supplyRegion,
+    availabilityStatus: "AVAILABLE",
+    availableQuantity: "500",
+    productCapabilities: ["cancel", "refund", "logistics"],
+    validFrom: "2026-01-01",
+    createdAt: "2026-01-01T09:00:00+08:00",
+    immutable: true,
+  })
+
+  return {
+    changeType: "UNCHANGED",
+    externalProduct: {
+      id: input.id,
+      supplier: { id: input.supplierId, name: input.supplierName },
+      connection: { id: input.connectionId, code: input.connectionCode },
+      externalProductId: `EXT-${input.externalSkuId}`,
+      externalSkuId: input.externalSkuId,
+      status: "ACTIVE",
+      currentRevision: rev({
+        revisionNo: 1,
+        externalRevisionToken: `src_${input.id}_1`,
+        sourceUpdatedAt: "2026-08-01T08:00:00+08:00",
+        syncedAt: "2026-08-01T08:02:00+08:00",
+        name: input.externalName,
+        specification: input.specification,
+        category: input.category,
+        supplyPriceGross: input.priceGross,
+        inputTaxRate: "0.13",
+        freightAmount: "0.00",
+        otherFeeAmount: "0.00",
+        supplyRegion: input.supplyRegion,
+        availableQuantity: "500",
+        availabilityStatus: "AVAILABLE",
+        expectedShipTime: "2 个工作日",
+        afterSalesNote: "按供应商售后政策执行",
+        capabilitySnapshot: ["cancel", "refund", "logistics"],
+      }),
+    },
+    mapping: {
+      mappingStatus: "ACTIVE",
+      skuId: input.skuId,
+      skuCode: input.skuCode,
+      skuName: input.productName,
+      skuRevisionId: `${input.productRevisionId}:${input.skuId}`,
+      specification: input.specification,
+      baseUnit: input.baseUnit,
+      approvedBy: "采购 · 周然",
+      approvedAt: "2026-01-01T09:00:00+08:00",
+      reason: "供应商商品与 ERP SKU 为同一可采购规格",
+      mappingVersion: `map_${input.id}_v1`,
+      history: [
+        {
+          id: `mh_${input.id}_1`,
+          skuCode: input.skuCode,
+          status: "已生效",
+          at: "2026-01-01",
+          note: "当前有效关联",
+        },
+      ],
+    },
+    skuCandidates: [],
+    offering: {
+      stableId: offeringId,
+      currentRevision: revision,
+      revisionHistory: [revision],
+    },
+    publicationImpact: {
+      ...noPause,
+      activePublicationCount: 1,
+      note: "当前供给关系有效；商城销售价与最小购买量仍由销售发布独立维护。",
+    },
+    syncContext: {
+      jobId: `sync_${input.id}`,
+      sourceBatchIdentity: `batch:${input.connectionCode.toLowerCase()}:20260801`,
+      receivedAt: "2026-08-01T08:02:00+08:00",
+    },
+    sourceDiff: [],
+    allowedActions: ["BROWSE", "OPEN_CENTER"],
+    actionBlockers: [],
+    costFieldVisibility: "visible",
+  }
+}
+
+const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
+  activeSupplySeed({
+    id: "ep_active_ny_01",
+    supplierId: "sup_fresh",
+    supplierName: "鲜果直供供应链",
+    connectionId: "conn_fresh_01",
+    connectionCode: "FRESH-CATALOG",
+    externalSkuId: "FRESH-NY-CLASSIC",
+    externalName: "新春坚果礼盒典藏装",
+    category: "礼盒",
+    skuId: "sku_ny_box_01",
+    skuCode: "SKU-NY-BOX-01",
+    productName: "新春坚果礼盒 · 典藏款",
+    productRevisionId: "prd_1_r6",
+    specification: "规格：典藏款",
+    baseUnit: "套",
+    priceGross: "118.00",
+    priceNet: "104.42",
+    minimumOrderQuantity: "10",
+    supplyRegion: ["华东", "华北"],
+  }),
+  activeSupplySeed({
+    id: "ep_active_ny_02",
+    supplierId: "sup_fresh",
+    supplierName: "鲜果直供供应链",
+    connectionId: "conn_fresh_01",
+    connectionCode: "FRESH-CATALOG",
+    externalSkuId: "FRESH-NY-LITE",
+    externalName: "新春坚果礼盒轻享装",
+    category: "礼盒",
+    skuId: "sku_ny_box_02",
+    skuCode: "SKU-NY-BOX-02",
+    productName: "新春坚果礼盒 · 典藏款",
+    productRevisionId: "prd_1_r6",
+    specification: "规格：轻享款",
+    baseUnit: "套",
+    priceGross: "82.00",
+    priceNet: "72.57",
+    minimumOrderQuantity: "20",
+    supplyRegion: ["华东", "华南"],
+  }),
+  activeSupplySeed({
+    id: "ep_active_tea_01",
+    supplierId: "sup_fresh",
+    supplierName: "鲜果直供供应链",
+    connectionId: "conn_fresh_01",
+    connectionCode: "FRESH-CATALOG",
+    externalSkuId: "FRESH-TEA-100-PAPER",
+    externalName: "礼盒红茶 100g 纸盒装",
+    category: "茶叶",
+    skuId: "sku_tea_01",
+    skuCode: "SKU-TEA-100-PAPER",
+    productName: "礼盒红茶",
+    productRevisionId: "prd_2_r3",
+    specification: "净含量：100g / 包装：纸盒",
+    baseUnit: "盒",
+    priceGross: "42.00",
+    priceNet: "37.17",
+    minimumOrderQuantity: "12",
+    supplyRegion: ["华东", "华南"],
+  }),
+  activeSupplySeed({
+    id: "ep_active_tea_02",
+    supplierId: "sup_fresh",
+    supplierName: "鲜果直供供应链",
+    connectionId: "conn_fresh_01",
+    connectionCode: "FRESH-CATALOG",
+    externalSkuId: "FRESH-TEA-100-TIN",
+    externalName: "礼盒红茶 100g 铁罐装",
+    category: "茶叶",
+    skuId: "sku_tea_02",
+    skuCode: "SKU-TEA-100-TIN",
+    productName: "礼盒红茶",
+    productRevisionId: "prd_2_r3",
+    specification: "净含量：100g / 包装：铁罐",
+    baseUnit: "盒",
+    priceGross: "49.00",
+    priceNet: "43.36",
+    minimumOrderQuantity: "12",
+    supplyRegion: ["华东", "华南"],
+  }),
+  activeSupplySeed({
+    id: "ep_active_tea_03",
+    supplierId: "sup_tea",
+    supplierName: "明前茶业供应链",
+    connectionId: "conn_tea_01",
+    connectionCode: "TEA-CATALOG",
+    externalSkuId: "TEA-250-PAPER",
+    externalName: "精选红茶 250g 礼盒",
+    category: "茶叶",
+    skuId: "sku_tea_03",
+    skuCode: "SKU-TEA-250-PAPER",
+    productName: "礼盒红茶",
+    productRevisionId: "prd_2_r3",
+    specification: "净含量：250g / 包装：纸盒",
+    baseUnit: "盒",
+    priceGross: "65.00",
+    priceNet: "57.52",
+    minimumOrderQuantity: "8",
+    supplyRegion: ["全国"],
+  }),
+  activeSupplySeed({
+    id: "ep_active_tea_04",
+    supplierId: "sup_tea",
+    supplierName: "明前茶业供应链",
+    connectionId: "conn_tea_01",
+    connectionCode: "TEA-CATALOG",
+    externalSkuId: "TEA-250-TIN",
+    externalName: "精选红茶 250g 铁罐",
+    category: "茶叶",
+    skuId: "sku_tea_04",
+    skuCode: "SKU-TEA-250-TIN",
+    productName: "礼盒红茶",
+    productRevisionId: "prd_2_r3",
+    specification: "净含量：250g / 包装：铁罐",
+    baseUnit: "盒",
+    priceGross: "72.00",
+    priceNet: "63.72",
+    minimumOrderQuantity: "8",
+    supplyRegion: ["全国"],
+  }),
+] as const
+
+export const EXTERNAL_PRODUCT_SUPPLY_SEED: readonly ExternalCatalogItemView[] = [
+  ...ACTIVE_PRODUCT_SUPPLY_SEEDS,
+  SEED_STOPPED,
+  SEED_ERROR,
+  SEED_CHANGED_PRICE,
+  SEED_NEW,
+  SEED_CHANGED_STOCK,
+]

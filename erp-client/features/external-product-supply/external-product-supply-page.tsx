@@ -61,9 +61,7 @@ import type {
 } from "@/features/external-product-supply/types"
 import {
   CHANGE_TYPE_LABEL,
-  DEMO_ROLE_LABEL,
   HOLD_REASON_OPTIONS,
-  RECOVERY_BLOCKER_MESSAGE,
   RETURN_REASON_OPTIONS,
 } from "@/features/external-product-supply/types"
 import {
@@ -74,9 +72,12 @@ import {
   useResolveUnknownExternalCatalogMutation,
   useSaveExternalCatalogDraftMutation,
 } from "@/features/external-product-supply/queries"
+import {
+  offeringStatusLabel,
+  SupplyRelationshipListView,
+} from "@/features/external-product-supply/supply-relationship-list-view"
 import { cn } from "@/lib/utils"
 import { compareDecimal } from "@/lib/fixed-decimal"
-import { versionText } from "@/lib/ui-text"
 
 type SessionLease = {
   workItemId: string
@@ -175,9 +176,35 @@ function formatTime(iso?: string) {
   }
 }
 
-function shortHash(hash: string) {
-  if (hash.length <= 18) return hash
-  return `${hash.slice(0, 10)}…${hash.slice(-4)}`
+function decisionLabel(kind: string) {
+  if (kind === "CONFIRM_ERROR_RESOLVED") return "供应商数据已恢复"
+  if (kind === "CONFIRM_STOP_SUPPLY") return "停供信息已确认"
+  return "处理完成"
+}
+
+function actionLabel(kind: string) {
+  if (kind === "HOLD") return "稍后处理"
+  if (kind === "RETURN_FOR_DATA_FIX") return "已退回修正"
+  if (kind === "QUERY_ORIGINAL_RESULT") return "已查询处理结果"
+  if (kind === "SAVE_EVIDENCE") return "处理说明已保存"
+  return "处理已记录"
+}
+
+function availabilityLabel(value: string) {
+  if (value === "AVAILABLE") return "可供"
+  if (value === "UNAVAILABLE") return "暂不可供"
+  if (value === "STOPPED") return "已停供"
+  if (value === "STALE") return "信息待更新"
+  return value
+}
+
+function safetyReasonLabel(value: string) {
+  if (value === "STOPPED") return "供应商停止供货"
+  if (value === "UNAVAILABLE") return "当前不可供"
+  if (value === "ZERO_STOCK") return "可供数量为零"
+  if (value === "STALE") return "供货信息过期"
+  if (value === "PRICE_CHANGED") return "供货价待确认"
+  return value
 }
 
 function isExceptionItem(
@@ -292,7 +319,7 @@ export function ExternalProductSupplyPage() {
   const resolveUnknownMutation = useResolveUnknownExternalCatalogMutation()
 
   const view = queueQuery.data
-  const items = view?.items ?? []
+  const items = React.useMemo(() => [...(view?.items ?? [])], [view?.items])
   const context = view?.context
   const item =
     items.find((i) => {
@@ -306,6 +333,8 @@ export function ExternalProductSupplyPage() {
     }) ??
     view?.current ??
     items[0]
+  const currentExceptionWorkItemId =
+    item && isExceptionItem(item) ? item.workItem.workItemId : null
 
   const currentIndex = item
     ? Math.max(
@@ -318,7 +347,6 @@ export function ExternalProductSupplyPage() {
   const [confirmMode, setConfirmMode] = React.useState<ConfirmMode>(null)
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
-  const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const [selectedSkuId, setSelectedSkuId] = React.useState<string>("")
   const [substituteIds, setSubstituteIds] = React.useState<string[]>([])
   const [searchInput, setSearchInput] = React.useState(q ?? "")
@@ -381,9 +409,9 @@ export function ExternalProductSupplyPage() {
         })
         setLastResult({
           status: "blocked",
-          title: "会话草稿已保存",
+          title: "草稿已保存",
           description:
-            "草稿仅存于当前会话：未经审核不写 ERP SKU / 商城商品 / 供给修订。映射确认与供给类型登记前无写入口。",
+            "草稿仅保存在当前页面，尚未改变 ERP 商品关联、供货条件或商城商品。",
           stayOnItem: true,
           terminal: false,
         })
@@ -431,6 +459,7 @@ export function ExternalProductSupplyPage() {
 
   // URL defaults
   React.useEffect(() => {
+    if (mode === "list") return
     if (queueQuery.isPending || !view) return
     const hasChange = searchParams.has("changeType")
     const hasCtx = searchParams.has("queueContextId")
@@ -459,10 +488,12 @@ export function ExternalProductSupplyPage() {
     items.length,
     pathname,
     router,
+    mode,
   ])
 
   // Auto-claim registered exception tasks only
   React.useEffect(() => {
+    if (mode === "list") return
     if (!item || !isExceptionItem(item)) return
     if (demoRole === "operations") return
     if (leaseRef.current?.workItemId === item.workItem.workItemId) return
@@ -488,15 +519,20 @@ export function ExternalProductSupplyPage() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅任务切换时领取
-  }, [item && isExceptionItem(item) ? item.workItem.workItemId : null, demoRole])
+  }, [
+    currentExceptionWorkItemId,
+    demoRole,
+    mode,
+  ])
 
   React.useEffect(() => {
+    if (mode === "list") return
     if (lastResult) {
       resultRef.current?.focus()
     } else if (item) {
       headingRef.current?.focus()
     }
-  }, [item?.externalProduct.id, lastResult?.status])
+  }, [item, lastResult, mode])
 
   const replaceUrl = React.useCallback(
     (patch: Record<string, string | null | undefined>) => {
@@ -506,6 +542,7 @@ export function ExternalProductSupplyPage() {
         else params.set(key, value)
       }
       if (
+        mode === "queue" &&
         !params.has("queueContextId") &&
         !Object.prototype.hasOwnProperty.call(patch, "queueContextId")
       ) {
@@ -514,7 +551,7 @@ export function ExternalProductSupplyPage() {
       const qs = params.toString()
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
     },
-    [pathname, queueContextId, router, searchParams]
+    [mode, pathname, queueContextId, router, searchParams]
   )
 
   const goToItem = React.useCallback(
@@ -635,14 +672,13 @@ export function ExternalProductSupplyPage() {
             comment: value.comment || undefined,
           },
           idempotencyKey: key,
-          simulateTimeout: forceUnknownOnce,
+          simulateTimeout: false,
         })
-        setForceUnknownOnce(false)
         setConfirmMode(null)
         if (result.status === "unknown") {
           setLastResult({
             status: "unknown",
-            title: "暂挂结果不确定",
+            title: "稍后处理结果待确认",
             description: result.message,
             pendingIdempotencyKey: result.idempotencyKey,
             stayOnItem: true,
@@ -656,7 +692,7 @@ export function ExternalProductSupplyPage() {
         if (result.outcome.kind !== "ACTION") return
         setLastResult({
           status: "blocked",
-          title: "已暂挂 · 仍在有效队列",
+          title: "已设为稍后处理",
           description: result.outcome.resumeHint,
           reference: result.outcome.reference,
           outcome: result.outcome,
@@ -665,7 +701,7 @@ export function ExternalProductSupplyPage() {
         })
         // 不自动下一项
       } catch (e) {
-        setActionError(e instanceof Error ? e.message : "暂挂失败")
+        setActionError(e instanceof Error ? e.message : "稍后处理失败")
       }
     },
   })
@@ -699,9 +735,8 @@ export function ExternalProductSupplyPage() {
             comment: value.comment,
           },
           idempotencyKey: key,
-          simulateTimeout: forceUnknownOnce,
+          simulateTimeout: false,
         })
-        setForceUnknownOnce(false)
         setConfirmMode(null)
         if (result.status === "unknown") {
           setLastResult({
@@ -774,14 +809,13 @@ export function ExternalProductSupplyPage() {
                   comment: value.comment,
                 },
           idempotencyKey: key,
-          simulateTimeout: forceUnknownOnce,
+          simulateTimeout: false,
         })
-        setForceUnknownOnce(false)
         setConfirmMode(null)
         if (result.status === "unknown") {
           setLastResult({
             status: "unknown",
-            title: "终结结果不确定",
+            title: "处理结果待确认",
             description: result.message,
             pendingIdempotencyKey: result.idempotencyKey,
             stayOnItem: true,
@@ -798,10 +832,10 @@ export function ExternalProductSupplyPage() {
           status: "succeeded",
           title:
             decisionKind === "CONFIRM_ERROR_RESOLVED"
-              ? "异常已解决 · 任务已终结"
-              : "停供记录已确认 · 任务已终结",
+              ? "供应商数据异常已解决"
+              : "供应商停供信息已确认",
           description:
-            "FormalActionResult 固定展示后，可按自动下一项偏好或手动继续。不包含替代供给选定或恢复发布。",
+            "处理结果已记录。你可以继续下一项；本次没有选择替代供应商，也没有恢复商城销售。",
           reference:
             result.outcome.kind === "COMPLETED"
               ? result.outcome.business.reference
@@ -853,7 +887,7 @@ export function ExternalProductSupplyPage() {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
-          title="外部商品映射与供给"
+          title={mode === "list" ? "商品供给关系" : "供应商商品待处理"}
           description="加载失败"
         />
         <Button type="button" onClick={() => void queueQuery.refetch()}>
@@ -863,13 +897,37 @@ export function ExternalProductSupplyPage() {
     )
   }
 
+  if (mode === "list") {
+    return (
+      <SupplyRelationshipListView
+        items={items}
+        skuId={skuId}
+        skuContext={view?.skuContext}
+        returnTo={safeReturnTo}
+        returnHref={buildQueueReturnHref(searchParams)}
+        updatedAt={context?.queueContextUpdatedAt}
+        costMasked={costMasked}
+        searchInput={searchInput}
+        onSearchInputChange={setSearchInput}
+        onSearch={() =>
+          replaceUrl({
+            q: searchInput.trim() || null,
+            currentExternalProductId: null,
+            currentWorkItemId: null,
+          })
+        }
+      />
+    )
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title="外部商品映射与供给"
+        title="供应商商品待处理"
+        description="处理供应商新增商品、供货变化、停供和数据异常"
         breadcrumbs={[
           { id: "api", label: "供应商 API", href: "/supplier-api/catalog" },
-          { id: "cat", label: "外部商品供给", current: true },
+          { id: "cat", label: "供应商商品待处理", current: true },
         ]}
         metadata={
           <DataFreshness
@@ -951,39 +1009,8 @@ export function ExternalProductSupplyPage() {
           aria-label="队列范围"
         >
           <ToggleGroupItem value="pending">待处理</ToggleGroupItem>
-          <ToggleGroupItem value="held">已暂挂</ToggleGroupItem>
+          <ToggleGroupItem value="held">稍后处理</ToggleGroupItem>
         </ToggleGroup>
-        <OptionCombobox
-          value={demoRole}
-          onValueChange={(v) => {
-            if (!v) return
-            replaceUrl({
-              demoRole: v === "procurement" ? null : v,
-              currentExternalProductId: null,
-              currentWorkItemId: null,
-            })
-          }}
-          options={(Object.keys(DEMO_ROLE_LABEL) as DemoRole[]).map((r) => ({
-            value: r,
-            label: DEMO_ROLE_LABEL[r],
-          }))}
-          className="w-[9rem]"
-          size="sm"
-          allowClear={false}
-          aria-label="演示角色"
-          placeholder="角色"
-        />
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            className="size-3.5"
-            checked={maskCost}
-            onChange={(e) =>
-              replaceUrl({ maskCost: e.target.checked ? "1" : null })
-            }
-          />
-          模拟无成本字段权
-        </label>
         <div className="flex items-center gap-2">
           <Label htmlFor="w21-auto-next" className="text-muted-foreground">
             自动下一项
@@ -1011,7 +1038,7 @@ export function ExternalProductSupplyPage() {
           <Input
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="外部商品 ID / SKU / 名称"
+            placeholder="供应商商品编码 / SKU / 名称"
             className="h-8 w-48"
             aria-label="搜索"
           />
@@ -1020,16 +1047,6 @@ export function ExternalProductSupplyPage() {
           </Button>
         </form>
       </div>
-
-      <label className="flex items-center gap-2 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
-          className="size-3.5"
-          checked={forceUnknownOnce}
-          onChange={(e) => setForceUnknownOnce(e.target.checked)}
-        />
-        下次处理动作模拟结果未知
-      </label>
 
       {lastResult ? (
         <div ref={resultRef} tabIndex={-1} className="outline-none">
@@ -1042,16 +1059,14 @@ export function ExternalProductSupplyPage() {
               lastResult.outcome?.kind === "COMPLETED"
                 ? [
                     {
-                      label: "决策",
-                      value: lastResult.outcome.business.decisionKind,
+                      label: "处理结论",
+                      value: decisionLabel(
+                        lastResult.outcome.business.decisionKind
+                      ),
                     },
                     {
-                      label: "审计号",
+                      label: "记录编号",
                       value: lastResult.outcome.business.auditEventId,
-                    },
-                    {
-                      label: versionText.dataVersion,
-                      value: shortHash(lastResult.outcome.business.subjectHash),
                     },
                     {
                       label: "完成时间",
@@ -1062,15 +1077,18 @@ export function ExternalProductSupplyPage() {
                   ? [
                       {
                         label: "动作",
-                        value: lastResult.outcome.actionKind,
+                        value: actionLabel(lastResult.outcome.actionKind),
                       },
                       {
                         label: "任务状态",
-                        value: lastResult.outcome.workItemStatus,
+                        value:
+                          lastResult.outcome.workItemStatus === "PENDING"
+                            ? "待处理"
+                            : "处理中",
                       },
                       {
-                        label: "停留当前项",
-                        value: "是（非终结）",
+                        label: "下一步",
+                        value: "继续处理当前供应商商品",
                       },
                     ]
                   : undefined
@@ -1098,7 +1116,7 @@ export function ExternalProductSupplyPage() {
                               title: "查询到处理结果",
                               description:
                                 r.outcome.kind === "COMPLETED"
-                                  ? "终结决策已确认。"
+                                  ? "处理结果已经确认。"
                                   : r.outcome.resumeHint,
                               reference:
                                 r.outcome.kind === "COMPLETED"
@@ -1116,7 +1134,7 @@ export function ExternalProductSupplyPage() {
                         })
                     }}
                   >
-                    查询最终结果
+                    查询处理结果
                   </Button>
                 ) : (
                   <>
@@ -1164,7 +1182,7 @@ export function ExternalProductSupplyPage() {
         <BusinessEmptyState
           kind="no-tasks"
           title="当前筛选项已处理完"
-          description="可切换变化类型/暂挂范围，或返回工作台。"
+          description="可切换变化类型或稍后处理范围，也可以返回工作台。"
           action={
             <Button render={<Link href="/workspace" />}>返回今日工作台</Button>
           }
@@ -1270,13 +1288,13 @@ export function ExternalProductSupplyPage() {
                   />
                   {isExceptionItem(item) ? (
                     <Badge variant="secondary">
-                      BUSINESS_EXCEPTION · {item.workItem.workItemId}
+                      供应商数据异常 · 待处理
                     </Badge>
                   ) : null}
                   {isExceptionItem(item) && item.workItem.held ? (
                     <BusinessStatusBadge
                       context="list"
-                      label="已暂挂 · 仍在有效队列"
+                      label="稍后处理"
                       tone="warning"
                     />
                   ) : null}
@@ -1285,14 +1303,12 @@ export function ExternalProductSupplyPage() {
                   ) : null}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  外部商品 {item.externalProduct.externalProductId}
+                  供应商商品编码 {item.externalProduct.externalProductId}
                   {item.externalProduct.externalSkuId
                     ? ` / ${item.externalProduct.externalSkuId}`
                     : ""}{" "}
-                  · 连接 {item.externalProduct.connection.code} · 来源修订 r
-                  {item.externalProduct.incomingRevision?.revisionNo ??
-                    item.externalProduct.currentRevision.revisionNo}{" "}
-                  · 接收 {formatTime(item.syncContext.receivedAt)}
+                  · 供应商 {item.externalProduct.supplier.name} · 最近更新{" "}
+                  {formatTime(item.syncContext.receivedAt)}
                 </p>
               </div>
               <Button
@@ -1310,19 +1326,21 @@ export function ExternalProductSupplyPage() {
           {item.publicationImpact.safetyPauseTriggered ? (
             <Alert variant="destructive">
               <ShieldAlertIcon aria-hidden="true" />
-              <AlertTitle>安全暂停已触发（不等待人工）</AlertTitle>
+              <AlertTitle>相关商城商品已暂停销售</AlertTitle>
               <AlertDescription className="space-y-1">
                 <p>{item.publicationImpact.note}</p>
                 <p>
-                  原因：{item.publicationImpact.safetyPauseReasons.join("、")} ·
+                  原因：
+                  {item.publicationImpact.safetyPauseReasons
+                    .map(safetyReasonLabel)
+                    .join("、")} ·
                   已暂停发布 {item.publicationImpact.pausedPublicationCount} ·
                   历史已支付{" "}
                   {item.publicationImpact.historicalPaidOrderCount} 笔历史记录保留
                 </p>
                 {item.publicationImpact.recoveryBlocker ? (
                   <p className="font-medium">
-                    {item.publicationImpact.recoveryBlocker.code}：
-                    {item.publicationImpact.recoveryBlocker.message}
+                    尚未确定恢复销售的负责人，当前只能查看影响和准备替代方案，暂不能恢复销售。
                   </p>
                 ) : null}
               </AlertDescription>
@@ -1330,16 +1348,13 @@ export function ExternalProductSupplyPage() {
           ) : null}
 
           {hasRegistrationBlocker && item.registrationBlocker ? (
-            <Alert variant="destructive">
+            <Alert>
               <TriangleAlertIcon aria-hidden="true" />
-              <AlertTitle>
-                {item.registrationBlocker.code} ·{" "}
-                {item.registrationBlocker.businessProcess === "MAPPING"
-                  ? "映射"
-                  : "供给复核"}
-              </AlertTitle>
+              <AlertTitle>当前暂不能提交确认</AlertTitle>
               <AlertDescription>
-                {item.registrationBlocker.message}
+                {item.registrationBlocker.businessProcess === "MAPPING"
+                  ? "商品关联功能正在配置。你可以查看供应商商品、比较 ERP SKU，并保存草稿。"
+                  : "供货条件确认功能正在配置。你可以查看变化并保存草稿，暂不能提交生效。"}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -1348,23 +1363,28 @@ export function ExternalProductSupplyPage() {
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,58fr)_minmax(17rem,42fr)]">
             <div className="min-w-0 space-y-4">
               <BusinessDiffPanel
-                title="来源版本差异（当前 vs 新修订）"
-                caption="业务字段对比；成本字段按权限隐藏"
+                title="供应商更新内容"
+                caption="对比原数据与供应商最新数据；成本字段按权限显示"
                 changes={item.sourceDiff.map((c) => ({
                   id: c.id,
                   field: c.field,
-                  before: c.before,
-                  after: c.after,
+                  before:
+                    c.field === "可供状态"
+                      ? availabilityLabel(c.before)
+                      : c.before,
+                  after:
+                    c.field === "可供状态"
+                      ? availabilityLabel(c.after)
+                      : c.after,
                   note: c.note,
                 }))}
               />
 
               <Card size="sm">
                 <CardHeader className="border-b py-3">
-                  <CardTitle className="text-base">外部修订暂存</CardTitle>
+                  <CardTitle className="text-base">供应商商品资料</CardTitle>
                   <CardDescription>
-                    先写入不可变的外部商品修订记录，未经映射与审核不修改
-                    ERP SKU 或商城商品
+                    供应商更新不会直接修改 ERP 商品或商城商品，确认后才会生效
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="pt-4">
@@ -1419,22 +1439,7 @@ export function ExternalProductSupplyPage() {
                       {
                         id: "avail",
                         label: "可供状态 / 数量",
-                        value: `${item.externalProduct.incomingRevision?.availabilityStatus ?? item.externalProduct.currentRevision.availabilityStatus} / ${item.externalProduct.incomingRevision?.availableQuantity ?? item.externalProduct.currentRevision.availableQuantity}`,
-                      },
-                      {
-                        id: "fp",
-                        label: "数据版本（短）",
-                        value:
-                          item.externalProduct.incomingRevision
-                            ?.contentFingerprintShort ??
-                          item.externalProduct.currentRevision
-                            .contentFingerprintShort ??
-                          "—",
-                      },
-                      {
-                        id: "sync",
-                        label: "同步批次",
-                        value: item.syncContext.sourceBatchIdentity,
+                        value: `${availabilityLabel(item.externalProduct.incomingRevision?.availabilityStatus ?? item.externalProduct.currentRevision.availabilityStatus)} / ${item.externalProduct.incomingRevision?.availableQuantity ?? item.externalProduct.currentRevision.availableQuantity}`,
                       },
                     ]}
                   />
@@ -1445,10 +1450,10 @@ export function ExternalProductSupplyPage() {
                 <Card size="sm">
                   <CardHeader className="border-b py-3">
                     <CardTitle className="text-base">
-                      供给修订时间线（不可变）
+                      供货条件历史
                     </CardTitle>
                     <CardDescription>
-                      供货价/关键供给变化形成新修订，不覆盖旧版；不自动改商城销售价
+                      价格或供货条件变化会保留历史版本，不会覆盖原记录
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-4">
@@ -1457,7 +1462,7 @@ export function ExternalProductSupplyPage() {
                         id: `off-r${r.revisionNo}`,
                         version: r.revisionNo,
                         source: "mall-sync" as const,
-                        actor: "系统 · 供给修订",
+                        actor: "系统记录",
                         isCurrent: idx === arr.length - 1,
                         status: {
                           label:
@@ -1475,7 +1480,7 @@ export function ExternalProductSupplyPage() {
                                 ? ("destructive" as const)
                                 : ("warning" as const),
                         },
-                        reason: `含税 ${r.supplyPriceGross ?? "—"} · MOQ ${r.minimumOrderQuantity} · ${r.supplyRegion.join("、")}`,
+                        reason: `含税价 ${r.supplyPriceGross ?? "—"} · 最小起订量 ${r.minimumOrderQuantity} · ${r.supplyRegion.join("、")}`,
                         effectiveAt: {
                           dateTime: r.validFrom,
                           label: r.validFrom,
@@ -1483,7 +1488,7 @@ export function ExternalProductSupplyPage() {
                       }))}
                     />
                     <p className="mt-3 text-xs text-muted-foreground">
-                      供货 MOQ 是供应商约束，不会自动复制为商城最小购买量；商城销售价将自动更新。
+                      最小起订量是供应商的供货要求，不会复制为商城最小购买量；供货价变化也不会自动修改商城销售价。
                     </p>
                   </CardContent>
                 </Card>
@@ -1493,7 +1498,7 @@ export function ExternalProductSupplyPage() {
                 <CardHeader className="border-b py-3">
                   <CardTitle className="text-base">发布影响</CardTitle>
                   <CardDescription>
-                    每个发布版本只绑定一条确定供给修订；无动态供应商路由
+                    每个商城商品版本使用一条确定的供给，系统不会自动切换供应商
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-2 pt-4 text-sm">
@@ -1539,9 +1544,9 @@ export function ExternalProductSupplyPage() {
                     className="mt-2"
                     disabled
                     aria-disabled="true"
-                    title={RECOVERY_BLOCKER_MESSAGE}
+                    title="尚未确定恢复负责人，当前暂不能恢复销售"
                   >
-                    发起商品发布恢复（阻断）
+                    恢复商城销售（暂不可用）
                   </Button>
                 </CardContent>
               </Card>
@@ -1551,9 +1556,9 @@ export function ExternalProductSupplyPage() {
             <div className="min-w-0 space-y-4">
               <Card size="sm">
                 <CardHeader className="border-b py-3">
-                  <CardTitle className="text-base">ERP SKU 映射</CardTitle>
+                  <CardTitle className="text-base">关联 ERP 商品规格</CardTitle>
                   <CardDescription>
-                    同一外部商品同一时间仅一个有效映射；一个 SKU 可有多个外部供给
+                    一个供应商商品只能关联一个 ERP SKU；同一 SKU 可以有多个供应商
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
@@ -1565,8 +1570,10 @@ export function ExternalProductSupplyPage() {
                       </div>
                       <p className="text-muted-foreground">
                         {item.mapping.specification} ·{" "}
-                        {item.mapping.baseUnit} · v
-                        {item.mapping.mappingVersion}
+                        {item.mapping.baseUnit}
+                        {item.mapping.approvedAt
+                          ? ` · ${formatTime(item.mapping.approvedAt)} 确认`
+                          : ""}
                       </p>
                     </div>
                   ) : (
@@ -1628,7 +1635,7 @@ export function ExternalProductSupplyPage() {
                       variant="secondary"
                       render={<Link href={w14Href} />}
                     >
-                      打开基础资料新建/修订 SKU
+                      前往商品资料
                     </Button>
                     {/* 正式确认映射：未登记时禁用且不可聚焦为可用 */}
                     <Button
@@ -1637,9 +1644,9 @@ export function ExternalProductSupplyPage() {
                       disabled
                       tabIndex={-1}
                       aria-disabled="true"
-                      title="确认入口尚未开放，请先完成映射与供给修订登记"
+                      title="商品关联确认功能暂未开放"
                     >
-                      确认映射（不可用）
+                      确认关联（暂不可用）
                     </Button>
                   </div>
                 </CardContent>
@@ -1647,9 +1654,9 @@ export function ExternalProductSupplyPage() {
 
               <Card size="sm">
                 <CardHeader className="border-b py-3">
-                  <CardTitle className="text-base">供给摘要 / 会话草稿</CardTitle>
+                  <CardTitle className="text-base">供货条件</CardTitle>
                   <CardDescription>
-                    仅会话草稿；供给修订类型登记前不可提交
+                    可准备价格、起订量、区域和有效期草稿；确认功能暂未开放
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
@@ -1659,8 +1666,8 @@ export function ExternalProductSupplyPage() {
                       items={[
                         {
                           id: "cur",
-                          label: "当前供给修订",
-                          value: `r${item.offering.currentRevision.revisionNo} · ${item.offering.currentRevision.status}`,
+                          label: "当前供货条件",
+                          value: `第 ${item.offering.currentRevision.revisionNo} 版 · ${offeringStatusLabel(item.offering.currentRevision.status)}`,
                         },
                         {
                           id: "price",
@@ -1681,7 +1688,7 @@ export function ExternalProductSupplyPage() {
                         },
                         {
                           id: "moq",
-                          label: "MOQ（供给）",
+                          label: "最小起订量",
                           value: item.offering.currentRevision.minimumOrderQuantity,
                           numeric: true,
                         },
@@ -1689,7 +1696,7 @@ export function ExternalProductSupplyPage() {
                     />
                   ) : (
                     <p className="text-sm text-muted-foreground">
-                      尚无供给修订
+                      尚未设置供货条件
                     </p>
                   )}
 
@@ -1702,7 +1709,7 @@ export function ExternalProductSupplyPage() {
                       }}
                     >
                       <p className="text-xs font-medium">
-                        拟生效供给草稿（会话）· 完整字段仅作为正式确认候选
+                        供货条件草稿 · 保存后不会立即生效
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2">
                         <offeringForm.AppField name="supplyMode">
@@ -1767,7 +1774,7 @@ export function ExternalProductSupplyPage() {
                       <div className="flex flex-wrap gap-2">
                         <offeringForm.AppForm>
                           <offeringForm.SubmitButton
-                            label="保存完整会话草稿"
+                            label="保存草稿"
                             disabled={demoRole !== "procurement"}
                           />
                         </offeringForm.AppForm>
@@ -1777,9 +1784,9 @@ export function ExternalProductSupplyPage() {
                           disabled
                           tabIndex={-1}
                           aria-disabled="true"
-                          title="尚未开放，需先登记供给修订类型"
+                          title="供货条件确认功能暂未开放"
                         >
-                          确认供给版本（不可用）
+                          确认供货条件（暂不可用）
                         </Button>
                       </div>
                     </form>
@@ -1791,7 +1798,7 @@ export function ExternalProductSupplyPage() {
                 <Card size="sm">
                   <CardHeader className="border-b py-3">
                     <CardTitle className="text-base">
-                      替代候选（会话内）
+                      替代供应商候选
                     </CardTitle>
                     <CardDescription>
                       当前仅可准备候选证据，暂不能选定替代供给
@@ -1826,9 +1833,9 @@ export function ExternalProductSupplyPage() {
                       disabled
                       tabIndex={-1}
                       aria-disabled="true"
-                      title={RECOVERY_BLOCKER_MESSAGE}
+                      title="尚未确定由谁选择替代供应商，当前只能准备候选方案"
                     >
-                      选定替代供给（阻断）
+                      选择替代供应商（暂不可用）
                     </Button>
                   </CardContent>
                 </Card>
@@ -1836,12 +1843,11 @@ export function ExternalProductSupplyPage() {
 
               <Card size="sm">
                 <CardHeader className="border-b py-3">
-                  <CardTitle className="text-base">决策动作</CardTitle>
+                  <CardTitle className="text-base">处理动作</CardTitle>
                   <CardDescription>
-                    角色：{DEMO_ROLE_LABEL[demoRole]}
                     {isRegistered
-                      ? " · 已注册异常可用任务内动作/终结"
-                      : " · 仅浏览与草稿"}
+                      ? "处理当前供应商商品的停供或数据异常"
+                      : "当前可查看资料并准备草稿，确认功能暂未开放"}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-2 pt-4">
@@ -1855,7 +1861,7 @@ export function ExternalProductSupplyPage() {
                         onClick={() => setConfirmMode({ kind: "hold" })}
                       >
                         <PauseIcon className="size-3.5" />
-                        暂挂
+                        稍后处理
                       </Button>
                       {item.changeType === "ERROR" ? (
                         <Button
@@ -1906,17 +1912,6 @@ export function ExternalProductSupplyPage() {
                   >
                     查看来源 API 连接
                   </Button>
-                  {item.actionBlockers.slice(0, 4).map((b) => (
-                    <p
-                      key={`${b.action}-${b.code}`}
-                      className="w-full text-xs text-muted-foreground"
-                    >
-                      <span className="font-medium text-foreground">
-                        {b.code}
-                      </span>
-                      ：{b.message}
-                    </p>
-                  ))}
                 </CardContent>
               </Card>
             </div>
@@ -1924,7 +1919,7 @@ export function ExternalProductSupplyPage() {
         </>
       ) : null}
 
-      {/* 暂挂 */}
+      {/* 稍后处理 */}
       <Dialog
         open={confirmMode?.kind === "hold"}
         onOpenChange={(open) => {
@@ -1933,9 +1928,9 @@ export function ExternalProductSupplyPage() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>暂挂当前异常任务</DialogTitle>
+            <DialogTitle>稍后处理当前事项</DialogTitle>
             <DialogDescription>
-              暂挂后任务保留在待处理队列，不会自动进入下一项
+              保存后仍可在待处理列表中继续跟进，不会自动进入下一项
             </DialogDescription>
           </DialogHeader>
           <form
@@ -1958,7 +1953,7 @@ export function ExternalProductSupplyPage() {
                     }
                     options={HOLD_REASON_OPTIONS}
                     allowClear={false}
-                    aria-label="暂挂原因"
+                    aria-label="稍后处理原因"
                     placeholder="请选择原因"
                   />
                 </div>
@@ -1972,7 +1967,7 @@ export function ExternalProductSupplyPage() {
                 取消
               </DialogClose>
               <holdForm.AppForm>
-                <holdForm.SubmitButton label="确认暂挂" />
+                <holdForm.SubmitButton label="确认稍后处理" />
               </holdForm.AppForm>
             </DialogFooter>
           </form>
@@ -1990,7 +1985,7 @@ export function ExternalProductSupplyPage() {
           <DialogHeader>
             <DialogTitle>退回数据修复</DialogTitle>
             <DialogDescription>
-              不能通过业务确认修复来源错误；任务不终结。
+              当前供应商数据需要修正，退回后仍可在待处理列表中继续跟进。
             </DialogDescription>
           </DialogHeader>
           <form
@@ -2049,32 +2044,35 @@ export function ExternalProductSupplyPage() {
         }
         description={
           confirmMode?.kind === "confirm_stop"
-            ? "安全暂停已先发生。本动作仅确认停供记录与任务终态，不包含替代供给选定或恢复发布。"
-            : "须存在数据修复证据边界；不写正常映射或供给修订。"
+            ? "相关商城商品已经暂停销售。本次只确认供应商停供信息，不会自动选择替代供应商或恢复销售。"
+            : "请确认供应商数据已经修正。本次不会更改 ERP 商品关联或现有供货条件。"
         }
-        actionLabel="提交终结决策"
+        actionLabel="确认处理结果"
         confirmLabel="确认提交"
-        fromStatus={{ label: "异常处理中", tone: "warning" }}
-        toStatus={{ label: "任务已终结", tone: "success" }}
+        fromStatus={{ label: "待处理", tone: "warning" }}
+        toStatus={{ label: "处理完成", tone: "success" }}
         lockedFields={[
-          item ? `外部商品 ${item.externalProduct.externalProductId}` : "外部商品",
-          `期望修订 r${expectedRevision}`,
-          `数据版本 ${shortHash(subjectHash)}`,
+          item
+            ? `供应商商品：${item.externalProduct.currentRevision.name}`
+            : "供应商商品",
+          item
+            ? `供应商：${item.externalProduct.supplier.name}`
+            : "供应商",
         ]}
         effects={
           confirmMode?.kind === "confirm_stop"
             ? [
-                "写入停供记录结论与审计",
-                "结束当前异常处理任务",
-                "不选定替代供给、不恢复上架",
+                "记录本次停供确认",
+                "完成当前待处理事项",
+                "保持相关商城商品暂停销售",
               ]
             : [
-                "写入异常已解决结论与审计",
-                "结束当前异常处理任务",
-                "不写正常映射或供给修订",
+                "记录供应商数据已经恢复",
+                "完成当前待处理事项",
+                "保持现有商品关联和供货条件不变",
               ]
         }
-        irreversibleEffects={["处理结果不可撤销（演示会话内）"]}
+        irreversibleEffects={["提交后将记录在操作历史中"]}
         pending={completeMutation.isPending}
         onConfirm={async () => {
           await completeForm.handleSubmit()

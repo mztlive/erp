@@ -25,6 +25,7 @@ import {
   COST_MASK,
   DEMO_ROLE_LABEL,
 } from "@/features/external-product-supply/types"
+import { MASTER_DATA_CENTER_SEEDS } from "@/features/master-data/data"
 import { EXTERNAL_PRODUCT_SUPPLY_SEED } from "@/mock/external-product-supply"
 import {
   applyWorkItemActionSession,
@@ -45,6 +46,27 @@ import {
 } from "@/mock/session-state"
 
 const drafts = new Map<string, SessionCatalogDraft>()
+
+function resolveSkuContext(skuId?: string) {
+  if (!skuId) return undefined
+
+  for (const product of Object.values(MASTER_DATA_CENTER_SEEDS)) {
+    if (product.resource !== "products" || !product.productDetail) continue
+    const sku = product.productDetail.skus.find((entry) => entry.skuId === skuId)
+    if (!sku) continue
+
+    return {
+      productId: product.stableId,
+      productName: product.name,
+      skuId,
+      skuCode: sku.skuNo,
+      specification: sku.specLabel,
+      baseUnit: sku.baseUnit ?? product.productDetail.baseUnit,
+    }
+  }
+
+  return undefined
+}
 
 function maskCostValue(v: string | null | undefined): string | null {
   if (v == null) return null
@@ -119,7 +141,7 @@ function roleBlockers(
         blockers.push({
           action,
           code: "ROLE_PROCUREMENT_ONLY",
-          message: "运营可查看发布准备度并转商品发布，不能确认映射或供给成本",
+          message: "运营可查看发布准备情况并前往商品发布，但不能确认商品关联或供货成本",
         })
       }
     }
@@ -134,7 +156,7 @@ function roleBlockers(
         blockers.push({
           action,
           code: "ROLE_TECH_ONLY",
-          message: "运维/管理员仅处理技术异常，不能确认业务映射或供给",
+          message: "系统管理员和技术人员只能处理数据异常，不能确认商品关联或供货条件",
         })
       }
     }
@@ -181,7 +203,7 @@ function projectItem(
         skuName: cand.skuName,
         specification: cand.specification,
         baseUnit: cand.baseUnit,
-        reason: "会话草稿（未经审核，未写 ERP）",
+        reason: "页面草稿（尚未提交）",
       }
     }
   }
@@ -277,7 +299,7 @@ function filterSummary(q: ExternalCatalogQueueQuery): string {
             : q.changeType === "ERROR"
               ? "异常"
               : "需处理",
-    q.status === "held" ? "已暂挂" : "待处理",
+    q.status === "held" ? "稍后处理" : "待处理",
     DEMO_ROLE_LABEL[resolveRole(q.demoRole)],
   ]
   if (q.q) parts.push(`搜索 ${q.q}`)
@@ -308,6 +330,25 @@ function sortItems(items: ExternalCatalogItemView[]): ExternalCatalogItemView[] 
         : 50
     return pb - pa
   })
+}
+
+function sortRelationshipItems(
+  items: ExternalCatalogItemView[]
+): ExternalCatalogItemView[] {
+  const rank = (item: ExternalCatalogItemView) => {
+    const offering = item.offering?.currentRevision
+    if (
+      item.mapping?.mappingStatus === "ACTIVE" &&
+      offering?.status === "ACTIVE" &&
+      offering.availabilityStatus === "AVAILABLE"
+    ) {
+      return 0
+    }
+    if (item.mapping?.mappingStatus !== "ACTIVE") return 1
+    return 2
+  }
+
+  return [...items].sort((a, b) => rank(a) - rank(b))
 }
 
 export async function fetchExternalCatalogQueue(
@@ -358,7 +399,8 @@ export async function fetchExternalCatalogQueue(
     })
   }
 
-  items = sortItems(items)
+  items =
+    query.mode === "list" ? sortRelationshipItems(items) : sortItems(items)
 
   const queueContextId =
     query.queueContextId ??
@@ -403,6 +445,7 @@ export async function fetchExternalCatalogQueue(
 
   return {
     preferences: { autoNextDefault: true },
+    skuContext: resolveSkuContext(query.skuId),
     context: {
       queueContextId,
       position: items.length === 0 ? 0 : position + 1,
@@ -510,7 +553,7 @@ export async function claimExternalCatalogWorkItem(
       s.workItem.workItemId === workItemId
   )
   if (!seed || (seed.changeType !== "ERROR" && seed.changeType !== "STOPPED")) {
-    throw new Error("仅已注册 ERROR/STOPPED 异常任务可领取")
+    throw new Error("当前事项不能领取处理")
   }
   if (getWorkItemTerminal(workItemId) || markCompletedHas(workItemId)) {
     throw new Error("任务已完成，无法领取")
@@ -555,7 +598,7 @@ export async function applyExternalCatalogWorkItemAction(input: {
     return {
       status: "failed",
       code: "NOT_REGISTERED",
-      message: "非已注册异常任务，禁止任务内动作",
+      message: "当前事项暂不支持此操作",
     }
   }
 
@@ -590,10 +633,10 @@ export async function applyExternalCatalogWorkItemAction(input: {
       heldAt: input.action.kind === "HOLD" ? record.recordedAt : undefined,
       resumeHint:
         input.action.kind === "HOLD"
-          ? "暂挂已写入证据，任务仍为 PENDING/IN_PROGRESS，保留在有效队列；不自动下一项。"
+          ? "已标记为稍后处理，当前事项仍在待处理列表中。"
           : input.action.kind === "RETURN_FOR_DATA_FIX"
-            ? "已追加退回数据修复请求；任务未终结，仍为 PENDING/IN_PROGRESS。"
-            : "任务内动作成功，状态保持 PENDING/IN_PROGRESS；不自动完成、不自动下一项。",
+            ? "已退回供应商数据修正，修正完成后可以继续处理。"
+            : "处理已记录，当前事项仍在待处理列表中。",
       reference: `W21-${input.action.kind}-${input.workItemId.toUpperCase()}`,
     }
     return { status: "succeeded", outcome }
@@ -631,7 +674,7 @@ export async function completeExternalCatalogWorkItem(input: {
     return {
       status: "failed",
       code: "NOT_REGISTERED",
-      message: "仅已注册 ERROR/STOPPED 可终结；正常映射/供给无提交端点",
+      message: "当前商品关联或供货条件暂不能提交确认",
     }
   }
 
@@ -642,7 +685,7 @@ export async function completeExternalCatalogWorkItem(input: {
     return {
       status: "failed",
       code: "DECISION_MISMATCH",
-      message: "确认异常已解决仅适用于 ERROR 项",
+      message: "当前事项不是供应商数据异常，不能使用此操作",
     }
   }
   if (
@@ -652,7 +695,7 @@ export async function completeExternalCatalogWorkItem(input: {
     return {
       status: "failed",
       code: "DECISION_MISMATCH",
-      message: "确认停供记录仅适用于 STOPPED 项",
+      message: "当前事项不是供应商停供，不能使用此操作",
     }
   }
 
@@ -664,7 +707,7 @@ export async function completeExternalCatalogWorkItem(input: {
     return {
       status: "failed",
       code: "REVISION_MISMATCH",
-      message: "外部修订已变化，请重新核对后提交",
+      message: "供应商商品数据已经更新，请刷新并重新核对后提交",
     }
   }
 
@@ -765,7 +808,7 @@ export async function resolveUnknownExternalCatalogResult(input: {
           workItemStatus: payload.workItemStatus ?? "IN_PROGRESS",
           actionKind: payload.actionKind,
           resumeHint:
-            "查询到任务内动作已成功；状态保持 PENDING/IN_PROGRESS，不自动下一项。",
+            "已查到原处理结果，当前事项仍在待处理列表中。",
           reference: payload.actionRecordId ?? input.idempotencyKey,
         },
       }
@@ -833,6 +876,6 @@ export async function attemptUnregisteredFormalWrite(): Promise<FormalActionResp
     status: "failed",
     code: "WORK_ITEM_TYPE_UNREGISTERED",
     message:
-      "正常映射/供给类型未登记：不存在可调用的提交入口。请仅使用会话草稿或进入基础资料。",
+      "商品关联和供货条件确认功能暂未开放。当前可以保存草稿或前往商品资料。",
   }
 }

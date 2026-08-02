@@ -257,6 +257,18 @@ export type ExternalCatalogQueueQuery = {
 
 export type ExternalCatalogQueueView = Readonly<{
   preferences: { autoNextDefault: boolean }
+  /**
+   * 从商品中心进入时的 SKU 上下文。
+   * 它来自商品主档，不能从供给关系结果反推，否则无关系时会丢失商品身份。
+   */
+  skuContext?: {
+    productId: string
+    productName: string
+    skuId: string
+    skuCode: string
+    specification: string
+    baseUnit: string
+  }
   context: {
     queueContextId: string
     position: number

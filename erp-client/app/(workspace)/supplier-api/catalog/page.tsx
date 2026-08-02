@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { ExternalProductSupplyPage } from "@/features/external-product-supply/external-product-supply-page"
 
 export const metadata: Metadata = {
-  title: "外部商品映射与供给",
+  title: "商品供给管理",
 }
 
 function CatalogFallback() {
