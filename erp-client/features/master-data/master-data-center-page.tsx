@@ -19,6 +19,7 @@ import {
   MasterDataDisableDialog,
   MasterDataReviseDialog,
 } from "@/features/master-data/master-data-action-dialog"
+import { ProductDetailPage } from "@/features/master-data/product-detail-page"
 import { revealMasterDataSensitive } from "@/features/master-data/api"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
@@ -72,6 +73,11 @@ export function MasterDataCenterPage({
         />
       </div>
     )
+  }
+
+  // 商品详情页即查看也是编辑（含新建 /new），不使用侧边 sheet / 对话框
+  if (resource === "products") {
+    return <ProductDetailPage stableId={stableId} />
   }
 
   return (
@@ -356,23 +362,6 @@ function MasterDataCenterBody({
                   )}
                 </div>
               ))}
-            </div>
-          ) : null}
-
-          {data.productConstraints ? (
-            <div className="mt-4 rounded-lg bg-muted/50 p-3 text-xs">
-              <p>
-                规格标识{" "}
-                <span className="num">
-                  {data.productConstraints.specificationSignature}
-                </span>
-                {" · "}
-                基础单位{" "}
-                <span className="num">{data.productConstraints.baseUnit}</span>
-              </p>
-              <p className="mt-1 text-muted-foreground">
-                {masterDataCopy.centerSpecNote}
-              </p>
             </div>
           ) : null}
 

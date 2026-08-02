@@ -32,7 +32,7 @@ OK: sellable-items uses SI-* codes
 OK: warehouses uses WH-* codes
 OK: warehouses does not show sellable-item codes
 OK: sellable-items does not show warehouse codes
-OK: products uses SKU codes
+OK: products list uses SPU codes
 OK: suppliers fixture identity
 All workspace filter + W14 resource checks passed
 

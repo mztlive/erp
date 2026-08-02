@@ -180,12 +180,19 @@ export type MasterDataCenterView = Readonly<{
     w10Href: string
     policyNote: string
   }
-  /** Product: signature & base unit constraints. */
+  /**
+   * 商品 SPU 约束摘要（不含规格标识：签名由属性组合系统派生，UI 不展示）。
+   */
   productConstraints?: {
-    specificationSignature: string
     baseUnit: string
     hasFormalReferences: boolean
+    skuCount: number
   }
+  /**
+   * 商品 SPU 详情：规格维度 + 由规格组合生成的 SKU 行。
+   * 主图在 SKU；轮播图 / 详情图在 SPU。
+   */
+  productDetail?: ProductDetailView
   allowedActions: readonly string[]
   actionBlockers: readonly ActionBlocker[]
   auditEvents: readonly {
@@ -198,26 +205,55 @@ export type MasterDataCenterView = Readonly<{
   sections: readonly MasterDataSectionId[]
 }>
 
-/** 商品与 SKU：规格身份变化必须新建 SKU，不允许通过修订改变规格签名。 */
-export type ProductFields = Readonly<{
-  spu: string
-  specSignature: string
-  baseUnit: string
-  category?: string
-  brand?: string
-  /** 默认/主供应商，下拉选自供应商主数据启用项。 */
-  supplier?: string
+/** 规格维度（如 颜色 / 规格），取值组合生成 SKU。 */
+export type ProductSpecDimension = Readonly<{
+  name: string
+  values: readonly string[]
+}>
+
+/** SKU 行：主图、条码、参考价等归属 SKU；规格取值由 SPU 规格维度组合得出。 */
+export type ProductSkuFields = Readonly<{
+  skuId?: string
+  skuNo: string
+  /** 与 specs 顺序对齐的属性取值。 */
+  attributeValues: readonly string[]
+  /** 展示用规格文案，如「颜色：红 / 规格：大」。 */
+  specLabel: string
   barcode?: string
-  /** 主图文件名/资产标识，必填。 */
+  /** SKU 主图（单张）。 */
   mainImage: string
-  /** 轮播图，逗号分隔文件名；允许空。 */
-  carouselImages?: string
-  /** 详情图，逗号分隔文件名；允许空。 */
-  detailImages?: string
-  /** 参考成本价（资料维护用，非正式供给成本）。 */
   costPrice?: string
-  /** 参考销售价（资料维护用，非正式商城发布价）。 */
   salePrice?: string
+  supplier?: string
+  baseUnit?: string
+  lifecycleStatus: LifecycleStatus
+}>
+
+/** 商品（SPU）可写字段：规格组合出 SKU；无「规格标识」手填字段。 */
+export type ProductFields = Readonly<{
+  baseUnit: string
+  category: string
+  brand: string
+  /** 默认/主供应商（可下沉到新建 SKU）。 */
+  supplier?: string
+  /** SPU 轮播图（多张，可空）。 */
+  carouselImages: readonly string[]
+  /** SPU 详情图（多张，可空）。 */
+  detailImages: readonly string[]
+  specs: readonly ProductSpecDimension[]
+  skus: readonly ProductSkuFields[]
+}>
+
+/** 对象中心展示用的商品详情投影。 */
+export type ProductDetailView = Readonly<{
+  baseUnit: string
+  category: string
+  brand: string
+  supplier?: string
+  carouselImages: readonly string[]
+  detailImages: readonly string[]
+  specs: readonly ProductSpecDimension[]
+  skus: readonly ProductSkuFields[]
 }>
 
 export type SellableItemFields = Readonly<{
@@ -279,7 +315,7 @@ export type CreateMasterDataInput = Readonly<{
   changeReason: string
   fields: MasterDataResourceFields[MasterDataResource]
   idempotencyKey: string
-  simulate?: "ok" | "overlap" | "sku_signature" | "base_unit" | "warehouse_stock"
+  simulate?: "ok" | "overlap" | "base_unit" | "warehouse_stock"
 }>
 
 export type CreateRevisionInput = Readonly<{
@@ -293,7 +329,7 @@ export type CreateRevisionInput = Readonly<{
   changeReason: string
   fields: MasterDataResourceFields[MasterDataResource]
   idempotencyKey: string
-  simulate?: "ok" | "overlap" | "sku_signature" | "base_unit" | "conflict"
+  simulate?: "ok" | "overlap" | "base_unit" | "conflict"
 }>
 
 export type DisableMasterDataInput = Readonly<{

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   BanIcon,
   DownloadIcon,
@@ -10,7 +11,6 @@ import {
   SearchIcon,
 } from "lucide-react"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
-
 import {
   BackgroundJobProgress,
   BusinessStatusBadge,
@@ -164,6 +164,9 @@ function MasterDataListWorkspace({
   resultsHeadingRef: React.RefObject<HTMLHeadingElement | null>
   lastFocusedRowId: React.MutableRefObject<string | null>
 }) {
+  const router = useRouter()
+  /** 商品（SPU）走详情页，不用侧边 sheet。 */
+  const isProductResource = resource === "products"
   const [search, setSearch] = React.useState("")
   const [lifecycleStatus, setLifecycleStatus] = React.useState<
     "enabled" | "disabled" | "all"
@@ -374,7 +377,13 @@ function MasterDataListWorkspace({
                 onClick={(e) => {
                   e.stopPropagation()
                   lastFocusedRowId.current = item.stableId
-                  setPreviewId(item.stableId)
+                  if (isProductResource) {
+                    router.push(
+                      `/master-data/products/${item.stableId}?section=overview`
+                    )
+                  } else {
+                    setPreviewId(item.stableId)
+                  }
                 }}
               >
                 {masterDataCopy.actionView}
@@ -387,7 +396,14 @@ function MasterDataListWorkspace({
                 title={reviseBlocker?.message}
                 onClick={(e) => {
                   e.stopPropagation()
-                  setReviseTarget(item)
+                  if (isProductResource) {
+                    // 详情页即编辑，与「查看」同一路由
+                    router.push(
+                      `/master-data/products/${item.stableId}?section=overview`
+                    )
+                  } else {
+                    setReviseTarget(item)
+                  }
                 }}
               >
                 <HistoryIcon data-icon="inline-start" aria-hidden />
@@ -412,7 +428,7 @@ function MasterDataListWorkspace({
         },
       },
     ],
-    []
+    [isProductResource, router]
   )
 
   const isWarehouse = resource === "warehouses"
@@ -486,7 +502,13 @@ function MasterDataListWorkspace({
                 mobileVisibility: "hide",
                 icon: PlusIcon,
                 disabled: false,
-                onClick: () => setCreateOpen(true),
+                onClick: () => {
+                  if (isProductResource) {
+                    router.push("/master-data/products/new")
+                  } else {
+                    setCreateOpen(true)
+                  }
+                },
               },
             ]}
           />
@@ -645,130 +667,146 @@ function MasterDataListWorkspace({
             }}
             onRowPreview={(row) => {
               lastFocusedRowId.current = row.stableId
-              setPreviewId(row.stableId)
+              if (isProductResource) {
+                router.push(
+                  `/master-data/products/${row.stableId}?section=overview`
+                )
+              } else {
+                setPreviewId(row.stableId)
+              }
             }}
             onRowOpen={(row) => {
               lastFocusedRowId.current = row.stableId
-              setPreviewId(row.stableId)
+              router.push(
+                `/master-data/${resource}/${row.stableId}?section=overview`
+              )
             }}
           />
         }
       />
 
-      <QuickPreviewSheet
-        open={previewRow != null}
-        onOpenChange={(open) => {
-          if (!open) {
-            setPreviewId(null)
-            // restore focus to last row when possible
-            if (lastFocusedRowId.current) {
-              const el = document.querySelector(
-                `[data-row-id="${lastFocusedRowId.current}"]`
-              )
-              if (el instanceof HTMLElement) el.focus()
+      {!isProductResource ? (
+        <QuickPreviewSheet
+          open={previewRow != null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setPreviewId(null)
+              if (lastFocusedRowId.current) {
+                const el = document.querySelector(
+                  `[data-row-id="${lastFocusedRowId.current}"]`
+                )
+                if (el instanceof HTMLElement) el.focus()
+              }
             }
+          }}
+          size="detail"
+          title={previewRow?.name ?? "基础资料预览"}
+          identity={
+            previewRow ? (
+              <span className="num">
+                {previewRow.stableNo} · v{previewRow.revisionNo}
+              </span>
+            ) : null
           }
-        }}
-        size="detail"
-        title={previewRow?.name ?? "基础资料预览"}
-        identity={
-          previewRow ? (
-            <span className="num">
-              {previewRow.stableNo} · v{previewRow.revisionNo}
-            </span>
-          ) : null
-        }
-        summary={
-          previewRow ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <BusinessStatusBadge
-                context="preview"
-                label={previewRow.lifecycleStatusLabel}
-                tone={previewRow.lifecycleTone}
-              />
-              <Badge
-                variant={
-                  previewRow.revisionTiming === "FUTURE"
-                    ? "warning"
-                    : "secondary"
-                }
-              >
-                {previewRow.revisionTimingLabel}
-              </Badge>
-            </div>
-          ) : null
-        }
-        footer={
-          previewRow ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setPreviewId(null)}
-              >
-                关闭
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!previewRow.allowedActions.includes("CREATE_REVISION")}
-                title={
-                  previewRow.actionBlockers.find(
-                    (b) => b.action === "CREATE_REVISION"
-                  )?.message
-                }
-                onClick={() => setReviseTarget(previewRow)}
-              >
-                {masterDataCopy.actionUpdate}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={!previewRow.allowedActions.includes("DISABLE")}
-                title={
-                  previewRow.actionBlockers.find((b) => b.action === "DISABLE")
-                    ?.message
-                }
-                onClick={() => setDisableTarget(previewRow)}
-              >
-                {masterDataCopy.actionDisable}
-              </Button>
-              <Button
-                type="button"
-                render={
-                  <Link
-                    href={`/master-data/${resource}/${previewRow.stableId}?section=overview`}
-                  />
-                }
-              >
-                {masterDataCopy.actionOpenDetail}
-              </Button>
-            </>
-          ) : null
-        }
-      >
-        {previewRow ? (
-          <MasterDataPreviewPanel
-            row={previewRow}
-            detail={previewDetailQuery.data}
-            detailLoading={previewDetailQuery.isPending}
-          />
-        ) : null}
-      </QuickPreviewSheet>
+          summary={
+            previewRow ? (
+              <div className="flex flex-wrap items-center gap-2">
+                <BusinessStatusBadge
+                  context="preview"
+                  label={previewRow.lifecycleStatusLabel}
+                  tone={previewRow.lifecycleTone}
+                />
+                <Badge
+                  variant={
+                    previewRow.revisionTiming === "FUTURE"
+                      ? "warning"
+                      : "secondary"
+                  }
+                >
+                  {previewRow.revisionTimingLabel}
+                </Badge>
+              </div>
+            ) : null
+          }
+          footer={
+            previewRow ? (
+              <>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setPreviewId(null)}
+                >
+                  关闭
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    !previewRow.allowedActions.includes("CREATE_REVISION")
+                  }
+                  title={
+                    previewRow.actionBlockers.find(
+                      (b) => b.action === "CREATE_REVISION"
+                    )?.message
+                  }
+                  onClick={() => setReviseTarget(previewRow)}
+                >
+                  {masterDataCopy.actionUpdate}
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={!previewRow.allowedActions.includes("DISABLE")}
+                  title={
+                    previewRow.actionBlockers.find(
+                      (b) => b.action === "DISABLE"
+                    )?.message
+                  }
+                  onClick={() => setDisableTarget(previewRow)}
+                >
+                  {masterDataCopy.actionDisable}
+                </Button>
+                <Button
+                  type="button"
+                  render={
+                    <Link
+                      href={`/master-data/${resource}/${previewRow.stableId}?section=overview`}
+                    />
+                  }
+                >
+                  {masterDataCopy.actionOpenDetail}
+                </Button>
+              </>
+            ) : null
+          }
+        >
+          {previewRow ? (
+            <MasterDataPreviewPanel
+              row={previewRow}
+              detail={previewDetailQuery.data}
+              detailLoading={previewDetailQuery.isPending}
+            />
+          ) : null}
+        </QuickPreviewSheet>
+      ) : null}
 
-      <MasterDataCreateDialog
-        open={createOpen}
-        onOpenChange={setCreateOpen}
-        resource={resource}
-      />
-      <MasterDataReviseDialog
-        open={reviseTarget != null}
-        onOpenChange={(open) => {
-          if (!open) setReviseTarget(null)
-        }}
-        resource={resource}
-        target={reviseTarget}
-      />
+      {!isProductResource ? (
+        <MasterDataCreateDialog
+          open={createOpen}
+          onOpenChange={setCreateOpen}
+          resource={resource}
+        />
+      ) : null}
+      {!isProductResource ? (
+        <MasterDataReviseDialog
+          open={reviseTarget != null}
+          onOpenChange={(open) => {
+            if (!open) setReviseTarget(null)
+          }}
+          resource={resource}
+          target={reviseTarget}
+        />
+      ) : null}
       <MasterDataDisableDialog
         open={disableTarget != null}
         onOpenChange={(open) => {

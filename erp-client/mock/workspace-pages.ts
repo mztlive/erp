@@ -1897,9 +1897,9 @@ export const MASTER_DATA_FIXTURES: Record<MasterDataResource, MasterDataFixture>
       { key: "pending", label: "待生效修订", value: 6, detail: "计划生效" },
     ],
     columns: [
-      { key: "code", header: "SKU" },
+      { key: "code", header: "商品编号" },
       { key: "name", header: "商品名称" },
-      { key: "spu", header: "SPU" },
+      { key: "skuCount", header: "SKU 数" },
       { key: "unit", header: "基础单位" },
       { key: "category", header: "分类" },
       { key: "version", header: "当前版本" },
@@ -1909,9 +1909,9 @@ export const MASTER_DATA_FIXTURES: Record<MasterDataResource, MasterDataFixture>
       {
         id: "prd_1",
         cells: {
-          code: "SKU-NY-BOX-01",
+          code: "SPU-NY-BOX",
           name: "新春坚果礼盒 · 典藏款",
-          spu: "SPU-NY-BOX",
+          skuCount: "2",
           unit: "套",
           category: "礼盒",
           version: "v6",
@@ -1923,9 +1923,9 @@ export const MASTER_DATA_FIXTURES: Record<MasterDataResource, MasterDataFixture>
       {
         id: "prd_2",
         cells: {
-          code: "SKU-TEA-09",
+          code: "SPU-TEA",
           name: "礼盒红茶",
-          spu: "SPU-TEA",
+          skuCount: "4",
           unit: "盒",
           category: "茶叶",
           version: "v3",
@@ -1937,9 +1937,9 @@ export const MASTER_DATA_FIXTURES: Record<MasterDataResource, MasterDataFixture>
       {
         id: "prd_3",
         cells: {
-          code: "SKU-OLD-88",
+          code: "SPU-FRUIT",
           name: "已下市果篮",
-          spu: "SPU-FRUIT",
+          skuCount: "1",
           unit: "篮",
           category: "礼盒",
           version: "v12",

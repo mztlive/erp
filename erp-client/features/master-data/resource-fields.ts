@@ -150,23 +150,12 @@ export const RESOURCE_FIELDS: Readonly<
     },
     { key: "taxRate", label: masterDataCopy.fTaxRate, kind: "text" },
   ],
+  /**
+   * 商品（SPU）列表/概览事实标签。
+   * 完整维护在商品详情页（规格组合 → SKU，主图在 SKU，轮播/详情图在 SPU），
+   * 不再使用宽对话框 + 规格标识手填模型。
+   */
   products: [
-    {
-      key: "spu",
-      label: masterDataCopy.fSpu,
-      kind: "text",
-      required: true,
-      listFact: true,
-      section: "identity",
-    },
-    {
-      key: "specSignature",
-      label: masterDataCopy.fSpecSignature,
-      kind: "text",
-      required: true,
-      listFact: true,
-      section: "identity",
-    },
     {
       key: "baseUnit",
       label: masterDataCopy.fBaseUnit,
@@ -174,12 +163,6 @@ export const RESOURCE_FIELDS: Readonly<
       options: BASE_UNIT_OPTIONS,
       required: true,
       listFact: true,
-      section: "identity",
-    },
-    {
-      key: "barcode",
-      label: masterDataCopy.fBarcode,
-      kind: "text",
       section: "identity",
     },
     {
@@ -205,45 +188,8 @@ export const RESOURCE_FIELDS: Readonly<
       label: masterDataCopy.fSupplier,
       kind: "select",
       options: SUPPLIER_OPTIONS,
-      required: true,
       listFact: true,
       section: "catalog",
-    },
-    {
-      key: "costPrice",
-      label: masterDataCopy.fCostPrice,
-      kind: "text",
-      listFact: true,
-      section: "catalog",
-    },
-    {
-      key: "salePrice",
-      label: masterDataCopy.fSalePrice,
-      kind: "text",
-      listFact: true,
-      section: "catalog",
-    },
-    {
-      key: "mainImage",
-      label: masterDataCopy.fMainImage,
-      kind: "media",
-      required: true,
-      section: "media",
-      hint: masterDataCopy.mediaUploadHint,
-    },
-    {
-      key: "carouselImages",
-      label: masterDataCopy.fCarouselImages,
-      kind: "media-list",
-      section: "media",
-      hint: masterDataCopy.mediaAllowEmpty,
-    },
-    {
-      key: "detailImages",
-      label: masterDataCopy.fDetailImages,
-      kind: "media-list",
-      section: "media",
-      hint: masterDataCopy.mediaAllowEmpty,
     },
   ],
   categories: [
@@ -419,19 +365,16 @@ export function buildResourceFields(
         taxRate: pickField(values, "taxRate"),
       }
     case "products":
+      // 商品完整字段由商品表单页直接组装 ProductFields；此处仅兜底空结构。
       return {
-        spu: pickField(values, "spu") ?? "",
-        specSignature: pickField(values, "specSignature") ?? "",
         baseUnit: pickField(values, "baseUnit") ?? "",
-        category: pickField(values, "category"),
-        brand: pickField(values, "brand"),
+        category: pickField(values, "category") ?? "",
+        brand: pickField(values, "brand") ?? "",
         supplier: pickField(values, "supplier"),
-        barcode: pickField(values, "barcode"),
-        mainImage: pickField(values, "mainImage") ?? "",
-        carouselImages: pickField(values, "carouselImages"),
-        detailImages: pickField(values, "detailImages"),
-        costPrice: pickField(values, "costPrice"),
-        salePrice: pickField(values, "salePrice"),
+        carouselImages: [],
+        detailImages: [],
+        specs: [],
+        skus: [],
       }
     case "categories":
       return {
@@ -526,7 +469,10 @@ export function joinMediaList(names: readonly string[]): string {
   return names.filter(Boolean).join(", ")
 }
 
-/** 是否使用宽对话框（商品 SKU 字段多、含媒体）。 */
-export function usesWideDialog(resource: MasterDataResource): boolean {
-  return resource === "products"
+/**
+ * 商品已改为详情页维护，不再使用宽对话框。
+ * 保留函数以免调用方断裂，恒为 false。
+ */
+export function usesWideDialog(_resource: MasterDataResource): boolean {
+  return false
 }

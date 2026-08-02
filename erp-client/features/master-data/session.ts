@@ -20,12 +20,13 @@ import type {
   MasterDataMutationResult,
   MasterDataResource,
 } from "@/features/master-data/types"
+import { productListFacts } from "@/features/master-data/product-model"
 import {
   RESOURCE_FIELDS,
   resourceFieldsToFacts,
   resourceFieldsToListFacts,
 } from "@/features/master-data/resource-fields"
-
+import type { ProductFields } from "@/features/master-data/types"
 const listOverlays = new Map<string, MasterDataListItem>()
 const centerOverlays = new Map<string, MasterDataCenterView>()
 const createdIdsByResource = new Map<MasterDataResource, string[]>()
@@ -98,7 +99,7 @@ export function buildW14ListResult(
 function nextStableNo(resource: MasterDataResource, index: number): string {
   const prefix: Record<MasterDataResource, string> = {
     "sellable-items": "SI-2026",
-    products: "SKU-NEW",
+    products: "SPU-NEW",
     categories: "CAT-NEW",
     brands: "BRD-NEW",
     "voucher-categories": "VC-NEW",
@@ -140,16 +141,6 @@ export function createW14Object(
     return blocked
   }
 
-  if (input.simulate === "sku_signature" && input.resource === "products") {
-    const blocked: MasterDataMutationResult = {
-      outcome: "blocked",
-      code: "SPEC_SIGNATURE_IMMUTABLE",
-      message: "规格变更需要新建商品，不能在新建时伪造规格变更。",
-    }
-    idempotencyResults.set(input.idempotencyKey, blocked)
-    return blocked
-  }
-
   const seq = (createdIdsByResource.get(input.resource)?.length ?? 0) + 1
   const stableId = `${input.resource.replace(/-/g, "_")}_new_${seq}`
   const stableNo = nextStableNo(input.resource, seq)
@@ -157,9 +148,16 @@ export function createW14Object(
   const recordedAt = new Date().toISOString()
   const effectiveFrom = input.effectiveFrom
 
-  const listFacts = resourceFieldsToListFacts(input.resource, input.fields)
-  const revisionFacts = resourceFieldsToFacts(input.resource, input.fields)
-
+  const productFields =
+    input.resource === "products"
+      ? (input.fields as ProductFields)
+      : undefined
+  const listFacts = productFields
+    ? productListFacts(productFields)
+    : resourceFieldsToListFacts(input.resource, input.fields)
+  const revisionFacts = productFields
+    ? productListFacts(productFields)
+    : resourceFieldsToFacts(input.resource, input.fields)
   const listItem: MasterDataListItem = {
     objectType: input.resource,
     stableId,
@@ -243,6 +241,31 @@ export function createW14Object(
     },
     sensitiveFields: [],
     resourceFacts: [...revisionFacts, { label: "创建人", value: ACTOR }],
+    productConstraints: productFields
+      ? {
+          baseUnit: productFields.baseUnit,
+          hasFormalReferences: false,
+          skuCount: productFields.skus.length,
+        }
+      : undefined,
+    productDetail: productFields
+      ? {
+          baseUnit: productFields.baseUnit,
+          category: productFields.category,
+          brand: productFields.brand,
+          supplier: productFields.supplier,
+          carouselImages: [...productFields.carouselImages],
+          detailImages: [...productFields.detailImages],
+          specs: productFields.specs.map((s) => ({
+            name: s.name,
+            values: [...s.values],
+          })),
+          skus: productFields.skus.map((sku) => ({
+            ...sku,
+            attributeValues: [...sku.attributeValues],
+          })),
+        }
+      : undefined,
     allowedActions: ["VIEW", "CREATE_REVISION", "DISABLE"],
     actionBlockers: [],
     auditEvents: [
@@ -327,19 +350,6 @@ export function reviseW14Object(
     return blocked
   }
 
-  if (input.simulate === "sku_signature" && input.resource === "products") {
-    const blocked: MasterDataMutationResult = {
-      outcome: "blocked",
-      code: "SPEC_SIGNATURE_IMMUTABLE",
-      message: "规格变更需要新建商品，不能在同一商品上改规格。",
-      detail: center.productConstraints
-        ? `当前规格标识 ${center.productConstraints.specificationSignature}`
-        : undefined,
-    }
-    idempotencyResults.set(input.idempotencyKey, blocked)
-    return blocked
-  }
-
   if (input.simulate === "base_unit" && input.resource === "products") {
     const blocked: MasterDataMutationResult = {
       outcome: "blocked",
@@ -360,8 +370,13 @@ export function reviseW14Object(
 
   const nameSnapshot = input.name.trim()
   const changeReason = input.changeReason.trim()
-  const revisionFacts = resourceFieldsToFacts(input.resource, input.fields)
-
+  const productFields =
+    input.resource === "products"
+      ? (input.fields as ProductFields)
+      : undefined
+  const revisionFacts = productFields
+    ? productListFacts(productFields)
+    : resourceFieldsToFacts(input.resource, input.fields)
   /**
    * 提交字段（含清空）覆盖旧值；仅保留不在表单字段集合内的历史事实
    * （如 seed 中的“product_kind”“边界”等表单未覆盖标签），避免误清。
@@ -450,6 +465,34 @@ export function reviseW14Object(
       },
       ...center.auditEvents,
     ],
+    productConstraints:
+      !isFuture && productFields
+        ? {
+            baseUnit: productFields.baseUnit,
+            hasFormalReferences:
+              center.productConstraints?.hasFormalReferences ?? false,
+            skuCount: productFields.skus.length,
+          }
+        : center.productConstraints,
+    productDetail:
+      !isFuture && productFields
+        ? {
+            baseUnit: productFields.baseUnit,
+            category: productFields.category,
+            brand: productFields.brand,
+            supplier: productFields.supplier,
+            carouselImages: [...productFields.carouselImages],
+            detailImages: [...productFields.detailImages],
+            specs: productFields.specs.map((s) => ({
+              name: s.name,
+              values: [...s.values],
+            })),
+            skus: productFields.skus.map((sku) => ({
+              ...sku,
+              attributeValues: [...sku.attributeValues],
+            })),
+          }
+        : center.productDetail,
   }
 
   const listRow =
@@ -457,6 +500,9 @@ export function reviseW14Object(
     null
 
   if (listRow) {
+    const nextListFacts = productFields
+      ? productListFacts(productFields)
+      : resourceFieldsToListFacts(input.resource, input.fields)
     const nextList: MasterDataListItem = {
       ...listRow,
       name: isFuture ? listRow.name : nameSnapshot,
@@ -472,11 +518,7 @@ export function reviseW14Object(
       lockVersion: listRow.lockVersion + 1,
       keyFacts: isFuture
         ? listRow.keyFacts
-        : mergeRevisionFacts(
-            resourceFieldsToListFacts(input.resource, input.fields),
-            listRow.keyFacts,
-            input.resource
-          ),
+        : mergeRevisionFacts(nextListFacts, listRow.keyFacts, input.resource),
       metricTags: isFuture
         ? Array.from(new Set([...listRow.metricTags, "pending"]))
         : listRow.metricTags,

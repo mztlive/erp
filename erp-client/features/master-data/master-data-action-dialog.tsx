@@ -393,9 +393,7 @@ export function MasterDataCreateDialog({
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey("create")
   )
-  const [simulate, setSimulate] = React.useState<
-    "ok" | "overlap" | "sku_signature"
-  >("ok")
+  const [simulate, setSimulate] = React.useState<"ok" | "overlap">("ok")
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null
   )
@@ -530,9 +528,7 @@ export function MasterDataCreateDialog({
                     id="create-sim"
                     value={simulate}
                     onValueChange={(v) =>
-                      setSimulate(
-                        (v ?? "ok") as "ok" | "overlap" | "sku_signature"
-                      )
+                      setSimulate((v ?? "ok") as "ok" | "overlap")
                     }
                     options={[
                       { value: "ok", label: masterDataCopy.demoOk },
@@ -540,14 +536,6 @@ export function MasterDataCreateDialog({
                         value: "overlap",
                         label: masterDataCopy.demoOverlap,
                       },
-                      ...(resource === "products"
-                        ? [
-                            {
-                              value: "sku_signature",
-                              label: masterDataCopy.demoSkuSig,
-                            },
-                          ]
-                        : []),
                     ]}
                     className="w-full"
                     allowClear={false}
@@ -608,7 +596,7 @@ export function MasterDataReviseDialog({
     newIdempotencyKey("revise")
   )
   const [simulate, setSimulate] = React.useState<
-    "ok" | "overlap" | "sku_signature" | "base_unit" | "conflict"
+    "ok" | "overlap" | "base_unit" | "conflict"
   >("ok")
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null
@@ -785,7 +773,6 @@ export function MasterDataReviseDialog({
                         (v ?? "ok") as
                           | "ok"
                           | "overlap"
-                          | "sku_signature"
                           | "base_unit"
                           | "conflict"
                       )
@@ -796,18 +783,6 @@ export function MasterDataReviseDialog({
                         value: "overlap",
                         label: masterDataCopy.demoOverlap,
                       },
-                      ...(resource === "products"
-                        ? [
-                            {
-                              value: "sku_signature",
-                              label: masterDataCopy.demoSkuSig,
-                            },
-                            {
-                              value: "base_unit",
-                              label: masterDataCopy.demoBaseUnit,
-                            },
-                          ]
-                        : []),
                       {
                         value: "conflict",
                         label: masterDataCopy.demoConflict,

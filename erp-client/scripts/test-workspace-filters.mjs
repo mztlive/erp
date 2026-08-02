@@ -196,9 +196,9 @@ const products = getMasterDataPageDef("products")
 if (products.shell.kind !== "list") throw new Error("products")
 assert(
   products.shell.payload.rows.some((r) =>
-    String(r.cells.code ?? "").startsWith("SKU-")
+    String(r.cells.code ?? "").startsWith("SPU-")
   ),
-  "products uses SKU codes"
+  "products list uses SPU codes"
 )
 assert(
   MASTER_DATA_FIXTURES.suppliers.rows.some((r) =>
