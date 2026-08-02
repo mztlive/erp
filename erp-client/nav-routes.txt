@@ -8,6 +8,7 @@ WORKSPACE_NAV_GROUPS hrefs:
  - /procurement/orders
  - /fulfillment
  - /inventory
+ - /procurement/supplier-catalog
  - /finance/customer-accounts
  - /finance/supplier-accounts
  - /finance/card-funds-review
@@ -25,7 +26,6 @@ WORKSPACE_NAV_GROUPS hrefs:
  - /commerce/execution-projections
  - /commerce/consumption-orders
  - /supplier-api/connections
- - /supplier-api/catalog
  - /supplier-api/orders
  - /supplier-api/settlements
  - /governance/mall-sync
@@ -56,7 +56,7 @@ Registry navHrefs:
  - W18: /governance/imports
  - W19: /system/access-audit
  - W20: /supplier-api/connections
- - W21: /supplier-api/catalog
+ - W21: /procurement/supplier-catalog
  - W22: /commerce/publications
  - W23: /commerce/execution-projections
  - W24: /governance/ownership-migrations

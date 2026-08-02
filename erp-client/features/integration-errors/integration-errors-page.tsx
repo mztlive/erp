@@ -1388,7 +1388,7 @@ export function IntegrationErrorsPage({
                             ? "不展示密钥或完整签名材料。"
                             : item.classification.errorClass ===
                                 "parameter-or-mapping"
-                              ? "请先到外部商品供给/商城同步修复映射。"
+                              ? "请先到供应商商品库/商城同步修复映射。"
                               : "请进入供应商订单售后/补偿路径。"}
                         </AlertDescription>
                       </Alert>

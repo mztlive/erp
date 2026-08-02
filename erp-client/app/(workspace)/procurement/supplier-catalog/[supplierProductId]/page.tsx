@@ -1,18 +1,18 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { ExternalProductCenterPage } from "@/features/external-product-supply/external-product-center-page"
+import { SupplierProductCenterPage } from "@/features/supplier-catalog/supplier-product-center-page"
 
 export const metadata: Metadata = {
-  title: "外部商品与供给详情",
+  title: "供应商商品与供给详情",
 }
 
 export default async function Page({
   params,
 }: {
-  params: Promise<{ externalProductId: string }>
+  params: Promise<{ supplierProductId: string }>
 }) {
-  const { externalProductId } = await params
+  const { supplierProductId } = await params
   return (
     <Suspense
       fallback={
@@ -22,7 +22,7 @@ export default async function Page({
         </div>
       }
     >
-      <ExternalProductCenterPage externalProductId={externalProductId} />
+      <SupplierProductCenterPage supplierProductId={supplierProductId} />
     </Suspense>
   )
 }

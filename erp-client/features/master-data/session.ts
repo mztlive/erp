@@ -100,6 +100,52 @@ function productSnapshot(fields: ProductFields): ProductDetailView {
   })
 }
 
+/**
+ * W14 owns the stable company SKU identity. The supplier catalog may only
+ * reference this ID; it must never invent a second company SKU identity.
+ */
+function withStableSkuIds(
+  fields: ProductFields,
+  stableProductId: string,
+  previous?: ProductDetailView,
+): ProductFields {
+  const previousIds = new Map(
+    (previous?.skus ?? [])
+      .filter((sku) => Boolean(sku.skuId))
+      .map((sku) => [sku.skuNo, sku.skuId!]),
+  )
+  const usedIds = new Set(
+    fields.skus.flatMap((sku) => (sku.skuId ? [sku.skuId] : [])),
+  )
+  return {
+    ...fields,
+    skus: fields.skus.map((sku, index) => {
+      const previousId = previousIds.get(sku.skuNo)
+      if (sku.skuId || previousId) {
+        const skuId = sku.skuId ?? previousId!
+        usedIds.add(skuId)
+        return { ...sku, skuId }
+      }
+
+      const identitySuffix =
+        sku.skuNo
+          .trim()
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "_")
+          .replace(/^_+|_+$/g, "") || String(index + 1).padStart(2, "0")
+      const baseId = `${stableProductId}_sku_${identitySuffix}`
+      let skuId = baseId
+      let collision = 2
+      while (usedIds.has(skuId)) {
+        skuId = `${baseId}_${collision}`
+        collision += 1
+      }
+      usedIds.add(skuId)
+      return { ...sku, skuId }
+    }),
+  }
+}
+
 function listKey(resource: MasterDataResource, stableId: string) {
   return `${resource}:${stableId}`
 }
@@ -224,10 +270,13 @@ export function createW14Object(
   const recordedAt = new Date().toISOString()
   const effectiveFrom = input.effectiveFrom
 
-  const productFields =
+  const submittedProductFields =
     input.resource === "products"
       ? (input.fields as ProductFields)
       : undefined
+  const productFields = submittedProductFields
+    ? withStableSkuIds(submittedProductFields, stableId)
+    : undefined
   const categoryFields =
     input.resource === "categories"
       ? (input.fields as CategoryFields)
@@ -443,10 +492,13 @@ export function reviseW14Object(
 
   const nameSnapshot = input.name.trim()
   const changeReason = input.changeReason.trim()
-  const productFields =
+  const submittedProductFields =
     input.resource === "products"
       ? (input.fields as ProductFields)
       : undefined
+  const productFields = submittedProductFields
+    ? withStableSkuIds(submittedProductFields, input.stableId, center.productDetail)
+    : undefined
   const categoryFields =
     input.resource === "categories"
       ? (input.fields as CategoryFields)

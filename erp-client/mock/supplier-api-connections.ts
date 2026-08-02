@@ -21,7 +21,7 @@ import {
 } from "@/features/supplier-api-connections/types"
 
 const PRODUCT_LEVEL_NOTE =
-  "连接级能力声明 ≠ 每个商品可用；商品/供给/发布级能力见外部商品供给 / 商品发布"
+  "连接级能力声明 ≠ 每个商品可用；商品/供给/发布级能力见供应商商品库 / 商品发布"
 
 function cap(
   code: CapabilityCode,
@@ -222,7 +222,7 @@ export const SEED_CONNECTIONS: SeedConnection[] = [
         auditNo: "AUD-W20-7602",
       },
     ],
-    nextStep: "运行正常 · 可进入外部商品供给查看目录",
+    nextStep: "运行正常 · 可进入供应商商品库查看目录",
   },
   {
     connectionId: "conn_sf_stg",
@@ -426,7 +426,7 @@ export const SEED_CONNECTIONS: SeedConnection[] = [
       activeSyncJobs: 0,
     },
     auditEvents: [],
-    nextStep: "运行正常 · 可进入外部商品供给查看目录",
+    nextStep: "运行正常 · 可进入供应商商品库查看目录",
   },
   {
     connectionId: "conn_elm_prod",
@@ -507,7 +507,7 @@ export const SEED_CONNECTIONS: SeedConnection[] = [
         severity: "warning",
         title: "商品目录同步时间陈旧",
         description:
-          "连接状态与目录同步时间分开展示。可触发目录同步（后台任务）或进入外部商品供给查看。",
+          "连接状态与目录同步时间分开展示。可触发目录同步（后台任务）或进入供应商商品库查看。",
       },
     ],
   },

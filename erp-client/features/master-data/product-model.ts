@@ -191,7 +191,7 @@ export function validateProductFields(fields: ProductFields): string | null {
       return `启用中的 SKU「${sku.skuNo}」必须上传主图`
     }
     const moneyFields: Array<[string, string | undefined]> = [
-      ["参考销售价", sku.salePrice],
+      ["销售可见价", sku.salePrice],
       ["市场价", sku.marketPrice],
     ]
     try {

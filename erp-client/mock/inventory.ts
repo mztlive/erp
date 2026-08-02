@@ -716,7 +716,7 @@ export const INVENTORY_EXCLUDED_FULFILLMENT_KINDS = [
   {
     kind: "SUPPLIER_DIRECT",
     label: "供应商直发",
-    reason: "外部供给进入外部商品供给，不与自有库存合并。",
+    reason: "外部供给进入供应商商品库，不与自有库存合并。",
   },
   {
     kind: "ELECTRONIC",

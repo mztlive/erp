@@ -174,7 +174,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     businessObject: {
       objectType: "external_product",
       objectId: "ep_jd_8821",
-      title: "京东外部商品 EP-JD-8821",
+      title: "京东供应商商品 EP-JD-8821",
     },
     classification: {
       code: "PARAMETER_OR_MAPPING",
@@ -223,7 +223,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       {
         action: "REPLAY_ORIGINAL",
         code: "MAPPING_BROKEN",
-        message: "映射错误禁止自动重试相同参数；请先在外部商品供给/商城同步修复",
+        message: "映射错误禁止自动重试相同参数；请先在供应商商品库/商城同步修复",
       },
       {
         action: "QUERY_ORIGINAL_RESULT",
@@ -239,8 +239,8 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     repairLinks: [
       {
         workspaceId: "W21",
-        label: "外部商品供给映射",
-        href: "/supplier-api/catalog?changeType=ERROR&q=EP-JD-8821",
+        label: "供应商商品库映射",
+        href: "/procurement/supplier-catalog?changeType=ERROR&q=EP-JD-8821",
       },
       {
         workspaceId: "W17",
@@ -784,7 +784,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       {
         workspaceId: "W21",
         label: "W21 映射修复",
-        href: "/supplier-api/catalog?q=MOF-77801",
+        href: "/procurement/supplier-catalog?q=MOF-77801",
       },
     ],
     resolutionEvidencePolicy: {

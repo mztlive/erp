@@ -1,23 +1,29 @@
 /**
- * 外部商品供给映射与供给 · 静态种子。
+ * 供应商商品库、公司 SKU 映射与供给 · 静态种子。
  * 会话覆盖（领取、暂挂、终结、草稿）在 api / session-state 中投影。
  */
 
 import type {
-  ExternalCatalogItemView,
-  ExternalProductRevisionView,
+  SupplierCatalogItemView,
+  SupplierProductRevisionView,
   PublicationImpactView,
   SupplierOfferingRevisionView,
-} from "@/features/external-product-supply/types"
+} from "@/features/supplier-catalog/types"
 import {
   REGISTRATION_BLOCKER_MESSAGE,
   RECOVERY_BLOCKER_MESSAGE,
-} from "@/features/external-product-supply/types"
+} from "@/features/supplier-catalog/types"
 
-function rev(
-  partial: ExternalProductRevisionView
-): ExternalProductRevisionView {
-  return partial
+type SupplierProductRevisionSeed = Omit<
+  SupplierProductRevisionView,
+  "sourceQuotedPriceGross"
+> & {
+  supplyPriceGross: string | null
+}
+
+function rev(partial: SupplierProductRevisionSeed): SupplierProductRevisionView {
+  const { supplyPriceGross, ...rest } = partial
+  return { ...rest, sourceQuotedPriceGross: supplyPriceGross }
 }
 
 type OfferingSeed = Omit<
@@ -72,6 +78,20 @@ const noPause: PublicationImpactView = {
   note: "尚无在售发布绑定。",
 }
 
+function poolEntryForSku(
+  skuId: string,
+  salesVisiblePrice: string,
+  status: "ACTIVE" | "PAUSED" = "ACTIVE"
+) {
+  return {
+    poolEntryId: `pool_${skuId}`,
+    poolEntryRevisionId: `pool_${skuId}_r1`,
+    status,
+    salesVisiblePrice,
+    validFrom: "2026-01-01",
+  } as const
+}
+
 const skuCandidatesCommon = [
   {
     skuId: "sku_ny_box_01",
@@ -94,12 +114,12 @@ const skuCandidatesCommon = [
 ]
 
 /** ERROR · 已注册 BUSINESS_EXCEPTION */
-export const SEED_ERROR: ExternalCatalogItemView = {
+export const SEED_ERROR: SupplierCatalogItemView = {
   changeType: "ERROR",
   workItem: {
     workItemId: "wi_ext_err_01",
     workItemType: "BUSINESS_EXCEPTION",
-    businessObjectType: "SUPPLIER_EXTERNAL_PRODUCT",
+    businessObjectType: "SUPPLIER_CATALOG_SKU",
     subjectVersion: "sv_ext_err_01_v1",
     subjectHash: "sha256:ext_err_01_rev19",
     workItemStatus: "PENDING",
@@ -122,18 +142,22 @@ export const SEED_ERROR: ExternalCatalogItemView = {
     reason: "来源规格字段缺失且价格口径异常，无法形成结构化白名单字段",
     impact: "不进入商品与发布；可退回技术/数据修复",
     priority: 95,
-    handlerKey: "ExternalCatalogErrorHandler",
+    handlerKey: "SupplierCatalogErrorHandler",
   },
-  externalProduct: {
+  supplierProduct: {
     id: "ep_err_01",
     supplier: { id: "sup_jd", name: "京东企业购" },
-    connection: { id: "conn_jd_01", code: "JD-CATALOG" },
-    externalProductId: "EXT-ERR-4410",
-    externalSkuId: "E-SKU-4410",
+    source: {
+      type: "API",
+      label: "API 同步",
+      connection: { id: "conn_jd_01", code: "JD-CATALOG" },
+    },
+    supplierSpuCode: "EXT-ERR-4410",
+    supplierSkuCode: "E-SKU-4410",
     status: "ERROR",
     currentRevision: rev({
       revisionNo: 18,
-      externalRevisionToken: "src_tok_18",
+      sourceRevisionToken: "src_tok_18",
       sourceUpdatedAt: "2026-07-28T10:00:00+08:00",
       syncedAt: "2026-07-28T10:05:00+08:00",
       name: "办公椅 · 残缺记录",
@@ -151,7 +175,7 @@ export const SEED_ERROR: ExternalCatalogItemView = {
     }),
     incomingRevision: rev({
       revisionNo: 19,
-      externalRevisionToken: "src_tok_19",
+      sourceRevisionToken: "src_tok_19",
       sourceUpdatedAt: "2026-08-01T08:10:00+08:00",
       syncedAt: "2026-08-01T08:12:00+08:00",
       name: "办公椅 · 残缺记录",
@@ -178,9 +202,9 @@ export const SEED_ERROR: ExternalCatalogItemView = {
     revisionHistory: [],
   },
   publicationImpact: noPause,
-  syncContext: {
-    jobId: "sync_job_8821",
-    sourceBatchIdentity: "batch:jd:20260801-0812",
+  sourceContext: {
+    intakeId: "sync_job_8821",
+    sourceReference: "batch:jd:20260801-0812",
     receivedAt: "2026-08-01T08:12:00+08:00",
   },
   sourceDiff: [
@@ -217,12 +241,12 @@ export const SEED_ERROR: ExternalCatalogItemView = {
 }
 
 /** STOPPED · 已注册异常 + 安全暂停 + 恢复责任阻断 */
-export const SEED_STOPPED: ExternalCatalogItemView = {
+export const SEED_STOPPED: SupplierCatalogItemView = {
   changeType: "STOPPED",
   workItem: {
     workItemId: "wi_ext_stop_01",
     workItemType: "BUSINESS_EXCEPTION",
-    businessObjectType: "SUPPLIER_EXTERNAL_PRODUCT",
+    businessObjectType: "SUPPLIER_CATALOG_SKU",
     subjectVersion: "sv_ext_stop_01_v2",
     subjectHash: "sha256:ext_stop_01_rev22",
     workItemStatus: "PENDING",
@@ -248,18 +272,22 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
     reason: "供应商停止供应；系统已安全暂停全部受影响在售发布",
     impact: "不可下单；历史订单记录保留；不得选定替代或恢复发布",
     priority: 100,
-    handlerKey: "ExternalCatalogStopSupplyHandler",
+    handlerKey: "SupplierCatalogStopSupplyHandler",
   },
-  externalProduct: {
+  supplierProduct: {
     id: "ep_stop_01",
     supplier: { id: "sup_jd", name: "京东企业购" },
-    connection: { id: "conn_jd_01", code: "JD-CATALOG" },
-    externalProductId: "EXT-SKU-8801",
-    externalSkuId: "E-SKU-8801",
+    source: {
+      type: "API",
+      label: "API 同步",
+      connection: { id: "conn_jd_01", code: "JD-CATALOG" },
+    },
+    supplierSpuCode: "EXT-SKU-8801",
+    supplierSkuCode: "E-SKU-8801",
     status: "STOPPED",
     currentRevision: rev({
       revisionNo: 21,
-      externalRevisionToken: "src_tok_21",
+      sourceRevisionToken: "src_tok_21",
       sourceUpdatedAt: "2026-07-20T14:00:00+08:00",
       syncedAt: "2026-07-20T14:02:00+08:00",
       name: "礼盒红茶 250g 铁罐装",
@@ -279,7 +307,7 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
     }),
     incomingRevision: rev({
       revisionNo: 22,
-      externalRevisionToken: "src_tok_22",
+      sourceRevisionToken: "src_tok_22",
       sourceUpdatedAt: "2026-08-01T07:00:00+08:00",
       syncedAt: "2026-08-01T07:01:00+08:00",
       name: "礼盒红茶 250g 铁罐装",
@@ -409,6 +437,7 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
       }),
     ],
   },
+  poolEntry: poolEntryForSku("sku_tea_04", "98.00", "PAUSED"),
   publicationImpact: pauseBase(
     ["STOPPED"],
     [
@@ -428,9 +457,9 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
       },
     ]
   ),
-  syncContext: {
-    jobId: "sync_job_8800",
-    sourceBatchIdentity: "batch:jd:20260801-0701",
+  sourceContext: {
+    intakeId: "sync_job_8800",
+    sourceReference: "batch:jd:20260801-0701",
     receivedAt: "2026-08-01T07:01:00+08:00",
   },
   sourceDiff: [
@@ -470,23 +499,27 @@ export const SEED_STOPPED: ExternalCatalogItemView = {
 }
 
 /** NEW · 类型未登记 fail-closed */
-export const SEED_NEW: ExternalCatalogItemView = {
+export const SEED_NEW: SupplierCatalogItemView = {
   changeType: "NEW",
   registrationBlocker: {
     code: "WORK_ITEM_TYPE_UNREGISTERED",
     message: REGISTRATION_BLOCKER_MESSAGE,
     businessProcess: "MAPPING",
   },
-  externalProduct: {
+  supplierProduct: {
     id: "ep_new_01",
     supplier: { id: "sup_jd", name: "京东企业购" },
-    connection: { id: "conn_jd_01", code: "JD-CATALOG" },
-    externalProductId: "EXT-SKU-9912",
-    externalSkuId: "E-SKU-9912",
+    source: {
+      type: "API",
+      label: "API 同步",
+      connection: { id: "conn_jd_01", code: "JD-CATALOG" },
+    },
+    supplierSpuCode: "EXT-SKU-9912",
+    supplierSkuCode: "E-SKU-9912",
     status: "OBSERVED",
     currentRevision: rev({
       revisionNo: 1,
-      externalRevisionToken: "src_tok_1",
+      sourceRevisionToken: "src_tok_1",
       sourceUpdatedAt: "2026-08-01T09:00:00+08:00",
       syncedAt: "2026-08-01T09:05:00+08:00",
       name: "坚果礼盒 A 款",
@@ -528,9 +561,9 @@ export const SEED_NEW: ExternalCatalogItemView = {
     },
   },
   publicationImpact: noPause,
-  syncContext: {
-    jobId: "sync_job_8910",
-    sourceBatchIdentity: "batch:jd:20260801-0905",
+  sourceContext: {
+    intakeId: "sync_job_8910",
+    sourceReference: "batch:jd:20260801-0905",
     receivedAt: "2026-08-01T09:05:00+08:00",
   },
   sourceDiff: [
@@ -578,23 +611,27 @@ export const SEED_NEW: ExternalCatalogItemView = {
 }
 
 /** CHANGED · 供货价变化 · 安全暂停 · 类型未登记 */
-export const SEED_CHANGED_PRICE: ExternalCatalogItemView = {
+export const SEED_CHANGED_PRICE: SupplierCatalogItemView = {
   changeType: "CHANGED",
   registrationBlocker: {
     code: "WORK_ITEM_TYPE_UNREGISTERED",
     message: REGISTRATION_BLOCKER_MESSAGE,
     businessProcess: "OFFERING_REVIEW",
   },
-  externalProduct: {
+  supplierProduct: {
     id: "ep_chg_01",
     supplier: { id: "sup_sn", name: "苏宁企业购" },
-    connection: { id: "conn_sn_02", code: "SN-CATALOG" },
-    externalProductId: "EXT-SKU-5502",
-    externalSkuId: "E-SKU-5502",
+    source: {
+      type: "API",
+      label: "API 同步",
+      connection: { id: "conn_sn_02", code: "SN-CATALOG" },
+    },
+    supplierSpuCode: "EXT-SKU-5502",
+    supplierSkuCode: "E-SKU-5502",
     status: "OBSERVED",
     currentRevision: rev({
       revisionNo: 7,
-      externalRevisionToken: "src_sn_7",
+      sourceRevisionToken: "src_sn_7",
       sourceUpdatedAt: "2026-07-15T11:00:00+08:00",
       syncedAt: "2026-07-15T11:03:00+08:00",
       name: "商务保温杯 500ml",
@@ -612,7 +649,7 @@ export const SEED_CHANGED_PRICE: ExternalCatalogItemView = {
     }),
     incomingRevision: rev({
       revisionNo: 8,
-      externalRevisionToken: "src_sn_8",
+      sourceRevisionToken: "src_sn_8",
       sourceUpdatedAt: "2026-08-01T10:20:00+08:00",
       syncedAt: "2026-08-01T10:22:00+08:00",
       name: "商务保温杯 500ml",
@@ -735,6 +772,7 @@ export const SEED_CHANGED_PRICE: ExternalCatalogItemView = {
       sessionDraftOnly: true,
     },
   },
+  poolEntry: poolEntryForSku("sku_cup_01", "128.00", "PAUSED"),
   publicationImpact: {
     ...pauseBase(
       ["COST_CHANGE_UNCONFIRMED"],
@@ -753,9 +791,9 @@ export const SEED_CHANGED_PRICE: ExternalCatalogItemView = {
     historicalPaidOrderCount: 48,
     note: "供货价或费用变化尚未确认，相关商城商品已暂停销售。确认新的供货条件后也不会自动恢复销售；商城销售价不会随供货价自动变更，最小起订量也不会复制为商城最小购买量。",
   },
-  syncContext: {
-    jobId: "sync_job_9012",
-    sourceBatchIdentity: "batch:sn:20260801-1022",
+  sourceContext: {
+    intakeId: "sync_job_9012",
+    sourceReference: "batch:sn:20260801-1022",
     receivedAt: "2026-08-01T10:22:00+08:00",
   },
   sourceDiff: [
@@ -808,23 +846,27 @@ export const SEED_CHANGED_PRICE: ExternalCatalogItemView = {
 }
 
 /** CHANGED · 零库存安全暂停（无任务，仅证据） */
-export const SEED_CHANGED_STOCK: ExternalCatalogItemView = {
+export const SEED_CHANGED_STOCK: SupplierCatalogItemView = {
   changeType: "CHANGED",
   registrationBlocker: {
     code: "WORK_ITEM_TYPE_UNREGISTERED",
     message: REGISTRATION_BLOCKER_MESSAGE,
     businessProcess: "OFFERING_REVIEW",
   },
-  externalProduct: {
+  supplierProduct: {
     id: "ep_stk_01",
     supplier: { id: "sup_sn", name: "苏宁企业购" },
-    connection: { id: "conn_sn_02", code: "SN-CATALOG" },
-    externalProductId: "EXT-SKU-3300",
-    externalSkuId: "E-SKU-3300",
+    source: {
+      type: "API",
+      label: "API 同步",
+      connection: { id: "conn_sn_02", code: "SN-CATALOG" },
+    },
+    supplierSpuCode: "EXT-SKU-3300",
+    supplierSkuCode: "E-SKU-3300",
     status: "OBSERVED",
     currentRevision: rev({
       revisionNo: 4,
-      externalRevisionToken: "src_sn_st_4",
+      sourceRevisionToken: "src_sn_st_4",
       sourceUpdatedAt: "2026-07-30T16:00:00+08:00",
       syncedAt: "2026-07-30T16:01:00+08:00",
       name: "无线键鼠套装",
@@ -842,7 +884,7 @@ export const SEED_CHANGED_STOCK: ExternalCatalogItemView = {
     }),
     incomingRevision: rev({
       revisionNo: 5,
-      externalRevisionToken: "src_sn_st_5",
+      sourceRevisionToken: "src_sn_st_5",
       sourceUpdatedAt: "2026-08-01T11:00:00+08:00",
       syncedAt: "2026-08-01T11:01:00+08:00",
       name: "无线键鼠套装",
@@ -922,6 +964,7 @@ export const SEED_CHANGED_STOCK: ExternalCatalogItemView = {
       }),
     ],
   },
+  poolEntry: poolEntryForSku("sku_kb_01", "168.00", "PAUSED"),
   publicationImpact: {
     ...pauseBase(
       ["ZERO_INVENTORY"],
@@ -942,9 +985,9 @@ export const SEED_CHANGED_STOCK: ExternalCatalogItemView = {
     },
     note: "可供数量为零，相关商城商品已暂停销售。供应商恢复供货后也不会自动重新上架。",
   },
-  syncContext: {
-    jobId: "sync_job_9100",
-    sourceBatchIdentity: "batch:sn:20260801-1101",
+  sourceContext: {
+    intakeId: "sync_job_9100",
+    sourceReference: "batch:sn:20260801-1101",
     receivedAt: "2026-08-01T11:01:00+08:00",
   },
   sourceDiff: [
@@ -984,7 +1027,7 @@ type ActiveSupplySeedInput = {
   supplierName: string
   connectionId: string
   connectionCode: string
-  externalSkuId: string
+  supplierSkuCode: string
   externalName: string
   category: string
   skuId: string
@@ -995,12 +1038,13 @@ type ActiveSupplySeedInput = {
   baseUnit: string
   priceGross: string
   priceNet: string
+  salesVisiblePrice: string
   minimumOrderQuantity: string
   supplyRegion: string[]
 }
 
 /** 已生效供给用于商品中心关系视图；正常数据不进入待处理队列。 */
-function activeSupplySeed(input: ActiveSupplySeedInput): ExternalCatalogItemView {
+function activeSupplySeed(input: ActiveSupplySeedInput): SupplierCatalogItemView {
   const offeringId = `off_${input.id}`
   const revision = offering({
     offeringId,
@@ -1023,16 +1067,20 @@ function activeSupplySeed(input: ActiveSupplySeedInput): ExternalCatalogItemView
 
   return {
     changeType: "UNCHANGED",
-    externalProduct: {
+    supplierProduct: {
       id: input.id,
       supplier: { id: input.supplierId, name: input.supplierName },
-      connection: { id: input.connectionId, code: input.connectionCode },
-      externalProductId: `EXT-${input.externalSkuId}`,
-      externalSkuId: input.externalSkuId,
+      source: {
+        type: "API",
+        label: "API 同步",
+        connection: { id: input.connectionId, code: input.connectionCode },
+      },
+      supplierSpuCode: `EXT-${input.supplierSkuCode}`,
+      supplierSkuCode: input.supplierSkuCode,
       status: "ACTIVE",
       currentRevision: rev({
         revisionNo: 1,
-        externalRevisionToken: `src_${input.id}_1`,
+        sourceRevisionToken: `src_${input.id}_1`,
         sourceUpdatedAt: "2026-08-01T08:00:00+08:00",
         syncedAt: "2026-08-01T08:02:00+08:00",
         name: input.externalName,
@@ -1078,14 +1126,15 @@ function activeSupplySeed(input: ActiveSupplySeedInput): ExternalCatalogItemView
       currentRevision: revision,
       revisionHistory: [revision],
     },
+    poolEntry: poolEntryForSku(input.skuId, input.salesVisiblePrice),
     publicationImpact: {
       ...noPause,
       activePublicationCount: 1,
       note: "当前供给关系有效；商城销售价与最小购买量仍由销售发布独立维护。",
     },
-    syncContext: {
-      jobId: `sync_${input.id}`,
-      sourceBatchIdentity: `batch:${input.connectionCode.toLowerCase()}:20260801`,
+    sourceContext: {
+      intakeId: `sync_${input.id}`,
+      sourceReference: `batch:${input.connectionCode.toLowerCase()}:20260801`,
       receivedAt: "2026-08-01T08:02:00+08:00",
     },
     sourceDiff: [],
@@ -1102,7 +1151,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     supplierName: "鲜果直供供应链",
     connectionId: "conn_fresh_01",
     connectionCode: "FRESH-CATALOG",
-    externalSkuId: "FRESH-NY-CLASSIC",
+    supplierSkuCode: "FRESH-NY-CLASSIC",
     externalName: "新春坚果礼盒典藏装",
     category: "礼盒",
     skuId: "sku_ny_box_01",
@@ -1113,6 +1162,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "套",
     priceGross: "118.00",
     priceNet: "104.42",
+    salesVisiblePrice: "168.00",
     minimumOrderQuantity: "10",
     supplyRegion: ["华东", "华北"],
   }),
@@ -1122,7 +1172,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     supplierName: "鲜果直供供应链",
     connectionId: "conn_fresh_01",
     connectionCode: "FRESH-CATALOG",
-    externalSkuId: "FRESH-NY-LITE",
+    supplierSkuCode: "FRESH-NY-LITE",
     externalName: "新春坚果礼盒轻享装",
     category: "礼盒",
     skuId: "sku_ny_box_02",
@@ -1133,6 +1183,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "套",
     priceGross: "82.00",
     priceNet: "72.57",
+    salesVisiblePrice: "128.00",
     minimumOrderQuantity: "20",
     supplyRegion: ["华东", "华南"],
   }),
@@ -1142,7 +1193,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     supplierName: "鲜果直供供应链",
     connectionId: "conn_fresh_01",
     connectionCode: "FRESH-CATALOG",
-    externalSkuId: "FRESH-TEA-100-PAPER",
+    supplierSkuCode: "FRESH-TEA-100-PAPER",
     externalName: "礼盒红茶 100g 纸盒装",
     category: "茶叶",
     skuId: "sku_tea_01",
@@ -1153,6 +1204,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "盒",
     priceGross: "42.00",
     priceNet: "37.17",
+    salesVisiblePrice: "58.00",
     minimumOrderQuantity: "12",
     supplyRegion: ["华东", "华南"],
   }),
@@ -1162,7 +1214,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     supplierName: "鲜果直供供应链",
     connectionId: "conn_fresh_01",
     connectionCode: "FRESH-CATALOG",
-    externalSkuId: "FRESH-TEA-100-TIN",
+    supplierSkuCode: "FRESH-TEA-100-TIN",
     externalName: "礼盒红茶 100g 铁罐装",
     category: "茶叶",
     skuId: "sku_tea_02",
@@ -1173,6 +1225,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "盒",
     priceGross: "49.00",
     priceNet: "43.36",
+    salesVisiblePrice: "68.00",
     minimumOrderQuantity: "12",
     supplyRegion: ["华东", "华南"],
   }),
@@ -1182,7 +1235,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     supplierName: "明前茶业供应链",
     connectionId: "conn_tea_01",
     connectionCode: "TEA-CATALOG",
-    externalSkuId: "TEA-250-PAPER",
+    supplierSkuCode: "TEA-250-PAPER",
     externalName: "精选红茶 250g 礼盒",
     category: "茶叶",
     skuId: "sku_tea_03",
@@ -1193,6 +1246,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "盒",
     priceGross: "65.00",
     priceNet: "57.52",
+    salesVisiblePrice: "88.00",
     minimumOrderQuantity: "8",
     supplyRegion: ["全国"],
   }),
@@ -1202,7 +1256,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     supplierName: "明前茶业供应链",
     connectionId: "conn_tea_01",
     connectionCode: "TEA-CATALOG",
-    externalSkuId: "TEA-250-TIN",
+    supplierSkuCode: "TEA-250-TIN",
     externalName: "精选红茶 250g 铁罐",
     category: "茶叶",
     skuId: "sku_tea_04",
@@ -1213,12 +1267,13 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "盒",
     priceGross: "72.00",
     priceNet: "63.72",
+    salesVisiblePrice: "98.00",
     minimumOrderQuantity: "8",
     supplyRegion: ["全国"],
   }),
 ] as const
 
-export const EXTERNAL_PRODUCT_SUPPLY_SEED: readonly ExternalCatalogItemView[] = [
+export const SUPPLIER_CATALOG_SEED: readonly SupplierCatalogItemView[] = [
   ...ACTIVE_PRODUCT_SUPPLY_SEEDS,
   SEED_STOPPED,
   SEED_ERROR,

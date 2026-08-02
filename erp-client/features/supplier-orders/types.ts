@@ -261,8 +261,8 @@ export type SupplierOrderItemView = {
   skuCode: string
   quantity: string
   unit: string
-  externalProductId: string
-  externalProductName: string
+  supplierProductId: string
+  supplierProductName: string
   publicationVersion: string
   supplyVersion: string
   /** 下单成本快照；无字段权限时为 null */

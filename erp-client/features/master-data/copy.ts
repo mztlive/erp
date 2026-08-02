@@ -123,7 +123,7 @@ export const masterDataCopy = {
   fCarouselImages: "轮播图",
   fDetailImages: "详情图",
   fCostPrice: "成本价",
-  fSalePrice: "销售价",
+  fSalePrice: "销售可见价",
   fMarketPrice: "市场价",
   fProductCode: "产品编码",
   fSpecName: "规格名",
@@ -138,11 +138,11 @@ export const masterDataCopy = {
   productCreateDesc:
     "以 SPU 维护商品，配置规格后组合生成 SKU。主图在 SKU；轮播图与详情图在商品（SPU）。保存后进入同一详情页继续维护。",
   productEditDesc:
-    "详情页可直接修改并保存：保存即生成新版本。规格取值变更会重建 SKU 组合，已有主图和参考价格尽量按规格匹配保留。",
+    "详情页可直接修改并保存：保存即生成新版本。规格取值变更会重建 SKU 组合，已有主图和商品池价格尽量按规格匹配保留。",
   productSpecsHint:
     "添加规格维度（如颜色、规格），填写取值后自动组合出 SKU。无规格时保留一个默认 SKU。",
   productSkuHint:
-    "SKU 只维护身份、主图与参考售价；供应商、供给方式、成本、税费和起订量在 W21 独立维护，库存由库存台账独立维护。",
+    "销售可见价属于公司商品池；每个 SKU 可关联多家供应商，采购成本、供给方式、税费和起订量按供应商供给版本在 W21 独立维护。",
   productAddSpec: "添加规格",
   productRemoveSpec: "移除规格",
   productRebuildSkus: "按规格重新生成 SKU",
@@ -174,8 +174,8 @@ export const masterDataCopy = {
   categoryColKind: "适用类型",
   brandListHint: "品牌字典供商品与 SKU 下拉选用；停用不删除历史引用。",
   fDescription: "类目描述",
-  fRefSupplier: "参考供应商",
-  fRefCost: "参考含税成本",
+  fSalesVisiblePrice: "销售可见价",
+  fSupplierCount: "可供供应商数",
   fRegion: "服务区域",
   fLeadTime: "交期",
   fFulfillmentModes: "允许履约方式",

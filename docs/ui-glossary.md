@@ -65,8 +65,8 @@
 | 任务仍在有效队列（PENDING） | `integration-errors/api.ts:799` | 任务仍在待处理列表，可稍后继续 |
 | 租约无效，请重新领取 | `fulfillment-operations/api.ts:944`、`procurement-confirmation/api.ts:322` | 操作已失效，请重新领取 |
 | fail-closed（用户可见） | 商品发布、权限审计等 | 结果未确认前禁止… / 按保守策略拒绝 |
-| subject_hash / 当前 subject_hash（UI 标签） | 卡券复核、外部商品 | 数据版本 |
-| mappingTaskStatus / catalog_sync_job 等字段名 | 商城同步、供应商 API | 业务中文描述 |
+| subject_hash / 当前 subject_hash（UI 标签） | 卡券复核、供应商商品 | 数据版本 |
+| mappingTaskStatus / supplier_catalog_intake_batch 等字段名 | 商城同步、供应商商品库 | 业务中文描述 |
 | Wxx 工作面编号（面向业务用户的提示） | 各页 mock / api message | 页面中文名（客户往来、接口错误中心…） |
 
 ### P2 · 长尾（批量替换）

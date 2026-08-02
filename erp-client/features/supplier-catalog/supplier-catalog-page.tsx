@@ -56,26 +56,32 @@ import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
   DemoRole,
-  ExternalCatalogItemView,
+  SupplierCatalogItemView,
+  SupplierCatalogQueueQuery,
+  SupplierCatalogSourceType,
   FormalOutcome,
-} from "@/features/external-product-supply/types"
+} from "@/features/supplier-catalog/types"
 import {
   CHANGE_TYPE_LABEL,
   HOLD_REASON_OPTIONS,
   RETURN_REASON_OPTIONS,
-} from "@/features/external-product-supply/types"
+} from "@/features/supplier-catalog/types"
 import {
-  useClaimExternalCatalogMutation,
-  useCompleteExternalCatalogMutation,
-  useExternalCatalogActionMutation,
-  useExternalCatalogQueueQuery,
-  useResolveUnknownExternalCatalogMutation,
-  useSaveExternalCatalogDraftMutation,
-} from "@/features/external-product-supply/queries"
+  PromoteSupplierProductDialog,
+  SupplierCatalogIntakeDialog,
+} from "@/features/supplier-catalog/catalog-write-dialogs"
+import {
+  useClaimSupplierCatalogMutation,
+  useCompleteSupplierCatalogMutation,
+  useSupplierCatalogActionMutation,
+  useSupplierCatalogQueueQuery,
+  useResolveUnknownSupplierCatalogMutation,
+  useSaveSupplierCatalogDraftMutation,
+} from "@/features/supplier-catalog/queries"
 import {
   offeringStatusLabel,
   SupplyRelationshipListView,
-} from "@/features/external-product-supply/supply-relationship-list-view"
+} from "@/features/supplier-catalog/supply-relationship-list-view"
 import { cn } from "@/lib/utils"
 import { compareDecimal } from "@/lib/fixed-decimal"
 
@@ -208,13 +214,13 @@ function safetyReasonLabel(value: string) {
 }
 
 function isExceptionItem(
-  item: ExternalCatalogItemView
-): item is Extract<ExternalCatalogItemView, { changeType: "ERROR" | "STOPPED" }> {
+  item: SupplierCatalogItemView
+): item is Extract<SupplierCatalogItemView, { changeType: "ERROR" | "STOPPED" }> {
   return item.changeType === "ERROR" || item.changeType === "STOPPED"
 }
 
 function changeTone(
-  t: ExternalCatalogItemView["changeType"]
+  t: SupplierCatalogItemView["changeType"]
 ): "destructive" | "warning" | "info" | "neutral" {
   if (t === "STOPPED" || t === "ERROR") return "destructive"
   if (t === "CHANGED") return "warning"
@@ -224,15 +230,15 @@ function changeTone(
 
 function buildQueueReturnHref(searchParams: URLSearchParams) {
   const qs = searchParams.toString()
-  return qs ? `/supplier-api/catalog?${qs}` : "/supplier-api/catalog"
+  return qs ? `/procurement/supplier-catalog?${qs}` : "/procurement/supplier-catalog"
 }
 
-export function ExternalProductSupplyPage() {
+export function SupplierCatalogPage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const mode: "list" | "queue" =
-    searchParams.get("mode") === "list" ? "list" : "queue"
+    searchParams.get("mode") === "queue" ? "queue" : "list"
   const skuId = searchParams.get("skuId") ?? undefined
   const returnToParam = searchParams.get("returnTo")
   const safeReturnTo =
@@ -242,7 +248,7 @@ export function ExternalProductSupplyPage() {
       : undefined
 
   const changeTypeParam = searchParams.get("changeType")
-  const changeType: ExternalCatalogQueueQueryChangeType =
+  const changeType: SupplierCatalogQueueQueryChangeType =
     changeTypeParam === "NEW" ||
     changeTypeParam === "CHANGED" ||
     changeTypeParam === "STOPPED" ||
@@ -267,8 +273,15 @@ export function ExternalProductSupplyPage() {
 
   const maskCost = searchParams.get("maskCost") === "1"
   const q = searchParams.get("q") ?? undefined
-  const currentExternalProductId =
-    searchParams.get("currentExternalProductId") ?? undefined
+  const sourceTypeParam = searchParams.get("sourceType")
+  const sourceType: SupplierCatalogSourceType | "all" =
+    sourceTypeParam === "API" ||
+    sourceTypeParam === "EXCEL" ||
+    sourceTypeParam === "MANUAL"
+      ? sourceTypeParam
+      : "all"
+  const currentSupplierProductId =
+    searchParams.get("currentSupplierProductId") ?? undefined
   const currentWorkItemId =
     searchParams.get("currentWorkItemId") ?? undefined
   const queueContextId =
@@ -284,7 +297,7 @@ export function ExternalProductSupplyPage() {
         ? true
         : sessionAutoNext
 
-  const filters = React.useMemo(
+  const filters = React.useMemo<SupplierCatalogQueueQuery>(
     () => ({
       mode,
       skuId,
@@ -293,7 +306,8 @@ export function ExternalProductSupplyPage() {
       demoRole,
       maskCost,
       q,
-      currentExternalProductId,
+      sourceType,
+      currentSupplierProductId,
       currentWorkItemId,
       queueContextId,
     }),
@@ -305,18 +319,23 @@ export function ExternalProductSupplyPage() {
       demoRole,
       maskCost,
       q,
-      currentExternalProductId,
+      sourceType,
+      currentSupplierProductId,
       currentWorkItemId,
       queueContextId,
     ]
   )
 
-  const queueQuery = useExternalCatalogQueueQuery(filters)
-  const claimMutation = useClaimExternalCatalogMutation()
-  const actionMutation = useExternalCatalogActionMutation()
-  const completeMutation = useCompleteExternalCatalogMutation()
-  const saveDraftMutation = useSaveExternalCatalogDraftMutation()
-  const resolveUnknownMutation = useResolveUnknownExternalCatalogMutation()
+  const queueQuery = useSupplierCatalogQueueQuery(filters)
+  const claimMutation = useClaimSupplierCatalogMutation()
+  const actionMutation = useSupplierCatalogActionMutation()
+  const completeMutation = useCompleteSupplierCatalogMutation()
+  const saveDraftMutation = useSaveSupplierCatalogDraftMutation()
+  const resolveUnknownMutation = useResolveUnknownSupplierCatalogMutation()
+  const [excelImportOpen, setExcelImportOpen] = React.useState(false)
+  const [manualEntryOpen, setManualEntryOpen] = React.useState(false)
+  const [promotionItem, setPromotionItem] =
+    React.useState<SupplierCatalogItemView | undefined>()
 
   const view = queueQuery.data
   const items = React.useMemo(() => [...(view?.items ?? [])], [view?.items])
@@ -326,8 +345,8 @@ export function ExternalProductSupplyPage() {
       if (currentWorkItemId && isExceptionItem(i)) {
         return i.workItem.workItemId === currentWorkItemId
       }
-      if (currentExternalProductId) {
-        return i.externalProduct.id === currentExternalProductId
+      if (currentSupplierProductId) {
+        return i.supplierProduct.id === currentSupplierProductId
       }
       return false
     }) ??
@@ -339,7 +358,7 @@ export function ExternalProductSupplyPage() {
   const currentIndex = item
     ? Math.max(
         0,
-        items.findIndex((i) => i.externalProduct.id === item.externalProduct.id)
+        items.findIndex((i) => i.supplierProduct.id === item.supplierProduct.id)
       )
     : 0
   const completed = Boolean(view) && items.length === 0
@@ -378,7 +397,7 @@ export function ExternalProductSupplyPage() {
       if (!item?.offering?.proposedDefaults) return
       try {
         await saveDraftMutation.mutateAsync({
-          externalProductId: item.externalProduct.id,
+          supplierProductId: item.supplierProduct.id,
           selectedSkuId: selectedSkuId || undefined,
           offeringDraft: {
             supplyMode: value.supplyMode,
@@ -453,8 +472,8 @@ export function ExternalProductSupplyPage() {
     setSubstituteIds([])
     setActionError(null)
     idempotencyRef.current = {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅按外部商品身份重置草稿
-  }, [item?.externalProduct.id, skuId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅按供应商商品身份重置草稿
+  }, [item?.supplierProduct.id, skuId])
    
 
   // URL defaults
@@ -464,14 +483,14 @@ export function ExternalProductSupplyPage() {
     const hasChange = searchParams.has("changeType")
     const hasCtx = searchParams.has("queueContextId")
     const hasItem =
-      searchParams.has("currentExternalProductId") ||
+      searchParams.has("currentSupplierProductId") ||
       searchParams.has("currentWorkItemId")
     if (hasChange && hasCtx && (hasItem || items.length === 0)) return
     const params = new URLSearchParams(searchParams.toString())
     if (!hasChange) params.set("changeType", changeType)
     if (!hasCtx) params.set("queueContextId", queueContextId)
     if (!hasItem && item) {
-      params.set("currentExternalProductId", item.externalProduct.id)
+      params.set("currentSupplierProductId", item.supplierProduct.id)
       if (isExceptionItem(item)) {
         params.set("currentWorkItemId", item.workItem.workItemId)
       }
@@ -555,19 +574,19 @@ export function ExternalProductSupplyPage() {
   )
 
   const goToItem = React.useCallback(
-    (next: ExternalCatalogItemView | undefined | null) => {
+    (next: SupplierCatalogItemView | undefined | null) => {
       setLastResult(null)
       setActionError(null)
       if (!next) {
         replaceUrl({
-          currentExternalProductId: null,
+          currentSupplierProductId: null,
           currentWorkItemId: null,
           queueContextId,
         })
         return
       }
       replaceUrl({
-        currentExternalProductId: next.externalProduct.id,
+        currentSupplierProductId: next.supplierProduct.id,
         currentWorkItemId: isExceptionItem(next)
           ? next.workItem.workItemId
           : null,
@@ -617,8 +636,8 @@ export function ExternalProductSupplyPage() {
   const subjectHash = exceptionWorkItem?.subjectHash ?? ""
   const expectedRevision = item
     ? String(
-        item.externalProduct.incomingRevision?.revisionNo ??
-          item.externalProduct.currentRevision.revisionNo
+        item.supplierProduct.incomingRevision?.revisionNo ??
+          item.supplierProduct.currentRevision.revisionNo
       )
     : ""
 
@@ -795,13 +814,13 @@ export function ExternalProductSupplyPage() {
             decisionKind === "CONFIRM_ERROR_RESOLVED"
               ? {
                   kind: "CONFIRM_ERROR_RESOLVED",
-                  expectedExternalRevision: expectedRevision,
+                  expectedSourceRevision: expectedRevision,
                   resolutionCode: "SOURCE_FIXED",
                   comment: value.comment,
                 }
               : {
                   kind: "CONFIRM_STOP_SUPPLY",
-                  expectedExternalRevision: expectedRevision,
+                  expectedSourceRevision: expectedRevision,
                   expectedOfferingRevision: item.offering?.currentRevision
                     ? String(item.offering.currentRevision.revisionNo)
                     : undefined,
@@ -853,19 +872,19 @@ export function ExternalProductSupplyPage() {
   })
 
   const w14Href = item
-    ? `/master-data/products?from=W21&externalProductId=${encodeURIComponent(item.externalProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}&queueContextId=${encodeURIComponent(queueContextId)}`
+    ? `/master-data/products?from=W21&supplierProductId=${encodeURIComponent(item.supplierProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}&queueContextId=${encodeURIComponent(queueContextId)}`
     : "/master-data"
   const w22Href = item?.mapping?.skuId && item.offering?.currentRevision
-    ? `/commerce/publications?from=W21&skuId=${encodeURIComponent(item.mapping.skuId)}&supplierOfferingRevisionId=${encodeURIComponent(item.offering.currentRevision.offeringRevisionId)}&externalProductId=${encodeURIComponent(item.externalProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}&queueContextId=${encodeURIComponent(queueContextId)}`
+    ? `/commerce/publications?from=W21&skuId=${encodeURIComponent(item.mapping.skuId)}&supplierOfferingRevisionId=${encodeURIComponent(item.offering.currentRevision.offeringRevisionId)}&supplierProductId=${encodeURIComponent(item.supplierProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}&queueContextId=${encodeURIComponent(queueContextId)}`
     : "/commerce/publications"
-  const w20Href = item
-    ? `/supplier-api/connections?connectionId=${encodeURIComponent(item.externalProduct.connection.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
+  const w20Href = item?.supplierProduct.source.connection
+    ? `/supplier-api/connections?connectionId=${encodeURIComponent(item.supplierProduct.source.connection.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
     : "/supplier-api/connections"
   const w29Href = item
-    ? `/governance/integration-errors?from=W21&externalProductId=${encodeURIComponent(item.externalProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
+    ? `/governance/integration-errors?from=W21&supplierProductId=${encodeURIComponent(item.supplierProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
     : "/governance/integration-errors"
   const centerHref = item
-    ? `/supplier-api/catalog/${item.externalProduct.id}?section=overview&queueContextId=${encodeURIComponent(queueContextId)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
+    ? `/procurement/supplier-catalog/${item.supplierProduct.id}?section=overview&queueContextId=${encodeURIComponent(queueContextId)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
     : "#"
 
   const costMasked = view?.costFieldVisibility === "masked" || maskCost
@@ -887,7 +906,7 @@ export function ExternalProductSupplyPage() {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
-          title={mode === "list" ? "商品供给关系" : "供应商商品待处理"}
+          title={mode === "list" ? "供应商商品库" : "供应商商品待处理"}
           description="加载失败"
         />
         <Button type="button" onClick={() => void queueQuery.refetch()}>
@@ -899,35 +918,76 @@ export function ExternalProductSupplyPage() {
 
   if (mode === "list") {
     return (
-      <SupplyRelationshipListView
-        items={items}
-        skuId={skuId}
-        skuContext={view?.skuContext}
-        returnTo={safeReturnTo}
-        returnHref={buildQueueReturnHref(searchParams)}
-        updatedAt={context?.queueContextUpdatedAt}
-        costMasked={costMasked}
-        searchInput={searchInput}
-        onSearchInputChange={setSearchInput}
-        onSearch={() =>
-          replaceUrl({
-            q: searchInput.trim() || null,
-            currentExternalProductId: null,
-            currentWorkItemId: null,
-          })
-        }
-      />
+      <>
+        <SupplyRelationshipListView
+          items={items}
+          skuId={skuId}
+          skuContext={view?.skuContext}
+          returnTo={safeReturnTo}
+          returnHref={buildQueueReturnHref(searchParams)}
+          updatedAt={context?.queueContextUpdatedAt}
+          costMasked={costMasked}
+          searchInput={searchInput}
+          onSearchInputChange={setSearchInput}
+          onSearch={() =>
+            replaceUrl({
+              q: searchInput.trim() || null,
+              currentSupplierProductId: null,
+              currentWorkItemId: null,
+            })
+          }
+          sourceType={sourceType}
+          onSourceTypeChange={(next) =>
+            replaceUrl({
+              sourceType: next === "all" ? null : next,
+              currentSupplierProductId: null,
+            })
+          }
+          onOpenExcelImport={() => setExcelImportOpen(true)}
+          onOpenManualEntry={() => setManualEntryOpen(true)}
+          onPromote={setPromotionItem}
+        />
+        <SupplierCatalogIntakeDialog
+          open={excelImportOpen}
+          onOpenChange={setExcelImportOpen}
+          sourceType="EXCEL"
+        />
+        <SupplierCatalogIntakeDialog
+          open={manualEntryOpen}
+          onOpenChange={setManualEntryOpen}
+          sourceType="MANUAL"
+          fixedSku={
+            view?.skuContext
+              ? {
+                  skuId: view.skuContext.skuId,
+                  skuCode: view.skuContext.skuCode,
+                  skuName: view.skuContext.productName,
+                  specification: view.skuContext.specification,
+                  baseUnit: view.skuContext.baseUnit,
+                }
+              : undefined
+          }
+        />
+        <PromoteSupplierProductDialog
+          key={promotionItem?.supplierProduct.id ?? "promote-supplier-product"}
+          item={promotionItem}
+          open={Boolean(promotionItem)}
+          onOpenChange={(open) => {
+            if (!open) setPromotionItem(undefined)
+          }}
+        />
+      </>
     )
   }
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title="供应商商品待处理"
-        description="处理供应商新增商品、供货变化、停供和数据异常"
+        title="供应商商品变化待处理"
+        description="处理 Excel、API 与手工来源中的新增、关键变化、停供和数据异常"
         breadcrumbs={[
-          { id: "api", label: "供应商 API", href: "/supplier-api/catalog" },
-          { id: "cat", label: "供应商商品待处理", current: true },
+          { id: "catalog", label: "供应商商品库", href: "/procurement/supplier-catalog" },
+          { id: "queue", label: "来源变化待处理", current: true },
         ]}
         metadata={
           <DataFreshness
@@ -961,7 +1021,7 @@ export function ExternalProductSupplyPage() {
               onClick={() =>
                 replaceUrl({
                   skuId: null,
-                  currentExternalProductId: null,
+                  currentSupplierProductId: null,
                   currentWorkItemId: null,
                   queueContextId: null,
                 })
@@ -977,7 +1037,7 @@ export function ExternalProductSupplyPage() {
             const next = (v[0] as typeof changeType | undefined) ?? "actionable"
             replaceUrl({
               changeType: next === "actionable" ? "actionable" : next,
-              currentExternalProductId: null,
+              currentSupplierProductId: null,
               currentWorkItemId: null,
             })
           }}
@@ -999,7 +1059,7 @@ export function ExternalProductSupplyPage() {
             const next = (v[0] as typeof status | undefined) ?? "pending"
             replaceUrl({
               status: next === "pending" ? null : next,
-              currentExternalProductId: null,
+              currentSupplierProductId: null,
               currentWorkItemId: null,
             })
           }}
@@ -1030,7 +1090,7 @@ export function ExternalProductSupplyPage() {
             e.preventDefault()
             replaceUrl({
               q: searchInput.trim() || null,
-              currentExternalProductId: null,
+              currentSupplierProductId: null,
               currentWorkItemId: null,
             })
           }}
@@ -1146,8 +1206,8 @@ export function ExternalProductSupplyPage() {
                             neighbor(1) ??
                             items.find(
                               (i) =>
-                                i.externalProduct.id !==
-                                item?.externalProduct.id
+                                i.supplierProduct.id !==
+                                item?.supplierProduct.id
                             )
                           goToItem(next)
                         }}
@@ -1265,7 +1325,7 @@ export function ExternalProductSupplyPage() {
             </Button>
             <span className="text-muted-foreground">
               {CHANGE_TYPE_LABEL[item.changeType]} ·{" "}
-              {item.externalProduct.supplier.name}
+              {item.supplierProduct.supplier.name}
             </span>
           </div>
 
@@ -1279,7 +1339,7 @@ export function ExternalProductSupplyPage() {
                     tabIndex={-1}
                     className="font-heading text-lg font-semibold outline-none"
                   >
-                    {item.externalProduct.currentRevision.name}
+                    {item.supplierProduct.currentRevision.name}
                   </h2>
                   <BusinessStatusBadge
                     context="list"
@@ -1303,12 +1363,12 @@ export function ExternalProductSupplyPage() {
                   ) : null}
                 </div>
                 <p className="text-sm text-muted-foreground">
-                  供应商商品编码 {item.externalProduct.externalProductId}
-                  {item.externalProduct.externalSkuId
-                    ? ` / ${item.externalProduct.externalSkuId}`
+                  供应商商品编码 {item.supplierProduct.supplierSpuCode ?? "未提供 SPU"}
+                  {item.supplierProduct.supplierSkuCode
+                    ? ` / ${item.supplierProduct.supplierSkuCode}`
                     : ""}{" "}
-                  · 供应商 {item.externalProduct.supplier.name} · 最近更新{" "}
-                  {formatTime(item.syncContext.receivedAt)}
+                  · 供应商 {item.supplierProduct.supplier.name} · 最近更新{" "}
+                  {formatTime(item.sourceContext.receivedAt)}
                 </p>
               </div>
               <Button
@@ -1395,27 +1455,27 @@ export function ExternalProductSupplyPage() {
                         id: "name",
                         label: "名称",
                         value:
-                          item.externalProduct.incomingRevision?.name ??
-                          item.externalProduct.currentRevision.name,
+                          item.supplierProduct.incomingRevision?.name ??
+                          item.supplierProduct.currentRevision.name,
                         emphasized: true,
                       },
                       {
                         id: "spec",
                         label: "规格",
                         value:
-                          item.externalProduct.incomingRevision
+                          item.supplierProduct.incomingRevision
                             ?.specification ||
-                          item.externalProduct.currentRevision.specification ||
+                          item.supplierProduct.currentRevision.specification ||
                           "—",
                       },
                       {
                         id: "price",
-                        label: "含税供货价",
+                        label: "来源含税报价",
                         value:
-                          item.externalProduct.incomingRevision
-                            ?.supplyPriceGross ??
-                          item.externalProduct.currentRevision
-                            .supplyPriceGross ??
+                          item.supplierProduct.incomingRevision
+                            ?.sourceQuotedPriceGross ??
+                          item.supplierProduct.currentRevision
+                            .sourceQuotedPriceGross ??
                           "—",
                         numeric: true,
                       },
@@ -1423,8 +1483,8 @@ export function ExternalProductSupplyPage() {
                         id: "tax",
                         label: "进项税率",
                         value:
-                          item.externalProduct.incomingRevision?.inputTaxRate ??
-                          item.externalProduct.currentRevision.inputTaxRate ??
+                          item.supplierProduct.incomingRevision?.inputTaxRate ??
+                          item.supplierProduct.currentRevision.inputTaxRate ??
                           "—",
                         numeric: true,
                       },
@@ -1432,14 +1492,14 @@ export function ExternalProductSupplyPage() {
                         id: "region",
                         label: "可供区域",
                         value: (
-                          item.externalProduct.incomingRevision?.supplyRegion ??
-                          item.externalProduct.currentRevision.supplyRegion
+                          item.supplierProduct.incomingRevision?.supplyRegion ??
+                          item.supplierProduct.currentRevision.supplyRegion
                         ).join("、") || "—",
                       },
                       {
                         id: "avail",
                         label: "可供状态 / 数量",
-                        value: `${availabilityLabel(item.externalProduct.incomingRevision?.availabilityStatus ?? item.externalProduct.currentRevision.availabilityStatus)} / ${item.externalProduct.incomingRevision?.availableQuantity ?? item.externalProduct.currentRevision.availableQuantity}`,
+                        value: `${availabilityLabel(item.supplierProduct.incomingRevision?.availabilityStatus ?? item.supplierProduct.currentRevision.availabilityStatus)} / ${item.supplierProduct.incomingRevision?.availableQuantity ?? item.supplierProduct.currentRevision.availableQuantity}`,
                       },
                     ]}
                   />
@@ -1904,14 +1964,16 @@ export function ExternalProductSupplyPage() {
                       进入接口错误中心（技术异常）
                     </Button>
                   ) : null}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    render={<Link href={w20Href} />}
-                  >
-                    查看来源 API 连接
-                  </Button>
+                  {w20Href ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      render={<Link href={w20Href} />}
+                    >
+                      查看来源 API 连接
+                    </Button>
+                  ) : null}
                 </CardContent>
               </Card>
             </div>
@@ -2053,10 +2115,10 @@ export function ExternalProductSupplyPage() {
         toStatus={{ label: "处理完成", tone: "success" }}
         lockedFields={[
           item
-            ? `供应商商品：${item.externalProduct.currentRevision.name}`
+            ? `供应商商品：${item.supplierProduct.currentRevision.name}`
             : "供应商商品",
           item
-            ? `供应商：${item.externalProduct.supplier.name}`
+            ? `供应商：${item.supplierProduct.supplier.name}`
             : "供应商",
         ]}
         effects={
@@ -2082,7 +2144,7 @@ export function ExternalProductSupplyPage() {
   )
 }
 
-type ExternalCatalogQueueQueryChangeType =
+type SupplierCatalogQueueQueryChangeType =
   | "actionable"
   | "NEW"
   | "CHANGED"

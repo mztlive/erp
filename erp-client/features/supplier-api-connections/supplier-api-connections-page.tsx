@@ -1412,7 +1412,7 @@ function ConnectionCenter({
             </div>
           </dl>
           <p className="text-xs text-muted-foreground">
-            历史版本与业务记录保留；不暗示删除。替代方案可链到外部商品供给 / 供应商订单 / 接口错误中心。
+            历史版本与业务记录保留；不暗示删除。替代方案可链到供应商商品库 / 供应商订单 / 接口错误中心。
           </p>
           <DialogFooter>
             <Button
@@ -1634,10 +1634,10 @@ function OverviewSection({
           <CardDescription>
             连接级能力声明不等于每个商品可用 ·{" "}
             <Link
-              href="/supplier-api/catalog"
+              href="/procurement/supplier-catalog"
               className="text-primary underline-offset-2 hover:underline"
             >
-              外部商品供给
+              供应商商品库
             </Link>
             {" · "}
             <Link
@@ -1746,7 +1746,7 @@ function CapabilitiesSection({
         meta: { label: "边界" },
         cell: () => (
           <span className="text-xs text-muted-foreground">
-            连接级 ≠ 商品级 · 见外部商品供给/商品发布
+            连接级 ≠ 商品级 · 见供应商商品库/商品发布
           </span>
         ),
       },
@@ -1796,7 +1796,7 @@ function CapabilitiesSection({
         <AlertTitle>能力边界</AlertTitle>
         <AlertDescription>
           下表为<strong>连接级</strong>
-          统一能力声明，不表示每个外部商品都可用。商品/供给/发布级能力由外部商品供给 / 商品发布返回。采购确认只追加业务需求与审计，不写能力启停；系统管理员使用独立配置命令。
+          统一能力声明，不表示每个供应商商品都可用。商品/供给/发布级能力由供应商商品库 / 商品发布返回。采购确认只追加业务需求与审计，不写能力启停；系统管理员使用独立配置命令。
         </AlertDescription>
       </Alert>
       {can("UPDATE_CAPABILITIES") ? (
@@ -2057,10 +2057,10 @@ function CatalogSection({
           <CardDescription>
             与连接状态分开展示 ·{" "}
             <Link
-              href={`/supplier-api/catalog?connectionId=${conn.connectionId}`}
+              href={`/procurement/supplier-catalog?connectionId=${conn.connectionId}`}
               className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
             >
-              打开外部商品供给
+              打开供应商商品库
               <ExternalLinkIcon className="size-3" aria-hidden="true" />
             </Link>
           </CardDescription>
@@ -2115,7 +2115,7 @@ function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
         {
           label: "活跃供给",
           value: conn.relatedImpact.activeOfferings,
-          href: "/supplier-api/catalog",
+          href: "/procurement/supplier-catalog",
         },
         {
           label: "生效发布",
@@ -2130,7 +2130,7 @@ function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
         {
           label: "同步任务",
           value: conn.relatedImpact.activeSyncJobs,
-          href: "/supplier-api/catalog",
+          href: "/procurement/supplier-catalog",
         },
       ].map((item) => (
         <Card key={item.label}>

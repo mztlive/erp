@@ -275,7 +275,7 @@ export const MALL_MAPPING_TASKS: MappingTaskView[] = [
       },
     ],
     currentTargets: [],
-    impactSummary: "未形成可销售项目映射；阻断销售版本、应收与经营归属。",
+    impactSummary: "未形成公司商品池映射；阻断销售版本、应收与经营归属。",
     resolutionHistory: [],
     allowedActions: ["CONFIRM_TARGET", "REQUEST_SOURCE_FIX", "DEFER", "TRANSFER"],
     actionBlockers: [],

@@ -505,7 +505,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
         dueAt: "2026-08-01T18:00:00+08:00",
         ownerRoleLabel: "运营",
         ownerUserLabel: "李倩",
-        reasonLabel: "外部商品缺少可销售项目映射",
+        reasonLabel: "供应商商品缺少公司商品池映射",
         impactSummary: "阻断 12 条消费订单入账",
         allowedActions: [
             "VIEW",

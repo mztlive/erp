@@ -117,8 +117,8 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       effectiveTo: "2026-12-31",
       keyFacts: [
         { label: "SKU", value: "SKU-NY-BOX-01" },
-        { label: "参考供应商", value: "鲜果直供" },
-        { label: "参考含税成本", value: "¥128.00" },
+        { label: "销售可见价", value: "¥168.00" },
+        { label: "可供供应商数", value: "2 家" },
         { label: "服务区域", value: "华东" },
       ],
       selectorEligibility: [
@@ -159,7 +159,8 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       effectiveTo: "2026-12-31",
       keyFacts: [
         { label: "SKU", value: "SKU-CARD-BDAY" },
-        { label: "参考供应商", value: "—" },
+        { label: "销售可见价", value: "¥58.00" },
+        { label: "可供供应商数", value: "1 家" },
         { label: "服务区域", value: "全国" },
       ],
       primaryBlocker: undefined,
@@ -194,7 +195,8 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       effectiveTo: "2025-10-31",
       keyFacts: [
         { label: "SKU", value: "SKU-MOON-09" },
-        { label: "参考供应商", value: "礼遇包装" },
+        { label: "销售可见价", value: "¥188.00" },
+        { label: "可供供应商数", value: "0 家（已停用）" },
       ],
       primaryBlocker: "已停用：不可进入销售选品",
       selectorEligibility: [
@@ -1080,12 +1082,12 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       name: "新春坚果礼盒 · 典藏款",
       effectiveFrom: "2026-01-01",
       effectiveTo: "2026-12-31",
-      changeReason: "调整参考含税成本与交期",
+      changeReason: "调整销售可见价与交期",
       actor: "赵强",
       fields: [
         { label: "SKU", value: "SKU-NY-BOX-01" },
-        { label: "参考供应商", value: "鲜果直供供应链" },
-        { label: "参考含税成本", value: "¥128.00" },
+        { label: "销售可见价", value: "¥168.00" },
+        { label: "可供供应商数", value: "2 家" },
         { label: "服务区域", value: "华东" },
         { label: "交期", value: "5 个工作日" },
         { label: "允许履约方式", value: "仓发 / 代发" },
@@ -1100,7 +1102,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
         actor: "赵强",
         from: "2026-01-01",
         to: "2026-12-31",
-        reason: "调整参考含税成本与交期",
+        reason: "调整销售可见价与交期",
         isCurrent: true,
         lifecycle: "ENABLED",
       },
@@ -1160,7 +1162,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
         at: "2026-01-01T09:12:00+08:00",
         actor: "赵强",
         action: "更新资料",
-        detail: "v6 · 调整参考成本",
+        detail: "v6 · 调整销售可见价",
       },
       {
         id: "a0",
@@ -1195,7 +1197,8 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       actor: "李倩",
       fields: [
         { label: "SKU", value: "SKU-CARD-BDAY" },
-        { label: "参考供应商", value: "二次确认时选择" },
+        { label: "销售可见价", value: "¥58.00" },
+        { label: "可供供应商数", value: "1 家" },
         { label: "服务区域", value: "全国" },
       ],
     },
@@ -1289,7 +1292,8 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       actor: "赵强",
       fields: [
         { label: "SKU", value: "SKU-MOON-09" },
-        { label: "参考供应商", value: "礼遇包装工坊" },
+        { label: "销售可见价", value: "¥188.00" },
+        { label: "可供供应商数", value: "0 家（已停用）" },
       ],
     },
     revisionTimeline: buildTimeline([
@@ -2747,7 +2751,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
 export function resourceLabel(resource: MasterDataResource): string {
   const found = (
     [
-      ["sellable-items", "可销售项目"],
+      ["sellable-items", "公司商品池"],
       ["products", "商品与 SKU"],
       ["categories", "商品分类"],
       ["brands", "品牌"],

@@ -20,9 +20,9 @@ import {
   sumFixed,
 } from "../lib/fixed-decimal.ts"
 import { fetchInventoryList } from "../features/inventory/api.ts"
-import { fetchExternalCatalogQueue } from "../features/external-product-supply/api.ts"
+import { fetchSupplierCatalogQueue } from "../features/supplier-catalog/api.ts"
 import { getW14Center } from "../features/master-data/session.ts"
-import { EXTERNAL_PRODUCT_SUPPLY_SEED } from "../mock/external-product-supply.ts"
+import { SUPPLIER_CATALOG_SEED } from "../mock/supplier-catalog.ts"
 import {
   getW22PublicationOverride,
   submitW22PublishRevision,
@@ -127,7 +127,7 @@ assert(
   "W14 product and SKU revisions do not embed supplier-offering fields"
 )
 
-const skuOfferingQueue = await fetchExternalCatalogQueue({
+const skuOfferingQueue = await fetchSupplierCatalogQueue({
   mode: "list",
   changeType: "all",
   skuId: "sku_ny_box_01",
@@ -142,7 +142,7 @@ assert(
   "W21 mock API filters supplier offerings by stable skuId"
 )
 
-const offerings = EXTERNAL_PRODUCT_SUPPLY_SEED.flatMap((item) => {
+const offerings = SUPPLIER_CATALOG_SEED.flatMap((item) => {
   if (!item.offering) return []
   return [
     ...(item.offering.currentRevision ? [item.offering.currentRevision] : []),
@@ -221,7 +221,7 @@ const purchaseMock = fs.readFileSync(
   "utf8"
 )
 const w21Page = fs.readFileSync(
-  path.join(process.cwd(), "features/external-product-supply/external-product-supply-page.tsx"),
+  path.join(process.cwd(), "features/supplier-catalog/supplier-catalog-page.tsx"),
   "utf8"
 )
 const w14Page = fs.readFileSync(
@@ -244,10 +244,12 @@ assert(
 )
 assert(
   w14Page.includes("mode=list&skuId=") &&
+    w14Page.includes("SupplierCatalogIntakeDialog") &&
+    w14Page.includes("添加供应商并登记成本") &&
     !w14Page.includes("sku.dropshipCostPrice") &&
     !w14Page.includes("sku.bulkCostPrice") &&
     !w14Page.includes("sku.inputTaxRate"),
-  "W14 links to W21 by skuId and exposes no embedded supply editor"
+  "W14 opens the W21 supplier-cost editor by stable skuId without embedding supply fields in the SKU"
 )
 
 if (failed) process.exit(1)

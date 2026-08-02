@@ -36,7 +36,7 @@
 | `pay_card_sell` | 一期卡券销售单商业事实来源 | 通过来源销售单身份、完整快照、内容指纹和映射校验形成 ERP 卡券销售单及版本 |
 | `erp_customer` | 客户基础资料候选来源 | 经客户去重、身份确认和联系人拆分后形成客户及历史版本 |
 | `erp_supplier` | 供应商基础资料、旧结算配置和旧汇总数据候选来源 | 供应商、联系人、能力、资质、结算条款分别映射；余额和累计值不得直接形成资金台账 |
-| `product_spu` | 商城商品聚合信息和陈列信息来源 | 进入商品暂存，拆分为商品族、商城发布内容和供应商外部商品候选关系 |
+| `product_spu` | 商城商品聚合信息和陈列信息来源 | 进入商品暂存，拆分为商品族、商城发布内容和供应商商品候选关系 |
 | `product_sku` | 商城可售规格、价格库存缓存和供应商 SKU 候选来源 | 进入 SKU 暂存，经规格、单位和供应关系确认后形成 ERP SKU |
 
 ### 1.3 不以兼容牺牲正确性
@@ -87,10 +87,11 @@
 | --- | --- |
 | `product` / `product_revision` | 商品族稳定身份、名称、分类、品牌和历史版本 |
 | `sku` / `sku_revision` | 正式销售、采购、履约和库存引用的最小稳定身份 |
-| `sellable_item` / `sellable_item_revision` | 采购维护的可销售项目、参考供给和有效期 |
-| `supplier_external_product` / `supplier_external_product_revision` | 二期 API 供应商外部商品稳定身份及原始目录版本 |
-| `supplier_product_mapping` | 外部商品到 ERP SKU 的确认映射 |
-| `supplier_offering` / `supplier_offering_revision` | 二期供应商供给稳定身份，以及供货价、区域、可供状态和有效期版本 |
+| `product_pool_entry` / `product_pool_entry_revision` | 公司商品池销售可见价、可售条件和有效期；不含供应商或成本 |
+| `supplier_catalog_product` / `supplier_catalog_product_revision` | 供应商 SPU 稳定身份及 Excel/API/手工来源修订 |
+| `supplier_catalog_sku` / `supplier_catalog_sku_revision` | 供应商 SKU 稳定身份、来源报价及目录版本；API 连接可空 |
+| `supplier_product_mapping` | 供应商商品到 ERP SKU 的确认映射 |
+| `supplier_offering` / `supplier_offering_revision` | 公司 SKU 与供应商 SKU 的供给稳定身份，以及采购确认成本、区域、可供状态和有效期版本 |
 | `product_publication` / `product_publication_revision` | 商城发布稳定身份，以及展示、销售价、区域、上下架和固定供给版本 |
 | `product_revision_media` / `product_publication_revision_media` | 经审核的商品版本媒体和商城发布媒体，统一关联 `file_asset` |
 | `warehouse_sku_policy` | 按仓库和 SKU 维护的库存预警策略，不接受来源全局阈值直接覆盖 |
@@ -163,7 +164,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | `product_spu` | `PRODUCT_SPU` | 字符串化的来源 `id` |
 | `product_sku` | `PRODUCT_SKU` | 字符串化的来源 `id` |
 
-客户编码、供应商编码、税号、条码和供应商外部商品编号都可能为空或重复，不作为未经核验的来源身份键。
+客户编码、供应商编码、税号、条码和供应商商品编号都可能为空或重复，不作为未经核验的来源身份键。
 
 根业务身份同一时点只允许一个有效 `PRIMARY` 目标。SPU 或 SKU 确需拆成多个规范
 对象时使用多个 `COMPONENT` 目标；多个来源对象合并到同一 `party`、`product`
@@ -437,7 +438,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | 财务使用 | 银行账户未进入加密链路；税率、结算周期或付款方式代码未知 | 不阻断身份及非资金资料 |
 | 正式过账 | 任一旧累计金额被当作付款、应付、实际成本或期初余额 | 所有旧累计字段继续只作核对，不形成正式事实 |
 
-只有经过采购确认的有效能力和必要资质才能用于新可销售项目、供给关系和采购单。
+只有经过采购确认的有效能力和必要资质才能用于新公司商品池、供给关系和采购单。
 
 ---
 
@@ -456,7 +457,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | `pic_url`、`slider_pic_urls` | `file_asset`、`product_revision_media` 或 `product_publication_revision_media` 候选 | 下载和内容安全校验通过后，经商品或发布审核进入对应版本关系，并保存用途、排序和替代文本；不继续保存逗号字符串 |
 | `status`、`delisting_type`、`sort` | 商城发布状态和排序 | 不直接等同 ERP 商品启用状态 |
 | `delivery_types`、`delivery_template_id`、`use_delivery_template`、`express_area_ids`、`city_template_id` | 发布能力和 `product_publication_revision.sales_region` 候选 | 运营确认后，区域进入发布版本，能够准确对应的配送能力进入 `product_capabilities`；旧模板 ID 和无法映射的代码只留白名单暂存，不新增旧模板影子表 |
-| `supplier_spu_id`、`supplier_type`、`third_channel_id` | 外部供给关系候选 | 进入供应商商品暂存；确认供应商连接和外部商品身份后才能建立供应关系 |
+| `supplier_spu_id`、`supplier_type`、`third_channel_id` | 外部供给关系候选 | 进入供应商商品暂存；确认供应商连接和供应商商品身份后才能建立供应关系 |
 | `category_tax_rate_id` | 来源税收分类引用候选 | 五张表没有被引用对象，必须补充旧税收分类字典并经财务确认；不得把旧 ID 直接认作 ERP 税务分类 |
 | `supplier_tax_rate` | 供应关系税率候选 | 不放商品基础资料，写入供应关系或采购条款版本 |
 | `create_time`、`update_time`、`creator`、`updater` | 来源审计 | 与 ERP 审核和发布审计分开 |
@@ -503,7 +504,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | `weight`、`volume` | `sku_revision.weight_kg`、`sku_revision.volume_m3` | 从来源浮点值转换为定点数；分别固定为千克和立方米，负数、非有限数或单位不明时不应用 |
 | `pic_url`、`pic_urls` | `file_asset`、`product_revision_media` 或 `product_publication_revision_media` 候选 | 完成安全校验、用途、排序和替代文本审核后进入相应版本关系 |
 | `description` | `product_publication_revision.sales_description` 候选 | 只有运营确认属于商城销售说明时才进入发布版本，否则只留白名单暂存 |
-| `supplier_sku_id`、`supplier_type` | 供应商外部 SKU 候选 | 必须结合补充的供应商连接和外部商品身份，确认后建立 `supplier_product_mapping` / `supplier_offering` |
+| `supplier_sku_id`、`supplier_type` | 供应商外部 SKU 候选 | 必须结合补充的供应商连接和供应商商品身份，确认后建立 `supplier_product_mapping` / `supplier_offering` |
 | `min_nums` | `supplier_offering_revision.minimum_order_quantity` 候选 | 默认只作为供应商最低订购量候选，经采购确认后写供给版本；不得自动同时写商城最低购买量。只有运营用独立证据确认商城购买约束时，才写 `product_publication_revision.minimum_purchase_quantity` |
 | `stock_warning` | `warehouse_sku_policy.minimum_available_quantity` 人工候选 | 来源没有仓库维度，不能直写全局正式值；必须由仓储为明确 `warehouse_id + sku_id` 逐项确认后建立或更新仓库级策略 |
 | `status` | SKU 来源状态 | 通过专用字典转换，不直接等同 ERP 启用状态 |
@@ -837,9 +838,9 @@ API 供应商原始目录、订单、动作结果、退款和账单必须逐项�
 
 | 数据集 | 必需内容 | 规范目标 |
 | --- | --- | --- |
-| 外部商品身份与版本 | 供应商、连接、外部商品/SKU ID、供应商版本或摘要、名称、规格、分类、图片、说明、供货价、进项税率、费用、区域、可供状态、预计发货和商品能力 | `supplier_external_product`、`supplier_external_product_revision`；批次结果另记 `catalog_sync_job`、`catalog_sync_item` |
-| ERP 商品映射 | 外部商品、ERP SKU、确认人、依据和有效状态 | `supplier_product_mapping` |
-| 固定供给版本 | ERP SKU、供应商、外部商品、含税/不含税供货价、进项税率、运费、服务费、区域、可供状态、商品能力、最低订购量和有效期 | `supplier_offering`、`supplier_offering_revision` |
+| 供应商商品身份与版本 | 供应商、来源类型、可选连接、供应商 SPU/SKU 编码、来源版本或摘要、名称、规格、分类、图片、说明、来源报价、进项税率、费用、区域、可供状态、预计发货和商品能力 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`；批次结果另记 `supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
+| ERP 商品映射 | 供应商商品、ERP SKU、确认人、依据和有效状态 | `supplier_product_mapping` |
+| 固定供给版本 | 公司 SKU、供应商 SKU、采购确认含税/不含税成本、进项税率、运费、服务费、区域、可供状态、商品能力、最低订购量和有效期 | `supplier_offering`、`supplier_offering_revision` |
 | 供应商子订单 | ERP 永久订单号、商城订单及明细、固定供应商和连接、固定供给版本、数量、地址快照、下单成本和进项税率 | `supplier_fulfillment_order`、`supplier_fulfillment_item` |
 | 下单、查询、取消、退款动作 | 原供应商订单、动作类型、商城售后请求、稳定幂等键、供应商请求号、脱敏请求/响应摘要和结果 | `supplier_order_action`；结果未知先按原请求查询，重试沿用原幂等键 |
 | 状态回调 | 外部事件 ID、供应商状态版本、原状态、新状态、发生时间和接收时间 | `supplier_order_status_history`；按版本和发生时间拒绝状态倒退 |
@@ -988,7 +989,7 @@ API 供应商原始目录、订单、动作结果、退款和账单必须逐项�
 
 ### 12.4 商品与 SKU
 
-- 商品名称、规格、分类、图片引用、说明、供应商外部商品 ID、价格和可供信息可以进入商品暂存。
+- 商品名称、规格、分类、图片引用、说明、供应商商品 ID、价格和可供信息可以进入商品暂存。
 - 图片 URL 必须校验协议、域名策略和内容类型，不由后端任意访问未知内网地址。
 - 富文本说明在展示前净化。
 - `properties` JSON 限制结构、深度、字段数量和字符串长度。
@@ -1015,7 +1016,7 @@ API 供应商原始目录、订单、动作结果、退款和账单必须逐项�
 | 商品分类、品牌及旧税收分类字典 | 解析 `category_id`、`brand_id`、`category_tax_rate_id` |
 | SKU 属性、属性值及分类适用关系 | 解析 `properties` 并生成稳定规格签名 |
 | 基础计量单位及每个 SKU 的单位来源 | 建立 `unit_of_measure` 与 `sku.base_unit_id` |
-| 供应商连接、渠道和外部商品身份 | 解释 `supplier_type`、`third_channel_id`、`supplier_spu_id`、`supplier_sku_id` |
+| 供应商连接、渠道和供应商商品身份 | 解释 `supplier_type`、`third_channel_id`、`supplier_spu_id`、`supplier_sku_id` |
 | 客户合同、结算主体及其有效版本 | 形成销售单正式版本和应收归属 |
 | 员工与组织身份 | 区分销售主管、负责销售和来源操作人 |
 | 商城正式状态历史或正式单清单 | 证明已生效、作废和关闭，不从当前行状态反推历史 |

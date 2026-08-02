@@ -1807,7 +1807,7 @@ const seeds: ConsumptionOrderSeed[] = [
       paymentOccurredAlert: {
         title: "商城支付已发生，正在处理履约异常",
         message:
-          "T 后支付记录已保存；商品发布或固定供给缺失进入差异，不拒收也不复制支付记录。请进入接口错误中心/外部商品供给修复后按原记录键继续归集。",
+          "T 后支付记录已保存；商品发布或固定供给缺失进入差异，不拒收也不复制支付记录。请进入接口错误中心/供应商商品库修复后按原记录键继续归集。",
         severity: "warning",
       },
       fieldPermissions: {

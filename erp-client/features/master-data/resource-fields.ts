@@ -139,14 +139,15 @@ export const RESOURCE_FIELDS: Readonly<
       listFact: true,
     },
     {
-      key: "refSupplier",
-      label: masterDataCopy.fRefSupplier,
+      key: "salesVisiblePrice",
+      label: masterDataCopy.fSalesVisiblePrice,
       kind: "text",
+      required: true,
       listFact: true,
     },
     {
-      key: "refCost",
-      label: masterDataCopy.fRefCost,
+      key: "supplierCount",
+      label: masterDataCopy.fSupplierCount,
       kind: "text",
       listFact: true,
     },
@@ -163,7 +164,6 @@ export const RESOURCE_FIELDS: Readonly<
       label: masterDataCopy.fFulfillmentModes,
       kind: "text",
     },
-    { key: "taxRate", label: masterDataCopy.fTaxRate, kind: "text" },
   ],
   /**
    * 商品（SPU）列表/概览事实标签。
@@ -537,12 +537,11 @@ export function buildResourceFields(
     case "sellable-items":
       return {
         sku: pickField(values, "sku") ?? "",
-        refSupplier: pickField(values, "refSupplier"),
-        refCost: pickField(values, "refCost"),
+        salesVisiblePrice: pickField(values, "salesVisiblePrice") ?? "",
+        supplierCount: pickField(values, "supplierCount"),
         region: pickField(values, "region"),
         leadTime: pickField(values, "leadTime"),
         fulfillmentModes: pickField(values, "fulfillmentModes"),
-        taxRate: pickField(values, "taxRate"),
       }
     case "products":
       // 商品完整字段由商品表单页直接组装 ProductFields；此处仅兜底空结构。

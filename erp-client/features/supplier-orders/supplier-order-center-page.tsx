@@ -801,7 +801,7 @@ export function SupplierOrderCenterPage({
               <TableRow>
                 <TableHead>商品</TableHead>
                 <TableHead>数量</TableHead>
-                <TableHead>外部商品</TableHead>
+                <TableHead>供应商商品</TableHead>
                 <TableHead>发布/供给</TableHead>
                 <TableHead className="text-right">下单成本（含税）</TableHead>
               </TableRow>
@@ -822,9 +822,9 @@ export function SupplierOrderCenterPage({
                     {item.quantity} {item.unit}
                   </TableCell>
                   <TableCell>
-                    <div className="text-xs">{item.externalProductName}</div>
+                    <div className="text-xs">{item.supplierProductName}</div>
                     <div className="num text-[11px] text-muted-foreground">
-                      {item.externalProductId}
+                      {item.supplierProductId}
                     </div>
                   </TableCell>
                   <TableCell className="num text-xs">

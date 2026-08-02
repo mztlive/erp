@@ -1,11 +1,11 @@
 # ERP 前端文案审查报告：采购 / 供应商域（2026-08-02）
 
-范围：features/ 下 purchase-orders、supplier-orders、supplier-settlements、supplier-payables、supplier-api-connections、procurement-confirmation、external-product-supply 共 13 个 .tsx 文件。
+范围：features/ 下 purchase-orders、supplier-orders、supplier-settlements、supplier-payables、supplier-api-connections、procurement-confirmation、supplier-catalog 共 13 个 .tsx 文件。
 类别：A=冗余、B=车轱辘话、C=技术名词/内部术语。
 
-## features/external-product-supply/external-product-supply-page.tsx
+## features/supplier-catalog/supplier-catalog-page.tsx
 
-- [C] 1233-1234: 「先进入 `supplier_external_product` 不可变修订区；未经映射与审核不修改 ERP SKU 或商城商品」→ 数据库表名直接暴露 → 「先写入不可变的外部商品修订记录，未经映射与审核不修改 ERP SKU 或商城商品」
+- [C] 1233-1234: 「先进入 `supplier_catalog_sku` 不可变修订区；未经映射与审核不修改 ERP SKU 或商城商品」→ 数据库表名直接暴露 → 「先写入不可变的供应商商品修订记录，未经映射与审核不修改 ERP SKU 或商城商品」
 - [C] 1219: caption「白名单业务字段对比；成本字段按权限掩码」→ 「白名单」为内部实现词 → 「业务字段对比；成本字段按权限隐藏」
 - [C] 1353-1356: 「供给 MOQ 是供应商约束，不等于商城最小购买量（`false` 自动复制）。商城销售价自动更新：`true`。」→ 布尔原值直接上屏 → 「供货 MOQ 是供应商约束，不会自动复制为商城最小购买量；商城销售价将自动更新」
 - [C] 1386: 「`{p.publicationId}` · `{p.reason}` · outbox `{p.outboxId}` · `{p.status}`」→ outbox 为内部基础设施术语 → 删去 outbox 字段或改「同步记录」
@@ -15,12 +15,12 @@
 - [C] 1759: 「使用 WorkItemActionEnvelope；成功后任务仍为 PENDING/IN_PROGRESS，不自动下一项。」→ 全句技术黑话 → 「暂挂后任务保留在待处理队列，不会自动进入下一项」
 - [C] 1889/1894: 「完成 BUSINESS_EXCEPTION 任务」→ 内部任务类型码 → 「结束当前异常处理任务」
 - [C] 1898: 「任务终态不可撤销（演示会话内）」→ 「终态」为内部状态词 → 「处理结果不可撤销（演示会话内）」
-- [A] 1427: 「同一外部商品同时点仅一个有效映射；一 SKU 可有多外部供给」→ 「同时点」生造词 → 「同一外部商品同一时间仅一个有效映射；一个 SKU 可有多个外部供给」
+- [A] 1427: 「同一供应商商品同时点仅一个有效映射；一 SKU 可有多外部供给」→ 「同时点」生造词 → 「同一供应商商品同一时间仅一个有效映射；一个 SKU 可有多个外部供给」
 
-## features/external-product-supply/external-product-center-page.tsx
+## features/supplier-catalog/supplier-product-center-page.tsx
 
 - [C] 254: AlertTitle 直接显示错误码「WORK_ITEM_TYPE_UNREGISTERED」→ 错误码当标题，最严重的一类 → 「任务类型尚未登记」
-- [C] 118: 「稳定身份 `{externalProductId}` 不在当前目录观察范围。」→ 「稳定身份」「观察范围」均为内部概念 → 「外部商品 `{externalProductId}` 不在当前目录范围内」
+- [C] 118: 「稳定身份 `{supplierProductId}` 不在当前目录观察范围。」→ 「稳定身份」「观察范围」均为内部概念 → 「供应商商品 `{supplierProductId}` 不在当前目录范围内」
 - [C] 180: 「上下文 `{queueContextId}`」→ 内部参数名上屏 → 「队列 `{queueContextId}`」
 - [C] 262: 「价格/税率/费用字段已按权限掩码」→ 「掩码」技术词 → 「价格/税率/费用字段已按权限隐藏」
 - [C] 467: 「数据版本 `{fingerprint}`（无原始报文/密钥）」→ 「原始报文」为内部术语 → 「数据版本 `{fingerprint}`（不含源数据原文）」
@@ -121,15 +121,15 @@
 
 | # | 位置 | 问题 | 类型 |
 |---|------|------|------|
-| 1 | external-product-center-page.tsx:254 | Alert 标题直接显示错误码 WORK_ITEM_TYPE_UNREGISTERED | C |
-| 2 | external-product-supply-page.tsx:1759 | 「使用 WorkItemActionEnvelope；…PENDING/IN_PROGRESS…」全句技术黑话 | C |
-| 3 | external-product-supply-page.tsx:1353-1356 | 布尔原值 true/false 直接上屏 | C |
+| 1 | supplier-product-center-page.tsx:254 | Alert 标题直接显示错误码 WORK_ITEM_TYPE_UNREGISTERED | C |
+| 2 | supplier-catalog-page.tsx:1759 | 「使用 WorkItemActionEnvelope；…PENDING/IN_PROGRESS…」全句技术黑话 | C |
+| 3 | supplier-catalog-page.tsx:1353-1356 | 布尔原值 true/false 直接上屏 | C |
 | 4 | supplier-settlements-page.tsx:1743-1749 | sourceSnapshotHash/subjectHash 字段名+值暴露 | C |
 | 5 | supplier-settlements-page.tsx:1848 | canEditBillOrOrder 字段名上屏 | C |
 | 6 | procurement-confirmation-page.tsx:937 | preferenceScope 等内部参数说明上屏 | C |
 | 7 | supplier-api-connections-page.tsx:2153 | 「跨工作面只传连接稳定身份…不信任来源布尔值」内部实现说明 | C |
 | 8 | supplier-settlements-page.tsx:1759-1761 | W26 内部编号暴露 | C |
-| 9 | external-product-supply-page.tsx:1233 | supplier_external_product 表名暴露 | C |
+| 9 | supplier-catalog-page.tsx:1233 | supplier_catalog_sku 表名暴露 | C |
 | 10 | 多页重复 | 「三轨正交」「重放」「前端/服务端」等内部术语跨 7 个文件重复出现 | C/B |
 
 共发现 60 处问题（C 类 47、B 类 9、A 类 4）。其中 hash/错误码/字段名直接上屏 8 处为最高危；「前端/服务端」「掩码」「门禁」「重放」「三轨正交」「消费」「终态」等内部术语在多个文件重复出现，建议统一术语表后全局替换。

@@ -576,7 +576,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     costAmountNet: null,
     consumptionAmountGross: "¥220.00",
     fulfillmentChain: "LEGACY_MANUAL",
-    unattributedReason: "外部商品映射缺失 · 消费时点供给版本不可判定",
+    unattributedReason: "供应商商品映射缺失 · 消费时点供给版本不可判定",
     whitelistFields: [
       { field: "productRef", label: "商城商品", value: "SKU-EXT-****771" },
       { field: "mapGap", label: "归集缺口", value: "W21 映射 / 税口径" },

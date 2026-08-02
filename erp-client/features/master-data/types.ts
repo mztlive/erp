@@ -1,7 +1,7 @@
 import type { StatusTone } from "@/components/ui/status-badge"
 
 export const MASTER_DATA_RESOURCES = [
-  { key: "sellable-items", label: "可销售项目" },
+  { key: "sellable-items", label: "公司商品池" },
   { key: "products", label: "商品与 SKU" },
   { key: "categories", label: "商品分类" },
   { key: "brands", label: "品牌" },
@@ -226,7 +226,8 @@ export type ProductSpecDimension = Readonly<{
 }>
 
 /**
- * SKU 行：只保存商品身份、媒体与非正式参考价格。
+ * SKU 行：保存公司商品身份与媒体；`salePrice` 是商品池销售可见价的
+ * 编辑投影，命令处理器必须写入商品池修订，不得把它当作供应商成本。
  * 规格取值由 SPU 规格维度组合得出。
  *
  * 供应商、供给模式、供货价、底价、进项税、费用、MOQ、区域、能力与
@@ -247,7 +248,7 @@ export type ProductSkuFields = Readonly<{
   barcode?: string
   /** SKU 主图（单张）。 */
   mainImage: string
-  /** 参考销售价（选品提示，非正式发布价）。 */
+  /** 公司商品池销售可见价；销售可见，采购成本不可见。 */
   salePrice?: string
   /** 市场价（参考展示，非正式发布价）。 */
   marketPrice?: string
@@ -290,12 +291,13 @@ export type ProductDetailView = Readonly<{
 
 export type SellableItemFields = Readonly<{
   sku: string
-  refSupplier?: string
-  refCost?: string
+  /** 采购发布给销售的公司商品池价格；不是任何一家供应商的成本。 */
+  salesVisiblePrice: string
+  /** 从 supplier_offering 聚合的可用供应商数量，只读投影。 */
+  supplierCount?: string
   region?: string
   leadTime?: string
   fulfillmentModes?: string
-  taxRate?: string
 }>
 
 export type VoucherCategoryFields = Readonly<{

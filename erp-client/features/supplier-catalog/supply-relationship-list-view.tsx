@@ -3,7 +3,7 @@
 import * as React from "react"
 import type { ColumnDef } from "@tanstack/react-table"
 import Link from "next/link"
-import { ArrowLeftIcon, ArrowRightIcon, SearchIcon } from "lucide-react"
+import { ArrowLeftIcon, ArrowRightIcon, SearchIcon, UploadIcon, PlusIcon } from "lucide-react"
 
 import {
   BusinessEmptyState,
@@ -14,6 +14,7 @@ import {
   ListToolbar,
   MetricItem,
   MetricStrip,
+  OptionCombobox,
   PageHeader,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -21,14 +22,15 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import type {
-  ExternalCatalogItemView,
-  ExternalCatalogQueueView,
-} from "@/features/external-product-supply/types"
+  SupplierCatalogItemView,
+  SupplierCatalogQueueView,
+  SupplierCatalogSourceType,
+} from "@/features/supplier-catalog/types"
 
 type SupplyRelationshipListViewProps = {
-  items: ExternalCatalogItemView[]
+  items: SupplierCatalogItemView[]
   skuId?: string
-  skuContext?: ExternalCatalogQueueView["skuContext"]
+  skuContext?: SupplierCatalogQueueView["skuContext"]
   returnTo?: string
   returnHref: string
   updatedAt?: string
@@ -36,6 +38,11 @@ type SupplyRelationshipListViewProps = {
   searchInput: string
   onSearchInputChange: (value: string) => void
   onSearch: () => void
+  sourceType: SupplierCatalogSourceType | "all"
+  onSourceTypeChange: (value: SupplierCatalogSourceType | "all") => void
+  onOpenExcelImport: () => void
+  onOpenManualEntry: () => void
+  onPromote: (item: SupplierCatalogItemView) => void
 }
 
 type RelationshipStatus = {
@@ -52,7 +59,7 @@ function offeringStatusLabel(status: string) {
 }
 
 function relationshipStatus(
-  item: ExternalCatalogItemView,
+  item: SupplierCatalogItemView,
   skuId?: string
 ): RelationshipStatus {
   const mappedToCurrentSku =
@@ -90,7 +97,7 @@ function relationshipStatus(
   return { label: "正常供货", tone: "success", kind: "active" }
 }
 
-function inferSkuContext(items: ExternalCatalogItemView[], skuId?: string) {
+function inferSkuContext(items: SupplierCatalogItemView[], skuId?: string) {
   if (!skuId) return undefined
   for (const item of items) {
     if (item.mapping?.skuId === skuId && item.mapping.skuCode) {
@@ -130,31 +137,55 @@ function SupplyRelationshipListView({
   searchInput,
   onSearchInputChange,
   onSearch,
+  sourceType,
+  onSourceTypeChange,
+  onOpenExcelImport,
+  onOpenManualEntry,
+  onPromote,
 }: SupplyRelationshipListViewProps) {
   const currentSku = skuContext ?? inferSkuContext(items, skuId)
   const statusSummary = items.map((item) => relationshipStatus(item, skuId))
   const supplierCount = new Set(
-    items.map((item) => item.externalProduct.supplier.id)
+    items.map((item) => item.supplierProduct.supplier.id)
   ).size
   const activeCount = statusSummary.filter((status) => status.kind === "active").length
-  const pendingCount = statusSummary.filter(
-    (status) => status.kind === "pending"
-  ).length
   const unavailableCount = statusSummary.filter(
     (status) => status.kind === "unavailable"
   ).length
+  const inPoolCount = new Set(
+    items.flatMap((item) =>
+      item.poolEntry?.status === "ACTIVE" ? [item.poolEntry.poolEntryId] : []
+    )
+  ).size
 
-  const columns = React.useMemo<ColumnDef<ExternalCatalogItemView, unknown>[]>(
+  const columns = React.useMemo<ColumnDef<SupplierCatalogItemView, unknown>[]>(
     () => [
       {
+        id: "source",
+        accessorFn: (row) => row.supplierProduct.source.label,
+        header: "来源",
+        meta: { label: "来源", width: "status" },
+        cell: ({ row }) => (
+          <div>
+            <Badge variant="outline">{row.original.supplierProduct.source.label}</Badge>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {row.original.supplierProduct.source.fileName ??
+                row.original.supplierProduct.source.connection?.code ??
+                row.original.supplierProduct.source.recordedBy ??
+                "—"}
+            </div>
+          </div>
+        ),
+      },
+      {
         id: "supplierProduct",
-        accessorFn: (row) => row.externalProduct.supplier.name,
+        accessorFn: (row) => row.supplierProduct.supplier.name,
         header: "供应商商品",
         meta: { label: "供应商商品", width: "reference" },
         cell: ({ row }) => {
           const revision =
-            row.original.externalProduct.incomingRevision ??
-            row.original.externalProduct.currentRevision
+            row.original.supplierProduct.incomingRevision ??
+            row.original.supplierProduct.currentRevision
           const mapping = row.original.mapping
           const candidate = skuId
             ? row.original.skuCandidates.find((entry) => entry.skuId === skuId)
@@ -171,13 +202,13 @@ function SupplyRelationshipListView({
           return (
             <div className="min-w-0">
               <div className="font-medium text-foreground">
-                {row.original.externalProduct.supplier.name}
+                {row.original.supplierProduct.supplier.name}
               </div>
               <div className="truncate text-sm text-muted-foreground">
                 {revision.name}
               </div>
               <div className="mt-0.5 text-xs text-muted-foreground">
-                编码 {row.original.externalProduct.externalSkuId ?? row.original.externalProduct.externalProductId}
+                编码 {row.original.supplierProduct.supplierSkuCode ?? row.original.supplierProduct.supplierSpuCode}
               </div>
               {relationTarget ? (
                 <div className="mt-1 text-xs font-medium text-foreground">
@@ -211,21 +242,38 @@ function SupplyRelationshipListView({
       },
       {
         id: "price",
-        accessorFn: (row) => row.offering?.currentRevision?.supplyPriceGross ?? "",
-        header: "含税供货价",
+        accessorFn: (row) =>
+          row.offering?.currentRevision?.supplyPriceGross ??
+          row.supplierProduct.currentRevision.sourceQuotedPriceGross ??
+          "",
+        header: "采购确认成本",
         meta: {
           align: "end",
           numeric: true,
           width: "amount",
         },
-        cell: ({ row }) => (
-          <span className="num">
-            {displayAmount(
-              row.original.offering?.currentRevision?.supplyPriceGross,
-              costMasked
-            )}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const confirmedCost =
+            row.original.offering?.currentRevision?.supplyPriceGross
+          if (confirmedCost) {
+            return (
+              <span className="num">
+                {displayAmount(confirmedCost, costMasked)}
+              </span>
+            )
+          }
+          const quote =
+            row.original.supplierProduct.currentRevision.sourceQuotedPriceGross
+          return (
+            <span className="text-xs text-muted-foreground">
+              {costMasked
+                ? "无查看权限"
+                : quote
+                  ? `报价 ¥${quote} · 待确认`
+                  : "待确认"}
+            </span>
+          )
+        },
       },
       {
         id: "coverage",
@@ -268,33 +316,45 @@ function SupplyRelationshipListView({
         meta: { label: "操作", align: "end", width: "status" },
         enableSorting: false,
         cell: ({ row }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            render={
-              <Link
-                href={`/supplier-api/catalog/${row.original.externalProduct.id}?section=overview&returnTo=${encodeURIComponent(returnHref)}`}
-              />
-            }
-          >
-            查看供货详情
-            <ArrowRightIcon className="size-3.5" aria-hidden="true" />
-          </Button>
+          <div className="flex justify-end gap-1">
+            {!row.original.poolEntry && row.original.changeType !== "ERROR" ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                onClick={() => onPromote(row.original)}
+              >
+                加入公司商品池
+              </Button>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="sm"
+              render={
+                <Link
+                  href={`/procurement/supplier-catalog/${row.original.supplierProduct.id}?section=overview&returnTo=${encodeURIComponent(returnHref)}`}
+                />
+              }
+            >
+              详情
+              <ArrowRightIcon className="size-3.5" aria-hidden="true" />
+            </Button>
+          </div>
         ),
       },
     ],
-    [costMasked, currentSku?.baseUnit, returnHref, skuId]
+    [costMasked, currentSku?.baseUnit, onPromote, returnHref, skuId]
   )
 
-  const queueHref = `/supplier-api/catalog?mode=queue${skuId ? `&skuId=${encodeURIComponent(skuId)}` : ""}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`
+  const queueHref = `/procurement/supplier-catalog?mode=queue${skuId ? `&skuId=${encodeURIComponent(skuId)}` : ""}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`
   const pageTitle = currentSku
     ? `${currentSku.productName}的供给关系`
-    : "商品供给关系"
+    : "供应商商品库"
   const pageDescription = currentSku
     ? `${currentSku.skuCode} · ${currentSku.specification ?? "默认规格"}${currentSku.baseUnit ? ` · 基本单位：${currentSku.baseUnit}` : ""}`
     : skuId
       ? `当前 SKU：${skuId}`
-      : "查看每个 ERP SKU 已关联的供应商与供货条件"
+      : "统一管理 Excel、API 和手工录入的供应商 SPU/SKU，选择后加入公司商品池"
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
@@ -302,8 +362,8 @@ function SupplyRelationshipListView({
         title={pageTitle}
         description={pageDescription}
         breadcrumbs={[
-          { id: "master", label: "商品与 SKU", href: "/master-data/products" },
-          { id: "supply", label: "供给关系", current: true },
+          { id: "procurement", label: "采购", href: "/procurement/orders" },
+          { id: "catalog", label: "供应商商品库", current: true },
         ]}
         metadata={
           <DataFreshness
@@ -315,8 +375,16 @@ function SupplyRelationshipListView({
         }
         actions={
           <div className="flex flex-wrap gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onOpenExcelImport}>
+              <UploadIcon className="size-3.5" />
+              导入 Excel
+            </Button>
+            <Button type="button" size="sm" onClick={onOpenManualEntry}>
+              <PlusIcon className="size-3.5" />
+              手工录入
+            </Button>
             <Button variant="outline" size="sm" render={<Link href={queueHref} />}>
-              处理供应商变更
+              处理来源变化
             </Button>
             {returnTo ? (
               <Button variant="secondary" size="sm" render={<Link href={returnTo} />}>
@@ -363,17 +431,35 @@ function SupplyRelationshipListView({
       )}
 
       <MetricStrip columns={4} density="compact" aria-label="供给关系概览">
-        <MetricItem label="供给关系" value={items.length} density="compact" />
+        <MetricItem label="供应商 SKU" value={items.length} density="compact" />
+        <MetricItem label="已入公司商品池" value={inPoolCount} density="compact" />
         <MetricItem label="正常供货" value={activeCount} density="compact" />
-        <MetricItem label="待确认" value={pendingCount} density="compact" />
         <MetricItem label="暂停或停供" value={unavailableCount} density="compact" />
       </MetricStrip>
 
       <BusinessTableFrame
-        title="供应商供给"
-        description="先看供应商商品，再看它关联到哪个 ERP SKU；价格、起订量和有效期属于这条供给关系。"
+        title={skuId ? "当前 SKU 的供应商供给" : "供应商商品"}
+        description="来源报价先保留为供应商事实；采购确认后，成本写入供给版本，销售可见价写入公司商品池版本。"
         toolbar={
           <ListToolbar
+            filters={
+              <OptionCombobox
+                value={sourceType}
+                onValueChange={(value) =>
+                  onSourceTypeChange(
+                    (value ?? "all") as SupplierCatalogSourceType | "all"
+                  )
+                }
+                options={[
+                  { value: "all", label: "全部来源" },
+                  { value: "EXCEL", label: "Excel 导入" },
+                  { value: "API", label: "API 同步" },
+                  { value: "MANUAL", label: "手工录入" },
+                ]}
+                allowClear={false}
+                className="w-40"
+              />
+            }
             search={
               <form
                 className="flex items-center gap-2"
@@ -406,10 +492,10 @@ function SupplyRelationshipListView({
           <DataTable
             data={items}
             columns={columns}
-            getRowId={(row) => row.externalProduct.id}
+            getRowId={(row) => row.supplierProduct.id}
             rowCount={items.length}
             rowLabel={(row) =>
-              `${row.externalProduct.supplier.name} ${row.externalProduct.currentRevision.name}`
+              `${row.supplierProduct.supplier.name} ${row.supplierProduct.currentRevision.name}`
             }
             caption="商品供给关系列表"
             density="compact"
@@ -420,11 +506,11 @@ function SupplyRelationshipListView({
             emptyState={
               <BusinessEmptyState
                 kind="no-data"
-                title="当前 SKU 暂无供应商供给"
-                description="尚未关联供应商商品，或没有符合当前搜索条件的记录。"
+                title={skuId ? "当前 SKU 暂无供应商供给" : "暂无供应商商品"}
+                description="可以导入供应商 Excel、运行 API 同步或手工录入。三种来源使用相同数据结构。"
                 action={
-                  <Button variant="outline" render={<Link href={queueHref} />}>
-                    查看供应商商品
+                  <Button variant="outline" type="button" onClick={onOpenManualEntry}>
+                    手工录入商品
                   </Button>
                 }
               />

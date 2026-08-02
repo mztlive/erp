@@ -291,7 +291,7 @@ function toCenter(
     capabilities: seed.capabilities.map((c) => ({
       ...c,
       productLevelNote:
-        "连接级能力声明 ≠ 每个商品可用；商品/供给/发布级能力见外部商品供给 / 商品发布",
+        "连接级能力声明 ≠ 每个商品可用；商品/供给/发布级能力见供应商商品库 / 商品发布",
     })),
     lastHealth:
       role === "procurement" && seed.lastHealth
@@ -1170,7 +1170,7 @@ export async function startCatalogSync(input: {
   return {
     status: "processing",
     title: "目录同步任务已创建",
-    message: `已创建目录同步任务 ${jobNo}。可在本页查看进度或进入外部商品供给。`,
+    message: `已创建目录同步任务 ${jobNo}。可在本页查看进度或进入供应商商品库。`,
     jobId,
     jobNo,
   }
@@ -1299,7 +1299,7 @@ export async function enableConnection(input: {
   return {
     status: "succeeded",
     title: "连接已启用",
-    message: "状态变为启用。不直接修改外部商品、供给或历史订单。",
+    message: "状态变为启用。不直接修改供应商商品、供给或历史订单。",
     reference: input.connectionId,
     connectionVersion: o.version,
   }

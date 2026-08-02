@@ -15,7 +15,7 @@ OK: W03 协作客户 scope filters list
 OK: W03 协作客户 narrows list
 OK: W03 team scope + search hits 北辰
 OK: W14 sellable-items has rows
-OK: W14 title includes 可销售项目
+OK: W14 title includes 公司商品池
 OK: W14 products has rows
 OK: W14 title includes 商品与 SKU
 OK: W14 categories has rows

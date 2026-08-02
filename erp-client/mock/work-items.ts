@@ -251,7 +251,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     dueAt: "今天 18:00",
     dueDateTime: "2026-08-01T18:00:00+08:00",
     responsibleParty: "运营 · 李倩",
-    reason: "外部商品缺少可销售项目映射",
+    reason: "供应商商品缺少公司商品池映射",
     impact: "阻断 12 条消费订单入账",
     statusCode: "IN_PROGRESS",
     status: { label: "处理中", tone: "info" },

@@ -34,13 +34,13 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { DemoRole } from "@/features/external-product-supply/types"
+import type { DemoRole } from "@/features/supplier-catalog/types"
 import {
   CHANGE_TYPE_LABEL,
   DEMO_ROLE_LABEL,
   RECOVERY_BLOCKER_MESSAGE,
-} from "@/features/external-product-supply/types"
-import { useExternalCatalogCenterQuery } from "@/features/external-product-supply/queries"
+} from "@/features/supplier-catalog/types"
+import { useSupplierCatalogCenterQuery } from "@/features/supplier-catalog/queries"
 
 const SECTIONS = [
   { id: "overview", label: "概览" },
@@ -61,10 +61,10 @@ function formatTime(iso?: string) {
   }
 }
 
-export function ExternalProductCenterPage({
-  externalProductId,
+export function SupplierProductCenterPage({
+  supplierProductId,
 }: {
-  externalProductId: string
+  supplierProductId: string
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -79,13 +79,13 @@ export function ExternalProductCenterPage({
   const maskCost = searchParams.get("maskCost") === "1"
   const returnTo =
     searchParams.get("returnTo") ??
-    `/supplier-api/catalog?queueContextId=${encodeURIComponent(
+    `/procurement/supplier-catalog?queueContextId=${encodeURIComponent(
       searchParams.get("queueContextId") ?? "queue:W21:procurement:actionable"
-    )}&currentExternalProductId=${encodeURIComponent(externalProductId)}`
+    )}&currentSupplierProductId=${encodeURIComponent(supplierProductId)}`
   const queueContextId = searchParams.get("queueContextId") ?? undefined
 
-  const centerQuery = useExternalCatalogCenterQuery({
-    externalProductId,
+  const centerQuery = useSupplierCatalogCenterQuery({
+    supplierProductId,
     section,
     demoRole,
     maskCost,
@@ -95,7 +95,7 @@ export function ExternalProductCenterPage({
     const params = new URLSearchParams(searchParams.toString())
     params.set("section", next)
     router.replace(
-      `/supplier-api/catalog/${externalProductId}?${params.toString()}`,
+      `/procurement/supplier-catalog/${supplierProductId}?${params.toString()}`,
       { scroll: false }
     )
   }
@@ -114,8 +114,8 @@ export function ExternalProductCenterPage({
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <BusinessEmptyState
           kind="no-data"
-          title="未找到外部商品"
-          description={`外部商品 ${externalProductId} 不在当前目录范围内。`}
+          title="未找到供应商商品"
+          description={`供应商商品 ${supplierProductId} 不在当前目录范围内。`}
           action={
             <Button render={<Link href={returnTo} />}>返回队列</Button>
           }
@@ -125,7 +125,7 @@ export function ExternalProductCenterPage({
   }
 
   const { item, related, costFieldVisibility } = centerQuery.data
-  const ep = item.externalProduct
+  const ep = item.supplierProduct
   const rev = ep.incomingRevision ?? ep.currentRevision
 
   return (
@@ -133,9 +133,13 @@ export function ExternalProductCenterPage({
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
-          { id: "api", label: "供应商 API", href: "/supplier-api/catalog" },
-          { id: "cat", label: "外部商品供给", href: returnTo },
-          { id: "obj", label: ep.externalProductId, current: true },
+          { id: "procurement", label: "采购", href: "/procurement/supplier-catalog" },
+          { id: "cat", label: "供应商商品库", href: returnTo },
+          {
+            id: "obj",
+            label: ep.supplierSpuCode ?? ep.supplierSkuCode,
+            current: true,
+          },
         ]}
         actions={
           <Button
@@ -153,7 +157,7 @@ export function ExternalProductCenterPage({
       <DocumentHeader
         density="compact"
         title={rev.name}
-        documentNumber={ep.externalProductId}
+        documentNumber={ep.supplierSpuCode ?? ep.supplierSkuCode}
         version={`r${rev.revisionNo}`}
         primaryStatus={{
           label: CHANGE_TYPE_LABEL[item.changeType],
@@ -218,21 +222,21 @@ export function ExternalProductCenterPage({
             },
           },
         ]}
-        secondaryActions={
+        secondaryActions={ep.source.connection ? (
           <Button
             type="button"
             size="sm"
             variant="outline"
             render={
               <Link
-                href={`/supplier-api/connections?connectionId=${encodeURIComponent(ep.connection.id)}`}
+                href={`/supplier-api/connections?connectionId=${encodeURIComponent(ep.source.connection.id)}`}
               />
             }
           >
-            连接 {ep.connection.code}
+            连接 {ep.source.connection.code}
             <ExternalLinkIcon className="size-3.5" />
           </Button>
-        }
+        ) : undefined}
       />
 
       {item.publicationImpact.safetyPauseTriggered ? (
@@ -291,7 +295,7 @@ export function ExternalProductCenterPage({
                   {
                     id: "ext",
                     label: "外部 SKU",
-                    value: ep.externalSkuId ?? "—",
+                    value: ep.supplierSkuCode ?? "—",
                   },
                   {
                     id: "sku",
@@ -306,7 +310,7 @@ export function ExternalProductCenterPage({
                   {
                     id: "price",
                     label: "含税供货价",
-                    value: rev.supplyPriceGross ?? "—",
+                    value: rev.sourceQuotedPriceGross ?? "—",
                     numeric: true,
                   },
                   {
@@ -455,10 +459,10 @@ export function ExternalProductCenterPage({
           </CardHeader>
           <CardContent className="space-y-2 pt-4 text-sm">
             <p>
-              任务 {item.syncContext.jobId} · 批次{" "}
-              {item.syncContext.sourceBatchIdentity}
+              任务 {item.sourceContext.intakeId} · 批次{" "}
+              {item.sourceContext.sourceReference}
             </p>
-            <p>接收时间 {formatTime(item.syncContext.receivedAt)}</p>
+            <p>接收时间 {formatTime(item.sourceContext.receivedAt)}</p>
             <p>
               数据版本{" "}
               {rev.contentFingerprintShort ?? "—"}（不含源数据原文）

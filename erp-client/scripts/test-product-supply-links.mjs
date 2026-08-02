@@ -11,9 +11,14 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..")
 const scratch = process.env.SCRATCH
 
 const runner = `
-import { fetchExternalCatalogQueue } from "../features/external-product-supply/api.ts"
+import {
+  createSupplierCatalogItem,
+  fetchSupplierCatalogCenter,
+  fetchSupplierCatalogQueue,
+  promoteSupplierProductToPool,
+} from "../features/supplier-catalog/api.ts"
 import { MASTER_DATA_CENTER_SEEDS } from "../features/master-data/data.ts"
-import { EXTERNAL_PRODUCT_SUPPLY_SEED } from "../mock/external-product-supply.ts"
+import { SUPPLIER_CATALOG_SEED } from "../mock/supplier-catalog.ts"
 
 let failed = 0
 function assert(cond: boolean, msg: string) {
@@ -40,7 +45,7 @@ const enabledSkus = Object.values(MASTER_DATA_CENTER_SEEDS)
   )
 
 for (const sku of enabledSkus) {
-  const activeMappings = EXTERNAL_PRODUCT_SUPPLY_SEED.filter(
+  const activeMappings = SUPPLIER_CATALOG_SEED.filter(
     (item) =>
       item.mapping?.mappingStatus === "ACTIVE" &&
       item.mapping.skuId === sku.skuId
@@ -57,7 +62,7 @@ for (const sku of enabledSkus) {
   )
 }
 
-const teaView = await fetchExternalCatalogQueue({
+const teaView = await fetchSupplierCatalogQueue({
   mode: "list",
   skuId: "sku_tea_04",
   changeType: "all",
@@ -76,6 +81,80 @@ assert(
       (item) => item.offering?.currentRevision?.status === "STOPPED"
     ),
   "one SKU demonstrates active and stopped supplier relationships"
+)
+
+assert(
+  SUPPLIER_CATALOG_SEED.every(
+    (item) =>
+      item.supplierProduct.source.type === "API" &&
+      Boolean(item.supplierProduct.source.connection)
+  ),
+  "API seeds expose connection only as source metadata"
+)
+
+const excelResult = await createSupplierCatalogItem({
+  sourceType: "EXCEL",
+  supplierId: "supplier_excel_test",
+  supplierName: "Excel 测试供应商",
+  supplierSpuCode: "SPU-EXCEL-01",
+  supplierSkuCode: "SKU-EXCEL-01",
+  name: "Excel 导入测试商品",
+  specification: "250g",
+  category: "茶叶",
+  sourceQuotedPriceGross: "42.00",
+  inputTaxRate: "0.13",
+  supplyRegion: ["全国"],
+  sourceReference: "supplier-catalog-test.xlsx",
+  minimumOrderQuantity: "1",
+  supplyMode: "BULK",
+  validFrom: "2026-08-02",
+  idempotencyKey: "test-excel-intake-1",
+})
+const excelCenterBefore = await fetchSupplierCatalogCenter({
+  supplierProductId: excelResult.supplierProductId,
+})
+assert(
+  excelCenterBefore?.item.supplierProduct.source.type === "EXCEL" &&
+    !excelCenterBefore.item.supplierProduct.source.connection &&
+    !excelCenterBefore.item.poolEntry,
+  "Excel intake creates a supplier SKU without a fake API connection or automatic pool entry"
+)
+
+await promoteSupplierProductToPool({
+  supplierProductId: excelResult.supplierProductId,
+  targetSkuId: "sku_tea_04",
+  targetSkuCode: "SKU-TEA-250-TIN",
+  targetSkuName: "礼盒红茶",
+  specification: "250g 罐装",
+  baseUnit: "盒",
+  confirmedCostGross: "40.00",
+  inputTaxRate: "0.13",
+  minimumOrderQuantity: "2",
+  supplyMode: "BULK",
+  supplyRegion: ["全国"],
+  validFrom: "2026-08-02",
+  salesVisiblePrice: "68.00",
+  idempotencyKey: "test-excel-promote-1",
+})
+const excelCenterAfter = await fetchSupplierCatalogCenter({
+  supplierProductId: excelResult.supplierProductId,
+})
+assert(
+  excelCenterAfter?.item.mapping?.skuId === "sku_tea_04" &&
+    excelCenterAfter.item.offering?.currentRevision?.supplyPriceGross === "40.00" &&
+    excelCenterAfter.item.poolEntry?.salesVisiblePrice === "68.00",
+  "promotion atomically records company SKU mapping, confirmed supplier cost, and sales-visible pool price"
+)
+
+const operationsView = await fetchSupplierCatalogCenter({
+  supplierProductId: excelResult.supplierProductId,
+  demoRole: "operations",
+})
+assert(
+  operationsView?.costFieldVisibility === "masked" &&
+    operationsView.item.offering?.currentRevision?.supplyPriceGross === "***" &&
+    operationsView.item.poolEntry?.salesVisiblePrice === "68.00",
+  "operations sees the pool price but not procurement cost"
 )
 
 if (failed) process.exit(1)

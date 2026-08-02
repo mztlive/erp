@@ -95,7 +95,7 @@ const safetySupplierStopped: SystemSafetyPauseOperationView = {
     businessObjectId: "sep_tea_09",
     subjectVersion: "sv-44",
     subjectHash: "sh-ss-01",
-    handlerKey: "W21.supplierExternalProduct.exception",
+    handlerKey: "W21.supplierSupplierProduct.exception",
   },
 }
 

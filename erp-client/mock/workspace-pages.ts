@@ -105,7 +105,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             dueAt: "今天 18:00",
             dueDateTime: "2026-08-01T18:00:00+08:00",
             responsibleParty: "运营 · 李倩",
-            reason: "外部商品缺少可销售项目映射",
+            reason: "供应商商品缺少公司商品池映射",
             impact: "阻断 12 条消费订单入账",
             status: { label: "处理中", tone: "info" },
             scopeTags: ["团队"],
@@ -715,11 +715,11 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W14",
     title: "基础资料",
     description:
-      "维护可销售项目、商品、卡券类目、供应商与仓库；版本变更可追溯。",
+      "维护公司商品池、商品、卡券类目、供应商与仓库；版本变更可追溯。",
     mode: "M2+M4",
     breadcrumbs: [
       { id: "md", label: "基础资料", href: "/master-data" },
-      { id: "resource", label: "可销售项目" },
+      { id: "resource", label: "公司商品池" },
     ],
     shell: {
       kind: "list",
@@ -727,7 +727,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
         searchPlaceholder: "编号、名称、负责人",
         primaryActionLabel: "新建 / 形成新版本",
         filterLabels: [
-          "可销售项目",
+          "公司商品池",
           "商品与 SKU",
           "卡券类目",
           "供应商",
@@ -980,7 +980,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
           {
             id: "i1",
             severity: "error",
-            message: "外部商品缺少可销售项目映射",
+            message: "供应商商品缺少公司商品池映射",
             objectLabel: "EXT-SKU-9912",
             field: "sellableItemId",
           },
@@ -1211,13 +1211,13 @@ export const WORKSPACE_PAGE_DEFS: Partial<
 
   W21: {
     id: "W21",
-    title: "外部商品映射与供给",
+    title: "供应商商品库",
     description:
-      "连续处理外部商品观察、映射与固定供给；在详情页维护供给条件。",
+      "统一接收 Excel、API 与手工供应商商品；选择性加入公司商品池并维护多供应商供给成本。",
     mode: "M3+M4",
     breadcrumbs: [
-      { id: "api", label: "供应商 API", href: "/supplier-api/catalog" },
-      { id: "cat", label: "外部商品供给" },
+      { id: "procurement", label: "采购", href: "/procurement/supplier-catalog" },
+      { id: "cat", label: "供应商商品库" },
     ],
     shell: {
       kind: "queue",
@@ -1226,7 +1226,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
         tasks: [
           {
             id: "ep_01",
-            taskType: "外部商品映射",
+            taskType: "供应商商品入池",
             businessObject: "EXT-SKU-9912",
             counterparty: "京东企业购",
             enteredAt: "今天 09:05",
@@ -1234,13 +1234,13 @@ export const WORKSPACE_PAGE_DEFS: Partial<
             dueAt: "今天 17:00",
             dueDateTime: "2026-08-01T17:00:00+08:00",
             responsibleParty: "运营 · 李倩",
-            reason: "新上架外部商品尚未映射到可销售项目",
+            reason: "新供应商商品尚未选择加入公司商品池",
             impact: "阻断相关消费订单与发布",
             status: { label: "待映射", tone: "warning" },
             summaryFields: [
-              { label: "外部名称", value: "坚果礼盒 A 款" },
+              { label: "供应商商品", value: "坚果礼盒 A 款" },
               { label: "来源版本", value: "v18" },
-              { label: "参考成本", value: money(420) },
+              { label: "采购确认成本", value: money(420) },
               { label: "运费策略", value: "按区" },
             ],
           },
@@ -1798,7 +1798,7 @@ export function getWorkspacePageDef(id: WorkspaceId): WorkspacePageDef {
 }
 
 export const MASTER_DATA_RESOURCES = [
-  { key: "sellable-items", label: "可销售项目" },
+  { key: "sellable-items", label: "公司商品池" },
   { key: "products", label: "商品与 SKU" },
   { key: "categories", label: "商品分类" },
   { key: "brands", label: "品牌" },
@@ -1830,7 +1830,7 @@ type MasterDataFixture = Readonly<{
 /** Per-resource list fixtures for W14 — rows must differ by resource identity. */
 export const MASTER_DATA_FIXTURES: Record<MasterDataResource, MasterDataFixture> = {
   "sellable-items": {
-    searchPlaceholder: "可销售项目编号、名称、负责人",
+    searchPlaceholder: "公司商品池编号、名称、负责人",
     metrics: [
       { key: "enabled", label: "当前启用", value: 426, detail: "可被选择" },
       { key: "disabled", label: "当前停用", value: 38, detail: "历史保留" },
@@ -1858,7 +1858,7 @@ export const MASTER_DATA_FIXTURES: Record<MasterDataResource, MasterDataFixture>
         },
         status: { label: "当前启用", tone: "success" },
         metricTags: ["enabled"],
-        filterTags: ["可销售项目"],
+        filterTags: ["公司商品池"],
       },
       {
         id: "si_2",
@@ -2211,7 +2211,7 @@ export function getMasterDataPageDef(
     id: "W14",
     title: `基础资料 · ${label}`,
     description:
-      "维护可销售项目、商品、卡券类目、供应商与仓库；版本变更可追溯。",
+      "维护公司商品池、商品、卡券类目、供应商与仓库；版本变更可追溯。",
     mode: "M2+M4",
     breadcrumbs: [
       { id: "md", label: "基础资料", href: "/master-data" },

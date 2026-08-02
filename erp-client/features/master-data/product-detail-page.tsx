@@ -54,6 +54,11 @@ import { StatusBadge } from "@/components/ui/status-badge"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { MasterDataDisableDialog } from "@/features/master-data/master-data-action-dialog"
+import {
+  SupplierCatalogIntakeDialog,
+  type FixedSku,
+} from "@/features/supplier-catalog/catalog-write-dialogs"
+import { useSupplierCatalogQueueQuery } from "@/features/supplier-catalog/queries"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { formatEffectiveRange } from "@/features/master-data/filter"
 import {
@@ -455,6 +460,10 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
   )
   const createMutation = useCreateMasterDataMutation()
   const reviseMutation = useCreateRevisionMutation()
+  const supplierCatalogQuery = useSupplierCatalogQueueQuery({
+    mode: "list",
+    changeType: "all",
+  })
 
   const data = detailQuery.data
   const lockVersion = data?.lockVersion
@@ -471,6 +480,8 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
     newIdempotencyKey(isCreate ? "create-product" : "revise-product"),
   )
   const [disableOpen, setDisableOpen] = React.useState(false)
+  const [supplierDialogSku, setSupplierDialogSku] =
+    React.useState<FixedSku>()
   const [activeSection, setActiveSection] =
     React.useState<ProductEditorSectionId>("basic")
   const stickyHeaderRef = React.useRef<HTMLElement>(null)
@@ -1518,7 +1529,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                 colSpan={2}
                                 className="border-l border-border px-3 py-2 font-medium"
                               >
-                                参考售价
+                                公司商品池价格
                               </th>
                               <th
                                 colSpan={3}
@@ -1569,8 +1580,21 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                             </tr>
                           </thead>
                           <tbody>
-                            {fields.skus.map((sku, index) => (
-                              <tr
+                            {fields.skus.map((sku, index) => {
+                              const supplierItems = sku.skuId
+                                ? (supplierCatalogQuery.data?.items ?? []).filter(
+                                    (item) => item.mapping?.skuId === sku.skuId,
+                                  )
+                                : []
+                              const supplierNames = Array.from(
+                                new Set(
+                                  supplierItems.map(
+                                    (item) => item.supplierProduct.supplier.name,
+                                  ),
+                                ),
+                              )
+                              return (
+                                <tr
                                 key={`${sku.skuNo}-${index}`}
                                 className="border-b border-border/70 align-top last:border-b-0"
                               >
@@ -1649,18 +1673,46 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                   />
                                 </td>
                                 <td className="border-l border-border px-3 py-3">
-                                  <div className="space-y-1">
-                                    <Badge variant="outline">W21 独立供给</Badge>
+                                  <div className="space-y-1.5">
+                                    <Badge variant="outline">
+                                      {supplierItems.length} 家供应商
+                                    </Badge>
+                                    {supplierNames.length > 0 ? (
+                                      <span className="block max-w-40 truncate text-xs text-muted-foreground">
+                                        {supplierNames.join("、")}
+                                      </span>
+                                    ) : null}
                                     {sku.skuId && !isCreate ? (
-                                      <Link
-                                        className="block text-xs text-primary hover:underline"
-                                        href={`/supplier-api/catalog?mode=list&skuId=${encodeURIComponent(sku.skuId)}&from=W14&returnTo=${encodeURIComponent(`/master-data/products/${stableId}#product-section-sku`)}`}
-                                      >
-                                        查看或维护供给
-                                      </Link>
+                                      <>
+                                        <Button
+                                          type="button"
+                                          variant="link"
+                                          size="xs"
+                                          className="h-auto justify-start p-0 text-xs"
+                                          onClick={() =>
+                                            setSupplierDialogSku({
+                                              skuId: sku.skuId!,
+                                              skuCode: sku.skuNo,
+                                              skuName: values.name,
+                                              specification: sku.specLabel,
+                                              baseUnit:
+                                                sku.baseUnit ?? fields.baseUnit,
+                                              salesVisiblePrice: sku.salePrice,
+                                            })
+                                          }
+                                        >
+                                          添加供应商并登记成本
+                                        </Button>
+                                        <Link
+                                          className="block text-xs text-primary hover:underline"
+                                          href={`/procurement/supplier-catalog?mode=list&skuId=${encodeURIComponent(sku.skuId)}&from=W14&returnTo=${encodeURIComponent(`/master-data/products/${stableId}#product-section-sku`)}`}
+                                        >
+                                          查看全部供给
+                                        </Link>
+                                      </>
                                     ) : (
                                       <span className="block text-xs text-muted-foreground">
-                                        保存后维护
+                                        保存商品后可添加多家供应商
                                       </span>
                                     )}
                                   </div>
@@ -1705,8 +1757,9 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                     </span>
                                   </div>
                                 </td>
-                              </tr>
-                            ))}
+                                </tr>
+                              )
+                            })}
                           </tbody>
                         </table>
                       </div>
@@ -1843,7 +1896,7 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                                             {sku.skuNo} · {sku.specLabel}
                                           </div>
                                           <div className="mt-1 text-muted-foreground">
-                                            参考售价 {sku.salePrice ?? "—"} · 市场价 {sku.marketPrice ?? "—"}
+                                            销售可见价 {sku.salePrice ?? "—"} · 市场价 {sku.marketPrice ?? "—"}
                                           </div>
                                         </div>
                                       ))}
@@ -1939,6 +1992,15 @@ export function ProductDetailPage({ stableId }: { stableId: string }) {
                 target={data}
               />
             ) : null}
+            <SupplierCatalogIntakeDialog
+              key={supplierDialogSku?.skuId ?? "supplier-intake"}
+              open={Boolean(supplierDialogSku)}
+              onOpenChange={(open) => {
+                if (!open) setSupplierDialogSku(undefined)
+              }}
+              sourceType="MANUAL"
+              fixedSku={supplierDialogSku}
+            />
           </div>
         )
       }}

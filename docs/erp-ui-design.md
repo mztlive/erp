@@ -170,7 +170,7 @@ Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`Quic
   · 卡券票款复核（一期重点）
 
 基础资料
-  · 可销售项目
+  · 公司商品池
   · 商品与 SKU
   · 商品分类
   · 品牌
@@ -439,7 +439,7 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 #### 4.6.1 建单 / 改单
 
 - 全宽任务页签；左侧表头字段，下方 `EditableLineItemTable`。  
-- 选客户、合同、可销售项目、供应商、结算主体、仓库、负责人：一律业务实体 Combobox（`CustomerCombobox` / `ContractCombobox` / `ProductCombobox` / `SupplierCombobox` / `SettlementPartyCombobox` / `WarehouseCombobox` / `OwnerCombobox` 等，底层 `BusinessObjectCombobox`；只出有效对象）。  
+- 选客户、合同、公司商品池、供应商、结算主体、仓库、负责人：一律业务实体 Combobox（`CustomerCombobox` / `ContractCombobox` / `ProductCombobox` / `SupplierCombobox` / `SettlementPartyCombobox` / `WarehouseCombobox` / `OwnerCombobox` 等，底层 `BusinessObjectCombobox`；只出有效对象）。
 - 状态、付款条件、单位、承运方等码表：一律 `OptionCombobox` / `field.SelectField`；共享码表见 `erp-client/lib/business-options.ts`。  
 - **禁止**用自由 `Input`/`TextField` 录入已有业务对象 ID 或名称；列表全文关键词搜索除外。  
 - 行内即时前端校验 + 提交前 `ValidationSummary`。  
@@ -490,7 +490,7 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 | 步骤 | 用户动作 | 界面 |
 | --- | --- | --- |
 | 1 | 在客户中心确认客户与合同 | M4 客户；合同可在侧栏新建（简单）或任务页签 |
-| 2 | 新建实物与服务销售单 | M5；从可销售项目池选品 |
+| 2 | 新建实物与服务销售单 | M5；从公司商品池选品 |
 | 3 | 保存草稿 / 提交二次确认 | 同页正式动作 |
 | 4 | （采购）处理二次确认 | **M3 队列**，不是邮件式链接散落 |
 | 5 | 通过后销售单生效 | 结果回写；销售在中心看到状态与后续采购单 |
@@ -563,7 +563,7 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 | 卡券销售审批 | M3 | 待办 + 销售单中心审批区（只读内容 + 通过/驳回） |
 | 执行投影 | M4 子区 + M2 列表 | 销售单「协同」；失败进错误中心 |
 | 主责迁移 | M7 批次 | 维护窗口 Banner + 批次向导；业务人员只读清单确认 |
-| 外部商品映射 | M3/M7 | 映射队列连续审核 |
+| 供应商商品映射 | M3/M7 | 映射队列连续审核 |
 | 商品发布 | M4 | 发布版本详情含商城确认状态 |
 | 商城消费订单 | M4 | 支付分摊、卡实例引用、原销售单钻取 |
 | 供应商订单 | M4 | 与消费订单、异常补偿同屏可触达 |
@@ -742,14 +742,14 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 | W11 | 客户往来 | M2+M5 | ✓ | ✓ | 财务 |
 | W12 | 供应商往来 | M2+M5 | ✓ | ✓ | 财务 |
 | W13 | 卡券票款复核 | M3 | ✓ | 延续 | 财务 |
-| W14 | 可销售项目/商品/类目/供应商/仓库 | M2+M4 | ✓ | ✓ | 采购/运营 |
+| W14 | 公司商品池/商品/类目/供应商/仓库 | M2+M4 | ✓ | ✓ | 采购/运营 |
 | W15 | 客户经营质量 | M6 | ✓ | ✓ | 管理/销售/财务 |
 | W16 | 实际经营盈亏 | M6 | ✓ | ✓ | 财务/管理 |
 | W17 | 商城同步与映射 | M7 | ✓ | ✓ | 管理员/销售/运营 |
 | W18 | 导入与期初 | M7 | ✓ | — | 管理员 |
 | W19 | 权限与审计 | M2 | ✓ | ✓ | 管理员 |
 | W20 | API 供应商连接 | M2+M4 | — | ✓ | 采购/运维 |
-| W21 | 外部商品映射与供给 | M3+M4 | — | ✓ | 采购/运营 |
+| W21 | 供应商商品映射与供给 | M3+M4 | — | ✓ | 采购/运营 |
 | W22 | 商品发布 | M2+M4 | — | ✓ | 运营 |
 | W23 | 执行投影 | M2+M4 | — | ✓ | 运营/销售 |
 | W24 | 主责迁移批次 | M7 | — | ✓ | 管理员/上线负责人 |

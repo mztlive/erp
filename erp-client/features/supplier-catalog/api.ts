@@ -6,27 +6,31 @@
 import { mockDelay } from "@/features/workspace-kit/delay"
 import type {
   CostFieldVisibility,
+  CreateSupplierCatalogItemInput,
   DemoRole,
   DiffChange,
-  ExternalCatalogCenterView,
-  ExternalCatalogDecision,
-  ExternalCatalogItemView,
-  ExternalCatalogQueueQuery,
-  ExternalCatalogQueueView,
-  ExternalCatalogWorkItemAction,
-  ExternalProductRevisionView,
+  SupplierCatalogCenterView,
+  SupplierCatalogDecision,
+  SupplierCatalogItemView,
+  SupplierCatalogQueueQuery,
+  SupplierCatalogQueueView,
+  SupplierCatalogWorkItemAction,
+  SupplierProductRevisionView,
   FormalActionResponse,
   FormalOutcome,
   SessionCatalogDraft,
+  SupplierCatalogWriteResult,
   SupplierOfferingRevisionView,
+  PromoteSupplierProductInput,
   WorkItemLease,
-} from "@/features/external-product-supply/types"
+} from "@/features/supplier-catalog/types"
 import {
   COST_MASK,
   DEMO_ROLE_LABEL,
-} from "@/features/external-product-supply/types"
+  REGISTRATION_BLOCKER_MESSAGE,
+} from "@/features/supplier-catalog/types"
 import { MASTER_DATA_CENTER_SEEDS } from "@/features/master-data/data"
-import { EXTERNAL_PRODUCT_SUPPLY_SEED } from "@/mock/external-product-supply"
+import { SUPPLIER_CATALOG_SEED } from "@/mock/supplier-catalog"
 import {
   applyWorkItemActionSession,
   claimWorkItemSession,
@@ -46,6 +50,19 @@ import {
 } from "@/mock/session-state"
 
 const drafts = new Map<string, SessionCatalogDraft>()
+const catalogOverlays = new Map<string, SupplierCatalogItemView>()
+const createdCatalogIds: string[] = []
+const writeResults = new Map<string, SupplierCatalogWriteResult>()
+
+function listCatalogItems(): SupplierCatalogItemView[] {
+  const seeded = SUPPLIER_CATALOG_SEED.map(
+    (item) => catalogOverlays.get(item.supplierProduct.id) ?? item
+  )
+  const created = createdCatalogIds
+    .map((id) => catalogOverlays.get(id))
+    .filter((item): item is SupplierCatalogItemView => Boolean(item))
+  return [...created, ...seeded]
+}
 
 function resolveSkuContext(skuId?: string) {
   if (!skuId) return undefined
@@ -74,13 +91,13 @@ function maskCostValue(v: string | null | undefined): string | null {
 }
 
 function maskRevision(
-  rev: ExternalProductRevisionView,
+  rev: SupplierProductRevisionView,
   mask: boolean
-): ExternalProductRevisionView {
+): SupplierProductRevisionView {
   if (!mask) return rev
   return {
     ...rev,
-    supplyPriceGross: maskCostValue(rev.supplyPriceGross),
+    sourceQuotedPriceGross: maskCostValue(rev.sourceQuotedPriceGross),
     inputTaxRate: maskCostValue(rev.inputTaxRate),
     freightAmount: maskCostValue(rev.freightAmount),
     otherFeeAmount: maskCostValue(rev.otherFeeAmount),
@@ -121,14 +138,16 @@ function costVisibility(
   forceMask?: boolean
 ): CostFieldVisibility {
   if (forceMask) return "masked"
-  if (role === "ops_tech" || role === "admin") return "masked"
+  if (role === "operations" || role === "ops_tech" || role === "admin") {
+    return "masked"
+  }
   return "visible"
 }
 
 function roleBlockers(
-  item: ExternalCatalogItemView,
+  item: SupplierCatalogItemView,
   role: DemoRole
-): ExternalCatalogItemView["actionBlockers"] {
+): SupplierCatalogItemView["actionBlockers"] {
   const blockers = [...item.actionBlockers]
   if (role === "operations") {
     for (const action of [
@@ -165,10 +184,10 @@ function roleBlockers(
 }
 
 function projectItem(
-  seed: ExternalCatalogItemView,
+  seed: SupplierCatalogItemView,
   role: DemoRole,
   mask: boolean
-): ExternalCatalogItemView | null {
+): SupplierCatalogItemView | null {
   // 仅已注册异常任务可终结移除
   if (seed.changeType === "ERROR" || seed.changeType === "STOPPED") {
     const terminal = getWorkItemTerminal(seed.workItem.workItemId)
@@ -188,7 +207,7 @@ function projectItem(
       ? getSessionLeaseState(seed.workItem.workItemId)
       : null
 
-  const ep = seed.externalProduct
+  const ep = seed.supplierProduct
   const draft = drafts.get(ep.id)
 
   let mapping = seed.mapping
@@ -216,9 +235,9 @@ function projectItem(
     }
   }
 
-  const base: ExternalCatalogItemView = {
+  const base: SupplierCatalogItemView = {
     ...seed,
-    externalProduct: {
+    supplierProduct: {
       ...ep,
       currentRevision: maskRevision(ep.currentRevision, mask),
       incomingRevision: ep.incomingRevision
@@ -286,7 +305,7 @@ function markHeldHas(id: string): boolean {
   return getHeldQueueTaskIds("W21").has(id)
 }
 
-function filterSummary(q: ExternalCatalogQueueQuery): string {
+function filterSummary(q: SupplierCatalogQueueQuery): string {
   const parts = [
     q.changeType === "all"
       ? "全部变化"
@@ -304,11 +323,20 @@ function filterSummary(q: ExternalCatalogQueueQuery): string {
   ]
   if (q.q) parts.push(`搜索 ${q.q}`)
   if (q.skuId) parts.push(`SKU ${q.skuId}`)
+  if (q.sourceType && q.sourceType !== "all") {
+    parts.push(
+      q.sourceType === "API"
+        ? "API 来源"
+        : q.sourceType === "EXCEL"
+          ? "Excel 来源"
+          : "手工录入"
+    )
+  }
   if (q.maskCost) parts.push("成本掩码")
   return parts.join(" · ")
 }
 
-function sortItems(items: ExternalCatalogItemView[]): ExternalCatalogItemView[] {
+function sortItems(items: SupplierCatalogItemView[]): SupplierCatalogItemView[] {
   const rank: Record<string, number> = {
     STOPPED: 0,
     ERROR: 1,
@@ -333,9 +361,9 @@ function sortItems(items: ExternalCatalogItemView[]): ExternalCatalogItemView[] 
 }
 
 function sortRelationshipItems(
-  items: ExternalCatalogItemView[]
-): ExternalCatalogItemView[] {
-  const rank = (item: ExternalCatalogItemView) => {
+  items: SupplierCatalogItemView[]
+): SupplierCatalogItemView[] {
+  const rank = (item: SupplierCatalogItemView) => {
     const offering = item.offering?.currentRevision
     if (
       item.mapping?.mappingStatus === "ACTIVE" &&
@@ -351,16 +379,23 @@ function sortRelationshipItems(
   return [...items].sort((a, b) => rank(a) - rank(b))
 }
 
-export async function fetchExternalCatalogQueue(
-  query: ExternalCatalogQueueQuery
-): Promise<ExternalCatalogQueueView> {
+export async function fetchSupplierCatalogQueue(
+  query: SupplierCatalogQueueQuery
+): Promise<SupplierCatalogQueueView> {
   await mockDelay()
   const role = resolveRole(query.demoRole)
   const mask = costVisibility(role, query.maskCost) === "masked"
 
-  let items = EXTERNAL_PRODUCT_SUPPLY_SEED.map((s) =>
+  const catalogItems = listCatalogItems()
+  let items = catalogItems.map((s) =>
     projectItem(s, role, mask)
-  ).filter((t): t is ExternalCatalogItemView => t != null)
+  ).filter((t): t is SupplierCatalogItemView => t != null)
+
+  if (query.sourceType && query.sourceType !== "all") {
+    items = items.filter(
+      (item) => item.supplierProduct.source.type === query.sourceType
+    )
+  }
 
   // 默认 actionable：排除 UNCHANGED（种子中无）
   if (!query.changeType || query.changeType === "actionable") {
@@ -388,10 +423,10 @@ export async function fetchExternalCatalogQueue(
   if (query.q?.trim()) {
     const q = query.q.trim().toUpperCase()
     items = items.filter((i) => {
-      const ep = i.externalProduct
+      const ep = i.supplierProduct
       return (
-        ep.externalProductId.toUpperCase().includes(q) ||
-        ep.externalSkuId?.toUpperCase().includes(q) ||
+        ep.supplierSpuCode?.toUpperCase().includes(q) ||
+        ep.supplierSkuCode.toUpperCase().includes(q) ||
         ep.currentRevision.name.toUpperCase().includes(q) ||
         i.mapping?.skuCode?.toUpperCase().includes(q) ||
         ep.supplier.name.includes(query.q!.trim())
@@ -409,7 +444,7 @@ export async function fetchExternalCatalogQueue(
   let position = 0
   let current = items[0]
 
-  // 优先 workItemId（已注册异常），其次 externalProductId
+  // 优先 workItemId（已注册异常），其次 supplierProductId
   if (query.currentWorkItemId) {
     const idx = items.findIndex(
       (i) =>
@@ -420,9 +455,9 @@ export async function fetchExternalCatalogQueue(
       position = idx
       current = items[idx]
     }
-  } else if (query.currentExternalProductId) {
+  } else if (query.currentSupplierProductId) {
     const idx = items.findIndex(
-      (i) => i.externalProduct.id === query.currentExternalProductId
+      (i) => i.supplierProduct.id === query.currentSupplierProductId
     )
     if (idx >= 0) {
       position = idx
@@ -431,7 +466,7 @@ export async function fetchExternalCatalogQueue(
   }
 
   const emptyReason =
-    EXTERNAL_PRODUCT_SUPPLY_SEED.length === 0
+    catalogItems.length === 0
       ? "NO_TASKS"
       : items.length === 0
         ? "FILTER_NO_RESULT"
@@ -450,10 +485,10 @@ export async function fetchExternalCatalogQueue(
       queueContextId,
       position: items.length === 0 ? 0 : position + 1,
       total: items.length,
-      currentExternalProductId: current?.externalProduct.id,
+      currentSupplierProductId: current?.supplierProduct.id,
       currentWorkItemId,
-      previousExternalProductId: items[position - 1]?.externalProduct.id,
-      nextExternalProductId: items[position + 1]?.externalProduct.id,
+      previousSupplierProductId: items[position - 1]?.supplierProduct.id,
+      nextSupplierProductId: items[position + 1]?.supplierProduct.id,
       filterSummary: filterSummary(query),
       queueContextUpdatedAt: new Date().toISOString(),
     },
@@ -465,19 +500,38 @@ export async function fetchExternalCatalogQueue(
   }
 }
 
-export async function fetchExternalCatalogCenter(input: {
-  externalProductId: string
+export async function fetchCompanySkuOptions() {
+  await mockDelay(60)
+  return Object.values(MASTER_DATA_CENTER_SEEDS)
+    .filter((center) => center.resource === "products" && center.productDetail)
+    .flatMap((center) =>
+      (center.productDetail?.skus ?? [])
+        .filter((sku) => sku.lifecycleStatus === "ENABLED" && sku.skuId)
+        .map((sku) => ({
+          skuId: sku.skuId!,
+          skuCode: sku.skuNo,
+          skuName: center.name,
+          specification: sku.specLabel,
+          baseUnit: sku.baseUnit ?? center.productDetail!.baseUnit,
+          revisionNo: center.currentRevision.revisionNo,
+          similarityLabel: "公司商品池候选",
+        }))
+    )
+}
+
+export async function fetchSupplierCatalogCenter(input: {
+  supplierProductId: string
   section?: string
   demoRole?: DemoRole
   maskCost?: boolean
-}): Promise<ExternalCatalogCenterView | null> {
+}): Promise<SupplierCatalogCenterView | null> {
   await mockDelay()
   const role = resolveRole(input.demoRole)
   const mask = costVisibility(role, input.maskCost) === "masked"
-  const seed = EXTERNAL_PRODUCT_SUPPLY_SEED.find(
+  const seed = listCatalogItems().find(
     (s) =>
-      s.externalProduct.id === input.externalProductId ||
-      s.externalProduct.externalProductId === input.externalProductId
+      s.supplierProduct.id === input.supplierProductId ||
+      s.supplierProduct.supplierSpuCode === input.supplierProductId
   )
   if (!seed) return null
   const item = projectItem(seed, role, mask)
@@ -509,7 +563,7 @@ export async function fetchExternalCatalogCenter(input: {
               {
                 id: "te1",
                 label: "接口错误与对账",
-                href: `/governance/integration-errors?from=W21&externalProductId=${item.externalProduct.id}`,
+                href: `/governance/integration-errors?from=W21&supplierProductId=${item.supplierProduct.id}`,
               },
             ]
           : [],
@@ -518,13 +572,13 @@ export async function fetchExternalCatalogCenter(input: {
 }
 
 export function getSessionDraft(
-  externalProductId: string
+  supplierProductId: string
 ): SessionCatalogDraft | null {
-  return drafts.get(externalProductId) ?? null
+  return drafts.get(supplierProductId) ?? null
 }
 
 export async function saveSessionDraft(input: {
-  externalProductId: string
+  supplierProductId: string
   selectedSkuId?: string
   offeringDraft?: SessionCatalogDraft["offeringDraft"]
   substituteCandidateSkuIds?: string[]
@@ -532,22 +586,22 @@ export async function saveSessionDraft(input: {
 }): Promise<SessionCatalogDraft> {
   await mockDelay(60)
   const next: SessionCatalogDraft = {
-    externalProductId: input.externalProductId,
+    supplierProductId: input.supplierProductId,
     selectedSkuId: input.selectedSkuId,
     offeringDraft: input.offeringDraft,
     substituteCandidateSkuIds: input.substituteCandidateSkuIds,
     note: input.note,
     updatedAt: new Date().toISOString(),
   }
-  drafts.set(input.externalProductId, next)
+  drafts.set(input.supplierProductId, next)
   return next
 }
 
-export async function claimExternalCatalogWorkItem(
+export async function claimSupplierCatalogWorkItem(
   workItemId: string
 ): Promise<WorkItemLease> {
   await mockDelay(80)
-  const seed = EXTERNAL_PRODUCT_SUPPLY_SEED.find(
+  const seed = SUPPLIER_CATALOG_SEED.find(
     (s) =>
       (s.changeType === "ERROR" || s.changeType === "STOPPED") &&
       s.workItem.workItemId === workItemId
@@ -579,17 +633,17 @@ export async function claimExternalCatalogWorkItem(
   }
 }
 
-export async function applyExternalCatalogWorkItemAction(input: {
+export async function applySupplierCatalogWorkItemAction(input: {
   workItemId: string
   claimToken: string
   leaseVersion: number
   expectedSubjectHash: string
-  action: ExternalCatalogWorkItemAction
+  action: SupplierCatalogWorkItemAction
   idempotencyKey: string
   simulateTimeout?: boolean
 }): Promise<FormalActionResponse> {
   await mockDelay(100)
-  const seed = EXTERNAL_PRODUCT_SUPPLY_SEED.find(
+  const seed = SUPPLIER_CATALOG_SEED.find(
     (s) =>
       (s.changeType === "ERROR" || s.changeType === "STOPPED") &&
       s.workItem.workItemId === input.workItemId
@@ -655,17 +709,17 @@ export async function applyExternalCatalogWorkItemAction(input: {
   }
 }
 
-export async function completeExternalCatalogWorkItem(input: {
+export async function completeSupplierCatalogWorkItem(input: {
   workItemId: string
   claimToken: string
   leaseVersion: number
   expectedSubjectHash: string
-  decision: ExternalCatalogDecision
+  decision: SupplierCatalogDecision
   idempotencyKey: string
   simulateTimeout?: boolean
 }): Promise<FormalActionResponse> {
   await mockDelay(120)
-  const seed = EXTERNAL_PRODUCT_SUPPLY_SEED.find(
+  const seed = SUPPLIER_CATALOG_SEED.find(
     (s) =>
       (s.changeType === "ERROR" || s.changeType === "STOPPED") &&
       s.workItem.workItemId === input.workItemId
@@ -700,10 +754,10 @@ export async function completeExternalCatalogWorkItem(input: {
   }
 
   const expectedRev = String(
-    seed.externalProduct.incomingRevision?.revisionNo ??
-      seed.externalProduct.currentRevision.revisionNo
+    seed.supplierProduct.incomingRevision?.revisionNo ??
+      seed.supplierProduct.currentRevision.revisionNo
   )
-  if (input.decision.expectedExternalRevision !== expectedRev) {
+  if (input.decision.expectedSourceRevision !== expectedRev) {
     return {
       status: "failed",
       code: "REVISION_MISMATCH",
@@ -730,7 +784,7 @@ export async function completeExternalCatalogWorkItem(input: {
 
     const business = {
       decisionKind: input.decision.kind,
-      externalProductId: seed.externalProduct.id,
+      supplierProductId: seed.supplierProduct.id,
       auditEventId: result.completionRecordId,
       publicationImpact: seed.publicationImpact,
       reference: `W21-DONE-${input.workItemId.toUpperCase()}`,
@@ -762,7 +816,7 @@ export async function completeExternalCatalogWorkItem(input: {
   }
 }
 
-export async function resolveUnknownExternalCatalogResult(input: {
+export async function resolveUnknownSupplierCatalogResult(input: {
   idempotencyKey: string
   settle?: boolean
 }): Promise<FormalActionResponse> {
@@ -828,7 +882,7 @@ export async function resolveUnknownExternalCatalogResult(input: {
               (payload.businessResult?.kind as
                 | "CONFIRM_ERROR_RESOLVED"
                 | "CONFIRM_STOP_SUPPLY") ?? "CONFIRM_ERROR_RESOLVED",
-            externalProductId: "",
+            supplierProductId: "",
             auditEventId: payload.completionRecordId,
             publicationImpact: {
               activePublicationCount: 0,
@@ -867,6 +921,287 @@ export async function resolveUnknownExternalCatalogResult(input: {
     code: "FAILED",
     message: entry.error ?? "动作失败",
   }
+}
+
+const EMPTY_PUBLICATION_IMPACT = {
+  activePublicationCount: 0,
+  pausedPublicationCount: 0,
+  historicalPaidOrderCount: 0,
+  safetyPauseTriggered: false,
+  safetyPauseReasons: [] as string[],
+  pauseSubResults: [] as Array<{
+    id: string
+    publicationId: string
+    reason: string
+    outboxId: string
+    status: string
+  }>,
+  mallSalePriceAutoUpdate: false as const,
+  moqCopiedToMallMinPurchase: false as const,
+  note: "尚未绑定商城发布。公司商品池价格与供应商采购成本分别维护。",
+}
+
+function createConfirmedOffering(input: {
+  offeringId: string
+  costGross: string
+  inputTaxRate: string
+  minimumOrderQuantity: string
+  supplyMode: "DROPSHIP" | "BULK"
+  supplyRegion: string[]
+  validFrom: string
+}): SupplierOfferingRevisionView {
+  return {
+    offeringId: input.offeringId,
+    offeringRevisionId: `${input.offeringId}_r1`,
+    revisionNo: 1,
+    status: "ACTIVE",
+    supplyPriceGross: input.costGross,
+    supplyPriceNet: input.costGross,
+    floorPriceGross: input.costGross,
+    supplyMode: input.supplyMode,
+    inputTaxRate: input.inputTaxRate,
+    freightAmount: "0.00",
+    serviceFeeAmount: "0.00",
+    minimumOrderQuantity: input.minimumOrderQuantity,
+    supplyRegion: input.supplyRegion,
+    availabilityStatus: "AVAILABLE",
+    availableQuantity: "—",
+    productCapabilities: [],
+    validFrom: input.validFrom,
+    createdAt: new Date().toISOString(),
+    immutable: true,
+  }
+}
+
+/**
+ * 日常供应商商品录入：Excel、API 和手工共用同一命令形状。
+ * API 连接只是来源元数据，不是供应商商品或供给的创建前置条件。
+ */
+export async function createSupplierCatalogItem(
+  input: CreateSupplierCatalogItemInput
+): Promise<SupplierCatalogWriteResult> {
+  await mockDelay(120)
+  const cached = writeResults.get(input.idempotencyKey)
+  if (cached) return cached
+  if (
+    input.targetSkuId &&
+    (!input.confirmedCostGross || !input.salesVisiblePrice)
+  ) {
+    throw new Error("加入公司商品池时必须同时确认采购成本和销售可见价")
+  }
+
+  const seq = createdCatalogIds.length + 1
+  const id = `supplier_product_manual_${seq}`
+  const now = new Date().toISOString()
+  const offeringId = `supplier_offering_${seq}`
+  const offering = input.targetSkuId
+    ? createConfirmedOffering({
+        offeringId,
+        costGross: input.confirmedCostGross!,
+        inputTaxRate: input.inputTaxRate,
+        minimumOrderQuantity: input.minimumOrderQuantity,
+        supplyMode: input.supplyMode,
+        supplyRegion: input.supplyRegion,
+        validFrom: input.validFrom,
+      })
+    : undefined
+
+  const base = {
+    supplierProduct: {
+      id,
+      supplier: { id: input.supplierId, name: input.supplierName },
+      source: {
+        type: input.sourceType,
+        label:
+          input.sourceType === "EXCEL"
+            ? "Excel 导入"
+            : input.sourceType === "API"
+              ? "API 同步"
+              : "手工录入",
+        fileName:
+          input.sourceType === "EXCEL" ? input.sourceReference : undefined,
+        batchNo: `SC-${input.sourceType}-${String(seq).padStart(4, "0")}`,
+        recordedBy: "采购 · 当前用户",
+      },
+      supplierSpuCode: input.supplierSpuCode,
+      supplierSkuCode: input.supplierSkuCode,
+      status: "ACTIVE",
+      currentRevision: {
+        revisionNo: 1,
+        sourceUpdatedAt: now,
+        syncedAt: now,
+        name: input.name,
+        specification: input.specification,
+        category: input.category,
+        sourceQuotedPriceGross: input.sourceQuotedPriceGross,
+        inputTaxRate: input.inputTaxRate,
+        freightAmount: "0.00",
+        otherFeeAmount: "0.00",
+        supplyRegion: input.supplyRegion,
+        availableQuantity: "—",
+        availabilityStatus: "AVAILABLE" as const,
+        capabilitySnapshot: [],
+      },
+    },
+    skuCandidates: input.targetSkuId
+      ? []
+      : [],
+    offering: offering
+      ? {
+          stableId: offeringId,
+          currentRevision: offering,
+          revisionHistory: [offering],
+        }
+      : {
+          stableId: offeringId,
+          revisionHistory: [],
+        },
+    poolEntry:
+      input.targetSkuId && input.salesVisiblePrice
+        ? {
+            poolEntryId: `pool_${input.targetSkuId}`,
+            poolEntryRevisionId: `pool_${input.targetSkuId}_r1`,
+            status: "ACTIVE" as const,
+            salesVisiblePrice: input.salesVisiblePrice,
+            validFrom: input.validFrom,
+          }
+        : undefined,
+    publicationImpact: EMPTY_PUBLICATION_IMPACT,
+    sourceContext: {
+      intakeId: `intake_${input.sourceType.toLowerCase()}_${seq}`,
+      sourceReference:
+        input.sourceReference ?? `${input.sourceType.toLowerCase()}:${seq}`,
+      receivedAt: now,
+    },
+    sourceDiff: [],
+    costFieldVisibility: "visible" as const,
+  }
+
+  const item: SupplierCatalogItemView = input.targetSkuId
+    ? {
+        ...base,
+        changeType: "UNCHANGED",
+        mapping: {
+          mappingStatus: "ACTIVE",
+          skuId: input.targetSkuId,
+          skuCode: input.targetSkuCode,
+          skuName: input.targetSkuName,
+          skuRevisionId: `${input.targetSkuId}:current`,
+          specification: input.specification,
+          baseUnit: input.baseUnit,
+          approvedBy: "采购 · 当前用户",
+          approvedAt: now,
+          reason: "手工录入并加入公司商品池",
+          mappingVersion: `mapping_${seq}_v1`,
+          history: [],
+        },
+        allowedActions: ["BROWSE", "REVISE_OFFERING"],
+        actionBlockers: [],
+      }
+    : {
+        ...base,
+        changeType: "NEW",
+        registrationBlocker: {
+          code: "WORK_ITEM_TYPE_UNREGISTERED",
+          message: REGISTRATION_BLOCKER_MESSAGE,
+          businessProcess: "MAPPING",
+        },
+        allowedActions: ["PROMOTE_TO_PRODUCT_POOL", "BROWSE"],
+        actionBlockers: [],
+      }
+
+  catalogOverlays.set(id, item)
+  createdCatalogIds.unshift(id)
+  const result = {
+    supplierProductId: id,
+    supplierOfferingRevisionId: offering?.offeringRevisionId,
+    poolEntryRevisionId: item.poolEntry?.poolEntryRevisionId,
+    reference: `SC-${input.sourceType}-${String(seq).padStart(4, "0")}`,
+    recordedAt: now,
+  }
+  writeResults.set(input.idempotencyKey, result)
+  return result
+}
+
+/** 采购把已有供应商 SKU 关联到公司 SKU，并同时确认成本与销售可见价。 */
+export async function promoteSupplierProductToPool(
+  input: PromoteSupplierProductInput
+): Promise<SupplierCatalogWriteResult> {
+  await mockDelay(140)
+  const cached = writeResults.get(input.idempotencyKey)
+  if (cached) return cached
+  const current = listCatalogItems().find(
+    (item) => item.supplierProduct.id === input.supplierProductId
+  )
+  if (!current) throw new Error("供应商商品不存在或无权访问")
+  if (current.changeType === "ERROR") {
+    throw new Error("异常来源数据必须先修复，不能直接加入公司商品池")
+  }
+
+  const now = new Date().toISOString()
+  const offeringId =
+    current.offering?.stableId ?? `offering_${input.supplierProductId}`
+  const offering = createConfirmedOffering({
+    offeringId,
+    costGross: input.confirmedCostGross,
+    inputTaxRate: input.inputTaxRate,
+    minimumOrderQuantity: input.minimumOrderQuantity,
+    supplyMode: input.supplyMode,
+    supplyRegion: input.supplyRegion,
+    validFrom: input.validFrom,
+  })
+  const { workItem: _workItem, registrationBlocker: _registrationBlocker, ...rest } =
+    current as SupplierCatalogItemView & {
+      workItem?: unknown
+      registrationBlocker?: unknown
+    }
+  void _workItem
+  void _registrationBlocker
+  const next: SupplierCatalogItemView = {
+    ...rest,
+    changeType: "UNCHANGED",
+    mapping: {
+      mappingStatus: "ACTIVE",
+      skuId: input.targetSkuId,
+      skuCode: input.targetSkuCode,
+      skuName: input.targetSkuName,
+      skuRevisionId: `${input.targetSkuId}:current`,
+      specification: input.specification,
+      baseUnit: input.baseUnit,
+      approvedBy: "采购 · 当前用户",
+      approvedAt: now,
+      reason: "采购确认加入公司商品池",
+      mappingVersion: `map_${input.supplierProductId}_${Date.now()}`,
+      history: current.mapping?.history ?? [],
+    },
+    offering: {
+      stableId: offeringId,
+      currentRevision: offering,
+      revisionHistory: [
+        ...(current.offering?.revisionHistory ?? []),
+        offering,
+      ],
+    },
+    poolEntry: {
+      poolEntryId: `pool_${input.targetSkuId}`,
+      poolEntryRevisionId: `pool_${input.targetSkuId}_${Date.now()}`,
+      status: "ACTIVE",
+      salesVisiblePrice: input.salesVisiblePrice,
+      validFrom: input.validFrom,
+    },
+    allowedActions: ["BROWSE", "REVISE_OFFERING"],
+    actionBlockers: [],
+  }
+  catalogOverlays.set(input.supplierProductId, next)
+  const result = {
+    supplierProductId: input.supplierProductId,
+    supplierOfferingRevisionId: offering.offeringRevisionId,
+    poolEntryRevisionId: next.poolEntry?.poolEntryRevisionId,
+    reference: `POOL-${input.targetSkuCode}-${Date.now().toString(36)}`,
+    recordedAt: now,
+  }
+  writeResults.set(input.idempotencyKey, result)
+  return result
 }
 
 /** 映射确认/供给确认端点不存在（类型未登记） */

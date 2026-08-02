@@ -1,10 +1,10 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
-import { ExternalProductSupplyPage } from "@/features/external-product-supply/external-product-supply-page"
+import { SupplierCatalogPage } from "@/features/supplier-catalog/supplier-catalog-page"
 
 export const metadata: Metadata = {
-  title: "商品供给管理",
+  title: "供应商商品库",
 }
 
 function CatalogFallback() {
@@ -21,13 +21,13 @@ function CatalogFallback() {
 }
 
 /**
- * SPA 壳：URL 恢复 changeType / currentExternalProductId / currentWorkItemId /
+ * SPA 壳：URL 恢复 changeType / currentSupplierProductId / currentWorkItemId /
  * queueContextId / autoNext / demoRole。业务数据不在服务端 fetch。
  */
 export default function Page() {
   return (
     <Suspense fallback={<CatalogFallback />}>
-      <ExternalProductSupplyPage />
+      <SupplierCatalogPage />
     </Suspense>
   )
 }

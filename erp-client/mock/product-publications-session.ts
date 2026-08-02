@@ -25,7 +25,7 @@ import {
   PUBLICATION_SEEDS,
   type PublicationSeed,
 } from "@/mock/product-publications"
-import { EXTERNAL_PRODUCT_SUPPLY_SEED } from "@/mock/external-product-supply"
+import { SUPPLIER_CATALOG_SEED } from "@/mock/supplier-catalog"
 import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
 
 const w22Overrides = new Map<string, PublicationSeed>()
@@ -66,7 +66,7 @@ function resolveFixedOffering(
       return structuredClone(revision.fixedOffering)
     }
   }
-  for (const item of EXTERNAL_PRODUCT_SUPPLY_SEED) {
+  for (const item of SUPPLIER_CATALOG_SEED) {
     const offering = item.offering
     if (!offering) continue
     const revision = [
@@ -76,7 +76,7 @@ function resolveFixedOffering(
     if (!revision) continue
     return {
       offeringRevisionId,
-      supplierName: item.externalProduct.supplier.name,
+      supplierName: item.supplierProduct.supplier.name,
       availability: revision.availabilityStatus.toLowerCase(),
       availabilityLabel:
         revision.availabilityStatus === "AVAILABLE"
@@ -744,7 +744,7 @@ export function triggerW22SystemSafetyPause(
         businessObjectId: command.sourceObjectId,
         subjectVersion: command.sourceVersion,
         subjectHash: command.subjectHash,
-        handlerKey: "W21.supplierExternalProduct.exception",
+        handlerKey: "W21.supplierSupplierProduct.exception",
       },
     }
   } else if (

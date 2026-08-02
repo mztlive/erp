@@ -46,6 +46,7 @@ export type WorkspaceMode =
   | "M2+M6"
   | "M3+M5"
   | "M3+M4"
+  | "M2+M3+M4"
   | "M2+M4+M5"
   | "nested"
 
@@ -204,7 +205,7 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
   },
   {
     id: "W14",
-    name: "可销售项目、商品、类目、供应商与仓库",
+    name: "公司商品池、商品、类目、供应商与仓库",
     mode: "M2+M4",
     mainRoute: "/master-data/:resource",
     navHref: "/master-data/sellable-items",
@@ -253,10 +254,10 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
   },
   {
     id: "W21",
-    name: "商品供给管理",
-    mode: "M3+M4",
-    mainRoute: "/supplier-api/catalog",
-    navHref: "/supplier-api/catalog",
+    name: "供应商商品库与供给管理",
+    mode: "M2+M3+M4",
+    mainRoute: "/procurement/supplier-catalog",
+    navHref: "/procurement/supplier-catalog",
   },
   {
     id: "W22",
@@ -394,6 +395,12 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
         label: "库存台账",
         icon: WarehouseIcon,
       },
+      {
+        id: "W21",
+        href: "/procurement/supplier-catalog",
+        label: "供应商商品库",
+        icon: PackageSearchIcon,
+      },
     ],
   },
   {
@@ -425,7 +432,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
       {
         id: "W14",
         href: "/master-data/sellable-items",
-        label: "可销售项目",
+        label: "公司商品池",
         icon: BoxesIcon,
       },
       {
@@ -520,12 +527,6 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
         href: "/supplier-api/connections",
         label: "API 连接",
         icon: PlugIcon,
-      },
-      {
-        id: "W21",
-        href: "/supplier-api/catalog",
-        label: "商品供给",
-        icon: PackageSearchIcon,
       },
       {
         id: "W26",
