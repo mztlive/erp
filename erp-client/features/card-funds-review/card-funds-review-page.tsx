@@ -51,6 +51,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -1383,14 +1384,12 @@ export function CardFundsReviewPage() {
                               </div>
                               <div className="space-y-1.5">
                                 <Label htmlFor="rcpt-at">到账日期</Label>
-                                <Input
-                                  id="rcpt-at"
-                                  type="date"
-                                  value={receiptForm.receivedAt}
-                                  onChange={(e) =>
+                                <DatePicker
+                                  value={receiptForm.receivedAt || undefined}
+                                  onValueChange={(next) =>
                                     setReceiptForm((f) => ({
                                       ...f,
-                                      receivedAt: e.target.value,
+                                      receivedAt: next ?? "",
                                     }))
                                   }
                                 />
@@ -1436,14 +1435,12 @@ export function CardFundsReviewPage() {
                               </div>
                               <div className="space-y-1.5">
                                 <Label htmlFor="inv-at">开票日期</Label>
-                                <Input
-                                  id="inv-at"
-                                  type="date"
-                                  value={invoiceForm.issuedAt}
-                                  onChange={(e) =>
+                                <DatePicker
+                                  value={invoiceForm.issuedAt || undefined}
+                                  onValueChange={(next) =>
                                     setInvoiceForm((f) => ({
                                       ...f,
-                                      issuedAt: e.target.value,
+                                      issuedAt: next ?? "",
                                     }))
                                   }
                                 />

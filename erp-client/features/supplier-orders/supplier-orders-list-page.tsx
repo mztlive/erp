@@ -27,6 +27,7 @@ import {
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { DatePicker } from "@/components/ui/date-picker"
 import {
   InputGroup,
   InputGroupAddon,
@@ -755,13 +756,12 @@ export function SupplierOrdersListPage() {
 
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
                   支付自
-                  <input
-                    type="date"
-                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                    value={url.paidFrom ?? ""}
-                    onChange={(e) =>
+                  <DatePicker
+                    className="w-[9.5rem]"
+                    value={url.paidFrom || undefined}
+                    onValueChange={(next) =>
                       pushUrl({
-                        paidFrom: e.target.value || undefined,
+                        paidFrom: next || undefined,
                         page: 1,
                       })
                     }
@@ -769,13 +769,12 @@ export function SupplierOrdersListPage() {
                 </label>
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
                   至
-                  <input
-                    type="date"
-                    className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                    value={url.paidTo ?? ""}
-                    onChange={(e) =>
+                  <DatePicker
+                    className="w-[9.5rem]"
+                    value={url.paidTo || undefined}
+                    onValueChange={(next) =>
                       pushUrl({
-                        paidTo: e.target.value || undefined,
+                        paidTo: next || undefined,
                         page: 1,
                       })
                     }

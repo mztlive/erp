@@ -50,6 +50,48 @@ function formatDateValue(date: Date) {
   return `${year}-${month}-${day}`
 }
 
+/** Normalize time to `HH:mm:ss` (seconds default to 00). */
+function normalizeTimeValue(time?: string) {
+  if (!time) return "00:00:00"
+  const parts = time.split(":")
+  const hours = (parts[0] ?? "00").padStart(2, "0")
+  const minutes = (parts[1] ?? "00").padStart(2, "0")
+  const seconds = (parts[2] ?? "00").padStart(2, "0").slice(0, 2)
+  return `${hours}:${minutes}:${seconds}`
+}
+
+/**
+ * Parse a datetime-local / local ISO-ish string into {@link ZonedDateTimeValue}.
+ * Accepts `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, `YYYY-MM-DDTHH:mm:ss`, and space separator.
+ */
+function parseDatetimeLocalValue(
+  value?: string,
+  timeZone = "Asia/Shanghai"
+): ZonedDateTimeValue | undefined {
+  if (!value) return undefined
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return { date: value, time: "00:00:00", timeZone }
+  }
+
+  const match = value.match(
+    /^(\d{4}-\d{2}-\d{2})[T\s](\d{2}:\d{2})(?::(\d{2}))?/
+  )
+  if (!match) return undefined
+
+  return {
+    date: match[1],
+    time: normalizeTimeValue(`${match[2]}:${match[3] ?? "00"}`),
+    timeZone,
+  }
+}
+
+/** Format {@link ZonedDateTimeValue} as `YYYY-MM-DDTHH:mm:ss` (local, no offset). */
+function formatDatetimeLocalValue(value?: ZonedDateTimeValue) {
+  if (!value?.date) return undefined
+  return `${value.date}T${normalizeTimeValue(value.time)}`
+}
+
 function DatePicker({
   value,
   onValueChange,
@@ -208,7 +250,9 @@ function DateTimePicker({
   placeholder = "选择日期和时间",
   disabled,
   disabledDates,
+  clearable = true,
   className,
+  "aria-invalid": ariaInvalid,
 }: {
   value?: ZonedDateTimeValue
   onValueChange?: (value?: ZonedDateTimeValue) => void
@@ -216,12 +260,14 @@ function DateTimePicker({
   placeholder?: string
   disabled?: boolean
   disabledDates?: Matcher | Matcher[]
+  clearable?: boolean
   className?: string
+  "aria-invalid"?: boolean
 }) {
   const [open, setOpen] = React.useState(false)
   const selected = parseDateValue(value?.date)
   const label = value
-    ? `${value.date} ${value.time} · ${value.timeZone}`
+    ? `${value.date} ${normalizeTimeValue(value.time)} · ${value.timeZone}`
     : placeholder
 
   const update = (next: Partial<ZonedDateTimeValue>) => {
@@ -230,7 +276,7 @@ function DateTimePicker({
 
     onValueChange?.({
       date,
-      time: next.time ?? value?.time ?? "00:00:00",
+      time: normalizeTimeValue(next.time ?? value?.time ?? "00:00:00"),
       timeZone,
     })
   }
@@ -245,6 +291,7 @@ function DateTimePicker({
               variant="outline"
               className="min-w-0 flex-1 justify-start"
               disabled={disabled}
+              aria-invalid={ariaInvalid}
               aria-label={label}
             />
           }
@@ -254,7 +301,7 @@ function DateTimePicker({
             {label}
           </span>
         </PopoverTrigger>
-        {value ? (
+        {clearable && value ? (
           <Button
             type="button"
             variant="ghost"
@@ -281,7 +328,7 @@ function DateTimePicker({
           <Input
             type="time"
             step={1}
-            value={value?.time ?? "00:00:00"}
+            value={normalizeTimeValue(value?.time)}
             onChange={(event) => update({ time: event.target.value })}
             disabled={disabled || !value?.date}
             aria-label="时间，精确到秒"
@@ -303,10 +350,55 @@ function DateTimePicker({
   )
 }
 
+/**
+ * DateTimePicker that binds to datetime-local style strings
+ * (`YYYY-MM-DDTHH:mm` / `YYYY-MM-DDTHH:mm:ss`).
+ */
+function DateTimeLocalPicker({
+  value,
+  onValueChange,
+  timeZone = "Asia/Shanghai",
+  placeholder = "选择日期和时间",
+  disabled,
+  disabledDates,
+  clearable = true,
+  className,
+  "aria-invalid": ariaInvalid,
+}: {
+  value?: string
+  onValueChange?: (value?: string) => void
+  timeZone?: string
+  placeholder?: string
+  disabled?: boolean
+  disabledDates?: Matcher | Matcher[]
+  clearable?: boolean
+  className?: string
+  "aria-invalid"?: boolean
+}) {
+  return (
+    <DateTimePicker
+      value={parseDatetimeLocalValue(value, timeZone)}
+      onValueChange={(next) =>
+        onValueChange?.(next ? formatDatetimeLocalValue(next) : undefined)
+      }
+      timeZone={timeZone}
+      placeholder={placeholder}
+      disabled={disabled}
+      disabledDates={disabledDates}
+      clearable={clearable}
+      className={className}
+      aria-invalid={ariaInvalid}
+    />
+  )
+}
+
 export {
   DatePicker,
   DateRangePicker,
   DateTimePicker,
+  DateTimeLocalPicker,
+  parseDatetimeLocalValue,
+  formatDatetimeLocalValue,
   type DateRangeValue,
   type ZonedDateTimeValue,
 }

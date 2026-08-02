@@ -51,6 +51,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -1347,18 +1348,18 @@ export function ProcurementConfirmationPage() {
                                         />
                                       </td>
                                       <td className="px-3 py-2">
-                                        <Input
-                                          type="date"
+                                        <DatePicker
                                           className="w-[9.5rem]"
-                                          value={line.expectedDeliveryDate}
-                                          onChange={(e) =>
+                                          value={
+                                            line.expectedDeliveryDate ||
+                                            undefined
+                                          }
+                                          onValueChange={(next) =>
                                             updateLine(line.lineKey, {
-                                              expectedDeliveryDate:
-                                                e.target.value,
+                                              expectedDeliveryDate: next ?? "",
                                             })
                                           }
                                           disabled={formalPending}
-                                          aria-label="预计交期"
                                         />
                                       </td>
                                       <td className="px-3 py-2">

@@ -65,6 +65,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { DatePicker } from "@/components/ui/date-picker"
 import {
   InputGroup,
   InputGroupAddon,
@@ -860,25 +861,17 @@ export function CustomerQualityPage() {
             <div className="grid flex-1 gap-2 sm:grid-cols-2">
               <div className="space-y-1.5">
                 <Label htmlFor="cq-from">开始日期</Label>
-                <InputGroup>
-                  <InputGroupInput
-                    id="cq-from"
-                    type="date"
-                    value={explicitFrom}
-                    onChange={(e) => setExplicitFrom(e.target.value)}
-                  />
-                </InputGroup>
+                <DatePicker
+                  value={explicitFrom || undefined}
+                  onValueChange={(next) => setExplicitFrom(next ?? "")}
+                />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="cq-to">结束日期</Label>
-                <InputGroup>
-                  <InputGroupInput
-                    id="cq-to"
-                    type="date"
-                    value={explicitTo}
-                    onChange={(e) => setExplicitTo(e.target.value)}
-                  />
-                </InputGroup>
+                <DatePicker
+                  value={explicitTo || undefined}
+                  onValueChange={(next) => setExplicitTo(next ?? "")}
+                />
               </div>
             </div>
             <Button
@@ -1083,37 +1076,31 @@ export function CustomerQualityPage() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="cq-period-from">期间起</Label>
-              <InputGroup className="w-[10.5rem]">
-                <InputGroupInput
-                  id="cq-period-from"
-                  type="date"
-                  value={resolvedFrom ?? ""}
-                  onChange={(e) =>
-                    patchUrl({
-                      from: e.target.value || null,
-                      periodSelectionSource: "EXPLICIT",
-                      periodPreset: null,
-                    })
-                  }
-                />
-              </InputGroup>
+              <DatePicker
+                className="w-[10.5rem]"
+                value={resolvedFrom || undefined}
+                onValueChange={(next) =>
+                  patchUrl({
+                    from: next || null,
+                    periodSelectionSource: "EXPLICIT",
+                    periodPreset: null,
+                  })
+                }
+              />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cq-period-to">期间止</Label>
-              <InputGroup className="w-[10.5rem]">
-                <InputGroupInput
-                  id="cq-period-to"
-                  type="date"
-                  value={resolvedTo ?? ""}
-                  onChange={(e) =>
-                    patchUrl({
-                      to: e.target.value || null,
-                      periodSelectionSource: "EXPLICIT",
-                      periodPreset: null,
-                    })
-                  }
-                />
-              </InputGroup>
+              <DatePicker
+                className="w-[10.5rem]"
+                value={resolvedTo || undefined}
+                onValueChange={(next) =>
+                  patchUrl({
+                    to: next || null,
+                    periodSelectionSource: "EXPLICIT",
+                    periodPreset: null,
+                  })
+                }
+              />
             </div>
             {periodPolicy?.presets?.length ? (
               <div className="space-y-1.5">

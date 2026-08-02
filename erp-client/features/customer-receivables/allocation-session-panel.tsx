@@ -467,9 +467,8 @@ export function AllocationSessionPanel({
               <form.AppField
                 name="receivedAt"
                 children={(field) => (
-                  <field.TextField
+                  <field.DateTimeField
                     label="实际到账时间"
-                    type="datetime-local"
                     disabled={locked}
                   />
                 )}
@@ -510,9 +509,8 @@ export function AllocationSessionPanel({
               <form.AppField
                 name="invoiceDate"
                 children={(field) => (
-                  <field.TextField
+                  <field.DateField
                     label="开票日期"
-                    type="date"
                     disabled={locked}
                   />
                 )}

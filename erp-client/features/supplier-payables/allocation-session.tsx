@@ -651,7 +651,7 @@ export function AllocationSession({
                         <paymentForm.AppField
                           name="paidAt"
                           children={(field) => (
-                            <field.TextField label="实际付款时间" type="datetime-local" />
+                            <field.DateTimeField label="实际付款时间" />
                           )}
                         />
                         <paymentForm.AppField
@@ -711,7 +711,7 @@ export function AllocationSession({
                         <invoiceForm.AppField
                           name="invoiceDate"
                           children={(field) => (
-                            <field.TextField label="开票日期" type="date" />
+                            <field.DateField label="开票日期" />
                           )}
                         />
                         <invoiceForm.AppField

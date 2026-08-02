@@ -12,6 +12,10 @@ import { TextareaField } from "@/components/form/textarea-field";
 import { SubmitButton } from "@/components/form/submit-button";
 import { SelectField } from "@/components/form/select-field";
 import { PdfUploadField } from "@/components/form/pdf-upload-field";
+import {
+  DateField,
+  DateTimeField,
+} from "@/components/form/date-field";
 
 /**
  * 应用统一表单入口：
@@ -29,6 +33,8 @@ export const { useAppForm, withForm, withFieldGroup } = createFormHook({
     TextareaField,
     SelectField,
     PdfUploadField,
+    DateField,
+    DateTimeField,
   },
   formComponents: {
     SubmitButton,
@@ -46,4 +52,8 @@ export {
   type ComboboxFieldOption,
 } from "@/components/form/select-field";
 export { PdfUploadField } from "@/components/form/pdf-upload-field";
+export {
+  DateField,
+  DateTimeField,
+} from "@/components/form/date-field";
 export { toFieldErrors } from "@/components/form/utils";

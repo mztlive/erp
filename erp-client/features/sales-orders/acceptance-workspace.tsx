@@ -984,9 +984,8 @@ export function AcceptanceWorkspace({
                   >
                     <form.AppField name="acceptedAt">
                       {(field) => (
-                        <field.TextField
+                        <field.DateTimeField
                           label="客户验收时间"
-                          type="datetime-local"
                           disabled={!canPost}
                         />
                       )}

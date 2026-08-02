@@ -822,15 +822,15 @@ export function ContractsListPage({
               <div className="grid gap-3 sm:grid-cols-2">
                 <uploadForm.AppField
                   name="signedAt"
-                  children={(field) => <field.TextField label="签订日期" type="date" />}
+                  children={(field) => <field.DateField label="签订日期" />}
                 />
                 <uploadForm.AppField
                   name="validFrom"
-                  children={(field) => <field.TextField label="有效期起" type="date" />}
+                  children={(field) => <field.DateField label="有效期起" />}
                 />
                 <uploadForm.AppField
                   name="validTo"
-                  children={(field) => <field.TextField label="有效期止" type="date" />}
+                  children={(field) => <field.DateField label="有效期止" />}
                 />
               </div>
             </div>

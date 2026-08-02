@@ -609,7 +609,7 @@ export function SalesOrderCreatePage({
                       </form.AppField>
                       <form.AppField name="uploadedSignedAt">
                         {(field) => (
-                          <field.TextField label="签订日期" type="date" />
+                          <field.DateField label="签订日期" />
                         )}
                       </form.AppField>
                       <form.AppField name="customerName">
@@ -620,12 +620,12 @@ export function SalesOrderCreatePage({
                       </form.AppField>
                       <form.AppField name="uploadedValidFrom">
                         {(field) => (
-                          <field.TextField label="合同有效期起" type="date" />
+                          <field.DateField label="合同有效期起" />
                         )}
                       </form.AppField>
                       <form.AppField name="uploadedValidTo">
                         {(field) => (
-                          <field.TextField label="合同有效期止" type="date" />
+                          <field.DateField label="合同有效期止" />
                         )}
                       </form.AppField>
                     </div>
@@ -677,7 +677,7 @@ export function SalesOrderCreatePage({
                 </form.AppField>
                 <form.AppField name="fulfillmentDeadline">
                   {(field) => (
-                    <field.TextField label="全单履约期限" type="date" />
+                    <field.DateField label="全单履约期限" />
                   )}
                 </form.AppField>
                 <form.AppField name="taxRatePercent">
@@ -824,7 +824,7 @@ export function SalesOrderCreatePage({
                               </form.AppField>
                               <form.AppField name={`lineItems[${rowIndex}].dueDate`}>
                                 {(field) => (
-                                  <field.TextField label="交付日期" hideLabel type="date" />
+                                  <field.DateField label="交付日期" hideLabel />
                                 )}
                               </form.AppField>
                             </div>

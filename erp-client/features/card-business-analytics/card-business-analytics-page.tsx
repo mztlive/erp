@@ -67,6 +67,7 @@ import {
   DescriptionList,
   DescriptionTerm,
 } from "@/components/ui/description-list"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -783,22 +784,16 @@ export function CardBusinessAnalyticsPage() {
             <div className="grid gap-3 sm:grid-cols-3">
               <div className="space-y-1.5">
                 <Label htmlFor="w28-from">开始日期</Label>
-                <input
-                  id="w28-from"
-                  type="date"
-                  className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
-                  value={explicitFrom}
-                  onChange={(e) => setExplicitFrom(e.target.value)}
+                <DatePicker
+                  value={explicitFrom || undefined}
+                  onValueChange={(next) => setExplicitFrom(next ?? "")}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="w28-to">结束日期</Label>
-                <input
-                  id="w28-to"
-                  type="date"
-                  className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
-                  value={explicitTo}
-                  onChange={(e) => setExplicitTo(e.target.value)}
+                <DatePicker
+                  value={explicitTo || undefined}
+                  onValueChange={(next) => setExplicitTo(next ?? "")}
                 />
               </div>
               <div className="space-y-1.5">
@@ -970,25 +965,21 @@ export function CardBusinessAnalyticsPage() {
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="w28-filter-from">从</Label>
-            <input
-              id="w28-filter-from"
-              type="date"
-              className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
-              value={from}
-              onChange={(e) =>
-                patchUrl({ from: e.target.value, periodPreset: null })
+            <DatePicker
+              className="w-[10.5rem]"
+              value={from || undefined}
+              onValueChange={(next) =>
+                patchUrl({ from: next ?? "", periodPreset: null })
               }
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="w28-filter-to">至</Label>
-            <input
-              id="w28-filter-to"
-              type="date"
-              className="flex h-9 w-full rounded-lg border border-input bg-transparent px-3 text-sm"
-              value={to}
-              onChange={(e) =>
-                patchUrl({ to: e.target.value, periodPreset: null })
+            <DatePicker
+              className="w-[10.5rem]"
+              value={to || undefined}
+              onValueChange={(next) =>
+                patchUrl({ to: next ?? "", periodPreset: null })
               }
             />
           </div>

@@ -51,6 +51,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { DateTimeLocalPicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -1606,13 +1607,11 @@ function FulfillmentTypeForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="receipt-at">入库时间</Label>
-            <Input
-              id="receipt-at"
-              type="datetime-local"
-              value={draft.occurredAt}
+            <DateTimeLocalPicker
+              value={draft.occurredAt || undefined}
               disabled={disabled}
-              onChange={(e) =>
-                onChange({ ...draft, occurredAt: e.target.value })
+              onValueChange={(next) =>
+                onChange({ ...draft, occurredAt: next ?? "" })
               }
             />
           </div>
@@ -1722,13 +1721,11 @@ function FulfillmentTypeForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ship-at">发货时间</Label>
-            <Input
-              id="ship-at"
-              type="datetime-local"
-              value={draft.shippedAt}
+            <DateTimeLocalPicker
+              value={draft.shippedAt || undefined}
               disabled={disabled}
-              onChange={(e) =>
-                onChange({ ...draft, shippedAt: e.target.value })
+              onValueChange={(next) =>
+                onChange({ ...draft, shippedAt: next ?? "" })
               }
             />
           </div>
@@ -1828,13 +1825,11 @@ function FulfillmentTypeForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="direct-at">发货时间</Label>
-            <Input
-              id="direct-at"
-              type="datetime-local"
-              value={draft.shippedAt}
+            <DateTimeLocalPicker
+              value={draft.shippedAt || undefined}
               disabled={disabled}
-              onChange={(e) =>
-                onChange({ ...draft, shippedAt: e.target.value })
+              onValueChange={(next) =>
+                onChange({ ...draft, shippedAt: next ?? "" })
               }
             />
           </div>
@@ -1887,13 +1882,11 @@ function FulfillmentTypeForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="el-at">实际时间</Label>
-            <Input
-              id="el-at"
-              type="datetime-local"
-              value={draft.occurredAt}
+            <DateTimeLocalPicker
+              value={draft.occurredAt || undefined}
               disabled={disabled}
-              onChange={(e) =>
-                onChange({ ...draft, occurredAt: e.target.value })
+              onValueChange={(next) =>
+                onChange({ ...draft, occurredAt: next ?? "" })
               }
             />
           </div>
@@ -1970,25 +1963,21 @@ function FulfillmentTypeForm({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="service-start">开始时间</Label>
-          <Input
-            id="service-start"
-            type="datetime-local"
-            value={draft.startedAt}
+          <DateTimeLocalPicker
+            value={draft.startedAt || undefined}
             disabled={disabled}
-            onChange={(e) =>
-              onChange({ ...draft, startedAt: e.target.value })
+            onValueChange={(next) =>
+              onChange({ ...draft, startedAt: next ?? "" })
             }
           />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="service-ended">结束时间</Label>
-          <Input
-            id="service-ended"
-            type="datetime-local"
-            value={draft.endedAt}
+          <DateTimeLocalPicker
+            value={draft.endedAt || undefined}
             disabled={disabled}
-            onChange={(e) =>
-              onChange({ ...draft, endedAt: e.target.value })
+            onValueChange={(next) =>
+              onChange({ ...draft, endedAt: next ?? "" })
             }
           />
         </div>
