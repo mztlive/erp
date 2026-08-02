@@ -783,18 +783,19 @@ erDiagram
 - 非空条码使用规范化精确查询索引；同一条码出现多个在用 SKU 时阻断正式启用并转人工，
   不把来源条码当内部稳定身份；
 - `weight_kg`、`volume_m3` 必须使用定点小数且非负，禁止把旧 `double` 原样复制；
-- 价格、库存、销量、利润标记不写入 `product` 或 `sku` 当前主表。
+- 正式商城销售价、供应商供给成本、库存、销量、利润标记不写入 `product` 或 `sku` 当前主表的“正式交易字段”；W14 可在 SKU 修订上维护**参考成本价 / 参考销售价**，仅用于资料维护与选品提示，不替代 W21 供给价或 W22 发布价。
+- W14 商品与 SKU 表单的基础单位、分类、品牌必须分别引用 `unit_of_measure`、`product_category`、`product_brand` 的启用字典项（下拉），不得自由文本冒充字典身份。
 
 `product_revision_media`：
 
 | 字段 | 说明 |
 | --- | --- |
 | `product_revision_id` / `file_asset_id` | 商品版本和合规媒体文件 |
-| `media_role` | 主图、详情图、附件等受控用途 |
+| `media_role` | **主图**、**轮播图**、**详情图**、附件等受控用途 |
 | `sort_order` | 版本内展示顺序 |
 | `alt_text` | 无障碍替代文本 |
 
-`(product_revision_id, media_role, sort_order)` 唯一。媒体变化形成新的商品修订；外部 URL
+`(product_revision_id, media_role, sort_order)` 唯一。同一修订主图恰好一张；轮播图与详情图允许为空。媒体变化形成新的商品修订；外部 URL
 只能先安全抓取并形成 `file_asset`，不得把短期签名 URL 作为长期业务值。
 
 卡券类目使用 `product_kind = VOUCHER` 的 SKU 身份。

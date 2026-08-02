@@ -1,0 +1,532 @@
+/**
+ * W14 资源专属字段 — 按资源强类型化（对齐 docs/ui-workspaces/w14-basic-data.md §4.3/§5.2/§8.2）。
+ * 新建 / 更新资料表单按 `RESOURCE_FIELDS` 渲染专属字段；
+ * 提交命令携带强类型 `fields`，禁止退回通用 Record。
+ */
+
+import { z } from "zod"
+
+import { masterDataCopy } from "@/features/master-data/copy"
+import type {
+  MasterDataCenterView,
+  MasterDataListItem,
+  MasterDataResource,
+  MasterDataResourceFields,
+} from "@/features/master-data/types"
+
+export const REGION_OPTIONS = [
+  "华东",
+  "华南",
+  "华北",
+  "西南",
+  "华中",
+  "西北",
+  "全国",
+] as const
+
+export const SUPPLIER_ROLE_OPTIONS = [
+  "实物供应",
+  "包装服务",
+  "配送",
+  "电子卡券",
+] as const
+
+/** SKU 基础计量单位字典（演示静态；正式由 unit_of_measure 维护）。 */
+export const BASE_UNIT_OPTIONS = [
+  "件",
+  "个",
+  "盒",
+  "套",
+  "箱",
+  "瓶",
+  "袋",
+  "份",
+  "张",
+  "篮",
+  "kg",
+  "g",
+] as const
+
+export const PRODUCT_KIND_OPTIONS = [
+  "实物",
+  "虚拟",
+  "服务",
+  "卡券",
+] as const
+
+/**
+ * 商品分类下拉选项（演示）。
+ * 正式环境从 `categories` 资源当前启用修订查询；此处与种子数据名称对齐。
+ */
+export const CATEGORY_OPTIONS = [
+  "礼盒",
+  "茶叶",
+  "零食",
+  "酒水",
+  "卡券",
+  "办公",
+] as const
+
+/**
+ * 品牌下拉选项（演示）。
+ * 正式环境从 `brands` 资源当前启用修订查询；此处与种子数据名称对齐。
+ */
+export const BRAND_OPTIONS = [
+  "新芽",
+  "明前",
+  "礼遇",
+  "企业优选",
+  "无品牌",
+] as const
+
+/**
+ * SKU 供应商下拉选项（演示，仅启用供应商）。
+ * 正式环境从 `suppliers` 资源当前启用修订查询；此处与种子数据名称对齐。
+ */
+export const SUPPLIER_OPTIONS = [
+  "鲜果直供供应链",
+  "礼遇包装工坊",
+] as const
+
+export type ResourceFieldKind =
+  | "text"
+  | "textarea"
+  | "select"
+  | "media"
+  | "media-list"
+
+export type ResourceFieldDef = Readonly<{
+  key: string
+  label: string
+  kind: ResourceFieldKind
+  options?: readonly string[]
+  required?: boolean
+  /** 是否进入列表关键信息（keyFacts）。 */
+  listFact?: boolean
+  /** 列表/历史版本中的其他同义标签，用于编辑回填。 */
+  aliases?: readonly string[]
+  /** 宽表单分区（仅商品 SKU 等复杂资源使用）。 */
+  section?: "identity" | "catalog" | "media" | "default"
+  /** media / media-list 字段说明。 */
+  hint?: string
+}>
+
+/** 按资源声明可维护专属字段；仓库在写门禁未确认前无维护字段。 */
+export const RESOURCE_FIELDS: Readonly<
+  Record<MasterDataResource, readonly ResourceFieldDef[]>
+> = {
+  "sellable-items": [
+    {
+      key: "sku",
+      label: masterDataCopy.fSku,
+      kind: "text",
+      required: true,
+      listFact: true,
+    },
+    {
+      key: "refSupplier",
+      label: masterDataCopy.fRefSupplier,
+      kind: "text",
+      listFact: true,
+    },
+    {
+      key: "refCost",
+      label: masterDataCopy.fRefCost,
+      kind: "text",
+      listFact: true,
+    },
+    {
+      key: "region",
+      label: masterDataCopy.fRegion,
+      kind: "select",
+      options: REGION_OPTIONS,
+      listFact: true,
+    },
+    { key: "leadTime", label: masterDataCopy.fLeadTime, kind: "text" },
+    {
+      key: "fulfillmentModes",
+      label: masterDataCopy.fFulfillmentModes,
+      kind: "text",
+    },
+    { key: "taxRate", label: masterDataCopy.fTaxRate, kind: "text" },
+  ],
+  products: [
+    {
+      key: "spu",
+      label: masterDataCopy.fSpu,
+      kind: "text",
+      required: true,
+      listFact: true,
+      section: "identity",
+    },
+    {
+      key: "specSignature",
+      label: masterDataCopy.fSpecSignature,
+      kind: "text",
+      required: true,
+      listFact: true,
+      section: "identity",
+    },
+    {
+      key: "baseUnit",
+      label: masterDataCopy.fBaseUnit,
+      kind: "select",
+      options: BASE_UNIT_OPTIONS,
+      required: true,
+      listFact: true,
+      section: "identity",
+    },
+    {
+      key: "barcode",
+      label: masterDataCopy.fBarcode,
+      kind: "text",
+      section: "identity",
+    },
+    {
+      key: "category",
+      label: masterDataCopy.fCategory,
+      kind: "select",
+      options: CATEGORY_OPTIONS,
+      required: true,
+      listFact: true,
+      section: "catalog",
+    },
+    {
+      key: "brand",
+      label: masterDataCopy.fBrand,
+      kind: "select",
+      options: BRAND_OPTIONS,
+      required: true,
+      listFact: true,
+      section: "catalog",
+    },
+    {
+      key: "supplier",
+      label: masterDataCopy.fSupplier,
+      kind: "select",
+      options: SUPPLIER_OPTIONS,
+      required: true,
+      listFact: true,
+      section: "catalog",
+    },
+    {
+      key: "costPrice",
+      label: masterDataCopy.fCostPrice,
+      kind: "text",
+      listFact: true,
+      section: "catalog",
+    },
+    {
+      key: "salePrice",
+      label: masterDataCopy.fSalePrice,
+      kind: "text",
+      listFact: true,
+      section: "catalog",
+    },
+    {
+      key: "mainImage",
+      label: masterDataCopy.fMainImage,
+      kind: "media",
+      required: true,
+      section: "media",
+      hint: masterDataCopy.mediaUploadHint,
+    },
+    {
+      key: "carouselImages",
+      label: masterDataCopy.fCarouselImages,
+      kind: "media-list",
+      section: "media",
+      hint: masterDataCopy.mediaAllowEmpty,
+    },
+    {
+      key: "detailImages",
+      label: masterDataCopy.fDetailImages,
+      kind: "media-list",
+      section: "media",
+      hint: masterDataCopy.mediaAllowEmpty,
+    },
+  ],
+  categories: [
+    {
+      key: "code",
+      label: masterDataCopy.fCategoryCode,
+      kind: "text",
+      required: true,
+      listFact: true,
+    },
+    {
+      key: "parent",
+      label: masterDataCopy.fParentCategory,
+      kind: "select",
+      options: CATEGORY_OPTIONS,
+      listFact: true,
+    },
+    {
+      key: "productKind",
+      label: masterDataCopy.fProductKind,
+      kind: "select",
+      options: PRODUCT_KIND_OPTIONS,
+      listFact: true,
+    },
+  ],
+  brands: [
+    {
+      key: "code",
+      label: masterDataCopy.fBrandCode,
+      kind: "text",
+      required: true,
+      listFact: true,
+    },
+  ],
+  "voucher-categories": [
+    {
+      key: "sku",
+      label: masterDataCopy.fSku,
+      kind: "text",
+      required: true,
+      listFact: true,
+      aliases: ["卡券 SKU"],
+    },
+    {
+      key: "description",
+      label: masterDataCopy.fDescription,
+      kind: "textarea",
+      listFact: true,
+      aliases: ["说明"],
+    },
+  ],
+  suppliers: [
+    {
+      key: "company",
+      label: masterDataCopy.fCompany,
+      kind: "text",
+      required: true,
+      listFact: true,
+    },
+    {
+      key: "role",
+      label: masterDataCopy.fRole,
+      kind: "select",
+      options: SUPPLIER_ROLE_OPTIONS,
+      required: true,
+      listFact: true,
+      aliases: ["角色"],
+    },
+    {
+      key: "settlement",
+      label: masterDataCopy.fSettlement,
+      kind: "text",
+      listFact: true,
+      aliases: ["商务结算"],
+    },
+    { key: "capability", label: masterDataCopy.fCapability, kind: "text", listFact: true },
+    { key: "qualification", label: masterDataCopy.fQualification, kind: "text" },
+  ],
+  warehouses: [],
+}
+
+export type ResourceFormValues = {
+  name: string
+  effectiveFrom: string
+  effectiveTo: string
+  changeReason: string
+  [field: string]: string
+}
+
+/** 通用基础字段 + 当前资源专属字段（必填规则），供新建 / 更新表单共用。 */
+export function buildResourceSchema(defs: readonly ResourceFieldDef[]) {
+  const dynamic: Record<string, z.ZodString> = {}
+  for (const def of defs) {
+    if (def.kind === "media" && def.required) {
+      dynamic[def.key] = z.string().trim().min(1, masterDataCopy.mediaMainRequired)
+    } else if (def.required) {
+      dynamic[def.key] = z.string().trim().min(1, `请填写${def.label}`)
+    } else {
+      dynamic[def.key] = z.string()
+    }
+  }
+  return z.object({
+    name: z.string().trim().min(2, "请填写名称"),
+    effectiveFrom: z.string().min(1, "请填写生效开始日期"),
+    effectiveTo: z.string(),
+    changeReason: z.string().trim().min(2, "请填写变更原因"),
+    ...dynamic,
+  })
+}
+
+export function emptyResourceFieldValues(
+  resource: MasterDataResource
+): Record<string, string> {
+  return Object.fromEntries(
+    RESOURCE_FIELDS[resource].map((def) => [def.key, ""])
+  )
+}
+
+export type ResourceFieldValues = Record<string, string>
+
+/**
+ * 从编辑目标（列表行或对象中心）回填当前值。
+ * 以展示标签匹配；`aliases` 覆盖列表与中心用词差异。
+ */
+export function currentResourceFieldValues(
+  target: MasterDataListItem | MasterDataCenterView
+): ResourceFieldValues {
+  const resource: MasterDataResource =
+    "currentRevision" in target ? target.resource : target.objectType
+  const facts =
+    "currentRevision" in target ? target.currentRevision.fields : target.keyFacts
+  const byLabel = new Map(facts.map((fact) => [fact.label, fact.value]))
+  const out: ResourceFieldValues = {}
+  for (const def of RESOURCE_FIELDS[resource]) {
+    const matched =
+      byLabel.get(def.label) ??
+      def.aliases
+        ?.map((alias) => byLabel.get(alias))
+        .find((value) => value !== undefined && value !== "")
+    if (matched === undefined) continue
+    // 展示事实可能带「（N 张）」摘要后缀，回填表单时去掉
+    if (def.kind === "media-list") {
+      out[def.key] = matched.replace(/（\d+\s*张）\s*$/, "").trim()
+    } else {
+      out[def.key] = matched
+    }
+  }
+  return out
+}
+
+function pickField(
+  values: ResourceFieldValues,
+  key: string
+): string | undefined {
+  const value = values[key]
+  return value?.trim() ? value.trim() : undefined
+}
+
+/** 表单值 → 当前资源的强类型字段对象。 */
+export function buildResourceFields(
+  resource: MasterDataResource,
+  values: ResourceFieldValues
+): MasterDataResourceFields[MasterDataResource] {
+  switch (resource) {
+    case "sellable-items":
+      return {
+        sku: pickField(values, "sku") ?? "",
+        refSupplier: pickField(values, "refSupplier"),
+        refCost: pickField(values, "refCost"),
+        region: pickField(values, "region"),
+        leadTime: pickField(values, "leadTime"),
+        fulfillmentModes: pickField(values, "fulfillmentModes"),
+        taxRate: pickField(values, "taxRate"),
+      }
+    case "products":
+      return {
+        spu: pickField(values, "spu") ?? "",
+        specSignature: pickField(values, "specSignature") ?? "",
+        baseUnit: pickField(values, "baseUnit") ?? "",
+        category: pickField(values, "category"),
+        brand: pickField(values, "brand"),
+        supplier: pickField(values, "supplier"),
+        barcode: pickField(values, "barcode"),
+        mainImage: pickField(values, "mainImage") ?? "",
+        carouselImages: pickField(values, "carouselImages"),
+        detailImages: pickField(values, "detailImages"),
+        costPrice: pickField(values, "costPrice"),
+        salePrice: pickField(values, "salePrice"),
+      }
+    case "categories":
+      return {
+        code: pickField(values, "code") ?? "",
+        parent: pickField(values, "parent"),
+        productKind: pickField(values, "productKind"),
+      }
+    case "brands":
+      return {
+        code: pickField(values, "code") ?? "",
+      }
+    case "voucher-categories":
+      return {
+        sku: pickField(values, "sku") ?? "",
+        description: pickField(values, "description"),
+      }
+    case "suppliers":
+      return {
+        company: pickField(values, "company") ?? "",
+        role: pickField(values, "role") ?? "",
+        settlement: pickField(values, "settlement"),
+        capability: pickField(values, "capability"),
+        qualification: pickField(values, "qualification"),
+      }
+    case "warehouses":
+      return {}
+  }
+}
+
+/** 媒体类字段展示值：空则跳过；列表类显示张数摘要。 */
+function formatFieldDisplayValue(
+  def: ResourceFieldDef,
+  value: string | undefined
+): string | null {
+  if (!value?.trim()) return null
+  if (def.kind === "media-list") {
+    const count = value
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean).length
+    return count > 0 ? `${value}（${count} 张）` : null
+  }
+  return value.trim()
+}
+
+/** 强类型字段 → 展示事实（跳过未填写的字段），写入版本 fields。 */
+export function resourceFieldsToFacts(
+  resource: MasterDataResource,
+  fields: MasterDataResourceFields[MasterDataResource] | undefined
+): ReadonlyArray<{ label: string; value: string }> {
+  if (!fields) return []
+  return RESOURCE_FIELDS[resource]
+    .map((def) => {
+      const raw = (fields as Readonly<Record<string, string | undefined>>)[
+        def.key
+      ]
+      const value = formatFieldDisplayValue(def, raw)
+      return value ? { label: def.label, value } : null
+    })
+    .filter((fact): fact is { label: string; value: string } => fact !== null)
+}
+
+/** 强类型字段 → 列表关键信息（只保留 listFact）。 */
+export function resourceFieldsToListFacts(
+  resource: MasterDataResource,
+  fields: MasterDataResourceFields[MasterDataResource] | undefined
+): ReadonlyArray<{ label: string; value: string }> {
+  if (!fields) return []
+  return RESOURCE_FIELDS[resource]
+    .filter((def) => def.listFact)
+    .map((def) => {
+      const raw = (fields as Readonly<Record<string, string | undefined>>)[
+        def.key
+      ]
+      const value = formatFieldDisplayValue(def, raw)
+      return value ? { label: def.label, value } : null
+    })
+    .filter((fact): fact is { label: string; value: string } => fact !== null)
+}
+
+/** 解析 media-list 逗号分隔文件名。 */
+export function parseMediaList(value: string | undefined): string[] {
+  if (!value?.trim()) return []
+  return value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
+
+/** 序列化 media-list。 */
+export function joinMediaList(names: readonly string[]): string {
+  return names.filter(Boolean).join(", ")
+}
+
+/** 是否使用宽对话框（商品 SKU 字段多、含媒体）。 */
+export function usesWideDialog(resource: MasterDataResource): boolean {
+  return resource === "products"
+}

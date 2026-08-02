@@ -172,6 +172,8 @@ Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`Quic
 基础资料
   · 可销售项目
   · 商品与 SKU
+  · 商品分类
+  · 品牌
   · 卡券类目
   · 供应商与资质
   · 仓库

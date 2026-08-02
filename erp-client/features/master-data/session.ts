@@ -20,6 +20,11 @@ import type {
   MasterDataMutationResult,
   MasterDataResource,
 } from "@/features/master-data/types"
+import {
+  RESOURCE_FIELDS,
+  resourceFieldsToFacts,
+  resourceFieldsToListFacts,
+} from "@/features/master-data/resource-fields"
 
 const listOverlays = new Map<string, MasterDataListItem>()
 const centerOverlays = new Map<string, MasterDataCenterView>()
@@ -77,6 +82,8 @@ export function buildW14ListResult(
       resourceAccess: {
         "sellable-items": true,
         products: true,
+        categories: true,
+        brands: true,
         "voucher-categories": true,
         suppliers: true,
         warehouses: true,
@@ -92,6 +99,8 @@ function nextStableNo(resource: MasterDataResource, index: number): string {
   const prefix: Record<MasterDataResource, string> = {
     "sellable-items": "SI-2026",
     products: "SKU-NEW",
+    categories: "CAT-NEW",
+    brands: "BRD-NEW",
     "voucher-categories": "VC-NEW",
     suppliers: "SUP-2026",
     warehouses: "WH-NEW",
@@ -148,6 +157,9 @@ export function createW14Object(
   const recordedAt = new Date().toISOString()
   const effectiveFrom = input.effectiveFrom
 
+  const listFacts = resourceFieldsToListFacts(input.resource, input.fields)
+  const revisionFacts = resourceFieldsToFacts(input.resource, input.fields)
+
   const listItem: MasterDataListItem = {
     objectType: input.resource,
     stableId,
@@ -163,10 +175,13 @@ export function createW14Object(
     revisionNo: 1,
     effectiveFrom,
     effectiveTo: input.effectiveTo,
-    keyFacts: [
-      { label: "分类", value: resourceLabel(input.resource) },
-      { label: "说明", value: "本次新建" },
-    ],
+    keyFacts:
+      listFacts.length > 0
+        ? [...listFacts]
+        : [
+            { label: "分类", value: resourceLabel(input.resource) },
+            { label: "说明", value: "本次新建" },
+          ],
     selectorEligibility: [
       {
         context: "default",
@@ -203,12 +218,7 @@ export function createW14Object(
       actor: ACTOR,
       fields: [
         { label: "名称", value: input.name.trim() },
-        ...(input.fields
-          ? Object.entries(input.fields).map(([label, value]) => ({
-              label,
-              value,
-            }))
-          : []),
+        ...revisionFacts,
       ],
     },
     revisionTimeline: [
@@ -232,7 +242,7 @@ export function createW14Object(
       note: "新建资料尚无业务引用。",
     },
     sensitiveFields: [],
-    resourceFacts: [{ label: "创建人", value: ACTOR }],
+    resourceFacts: [...revisionFacts, { label: "创建人", value: ACTOR }],
     allowedActions: ["VIEW", "CREATE_REVISION", "DISABLE"],
     actionBlockers: [],
     auditEvents: [
@@ -350,6 +360,31 @@ export function reviseW14Object(
 
   const nameSnapshot = input.name.trim()
   const changeReason = input.changeReason.trim()
+  const revisionFacts = resourceFieldsToFacts(input.resource, input.fields)
+
+  /**
+   * 提交字段（含清空）覆盖旧值；仅保留不在表单字段集合内的历史事实
+   * （如 seed 中的“product_kind”“边界”等表单未覆盖标签），避免误清。
+   * 表单字段集合 = 各 def 的 label + aliases + 基础“名称”。
+   */
+  function mergeRevisionFacts(
+    next: ReadonlyArray<{ label: string; value: string }>,
+    previous: ReadonlyArray<{ label: string; value: string }>,
+    resource: MasterDataResource
+  ): ReadonlyArray<{ label: string; value: string }> {
+    const nextLabels = new Set(next.map((fact) => fact.label))
+    const defLabels = new Set(["名称"])
+    for (const def of RESOURCE_FIELDS[resource]) {
+      defLabels.add(def.label)
+      for (const alias of def.aliases ?? []) defLabels.add(alias)
+    }
+    return [
+      ...next,
+      ...previous.filter(
+        (fact) => !nextLabels.has(fact.label) && !defLabels.has(fact.label)
+      ),
+    ]
+  }
 
   const nextCenter: MasterDataCenterView = {
     ...center,
@@ -369,12 +404,11 @@ export function reviseW14Object(
           actor: ACTOR,
           fields: [
             { label: "名称", value: nameSnapshot },
-            ...(input.fields
-              ? Object.entries(input.fields).map(([label, value]) => ({
-                  label,
-                  value,
-                }))
-              : center.currentRevision.fields),
+            ...mergeRevisionFacts(
+              revisionFacts,
+              center.currentRevision.fields,
+              input.resource
+            ),
           ],
         },
     revisionTimeline: [
@@ -436,6 +470,13 @@ export function reviseW14Object(
       effectiveFrom: isFuture ? listRow.effectiveFrom : input.effectiveFrom,
       effectiveTo: isFuture ? listRow.effectiveTo : input.effectiveTo,
       lockVersion: listRow.lockVersion + 1,
+      keyFacts: isFuture
+        ? listRow.keyFacts
+        : mergeRevisionFacts(
+            resourceFieldsToListFacts(input.resource, input.fields),
+            listRow.keyFacts,
+            input.resource
+          ),
       metricTags: isFuture
         ? Array.from(new Set([...listRow.metricTags, "pending"]))
         : listRow.metricTags,

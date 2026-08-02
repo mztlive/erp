@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { ImageIcon, XIcon } from "lucide-react"
 import { z } from "zod"
 
 import { FormalActionResult, OptionCombobox } from "@/components/business"
@@ -20,12 +21,25 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { FileUpload } from "@/components/ui/file-upload"
 import { Label } from "@/components/ui/label"
 import { masterDataCopy } from "@/features/master-data/copy"
 import {
   WAREHOUSE_WRITE_MESSAGE,
   resourceLabel,
 } from "@/features/master-data/data"
+import {
+  RESOURCE_FIELDS,
+  buildResourceFields,
+  buildResourceSchema,
+  currentResourceFieldValues,
+  emptyResourceFieldValues,
+  joinMediaList,
+  parseMediaList,
+  usesWideDialog,
+  type ResourceFieldDef,
+  type ResourceFormValues,
+} from "@/features/master-data/resource-fields"
 import {
   useCreateMasterDataMutation,
   useCreateRevisionMutation,
@@ -37,9 +51,277 @@ import type {
   MasterDataMutationResult,
   MasterDataResource,
 } from "@/features/master-data/types"
+import { cn } from "@/lib/utils"
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+type FieldApi = {
+  TextField: React.ComponentType<{ label: string }>
+  TextareaField: React.ComponentType<{ label: string }>
+  SelectField: React.ComponentType<{
+    label: string
+    options: readonly { value: string; label: string }[]
+    allowClear?: boolean
+    placeholder?: string
+  }>
+  state: { value: string }
+  handleChange: (value: string) => void
+  handleBlur: () => void
+}
+
+type ResourceFormApp = {
+  AppField: React.ComponentType<{
+    name: string
+    children: (field: FieldApi) => React.ReactNode
+  }>
+}
+
+function MediaSingleField({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  value: string
+  onChange: (next: string) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-sm font-medium">
+          {label}
+          <span className="ml-1 text-destructive">*</span>
+        </Label>
+        {value ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={() => onChange("")}
+          >
+            {masterDataCopy.mediaRemove}
+          </Button>
+        ) : null}
+      </div>
+      {value ? (
+        <div className="flex items-center gap-3 rounded-md border border-border bg-surface-sunken px-3 py-2">
+          <div className="flex size-10 items-center justify-center rounded-md bg-muted">
+            <ImageIcon className="size-5 text-muted-foreground" aria-hidden />
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-sm font-medium">{value}</div>
+            <div className="text-xs text-muted-foreground">主图 · 已选择</div>
+          </div>
+        </div>
+      ) : (
+        <FileUpload
+          accept="image/jpeg,image/png,image/webp"
+          multiple={false}
+          label={label}
+          description={hint ?? masterDataCopy.mediaUploadHint}
+          onFilesSelected={(files) => {
+            const file = files[0]
+            if (file) onChange(file.name)
+          }}
+          className="p-4"
+        />
+      )}
+    </div>
+  )
+}
+
+function MediaListField({
+  label,
+  hint,
+  value,
+  onChange,
+}: {
+  label: string
+  hint?: string
+  value: string
+  onChange: (next: string) => void
+}) {
+  const items = parseMediaList(value)
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label className="text-sm font-medium">{label}</Label>
+        <span className="text-xs text-muted-foreground">
+          {masterDataCopy.mediaCount(items.length)}
+          {hint ? ` · ${hint}` : null}
+        </span>
+      </div>
+      {items.length > 0 ? (
+        <ul className="space-y-1.5">
+          {items.map((name, index) => (
+            <li
+              key={`${name}-${index}`}
+              className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5"
+            >
+              <ImageIcon
+                className="size-4 shrink-0 text-muted-foreground"
+                aria-hidden
+              />
+              <span className="min-w-0 flex-1 truncate text-sm">{name}</span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`${masterDataCopy.mediaRemove} ${name}`}
+                onClick={() => {
+                  const next = items.filter((_, i) => i !== index)
+                  onChange(joinMediaList(next))
+                }}
+              >
+                <XIcon className="size-3.5" />
+              </Button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          {masterDataCopy.mediaEmpty}（{masterDataCopy.mediaAllowEmpty}）
+        </p>
+      )}
+      <FileUpload
+        accept="image/jpeg,image/png,image/webp"
+        multiple
+        label={`添加${label}`}
+        description={masterDataCopy.mediaUploadHint}
+        onFilesSelected={(files) => {
+          const names = files.map((f) => f.name)
+          onChange(joinMediaList([...items, ...names]))
+        }}
+        className="p-3"
+      />
+    </div>
+  )
+}
+
+function renderStandardField(def: ResourceFieldDef, field: FieldApi) {
+  if (def.kind === "textarea") {
+    return <field.TextareaField label={def.label} />
+  }
+  if (def.kind === "select") {
+    return (
+      <field.SelectField
+        label={def.label}
+        options={(def.options ?? []).map((option) => ({
+          value: option,
+          label: option,
+        }))}
+        allowClear={!def.required}
+        placeholder={def.required ? `请选择${def.label}` : "未填写"}
+      />
+    )
+  }
+  if (def.kind === "media") {
+    return (
+      <MediaSingleField
+        label={def.label}
+        hint={def.hint}
+        value={field.state.value}
+        onChange={(next) => field.handleChange(next)}
+      />
+    )
+  }
+  if (def.kind === "media-list") {
+    return (
+      <MediaListField
+        label={def.label}
+        hint={def.hint}
+        value={field.state.value}
+        onChange={(next) => field.handleChange(next)}
+      />
+    )
+  }
+  return <field.TextField label={def.label} />
+}
+
+/** 资源专属字段区块：窄对话框单列；商品 SKU 在宽对话框中分区双列。 */
+function ResourceFieldsSection({
+  form,
+  resource,
+  wide,
+}: {
+  form: ResourceFormApp
+  resource: MasterDataResource
+  wide?: boolean
+}) {
+  const defs = RESOURCE_FIELDS[resource]
+  if (defs.length === 0) return null
+
+  if (!wide || resource !== "products") {
+    return (
+      <fieldset className="space-y-3 rounded-md border border-border p-3">
+        <legend className="px-1 text-xs text-muted-foreground">
+          {masterDataCopy.fieldResourceSection}
+        </legend>
+        {defs.map((def) => (
+          <form.AppField
+            key={def.key}
+            name={def.key}
+            children={(field) => renderStandardField(def, field)}
+          />
+        ))}
+      </fieldset>
+    )
+  }
+
+  const identity = defs.filter((d) => d.section === "identity")
+  const catalog = defs.filter((d) => d.section === "catalog")
+  const media = defs.filter((d) => d.section === "media")
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-4 lg:grid-cols-2">
+        <fieldset className="space-y-3 rounded-md border border-border p-3">
+          <legend className="px-1 text-xs text-muted-foreground">
+            {masterDataCopy.fieldIdentitySection}
+          </legend>
+          {identity.map((def) => (
+            <form.AppField
+              key={def.key}
+              name={def.key}
+              children={(field) => renderStandardField(def, field)}
+            />
+          ))}
+        </fieldset>
+        <fieldset className="space-y-3 rounded-md border border-border p-3">
+          <legend className="px-1 text-xs text-muted-foreground">
+            {masterDataCopy.fieldCatalogSection}
+          </legend>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {catalog.map((def) => (
+              <form.AppField
+                key={def.key}
+                name={def.key}
+                children={(field) => renderStandardField(def, field)}
+              />
+            ))}
+          </div>
+        </fieldset>
+      </div>
+      <fieldset className="space-y-4 rounded-md border border-border p-3">
+        <legend className="px-1 text-xs text-muted-foreground">
+          {masterDataCopy.fieldMediaSection}
+        </legend>
+        <div className="grid gap-4 lg:grid-cols-3">
+          {media.map((def) => (
+            <form.AppField
+              key={def.key}
+              name={def.key}
+              children={(field) => renderStandardField(def, field)}
+            />
+          ))}
+        </div>
+      </fieldset>
+    </div>
+  )
 }
 
 function resultFacts(
@@ -71,24 +353,32 @@ function resultFacts(
   ]
 }
 
-const createSchema = z.object({
-  name: z.string().trim().min(2, "请填写名称"),
-  effectiveFrom: z.string().min(1, "请填写生效开始日期"),
-  effectiveTo: z.string(),
-  changeReason: z.string().trim().min(2, "请填写变更原因"),
-})
-
-const reviseSchema = z.object({
-  name: z.string().trim().min(2, "请填写名称"),
-  effectiveFrom: z.string().min(1, "请填写生效开始日期"),
-  effectiveTo: z.string(),
-  changeReason: z.string().trim().min(2, "请填写变更原因"),
-})
-
 const disableSchema = z.object({
   changeReason: z.string().trim().min(2, "请填写停用原因"),
   effectiveFrom: z.string().min(1, "请填写停用时间"),
 })
+
+function dialogContentClass(resource: MasterDataResource) {
+  if (usesWideDialog(resource)) {
+    return cn(
+      "flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-5xl"
+    )
+  }
+  return "max-w-lg"
+}
+
+function DialogScrollBody({
+  children,
+  wide,
+}: {
+  children: React.ReactNode
+  wide?: boolean
+}) {
+  if (!wide) return <>{children}</>
+  return (
+    <div className="min-h-0 flex-1 overflow-y-auto pr-1">{children}</div>
+  )
+}
 
 export function MasterDataCreateDialog({
   open,
@@ -111,15 +401,19 @@ export function MasterDataCreateDialog({
   )
 
   const isWarehouse = resource === "warehouses"
+  const wide = usesWideDialog(resource)
+
+  const defaults: ResourceFormValues = {
+    name: "",
+    effectiveFrom: "2026-08-01",
+    effectiveTo: "",
+    changeReason: "",
+    ...emptyResourceFieldValues(resource),
+  }
 
   const form = useAppForm({
-    defaultValues: {
-      name: "",
-      effectiveFrom: "2026-08-01",
-      effectiveTo: "",
-      changeReason: "",
-    },
-    validators: { onChange: createSchema },
+    defaultValues: defaults,
+    validators: { onChange: buildResourceSchema(RESOURCE_FIELDS[resource]) },
     onSubmit: async ({ value }) => {
       const response = await mutation.mutateAsync({
         resource,
@@ -127,6 +421,7 @@ export function MasterDataCreateDialog({
         effectiveFrom: value.effectiveFrom,
         effectiveTo: value.effectiveTo.trim() || undefined,
         changeReason: value.changeReason.trim(),
+        fields: buildResourceFields(resource, value),
         idempotencyKey,
         simulate: isWarehouse ? "ok" : simulate,
       })
@@ -148,7 +443,7 @@ export function MasterDataCreateDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className="max-w-lg">
+      <DialogContent className={dialogContentClass(resource)}>
         <DialogHeader>
           <DialogTitle>
             {masterDataCopy.createTitle(resourceLabel(resource))}
@@ -156,128 +451,142 @@ export function MasterDataCreateDialog({
           <DialogDescription>{masterDataCopy.createDesc}</DialogDescription>
         </DialogHeader>
 
-        {isWarehouse ? (
-          <Alert variant="destructive">
-            <AlertTitle>{masterDataCopy.warehouseWriteTitle}</AlertTitle>
-            <AlertDescription>{WAREHOUSE_WRITE_MESSAGE}</AlertDescription>
-          </Alert>
-        ) : null}
+        <DialogScrollBody wide={wide}>
+          {isWarehouse ? (
+            <Alert variant="destructive">
+              <AlertTitle>{masterDataCopy.warehouseWriteTitle}</AlertTitle>
+              <AlertDescription>{WAREHOUSE_WRITE_MESSAGE}</AlertDescription>
+            </Alert>
+          ) : null}
 
-        {result?.outcome === "succeeded" ? (
-          <FormalActionResult
-            status="succeeded"
-            title={masterDataCopy.createSuccessTitle}
-            description={masterDataCopy.createSuccessDesc}
-            reference={result.reference}
-            facts={resultFacts(result)}
-          />
-        ) : null}
-
-        {result?.outcome === "blocked" ? (
-          <FormalActionResult
-            status="blocked"
-            title={masterDataCopy.createBlockedTitle}
-            description={result.message}
-            facts={
-              result.detail
-                ? [{ label: "说明", value: result.detail }]
-                : undefined
-            }
-          />
-        ) : null}
-
-        {result?.outcome !== "succeeded" ? (
-          <form
-            className="grid gap-3"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void form.handleSubmit()
-            }}
-          >
-            <form.AppField
-              name="name"
-              children={(field) => <field.TextField label="名称" />}
+          {result?.outcome === "succeeded" ? (
+            <FormalActionResult
+              status="succeeded"
+              title={masterDataCopy.createSuccessTitle}
+              description={masterDataCopy.createSuccessDesc}
+              reference={result.reference}
+              facts={resultFacts(result)}
             />
-            <div className="grid gap-3 sm:grid-cols-2">
-              <form.AppField
-                name="effectiveFrom"
-                children={(field) => (
-                  <field.TextField label={masterDataCopy.fieldEffectiveFrom} />
-                )}
-              />
-              <form.AppField
-                name="effectiveTo"
-                children={(field) => (
-                  <field.TextField label={masterDataCopy.fieldEffectiveTo} />
-                )}
-              />
-            </div>
-            <form.AppField
-              name="changeReason"
-              children={(field) => (
-                <field.TextareaField label={masterDataCopy.fieldChangeReason} />
-              )}
+          ) : null}
+
+          {result?.outcome === "blocked" ? (
+            <FormalActionResult
+              status="blocked"
+              title={masterDataCopy.createBlockedTitle}
+              description={result.message}
+              facts={
+                result.detail
+                  ? [{ label: "说明", value: result.detail }]
+                  : undefined
+              }
             />
-            {!isWarehouse ? (
-              <div className="space-y-2">
-                <Label htmlFor="create-sim">
-                  {masterDataCopy.demoSimulateLabel}
-                </Label>
-                <OptionCombobox
-                  id="create-sim"
-                  value={simulate}
-                  onValueChange={(v) =>
-                    setSimulate(
-                      (v ?? "ok") as "ok" | "overlap" | "sku_signature"
-                    )
-                  }
-                  options={[
-                    { value: "ok", label: masterDataCopy.demoOk },
-                    { value: "overlap", label: masterDataCopy.demoOverlap },
-                    ...(resource === "products"
-                      ? [
-                          {
-                            value: "sku_signature",
-                            label: masterDataCopy.demoSkuSig,
-                          },
-                        ]
-                      : []),
-                  ]}
-                  className="w-full"
-                  allowClear={false}
-                  aria-label={masterDataCopy.demoSimulateLabel}
-                  placeholder={masterDataCopy.demoSimulateLabel}
-                />
-              </div>
-            ) : null}
-            <DialogFooter>
-              <DialogClose render={<Button type="button" variant="outline" />}>
-                关闭
-              </DialogClose>
-              <Button
-                type="submit"
-                disabled={mutation.isPending}
-                title={isWarehouse ? WAREHOUSE_WRITE_MESSAGE : undefined}
-              >
-                {isWarehouse
-                  ? masterDataCopy.createSubmitRejected
-                  : masterDataCopy.createSubmit}
-              </Button>
-            </DialogFooter>
-          </form>
-        ) : (
-          <DialogFooter>
-            <Button
-              type="button"
-              onClick={() => {
-                reset()
-                onOpenChange(false)
+          ) : null}
+
+          {result?.outcome !== "succeeded" ? (
+            <form
+              className="grid gap-3"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void form.handleSubmit()
               }}
             >
-              完成
-            </Button>
-          </DialogFooter>
-        )}
+              <form.AppField
+                name="name"
+                children={(field) => <field.TextField label="名称" />}
+              />
+              <ResourceFieldsSection
+                form={form}
+                resource={resource}
+                wide={wide}
+              />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <form.AppField
+                  name="effectiveFrom"
+                  children={(field) => (
+                    <field.TextField label={masterDataCopy.fieldEffectiveFrom} />
+                  )}
+                />
+                <form.AppField
+                  name="effectiveTo"
+                  children={(field) => (
+                    <field.TextField label={masterDataCopy.fieldEffectiveTo} />
+                  )}
+                />
+              </div>
+              <form.AppField
+                name="changeReason"
+                children={(field) => (
+                  <field.TextareaField
+                    label={masterDataCopy.fieldChangeReason}
+                  />
+                )}
+              />
+              {!isWarehouse ? (
+                <div className="space-y-2">
+                  <Label htmlFor="create-sim">
+                    {masterDataCopy.demoSimulateLabel}
+                  </Label>
+                  <OptionCombobox
+                    id="create-sim"
+                    value={simulate}
+                    onValueChange={(v) =>
+                      setSimulate(
+                        (v ?? "ok") as "ok" | "overlap" | "sku_signature"
+                      )
+                    }
+                    options={[
+                      { value: "ok", label: masterDataCopy.demoOk },
+                      {
+                        value: "overlap",
+                        label: masterDataCopy.demoOverlap,
+                      },
+                      ...(resource === "products"
+                        ? [
+                            {
+                              value: "sku_signature",
+                              label: masterDataCopy.demoSkuSig,
+                            },
+                          ]
+                        : []),
+                    ]}
+                    className="w-full"
+                    allowClear={false}
+                    aria-label={masterDataCopy.demoSimulateLabel}
+                    placeholder={masterDataCopy.demoSimulateLabel}
+                  />
+                </div>
+              ) : null}
+              <DialogFooter>
+                <DialogClose
+                  render={<Button type="button" variant="outline" />}
+                >
+                  关闭
+                </DialogClose>
+                <Button
+                  type="submit"
+                  disabled={mutation.isPending}
+                  title={isWarehouse ? WAREHOUSE_WRITE_MESSAGE : undefined}
+                >
+                  {isWarehouse
+                    ? masterDataCopy.createSubmitRejected
+                    : masterDataCopy.createSubmit}
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : (
+            <DialogFooter>
+              <Button
+                type="button"
+                onClick={() => {
+                  reset()
+                  onOpenChange(false)
+                }}
+              >
+                完成
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )
@@ -306,6 +615,7 @@ export function MasterDataReviseDialog({
   )
 
   const isWarehouse = resource === "warehouses"
+  const wide = usesWideDialog(resource)
   const stableId = target && "stableId" in target ? target.stableId : ""
   const baseRevisionId =
     target && "currentRevisionId" in target
@@ -316,14 +626,17 @@ export function MasterDataReviseDialog({
   const lockVersion = target?.lockVersion ?? 0
   const nameDefault = target?.name ?? ""
 
+  const defaults: ResourceFormValues = {
+    name: nameDefault,
+    effectiveFrom: "2026-08-15",
+    effectiveTo: "",
+    changeReason: "",
+    ...emptyResourceFieldValues(resource),
+  }
+
   const form = useAppForm({
-    defaultValues: {
-      name: nameDefault,
-      effectiveFrom: "2026-08-15",
-      effectiveTo: "",
-      changeReason: "",
-    },
-    validators: { onChange: reviseSchema },
+    defaultValues: defaults,
+    validators: { onChange: buildResourceSchema(RESOURCE_FIELDS[resource]) },
     onSubmit: async ({ value }) => {
       if (!stableId || !baseRevisionId) return
       const response = await mutation.mutateAsync({
@@ -335,6 +648,7 @@ export function MasterDataReviseDialog({
         effectiveFrom: value.effectiveFrom,
         effectiveTo: value.effectiveTo.trim() || undefined,
         changeReason: value.changeReason.trim(),
+        fields: buildResourceFields(resource, value),
         idempotencyKey,
         simulate: isWarehouse ? "ok" : simulate,
       })
@@ -345,6 +659,11 @@ export function MasterDataReviseDialog({
   React.useEffect(() => {
     if (open && target) {
       form.setFieldValue("name", target.name)
+      for (const [key, value] of Object.entries(
+        currentResourceFieldValues(target)
+      )) {
+        form.setFieldValue(key, value)
+      }
       setResult(null)
       setIdempotencyKey(newIdempotencyKey("revise"))
     }
@@ -353,7 +672,7 @@ export function MasterDataReviseDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className={dialogContentClass(resource)}>
         <DialogHeader>
           <DialogTitle>{masterDataCopy.reviseTitle}</DialogTitle>
           <DialogDescription>
@@ -367,144 +686,161 @@ export function MasterDataReviseDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {isWarehouse ? (
-          <Alert variant="destructive">
-            <AlertTitle>{masterDataCopy.warehouseWriteTitle}</AlertTitle>
-            <AlertDescription>{WAREHOUSE_WRITE_MESSAGE}</AlertDescription>
-          </Alert>
-        ) : null}
+        <DialogScrollBody wide={wide}>
+          {isWarehouse ? (
+            <Alert variant="destructive">
+              <AlertTitle>{masterDataCopy.warehouseWriteTitle}</AlertTitle>
+              <AlertDescription>{WAREHOUSE_WRITE_MESSAGE}</AlertDescription>
+            </Alert>
+          ) : null}
 
-        {result?.outcome === "succeeded" ? (
-          <FormalActionResult
-            status="succeeded"
-            title={masterDataCopy.reviseSuccessTitle}
-            description={masterDataCopy.reviseSuccessDesc}
-            reference={result.reference}
-            facts={resultFacts(result)}
-          />
-        ) : null}
-
-        {result?.outcome === "blocked" ? (
-          <FormalActionResult
-            status="blocked"
-            title={masterDataCopy.reviseBlockedTitle}
-            description={result.message}
-            facts={
-              result.detail
-                ? [{ label: "说明", value: result.detail }]
-                : undefined
-            }
-          />
-        ) : null}
-
-        {result?.outcome === "conflict" ? (
-          <FormalActionResult
-            status="blocked"
-            title={masterDataCopy.reviseConflictTitle}
-            description={result.message || masterDataCopy.reviseConflictHint}
-            facts={[
-              {
-                label: "当前版本",
-                value: `v${result.serverRevisionNo}`,
-              },
-            ]}
-          />
-        ) : null}
-
-        {result?.outcome !== "succeeded" ? (
-          <form
-            className="grid gap-3"
-            onSubmit={(e) => {
-              e.preventDefault()
-              void form.handleSubmit()
-            }}
-          >
-            <form.AppField
-              name="name"
-              children={(field) => (
-                <field.TextField label={masterDataCopy.reviseNameLabel} />
-              )}
+          {result?.outcome === "succeeded" ? (
+            <FormalActionResult
+              status="succeeded"
+              title={masterDataCopy.reviseSuccessTitle}
+              description={masterDataCopy.reviseSuccessDesc}
+              reference={result.reference}
+              facts={resultFacts(result)}
             />
-            <div className="grid gap-3 sm:grid-cols-2">
+          ) : null}
+
+          {result?.outcome === "blocked" ? (
+            <FormalActionResult
+              status="blocked"
+              title={masterDataCopy.reviseBlockedTitle}
+              description={result.message}
+              facts={
+                result.detail
+                  ? [{ label: "说明", value: result.detail }]
+                  : undefined
+              }
+            />
+          ) : null}
+
+          {result?.outcome === "conflict" ? (
+            <FormalActionResult
+              status="blocked"
+              title={masterDataCopy.reviseConflictTitle}
+              description={result.message || masterDataCopy.reviseConflictHint}
+              facts={[
+                {
+                  label: "当前版本",
+                  value: `v${result.serverRevisionNo}`,
+                },
+              ]}
+            />
+          ) : null}
+
+          {result?.outcome !== "succeeded" ? (
+            <form
+              className="grid gap-3"
+              onSubmit={(e) => {
+                e.preventDefault()
+                void form.handleSubmit()
+              }}
+            >
               <form.AppField
-                name="effectiveFrom"
+                name="name"
                 children={(field) => (
-                  <field.TextField label={masterDataCopy.fieldEffectiveFrom} />
+                  <field.TextField label={masterDataCopy.reviseNameLabel} />
                 )}
               />
-              <form.AppField
-                name="effectiveTo"
-                children={(field) => (
-                  <field.TextField label={masterDataCopy.fieldEffectiveTo} />
-                )}
+              <ResourceFieldsSection
+                form={form}
+                resource={resource}
+                wide={wide}
               />
-            </div>
-            <form.AppField
-              name="changeReason"
-              children={(field) => (
-                <field.TextareaField label={masterDataCopy.fieldChangeReason} />
-              )}
-            />
-            {!isWarehouse ? (
-              <div className="space-y-2">
-                <Label htmlFor="rev-sim">
-                  {masterDataCopy.demoSimulateLabel}
-                </Label>
-                <OptionCombobox
-                  id="rev-sim"
-                  value={simulate}
-                  onValueChange={(v) =>
-                    setSimulate(
-                      (v ?? "ok") as
-                        | "ok"
-                        | "overlap"
-                        | "sku_signature"
-                        | "base_unit"
-                        | "conflict"
-                    )
-                  }
-                  options={[
-                    { value: "ok", label: masterDataCopy.demoOk },
-                    { value: "overlap", label: masterDataCopy.demoOverlap },
-                    ...(resource === "products"
-                      ? [
-                          {
-                            value: "sku_signature",
-                            label: masterDataCopy.demoSkuSig,
-                          },
-                          {
-                            value: "base_unit",
-                            label: masterDataCopy.demoBaseUnit,
-                          },
-                        ]
-                      : []),
-                    { value: "conflict", label: masterDataCopy.demoConflict },
-                  ]}
-                  className="w-full"
-                  allowClear={false}
-                  aria-label={masterDataCopy.demoSimulateLabel}
-                  placeholder={masterDataCopy.demoSimulateLabel}
+              <div className="grid gap-3 sm:grid-cols-2">
+                <form.AppField
+                  name="effectiveFrom"
+                  children={(field) => (
+                    <field.TextField label={masterDataCopy.fieldEffectiveFrom} />
+                  )}
+                />
+                <form.AppField
+                  name="effectiveTo"
+                  children={(field) => (
+                    <field.TextField label={masterDataCopy.fieldEffectiveTo} />
+                  )}
                 />
               </div>
-            ) : null}
+              <form.AppField
+                name="changeReason"
+                children={(field) => (
+                  <field.TextareaField
+                    label={masterDataCopy.fieldChangeReason}
+                  />
+                )}
+              />
+              {!isWarehouse ? (
+                <div className="space-y-2">
+                  <Label htmlFor="rev-sim">
+                    {masterDataCopy.demoSimulateLabel}
+                  </Label>
+                  <OptionCombobox
+                    id="rev-sim"
+                    value={simulate}
+                    onValueChange={(v) =>
+                      setSimulate(
+                        (v ?? "ok") as
+                          | "ok"
+                          | "overlap"
+                          | "sku_signature"
+                          | "base_unit"
+                          | "conflict"
+                      )
+                    }
+                    options={[
+                      { value: "ok", label: masterDataCopy.demoOk },
+                      {
+                        value: "overlap",
+                        label: masterDataCopy.demoOverlap,
+                      },
+                      ...(resource === "products"
+                        ? [
+                            {
+                              value: "sku_signature",
+                              label: masterDataCopy.demoSkuSig,
+                            },
+                            {
+                              value: "base_unit",
+                              label: masterDataCopy.demoBaseUnit,
+                            },
+                          ]
+                        : []),
+                      {
+                        value: "conflict",
+                        label: masterDataCopy.demoConflict,
+                      },
+                    ]}
+                    className="w-full"
+                    allowClear={false}
+                    aria-label={masterDataCopy.demoSimulateLabel}
+                    placeholder={masterDataCopy.demoSimulateLabel}
+                  />
+                </div>
+              ) : null}
+              <DialogFooter>
+                <DialogClose
+                  render={<Button type="button" variant="outline" />}
+                >
+                  关闭
+                </DialogClose>
+                <Button type="submit" disabled={mutation.isPending || !target}>
+                  {isWarehouse
+                    ? masterDataCopy.createSubmitRejected
+                    : masterDataCopy.reviseSubmit}
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : (
             <DialogFooter>
-              <DialogClose render={<Button type="button" variant="outline" />}>
-                关闭
-              </DialogClose>
-              <Button type="submit" disabled={mutation.isPending || !target}>
-                {isWarehouse
-                  ? masterDataCopy.createSubmitRejected
-                  : masterDataCopy.reviseSubmit}
+              <Button type="button" onClick={() => onOpenChange(false)}>
+                完成
               </Button>
             </DialogFooter>
-          </form>
-        ) : (
-          <DialogFooter>
-            <Button type="button" onClick={() => onOpenChange(false)}>
-              完成
-            </Button>
-          </DialogFooter>
-        )}
+          )}
+        </DialogScrollBody>
       </DialogContent>
     </Dialog>
   )

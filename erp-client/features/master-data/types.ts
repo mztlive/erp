@@ -3,6 +3,8 @@ import type { StatusTone } from "@/components/ui/status-badge"
 export const MASTER_DATA_RESOURCES = [
   { key: "sellable-items", label: "可销售项目" },
   { key: "products", label: "商品与 SKU" },
+  { key: "categories", label: "商品分类" },
+  { key: "brands", label: "品牌" },
   { key: "voucher-categories", label: "卡券类目" },
   { key: "suppliers", label: "供应商与资质" },
   { key: "warehouses", label: "仓库" },
@@ -196,13 +198,86 @@ export type MasterDataCenterView = Readonly<{
   sections: readonly MasterDataSectionId[]
 }>
 
+/** 商品与 SKU：规格身份变化必须新建 SKU，不允许通过修订改变规格签名。 */
+export type ProductFields = Readonly<{
+  spu: string
+  specSignature: string
+  baseUnit: string
+  category?: string
+  brand?: string
+  /** 默认/主供应商，下拉选自供应商主数据启用项。 */
+  supplier?: string
+  barcode?: string
+  /** 主图文件名/资产标识，必填。 */
+  mainImage: string
+  /** 轮播图，逗号分隔文件名；允许空。 */
+  carouselImages?: string
+  /** 详情图，逗号分隔文件名；允许空。 */
+  detailImages?: string
+  /** 参考成本价（资料维护用，非正式供给成本）。 */
+  costPrice?: string
+  /** 参考销售价（资料维护用，非正式商城发布价）。 */
+  salePrice?: string
+}>
+
+export type SellableItemFields = Readonly<{
+  sku: string
+  refSupplier?: string
+  refCost?: string
+  region?: string
+  leadTime?: string
+  fulfillmentModes?: string
+  taxRate?: string
+}>
+
+export type VoucherCategoryFields = Readonly<{
+  sku: string
+  description?: string
+}>
+
+/** 商品分类字典：稳定代码 + 名称（name 在通用字段）。 */
+export type CategoryFields = Readonly<{
+  code: string
+  parent?: string
+  productKind?: string
+}>
+
+/** 品牌字典：稳定代码 + 名称（name 在通用字段）。 */
+export type BrandFields = Readonly<{
+  code: string
+}>
+
+export type SupplierFields = Readonly<{
+  company: string
+  role: string
+  settlement?: string
+  capability?: string
+  qualification?: string
+}>
+
+export type WarehouseFields = Readonly<Record<string, never>>
+
+/**
+ * 按资源强类型化的专属字段（对齐 W14 §4.3 / §5.2 / §8.2）。
+ * 正式提交不得退回通用 `Record<string, string>` 契约。
+ */
+export type MasterDataResourceFields = {
+  "sellable-items": SellableItemFields
+  products: ProductFields
+  categories: CategoryFields
+  brands: BrandFields
+  "voucher-categories": VoucherCategoryFields
+  suppliers: SupplierFields
+  warehouses: WarehouseFields
+}
+
 export type CreateMasterDataInput = Readonly<{
   resource: MasterDataResource
   name: string
   effectiveFrom: string
   effectiveTo?: string
   changeReason: string
-  fields?: Record<string, string>
+  fields: MasterDataResourceFields[MasterDataResource]
   idempotencyKey: string
   simulate?: "ok" | "overlap" | "sku_signature" | "base_unit" | "warehouse_stock"
 }>
@@ -216,7 +291,7 @@ export type CreateRevisionInput = Readonly<{
   effectiveFrom: string
   effectiveTo?: string
   changeReason: string
-  fields?: Record<string, string>
+  fields: MasterDataResourceFields[MasterDataResource]
   idempotencyKey: string
   simulate?: "ok" | "overlap" | "sku_signature" | "base_unit" | "conflict"
 }>
