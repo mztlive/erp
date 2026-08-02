@@ -304,12 +304,30 @@ export type SupplierFields = Readonly<{
   company: string
   contactName?: string
   contactPhone?: string
+  address?: string
   settlement?: string
   capability?: string
+  businessCategory?: string
+  signingEntity?: string
+  paymentEntity?: string
   qualification?: string
+  contractNo?: string
+  contractValidFrom?: string
+  contractValidTo?: string
+  contractFile?: string
+  authorizationFile?: string
+  authorizationValidFrom?: string
+  authorizationValidTo?: string
+  foodLicense?: string
+  legalPersonIdCard?: string
   taxNo?: string
   bankName?: string
   bankAccount?: string
+  invoiceType?: string
+  invoiceTaxRate?: string
+  initialScore?: string
+  supplierRating?: string
+  currentScore?: string
 }>
 
 export type WarehouseFields = Readonly<Record<string, never>>

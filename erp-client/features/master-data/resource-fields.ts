@@ -27,6 +27,21 @@ export const REGION_OPTIONS = [
 /** 供应商结算方式（对齐 supplier_commercial_profile_revision.settlement_mode）。 */
 export const SETTLEMENT_MODE_OPTIONS = ["预付款", "先用后付", "现结"] as const
 
+/** 供应商发票类型。 */
+export const INVOICE_TYPE_OPTIONS = [
+  "增值税专用发票",
+  "增值税普通发票",
+  "电子发票",
+] as const
+
+/** 供应商评级。 */
+export const SUPPLIER_RATING_OPTIONS = [
+  "A 级",
+  "B 级",
+  "C 级",
+  "D 级",
+] as const
+
 /** 供应商能力（多选，对齐 erp-phase-1 §4.5）。 */
 export const SUPPLIER_CAPABILITY_OPTIONS = [
   "实物商品",
@@ -277,6 +292,11 @@ export const RESOURCE_FIELDS: Readonly<
       listFact: true,
     },
     {
+      key: "address",
+      label: masterDataCopy.fAddress,
+      kind: "text",
+    },
+    {
       key: "settlement",
       label: masterDataCopy.fSettlement,
       kind: "select",
@@ -293,14 +313,107 @@ export const RESOURCE_FIELDS: Readonly<
       aliases: ["能力版本"],
     },
     {
+      key: "businessCategory",
+      label: masterDataCopy.fBusinessCategory,
+      kind: "text",
+    },
+    {
+      key: "signingEntity",
+      label: masterDataCopy.fSigningEntity,
+      kind: "text",
+    },
+    {
+      key: "paymentEntity",
+      label: masterDataCopy.fPaymentEntity,
+      kind: "text",
+    },
+    {
       key: "qualification",
       label: masterDataCopy.fQualification,
+      kind: "media-list",
+      hint: masterDataCopy.supplierQualificationHint,
+    },
+    {
+      key: "contractNo",
+      label: masterDataCopy.fContractNo,
+      kind: "text",
+    },
+    {
+      key: "contractValidFrom",
+      label: masterDataCopy.fContractValidFrom,
+      kind: "text",
+    },
+    {
+      key: "contractValidTo",
+      label: masterDataCopy.fContractValidTo,
+      kind: "text",
+    },
+    {
+      key: "contractFile",
+      label: masterDataCopy.fContractFile,
+      kind: "media-list",
+      hint: masterDataCopy.supplierQualificationHint,
+    },
+    {
+      key: "authorizationFile",
+      label: masterDataCopy.fAuthorizationFile,
+      kind: "media-list",
+      hint: masterDataCopy.supplierQualificationHint,
+    },
+    {
+      key: "authorizationValidFrom",
+      label: masterDataCopy.fAuthorizationValidFrom,
+      kind: "text",
+    },
+    {
+      key: "authorizationValidTo",
+      label: masterDataCopy.fAuthorizationValidTo,
+      kind: "text",
+    },
+    {
+      key: "foodLicense",
+      label: masterDataCopy.fFoodLicense,
+      kind: "media-list",
+      hint: masterDataCopy.supplierQualificationHint,
+    },
+    {
+      key: "legalPersonIdCard",
+      label: masterDataCopy.fLegalPersonIdCard,
       kind: "media-list",
       hint: masterDataCopy.supplierQualificationHint,
     },
     { key: "taxNo", label: masterDataCopy.fTaxNo, kind: "text" },
     { key: "bankName", label: masterDataCopy.fBankName, kind: "text" },
     { key: "bankAccount", label: masterDataCopy.fBankAccount, kind: "text" },
+    {
+      key: "invoiceType",
+      label: masterDataCopy.fInvoiceType,
+      kind: "select",
+      options: INVOICE_TYPE_OPTIONS,
+      listFact: true,
+    },
+    {
+      key: "invoiceTaxRate",
+      label: masterDataCopy.fInvoiceTaxRate,
+      kind: "text",
+    },
+    {
+      key: "initialScore",
+      label: masterDataCopy.fInitialScore,
+      kind: "text",
+    },
+    {
+      key: "supplierRating",
+      label: masterDataCopy.fSupplierRating,
+      kind: "select",
+      options: SUPPLIER_RATING_OPTIONS,
+      listFact: true,
+    },
+    {
+      key: "currentScore",
+      label: masterDataCopy.fCurrentScore,
+      kind: "text",
+    },
   ],
   warehouses: [],
 }
@@ -480,12 +593,30 @@ export function buildResourceFields(
         company: pickField(values, "company") ?? "",
         contactName: pickField(values, "contactName"),
         contactPhone: pickField(values, "contactPhone"),
+        address: pickField(values, "address"),
         settlement: pickField(values, "settlement"),
         capability: pickField(values, "capability"),
+        businessCategory: pickField(values, "businessCategory"),
+        signingEntity: pickField(values, "signingEntity"),
+        paymentEntity: pickField(values, "paymentEntity"),
         qualification: pickField(values, "qualification"),
+        contractNo: pickField(values, "contractNo"),
+        contractValidFrom: pickField(values, "contractValidFrom"),
+        contractValidTo: pickField(values, "contractValidTo"),
+        contractFile: pickField(values, "contractFile"),
+        authorizationFile: pickField(values, "authorizationFile"),
+        authorizationValidFrom: pickField(values, "authorizationValidFrom"),
+        authorizationValidTo: pickField(values, "authorizationValidTo"),
+        foodLicense: pickField(values, "foodLicense"),
+        legalPersonIdCard: pickField(values, "legalPersonIdCard"),
         taxNo: pickField(values, "taxNo"),
         bankName: pickField(values, "bankName"),
         bankAccount: pickField(values, "bankAccount"),
+        invoiceType: pickField(values, "invoiceType"),
+        invoiceTaxRate: pickField(values, "invoiceTaxRate"),
+        initialScore: pickField(values, "initialScore"),
+        supplierRating: pickField(values, "supplierRating"),
+        currentScore: pickField(values, "currentScore"),
       }
     case "warehouses":
       return {}

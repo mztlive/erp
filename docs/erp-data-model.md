@@ -269,10 +269,11 @@ erDiagram
 | `party_tax_profile` | 一期 | 税号及税务资料 |
 | `party_bank_account` | 一期 | 加密银行账户及带密钥查询指纹 |
 | `customer_assignment` | 一期 | 主负责销售与协作销售的有效期归属 |
-| `supplier_commercial_profile_revision` | 一期 | 供应商结算方式、对账周期和付款条件历史 |
+| `supplier_commercial_profile_revision` | 一期 | 供应商结算方式、对账周期、付款条件、发票类型/税点及签约/付款主体历史 |
 | `supplier_capability` / `supplier_capability_revision` | 一期 | 供应商能力与区域、有效期 |
-| `supplier_qualification` / `supplier_qualification_revision` | 一期 | 供应商资质历史 |
+| `supplier_qualification` / `supplier_qualification_revision` | 一期 | 供应商资质、合同、授权书、食品经营许可证和法人身份证等证照文档历史 |
 | `supplier_qualification_capability` | 一期 | 资质适用能力 |
+| `supplier_rating_revision` | 一期 | 供应商期初评分、评级和合作中评分历史 |
 | `contract` / `contract_revision` | 一期 | 客户合同和不可变版本 |
 | `product_category` / `product_brand` / `unit_of_measure` | 一期 | 商品分类、品牌和唯一基础单位字典 |
 | `sku_attribute` / `sku_attribute_value` / `product_category_attribute` | 一期 | SKU 规格属性、值及分类适用关系 |
@@ -629,6 +630,10 @@ erDiagram
 | `settlement_mode` | 预付款、先用后付、现结等受控代码 |
 | `reconciliation_cycle` | 日、周、月、季、年或无需周期对账 |
 | `payment_term_snapshot` | 结构化付款条件 |
+| `invoice_type` | 增值税专用发票、增值税普通发票、电子发票等受控代码 |
+| `invoice_tax_rate` | 发票税点（如 13%） |
+| `signing_entity_party_id` | 与我司签约的公司主体（内部 `party` 引用） |
+| `payment_entity_party_id` | 付款时的公司主体（内部 `party` 引用） |
 | `valid_from` / `valid_to` | 生效区间 |
 | `change_reason` | 变更原因 |
 
@@ -682,11 +687,11 @@ erDiagram
 | 字段 | 说明 |
 | --- | --- |
 | `supplier_id` | 供应商 |
-| `qualification_type` | 资质类型 |
-| `certificate_no` | 证书编号 |
+| `qualification_type` | 资质类型：资质证照、合同、授权书、食品经营许可证、法人身份证等 |
+| `certificate_no` | 证书编号；合同 / 授权书使用合同编号或授权编号 |
 | `issuer` | 发证机构 |
 | `valid_from` / `valid_to` | 生效、失效日期 |
-| `attachment_id` | 资质附件 |
+| `attachment_id` | 资质附件；合同文件、授权书文件等文档附件 |
 | `status` | 有效、失效、停用 |
 
 必需约束与索引：
@@ -694,7 +699,25 @@ erDiagram
 - 供应商、资质类型、证书编号组合唯一；
 - `valid_to + status` 到期预警索引；
 - `supplier_qualification_capability` 明确适用能力；
-- 新建可销售项目、采购单和供给关系时必须校验适用能力存在有效资质。
+- 新建可销售项目、采购单和供给关系时必须校验适用能力存在有效资质；
+- 合同、授权书、食品经营许可证和法人身份证以受控 `qualification_type` 表达，附件走受控下载并记录访问审计。
+
+#### `supplier_rating_revision`
+
+| 字段 | 说明 |
+| --- | --- |
+| `supplier_id` / `revision_no` | 供应商及评估版本 |
+| `initial_score` | 合作期初评分（合作开始时记录） |
+| `rating` | 供应商评级（A–D 级） |
+| `current_score` | 合作中评分（随合作过程定期更新） |
+| `valid_from` / `valid_to` | 生效区间 |
+| `change_reason` | 变更原因 |
+
+必需约束与索引：
+
+- `(supplier_id, revision_no)` 唯一；
+- 同一供应商评估版本有效期不得重叠；
+- 期初评分只在首次合作版本填写；合作中评分与评级按周期追加新版本，不原位覆盖。
 
 ### 6.3 商品、SKU、卡券类目与可销售项目
 
@@ -3725,8 +3748,9 @@ PREPARING
 
 - 基础企业资料映射 `party + supplier_account`；
 - 供应商类型不能替代能力模型，拆为多条 `supplier_capability`；
-- 营业执照等 JSON 字段拆为 `supplier_qualification` 和附件；
-- 对账周期、结算条件映射到供应商结算资料修订；
+- 营业执照、食品经营许可证、合同、授权书和法人身份证等 JSON 字段拆为 `supplier_qualification` 和附件（按受控 `qualification_type` 区分）；
+- 对账周期、结算条件、发票类型与税点映射到供应商结算资料修订；
+- 期初评分、评级和合作中评分映射 `supplier_rating_revision`，不把旧统计当正式期初权威事实；
 - 预付款余额、授信余额、累计核销和累计退款等统计字段不作为 ERP 期初权威事实；
   如需迁移必须有独立余额确认单和基准日；
 - 旧 `tenant_id`、回收标记和排序字段不扩散到正式模型。

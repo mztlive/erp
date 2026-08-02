@@ -37,8 +37,10 @@ import {
 import { masterDataCopy } from "@/features/master-data/copy"
 import { formatEffectiveRange } from "@/features/master-data/filter"
 import {
+  INVOICE_TYPE_OPTIONS,
   SETTLEMENT_MODE_OPTIONS,
   SUPPLIER_CAPABILITY_OPTIONS,
+  SUPPLIER_RATING_OPTIONS,
   buildResourceFields,
   currentResourceFieldValues,
 } from "@/features/master-data/resource-fields"
@@ -102,12 +104,30 @@ type SupplierEditorFormValues = Readonly<{
   company: string
   contactName: string
   contactPhone: string
+  address: string
   capability: string
   settlement: string
+  businessCategory: string
+  signingEntity: string
+  paymentEntity: string
   qualification: string
+  contractNo: string
+  contractValidFrom: string
+  contractValidTo: string
+  contractFile: string
+  authorizationFile: string
+  authorizationValidFrom: string
+  authorizationValidTo: string
+  foodLicense: string
+  legalPersonIdCard: string
   taxNo: string
   bankName: string
   bankAccount: string
+  invoiceType: string
+  invoiceTaxRate: string
+  initialScore: string
+  supplierRating: string
+  currentScore: string
   effectiveFrom: string
   effectiveTo: string
   changeReason: string
@@ -130,12 +150,30 @@ function hydrateFromCenter(data: MasterDataCenterView): SupplierEditorFormValues
     company: fields.company ?? "",
     contactName: fields.contactName ?? "",
     contactPhone: fields.contactPhone ?? "",
+    address: fields.address ?? "",
     capability: fields.capability ?? "",
     settlement: fields.settlement ?? "",
+    businessCategory: fields.businessCategory ?? "",
+    signingEntity: fields.signingEntity ?? "",
+    paymentEntity: fields.paymentEntity ?? "",
     qualification: fields.qualification ?? "",
+    contractNo: fields.contractNo ?? "",
+    contractValidFrom: fields.contractValidFrom ?? "",
+    contractValidTo: fields.contractValidTo ?? "",
+    contractFile: fields.contractFile ?? "",
+    authorizationFile: fields.authorizationFile ?? "",
+    authorizationValidFrom: fields.authorizationValidFrom ?? "",
+    authorizationValidTo: fields.authorizationValidTo ?? "",
+    foodLicense: fields.foodLicense ?? "",
+    legalPersonIdCard: fields.legalPersonIdCard ?? "",
     taxNo: fields.taxNo ?? "",
     bankName: fields.bankName ?? "",
     bankAccount: fields.bankAccount ?? "",
+    invoiceType: fields.invoiceType ?? "",
+    invoiceTaxRate: fields.invoiceTaxRate ?? "",
+    initialScore: fields.initialScore ?? "",
+    supplierRating: fields.supplierRating ?? "",
+    currentScore: fields.currentScore ?? "",
     effectiveFrom: data.currentRevision.effectiveFrom,
     effectiveTo: data.currentRevision.effectiveTo ?? "",
     changeReason: "",
@@ -148,12 +186,30 @@ function createDefaults(isCreate: boolean): SupplierEditorFormValues {
     company: "",
     contactName: "",
     contactPhone: "",
+    address: "",
     capability: "",
     settlement: "",
+    businessCategory: "",
+    signingEntity: "",
+    paymentEntity: "",
     qualification: "",
+    contractNo: "",
+    contractValidFrom: "",
+    contractValidTo: "",
+    contractFile: "",
+    authorizationFile: "",
+    authorizationValidFrom: "",
+    authorizationValidTo: "",
+    foodLicense: "",
+    legalPersonIdCard: "",
     taxNo: "",
     bankName: "",
     bankAccount: "",
+    invoiceType: "",
+    invoiceTaxRate: "",
+    initialScore: "",
+    supplierRating: "",
+    currentScore: "",
     effectiveFrom: "2026-08-01",
     effectiveTo: "",
     changeReason: isCreate ? "新建供应商" : "",
@@ -322,12 +378,30 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
             | "company"
             | "contactName"
             | "contactPhone"
+            | "address"
             | "capability"
             | "settlement"
+            | "businessCategory"
+            | "signingEntity"
+            | "paymentEntity"
             | "qualification"
+            | "contractNo"
+            | "contractValidFrom"
+            | "contractValidTo"
+            | "contractFile"
+            | "authorizationFile"
+            | "authorizationValidFrom"
+            | "authorizationValidTo"
+            | "foodLicense"
+            | "legalPersonIdCard"
             | "taxNo"
             | "bankName"
             | "bankAccount"
+            | "invoiceType"
+            | "invoiceTaxRate"
+            | "initialScore"
+            | "supplierRating"
+            | "currentScore"
             | "effectiveFrom"
             | "effectiveTo"
             | "changeReason",
@@ -553,6 +627,20 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                         disabled={!canEdit}
                       />
                     </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label htmlFor="supplier-address">
+                        {masterDataCopy.fAddress}
+                      </Label>
+                      <Input
+                        id="supplier-address"
+                        value={values.address}
+                        onChange={(e) =>
+                          setFieldValue("address", e.target.value)
+                        }
+                        placeholder="供应商注册或经营地址"
+                        disabled={!canEdit}
+                      />
+                    </div>
                   </div>
                 </section>
 
@@ -586,6 +674,50 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                       disabled={!canEdit}
                     />
                   </div>
+                  <div className="grid gap-3 px-1 sm:grid-cols-2">
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label htmlFor="supplier-business-category">
+                        {masterDataCopy.fBusinessCategory}
+                      </Label>
+                      <Input
+                        id="supplier-business-category"
+                        value={values.businessCategory}
+                        onChange={(e) =>
+                          setFieldValue("businessCategory", e.target.value)
+                        }
+                        placeholder="如：礼盒、茶叶、卡券"
+                        disabled={!canEdit}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="supplier-signing-entity">
+                        {masterDataCopy.fSigningEntity}
+                      </Label>
+                      <Input
+                        id="supplier-signing-entity"
+                        value={values.signingEntity}
+                        onChange={(e) =>
+                          setFieldValue("signingEntity", e.target.value)
+                        }
+                        placeholder="与我司签约的公司主体"
+                        disabled={!canEdit}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="supplier-payment-entity">
+                        {masterDataCopy.fPaymentEntity}
+                      </Label>
+                      <Input
+                        id="supplier-payment-entity"
+                        value={values.paymentEntity}
+                        onChange={(e) =>
+                          setFieldValue("paymentEntity", e.target.value)
+                        }
+                        placeholder="付款时的公司主体"
+                        disabled={!canEdit}
+                      />
+                    </div>
+                  </div>
                 </section>
 
                 <section className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -603,6 +735,125 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                       }
                       accept="image/jpeg,image/png,image/webp,application/pdf"
                     />
+                  </div>
+                </section>
+
+                <section className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                  <h2 className="px-1 text-base font-semibold">合同与授权</h2>
+                  <p className="px-1 text-xs text-muted-foreground">
+                    合同与授权书文件支持图片 / PDF；有效期到期后需重新维护。
+                  </p>
+                  <div className="grid gap-3 px-1 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="supplier-contract-no">
+                        {masterDataCopy.fContractNo}
+                      </Label>
+                      <Input
+                        id="supplier-contract-no"
+                        value={values.contractNo}
+                        onChange={(e) =>
+                          setFieldValue("contractNo", e.target.value)
+                        }
+                        placeholder="合同编号"
+                        disabled={!canEdit}
+                      />
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label htmlFor="supplier-contract-valid-from">
+                        {masterDataCopy.fContractValidFrom}
+                      </Label>
+                      <DatePicker
+                        value={values.contractValidFrom || undefined}
+                        onValueChange={(next) =>
+                          setFieldValue("contractValidFrom", next ?? "")
+                        }
+                        disabled={!canEdit}
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label htmlFor="supplier-contract-valid-to">
+                        {masterDataCopy.fContractValidTo}
+                      </Label>
+                      <DatePicker
+                        value={values.contractValidTo || undefined}
+                        onValueChange={(next) =>
+                          setFieldValue("contractValidTo", next ?? "")
+                        }
+                        disabled={!canEdit}
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <MediaListField
+                        label={masterDataCopy.fContractFile}
+                        hint={masterDataCopy.supplierQualificationHint}
+                        value={values.contractFile}
+                        onChange={(next) =>
+                          setFieldValue("contractFile", next)
+                        }
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <MediaListField
+                        label={masterDataCopy.fAuthorizationFile}
+                        hint={masterDataCopy.supplierQualificationHint}
+                        value={values.authorizationFile}
+                        onChange={(next) =>
+                          setFieldValue("authorizationFile", next)
+                        }
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="supplier-auth-valid-from">
+                        {masterDataCopy.fAuthorizationValidFrom}
+                      </Label>
+                      <DatePicker
+                        value={values.authorizationValidFrom || undefined}
+                        onValueChange={(next) =>
+                          setFieldValue("authorizationValidFrom", next ?? "")
+                        }
+                        disabled={!canEdit}
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="supplier-auth-valid-to">
+                        {masterDataCopy.fAuthorizationValidTo}
+                      </Label>
+                      <DatePicker
+                        value={values.authorizationValidTo || undefined}
+                        onValueChange={(next) =>
+                          setFieldValue("authorizationValidTo", next ?? "")
+                        }
+                        disabled={!canEdit}
+                        className="w-full"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <MediaListField
+                        label={masterDataCopy.fFoodLicense}
+                        hint={masterDataCopy.supplierQualificationHint}
+                        value={values.foodLicense}
+                        onChange={(next) =>
+                          setFieldValue("foodLicense", next)
+                        }
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <MediaListField
+                        label={masterDataCopy.fLegalPersonIdCard}
+                        hint={masterDataCopy.supplierQualificationHint}
+                        value={values.legalPersonIdCard}
+                        onChange={(next) =>
+                          setFieldValue("legalPersonIdCard", next)
+                        }
+                        accept="image/jpeg,image/png,image/webp,application/pdf"
+                      />
+                    </div>
                   </div>
                 </section>
 
@@ -649,6 +900,91 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                           setFieldValue("bankAccount", e.target.value)
                         }
                         placeholder="银行账号"
+                        disabled={!canEdit}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>{masterDataCopy.fInvoiceType}</Label>
+                      <OptionCombobox
+                        value={values.invoiceType || null}
+                        onValueChange={(v) =>
+                          setFieldValue("invoiceType", v ?? "")
+                        }
+                        options={INVOICE_TYPE_OPTIONS.map((o) => ({
+                          value: o,
+                          label: o,
+                        }))}
+                        allowClear
+                        placeholder="请选择发票类型"
+                        className="w-full"
+                        disabled={!canEdit}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="supplier-invoice-tax-rate">
+                        {masterDataCopy.fInvoiceTaxRate}
+                      </Label>
+                      <Input
+                        id="supplier-invoice-tax-rate"
+                        value={values.invoiceTaxRate}
+                        onChange={(e) =>
+                          setFieldValue("invoiceTaxRate", e.target.value)
+                        }
+                        placeholder="如：13%"
+                        disabled={!canEdit}
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                  <h2 className="px-1 text-base font-semibold">合作评估</h2>
+                  <p className="px-1 text-xs text-muted-foreground">
+                    期初评分在合作开始时记录；合作中评分随合作过程定期更新。
+                  </p>
+                  <div className="grid gap-3 px-1 sm:grid-cols-3">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="supplier-initial-score">
+                        {masterDataCopy.fInitialScore}
+                      </Label>
+                      <Input
+                        id="supplier-initial-score"
+                        value={values.initialScore}
+                        onChange={(e) =>
+                          setFieldValue("initialScore", e.target.value)
+                        }
+                        placeholder="如：85"
+                        disabled={!canEdit}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>{masterDataCopy.fSupplierRating}</Label>
+                      <OptionCombobox
+                        value={values.supplierRating || null}
+                        onValueChange={(v) =>
+                          setFieldValue("supplierRating", v ?? "")
+                        }
+                        options={SUPPLIER_RATING_OPTIONS.map((o) => ({
+                          value: o,
+                          label: o,
+                        }))}
+                        allowClear
+                        placeholder="请选择评级"
+                        className="w-full"
+                        disabled={!canEdit}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="supplier-current-score">
+                        {masterDataCopy.fCurrentScore}
+                      </Label>
+                      <Input
+                        id="supplier-current-score"
+                        value={values.currentScore}
+                        onChange={(e) =>
+                          setFieldValue("currentScore", e.target.value)
+                        }
+                        placeholder="如：88"
                         disabled={!canEdit}
                       />
                     </div>
