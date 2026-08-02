@@ -16,6 +16,7 @@ import {
   AlertTitle,
 } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogClose,
@@ -176,16 +177,19 @@ function MediaSingleField({
   )
 }
 
-function MediaListField({
+export function MediaListField({
   label,
   hint,
   value,
   onChange,
+  accept = "image/jpeg,image/png,image/webp",
 }: {
   label: string
   hint?: string
   value: string
   onChange: (next: string) => void
+  /** 允许上传的文件类型；默认图片。 */
+  accept?: string
 }) {
   const items = parseMediaList(value)
   return (
@@ -230,7 +234,7 @@ function MediaListField({
         </p>
       )}
       <FileUpload
-        accept="image/jpeg,image/png,image/webp"
+        accept={accept}
         multiple
         label={`添加${label}`}
         description={masterDataCopy.mediaUploadHint}
@@ -265,6 +269,41 @@ function renderStandardField(
         allowClear={!def.required}
         placeholder={def.required ? `请选择${def.label}` : "未填写"}
       />
+    )
+  }
+  if (def.kind === "checkbox-group") {
+    const selected = new Set(
+      (field.state.value ?? "")
+        .split(/[、,，]/)
+        .map((s) => s.trim())
+        .filter(Boolean)
+    )
+    return (
+      <div className="space-y-1.5">
+        <Label className="text-sm font-medium">{def.label}</Label>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {(def.options ?? []).map((option) => (
+            <label
+              key={option}
+              className="flex items-center gap-2 text-sm"
+            >
+              <Checkbox
+                checked={selected.has(option)}
+                onCheckedChange={(checked) => {
+                  const next = new Set(selected)
+                  if (checked === true) {
+                    next.add(option)
+                  } else {
+                    next.delete(option)
+                  }
+                  field.handleChange(Array.from(next).join("、"))
+                }}
+              />
+              {option}
+            </label>
+          ))}
+        </div>
+      </div>
     )
   }
   if (def.kind === "category-parent") {

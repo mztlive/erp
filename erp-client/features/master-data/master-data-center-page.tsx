@@ -20,6 +20,7 @@ import {
   MasterDataReviseDialog,
 } from "@/features/master-data/master-data-action-dialog"
 import { ProductDetailPage } from "@/features/master-data/product-detail-page"
+import { SupplierDetailPage } from "@/features/master-data/supplier-detail-page"
 import { revealMasterDataSensitive } from "@/features/master-data/api"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
@@ -75,9 +76,12 @@ export function MasterDataCenterPage({
     )
   }
 
-  // 商品详情页即查看也是编辑（含新建 /new），不使用侧边 sheet / 对话框
+  // 商品 / 供应商详情页即查看也是编辑（含新建 /new），不使用侧边 sheet / 对话框
   if (resource === "products") {
     return <ProductDetailPage stableId={stableId} />
+  }
+  if (resource === "suppliers") {
+    return <SupplierDetailPage stableId={stableId} />
   }
 
   return (

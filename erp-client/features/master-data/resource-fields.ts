@@ -24,11 +24,16 @@ export const REGION_OPTIONS = [
   "全国",
 ] as const
 
-export const SUPPLIER_ROLE_OPTIONS = [
-  "实物供应",
-  "包装服务",
-  "配送",
-  "电子卡券",
+/** 供应商结算方式（对齐 supplier_commercial_profile_revision.settlement_mode）。 */
+export const SETTLEMENT_MODE_OPTIONS = ["预付款", "先用后付", "现结"] as const
+
+/** 供应商能力（多选，对齐 erp-phase-1 §4.5）。 */
+export const SUPPLIER_CAPABILITY_OPTIONS = [
+  "实物商品",
+  "虚拟商品",
+  "线下服务",
+  "API",
+  "印刷",
 ] as const
 
 /** SKU 基础计量单位字典（演示静态；正式由 unit_of_measure 维护）。 */
@@ -92,6 +97,7 @@ export type ResourceFieldKind =
   | "text"
   | "textarea"
   | "select"
+  | "checkbox-group"
   | "category-parent"
   | "media"
   | "media-list"
@@ -259,23 +265,42 @@ export const RESOURCE_FIELDS: Readonly<
       listFact: true,
     },
     {
-      key: "role",
-      label: masterDataCopy.fRole,
-      kind: "select",
-      options: SUPPLIER_ROLE_OPTIONS,
-      required: true,
+      key: "contactName",
+      label: masterDataCopy.fContactName,
+      kind: "text",
       listFact: true,
-      aliases: ["角色"],
+    },
+    {
+      key: "contactPhone",
+      label: masterDataCopy.fContactPhone,
+      kind: "text",
+      listFact: true,
     },
     {
       key: "settlement",
       label: masterDataCopy.fSettlement,
-      kind: "text",
+      kind: "select",
+      options: SETTLEMENT_MODE_OPTIONS,
       listFact: true,
-      aliases: ["商务结算"],
+      aliases: ["商务结算", "商务结算版本"],
     },
-    { key: "capability", label: masterDataCopy.fCapability, kind: "text", listFact: true },
-    { key: "qualification", label: masterDataCopy.fQualification, kind: "text" },
+    {
+      key: "capability",
+      label: masterDataCopy.fCapability,
+      kind: "checkbox-group",
+      options: SUPPLIER_CAPABILITY_OPTIONS,
+      listFact: true,
+      aliases: ["能力版本"],
+    },
+    {
+      key: "qualification",
+      label: masterDataCopy.fQualification,
+      kind: "media-list",
+      hint: masterDataCopy.supplierQualificationHint,
+    },
+    { key: "taxNo", label: masterDataCopy.fTaxNo, kind: "text" },
+    { key: "bankName", label: masterDataCopy.fBankName, kind: "text" },
+    { key: "bankAccount", label: masterDataCopy.fBankAccount, kind: "text" },
   ],
   warehouses: [],
 }
@@ -453,10 +478,14 @@ export function buildResourceFields(
     case "suppliers":
       return {
         company: pickField(values, "company") ?? "",
-        role: pickField(values, "role") ?? "",
+        contactName: pickField(values, "contactName"),
+        contactPhone: pickField(values, "contactPhone"),
         settlement: pickField(values, "settlement"),
         capability: pickField(values, "capability"),
         qualification: pickField(values, "qualification"),
+        taxNo: pickField(values, "taxNo"),
+        bankName: pickField(values, "bankName"),
+        bankAccount: pickField(values, "bankAccount"),
       }
     case "warehouses":
       return {}

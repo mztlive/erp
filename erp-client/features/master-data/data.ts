@@ -41,8 +41,6 @@ export const WAREHOUSE_WRITE_MESSAGE =
   "仓库资料暂不可维护：目前只能查看，不能新建、更新或停用。维护功能尚未开放。"
 
 export const MOCK_SENSITIVE_REVEALS: Record<string, string> = {
-  "reveal:sup_1:bank": "6222 **** **** 0188 · 开户名：鲜果直供供应链有限公司",
-  "reveal:sup_2:bank": "6217 **** **** 5521 · 开户名：礼遇包装工坊",
   "reveal:wh_1:contact": "周航 · 138****6621 · 上海市浦东新区临港大道 88 号",
   "reveal:wh_2:contact": "陈璐 · 139****3102 · 广州市黄埔区保税物流园 B3",
 }
@@ -835,8 +833,8 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       revisionNo: 3,
       effectiveFrom: "2026-01-01",
       keyFacts: [
-        { label: "角色", value: "实物供应" },
-        { label: "商务结算", value: "v3" },
+        { label: "能力", value: "实物商品、线下服务" },
+        { label: "结算方式", value: "预付款" },
         { label: "资质", value: "正常" },
         { label: "银行账号", value: "6222 **** **** 0188", sensitive: true },
       ],
@@ -868,8 +866,8 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       revisionNo: 5,
       effectiveFrom: "2025-06-01",
       keyFacts: [
-        { label: "角色", value: "包装服务" },
-        { label: "商务结算", value: "v5" },
+        { label: "能力", value: "印刷、实物商品" },
+        { label: "结算方式", value: "先用后付" },
         { label: "资质", value: "将到期" },
         { label: "银行账号", value: "6217 **** **** 5521", sensitive: true },
       ],
@@ -904,7 +902,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       effectiveFrom: "2024-01-01",
       effectiveTo: "2025-12-31",
       keyFacts: [
-        { label: "角色", value: "配送" },
+        { label: "能力", value: "线下服务" },
         { label: "资质", value: "已失效" },
       ],
       primaryBlocker: "已停用 / 资质失效",
@@ -2221,10 +2219,14 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       changeReason: "更新商务结算版本",
       actor: "赵强",
       fields: [
-        { label: "供应商角色", value: "实物供应" },
-        { label: "商务结算版本", value: "v3" },
-        { label: "能力版本", value: "生鲜冷链 · v2" },
-        { label: "资质", value: "食品经营许可证 · 有效至 2027-06-30" },
+        { label: "联系人", value: "赵强" },
+        { label: "联系电话", value: "138****6621" },
+        { label: "结算方式", value: "预付款" },
+        { label: "能力", value: "实物商品、线下服务" },
+        { label: "资质附件", value: "食品经营许可证.pdf" },
+        { label: "税号", value: "91310000MA1FL0001A" },
+        { label: "开户银行", value: "招商银行上海分行" },
+        { label: "银行账号", value: "6222000011110188" },
       ],
     },
     revisionTimeline: buildTimeline([
@@ -2264,14 +2266,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       historicalReferenceCount: 33,
       note: "采购选择时校验能力、资质与业务日期。",
     },
-    sensitiveFields: [
-      {
-        label: "银行账号",
-        maskedValue: "6222 **** **** 0188",
-        revealToken: "reveal:sup_1:bank",
-        visibility: "masked",
-      },
-    ],
+    sensitiveFields: [],
     resourceFacts: [
       { label: "负责人", value: "赵强" },
       { label: "资质预警", value: "正常" },
@@ -2300,9 +2295,14 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       changeReason: "资质换证提醒",
       actor: "李倩",
       fields: [
-        { label: "供应商角色", value: "包装服务" },
-        { label: "商务结算版本", value: "v5" },
-        { label: "资质", value: "包装服务资质 · 将于 30 日内到期" },
+        { label: "联系人", value: "李倩" },
+        { label: "联系电话", value: "139****3102" },
+        { label: "结算方式", value: "先用后付" },
+        { label: "能力", value: "印刷、实物商品" },
+        { label: "资质附件", value: "包装服务资质.pdf" },
+        { label: "税号", value: "91310000MA1FL0002B" },
+        { label: "开户银行", value: "工商银行深圳分行" },
+        { label: "银行账号", value: "6217000011115521" },
       ],
     },
     revisionTimeline: buildTimeline([
@@ -2331,14 +2331,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       historicalReferenceCount: 12,
       note: "是否可选按业务日期计算。",
     },
-    sensitiveFields: [
-      {
-        label: "银行账号",
-        maskedValue: "6217 **** **** 5521",
-        revealToken: "reveal:sup_2:bank",
-        visibility: "masked",
-      },
-    ],
+    sensitiveFields: [],
     resourceFacts: [
       { label: "负责人", value: "李倩" },
       { label: "资质预警", value: "将到期" },
@@ -2368,8 +2361,13 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       changeReason: "合作终止",
       actor: "赵强",
       fields: [
-        { label: "供应商角色", value: "配送" },
-        { label: "资质", value: "已失效" },
+        { label: "联系人", value: "王磊" },
+        { label: "联系电话", value: "137****5509" },
+        { label: "能力", value: "线下服务" },
+        { label: "资质附件", value: "道路运输经营许可证.pdf" },
+        { label: "税号", value: "91310000MA1FL0003C" },
+        { label: "开户银行", value: "建设银行北京分行" },
+        { label: "银行账号", value: "6222000011110033" },
       ],
     },
     revisionTimeline: buildTimeline([

@@ -173,9 +173,12 @@ function MasterDataListWorkspace({
   const router = useRouter()
   /** 商品（SPU）走详情页，不用侧边 sheet。 */
   const isProductResource = resource === "products"
+  /** 供应商走详情页（查看与编辑同一页面），不用侧边 sheet / 编辑弹窗。 */
+  const isSupplierResource = resource === "suppliers"
   /** 品牌：列表 + 对话框维护，不使用侧栏预览 sheet。 */
   const isBrandResource = resource === "brands"
-  const skipPreviewSheet = isProductResource || isBrandResource
+  const skipPreviewSheet =
+    isProductResource || isBrandResource || isSupplierResource
   /** 品牌 / 分类字典不展示生效期间列。 */
   const showEffectiveColumn = resource !== "brands"
   const [search, setSearch] = React.useState("")
@@ -395,9 +398,9 @@ function MasterDataListWorkspace({
                   onClick={(e) => {
                     e.stopPropagation()
                     lastFocusedRowId.current = item.stableId
-                    if (isProductResource) {
+                    if (isProductResource || isSupplierResource) {
                       router.push(
-                        `/master-data/products/${item.stableId}?section=overview`
+                        `/master-data/${resource}/${item.stableId}?section=overview`
                       )
                     } else {
                       setPreviewId(item.stableId)
@@ -415,10 +418,10 @@ function MasterDataListWorkspace({
                 title={reviseBlocker?.message}
                 onClick={(e) => {
                   e.stopPropagation()
-                  if (isProductResource) {
+                  if (isProductResource || isSupplierResource) {
                     // 详情页即编辑，与「查看」同一路由
                     router.push(
-                      `/master-data/products/${item.stableId}?section=overview`
+                      `/master-data/${resource}/${item.stableId}?section=overview`
                     )
                   } else {
                     setReviseTarget(item)
@@ -447,7 +450,7 @@ function MasterDataListWorkspace({
         },
       },
     ],
-    [isBrandResource, isProductResource, router, showEffectiveColumn]
+    [isBrandResource, isProductResource, isSupplierResource, router, showEffectiveColumn]
   )
 
   const isWarehouse = resource === "warehouses"
@@ -522,8 +525,8 @@ function MasterDataListWorkspace({
                 icon: PlusIcon,
                 disabled: false,
                 onClick: () => {
-                  if (isProductResource) {
-                    router.push("/master-data/products/new")
+                  if (isProductResource || isSupplierResource) {
+                    router.push(`/master-data/${resource}/new`)
                   } else {
                     setCreateOpen(true)
                   }
@@ -692,9 +695,9 @@ function MasterDataListWorkspace({
             }}
             onRowPreview={(row) => {
               lastFocusedRowId.current = row.stableId
-              if (isProductResource) {
+              if (isProductResource || isSupplierResource) {
                 router.push(
-                  `/master-data/products/${row.stableId}?section=overview`
+                  `/master-data/${resource}/${row.stableId}?section=overview`
                 )
               } else if (isBrandResource) {
                 setReviseTarget(row)
@@ -821,14 +824,14 @@ function MasterDataListWorkspace({
         </QuickPreviewSheet>
       ) : null}
 
-      {!isProductResource ? (
+      {!isProductResource && !isSupplierResource ? (
         <MasterDataCreateDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
           resource={resource}
         />
       ) : null}
-      {!isProductResource ? (
+      {!isProductResource && !isSupplierResource ? (
         <MasterDataReviseDialog
           open={reviseTarget != null}
           onOpenChange={(open) => {

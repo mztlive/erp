@@ -302,10 +302,14 @@ export type BrandFields = Readonly<{
 
 export type SupplierFields = Readonly<{
   company: string
-  role: string
+  contactName?: string
+  contactPhone?: string
   settlement?: string
   capability?: string
   qualification?: string
+  taxNo?: string
+  bankName?: string
+  bankAccount?: string
 }>
 
 export type WarehouseFields = Readonly<Record<string, never>>
