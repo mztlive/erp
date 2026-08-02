@@ -13,6 +13,7 @@ function FileUpload({
   disabled = false,
   label = "上传文件",
   description = "点击选择文件，或将文件拖到此处",
+  density = "default",
   className,
 }: {
   onFilesSelected: (files: File[]) => void
@@ -21,6 +22,7 @@ function FileUpload({
   disabled?: boolean
   label?: React.ReactNode
   description?: React.ReactNode
+  density?: "default" | "compact"
   className?: string
 }) {
   const inputRef = React.useRef<HTMLInputElement>(null)
@@ -36,9 +38,12 @@ function FileUpload({
       data-slot="file-upload"
       data-dragging={dragging || undefined}
       className={cn(
-        "flex min-w-0 flex-col items-center justify-center gap-3 rounded-lg border border-dashed bg-surface-sunken p-6 text-center transition-colors data-dragging:border-ring data-dragging:bg-accent",
+        "flex min-w-0 items-center justify-center rounded-lg border border-dashed bg-surface-sunken transition-colors data-dragging:border-ring data-dragging:bg-accent",
+        density === "compact"
+          ? "flex-row gap-2 p-2 text-left"
+          : "flex-col gap-3 p-6 text-center",
         disabled && "cursor-not-allowed opacity-50",
-        className
+        className,
       )}
       onDragEnter={(event) => {
         event.preventDefault()
@@ -69,22 +74,44 @@ function FileUpload({
         }}
         aria-label={typeof label === "string" ? label : "选择上传文件"}
       />
-      <div className="flex size-10 items-center justify-center rounded-xl bg-muted text-foreground">
-        <UploadCloudIcon className="size-5" aria-hidden="true" />
+      <div
+        className={cn(
+          "flex shrink-0 items-center justify-center bg-muted text-foreground",
+          density === "compact" ? "size-8 rounded-lg" : "size-10 rounded-xl",
+        )}
+      >
+        <UploadCloudIcon
+          className={density === "compact" ? "size-4" : "size-5"}
+          aria-hidden="true"
+        />
       </div>
-      <div>
-        <div className="text-sm font-medium text-foreground">{label}</div>
-        <div className="mt-1 text-xs text-muted-foreground">{description}</div>
+      <div className={cn(density === "compact" && "min-w-0 flex-1")}>
+        <div
+          className={cn(
+            "font-medium text-foreground",
+            density === "compact" ? "text-xs" : "text-sm",
+          )}
+        >
+          {label}
+        </div>
+        <div
+          className={cn(
+            "text-xs text-muted-foreground",
+            density === "compact" ? "truncate" : "mt-1",
+          )}
+        >
+          {description}
+        </div>
       </div>
       <Button
         type="button"
         variant="outline"
-        size="sm"
+        size={density === "compact" ? "xs" : "sm"}
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
       >
         <FileUpIcon data-icon="inline-start" aria-hidden="true" />
-        选择文件
+        {density === "compact" ? "选择" : "选择文件"}
       </Button>
     </div>
   )
