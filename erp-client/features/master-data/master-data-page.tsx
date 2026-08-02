@@ -38,6 +38,7 @@ import {
   buildMasterDataExportCsv,
   downloadCsv,
 } from "@/features/master-data/api"
+import { masterDataCopy } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
 import { formatEffectiveRange } from "@/features/master-data/filter"
 import {
@@ -73,7 +74,7 @@ function ResourceNav({
   return (
     <nav
       ref={navRef}
-      aria-label="基础资料资源"
+      aria-label={masterDataCopy.resourceNavAria}
       role="tablist"
       className="flex flex-wrap gap-2 border-b border-border pb-3"
     >
@@ -132,8 +133,8 @@ export function MasterDataPage({ resource }: { resource: string }) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
-          title="基础资料资源不存在"
-          description={`未知资源 “${resource}”。请从已注册资源中选择。`}
+          title={masterDataCopy.unknownResourceTitle}
+          description={masterDataCopy.unknownResourceDesc(resource)}
         />
         <ResourceNav resource="" navRef={navRef} />
       </div>
@@ -236,9 +237,9 @@ function MasterDataListWorkspace({
 
   const filterSnapshotLabel = React.useMemo(() => {
     const parts = [
-      `资源=${resourceLabel(resource)}`,
-      `启停=${lifecycleStatus}`,
-      `时序=${revisionTiming}`,
+      `分类=${resourceLabel(resource)}`,
+      `启用状态=${lifecycleStatus}`,
+      `版本状态=${revisionTiming}`,
       `指标=${metricKey}`,
       search.trim() ? `搜索=${search.trim()}` : "搜索=空",
     ]
@@ -253,7 +254,7 @@ function MasterDataListWorkspace({
       filterSnapshotLabel,
       listQuery.data.permissionVersion
     )
-    downloadCsv(csv, `基础资料-${resourceLabel(resource)}-导出`)
+    downloadCsv(csv, `基础资料-${resourceLabel(resource)}`)
     setExportMeta({
       jobId: `EXP-W14-${Date.now().toString(36)}`,
       rowCount: rows.length,
@@ -273,8 +274,8 @@ function MasterDataListWorkspace({
       {
         id: "stableNo",
         accessorKey: "stableNo",
-        header: "稳定编号",
-        meta: { label: "稳定编号", width: "default" as const },
+        header: masterDataCopy.colStableNo,
+        meta: { label: masterDataCopy.colStableNo, width: "default" as const },
         cell: ({ row }) => (
           <span className="num text-sm">{row.original.stableNo}</span>
         ),
@@ -282,8 +283,8 @@ function MasterDataListWorkspace({
       {
         id: "name",
         accessorKey: "name",
-        header: "名称",
-        meta: { label: "名称" },
+        header: masterDataCopy.colName,
+        meta: { label: masterDataCopy.colName },
         cell: ({ row }) => (
           <div className="min-w-0">
             <div className="truncate text-sm font-medium">
@@ -300,16 +301,16 @@ function MasterDataListWorkspace({
       },
       {
         id: "revisionNo",
-        header: "版本",
-        meta: { label: "版本", width: "amount" as const },
+        header: masterDataCopy.colVersion,
+        meta: { label: masterDataCopy.colVersion, width: "amount" as const },
         cell: ({ row }) => (
           <span className="num text-sm">v{row.original.revisionNo}</span>
         ),
       },
       {
         id: "lifecycle",
-        header: "启停生命周期",
-        meta: { label: "启停生命周期" },
+        header: masterDataCopy.colLifecycle,
+        meta: { label: masterDataCopy.colLifecycle },
         cell: ({ row }) => (
           <div className="flex flex-col gap-1">
             <BusinessStatusBadge
@@ -327,8 +328,8 @@ function MasterDataListWorkspace({
       },
       {
         id: "revisionTiming",
-        header: "修订时序",
-        meta: { label: "修订时序" },
+        header: masterDataCopy.colVersionState,
+        meta: { label: masterDataCopy.colVersionState },
         cell: ({ row }) => (
           <Badge
             variant={
@@ -341,8 +342,8 @@ function MasterDataListWorkspace({
       },
       {
         id: "period",
-        header: "生效区间",
-        meta: { label: "生效区间" },
+        header: masterDataCopy.colEffective,
+        meta: { label: masterDataCopy.colEffective },
         cell: ({ row }) => (
           <span className="num text-xs">
             {formatEffectiveRange(
@@ -354,8 +355,8 @@ function MasterDataListWorkspace({
       },
       {
         id: "blocker",
-        header: "主要阻塞",
-        meta: { label: "主要阻塞" },
+        header: masterDataCopy.colBlocker,
+        meta: { label: masterDataCopy.colBlocker },
         cell: ({ row }) =>
           row.original.primaryBlocker ? (
             <span className="text-xs text-destructive">
@@ -367,8 +368,8 @@ function MasterDataListWorkspace({
       },
       {
         id: "actions",
-        header: "操作",
-        meta: { label: "操作" },
+        header: masterDataCopy.colActions,
+        meta: { label: masterDataCopy.colActions },
         cell: ({ row }) => {
           const item = row.original
           const canRevise = item.allowedActions.includes("CREATE_REVISION")
@@ -391,7 +392,7 @@ function MasterDataListWorkspace({
                   setPreviewId(item.stableId)
                 }}
               >
-                查看
+                {masterDataCopy.actionView}
               </Button>
               <Button
                 type="button"
@@ -405,7 +406,7 @@ function MasterDataListWorkspace({
                 }}
               >
                 <HistoryIcon data-icon="inline-start" aria-hidden />
-                新版本
+                {masterDataCopy.actionUpdate}
               </Button>
               <Button
                 type="button"
@@ -419,7 +420,7 @@ function MasterDataListWorkspace({
                 }}
               >
                 <BanIcon data-icon="inline-start" aria-hidden />
-                停用
+                {masterDataCopy.actionDisable}
               </Button>
             </div>
           )
@@ -435,7 +436,7 @@ function MasterDataListWorkspace({
   if (listQuery.isPending) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title={`基础资料 · ${resourceLabel(resource)}`} />
+        <PageHeader title={masterDataCopy.pageTitle(resourceLabel(resource))} />
         <ResourceNav resource={resource} navRef={navRef} />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
       </div>
@@ -445,7 +446,7 @@ function MasterDataListWorkspace({
   if (listQuery.isError || !listQuery.data) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title={`基础资料 · ${resourceLabel(resource)}`} />
+        <PageHeader title={masterDataCopy.pageTitle(resourceLabel(resource))} />
         <ResourceNav resource={resource} navRef={navRef} />
         <Button type="button" onClick={() => void listQuery.refetch()}>
           重试
@@ -461,7 +462,7 @@ function MasterDataListWorkspace({
       </div>
 
       <PageHeader
-        title={`基础资料 · ${resourceLabel(resource)}`}
+        title={masterDataCopy.pageTitle(resourceLabel(resource))}
         breadcrumbs={[
           {
             id: "md",
@@ -487,7 +488,7 @@ function MasterDataListWorkspace({
             actions={[
               {
                 actionKey: "export",
-                label: "导出",
+                label: masterDataCopy.actionExport,
                 icon: DownloadIcon,
                 variant: "outline",
                 mobileVisibility: "hide",
@@ -496,7 +497,7 @@ function MasterDataListWorkspace({
               },
               {
                 actionKey: "selector",
-                label: "选择器影响",
+                label: masterDataCopy.actionWhereUsable,
                 variant: "outline",
                 mobileVisibility: "hide",
                 onClick: () => setSelectorDemoOpen((v) => !v),
@@ -504,8 +505,8 @@ function MasterDataListWorkspace({
               {
                 actionKey: "create",
                 label: isWarehouse
-                  ? "新建（写已关闭）"
-                  : "新建 / 形成新版本",
+                  ? masterDataCopy.actionCreateClosed
+                  : masterDataCopy.actionCreate,
                 mobileVisibility: "hide",
                 icon: PlusIcon,
                 disabled: false,
@@ -521,19 +522,23 @@ function MasterDataListWorkspace({
           className="flex flex-wrap gap-2 text-xs text-muted-foreground"
           aria-label="权限摘要"
         >
-          <Badge variant="outline">模块：有权</Badge>
+          <Badge variant="outline">{masterDataCopy.permissionModule}</Badge>
           <Badge variant="outline">
-            资源：{resourceLabel(resource)} 有权
-          </Badge>
-          <Badge variant="outline">角色：{permissionDemo.roleLabel}</Badge>
-          <Badge variant="outline">
-            字段揭示：{permissionDemo.canRevealSensitive ? "可短时" : "禁止"}
+            {masterDataCopy.permissionResource(resourceLabel(resource))}
           </Badge>
           <Badge variant="outline">
-            动作：{isWarehouse ? "仓库写入暂不可用" : "维护开放"}
+            {masterDataCopy.permissionRole(permissionDemo.roleLabel)}
           </Badge>
           <Badge variant="outline">
-            导出：{permissionDemo.canExport ? "授权" : "无"}
+            {masterDataCopy.permissionReveal(permissionDemo.canRevealSensitive)}
+          </Badge>
+          <Badge variant="outline">
+            {isWarehouse
+              ? masterDataCopy.permissionWriteWarehouse
+              : masterDataCopy.permissionWriteOpen}
+          </Badge>
+          <Badge variant="outline">
+            {masterDataCopy.permissionExport(permissionDemo.canExport)}
           </Badge>
         </div>
       ) : null}
@@ -541,9 +546,8 @@ function MasterDataListWorkspace({
       {isWarehouse ? (
         <FormalActionResult
           status="blocked"
-          title="仓库写责任未确认（Q1）"
-          description="仓库资料与 SKU 策略仅可查看；新建、改版、停用等功能暂不可用，任何角色都无法操作。"
-          reference="WAREHOUSE_WRITE_OWNER_UNCONFIRMED"
+          title={masterDataCopy.warehouseWriteTitle}
+          description={masterDataCopy.warehouseWriteBody}
         />
       ) : null}
 
@@ -554,14 +558,12 @@ function MasterDataListWorkspace({
           total={exportMeta.rowCount}
           completed={exportMeta.rowCount}
           succeeded={exportMeta.rowCount}
-          label="基础资料导出任务"
+          label={masterDataCopy.exportDone}
           description={
             <>
-              筛选结果：{exportMeta.filterSnapshotLabel}。任务号{" "}
+              按当前筛选导出 {exportMeta.rowCount} 条。任务号{" "}
               <span className="num">{exportMeta.jobId}</span>
-              ，权限版本{" "}
-              <span className="num">{exportMeta.permissionVersion}</span>
-              重新鉴权；不含无权敏感字段明文。
+              。不含无权限查看的敏感信息。
             </>
           }
         />
@@ -570,17 +572,15 @@ function MasterDataListWorkspace({
       {selectorDemoOpen && selectorQuery.data ? (
         <section
           className="rounded-xl border border-border bg-card p-3 text-sm"
-          aria-label="业务选择器影响演示"
+          aria-label="业务选用情况"
         >
           <h2 className="mb-1 text-sm font-medium">
-            选择器影响摘要 · {selectorQuery.data.scene}
+            {masterDataCopy.selectorPanelTitle(selectorQuery.data.note)}
           </h2>
           <p className="mb-2 text-xs text-muted-foreground">
-            {selectorQuery.data.note}（数据截至{" "}
-            <span className="num">
-              {selectorQuery.data.asOf.slice(0, 19)}
-            </span>
-            ）。提交时以最新数据为准。
+            {masterDataCopy.selectorPanelHint(
+              selectorQuery.data.asOf.slice(0, 19).replace("T", " ")
+            )}
           </p>
           <ul className="space-y-1">
             {selectorQuery.data.candidates.map((c) => (
@@ -592,7 +592,9 @@ function MasterDataListWorkspace({
                 <span>{c.name}</span>
                 <span className="num">v{c.revisionNo}</span>
                 <Badge variant={c.eligible ? "success" : "destructive"}>
-                  {c.eligible ? "可用" : "不可用"}
+                  {c.eligible
+                    ? masterDataCopy.eligible
+                    : masterDataCopy.ineligible}
                 </Badge>
                 {c.reason ? (
                   <span className="text-muted-foreground">{c.reason}</span>
@@ -634,7 +636,7 @@ function MasterDataListWorkspace({
 
       <BusinessTableFrame
         title={`${resourceLabel(resource)}列表`}
-        description={`共 ${rows.length} 条 · 支持按启停状态与修订时序筛选 · 按 / 可快速搜索 · 回车打开详情`}
+        description={masterDataCopy.listDescription(rows.length)}
         toolbar={
           <ListToolbar
             search={
@@ -649,8 +651,8 @@ function MasterDataListWorkspace({
                     setSearch(e.target.value)
                     resetPagination()
                   }}
-                  placeholder="稳定编号、名称、SKU/供应商/仓库代码"
-                  aria-label="搜索基础资料"
+                  placeholder={masterDataCopy.searchPlaceholder}
+                  aria-label={masterDataCopy.searchAria}
                 />
               </InputGroup>
             }
@@ -668,16 +670,20 @@ function MasterDataListWorkspace({
                   variant="outline"
                   size="sm"
                   spacing={0}
-                  aria-label="启停生命周期"
+                  aria-label={masterDataCopy.filterLifecycleAria}
                 >
                   <ToggleGroupItem value="all">全部</ToggleGroupItem>
-                  <ToggleGroupItem value="enabled">当前启用</ToggleGroupItem>
-                  <ToggleGroupItem value="disabled">当前停用</ToggleGroupItem>
+                  <ToggleGroupItem value="enabled">
+                    {masterDataCopy.lifecycleEnabled}
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="disabled">
+                    {masterDataCopy.lifecycleDisabled}
+                  </ToggleGroupItem>
                 </ToggleGroup>
                 <OptionCombobox
-                  className="w-[9.5rem]"
+                  className="w-[10.5rem]"
                   value={revisionTiming}
-                  aria-label="修订时序"
+                  aria-label={masterDataCopy.filterVersionAria}
                   onValueChange={(v) => {
                     setRevisionTiming(
                       (v ?? "all") as typeof revisionTiming
@@ -685,13 +691,19 @@ function MasterDataListWorkspace({
                     resetPagination()
                   }}
                   options={[
-                    { value: "all", label: "时序：全部" },
-                    { value: "current", label: "时序：当前" },
-                    { value: "future", label: "时序：待生效" },
+                    { value: "all", label: masterDataCopy.versionAll },
+                    {
+                      value: "current",
+                      label: masterDataCopy.versionCurrent,
+                    },
+                    {
+                      value: "future",
+                      label: masterDataCopy.versionFuture,
+                    },
                   ]}
                   size="sm"
                   allowClear={false}
-                  placeholder="时序：全部"
+                  placeholder={masterDataCopy.versionAll}
                 />
               </>
             }
@@ -792,7 +804,7 @@ function MasterDataListWorkspace({
                 }
                 onClick={() => setReviseTarget(previewRow)}
               >
-                形成新版本
+                {masterDataCopy.actionUpdate}
               </Button>
               <Button
                 type="button"
@@ -804,7 +816,7 @@ function MasterDataListWorkspace({
                 }
                 onClick={() => setDisableTarget(previewRow)}
               >
-                停用
+                {masterDataCopy.actionDisable}
               </Button>
               <Button
                 type="button"
@@ -814,7 +826,7 @@ function MasterDataListWorkspace({
                   />
                 }
               >
-                查看详情
+                {masterDataCopy.actionOpenDetail}
               </Button>
             </>
           ) : null

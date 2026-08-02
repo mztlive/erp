@@ -10,6 +10,10 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import {
+  masterDataActionLabel,
+  masterDataCopy,
+} from "@/features/master-data/copy"
 import { formatEffectiveRange } from "@/features/master-data/filter"
 import { revealMasterDataSensitive } from "@/features/master-data/api"
 import type {
@@ -29,13 +33,17 @@ export function MasterDataPreviewPanel({
   return (
     <div className="space-y-4 text-sm">
       <section className="space-y-2">
-        <h3 className="text-xs font-medium text-muted-foreground">身份与生命周期</h3>
+        <h3 className="text-xs font-medium text-muted-foreground">
+          {masterDataCopy.previewIdentity}
+        </h3>
         <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1.5">
-          <dt className="text-muted-foreground">稳定编号</dt>
+          <dt className="text-muted-foreground">{masterDataCopy.colStableNo}</dt>
           <dd className="num">{row.stableNo}</dd>
-          <dt className="text-muted-foreground">名称</dt>
+          <dt className="text-muted-foreground">{masterDataCopy.colName}</dt>
           <dd>{row.name}</dd>
-          <dt className="text-muted-foreground">启停生命周期</dt>
+          <dt className="text-muted-foreground">
+            {masterDataCopy.colLifecycle}
+          </dt>
           <dd className="flex flex-wrap items-center gap-2">
             <BusinessStatusBadge
               context="preview"
@@ -46,20 +54,32 @@ export function MasterDataPreviewPanel({
               <Badge variant="outline">{row.scheduledLifecycleLabel}</Badge>
             ) : null}
           </dd>
-          <dt className="text-muted-foreground">修订时序</dt>
+          <dt className="text-muted-foreground">
+            {masterDataCopy.colVersionState}
+          </dt>
           <dd>
-            <Badge variant={row.revisionTiming === "FUTURE" ? "warning" : "secondary"}>
+            <Badge
+              variant={
+                row.revisionTiming === "FUTURE" ? "warning" : "secondary"
+              }
+            >
               {row.revisionTimingLabel}
             </Badge>
-            <span className="ml-2 num text-muted-foreground">v{row.revisionNo}</span>
+            <span className="ml-2 num text-muted-foreground">
+              v{row.revisionNo}
+            </span>
           </dd>
-          <dt className="text-muted-foreground">生效区间</dt>
+          <dt className="text-muted-foreground">
+            {masterDataCopy.colEffective}
+          </dt>
           <dd className="num">
             {formatEffectiveRange(row.effectiveFrom, row.effectiveTo)}
           </dd>
           {row.primaryBlocker ? (
             <>
-              <dt className="text-muted-foreground">主要阻塞</dt>
+              <dt className="text-muted-foreground">
+                {masterDataCopy.colBlocker}
+              </dt>
               <dd className="text-destructive">{row.primaryBlocker}</dd>
             </>
           ) : null}
@@ -69,7 +89,9 @@ export function MasterDataPreviewPanel({
       <Separator />
 
       <section className="space-y-2">
-        <h3 className="text-xs font-medium text-muted-foreground">关键记录</h3>
+        <h3 className="text-xs font-medium text-muted-foreground">
+          {masterDataCopy.previewKeyFacts}
+        </h3>
         <dl className="grid grid-cols-[7rem_1fr] gap-x-3 gap-y-1.5">
           {row.keyFacts.map((fact) => (
             <div key={fact.label} className="contents">
@@ -84,7 +106,7 @@ export function MasterDataPreviewPanel({
 
       <section className="space-y-2">
         <h3 className="text-xs font-medium text-muted-foreground">
-          业务选择器可用性（以系统数据为准）
+          {masterDataCopy.previewUsability}
         </h3>
         <ul className="space-y-1.5">
           {row.selectorEligibility.map((s) => (
@@ -94,10 +116,14 @@ export function MasterDataPreviewPanel({
             >
               <span>{s.contextLabel}</span>
               <Badge variant={s.eligible ? "success" : "destructive"}>
-                {s.eligible ? "可用" : "不可用"}
+                {s.eligible
+                  ? masterDataCopy.eligible
+                  : masterDataCopy.ineligible}
               </Badge>
               {s.reason ? (
-                <span className="text-xs text-muted-foreground">{s.reason}</span>
+                <span className="text-xs text-muted-foreground">
+                  {s.reason}
+                </span>
               ) : null}
             </li>
           ))}
@@ -105,7 +131,9 @@ export function MasterDataPreviewPanel({
       </section>
 
       {detailLoading ? (
-        <p className="text-xs text-muted-foreground">正在加载版本与敏感字段…</p>
+        <p className="text-xs text-muted-foreground">
+          {masterDataCopy.centerLoading}
+        </p>
       ) : null}
 
       {detail?.sensitiveFields && detail.sensitiveFields.length > 0 ? (
@@ -113,11 +141,14 @@ export function MasterDataPreviewPanel({
           <Separator />
           <section className="space-y-2">
             <h3 className="text-xs font-medium text-muted-foreground">
-              敏感字段（打码显示，可短时查看）
+              {masterDataCopy.previewSensitive}
             </h3>
             <ul className="space-y-2">
               {detail.sensitiveFields.map((field) => (
-                <li key={field.label} className="flex flex-wrap items-center gap-2">
+                <li
+                  key={field.label}
+                  className="flex flex-wrap items-center gap-2"
+                >
                   <span className="text-muted-foreground">{field.label}</span>
                   {field.visibility === "masked" && field.revealToken ? (
                     <SensitiveValue
@@ -144,7 +175,7 @@ export function MasterDataPreviewPanel({
           <Separator />
           <section className="space-y-2">
             <h3 className="text-xs font-medium text-muted-foreground">
-              库存摘要（只读）
+              {masterDataCopy.previewStock}
             </h3>
             <p className="text-xs text-muted-foreground">
               {detail.warehouseStockSummary.policyNote}
@@ -164,9 +195,7 @@ export function MasterDataPreviewPanel({
               type="button"
               size="sm"
               variant="outline"
-              render={
-                <Link href={detail.warehouseStockSummary.w10Href} />
-              }
+              render={<Link href={detail.warehouseStockSummary.w10Href} />}
             >
               打开库存台账
             </Button>
@@ -179,7 +208,7 @@ export function MasterDataPreviewPanel({
           <Separator />
           <section className="space-y-2">
             <h3 className="text-xs font-medium text-muted-foreground">
-              版本时间线（历史名称记录）
+              {masterDataCopy.previewHistory}
             </h3>
             <RevisionTimeline
               revisions={detail.revisionTimeline.map((rev) => ({
@@ -189,14 +218,20 @@ export function MasterDataPreviewPanel({
                 actor: rev.actor,
                 effectiveAt: {
                   dateTime: rev.effectiveFrom,
-                  label: formatEffectiveRange(rev.effectiveFrom, rev.effectiveTo),
+                  label: formatEffectiveRange(
+                    rev.effectiveFrom,
+                    rev.effectiveTo
+                  ),
                 },
                 reason: (
                   <div className="space-y-1">
                     <div>
-                      记录名称：<strong>{rev.nameSnapshot}</strong>
+                      {masterDataCopy.centerHistoryName}：
+                      <strong>{rev.nameSnapshot}</strong>
                     </div>
-                    <div className="text-muted-foreground">{rev.changeReason}</div>
+                    <div className="text-muted-foreground">
+                      {rev.changeReason}
+                    </div>
                     <div className="flex flex-wrap gap-2">
                       <Badge variant="outline">{rev.timingLabel}</Badge>
                       <Badge variant="secondary">
@@ -218,12 +253,15 @@ export function MasterDataPreviewPanel({
         <>
           <Separator />
           <section className="space-y-2">
-            <h3 className="text-xs font-medium text-muted-foreground">动作阻断</h3>
+            <h3 className="text-xs font-medium text-muted-foreground">
+              {masterDataCopy.previewActionBlocked}
+            </h3>
             <ul className="space-y-1 text-xs">
               {row.actionBlockers.map((b) => (
                 <li key={`${b.action}-${b.code}`}>
-                  <span className="font-medium">{b.action}</span>{" "}
-                  <span className="num text-muted-foreground">{b.code}</span>
+                  <span className="font-medium">
+                    {masterDataActionLabel(b.action)}
+                  </span>
                   <div className="text-muted-foreground">{b.message}</div>
                 </li>
               ))}

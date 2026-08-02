@@ -33,10 +33,10 @@ export const W14_PERMISSION_DEMO: PermissionDemoSnapshot = {
   canRevealSensitive: true,
 }
 
-/** Warehouse write always fail-closed while Q1 unconfirmed. */
+/** Warehouse write always fail-closed while write ownership unconfirmed. */
 export const WAREHOUSE_WRITE_CODE = "WAREHOUSE_WRITE_OWNER_UNCONFIRMED"
 export const WAREHOUSE_WRITE_MESSAGE =
-  "Q1 未确认：仓库资料与 SKU 策略写责任未指定。查询可用，全部写操作暂不可用；仓储与系统管理员均不可维护。"
+  "仓库资料暂不可维护：目前只能查看，不能新建、更新或停用。维护功能尚未开放。"
 
 export const MOCK_SENSITIVE_REVEALS: Record<string, string> = {
   "reveal:sup_1:bank": "6222 **** **** 0188 · 开户名：鲜果直供供应链有限公司",
@@ -89,7 +89,7 @@ function commonActions(
     blockers.push({
       action: "DISABLE",
       code: "ALREADY_DISABLED",
-      message: "对象已停用；停用不是删除，历史版本仍可只读打开。",
+      message: "资料已停用；不是删除，历史记录仍可查看。",
     })
   }
   return { allowedActions: allowed, actionBlockers: blockers }
@@ -109,7 +109,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前启用",
       lifecycleTone: "success",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "si_1_r6",
       displayedRevisionId: "si_1_r6",
       revisionNo: 6,
@@ -186,7 +186,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前停用",
       lifecycleTone: "neutral",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "si_3_r9",
       displayedRevisionId: "si_3_r9",
       revisionNo: 9,
@@ -222,7 +222,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前启用",
       lifecycleTone: "success",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "prd_1_r6",
       displayedRevisionId: "prd_1_r6",
       revisionNo: 6,
@@ -230,7 +230,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       keyFacts: [
         { label: "SPU", value: "SPU-NY-BOX" },
         { label: "基础单位", value: "套" },
-        { label: "规格签名", value: "sig:ny-box-01@v1" },
+        { label: "规格标识", value: "sig:ny-box-01@v1" },
       ],
       selectorEligibility: [
         {
@@ -253,7 +253,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前启用",
       lifecycleTone: "success",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "prd_2_r3",
       displayedRevisionId: "prd_2_r3",
       revisionNo: 3,
@@ -261,9 +261,9 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       keyFacts: [
         { label: "SPU", value: "SPU-TEA" },
         { label: "基础单位", value: "盒" },
-        { label: "规格签名", value: "sig:tea-09@v1" },
+        { label: "规格标识", value: "sig:tea-09@v1" },
       ],
-      primaryBlocker: "基础单位已被已生效单据引用，不可在同 SKU 修订中变更",
+      primaryBlocker: "基础单位已被业务单据使用，不能在本商品上修改",
       selectorEligibility: [
         {
           context: "sku_pick",
@@ -278,13 +278,13 @@ export const MASTER_DATA_LIST_SEEDS: Record<
           action: "CHANGE_BASE_UNIT",
           code: "BASE_UNIT_LOCKED",
           message:
-            "SKU 已被已生效单据使用，不得修改基础单位。请「停用并新建 SKU」。",
+            "商品已被业务单据使用，不能改基础单位。请先停用，再新建商品。",
         },
         {
           action: "CHANGE_SPEC_SIGNATURE",
           code: "SPEC_SIGNATURE_IMMUTABLE",
           message:
-            "规格身份变化必须新建 SKU，不允许通过同一 SKU 修订改变 specification_signature。",
+            "规格变更需要新建商品，不能在同一商品上改规格。",
         },
       ],
       lockVersion: 3,
@@ -299,7 +299,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前停用",
       lifecycleTone: "neutral",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "prd_3_r12",
       displayedRevisionId: "prd_3_r12",
       revisionNo: 12,
@@ -334,7 +334,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前启用",
       lifecycleTone: "success",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "vc_1_r4",
       displayedRevisionId: "vc_1_r4",
       revisionNo: 4,
@@ -364,7 +364,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前停用",
       lifecycleTone: "neutral",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "vc_2_r2",
       displayedRevisionId: "vc_2_r2",
       revisionNo: 2,
@@ -399,7 +399,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前启用",
       lifecycleTone: "success",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "sup_1_r3",
       displayedRevisionId: "sup_1_r3",
       revisionNo: 3,
@@ -432,7 +432,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前启用",
       lifecycleTone: "warning",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "sup_2_r5",
       displayedRevisionId: "sup_2_r5",
       revisionNo: 5,
@@ -467,7 +467,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前停用",
       lifecycleTone: "neutral",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "sup_3_r1",
       displayedRevisionId: "sup_3_r1",
       revisionNo: 1,
@@ -502,7 +502,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前启用",
       lifecycleTone: "success",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "wh_1_r2",
       displayedRevisionId: "wh_1_r2",
       revisionNo: 2,
@@ -513,7 +513,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
         { label: "SKU 预警策略", value: "安全库存 · 默认（只读）" },
         { label: "库存摘要", value: "在库 1,280 · 预占 42" },
       ],
-      primaryBlocker: "写操作暂不可用（本期）",
+      primaryBlocker: "暂不可维护（本期）",
       selectorEligibility: [
         {
           context: "warehouse_pick",
@@ -535,7 +535,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前启用",
       lifecycleTone: "success",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "wh_2_r1",
       displayedRevisionId: "wh_2_r1",
       revisionNo: 1,
@@ -546,7 +546,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
         { label: "SKU 预警策略", value: "低周转加强（只读）" },
         { label: "库存摘要", value: "在库 86 · 预占 0" },
       ],
-      primaryBlocker: "写操作暂不可用（本期）",
+      primaryBlocker: "暂不可维护（本期）",
       selectorEligibility: [
         {
           context: "warehouse_pick",
@@ -568,7 +568,7 @@ export const MASTER_DATA_LIST_SEEDS: Record<
       lifecycleStatusLabel: "当前停用",
       lifecycleTone: "neutral",
       revisionTiming: "CURRENT",
-      revisionTimingLabel: "当前",
+      revisionTimingLabel: "当前生效",
       currentRevisionId: "wh_3_r3",
       displayedRevisionId: "wh_3_r3",
       revisionNo: 3,
@@ -616,7 +616,7 @@ function buildTimeline(
     revisionTiming: e.timing,
     timingLabel:
       e.timing === "CURRENT"
-        ? "当前"
+        ? "当前生效"
         : e.timing === "FUTURE"
           ? "待生效"
           : "已结束",
@@ -640,7 +640,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前启用",
     lifecycleTone: "success",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 6,
     currentRevision: {
       revisionId: "si_1_r6",
@@ -713,12 +713,12 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     ],
     usageSummary: {
       historicalReferenceCount: 42,
-      note: "历史销售单引用精确修订 ID；当前名称变更不回填历史记录。",
+      note: "历史销售单保留当时用的那一版；改名称不会改掉历史单据。",
     },
     sensitiveFields: [],
     resourceFacts: [
       { label: "税率", value: "13%" },
-      { label: "资质校验", value: "通过（eligibilityAsOf 服务端）" },
+      { label: "资质校验", value: "通过（按业务日期）" },
     ],
     allowedActions: ["VIEW", "CREATE_REVISION", "DISABLE"],
     actionBlockers: [],
@@ -727,7 +727,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
         id: "a1",
         at: "2026-01-01T09:12:00+08:00",
         actor: "赵强",
-        action: "形成新版本",
+        action: "更新资料",
         detail: "v6 · 调整参考成本",
       },
       {
@@ -735,7 +735,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
         at: "2025-01-01T10:00:00+08:00",
         actor: "系统导入",
         action: "新建",
-        detail: "v1 稳定身份 SI-2026-0188",
+        detail: "v1 · 资料编号 SI-2026-0188",
       },
     ],
     sections: ["overview", "versions", "relations", "audit"],
@@ -816,7 +816,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     ],
     usageSummary: {
       historicalReferenceCount: 11,
-      note: "待生效修订不影响当前选择器结果，直至 effectiveFrom。",
+      note: "待生效内容在生效日之前不影响业务选用。",
     },
     sensitiveFields: [],
     resourceFacts: [
@@ -830,7 +830,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
         id: "a2",
         at: "2026-07-15T14:00:00+08:00",
         actor: "李倩",
-        action: "形成待生效版本",
+        action: "预约更新",
         detail: "v3 计划 2026-09-01 停用",
       },
     ],
@@ -845,7 +845,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前停用",
     lifecycleTone: "neutral",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 9,
     currentRevision: {
       revisionId: "si_3_r9",
@@ -906,7 +906,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       {
         action: "DISABLE",
         code: "ALREADY_DISABLED",
-        message: "对象已停用。",
+        message: "资料已停用。",
       },
     ],
     auditEvents: [
@@ -929,7 +929,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前启用",
     lifecycleTone: "success",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 6,
     currentRevision: {
       revisionId: "prd_1_r6",
@@ -941,7 +941,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       fields: [
         { label: "SPU", value: "SPU-NY-BOX" },
         { label: "基础单位", value: "套" },
-        { label: "规格签名", value: "sig:ny-box-01@v1" },
+        { label: "规格标识", value: "sig:ny-box-01@v1" },
         { label: "分类", value: "礼盒" },
       ],
     },
@@ -980,11 +980,11 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     ],
     usageSummary: {
       historicalReferenceCount: 55,
-      note: "规格签名不可变；变更须新建 SKU。",
+      note: "规格不可直接改；变更需新建商品。",
     },
     sensitiveFields: [],
     resourceFacts: [
-      { label: "规格签名", value: "sig:ny-box-01@v1" },
+      { label: "规格标识", value: "sig:ny-box-01@v1" },
       { label: "基础单位", value: "套" },
     ],
     productConstraints: {
@@ -997,7 +997,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       {
         action: "CHANGE_SPEC_SIGNATURE",
         code: "SPEC_SIGNATURE_IMMUTABLE",
-        message: "规格身份变化必须新建 SKU。",
+        message: "规格变更需要新建商品。",
       },
       {
         action: "CHANGE_BASE_UNIT",
@@ -1017,7 +1017,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前启用",
     lifecycleTone: "success",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 3,
     currentRevision: {
       revisionId: "prd_2_r3",
@@ -1029,7 +1029,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       fields: [
         { label: "SPU", value: "SPU-TEA" },
         { label: "基础单位", value: "盒" },
-        { label: "规格签名", value: "sig:tea-09@v1" },
+        { label: "规格标识", value: "sig:tea-09@v1" },
       ],
     },
     revisionTimeline: buildTimeline([
@@ -1067,11 +1067,11 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     ],
     usageSummary: {
       historicalReferenceCount: 19,
-      note: "演示：尝试改规格签名或基础单位将被阻断。",
+      note: "演示：改规格或基础单位会被拦截。",
     },
     sensitiveFields: [],
     resourceFacts: [
-      { label: "规格签名", value: "sig:tea-09@v1" },
+      { label: "规格标识", value: "sig:tea-09@v1" },
       { label: "基础单位", value: "盒（已锁定）" },
     ],
     productConstraints: {
@@ -1084,14 +1084,13 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       {
         action: "CHANGE_SPEC_SIGNATURE",
         code: "SPEC_SIGNATURE_IMMUTABLE",
-        message:
-          "规格身份变化必须新建 SKU，不允许通过同一 SKU 修订改变 specification_signature。",
+        message: "规格变更需要新建商品，不能在同一商品上改规格。",
       },
       {
         action: "CHANGE_BASE_UNIT",
         code: "BASE_UNIT_LOCKED",
         message:
-          "SKU 已被已生效单据使用，不得修改基础单位。请「停用并新建 SKU」。",
+          "商品已被业务单据使用，不能改基础单位。请先停用，再新建商品。",
       },
     ],
     auditEvents: [],
@@ -1106,7 +1105,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前停用",
     lifecycleTone: "neutral",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 12,
     currentRevision: {
       revisionId: "prd_3_r12",
@@ -1160,7 +1159,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       {
         action: "DISABLE",
         code: "ALREADY_DISABLED",
-        message: "对象已停用。",
+        message: "资料已停用。",
       },
     ],
     auditEvents: [],
@@ -1175,7 +1174,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前启用",
     lifecycleTone: "success",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 4,
     currentRevision: {
       revisionId: "vc_1_r4",
@@ -1234,7 +1233,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前停用",
     lifecycleTone: "neutral",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 2,
     currentRevision: {
       revisionId: "vc_2_r2",
@@ -1283,7 +1282,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       {
         action: "DISABLE",
         code: "ALREADY_DISABLED",
-        message: "对象已停用。",
+        message: "资料已停用。",
       },
     ],
     auditEvents: [],
@@ -1298,7 +1297,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前启用",
     lifecycleTone: "success",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 3,
     currentRevision: {
       revisionId: "sup_1_r3",
@@ -1377,7 +1376,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前启用",
     lifecycleTone: "warning",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 5,
     currentRevision: {
       revisionId: "sup_2_r5",
@@ -1416,7 +1415,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     ],
     usageSummary: {
       historicalReferenceCount: 12,
-      note: "资格由服务端按业务日期计算。",
+      note: "是否可选按业务日期计算。",
     },
     sensitiveFields: [
       {
@@ -1444,7 +1443,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前停用",
     lifecycleTone: "neutral",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 1,
     currentRevision: {
       revisionId: "sup_3_r1",
@@ -1493,7 +1492,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       {
         action: "DISABLE",
         code: "ALREADY_DISABLED",
-        message: "对象已停用。",
+        message: "资料已停用。",
       },
     ],
     auditEvents: [],
@@ -1508,14 +1507,14 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前启用",
     lifecycleTone: "success",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 2,
     currentRevision: {
       revisionId: "wh_1_r2",
       revisionNo: 2,
       name: "华东一号仓",
       effectiveFrom: "2025-01-01",
-      changeReason: "更新联系人（历史写操作，Q1 后只读）",
+      changeReason: "更新联系人（历史维护；之后只读）",
       actor: "系统管理员",
       fields: [
         { label: "区域", value: "华东" },
@@ -1530,7 +1529,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
         name: "华东一号仓",
         actor: "系统管理员",
         from: "2025-01-01",
-        reason: "历史维护（Q1 前）",
+        reason: "历史维护（维护关闭前）",
         isCurrent: true,
         lifecycle: "ENABLED",
       },
@@ -1568,7 +1567,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       },
     ],
     resourceFacts: [
-      { label: "写权限", value: "本期未确认 · 写操作暂不可用" },
+      { label: "维护权限", value: "本期暂不可维护" },
       { label: "策略效果", value: "仅预警，不改库存余额" },
     ],
     warehouseStockSummary: {
@@ -1605,7 +1604,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
         action: "DISABLE_WITH_STOCK",
         code: "WAREHOUSE_HAS_STOCK",
         message:
-          "仓库仍有在库 1,280 / 预占 42，即使 Q1 确认后也不得在有库存时停用。",
+          "仓库仍有在库 1,280 / 预占 42，有库存时不能停用。",
       },
     ],
     auditEvents: [
@@ -1628,7 +1627,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前启用",
     lifecycleTone: "success",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 1,
     currentRevision: {
       revisionId: "wh_2_r1",
@@ -1676,7 +1675,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       },
     ],
     resourceFacts: [
-      { label: "写权限", value: "本期未确认 · 写操作暂不可用" },
+      { label: "维护权限", value: "本期暂不可维护" },
     ],
     warehouseStockSummary: {
       onHandQty: "86",
@@ -1715,7 +1714,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     lifecycleStatusLabel: "当前停用",
     lifecycleTone: "neutral",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 3,
     currentRevision: {
       revisionId: "wh_3_r3",
@@ -1758,13 +1757,13 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       note: "身份保留。",
     },
     sensitiveFields: [],
-    resourceFacts: [{ label: "写权限", value: "本期未确认 · 写操作暂不可用" }],
+    resourceFacts: [{ label: "维护权限", value: "本期暂不可维护" }],
     warehouseStockSummary: {
       onHandQty: "0",
       reservedQty: "0",
       hasBlockingStock: false,
       w10Href: "/inventory?warehouseId=wh_3",
-      policyNote: "无库存；写操作仍因本期策略暂不可用。",
+      policyNote: "无库存；维护功能仍因本期策略暂不可用。",
     },
     allowedActions: ["VIEW"],
     actionBlockers: [
@@ -1803,13 +1802,13 @@ export function computeMetrics(rows: readonly MasterDataListItem[]) {
       key: "all",
       label: "全部",
       value: rows.length,
-      detail: "当前资源",
+      detail: "当前分类",
     },
     {
       key: "enabled",
       label: "当前启用",
       value: rows.filter((r) => r.lifecycleStatus === "ENABLED").length,
-      detail: "启停生命周期",
+      detail: "启用状态",
     },
     {
       key: "disabled",
@@ -1819,9 +1818,9 @@ export function computeMetrics(rows: readonly MasterDataListItem[]) {
     },
     {
       key: "pending",
-      label: "待生效修订",
+      label: "待生效更新",
       value: rows.filter((r) => r.revisionTiming === "FUTURE").length,
-      detail: "修订时序 · 非启停",
+      detail: "版本状态 · 不是启用状态",
     },
   ] as const
 }

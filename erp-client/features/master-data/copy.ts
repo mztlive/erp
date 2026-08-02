@@ -1,0 +1,158 @@
+/**
+ * W14 用户可见文案 — 业务语言，不暴露实现术语。
+ * 代码字段名（revision / selector / lockVersion）仅限内部使用。
+ */
+
+export function masterDataActionLabel(action: string): string {
+  switch (action) {
+    case "CREATE":
+      return "新建"
+    case "CREATE_REVISION":
+      return "更新资料"
+    case "DISABLE":
+      return "停用"
+    case "VIEW":
+      return "查看"
+    case "EXPORT_ROW":
+      return "导出本行"
+    case "MAINTAIN_POLICY":
+      return "维护预警策略"
+    default:
+      return "该操作"
+  }
+}
+
+/** 权限条、表头等短标签 */
+export const masterDataCopy = {
+  resourceNavAria: "基础资料分类",
+  unknownResourceTitle: "找不到该分类",
+  unknownResourceDesc: (resource: string) =>
+    `没有「${resource}」这一类基础资料，请从上方分类重新进入。`,
+  pageTitle: (resourceLabel: string) => `基础资料 · ${resourceLabel}`,
+  listDescription: (count: number) =>
+    `共 ${count} 条 · 可按启用状态、版本状态筛选 · 按 / 搜索 · 回车打开详情`,
+  searchPlaceholder: "编号、名称、SKU / 供应商 / 仓库代码",
+  searchAria: "搜索基础资料",
+  filterLifecycleAria: "启用状态",
+  filterVersionAria: "版本状态",
+  versionAll: "版本：全部",
+  versionCurrent: "版本：当前生效",
+  versionFuture: "版本：待生效",
+  colStableNo: "资料编号",
+  colName: "名称",
+  colVersion: "版本",
+  colLifecycle: "启用状态",
+  colVersionState: "版本状态",
+  colEffective: "生效期间",
+  colBlocker: "不可用原因",
+  colActions: "操作",
+  actionView: "查看",
+  actionUpdate: "更新资料",
+  actionDisable: "停用",
+  actionCreate: "新建",
+  actionCreateClosed: "新建（暂不可用）",
+  actionExport: "导出",
+  actionWhereUsable: "哪里能选到",
+  actionOpenDetail: "打开完整资料",
+  actionBackList: "返回列表",
+  permissionModule: "模块：有权",
+  permissionResource: (label: string) => `分类：${label} 有权`,
+  permissionRole: (role: string) => `角色：${role}`,
+  permissionReveal: (ok: boolean) =>
+    ok ? "敏感信息：可短时查看" : "敏感信息：不可查看",
+  permissionWriteOpen: "维护：可新建与更新",
+  permissionWriteWarehouse: "维护：仓库暂不可改",
+  permissionExport: (ok: boolean) => (ok ? "导出：允许" : "导出：无权限"),
+  warehouseWriteTitle: "仓库资料暂不可维护",
+  warehouseWriteBody:
+    "目前只能查看仓库信息和库存摘要，不能新建、更新或停用。维护功能尚未开放。",
+  selectorPanelTitle: (sceneNote: string) => `哪里能选到 · ${sceneNote}`,
+  selectorPanelHint: (asOf: string) =>
+    `以下为各业务页面能否选到这些资料（截至 ${asOf}）。实际建单时会再核对一次。`,
+  eligible: "可选",
+  ineligible: "不可选",
+  exportDone: "导出已完成",
+  previewIdentity: "基本信息",
+  previewKeyFacts: "关键信息",
+  previewUsability: "哪些业务能选用",
+  previewSensitive: "敏感信息（已打码，可短时查看）",
+  previewStock: "库存摘要（只读）",
+  previewHistory: "资料变更历史",
+  previewActionBlocked: "当前无法进行的操作",
+  createTitle: (resourceLabel: string) => `新建${resourceLabel}`,
+  createDesc:
+    "保存后生成资料编号和第一版内容。以后如需修改，请用「更新资料」，历史记录会保留。",
+  createSuccessTitle: "已新建",
+  createSuccessDesc: "资料已可用。历史业务单据不会自动引用这份新资料。",
+  createBlockedTitle: "无法新建",
+  createSubmit: "保存",
+  createSubmitRejected: "暂不可保存",
+  reviseTitle: "更新资料",
+  reviseDesc:
+    "会生成新一版内容并保留原因与时间；不会改掉历史业务单据里已经用过的那一版。",
+  reviseSuccessTitle: "资料已更新",
+  reviseSuccessDesc:
+    "若立即生效，列表会显示新内容；若指定了未来日期，到期后自动切换。",
+  reviseBlockedTitle: "无法更新",
+  reviseConflictTitle: "资料已被他人更新",
+  reviseConflictHint: "请关闭后刷新页面，再重新填写。",
+  reviseNameLabel: "名称",
+  reviseSubmit: "保存更新",
+  disableTitle: "停用资料",
+  disableDesc:
+    "停用后，业务页面里一般选不到这份资料；资料编号和历史记录会保留，不是删除。",
+  disableSuccessTitle: "已停用",
+  disableSuccessDesc: "以后业务中默认选不到；历史单据与记录仍可查看。",
+  disableBlockedTitle: "无法停用",
+  disableSubmit: "确认停用",
+  fieldEffectiveFrom: "生效开始",
+  fieldEffectiveTo: "生效结束（可留空表示长期）",
+  fieldChangeReason: "变更原因",
+  fieldDisableAt: "停用时间",
+  fieldDisableReason: "停用原因",
+  resultNo: "资料编号",
+  resultVersion: "版本",
+  resultVersionState: "版本状态",
+  resultEffective: "生效时间",
+  resultActor: "操作人",
+  resultAt: "操作时间",
+  resultReason: "原因",
+  versionStateCurrent: "当前生效",
+  versionStateFuture: "待生效",
+  centerLoading: "正在加载…",
+  centerLoadFail: "加载失败，请重试。",
+  centerMissingTitle: "找不到这份资料或无权查看",
+  centerMissingDesc: "停用后的资料通常仍可打开；若确实无权限，则不会显示内容。",
+  centerOverview: "概览",
+  centerVersions: "变更历史",
+  centerRelations: "引用与选用",
+  centerAudit: "操作记录",
+  centerOverviewDesc: "编号、启用状态、生效期间与分类信息",
+  centerVersionsDesc: "每一版的名称、原因与生效期间；改名称不会改掉历史记录",
+  centerRelationsDesc: "被业务引用的情况，以及哪些页面还能选到",
+  centerAuditDesc: "新建、更新、停用等操作记录（敏感内容不显示原文）",
+  centerNoAudit: "暂无操作记录",
+  centerCurrentVersion: "当前版本",
+  centerChangeReason: "变更原因",
+  centerActor: "操作人",
+  centerVersionState: "版本状态",
+  centerScheduledLifecycle: "计划中的启用变化",
+  centerSensitive: "敏感信息",
+  centerUpdateBlocked: (msg: string) => `暂时不能更新资料：${msg}`,
+  centerDisableBlocked: (msg: string) => `暂时不能停用：${msg}`,
+  centerSpecNote: "规格变更需新建商品；已被业务使用的商品不可改基础单位。",
+  centerHistoryName: "当时名称",
+  centerUsageCount: (n: number) => `约被业务引用 ${n} 次。`,
+  demoSimulateLabel: "演示结果（仅演示）",
+  demoOk: "正常保存",
+  demoOverlap: "模拟：生效时间冲突",
+  demoSkuSig: "模拟：规格变更需新建商品",
+  demoBaseUnit: "模拟：基础单位不可改",
+  demoConflict: "模拟：资料已被他人更新",
+  demoDisableOk: "正常停用",
+  lifecycleEnabled: "当前启用",
+  lifecycleDisabled: "当前停用",
+  timingCurrent: "当前生效",
+  timingFuture: "待生效",
+  timingHistorical: "已结束",
+} as const

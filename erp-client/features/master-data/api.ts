@@ -107,14 +107,14 @@ export function buildMasterDataExportCsv(
 ): string {
   const quote = (value: string) => `"${value.replaceAll('"', '""')}"`
   const header = [
-    "稳定编号",
+    "资料编号",
     "名称",
     "版本",
-    "启停生命周期",
-    "修订时序",
-    "生效起",
-    "生效止",
-    "主要阻塞",
+    "启用状态",
+    "版本状态",
+    "生效开始",
+    "生效结束",
+    "不可用原因",
   ]
     .map(quote)
     .join(",")
@@ -135,9 +135,9 @@ export function buildMasterDataExportCsv(
     )
     .join("\n")
   const meta = [
-    `# filterSnapshot=${filterSnapshotLabel}`,
-    `# permissionVersion=${permissionVersion}`,
-    `# note=下载时按权限版本重新鉴权；不含无权敏感字段明文`,
+    `# 筛选条件=${filterSnapshotLabel}`,
+    `# 权限核对=${permissionVersion}`,
+    `# 说明=导出时按权限重新核对；不含无权查看的敏感信息`,
   ].join("\n")
   return `${meta}\n${header}\n${body}`
 }

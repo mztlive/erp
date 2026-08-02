@@ -21,6 +21,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import { masterDataCopy } from "@/features/master-data/copy"
+import {
+  WAREHOUSE_WRITE_MESSAGE,
+  resourceLabel,
+} from "@/features/master-data/data"
 import {
   useCreateMasterDataMutation,
   useCreateRevisionMutation,
@@ -32,54 +37,57 @@ import type {
   MasterDataMutationResult,
   MasterDataResource,
 } from "@/features/master-data/types"
-import {
-  WAREHOUSE_WRITE_CODE,
-  WAREHOUSE_WRITE_MESSAGE,
-  resourceLabel,
-} from "@/features/master-data/data"
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
-function resultFacts(result: Extract<MasterDataMutationResult, { outcome: "succeeded" }>) {
+function resultFacts(
+  result: Extract<MasterDataMutationResult, { outcome: "succeeded" }>
+) {
   return [
-    { label: "稳定编号", value: result.stableNo },
-    { label: "版本", value: `v${result.revisionNo}` },
-    { label: "时序", value: result.revisionState === "FUTURE" ? "待生效" : "当前" },
+    { label: masterDataCopy.resultNo, value: result.stableNo },
+    { label: masterDataCopy.resultVersion, value: `v${result.revisionNo}` },
     {
-      label: "生效时间",
+      label: masterDataCopy.resultVersionState,
+      value:
+        result.revisionState === "FUTURE"
+          ? masterDataCopy.versionStateFuture
+          : masterDataCopy.versionStateCurrent,
+    },
+    {
+      label: masterDataCopy.resultEffective,
       value: result.effectiveFrom,
     },
     {
-      label: "操作者",
+      label: masterDataCopy.resultActor,
       value: result.actor,
     },
     {
-      label: "时间",
+      label: masterDataCopy.resultAt,
       value: result.recordedAt.slice(0, 19).replace("T", " "),
     },
-    { label: "原因", value: result.changeReason },
+    { label: masterDataCopy.resultReason, value: result.changeReason },
   ]
 }
 
 const createSchema = z.object({
   name: z.string().trim().min(2, "请填写名称"),
-  effectiveFrom: z.string().min(1, "请填写生效起"),
+  effectiveFrom: z.string().min(1, "请填写生效开始日期"),
   effectiveTo: z.string(),
   changeReason: z.string().trim().min(2, "请填写变更原因"),
 })
 
 const reviseSchema = z.object({
   name: z.string().trim().min(2, "请填写名称"),
-  effectiveFrom: z.string().min(1, "请填写生效起"),
+  effectiveFrom: z.string().min(1, "请填写生效开始日期"),
   effectiveTo: z.string(),
   changeReason: z.string().trim().min(2, "请填写变更原因"),
 })
 
 const disableSchema = z.object({
   changeReason: z.string().trim().min(2, "请填写停用原因"),
-  effectiveFrom: z.string().min(1, "请填写停用时点"),
+  effectiveFrom: z.string().min(1, "请填写停用时间"),
 })
 
 export function MasterDataCreateDialog({
@@ -142,15 +150,15 @@ export function MasterDataCreateDialog({
     >
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>新建 · {resourceLabel(resource)}</DialogTitle>
-          <DialogDescription>
-            创建后将生成稳定编号与首个版本；名称与版本历史不可修改，须填写变更原因。
-          </DialogDescription>
+          <DialogTitle>
+            {masterDataCopy.createTitle(resourceLabel(resource))}
+          </DialogTitle>
+          <DialogDescription>{masterDataCopy.createDesc}</DialogDescription>
         </DialogHeader>
 
         {isWarehouse ? (
           <Alert variant="destructive">
-            <AlertTitle>{WAREHOUSE_WRITE_CODE}</AlertTitle>
+            <AlertTitle>{masterDataCopy.warehouseWriteTitle}</AlertTitle>
             <AlertDescription>{WAREHOUSE_WRITE_MESSAGE}</AlertDescription>
           </Alert>
         ) : null}
@@ -158,8 +166,8 @@ export function MasterDataCreateDialog({
         {result?.outcome === "succeeded" ? (
           <FormalActionResult
             status="succeeded"
-            title="基础资料已创建"
-            description="已创建稳定编号与首个版本；历史单据不会引用新创建的对象。"
+            title={masterDataCopy.createSuccessTitle}
+            description={masterDataCopy.createSuccessDesc}
             reference={result.reference}
             facts={resultFacts(result)}
           />
@@ -168,9 +176,8 @@ export function MasterDataCreateDialog({
         {result?.outcome === "blocked" ? (
           <FormalActionResult
             status="blocked"
-            title="创建被阻断"
+            title={masterDataCopy.createBlockedTitle}
             description={result.message}
-            reference={result.code}
             facts={
               result.detail
                 ? [{ label: "说明", value: result.detail }]
@@ -194,24 +201,28 @@ export function MasterDataCreateDialog({
             <div className="grid gap-3 sm:grid-cols-2">
               <form.AppField
                 name="effectiveFrom"
-                children={(field) => <field.TextField label="生效起" />}
+                children={(field) => (
+                  <field.TextField label={masterDataCopy.fieldEffectiveFrom} />
+                )}
               />
               <form.AppField
                 name="effectiveTo"
                 children={(field) => (
-                  <field.TextField label="生效止（空=长期）" />
+                  <field.TextField label={masterDataCopy.fieldEffectiveTo} />
                 )}
               />
             </div>
             <form.AppField
               name="changeReason"
               children={(field) => (
-                <field.TextareaField label="变更原因" />
+                <field.TextareaField label={masterDataCopy.fieldChangeReason} />
               )}
             />
             {!isWarehouse ? (
               <div className="space-y-2">
-                <Label htmlFor="create-sim">模拟校验（仅演示）</Label>
+                <Label htmlFor="create-sim">
+                  {masterDataCopy.demoSimulateLabel}
+                </Label>
                 <OptionCombobox
                   id="create-sim"
                   value={simulate}
@@ -221,21 +232,21 @@ export function MasterDataCreateDialog({
                     )
                   }
                   options={[
-                    { value: "ok", label: "正常成功" },
-                    { value: "overlap", label: "有效期重叠阻断" },
+                    { value: "ok", label: masterDataCopy.demoOk },
+                    { value: "overlap", label: masterDataCopy.demoOverlap },
                     ...(resource === "products"
                       ? [
                           {
                             value: "sku_signature",
-                            label: "SKU 规格身份阻断",
+                            label: masterDataCopy.demoSkuSig,
                           },
                         ]
                       : []),
                   ]}
                   className="w-full"
                   allowClear={false}
-                  aria-label="模拟校验（仅演示）"
-                  placeholder="模拟校验"
+                  aria-label={masterDataCopy.demoSimulateLabel}
+                  placeholder={masterDataCopy.demoSimulateLabel}
                 />
               </div>
             ) : null}
@@ -248,7 +259,9 @@ export function MasterDataCreateDialog({
                 disabled={mutation.isPending}
                 title={isWarehouse ? WAREHOUSE_WRITE_MESSAGE : undefined}
               >
-                {isWarehouse ? "提交（将拒绝）" : "创建"}
+                {isWarehouse
+                  ? masterDataCopy.createSubmitRejected
+                  : masterDataCopy.createSubmit}
               </Button>
             </DialogFooter>
           </form>
@@ -293,8 +306,7 @@ export function MasterDataReviseDialog({
   )
 
   const isWarehouse = resource === "warehouses"
-  const stableId =
-    target && "stableId" in target ? target.stableId : ""
+  const stableId = target && "stableId" in target ? target.stableId : ""
   const baseRevisionId =
     target && "currentRevisionId" in target
       ? target.currentRevisionId
@@ -343,13 +355,13 @@ export function MasterDataReviseDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>形成新版本</DialogTitle>
+          <DialogTitle>{masterDataCopy.reviseTitle}</DialogTitle>
           <DialogDescription>
-            追加不可变修订并保留原因、操作者与时间。当前名称变化不改写历史记录。
+            {masterDataCopy.reviseDesc}
             {target ? (
               <>
                 {" "}
-                基准 <span className="num">{target.stableNo}</span>
+                资料编号 <span className="num">{target.stableNo}</span>
               </>
             ) : null}
           </DialogDescription>
@@ -357,7 +369,7 @@ export function MasterDataReviseDialog({
 
         {isWarehouse ? (
           <Alert variant="destructive">
-            <AlertTitle>{WAREHOUSE_WRITE_CODE}</AlertTitle>
+            <AlertTitle>{masterDataCopy.warehouseWriteTitle}</AlertTitle>
             <AlertDescription>{WAREHOUSE_WRITE_MESSAGE}</AlertDescription>
           </Alert>
         ) : null}
@@ -365,8 +377,8 @@ export function MasterDataReviseDialog({
         {result?.outcome === "succeeded" ? (
           <FormalActionResult
             status="succeeded"
-            title="新版本已形成"
-            description="新版本已创建；即时生效的版本立即应用，待生效的版本到生效日自动切换。"
+            title={masterDataCopy.reviseSuccessTitle}
+            description={masterDataCopy.reviseSuccessDesc}
             reference={result.reference}
             facts={resultFacts(result)}
           />
@@ -375,9 +387,8 @@ export function MasterDataReviseDialog({
         {result?.outcome === "blocked" ? (
           <FormalActionResult
             status="blocked"
-            title="修订被阻断"
+            title={masterDataCopy.reviseBlockedTitle}
             description={result.message}
-            reference={result.code}
             facts={
               result.detail
                 ? [{ label: "说明", value: result.detail }]
@@ -389,12 +400,11 @@ export function MasterDataReviseDialog({
         {result?.outcome === "conflict" ? (
           <FormalActionResult
             status="blocked"
-            title="版本冲突"
-            description={result.message}
-            reference={`lock=${result.serverLockVersion}`}
+            title={masterDataCopy.reviseConflictTitle}
+            description={result.message || masterDataCopy.reviseConflictHint}
             facts={[
               {
-                label: "服务端版本",
+                label: "当前版本",
                 value: `v${result.serverRevisionNo}`,
               },
             ]}
@@ -411,29 +421,35 @@ export function MasterDataReviseDialog({
           >
             <form.AppField
               name="name"
-              children={(field) => <field.TextField label="名称（新版本）" />}
+              children={(field) => (
+                <field.TextField label={masterDataCopy.reviseNameLabel} />
+              )}
             />
             <div className="grid gap-3 sm:grid-cols-2">
               <form.AppField
                 name="effectiveFrom"
-                children={(field) => <field.TextField label="生效起" />}
+                children={(field) => (
+                  <field.TextField label={masterDataCopy.fieldEffectiveFrom} />
+                )}
               />
               <form.AppField
                 name="effectiveTo"
                 children={(field) => (
-                  <field.TextField label="生效止（空=长期）" />
+                  <field.TextField label={masterDataCopy.fieldEffectiveTo} />
                 )}
               />
             </div>
             <form.AppField
               name="changeReason"
               children={(field) => (
-                <field.TextareaField label="变更原因" />
+                <field.TextareaField label={masterDataCopy.fieldChangeReason} />
               )}
             />
             {!isWarehouse ? (
               <div className="space-y-2">
-                <Label htmlFor="rev-sim">模拟校验（仅演示）</Label>
+                <Label htmlFor="rev-sim">
+                  {masterDataCopy.demoSimulateLabel}
+                </Label>
                 <OptionCombobox
                   id="rev-sim"
                   value={simulate}
@@ -448,26 +464,26 @@ export function MasterDataReviseDialog({
                     )
                   }
                   options={[
-                    { value: "ok", label: "正常成功" },
-                    { value: "overlap", label: "有效期重叠阻断" },
+                    { value: "ok", label: masterDataCopy.demoOk },
+                    { value: "overlap", label: masterDataCopy.demoOverlap },
                     ...(resource === "products"
                       ? [
                           {
                             value: "sku_signature",
-                            label: "SKU 规格身份阻断",
+                            label: masterDataCopy.demoSkuSig,
                           },
                           {
                             value: "base_unit",
-                            label: "基础单位变更阻断",
+                            label: masterDataCopy.demoBaseUnit,
                           },
                         ]
                       : []),
-                    { value: "conflict", label: "版本冲突" },
+                    { value: "conflict", label: masterDataCopy.demoConflict },
                   ]}
                   className="w-full"
                   allowClear={false}
-                  aria-label="模拟校验（仅演示）"
-                  placeholder="模拟校验"
+                  aria-label={masterDataCopy.demoSimulateLabel}
+                  placeholder={masterDataCopy.demoSimulateLabel}
                 />
               </div>
             ) : null}
@@ -476,7 +492,9 @@ export function MasterDataReviseDialog({
                 关闭
               </DialogClose>
               <Button type="submit" disabled={mutation.isPending || !target}>
-                {isWarehouse ? "提交（将拒绝）" : "形成新版本"}
+                {isWarehouse
+                  ? masterDataCopy.createSubmitRejected
+                  : masterDataCopy.reviseSubmit}
               </Button>
             </DialogFooter>
           </form>
@@ -507,9 +525,9 @@ export function MasterDataDisableDialog({
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey("disable")
   )
-  const [simulate, setSimulate] = React.useState<"ok" | "warehouse_stock" | "conflict">(
-    "ok"
-  )
+  const [simulate, setSimulate] = React.useState<
+    "ok" | "warehouse_stock" | "conflict"
+  >("ok")
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null
   )
@@ -559,13 +577,13 @@ export function MasterDataDisableDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>停用基础资料</DialogTitle>
+          <DialogTitle>{masterDataCopy.disableTitle}</DialogTitle>
           <DialogDescription>
-            停用不等于删除：对象仍可查询，历史记录永久保留。
+            {masterDataCopy.disableDesc}
             {target ? (
               <>
                 {" "}
-                对象 <span className="num">{target.stableNo}</span>
+                资料编号 <span className="num">{target.stableNo}</span>
               </>
             ) : null}
           </DialogDescription>
@@ -573,13 +591,13 @@ export function MasterDataDisableDialog({
 
         {isWarehouse ? (
           <Alert variant="destructive">
-            <AlertTitle>{WAREHOUSE_WRITE_CODE}</AlertTitle>
+            <AlertTitle>{masterDataCopy.warehouseWriteTitle}</AlertTitle>
             <AlertDescription>
               {WAREHOUSE_WRITE_MESSAGE}
               {target &&
               "warehouseStockSummary" in target &&
               target.warehouseStockSummary?.hasBlockingStock
-                ? ` 另：在库 ${target.warehouseStockSummary.onHandQty} / 预占 ${target.warehouseStockSummary.reservedQty} 时即使 Q1 确认也不得停用。`
+                ? ` 另：在库 ${target.warehouseStockSummary.onHandQty} / 预占 ${target.warehouseStockSummary.reservedQty} 时也不可停用。`
                 : null}
             </AlertDescription>
           </Alert>
@@ -588,8 +606,8 @@ export function MasterDataDisableDialog({
         {result?.outcome === "succeeded" ? (
           <FormalActionResult
             status="succeeded"
-            title="已停用"
-            description="已形成停用版本；身份保留，历史版本可只读打开。"
+            title={masterDataCopy.disableSuccessTitle}
+            description={masterDataCopy.disableSuccessDesc}
             reference={result.reference}
             facts={resultFacts(result)}
           />
@@ -598,9 +616,8 @@ export function MasterDataDisableDialog({
         {result?.outcome === "blocked" ? (
           <FormalActionResult
             status="blocked"
-            title="停用被阻断"
+            title={masterDataCopy.disableBlockedTitle}
             description={result.message}
-            reference={result.code}
             facts={[
               ...(result.detail
                 ? [{ label: "说明", value: result.detail }]
@@ -622,17 +639,23 @@ export function MasterDataDisableDialog({
           >
             <form.AppField
               name="effectiveFrom"
-              children={(field) => <field.TextField label="停用时点" />}
+              children={(field) => (
+                <field.TextField label={masterDataCopy.fieldDisableAt} />
+              )}
             />
             <form.AppField
               name="changeReason"
               children={(field) => (
-                <field.TextareaField label="停用原因" />
+                <field.TextareaField
+                  label={masterDataCopy.fieldDisableReason}
+                />
               )}
             />
             {!isWarehouse ? (
               <div className="space-y-2">
-                <Label htmlFor="dis-sim">模拟结果（仅演示）</Label>
+                <Label htmlFor="dis-sim">
+                  {masterDataCopy.demoSimulateLabel}
+                </Label>
                 <OptionCombobox
                   id="dis-sim"
                   value={simulate}
@@ -642,13 +665,13 @@ export function MasterDataDisableDialog({
                     )
                   }
                   options={[
-                    { value: "ok", label: "正常停用" },
-                    { value: "conflict", label: "版本冲突" },
+                    { value: "ok", label: masterDataCopy.demoDisableOk },
+                    { value: "conflict", label: masterDataCopy.demoConflict },
                   ]}
                   className="w-full"
                   allowClear={false}
-                  aria-label="模拟结果（仅演示）"
-                  placeholder="模拟结果"
+                  aria-label={masterDataCopy.demoSimulateLabel}
+                  placeholder={masterDataCopy.demoSimulateLabel}
                 />
               </div>
             ) : null}
@@ -657,7 +680,9 @@ export function MasterDataDisableDialog({
                 关闭
               </DialogClose>
               <Button type="submit" disabled={mutation.isPending || !target}>
-                {isWarehouse ? "提交（将拒绝）" : "确认停用"}
+                {isWarehouse
+                  ? masterDataCopy.createSubmitRejected
+                  : masterDataCopy.disableSubmit}
               </Button>
             </DialogFooter>
           </form>

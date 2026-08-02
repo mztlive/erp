@@ -532,7 +532,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           ) : null}
         </div>
       }
-      maintenanceBanner={<OwnershipMigrationGlobalFreezeBanner />}
+      // maintenanceBanner={<OwnershipMigrationGlobalFreezeBanner />}
       taskTabs={
         <TaskTabs
           value={activeTab}

@@ -20,6 +20,7 @@ import {
   MasterDataReviseDialog,
 } from "@/features/master-data/master-data-action-dialog"
 import { revealMasterDataSensitive } from "@/features/master-data/api"
+import { masterDataCopy } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
 import { formatEffectiveRange } from "@/features/master-data/filter"
 import { useMasterDataCenterQuery } from "@/features/master-data/queries"
@@ -33,10 +34,10 @@ const SECTION_NAV: readonly {
   id: MasterDataSectionId
   label: string
 }[] = [
-  { id: "overview", label: "概览" },
-  { id: "versions", label: "版本" },
-  { id: "relations", label: "关系" },
-  { id: "audit", label: "审计" },
+  { id: "overview", label: masterDataCopy.centerOverview },
+  { id: "versions", label: masterDataCopy.centerVersions },
+  { id: "relations", label: masterDataCopy.centerRelations },
+  { id: "audit", label: masterDataCopy.centerAudit },
 ]
 
 function resolveSection(section?: string | null): MasterDataSectionId {
@@ -61,8 +62,8 @@ export function MasterDataCenterPage({
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
-          title="基础资料资源不存在"
-          description={`未知资源 “${resource}”。`}
+          title={masterDataCopy.unknownResourceTitle}
+          description={masterDataCopy.unknownResourceDesc(resource)}
           actions={
             <Button render={<Link href="/master-data" />}>
               返回基础资料
@@ -107,7 +108,10 @@ function MasterDataCenterBody({
   if (query.isPending) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="基础资料详情" description="正在加载…" />
+        <PageHeader
+          title="基础资料详情"
+          description={masterDataCopy.centerLoading}
+        />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
       </div>
     )
@@ -119,7 +123,7 @@ function MasterDataCenterBody({
         <PageHeader title="基础资料详情" />
         <BusinessFailureState
           kind="system"
-          description="加载对象失败。"
+          description={masterDataCopy.centerLoadFail}
           action={
             <Button type="button" onClick={() => void query.refetch()}>
               重试
@@ -134,11 +138,11 @@ function MasterDataCenterBody({
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
-          title="对象不存在或无权访问"
-          description={`未找到 ${resource} / ${stableId}。停用对象仍应可打开；若确实无权限则不展示缓存内容。`}
+          title={masterDataCopy.centerMissingTitle}
+          description={masterDataCopy.centerMissingDesc}
           actions={
             <Button render={<Link href={`/master-data/${resource}`} />}>
-              返回列表
+              {masterDataCopy.actionBackList}
             </Button>
           }
         />
@@ -173,7 +177,7 @@ function MasterDataCenterBody({
             actions={[
               {
                 actionKey: "back",
-                label: "返回列表",
+                label: masterDataCopy.actionBackList,
                 icon: ArrowLeftIcon,
                 variant: "outline",
                 onClick: () => {
@@ -205,7 +209,7 @@ function MasterDataCenterBody({
         statuses={[
           {
             id: "timing",
-            label: "修订时序",
+            label: masterDataCopy.centerVersionState,
             status: {
               label: data.revisionTimingLabel,
               tone: data.revisionTiming === "FUTURE" ? "warning" : "info",
@@ -215,7 +219,7 @@ function MasterDataCenterBody({
             ? [
                 {
                   id: "scheduled",
-                  label: "待生效启停",
+                  label: masterDataCopy.centerScheduledLifecycle,
                   status: {
                     label: data.scheduledLifecycleLabel,
                     tone: "neutral" as const,
@@ -232,7 +236,7 @@ function MasterDataCenterBody({
             onClick={() => setReviseOpen(true)}
           >
             <HistoryIcon data-icon="inline-start" aria-hidden="true" />
-            形成新版本
+            {masterDataCopy.actionUpdate}
           </Button>
         }
         secondaryActions={
@@ -244,24 +248,24 @@ function MasterDataCenterBody({
             onClick={() => setDisableOpen(true)}
           >
             <BanIcon data-icon="inline-start" aria-hidden="true" />
-            停用
+            {masterDataCopy.actionDisable}
           </Button>
         }
       />
 
       {!canRevise && reviseBlocker ? (
         <p className="text-xs text-muted-foreground">
-          形成新版本不可用：{reviseBlocker.message}
+          {masterDataCopy.centerUpdateBlocked(reviseBlocker.message)}
         </p>
       ) : null}
       {!canDisable && disableBlocker ? (
         <p className="text-xs text-muted-foreground">
-          停用不可用：{disableBlocker.message}
+          {masterDataCopy.centerDisableBlocked(disableBlocker.message)}
         </p>
       ) : null}
 
       <nav
-        aria-label="详情子区"
+        aria-label="资料分区"
         className="sticky top-0 z-10 flex flex-wrap gap-2 border-b border-border bg-background/95 py-2 backdrop-blur"
       >
         {SECTION_NAV.map((item) => {
@@ -284,24 +288,32 @@ function MasterDataCenterBody({
       <div className="space-y-6">
         <DocumentSection
           id="md-section-overview"
-          title="概览"
-          description="身份、生命周期、生效区间与资源专属记录"
+          title={masterDataCopy.centerOverview}
+          description={masterDataCopy.centerOverviewDesc}
         >
           <dl className="grid gap-2 text-sm sm:grid-cols-2">
             <div>
-              <dt className="text-xs text-muted-foreground">稳定编号</dt>
+              <dt className="text-xs text-muted-foreground">
+                {masterDataCopy.colStableNo}
+              </dt>
               <dd className="num">{data.stableNo}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">当前版本</dt>
+              <dt className="text-xs text-muted-foreground">
+                {masterDataCopy.centerCurrentVersion}
+              </dt>
               <dd className="num">v{data.currentRevision.revisionNo}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">变更原因</dt>
+              <dt className="text-xs text-muted-foreground">
+                {masterDataCopy.centerChangeReason}
+              </dt>
               <dd>{data.currentRevision.changeReason}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">操作者</dt>
+              <dt className="text-xs text-muted-foreground">
+                {masterDataCopy.centerActor}
+              </dt>
               <dd>{data.currentRevision.actor}</dd>
             </div>
             {data.currentRevision.fields.map((f) => (
@@ -321,7 +333,7 @@ function MasterDataCenterBody({
           {data.sensitiveFields.length > 0 ? (
             <div className="mt-4 space-y-2">
               <h4 className="text-xs font-medium text-muted-foreground">
-                敏感字段
+                {masterDataCopy.centerSensitive}
               </h4>
               {data.sensitiveFields.map((field) => (
                 <div
@@ -350,7 +362,7 @@ function MasterDataCenterBody({
           {data.productConstraints ? (
             <div className="mt-4 rounded-lg bg-muted/50 p-3 text-xs">
               <p>
-                规格签名{" "}
+                规格标识{" "}
                 <span className="num">
                   {data.productConstraints.specificationSignature}
                 </span>
@@ -359,7 +371,7 @@ function MasterDataCenterBody({
                 <span className="num">{data.productConstraints.baseUnit}</span>
               </p>
               <p className="mt-1 text-muted-foreground">
-                规格身份变化需新建 SKU；已被引用的 SKU 不可修改基础单位。
+                {masterDataCopy.centerSpecNote}
               </p>
             </div>
           ) : null}
@@ -394,8 +406,8 @@ function MasterDataCenterBody({
 
         <DocumentSection
           id="md-section-versions"
-          title="版本"
-          description="版本时间线：历史名称记录独立于当前名称"
+          title={masterDataCopy.centerVersions}
+          description={masterDataCopy.centerVersionsDesc}
         >
           <RevisionTimeline
             revisions={data.revisionTimeline.map((rev) => ({
@@ -410,7 +422,8 @@ function MasterDataCenterBody({
               reason: (
                 <div className="space-y-1">
                   <div>
-                    记录名称：<strong>{rev.nameSnapshot}</strong>
+                    {masterDataCopy.centerHistoryName}：
+                    <strong>{rev.nameSnapshot}</strong>
                   </div>
                   <div>{rev.changeReason}</div>
                   <div className="flex flex-wrap gap-2">
@@ -430,15 +443,14 @@ function MasterDataCenterBody({
 
         <DocumentSection
           id="md-section-relations"
-          title="关系"
-          description="使用影响与业务选择器可用性（系统最新数据）"
+          title={masterDataCopy.centerRelations}
+          description={masterDataCopy.centerRelationsDesc}
         >
           <p className="text-sm">
-            历史引用约{" "}
-            <span className="num">
-              {data.usageSummary.historicalReferenceCount}
-            </span>{" "}
-            次。{data.usageSummary.note}
+            {masterDataCopy.centerUsageCount(
+              data.usageSummary.historicalReferenceCount
+            )}
+            {data.usageSummary.note}
           </p>
           <ul className="mt-3 space-y-2">
             {data.selectorEligibility.map((s) => (
@@ -448,16 +460,13 @@ function MasterDataCenterBody({
               >
                 <span>{s.contextLabel}</span>
                 <Badge variant={s.eligible ? "success" : "destructive"}>
-                  {s.eligible ? "可用" : "不可用"}
+                  {s.eligible
+                    ? masterDataCopy.eligible
+                    : masterDataCopy.ineligible}
                 </Badge>
                 {s.reason ? (
                   <span className="text-xs text-muted-foreground">
                     {s.reason}
-                  </span>
-                ) : null}
-                {s.blockerCodes.length > 0 ? (
-                  <span className="num text-xs text-muted-foreground">
-                    {s.blockerCodes.join(", ")}
                   </span>
                 ) : null}
               </li>
@@ -467,11 +476,13 @@ function MasterDataCenterBody({
 
         <DocumentSection
           id="md-section-audit"
-          title="审计"
-          description="创建、变更与停用记录（敏感值不展示明文）"
+          title={masterDataCopy.centerAudit}
+          description={masterDataCopy.centerAuditDesc}
         >
           {data.auditEvents.length === 0 ? (
-            <p className="text-sm text-muted-foreground">暂无审计事件</p>
+            <p className="text-sm text-muted-foreground">
+              {masterDataCopy.centerNoAudit}
+            </p>
           ) : (
             <ul className="space-y-2 text-sm">
               {data.auditEvents.map((ev) => (

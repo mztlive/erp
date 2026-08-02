@@ -107,7 +107,7 @@ function rejectWarehouseWrite(): MasterDataMutationResult {
     outcome: "blocked",
     code: WAREHOUSE_WRITE_CODE,
     message: WAREHOUSE_WRITE_MESSAGE,
-    detail: "服务端拒绝写入；仓储与系统管理员均不可作为临时写入人。",
+    detail: "仓库资料暂不可维护，任何角色都不能改。",
   }
 }
 
@@ -127,8 +127,8 @@ export function createW14Object(
     const blocked: MasterDataMutationResult = {
       outcome: "blocked",
       code: "EFFECTIVE_RANGE_OVERLAP",
-      message: "生效区间与已有修订重叠，服务端拒绝创建。",
-      detail: `与当前 v1 区间 ${input.effectiveFrom} 起冲突，请调整 effectiveFrom/To。`,
+      message: "生效期间与已有内容重叠，无法保存。",
+      detail: `与当前 v1（从 ${input.effectiveFrom} 起）冲突，请调整生效开始或结束日期。`,
     }
     idempotencyResults.set(input.idempotencyKey, blocked)
     return blocked
@@ -138,7 +138,7 @@ export function createW14Object(
     const blocked: MasterDataMutationResult = {
       outcome: "blocked",
       code: "SPEC_SIGNATURE_IMMUTABLE",
-      message: "规格身份变化必须新建 SKU，不能在创建路径伪造签名变更。",
+      message: "规格变更需要新建商品，不能在新建时伪造规格变更。",
     }
     idempotencyResults.set(input.idempotencyKey, blocked)
     return blocked
@@ -160,20 +160,20 @@ export function createW14Object(
     lifecycleStatusLabel: "当前启用",
     lifecycleTone: "success",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     currentRevisionId: revisionId,
     displayedRevisionId: revisionId,
     revisionNo: 1,
     effectiveFrom,
     effectiveTo: input.effectiveTo,
     keyFacts: [
-      { label: "资源", value: resourceLabel(input.resource) },
-      { label: "说明", value: "会话新建" },
+      { label: "分类", value: resourceLabel(input.resource) },
+      { label: "说明", value: "本次新建" },
     ],
     selectorEligibility: [
       {
         context: "default",
-        contextLabel: "业务选择器",
+        contextLabel: "业务选用",
         eligible: true,
         blockerCodes: [],
       },
@@ -194,7 +194,7 @@ export function createW14Object(
     lifecycleStatusLabel: "当前启用",
     lifecycleTone: "success",
     revisionTiming: "CURRENT",
-    revisionTimingLabel: "当前",
+    revisionTimingLabel: "当前生效",
     lockVersion: 1,
     currentRevision: {
       revisionId,
@@ -219,7 +219,7 @@ export function createW14Object(
         id: revisionId,
         revisionNo: 1,
         revisionTiming: "CURRENT",
-        timingLabel: "当前",
+        timingLabel: "当前生效",
         nameSnapshot: input.name.trim(),
         actor: ACTOR,
         effectiveFrom,
@@ -232,7 +232,7 @@ export function createW14Object(
     selectorEligibility: listItem.selectorEligibility,
     usageSummary: {
       historicalReferenceCount: 0,
-      note: "新建对象尚无历史引用。",
+      note: "新建资料尚无业务引用。",
     },
     sensitiveFields: [],
     resourceFacts: [{ label: "创建人", value: ACTOR }],
@@ -268,7 +268,7 @@ export function createW14Object(
     actor: ACTOR,
     changeReason: input.changeReason.trim() || "新建",
     reference: `MD-CREATE-${stableNo}`,
-    nextActions: ["查看详情", "形成新版本"],
+    nextActions: ["查看详情", "更新资料"],
   }
   idempotencyResults.set(input.idempotencyKey, result)
   return result
@@ -290,7 +290,7 @@ export function reviseW14Object(
   if (!center) {
     return {
       outcome: "unknown",
-      message: "对象不存在或无权访问。",
+      message: "资料不存在或无权访问。",
       idempotencyKey: input.idempotencyKey,
     }
   }
@@ -301,7 +301,7 @@ export function reviseW14Object(
   ) {
     const result: MasterDataMutationResult = {
       outcome: "conflict",
-      message: "基础资料版本已变化，禁止静默覆盖。请刷新基准后重做。",
+      message: "资料已被他人更新，请刷新后重新填写。",
       serverLockVersion: center.lockVersion,
       serverRevisionNo: center.currentRevision.revisionNo,
     }
@@ -313,8 +313,8 @@ export function reviseW14Object(
     const blocked: MasterDataMutationResult = {
       outcome: "blocked",
       code: "EFFECTIVE_RANGE_OVERLAP",
-      message: "生效区间与已有修订重叠。",
-      detail: `冲突位置：当前 v${center.currentRevision.revisionNo}（${center.currentRevision.effectiveFrom} 起）。请调整生效区间。`,
+      message: "生效期间与已有内容重叠。",
+      detail: `与当前 v${center.currentRevision.revisionNo}（${center.currentRevision.effectiveFrom} 起）冲突，请调整生效日期。`,
     }
     idempotencyResults.set(input.idempotencyKey, blocked)
     return blocked
@@ -324,10 +324,9 @@ export function reviseW14Object(
     const blocked: MasterDataMutationResult = {
       outcome: "blocked",
       code: "SPEC_SIGNATURE_IMMUTABLE",
-      message:
-        "规格身份变化必须新建 SKU，不允许通过同一 SKU 修订改变 specification_signature。",
+      message: "规格变更需要新建商品，不能在同一商品上改规格。",
       detail: center.productConstraints
-        ? `当前签名 ${center.productConstraints.specificationSignature}`
+        ? `当前规格标识 ${center.productConstraints.specificationSignature}`
         : undefined,
     }
     idempotencyResults.set(input.idempotencyKey, blocked)
@@ -338,8 +337,7 @@ export function reviseW14Object(
     const blocked: MasterDataMutationResult = {
       outcome: "blocked",
       code: "BASE_UNIT_LOCKED",
-      message:
-        "已被已生效单据使用的 SKU 不得修改基础单位。请「停用并新建 SKU」。",
+      message: "已被业务单据使用的商品不能改基础单位。请先停用，再新建商品。",
       detail: center.productConstraints
         ? `当前基础单位 ${center.productConstraints.baseUnit}`
         : undefined,
@@ -361,7 +359,7 @@ export function reviseW14Object(
     name: isFuture ? center.name : nameSnapshot,
     lockVersion: center.lockVersion + 1,
     revisionTiming: isFuture ? "FUTURE" : "CURRENT",
-    revisionTimingLabel: isFuture ? "待生效" : "当前",
+    revisionTimingLabel: isFuture ? "待生效" : "当前生效",
     currentRevision: isFuture
       ? center.currentRevision
       : {
@@ -387,7 +385,7 @@ export function reviseW14Object(
         id: revisionId,
         revisionNo: newRevNo,
         revisionTiming: isFuture ? "FUTURE" : "CURRENT",
-        timingLabel: isFuture ? "待生效" : "当前",
+        timingLabel: isFuture ? "待生效" : "当前生效",
         nameSnapshot,
         actor: ACTOR,
         effectiveFrom: input.effectiveFrom,
@@ -416,7 +414,7 @@ export function reviseW14Object(
         id: `${revisionId}_audit`,
         at: recordedAt,
         actor: ACTOR,
-        action: isFuture ? "形成待生效版本" : "形成新版本",
+        action: isFuture ? "预约更新" : "更新资料",
         detail: `v${newRevNo} · ${changeReason}`,
       },
       ...center.auditEvents,
@@ -433,7 +431,7 @@ export function reviseW14Object(
       name: isFuture ? listRow.name : nameSnapshot,
       revisionNo: isFuture ? listRow.revisionNo : newRevNo,
       revisionTiming: isFuture ? "FUTURE" : "CURRENT",
-      revisionTimingLabel: isFuture ? "待生效" : "当前",
+      revisionTimingLabel: isFuture ? "待生效" : "当前生效",
       displayedRevisionId: revisionId,
       currentRevisionId: isFuture
         ? listRow.currentRevisionId
@@ -462,7 +460,7 @@ export function reviseW14Object(
     actor: ACTOR,
     changeReason,
     reference: `MD-REV-${center.stableNo}-v${newRevNo}`,
-    nextActions: ["查看版本时间线", "核对选择器影响"],
+    nextActions: ["查看变更历史", "查看哪里能选到"],
   }
   idempotencyResults.set(input.idempotencyKey, result)
   return result
@@ -500,7 +498,7 @@ export function disableW14Object(
   if (!center) {
     return {
       outcome: "unknown",
-      message: "对象不存在或无权访问。",
+      message: "资料不存在或无权访问。",
       idempotencyKey: input.idempotencyKey,
     }
   }
@@ -509,7 +507,7 @@ export function disableW14Object(
     const blocked: MasterDataMutationResult = {
       outcome: "blocked",
       code: "ALREADY_DISABLED",
-      message: "对象已停用；停用不是删除，历史版本仍可只读打开。",
+      message: "资料已停用；不是删除，历史记录仍可查看。",
     }
     idempotencyResults.set(input.idempotencyKey, blocked)
     return blocked
@@ -521,7 +519,7 @@ export function disableW14Object(
   ) {
     const result: MasterDataMutationResult = {
       outcome: "conflict",
-      message: "基础资料版本已变化，禁止静默覆盖。",
+      message: "资料已被他人更新，请刷新后重试。",
       serverLockVersion: center.lockVersion,
       serverRevisionNo: center.currentRevision.revisionNo,
     }
@@ -555,7 +553,7 @@ export function disableW14Object(
         id: revisionId,
         revisionNo: newRevNo,
         revisionTiming: "CURRENT",
-        timingLabel: "当前",
+        timingLabel: "当前生效",
         nameSnapshot: center.name,
         actor: ACTOR,
         effectiveFrom: input.effectiveFrom,
@@ -587,7 +585,7 @@ export function disableW14Object(
       {
         action: "DISABLE",
         code: "ALREADY_DISABLED",
-        message: "对象已停用；身份与历史版本永久保留。",
+        message: "资料已停用；编号与历史记录永久保留。",
       },
     ],
     auditEvents: [
@@ -602,7 +600,7 @@ export function disableW14Object(
     ],
     usageSummary: {
       ...center.usageSummary,
-      note: "停用非删除：已引用身份保留并可只读打开历史版本。",
+      note: "停用不是删除：历史业务引用仍可查看。",
     },
   }
 
@@ -619,7 +617,7 @@ export function disableW14Object(
       currentRevisionId: revisionId,
       displayedRevisionId: revisionId,
       lockVersion: listRow.lockVersion + 1,
-      primaryBlocker: "已停用：不可进入业务选择器",
+      primaryBlocker: "已停用：业务页面选不到",
       selectorEligibility: listRow.selectorEligibility.map((s) => ({
         ...s,
         eligible: false,
@@ -631,7 +629,7 @@ export function disableW14Object(
         {
           action: "DISABLE",
           code: "ALREADY_DISABLED",
-          message: "对象已停用。",
+          message: "资料已停用。",
         },
       ],
       metricTags: ["disabled"],
@@ -652,7 +650,7 @@ export function disableW14Object(
     actor: ACTOR,
     changeReason,
     reference: `MD-DIS-${center.stableNo}-v${newRevNo}`,
-    nextActions: ["只读打开历史版本", "返回列表"],
+    nextActions: ["查看变更历史", "返回列表"],
   }
   idempotencyResults.set(input.idempotencyKey, result)
   return result
@@ -680,7 +678,7 @@ export function queryW14Selector(
     return {
       scene,
       asOf,
-      note: "仅返回启用、当前有效、区域/履约匹配的精确可销售项目版本；提交时再校验。",
+      note: "销售建单可选的可销售项目（已启用且当前有效）；建单时会再核对一次。",
       candidates: pick("sellable-items", (row) => {
         if (row.lifecycleStatus !== "ENABLED") return null
         if (row.revisionTiming === "FUTURE" && row.scheduledLifecycleStatus === "DISABLED") {
@@ -704,7 +702,7 @@ export function queryW14Selector(
     return {
       scene,
       asOf,
-      note: "校验供应商角色启用、能力、适用资质与业务日期；列表可用≠提交通过。",
+      note: "采购可选的供应商（启用、能力与资质需匹配）；列表可选不代表建单一定通过。",
       candidates: pick("suppliers", (row) => {
         const elig = row.selectorEligibility.find(
           (s) => s.context === "procurement_supplier"
@@ -717,7 +715,7 @@ export function queryW14Selector(
             revisionId: row.currentRevisionId,
             revisionNo: row.revisionNo,
             eligible: false,
-            reason: elig?.reason ?? "不可用",
+            reason: elig?.reason ?? "不可选",
           }
         }
         return {
@@ -737,7 +735,7 @@ export function queryW14Selector(
     return {
       scene,
       asOf,
-      note: "SKU 启用、规格身份稳定、基础单位存在。",
+      note: "可选商品需已启用，且规格、基础单位完整。",
       candidates: pick("products", (row) => {
         const ok = row.lifecycleStatus === "ENABLED"
         return {
@@ -757,7 +755,7 @@ export function queryW14Selector(
     return {
       scene,
       asOf,
-      note: "product_kind=VOUCHER；不读取商城玩法。",
+      note: "卡券类目（ERP 销售口径，不含商城玩法）。",
       candidates: pick("voucher-categories", (row) => ({
         stableId: row.stableId,
         stableNo: row.stableNo,
@@ -776,7 +774,7 @@ export function queryW14Selector(
   return {
     scene: "warehouse_pick",
     asOf,
-    note: "仓库当前有效且数据范围允许；库存操作另由库存台账校验。",
+    note: "可选仓库需已启用且在你的数据范围内；出入库另在库存台账处理。",
     candidates: pick("warehouses", (row) => ({
       stableId: row.stableId,
       stableNo: row.stableNo,
@@ -786,7 +784,7 @@ export function queryW14Selector(
       eligible: row.lifecycleStatus === "ENABLED",
       reason:
         row.lifecycleStatus === "ENABLED"
-          ? "可查询；写操作暂不可用"
+          ? "可查询；仓库资料暂不可改"
           : "当前停用",
     })),
   }
