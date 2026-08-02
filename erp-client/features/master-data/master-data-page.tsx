@@ -50,7 +50,6 @@ import { MasterDataPreviewPanel } from "@/features/master-data/master-data-previ
 import {
   useMasterDataCenterQuery,
   useMasterDataListQuery,
-  useSelectorCandidatesQuery,
 } from "@/features/master-data/queries"
 import {
   MASTER_DATA_RESOURCES,
@@ -189,7 +188,6 @@ function MasterDataListWorkspace({
     filterSnapshotLabel: string
     permissionVersion: string
   } | null>(null)
-  const [selectorDemoOpen, setSelectorDemoOpen] = React.useState(false)
 
   const listQuery = useMasterDataListQuery({
     resource,
@@ -207,19 +205,6 @@ function MasterDataListWorkspace({
     resource,
     previewId ?? ""
   )
-
-  const selectorScene =
-    resource === "sellable-items"
-      ? "sales_pick"
-      : resource === "suppliers"
-        ? "procurement_supplier"
-        : resource === "products"
-          ? "sku_pick"
-          : resource === "voucher-categories"
-            ? "voucher_category"
-            : "warehouse_pick"
-
-  const selectorQuery = useSelectorCandidatesQuery(selectorScene)
 
   const previewRow = React.useMemo(
     () => rows.find((r) => r.stableId === previewId) ?? null,
@@ -457,9 +442,7 @@ function MasterDataListWorkspace({
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:gap-3.5 md:p-4">
-      <div className="px-1">
-        <ResourceNav resource={resource} navRef={navRef} />
-      </div>
+
 
       <PageHeader
         title={masterDataCopy.pageTitle(resourceLabel(resource))}
@@ -496,13 +479,6 @@ function MasterDataListWorkspace({
                 onClick: handleExport,
               },
               {
-                actionKey: "selector",
-                label: masterDataCopy.actionWhereUsable,
-                variant: "outline",
-                mobileVisibility: "hide",
-                onClick: () => setSelectorDemoOpen((v) => !v),
-              },
-              {
                 actionKey: "create",
                 label: isWarehouse
                   ? masterDataCopy.actionCreateClosed
@@ -517,31 +493,6 @@ function MasterDataListWorkspace({
         }
       />
 
-      {permissionDemo ? (
-        <div
-          className="flex flex-wrap gap-2 text-xs text-muted-foreground"
-          aria-label="权限摘要"
-        >
-          <Badge variant="outline">{masterDataCopy.permissionModule}</Badge>
-          <Badge variant="outline">
-            {masterDataCopy.permissionResource(resourceLabel(resource))}
-          </Badge>
-          <Badge variant="outline">
-            {masterDataCopy.permissionRole(permissionDemo.roleLabel)}
-          </Badge>
-          <Badge variant="outline">
-            {masterDataCopy.permissionReveal(permissionDemo.canRevealSensitive)}
-          </Badge>
-          <Badge variant="outline">
-            {isWarehouse
-              ? masterDataCopy.permissionWriteWarehouse
-              : masterDataCopy.permissionWriteOpen}
-          </Badge>
-          <Badge variant="outline">
-            {masterDataCopy.permissionExport(permissionDemo.canExport)}
-          </Badge>
-        </div>
-      ) : null}
 
       {isWarehouse ? (
         <FormalActionResult
@@ -567,42 +518,6 @@ function MasterDataListWorkspace({
             </>
           }
         />
-      ) : null}
-
-      {selectorDemoOpen && selectorQuery.data ? (
-        <section
-          className="rounded-xl border border-border bg-card p-3 text-sm"
-          aria-label="业务选用情况"
-        >
-          <h2 className="mb-1 text-sm font-medium">
-            {masterDataCopy.selectorPanelTitle(selectorQuery.data.note)}
-          </h2>
-          <p className="mb-2 text-xs text-muted-foreground">
-            {masterDataCopy.selectorPanelHint(
-              selectorQuery.data.asOf.slice(0, 19).replace("T", " ")
-            )}
-          </p>
-          <ul className="space-y-1">
-            {selectorQuery.data.candidates.map((c) => (
-              <li
-                key={c.stableId}
-                className="flex flex-wrap items-center gap-2 text-xs"
-              >
-                <span className="num">{c.stableNo}</span>
-                <span>{c.name}</span>
-                <span className="num">v{c.revisionNo}</span>
-                <Badge variant={c.eligible ? "success" : "destructive"}>
-                  {c.eligible
-                    ? masterDataCopy.eligible
-                    : masterDataCopy.ineligible}
-                </Badge>
-                {c.reason ? (
-                  <span className="text-muted-foreground">{c.reason}</span>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
       ) : null}
 
       {metrics.length > 0 ? (

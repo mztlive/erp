@@ -6,7 +6,6 @@ import {
   disableW14Object,
   getW14Center,
   queryW14Idempotency,
-  queryW14Selector,
   reviseW14Object,
 } from "@/features/master-data/session"
 import type {
@@ -18,8 +17,6 @@ import type {
   MasterDataListResult,
   MasterDataMutationResult,
   MasterDataResource,
-  SelectorQueryResult,
-  SelectorQueryScene,
 } from "@/features/master-data/types"
 import { filterMasterDataRows } from "@/features/master-data/filter"
 
@@ -81,13 +78,6 @@ export async function revealMasterDataSensitive(
     throw new Error("无权查看或权限已失效")
   }
   return value
-}
-
-export async function fetchSelectorCandidates(
-  scene: SelectorQueryScene
-): Promise<SelectorQueryResult> {
-  await mockDelay(70)
-  return queryW14Selector(scene)
 }
 
 /** Export uses current filter snapshot; permission re-check is mock copy. */

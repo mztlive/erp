@@ -266,26 +266,3 @@ export type MasterDataMutationResult =
       idempotencyKey: string
     }
 
-export type SelectorQueryScene =
-  | "sales_pick"
-  | "procurement_supplier"
-  | "sku_pick"
-  | "voucher_category"
-  | "warehouse_pick"
-
-export type SelectorCandidate = Readonly<{
-  stableId: string
-  stableNo: string
-  name: string
-  revisionId: string
-  revisionNo: number
-  eligible: boolean
-  reason?: string
-}>
-
-export type SelectorQueryResult = Readonly<{
-  scene: SelectorQueryScene
-  asOf: string
-  candidates: readonly SelectorCandidate[]
-  note: string
-}>

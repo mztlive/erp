@@ -1,6 +1,6 @@
 /**
  * W14 用户可见文案 — 业务语言，不暴露实现术语。
- * 代码字段名（revision / selector / lockVersion）仅限内部使用。
+ * 代码字段名（revision / lockVersion）仅限内部使用。
  */
 
 export function masterDataActionLabel(action: string): string {
@@ -52,7 +52,6 @@ export const masterDataCopy = {
   actionCreate: "新建",
   actionCreateClosed: "新建（暂不可用）",
   actionExport: "导出",
-  actionWhereUsable: "哪里能选到",
   actionOpenDetail: "打开完整资料",
   actionBackList: "返回列表",
   permissionModule: "模块：有权",
@@ -66,9 +65,6 @@ export const masterDataCopy = {
   warehouseWriteTitle: "仓库资料暂不可维护",
   warehouseWriteBody:
     "目前只能查看仓库信息和库存摘要，不能新建、更新或停用。维护功能尚未开放。",
-  selectorPanelTitle: (sceneNote: string) => `哪里能选到 · ${sceneNote}`,
-  selectorPanelHint: (asOf: string) =>
-    `以下为各业务页面能否选到这些资料（截至 ${asOf}）。实际建单时会再核对一次。`,
   eligible: "可选",
   ineligible: "不可选",
   exportDone: "导出已完成",

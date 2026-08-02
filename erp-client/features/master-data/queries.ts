@@ -12,7 +12,6 @@ import {
   disableMasterDataObject,
   fetchMasterDataCenter,
   fetchMasterDataList,
-  fetchSelectorCandidates,
   queryMasterDataIdempotency,
   revealMasterDataSensitive,
 } from "@/features/master-data/api"
@@ -22,7 +21,6 @@ import type {
   DisableMasterDataInput,
   MasterDataListQuery,
   MasterDataResource,
-  SelectorQueryScene,
 } from "@/features/master-data/types"
 
 export const masterDataKeys = {
@@ -31,8 +29,6 @@ export const masterDataKeys = {
     [...masterDataKeys.all, "list", query] as const,
   detail: (resource: MasterDataResource, stableId: string) =>
     [...masterDataKeys.all, "detail", resource, stableId] as const,
-  selector: (scene: SelectorQueryScene) =>
-    [...masterDataKeys.all, "selector", scene] as const,
 }
 
 export function useMasterDataListQuery(query: MasterDataListQuery) {
@@ -50,13 +46,6 @@ export function useMasterDataCenterQuery(
     queryKey: masterDataKeys.detail(resource, stableId),
     queryFn: () => fetchMasterDataCenter(resource, stableId),
     enabled: Boolean(stableId),
-  })
-}
-
-export function useSelectorCandidatesQuery(scene: SelectorQueryScene) {
-  return useQuery({
-    queryKey: masterDataKeys.selector(scene),
-    queryFn: () => fetchSelectorCandidates(scene),
   })
 }
 

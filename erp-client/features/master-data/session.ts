@@ -19,9 +19,6 @@ import type {
   MasterDataListResult,
   MasterDataMutationResult,
   MasterDataResource,
-  SelectorCandidate,
-  SelectorQueryResult,
-  SelectorQueryScene,
 } from "@/features/master-data/types"
 
 const listOverlays = new Map<string, MasterDataListItem>()
@@ -460,7 +457,7 @@ export function reviseW14Object(
     actor: ACTOR,
     changeReason,
     reference: `MD-REV-${center.stableNo}-v${newRevNo}`,
-    nextActions: ["查看变更历史", "查看哪里能选到"],
+    nextActions: ["查看变更历史", "返回列表"],
   }
   idempotencyResults.set(input.idempotencyKey, result)
   return result
@@ -660,132 +657,4 @@ export function queryW14Idempotency(
   key: string
 ): MasterDataMutationResult | null {
   return idempotencyResults.get(key) ?? null
-}
-
-export function queryW14Selector(
-  scene: SelectorQueryScene
-): SelectorQueryResult {
-  const asOf = new Date().toISOString()
-  const pick = (
-    resource: MasterDataResource,
-    map: (row: MasterDataListItem) => SelectorCandidate | null
-  ): SelectorCandidate[] =>
-    listW14Rows(resource)
-      .map(map)
-      .filter((x): x is SelectorCandidate => Boolean(x))
-
-  if (scene === "sales_pick") {
-    return {
-      scene,
-      asOf,
-      note: "销售建单可选的可销售项目（已启用且当前有效）；建单时会再核对一次。",
-      candidates: pick("sellable-items", (row) => {
-        if (row.lifecycleStatus !== "ENABLED") return null
-        if (row.revisionTiming === "FUTURE" && row.scheduledLifecycleStatus === "DISABLED") {
-          // current version still eligible
-        }
-        const elig = row.selectorEligibility.find((s) => s.context === "sales_pick")
-        if (elig && !elig.eligible) return null
-        return {
-          stableId: row.stableId,
-          stableNo: row.stableNo,
-          name: row.name,
-          revisionId: row.currentRevisionId,
-          revisionNo: row.revisionNo,
-          eligible: true,
-        }
-      }),
-    }
-  }
-
-  if (scene === "procurement_supplier") {
-    return {
-      scene,
-      asOf,
-      note: "采购可选的供应商（启用、能力与资质需匹配）；列表可选不代表建单一定通过。",
-      candidates: pick("suppliers", (row) => {
-        const elig = row.selectorEligibility.find(
-          (s) => s.context === "procurement_supplier"
-        )
-        if (!elig?.eligible) {
-          return {
-            stableId: row.stableId,
-            stableNo: row.stableNo,
-            name: row.name,
-            revisionId: row.currentRevisionId,
-            revisionNo: row.revisionNo,
-            eligible: false,
-            reason: elig?.reason ?? "不可选",
-          }
-        }
-        return {
-          stableId: row.stableId,
-          stableNo: row.stableNo,
-          name: row.name,
-          revisionId: row.currentRevisionId,
-          revisionNo: row.revisionNo,
-          eligible: true,
-          reason: elig.reason,
-        }
-      }),
-    }
-  }
-
-  if (scene === "sku_pick") {
-    return {
-      scene,
-      asOf,
-      note: "可选商品需已启用，且规格、基础单位完整。",
-      candidates: pick("products", (row) => {
-        const ok = row.lifecycleStatus === "ENABLED"
-        return {
-          stableId: row.stableId,
-          stableNo: row.stableNo,
-          name: row.name,
-          revisionId: row.currentRevisionId,
-          revisionNo: row.revisionNo,
-          eligible: ok,
-          reason: ok ? undefined : "当前停用",
-        }
-      }),
-    }
-  }
-
-  if (scene === "voucher_category") {
-    return {
-      scene,
-      asOf,
-      note: "卡券类目（ERP 销售口径，不含商城玩法）。",
-      candidates: pick("voucher-categories", (row) => ({
-        stableId: row.stableId,
-        stableNo: row.stableNo,
-        name: row.name,
-        revisionId: row.currentRevisionId,
-        revisionNo: row.revisionNo,
-        eligible: row.lifecycleStatus === "ENABLED",
-        reason:
-          row.lifecycleStatus === "ENABLED"
-            ? "ERP 销售项 · 无玩法字段"
-            : "当前停用",
-      })),
-    }
-  }
-
-  return {
-    scene: "warehouse_pick",
-    asOf,
-    note: "可选仓库需已启用且在你的数据范围内；出入库另在库存台账处理。",
-    candidates: pick("warehouses", (row) => ({
-      stableId: row.stableId,
-      stableNo: row.stableNo,
-      name: row.name,
-      revisionId: row.currentRevisionId,
-      revisionNo: row.revisionNo,
-      eligible: row.lifecycleStatus === "ENABLED",
-      reason:
-        row.lifecycleStatus === "ENABLED"
-          ? "可查询；仓库资料暂不可改"
-          : "当前停用",
-    })),
-  }
 }
