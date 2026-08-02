@@ -27,10 +27,12 @@ import {
   MaintenanceBanner,
   MetricItem,
   MetricStrip,
+  CustomerCombobox,
   OptionCombobox,
   PageHeader,
   type ImportStageStates,
 } from "@/components/business"
+import { useCustomerDirectoryQuery } from "@/features/customers/queries"
 import {
   Alert,
   AlertDescription,
@@ -263,11 +265,29 @@ function OverviewView({
 }) {
   const isMobile = useIsMobile()
   const freezeQuery = useMaintenanceFreezeQuery()
+  const customerDirectoryQuery = useCustomerDirectoryQuery({
+    scope: "team",
+    status: "all",
+  })
   const [qDraft, setQDraft] = React.useState(urlState.q ?? "")
 
   React.useEffect(() => {
     setQDraft(urlState.q ?? "")
   }, [urlState.q])
+
+  const customerComboboxItems = React.useMemo(
+    () =>
+      (customerDirectoryQuery.data?.items ?? []).map((c) => ({
+        id: c.id,
+        customerNo: c.customerNo,
+        legalName: c.legalName,
+        shortName: c.shortName,
+        statusLabel: c.statusLabel.label,
+        statusTone: c.statusLabel.tone,
+        ownerName: c.ownerName,
+      })),
+    [customerDirectoryQuery.data?.items]
+  )
 
   const listQuery = useOwnershipMigrationListQuery({
     mallId: urlState.mall ?? MALL.id,
@@ -617,27 +637,18 @@ function OverviewView({
                 </div>
                 <div className="space-y-1">
                   <Label className="text-xs">客户</Label>
-                  <Input
-                    className="h-8 w-[10rem]"
-                    placeholder="客户名/编号"
-                    defaultValue={urlState.customer ?? ""}
-                    key={urlState.customer ?? "cust"}
-                    onBlur={(e) =>
+                  <CustomerCombobox
+                    value={urlState.customer || undefined}
+                    onValueChange={(id) =>
                       patchUrl({
-                        customer: e.target.value.trim() || undefined,
+                        customer: id || undefined,
                         page: 1,
                       })
                     }
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        patchUrl({
-                          customer:
-                            (e.target as HTMLInputElement).value.trim() ||
-                            undefined,
-                          page: 1,
-                        })
-                      }
-                    }}
+                    customers={customerComboboxItems}
+                    loading={customerDirectoryQuery.isPending}
+                    className="w-[14rem]"
+                    placeholder="全部客户"
                   />
                 </div>
                 <div className="space-y-1">

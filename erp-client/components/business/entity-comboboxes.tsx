@@ -348,6 +348,162 @@ export function ProductCombobox({
 }
 
 // ---------------------------------------------------------------------------
+// 结算主体 / Party
+// ---------------------------------------------------------------------------
+
+export type SettlementPartyComboboxItem = Readonly<{
+  partyId: string
+  displayName: string
+  partyCode?: string
+  statusLabel?: string
+  statusTone?: StatusTone
+  description?: string
+}>
+
+export type SettlementPartyComboboxProps = EntityComboboxBaseProps & {
+  parties: readonly SettlementPartyComboboxItem[]
+}
+
+/** 结算主体选择：搜索名称与编号。 */
+export function SettlementPartyCombobox({
+  parties,
+  placeholder = "搜索结算主体",
+  emptyLabel = "没有符合条件的结算主体",
+  ...props
+}: SettlementPartyComboboxProps) {
+  const items = React.useMemo(
+    () =>
+      mapToOptions(
+        parties.map((p) => ({
+          id: p.partyId,
+          code: p.partyCode ?? p.partyId,
+          label: p.displayName,
+          status: {
+            label: p.statusLabel ?? "可选",
+            tone: p.statusTone ?? "neutral",
+          },
+          description: p.description,
+        }))
+      ),
+    [parties]
+  )
+
+  return (
+    <BusinessObjectCombobox
+      {...props}
+      items={items}
+      label="结算主体"
+      placeholder={placeholder}
+      emptyLabel={emptyLabel}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 仓库
+// ---------------------------------------------------------------------------
+
+export type WarehouseComboboxItem = Readonly<{
+  warehouseId: string
+  warehouseName: string
+  warehouseCode?: string
+  statusLabel?: string
+  statusTone?: StatusTone
+  description?: string
+}>
+
+export type WarehouseComboboxProps = EntityComboboxBaseProps & {
+  warehouses: readonly WarehouseComboboxItem[]
+}
+
+/** 仓库选择：搜索名称与编码。 */
+export function WarehouseCombobox({
+  warehouses,
+  placeholder = "搜索仓库名称或编码",
+  emptyLabel = "没有符合条件的仓库",
+  ...props
+}: WarehouseComboboxProps) {
+  const items = React.useMemo(
+    () =>
+      mapToOptions(
+        warehouses.map((w) => ({
+          id: w.warehouseId,
+          code: w.warehouseCode ?? w.warehouseId,
+          label: w.warehouseName,
+          status: {
+            label: w.statusLabel ?? "可选",
+            tone: w.statusTone ?? "neutral",
+          },
+          description: w.description,
+        }))
+      ),
+    [warehouses]
+  )
+
+  return (
+    <BusinessObjectCombobox
+      {...props}
+      items={items}
+      label="仓库"
+      placeholder={placeholder}
+      emptyLabel={emptyLabel}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// 负责人 / 用户
+// ---------------------------------------------------------------------------
+
+export type OwnerComboboxItem = Readonly<{
+  userId: string
+  displayName: string
+  userCode?: string
+  statusLabel?: string
+  statusTone?: StatusTone
+  description?: string
+}>
+
+export type OwnerComboboxProps = EntityComboboxBaseProps & {
+  owners: readonly OwnerComboboxItem[]
+}
+
+/** 负责人选择：搜索姓名与工号。 */
+export function OwnerCombobox({
+  owners,
+  placeholder = "搜索负责人或工号",
+  emptyLabel = "没有符合条件的负责人",
+  ...props
+}: OwnerComboboxProps) {
+  const items = React.useMemo(
+    () =>
+      mapToOptions(
+        owners.map((o) => ({
+          id: o.userId,
+          code: o.userCode ?? o.userId,
+          label: o.displayName,
+          status: {
+            label: o.statusLabel ?? "在职",
+            tone: o.statusTone ?? "success",
+          },
+          description: o.description,
+        }))
+      ),
+    [owners]
+  )
+
+  return (
+    <BusinessObjectCombobox
+      {...props}
+      items={items}
+      label="负责人"
+      placeholder={placeholder}
+      emptyLabel={emptyLabel}
+    />
+  )
+}
+
+// ---------------------------------------------------------------------------
 // 枚举 / 筛选便捷封装（固定 options 的命名别名场景）
 // ---------------------------------------------------------------------------
 

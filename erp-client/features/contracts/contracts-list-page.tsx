@@ -15,6 +15,7 @@ import {
   BackgroundJobProgress,
   BusinessStatusBadge,
   BusinessTableFrame,
+  CustomerCombobox,
   DataFreshness,
   DataTable,
   FormalActionResult,
@@ -25,8 +26,14 @@ import {
   PageActions,
   PageHeader,
   QuickPreviewSheet,
+  SettlementPartyCombobox,
 } from "@/components/business"
-import { useAppForm } from "@/components/form"
+import { toFieldErrors, useAppForm } from "@/components/form"
+import {
+  PAYMENT_TERM_OPTIONS,
+  SETTLEMENT_PARTY_OPTIONS,
+  paymentTermLabel,
+} from "@/lib/business-options"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -64,15 +71,21 @@ import type {
   ContractExportJob,
   ContractListRow,
 } from "@/features/contracts/types"
-import { useCustomerCenterQuery } from "@/features/customers/queries"
+import {
+  useCustomerCenterQuery,
+  useCustomerDirectoryQuery,
+} from "@/features/customers/queries"
+import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 
 const uploadSchema = z
   .object({
     pdfFile: z.custom<File | null>(),
     contractNo: z.string().trim().min(1, "请填写合同编号"),
-    customerName: z.string().trim().min(2, "请填写客户名称"),
-    settlementPartyName: z.string().trim().min(2, "请填写结算主体"),
-    paymentTerms: z.string().trim().min(1, "请填写付款条件摘要"),
+    customerId: z.string().trim().min(1, "请选择客户"),
+    customerName: z.string().trim().min(2, "请选择客户"),
+    settlementPartyId: z.string().trim().min(1, "请选择结算主体"),
+    settlementPartyName: z.string().trim().min(2, "请选择结算主体"),
+    paymentTerms: z.string().trim().min(1, "请选择付款条件"),
     signedAt: z.string().min(1, "请填写签订日期"),
     validFrom: z.string().min(1, "请填写有效期起"),
     validTo: z.string().min(1, "请填写有效期止"),
@@ -100,11 +113,42 @@ export function ContractsListPage({
 }) {
   const contractsQuery = useContractsQuery()
   const customerQuery = useCustomerCenterQuery(initialCustomerId)
+  const customerDirectoryQuery = useCustomerDirectoryQuery({
+    scope: "team",
+    status: "active",
+  })
   const allRows = React.useMemo(
     () => contractsQuery.data ?? [],
     [contractsQuery.data]
   )
   const seededCustomerRef = React.useRef(false)
+
+  const customerComboboxItems = React.useMemo(
+    () =>
+      (customerDirectoryQuery.data?.items ?? []).map((c) => ({
+        id: c.id,
+        customerNo: c.customerNo,
+        legalName: c.legalName,
+        shortName: c.shortName,
+        statusLabel: c.statusLabel.label,
+        statusTone: c.statusLabel.tone,
+        ownerName: c.ownerName,
+      })),
+    [customerDirectoryQuery.data?.items]
+  )
+
+  const settlementPartyItems = React.useMemo(() => {
+    const fromRows = allRows.map((r) => ({
+      partyId: r.settlementParty.partyId,
+      displayName: r.settlementParty.displayName,
+      statusLabel: "可选" as const,
+      statusTone: "neutral" as const,
+    }))
+    const byId = new Map(
+      [...SETTLEMENT_PARTY_OPTIONS, ...fromRows].map((p) => [p.partyId, p])
+    )
+    return [...byId.values()]
+  }, [allRows])
 
   const [search, setSearch] = React.useState(initialSearch)
   const [metricKey, setMetricKey] =
@@ -173,9 +217,11 @@ export function ContractsListPage({
     defaultValues: {
       pdfFile: null as File | null,
       contractNo: "",
+      customerId: initialCustomerId,
       customerName: "",
+      settlementPartyId: "",
       settlementPartyName: "",
-      paymentTerms: "",
+      paymentTerms: "CONTRACT",
       signedAt: "2026-08-02",
       validFrom: "2026-08-02",
       validTo: "2027-08-01",
@@ -186,10 +232,12 @@ export function ContractsListPage({
       const result = await uploadMutation.mutateAsync({
         pdfFile: value.pdfFile,
         contractNo: value.contractNo.trim(),
-        customerId: initialCustomerId || undefined,
+        customerId:
+          value.customerId.trim() || initialCustomerId || undefined,
         customerName: value.customerName.trim(),
         settlementPartyName: value.settlementPartyName.trim(),
-        paymentTerms: value.paymentTerms.trim(),
+        paymentTerms:
+          paymentTermLabel(value.paymentTerms) || value.paymentTerms.trim(),
         signedAt: value.signedAt,
         validFrom: value.validFrom,
         validTo: value.validTo,
@@ -221,9 +269,9 @@ export function ContractsListPage({
     const customer = customerQuery.data
     if (!customer || seededCustomerRef.current) return
     seededCustomerRef.current = true
-    uploadForm.setFieldValue("customerName", customer.currentRevision.legalName)
+    uploadForm.setFieldValue("customerId", customer.customerId)
     uploadForm.setFieldValue(
-      "settlementPartyName",
+      "customerName",
       customer.currentRevision.legalName
     )
   }, [customerQuery.data, uploadForm])
@@ -803,18 +851,74 @@ export function ContractsListPage({
                 children={(field) => <field.TextField label="合同编号" />}
               />
               <uploadForm.AppField
-                name="customerName"
-                children={(field) => <field.TextField label="客户名称" />}
+                name="customerId"
+                children={(field) => {
+                  const isInvalid =
+                    field.state.meta.isTouched && !field.state.meta.isValid
+                  const errors = toFieldErrors(field.state.meta.errors)
+                  return (
+                    <Field data-invalid={isInvalid || undefined}>
+                      <FieldLabel htmlFor="upload-customerId">客户</FieldLabel>
+                      <CustomerCombobox
+                        value={field.state.value || undefined}
+                        onValueChange={(id) => {
+                          const next = id ?? ""
+                          field.handleChange(next)
+                          const customer = customerComboboxItems.find(
+                            (c) => c.id === next
+                          )
+                          uploadForm.setFieldValue(
+                            "customerName",
+                            customer?.legalName ?? ""
+                          )
+                        }}
+                        customers={customerComboboxItems}
+                        loading={customerDirectoryQuery.isPending}
+                        placeholder="搜索客户编号或名称"
+                      />
+                      {isInvalid ? <FieldError errors={errors} /> : null}
+                    </Field>
+                  )
+                }}
               />
               <uploadForm.AppField
-                name="settlementPartyName"
-                children={(field) => <field.TextField label="结算主体" />}
+                name="settlementPartyId"
+                children={(field) => {
+                  const isInvalid =
+                    field.state.meta.isTouched && !field.state.meta.isValid
+                  const errors = toFieldErrors(field.state.meta.errors)
+                  return (
+                    <Field data-invalid={isInvalid || undefined}>
+                      <FieldLabel htmlFor="upload-settlementPartyId">
+                        结算主体
+                      </FieldLabel>
+                      <SettlementPartyCombobox
+                        value={field.state.value || undefined}
+                        onValueChange={(id) => {
+                          const next = id ?? ""
+                          field.handleChange(next)
+                          const party = settlementPartyItems.find(
+                            (p) => p.partyId === next
+                          )
+                          uploadForm.setFieldValue(
+                            "settlementPartyName",
+                            party?.displayName ?? ""
+                          )
+                        }}
+                        parties={settlementPartyItems}
+                        placeholder="搜索结算主体"
+                      />
+                      {isInvalid ? <FieldError errors={errors} /> : null}
+                    </Field>
+                  )
+                }}
               />
               <uploadForm.AppField
                 name="paymentTerms"
                 children={(field) => (
-                  <field.TextField
-                    label="付款条件摘要"
+                  <field.SelectField
+                    label="付款条件"
+                    options={PAYMENT_TERM_OPTIONS}
                     description="用于销售单快速带出；完整条款以 PDF 为准。"
                   />
                 )}

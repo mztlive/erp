@@ -29,6 +29,7 @@ import {
   PageActions,
   PageHeader,
   QuickPreviewSheet,
+  SettlementPartyCombobox,
 } from "@/components/business"
 import {
   Alert,
@@ -1051,24 +1052,24 @@ export function CustomerReceivablesPage() {
                       <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
                         往来主体
                       </span>
-                      <OptionCombobox
-                        value={counterpartyPartyId ?? ""}
-                        onValueChange={(v) => {
+                      <SettlementPartyCombobox
+                        value={counterpartyPartyId || undefined}
+                        onValueChange={(id) => {
                           patchUrl({
-                            counterpartyId: v || null,
+                            counterpartyId: id || null,
                           })
                           setPagination((p) => ({ ...p, pageIndex: 0 }))
                         }}
-                        options={[
-                          { value: "", label: "全部主体" },
-                          ...counterparties.map((c) => ({
-                            value: c.counterpartyPartyId,
-                            label: c.counterpartyPartyName,
-                          })),
-                        ]}
-                        className="w-52"
-                        size="sm"
-                        allowClear={false}
+                        parties={counterparties.map((c) => ({
+                          partyId: c.counterpartyPartyId,
+                          displayName: c.counterpartyPartyName,
+                          description: c.customerName
+                            ? `经营客户 ${c.customerName}`
+                            : undefined,
+                          statusLabel: "可选",
+                          statusTone: "neutral",
+                        }))}
+                        className="w-56"
                         aria-label="筛选往来主体"
                         placeholder="全部主体"
                       />
@@ -1451,21 +1452,21 @@ export function CustomerReceivablesPage() {
           </DialogHeader>
           <div className="space-y-2">
             <Label htmlFor="pick-party">往来主体</Label>
-            <OptionCombobox
-              id="pick-party"
-              value={selectedPartyId}
-              onValueChange={(v) => setSelectedPartyId(v ?? "")}
-              options={[
-                { value: "", label: "请选择" },
-                ...counterparties.map((c) => ({
-                  value: c.counterpartyPartyId,
-                  label: `${c.counterpartyPartyName}（${c.customerName}）`,
-                })),
-              ]}
+            <SettlementPartyCombobox
+              value={selectedPartyId || undefined}
+              onValueChange={(id) => setSelectedPartyId(id ?? "")}
+              parties={counterparties.map((c) => ({
+                partyId: c.counterpartyPartyId,
+                displayName: c.counterpartyPartyName,
+                description: c.customerName
+                  ? `经营客户 ${c.customerName}`
+                  : undefined,
+                statusLabel: "可选",
+                statusTone: "neutral",
+              }))}
               className="w-full"
-              allowClear={false}
               aria-label="往来主体"
-              placeholder="请选择"
+              placeholder="请选择往来主体"
             />
           </div>
           <DialogFooter>

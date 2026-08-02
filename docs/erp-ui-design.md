@@ -437,7 +437,9 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 #### 4.6.1 建单 / 改单
 
 - 全宽任务页签；左侧表头字段，下方 `EditableLineItemTable`。  
-- 选客户、合同、可销售项目：一律 `BusinessObjectCombobox`（只出有效对象）。  
+- 选客户、合同、可销售项目、供应商、结算主体、仓库、负责人：一律业务实体 Combobox（`CustomerCombobox` / `ContractCombobox` / `ProductCombobox` / `SupplierCombobox` / `SettlementPartyCombobox` / `WarehouseCombobox` / `OwnerCombobox` 等，底层 `BusinessObjectCombobox`；只出有效对象）。  
+- 状态、付款条件、单位、承运方等码表：一律 `OptionCombobox` / `field.SelectField`；共享码表见 `erp-client/lib/business-options.ts`。  
+- **禁止**用自由 `Input`/`TextField` 录入已有业务对象 ID 或名称；列表全文关键词搜索除外。  
 - 行内即时前端校验 + 提交前 `ValidationSummary`。  
 - 自动草稿保存（防抖）+ 显式「保存草稿」；`EditorPresence` 提示他人占用。  
 - 提交：`FormalActionConfirmDialog` → mutation → `FormalActionResult`（含单号、下步建议）。

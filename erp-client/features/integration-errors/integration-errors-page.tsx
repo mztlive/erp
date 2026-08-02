@@ -29,6 +29,7 @@ import {
   type InterfaceErrorResolutionActions,
   type InterfaceErrorStatus,
 } from "@/components/business"
+import { TRANSFER_ROLE_OPTIONS } from "@/lib/business-options"
 import {
   Alert,
   AlertDescription,
@@ -1726,11 +1727,17 @@ export function IntegrationErrorsPage({
                       ) : null}
                       {can("TRANSFER") && item.workItem ? (
                         <div className="flex flex-wrap items-center gap-2">
-                          <Input
-                            className="h-8 w-28"
+                          <OptionCombobox
                             value={transferRole}
-                            onChange={(e) => setTransferRole(e.target.value)}
+                            onValueChange={(v) =>
+                              setTransferRole(v ?? "研发运维")
+                            }
+                            options={TRANSFER_ROLE_OPTIONS}
+                            className="w-32"
+                            size="sm"
+                            allowClear={false}
                             aria-label="转交目标角色"
+                            placeholder="目标角色"
                           />
                           <Button
                             type="button"

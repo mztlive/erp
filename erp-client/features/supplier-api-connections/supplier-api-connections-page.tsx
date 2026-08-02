@@ -31,10 +31,13 @@ import {
   MetricFilterItem,
   MetricStrip,
   OptionCombobox,
+  SupplierCombobox,
   PageActions,
   PageHeader,
 } from "@/components/business"
-import { useAppForm } from "@/components/form"
+import { toFieldErrors, useAppForm } from "@/components/form"
+import { PROCUREMENT_SUPPLIER_OPTIONS } from "@/lib/business-options"
+import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import {
   Alert,
   AlertDescription,
@@ -480,13 +483,15 @@ function ConnectionList({
 
   const createSchema = z.object({
     connectionCode: z.string().trim().min(3, "请填写连接代码"),
-    supplierName: z.string().trim().min(2, "请填写供应商名称"),
+    supplierId: z.string().trim().min(1, "请选择供应商"),
+    supplierName: z.string().trim().min(2, "请选择供应商"),
     environment: z.enum(["DEVELOPMENT", "STAGING", "PRODUCTION"]),
   })
 
   const form = useAppForm({
     defaultValues: {
       connectionCode: "",
+      supplierId: "",
       supplierName: "",
       environment: "PRODUCTION" as "DEVELOPMENT" | "STAGING" | "PRODUCTION",
     },
@@ -494,7 +499,7 @@ function ConnectionList({
     onSubmit: async ({ value }) => {
       const outcome = await createMutation.mutateAsync({
         connectionCode: value.connectionCode,
-        supplierId: `sup_${value.supplierName.slice(0, 4)}`,
+        supplierId: value.supplierId,
         supplierName: value.supplierName,
         environment: value.environment,
         role: urlState.role,
@@ -864,10 +869,34 @@ function ConnectionList({
               )}
             />
             <form.AppField
-              name="supplierName"
-              children={(field) => (
-                <field.TextField label="供应商名称" placeholder="供应商显示名" />
-              )}
+              name="supplierId"
+              children={(field) => {
+                const isInvalid =
+                  field.state.meta.isTouched && !field.state.meta.isValid
+                const errors = toFieldErrors(field.state.meta.errors)
+                return (
+                  <Field data-invalid={isInvalid || undefined}>
+                    <FieldLabel htmlFor="create-supplierId">供应商</FieldLabel>
+                    <SupplierCombobox
+                      value={field.state.value || undefined}
+                      onValueChange={(id) => {
+                        const next = id ?? ""
+                        field.handleChange(next)
+                        const supplier = PROCUREMENT_SUPPLIER_OPTIONS.find(
+                          (s) => s.supplierId === next
+                        )
+                        form.setFieldValue(
+                          "supplierName",
+                          supplier?.supplierName ?? ""
+                        )
+                      }}
+                      suppliers={PROCUREMENT_SUPPLIER_OPTIONS}
+                      placeholder="搜索供应商名称或编码"
+                    />
+                    {isInvalid ? <FieldError errors={errors} /> : null}
+                  </Field>
+                )
+              }}
             />
             <form.AppField
               name="environment"

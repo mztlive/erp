@@ -8,14 +8,25 @@ import { z } from "zod"
 
 import {
   ContractCombobox,
+  CustomerCombobox,
   DocumentSection,
   EditableLineItemTable,
   MoneyValue,
+  OwnerCombobox,
   PageHeader,
+  ProductCombobox,
+  SettlementPartyCombobox,
   StickyTotalBar,
   type EditableLineItemColumn,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
+import {
+  DEMO_OWNER_OPTIONS,
+  PAYMENT_TERM_OPTIONS,
+  SETTLEMENT_PARTY_OPTIONS,
+  UNIT_OPTIONS,
+  paymentTermLabel,
+} from "@/lib/business-options"
 import {
   Alert,
   AlertDescription,
@@ -37,7 +48,11 @@ import {
 } from "@/components/ui/field"
 import { useContractCenterQuery, useContractsForNewSalesOrderQuery } from "@/features/contracts/queries"
 import { contractPdfError } from "@/features/contracts/pdf"
-import { useCustomerCenterQuery } from "@/features/customers/queries"
+import {
+  useCustomerCenterQuery,
+  useCustomerDirectoryQuery,
+} from "@/features/customers/queries"
+import { useMasterDataListQuery } from "@/features/master-data/queries"
 import { useCreateSalesOrderMutation } from "@/features/sales-orders/queries"
 import type {
   CreateSalesOrderInput,
@@ -79,12 +94,15 @@ const createSalesOrderSchema = z
     uploadedSignedAt: z.string(),
     uploadedValidFrom: z.string(),
     uploadedValidTo: z.string(),
+    customerId: z.string(),
     customerName: z.string(),
+    settlementPartyId: z.string(),
     settlementEntity: z.string(),
     nature: z.enum(["physical_service", "card_voucher"]),
-    ownerName: z.string().trim().min(1, "请输入负责销售"),
+    ownerUserId: z.string(),
+    ownerName: z.string().trim().min(1, "请选择负责销售"),
     welfareScene: z.string().trim().min(1, "请输入福利场景"),
-    paymentTerms: z.string().trim().min(1, "请输入付款条件"),
+    paymentTerms: z.string().trim().min(1, "请选择付款条件"),
     fulfillmentDeadline: z.string().min(1, "请选择履约期限"),
     taxRatePercent: positiveDecimal("税率").refine(
       (value) => Number(value) <= 100,
@@ -153,7 +171,7 @@ const createSalesOrderSchema = z
         message:
           value.contractSource === "existing"
             ? "客户尚未加载完成"
-            : "请填写客户名称",
+            : "请选择客户",
       })
     }
     if (!value.settlementEntity.trim()) {
@@ -163,7 +181,7 @@ const createSalesOrderSchema = z
         message:
           value.contractSource === "existing"
             ? "结算主体尚未加载完成"
-            : "请填写结算主体",
+            : "请选择结算主体",
       })
     }
     if (value.nature === "card_voucher" && value.lineItems.length !== 1) {
@@ -301,12 +319,65 @@ export function SalesOrderCreatePage({
   const router = useRouter()
   const contractsQuery = useContractsForNewSalesOrderQuery()
   const customerQuery = useCustomerCenterQuery(initialCustomerId)
+  const customerDirectoryQuery = useCustomerDirectoryQuery({
+    scope: "team",
+    status: "active",
+  })
+  const productsQuery = useMasterDataListQuery({
+    resource: "products",
+    lifecycleStatus: "enabled",
+  })
   const createMutation = useCreateSalesOrderMutation()
   const [selectedContractId, setSelectedContractId] =
     React.useState(initialContractId)
   const preferredRevisionRef = React.useRef(initialContractRevisionId)
   const submitIntentRef = React.useRef<SalesOrderCreateIntent>("SAVE_DRAFT")
   const contractQuery = useContractCenterQuery(selectedContractId)
+
+  const customerComboboxItems = React.useMemo(
+    () =>
+      (customerDirectoryQuery.data?.items ?? []).map((c) => ({
+        id: c.id,
+        customerNo: c.customerNo,
+        legalName: c.legalName,
+        shortName: c.shortName,
+        statusLabel: c.statusLabel.label,
+        statusTone: c.statusLabel.tone,
+        ownerName: c.ownerName,
+      })),
+    [customerDirectoryQuery.data?.items]
+  )
+
+  const productComboboxItems = React.useMemo(
+    () =>
+      (productsQuery.data?.rows ?? []).map((p) => ({
+        productId: p.stableId,
+        sku: p.stableNo,
+        name: p.name,
+        statusLabel: p.lifecycleStatusLabel,
+        statusTone: p.lifecycleTone,
+        description: p.keyFacts.find((f) => f.label === "基础单位")?.value
+          ? `单位 ${p.keyFacts.find((f) => f.label === "基础单位")?.value}`
+          : undefined,
+      })),
+    [productsQuery.data?.rows]
+  )
+
+  const settlementPartyItems = React.useMemo(() => {
+    const fromContracts = (contractsQuery.data ?? []).map((c) => ({
+      partyId: c.settlementParty.partyId,
+      displayName: c.settlementParty.displayName,
+      statusLabel: "可选" as const,
+      statusTone: "neutral" as const,
+    }))
+    const byId = new Map(
+      [...SETTLEMENT_PARTY_OPTIONS, ...fromContracts].map((p) => [
+        p.partyId,
+        p,
+      ])
+    )
+    return [...byId.values()]
+  }, [contractsQuery.data])
 
   const form = useAppForm({
     defaultValues: {
@@ -319,9 +390,12 @@ export function SalesOrderCreatePage({
       uploadedSignedAt: "2026-08-02",
       uploadedValidFrom: "2026-08-02",
       uploadedValidTo: "2027-08-01",
+      customerId: initialCustomerId,
       customerName: "",
+      settlementPartyId: "",
       settlementEntity: "",
       nature: initialNature,
+      ownerUserId: "",
       ownerName: "",
       welfareScene: "",
       paymentTerms: "",
@@ -347,7 +421,8 @@ export function SalesOrderCreatePage({
                 source: "upload_pdf",
                 pdfFile: value.contractPdf!,
                 contractNo: value.uploadedContractNo.trim(),
-                customerId: initialCustomerId || undefined,
+                customerId:
+                  value.customerId.trim() || initialCustomerId || undefined,
                 customerName: value.customerName.trim(),
                 settlementPartyName: value.settlementEntity.trim(),
                 signedAt: value.uploadedSignedAt,
@@ -357,7 +432,7 @@ export function SalesOrderCreatePage({
         nature: value.nature,
         ownerName: value.ownerName,
         welfareScene: value.welfareScene,
-        paymentTerms: value.paymentTerms,
+        paymentTerms: paymentTermLabel(value.paymentTerms) || value.paymentTerms,
         fulfillmentDeadline: value.fulfillmentDeadline,
         taxRatePercent: value.taxRatePercent,
         remark: value.remark,
@@ -414,17 +489,35 @@ export function SalesOrderCreatePage({
       "contractRevisionLabel",
       `${contract.contractNo}@v${revision?.revisionNo ?? contract.currentRevision.revisionNo}`
     )
+    form.setFieldValue("customerId", contract.customer.id)
     form.setFieldValue("customerName", contract.customer.displayName)
+    form.setFieldValue(
+      "settlementPartyId",
+      contract.currentRevision.settlementParty.id
+    )
     form.setFieldValue(
       "settlementEntity",
       contract.currentRevision.settlementParty.displayName
     )
-    form.setFieldValue("ownerName", contract.ownerLabel.split(" · ")[0] ?? "")
-    form.setFieldValue(
-      "paymentTerms",
-      contract.currentRevision.paymentTermSnapshot.label
+    const ownerLabel = contract.ownerLabel.split(" · ")[0] ?? ""
+    const ownerMatch = DEMO_OWNER_OPTIONS.find(
+      (o) => o.displayName === ownerLabel
     )
+    form.setFieldValue("ownerUserId", ownerMatch?.userId ?? "")
+    form.setFieldValue("ownerName", ownerLabel)
+    const termLabel = contract.currentRevision.paymentTermSnapshot.label
+    const termMatch = PAYMENT_TERM_OPTIONS.find(
+      (o) => o.label === termLabel || o.value === termLabel
+    )
+    form.setFieldValue("paymentTerms", termMatch?.value ?? "CONTRACT")
   }, [contractQuery.data, form])
+
+  React.useEffect(() => {
+    const customer = customerQuery.data
+    if (!customer || !initialCustomerId) return
+    form.setFieldValue("customerId", customer.customerId)
+    form.setFieldValue("customerName", customer.currentRevision.legalName)
+  }, [customerQuery.data, form, initialCustomerId])
 
   const handleContractChange = React.useCallback(
     (contractId: string) => {
@@ -612,11 +705,74 @@ export function SalesOrderCreatePage({
                           <field.DateField label="签订日期" />
                         )}
                       </form.AppField>
-                      <form.AppField name="customerName">
-                        {(field) => <field.TextField label="客户" />}
+                      <form.AppField name="customerId">
+                        {(field) => {
+                          const isInvalid =
+                            field.state.meta.isTouched && !field.state.meta.isValid
+                          const errors = toFieldErrors(field.state.meta.errors)
+                          return (
+                            <Field data-invalid={isInvalid || undefined}>
+                              <FieldLabel htmlFor="customerId">客户</FieldLabel>
+                              <CustomerCombobox
+                                value={field.state.value || undefined}
+                                onValueChange={(id) => {
+                                  const next = id ?? ""
+                                  field.handleChange(next)
+                                  const customer = customerComboboxItems.find(
+                                    (c) => c.id === next
+                                  )
+                                  form.setFieldValue(
+                                    "customerName",
+                                    customer?.legalName ?? ""
+                                  )
+                                }}
+                                customers={customerComboboxItems}
+                                loading={customerDirectoryQuery.isPending}
+                                disabled={
+                                  customerDirectoryQuery.isPending ||
+                                  customerDirectoryQuery.isError
+                                }
+                                placeholder="搜索客户编号或名称"
+                              />
+                              {isInvalid ? (
+                                <FieldError errors={errors} />
+                              ) : null}
+                            </Field>
+                          )
+                        }}
                       </form.AppField>
-                      <form.AppField name="settlementEntity">
-                        {(field) => <field.TextField label="结算主体" />}
+                      <form.AppField name="settlementPartyId">
+                        {(field) => {
+                          const isInvalid =
+                            field.state.meta.isTouched && !field.state.meta.isValid
+                          const errors = toFieldErrors(field.state.meta.errors)
+                          return (
+                            <Field data-invalid={isInvalid || undefined}>
+                              <FieldLabel htmlFor="settlementPartyId">
+                                结算主体
+                              </FieldLabel>
+                              <SettlementPartyCombobox
+                                value={field.state.value || undefined}
+                                onValueChange={(id) => {
+                                  const next = id ?? ""
+                                  field.handleChange(next)
+                                  const party = settlementPartyItems.find(
+                                    (p) => p.partyId === next
+                                  )
+                                  form.setFieldValue(
+                                    "settlementEntity",
+                                    party?.displayName ?? ""
+                                  )
+                                }}
+                                parties={settlementPartyItems}
+                                placeholder="搜索结算主体"
+                              />
+                              {isInvalid ? (
+                                <FieldError errors={errors} />
+                              ) : null}
+                            </Field>
+                          )
+                        }}
                       </form.AppField>
                       <form.AppField name="uploadedValidFrom">
                         {(field) => (
@@ -656,8 +812,34 @@ export function SalesOrderCreatePage({
                     />
                   )}
                 </form.AppField>
-                <form.AppField name="ownerName">
-                  {(field) => <field.TextField label="负责销售" />}
+                <form.AppField name="ownerUserId">
+                  {(field) => {
+                    const isInvalid =
+                      field.state.meta.isTouched && !field.state.meta.isValid
+                    const errors = toFieldErrors(field.state.meta.errors)
+                    return (
+                      <Field data-invalid={isInvalid || undefined}>
+                        <FieldLabel htmlFor="ownerUserId">负责销售</FieldLabel>
+                        <OwnerCombobox
+                          value={field.state.value || undefined}
+                          onValueChange={(id) => {
+                            const next = id ?? ""
+                            field.handleChange(next)
+                            const owner = DEMO_OWNER_OPTIONS.find(
+                              (o) => o.userId === next
+                            )
+                            form.setFieldValue(
+                              "ownerName",
+                              owner?.displayName ?? ""
+                            )
+                          }}
+                          owners={DEMO_OWNER_OPTIONS}
+                          placeholder="搜索负责人"
+                        />
+                        {isInvalid ? <FieldError errors={errors} /> : null}
+                      </Field>
+                    )
+                  }}
                 </form.AppField>
                 <form.AppField name="welfareScene">
                   {(field) => (
@@ -669,9 +851,10 @@ export function SalesOrderCreatePage({
                 </form.AppField>
                 <form.AppField name="paymentTerms">
                   {(field) => (
-                    <field.TextField
+                    <field.SelectField
                       label="付款条件"
-                      description="默认带出合同约定，可补充本单执行口径。"
+                      options={PAYMENT_TERM_OPTIONS}
+                      description="默认带出合同约定，可按本单执行口径调整。"
                     />
                   )}
                 </form.AppField>
@@ -708,22 +891,69 @@ export function SalesOrderCreatePage({
                       renderValue: ({ item }) => item.name,
                       renderEditor: ({ rowIndex }) => (
                         <div className="grid min-w-48 gap-2">
-                          <form.AppField name={`lineItems[${rowIndex}].name`}>
-                            {(field) => (
-                              <field.TextField
-                                label="销售项目"
-                                hideLabel
-                                placeholder={
-                                  nature === "card_voucher" ? "卡券类目" : "商品或服务"
-                                }
-                              />
-                            )}
-                          </form.AppField>
-                          <form.AppField name={`lineItems[${rowIndex}].sku`}>
-                            {(field) => (
-                              <field.TextField label="SKU / 类目编码" hideLabel placeholder="SKU / 类目编码" />
-                            )}
-                          </form.AppField>
+                          {nature === "card_voucher" ? (
+                            <>
+                              <form.AppField name={`lineItems[${rowIndex}].name`}>
+                                {(field) => (
+                                  <field.TextField
+                                    label="销售项目"
+                                    hideLabel
+                                    placeholder="卡券类目"
+                                  />
+                                )}
+                              </form.AppField>
+                              <form.AppField name={`lineItems[${rowIndex}].sku`}>
+                                {(field) => (
+                                  <field.TextField
+                                    label="类目编码"
+                                    hideLabel
+                                    placeholder="类目编码"
+                                  />
+                                )}
+                              </form.AppField>
+                            </>
+                          ) : (
+                            <form.AppField name={`lineItems[${rowIndex}].sku`}>
+                              {(field) => {
+                                const productId =
+                                  productComboboxItems.find(
+                                    (p) => p.sku === field.state.value
+                                  )?.productId ??
+                                  productComboboxItems.find(
+                                    (p) => p.name === values.lineItems[rowIndex]?.name
+                                  )?.productId
+                                return (
+                                  <ProductCombobox
+                                    value={productId}
+                                    onValueChange={(id) => {
+                                      const product = productComboboxItems.find(
+                                        (p) => p.productId === id
+                                      )
+                                      field.handleChange(product?.sku ?? "")
+                                      form.setFieldValue(
+                                        `lineItems[${rowIndex}].name`,
+                                        product?.name ?? ""
+                                      )
+                                      const unitHint =
+                                        product?.description?.replace(
+                                          /^单位\s*/,
+                                          ""
+                                        )
+                                      if (unitHint) {
+                                        form.setFieldValue(
+                                          `lineItems[${rowIndex}].unit`,
+                                          unitHint
+                                        )
+                                      }
+                                    }}
+                                    products={productComboboxItems}
+                                    loading={productsQuery.isPending}
+                                    placeholder="搜索 SKU 或商品名称"
+                                  />
+                                )
+                              }}
+                            </form.AppField>
+                          )}
                         </div>
                       ),
                     },
@@ -741,7 +971,13 @@ export function SalesOrderCreatePage({
                           </form.AppField>
                           <form.AppField name={`lineItems[${rowIndex}].unit`}>
                             {(field) => (
-                              <field.TextField label="单位" hideLabel placeholder="单位" />
+                              <field.SelectField
+                                label="单位"
+                                hideLabel
+                                options={UNIT_OPTIONS}
+                                placeholder="单位"
+                                allowClear={false}
+                              />
                             )}
                           </form.AppField>
                         </div>

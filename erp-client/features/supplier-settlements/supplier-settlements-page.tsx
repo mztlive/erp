@@ -822,25 +822,23 @@ function SettlementList({
                     ))}
                   </TabsList>
                 </Tabs>
-                <OptionCombobox
-                  value={urlState.supplierId || null}
-                  onValueChange={(v) =>
+                <SupplierCombobox
+                  value={urlState.supplierId || undefined}
+                  onValueChange={(id) =>
                     patchUrl({
-                      supplierId: v || undefined,
+                      supplierId: id || undefined,
                       page: 1,
                     })
                   }
-                  options={[
-                    { value: "", label: "全部供应商" },
-                    ...(data?.suppliers ?? []).map((s) => ({
-                      value: s.supplierId,
-                      label: s.supplierName,
-                    })),
-                  ]}
-                  className="w-[10rem]"
-                  size="sm"
+                  suppliers={(data?.suppliers ?? []).map((s) => ({
+                    supplierId: s.supplierId,
+                    supplierName: s.supplierName,
+                    statusLabel: "可选",
+                    statusTone: "neutral",
+                  }))}
+                  className="w-[12rem]"
                   aria-label="供应商"
-                  allowClear={false}
+                  placeholder="全部供应商"
                 />
                 <OptionCombobox
                   value={urlState.status || null}

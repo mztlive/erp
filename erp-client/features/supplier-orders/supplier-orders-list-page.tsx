@@ -24,6 +24,7 @@ import {
   PageHeader,
   QuickPreviewSheet,
   StatusTrackSummary,
+  SupplierCombobox,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -663,25 +664,22 @@ export function SupplierOrdersListPage() {
                   ))}
                 </ToggleGroup>
 
-                <OptionCombobox
-                  value={url.supplierId ?? ""}
-                  onValueChange={(v) =>
+                <SupplierCombobox
+                  value={url.supplierId || undefined}
+                  onValueChange={(id) =>
                     pushUrl({
-                      supplierId: v || undefined,
+                      supplierId: id || undefined,
                       page: 1,
                     })
                   }
-                  options={[
-                    { value: "", label: "全部供应商" },
-                    ...suppliers.map((s) => ({
-                      value: s.id,
-                      label: s.name,
-                    })),
-                  ]}
+                  suppliers={suppliers.map((s) => ({
+                    supplierId: s.id,
+                    supplierName: s.name,
+                    statusLabel: "可选",
+                    statusTone: "neutral",
+                  }))}
                   aria-label="供应商"
-                  className="w-[9rem]"
-                  size="sm"
-                  allowClear={false}
+                  className="w-[12rem]"
                   placeholder="全部供应商"
                 />
 

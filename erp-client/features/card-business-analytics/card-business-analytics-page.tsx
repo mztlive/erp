@@ -34,12 +34,16 @@ import {
   DataTable,
   MetricItem,
   MetricStrip,
+  CustomerCombobox,
   MoneyValue,
   OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
+  SalesOrderCombobox,
 } from "@/components/business"
+import { useCustomerDirectoryQuery } from "@/features/customers/queries"
+import { useSalesOrdersQuery } from "@/features/sales-orders/queries"
 import type { DataFreshnessState } from "@/components/business/page"
 import {
   Alert,
@@ -327,6 +331,41 @@ export function CardBusinessAnalyticsPage() {
   const [basisSheetOpen, setBasisSheetOpen] = React.useState(false)
   const [refreshFailed, setRefreshFailed] = React.useState(false)
   const [refreshing, setRefreshing] = React.useState(false)
+
+  const customerDirectoryQuery = useCustomerDirectoryQuery({
+    scope: "team",
+    status: "all",
+  })
+  const salesOrdersQuery = useSalesOrdersQuery()
+
+  const customerComboboxItems = React.useMemo(
+    () =>
+      (customerDirectoryQuery.data?.items ?? []).map((c) => ({
+        id: c.id,
+        customerNo: c.customerNo,
+        legalName: c.legalName,
+        shortName: c.shortName,
+        statusLabel: c.statusLabel.label,
+        statusTone: c.statusLabel.tone,
+        ownerName: c.ownerName,
+      })),
+    [customerDirectoryQuery.data?.items]
+  )
+
+  const salesOrderComboboxItems = React.useMemo(
+    () =>
+      (salesOrdersQuery.data?.rows ?? []).map((o) => ({
+        id: o.id,
+        documentNumber: o.documentNumber,
+        customerName: o.customerName,
+        statusLabel: o.primaryStatus.label,
+        statusTone: o.primaryStatus.tone,
+        amountGross: o.amountGross,
+        natureLabel:
+          o.nature === "card_voucher" ? "卡券" : "实物与服务",
+      })),
+    [salesOrdersQuery.data?.rows]
+  )
 
   const basisQuery = useDateBasisConfigQuery({
     scenario: basisConfigScenario,
@@ -1003,27 +1042,29 @@ export function CardBusinessAnalyticsPage() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="w28-customer">客户 ID</Label>
-            <input
-              id="w28-customer"
-              className="flex h-9 w-full min-w-36 rounded-lg border border-input bg-transparent px-3 text-sm"
-              placeholder="全部"
-              value={customerId ?? ""}
-              onChange={(e) =>
-                patchUrl({ customerId: e.target.value.trim() || null })
+            <Label htmlFor="w28-customer">客户</Label>
+            <CustomerCombobox
+              value={customerId}
+              onValueChange={(id) =>
+                patchUrl({ customerId: id || null })
               }
+              customers={customerComboboxItems}
+              loading={customerDirectoryQuery.isPending}
+              className="min-w-48"
+              placeholder="全部客户"
             />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="w28-so">销售单</Label>
-            <input
-              id="w28-so"
-              className="flex h-9 w-full min-w-36 rounded-lg border border-input bg-transparent px-3 text-sm"
-              placeholder="全部"
-              value={salesOrderId ?? ""}
-              onChange={(e) =>
-                patchUrl({ salesOrderId: e.target.value.trim() || null })
+            <SalesOrderCombobox
+              value={salesOrderId}
+              onValueChange={(id) =>
+                patchUrl({ salesOrderId: id || null })
               }
+              orders={salesOrderComboboxItems}
+              loading={salesOrdersQuery.isPending}
+              className="min-w-48"
+              placeholder="全部销售单"
             />
           </div>
           <div className="space-y-1.5">

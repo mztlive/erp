@@ -28,6 +28,7 @@ import {
   PageActions,
   PageHeader,
   QuickPreviewSheet,
+  SupplierCombobox,
 } from "@/components/business"
 import {
   Alert,
@@ -1067,22 +1068,19 @@ export function SupplierAccountsPage() {
           <div className="flex flex-wrap items-end gap-2">
             <div>
               <Label className="sr-only">供应商</Label>
-              <OptionCombobox
-                value={supplierId ?? ""}
-                onValueChange={(v) => {
+              <SupplierCombobox
+                value={supplierId || undefined}
+                onValueChange={(id) => {
                   setPagination((p) => ({ ...p, pageIndex: 0 }))
-                  patchUrl({ supplierId: v || null })
+                  patchUrl({ supplierId: id || null })
                 }}
-                options={[
-                  { value: "", label: "全部供应商" },
-                  ...data.suppliers.map((s) => ({
-                    value: s.supplierId,
-                    label: s.supplierName,
-                  })),
-                ]}
-                className="w-[10rem]"
-                size="sm"
-                allowClear={false}
+                suppliers={data.suppliers.map((s) => ({
+                  supplierId: s.supplierId,
+                  supplierName: s.supplierName,
+                  statusLabel: "可选",
+                  statusTone: "neutral",
+                }))}
+                className="w-[12rem]"
                 aria-label="供应商"
                 placeholder="全部供应商"
               />
@@ -1475,15 +1473,16 @@ export function SupplierAccountsPage() {
           </DialogHeader>
           <div className="space-y-2">
             <Label>供应商</Label>
-            <OptionCombobox
-              value={pickSupplierId}
-              onValueChange={(v) => setPickSupplierId(v ?? "")}
-              options={data.suppliers.map((s) => ({
-                value: s.supplierId,
-                label: s.supplierName,
+            <SupplierCombobox
+              value={pickSupplierId || undefined}
+              onValueChange={(id) => setPickSupplierId(id ?? "")}
+              suppliers={data.suppliers.map((s) => ({
+                supplierId: s.supplierId,
+                supplierName: s.supplierName,
+                statusLabel: "可选",
+                statusTone: "neutral",
               }))}
               className="w-full"
-              allowClear={false}
               aria-label="供应商"
               placeholder="选择供应商"
             />

@@ -25,8 +25,10 @@ import {
   OptionCombobox,
   PageHeader,
   SequentialProcessBar,
+  SupplierCombobox,
   ValidationSummary,
 } from "@/components/business"
+import { PROCUREMENT_SUPPLIER_OPTIONS } from "@/lib/business-options"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -439,9 +441,6 @@ export function ProcurementConfirmationPage() {
         },
       ])
       setDirty(true)
-      requestAnimationFrame(() => {
-        document.getElementById(`line-supplier-${key}`)?.focus()
-      })
     },
     [task]
   )
@@ -1289,17 +1288,26 @@ export function ProcurementConfirmationPage() {
                                       className="border-b border-border last:border-0"
                                     >
                                       <td className="px-3 py-2">
-                                        <Input
-                                          id={`line-supplier-${line.lineKey}`}
-                                          value={line.supplierName}
-                                          onChange={(e) =>
+                                        <SupplierCombobox
+                                          value={line.supplierId || undefined}
+                                          onValueChange={(id) => {
+                                            const next =
+                                              PROCUREMENT_SUPPLIER_OPTIONS.find(
+                                                (s) => s.supplierId === id
+                                              )
                                             updateLine(line.lineKey, {
-                                              supplierName: e.target.value,
+                                              supplierId: id ?? "",
+                                              supplierName:
+                                                next?.supplierName ?? "",
+                                              capabilitySummary:
+                                                next?.description ??
+                                                line.capabilitySummary,
                                             })
-                                          }
+                                          }}
+                                          suppliers={PROCUREMENT_SUPPLIER_OPTIONS}
                                           disabled={formalPending}
-                                          aria-label={`${subLine.itemName} 供应商`}
-                                          className="min-w-[8rem]"
+                                          placeholder="选择供应商"
+                                          className="min-w-[12rem]"
                                         />
                                         <p className="mt-0.5 text-[11px] text-muted-foreground">
                                           {line.capabilitySummary}

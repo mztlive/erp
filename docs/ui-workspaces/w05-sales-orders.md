@@ -124,6 +124,13 @@
 └                              [保存草稿] [提交正式流程]              ┘
 ```
 
+建单字段控件约定：
+
+- 已有合同：`ContractCombobox`；客户 / 结算主体由合同快照只读带出。
+- 同步上传合同：客户 `CustomerCombobox`，结算主体 `SettlementPartyCombobox`，付款条件码表 `SelectField`。
+- 负责销售：`OwnerCombobox`；非卡券明细商品/SKU：`ProductCombobox`；单位：码表 `SelectField`。
+- 禁止用自由 `Input` 手输客户名、结算主体名、负责销售、SKU 编码（卡券类目名称除外）。
+
 ### 4.4 区域规则
 
 | 区域 | 目的 | 主组件 | 关键规则 |

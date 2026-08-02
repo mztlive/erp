@@ -9,6 +9,10 @@ import {
   OptionCombobox,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
+import {
+  PAYMENT_TERM_OPTIONS,
+  paymentTermLabel,
+} from "@/lib/business-options"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
@@ -84,7 +88,7 @@ export function CustomerCreateSheet({
       legalName: "",
       shortName: "",
       unifiedCreditCode: "",
-      defaultPaymentTerm: "货到 30 日内付款",
+      defaultPaymentTerm: "POSTPAY_NET30",
       changeReason: "",
     } satisfies FormValues,
     validators: { onChange: createSchema },
@@ -93,7 +97,9 @@ export function CustomerCreateSheet({
         legalName: value.legalName.trim(),
         shortName: value.shortName.trim() || undefined,
         unifiedCreditCode: value.unifiedCreditCode.trim() || undefined,
-        defaultPaymentTerm: value.defaultPaymentTerm.trim() || undefined,
+        defaultPaymentTerm: value.defaultPaymentTerm.trim()
+          ? paymentTermLabel(value.defaultPaymentTerm.trim())
+          : undefined,
         ownerUserId: "u_current",
         ownerName: "当前用户",
         idempotencyKey,
@@ -168,7 +174,11 @@ export function CustomerCreateSheet({
           <form.AppField
             name="defaultPaymentTerm"
             children={(field) => (
-              <field.TextField label="默认付款条件" placeholder="录单提示" />
+              <field.SelectField
+                label="默认付款条件"
+                options={PAYMENT_TERM_OPTIONS}
+                placeholder="录单提示"
+              />
             )}
           />
 

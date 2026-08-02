@@ -4,8 +4,7 @@
 组件实现以该设计文档与 [关键流程交互说明](../../../docs/erp-ui-flows.md) 为依据，不复制业务
 状态机、金额计算、权限判断或网络请求。
 
-运行项目后访问 `/business-components` 可验收全部 64 个公开组件；预览实现见
-[业务组件预览页](../../app/business-components/page.tsx)。主题基础仍在 `/theme` 验收。
+业务组件以本目录导出为准；选择器约定见下文「可搜索 Combobox 约定」。共享码表（付款条件、单位、承运方等）见 `lib/business-options.ts`。
 
 ## 分层边界
 
@@ -27,7 +26,7 @@
 | 页面公共区 | `PageHeader`（`page` / `object-chrome`）、`PageActions`、`MetricStrip`、`MetricItem`（`detailMode`）、`DataFreshness` | `page.tsx` | 面包屑、标题、动作、工作台统计、数据水位；M4 只用 object-chrome |
 | 高密度列表 | `DataTable`、`DataTableViewOptions`、`DataTablePagination` | `data-table.tsx` | 服务端分页、排序、筛选、显隐、固定、调宽、跨页稳定选择和键盘行导航 |
 | 列表编排 | `ListToolbar`、`SelectionScopeBar`、`StatusMatrix`、`BusinessTableFrame`、`QuickPreviewSheet` | `list.tsx` | 常驻筛选、选择范围、多轨状态、加载/空态/失败、右侧快速预览 |
-| 选择与筛选 | `OptionCombobox`、`BusinessObjectCombobox`、业务实体 Combobox（合同/销售单/客户/采购单/供应商/商品）、`SavedViewPicker`、`AdvancedFilterSheet` | `option-combobox.tsx`、`entity-comboboxes.tsx`、`selectors.tsx` | 可搜索枚举/筛选、有效业务对象选择、个人/团队视图、高级筛选；**禁止**在业务页继续使用 `Select` / `NativeSelect` |
+| 选择与筛选 | `OptionCombobox`、`BusinessObjectCombobox`、业务实体 Combobox（合同/销售单/客户/采购单/供应商/商品/结算主体/仓库/负责人）、`SavedViewPicker`、`AdvancedFilterSheet` | `option-combobox.tsx`、`entity-comboboxes.tsx`、`selectors.tsx` | 可搜索枚举/筛选、有效业务对象选择、个人/团队视图、高级筛选；**禁止**在业务页继续使用 `Select` / `NativeSelect`；**禁止**用自由 `Input` 录入已有业务对象 ID/名称 |
 | 值与状态 | `BusinessStatusBadge`、`StatusTrackSummary`、`BusinessObjectRef`、`MoneyValue`、`QuantityValue`、`RateValue`、`DocumentTotals` | `values.tsx` | 多维状态、稳定对象引用、精确十进制展示、含税/不含税口径 |
 | 正式单据/对象详情 | `DocumentHeader`（M4 用 `density="compact"` + `meta`）、`DocumentSummary`、`DocumentSection`、`RevisionTimeline`、`RelatedDocumentList`、`ResponsibilityPanel` | `document.tsx` | 销售、采购、客户、票款、发票、结算等详情与版本追溯；唯一身份头 |
 | 纸质单据预览 | `PaperDocument` | `paper-document.tsx` | 销售、采购、出入库、收付款和发票等正式单据的 A4 风格查看与打印投影 |
@@ -100,10 +99,13 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 
 | 场景 | 组件 | 说明 |
 | --- | --- | --- |
-| 状态/环境/角色等枚举与筛选 | `OptionCombobox` | `{ value, label }[]`，内置搜索；`allowClear={false}` 用于必选筛选 |
-| 有效合同 / 销售单 / 客户 / 采购单 / 供应商 / 商品 | `ContractCombobox` 等 | 展示编号、状态与摘要；数据由 feature Query 注入，组件本身不请求 |
+| 状态/环境/角色/付款条件/单位等枚举与筛选 | `OptionCombobox` | `{ value, label }[]`，内置搜索；`allowClear={false}` 用于必选筛选；共享码表见 `lib/business-options.ts` |
+| 有效合同 / 销售单 / 客户 / 采购单 / 供应商 / 商品 / 结算主体 / 仓库 / 负责人 | `ContractCombobox`、`CustomerCombobox`、`SupplierCombobox`、`SettlementPartyCombobox`、`WarehouseCombobox`、`OwnerCombobox` 等 | 展示编号、状态与摘要；数据由 feature Query 注入，组件本身不请求 |
 | 通用带状态业务对象 | `BusinessObjectCombobox` | 上述实体 Combobox 的底层 |
 | TanStack Form 枚举字段 | `field.SelectField` / `ComboboxField` | 已绑定 `OptionCombobox` |
+| 列表全文搜索（单号关键词混搜） | `Input` / `InputGroupInput` | 非实体单选场景，可继续自由输入 |
+
+**禁止**用自由文本 `Input`/`TextField` 录入应引用主数据或单据的字段（客户、供应商、合同、商品 SKU、结算主体、负责人等）。筛选条清空即「全部」时，实体 Combobox 用 `value={id || undefined}` + `onValueChange` 写 `null`/`undefined` 即可，不必再塞「全部」伪选项。
 
 ```tsx
 // 筛选条

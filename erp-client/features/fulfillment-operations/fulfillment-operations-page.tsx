@@ -27,6 +27,10 @@ import {
   WorkTaskItem,
   type ValidationIssue,
 } from "@/components/business"
+import {
+  CARRIER_OPTIONS,
+  QUALITY_RESULT_OPTIONS,
+} from "@/lib/business-options"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -1688,13 +1692,16 @@ function FulfillmentTypeForm({
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor={`receipt-qr-${i}`}>质量结果</Label>
-                <Input
+                <OptionCombobox
                   id={`receipt-qr-${i}`}
-                  value={line.qualityResult}
+                  value={line.qualityResult || null}
                   disabled={disabled}
-                  onChange={(e) => {
+                  options={QUALITY_RESULT_OPTIONS}
+                  allowClear={false}
+                  placeholder="选择质量结果"
+                  onValueChange={(v) => {
                     const lines = draft.lines.map((l, idx) =>
-                      idx === i ? { ...l, qualityResult: e.target.value } : l
+                      idx === i ? { ...l, qualityResult: v ?? "" } : l
                     )
                     onChange({ ...draft, lines })
                   }}
@@ -1731,12 +1738,15 @@ function FulfillmentTypeForm({
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="ship-carrier">承运方</Label>
-            <Input
+            <OptionCombobox
               id="ship-carrier"
-              value={draft.carrier}
+              value={draft.carrier || null}
               disabled={disabled}
-              onChange={(e) =>
-                onChange({ ...draft, carrier: e.target.value })
+              options={CARRIER_OPTIONS}
+              allowClear={false}
+              placeholder="选择承运方"
+              onValueChange={(v) =>
+                onChange({ ...draft, carrier: v ?? "" })
               }
             />
           </div>
@@ -1803,12 +1813,15 @@ function FulfillmentTypeForm({
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="direct-carrier">承运方</Label>
-            <Input
+            <OptionCombobox
               id="direct-carrier"
-              value={draft.carrier}
+              value={draft.carrier || null}
               disabled={disabled}
-              onChange={(e) =>
-                onChange({ ...draft, carrier: e.target.value })
+              options={CARRIER_OPTIONS}
+              allowClear={false}
+              placeholder="选择承运方"
+              onValueChange={(v) =>
+                onChange({ ...draft, carrier: v ?? "" })
               }
             />
           </div>

@@ -30,6 +30,7 @@ import {
   PageActions,
   PageHeader,
   QuickPreviewSheet,
+  WarehouseCombobox,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import {
@@ -1310,25 +1311,22 @@ export function InventoryLedgerPage() {
                   <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
                     仓库
                   </span>
-                  <OptionCombobox
-                    className="w-36"
-                    value={warehouseId ?? "all"}
-                    onValueChange={(v) => {
-                      const next = v ?? "all"
+                  <WarehouseCombobox
+                    className="w-44"
+                    value={warehouseId || undefined}
+                    onValueChange={(id) => {
                       patchUrl({
-                        warehouseId: next === "all" ? null : next,
+                        warehouseId: id || null,
                       })
                       resetPagination()
                     }}
-                    options={[
-                      { value: "all", label: "全部仓库" },
-                      ...data.warehouses.map((w) => ({
-                        value: w.id,
-                        label: w.name,
-                      })),
-                    ]}
-                    size="sm"
-                    allowClear={false}
+                    warehouses={data.warehouses.map((w) => ({
+                      warehouseId: w.id,
+                      warehouseName: w.name,
+                      warehouseCode: w.id,
+                      statusLabel: "可选",
+                      statusTone: "neutral",
+                    }))}
                     aria-label="筛选仓库"
                     placeholder="全部仓库"
                   />
