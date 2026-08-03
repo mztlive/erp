@@ -188,7 +188,33 @@ export function CreateOrderForm() {
 - 数据层（TanStack Query）与展示层解耦：组件只消费 query/mutation hooks 的状态与数据。
 - 表单层（TanStack Form）与展示层解耦：字段通过 `components/form` 绑定 UI，业务页只声明 schema 与 submit。
 
-## 5. 改代码前自检清单
+## 5. 用户可见文案必须过术语表
+
+**权威文件：`../docs/ui-glossary.md`**（禁用词表 + 替换口径）。写任何界面字符串前先查。
+
+本系统围绕内部工作流架构构建（work item、租约、投影、事实、幂等键）。这些词
+**只出现在代码注释、字段名和设计文档里**，界面一律翻译成业务语言。
+
+### 强制规则
+
+- **禁止**把实现术语写进用户可见字符串：租约、投影、幂等键、work_item、指纹、水位、
+  乐观更新、正式（作为前缀）等。已有替换口径见术语表 §2。
+- **禁止**把枚举原值直接渲染：`POSTED`、`SHIPPED`、`BLOCKED`、`PENDING`…
+  新增枚举时必须同时写中文映射表（如 `FORMAL_STATUS_LABEL`）。
+- **禁止**把内部 ID 展示给用户：`rsv_*`、`pla_*`、`sv_*`、`wi_*`。
+  换成「品名 + 数量 + 业务单号」这类用户认得的东西。
+- **禁止**为了某个页面的措辞去改 `components/business` 的默认文案 —— 那会波及其它工作面。
+  加可选 prop、保留原默认值（参考 `PrepaymentGate.copy`、`SequentialProcessBar.showProcess`）。
+- 跨页复用的文案优先从 `lib/ui-text.ts` 引用，不要手写绕过。
+- 按钮说**动作**不说机制，状态说**结果**不说锁，错误说**下一步**不说原理。
+
+### 两条容易被忽略的界面契约
+
+- **按钮文案必须与实际行为一致**。「确认并下一项」在关掉自动跳转后就不能再这么写。
+- **URL 参数与界面控件一一对应**。被 `queryFn` 消费、却没有控件也无法清除的参数，
+  是用户改不动的隐形状态：要么补控件，要么从查询里摘掉。
+
+## 6. 改代码前自检清单
 
 - [ ] 是否引入了任何 SSR / RSC 取数路径？若有，改为客户端 + TanStack Query。
 - [ ] 是否存在裸 `fetch`/`axios`/`useEffect` 请求？若有，收进 `queryFn`/`mutationFn`。
@@ -196,3 +222,7 @@ export function CreateOrderForm() {
 - [ ] mutation 后是否正确失效或更新相关 queryKey？
 - [ ] 新表单是否使用 `useAppForm`（TanStack Form），而非 useState/react-hook-form？
 - [ ] 表单提交是否通过 `useMutation`，校验是否用 Zod / Standard Schema？
+- [ ] 新增/修改的界面字符串是否过了 `../docs/ui-glossary.md`？
+- [ ] 新增枚举是否配了中文映射？内部 ID 是否漏进界面？
+- [ ] 是否为了单个页面改了共享组件的默认文案（应改为加 prop）？
+- [ ] 新增的 URL 查询参数是否有对应的界面控件和清除方式？

@@ -37,6 +37,46 @@ export const OPERATION_TYPE_SHORT: Record<FulfillmentOperationType, string> = {
   SERVICE: "服务",
 }
 
+/** 主按钮：按作业类型说人话，不说「过账」 */
+export const OPERATION_ACTION_LABEL: Record<FulfillmentOperationType, string> = {
+  RECEIPT: "确认入库",
+  WAREHOUSE_SHIP: "确认发货",
+  SUPPLIER_DIRECT: "确认发货",
+  ELECTRONIC: "确认交付",
+  SERVICE: "确认完成",
+}
+
+/** 确认弹窗标题 */
+export const OPERATION_CONFIRM_TITLE: Record<FulfillmentOperationType, string> =
+  {
+    RECEIPT: "确认入库？",
+    WAREHOUSE_SHIP: "确认发货？",
+    SUPPLIER_DIRECT: "确认发货？",
+    ELECTRONIC: "确认交付？",
+    SERVICE: "确认服务完成？",
+  }
+
+/** 完成后的状态说法 */
+export const OPERATION_DONE_LABEL: Record<FulfillmentOperationType, string> = {
+  RECEIPT: "已入库",
+  WAREHOUSE_SHIP: "已发货",
+  SUPPLIER_DIRECT: "已发货",
+  ELECTRONIC: "已交付",
+  SERVICE: "已完成",
+}
+
+/** 队列空态：说清「今天这类活干完了」 */
+export const OPERATION_CLEARED_LABEL: Record<
+  FulfillmentOperationType,
+  string
+> = {
+  RECEIPT: "今天的入库都干完了",
+  WAREHOUSE_SHIP: "今天的发货都干完了",
+  SUPPLIER_DIRECT: "今天的直发都干完了",
+  ELECTRONIC: "今天的电子交付都干完了",
+  SERVICE: "今天的服务都干完了",
+}
+
 export const DEFER_REASON_LABEL: Record<DeferReasonCode, string> = {
   WAITING_SUPPLIER: "等待供应商",
   WAITING_WAREHOUSE: "等待仓储配合",
@@ -50,6 +90,14 @@ export const RESULT_LABEL: Record<FulfillmentResultCode, string> = {
   PARTIAL: "部分成功",
   FAILED: "失败",
 }
+
+/** 电子交付 / 线下服务共用的履约结果选项 */
+export const RESULT_OPTIONS: ReadonlyArray<{
+  value: FulfillmentResultCode
+  label: string
+}> = (
+  Object.keys(RESULT_LABEL) as FulfillmentResultCode[]
+).map((value) => ({ value, label: RESULT_LABEL[value] }))
 
 /** URL type 参数 */
 export const TYPE_SLUG: Record<FulfillmentOperationType, string> = {
@@ -230,12 +278,24 @@ export type FulfillmentQueueView = Readonly<{
     previousWorkItemId?: string
     nextWorkItemId?: string
     filterSummary: string
+    /** 仓筛选可选值，按权限范围全量投影去重（不随当前队列收缩） */
+    warehouseOptions: ReadonlyArray<{ value: string; label: string }>
+    /** 当前角色能看到的作业类型；类型分段与指标只渲染这些 */
+    visibleTypes: readonly FulfillmentOperationType[]
+    roleLabel: string
+    /** 当前登录人；只读角色为 undefined */
+    viewerLabel?: string
+    canExecute: boolean
     snapshotUpdatedAt: string
   }
   metrics: FulfillmentQueueMetrics
   tasks: readonly FulfillmentTask[]
   current?: FulfillmentTask
-  emptyReason?: "NO_TASKS" | "FILTER_NO_RESULT" | "NO_DATA_SCOPE"
+  emptyReason?:
+    | "NO_TASKS"
+    | "FILTER_NO_RESULT"
+    | "NO_DATA_SCOPE"
+    | "NO_PERMISSION"
   preferences: { autoNextDefault: boolean }
 }>
 
@@ -308,6 +368,14 @@ export type FormalActionResponse =
   | { status: "failed"; message: string; code: string }
   | { status: "unknown"; message: string; idempotencyKey: string }
 
+/** 正式记录状态码 → 人话（界面不出现 POSTED/SHIPPED 这类原值） */
+export const FORMAL_STATUS_LABEL: Record<string, string> = {
+  POSTED: "已入库",
+  SHIPPED: "已发出",
+  CONFIRMED: "已确认",
+  FAILED: "失败",
+}
+
 export const FACT_TYPE_LABEL: Record<
   FulfillmentFormalOutcome["factType"],
   string
@@ -318,9 +386,16 @@ export const FACT_TYPE_LABEL: Record<
   SERVICE_FULFILLMENT: "服务履约",
 }
 
-/** 履约/物流 ≠ 客户验收 */
+/**
+ * 物流签收 ≠ 客户验收。
+ * 只在确认成功后的结果面板出现 —— 那时才有「去客户验收」这一步，常驻横幅只会被无视。
+ */
 export const NOT_ACCEPTANCE_NOTICE =
-  "本页面只登记履约记录（入库/发货/交付/服务）。物流签收或履约完成不等于客户验收通过。"
+  "客户签收不等于验收通过。要等销售在客户验收里登记，这一单才算验收完成。"
 
+/**
+ * 记录不可覆盖。
+ * 只在确认弹窗的不可逆区出现 —— 那时才是用户真的要下决定的时刻。
+ */
 export const CORRECTION_NOTICE =
-  "已过账/已确认记录不可覆盖；纠错请使用冲正、退货、库存调整或新履约记录，不要在本页改写历史。"
+  "确认之后这条记录就不能改了。写错了要走冲正、退货或库存调整，不能回来改这一条。"

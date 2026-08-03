@@ -1,7 +1,7 @@
 /**
  * W09 session-mock API：queryFn / mutationFn 纯函数。
  * claimToken 仅出现在领取/续租响应；查询 View 不回显令牌。
- * 过账后才更新队列完成集合与业务结果；结果未知时不改库存/预占/队列。
+ * 确认成功后才更新队列完成集合与业务结果；结果未知时不改库存/预占/队列。
  */
 
 import { mockDelay } from "@/features/workspace-kit/delay"
@@ -16,9 +16,13 @@ import type {
   WorkItemLease,
 } from "@/features/fulfillment-operations/types"
 import {
-  OPERATION_TYPE_LABEL,
+  OPERATION_DONE_LABEL,
   OPERATION_TYPE_SHORT,
 } from "@/features/fulfillment-operations/types"
+import {
+  resolveRole,
+  type FulfillmentRole,
+} from "@/features/fulfillment-operations/fulfillment-roles"
 import { FULFILLMENT_OPERATIONS_SEED } from "@/mock/fulfillment-operations"
 import {
   applyWorkItemActionSession,
@@ -45,12 +49,14 @@ import {
 import { leaseText } from "@/lib/ui-text"
 
 export type FulfillmentQueueFilters = {
+  /** 演示角色：决定可见作业类型与「仅我的」匹配谁 */
+  role: FulfillmentRole
   scope: "mine" | "role_pool"
   /** 空 = 全部类型 */
   operationTypes?: FulfillmentOperationType[]
   warehouseId?: string
   q?: string
-  due?: "active" | "today" | "overdue"
+  due?: "today" | "overdue"
   gate?: "blocked" | "satisfied"
   salesOrderId?: string
   purchaseOrderId?: string
@@ -102,7 +108,7 @@ function projectTask(seed: FulfillmentTask): FulfillmentTask | null {
   return {
     ...seed,
     held,
-    statusLabel: held ? "已暂挂" : seed.statusLabel,
+    statusLabel: held ? "已跳过" : seed.statusLabel,
     statusTone: held ? "warning" : seed.statusTone,
     editVersion,
     draft,
@@ -119,18 +125,56 @@ function projectTask(seed: FulfillmentTask): FulfillmentTask | null {
   }
 }
 
-function filterSummary(filters: FulfillmentQueueFilters): string {
+/** 仓筛选只对入库/仓发有意义，选项按权限范围全量投影去重 */
+function computeWarehouseOptions(
+  all: readonly FulfillmentTask[]
+): FulfillmentQueueView["context"]["warehouseOptions"] {
+  const seen = new Map<string, string>()
+  for (const task of all) {
+    if (
+      task.operationType !== "RECEIPT" &&
+      task.operationType !== "WAREHOUSE_SHIP"
+    ) {
+      continue
+    }
+    const id = task.source.warehouseId
+    if (!id || seen.has(id)) continue
+    seen.set(id, task.source.warehouseLabel ?? id)
+  }
+  return [...seen].map(([value, label]) => ({ value, label }))
+}
+
+/**
+ * 种子数据的到期日固定在某一天，直接对系统时钟取「今天」会永远筛空。
+ * 以投影中最早的到期日作为参照日，与列表上的「今天/明天」标签保持一致。
+ */
+function referenceDay(all: readonly FulfillmentTask[]): string | undefined {
+  const days = all.map((t) => t.dueAt.slice(0, 10)).sort()
+  return days[0]
+}
+
+function filterSummary(
+  filters: FulfillmentQueueFilters,
+  warehouseOptions: FulfillmentQueueView["context"]["warehouseOptions"]
+): string {
   const parts = [
-    filters.scope === "mine" ? "仅我的" : "团队",
+    filters.scope === "mine" && resolveRole(filters.role).userLabel
+      ? "仅我的"
+      : "全组",
     filters.operationTypes && filters.operationTypes.length > 0
       ? filters.operationTypes.map((t) => OPERATION_TYPE_SHORT[t]).join("/")
       : "全部类型",
   ]
   if (filters.due === "overdue") parts.push("已超期")
   else if (filters.due === "today") parts.push("今日到期")
-  if (filters.gate === "blocked") parts.push("门禁阻塞")
-  if (filters.gate === "satisfied") parts.push("门禁满足")
-  if (filters.warehouseId) parts.push(`仓 ${filters.warehouseId}`)
+  if (filters.gate === "blocked") parts.push("先款未到")
+  if (filters.gate === "satisfied") parts.push("货款已到")
+  if (filters.warehouseId) {
+    const label = warehouseOptions.find(
+      (w) => w.value === filters.warehouseId
+    )?.label
+    parts.push(label ?? `仓 ${filters.warehouseId}`)
+  }
   if (filters.q) parts.push(`单号 ${filters.q}`)
   if (filters.salesOrderId) parts.push(`销售 ${filters.salesOrderId}`)
   if (filters.purchaseOrderId) parts.push(`采购 ${filters.purchaseOrderId}`)
@@ -139,8 +183,20 @@ function filterSummary(filters: FulfillmentQueueFilters): string {
 
 function matchTask(
   task: FulfillmentTask,
-  filters: FulfillmentQueueFilters
+  filters: FulfillmentQueueFilters,
+  today: string | undefined
 ): boolean {
+  const role = resolveRole(filters.role)
+  // 角色可见性在「服务端」收敛，前端拿不到越权任务
+  if (!role.types.includes(task.operationType)) return false
+  // 仅我的：只看落在当前登录人头上的；只读角色没有「我的」概念
+  if (
+    filters.scope === "mine" &&
+    role.userLabel &&
+    task.responsibleLabel !== role.userLabel
+  ) {
+    return false
+  }
   if (
     filters.operationTypes &&
     filters.operationTypes.length > 0 &&
@@ -188,22 +244,19 @@ function matchTask(
     }
   }
   if (filters.due === "overdue" && !task.overdue) return false
+  if (filters.due === "today" && (!today || task.dueAt.slice(0, 10) !== today)) {
+    return false
+  }
   if (filters.gate === "blocked" && task.gate.state !== "BLOCKED") return false
   if (filters.gate === "satisfied" && task.gate.state !== "SATISFIED") return false
   return true
 }
 
 function computeMetrics(
-  all: readonly FulfillmentTask[]
+  all: readonly FulfillmentTask[],
+  visibleTypes: readonly FulfillmentOperationType[]
 ): FulfillmentQueueView["metrics"] {
-  const types: FulfillmentOperationType[] = [
-    "RECEIPT",
-    "WAREHOUSE_SHIP",
-    "SUPPLIER_DIRECT",
-    "ELECTRONIC",
-    "SERVICE",
-  ]
-  return types.map((operationType) => ({
+  return visibleTypes.map((operationType) => ({
     operationType,
     label: `待${OPERATION_TYPE_SHORT[operationType]}`,
     count: all.filter((t) => t.operationType === operationType).length,
@@ -215,14 +268,27 @@ export async function fetchFulfillmentQueue(
   filters: FulfillmentQueueFilters
 ): Promise<FulfillmentQueueView> {
   await mockDelay()
+  const role = resolveRole(filters.role)
   const projected = FULFILLMENT_OPERATIONS_SEED.map(projectTask).filter(
     (t): t is FulfillmentTask => t != null
   )
+  // 角色可见范围：不泄露越权数据
+  const inScopeOfRole = projected.filter((t) =>
+    role.types.includes(t.operationType)
+  )
+  // 指标与仓库选项还要跟着「仅我的/全组」走 —— 否则点「待入库 3」却只出 2 条。
+  // 类型/到期/门禁/单号这些才是「筛选」，指标不随它们收缩。
+  const inScopeOfViewer =
+    filters.scope === "mine" && role.userLabel
+      ? inScopeOfRole.filter((t) => t.responsibleLabel === role.userLabel)
+      : inScopeOfRole
 
-  // 指标按权限范围全量（演示 = 全部投影），不由当前筛选队列求和
-  const metrics = computeMetrics(projected)
+  const metrics = computeMetrics(inScopeOfViewer, role.types)
+  const warehouseOptions = computeWarehouseOptions(inScopeOfViewer)
+  // 参照日是日历概念，跨角色保持一致
+  const today = referenceDay(projected)
 
-  let tasks = projected.filter((t) => matchTask(t, filters))
+  let tasks = projected.filter((t) => matchTask(t, filters, today))
   tasks = [...tasks].sort((a, b) => {
     if (a.overdue !== b.overdue) return a.overdue ? -1 : 1
     if (a.priority !== b.priority) return b.priority - a.priority
@@ -230,8 +296,7 @@ export async function fetchFulfillmentQueue(
   })
 
   const queueContextId =
-    filters.queueContextId ??
-    `queue:fulfillment:demo:${filters.scope}`
+    filters.queueContextId ?? `queue:W09:${filters.scope}`
 
   let position = 0
   let current = tasks[0]
@@ -243,10 +308,15 @@ export async function fetchFulfillmentQueue(
     }
   }
 
-  const emptyReason =
-    FULFILLMENT_OPERATIONS_SEED.every((t) =>
-      isFulfillmentWorkItemTerminal(t.workItemId)
-    )
+  // URL 直接指向角色无权的类型：报无权限，不报空列表（文档 §2.2）
+  const requestedOutOfRole =
+    filters.operationTypes && filters.operationTypes.length > 0
+      ? filters.operationTypes.filter((t) => !role.types.includes(t))
+      : []
+
+  const emptyReason = requestedOutOfRole.length > 0
+    ? "NO_PERMISSION"
+    : inScopeOfViewer.length === 0
       ? "NO_TASKS"
       : tasks.length === 0
         ? "FILTER_NO_RESULT"
@@ -261,7 +331,12 @@ export async function fetchFulfillmentQueue(
       currentWorkItemId: current?.workItemId,
       previousWorkItemId: tasks[position - 1]?.workItemId,
       nextWorkItemId: tasks[position + 1]?.workItemId,
-      filterSummary: filterSummary(filters),
+      filterSummary: filterSummary(filters, warehouseOptions),
+      warehouseOptions,
+      visibleTypes: role.types,
+      roleLabel: role.label,
+      viewerLabel: role.userLabel,
+      canExecute: role.canExecute,
       snapshotUpdatedAt: new Date().toISOString(),
     },
     metrics,
@@ -278,7 +353,7 @@ export async function claimFulfillmentWorkItem(
   const seed = FULFILLMENT_OPERATIONS_SEED.find((t) => t.workItemId === workItemId)
   if (!seed) throw new Error("任务不存在")
   if (isFulfillmentWorkItemTerminal(workItemId)) {
-    throw new Error("任务已完成，无法领取")
+    throw new Error("这条已经处理完了")
   }
   try {
     const lease = claimWorkItemSession({
@@ -339,7 +414,7 @@ function validateDraft(
   draft: FulfillmentDraft
 ): string | null {
   if (draft.type !== task.operationType) {
-    return "草稿类型与当前作业类型不一致，禁止跨类型生成记录"
+    return "这条草稿和当前任务对不上，不能跨类型提交"
   }
   if (task.gate.state === "BLOCKED" && draft.type !== "WAREHOUSE_SHIP") {
     return task.gate.message
@@ -372,14 +447,14 @@ function validateDraft(
     for (const line of draft.lines) {
       const qty = Number(line.quantity)
       if (!(qty > 0)) return "发货数量必须大于 0"
-      if (!line.stockReservationId) return "仓发必须引用有效销售预占"
+      if (!line.stockReservationId) return "找不到为这单留的货"
       const src = task.lines.find((l) => l.salesOrderLineId === line.salesOrderLineId)
       if (!src) return "销售明细不存在"
       if (src.stockReservationId !== line.stockReservationId) {
-        return "预占必须归属本销售明细"
+        return "留的货不属于这条销售明细"
       }
       const cap = Number(src.reservedQuantity ?? src.remainingQuantity)
-      if (qty > cap + 1e-9) return `发货量不得超过有效预占 ${cap}`
+      if (qty > cap + 1e-9) return `发货数量不能超过为这单留的 ${cap}`
     }
   }
 
@@ -510,8 +585,8 @@ function buildFormalOutcome(
       remainingByLine,
       acceptanceRequired: false,
       acceptanceNextStep:
-        "入库不触发客户验收。合格量已形成库存与销售预占；后续仓发后再由销售在客户验收登记。",
-      inventoryImpactSummary: `合格 ${qualTotal} 入库存并建立预占；不合格 ${rejTotal} 不入库、不预占。`,
+        "入库不等于验收。合格的货已入库并按销售单留好；等发货之后，再由销售去登记客户验收。",
+      inventoryImpactSummary: `合格 ${qualTotal} 入库并留货；不合格 ${rejTotal} 不入库、不留货。`,
       reference: `FF-RK-${short}`,
       nextWorkItemId,
       salesOrderId: task.source.salesOrderId,
@@ -566,7 +641,7 @@ function buildFormalOutcome(
       acceptanceNextStep:
         "仓发记录已确认。物流签收不等于客户验收；请销售在客户验收登记。",
       inventoryImpactSummary:
-        "已消耗本销售明细有效预占，并减少自有库存（不写采购付款流水）。",
+        "用掉了为这单留的货，库存相应减少（不涉及付款）。",
       reference: `FF-FH-${short}`,
       nextWorkItemId,
       salesOrderId: task.source.salesOrderId,
@@ -600,7 +675,7 @@ function buildFormalOutcome(
       acceptanceRequired: true,
       acceptanceNextStep:
         "供应商直发记录已确认，不影响自有库存。请销售在客户验收登记（物流签收≠验收）。",
-      inventoryImpactSummary: "不影响自有库存与销售预占流水。",
+      inventoryImpactSummary: "不动自己仓库的库存，也不动留货。",
       reference: `FF-DF-${short}`,
       nextWorkItemId,
       salesOrderId: task.source.salesOrderId,
@@ -726,7 +801,7 @@ export async function postFulfillmentOperation(input: {
         return {
           status: "unknown",
           message:
-            "处理结果尚未确定。请勿假定库存/预占/履约已变更，停留当前项并按原任务号查询。",
+            "这次提交没收到结果。先别当成已经做完 —— 库存和留货都还没动。留在这一条，点「查询最终结果」按原任务号查一下。",
           idempotencyKey: input.idempotencyKey,
         }
       }
@@ -735,7 +810,7 @@ export async function postFulfillmentOperation(input: {
       return {
         status: "unknown",
         message:
-          "处理结果尚未确定。请勿假定库存/预占/履约已变更，停留当前项并按原任务号查询。",
+          "这次提交没收到结果。先别当成已经做完 —— 库存和留货都还没动。留在这一条，点「查询最终结果」按原任务号查一下。",
         idempotencyKey: input.idempotencyKey,
       }
     }
@@ -751,7 +826,7 @@ export async function postFulfillmentOperation(input: {
     return {
       status: "failed",
       code: "SUBJECT_HASH_MISMATCH",
-      message: "来源版本数据已变化，请刷新后处理最新上下文",
+      message: "这条任务的来源单据有改动，请刷新后再处理",
     }
   }
 
@@ -785,7 +860,7 @@ export async function postFulfillmentOperation(input: {
       idempotencyKey: input.idempotencyKey,
       decision: {
         kind: `FULFILLMENT_${input.draft.type}`,
-        summary: `${OPERATION_TYPE_LABEL[input.draft.type]}过账 ${outcome.factNo}`,
+        summary: `${OPERATION_DONE_LABEL[input.draft.type]} ${outcome.factNo}`,
       },
     })
     setFulfillmentBusinessOutcome(input.workItemId, outcome)
@@ -831,7 +906,7 @@ export async function deferFulfillmentOperation(input: {
     return { status: "failed", code: "NOT_FOUND", message: "任务不存在" }
   }
   if (!input.reasonCode) {
-    return { status: "failed", code: "REASON_REQUIRED", message: "暂挂须选择原因" }
+    return { status: "failed", code: "REASON_REQUIRED", message: "先跳过需要选一个原因" }
   }
   try {
     applyWorkItemActionSession({

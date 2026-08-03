@@ -391,6 +391,11 @@ export type SequentialProcessBarProps = Omit<
   processDisabled?: boolean
   /** 主动作会离开当前页面（如跳转专用处理器）时置 false，避免两个同义按钮。 */
   showProcessNext?: boolean
+  /**
+   * 只读角色（如销售/财务查看进度）置 false：
+   * 不渲染主动作与「重新领取」，避免展示一排点不动的按钮。
+   */
+  showProcess?: boolean
   onBack: () => void
   onProcess: () => void
   onProcessNext: () => void
@@ -408,6 +413,7 @@ function SequentialProcessBar({
   pending = false,
   processDisabled = false,
   showProcessNext = true,
+  showProcess = true,
   onBack,
   onProcess,
   onProcessNext,
@@ -418,7 +424,8 @@ function SequentialProcessBar({
   const lease = sequentialLeaseStatus[leaseStatus]
   const canProcess =
     leaseStatus === "active" && !pending && !processDisabled
-  const canReclaim = leaseStatus === "unclaimed" || leaseStatus === "lost"
+  const canReclaim =
+    showProcess && (leaseStatus === "unclaimed" || leaseStatus === "lost")
 
   return (
     <section
@@ -482,25 +489,27 @@ function SequentialProcessBar({
           </Button>
         ) : null}
 
-        <Button
-          type="button"
-          /* 隐藏「并打开下一条」时，本按钮就是唯一主动作 */
-          variant={showProcessNext ? "secondary" : "default"}
-          disabled={!canProcess}
-          onClick={onProcess}
-        >
-          {pending ? (
-            <LoaderCircleIcon
-              data-icon="inline-start"
-              aria-hidden="true"
-              className="animate-spin"
-            />
-          ) : (
-            <CheckIcon data-icon="inline-start" aria-hidden="true" />
-          )}
-          {pending ? "正在处理" : processLabel}
-        </Button>
-        {showProcessNext ? (
+        {showProcess ? (
+          <Button
+            type="button"
+            /* 隐藏「并打开下一条」时，本按钮就是唯一主动作 */
+            variant={showProcessNext ? "secondary" : "default"}
+            disabled={!canProcess}
+            onClick={onProcess}
+          >
+            {pending ? (
+              <LoaderCircleIcon
+                data-icon="inline-start"
+                aria-hidden="true"
+                className="animate-spin"
+              />
+            ) : (
+              <CheckIcon data-icon="inline-start" aria-hidden="true" />
+            )}
+            {pending ? "正在处理" : processLabel}
+          </Button>
+        ) : null}
+        {showProcess && showProcessNext ? (
           <Button
             type="button"
             disabled={!canProcess}

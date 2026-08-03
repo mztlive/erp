@@ -457,6 +457,43 @@ export type PrepaymentGateProps = DomainPanelProps & {
   updatedAt: DomainDateTime
   allowed: boolean
   paymentAction?: React.ReactNode
+  /**
+   * 面向一线作业角色时可整体替换为业务口语（如 W09 履约作业）。
+   * 不传则沿用面向采购/财务的默认措辞。
+   */
+  copy?: Partial<PrepaymentGateCopy>
+}
+
+export type PrepaymentGateCopy = {
+  title: string
+  description: string
+  allowedBadge: string
+  blockedBadge: string
+  amountTerm: string
+  ratioTerm: string
+  allocatedTerm: string
+  gapTerm: string
+  updatedTerm: string
+  allowedTitle: string
+  blockedTitle: string
+  allowedBody: string
+  blockedBody: string
+}
+
+const PREPAYMENT_GATE_COPY: PrepaymentGateCopy = {
+  title: "先款后货门禁",
+  description: "仅按已过账付款的有效净分配判断，不以付款申请或附件代替。",
+  allowedBadge: "允许继续履约",
+  blockedBadge: "履约已阻断",
+  amountTerm: "最低有效付款金额",
+  ratioTerm: "最低有效付款比例",
+  allocatedTerm: "已分配",
+  gapTerm: "当前缺口",
+  updatedTerm: "计算更新时间",
+  allowedTitle: "付款门禁已满足",
+  blockedTitle: "付款门禁尚未满足",
+  allowedBody: "当前有效净付款分配已达到冻结条件，可以继续本次履约。",
+  blockedBody: "新的入库、直发、电子交付或服务确认必须等待缺口补齐。",
 }
 
 function PrepaymentGate({
@@ -466,11 +503,13 @@ function PrepaymentGate({
   updatedAt,
   allowed,
   paymentAction,
+  copy,
   className,
   ...props
 }: PrepaymentGateProps) {
+  const text = copy ? { ...PREPAYMENT_GATE_COPY, ...copy } : PREPAYMENT_GATE_COPY
   const conditionLabel =
-    condition.kind === "amount" ? "最低有效付款金额" : "最低有效付款比例"
+    condition.kind === "amount" ? text.amountTerm : text.ratioTerm
 
   return (
     <Card
@@ -480,14 +519,12 @@ function PrepaymentGate({
       {...props}
     >
       <CardHeader className="border-b border-border">
-        <CardTitle>先款后货门禁</CardTitle>
-        <CardDescription>
-          仅按已过账付款的有效净分配判断，不以付款申请或附件代替。
-        </CardDescription>
+        <CardTitle>{text.title}</CardTitle>
+        <CardDescription>{text.description}</CardDescription>
         <CardAction>
           <StatusBadge
             tone={allowed ? "success" : "warning"}
-            label={allowed ? "允许继续履约" : "履约已阻断"}
+            label={allowed ? text.allowedBadge : text.blockedBadge}
           />
         </CardAction>
       </CardHeader>
@@ -506,19 +543,19 @@ function PrepaymentGate({
             </DescriptionDetails>
           </DescriptionItem>
           <DescriptionItem>
-            <DescriptionTerm>已分配</DescriptionTerm>
+            <DescriptionTerm>{text.allocatedTerm}</DescriptionTerm>
             <DescriptionDetails>
               <NumericValue>{allocated}</NumericValue>
             </DescriptionDetails>
           </DescriptionItem>
           <DescriptionItem>
-            <DescriptionTerm>当前缺口</DescriptionTerm>
+            <DescriptionTerm>{text.gapTerm}</DescriptionTerm>
             <DescriptionDetails>
               <NumericValue>{gap}</NumericValue>
             </DescriptionDetails>
           </DescriptionItem>
           <DescriptionItem>
-            <DescriptionTerm>计算更新时间</DescriptionTerm>
+            <DescriptionTerm>{text.updatedTerm}</DescriptionTerm>
             <DescriptionDetails>
               <DomainTime value={updatedAt} />
             </DescriptionDetails>
@@ -527,12 +564,10 @@ function PrepaymentGate({
 
         <Alert variant={allowed ? "success" : "warning"}>
           <AlertTitle>
-            {allowed ? "付款门禁已满足" : "付款门禁尚未满足"}
+            {allowed ? text.allowedTitle : text.blockedTitle}
           </AlertTitle>
           <AlertDescription>
-            {allowed
-              ? "当前有效净付款分配已达到冻结条件，可以继续本次履约。"
-              : "新的入库、直发、电子交付或服务确认必须等待缺口补齐。"}
+            {allowed ? text.allowedBody : text.blockedBody}
           </AlertDescription>
         </Alert>
       </CardContent>
