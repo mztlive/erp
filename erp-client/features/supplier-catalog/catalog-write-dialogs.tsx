@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { FileUpload } from "@/components/ui/file-upload"
 import { Label } from "@/components/ui/label"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   useCompanySkuOptionsQuery,
   useCreateSupplierCatalogItemMutation,
@@ -27,15 +28,28 @@ import type {
   SupplierCatalogItemView,
   SupplierCatalogSourceType,
   SupplierCatalogWriteResult,
+  SupplyMode,
 } from "@/features/supplier-catalog/types"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
 
+/**
+ * W14 固定 SKU 的「添加供应商并登记成本」上下文。
+ * 公司侧资料（名称/规格/分类/品牌/条码/媒体）在登记供给时反向复用
+ * 为供应商商品的基础快照，对话框只补录供应商独有差异。
+ */
 type FixedSku = Readonly<{
   skuId: string
   skuCode: string
   skuName: string
   specification: string
   baseUnit: string
+  category?: string
+  brand?: string
+  barcode?: string
+  description?: string
+  carouselImages?: readonly string[]
+  detailImages?: readonly string[]
+  mainImage?: string
   salesVisiblePrice?: string
   hasPoolEntry?: boolean
 }>
@@ -45,33 +59,105 @@ const money = z
   .trim()
   .regex(/^\d+(?:\.\d{1,4})?$/, "请输入正确金额，最多 4 位小数")
 
-const intakeSchema = z.object({
-  supplierId: z.string().min(1, "请选择供应商"),
-  sourceReference: z.string(),
-  supplierSpuCode: z.string(),
-  supplierSkuCode: z.string().trim().min(1, "请填写供应商 SKU 编码"),
-  name: z.string().trim().min(2, "请填写商品名称"),
-  description: z.string(),
-  specification: z.string().trim().min(1, "请填写规格"),
-  category: z.string().trim().min(1, "请填写来源分类"),
-  brand: z.string(),
-  sourceBaseUnit: z.string(),
-  barcode: z.string(),
-  attributeText: z.string(),
-  carouselImages: z.array(z.string()),
-  detailImages: z.array(z.string()),
-  skuMainImage: z.string(),
-  dropshipFloorPriceGross: money,
-  bulkFloorPriceGross: money,
-  bulkMinimumOrderQuantity: z
-    .string()
-    .trim()
-    .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确集采起订量"),
-  minimumOrderQuantity: z.string().trim().regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
-  supplyMode: z.enum(["DROPSHIP", "BULK"]),
-  validFrom: z.string().min(1, "请选择生效日期"),
-  salesVisiblePrice: z.string(),
-})
+/** 供给方式多选；对话框不再收集生效日期，提交默认当日生效。 */
+const supplyModes = (): readonly SupplyMode[] => ["BULK"]
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function SupplyModeToggle({
+  value,
+  onChange,
+}: {
+  value: readonly SupplyMode[]
+  onChange: (next: readonly SupplyMode[]) => void
+}) {
+  return (
+    <ToggleGroup
+      multiple
+      value={value}
+      onValueChange={(next) =>
+        onChange(next as readonly SupplyMode[])
+      }
+      variant="outline"
+      size="sm"
+      aria-label="供给方式（可多选）"
+    >
+      <ToggleGroupItem value="DROPSHIP">一件代发</ToggleGroupItem>
+      <ToggleGroupItem value="BULK">集采</ToggleGroupItem>
+    </ToggleGroup>
+  )
+}
+
+/** 金额字段在勾选对应供给方式时才必填；未勾选时允许为空。 */
+function supplyPriceIssue(
+  mode: SupplyMode,
+  price: string,
+  label: string,
+): { path: "dropshipFloorPriceGross" | "bulkFloorPriceGross"; message: string } | null {
+  if (!price.trim() || !money.safeParse(price.trim()).success) {
+    return { path: mode === "DROPSHIP" ? "dropshipFloorPriceGross" : "bulkFloorPriceGross", message: `勾选「${label}」时必须填写对应底价（最多 4 位小数）` }
+  }
+  return null
+}
+
+function buildIntakeSchema(requireSalesVisiblePrice: boolean) {
+  return z.object({
+    supplierId: z.string().min(1, "请选择供应商"),
+    sourceReference: z.string(),
+    supplierSpuCode: z.string(),
+    supplierSkuCode: z.string().trim().min(1, "请填写供应商 SKU 编码"),
+    name: z.string().trim().min(2, "请填写商品名称"),
+    description: z.string(),
+    specification: z.string().trim().min(1, "请填写规格"),
+    category: z.string().trim().min(1, "请填写来源分类"),
+    brand: z.string(),
+    sourceBaseUnit: z.string(),
+    barcode: z.string(),
+    attributeText: z.string(),
+    carouselImages: z.array(z.string()),
+    detailImages: z.array(z.string()),
+    skuMainImage: z.string(),
+    dropshipFloorPriceGross: z.string(),
+    bulkFloorPriceGross: z.string(),
+    bulkMinimumOrderQuantity: z
+      .string()
+      .trim()
+      .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确集采起订量"),
+    minimumOrderQuantity: z
+      .string()
+      .trim()
+      .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
+    supplyMode: z
+      .array(z.enum(["DROPSHIP", "BULK"]))
+      .min(1, "请至少选择一种供给方式"),
+    salesVisiblePrice: z.string(),
+  }).superRefine((value, context) => {
+    const dropship = value.supplyMode.includes("DROPSHIP")
+      ? supplyPriceIssue("DROPSHIP", value.dropshipFloorPriceGross, "一件代发")
+      : null
+    if (dropship) {
+      context.addIssue({ code: "custom", path: [dropship.path], message: dropship.message })
+    }
+    const bulk = value.supplyMode.includes("BULK")
+      ? supplyPriceIssue("BULK", value.bulkFloorPriceGross, "集采")
+      : null
+    if (bulk) {
+      context.addIssue({ code: "custom", path: [bulk.path], message: bulk.message })
+    }
+    if (
+      requireSalesVisiblePrice &&
+      !money.safeParse(value.salesVisiblePrice.trim()).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["salesVisiblePrice"],
+        message: "该公司 SKU 尚未进入商品池，请填写销售可见价（最多 4 位小数）",
+      })
+    }
+  })
+}
 
 function idempotencyKey(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -169,14 +255,11 @@ export function SupplierCatalogIntakeDialog({
       bulkFloorPriceGross: "",
       bulkMinimumOrderQuantity: "1",
       minimumOrderQuantity: "1",
-      supplyMode: "BULK" as "DROPSHIP" | "BULK",
-      validFrom: "2026-08-02",
+      supplyMode: supplyModes(),
       salesVisiblePrice: fixedSku?.hasPoolEntry ? "" : fixedSku?.salesVisiblePrice ?? "",
     },
     validators: {
-      onSubmit: fixedSku && !fixedSku.hasPoolEntry
-        ? intakeSchema.extend({ salesVisiblePrice: money })
-        : intakeSchema,
+      onSubmit: buildIntakeSchema(Boolean(fixedSku && !fixedSku.hasPoolEntry)),
     },
     onSubmit: async ({ value }) => {
       const supplier = supplierQuery.data?.rows.find(
@@ -222,8 +305,8 @@ export function SupplierCatalogIntakeDialog({
               }]
             : []),
         ],
-        dropshipFloorPriceGross: value.dropshipFloorPriceGross.trim(),
-        bulkFloorPriceGross: value.bulkFloorPriceGross.trim(),
+        dropshipFloorPriceGross: value.dropshipFloorPriceGross.trim() || undefined,
+        bulkFloorPriceGross: value.bulkFloorPriceGross.trim() || undefined,
         bulkMinimumOrderQuantity: value.bulkMinimumOrderQuantity.trim(),
         confirmedCostGross: fixedSku
           ? value.bulkFloorPriceGross.trim() ||
@@ -247,7 +330,7 @@ export function SupplierCatalogIntakeDialog({
           : undefined,
         minimumOrderQuantity: value.minimumOrderQuantity.trim(),
         supplyMode: value.supplyMode,
-        validFrom: value.validFrom,
+        validFrom: todayIso(),
         idempotencyKey: idempotencyKey("supplier-catalog-intake"),
       })
       setResult(response.reference)
@@ -362,17 +445,20 @@ export function SupplierCatalogIntakeDialog({
             </form.AppField>
             <form.AppField name="dropshipFloorPriceGross">
               {(field) => (
-                <field.TextField label="一件代发底价（含税运）*" />
+                <field.TextField
+                  label="一件代发底价（含税运）"
+                  description="勾选「一件代发」时必填；供应商商品资料保留双底价"
+                />
               )}
             </form.AppField>
             <form.AppField name="bulkFloorPriceGross">
               {(field) => (
                 <field.TextField
-                  label="集采底价（含税）*"
+                  label="集采底价（含税）"
                   description={
                     fixedSku
-                      ? "登记供给时默认用作采购确认成本"
-                      : undefined
+                      ? "勾选「集采」时必填；登记供给时默认用作采购确认成本"
+                      : "勾选「集采」时必填"
                   }
                 />
               )}
@@ -390,24 +476,13 @@ export function SupplierCatalogIntakeDialog({
             <form.AppField name="supplyMode">
               {(field) => (
                 <div className="space-y-1.5">
-                  <Label>供给方式 *</Label>
-                  <OptionCombobox
+                  <Label>供给方式（可多选）*</Label>
+                  <SupplyModeToggle
                     value={field.state.value}
-                    onValueChange={(value) =>
-                      field.handleChange((value ?? "BULK") as "DROPSHIP" | "BULK")
-                    }
-                    options={[
-                      { value: "DROPSHIP", label: "一件代发" },
-                      { value: "BULK", label: "集采" },
-                    ]}
-                    allowClear={false}
-                    className="w-full"
+                    onChange={(next) => field.handleChange([...next])}
                   />
                 </div>
               )}
-            </form.AppField>
-            <form.AppField name="validFrom">
-              {(field) => <field.TextField label="生效日期 *" type="date" />}
             </form.AppField>
             {fixedSku?.hasPoolEntry ? (
               <Alert className="sm:col-span-2">
@@ -481,6 +556,305 @@ export function SupplierCatalogIntakeDialog({
   )
 }
 
+function buildRegisterSupplySchema(requireSalesVisiblePrice: boolean) {
+  return z.object({
+    supplierId: z.string().min(1, "请选择供应商"),
+    supplierSkuCode: z.string().trim().min(1, "请填写供应商 SKU 编码"),
+    dropshipFloorPriceGross: z.string(),
+    bulkFloorPriceGross: z.string(),
+    minimumOrderQuantity: z
+      .string()
+      .trim()
+      .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
+    supplyMode: z
+      .array(z.enum(["DROPSHIP", "BULK"]))
+      .min(1, "请至少选择一种供给方式"),
+    salesVisiblePrice: z.string(),
+  }).superRefine((value, context) => {
+    const dropship = value.supplyMode.includes("DROPSHIP")
+      ? supplyPriceIssue("DROPSHIP", value.dropshipFloorPriceGross, "一件代发")
+      : null
+    if (dropship) {
+      context.addIssue({ code: "custom", path: [dropship.path], message: dropship.message })
+    }
+    const bulk = value.supplyMode.includes("BULK")
+      ? supplyPriceIssue("BULK", value.bulkFloorPriceGross, "集采")
+      : null
+    if (bulk) {
+      context.addIssue({ code: "custom", path: [bulk.path], message: bulk.message })
+    }
+    if (
+      requireSalesVisiblePrice &&
+      !money.safeParse(value.salesVisiblePrice.trim()).success
+    ) {
+      context.addIssue({
+        code: "custom",
+        path: ["salesVisiblePrice"],
+        message: "该公司 SKU 尚未进入商品池，请填写销售可见价（最多 4 位小数）",
+      })
+    }
+  })
+}
+
+/**
+ * W14/W21 固定公司 SKU 的「添加供应商并登记成本」最小对话框。
+ * 只补录供应商侧独有差异：供应商、供应商 SKU 编码、供给方式（多选）与
+ * 双底价（一件代发含税运 / 集采含税）、供给起订量；无商品池条目时追加
+ * 首次销售可见价。名称/规格/分类/品牌/单位/条码/媒体从公司 SKU 反向
+ * 复用为供应商商品快照；采购确认成本取勾选方式对应底价（集采优先）。
+ */
+export function RegisterSupplyForSkuDialog({
+  open,
+  onOpenChange,
+  fixedSku,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  fixedSku?: FixedSku
+}) {
+  const supplierQuery = useMasterDataListQuery({
+    resource: "suppliers",
+    lifecycleStatus: "enabled",
+    revisionTiming: "current",
+  })
+  const createMutation = useCreateSupplierCatalogItemMutation()
+  const [result, setResult] = React.useState<string | null>(null)
+  const form = useAppForm({
+    defaultValues: {
+      supplierId: "",
+      supplierSkuCode: "",
+      dropshipFloorPriceGross: "",
+      bulkFloorPriceGross: "",
+      minimumOrderQuantity: "1",
+      supplyMode: supplyModes(),
+      salesVisiblePrice: fixedSku?.hasPoolEntry
+        ? ""
+        : fixedSku?.salesVisiblePrice ?? "",
+    },
+    validators: {
+      onSubmit: buildRegisterSupplySchema(Boolean(
+        fixedSku && !fixedSku.hasPoolEntry,
+      )),
+    },
+    onSubmit: async ({ value }) => {
+      if (!fixedSku) return
+      const supplier = supplierQuery.data?.rows.find(
+        (row) => row.stableId === value.supplierId,
+      )
+      if (!supplier) return
+      const media: Omit<
+        import("@/features/supplier-catalog/types").SupplierCatalogMediaView,
+        "id"
+      >[] = [
+        ...(fixedSku.carouselImages ?? []).map((fileName, index) => ({
+          usage: "SPU_CAROUSEL" as const,
+          fileName,
+          sortOrder: index,
+          fileAssetId: `asset:${fileName}`,
+          archiveStatus: "ARCHIVED" as const,
+        })),
+        ...(fixedSku.detailImages ?? []).map((fileName, index) => ({
+          usage: "SPU_DETAIL" as const,
+          fileName,
+          sortOrder: index,
+          fileAssetId: `asset:${fileName}`,
+          archiveStatus: "ARCHIVED" as const,
+        })),
+        ...(fixedSku.mainImage
+          ? [{
+              usage: "SKU_MAIN" as const,
+              fileName: fixedSku.mainImage,
+              sortOrder: 0,
+              fileAssetId: `asset:${fixedSku.mainImage}`,
+              archiveStatus: "ARCHIVED" as const,
+            }]
+          : []),
+      ]
+      const response = await createMutation.mutateAsync({
+        sourceType: "MANUAL",
+        supplierId: supplier.stableId,
+        supplierName: supplier.name,
+        supplierSkuCode: value.supplierSkuCode.trim(),
+        name: fixedSku.skuName,
+        description: fixedSku.description,
+        specification: fixedSku.specification,
+        category: fixedSku.category ?? "",
+        brand: fixedSku.brand,
+        sourceBaseUnit: fixedSku.baseUnit,
+        barcode: fixedSku.barcode,
+        attributes: [],
+        media,
+        dropshipFloorPriceGross:
+          value.dropshipFloorPriceGross.trim() || undefined,
+        bulkFloorPriceGross: value.bulkFloorPriceGross.trim() || undefined,
+        bulkMinimumOrderQuantity: value.minimumOrderQuantity.trim(),
+        confirmedCostGross:
+          value.bulkFloorPriceGross.trim() ||
+          value.dropshipFloorPriceGross.trim(),
+        inputTaxRate: "0.13",
+        supplyRegion: ["全国"],
+        targetSkuId: fixedSku.skuId,
+        targetSkuCode: fixedSku.skuCode,
+        targetSkuName: fixedSku.skuName,
+        targetSpecification: fixedSku.specification,
+        baseUnit: fixedSku.baseUnit,
+        salesVisiblePrice: fixedSku.hasPoolEntry
+          ? undefined
+          : value.salesVisiblePrice.trim() || undefined,
+        poolPriceAction: fixedSku.hasPoolEntry
+          ? "KEEP_EXISTING"
+          : "SET_PRICE",
+        minimumOrderQuantity: value.minimumOrderQuantity.trim(),
+        supplyMode: value.supplyMode,
+        validFrom: todayIso(),
+        idempotencyKey: idempotencyKey("register-supply-for-sku"),
+      })
+      setResult(response.reference)
+    },
+  })
+
+  React.useEffect(() => {
+    if (!open) setResult(null)
+  }, [open])
+
+  const supplierOptions = (supplierQuery.data?.rows ?? []).map((supplier) => ({
+    value: supplier.stableId,
+    label: `${supplier.name} · ${supplier.stableNo}`,
+  }))
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-xl">
+        <DialogHeader>
+          <DialogTitle>添加供应商并登记成本</DialogTitle>
+          <DialogDescription>
+            固定当前公司 SKU；名称、规格、分类、品牌、单位、条码和图文从公司资料复用为供应商商品快照，只补录供应商 SKU、供给方式、双底价（一件代发含税运 / 集采含税）和起订量。
+          </DialogDescription>
+        </DialogHeader>
+
+        {result ? (
+          <Alert>
+            <AlertTitle>供应商供给已登记</AlertTitle>
+            <AlertDescription>
+              业务记录 {result} 已形成；供应商商品、映射和供给已在同一事务中保存。
+            </AlertDescription>
+          </Alert>
+        ) : null}
+
+        {fixedSku ? (
+          <div className="rounded-xl border border-border bg-muted/50 px-3 py-2.5">
+            <div className="text-xs font-medium text-muted-foreground">
+              固定公司 SKU（资料将复用为供应商商品基础）
+            </div>
+            <div className="mt-1 font-medium text-foreground">
+              {fixedSku.skuName}
+            </div>
+            <div className="mt-0.5 text-xs text-muted-foreground">
+              {fixedSku.skuCode} · {fixedSku.specification} · {fixedSku.baseUnit}
+              {fixedSku.category ? ` · ${fixedSku.category}` : ""}
+              {fixedSku.brand ? ` · ${fixedSku.brand}` : ""}
+            </div>
+            {fixedSku.hasPoolEntry ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                当前销售可见价 ¥{fixedSku.salesVisiblePrice ?? "—"}；本次只新增供应商映射和供给，不形成商品池价格修订。
+              </p>
+            ) : (
+              <p className="mt-1 text-xs text-muted-foreground">
+                该公司 SKU 尚未进入商品池，本次需同时设置首次销售可见价。
+              </p>
+            )}
+          </div>
+        ) : null}
+
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void form.handleSubmit()
+          }}
+        >
+          <div className="grid gap-4 sm:grid-cols-2">
+            <form.AppField name="supplierId">
+              {(field) => (
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label>供应商 *</Label>
+                  <OptionCombobox
+                    value={field.state.value || null}
+                    onValueChange={(value) => field.handleChange(value ?? "")}
+                    options={supplierOptions}
+                    placeholder="选择已启用供应商"
+                    className="w-full"
+                  />
+                </div>
+              )}
+            </form.AppField>
+            <form.AppField name="supplierSkuCode">
+              {(field) => (
+                <field.TextField
+                  label="供应商 SKU 编码 *"
+                  description="供应商侧对该商品的编码，用于后续映射与对账"
+                />
+              )}
+            </form.AppField>
+            <form.AppField name="supplyMode">
+              {(field) => (
+                <div className="space-y-1.5">
+                  <Label>供给方式（可多选）*</Label>
+                  <SupplyModeToggle
+                    value={field.state.value}
+                    onChange={(next) => field.handleChange([...next])}
+                  />
+                </div>
+              )}
+            </form.AppField>
+            <form.AppField name="dropshipFloorPriceGross">
+              {(field) => (
+                <field.TextField
+                  label="一件代发底价（含税运）"
+                  description="勾选「一件代发」时必填；供应商商品资料保留双底价"
+                />
+              )}
+            </form.AppField>
+            <form.AppField name="bulkFloorPriceGross">
+              {(field) => (
+                <field.TextField
+                  label="集采底价（含税）"
+                  description="勾选「集采」时必填；登记供给时默认用作采购确认成本"
+                />
+              )}
+            </form.AppField>
+            <form.AppField name="minimumOrderQuantity">
+              {(field) => <field.TextField label="供给起订量 *" />}
+            </form.AppField>
+            {!fixedSku?.hasPoolEntry ? (
+              <form.AppField name="salesVisiblePrice">
+                {(field) => (
+                  <field.TextField
+                    label="销售可见价 *"
+                    description={`加入 ${fixedSku?.skuCode ?? ""} 的公司商品池价格；不等于采购成本`}
+                  />
+                )}
+              </form.AppField>
+            ) : null}
+          </div>
+
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              关闭
+            </DialogClose>
+            <form.AppForm>
+              <form.SubmitButton
+                label="保存供给"
+                disabled={createMutation.isPending || Boolean(result)}
+              />
+            </form.AppForm>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 const promoteSchema = z.object({
   targetSkuId: z.string().min(1, "请选择公司 SKU"),
   confirmedCostGross: money,
@@ -488,7 +862,9 @@ const promoteSchema = z.object({
   poolPriceAction: z.enum(["KEEP_EXISTING", "SET_PRICE"]),
   inputTaxRate: z.string().trim().min(1, "请填写税率"),
   minimumOrderQuantity: z.string().trim().min(1, "请填写起订量"),
-  supplyMode: z.enum(["DROPSHIP", "BULK"]),
+  supplyMode: z
+    .array(z.enum(["DROPSHIP", "BULK"]))
+    .min(1, "请至少选择一种供给方式"),
   supplyRegionText: z.string().trim().min(1, "请填写可供区域"),
   validFrom: z.string().min(1, "请选择生效日期"),
 }).superRefine((value, context) => {
@@ -531,9 +907,9 @@ export function PromoteSupplierProductDialog({
         item?.offering?.proposedDefaults?.minimumOrderQuantity ??
         sourceRevision?.bulkMinimumOrderQuantity ??
         "1",
-      supplyMode:
-        item?.offering?.proposedDefaults?.supplyMode ??
-        ("BULK" as "DROPSHIP" | "BULK"),
+      supplyMode: [
+        ...(item?.offering?.proposedDefaults?.supplyMode ?? ["BULK"]),
+      ],
       supplyRegionText: "全国",
       validFrom: "2026-08-02",
     },
@@ -597,7 +973,9 @@ export function PromoteSupplierProductDialog({
         item.offering?.proposedDefaults?.minimumOrderQuantity ??
         nextSource.bulkMinimumOrderQuantity ??
         "1",
-      supplyMode: item.offering?.proposedDefaults?.supplyMode ?? "BULK",
+      supplyMode: [
+        ...(item.offering?.proposedDefaults?.supplyMode ?? ["BULK"]),
+      ],
       supplyRegionText:
         item.offering?.proposedDefaults?.supplyRegion.join("、") || "全国",
       validFrom: "2026-08-02",
@@ -759,18 +1137,10 @@ export function PromoteSupplierProductDialog({
             <form.AppField name="supplyMode">
               {(field) => (
                 <div className="space-y-1.5">
-                  <Label>供给方式 *</Label>
-                  <OptionCombobox
+                  <Label>供给方式（可多选）*</Label>
+                  <SupplyModeToggle
                     value={field.state.value}
-                    onValueChange={(value) =>
-                      field.handleChange((value ?? "BULK") as "DROPSHIP" | "BULK")
-                    }
-                    options={[
-                      { value: "DROPSHIP", label: "一件代发" },
-                      { value: "BULK", label: "集采" },
-                    ]}
-                    allowClear={false}
-                    className="w-full"
+                    onChange={(next) => field.handleChange([...next])}
                   />
                 </div>
               )}

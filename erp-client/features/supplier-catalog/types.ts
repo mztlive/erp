@@ -118,6 +118,8 @@ export type SupplierProductMappingView = Readonly<{
   }[]
 }>
 
+export type SupplyMode = "DROPSHIP" | "BULK"
+
 export type SupplierOfferingRevisionView = Readonly<{
   offeringId: string
   offeringRevisionId: string
@@ -126,7 +128,7 @@ export type SupplierOfferingRevisionView = Readonly<{
   supplyPriceGross: string | null
   supplyPriceNet: string | null
   floorPriceGross: string | null
-  supplyMode: "DROPSHIP" | "BULK"
+  supplyMode: readonly SupplyMode[]
   dropshipExpress?: string
   inputTaxRate: string | null
   freightAmount: string | null
@@ -145,7 +147,7 @@ export type SupplierOfferingRevisionView = Readonly<{
 export type SafeOfferingDraftView = Readonly<{
   supplyPriceGross: string
   floorPriceGross: string
-  supplyMode: "DROPSHIP" | "BULK"
+  supplyMode: readonly SupplyMode[]
   dropshipExpress?: string
   inputTaxRate: string
   freightAmount: string
@@ -337,6 +339,7 @@ export type SupplierCatalogQueueView = Readonly<{
   /**
    * 从商品中心进入时的 SKU 上下文。
    * 它来自商品主档，不能从供给关系结果反推，否则无关系时会丢失商品身份。
+   * 公司侧资料用于「添加供应商并登记成本」时反向复用为供应商商品快照。
    */
   skuContext?: {
     productId: string
@@ -345,6 +348,13 @@ export type SupplierCatalogQueueView = Readonly<{
     skuCode: string
     specification: string
     baseUnit: string
+    category?: string
+    brand?: string
+    barcode?: string
+    description?: string
+    carouselImages?: readonly string[]
+    detailImages?: readonly string[]
+    mainImage?: string
     poolEntry?: {
       poolEntryId: string
       poolEntryRevisionId: string
@@ -547,7 +557,7 @@ export type CreateSupplierCatalogItemInput = SupplierCatalogSpuContentFields &
     /** 已有商品池时默认沿用；只有显式 SET_PRICE 才允许形成新修订。 */
     poolPriceAction?: "KEEP_EXISTING" | "SET_PRICE"
     minimumOrderQuantity: string
-    supplyMode: "DROPSHIP" | "BULK"
+    supplyMode: readonly SupplyMode[]
     /** 仅固定 SKU 入池/供给路径使用；非供应商商品目录字段 */
     supplyRegion?: string[]
     inputTaxRate?: string
@@ -581,7 +591,7 @@ export type PromoteSupplierProductInput = Readonly<{
   confirmedCostGross: string
   inputTaxRate: string
   minimumOrderQuantity: string
-  supplyMode: "DROPSHIP" | "BULK"
+  supplyMode: readonly SupplyMode[]
   supplyRegion: string[]
   validFrom: string
   salesVisiblePrice?: string

@@ -239,12 +239,12 @@ assert(
 assert(
   w21Page.includes("useAppForm") &&
     w21Page.includes('name="floorPriceGross"') &&
-    w21Page.includes('name="supplyMode"'),
+    w21Page.includes('aria-label="供给模式（可多选）"'),
   "W21 full supply draft is wired through TanStack Form"
 )
 assert(
   w14Page.includes("mode=list&skuId=") &&
-    w14Page.includes("SupplierCatalogIntakeDialog") &&
+    w14Page.includes("RegisterSupplyForSkuDialog") &&
     w14Page.includes("添加供应商并登记成本") &&
     !w14Page.includes("sku.dropshipCostPrice") &&
     !w14Page.includes("sku.bulkCostPrice") &&

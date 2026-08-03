@@ -55,7 +55,7 @@ import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { MasterDataDisableDialog } from "@/features/master-data/master-data-action-dialog"
 import {
-  SupplierCatalogIntakeDialog,
+  RegisterSupplyForSkuDialog,
   type FixedSku,
 } from "@/features/supplier-catalog/catalog-write-dialogs"
 import { useSupplierCatalogQueueQuery } from "@/features/supplier-catalog/queries"
@@ -1716,8 +1716,21 @@ export function ProductDetailPage({
                                               specification: sku.specLabel,
                                               baseUnit:
                                                 sku.baseUnit ?? fields.baseUnit,
+                                              category:
+                                                fields.category || undefined,
+                                              brand: fields.brand || undefined,
+                                              barcode: sku.barcode,
+                                              description:
+                                                fields.description || undefined,
+                                              carouselImages:
+                                                fields.carouselImages,
+                                              detailImages: fields.detailImages,
+                                              mainImage:
+                                                sku.mainImage || undefined,
                                               salesVisiblePrice: sku.salePrice,
-                                              hasPoolEntry: Boolean(sku.salePrice),
+                                              hasPoolEntry: Boolean(
+                                                sku.salePrice,
+                                              ),
                                             })
                                           }
                                         >
@@ -2012,13 +2025,12 @@ export function ProductDetailPage({
                 target={data}
               />
             ) : null}
-            <SupplierCatalogIntakeDialog
-              key={supplierDialogSku?.skuId ?? "supplier-intake"}
+            <RegisterSupplyForSkuDialog
+              key={supplierDialogSku?.skuId ?? "register-supply"}
               open={Boolean(supplierDialogSku)}
               onOpenChange={(open) => {
                 if (!open) setSupplierDialogSku(undefined)
               }}
-              sourceType="MANUAL"
               fixedSku={supplierDialogSku}
             />
           </div>

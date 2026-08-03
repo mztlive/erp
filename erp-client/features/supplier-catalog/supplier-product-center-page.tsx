@@ -476,7 +476,7 @@ export function SupplierProductCenterPage({
           ...payload,
           sourceReference: fields.sourceReference.trim() || undefined,
           minimumOrderQuantity: "1",
-          supplyMode: "BULK",
+          supplyMode: ["BULK"],
           validFrom: "2026-08-02",
           idempotencyKey,
         })

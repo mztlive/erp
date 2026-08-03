@@ -69,6 +69,7 @@ import {
 } from "@/features/supplier-catalog/types"
 import {
   PromoteSupplierProductDialog,
+  RegisterSupplyForSkuDialog,
   SupplierCatalogIntakeDialog,
 } from "@/features/supplier-catalog/catalog-write-dialogs"
 import {
@@ -156,7 +157,9 @@ function decimalAtMost(value: string, maximum: string, maxScale: number) {
 }
 
 const offeringDraftSchema = z.object({
-  supplyMode: z.enum(["DROPSHIP", "BULK"]),
+  supplyMode: z
+    .array(z.enum(["DROPSHIP", "BULK"]))
+    .min(1, "请至少选择一种供给方式"),
   supplyPriceGross: decimalString("含税供货价", 4, true),
   floorPriceGross: decimalString("含税底价", 4),
   dropshipExpress: z.string(),
@@ -379,7 +382,7 @@ export function SupplierCatalogPage() {
 
   const offeringForm = useAppForm({
     defaultValues: {
-      supplyMode: "BULK" as "DROPSHIP" | "BULK",
+      supplyMode: ["BULK"] as ("DROPSHIP" | "BULK")[],
       supplyPriceGross: "",
       floorPriceGross: "",
       dropshipExpress: "",
@@ -405,7 +408,7 @@ export function SupplierCatalogPage() {
             supplyPriceGross: value.supplyPriceGross,
             floorPriceGross: value.floorPriceGross,
             dropshipExpress:
-              value.supplyMode === "DROPSHIP"
+              value.supplyMode.includes("DROPSHIP")
                 ? value.dropshipExpress.trim() || undefined
                 : undefined,
             inputTaxRate: value.inputTaxRate,
@@ -456,7 +459,9 @@ export function SupplierCatalogPage() {
       contextSkuId ?? item.mapping?.skuId ?? item.skuCandidates[0]?.skuId ?? ""
     )
     offeringForm.reset({
-      supplyMode: proposed?.supplyMode ?? "BULK",
+      supplyMode: [
+        ...(proposed?.supplyMode ?? (["BULK"] as ("DROPSHIP" | "BULK")[])),
+      ],
       supplyPriceGross: proposed?.supplyPriceGross ?? "",
       floorPriceGross: proposed?.floorPriceGross ?? "",
       dropshipExpress: proposed?.dropshipExpress ?? "",
@@ -957,25 +962,35 @@ export function SupplierCatalogPage() {
           onOpenChange={setExcelImportOpen}
           sourceType="EXCEL"
         />
-        <SupplierCatalogIntakeDialog
-          open={manualEntryOpen}
-          onOpenChange={setManualEntryOpen}
-          sourceType="MANUAL"
-          fixedSku={
-            view?.skuContext
-              ? {
-                  skuId: view.skuContext.skuId,
-                  skuCode: view.skuContext.skuCode,
-                  skuName: view.skuContext.productName,
-                  specification: view.skuContext.specification,
-                  baseUnit: view.skuContext.baseUnit,
-                  salesVisiblePrice:
-                    view.skuContext.poolEntry?.salesVisiblePrice,
-                  hasPoolEntry: Boolean(view.skuContext.poolEntry),
-                }
-              : undefined
-          }
-        />
+        {view?.skuContext ? (
+          <RegisterSupplyForSkuDialog
+            key={view.skuContext.skuId}
+            open={manualEntryOpen}
+            onOpenChange={setManualEntryOpen}
+            fixedSku={{
+              skuId: view.skuContext.skuId,
+              skuCode: view.skuContext.skuCode,
+              skuName: view.skuContext.productName,
+              specification: view.skuContext.specification,
+              baseUnit: view.skuContext.baseUnit,
+              category: view.skuContext.category,
+              brand: view.skuContext.brand,
+              barcode: view.skuContext.barcode,
+              description: view.skuContext.description,
+              carouselImages: view.skuContext.carouselImages,
+              detailImages: view.skuContext.detailImages,
+              mainImage: view.skuContext.mainImage,
+              salesVisiblePrice: view.skuContext.poolEntry?.salesVisiblePrice,
+              hasPoolEntry: Boolean(view.skuContext.poolEntry),
+            }}
+          />
+        ) : (
+          <SupplierCatalogIntakeDialog
+            open={manualEntryOpen}
+            onOpenChange={setManualEntryOpen}
+            sourceType="MANUAL"
+          />
+        )}
         <PromoteSupplierProductDialog
           key={promotionItem?.supplierProduct.id ?? "promote-supplier-product"}
           item={promotionItem}
@@ -1807,7 +1822,7 @@ export function SupplierCatalogPage() {
                         {
                           id: "mode",
                           label: "供给模式 / 快递",
-                          value: `${item.offering.currentRevision.supplyMode === "DROPSHIP" ? "一件代发" : "集采"} / ${item.offering.currentRevision.dropshipExpress ?? "—"}`,
+                          value: `${item.offering.currentRevision.supplyMode.map((mode) => (mode === "DROPSHIP" ? "一件代发" : "集采")).join(" / ")} / ${item.offering.currentRevision.dropshipExpress ?? "—"}`,
                         },
                         {
                           id: "moq",
@@ -1838,22 +1853,27 @@ export function SupplierCatalogPage() {
                         <offeringForm.AppField name="supplyMode">
                           {(field) => (
                             <div className="space-y-1.5">
-                              <Label>供给模式</Label>
-                              <OptionCombobox
+                              <Label>供给模式（可多选）</Label>
+                              <ToggleGroup
+                                multiple
                                 value={field.state.value}
-                                onValueChange={(value) =>
+                                onValueChange={(next) =>
                                   field.handleChange(
-                                    (value ?? "BULK") as "DROPSHIP" | "BULK"
+                                    next as unknown as ("DROPSHIP" | "BULK")[],
                                   )
                                 }
-                                options={[
-                                  { value: "DROPSHIP", label: "一件代发（含税运）" },
-                                  { value: "BULK", label: "集采（含税）" },
-                                ]}
-                                allowClear={false}
+                                variant="outline"
+                                size="sm"
                                 disabled={demoRole !== "procurement"}
-                                className="w-full"
-                              />
+                                aria-label="供给模式（可多选）"
+                              >
+                                <ToggleGroupItem value="DROPSHIP">
+                                  一件代发（含税运）
+                                </ToggleGroupItem>
+                                <ToggleGroupItem value="BULK">
+                                  集采（含税）
+                                </ToggleGroupItem>
+                              </ToggleGroup>
                             </div>
                           )}
                         </offeringForm.AppField>

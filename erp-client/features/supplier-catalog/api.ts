@@ -122,6 +122,13 @@ function resolveSkuContext(skuId?: string) {
       skuCode: sku.skuNo,
       specification: sku.specLabel,
       baseUnit: sku.baseUnit ?? detail.baseUnit,
+      category: detail.category || undefined,
+      brand: detail.brand || undefined,
+      barcode: sku.barcode,
+      description: detail.description,
+      carouselImages: detail.carouselImages,
+      detailImages: detail.detailImages,
+      mainImage: sku.mainImage || undefined,
       poolEntry: currentPoolEntryForSku(skuId),
     }
   }
@@ -996,7 +1003,7 @@ function createConfirmedOffering(input: {
   costGross: string
   inputTaxRate: string
   minimumOrderQuantity: string
-  supplyMode: "DROPSHIP" | "BULK"
+  supplyMode: readonly import("@/features/supplier-catalog/types").SupplyMode[]
   supplyRegion: string[]
   validFrom: string
 }): SupplierOfferingRevisionView {
