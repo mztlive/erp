@@ -169,8 +169,10 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 | 组件 | 扩展点 | 默认 | 谁在用非默认值 |
 | --- | --- | --- | --- |
 | `PrepaymentGate` | `copy?: Partial<PrepaymentGateCopy>` | 面向采购/财务的措辞（「先款后货门禁」「付款门禁已满足」） | W09 履约作业传一线口语（「先款条件」「货款已到，可以收货」） |
+| `PrepaymentGate` | `presentation?: "panel" \| "badge"` | `panel` 完整卡片 | W09 传 `badge`：顶栏结果徽章，悬停展开详情，不打断读单 |
 | `SequentialProcessBar` | `showProcess?: boolean` | `true` | W09 只读角色传 `false`，同时隐藏主动作与「重新领取」 |
 | `SequentialProcessBar` | `showProcessNext?: boolean` | `true` | 主动作会离开当前页、或没有独立「并下一条」路径时传 `false` |
+| `SequentialProcessBar` | `statusExtras?: ReactNode` | 无 | W09 传入先款条件徽章，放在位置/租约状态之后 |
 
 只读角色不要用「渲染但禁用」表达 —— 禁用态不解释原因，且「重新领取」这类按钮
 本就不该让只读用户看到。替换成一句说明加一个有用的出口。

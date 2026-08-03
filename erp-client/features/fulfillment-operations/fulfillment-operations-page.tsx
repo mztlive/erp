@@ -1062,6 +1062,86 @@ export function FulfillmentOperationsPage() {
               // 没有独立的「并下一项」路径：两个 handler 同义，第二个按钮名不副实
               showProcessNext={false}
               processDisabled={formalPending || !canPost}
+              statusExtras={
+                task.gate.state !== "NOT_APPLICABLE" ? (
+                  <PrepaymentGate
+                    id="prepayment-gate"
+                    presentation="badge"
+                    copy={{
+                      title: "先款条件",
+                      description:
+                        "只认已经到账并核销过的货款，付款申请和附件不算。",
+                      allowedBadge: "可以收货",
+                      blockedBadge: "暂时不能收货",
+                      amountTerm: "至少要付",
+                      ratioTerm: "至少要付比例",
+                      allocatedTerm: "已经付了",
+                      gapTerm: "还差",
+                      updatedTerm: "算到什么时候",
+                      allowedTitle: "货款已到，可以收货",
+                      blockedTitle: "先款未到，暂时不能收货",
+                      allowedBody: "货款已经够了，这一单可以继续。",
+                      blockedBody:
+                        "差额补齐之前，入库、直发、电子交付和服务都确认不了。",
+                    }}
+                    condition={{
+                      kind: "amount",
+                      required: task.gate.requiredAmount ?? "—",
+                      description: task.gate.message,
+                    }}
+                    allocated={task.gate.effectivePaidAmount ?? "—"}
+                    gap={
+                      task.gate.state === "BLOCKED" &&
+                      task.gate.requiredAmount &&
+                      task.gate.effectivePaidAmount
+                        ? String(
+                            Math.max(
+                              0,
+                              Number(task.gate.requiredAmount) -
+                                Number(task.gate.effectivePaidAmount)
+                            )
+                          )
+                        : "0"
+                    }
+                    updatedAt={{
+                      label: "刚刚",
+                      dateTime:
+                        context?.snapshotUpdatedAt ?? new Date().toISOString(),
+                    }}
+                    allowed={task.gate.state === "SATISFIED"}
+                    paymentAction={
+                      task.gate.state === "BLOCKED" ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          render={
+                            <Link
+                              href={`/finance/supplier-accounts?from=W09&purchaseOrderId=${task.source.purchaseOrderId ?? ""}&returnTo=${encodeURIComponent(
+                                `${pathname}?${searchParams.toString()}`
+                              )}`}
+                            />
+                          }
+                        >
+                          去登记付款
+                        </Button>
+                      ) : undefined
+                    }
+                  />
+                ) : (
+                  <BusinessStatusBadge
+                    context="list"
+                    id="prepayment-gate"
+                    tone="neutral"
+                    label={
+                      task.operationType === "WAREHOUSE_SHIP"
+                        ? "发货条件：无先款要求"
+                        : "无先款要求"
+                    }
+                    description={task.gate.message}
+                  />
+                )
+              }
               onBack={() => {
                 if (sourceReturnHref) router.push(sourceReturnHref)
                 else router.push("/workspace")
@@ -1184,81 +1264,6 @@ export function FulfillmentOperationsPage() {
                     ))}
                   </dl>
                 </section>
-
-                {task.gate.state !== "NOT_APPLICABLE" ? (
-                  <div id="prepayment-gate">
-                    <PrepaymentGate
-                      copy={{
-                        title: "先款条件",
-                        description:
-                          "只认已经到账并核销过的货款，付款申请和附件不算。",
-                        allowedBadge: "可以收货",
-                        blockedBadge: "暂时不能收货",
-                        amountTerm: "至少要付",
-                        ratioTerm: "至少要付比例",
-                        allocatedTerm: "已经付了",
-                        gapTerm: "还差",
-                        updatedTerm: "算到什么时候",
-                        allowedTitle: "货款已到，可以收货",
-                        blockedTitle: "先款未到，暂时不能收货",
-                        allowedBody: "货款已经够了，这一单可以继续。",
-                        blockedBody:
-                          "差额补齐之前，入库、直发、电子交付和服务都确认不了。",
-                      }}
-                      condition={{
-                        kind: "amount",
-                        required: task.gate.requiredAmount ?? "—",
-                        description: task.gate.message,
-                      }}
-                      allocated={task.gate.effectivePaidAmount ?? "—"}
-                      gap={
-                        task.gate.state === "BLOCKED" &&
-                        task.gate.requiredAmount &&
-                        task.gate.effectivePaidAmount
-                          ? String(
-                              Math.max(
-                                0,
-                                Number(task.gate.requiredAmount) -
-                                  Number(task.gate.effectivePaidAmount)
-                              )
-                            )
-                          : "0"
-                      }
-                      updatedAt={{
-                        label: "刚刚",
-                        dateTime: context?.snapshotUpdatedAt ?? new Date().toISOString(),
-                      }}
-                      allowed={task.gate.state === "SATISFIED"}
-                      paymentAction={
-                        task.gate.state === "BLOCKED" ? (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            render={
-                              <Link
-                                href={`/finance/supplier-accounts?from=W09&purchaseOrderId=${task.source.purchaseOrderId ?? ""}&returnTo=${encodeURIComponent(
-                                  `${pathname}?${searchParams.toString()}`
-                                )}`}
-                              />
-                            }
-                          >
-                            去登记付款
-                          </Button>
-                        ) : undefined
-                      }
-                    />
-                  </div>
-                ) : (
-                  <Alert>
-                    <AlertTitle>
-                      {task.operationType === "WAREHOUSE_SHIP"
-                        ? "发货条件"
-                        : "作业条件"}
-                    </AlertTitle>
-                    <AlertDescription>{task.gate.message}</AlertDescription>
-                  </Alert>
-                )}
 
                 <Separator />
 

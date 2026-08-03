@@ -396,6 +396,11 @@ export type SequentialProcessBarProps = Omit<
    * 不渲染主动作与「重新领取」，避免展示一排点不动的按钮。
    */
   showProcess?: boolean
+  /**
+   * 插入状态徽章区（位置/租约之后），例如先款条件结果徽章。
+   * 不改变默认布局；各工作面按需传入。
+   */
+  statusExtras?: React.ReactNode
   onBack: () => void
   onProcess: () => void
   onProcessNext: () => void
@@ -414,6 +419,7 @@ function SequentialProcessBar({
   processDisabled = false,
   showProcessNext = true,
   showProcess = true,
+  statusExtras,
   onBack,
   onProcess,
   onProcessNext,
@@ -448,6 +454,7 @@ function SequentialProcessBar({
           icon={lease.icon}
           label={leaseStatusLabel ?? lease.label}
         />
+        {statusExtras}
         {leaseStatus === "lost" ? (
           <span className="text-sm text-destructive">
             当前输入会保留，重新领取后才能提交。

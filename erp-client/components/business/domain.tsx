@@ -25,6 +25,11 @@ import {
   DescriptionTerm,
 } from "@/components/ui/description-list"
 import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
+import {
   Item,
   ItemActions,
   ItemContent,
@@ -462,6 +467,11 @@ export type PrepaymentGateProps = DomainPanelProps & {
    * 不传则沿用面向采购/财务的默认措辞。
    */
   copy?: Partial<PrepaymentGateCopy>
+  /**
+   * `panel`：完整卡片（采购中心默认）。
+   * `badge`：仅结果徽章，悬停/聚焦展开详情（适合连续作业顶栏，避免打断读单）。
+   */
+  presentation?: "panel" | "badge"
 }
 
 export type PrepaymentGateCopy = {
@@ -504,17 +514,109 @@ function PrepaymentGate({
   allowed,
   paymentAction,
   copy,
+  presentation = "panel",
   className,
   ...props
 }: PrepaymentGateProps) {
   const text = copy ? { ...PREPAYMENT_GATE_COPY, ...copy } : PREPAYMENT_GATE_COPY
   const conditionLabel =
     condition.kind === "amount" ? text.amountTerm : text.ratioTerm
+  const resultLabel = allowed ? text.allowedBadge : text.blockedBadge
+  const resultTone: StatusTone = allowed ? "success" : "warning"
+
+  const metrics = (
+    <DescriptionList columns={presentation === "badge" ? "two" : "four"}>
+      <DescriptionItem>
+        <DescriptionTerm>{conditionLabel}</DescriptionTerm>
+        <DescriptionDetails>
+          <NumericValue>{condition.required}</NumericValue>
+          {condition.description != null ? (
+            <span className="mt-1 block text-xs text-muted-foreground">
+              {condition.description}
+            </span>
+          ) : null}
+        </DescriptionDetails>
+      </DescriptionItem>
+      <DescriptionItem>
+        <DescriptionTerm>{text.allocatedTerm}</DescriptionTerm>
+        <DescriptionDetails>
+          <NumericValue>{allocated}</NumericValue>
+        </DescriptionDetails>
+      </DescriptionItem>
+      <DescriptionItem>
+        <DescriptionTerm>{text.gapTerm}</DescriptionTerm>
+        <DescriptionDetails>
+          <NumericValue>{gap}</NumericValue>
+        </DescriptionDetails>
+      </DescriptionItem>
+      <DescriptionItem>
+        <DescriptionTerm>{text.updatedTerm}</DescriptionTerm>
+        <DescriptionDetails>
+          <DomainTime value={updatedAt} />
+        </DescriptionDetails>
+      </DescriptionItem>
+    </DescriptionList>
+  )
+
+  const conclusion = (
+    <Alert variant={allowed ? "success" : "warning"}>
+      <AlertTitle>
+        {allowed ? text.allowedTitle : text.blockedTitle}
+      </AlertTitle>
+      <AlertDescription>
+        {allowed ? text.allowedBody : text.blockedBody}
+      </AlertDescription>
+    </Alert>
+  )
+
+  if (presentation === "badge") {
+    const { id } = props
+    return (
+      <HoverCard>
+        <HoverCardTrigger
+          id={id}
+          data-slot="prepayment-gate"
+          data-allowed={allowed}
+          data-presentation="badge"
+          render={
+            <button
+              type="button"
+              className={cn(
+                "inline-flex rounded-2xl outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                className
+              )}
+              aria-label={`${text.title}：${resultLabel}`}
+            />
+          }
+        >
+          <StatusBadge tone={resultTone} label={resultLabel} />
+        </HoverCardTrigger>
+        <HoverCardContent
+          align="start"
+          side="bottom"
+          className="w-80 space-y-3 p-4 sm:w-96"
+        >
+          <div className="space-y-1">
+            <p className="text-sm font-medium">{text.title}</p>
+            <p className="text-xs text-muted-foreground">{text.description}</p>
+          </div>
+          {metrics}
+          {conclusion}
+          {paymentAction != null ? (
+            <div className="flex justify-end border-t border-border pt-3">
+              {paymentAction}
+            </div>
+          ) : null}
+        </HoverCardContent>
+      </HoverCard>
+    )
+  }
 
   return (
     <Card
       data-slot="prepayment-gate"
       data-allowed={allowed}
+      data-presentation="panel"
       className={className}
       {...props}
     >
@@ -522,54 +624,13 @@ function PrepaymentGate({
         <CardTitle>{text.title}</CardTitle>
         <CardDescription>{text.description}</CardDescription>
         <CardAction>
-          <StatusBadge
-            tone={allowed ? "success" : "warning"}
-            label={allowed ? text.allowedBadge : text.blockedBadge}
-          />
+          <StatusBadge tone={resultTone} label={resultLabel} />
         </CardAction>
       </CardHeader>
 
       <CardContent className="space-y-4">
-        <DescriptionList columns="four">
-          <DescriptionItem>
-            <DescriptionTerm>{conditionLabel}</DescriptionTerm>
-            <DescriptionDetails>
-              <NumericValue>{condition.required}</NumericValue>
-              {condition.description != null ? (
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  {condition.description}
-                </span>
-              ) : null}
-            </DescriptionDetails>
-          </DescriptionItem>
-          <DescriptionItem>
-            <DescriptionTerm>{text.allocatedTerm}</DescriptionTerm>
-            <DescriptionDetails>
-              <NumericValue>{allocated}</NumericValue>
-            </DescriptionDetails>
-          </DescriptionItem>
-          <DescriptionItem>
-            <DescriptionTerm>{text.gapTerm}</DescriptionTerm>
-            <DescriptionDetails>
-              <NumericValue>{gap}</NumericValue>
-            </DescriptionDetails>
-          </DescriptionItem>
-          <DescriptionItem>
-            <DescriptionTerm>{text.updatedTerm}</DescriptionTerm>
-            <DescriptionDetails>
-              <DomainTime value={updatedAt} />
-            </DescriptionDetails>
-          </DescriptionItem>
-        </DescriptionList>
-
-        <Alert variant={allowed ? "success" : "warning"}>
-          <AlertTitle>
-            {allowed ? text.allowedTitle : text.blockedTitle}
-          </AlertTitle>
-          <AlertDescription>
-            {allowed ? text.allowedBody : text.blockedBody}
-          </AlertDescription>
-        </Alert>
+        {metrics}
+        {conclusion}
       </CardContent>
 
       {paymentAction != null ? (
