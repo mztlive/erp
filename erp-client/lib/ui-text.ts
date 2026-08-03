@@ -193,7 +193,7 @@ export function actionLabelForWorkItemType(
 
 export const interfaceText = {
   duplicateCallbackIgnored:
-    "重复回调将忽略，不会重复形成业务记录或待办。",
+    "重复通知将忽略，不会重复形成业务记录或待办。",
 } as const
 
 // ─── 导航 / 详情入口（禁止「打开中心 / 对象中心」） ───────────────────────────

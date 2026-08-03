@@ -629,7 +629,7 @@ function SettlementList({
         <BusinessFailureState
           kind="system"
           title="结算列表加载失败"
-          description="请重试。有缓存时应保留旧列表。"
+          description="请重试。已有数据时保留旧列表。"
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重试
@@ -2181,7 +2181,7 @@ function SettlementCenter({
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
         title="确认结算（不可逆）"
-        description="同事务追加成本差额、形成唯一应付并锁定处理结果。经办人不可确认本单。"
+        description="同一次提交追加成本差额、形成唯一应付并锁定处理结果。经办人不可确认本单。"
         actionLabel="确认结算"
         confirmLabel="确认结算"
         fromStatus={{ label: "待复核", tone: "warning" }}

@@ -394,7 +394,7 @@ export function ContractDetailPage({
                 },
                 {
                   id: "tax",
-                  label: "税号（掩码）",
+                  label: "税号（打码）",
                   value: rev.invoiceRequirementSnapshot.taxIdMasked ?? "—",
                   numeric: true,
                 },

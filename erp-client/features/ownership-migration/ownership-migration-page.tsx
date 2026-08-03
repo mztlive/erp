@@ -169,7 +169,7 @@ function RoleDemoBar({
         allowClear={false}
       />
       <span className="text-xs text-muted-foreground">
-        角色仅影响 allowedActions / 掩码，不写入业务记录
+        角色仅影响 allowedActions / 打码，不写入业务记录
       </span>
     </div>
   )
@@ -778,7 +778,7 @@ function OverviewView({
               仅已生效及之后、未作废的已生效存量卡券销售单可迁移；商城草稿不入批次与统计。每批仅一位客户。销售 / 财务 / 基线确认职责分离，管理员不可代签。成功仅改主责标记。
               {data.financeFieldsMasked ? (
                 <span className="mt-1 block font-medium">
-                  当前角色票款字段已掩码，仅见确认状态。
+                  当前角色票款字段已隐藏，仅见确认状态。
                 </span>
               ) : null}
             </AlertDescription>
@@ -958,7 +958,7 @@ function BatchWizardView({
               {batch.freeze.startedAt ? (
                 <p>开始于 {formatTime(batch.freeze.startedAt)}</p>
               ) : null}
-              <p className="font-medium">不可忽略 · 无本地绕过入口</p>
+              <p className="font-medium">不可忽略 · 无法跳过</p>
             </div>
           }
         />
@@ -1078,7 +1078,7 @@ function BatchWizardView({
 
       <Card size="sm">
         <CardContent className="grid gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-5">
-          <Fact label="scopeHash" value={batch.scopeHash} mono />
+          <Fact label="数据版本" value={batch.scopeHash} mono />
           <Fact label="销售版本摘要" value={batch.salesVersionSummary} />
           <Fact
             label="票款摘要"
@@ -1344,7 +1344,7 @@ function ConfirmationsSection({
           scopeHash={batch.scopeHash}
           objectSummary={
             batch.financeSummaryMasked
-              ? "（金额已掩码）"
+              ? "（金额已隐藏）"
               : batch.financeSummary
           }
           canAct={!hideHighRisk && can("CONFIRM_FINANCE")}
@@ -1353,7 +1353,7 @@ function ConfirmationsSection({
           onConfirm={() => onConfirm("CONFIRM_FINANCE")}
         />
         <ConfirmationCard
-          title="最终权威基线"
+          title="最终基线"
           facet="baseline"
           summary={batch.confirmations.baseline}
           scopeHash={batch.scopeHash}
@@ -1405,13 +1405,13 @@ function ConfirmationCard({
         <CardDescription>独立确认卡 · 不可与其它分面合并代签</CardDescription>
       </CardHeader>
       <CardContent className="space-y-3 pt-4 text-sm">
-        <Fact label="当前 scopeHash" value={scopeHash} mono />
+        <Fact label="当前数据版本" value={scopeHash} mono />
         <Fact label="对象摘要" value={objectSummary} />
         {summary.state === "VALID" ? (
           <>
             <Fact label="确认人" value={summary.confirmedBy ?? "—"} />
             <Fact label="确认时间" value={formatTime(summary.confirmedAt)} />
-            <Fact label="subjectHash" value={summary.subjectHash ?? "—"} mono />
+            <Fact label="数据版本" value={summary.subjectHash ?? "—"} mono />
           </>
         ) : null}
         {summary.state === "INVALIDATED" ? (
@@ -1558,7 +1558,7 @@ function BaselineSection({
     <div className="grid gap-4 lg:grid-cols-2">
       <Card size="sm">
         <CardHeader className="border-b">
-          <CardTitle>最终权威基线</CardTitle>
+          <CardTitle>最终基线</CardTitle>
           <CardDescription>
             基线登记不生成新销售版本；迁移执行基线为第一份数据修订。
           </CardDescription>
@@ -1617,7 +1617,7 @@ function BaselineSection({
                 }
                 onClick={onConfirm}
               >
-                确认最终权威基线
+                确认最终基线
               </Button>
             </div>
           ) : (

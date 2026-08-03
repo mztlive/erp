@@ -1863,7 +1863,7 @@ const seeds: ConsumptionOrderSeed[] = [
         {
           action: "OVERRIDE_BASELINE",
           code: "BASELINE_CONFLICT",
-          message: "基线冲突禁止覆盖，须 FINANCE_CORRECTION_REVIEW。",
+          message: "初始数据冲突禁止覆盖，须财务纠错复核。",
         },
       ],
       costBasisPolicyState: "UNCONFIGURED",
@@ -2033,7 +2033,7 @@ const seeds: ConsumptionOrderSeed[] = [
           action: "OVERRIDE_BASELINE",
           code: "BASELINE_CONFLICT",
           message:
-            "基线冲突，禁止覆盖。原基线永久保留；财务按 FINANCE_CORRECTION_REVIEW 追加纠错。",
+            "初始数据冲突，禁止覆盖。原有记录永久保留；财务按纠错复核追加纠错。",
         },
         {
           action: "EDIT_MALL_ORDER",
@@ -2042,9 +2042,9 @@ const seeds: ConsumptionOrderSeed[] = [
         },
       ],
       paymentOccurredAlert: {
-        title: "卡实例基线冲突 · 禁止覆盖",
+        title: "初始数据冲突 · 禁止覆盖",
         message:
-          "新来源声称的原销售单或初始余额与既有基线冲突。领域服务保留原基线，创建 FINANCE_CORRECTION_REVIEW；运营只能补充证据。",
+          "新来源声称的原销售单或初始余额与既有记录冲突。系统保留原记录，创建财务纠错复核；运营只能补充证据。",
         severity: "destructive",
       },
       fieldPermissions: {
@@ -2056,7 +2056,7 @@ const seeds: ConsumptionOrderSeed[] = [
         customer: "full",
       },
       boundaryNotice:
-        "既有卡实例基线冲突不得由运营直接覆盖；仅财务复核后追加纠错。",
+        "既有初始数据冲突不得由运营直接覆盖；仅财务复核后追加纠错。",
       workItemIds: ["wi-fcr-4402"],
     },
   },

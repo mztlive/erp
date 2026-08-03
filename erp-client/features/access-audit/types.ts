@@ -350,7 +350,7 @@ export const ACCESS_LAYER_HELP = [
   {
     id: "module",
     title: "模块与动作权限",
-    description: "能否进入工作面、能否执行某类动作（角色权限与授权策略）。",
+    description: "能否进入页面、能否执行某类动作（角色权限与授权策略）。",
   },
   {
     id: "scope",
@@ -360,7 +360,7 @@ export const ACCESS_LAYER_HELP = [
   {
     id: "field",
     title: "字段权限",
-    description: "字段可见、掩码、短时揭示、编辑或导出到什么程度。",
+    description: "字段可见、打码、短时查看、编辑或导出到什么程度。",
   },
   {
     id: "object",

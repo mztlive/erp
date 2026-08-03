@@ -634,6 +634,6 @@ export const REGISTRATION_BLOCKER_MESSAGE =
   "来源商品变化仍需采购复核；采购可以直接把新供应商商品加入公司商品池，异常数据必须先修复。"
 
 export const RECOVERY_BLOCKER_MESSAGE =
-  "替代供给选定人与恢复发布责任链尚未确认（Q3）。服务端固定返回 RECOVERY_RESPONSIBILITY_UNCONFIRMED：可准备会话内候选证据，不得选定替代供给或从供应商商品库发起商品发布恢复。"
+  "替代供给选定人与恢复发布责任链尚未确认。系统按保守策略处理：可准备候选证据，但不得选定替代供给或从供应商商品库发起商品发布恢复。"
 
 export const COST_MASK = "***"

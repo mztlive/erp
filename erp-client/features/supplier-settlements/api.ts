@@ -149,7 +149,7 @@ function refreshCutoffPolicy() {
         action: "SUBMIT_REVIEW",
         code: "REFRESH_CUTOFF_POLICY_UNCONFIGURED",
         message:
-          "刷新截止策略未配置，不得提交复核或创建任务；请先完成 Q4 策略配置",
+          "刷新截止策略未配置，不得提交复核或创建任务；请先完成策略配置",
       },
     }
   }
@@ -704,7 +704,7 @@ export async function createSettlementDraft(
       code: "PERIOD_POLICY_STALE",
       title: "期间策略版本过期",
       message:
-        "客户端携带的策略版本与服务端不一致，已拒绝创建草稿。请重新加载策略后选择完整周期。",
+        "当前使用的策略版本已更新，已拒绝创建草稿。请重新加载策略后选择完整周期。",
     }
   }
   const periodOk = policy.selectablePeriods.some(
@@ -846,7 +846,7 @@ export async function refreshSettlementTrial(
     return {
       status: "failed",
       code: "VERSION_CONFLICT",
-      title: "锁版本冲突",
+      title: "数据已更新",
       message: "请重新加载后基于最新 lockVersion 与 sourceSnapshotHash 刷新",
     }
   }
@@ -950,8 +950,8 @@ export async function appendDifferenceEvidence(
     return {
       status: "failed",
       code: "DIFF_VERSION_CONFLICT",
-      title: "差异版本冲突",
-      message: "请重载差异后重试",
+      title: "差异数据已更新",
+      message: "请刷新后重试",
     }
   }
 
@@ -1040,8 +1040,8 @@ export async function resolveDifference(
     return {
       status: "failed",
       code: "VERSION_CONFLICT",
-      title: "锁版本冲突",
-      message: "请重载后基于最新版本提交",
+      title: "数据已更新",
+      message: "请刷新后基于最新数据提交",
     }
   }
   const diff = seed.differences.find((d) => d.differenceId === input.differenceId)
@@ -1057,8 +1057,8 @@ export async function resolveDifference(
     return {
       status: "failed",
       code: "DIFF_VERSION_CONFLICT",
-      title: "差异版本冲突",
-      message: "请重载差异后重试",
+      title: "差异数据已更新",
+      message: "请刷新后重试",
     }
   }
   if (
@@ -1177,7 +1177,7 @@ export async function submitSettlementReview(
     return {
       status: "failed",
       code: "VERSION_CONFLICT",
-      title: "锁版本冲突",
+      title: "数据已更新",
       message: "版本变化会使旧提交失效",
     }
   }
@@ -1317,7 +1317,7 @@ export async function decideSettlementReview(
     return {
       status: "failed",
       code: "VERSION_CONFLICT",
-      title: "锁版本冲突",
+      title: "数据已更新",
       message: "请刷新任务与结算单后重试",
     }
   }
@@ -1456,7 +1456,7 @@ export async function decideSettlementReview(
     status: "succeeded",
     title: "结算已确认",
     message:
-      "同事务已追加成本差额并形成唯一应付。付款、进项发票与核销请进入供应商往来，本页不复制财务流程。",
+      "同一次提交已追加成本差额并形成唯一应付。付款、进项发票与核销请进入供应商往来，本页不复制财务流程。",
     reference: payableNo,
     statementId: seed.statementId,
     payableNo,

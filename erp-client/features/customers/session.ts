@@ -117,7 +117,7 @@ export function saveW03CustomerRevision(
     const result: CustomerMutationResult = {
       outcome: "unknown",
       message:
-        "提交结果不确定：未确认服务端是否已生成新版本。请查询最终结果后再决定是否重试（同一任务号）。",
+        "提交结果不确定：未确认系统是否已生成新版本。请查询最终结果后再决定是否重试（同一任务号）。",
       idempotencyKey: input.idempotencyKey,
     }
     // Do not cache unknown as terminal success — allow re-query.
@@ -140,7 +140,7 @@ export function saveW03CustomerRevision(
   ) {
     const result: CustomerMutationResult = {
       outcome: "conflict",
-      message: "基础资料版本已变化，禁止静默覆盖。请查看服务端新版本后重做。",
+      message: "基础资料版本已变化，禁止静默覆盖。请查看系统最新版本后重做。",
       serverLockVersion: detail.lockVersion,
       serverRevisionNo: detail.currentRevision.revisionNo,
       serverLegalName: detail.currentRevision.legalName,

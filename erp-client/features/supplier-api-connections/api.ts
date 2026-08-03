@@ -658,7 +658,7 @@ export async function bindCredentialReference(input: {
     return {
       status: "failed",
       code: "VERSION_CONFLICT",
-      title: "配置版本冲突",
+      title: "配置已更新",
       message: "连接配置已被他人更新，请重新加载后基于最新版本提交",
     }
   }
@@ -670,7 +670,7 @@ export async function bindCredentialReference(input: {
       status: "failed",
       code: "INVALID_REFERENCE",
       title: "无效引用",
-      message: "只能选择服务端提供的密钥管理系统不透明引用，无明文输入路径",
+      message: "只能选择系统提供的密钥引用，不能明文输入",
     }
   }
 
@@ -759,7 +759,7 @@ export async function confirmCapabilityRequirement(input: {
     return {
       status: "failed",
       code: "VERSION_CONFLICT",
-      title: "连接版本冲突",
+      title: "连接信息已更新",
       message: "请重新加载后基于最新连接版本确认",
     }
   }
@@ -778,7 +778,7 @@ export async function confirmCapabilityRequirement(input: {
     return {
       status: "failed",
       code: "CAP_VERSION_CONFLICT",
-      title: "能力版本冲突",
+      title: "能力信息已更新",
       message: "请重新加载后基于最新能力版本确认",
     }
   }
@@ -873,7 +873,7 @@ export async function updateCapabilities(input: {
     return {
       status: "failed",
       code: "VERSION_CONFLICT",
-      title: "连接版本冲突",
+      title: "连接信息已更新",
       message: "冲突不覆盖，请重读后提交",
     }
   }
@@ -1205,7 +1205,7 @@ export async function disableConnection(input: {
     return {
       status: "failed",
       code: "VERSION_CONFLICT",
-      title: "版本冲突",
+      title: "数据已更新",
       message: "请重新加载后提交",
     }
   }
@@ -1315,7 +1315,7 @@ export async function queryFormalByIdempotency(
     return {
       status: "unknown",
       title: "结果仍未知",
-      message: "服务端尚未给出最终结论，请稍后用原任务号再查。",
+      message: "系统尚未给出最终结论，请稍后用原任务号再查。",
       operationId: idempotencyKey,
       idempotencyKey,
     }

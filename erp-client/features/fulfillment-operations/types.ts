@@ -320,7 +320,7 @@ export const FACT_TYPE_LABEL: Record<
 
 /** 履约/物流 ≠ 客户验收 */
 export const NOT_ACCEPTANCE_NOTICE =
-  "本工作面只登记履约记录（入库/发货/交付/服务）。物流签收或履约完成不等于客户验收通过。"
+  "本页面只登记履约记录（入库/发货/交付/服务）。物流签收或履约完成不等于客户验收通过。"
 
 export const CORRECTION_NOTICE =
   "已过账/已确认记录不可覆盖；纠错请使用冲正、退货、库存调整或新履约记录，不要在本页改写历史。"

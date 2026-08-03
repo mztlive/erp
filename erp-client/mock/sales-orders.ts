@@ -63,11 +63,11 @@ const cardApprovalSo1013: CardSalesApproval = {
   actionBlockers: [
     {
       action: "APPROVE",
-      reason: "须先领取任务并取得会话内 claimToken。",
+      reason: "须先领取任务并取得处理权限。",
     },
     {
       action: "REJECT",
-      reason: "须先领取任务并取得会话内 claimToken。",
+      reason: "须先领取任务并取得处理权限。",
     },
   ],
 }

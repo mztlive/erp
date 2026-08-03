@@ -731,6 +731,6 @@ function toDraftView(draft: NonNullable<ReturnType<typeof getW10AdjustmentDraft>
     editVersion: draft.editVersion,
     operatorLabel: draft.operatorLabel,
     segregationNote:
-      "经办提交后进入仓储复核与财务确认，经办本人不得复核或过账；余额仅在过账事务完成后由服务端更新。",
+      "经办提交后进入仓储复核与财务确认，经办本人不得复核或过账；余额仅在过账完成后由系统更新。",
   }
 }

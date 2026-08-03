@@ -313,7 +313,7 @@ export const BATCH_SEEDS: OwnershipMigrationBatchView[] = [
       {
         action: "EXECUTE_BATCH",
         code: "BASELINE_REQUIRED",
-        message: "最终权威基线确认后才可执行迁移。",
+        message: "最终基线确认后才可执行迁移。",
       },
       {
         action: "CONFIRM_SALES",
@@ -376,7 +376,7 @@ export const BATCH_SEEDS: OwnershipMigrationBatchView[] = [
         code: "ATOMIC_EXECUTE",
         status: "BLOCKED",
         subjectHash: "chk_exec_fail",
-        summary: "原子事务回滚：卡实例锁冲突",
+        summary: "提交未生效：卡实例数据已更新",
       },
     ],
     items: [
@@ -684,7 +684,7 @@ export const CUTOVER_SEED: ConsumptionCutoverView = {
     },
     {
       key: "polling",
-      label: "一期轮询封存",
+      label: "一期同步已封存",
       passed: true,
       detail: "PHASE1_POLLING_STOPPED 链尾已通过",
     },
@@ -760,7 +760,7 @@ export const CUTOVER_READY_PATCH: Partial<ConsumptionCutoverView> = {
     },
     {
       key: "polling",
-      label: "一期轮询封存",
+      label: "一期同步已封存",
       passed: true,
       detail: "PHASE1_POLLING_STOPPED 链尾已通过",
     },

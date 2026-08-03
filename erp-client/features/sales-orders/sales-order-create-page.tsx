@@ -818,7 +818,7 @@ export function SalesOrderCreatePage({
 
             <DocumentSection
               title="商业约定"
-              description="业务性质创建后锁定；正式单的后续商业变化必须走销售变更单。"
+              description="业务性质创建后锁定；生效单的后续商业变化必须走销售变更单。"
             >
               <div className="grid gap-4 lg:grid-cols-3">
                 <form.AppField name="nature">
@@ -895,7 +895,7 @@ export function SalesOrderCreatePage({
                       label="税率（%）"
                       type="number"
                       inputClassName="num"
-                      description="页面仅预估，提交后由服务端重算。"
+                      description="页面仅预估，提交后由系统重算。"
                     />
                   )}
                 </form.AppField>
@@ -1201,14 +1201,14 @@ export function SalesOrderCreatePage({
                               }}
                             />
                             <form.SubmitButton
-                              label="提交正式流程"
+                              label="提交"
                               pendingLabel="正在提交…"
                               onClick={() => {
                                 submitIntentRef.current = "SUBMIT"
                               }}
                             >
                               <PlusIcon data-icon="inline-start" aria-hidden="true" />
-                              提交正式流程
+                              提交
                             </form.SubmitButton>
                           </form.AppForm>
                         }

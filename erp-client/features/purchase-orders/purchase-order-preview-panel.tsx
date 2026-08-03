@@ -374,7 +374,7 @@ export function PurchaseOrderPreviewPanel({
             ]}
             warning={
               costMasked
-                ? "销售/仓储角色成本已掩码"
+                ? "销售/仓储角色成本已隐藏"
                 : currentContent.source === "SUBMISSION"
                   ? "当前展示不可变提交内容，审核不得改字段"
                   : undefined

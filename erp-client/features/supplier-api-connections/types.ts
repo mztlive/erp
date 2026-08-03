@@ -334,7 +334,7 @@ export const CAPABILITY_LABEL: Record<CapabilityCode, string> = {
   CANCEL: "取消",
   REFUND: "退款",
   LOGISTICS: "物流",
-  CALLBACK: "回调",
+  CALLBACK: "通知",
   SETTLEMENT: "结算",
 }
 

@@ -556,13 +556,13 @@ export function submitW22RetryDelivery(
     (d) => d.deliveryId === command.deliveryId
   )
   if (!delivery) {
-    return { status: "blocked", code: "NOT_FOUND", message: "投递记录不存在。" }
+    return { status: "blocked", code: "NOT_FOUND", message: "发送记录不存在。" }
   }
   if (delivery.status === "SENDING" || delivery.status === "RETRYING") {
     return {
       status: "blocked",
       code: "ALREADY_IN_FLIGHT",
-      message: "投递进行中，请勿重复重试。",
+      message: "发送中，请勿重复操作。",
     }
   }
   if (delivery.status === "HANDOFF") {

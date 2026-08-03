@@ -793,7 +793,7 @@ function JobListView({
         <AlertTitle>范围与敏感边界</AlertTitle>
         <AlertDescription>
           半开区间 [rangeStart, T)，occurredAt = T 不进历史回填。技术处理完成 ≠
-          报告已确认 ≠ 全历史业务完成。页面与导出不含卡号、卡密、绑定手机、完整地址或原始报文。
+          报告已确认 ≠ 全历史业务完成。页面与导出不含卡号、卡密、绑定手机、完整地址或原始消息内容。
         </AlertDescription>
       </Alert>
 
@@ -801,7 +801,7 @@ function JobListView({
         <BusinessEmptyState
           kind="no-data"
           title="任务列表加载失败"
-          description="请重试。不会根据前端猜测补造任务。"
+          description="请重试。不会自行补造任务。"
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重试
@@ -1359,7 +1359,7 @@ function JobDetailView({
         label={`后台回填进度 · ${currentJob.jobNo}`}
         description={
           <>
-            异步执行，不伪装同步完成。已处理 {currentJob.progress.processedCount.toLocaleString("zh-CN")}{" "}
+            后台执行，不伪装同步完成。已处理 {currentJob.progress.processedCount.toLocaleString("zh-CN")}{" "}
             · 新增 {currentJob.progress.insertedCount.toLocaleString("zh-CN")} · 去重{" "}
             {currentJob.progress.deduplicatedCount.toLocaleString("zh-CN")} · 待归集{" "}
             {currentJob.progress.unattributedCount.toLocaleString("zh-CN")} · 失败{" "}
@@ -1501,7 +1501,7 @@ function JobDetailView({
           `商城 ${currentJob.mallName} · ${ENVIRONMENT_LABEL[currentJob.environment]}`,
         ]}
         effects={[
-          "后台异步执行五类关键记录回填",
+          "后台执行五类关键记录回填",
           "与实时记录按业务记录键去重",
           "成本按 ACTUAL / 时点 STANDARD / NONE 评估",
         ]}
@@ -1645,19 +1645,17 @@ function OverviewSection({
       <Card>
         <CardHeader>
           <CardTitle>任务身份与范围</CardTitle>
-          <CardDescription>
-            rangeStart 固定等于 requiredHistoryStart
-          </CardDescription>
+          <CardDescription>范围起点固定等于必须覆盖起点</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
-          <Fact label="切换 cutoverId" value={job.cutoverId} mono />
+          <Fact label="切换编号" value={job.cutoverId} mono />
           <Fact
             label="必须覆盖起点"
             value={formatDay(job.requiredHistoryStart)}
             mono
           />
-          <Fact label="rangeStart" value={formatDay(job.rangeStart)} mono />
-          <Fact label="T / rangeEnd" value={formatDay(job.rangeEnd)} mono />
+          <Fact label="范围起点" value={formatDay(job.rangeStart)} mono />
+          <Fact label="截止时点" value={formatDay(job.rangeEnd)} mono />
           <Fact
             label="覆盖完整"
             value={job.coverageComplete ? "是" : "否"}
@@ -1878,7 +1876,7 @@ function ItemsTable({
               ? "失败诊断"
               : "记录结果"
       }
-      description="不含卡号/卡密/手机/完整地址/原始报文 · 商城订单号不是唯一任务号"
+      description="不含卡号/卡密/手机/完整地址/原始消息内容 · 商城订单号不是唯一任务号"
       table={
         <DataTable
           data={[...items]}

@@ -532,7 +532,7 @@ function ConnectionList({
         <BusinessFailureState
           kind="system"
           title="连接列表加载失败"
-          description="请重试。有缓存时应保留旧连接。"
+          description="请重试。已有数据时保留旧连接。"
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重试
@@ -2010,7 +2010,7 @@ function HealthSection({
       ) : null}
       <BusinessTableFrame
         title="健康检查记录"
-        description="不展示原始密钥与敏感报文；结果未知单独文字说明"
+        description="不展示原始密钥与敏感消息内容；结果未知单独文字说明"
         table={
           <DataTable
             data={records}

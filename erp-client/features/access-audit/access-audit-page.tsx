@@ -263,8 +263,8 @@ function EmptyByReason({
       return (
         <BusinessEmptyState
           kind="no-data"
-          title="字段级掩码（非空列表）"
-          description="列表与标签保留，敏感值按字段策略掩码显示。权限管理员不会因为能配置权限而自动看到业务敏感正文。"
+          title="字段级打码（非空列表）"
+          description="列表与标签保留，敏感值按字段策略打码显示。权限管理员不会因为能配置权限而自动看到业务敏感正文。"
         />
       )
     case "FILTER_NO_RESULT":
@@ -575,7 +575,7 @@ export function AccessAuditPage() {
             : "rejected",
         title:
           outcome.code === "REVIEW_POLICY_UNCONFIGURED"
-            ? "复核策略未固化，动作已阻断"
+            ? "复核策略未确定，动作已阻断"
             : "授权变更被拒绝",
         description: outcome.message,
         facts: outcome.actionBlockers?.map((b) => ({
@@ -588,7 +588,7 @@ export function AccessAuditPage() {
     if (outcome.outcome === "CONFLICT") {
       setLastResult({
         status: "blocked",
-        title: "权限版本冲突",
+        title: "权限已更新",
         description: outcome.message,
         facts: [
           {
@@ -715,7 +715,7 @@ export function AccessAuditPage() {
         cell: ({ row }) => (
           <span className="text-sm">
             {data?.emptyReason === "FIELD_MASKED"
-              ? "****（已掩码）"
+              ? "****（已打码）"
               : row.original.fieldPolicySummary}
           </span>
         ),
@@ -1549,7 +1549,7 @@ export function AccessAuditPage() {
                   { value: "NO_MODULE_PERMISSION", label: "无模块权限" },
                   { value: "NO_DATA_SCOPE", label: "无数据范围" },
                   { value: "NO_RECORDS_IN_SCOPE", label: "范围内无记录" },
-                  { value: "FIELD_MASKED", label: "字段掩码" },
+                  { value: "FIELD_MASKED", label: "字段打码" },
                 ]}
                 className="w-full"
                 size="sm"
@@ -1603,7 +1603,7 @@ export function AccessAuditPage() {
           权限版本{" "}
           <span className="font-mono">{data.permissionVersion}</span> ·
           任务流：{data.workItemSupport === "DISABLED_Q1"
-            ? "Q1 前关闭"
+            ? "策略确定前关闭"
             : data.workItemSupport}
         </p>
       ) : null}
@@ -1611,7 +1611,7 @@ export function AccessAuditPage() {
       {data.fieldMaskNote ? (
         <Alert variant="info">
           <LockIcon aria-hidden="true" />
-          <AlertTitle>字段掩码</AlertTitle>
+          <AlertTitle>字段打码</AlertTitle>
           <AlertDescription>{data.fieldMaskNote}</AlertDescription>
         </Alert>
       ) : null}

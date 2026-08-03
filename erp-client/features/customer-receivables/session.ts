@@ -206,7 +206,7 @@ export function createW11AllocationSession(
       throw new Error("只能对已过账且有余额的回款继续核销。")
     }
     if (r.counterpartyPartyId !== input.counterpartyPartyId) {
-      throw new Error("回款往来主体与会话主体不一致。")
+      throw new Error("回款往来主体与本次核销主体不一致。")
     }
     if (parseMoney(r.unallocatedAmount) <= 0) {
       throw new Error("该回款已无有效未分配余额。")
@@ -223,7 +223,7 @@ export function createW11AllocationSession(
       throw new Error("只能对已登记蓝票且有余额的发票继续核销。")
     }
     if (inv.counterpartyPartyId !== input.counterpartyPartyId) {
-      throw new Error("发票往来主体与会话主体不一致。")
+      throw new Error("发票往来主体与本次核销主体不一致。")
     }
     if (parseMoney(inv.unallocatedAmount) <= 0) {
       throw new Error("该发票已无有效未分配余额。")
@@ -323,7 +323,7 @@ export function createW11AllocationSession(
     ...proposed,
     submitPolicy: {
       allowUnallocatedRemainder: true,
-      label: "允许保留未分配余额（服务端策略）",
+      label: "允许保留未分配余额（系统统一判定）",
     },
     returnContext: {
       returnTo: input.returnTo,
@@ -347,10 +347,10 @@ export function saveW11AllocationDraft(
   }
   const s = sessions.get(input.draftSessionId)
   if (!s || s.status !== "draft") {
-    throw new Error("草稿会话不存在或已过账。")
+    throw new Error("草稿已不存在或已过账。")
   }
   if (input.editVersion !== s.editVersion) {
-    throw new Error("草稿版本冲突，请刷新后重试。")
+    throw new Error("草稿数据已更新，请刷新后重试。")
   }
 
   // 拒绝跨主体目标进入分配（双重校验）
@@ -413,7 +413,7 @@ export function postW11Allocation(
     const failed: PostAllocationResult = {
       status: "failed",
       code: "SESSION_INVALID",
-      message: "核销会话不存在或已提交。",
+      message: "本次核销已不存在或已提交。",
     }
     postIdempotency.set(input.idempotencyKey, failed)
     return failed
@@ -422,7 +422,7 @@ export function postW11Allocation(
     const failed: PostAllocationResult = {
       status: "failed",
       code: "VERSION_CONFLICT",
-      message: "草稿版本冲突，请保存或刷新后重试。",
+      message: "草稿数据已更新，请保存或刷新后重试。",
     }
     return failed
   }

@@ -437,7 +437,7 @@ export function SalesOrdersListPage({
         <div className="space-y-2">
           <FormalActionResult
             status="succeeded"
-            title="导出任务已完成（客户端筛选结果）"
+            title="导出任务已完成（当前筛选结果）"
             description={`共 ${exportJob.rowCount} 行，仅包含当前筛选结果；导出后金额与状态以列表页最新数据为准。`}
             reference={exportJob.jobId}
             facts={[

@@ -392,7 +392,7 @@ export function AllocationSession({
     return (
       <BusinessEmptyState
         kind="no-data"
-        title="无法打开核销会话"
+        title="无法开始本次核销"
         description={
           sessionQuery.error instanceof Error
             ? sessionQuery.error.message
@@ -844,7 +844,7 @@ export function AllocationSession({
         title={track === "payment" ? "确认登记付款并核销" : "确认登记进项发票并核销"}
         description="提交后形成不可编辑记录；纠错须追加冲正/红票。提交时系统将校验供应商、余额与策略版本。"
         confirmLabel="确认提交"
-        fromStatus={{ label: "草稿会话", tone: "neutral" }}
+        fromStatus={{ label: "本次草稿", tone: "neutral" }}
         toStatus={{ label: "已过账", tone: "success" }}
         lockedFields={[
           `供应商 ${session.supplierName}`,

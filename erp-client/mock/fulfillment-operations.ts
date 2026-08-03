@@ -110,7 +110,7 @@ const serviceDraft = (line: {
   type: "SERVICE",
   startedAt: localNowInput(-120),
   endedAt: localNowInput(),
-  serviceLocation: "客户现场 · 地址已掩码",
+  serviceLocation: "客户现场 · 地址已打码",
   result: "SUCCESS",
   completionNote: "",
   evidenceNote: "",
@@ -435,7 +435,7 @@ export const FULFILLMENT_OPERATIONS_SEED: readonly FulfillmentTask[] = [
       remaining: "500",
     }),
     summary: "到货待入库 · 付款门禁阻塞",
-    impact: "门禁未满足时过账将被服务端拒绝",
+    impact: "门禁未满足时过账将被系统拒绝",
     allowedActions: ["SAVE", "DEFER"],
     actionBlockers: [
       {

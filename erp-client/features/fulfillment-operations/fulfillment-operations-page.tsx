@@ -695,7 +695,7 @@ export function FulfillmentOperationsPage() {
         status: "succeeded",
         title: `${OPERATION_TYPE_LABEL[response.outcome.operationType]}已过账`,
         description: autoNext
-          ? "记录已保存（当前会话），将自动打开筛选范围内的下一项。"
+          ? "记录已保存（本次操作），将自动打开筛选范围内的下一项。"
           : "记录已保存。可核对库存/预占影响后再继续。",
         reference: response.outcome.factNo,
         outcome: response.outcome,
@@ -968,7 +968,7 @@ export function FulfillmentOperationsPage() {
       {sourceReturnHref ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 text-sm">
           <span className="text-muted-foreground">
-            自 {fromWorkspace ?? "关联工作面"} 打开
+            自 {fromWorkspace ?? "关联页面"} 打开
             {task
               ? ` · 已定位 ${task.source.salesOrderNo}${
                   task.source.purchaseNo ? ` / ${task.source.purchaseNo}` : ""

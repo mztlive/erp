@@ -503,7 +503,7 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     dueAt: "今天 12:00",
     dueDateTime: "2026-08-01T12:00:00+08:00",
     responsibleParty: "系统 · 待处理",
-    reason: "与 wi_pc_01 指向同一确认事项，服务端判定为重复",
+    reason: "与已有任务指向同一确认事项，系统判定为重复",
     impact: "关闭后不影响业务记录，仅清理待办噪声",
     statusCode: "PENDING",
     status: { label: "待处理", tone: "neutral" },

@@ -261,7 +261,7 @@ function projectBatch(
     actionBlockers,
     objectVersion: overlay?.objectVersion ?? seed.objectVersion,
     financeSummaryMasked: financeMasked,
-    financeSummary: financeMasked ? "（票款字段已按权限掩码）" : seed.financeSummary,
+    financeSummary: financeMasked ? "（票款字段已按权限隐藏）" : seed.financeSummary,
     queriedAt: nowIso(),
     viewerRole: role,
   }
@@ -696,7 +696,7 @@ export async function submitMigrationFormal(
       status: "COMMITTED",
       committedAt: nowIso(),
       nextAction: "全局维护 Banner 已生效；执行最后同步与基线确认",
-      message: "维护冻结已写入服务端记录，不可由浏览器忽略。",
+      message: "维护冻结已生效，不可跳过。",
     }
     formalOps.set(requestId, result)
     return result
@@ -808,7 +808,7 @@ export async function submitMigrationFormal(
         requestId,
         command.batchId,
         "ADMIN_CANNOT_CONFIRM",
-        "仅上线负责人可确认最终权威基线。"
+        "仅上线负责人可确认最终基线。"
       )
     }
 
@@ -825,7 +825,7 @@ export async function submitMigrationFormal(
         requestId,
         command.batchId,
         "SCOPE_MISMATCH",
-        "提交时 scopeHash 与服务端不一致，确认未写入。"
+        "提交时数据版本已变化，确认未写入。"
       )
     }
 
@@ -911,7 +911,7 @@ export async function submitMigrationFormal(
         command.action === "CONFIRM_BASELINE"
           ? "可由系统管理员执行迁移批次"
           : "继续其它确认或推进冻结",
-      message: "确认已与任务完成在同一事务落地（演示）。",
+      message: "确认已与任务完成同时生效（演示）。",
     }
     formalOps.set(requestId, result)
     return result
@@ -1086,7 +1086,7 @@ export async function submitMigrationFormal(
       operationId: `op_sync_${Date.now()}`,
       batchId: command.batchId,
       status: "COMMITTED",
-      nextAction: "上线负责人确认最终权威基线",
+      nextAction: "上线负责人确认最终基线",
       message: "最后一期同步与全量核对完成；基线确认不产生新销售版本。",
     }
     formalOps.set(requestId, result)

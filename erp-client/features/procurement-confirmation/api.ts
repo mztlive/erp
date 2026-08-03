@@ -163,7 +163,7 @@ function projectTask(
             {
               action: "APPROVE",
               code: "QTY_COVERAGE_INCOMPLETE",
-              message: "存在未完整覆盖的销售明细，服务端将拒绝通过",
+              message: "存在未完整覆盖的销售明细，系统将拒绝通过",
             },
           ]
         : [],

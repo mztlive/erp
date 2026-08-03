@@ -560,7 +560,7 @@ export function BatchOperationResult({
   succeeded,
   skipped = [],
   failed,
-  title = "批处理结果",
+  title = "批量处理结果",
   retryAction,
   successEmptyMessage = "没有成功项",
   skippedEmptyMessage = "没有跳过项",

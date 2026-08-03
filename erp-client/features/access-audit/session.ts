@@ -116,7 +116,7 @@ const ROLE_SEED: RoleRow[] = [
     statusTone: "success",
     permissionSummary: "客户中心 · 合同 · 销售单（读/建/提交）",
     dataScopeSummary: "本人负责 + 协作参与",
-    fieldPolicySummary: "联系方式掩码 · 银行账户隐藏",
+    fieldPolicySummary: "联系方式打码 · 银行账户隐藏",
     riskFlags: [],
     permissionVersion: "pv-w19-12",
     organizationLabel: "销售中心",
@@ -130,7 +130,7 @@ const ROLE_SEED: RoleRow[] = [
     statusTone: "success",
     permissionSummary: "客户往来 · 供应商往来 · 卡券票款复核",
     dataScopeSummary: "公司级",
-    fieldPolicySummary: "银行账户可见 · 证件掩码",
+    fieldPolicySummary: "银行账户可见 · 证件打码",
     riskFlags: ["HIGH_PRIVILEGE"],
     permissionVersion: "pv-w19-12",
     organizationLabel: "财务中心",
@@ -200,7 +200,7 @@ const ROLE_SEED: RoleRow[] = [
     statusTone: "success",
     permissionSummary: "客户验收 · 采购二次确认",
     dataScopeSummary: "本人负责 + 团队",
-    fieldPolicySummary: "供应商账号掩码",
+    fieldPolicySummary: "供应商账号打码",
     riskFlags: [],
     permissionVersion: "pv-w19-12",
     organizationLabel: "采购中心",
@@ -442,7 +442,7 @@ const FIELD_POLICY_SEED: FieldPolicyRow[] = [
     policyTargetId: "pt_bank_account",
     targetLabel: "银行账户字段组",
     accessCapabilities: ["MASKED", "EXPORTABLE"],
-    capabilitySummary: "掩码 · 可导出（再裁剪）",
+    capabilitySummary: "打码 · 可导出（再裁剪）",
     subjectLabel: "销售角色默认",
     permissionVersion: "pv-w19-12",
     editable: false,
@@ -452,7 +452,7 @@ const FIELD_POLICY_SEED: FieldPolicyRow[] = [
     policyTargetId: "pt_contact_phone",
     targetLabel: "联系方式字段组",
     accessCapabilities: ["MASKED", "TEMPORARY_REVEAL"],
-    capabilitySummary: "掩码 · 短时揭示",
+    capabilitySummary: "打码 · 短时揭示",
     subjectLabel: "销售角色默认",
     permissionVersion: "pv-w19-12",
     editable: false,
@@ -492,7 +492,7 @@ const FIELD_POLICY_SEED: FieldPolicyRow[] = [
     policyTargetId: "pt_full_address",
     targetLabel: "完整地址",
     accessCapabilities: ["MASKED"],
-    capabilitySummary: "掩码",
+    capabilitySummary: "打码",
     subjectLabel: "仓储角色默认",
     permissionVersion: "pv-w19-12",
     editable: false,
@@ -502,7 +502,7 @@ const FIELD_POLICY_SEED: FieldPolicyRow[] = [
     policyTargetId: "pt_employee_mobile",
     targetLabel: "员工手机号",
     accessCapabilities: ["MASKED", "TEMPORARY_REVEAL"],
-    capabilitySummary: "掩码 · 短时揭示",
+    capabilitySummary: "打码 · 短时揭示",
     subjectLabel: "权限管理员视图",
     permissionVersion: "pv-w19-12",
     editable: false,
@@ -964,7 +964,7 @@ export function buildW19ListView(query: AccessListQuery): AccessListView {
     actionBlockers.push({
       action: "EXPORT_AUDIT",
       code: "AUDIT_ACCESS_POLICY_MISSING",
-      message: "审计访问/导出策略未配置：仅允许服务端保守短窗口查询，全部导出禁用。",
+      message: "审计访问/导出策略未配置：仅允许保守短时查询，全部导出禁用。",
     })
     actionBlockers.push({
       action: "EXPORT_CONFIGURATION",
@@ -991,7 +991,7 @@ export function buildW19ListView(query: AccessListQuery): AccessListView {
     action: "EXPAND_COMPANY_SCOPE",
     code: "REVIEW_POLICY_UNCONFIGURED",
     message:
-      "Q1 复核策略未固化：扩大全公司数据范围等需双人复核的动作已阻断，不创建临时任务。",
+      "复核策略未确定：扩大全公司数据范围等需双人复核的动作已阻断，不创建临时任务。",
   })
 
   return {
@@ -1010,7 +1010,7 @@ export function buildW19ListView(query: AccessListQuery): AccessListView {
     emptyReason,
     fieldMaskNote:
       emptyReason === "FIELD_MASKED"
-        ? "字段级隐藏：标签与列保留，值按策略掩码（如银行账号显示为 ****）。权限管理员不因此看到业务敏感正文。"
+        ? "字段级隐藏：标签与列保留，值按策略打码（如银行账号显示为 ****）。权限管理员不因此看到业务敏感正文。"
         : undefined,
     roles: emptyReason === "NO_RECORDS_IN_SCOPE" ? [] : roles,
     users: emptyReason === "NO_RECORDS_IN_SCOPE" ? [] : users,
@@ -1129,7 +1129,7 @@ export function getW19EffectiveAccess(
                 action: "EXPAND_SENSITIVE_FIELD",
                 code: "REVIEW_POLICY_UNCONFIGURED",
                 message:
-                  "Q1 未固化：扩大敏感字段访问需双人复核，当前失败关闭且不创建任务。",
+                  "复核策略未确定：扩大敏感字段访问需双人复核，当前已关闭且不创建任务。",
               },
             ]
           : []),
@@ -1183,7 +1183,7 @@ export function getW19EffectiveAccess(
         layer: "FIELD",
         layerLabel: "字段权限",
         targetLabel: "继承角色字段策略；权限管理员不可见业务敏感正文",
-        capability: "掩码 / 隐藏",
+        capability: "打码 / 隐藏",
         sourceType: "FIELD_POLICY",
         sourceLabel: "角色默认",
       },
@@ -1272,9 +1272,9 @@ export function previewW19AccessChange(
     return {
       subjectLabel: user?.displayName ?? command.subjectId,
       actionLabel: "立即紧急撤权",
-      changeSummary: `立即撤销授权记录 ${"roleAssignmentId" in command ? command.roleAssignmentId : "—"}，敏感会话缓存失效。`,
+      changeSummary: `立即撤销授权记录 ${"roleAssignmentId" in command ? command.roleAssignmentId : "—"}，敏感数据立即清除。`,
       affectedSubjectCount: 1,
-      affectedWorkSurfaceSummary: "该用户已打开的工作面将按新权限版本失效查询缓存",
+      affectedWorkSurfaceSummary: "该用户已打开的页面将按新权限立即更新",
       riskLevel: "high",
       riskSummary: "立即止损：角色组合失效，不依赖时间策略。",
       riskFlags: ["IMMEDIATE", "SESSION_INVALIDATION"],
@@ -1316,7 +1316,7 @@ export function previewW19AccessChange(
       actionLabel: "修改字段策略",
       changeSummary: `策略目标 ${"policyTargetId" in command ? command.policyTargetId : "—"} 访问能力调整为 ${caps}`,
       affectedSubjectCount: 24,
-      affectedWorkSurfaceSummary: "客户/合同/资金工作面字段裁剪",
+      affectedWorkSurfaceSummary: "客户/合同/资金页面字段裁剪",
       riskLevel: "medium",
       riskSummary: "字段能力变更将使已揭示敏感值在权限版本推进后清除。",
       riskFlags: ["FIELD_CAPABILITY"],
@@ -1398,8 +1398,8 @@ export function previewW19AccessChange(
       affectedWorkSurfaceSummary: "相关模块入口与动作",
       riskLevel: highRisk ? "high" : "medium",
       riskSummary: highRisk
-        ? "高风险扩权：Q1 复核策略未固化时服务端将阻断。"
-        : "权限缩减可按服务端策略直接生效。",
+        ? "高风险扩权：复核策略未确定时系统将阻断。"
+        : "权限缩减可按系统策略直接生效。",
       riskFlags: highRisk ? ["HIGH_PRIVILEGE", "NEEDS_REVIEW"] : ["PERMISSION_CHANGE"],
       diffs:
         "changeSet" in command
@@ -1424,7 +1424,7 @@ export function previewW19AccessChange(
   return {
     subjectLabel: command.subjectId,
     actionLabel: command.action,
-    changeSummary: "对象级 AccessChange 预览",
+    changeSummary: "按对象变更预览",
     affectedSubjectCount: 1,
     affectedWorkSurfaceSummary: "—",
     riskLevel: "low",
@@ -1498,7 +1498,7 @@ export function submitW19AccessChange(
       const result: AccessChangeOutcome = {
         outcome: "REJECTED",
         code: "INVALID_POLICY_TARGET",
-        message: "只能提交服务端返回的 policyTargetId，禁止自由字段路径。",
+        message: "只能选择系统提供的授权目标，禁止自定义。",
       }
       idempotencyResults.set(command.idempotencyKey, result)
       return result
@@ -1549,7 +1549,7 @@ export function submitW19AccessChange(
       effectiveAt: audit.recordedAt,
       reference: `ACC-${audit.auditEventId}`,
       nextSteps: [
-        "各工作面按新 permissionVersion 失效查询缓存",
+        "各页面按新权限版本立即更新",
         "已揭示敏感值应立即清除",
         "可在审计查询中打开本事件",
       ],
@@ -1634,8 +1634,8 @@ export function submitW19AccessChange(
       effectiveAt: audit.recordedAt,
       reference: `ACC-${audit.auditEventId}`,
       nextSteps: [
-        "该用户会话敏感缓存应立即失效",
-        "打开中工作面按新权限版本重查",
+        "该用户临时数据应立即清除",
+        "打开中的页面按新权限版本重新读取",
         "审计事件已追加，不可编辑删除",
       ],
       message: "已立即撤销指定用户角色授权。",
@@ -1656,7 +1656,7 @@ export function submitW19AccessChange(
       outcome: "REJECTED",
       code: "REVIEW_POLICY_UNCONFIGURED",
       message:
-        "复核策略未固化：本动作已拒绝。权限与审计页不创建、领取或完成任务。",
+        "复核策略未确定：本动作已拒绝。权限与审计页不创建、领取或完成任务。",
       actionBlockers: [
         {
           action: command.action,
@@ -1698,7 +1698,7 @@ export function submitW19AccessChange(
       nextSteps: [
         "历史角色代码与身份保留",
         "检查任务责任池替代角色",
-        "按新权限版本刷新相关工作面",
+        "按新权限版本刷新相关页面",
       ],
       message: "角色已停用。",
     }
@@ -1734,7 +1734,7 @@ export function submitW19AccessChange(
       reference: `ACC-${audit.auditEventId}`,
       nextSteps: [
         "配置版本已更新",
-        "受影响用户工作面缓存失效",
+        "受影响用户页面数据立即更新",
         "可查看有效权限解释确认来源",
       ],
       message: "角色权限已更新。",
@@ -1767,7 +1767,7 @@ export function submitW19AccessChange(
       affectedSubjectCount: 12,
       effectiveAt: audit.recordedAt,
       reference: `ACC-${audit.auditEventId}`,
-      nextSteps: ["客户端收到权限版本变化后重查", "范围目标名称按当前范围显示"],
+      nextSteps: ["系统收到权限版本变化后重新读取", "范围目标名称按当前范围显示"],
       message: "数据范围已更新。",
     }
     idempotencyResults.set(command.idempotencyKey, result)

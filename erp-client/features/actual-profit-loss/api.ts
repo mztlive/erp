@@ -317,7 +317,7 @@ export async function fetchProfitLossView(
   )
   if (!query.periodBasis || !allowed.has(query.periodBasis)) {
     throw new Error(
-      "periodBasis 未通过允许集合校验；请先选择服务端允许的期间归属口径。"
+      "期间归属口径未通过校验；请先选择系统允许的期间归属口径。"
     )
   }
 
@@ -425,7 +425,7 @@ export async function fetchProfitLossView(
     filterSummary: filterParts.join(" · "),
     excludedNote: W16_EXCLUDED_NOTE,
     correctionPendingNotice: w16CorrectionPending
-      ? "业务记录已更新，经营汇总将在数据追平后刷新。本页不会本地覆盖金额。"
+      ? "业务记录已更新，经营汇总将在数据追平后刷新。本页不会覆盖系统金额。"
       : undefined,
   }
 }
@@ -498,7 +498,7 @@ export async function markSourceCorrectionPending(): Promise<{
   setW16CorrectionPending(true)
   return {
     notice:
-      "业务记录已更新，经营汇总将在数据追平后刷新。本页不会本地覆盖金额。",
+      "业务记录已更新，经营汇总将在数据追平后刷新。本页不会覆盖系统金额。",
   }
 }
 

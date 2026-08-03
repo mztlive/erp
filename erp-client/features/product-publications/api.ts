@@ -279,7 +279,7 @@ export async function fetchPublicationDetail(
         contentHash: r.contentHash,
         deliverySummary: delivery
           ? `${delivery.statusLabel}${delivery.errorSummary ? ` · ${delivery.errorSummary}` : ""}`
-          : "无投递",
+          : "无发送",
         isMallAcked: r.revisionId === ackedId,
         isLatest: r.revisionId === latest?.revisionId,
       }

@@ -317,7 +317,7 @@ export const BASE_METRICS: readonly CustomerQualityMetric[] = [
     value: "46 天",
     visible: true,
     reliability: "reliable",
-    explanation: "服务端金额加权；样本量 28 笔已结清。",
+    explanation: "系统金额加权；样本量 28 笔已结清。",
   },
   {
     key: "exceptionCustomerCount",

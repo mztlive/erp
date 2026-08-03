@@ -477,7 +477,7 @@ export async function fetchCustomerAccountsList(
     emptyReason: total === 0 ? (hasFilters || !scopedEmpty ? "FILTER_NO_RESULT" : "NO_DATA") : undefined,
     submitPolicy: {
       allowUnallocatedRemainder: true,
-      label: "允许保留未分配余额（服务端策略，前端不硬编码业务规则）",
+      label: "允许保留未分配余额（系统统一判定）",
     },
   }
 }
@@ -523,7 +523,7 @@ function emptyView(
     emptyReason: reason,
     submitPolicy: {
       allowUnallocatedRemainder: true,
-      label: "允许保留未分配余额（服务端策略）",
+      label: "允许保留未分配余额（系统统一判定）",
     },
   }
 }

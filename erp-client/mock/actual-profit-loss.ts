@@ -44,7 +44,7 @@ export const W16_PERIOD_BASIS_CONFIGURED: ProfitLossPeriodBasisConfig = {
     {
       code: "fulfillment_complete_date",
       label: "履约完成日",
-      explanation: "按履约终态完成日归属期间。",
+      explanation: "按履约完成日归属期间。",
     },
     {
       code: "cost_occurred_date",

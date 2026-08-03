@@ -661,7 +661,7 @@ export function CardFundsReviewPage() {
         receivedAt: receiptForm.receivedAt,
         grossAmount: receiptForm.grossAmount,
         allocations: allocLines,
-        evidenceReference: evidenceRef.trim() || "银行回单-会话登记",
+        evidenceReference: evidenceRef.trim() || "银行回单-本次登记",
         idempotencyKey: `rcpt_${task.workItem.workItemId}_${crypto.randomUUID()}`,
       })
       // 登记后停留当前项，刷新金额/指纹（invalidate 后 query 更新）
@@ -711,7 +711,7 @@ export function CardFundsReviewPage() {
         netAmount: net,
         taxAmount: tax,
         allocations: allocLines,
-        evidenceReference: evidenceRef.trim() || "发票扫描件-会话登记",
+        evidenceReference: evidenceRef.trim() || "发票扫描件-本次登记",
         idempotencyKey: `inv_${task.workItem.workItemId}_${crypto.randomUUID()}`,
       })
       setAllocationMode(null)
@@ -1816,7 +1816,7 @@ export function CardFundsReviewPage() {
             : [
                 "追加复核链尾并完成任务",
                 "提交时核对数据版本，不一致将阻断",
-                "同事务完成当前任务",
+                "同本次提交完成当前任务",
               ]
         }
         pending={completeMutation.isPending}

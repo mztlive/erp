@@ -556,7 +556,7 @@ export function ContractsListPage({
                 ? "有效期止不能早于有效期起。"
                 : uploadMutation.error instanceof Error
                   ? uploadMutation.error.message
-                  : "上传失败，请使用原幂等操作重试。"
+                  : "上传失败，请使用原任务号重试。"
           }
           reference="CONTRACT-PDF-NOT-COMMITTED"
         />

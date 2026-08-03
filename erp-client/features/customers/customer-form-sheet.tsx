@@ -413,7 +413,7 @@ export function CustomerReviseSheet({
               }
               options={[
                 { value: "ok", label: "正常成功" },
-                { value: "conflict", label: "版本冲突（保留输入）" },
+                { value: "conflict", label: "数据已更新（保留输入）" },
                 { value: "unknown", label: "结果不确定（保留输入）" },
               ]}
               allowClear={false}
@@ -485,18 +485,18 @@ export function CustomerReviseSheet({
             open={conflictOpen}
             onOpenChange={setConflictOpen}
             description={result.message}
-            currentVersion={`v${result.serverRevisionNo} · lock ${result.serverLockVersion}`}
-            localBaseline={`v${customer.currentRevision.revisionNo} · lock ${customer.lockVersion}`}
+            currentVersion={`v${result.serverRevisionNo} · 数据版本 ${result.serverLockVersion}`}
+            localBaseline={`v${customer.currentRevision.revisionNo} · 数据版本 ${customer.lockVersion}`}
             actor={result.actor}
             changedAt={result.changedAt}
             diff={
               <ul className="list-inside list-disc space-y-1 text-sm">
-                <li>服务端法定名称：{result.serverLegalName}</li>
-                <li>服务端简称：{result.serverShortName ?? "—"}</li>
+                <li>系统现有法定名称：{result.serverLegalName}</li>
+                <li>系统现有简称：{result.serverShortName ?? "—"}</li>
                 <li>
-                  服务端信用代码：{result.serverUnifiedCreditCode ?? "—"}
+                  系统现有信用代码：{result.serverUnifiedCreditCode ?? "—"}
                 </li>
-                <li>本地输入仍保留在表单中，未写入业务记录。</li>
+                <li>你输入的内容仍保留在表单中，未写入业务记录。</li>
               </ul>
             }
             onReload={() => {

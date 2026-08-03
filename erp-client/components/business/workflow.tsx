@@ -679,8 +679,8 @@ export type ConflictResolutionDialogProps = ControllableDialogProps & {
 /** 并发版本冲突的差异查看与安全处理入口。 */
 function ConflictResolutionDialog({
   trigger,
-  title = "发现并发版本冲突",
-  description = "当前版本已经变化，本地内容不能直接覆盖。",
+  title = "数据已更新",
+  description = "当前数据已经更新，你输入的内容不能直接覆盖。",
   currentVersion,
   localBaseline,
   actor,
@@ -735,13 +735,13 @@ function ConflictResolutionDialog({
             </div>
             <div className="rounded-xl border border-border bg-muted p-4">
               <dt className="text-sm font-medium text-muted-foreground">
-                本地内容基线
+                你输入的内容版本
               </dt>
               <dd className="mt-2 flex flex-wrap items-center gap-2">
                 <StatusBadge
                   tone="warning"
                   icon={Clock3Icon}
-                  label="基线已过期"
+                  label="数据已过期"
                 />
                 <span className="num font-medium text-foreground">
                   {localBaseline}
@@ -866,7 +866,7 @@ function PresenceNames({ users }: { users: readonly EditorPresenceUser[] }) {
 function EditorPresence({
   viewers = [],
   editors = [],
-  reminder = "这是协作提醒，不是业务锁；提交仍以服务端版本校验为准。",
+  reminder = "这是协作提醒；提交仍以系统最新数据为准。",
   className,
   ...props
 }: EditorPresenceProps) {

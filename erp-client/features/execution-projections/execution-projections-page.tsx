@@ -197,7 +197,7 @@ function commandToResultState(
     return {
       status: "blocked",
       title: result.resultLabel,
-      description: "销售记录与应收未回退。可重试投递或升级到接口错误中心。",
+      description: "销售记录与应收未回退。可重试发送或转到接口错误中心。",
       reference: result.operationId,
       facts: [
         { label: "操作编号", value: result.operationId },
@@ -708,7 +708,7 @@ export function ExecutionProjectionsPage() {
             updatedAt="刚刚"
             dateTime={view?.queriedAt}
             state="fresh"
-            label="投递状态"
+            label="发送状态"
           />
         }
         actions={
@@ -798,7 +798,7 @@ export function ExecutionProjectionsPage() {
           }
           description={
             <>
-              服务端筛选结果{" "}
+              系统筛选结果{" "}
               <span className="num">{bulkJob.selectionSnapshotId}</span>
               。成功 {bulkJob.succeeded} · 跳过 {bulkJob.skipped} · 仍未知{" "}
               {bulkJob.stillUnknown} · 失败 {bulkJob.failed}。
@@ -1149,7 +1149,7 @@ export function ExecutionProjectionsPage() {
                 },
                 {
                   id: "delivery",
-                  label: "信息投递",
+                  label: "信息发送",
                   status: {
                     label: detail.tracks.projectionDelivery.label,
                     tone: detail.tracks.projectionDelivery.tone,
@@ -1219,7 +1219,7 @@ export function ExecutionProjectionsPage() {
                         })
                       }}
                     >
-                      重试投递
+                      重试发送
                     </Button>
                   ) : null}
                   {detail.allowedActions.includes("ESCALATE") ||
@@ -1280,7 +1280,7 @@ export function ExecutionProjectionsPage() {
                 },
                 {
                   id: "projection-delivery",
-                  label: "信息投递",
+                  label: "信息发送",
                   status: {
                     label: detail.tracks.projectionDelivery.label,
                     tone: detail.tracks.projectionDelivery.tone,
@@ -1303,7 +1303,7 @@ export function ExecutionProjectionsPage() {
               <TabsList>
                 <TabsTrigger value="overview">概览</TabsTrigger>
                 <TabsTrigger value="content">执行内容</TabsTrigger>
-                <TabsTrigger value="history">投递历史</TabsTrigger>
+                <TabsTrigger value="history">发送历史</TabsTrigger>
                 <TabsTrigger value="versions">版本对应</TabsTrigger>
                 <TabsTrigger value="diff">差异与错误</TabsTrigger>
               </TabsList>
@@ -1366,7 +1366,7 @@ export function ExecutionProjectionsPage() {
             ) : null}
 
             {objectTab === "history" ? (
-              <DocumentSection title="投递历史">
+              <DocumentSection title="发送历史">
                 <div className="overflow-x-auto rounded-xl border">
                   <table className="w-full text-sm">
                     <thead className="bg-muted/50 text-left text-xs text-muted-foreground">
@@ -1555,7 +1555,7 @@ export function ExecutionProjectionsPage() {
           if (!open) setPreviewId(null)
         }}
         title="数据预览"
-        description="白名单字段、来源版本与最新投递（只读）"
+        description="白名单字段、来源版本与最新发送（只读）"
       >
         {previewQuery.data ? (
           <div className="space-y-3">
@@ -1571,7 +1571,7 @@ export function ExecutionProjectionsPage() {
                 },
                 {
                   id: "d",
-                  label: "信息投递",
+                  label: "信息发送",
                   status: {
                     label: previewQuery.data.tracks.projectionDelivery.label,
                     tone: previewQuery.data.tracks.projectionDelivery.tone,
@@ -1617,7 +1617,7 @@ export function ExecutionProjectionsPage() {
           pendingAction?.kind === "QUERY_RESULT"
             ? "查询最终结果"
             : pendingAction?.kind === "RETRY"
-              ? "重试投递"
+              ? "重试发送"
               : pendingAction?.kind === "ESCALATE"
                 ? "升级到接口错误中心"
                 : pendingAction?.kind === "BULK_QUERY"
@@ -1659,7 +1659,7 @@ export function ExecutionProjectionsPage() {
             : pendingAction && "ids" in pendingAction
               ? [
                   `显式选择 ${pendingAction.ids.length} 项`,
-                  "服务端筛选结果（非当前筛选全部）",
+                  "系统筛选结果（非当前筛选全部）",
                 ]
               : []
         }
@@ -1672,7 +1672,7 @@ export function ExecutionProjectionsPage() {
               ]
             : pendingAction?.kind === "RETRY"
               ? [
-                  "沿原数据修订继续投递",
+                  "沿原数据修订继续发送",
                   "不生成新数据修订",
                   "不回退销售记录或应收",
                 ]
@@ -1683,12 +1683,12 @@ export function ExecutionProjectionsPage() {
                   ]
                 : pendingAction?.kind === "BULK_RETRY"
                   ? [
-                      "服务端冻结筛选结果并逐项重验",
+                      "系统按筛选结果逐项核对",
                       "已确认/结果未知/权限变化项跳过",
                       "展示成功/跳过/失败/仍未知",
                     ]
                   : [
-                      "服务端筛选结果逐项查询",
+                      "系统按筛选结果逐项查询",
                       "仍未知不按成功处理",
                     ]
         }

@@ -43,9 +43,9 @@ export function SafetyPausePanel({
         <AlertDescription>
           <div className="space-y-2 text-sm">
             <p>
-              本地保持{" "}
+              保持{" "}
               <Badge variant="destructive">不可下单</Badge>
-              （FAIL_CLOSED_PENDING_RESULT），不得推断暂停未发生，也不得创建第二暂停版本。
+              （结果未确认），不得推断暂停未发生，也不得创建第二暂停版本。
             </p>
             <dl className="grid gap-1 sm:grid-cols-2">
               <div>
@@ -97,7 +97,7 @@ export function SafetyPausePanel({
       <AlertTitle>
         系统安全暂停 · {causeLabel}
         <Badge variant="destructive" className="ml-2">
-          {pause.resultStatus === "ALREADY_SAFE" ? "已处于安全态" : "已落库"}
+          {pause.resultStatus === "ALREADY_SAFE" ? "已处于安全态" : "已记录"}
         </Badge>
       </AlertTitle>
       <AlertDescription>
@@ -111,7 +111,7 @@ export function SafetyPausePanel({
               <dd className="num">{pause.operationId}</dd>
             </div>
             <div>
-              <dt className="text-xs text-muted-foreground">本地提交时间</dt>
+              <dt className="text-xs text-muted-foreground">提交时间</dt>
               <dd className="num">{formatTime(pause.committedAt)}</dd>
             </div>
             <div>
@@ -142,7 +142,7 @@ export function SafetyPausePanel({
                     {ap.pauseArtifactKind === "REVISION"
                       ? `暂停修订 ${ap.pauseRevisionId}`
                       : `暂停动作 ${ap.pauseActionId}`}
-                    {" · 投递 "}
+                    {" · 发送 "}
                     <span className="num">{ap.deliveryId}</span>
                     {" · outbox "}
                     <span className="num">{ap.outboxMessageId}</span>

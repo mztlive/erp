@@ -778,7 +778,7 @@ export function CardBusinessAnalyticsPage() {
         <BusinessFailureState
           kind="system"
           title="日期口径配置加载失败"
-          description="无法取得服务端默认日期口径。请重试；不会自动采用本月或消费发生日。"
+          description="无法取得系统默认日期口径。请重试；不会自动采用本月或消费发生日。"
           action={
             <Button
               type="button"
@@ -1142,7 +1142,7 @@ export function CardBusinessAnalyticsPage() {
         <BusinessFailureState
           kind="system"
           title="卡券经营数据加载失败"
-          description="当前无缓存结果可展示。请重试或调整筛选。"
+          description="当前无可展示的结果。请重试或调整筛选。"
           action={
             <Button type="button" onClick={() => void viewQuery.refetch()}>
               重试

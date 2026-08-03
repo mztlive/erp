@@ -708,7 +708,7 @@ export function AcceptanceWorkspace({
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <MetricStrip columns={4} aria-label="待验收摘要（服务端净记录）">
+        <MetricStrip columns={4} aria-label="待验收摘要（系统净记录）">
           <MetricItem
             label="待验收批次"
             value={String(view.metrics.eligibleFulfillmentCount)}
@@ -722,7 +722,7 @@ export function AcceptanceWorkspace({
           <MetricItem
             label="履约进度"
             value={view.salesOrder.fulfillmentProgress}
-            detail="服务端履约数据"
+            detail="系统履约数据"
           />
           <MetricItem
             label={freshnessText.dataUpdatedAt}
@@ -1344,7 +1344,7 @@ export function AcceptanceWorkspace({
         }}
         lockedFields={[
           "履约记录版本",
-          "净可验收量（服务端）",
+          "净可验收量（系统）",
           "销售单 lockVersion",
         ]}
         effects={[

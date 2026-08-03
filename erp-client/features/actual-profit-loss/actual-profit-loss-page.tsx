@@ -1053,7 +1053,7 @@ export function ActualProfitLossPage() {
             <BusinessFailureState
               kind="system"
               title="盈亏数据加载失败"
-              description="当前无缓存结果可展示。请重试或返回其他模块。"
+              description="当前无可展示的结果。请重试或返回其他模块。"
               action={
                 <Button type="button" onClick={() => void viewQuery.refetch()}>
                   重试
@@ -1071,7 +1071,7 @@ export function ActualProfitLossPage() {
                   </AlertTitle>
                   <AlertDescription>
                     {refreshFailed
-                      ? "保留上次成功数据供只读查阅；可再次刷新。不会用本地估算覆盖金额。"
+                          ? "保留上次成功数据供只读查阅；可再次刷新。不会用本页估算覆盖金额。"
                       : `数据更新于 ${formatDateTime(data.freshness.projectedAt)}，来源已于 ${formatDateTime(data.freshness.sourceWatermark)} 更新。`}
                   </AlertDescription>
                 </Alert>

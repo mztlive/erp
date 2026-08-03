@@ -1,6 +1,6 @@
 /**
  * W30 历史消费回填 · seed 数据（session-mock）
- * 不含卡号/卡密/手机/完整地址/原始报文。
+ * 不含卡号/卡密/手机/完整地址/原始消息内容。
  */
 
 import type {
@@ -18,7 +18,7 @@ const LEGACY_NOTE =
   "T 前支付只补台账，履约链固定 LEGACY_MANUAL，不创建供应商订单、取消或退款动作。"
 
 const SENSITIVE_NOTE =
-  "报告与明细已脱敏：不含卡号、卡密、绑定手机号、完整履约地址或原始商城报文。"
+  "报告与明细已脱敏：不含卡号、卡密、绑定手机号、完整履约地址或原始商城消息内容。"
 
 function baseJob(
   partial: Omit<

@@ -358,7 +358,7 @@ export function UnifiedTaskQueuePage() {
         setConflictOpen(true)
         setLastResult({
           status: "failed",
-          title: "数据版本冲突",
+          title: "数据已更新",
           description: error.message,
           reference: item.id,
         })
@@ -606,7 +606,7 @@ export function UnifiedTaskQueuePage() {
         setLastResult({
           status: "succeeded",
           title: resultText.querySucceededOriginal,
-          description: "已按原任务号确认终态，现在可以打开下一项。",
+          description: "已按原任务号确认处理结果，现在可以打开下一项。",
           reference: ref,
         })
         const fromId = pendingIdem.workItemId
@@ -1347,7 +1347,7 @@ export function UnifiedTaskQueuePage() {
                       {(field) => (
                         <field.TextareaField
                           label="备注"
-                          placeholder="操作已失效或版本冲突时备注仍保留，但不能提交"
+                          placeholder="操作已失效或数据已更新时备注仍保留，但不能提交"
                           rows={3}
                           disabled={permissionRevoked}
                         />
@@ -1609,7 +1609,7 @@ export function UnifiedTaskQueuePage() {
         ]}
         effects={[
           `执行 ${task?.completionAction ?? "领域完成动作"}`,
-          "业务记录与任务 COMPLETED 同一事务返回",
+          "业务记录与任务完成状态在同一提交中返回",
           "无独立「标记完成」伪动作",
         ]}
         nextDepartment="相关责任组"

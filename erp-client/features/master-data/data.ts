@@ -2136,7 +2136,7 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
     },
     sensitiveFields: [],
     resourceFacts: [
-      { label: "商城玩法", value: "不展示、不缓存、不保存" },
+      { label: "商城玩法", value: "不展示、不留存、不保存" },
     ],
     allowedActions: ["VIEW", "CREATE_REVISION", "DISABLE"],
     actionBlockers: [],

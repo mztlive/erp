@@ -33,7 +33,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     id: "W02",
     title: "统一待办队列",
     description:
-      "在可恢复的队列上下文中连续处理任务；先读懂对象、原因与影响，再做正式决策。",
+      "在可恢复的队列上下文中连续处理任务；先读懂对象、原因与影响，再作决定。",
     mode: "M3",
     breadcrumbs: [
       { id: "work", label: "工作", href: "/workspace" },
@@ -851,7 +851,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
           },
         ]),
         notes: [
-          "经营质量为异步汇总，允许最多约 1 分钟延迟。",
+          "经营质量为系统汇总，允许最多约 1 分钟延迟。",
           "利润与成本字段受权限控制；无权时仅显示覆盖等级。",
         ],
       },
@@ -1709,7 +1709,7 @@ export const WORKSPACE_PAGE_DEFS: Partial<
           {
             id: "ei1",
             severity: "error",
-            message: "供应商回调签名校验失败，已转技术责任",
+            message: "供应商通知签名校验失败，已转技术责任",
             objectLabel: "CONN-JD-PROD",
           },
           {

@@ -39,7 +39,7 @@ export const MALL_SYNC_JOBS: MallSyncJobRow[] = [
     finishedAt: "2026-08-01T09:04:33+08:00",
     errorClass: "SOURCE_PAGE_TIMEOUT",
     impactSummary:
-      "2 页读取超时未安全持久化，对应同步进度未推进；已安全捕获的 148 条数据保留。异步映射失败不回退同步进度。",
+      "2 页读取超时未安全持久化，对应同步进度未推进；已安全捕获的 148 条数据保留。映射失败不回退同步进度。",
     triggeredBy: "系统调度",
     watermarkAdvanced: true,
     allowedActions: ["RETRY_FAILED_JOB", "VIEW_SNAPSHOTS"],
@@ -577,7 +577,7 @@ export const MALL_HISTORY: HistoryArchiveEntry[] = [
   {
     id: "hist_seal_demo",
     kind: "SEAL",
-    title: "第一期轮询封存（演示样本）",
+    title: "第一期同步已封存（演示样本）",
     summary:
       "最终基线确认后封存；当前执行信息转执行信息页，迁移转主责迁移，通用错误与对账转接口错误中心。",
     recordedAt: "2026-07-15T18:00:00+08:00",

@@ -148,7 +148,7 @@ function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
             submissionNo: rejectionOutcome.newSubmissionNo ?? 2,
             subjectHash:
               rejectionOutcome.newSubjectHash ?? "sha256:lm…pending",
-            acceptanceReason: "照原条件申请低毛利承接（会话演示）",
+            acceptanceReason: "照原条件申请低毛利承接（演示）",
             commercialTermsMatchRejectedSubmission: true,
           },
           activeLowMarginManagerTask: {
@@ -173,7 +173,7 @@ function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
             },
             {
               action: "VOID_AFTER_REJECTION",
-              reason: "存在有效低毛利后继任务，不可并发作废。",
+              reason: "存在有效的低毛利后继任务，不可同时作废。",
             },
           ],
         }

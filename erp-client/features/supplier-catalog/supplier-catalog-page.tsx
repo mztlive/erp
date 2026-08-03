@@ -1367,7 +1367,7 @@ export function SupplierCatalogPage() {
                     />
                   ) : null}
                   {costMasked ? (
-                    <Badge variant="outline">成本字段已掩码</Badge>
+                    <Badge variant="outline">成本字段已隐藏</Badge>
                   ) : null}
                 </div>
                 <p className="text-sm text-muted-foreground">

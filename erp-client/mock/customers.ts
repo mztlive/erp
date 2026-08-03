@@ -255,7 +255,7 @@ export const MOCK_CUSTOMER_DETAILS: Readonly<
       earliestOverdueDate: "2026-07-15",
       collectionProgressLabel: "部分回款",
       invoicingProgressLabel: "部分开票",
-      reliabilityNote: "金额为服务端已确认应收汇总；卡券票款未复核时不可靠。",
+      reliabilityNote: "金额为系统已确认应收汇总；卡券票款未复核时不可靠。",
     },
     qualitySummary: {
       scaleLabel: "中型",

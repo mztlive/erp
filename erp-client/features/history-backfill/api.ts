@@ -358,7 +358,7 @@ export async function fetchHistoryBackfillDetail(
         action: "CONFIRM_REPORT",
         code: "REPORT_REVIEW_POLICY_MISSING",
         message:
-          "报告复核策略未配置：服务端不返回确认动作；技术报告可下载但固定标「未确认」。",
+          "报告复核策略未配置：系统不返回确认动作；技术报告可下载但固定标「未确认」。",
       })
     }
   }
@@ -454,7 +454,7 @@ export async function submitHistoryBackfillCommand(
         status: "BLOCKED",
         title: "rangeStart 非法",
         description:
-          "客户端不能选择较晚起点；rangeStart 必须等于服务端登记的 requiredHistoryStart。",
+          "不能选择更晚的起点；范围起点必须等于系统登记的「必须覆盖起点」。",
         operationId,
         idempotencyKey,
         blockers: ["RANGE_START_FIXED"],
@@ -595,7 +595,7 @@ export async function submitHistoryBackfillCommand(
       jobNo: job.jobNo,
       operationId,
       idempotencyKey,
-      nextStep: "确认后开始回填（后台异步）",
+      nextStep: "确认后开始回填（后台执行）",
     }
     setIdempotencySucceeded(idempotencyKey, IDEM_KIND, result)
     return result
@@ -857,7 +857,7 @@ export async function submitHistoryBackfillCommand(
         status: "BLOCKED",
         title: "报告复核策略未配置 · 已阻断",
         description:
-          "策略缺失时服务端不返回确认动作；技术报告仅可下载并固定标「未确认」，不解锁下游。",
+          "策略缺失时系统不返回确认动作；技术报告仅可下载并固定标「未确认」，不解锁下游。",
         operationId,
         idempotencyKey,
         jobId: job.id,

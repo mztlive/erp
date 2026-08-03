@@ -273,11 +273,11 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
   },
   conflict: {
     title: versionText.versionChanged,
-    description: "服务端数据已更新，请比较差异后重新处理。",
+    description: "数据已更新，请比较差异后重新处理。",
     icon: GitCompareArrowsIcon,
     variant: "warning",
     tone: "warning",
-    label: "并发冲突",
+    label: "数据已更新",
   },
   system: {
     title: "系统暂时无法完成操作",

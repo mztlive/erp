@@ -734,7 +734,7 @@ export function AllocationSessionPanel({
         title={isReceipt ? "确认登记回款并核销" : "确认登记销项发票并分配"}
         actionLabel="提交"
         confirmLabel="确认提交"
-        fromStatus={{ label: "草稿会话", tone: "warning" }}
+        fromStatus={{ label: "本次草稿", tone: "warning" }}
         toStatus={{
           label: isReceipt ? "已过账回款" : "已登记发票",
           tone: "success",
@@ -742,8 +742,8 @@ export function AllocationSessionPanel({
         lockedFields={["往来主体", "记录编号（提交后）", "既有分配行"]}
         effects={[
           "形成回款/发票记录与追加式分配明细",
-          "同步更新应收开放余额与净分配（服务端）",
-          "未分配余额按服务端策略保留并可见",
+          "同步更新应收开放余额与净分配（系统）",
+          "未分配余额按系统策略保留并可见",
           "重复提交不会重复生成记录",
         ]}
         nextDepartment="财务"

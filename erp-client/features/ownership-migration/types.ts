@@ -208,7 +208,7 @@ export const CUTOVER_CHECK_LABEL: Record<CutoverCheckCode, string> = {
   MANUAL_EXCEPTION: "人工例外",
   RECONCILIATION: "对账",
   BACKFILL_CAPABILITY: "回填能力",
-  PHASE1_POLLING_STOPPED: "一期轮询封存",
+  PHASE1_POLLING_STOPPED: "一期同步已封存",
   MALL_B2B_ENTRY_CLOSED: "B2B 入口关闭",
   MALL_COMMERCIAL_FIELDS_READONLY: "商业字段只读",
 }

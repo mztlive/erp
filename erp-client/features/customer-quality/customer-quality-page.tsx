@@ -816,7 +816,7 @@ export function CustomerQualityPage() {
         <BusinessFailureState
           kind="system"
           title="期间配置加载失败"
-          description="无法取得服务端默认期间策略。请重试；不会静默采用自然年。"
+          description="无法取得系统默认期间策略。请重试；不会静默采用自然年。"
           action={
             <Button
               type="button"
@@ -912,7 +912,7 @@ export function CustomerQualityPage() {
         <BusinessFailureState
           kind="projection"
           title="经营质量数据加载失败"
-          description="无可用缓存。请重试或返回其它模块。"
+          description="暂无可用结果。请重试或返回其它模块。"
           action={
             <Button type="button" onClick={() => void viewQuery.refetch()}>
               重试
@@ -984,7 +984,7 @@ export function CustomerQualityPage() {
               <span>
                 期间 {data.period.from} ~ {data.period.to}
                 {data.period.selectionSource === "SERVER_DEFAULT"
-                  ? " · 服务端默认"
+                  ? " · 系统默认"
                   : data.period.selectionSource === "CONFIGURED_PRESET"
                     ? " · 配置快捷项"
                     : " · 显式选择"}

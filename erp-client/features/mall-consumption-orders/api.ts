@@ -410,7 +410,7 @@ export async function createConsumptionOrderExportJob(
     permissionVersion: PERMISSION_VERSION,
     fieldSetId: command.fieldSetId,
     maskDisclaimer:
-      "导出使用服务端筛选结果与字段权限掩码：地址、手机号、完整支付引用、卡号/卡密、未授权成本金额不会以明文写入文件。下载时重新鉴权。",
+      "导出使用系统筛选结果与字段权限打码：地址、手机号、完整支付引用、卡号/卡密、未授权成本金额不会以明文写入文件。下载时重新鉴权。",
     expiresAt,
     downloadLabel: `商城消费订单_${jobId}.csv`,
     status: "succeeded",

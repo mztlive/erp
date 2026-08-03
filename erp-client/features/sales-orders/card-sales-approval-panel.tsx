@@ -298,7 +298,7 @@ export function CardSalesApprovalPanel({
               setResult({
                 status: "blocked",
                 title: "操作已失效或冲突",
-                description: "请重新领取任务并重查冻结提交与版本，勿本地推进状态。",
+                description: "请重新领取任务并重查冻结提交与版本，勿自行推进状态。",
                 reference: approval.workItemId,
               })
             }

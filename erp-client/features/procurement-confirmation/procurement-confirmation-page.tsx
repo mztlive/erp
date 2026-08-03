@@ -1825,7 +1825,7 @@ function buildResultFacts(
       },
       {
         label: "后继任务",
-        value: "无（本事务不创建任何任务）",
+        value: "无（本次提交不创建任何任务）",
       },
       {
         label: "驳回原因",

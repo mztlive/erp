@@ -121,7 +121,7 @@ const safetyZeroInventory: SystemSafetyPauseOperationView = {
   followUpBlocker: {
     code: "NO_MANUAL_FOLLOW_UP_TASK_BY_CURRENT_POLICY",
     message:
-      "零库存安全暂停不创建人工后续任务；本地已不可下单，来源恢复不会自动上架。",
+      "零库存安全暂停不创建人工后续任务；已不可下单，来源恢复不会自动上架。",
     evidenceReference: "ev-zi-policy-1",
   },
 }

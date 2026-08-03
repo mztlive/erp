@@ -405,8 +405,8 @@ export const ERROR_CLASS_LABEL: Record<string, string> = {
   "result-unknown": "结果未知",
   "authentication-or-signature": "鉴权/签名失败",
   "rate-limited": "限流",
-  "duplicate-callback": "回调重复",
-  "out-of-order-callback": "回调乱序",
+  "duplicate-callback": "重复通知",
+  "out-of-order-callback": "通知顺序异常",
   "reconciliation-difference": "对账差异",
 }
 

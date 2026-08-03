@@ -596,7 +596,7 @@ export function ConsumptionOrdersListPage() {
             mode="all-or-nothing"
             status="succeeded"
             label="导出作业"
-            description={`筛选结果 · 字段掩码 · ${exportResult.jobId}`}
+            description={`筛选结果 · 字段打码 · ${exportResult.jobId}`}
             total={exportResult.rowCount}
             completed={exportResult.rowCount}
             succeeded={exportResult.rowCount}
@@ -622,7 +622,7 @@ export function ConsumptionOrdersListPage() {
               "卡号/卡密（永不导出）",
               "未授权成本金额",
             ]}
-            skippedReason="无权限字段以掩码形式导出"
+            skippedReason="无权限字段以打码形式导出"
           />
           <div className="flex flex-wrap gap-2">
             <Button

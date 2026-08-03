@@ -95,7 +95,7 @@ export function SalesOrderCollaborationCard({
   return (
     <DocumentSection
       title="商城执行协同"
-      description="销售生效、信息投递与商城确认为独立环节；本区只读。"
+      description="销售生效、信息发送与商城确认为独立环节；本区只读。"
       action={
         <div className="flex flex-wrap gap-2">
           {data.historyHref ? (
@@ -148,7 +148,7 @@ export function SalesOrderCollaborationCard({
             },
             {
               id: "projection-delivery",
-              label: "信息投递",
+              label: "信息发送",
               status: {
                 label: tracks.projectionDelivery.label,
                 tone: tracks.projectionDelivery.tone,

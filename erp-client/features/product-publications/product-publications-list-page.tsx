@@ -527,7 +527,7 @@ export function ProductPublicationsListPage() {
                 })
               }
               options={[
-                { value: "all", label: "投递状态" },
+                { value: "all", label: "发送状态" },
                 { value: "pending_confirm", label: "待商城确认" },
                 { value: "failed", label: "失败" },
                 { value: "handoff", label: "转人工" },
@@ -536,8 +536,8 @@ export function ProductPublicationsListPage() {
               className="w-40"
               size="sm"
               allowClear={false}
-              aria-label="投递状态"
-              placeholder="投递状态"
+              aria-label="发送状态"
+              placeholder="发送状态"
             />
             {(qParam ||
               mallId ||

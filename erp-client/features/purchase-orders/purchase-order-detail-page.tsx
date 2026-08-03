@@ -903,7 +903,7 @@ export function PurchaseOrderDetailPage({
               <LinesTable order={order} costMasked={costMasked} />
               <DocumentTotals
                 className="mt-4 max-w-md ml-auto"
-                title="服务端合计"
+                title="系统合计"
                 items={[
                   {
                     id: "g",
@@ -1177,7 +1177,7 @@ export function PurchaseOrderDetailPage({
         lockedFields={[
           "供应商 / 采购类型 / 履约责任 / 付款条件",
           "商品行（二次确认分行）与物流费用",
-          "销售分配与服务端金额",
+          "销售分配与系统金额",
         ]}
         effects={[
           "形成不可修改的采购提交与数据版本",

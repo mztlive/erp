@@ -143,7 +143,7 @@ function recomputeActions(seed: ProjectionSeed): {
       {
         action: "RETRY",
         code: "ESCALATED",
-        message: "已升级人工，对象级重试请在接口错误中心按原任务号处理。",
+        message: "已转人工处理，按单据重试请到接口错误中心按原任务号处理。",
       },
       {
         action: "QUERY_RESULT",
@@ -171,7 +171,7 @@ function recomputeActions(seed: ProjectionSeed): {
       {
         action: "RETRY",
         code: "NOT_YET_SENT",
-        message: "尚未首次投递，由后台按计划发送。",
+        message: "尚未首次发送，将由后台按计划执行。",
       },
       {
         action: "QUERY_RESULT",
@@ -184,7 +184,7 @@ function recomputeActions(seed: ProjectionSeed): {
     blockers.push({
       action: "RETRY",
       code: "IN_FLIGHT",
-      message: "存在进行中的投递，禁止并发重试。",
+      message: "正在发送中，请勿重复操作。",
     })
   }
   if (status === "UNKNOWN") {
@@ -446,7 +446,7 @@ function buildTracks(seed: ProjectionSeed): ExecutionProjectionView["tracks"] {
       tone: DELIVERY_STATUS_TONE[delivery],
       description:
         delivery === "ACKED"
-          ? "信息投递已闭环"
+          ? "信息发送已完成"
           : delivery === "UNKNOWN"
             ? "结果未知：须先查询，未明确前不显示成功"
             : `尝试 ${seed.attemptCount} 次${seed.nextAttemptAt ? ` · 下次 ${seed.nextAttemptAt}` : ""}`,
@@ -628,7 +628,7 @@ export async function fetchSalesOrderCollaboration(
       salesOrderNo: salesOrderId,
       hasProjection: false,
       historyCount: 0,
-      note: "当前销售单尚无执行信息。卡券销售版本生效后由服务端自动形成数据。",
+      note: "当前销售单尚无执行信息。卡券销售版本生效后由系统自动形成数据。",
     }
   }
 
@@ -654,7 +654,7 @@ export async function fetchSalesOrderCollaboration(
     historyCount,
     w23Href: `/commerce/execution-projections?projectionId=${seed.projectionId}`,
     historyHref: `/commerce/execution-projections?projectionId=${seed.projectionId}&revision=${seed.projectionRevisionId}`,
-    note: "协同状态读取服务端数据；本区只读。变更销售内容请走销售变更单。",
+    note: "协同状态读取系统数据；本区只读。变更销售内容请走销售变更单。",
   }
 }
 
@@ -739,7 +739,7 @@ export async function submitProjectionDeliveryCommand(
       if (seed.latencyBand === "over_sla" && seed.deliveryStatus === "UNKNOWN") {
         result = "FAILED"
         resultLabel = "查询后明确失败"
-        nextAction = "可对象级重试或升级到接口错误中心"
+        nextAction = "可按单据重试或转到接口错误中心"
         overlay.status = "FAILED"
         overlay.errorCode = seed.errorCode ?? "QUERIED_FAILED"
         overlay.errorSummary =
@@ -763,7 +763,7 @@ export async function submitProjectionDeliveryCommand(
     } else if (seed.deliveryStatus === "FAILED") {
       result = "FAILED"
       resultLabel = "查询确认仍为失败"
-      nextAction = "可重试投递或升级到接口错误中心"
+      nextAction = "可重试发送或升级到接口错误中心"
       overlay.lastAttemptAt = occurredAt
     } else {
       result = "STILL_UNKNOWN"
@@ -776,7 +776,7 @@ export async function submitProjectionDeliveryCommand(
     // 沿原修订继续，不生成新投影修订
     result = "RETRY_SCHEDULED"
     resultLabel = "已安排按原任务号重试"
-    nextAction = "等待投递结果；超时请先查询"
+    nextAction = "等待发送结果；超时请先查询"
     overlay.status = "RETRYING"
     overlay.attemptCount = seed.attemptCount + 1
     overlay.lastAttemptAt = occurredAt
@@ -987,7 +987,7 @@ export async function submitBulkProjectionCommand(
         salesOrderNo: seed.salesOrderNo,
         deliveryId: `dlv_${id}`,
         outcome: "succeeded",
-        reason: "已刷新投递状态",
+        reason: "已刷新发送状态",
       })
       succeeded += 1
     }

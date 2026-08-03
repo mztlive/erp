@@ -377,7 +377,7 @@ function buildOwnership(stage: OwnershipStage) {
       sealedAt: "2026-07-15T18:00:00+08:00",
       finalWatermark: "wm_final_phase1_20260715",
       migrationReference: "W24 · 已封存",
-      mallWriteBoundary: "第一期轮询已封存；商城执行信息见执行信息页",
+      mallWriteBoundary: "第一期同步已封存；商城执行信息见执行信息页",
       erpWriteBoundary: "ERP 主责；商城同步仅历史只读，当前治理见执行信息 / 主责迁移 / 接口错误中心",
     }
   }
@@ -720,8 +720,8 @@ export async function triggerManualIncremental(input: {
       jobNo,
       jobType: "INCREMENTAL",
       jobTypeLabel: JOB_TYPE_LABEL.INCREMENTAL,
-      rangeStart: "（服务端按安全同步点计算）",
-      rangeEnd: "（服务端 safeNow）",
+      rangeStart: "（系统按安全同步点计算）",
+      rangeEnd: "（系统当前时间）",
       status: "RUNNING",
       statusLabel: "运行中",
       statusTone: "info",
@@ -986,7 +986,7 @@ export async function confirmMapping(input: {
       return {
         status: "unknown",
         message:
-          "确认映射结果未知。不得在前端标记已解决，停留当前项并按原任务号查询。",
+          "确认映射结果未知。不得标记为已解决，停留当前项并按原任务号查询。",
         idempotencyKey: input.idempotencyKey,
       }
     }

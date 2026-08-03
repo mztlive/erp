@@ -546,7 +546,7 @@ function BatchListView({
         <BusinessEmptyState
           kind="no-data"
           title="批次列表加载失败"
-          description="请重试。不会根据前端猜测补造批次。"
+          description="请重试。不会自行补造批次。"
           action={
             <Button
               type="button"
@@ -1018,7 +1018,7 @@ function OverviewSection({
       <Card size="sm">
         <CardHeader className="border-b">
           <CardTitle>期初口径</CardTitle>
-          <CardDescription>按本批对象集合固定提示，不可前端改写。</CardDescription>
+          <CardDescription>提示按本批对象固定生成，不可修改。</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3 pt-4">
           {batch.openingPolicyHints.map((hint) => (

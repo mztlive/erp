@@ -72,7 +72,7 @@ export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
         ? "卡券销售审批进行中：冻结提交只读，须通过任务处理页决定。"
         : input.primaryStatus.label === "已关闭" ||
             input.primaryStatus.label === "已作废"
-          ? "终态不可直接编辑；历史版本记录不被当前基础资料覆盖。"
+          ? "已生效记录不可直接编辑；历史版本记录不被当前基础资料覆盖。"
           : commercialReadOnly
             ? "商业内容只读；变更须走销售变更单。"
             : undefined

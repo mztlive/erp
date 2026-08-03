@@ -207,7 +207,7 @@ export const EXECUTION_PROJECTION_SEEDS: readonly ProjectionSeed[] = [
       {
         action: "RETRY",
         code: "IN_FLIGHT",
-        message: "存在进行中的投递，禁止并发重试。",
+        message: "正在发送中，请勿重复操作。",
       },
     ],
   },
@@ -346,7 +346,7 @@ export const EXECUTION_PROJECTION_SEEDS: readonly ProjectionSeed[] = [
       {
         action: "RETRY",
         code: "ESCALATED",
-        message: "已升级人工，对象级重试请在接口错误中心按原任务号处理。",
+        message: "已转人工处理，按单据重试请到接口错误中心按原任务号处理。",
       },
       {
         action: "QUERY_RESULT",
@@ -391,7 +391,7 @@ export const EXECUTION_PROJECTION_SEEDS: readonly ProjectionSeed[] = [
       {
         action: "RETRY",
         code: "NOT_YET_SENT",
-        message: "尚未首次投递，由后台按计划发送。",
+        message: "尚未首次发送，将由后台按计划执行。",
       },
       {
         action: "QUERY_RESULT",

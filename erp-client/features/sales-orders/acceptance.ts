@@ -150,7 +150,7 @@ export async function fetchCustomerAcceptanceWorkspace(
             action: "POST_ACCEPTANCE",
             code: "PERMISSION_REVOKED",
             message:
-              "操作期间权限被收回：已停止自动保存与提交，敏感缓存已清理",
+              "操作期间权限被收回：已停止自动保存与提交，敏感数据已清理",
           },
           {
             action: "CREATE_ACCEPTANCE",

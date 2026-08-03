@@ -296,7 +296,7 @@ export function CustomerReceivablesPage() {
         patchUrl({ sessionId: session.draftSessionId }, { replace: true })
       } catch (err) {
         setActionError(
-          err instanceof Error ? err.message : "无法打开核销会话"
+          err instanceof Error ? err.message : "无法开始本次核销"
         )
       }
     })()
@@ -346,7 +346,7 @@ export function CustomerReceivablesPage() {
         counterpartyId: partyId,
       })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "创建核销会话失败")
+      setActionError(err instanceof Error ? err.message : "创建本次核销失败")
     }
   }
 
@@ -755,8 +755,8 @@ export function CustomerReceivablesPage() {
         <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
           <BusinessFailureState
             kind="business"
-            title="核销会话无效"
-            description="核销会话不存在或已失效。"
+            title="本次核销无效"
+            description="本次核销已失效，请重新开始。"
             action={
               <Button
                 type="button"
@@ -841,7 +841,7 @@ export function CustomerReceivablesPage() {
                   setLastResult({
                     status: "succeeded",
                     title: "导出任务已创建",
-                    description: `服务端筛选结果：${data?.filterSummary ?? ""}。7 天内可下载（演示）。`,
+                    description: `系统筛选结果：${data?.filterSummary ?? ""}。7 天内可下载（演示）。`,
                     reference: `EXP-W11-${Date.now().toString(36)}`,
                   })
                 },
@@ -940,7 +940,7 @@ export function CustomerReceivablesPage() {
               <MetricFilterItem
                 label="开放应收"
                 value={<MoneyValue value={metrics.openReceivableTotal} />}
-                detail="服务端更新时间"
+                detail="系统更新时间"
                 active={view === "receivable"}
                 onClick={() => {
                   patchUrl({ view: "receivable" })

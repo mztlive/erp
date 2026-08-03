@@ -332,7 +332,7 @@ export function CustomerDetailPage({
           density="compact"
           label="进行中销售单"
           value={String(customer.metrics.inProgressSalesOrderCount)}
-          detail="服务端聚合 · 非列表求和"
+          detail="系统汇总 · 非列表求和"
           detailMode="tooltip"
         />
         <MetricItem
@@ -447,7 +447,7 @@ export function CustomerDetailPage({
       >
         <DocumentSection
           title="联系与地址"
-          description="有效联系人与地址；手机与履约地址按字段权限掩码"
+          description="有效联系人与地址；手机与履约地址按字段权限打码"
         >
           {customer.partitions.contacts === "error" ? (
             <BusinessFailureState
@@ -464,7 +464,7 @@ export function CustomerDetailPage({
               <Card size="sm">
                 <CardHeader>
                   <CardTitle className="text-sm">有效联系人</CardTitle>
-                  <CardDescription>默认掩码手机；揭示短时可审计</CardDescription>
+                  <CardDescription>默认打码手机；揭示短时可审计</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {customer.contacts.length === 0 ? (
@@ -521,7 +521,7 @@ export function CustomerDetailPage({
               <Card size="sm">
                 <CardHeader>
                   <CardTitle className="text-sm">地址</CardTitle>
-                  <CardDescription>履约地址按权限掩码</CardDescription>
+                  <CardDescription>履约地址按权限打码</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   {customer.addresses.length === 0 ? (
@@ -714,7 +714,7 @@ export function CustomerDetailPage({
               {customer.bankAccounts.length > 0 ? (
                 <Card size="sm">
                   <CardHeader>
-                    <CardTitle className="text-sm">银行账户（掩码）</CardTitle>
+                    <CardTitle className="text-sm">银行账户（打码）</CardTitle>
                     <CardDescription>
                       默认显示末四位；完整显示需授权并记录审计。
                     </CardDescription>
@@ -754,7 +754,7 @@ export function CustomerDetailPage({
             <BusinessEmptyState
               kind="no-data"
               title="暂无票款摘要"
-              description="服务端未返回应收数据。"
+              description="系统暂无应收数据。"
             />
           )}
         </DocumentSection>
@@ -770,7 +770,7 @@ export function CustomerDetailPage({
       >
         <DocumentSection
           title="经营摘要"
-          description="数据由系统异步汇总；标签以系统返回为准。"
+          description="数据由系统汇总；标签以系统返回为准。"
           action={
             <Button
               type="button"

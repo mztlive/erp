@@ -582,7 +582,7 @@ export function MallSyncPage() {
     if (res.status === "succeeded") {
       setResult({
         status: "succeeded",
-        title: "重新归集终态已确认",
+        title: "重新归集结果已确认",
         description: res.message,
         reference: res.salesOrderNo,
       })
@@ -1141,9 +1141,9 @@ export function MallSyncPage() {
       {/* 演示控制：角色 / 阶段 / 策略 / 来源（mock） */}
       <Card size="sm">
         <CardHeader className="border-b py-3">
-          <CardTitle className="text-sm">演示控制（仅当前会话生效）</CardTitle>
+          <CardTitle className="text-sm">演示控制（仅本次操作生效）</CardTitle>
           <CardDescription>
-            切换角色与阶段可查看不同阶段的分工与冻结状态；变更仅本次会话有效。
+            切换角色与阶段可查看不同阶段的分工与冻结状态；变更仅本次操作有效。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-end gap-4 pt-3">
@@ -1395,7 +1395,7 @@ export function MallSyncPage() {
         <div className="grid gap-4 xl:grid-cols-[minmax(0,1.4fr)_minmax(18rem,1fr)]">
           <BusinessTableFrame
             title="同步任务"
-            description="基线 / 增量 / 单号补拉。同步进度不因异步映射失败回退。"
+            description="基线 / 增量 / 单号补拉。同步进度不因映射失败回退。"
             table={
               <DataTable
                 data={pageJobs}

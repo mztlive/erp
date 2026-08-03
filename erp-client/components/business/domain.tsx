@@ -1133,22 +1133,22 @@ const interfaceErrorClassPresentation = {
     guidance: "停止自动重试并排查连接配置，不展示或复制密钥正文。",
   },
   "rate-limited": {
-    label: "接口限流",
+    label: "调用次数受限",
     tone: "warning",
     alert: "warning",
-    guidance: "等待退避时间，不允许高频手工重复请求。",
+    guidance: "请稍后重试，不要高频重复操作。",
   },
   "duplicate-callback": {
-    label: "重复回调",
+    label: "重复通知",
     tone: "neutral",
     alert: "info",
     guidance: interfaceText.duplicateCallbackIgnored,
   },
   "out-of-order-callback": {
-    label: "乱序回调",
+    label: "通知顺序异常",
     tone: "warning",
     alert: "warning",
-    guidance: "保留当前有效状态，并展示被拒绝的状态迁移。",
+    guidance: "保留当前有效状态，并展示被拒绝的状态变化。",
   },
 } satisfies Record<
   InterfaceErrorClass,
@@ -1316,7 +1316,7 @@ function InterfaceErrorResolutionPanel({
         {terminalEvidence != null ? (
           <DescriptionList columns="one">
             <DescriptionItem>
-              <DescriptionTerm>允许关闭的终态证据</DescriptionTerm>
+              <DescriptionTerm>可关闭任务的完成凭证</DescriptionTerm>
               <DescriptionDetails>{terminalEvidence}</DescriptionDetails>
             </DescriptionItem>
           </DescriptionList>
@@ -1331,7 +1331,7 @@ function InterfaceErrorResolutionPanel({
             />
             <ResolutionActionSlot
               title={resultText.useOriginalTaskNoRetry}
-              description="仅在服务端确认原请求无结果且可安全重试时使用。"
+              description="仅在系统确认原请求无结果且可安全重试时使用。"
               action={retrySameKeyAction}
             />
             <ResolutionActionSlot
@@ -1341,7 +1341,7 @@ function InterfaceErrorResolutionPanel({
             />
             <ResolutionActionSlot
               title="关闭任务"
-              description="仅关闭重复、误派或已有终态证据的任务，不改变业务记录。"
+              description="仅关闭重复、误派或已有完成凭证的任务，不改变业务记录。"
               action={closeAction}
             />
           </ItemGroup>

@@ -69,7 +69,7 @@ const SECTIONS = [
   { id: "content", label: "发布内容" },
   { id: "media", label: "媒体" },
   { id: "offering", label: "固定供给" },
-  { id: "delivery", label: "投递与版本" },
+  { id: "delivery", label: "发送与版本" },
   { id: "audit", label: "审计" },
 ] as const
 
@@ -508,7 +508,7 @@ export function PublicationCenterPage({
   const discardSession = () => {
     if (
       sessionEdit &&
-      !window.confirm("放弃当前会话内输入？未提交内容将丢失，不会保存草稿。")
+      !window.confirm("放弃本次输入？未提交内容将丢失，不会保存草稿。")
     ) {
       return
     }
@@ -528,7 +528,7 @@ export function PublicationCenterPage({
     if (dirty) {
       if (
         !window.confirm(
-          "切换历史修订将放弃会话内未提交输入。输入仅存在于当前页签，不会保存草稿。"
+          "切换历史修订将放弃本次未提交输入。输入仅存在于当前页签，不会保存草稿。"
         )
       ) {
         return
@@ -591,13 +591,13 @@ export function PublicationCenterPage({
         status: "succeeded",
         title: "发布修订已提交，等待商城确认",
         description:
-          "已形成不可变发布修订与投递。商城确认前不会显示为「商城已生效」。",
+          "已形成不可变发布修订与发送。商城确认前不会显示为「商城已生效」。",
         reference: result.operationId,
         facts: [
           { label: "发布版本", value: `r${result.revisionNo}` },
           { label: "修订编号", value: result.revisionId },
-          { label: "投递编号", value: result.deliveryId },
-          { label: "投递状态", value: "待发送" },
+          { label: "发送编号", value: result.deliveryId },
+          { label: "发送状态", value: "待发送" },
         ],
       })
       setSessionEdit(null)
@@ -635,10 +635,10 @@ export function PublicationCenterPage({
       setLastResult({
         status: "succeeded",
         title: "人工暂停修订已提交",
-        description: "已形成暂停发布修订并进入投递。",
+        description: "已形成暂停发布修订并进入发送。",
         facts: [
           { label: "发布版本", value: `r${result.revisionNo}` },
-          { label: "投递编号", value: result.deliveryId },
+          { label: "发送编号", value: result.deliveryId },
         ],
       })
       setPauseReason("")
@@ -765,7 +765,7 @@ export function PublicationCenterPage({
 
       {dirty ? (
         <Alert variant="warning" role="status">
-          <AlertTitle>会话内编辑 · 未持久化</AlertTitle>
+          <AlertTitle>本次编辑 · 未保存</AlertTitle>
           <AlertDescription>
             当前输入仅存在于本页签内存，无草稿保存、无自动保存、无本地持久化。刷新或关闭前将提示丢失。
             <div className="mt-2 flex gap-2">
@@ -802,7 +802,7 @@ export function PublicationCenterPage({
                         description: "原请求已形成发布修订，等待商城确认。",
                         facts: [
                           { label: "发布版本", value: `r${r.revisionNo}` },
-                          { label: "投递编号", value: r.deliveryId },
+                          { label: "发送编号", value: r.deliveryId },
                         ],
                       })
                       setSessionEdit(null)
@@ -840,7 +840,7 @@ export function PublicationCenterPage({
                           "演示结算：原任务号已形成修订。商城确认前不显示商城已生效。",
                         facts: [
                           { label: "发布版本", value: `r${r.revisionNo}` },
-                          { label: "投递编号", value: r.deliveryId },
+                          { label: "发送编号", value: r.deliveryId },
                         ],
                       })
                       setSessionEdit(null)
@@ -887,9 +887,9 @@ export function PublicationCenterPage({
           },
           {
             id: "delivery",
-            label: "投递",
+            label: "发送",
             status: {
-              label: deliveryTrack?.statusLabel ?? "无投递",
+              label: deliveryTrack?.statusLabel ?? "无发送",
               tone: deliveryTrack?.statusTone ?? "neutral",
             },
           },
@@ -1119,7 +1119,7 @@ export function PublicationCenterPage({
                 }}
               >
                 <Alert variant="info">
-                  <AlertTitle>基于历史/当前版本的会话编辑</AlertTitle>
+                  <AlertTitle>基于历史/当前版本的本次编辑</AlertTitle>
                   <AlertDescription>
                     基线修订{" "}
                     <span className="num">{sessionEdit?.baselineRevisionId}</span>
@@ -1192,13 +1192,13 @@ export function PublicationCenterPage({
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   <form.AppField name="skuRevisionId">
-                    {(field) => <field.TextField label="SKU 修订 ID" />}
+                    {(field) => <field.TextField label="SKU 修订编号" />}
                   </form.AppField>
                   <form.AppField name="categoryId">
-                    {(field) => <field.TextField label="商城类目 ID" />}
+                    {(field) => <field.TextField label="商城类目编号" />}
                   </form.AppField>
                   <form.AppField name="supplierOfferingRevisionId">
-                    {(field) => <field.TextField label="唯一固定供给修订 ID" />}
+                    {(field) => <field.TextField label="唯一固定供给修订编号" />}
                   </form.AppField>
                   <form.AppField name="baseUnitCode">
                     {(field) => <field.TextField label="基础单位代码" />}
@@ -1323,8 +1323,8 @@ export function PublicationCenterPage({
 
           <DocumentSection
             id="pub-section-delivery"
-            title="投递与版本"
-            description="不可变版本时间线与投递尝试"
+            title="发送与版本"
+            description="不可变版本时间线与发送尝试"
           >
             <RevisionTimeline
               revisions={data.revisions
@@ -1363,9 +1363,9 @@ export function PublicationCenterPage({
             />
             <Separator className="my-4" />
             <div className="space-y-2">
-              <div className="text-sm font-medium">投递记录</div>
+              <div className="text-sm font-medium">发送记录</div>
               {data.deliveries.length === 0 ? (
-                <p className="text-sm text-muted-foreground">暂无投递</p>
+                <p className="text-sm text-muted-foreground">暂无发送</p>
               ) : (
                 <ul className="space-y-2">
                   {data.deliveries
@@ -1413,11 +1413,11 @@ export function PublicationCenterPage({
                                 if (r.status === "succeeded") {
                                   setLastResult({
                                     status: "succeeded",
-                                    title: "已发起重试投递",
-                                    description: `继续原投递，尝试次数 ${r.attemptCount}。`,
+                                    title: "已发起重试发送",
+                                    description: `继续发送，尝试次数 ${r.attemptCount}。`,
                                     facts: [
                                       {
-                                        label: "投递编号",
+                                        label: "发送编号",
                                         value: r.deliveryId,
                                       },
                                       {
@@ -1435,7 +1435,7 @@ export function PublicationCenterPage({
                                 }
                               }}
                             >
-                              重试投递
+                              重试发送
                             </Button>
                           ) : null}
                           {d.status === "HANDOFF" ? (
@@ -1559,8 +1559,8 @@ export function PublicationCenterPage({
         actionLabel="提交发布"
         confirmLabel="确认提交"
         title="确认提交发布"
-        description="提交后将形成新发布版本并投递目标商城，进入「等待商城确认」。"
-        fromStatus={{ label: "会话编辑", tone: "warning" }}
+        description="提交后将形成新发布版本并发送至目标商城，进入「等待商城确认」。"
+        fromStatus={{ label: "本次编辑", tone: "warning" }}
         toStatus={{ label: "待商城确认", tone: "info" }}
         lockedFields={
           sessionEdit
@@ -1575,12 +1575,12 @@ export function PublicationCenterPage({
             : []
         }
         effects={[
-          "形成不可变发布修订与投递记录",
+          "形成不可变发布修订与发送记录",
           "商城确认前不显示为商城已生效",
           "不覆盖历史修订",
         ]}
         nextDepartment="商城接收确认"
-        irreversibleEffects={["写入新的发布修订号与投递编号"]}
+        irreversibleEffects={["写入新的发布修订号与发送编号"]}
         pending={publishMutation.isPending}
         onConfirm={() => void doPublish()}
       />
@@ -1591,15 +1591,15 @@ export function PublicationCenterPage({
         actionLabel="人工暂停"
         confirmLabel="确认暂停"
         title="确认人工暂停"
-        description="将形成新的暂停发布修订并投递目标商城。"
+        description="将形成新的暂停发布修订并发送至目标商城。"
         fromStatus={{ label: data.statusLabel, tone: data.statusTone }}
         toStatus={{ label: "已暂停", tone: "warning" }}
         lockedFields={[
           `受影响商城 ${data.identity.targetMallName}`,
           pauseReason.trim() ? `原因 ${pauseReason.trim()}` : "请填写暂停原因",
         ]}
-        effects={["形成暂停修订", "投递商城", "不覆盖历史版本"]}
-        irreversibleEffects={["写入新的暂停修订与投递编号"]}
+        effects={["形成暂停修订", "发送至商城", "不覆盖历史版本"]}
+        irreversibleEffects={["写入新的暂停修订与发送编号"]}
         pending={pauseMutation.isPending}
         onConfirm={() => void doPause()}
       />

@@ -911,7 +911,7 @@ export function SupplierAccountsPage() {
 
       {(fromWorkspace || purchaseOrderId) && (
         <Alert>
-          <AlertTitle>跨工作面进入</AlertTitle>
+          <AlertTitle>跨页面进入</AlertTitle>
           <AlertDescription>
             {fromWorkspace ? `来源 ${fromWorkspace}` : null}
             {purchaseOrderId ? ` · 采购单 ${purchaseOrderId}` : null}

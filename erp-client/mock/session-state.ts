@@ -467,7 +467,7 @@ function requireValidLease(input: {
   if (!lease) {
     throw new WorkItemMockError(
       "LEASE_LOST",
-      "操作已失效，本地输入可保留但不能提交。请重新领取。"
+      "操作已失效，你输入的内容可保留但不能提交。请重新领取。"
     )
   }
   if (lease.claimToken !== input.claimToken) {
@@ -479,14 +479,14 @@ function requireValidLease(input: {
   if (lease.leaseVersion !== input.leaseVersion) {
     throw new WorkItemMockError(
       "LEASE_CONFLICT",
-      "版本冲突，请刷新后重新领取。"
+      "数据已更新，请刷新后重新领取。"
     )
   }
   if (new Date(lease.leaseExpiresAt).getTime() <= Date.now()) {
     workItemLeases.delete(input.workItemId)
     throw new WorkItemMockError(
       "LEASE_LOST",
-      "操作已过期，本地输入可保留但不能提交。"
+      "操作已过期，你输入的内容可保留但不能提交。"
     )
   }
   return lease
@@ -517,7 +517,7 @@ export function applyWorkItemActionSession(input: {
     setIdempotencyPending(input.idempotencyKey, input.action.kind)
     throw new WorkItemMockError(
       "TIMEOUT",
-      "网络超时：任务状态未在本地变更，请按原任务号查询最终结果。"
+      "网络超时：任务状态未变更，请按原任务号查询最终结果。"
     )
   }
 
@@ -644,7 +644,7 @@ export function completeWorkItemSession(input: {
   if (subject && subject.subjectHash !== input.expectedSubjectHash) {
     throw new WorkItemMockError(
       "VERSION_CONFLICT",
-      "数据版本已变更，完成已阻止。本地输入已保留。"
+      "数据版本已变更，完成已阻止。你输入的内容已保留。"
     )
   }
 
@@ -982,7 +982,7 @@ export function resolveW05ProcurementRejection(input: {
       outcome: "CHANGED_TERMS_RESUBMITTED",
       reference: `PR-RESUB-${stamp}`,
       detail:
-        "已冻结新提交与新 subjectHash，并创建唯一新 PROCUREMENT_CONFIRMATION；旧提交与旧采购二次确认任务保持已完成驳回。",
+        "已冻结新提交与新数据版本，并创建唯一新采购确认任务；旧提交与旧采购二次确认任务保持已完成驳回。",
       newSubmissionNo: 2,
       newSubjectHash: `sha256:new…${stamp.slice(0, 4)}`,
       newWorkItemId: `wi_pc_new_${stamp.toLowerCase()}`,
@@ -1033,7 +1033,7 @@ export function decideW05LowMargin(input: {
           outcome: "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED",
           reference: `LM-OK-${stamp}`,
           detail:
-            "上级已同意低毛利承接；同事务完成低毛利任务并创建唯一新 PROCUREMENT_CONFIRMATION。销售单未生效。",
+            "上级已同意低毛利承接；同一次提交完成低毛利任务并创建唯一新采购确认任务。销售单未生效。",
           newSubmissionNo: 2,
           newSubjectHash: `sha256:lmok…${stamp.slice(0, 4)}`,
           newWorkItemId: `wi_pc_after_lm_${stamp.toLowerCase()}`,
@@ -1199,7 +1199,7 @@ export function completeW05CardApproval(input: {
     result = {
       outcome: "MANAGER_APPROVED",
       reference: `CARD-MGR-${stamp}`,
-      detail: "领导已通过；同事务创建唯一 CARD_SALES_OPERATION_APPROVAL，销售单进入待运营审批。",
+      detail: "领导已通过；同一次提交创建唯一销售运营审批任务，销售单进入待运营审批。",
       nextWorkItemId: `wi_card_ops_${stamp.toLowerCase()}`,
       primaryStatusLabel: "待运营审批",
     }
@@ -1208,7 +1208,7 @@ export function completeW05CardApproval(input: {
       outcome: "OPERATIONS_APPROVED_AND_EFFECTIVE",
       reference: `CARD-OPS-${stamp}`,
       detail:
-        "运营已通过；同事务形成首个销售版本、应收与执行信息同步，销售单生效。",
+        "运营已通过；同一次提交形成首个销售版本、应收与执行信息同步，销售单生效。",
       primaryStatusLabel: "已生效",
     }
   }
@@ -1327,7 +1327,7 @@ export function saveAcceptanceDraft(
     input.expectedDraftVersion != null &&
     existing.draftVersion !== input.expectedDraftVersion
   ) {
-    throw new Error("草稿版本冲突，请刷新后重试")
+    throw new Error("草稿数据已更新，请刷新后重试")
   }
   const next: AcceptanceDraft = {
     acceptanceDraftId:
@@ -1411,7 +1411,7 @@ export function postCustomerAcceptance(
   if (acceptancePermissionRevoked) {
     return {
       status: "failed",
-      message: "权限已收回，过账已停止；本地敏感草稿已清理",
+      message: "权限已收回，过账已停止；临时草稿已清理",
     }
   }
 
@@ -1420,7 +1420,7 @@ export function postCustomerAcceptance(
     return { status: "failed", message: "草稿不存在或已失效，请重新保存" }
   }
   if (draft.draftVersion !== input.expectedDraftVersion) {
-    return { status: "failed", message: "草稿版本冲突，请刷新后重试" }
+    return { status: "failed", message: "草稿数据已更新，请刷新后重试" }
   }
 
   const validationError = validatePostLines(input.salesOrderId, input.lines)
@@ -1525,7 +1525,7 @@ export function reverseCustomerAcceptance(
     return { status: "failed", message: "仅已过账且未完整冲正的验收可冲正" }
   }
   if (original.version !== input.expectedAcceptanceVersion) {
-    return { status: "failed", message: "验收版本冲突，请刷新后重试" }
+    return { status: "failed", message: "验收数据已更新，请刷新后重试" }
   }
   if (!input.reasonText.trim()) {
     return { status: "failed", message: "请填写冲正理由" }
@@ -1723,7 +1723,7 @@ export function saveProcurementDraft(
   if (current && current.editVersion !== expectedEditVersion) {
     throw new WorkItemMockError(
       "VERSION_CONFLICT",
-      "确认编辑版本冲突，请重载服务端分行后再保存。"
+      "确认编辑时数据已更新，请刷新后再保存。"
     )
   }
   const base = current?.editVersion ?? expectedEditVersion
@@ -1919,7 +1919,7 @@ export function saveW10AdjustmentDraft(input: {
   if (draft.editVersion !== input.expectedEditVersion) {
     throw new WorkItemMockError(
       "VERSION_CONFLICT",
-      "草稿版本冲突，请重载后再保存。"
+      "草稿数据已更新，请刷新后再保存。"
     )
   }
   const next: W10AdjustmentDraft = {
@@ -2093,7 +2093,7 @@ export function resolveW10AdjustmentUnknown(input: {
   if (w10InFlight.has(input.idempotencyKey)) {
     return {
       status: "unknown",
-      message: "仍在处理中，处理结果待确认。余额未本地修改。",
+      message: "仍在处理中，处理结果待确认。余额未被修改。",
       idempotencyKey: input.idempotencyKey,
     }
   }
@@ -2447,7 +2447,7 @@ export function saveFulfillmentDraft(
   if (current && current.editVersion !== expectedEditVersion) {
     throw new WorkItemMockError(
       "VERSION_CONFLICT",
-      "履约草稿编辑版本冲突，请重载后再保存。"
+      "履约草稿数据已更新，请刷新后再保存。"
     )
   }
   const base = current?.editVersion ?? expectedEditVersion
@@ -2895,7 +2895,7 @@ function requireDraftToken(
   if (center.identity.lockVersion !== expectedLockVersion) {
     throw new WorkItemMockError(
       "VERSION_CONFLICT",
-      "采购单版本冲突，请刷新后比较差异再保存。"
+      "采购单数据已更新，请刷新后比较差异再保存。"
     )
   }
 }
@@ -2944,7 +2944,7 @@ export function saveW08PurchaseOrderDraft(input: {
   if (input.simulateConflict) {
     throw new WorkItemMockError(
       "VERSION_CONFLICT",
-      "采购单版本冲突，服务端已有更新，本地输入已保留。"
+      "采购单数据已更新，你输入的内容已保留。"
     )
   }
 
@@ -3185,7 +3185,7 @@ export function reviewW08PurchaseOrder(input: {
     w08PendingUnknown.add(input.idempotencyKey)
     throw new WorkItemMockError(
       "TIMEOUT",
-      "审核结果未知：不得本地生效，请查询最终结果。"
+      "审核结果未知：不得直接生效，请查询最终结果。"
     )
   }
 
@@ -3385,7 +3385,7 @@ export function startW08PurchaseChange(input: {
     )
   }
   if (center.identity.lockVersion !== input.expectedLockVersion) {
-    throw new WorkItemMockError("VERSION_CONFLICT", "版本冲突，请刷新后重试")
+    throw new WorkItemMockError("VERSION_CONFLICT", "数据已更新，请刷新后重试")
   }
 
   const changeId = `poc_${input.purchaseOrderId}_${Date.now().toString(36)}`
@@ -4559,7 +4559,7 @@ export function openW12AllocationSession(input: {
       if (pay.supplierId !== input.supplierId) {
         throw new SupplierPayablesMockError(
           "SUPPLIER_MISMATCH",
-          "付款供应商与会话供应商不一致，不能进入同一核销池。"
+          "付款供应商与本次核销供应商不一致，不能进入同一核销池。"
         )
       }
       existingAmount = pay.amount
@@ -4575,7 +4575,7 @@ export function openW12AllocationSession(input: {
       if (inv.supplierId !== input.supplierId) {
         throw new SupplierPayablesMockError(
           "SUPPLIER_MISMATCH",
-          "发票供应商与会话供应商不一致，不能进入同一核销池。"
+          "发票供应商与本次核销供应商不一致，不能进入同一核销池。"
         )
       }
       existingAmount = inv.grossAmount
@@ -4806,7 +4806,7 @@ function validateTargetsSameSupplier(
     if (p.supplierId !== supplierId) {
       throw new SupplierPayablesMockError(
         "CROSS_SUPPLIER",
-        "不同供应商的目标不能进入同一核销池；服务端已拒绝跨供应商提交。"
+        "不同供应商的目标不能进入同一核销池；系统已拒绝跨供应商提交。"
       )
     }
     if (w12Cents(t.amount) <= 0) {
@@ -4924,7 +4924,7 @@ export function postW12Payment(input: PostPaymentInput): FormalSubmitResult {
       ) {
         throw new SupplierPayablesMockError(
           "VERSION_CONFLICT",
-          `应付 ${p.sourceDocumentNo} 版本冲突，请刷新后重试。`
+          `应付 ${p.sourceDocumentNo} 数据已更新，请刷新后重试。`
         )
       }
       const open = w12Max0(w12Sub(p.grossTotal, p.settledTotal))
@@ -4955,7 +4955,7 @@ export function postW12Payment(input: PostPaymentInput): FormalSubmitResult {
       if (base.supplierId !== input.supplierId) {
         throw new SupplierPayablesMockError(
           "CROSS_SUPPLIER",
-          "不同供应商的目标不能进入同一核销池；服务端已拒绝跨供应商提交。"
+        "不同供应商的目标不能进入同一核销池；系统已拒绝跨供应商提交。"
         )
       }
       const current = projectPaymentRow(base)
@@ -5031,7 +5031,7 @@ export function postW12Payment(input: PostPaymentInput): FormalSubmitResult {
       unallocatedAmount: row.unallocatedAmount,
       allocatedTotal: row.allocatedTotal,
       paymentGateRefreshHint:
-        "请返回来源页重新查询 PrepaymentGate；勿信任客户端布尔值。",
+        "请返回来源页重新查询预付门槛；不要信任本页显示值。",
       facts: [
         { label: "付款单号", value: row.paymentNo },
         { label: "付款金额", value: row.amount },
@@ -5124,7 +5124,7 @@ export function postW12Invoice(input: PostInvoiceInput): FormalSubmitResult {
       if (t.accountLockVersion !== p.accountLockVersion) {
         throw new SupplierPayablesMockError(
           "VERSION_CONFLICT",
-          `应付 ${p.sourceDocumentNo} 账户版本冲突`
+          `应付 ${p.sourceDocumentNo} 账户数据已更新`
         )
       }
       const openInv = w12Max0(w12Sub(p.grossTotal, p.invoicedTotal))
@@ -5230,7 +5230,7 @@ export function postW12Invoice(input: PostInvoiceInput): FormalSubmitResult {
       status: "succeeded",
       title: "进项发票已登记并核销",
       description:
-        "进项票与付款轨道独立；收票进度不表示已付款。净分配以服务端为准。",
+        "进项票与付款轨道独立；收票进度不表示已付款。净分配以系统为准。",
       reference: row.invoiceId,
       documentNo: `${row.invoiceCode}-${row.invoiceNo}`,
       operationId: `op_w12_inv_${row.invoiceId}`,

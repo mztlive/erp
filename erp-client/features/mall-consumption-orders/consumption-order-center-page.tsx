@@ -611,7 +611,7 @@ export function ConsumptionOrderCenterPage({
                   label: "客户",
                   value:
                     view.fieldPermissions.customer === "masked"
-                      ? "****（掩码）"
+                      ? "****（打码）"
                       : view.customer.customerLabel,
                 },
                 {
@@ -690,7 +690,7 @@ export function ConsumptionOrderCenterPage({
             ) : null}
           </DocumentSection>
 
-          <DocumentSection title="敏感字段（按权限掩码）">
+          <DocumentSection title="敏感字段（按权限打码）">
             <DocumentSummary
               columns="three"
               items={[
@@ -929,7 +929,7 @@ export function ConsumptionOrderCenterPage({
                     >
                       <AlertTitle>
                         {s.attributionIssue.type === "BASELINE_CONFLICT"
-                          ? "数据版本冲突，禁止覆盖"
+                          ? "数据已更新，禁止覆盖"
                           : s.attributionIssue.type === "SOURCE_OBJECT_MISSING"
                             ? "来源对象缺失 · 待归集"
                             : "未归属 · 待归集"}
@@ -1245,7 +1245,7 @@ export function ConsumptionOrderCenterPage({
                                   unavailableReason={
                                     ca.noneReason ??
                                     (view.fieldPermissions.cost === "masked"
-                                      ? "字段掩码"
+                                      ? "字段打码"
                                       : "无可用成本")
                                   }
                                 />

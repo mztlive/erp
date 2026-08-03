@@ -334,7 +334,7 @@ export function SupplierOrderCenterPage({
           : res.status === "blocked"
             ? "blocked"
             : "rejected",
-      title: res.status === "succeeded" ? "安全重放已完成" : "重放未执行",
+      title: res.status === "succeeded" ? "已安全重发" : "未重发",
       description: res.message,
       reference: res.reference,
       facts: res.data
@@ -647,8 +647,8 @@ export function SupplierOrderCenterPage({
                 最近查询：{detail.lastInvestigation.outcomeLabel} —{" "}
                 {detail.lastInvestigation.summary}
                 {detail.lastInvestigation.canSafeRetry
-                  ? " · 已开放安全重放"
-                  : " · 重放仍关闭"}
+                  ? " · 已开放安全重发"
+                  : " · 重发未开放"}
               </span>
             ) : (
               <span className="mt-1 block">
@@ -691,7 +691,7 @@ export function SupplierOrderCenterPage({
                 }
               />
             </span>
-            <span>完成动作须另行确认可验证终态</span>
+            <span>完成动作须另行确认处理结果</span>
           </CardContent>
         </Card>
       ) : null}
@@ -891,7 +891,7 @@ export function SupplierOrderCenterPage({
             <CardHeader className="pb-2">
               <CardTitle className="text-sm">收货信息</CardTitle>
               <CardDescription className="text-xs">
-                默认掩码；仅履约所需角色可短时揭示，揭示写入审计。
+                默认打码；仅履约所需角色可短时揭示，揭示写入审计。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
@@ -1062,7 +1062,7 @@ export function SupplierOrderCenterPage({
       {activeSection === "costs" ? (
         <DocumentSection
           title="成本与结算"
-          description="金额按含税/不含税分别标注；无字段权限时掩码"
+          description="金额按含税/不含税分别标注；无字段权限时打码"
         >
           <DescriptionList className="gap-y-3">
             <Item
@@ -1146,7 +1146,7 @@ export function SupplierOrderCenterPage({
       {activeSection === "audit" ? (
         <DocumentSection
           title="动作与审计"
-          description="不展示密钥、完整报文或敏感地址"
+          description="不展示密钥、完整消息内容或敏感地址"
         >
           <Table>
             <TableHeader>
@@ -1222,18 +1222,18 @@ export function SupplierOrderCenterPage({
       <FormalActionConfirmDialog
         open={replayOpen}
         onOpenChange={setReplayOpen}
-        actionLabel="安全重放"
+        actionLabel="安全重发"
         title="确认沿用原任务号重新提交"
-        description="仅在查询明确无结果且服务端确认可安全重试时允许。重放不新建业务订单。"
+        description="仅在确认无结果且系统判定可安全重试时允许。重发不会新建业务订单。"
         fromStatus={{ label: o.fulfillmentLabel, tone: o.fulfillmentTone }}
-        toStatus={{ label: "重放后待确认", tone: "info" }}
+        toStatus={{ label: "重发后待确认", tone: "info" }}
         effects={[
           `订单 ${o.orderNo}`,
           `供应商 ${o.supplierName}`,
           "沿用原下单任务号",
           "任务保持待处理，不会自动完成",
         ]}
-        irreversibleEffects={["将再次调用供应商下单接口"]}
+        irreversibleEffects={["将再次向供应商发起下单"]}
         pending={replayMutation.isPending}
         onConfirm={() => handleReplay()}
       />

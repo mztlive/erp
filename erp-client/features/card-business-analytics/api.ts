@@ -302,7 +302,7 @@ export async function fetchCardBusinessAnalytics(
   const allowed = new Set(config.allowedDateBases.map((b) => b.code))
   if (!query.dateBasis || !allowed.has(query.dateBasis)) {
     throw new Error(
-      "dateBasis 未通过允许集合校验；请先选择服务端允许的日期口径。"
+      "日期口径未通过校验；请先选择系统允许的日期口径。"
     )
   }
 

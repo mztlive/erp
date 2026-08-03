@@ -134,7 +134,7 @@ function baseAllowed(
           action: "REPLAY_ORIGINAL",
           code: "QUERY_REQUIRED",
           message:
-            "结果未知：须先查询原结果；仅明确无结果且服务端确认安全后才开放重放",
+            "结果未知：须先查询原结果；仅确认无结果且系统判定安全后才可重新提交",
         })
       }
     }
@@ -529,9 +529,9 @@ export async function applyIntegrationTaskAction(
   if (unsafe.originalActionIdempotencyKey) {
     return {
       status: "rejected",
-      title: "禁止客户端传入原任务号",
+      title: "禁止自行指定原任务号",
       description:
-        "重放必须由服务端读取并沿用锁定的 originalActionIdempotencyKey，客户端不得传入或替换。",
+        "重新提交必须由系统沿用已锁定的原任务号，不允许手动指定或替换。",
       stayOnItem: true,
     }
   }
@@ -541,9 +541,9 @@ export async function applyIntegrationTaskAction(
     if (o.queryStage !== "NO_RESULT_CONFIRMED" || !o.replaySafe) {
       return {
         status: "blocked",
-        title: "重放未开放",
+        title: "暂不可重新提交",
         description:
-          "仅在查询确认无结果且服务端判定安全后才允许重放；本次未放行。",
+          "仅在查询确认无结果且系统判定安全后才可重新提交；本次未放行。",
         stayOnItem: true,
       }
     }
@@ -582,8 +582,8 @@ export async function applyIntegrationTaskAction(
         action: "查询原结果",
         detail:
           outcome === "RESULT_UNKNOWN"
-            ? "仍未知 · 任务保持 PENDING/IN_PROGRESS"
-            : "明确无结果 · 服务端判定可安全重放（原键锁定）",
+            ? "仍未知 · 任务保持待处理"
+            : "确认无结果 · 系统判定可安全重发",
       })
       appendAudit(input.itemId, {
         id: newOpRef("QAU"),
@@ -614,8 +614,8 @@ export async function applyIntegrationTaskAction(
             : "查询原结果：明确无结果",
         description:
           outcome === "RESULT_UNKNOWN"
-            ? "不得按成功处理，不得自动下一项；可再次查询或转交。任务仍为 PENDING/IN_PROGRESS。"
-            : "服务端确认无结果且安全；已开放沿锁定原任务号的重放。客户端未持有原任务号。任务仍为 PENDING/IN_PROGRESS。",
+            ? "不得按成功处理，不得自动下一项；可再次查询或转交。任务仍在处理中。"
+            : "已确认无结果且系统判定安全；已按原任务号开放重新提交。任务仍在处理中。",
         reference: input.operationId,
         outcome,
         nextAllowedActions: next?.allowedActions,
@@ -623,14 +623,18 @@ export async function applyIntegrationTaskAction(
         stayOnItem: true,
         terminal: false,
         facts: [
-          { label: "查询结果", value: outcome },
+          {
+            label: "查询结果",
+            value:
+              outcome === "RESULT_UNKNOWN" ? "仍未知" : "确认无结果",
+          },
           {
             label: resultText.originalTaskNo,
             value:
               seed.originalAction?.originalActionIdempotencyKeySummary ?? "—",
           },
-          { label: "原键锁定", value: "是（服务端）" },
-          { label: "任务状态", value: "IN_PROGRESS" },
+          { label: "按原任务号重发", value: "是（系统）" },
+          { label: "任务状态", value: "处理中" },
         ],
       }
     }
@@ -651,21 +655,21 @@ export async function applyIntegrationTaskAction(
         id: newOpRef("REV"),
         at: new Date().toISOString(),
         actor: "当前用户",
-        action: "重放原动作",
-        detail: `服务端沿用 ${seed.originalAction?.originalActionIdempotencyKeySummary ?? "锁定键"} · 客户端未传键`,
+        action: "按原任务重新提交",
+        detail: `系统沿用 ${seed.originalAction?.originalActionIdempotencyKeySummary ?? "锁定原任务号"} · 未手动指定`,
       })
       appendAudit(input.itemId, {
         id: newOpRef("RAU"),
         at: new Date().toISOString(),
         actor: "当前用户",
         action: "REPLAY_ORIGINAL",
-        detail: "REPLAY_ACCEPTED · 任务仍非终态",
+        detail: "已受理重新提交 · 任务尚未完成",
       })
       return {
         status: "succeeded",
-        title: "重放已受理",
+        title: "重新提交已受理",
         description:
-          "服务端已沿锁定原任务号重放。任务仍为 PENDING/IN_PROGRESS，需显式 RESOLVE 才能完成。",
+          "系统已按原任务号重新提交。任务仍在处理中，需处理完成后才能关闭。",
         reference: input.operationId,
         outcome: "REPLAY_ACCEPTED",
         workItemStatus: "IN_PROGRESS",
@@ -673,12 +677,12 @@ export async function applyIntegrationTaskAction(
         terminal: false,
         facts: [
           {
-            label: "原键摘要",
+            label: "原任务号",
             value:
               seed.originalAction?.originalActionIdempotencyKeySummary ?? "—",
           },
-          { label: "客户端传入原键", value: "否" },
-          { label: "任务状态", value: "IN_PROGRESS" },
+          { label: "手动指定原任务号", value: "否" },
+          { label: "任务状态", value: "处理中" },
         ],
       }
     }
@@ -806,7 +810,7 @@ export async function applyIntegrationTaskAction(
         terminal: false,
         facts: [
           { label: "仍在队列", value: "是" },
-          { label: "任务状态", value: "PENDING" },
+          { label: "任务状态", value: "待处理" },
         ],
       }
     }
@@ -907,7 +911,7 @@ export async function resolveIntegrationTask(
       facts: [
         { label: "策略", value: `${input.evidencePolicyId}@v${input.evidencePolicyVersion}` },
         { label: "证据数", value: String(input.evidenceRefs.length) },
-        { label: "任务状态", value: "COMPLETED" },
+        { label: "任务状态", value: "已完成" },
       ],
     }
   } catch (e) {
@@ -1086,7 +1090,7 @@ export async function applyDirectReconciliation(
       status: "succeeded",
       title: "已追加差异处理记录",
       description:
-        "差异保持非终态；未完成或关闭任何任务。",
+        "差异处理尚未完成；未完成或关闭任何任务。",
       reference: input.operationId,
       outcome: "EVIDENCE_ADDED",
       stayOnItem: true,

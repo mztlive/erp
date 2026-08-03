@@ -159,8 +159,8 @@ function computeAllowedActions(
         code: "REPLAY_NOT_SAFE",
         message:
           lastInv?.outcome === "VERIFIED_NO_RESULT"
-            ? "查询已明确无结果，但服务端未确认可安全重试"
-            : "结果未知时不可直接重放，请先查询原结果",
+            ? "已确认无结果，但系统尚未判定可安全重试"
+            : "结果未知时不可直接重发，请先查询原结果",
       })
     }
   }
@@ -657,14 +657,14 @@ export async function querySupplierResult(
     canSafeRetry = Boolean(seed.canSafeRetryAfterNoResult)
     outcomeLabel = "明确无结果"
     summary = canSafeRetry
-      ? "供应商确认无对应订单，服务端允许沿用原任务号重新提交。"
+      ? "供应商确认无对应订单，系统允许沿用原任务号重新提交。"
       : "供应商确认无对应订单，但当前不可安全重试。"
   } else if (preset === "VERIFIED_TERMINAL") {
     outcome = "VERIFIED_TERMINAL"
     canSafeRetry = false
-    outcomeLabel = "已取得终态"
+    outcomeLabel = "已取得处理结果"
     externalOrderNo = seed.externalOrderNo ?? "EXT-VERIFIED-001"
-    summary = "查询确认供应商侧已有终态结果，不得重放。"
+    summary = "已查到供应商侧已有处理结果，不得重发。"
   } else {
     outcome = "RESULT_UNKNOWN"
     canSafeRetry = false
@@ -772,7 +772,7 @@ export async function replaySupplierOrder(
     return {
       status: "blocked",
       message:
-        "仅当查询明确无结果且服务端确认可安全重试时才可重放。请先查询原结果。",
+        "仅当确认无结果且系统判定可安全重试时才可重发。请先查询原结果。",
     }
   }
 
@@ -787,11 +787,11 @@ export async function replaySupplierOrder(
     evidenceId: `evr_${input.orderId}_${Date.now()}`,
     targetSupplierActionId: input.targetSupplierActionId,
     outcome: "VERIFIED_TERMINAL",
-    outcomeLabel: "重放已接单",
+    outcomeLabel: "重发已接单",
     recordedAt: now,
     canSafeRetry: false,
     externalOrderNo,
-    summary: "沿用原任务号重新提交成功，已取得外部单号。任务仍待确认终态。",
+    summary: "沿用原任务号重新提交成功，已取得外部单号。任务处理结果待确认。",
   }
   session.lastInvestigation = evidence
   session.actionsExtra = [
@@ -799,7 +799,7 @@ export async function replaySupplierOrder(
     {
       actionId: `act-replay-${Date.now()}`,
       actionType: "REPLAY",
-      actionLabel: "安全重放",
+      actionLabel: "安全重发",
       at: now,
       actor: "当前用户",
       outcomeLabel: "已接单",
@@ -838,7 +838,7 @@ export async function replaySupplierOrder(
   const res: FormalActionResponse<ReplayResultData> = {
     status: "succeeded",
     message:
-      "重放已受理并取得接单结果。任务仍为待处理，需另行确认可验证终态。",
+      "重发已受理并取得接单结果。任务仍在处理中，需确认处理结果。",
     reference: evidence.evidenceId,
     operationId: input.operationId,
     data,
@@ -1026,7 +1026,7 @@ export async function addCollaborationNote(
   if (input.expectedLockVersion !== session.lockVersion) {
     return {
       status: "blocked",
-      message: "版本冲突，协同说明未写入。请刷新后重试。",
+      message: "数据已更新，协同说明未写入。请刷新后重试。",
     }
   }
   session.lockVersion += 1

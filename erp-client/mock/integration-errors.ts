@@ -75,7 +75,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       {
         attemptNumber: 2,
         attemptedAt: "2026-08-01T07:45:00+08:00",
-        result: "超时 · 无业务终态",
+        result: "超时 · 无处理结果",
         requestSummary: "下单 · 原任务号摘要 idem_ord_***77120",
         responseSummary: "HTTP 504 · 无 body（已脱敏）",
         nextRetryAt: undefined,
@@ -101,7 +101,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       {
         action: "REPLAY_ORIGINAL",
         code: "QUERY_REQUIRED",
-        message: "结果未知：须先查询原结果；仅明确无结果且服务端确认安全后才开放重放",
+        message: "结果未知：须先查询原结果；仅确认无结果且系统判定安全后才可重新提交",
       },
       {
         action: "RESOLVE",
@@ -132,7 +132,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         at: "2026-08-01T07:20:00+08:00",
         actor: "系统",
         action: "创建错误任务",
-        detail: "投递超时升级 RESULT_UNKNOWN",
+        detail: "发送超时，结果未知",
       },
     ],
     evidenceTimeline: [
@@ -148,7 +148,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         at: "2026-08-01T07:45:00+08:00",
         actor: "系统",
         action: "尝试 #2",
-        detail: "504 · 仍无终态",
+        detail: "504 · 仍无处理结果",
       },
     ],
     queryStage: null,
@@ -198,7 +198,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       businessFactKeySummary: "bfk_ep_jd_8821",
       schemaVersion: "catalog.offer.v2",
       directionLabel: "供应商 → ERP",
-      maskedPayloadSummary: "SKU 映射缺失 · 价格字段已掩码",
+      maskedPayloadSummary: "SKU 映射缺失 · 价格字段已打码",
     },
     hasWorkItem: true,
     attempts: [
@@ -332,12 +332,12 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       {
         action: "REPLAY_ORIGINAL",
         code: "AUTH_FAIL_CLOSED",
-        message: "鉴权/签名失败禁止继续自动或人工无意义重试；请修复连接后由服务端恢复",
+        message: "鉴权/签名失败禁止继续无意义重试；请修复连接后由系统恢复",
       },
       {
         action: "QUERY_ORIGINAL_RESULT",
         code: "NOT_APPLICABLE",
-        message: "安全故障不走查询原结果重放路径",
+        message: "安全故障不走查询原结果重发路径",
       },
       {
         action: "RESOLVE",
@@ -427,7 +427,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       businessFactKeySummary: "bfk_spo_99012",
       schemaVersion: "supplier.order.v3",
       directionLabel: "ERP → 供应商",
-      maskedPayloadSummary: "取消请求被拒 · 拒绝码 STOCK_OUT · 手机/地址已掩码",
+      maskedPayloadSummary: "取消请求被拒 · 拒绝码 STOCK_OUT · 手机/地址已打码",
     },
     originalAction: {
       originalActionId: "oa_cancel_99012",
@@ -502,7 +502,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         id: "ev_r1",
         at: "2026-08-01T04:10:00+08:00",
         actor: "供应商",
-        action: "拒绝回调",
+        action: "拒绝通知",
         detail: "拒绝码 STOCK_OUT（脱敏）",
       },
     ],
@@ -534,7 +534,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     classification: {
       code: "DUPLICATE_CALLBACK",
       errorClass: "duplicate-callback",
-      label: "回调重复",
+      label: "通知重复",
       severity: "low",
       severityLabel: "低",
     },
@@ -553,7 +553,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       businessFactKeySummary: "bfk_mof_55102",
       schemaVersion: "mall.callback.v1",
       directionLabel: "商城 → ERP",
-      maskedPayloadSummary: "重复回调 · 已关联原记录 · 无完整载荷",
+      maskedPayloadSummary: "重复通知 · 已关联原记录 · 无完整消息内容",
     },
     hasWorkItem: true,
     attempts: [
@@ -561,7 +561,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         attemptNumber: 1,
         attemptedAt: "2026-08-01T09:20:00+08:00",
         result: "重复提交已忽略 · 已有业务记录",
-        requestSummary: "回调摘要",
+        requestSummary: "通知摘要",
         responseSummary: "DUPLICATE_IGNORED",
       },
     ],

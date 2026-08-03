@@ -166,7 +166,7 @@ function maskDiff(changes: readonly DiffChange[], mask: boolean): DiffChange[] {
   if (!mask) return [...changes]
   return changes.map((c) =>
     c.costSensitive
-      ? { ...c, before: COST_MASK, after: COST_MASK, note: "已变化（成本字段掩码）" }
+      ? { ...c, before: COST_MASK, after: COST_MASK, note: "已变化（成本字段已隐藏）" }
       : c
   )
 }
@@ -377,7 +377,7 @@ function filterSummary(q: SupplierCatalogQueueQuery): string {
           : "手工录入"
     )
   }
-  if (q.maskCost) parts.push("成本掩码")
+  if (q.maskCost) parts.push("成本隐藏")
   return parts.join(" · ")
 }
 

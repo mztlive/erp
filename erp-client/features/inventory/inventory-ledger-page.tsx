@@ -1067,7 +1067,7 @@ export function InventoryLedgerPage() {
         <BusinessFailureState
           kind="permission"
           title="权限已收回"
-          description="当前账号的库存台账访问权限在本会话中被收回。余额、流水、导出结果与展开来源均不可见。"
+          description="当前账号的库存台账访问权限已被收回。余额、流水、导出结果与展开来源均不可见。"
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重新检查权限
