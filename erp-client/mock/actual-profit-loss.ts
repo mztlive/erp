@@ -117,8 +117,8 @@ export const W16_COST_ENTRIES: readonly CostEntryDetail[] = [
     salesOrderLineId: "sol-001-1",
     salesOrderLineLabel: "定制礼盒 A × 200",
     voucherSummary: "物流费不含税 21,320.00",
-    correctionHref: "/fulfillment?salesOrderId=so-nv-001",
-    correctionLabel: "打开履约作业",
+    correctionHref: "/fulfillment?lane=warehouse&salesOrderId=so-nv-001",
+    correctionLabel: "打开收货与发货",
   },
   {
     costEntryId: "ce-red-001",
@@ -171,8 +171,8 @@ export const W16_COST_ENTRIES: readonly CostEntryDetail[] = [
     salesOrderLineId: "sol-002-1",
     salesOrderLineLabel: "员工节日礼包印刷件",
     voucherSummary: "印刷费不含税 28,140.00",
-    correctionHref: "/fulfillment?salesOrderId=so-nv-002",
-    correctionLabel: "打开履约作业",
+    correctionHref: "/fulfillment?lane=warehouse&salesOrderId=so-nv-002",
+    correctionLabel: "打开收货与发货",
   },
   {
     costEntryId: "ce-act-004",

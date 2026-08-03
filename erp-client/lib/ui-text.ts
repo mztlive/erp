@@ -116,7 +116,8 @@ const WORKSPACE_SHORT_LABEL: Partial<Record<WorkspaceId, string>> = {
   W06: "客户验收",
   W07: "采购二次确认",
   W08: "采购单",
-  W09: "履约作业",
+  /** 跨页提示用中性短名；侧栏按岗位分「收货与发货 / 交付与代发」 */
+  W09: "履约处理",
   W10: "库存台账",
   W11: "客户往来",
   W12: "供应商往来",
@@ -164,7 +165,7 @@ export const actionLabels = {
   reviewCardFunds: "去复核卡券票款",
   handleMappingException: "去处理映射异常",
   reconcileReceipt: "去核对回款",
-  handleFulfillment: "去处理履约",
+  handleFulfillment: "去处理",
 } as const
 
 const WORK_ITEM_ACTION_BY_TYPE_LABEL: Record<string, string> = {
@@ -174,6 +175,8 @@ const WORK_ITEM_ACTION_BY_TYPE_LABEL: Record<string, string> = {
   回款事实复核: actionLabels.reconcileReceipt,
   回款核对: actionLabels.reconcileReceipt,
   履约作业: actionLabels.handleFulfillment,
+  收货与发货: actionLabels.handleFulfillment,
+  交付与代发: actionLabels.handleFulfillment,
   电子履约: actionLabels.handleFulfillment,
   实物履约: actionLabels.handleFulfillment,
   服务履约: actionLabels.handleFulfillment,

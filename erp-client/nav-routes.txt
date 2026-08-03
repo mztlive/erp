@@ -6,9 +6,10 @@ WORKSPACE_NAV_GROUPS hrefs:
  - /sales/orders
  - /procurement/confirm
  - /procurement/orders
- - /fulfillment
- - /inventory
+ - /fulfillment?lane=procurement
  - /procurement/supplier-catalog
+ - /fulfillment?lane=warehouse
+ - /inventory
  - /finance/customer-accounts
  - /finance/supplier-accounts
  - /finance/card-funds-review
@@ -44,7 +45,7 @@ Registry navHrefs:
  - W06: /sales/orders/so_1002?section=acceptance
  - W07: /procurement/confirm
  - W08: /procurement/orders
- - W09: /fulfillment
+ - W09: /fulfillment?lane=warehouse
  - W10: /inventory
  - W11: /finance/customer-accounts
  - W12: /finance/supplier-accounts

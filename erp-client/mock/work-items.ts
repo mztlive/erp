@@ -314,7 +314,8 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     workItemTypeLabel: "履约异常",
     family: "fulfillment",
     handlerKey: "fulfillment_exception",
-    handlerHref: "/fulfillment?scope=mine&currentWorkItemId=wi_ff_electronic_01",
+    handlerHref:
+      "/fulfillment?lane=procurement&scope=mine&currentWorkItemId=wi_ff_electronic_01",
     completionAction: "RESOLVE_FULFILLMENT_EXCEPTION",
     businessObject: "销售单 · XS20260312008",
     counterparty: "云帆物流集团",

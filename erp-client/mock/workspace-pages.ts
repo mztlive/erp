@@ -400,13 +400,13 @@ export const WORKSPACE_PAGE_DEFS: Partial<
 
   W09: {
     id: "W09",
-    title: "履约作业",
+    title: "收货与发货 / 交付与代发",
     description:
-      "按任务连续处理出库、到货、服务交付等履约作业，记录履约记录。",
+      "仓储处理入库与公司仓发；采购处理直发、电子交付与线下服务。同一作业引擎，岗位分入口。",
     mode: "M3+M5",
     breadcrumbs: [
-      { id: "proc", label: "采购与履约", href: "/procurement/confirm" },
-      { id: "fulfillment", label: "履约作业" },
+      { id: "wh", label: "仓储", href: "/fulfillment?lane=warehouse" },
+      { id: "fulfillment", label: "收货与发货" },
     ],
     shell: {
       kind: "queue",

@@ -70,7 +70,13 @@ import {
 import {
   resolveRole,
   ROLE_OPTIONS,
+  type FulfillmentRole,
 } from "@/features/fulfillment-operations/fulfillment-roles"
+import {
+  FULFILLMENT_LANES,
+  laneHeader,
+  resolveLane,
+} from "@/features/fulfillment-operations/lanes"
 import {
   parseDueParam,
   parseGateParam,
@@ -126,7 +132,16 @@ export function FulfillmentOperationsPage() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const role = resolveRole(searchParams.get("demoRole"))
+  const lane = resolveLane(
+    searchParams.get("lane"),
+    searchParams.get("demoRole")
+  )
+  const header = laneHeader(lane)
+  // 显式 demoRole 优先；否则按岗位通道默认（仓储/采购经办）；都没有时回落默认角色
+  const role = resolveRole(
+    searchParams.get("demoRole") ??
+      (lane ? FULFILLMENT_LANES[lane].defaultDemoRole : null)
+  )
   const scope: "mine" | "role_pool" =
     searchParams.get("scope") === "role_pool" ? "role_pool" : "mine"
   const operationTypes = parseTypeParam(searchParams.get("type"))
@@ -138,8 +153,11 @@ export function FulfillmentOperationsPage() {
   const purchaseOrderId = searchParams.get("purchaseOrderId") ?? undefined
   const currentWorkItemId =
     searchParams.get("currentWorkItemId") ?? undefined
+  /** 队列上下文里的岗位段；无岗位时用 any，避免拼出 "queue:W09:null:…" */
+  const laneKey = lane ?? "any"
   const queueContextId =
-    searchParams.get("queueContextId") ?? `queue:W09:${role.value}:${scope}`
+    searchParams.get("queueContextId") ??
+    `queue:W09:${laneKey}:${role.value}:${scope}`
   const returnTo = searchParams.get("returnTo") ?? undefined
   const fromWorkspace = searchParams.get("from") ?? undefined
 
@@ -235,11 +253,23 @@ export function FulfillmentOperationsPage() {
 
   React.useEffect(() => {
     if (queueQuery.isPending || !view) return
+    const hasLane = searchParams.has("lane")
     const hasScope = searchParams.has("scope")
     const hasItem = searchParams.has("currentWorkItemId")
     const hasCtx = searchParams.has("queueContextId")
-    if (hasScope && hasCtx && (hasItem || tasks.length === 0)) return
+    // 没有确定岗位（只读角色 / 未声明岗位的深链）就不写 lane，
+    // 否则等于替用户认领一个他没选的岗位，侧栏还会跟着高亮错的入口。
+    const laneSettled = hasLane || lane === null
+    if (
+      laneSettled &&
+      hasScope &&
+      hasCtx &&
+      (hasItem || tasks.length === 0)
+    ) {
+      return
+    }
     const params = new URLSearchParams(searchParams.toString())
+    if (!hasLane && lane) params.set("lane", lane)
     if (!hasScope) params.set("scope", scope)
     if (!hasCtx) params.set("queueContextId", queueContextId)
     if (!hasItem && task) {
@@ -251,6 +281,7 @@ export function FulfillmentOperationsPage() {
     queueQuery.isPending,
     view,
     searchParams,
+    lane,
     scope,
     queueContextId,
     task,
@@ -688,10 +719,10 @@ export function FulfillmentOperationsPage() {
       replaceUrl({
         type: next === "all" ? null : TYPE_SLUG[next],
         currentWorkItemId: null,
-        queueContextId: `queue:W09:${role.value}:${scope}:${next === "all" ? "all" : TYPE_SLUG[next]}`,
+        queueContextId: `queue:W09:${laneKey}:${role.value}:${scope}:${next === "all" ? "all" : TYPE_SLUG[next]}`,
       })
     },
-    [dirty, replaceUrl, role.value, scope]
+    [dirty, laneKey, replaceUrl, role.value, scope]
   )
 
   /** 空态出口：类型、单号、仓库、到期、门禁和来源对象筛选一次清干净 */
@@ -710,9 +741,35 @@ export function FulfillmentOperationsPage() {
       salesOrderId: null,
       purchaseOrderId: null,
       currentWorkItemId: null,
-      queueContextId: `queue:W09:${role.value}:${scope}:all`,
+      queueContextId: `queue:W09:${laneKey}:${role.value}:${scope}:all`,
     })
-  }, [dirty, replaceUrl, role.value, scope])
+  }, [dirty, laneKey, replaceUrl, role.value, scope])
+
+  /** 演示身份切换时同步岗位通道，侧栏高亮跟当前干活的人走 */
+  const handleRolePatch = React.useCallback(
+    (patch: Record<string, string | null | undefined>) => {
+      if (dirty) {
+        setActionError("有没保存的修改，先保存或放弃再改筛选")
+        return
+      }
+      setLastResult(null)
+      const next: Record<string, string | null | undefined> = { ...patch }
+      if (patch.demoRole != null) {
+        const nextRole = patch.demoRole as FulfillmentRole
+        // 只读角色（销售/财务）队列里五类都在，没有归属岗位：清掉 lane 走中性页头，
+        // 否则页头会顶着「收货与发货」列出电子交付和线下服务。
+        const nextLane =
+          nextRole === "warehouse" || nextRole === "procurement"
+            ? nextRole
+            : null
+        next.lane = nextLane
+        next.currentWorkItemId = null
+        next.queueContextId = `queue:W09:${nextLane ?? "any"}:${nextRole}:${scope}:all`
+      }
+      replaceUrl(next)
+    },
+    [dirty, replaceUrl, scope]
+  )
 
   const leaseStatus = !task
     ? "unclaimed"
@@ -751,7 +808,7 @@ export function FulfillmentOperationsPage() {
   if (queueQuery.isPending) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="履约作业" description="正在加载队列…" />
+        <PageHeader title={header.label} description="正在加载队列…" />
         <div className="h-20 animate-pulse rounded-2xl bg-muted" />
         <div className="grid gap-4 xl:grid-cols-[minmax(16rem,1fr)_minmax(0,2fr)]">
           <div className="h-80 animate-pulse rounded-2xl bg-muted" />
@@ -764,14 +821,19 @@ export function FulfillmentOperationsPage() {
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:p-5">
       <PageHeader
-        title="履约作业"
+        title={header.label}
+        description={header.description}
         breadcrumbs={[
-          {
-            id: "proc",
-            label: "采购与履约",
-            href: "/procurement/confirm",
-          },
-          { id: "fulfillment", label: "履约作业", current: true },
+          ...(header.group
+            ? [
+                {
+                  id: "group",
+                  label: header.group.label,
+                  href: header.group.href,
+                },
+              ]
+            : []),
+          { id: "fulfillment", label: header.label, current: true },
         ]}
         metadata={
           <div className="flex flex-wrap items-center gap-3">
@@ -856,14 +918,7 @@ export function FulfillmentOperationsPage() {
         showAutoNext={role.canExecute}
         roleValue={role.value}
         roleOptions={ROLE_OPTIONS}
-        onPatch={(patch) => {
-          if (dirty) {
-            setActionError("有没保存的修改，先保存或放弃再改筛选")
-            return
-          }
-          setLastResult(null)
-          replaceUrl(patch)
-        }}
+        onPatch={handleRolePatch}
         onAutoNextChange={(next) => {
           setSessionAutoNext(next)
           replaceUrl({ autoNext: next ? "1" : "0" })

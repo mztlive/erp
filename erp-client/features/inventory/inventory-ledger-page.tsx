@@ -1924,7 +1924,7 @@ export function InventoryLedgerPage() {
                           className="mt-1 h-auto px-0"
                           render={<Link href={r.fulfillmentHref} />}
                         >
-                          打开履约作业上下文
+                          打开收货与发货
                         </Button>
                       ) : null}
                       {/* 无「释放预占」入口 */}

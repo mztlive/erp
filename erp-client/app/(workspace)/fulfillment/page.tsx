@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { FulfillmentOperationsPage } from "@/features/fulfillment-operations/fulfillment-operations-page"
 
 export const metadata: Metadata = {
-  title: "履约作业",
+  title: "收货与发货 / 交付与代发",
 }
 
 function FulfillmentFallback() {
@@ -22,8 +22,9 @@ function FulfillmentFallback() {
 
 /**
  * SPA 壳：URL 查询由客户端 useSearchParams 读取并恢复
- * type / scope / currentWorkItemId / queueContextId / salesOrderId / purchaseOrderId /
- * warehouseId / returnTo / from / autoNext。
+ * lane / type / scope / currentWorkItemId / queueContextId / salesOrderId /
+ * purchaseOrderId / warehouseId / returnTo / from / autoNext / demoRole。
+ * lane=warehouse → 收货与发货；lane=procurement → 交付与代发。
  * 业务数据不在服务端 fetch。
  */
 export default function Page() {

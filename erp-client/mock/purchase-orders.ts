@@ -681,7 +681,7 @@ const SEED: SeedPO[] = [
       inboundQty: "0",
       shippedQty: "0",
       remainingQty: "200",
-      note: "门禁已满足，可进入履约作业电子交付",
+      note: "货款已到，可进入交付与代发登记电子交付",
     },
     changes: [],
     workflow: [

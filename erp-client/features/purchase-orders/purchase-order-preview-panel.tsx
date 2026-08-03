@@ -193,10 +193,10 @@ export function PurchaseOrderPreviewPanel({
             <SectionTitle>关联对象</SectionTitle>
             <div className="flex flex-wrap items-center gap-1.5">
               <Link
-                href={`/fulfillment?scope=mine&purchaseOrderId=${encodeURIComponent(identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(`/procurement/orders?currentId=${identity.purchaseOrderId}`)}`}
+                href={`/fulfillment?lane=procurement&scope=mine&purchaseOrderId=${encodeURIComponent(identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(`/procurement/orders?currentId=${identity.purchaseOrderId}`)}`}
                 className="inline-flex h-7 items-center rounded-md border border-border bg-background px-2 text-xs font-medium text-primary hover:bg-accent"
               >
-                去履约作业
+                去交付与代发
               </Link>
               <RelatedPill label="销售" count={1} />
               <RelatedPill

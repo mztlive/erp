@@ -12,6 +12,12 @@ const scratch = process.env.SCRATCH || root
 
 const runner = `
 import { isNavItemActive } from "../lib/nav-active.ts"
+import { WORKSPACE_NAV_GROUPS } from "../lib/workspace-registry.ts"
+import {
+  FULFILLMENT_NEUTRAL_HEADER,
+  laneHeader,
+  resolveLane,
+} from "../features/fulfillment-operations/lanes.ts"
 import {
   buildQueueSearchParams,
   scopeLabelToSlug,
@@ -54,6 +60,80 @@ assert(
 assert(
   isNavItemActive("/workspace", "/workspace", hrefs) === true,
   "/workspace active on exact"
+)
+
+// --- Nav query constraints (W09 dual lane) ---
+const fulfillmentHrefs = [
+  "/fulfillment?lane=warehouse",
+  "/fulfillment?lane=procurement",
+  "/inventory",
+]
+assert(
+  isNavItemActive(
+    "/fulfillment",
+    "/fulfillment?lane=warehouse",
+    fulfillmentHrefs,
+    "lane=warehouse&scope=mine"
+  ) === true,
+  "warehouse lane active"
+)
+assert(
+  isNavItemActive(
+    "/fulfillment",
+    "/fulfillment?lane=procurement",
+    fulfillmentHrefs,
+    "lane=warehouse&scope=mine"
+  ) === false,
+  "procurement lane inactive on warehouse"
+)
+assert(
+  isNavItemActive(
+    "/fulfillment",
+    "/fulfillment?lane=procurement",
+    fulfillmentHrefs,
+    "lane=procurement&scope=mine"
+  ) === true,
+  "procurement lane active"
+)
+// 无 lane 的深链不该点亮任一岗位入口
+assert(
+  isNavItemActive("/fulfillment", "/fulfillment?lane=warehouse", fulfillmentHrefs, "scope=mine") ===
+    false &&
+    isNavItemActive(
+      "/fulfillment",
+      "/fulfillment?lane=procurement",
+      fulfillmentHrefs,
+      "scope=mine"
+    ) === false,
+  "lane-less deep link highlights neither lane"
+)
+
+// --- W09 lane header（防「对着电子交付写收货与发货」回归）---
+assert(resolveLane("warehouse", null) === "warehouse", "explicit lane wins")
+assert(resolveLane(null, "procurement") === "procurement", "lane derived from role")
+// 只读角色与未声明岗位的深链必须落中性页头，不能回落 warehouse
+assert(resolveLane(null, "sales") === null, "read-only sales has no lane")
+assert(resolveLane(null, "finance") === null, "read-only finance has no lane")
+assert(resolveLane(null, null) === null, "lane-less deep link has no lane")
+assert(
+  laneHeader(null).label === FULFILLMENT_NEUTRAL_HEADER.label &&
+    laneHeader(null).group === undefined,
+  "neutral header has no owning group"
+)
+assert(
+  laneHeader("warehouse").label === "收货与发货" &&
+    laneHeader("procurement").label === "交付与代发",
+  "lane headers are role-facing"
+)
+
+// --- 侧栏两个岗位入口都要有待处理数徽章 ---
+const w09NavItems = WORKSPACE_NAV_GROUPS.flatMap((g) =>
+  g.items.filter((i) => i.href.startsWith("/fulfillment"))
+)
+assert(w09NavItems.length === 2, "two W09 lane entries in sidebar")
+assert(
+  w09NavItems.every((i) => Boolean(i.badge)),
+  "both lane entries carry a pending-count badge"
 )
 
 // --- Queue URL helpers ---

@@ -87,7 +87,7 @@ function projectMovement(
     sourceHref: link.href
       ? seed.sourceDocumentType === "PURCHASE_RECEIPT" ||
         seed.sourceDocumentType === "WAREHOUSE_DISPATCH"
-        ? `/fulfillment?sourceDocId=${encodeURIComponent(seed.sourceDocumentId)}&warehouseId=${encodeURIComponent(seed.warehouseId)}&skuId=${encodeURIComponent(seed.skuId)}`
+        ? `/fulfillment?lane=warehouse&sourceDocId=${encodeURIComponent(seed.sourceDocumentId)}&warehouseId=${encodeURIComponent(seed.warehouseId)}&skuId=${encodeURIComponent(seed.skuId)}`
         : link.href
       : undefined,
   }
@@ -98,7 +98,7 @@ function projectReservation(
 ): StockReservationRow {
   return {
     ...seed,
-    fulfillmentHref: `/fulfillment?type=warehouse_ship&scope=mine&warehouseId=${encodeURIComponent(seed.warehouseId)}&from=W10&returnTo=${encodeURIComponent(`/inventory?warehouseId=${seed.warehouseId}&skuId=${seed.skuId}`)}`,
+    fulfillmentHref: `/fulfillment?lane=warehouse&type=warehouse_ship&scope=mine&warehouseId=${encodeURIComponent(seed.warehouseId)}&from=W10&returnTo=${encodeURIComponent(`/inventory?warehouseId=${seed.warehouseId}&skuId=${seed.skuId}`)}`,
   }
 }
 
@@ -592,7 +592,7 @@ export async function fetchBalanceDetail(
       href:
         m.sourceDocumentType === "PURCHASE_RECEIPT" ||
         m.sourceDocumentType === "WAREHOUSE_DISPATCH"
-          ? `/fulfillment?sourceDocId=${encodeURIComponent(m.sourceDocumentId)}&warehouseId=${encodeURIComponent(m.warehouseId)}&skuId=${encodeURIComponent(m.skuId)}`
+          ? `/fulfillment?lane=warehouse&sourceDocId=${encodeURIComponent(m.sourceDocumentId)}&warehouseId=${encodeURIComponent(m.warehouseId)}&skuId=${encodeURIComponent(m.skuId)}`
           : link.href,
       workspaceId: link.workspaceId,
     })

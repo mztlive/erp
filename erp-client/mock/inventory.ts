@@ -742,7 +742,7 @@ export function sourceDocumentHref(
         documentId,
         documentNo: documentId,
         label: type === "PURCHASE_RECEIPT" ? "采购入库" : "仓发作业",
-        href: `/fulfillment?sourceDocId=${encodeURIComponent(documentId)}`,
+        href: `/fulfillment?lane=warehouse&sourceDocId=${encodeURIComponent(documentId)}`,
         workspaceId: "W09",
       }
     case "STOCK_ADJUSTMENT":

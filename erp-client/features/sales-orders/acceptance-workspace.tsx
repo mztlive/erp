@@ -810,10 +810,14 @@ export function AcceptanceWorkspace({
         <BusinessEmptyState
           kind="no-data"
           title="当前没有待验收的履约记录"
-          description="请先在履约作业完成仓发、代发、电子交付或服务履约过账；也可查看历史验收。"
+          description="请先在收货与发货或交付与代发中完成登记；也可查看历史验收。"
           action={
-            <Button render={<Link href="/fulfillment" />} variant="outline">
-              去履约作业
+            <Button
+              /* 销售只读，没有归属岗位：不带 lane，走中性页头 */
+              render={<Link href="/fulfillment" />}
+              variant="outline"
+            >
+              打开履约处理
             </Button>
           }
         />
@@ -839,7 +843,7 @@ export function AcceptanceWorkspace({
               <CardContent className="max-h-[min(32rem,70vh)] space-y-4 overflow-y-auto pt-4">
                 {view.salesLines.length === 0 ? (
                   <p className="text-sm text-muted-foreground">
-                    筛选条件下无履约记录。可切换「全部历史记录」或去履约作业查看。
+                    筛选条件下无履约记录。可切换「全部历史记录」或去作业队列查看。
                   </p>
                 ) : (
                   view.salesLines.map((line) => (

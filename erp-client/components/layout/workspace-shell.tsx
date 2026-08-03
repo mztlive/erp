@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { usePathname, useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   Building2Icon,
   ClipboardCheckIcon,
@@ -38,6 +38,9 @@ import { useCustomerDirectoryQuery } from "@/features/customers/queries"
 
 function AppSidebarNav() {
   const pathname = usePathname()
+  // 必须订阅 searchParams：同 path 只改 lane 时 pathname 不变，否则高亮卡死
+  const searchParams = useSearchParams()
+  const search = searchParams.toString()
   const allHrefs = WORKSPACE_NAV_GROUPS.flatMap((group) =>
     group.items.map((item) => item.href)
   )
@@ -52,7 +55,12 @@ function AppSidebarNav() {
             <SidebarMenu>
               {group.items.map((item) => {
                 const Icon = item.icon
-                const isActive = isNavItemActive(pathname, item.href, allHrefs)
+                const isActive = isNavItemActive(
+                  pathname,
+                  item.href,
+                  allHrefs,
+                  search
+                )
 
                 return (
                   <SidebarMenuItem key={`${group.label}-${item.href}`}>
@@ -238,6 +246,8 @@ function resolveTaskTab(pathname: string, search: string): string {
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const routeSearchParams = useSearchParams()
+  const locationSearch = routeSearchParams.toString()
   const [search, setSearch] = React.useState("")
   const [searchFocused, setSearchFocused] = React.useState(false)
   const [sidebarOpen, setSidebarOpen] = React.useState(false)
@@ -245,7 +255,6 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const openObjectTabsRef = React.useRef<OpenObjectTab[]>([])
   const closingTabRef = React.useRef<string | null>(null)
   const previousLocationRef = React.useRef("/workspace")
-  const [locationSearch, setLocationSearch] = React.useState("")
   const activeTab = resolveTaskTab(pathname, locationSearch)
   const customerSearchQuery = useCustomerDirectoryQuery({
     scope: "team",
@@ -259,13 +268,6 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
         : [],
     [customerSearchQuery.data?.items, search]
   )
-
-  React.useEffect(() => {
-    const nextSearch = window.location.search.replace(/^\?/, "")
-    setLocationSearch((current) =>
-      current === nextSearch ? current : nextSearch
-    )
-  }, [children, pathname])
 
   const persistObjectTabs = React.useCallback((tabs: OpenObjectTab[]) => {
     window.sessionStorage.setItem(OBJECT_TABS_STORAGE_KEY, JSON.stringify(tabs))
@@ -554,7 +556,9 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
             } else if (value === "tasks") {
               router.push("/workspace/tasks")
             } else if (value === "fulfillment") {
-              router.push("/fulfillment")
+              // 保留当前岗位通道；写死 warehouse 会把采购经办甩进仓储队列
+              const lane = routeSearchParams.get("lane")
+              router.push(lane ? `/fulfillment?lane=${lane}` : "/fulfillment")
             } else router.push("/workspace")
           }}
           trailing={

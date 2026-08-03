@@ -618,9 +618,12 @@ export function PurchaseOrderDetailPage({
                 ? [
                     {
                       actionKey: "fulfill",
-                      label: "去履约",
+                      label: "去交付",
                       variant: "outline" as const,
-                      onClick: () => router.push("/fulfillment"),
+                      onClick: () =>
+                        router.push(
+                          `/fulfillment?lane=procurement&scope=mine&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`
+                        ),
                     },
                   ]
                 : []),
@@ -978,8 +981,15 @@ export function PurchaseOrderDetailPage({
               ) : null}
               <div className="mt-4 flex flex-wrap gap-2">
                 {canFulfill ? (
-                  <Button type="button" render={<Link href="/fulfillment" />}>
-                    去履约作业
+                  <Button
+                    type="button"
+                    render={
+                      <Link
+                        href={`/fulfillment?lane=procurement&scope=mine&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(baseHref)}`}
+                      />
+                    }
+                  >
+                    去交付与代发
                   </Button>
                 ) : (
                   <Button type="button" disabled title={fulfillBlocker?.message}>

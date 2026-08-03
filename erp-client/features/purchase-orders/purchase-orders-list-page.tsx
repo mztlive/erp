@@ -512,9 +512,11 @@ export function PurchaseOrdersListPage() {
                   type="button"
                   variant="outline"
                   size="xs"
-                  render={<Link href="/fulfillment" />}
+                  render={
+                    <Link href="/fulfillment?lane=procurement&scope=mine" />
+                  }
                 >
-                  去履约
+                  去交付
                 </Button>
               ) : fulfillBlocker ? (
                 <Button
@@ -852,9 +854,11 @@ export function PurchaseOrdersListPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  render={<Link href="/fulfillment" />}
+                  render={
+                    <Link href="/fulfillment?lane=procurement&scope=mine" />
+                  }
                 >
-                  去履约
+                  去交付
                 </Button>
               ) : previewQuery.data.actionBlockers.some(
                   (b) => b.action === "FULFILL"

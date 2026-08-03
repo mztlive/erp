@@ -170,10 +170,11 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
   },
   {
     id: "W09",
-    name: "履约作业",
+    name: "收货与发货 / 交付与代发",
     mode: "M3+M5",
     mainRoute: "/fulfillment",
-    navHref: "/fulfillment",
+    /** 双入口之一；侧栏另有 procurement lane，见 WORKSPACE_NAV_GROUPS */
+    navHref: "/fulfillment?lane=warehouse",
   },
   {
     id: "W10",
@@ -385,21 +386,38 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
       },
       {
         id: "W09",
-        href: "/fulfillment",
-        label: "履约作业",
+        href: "/fulfillment?lane=procurement",
+        label: "交付与代发",
         icon: TruckIcon,
-      },
-      {
-        id: "W10",
-        href: "/inventory",
-        label: "库存台账",
-        icon: WarehouseIcon,
+        // 采购 · 李采「仅我的」待处理数（mock/fulfillment-operations.ts 固定夹具）。
+        // 接真实队列后改为实时值，见 features/fulfillment-operations/queries.ts。
+        badge: "3",
       },
       {
         id: "W21",
         href: "/procurement/supplier-catalog",
         label: "供应商商品库",
         icon: PackageSearchIcon,
+      },
+    ],
+  },
+  {
+    label: "仓储",
+    items: [
+      {
+        id: "W09",
+        href: "/fulfillment?lane=warehouse",
+        label: "收货与发货",
+        icon: PackageIcon,
+        // 仓储 · 周航「仅我的」待处理数（mock/fulfillment-operations.ts 固定夹具）。
+        // 一线打开侧栏就要看到「我有几件活」；接真实队列后改为实时值。
+        badge: "4",
+      },
+      {
+        id: "W10",
+        href: "/inventory",
+        label: "库存台账",
+        icon: WarehouseIcon,
       },
     ],
   },

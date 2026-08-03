@@ -193,7 +193,7 @@ export function SalesOrderDetailPage({
                   returnTo && fromWorkspace === "W07"
                     ? "返回采购确认队列"
                     : returnTo && fromWorkspace === "W09"
-                      ? "返回履约作业"
+                      ? "返回作业队列"
                       : "返回列表",
                 icon: ArrowLeftIcon,
                 variant: "outline",
@@ -243,11 +243,11 @@ export function SalesOrderDetailPage({
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
           <span className="text-muted-foreground">
             {fromWorkspace === "W09"
-              ? "自履约作业打开 · 关闭后可返回原队列位置、类型与筛选"
+              ? "自履约处理打开 · 关闭后可返回原队列位置、类型与筛选"
               : "自采购二次确认队列打开 · 关闭后可返回原队列位置与筛选"}
           </span>
           <Button type="button" size="sm" variant="outline" render={<Link href={returnTo} />}>
-            {fromWorkspace === "W09" ? "返回履约作业队列" : "返回二次确认队列"}
+            {fromWorkspace === "W09" ? "返回作业队列" : "返回二次确认队列"}
           </Button>
         </div>
       ) : null}
@@ -287,13 +287,15 @@ export function SalesOrderDetailPage({
                 variant="outline"
                 render={
                   <Link
+                    /* 不带 lane：一张销售单可能落在仓发，也可能落在电子/服务，
+                       这里替用户选岗位会让页头对着电子交付写「收货与发货」 */
                     href={`/fulfillment?scope=mine&salesOrderId=${order.id}&from=W05&returnTo=${encodeURIComponent(
                       `${baseHref}${activeSection === "overview" ? "" : `?section=${activeSection}`}`
                     )}`}
                   />
                 }
               >
-                去履约
+                去处理
               </Button>
             ) : null}
           </div>
