@@ -4,11 +4,14 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { PlusIcon, SearchIcon } from "lucide-react"
+import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 
 import {
   BusinessEmptyState,
   BusinessStatusBadge,
+  BusinessTableFrame,
   DataFreshness,
+  DataTable,
   ListToolbar,
   MoneyValue,
   OptionCombobox,
@@ -20,9 +23,6 @@ import { Button } from "@/components/ui/button"
 import {
   Card,
   CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
 } from "@/components/ui/card"
 import {
   InputGroup,
@@ -30,14 +30,17 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { CustomerCreateSheet } from "@/features/customers/customer-form-sheet"
+import { CustomerCreateDialog } from "@/features/customers/customer-create-dialog"
 import {
   parseCustomerScope,
   SCOPE_LABELS,
   SCOPE_ORDER,
 } from "@/features/customers/filter-customers"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
-import type { CustomerScope } from "@/features/customers/types"
+import type {
+  CustomerDirectoryItem,
+  CustomerScope,
+} from "@/features/customers/types"
 
 function writeDirectoryUrl(
   pathname: string,
@@ -70,10 +73,20 @@ export function CustomerCenterPage() {
 
   const [searchDraft, setSearchDraft] = React.useState(q)
   const [createOpen, setCreateOpen] = React.useState(false)
+  const [pagination, setPagination] = React.useState<PaginationState>({
+    pageIndex: 0,
+    pageSize: 20,
+  })
 
   React.useEffect(() => {
     setSearchDraft(q)
   }, [q])
+
+  const resetPagination = React.useCallback(() => {
+    setPagination((previous) =>
+      previous.pageIndex === 0 ? previous : { ...previous, pageIndex: 0 }
+    )
+  }, [])
 
   const directoryQuery = useCustomerDirectoryQuery({
     scope,
@@ -83,7 +96,154 @@ export function CustomerCenterPage() {
   })
 
   const data = directoryQuery.data
-  const items = data?.items ?? []
+  const items = React.useMemo(
+    () => data?.items ?? [],
+    [data?.items]
+  )
+
+  const pageRows = React.useMemo(() => {
+    const start = pagination.pageIndex * pagination.pageSize
+    return items.slice(start, start + pagination.pageSize)
+  }, [items, pagination.pageIndex, pagination.pageSize])
+
+  const columns = React.useMemo<ColumnDef<CustomerDirectoryItem>[]>(
+    () => [
+      {
+        id: "customer",
+        accessorFn: (row) => row.shortName || row.legalName,
+        header: "客户",
+        meta: { label: "客户", width: "reference" },
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <Link
+              href={`/sales/customers/${row.original.id}`}
+              className="font-medium text-foreground underline-offset-4 hover:underline"
+            >
+              {row.original.shortName || row.original.legalName}
+            </Link>
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="num text-xs text-muted-foreground">
+                {row.original.customerNo}
+              </span>
+              {row.original.attentionTags?.map((tag) => (
+                <Badge key={tag} variant="outline" className="text-[10px]">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        ),
+      },
+      {
+        id: "owner",
+        accessorKey: "ownerName",
+        header: "负责销售",
+        meta: { label: "负责销售", width: "default" },
+        cell: ({ row }) => (
+          <div className="text-sm">
+            <div>{row.original.ownerName}</div>
+            {row.original.collaboratorCount > 0 ? (
+              <div className="text-xs text-muted-foreground">
+                协作 {row.original.collaboratorCount} 人
+              </div>
+            ) : null}
+          </div>
+        ),
+      },
+      {
+        id: "status",
+        accessorFn: (row) => row.statusLabel.label,
+        header: "状态",
+        meta: { label: "状态", width: "status" },
+        cell: ({ row }) => (
+          <BusinessStatusBadge context="list" {...row.original.statusLabel} />
+        ),
+      },
+      {
+        id: "contracts",
+        accessorFn: (row) => row.metrics.activeContractCount,
+        header: "有效合同",
+        meta: { label: "有效合同", width: "status", numeric: true },
+        cell: ({ row }) => (
+          <span className="num text-sm">
+            {row.original.metrics.activeContractCount}
+          </span>
+        ),
+      },
+      {
+        id: "orders",
+        accessorFn: (row) => row.metrics.inProgressSalesOrderCount,
+        header: "进行中销售单",
+        meta: { label: "进行中销售单", width: "status", numeric: true },
+        cell: ({ row }) => (
+          <span className="num text-sm">
+            {row.original.metrics.inProgressSalesOrderCount}
+          </span>
+        ),
+      },
+      {
+        id: "receivable",
+        accessorFn: (row) => row.metrics.receivableBalance,
+        header: "未结清",
+        meta: { label: "未结清", width: "amount", numeric: true },
+        cell: ({ row }) => (
+          <MoneyValue value={row.original.metrics.receivableBalance} />
+        ),
+      },
+      {
+        id: "overdue",
+        accessorFn: (row) => row.metrics.overdueAmount,
+        header: "逾期",
+        meta: { label: "逾期", width: "amount", numeric: true },
+        cell: ({ row }) => (
+          <span
+            className={
+              Number.parseFloat(row.original.metrics.overdueAmount) > 0
+                ? "text-warning-foreground"
+                : undefined
+            }
+          >
+            <MoneyValue value={row.original.metrics.overdueAmount} />
+          </span>
+        ),
+      },
+      {
+        id: "business",
+        accessorFn: (row) => row.recentBusinessAt ?? row.updatedAt,
+        header: "最近业务",
+        meta: { label: "最近业务", width: "default", numeric: true },
+        cell: ({ row }) => (
+          <span className="num text-sm text-muted-foreground">
+            {(row.original.recentBusinessAt ?? row.original.updatedAt).slice(
+              0,
+              10
+            )}
+          </span>
+        ),
+      },
+      {
+        id: "actions",
+        header: "操作",
+        meta: { label: "操作", width: "default", align: "end" },
+        cell: ({ row }) => (
+          <div
+            className="flex justify-end gap-1"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              render={<Link href={`/sales/customers/${row.original.id}`} />}
+            >
+              打开
+            </Button>
+          </div>
+        ),
+      },
+    ],
+    []
+  )
 
   const pushState = React.useCallback(
     (next: {
@@ -141,74 +301,6 @@ export function CustomerCenterPage() {
         }
       />
 
-      <ListToolbar
-        search={
-          <InputGroup className="max-w-md">
-            <InputGroupAddon>
-              <SearchIcon aria-hidden="true" />
-            </InputGroupAddon>
-            <InputGroupInput
-              value={searchDraft}
-              onChange={(e) => setSearchDraft(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  pushState({ q: searchDraft })
-                }
-              }}
-              placeholder="名称、编码、统一社会信用代码"
-              aria-label="搜索客户"
-            />
-          </InputGroup>
-        }
-        filters={
-          <div className="flex flex-wrap items-center gap-2">
-            <ToggleGroup
-              value={[scope]}
-              onValueChange={(values) => {
-                const next = values[0] as CustomerScope | undefined
-                if (next) pushState({ scope: next })
-              }}
-              variant="outline"
-              size="sm"
-              spacing={0}
-              aria-label="客户范围"
-            >
-              {SCOPE_ORDER.map((key) => (
-                <ToggleGroupItem key={key} value={key}>
-                  {SCOPE_LABELS[key]}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            <OptionCombobox
-              aria-label="客户状态"
-              value={status}
-              onValueChange={(v) =>
-                pushState({
-                  status: (v ?? "active") as "active" | "disabled" | "all",
-                })
-              }
-              options={[
-                { value: "active", label: "启用" },
-                { value: "disabled", label: "停用" },
-                { value: "all", label: "全部状态" },
-              ]}
-              className="w-[7.5rem]"
-              size="sm"
-              allowClear={false}
-              placeholder="客户状态"
-            />
-            <Button
-              type="button"
-              size="sm"
-              variant="secondary"
-              onClick={() => pushState({ q: searchDraft })}
-            >
-              搜索
-            </Button>
-          </div>
-        }
-      />
-
       {directoryQuery.isPending ? (
         <Card size="sm">
           <CardContent className="p-8 text-sm text-muted-foreground">
@@ -246,88 +338,128 @@ export function CustomerCenterPage() {
           }
         />
       ) : (
-        <Card size="sm">
-          <CardHeader className="border-b">
-            <CardTitle>客户结果</CardTitle>
-            <CardDescription>
-              共 {items.length} 家 · {SCOPE_LABELS[scope]}
-              {status !== "active" ? ` · ${status === "disabled" ? "停用" : "全部状态"}` : ""}
-              。本页用于选择客户并进入其详情。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="divide-y p-0" role="list" aria-label="客户列表">
-            {items.map((item) => (
-              <div
-                key={item.id}
-                role="listitem"
-                className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      href={`/sales/customers/${item.id}`}
-                      className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    >
-                      {item.shortName || item.legalName}
-                    </Link>
-                    <BusinessStatusBadge context="list" {...item.statusLabel} />
-                    {item.attentionTags?.map((tag) => (
-                      <Badge key={tag} variant="outline">
-                        {tag}
-                      </Badge>
-                    ))}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    <span className="num">{item.customerNo}</span>
-                    {" · 负责销售 "}
-                    {item.ownerName}
-                    {item.collaboratorCount > 0
-                      ? ` · 协作 ${item.collaboratorCount} 人`
-                      : ""}
-                  </div>
-                  <div
-                    className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground"
-                    aria-label="关系指标摘要"
+        <BusinessTableFrame
+          title="客户结果"
+          description={
+            scope !== "mine" || status !== "active" || q.trim()
+              ? `当前筛选：${SCOPE_LABELS[scope]}${
+                  status !== "active"
+                    ? ` · ${status === "disabled" ? "停用" : "全部状态"}`
+                    : ""
+                }${q.trim() ? ` · “${q.trim()}”` : ""}`
+              : `${SCOPE_LABELS[scope]}下的全部客户；本页用于选择客户并进入其详情。`
+          }
+          toolbar={
+            <ListToolbar
+              search={
+                <InputGroup className="max-w-md">
+                  <InputGroupAddon>
+                    <SearchIcon aria-hidden="true" />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    value={searchDraft}
+                    onChange={(e) => setSearchDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        pushState({ q: searchDraft })
+                        resetPagination()
+                      }
+                    }}
+                    placeholder="名称、编码、统一社会信用代码"
+                    aria-label="搜索客户"
+                  />
+                </InputGroup>
+              }
+              filters={
+                <div className="flex flex-wrap items-center gap-2">
+                  <ToggleGroup
+                    value={[scope]}
+                    onValueChange={(values) => {
+                      const next = values[0] as CustomerScope | undefined
+                      if (next) {
+                        pushState({ scope: next })
+                        resetPagination()
+                      }
+                    }}
+                    variant="outline"
+                    size="sm"
+                    spacing={0}
+                    aria-label="客户范围"
                   >
-                    <span>
-                      有效合同{" "}
-                      <span className="num text-foreground">
-                        {item.metrics.activeContractCount}
-                      </span>
-                    </span>
-                    <span>
-                      进行中销售单{" "}
-                      <span className="num text-foreground">
-                        {item.metrics.inProgressSalesOrderCount}
-                      </span>
-                    </span>
-                    <span className="inline-flex items-center gap-1">
-                      未结清
-                      <MoneyValue value={item.metrics.receivableBalance} />
-                    </span>
-                    {Number.parseFloat(item.metrics.overdueAmount) > 0 ? (
-                      <span className="inline-flex items-center gap-1 text-warning-foreground">
-                        逾期
-                        <MoneyValue value={item.metrics.overdueAmount} />
-                      </span>
-                    ) : null}
-                  </div>
+                    {SCOPE_ORDER.map((key) => (
+                      <ToggleGroupItem key={key} value={key}>
+                        {SCOPE_LABELS[key]}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                  <OptionCombobox
+                    aria-label="客户状态"
+                    value={status}
+                    onValueChange={(v) => {
+                      pushState({
+                        status: (v ?? "active") as
+                          | "active"
+                          | "disabled"
+                          | "all",
+                      })
+                      resetPagination()
+                    }}
+                    options={[
+                      { value: "active", label: "启用" },
+                      { value: "disabled", label: "停用" },
+                      { value: "all", label: "全部状态" },
+                    ]}
+                    className="w-[7.5rem]"
+                    size="sm"
+                    allowClear={false}
+                    placeholder="客户状态"
+                  />
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      pushState({ q: searchDraft })
+                      resetPagination()
+                    }}
+                  >
+                    搜索
+                  </Button>
                 </div>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  render={<Link href={`/sales/customers/${item.id}`} />}
+              }
+              actions={
+                <span
+                  className="text-xs text-muted-foreground"
+                  aria-live="polite"
                 >
-                  打开
-                </Button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+                  共 {items.length.toLocaleString("zh-CN")} 家
+                </span>
+              }
+            />
+          }
+          table={
+            <DataTable
+              data={pageRows}
+              columns={columns}
+              getRowId={(row) => row.id}
+              rowCount={items.length}
+              pagination={pagination}
+              onPaginationChange={setPagination}
+              layout="flush"
+              density="compact"
+              defaultColumnPinning={{
+                left: ["customer"],
+                right: ["actions"],
+              }}
+              onRowOpen={(row) =>
+                router.push(`/sales/customers/${row.id}`)
+              }
+            />
+          }
+        />
       )}
 
-      <CustomerCreateSheet
+      <CustomerCreateDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
         onSucceeded={(customerId) => {

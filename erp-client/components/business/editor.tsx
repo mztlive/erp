@@ -192,23 +192,30 @@ function EditableLineItemTable<TItem>({
   const columnCount = columns.length + (hasRowActions ? 1 : 0)
   const canAdd = Boolean(onAddItem) && !disabled && !addDisabledReason
 
+  /** 可编辑表单元格：容纳表单控件，不用高密度列表行高。 */
+  const cellPad =
+    mode === "edit"
+      ? "h-auto min-h-11 px-3 py-3"
+      : "h-auto min-h-(--table-row-height) px-3 py-2.5"
+
   return (
     <section
       data-slot="editable-line-item-table"
       data-mode={mode}
-      className={cn("space-y-3", className)}
+      className={cn("space-y-4", className)}
       {...props}
     >
-      <div className="rounded-2xl border border-border bg-card">
-        <Table>
+      <div className="overflow-hidden rounded-2xl border border-border bg-card">
+        <Table data-density="comfortable">
           <caption className="sr-only">{caption}</caption>
           <TableHeader>
-            <TableRow>
+            <TableRow className="hover:bg-transparent">
               {columns.map((column) => (
                 <TableHead
                   key={column.id}
                   scope="col"
                   className={cn(
+                    "h-auto min-h-10 px-3 py-2.5",
                     alignmentClass[column.align ?? "start"],
                     column.numeric && "num"
                   )}
@@ -217,7 +224,10 @@ function EditableLineItemTable<TItem>({
                 </TableHead>
               ))}
               {hasRowActions ? (
-                <TableHead scope="col" className="text-right">
+                <TableHead
+                  scope="col"
+                  className="h-auto min-h-10 px-3 py-2.5 text-right"
+                >
                   操作
                 </TableHead>
               ) : null}
@@ -228,7 +238,7 @@ function EditableLineItemTable<TItem>({
               <TableRow>
                 <TableCell
                   colSpan={Math.max(columnCount, 1)}
-                  className="whitespace-normal py-8 text-center text-muted-foreground"
+                  className="h-auto whitespace-normal px-3 py-10 text-center text-muted-foreground"
                 >
                   {emptyContent}
                 </TableCell>
@@ -260,7 +270,8 @@ function EditableLineItemTable<TItem>({
                           <TableCell
                             key={column.id}
                             className={cn(
-                              "whitespace-normal align-top",
+                              "whitespace-normal align-middle",
+                              cellPad,
                               alignmentClass[column.align ?? "start"],
                               column.numeric && "num"
                             )}
@@ -270,8 +281,10 @@ function EditableLineItemTable<TItem>({
                         )
                       })}
                       {hasRowActions ? (
-                        <TableCell className="align-top">
-                          <div className="flex justify-end gap-1">
+                        <TableCell
+                          className={cn("align-middle", cellPad)}
+                        >
+                          <div className="flex justify-end gap-1.5">
                             {renderRowActions?.(context)}
                             {onRemoveItem ? (
                               <GuardedBusinessAction
@@ -299,7 +312,7 @@ function EditableLineItemTable<TItem>({
                       <TableRow data-slot="editable-line-item-errors">
                         <TableCell
                           colSpan={Math.max(columnCount, 1)}
-                          className="h-auto whitespace-normal py-2"
+                          className="h-auto whitespace-normal px-3 py-3"
                         >
                           <Alert variant="destructive">
                             <TriangleAlertIcon aria-hidden="true" />

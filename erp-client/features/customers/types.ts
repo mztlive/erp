@@ -198,6 +198,43 @@ export type SaveCustomerRevisionInput = Readonly<{
   simulate?: "ok" | "conflict" | "unknown"
 }>
 
+export type SaveCustomerDetailsInput = Readonly<{
+  customerId: string
+  expectedLockVersion: number
+  baseRevisionId: string
+  legalName: string
+  shortName?: string
+  unifiedCreditCode?: string
+  changeReason: string
+  contacts: readonly CreateCustomerContactInput[]
+  addresses: readonly CreateCustomerAddressInput[]
+  bankAccounts: readonly CreateCustomerBankAccountInput[]
+  idempotencyKey: string
+  /** Demo: force conflict / unknown outcome. */
+  simulate?: "ok" | "conflict" | "unknown"
+}>
+
+export type CreateCustomerContactInput = Readonly<{
+  name: string
+  title?: string
+  phone?: string
+  email?: string
+  isDefault: boolean
+}>
+
+export type CreateCustomerAddressInput = Readonly<{
+  addressType: string
+  address: string
+  isDefault: boolean
+}>
+
+export type CreateCustomerBankAccountInput = Readonly<{
+  accountName: string
+  bankName: string
+  accountNumber: string
+  isDefault: boolean
+}>
+
 export type CreateCustomerInput = Readonly<{
   legalName: string
   shortName?: string
@@ -205,6 +242,9 @@ export type CreateCustomerInput = Readonly<{
   ownerUserId: string
   ownerName: string
   defaultPaymentTerm?: string
+  contacts?: readonly CreateCustomerContactInput[]
+  addresses?: readonly CreateCustomerAddressInput[]
+  bankAccounts?: readonly CreateCustomerBankAccountInput[]
   idempotencyKey: string
   simulate?: "ok" | "conflict" | "unknown"
 }>

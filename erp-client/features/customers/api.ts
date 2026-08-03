@@ -5,6 +5,7 @@ import type {
   CustomerDirectoryQuery,
   CustomerDirectoryResult,
   CustomerMutationResult,
+  SaveCustomerDetailsInput,
   SaveCustomerRevisionInput,
 } from "@/features/customers/types"
 import { filterCustomerDirectory } from "@/features/customers/filter-customers"
@@ -12,11 +13,12 @@ import {
   createW03Customer,
   getW03DetailBaseline,
   getW03NoCustomerScope,
+  getW03SensitiveReveal,
   listW03DirectoryBaseline,
   queryW03Idempotency,
+  saveW03CustomerDetails,
   saveW03CustomerRevision,
 } from "@/features/customers/session"
-import { MOCK_SENSITIVE_REVEALS } from "@/mock/customers"
 
 export async function fetchCustomerDirectory(
   query: CustomerDirectoryQuery
@@ -58,6 +60,13 @@ export async function saveCustomerRevision(
   return saveW03CustomerRevision(input)
 }
 
+export async function saveCustomerDetails(
+  input: SaveCustomerDetailsInput
+): Promise<CustomerMutationResult> {
+  await mockDelay(140)
+  return saveW03CustomerDetails(input)
+}
+
 export async function createCustomer(
   input: CreateCustomerInput
 ): Promise<CustomerMutationResult> {
@@ -77,7 +86,7 @@ export async function revealCustomerSensitiveField(
   revealToken: string
 ): Promise<string> {
   await mockDelay(80)
-  const value = MOCK_SENSITIVE_REVEALS[revealToken]
+  const value = getW03SensitiveReveal(revealToken)
   if (!value) {
     throw new Error("无权查看或权限已失效")
   }

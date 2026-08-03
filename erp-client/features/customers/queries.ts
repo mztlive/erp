@@ -12,11 +12,13 @@ import {
   fetchCustomerDirectory,
   queryCustomerMutationByIdempotency,
   revealCustomerSensitiveField,
+  saveCustomerDetails,
   saveCustomerRevision,
 } from "@/features/customers/api"
 import type {
   CreateCustomerInput,
   CustomerDirectoryQuery,
+  SaveCustomerDetailsInput,
   SaveCustomerRevisionInput,
 } from "@/features/customers/types"
 
@@ -48,6 +50,19 @@ export function useSaveCustomerRevisionMutation() {
   return useMutation({
     mutationFn: (input: SaveCustomerRevisionInput) =>
       saveCustomerRevision(input),
+    onSuccess: async (result) => {
+      if (result.outcome === "succeeded") {
+        await queryClient.invalidateQueries({ queryKey: customerKeys.all })
+      }
+    },
+  })
+}
+
+export function useSaveCustomerDetailsMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: SaveCustomerDetailsInput) =>
+      saveCustomerDetails(input),
     onSuccess: async (result) => {
       if (result.outcome === "succeeded") {
         await queryClient.invalidateQueries({ queryKey: customerKeys.all })

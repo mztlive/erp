@@ -4,15 +4,23 @@
  */
 
 import type {
+  CreateCustomerAddressInput,
+  CreateCustomerBankAccountInput,
+  CreateCustomerContactInput,
   CreateCustomerInput,
+  CustomerAddressView,
+  CustomerBankAccountView,
   CustomerCenterView,
+  CustomerContactView,
   CustomerDirectoryItem,
   CustomerMutationResult,
+  SaveCustomerDetailsInput,
   SaveCustomerRevisionInput,
 } from "@/features/customers/types"
 import {
   MOCK_CUSTOMER_DETAILS,
   MOCK_CUSTOMER_DIRECTORY,
+  MOCK_SENSITIVE_REVEALS,
 } from "@/mock/customers"
 
 type RevisionOverlay = {
@@ -27,14 +35,110 @@ type RevisionOverlay = {
   actor: string
 }
 
+type DetailsOverlay = {
+  contacts: readonly CustomerContactView[]
+  addresses: readonly CustomerAddressView[]
+  bankAccounts: readonly CustomerBankAccountView[]
+}
+
 type CreatedCustomer = {
   directory: CustomerDirectoryItem
   detail: CustomerCenterView
 }
 
 const revisionOverlays = new Map<string, RevisionOverlay>()
+const detailsOverlays = new Map<string, DetailsOverlay>()
 const createdCustomers = new Map<string, CreatedCustomer>()
 const idempotencyResults = new Map<string, CustomerMutationResult>()
+/** Reveal tokens for sensitive values created in this session. */
+const createdReveals = new Map<string, string>()
+
+function maskPhone(phone: string): string {
+  if (phone.length <= 7) return `${phone.slice(0, 1)}****`
+  return `${phone.slice(0, 3)}****${phone.slice(-4)}`
+}
+
+function maskAddress(address: string): string {
+  if (address.length <= 8) return `${address.slice(0, 2)}****`
+  return `${address.slice(0, 6)}****`
+}
+
+function maskAccountNumber(accountNumber: string): string {
+  if (accountNumber.length <= 4) return "****"
+  return `****${accountNumber.slice(-4)}`
+}
+
+/** Returns session-created reveal first, then static mock baseline. */
+export function getW03SensitiveReveal(token: string): string | undefined {
+  return createdReveals.get(token) ?? MOCK_SENSITIVE_REVEALS[token]
+}
+
+function buildContactViews(
+  customerId: string,
+  inputs: readonly CreateCustomerContactInput[],
+  today: string
+): CustomerContactView[] {
+  return inputs.map((contact, index) => {
+    const id = `ct_${customerId}_${index + 1}`
+    if (contact.phone) {
+      createdReveals.set(`reveal:${id}_phone`, contact.phone)
+    }
+    return {
+      id,
+      name: contact.name.trim(),
+      title: contact.title?.trim() || undefined,
+      purpose: undefined,
+      phoneMasked: contact.phone ? maskPhone(contact.phone) : "—",
+      phoneRevealToken: contact.phone ? `reveal:${id}_phone` : undefined,
+      email: contact.email?.trim() || undefined,
+      isDefault: contact.isDefault,
+      effectiveFrom: today,
+      fieldVisibility: { phone: "masked" as const },
+    }
+  })
+}
+
+function buildAddressViews(
+  customerId: string,
+  inputs: readonly CreateCustomerAddressInput[],
+  today: string
+): CustomerAddressView[] {
+  return inputs.map((address, index) => {
+    const id = `addr_${customerId}_${index + 1}`
+    createdReveals.set(`reveal:${id}`, address.address.trim())
+    return {
+      id,
+      addressType: address.addressType.trim(),
+      addressMasked: maskAddress(address.address.trim()),
+      addressRevealToken: `reveal:${id}`,
+      isDefault: address.isDefault,
+      effectiveFrom: today,
+      fieldVisibility: { address: "masked" as const },
+    }
+  })
+}
+
+function buildBankAccountViews(
+  customerId: string,
+  inputs: readonly CreateCustomerBankAccountInput[],
+  today: string
+): CustomerBankAccountView[] {
+  const seq = customerId.split("_").pop() ?? "0"
+  return inputs.map((bank, index) => {
+    const id = `bank_${customerId}_${index + 1}`
+    createdReveals.set(`reveal:${id}`, bank.accountNumber.trim())
+    return {
+      id,
+      internalNo: `BA-${seq}-${String(index + 1).padStart(2, "0")}`,
+      accountName: bank.accountName.trim(),
+      bankName: bank.bankName.trim(),
+      accountMasked: maskAccountNumber(bank.accountNumber.trim()),
+      accountRevealToken: `reveal:${id}`,
+      effectiveFrom: today,
+      fieldVisibility: { accountNumber: "masked" as const },
+    }
+  })
+}
 
 /** Demo toggle: when true, directory reports no customer data scope. */
 let noCustomerScope = false
@@ -66,10 +170,22 @@ export function getW03DetailBaseline(
   customerId: string
 ): CustomerCenterView | null {
   const created = createdCustomers.get(customerId)
-  if (created) return applyRevisionOverlay(created.detail)
+  if (created) return applyOverlays(created.detail)
   const base = MOCK_CUSTOMER_DETAILS[customerId]
   if (!base) return null
-  return applyRevisionOverlay(base)
+  return applyOverlays(base)
+}
+
+function applyOverlays(detail: CustomerCenterView): CustomerCenterView {
+  const withRevision = applyRevisionOverlay(detail)
+  const overlay = detailsOverlays.get(detail.customerId)
+  if (!overlay) return withRevision
+  return {
+    ...withRevision,
+    contacts: overlay.contacts,
+    addresses: overlay.addresses,
+    bankAccounts: overlay.bankAccounts,
+  }
 }
 
 function applyRevisionOverlay(
@@ -214,10 +330,19 @@ export function createW03Customer(
   }
 
   const now = new Date().toISOString()
+  const today = now.slice(0, 10)
   const seq = 500 + createdCustomers.size + 1
   const customerId = `cust_new_${seq}`
   const customerNo = `KH-${String(seq).padStart(6, "0")}`
   const partyId = `party_new_${seq}`
+
+  const contacts = buildContactViews(customerId, input.contacts ?? [], today)
+  const addresses = buildAddressViews(customerId, input.addresses ?? [], today)
+  const bankAccounts = buildBankAccountViews(
+    customerId,
+    input.bankAccounts ?? [],
+    today
+  )
 
   const directory: CustomerDirectoryItem = {
     id: customerId,
@@ -266,9 +391,9 @@ export function createW03Customer(
         isCurrent: true,
       },
     ],
-    contacts: [],
-    addresses: [],
-    bankAccounts: [],
+    contacts,
+    addresses,
+    bankAccounts,
     metrics: directory.metrics,
     contracts: [],
     salesOrders: [],
@@ -314,6 +439,93 @@ export function createW03Customer(
     lockVersion: 1,
     occurredAt: now,
     reference: `CUST-NEW-${customerNo}`,
+  }
+  idempotencyResults.set(input.idempotencyKey, result)
+  return result
+}
+
+/** Saves identity revision + contacts/addresses/bank accounts in one formal action. */
+export function saveW03CustomerDetails(
+  input: SaveCustomerDetailsInput
+): CustomerMutationResult {
+  const existing = idempotencyResults.get(input.idempotencyKey)
+  if (existing) return existing
+
+  if (input.simulate === "unknown") {
+    const result: CustomerMutationResult = {
+      outcome: "unknown",
+      message:
+        "提交结果不确定：未确认系统是否已生成新版本。请查询最终结果后再决定是否重试（同一任务号）。",
+      idempotencyKey: input.idempotencyKey,
+    }
+    return result
+  }
+
+  const detail = getW03DetailBaseline(input.customerId)
+  if (!detail) {
+    const result: CustomerMutationResult = {
+      outcome: "unknown",
+      message: "客户不存在或无权访问。",
+      idempotencyKey: input.idempotencyKey,
+    }
+    return result
+  }
+
+  if (
+    input.simulate === "conflict" ||
+    input.expectedLockVersion !== detail.lockVersion
+  ) {
+    const result: CustomerMutationResult = {
+      outcome: "conflict",
+      message: "基础资料版本已变化，禁止静默覆盖。请查看系统最新版本后重做。",
+      serverLockVersion: detail.lockVersion,
+      serverRevisionNo: detail.currentRevision.revisionNo,
+      serverLegalName: detail.currentRevision.legalName,
+      serverShortName: detail.currentRevision.shortName,
+      serverUnifiedCreditCode: detail.currentRevision.unifiedCreditCode,
+      actor: "王敏",
+      changedAt: detail.currentRevision.effectiveFrom,
+    }
+    idempotencyResults.set(input.idempotencyKey, result)
+    return result
+  }
+
+  const now = new Date().toISOString()
+  const today = now.slice(0, 10)
+  const nextRevisionNo = detail.currentRevision.revisionNo + 1
+  const nextLock = detail.lockVersion + 1
+  const revisionId = `rev_${input.customerId}_${nextRevisionNo}`
+
+  revisionOverlays.set(input.customerId, {
+    lockVersion: nextLock,
+    revisionId,
+    revisionNo: nextRevisionNo,
+    legalName: input.legalName.trim(),
+    shortName: input.shortName?.trim() || undefined,
+    unifiedCreditCode: input.unifiedCreditCode?.trim() || undefined,
+    effectiveFrom: now,
+    changeReason: input.changeReason.trim(),
+    actor: "当前用户",
+  })
+
+  detailsOverlays.set(input.customerId, {
+    contacts: buildContactViews(input.customerId, input.contacts, today),
+    addresses: buildAddressViews(input.customerId, input.addresses, today),
+    bankAccounts: buildBankAccountViews(
+      input.customerId,
+      input.bankAccounts,
+      today
+    ),
+  })
+
+  const result: CustomerMutationResult = {
+    outcome: "succeeded",
+    customerId: input.customerId,
+    customerNo: detail.customerNo,
+    revisionNo: nextRevisionNo,
+    lockVersion: nextLock,
+    occurredAt: now,
+    reference: `CUST-REV-${nextRevisionNo}-${Date.now().toString(36).toUpperCase()}`,
   }
   idempotencyResults.set(input.idempotencyKey, result)
   return result

@@ -8,7 +8,6 @@ import type {
   SalesOrderListItem,
 } from "@/features/sales-orders/types"
 import { buildSalesOrder } from "@/features/sales-orders/build-order"
-import { contractPdfError } from "@/features/contracts/pdf"
 import {
   getMockSalesOrder,
   listMockSalesOrders,
@@ -33,7 +32,6 @@ import {
   postSalesOrderAcceptance,
   resolveW05ProcurementRejection,
   startW05SalesChangeOrder,
-  uploadW04ContractPdf,
   verifyW05CardClaim,
 } from "@/mock/session-state"
 import {
@@ -388,29 +386,8 @@ export async function createSalesOrder(
     throw new Error("LINE_ITEM_INVALID")
   }
 
-  let contractId: string
-  let requestedRevisionId: string
-  if (input.contract.source === "existing") {
-    contractId = input.contract.contractId
-    requestedRevisionId = input.contract.requestedContractRevisionId
-  } else {
-    const fileError = contractPdfError(input.contract.pdfFile)
-    if (fileError) throw new Error(fileError)
-    const uploaded = uploadW04ContractPdf({
-      pdfFile: input.contract.pdfFile,
-      contractNo: input.contract.contractNo,
-      customerId: input.contract.customerId,
-      customerName: input.contract.customerName,
-      settlementPartyName: input.contract.settlementPartyName,
-      signedAt: input.contract.signedAt,
-      validFrom: input.contract.validFrom,
-      validTo: input.contract.validTo,
-      paymentTerms: input.paymentTerms,
-      idempotencyKey: `${input.idempotencyKey}:contract-pdf`,
-    })
-    contractId = uploaded.contractId
-    requestedRevisionId = uploaded.revisionId
-  }
+  const contractId = input.contract.contractId
+  const requestedRevisionId = input.contract.requestedContractRevisionId
 
   const contract = getW04ContractCenter(contractId)
   if (!contract?.selectableForNewSalesOrder) {

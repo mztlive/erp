@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
   ArrowLeftIcon,
   FilePlus2Icon,
@@ -40,7 +41,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { CustomerReviseSheet } from "@/features/customers/customer-form-sheet"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { CustomerForm } from "@/features/customers/customer-form"
 import { useCustomerCenterQuery } from "@/features/customers/queries"
 import { revealCustomerSensitiveField } from "@/features/customers/api"
 import type {
@@ -55,7 +57,6 @@ const SECTION_NAV: readonly {
   hash: string
 }[] = [
   { id: "overview", label: "概览", hash: "overview" },
-  { id: "contacts", label: "联系与地址", hash: "contacts" },
   { id: "related", label: "合同与销售", hash: "related" },
   { id: "settlement", label: "票款摘要", hash: "settlement" },
   { id: "quality", label: "经营摘要", hash: "quality" },
@@ -63,6 +64,7 @@ const SECTION_NAV: readonly {
 ]
 
 function resolveSection(section?: string | null): CustomerSectionId {
+  if (section === "contacts") return "overview"
   const found = SECTION_NAV.find(
     (item) => item.id === section || item.hash === section
   )
@@ -121,21 +123,23 @@ export function CustomerDetailPage({
   section?: string
 }) {
   const query = useCustomerCenterQuery(customerId)
+  const router = useRouter()
   const activeSection = resolveSection(section)
-  const [reviseOpen, setReviseOpen] = React.useState(false)
-  const sectionRefs = React.useRef<
-    Partial<Record<CustomerSectionId, HTMLElement | null>>
-  >({})
+  const [editing, setEditing] = React.useState(false)
 
   const customer = query.data
 
-  React.useEffect(() => {
-    if (!customer) return
-    const el = sectionRefs.current[activeSection]
-    if (el) {
-      el.scrollIntoView({ block: "start", behavior: "smooth" })
-    }
-  }, [activeSection, customer?.customerId])
+  const selectSection = React.useCallback(
+    (next: CustomerSectionId) => {
+      router.replace(
+        next === "overview"
+          ? `/sales/customers/${customerId}`
+          : `/sales/customers/${customerId}?section=${next}`,
+        { scroll: false }
+      )
+    },
+    [customerId, router]
+  )
 
   if (query.isPending) {
     return (
@@ -183,7 +187,6 @@ export function CustomerDetailPage({
     )
   }
 
-  const baseHref = `/sales/customers/${customer.customerId}`
   const displayName =
     customer.currentRevision.shortName || customer.currentRevision.legalName
   const isDisabled = customer.status === "disabled"
@@ -288,16 +291,6 @@ export function CustomerDetailPage({
               <ShoppingCartIcon data-icon="inline-start" aria-hidden="true" />
               新建销售单
             </GuardedBusinessAction>
-            <GuardedBusinessAction
-              size="sm"
-              variant="outline"
-              disabled={editBlocked}
-              reason={blocker(customer, "EDIT_CUSTOMER")}
-              onClick={() => setReviseOpen(true)}
-            >
-              <PencilIcon data-icon="inline-start" aria-hidden="true" />
-              修订主体
-            </GuardedBusinessAction>
           </div>
         }
       />
@@ -350,583 +343,567 @@ export function CustomerDetailPage({
         />
       </MetricStrip>
 
-      {/* Keyboard-navigable section anchors */}
-      <nav
-        aria-label="客户信息分区"
-        className="sticky top-0 z-10 -mx-1 flex flex-wrap gap-1 border-b border-border bg-background/95 px-1 py-2 backdrop-blur supports-backdrop-filter:bg-background/80"
-      >
-        {SECTION_NAV.map((item) => {
-          const href =
-            item.id === "overview"
-              ? baseHref
-              : `${baseHref}?section=${item.id}`
-          const isCurrent = activeSection === item.id
-          return (
-            <Button
-              key={item.id}
-              type="button"
-              size="sm"
-              variant={isCurrent ? "secondary" : "ghost"}
-              aria-current={isCurrent ? "true" : undefined}
-              render={<Link href={href} scroll={false} />}
-            >
-              {item.label}
-            </Button>
-          )
-        })}
-      </nav>
-
-      {/* Overview / identity — always shown when identity partition ok */}
-      <div
-        id="overview"
-        ref={(el) => {
-          sectionRefs.current.overview = el
+      <Tabs
+        value={activeSection}
+        onValueChange={(next) => {
+          const target = (next as CustomerSectionId) ?? "overview"
+          if (target !== activeSection) selectSection(target)
         }}
-        tabIndex={-1}
       >
-        <DocumentSection title="主体身份与客户角色" description="当前基础资料版本，不覆盖历史单据记录">
-          {customer.partitions.identity === "error" ? (
-            <BusinessFailureState
-              kind="system"
-              description="主体分区加载失败。"
-              action={
-                <Button type="button" size="sm" onClick={() => void query.refetch()}>
-                  重试
-                </Button>
-              }
-            />
-          ) : (
-            <DocumentSummary
-              columns="two"
-              items={[
-                {
-                  id: "legalName",
-                  label: "法定名称",
-                  value: customer.currentRevision.legalName,
-                },
-                {
-                  id: "shortName",
-                  label: "客户简称",
-                  value: customer.currentRevision.shortName ?? "—",
-                },
-                {
-                  id: "credit",
-                  label: "统一社会信用代码",
-                  value: customer.currentRevision.unifiedCreditCode ?? "—",
-                },
-                {
-                  id: "payment",
-                  label: "默认付款条件",
-                  value:
-                    customer.currentRevision.defaultPaymentTerm ??
-                    "—（仅录单提示）",
-                },
-                {
-                  id: "revision",
-                  label: "基础资料版本",
-                  value: `v${customer.currentRevision.revisionNo} · ${customer.currentRevision.effectiveFrom.slice(0, 10)} 生效`,
-                },
-                {
-                  id: "owner",
-                  label: "负责销售（OWNER）",
-                  value: ownerLabel(customer),
-                },
-              ]}
-            />
-          )}
-        </DocumentSection>
-      </div>
-
-      {/* Contacts & addresses */}
-      <div
-        id="contacts"
-        ref={(el) => {
-          sectionRefs.current.contacts = el
-        }}
-        tabIndex={-1}
-      >
-        <DocumentSection
-          title="联系与地址"
-          description="有效联系人与地址；手机与履约地址按字段权限打码"
+        <TabsList
+          variant="line"
+          className="sticky top-0 z-10 w-full justify-start overflow-x-auto rounded-none border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80"
         >
-          {customer.partitions.contacts === "error" ? (
-            <BusinessFailureState
-              kind="system"
-              description="联系分区失败；主体身份仍保留。"
-              action={
-                <Button type="button" size="sm" onClick={() => void query.refetch()}>
-                  重试分区
-                </Button>
-              }
-            />
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle className="text-sm">有效联系人</CardTitle>
-                  <CardDescription>默认打码手机；揭示短时可审计</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {customer.contacts.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">暂无联系人</p>
-                  ) : (
-                    customer.contacts.map((c) => (
-                      <div
-                        key={c.id}
-                        className="rounded-lg border border-border p-3 text-sm"
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">{c.name}</span>
-                          {c.isDefault ? (
-                            <Badge variant="secondary">默认</Badge>
-                          ) : null}
-                          {c.title ? (
-                            <span className="text-muted-foreground">
-                              {c.title}
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="mt-2 space-y-1 text-muted-foreground">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span>手机</span>
-                            {c.fieldVisibility.phone === "masked" ? (
-                              <SensitiveValue
-                                label={`${c.name}手机`}
-                                maskedValue={c.phoneMasked}
-                                onReveal={
-                                  c.phoneRevealToken
-                                    ? () =>
-                                        revealCustomerSensitiveField(
-                                          c.phoneRevealToken!
-                                        )
-                                    : undefined
-                                }
-                              />
-                            ) : (
-                              <span className="num">{c.phoneMasked}</span>
-                            )}
-                          </div>
-                          {c.email ? <div>邮箱 {c.email}</div> : null}
-                          <div className="text-xs">
-                            有效期 {c.effectiveFrom}
-                            {c.effectiveTo ? ` ~ ${c.effectiveTo}` : " 起"}
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </CardContent>
-              </Card>
+          {SECTION_NAV.map((item) => (
+            <TabsTrigger key={item.id} value={item.id} className="flex-none">
+              {item.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle className="text-sm">地址</CardTitle>
-                  <CardDescription>履约地址按权限打码</CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {customer.addresses.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">暂无地址</p>
-                  ) : (
-                    customer.addresses.map((a) => (
-                      <div
-                        key={a.id}
-                        className="rounded-lg border border-border p-3 text-sm"
+        <TabsContent value="overview">
+          <div className="space-y-4 pt-4">
+            {editing ? (
+              <CustomerForm
+                mode="edit"
+                grouped
+                customer={customer}
+                onCancel={() => setEditing(false)}
+                onSucceeded={() => setEditing(false)}
+              />
+            ) : (
+              <>
+                <DocumentSection
+                  title="主体身份与客户角色"
+                  description="当前基础资料版本，不覆盖历史单据记录"
+                  action={
+                    !editBlocked ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setEditing(true)}
                       >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-medium">{a.addressType}</span>
-                          {a.isDefault ? (
-                            <Badge variant="secondary">默认</Badge>
-                          ) : null}
-                        </div>
-                        <div className="mt-2">
-                          {a.fieldVisibility.address === "masked" ? (
+                        <PencilIcon
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />
+                        编辑资料
+                      </Button>
+                    ) : null
+                  }
+                >
+                  {customer.partitions.identity === "error" ? (
+                    <BusinessFailureState
+                      kind="system"
+                      description="主体分区加载失败。"
+                      action={
+                        <Button type="button" size="sm" onClick={() => void query.refetch()}>
+                          重试
+                        </Button>
+                      }
+                    />
+                  ) : (
+                    <DocumentSummary
+                      columns="two"
+                      items={[
+                        {
+                          id: "legalName",
+                          label: "法定名称",
+                          value: customer.currentRevision.legalName,
+                        },
+                        {
+                          id: "shortName",
+                          label: "客户简称",
+                          value: customer.currentRevision.shortName ?? "—",
+                        },
+                        {
+                          id: "credit",
+                          label: "统一社会信用代码",
+                          value: customer.currentRevision.unifiedCreditCode ?? "—",
+                        },
+                        {
+                          id: "payment",
+                          label: "默认付款条件",
+                          value:
+                            customer.currentRevision.defaultPaymentTerm ??
+                            "—（仅录单提示）",
+                        },
+                        {
+                          id: "revision",
+                          label: "基础资料版本",
+                          value: `v${customer.currentRevision.revisionNo} · ${customer.currentRevision.effectiveFrom.slice(0, 10)} 生效`,
+                        },
+                        {
+                          id: "owner",
+                          label: "负责销售（OWNER）",
+                          value: ownerLabel(customer),
+                        },
+                      ]}
+                    />
+                  )}
+                </DocumentSection>
+
+                <DocumentSection
+                  title="联系与地址"
+                  description="有效联系人与地址；手机与履约地址按字段权限打码"
+                >
+                  {customer.partitions.contacts === "error" ? (
+                    <BusinessFailureState
+                      kind="system"
+                      description="联系分区失败；主体身份仍保留。"
+                      action={
+                        <Button type="button" size="sm" onClick={() => void query.refetch()}>
+                          重试分区
+                        </Button>
+                      }
+                    />
+                  ) : (
+                    <div className="grid gap-4 lg:grid-cols-2">
+                      <Card size="sm">
+                        <CardHeader>
+                          <CardTitle className="text-sm">有效联系人</CardTitle>
+                          <CardDescription>默认打码手机；揭示短时可审计</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {customer.contacts.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">暂无联系人</p>
+                          ) : (
+                            customer.contacts.map((c) => (
+                              <div
+                                key={c.id}
+                                className="rounded-lg border border-border p-3 text-sm"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-medium">{c.name}</span>
+                                  {c.isDefault ? (
+                                    <Badge variant="secondary">默认</Badge>
+                                  ) : null}
+                                  {c.title ? (
+                                    <span className="text-muted-foreground">
+                                      {c.title}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="mt-2 space-y-1 text-muted-foreground">
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span>手机</span>
+                                    {c.fieldVisibility.phone === "masked" ? (
+                                      <SensitiveValue
+                                        label={`${c.name}手机`}
+                                        maskedValue={c.phoneMasked}
+                                        onReveal={
+                                          c.phoneRevealToken
+                                            ? () =>
+                                                revealCustomerSensitiveField(
+                                                  c.phoneRevealToken!
+                                                )
+                                            : undefined
+                                        }
+                                      />
+                                    ) : (
+                                      <span className="num">{c.phoneMasked}</span>
+                                    )}
+                                  </div>
+                                  {c.email ? <div>邮箱 {c.email}</div> : null}
+                                  <div className="text-xs">
+                                    有效期 {c.effectiveFrom}
+                                    {c.effectiveTo ? ` ~ ${c.effectiveTo}` : " 起"}
+                                  </div>
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </CardContent>
+                      </Card>
+
+                      <Card size="sm">
+                        <CardHeader>
+                          <CardTitle className="text-sm">地址</CardTitle>
+                          <CardDescription>履约地址按权限打码</CardDescription>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                          {customer.addresses.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">暂无地址</p>
+                          ) : (
+                            customer.addresses.map((a) => (
+                              <div
+                                key={a.id}
+                                className="rounded-lg border border-border p-3 text-sm"
+                              >
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <span className="font-medium">{a.addressType}</span>
+                                  {a.isDefault ? (
+                                    <Badge variant="secondary">默认</Badge>
+                                  ) : null}
+                                </div>
+                                <div className="mt-2">
+                                  {a.fieldVisibility.address === "masked" ? (
+                                    <SensitiveValue
+                                      label={a.addressType}
+                                      maskedValue={a.addressMasked}
+                                      onReveal={
+                                        a.addressRevealToken
+                                          ? () =>
+                                              revealCustomerSensitiveField(
+                                                a.addressRevealToken!
+                                              )
+                                          : undefined
+                                      }
+                                    />
+                                  ) : (
+                                    <span>{a.addressMasked}</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))
+                          )}
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+                </DocumentSection>
+
+                <DocumentSection
+                  title="银行账户"
+                  description="账号默认只显示末四位；完整显示需授权并记审计"
+                >
+                  {customer.bankAccounts.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">暂无银行账户</p>
+                  ) : (
+                    <Card size="sm">
+                      <CardContent className="space-y-2">
+                        {customer.bankAccounts.map((b) => (
+                          <div
+                            key={b.id}
+                            className="flex flex-wrap items-center gap-2 text-sm"
+                          >
+                            <span className="num text-muted-foreground">
+                              {b.internalNo}
+                            </span>
+                            <span>{b.accountName}</span>
+                            <span className="text-muted-foreground">
+                              {b.bankName}
+                            </span>
                             <SensitiveValue
-                              label={a.addressType}
-                              maskedValue={a.addressMasked}
+                              label="银行账号"
+                              maskedValue={b.accountMasked}
                               onReveal={
-                                a.addressRevealToken
+                                b.accountRevealToken
                                   ? () =>
                                       revealCustomerSensitiveField(
-                                        a.addressRevealToken!
+                                        b.accountRevealToken!
                                       )
                                   : undefined
                               }
                             />
-                          ) : (
-                            <span>{a.addressMasked}</span>
-                          )}
-                        </div>
-                      </div>
-                    ))
+                          </div>
+                        ))}
+                      </CardContent>
+                    </Card>
                   )}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </DocumentSection>
-      </div>
+                </DocumentSection>
+              </>
+            )}
+          </div>
+        </TabsContent>
 
-      {/* Related contracts & sales */}
-      <div
-        id="related"
-        ref={(el) => {
-          sectionRefs.current.related = el
-        }}
-        tabIndex={-1}
-      >
-        <DocumentSection
-          title="合同与销售"
-          description="以下列出有效合同与进行中销售单。"
-          action={
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                render={
-                  <Link
-                    href={`/sales/contracts?customerId=${encodeURIComponent(customer.customerId)}`}
-                  />
-                }
-              >
-                查看全部合同
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                render={
-                  <Link
-                    href={`/sales/orders?customerId=${encodeURIComponent(customer.customerId)}`}
-                  />
-                }
-              >
-                查看全部销售单
-              </Button>
-            </div>
-          }
-        >
-          {customer.partitions.related === "error" ? (
-            <BusinessFailureState
-              kind="system"
-              description="关联业务分区失败；主体与其它分区仍保留。"
+        <TabsContent value="related">
+          <div className="space-y-4 pt-4">
+            <DocumentSection
+              title="合同与销售"
+              description="以下列出有效合同与进行中销售单。"
               action={
-                <Button type="button" size="sm" onClick={() => void query.refetch()}>
-                  重试
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    render={
+                      <Link
+                        href={`/sales/contracts?customerId=${encodeURIComponent(customer.customerId)}`}
+                      />
+                    }
+                  >
+                    查看全部合同
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    render={
+                      <Link
+                        href={`/sales/orders?customerId=${encodeURIComponent(customer.customerId)}`}
+                      />
+                    }
+                  >
+                    查看全部销售单
+                  </Button>
+                </div>
+              }
+            >
+              {customer.partitions.related === "error" ? (
+                <BusinessFailureState
+                  kind="system"
+                  description="关联业务分区失败；主体与其它分区仍保留。"
+                  action={
+                    <Button type="button" size="sm" onClick={() => void query.refetch()}>
+                      重试
+                    </Button>
+                  }
+                />
+              ) : (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <RelatedList
+                    title="合同（最近）"
+                    empty="暂无合同摘要"
+                    items={customer.contracts}
+                  />
+                  <RelatedList
+                    title="销售单（最近）"
+                    empty="暂无销售单摘要"
+                    items={customer.salesOrders}
+                  />
+                </div>
+              )}
+            </DocumentSection>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="settlement">
+          <div className="space-y-4 pt-4">
+            <DocumentSection
+              title="票款摘要"
+              description="只读应收汇总；不在此核销或开票。往来详情进入客户往来。"
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  render={<Link href={receivableHref} />}
+                >
+                  {openWorkspaceLabel("W11")}
                 </Button>
               }
-            />
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <RelatedList
-                title="合同（最近）"
-                empty="暂无合同摘要"
-                items={customer.contracts}
-              />
-              <RelatedList
-                title="销售单（最近）"
-                empty="暂无销售单摘要"
-                items={customer.salesOrders}
-              />
-            </div>
-          )}
-        </DocumentSection>
-      </div>
-
-      {/* Settlement / receivable — read-only, deep link W11 */}
-      <div
-        id="settlement"
-        ref={(el) => {
-          sectionRefs.current.settlement = el
-        }}
-        tabIndex={-1}
-      >
-        <DocumentSection
-          title="票款摘要"
-          description="只读应收汇总；不在此核销或开票。往来详情进入客户往来。"
-          action={
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              render={<Link href={receivableHref} />}
             >
-              {openWorkspaceLabel("W11")}
-            </Button>
-          }
-        >
-          {customer.partitions.settlement === "error" ? (
-            <BusinessFailureState
-              kind="system"
-              description="票款分区失败；主体身份仍保留。"
-            />
-          ) : customer.receivableSummary ? (
-            <div className="space-y-3">
-              <DocumentSummary
-                columns="two"
-                items={[
-                  {
-                    id: "ar",
-                    label: "应收余额",
-                    value: (
-                      <MoneyValue
-                        value={customer.receivableSummary.receivableBalance}
-                      />
-                    ),
-                    numeric: true,
-                  },
-                  {
-                    id: "od",
-                    label: "逾期金额",
-                    value: (
-                      <MoneyValue
-                        value={customer.receivableSummary.overdueAmount}
-                      />
-                    ),
-                    numeric: true,
-                  },
-                  {
-                    id: "earliest",
-                    label: "最早逾期日",
-                    value:
-                      customer.receivableSummary.earliestOverdueDate ?? "—",
-                  },
-                  {
-                    id: "coll",
-                    label: "回款进度",
-                    value:
-                      customer.receivableSummary.collectionProgressLabel ??
-                      "—",
-                  },
-                  {
-                    id: "inv",
-                    label: "开票进度",
-                    value:
-                      customer.receivableSummary.invoicingProgressLabel ?? "—",
-                  },
-                ]}
-              />
-              {customer.receivableSummary.reliabilityNote ? (
-                <p className="text-xs text-muted-foreground">
-                  {customer.receivableSummary.reliabilityNote}
-                </p>
-              ) : null}
-              {customer.bankAccounts.length > 0 ? (
-                <Card size="sm">
-                  <CardHeader>
-                    <CardTitle className="text-sm">银行账户（打码）</CardTitle>
-                    <CardDescription>
-                      默认显示末四位；完整显示需授权并记录审计。
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-2">
-                    {customer.bankAccounts.map((b) => (
-                      <div
-                        key={b.id}
-                        className="flex flex-wrap items-center gap-2 text-sm"
-                      >
-                        <span className="num text-muted-foreground">
-                          {b.internalNo}
-                        </span>
-                        <span>{b.accountName}</span>
-                        <span className="text-muted-foreground">
-                          {b.bankName}
-                        </span>
-                        <SensitiveValue
-                          label="银行账号"
-                          maskedValue={b.accountMasked}
-                          onReveal={
-                            b.accountRevealToken
-                              ? () =>
-                                  revealCustomerSensitiveField(
-                                    b.accountRevealToken!
-                                  )
-                              : undefined
-                          }
-                        />
-                      </div>
-                    ))}
-                  </CardContent>
-                </Card>
-              ) : null}
-            </div>
-          ) : (
-            <BusinessEmptyState
-              kind="no-data"
-              title="暂无票款摘要"
-              description="系统暂无应收数据。"
-            />
-          )}
-        </DocumentSection>
-      </div>
-
-      {/* Quality — read-only, deep link W15 */}
-      <div
-        id="quality"
-        ref={(el) => {
-          sectionRefs.current.quality = el
-        }}
-        tabIndex={-1}
-      >
-        <DocumentSection
-          title="经营摘要"
-          description="数据由系统汇总；标签以系统返回为准。"
-          action={
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              render={<Link href={qualityHref} />}
-            >
-              打开经营质量
-            </Button>
-          }
-        >
-          <AsyncSectionState
-            status={
-              customer.partitions.quality === "error" ? "error" : "success"
-            }
-            error="经营数据分区暂时不可用。已确认的客户主体与其它分区不受影响。"
-            errorKind="projection"
-            retryAction={
-              <Button type="button" size="sm" onClick={() => void query.refetch()}>
-                重试经营分区
-              </Button>
-            }
-          >
-            {customer.partitions.quality === "ok" && customer.qualitySummary ? (
-              <div className="space-y-3">
-                <DocumentSummary
-                  columns="two"
-                  items={[
-                    {
-                      id: "scale",
-                      label: "规模标签",
-                      value: customer.qualitySummary.scaleLabel,
-                    },
-                    {
-                      id: "profit",
-                      label: "利润贡献",
-                      value: customer.qualitySummary.profitContributionLabel,
-                    },
-                    {
-                      id: "risk",
-                      label: "回款风险",
-                      value: customer.qualitySummary.collectionRiskLabel,
-                    },
-                    {
-                      id: "lastBiz",
-                      label: "最近业务",
-                      value: customer.qualitySummary.lastBusinessAt ?? "—",
-                    },
-                  ]}
+              {customer.partitions.settlement === "error" ? (
+                <BusinessFailureState
+                  kind="system"
+                  description="票款分区失败；主体身份仍保留。"
                 />
-                <DataFreshness
-                  updatedAt={
-                    customer.qualitySummary.isStale ? "数据可能不是最新" : "数据"
-                  }
-                  dateTime={customer.qualitySummary.projectionAt}
-                  state={customer.qualitySummary.isStale ? "stale" : "fresh"}
-                  label="经营质量"
-                />
-              </div>
-            ) : customer.partitions.quality === "ok" ? (
-              <BusinessEmptyState
-                kind="no-data"
-                title="暂无经营摘要"
-                description="数据尚未生成。"
-              />
-            ) : null}
-          </AsyncSectionState>
-        </DocumentSection>
-      </div>
-
-      {/* Audit / ownership */}
-      <div
-        id="audit"
-        ref={(el) => {
-          sectionRefs.current.audit = el
-        }}
-        tabIndex={-1}
-      >
-        <DocumentSection title="归属与审计" description="每位客户只有一位负责销售；协作销售显示有效期">
-          {customer.partitions.audit === "error" ? (
-            <BusinessFailureState
-              kind="system"
-              description="归属审计分区失败。"
-            />
-          ) : (
-            <div className="grid gap-4 lg:grid-cols-2">
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle className="text-sm">当前责任关系</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  {customer.assignments
-                    .filter((a) => a.isCurrent)
-                    .map((a) => (
-                      <div
-                        key={a.id}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
-                      >
-                        <div>
-                          <BusinessStatusBadge
-                            context="list"
-                            label={
-                              a.role === "OWNER" ? "负责销售" : "协作销售"
-                            }
-                            tone={a.role === "OWNER" ? "info" : "neutral"}
+              ) : customer.receivableSummary ? (
+                <div className="space-y-3">
+                  <DocumentSummary
+                    columns="two"
+                    items={[
+                      {
+                        id: "ar",
+                        label: "应收余额",
+                        value: (
+                          <MoneyValue
+                            value={customer.receivableSummary.receivableBalance}
                           />
-                          <span className="ml-2 font-medium">{a.userName}</span>
-                        </div>
-                        <span className="text-xs text-muted-foreground">
-                          {a.effectiveFrom}
-                          {a.effectiveTo ? ` ~ ${a.effectiveTo}` : " 起"}
-                        </span>
-                      </div>
-                    ))}
-                </CardContent>
-              </Card>
-              <Card size="sm">
-                <CardHeader>
-                  <CardTitle className="text-sm">修订时间线</CardTitle>
-                  <CardDescription>
-                    新版本不覆盖历史合同/销售单记录
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-2 text-sm">
-                  {customer.revisionTimeline.map((r) => (
-                    <div
-                      key={r.id}
-                      className="rounded-md border border-border px-3 py-2"
-                    >
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="num font-medium">v{r.revisionNo}</span>
-                        {r.isCurrent ? (
-                          <Badge variant="secondary">当前</Badge>
-                        ) : null}
-                        <span className="text-muted-foreground">{r.actor}</span>
-                      </div>
-                      <p className="mt-1 text-muted-foreground">{r.reason}</p>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
-                        {r.effectiveAt}
-                      </p>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-            </div>
-          )}
-        </DocumentSection>
-      </div>
+                        ),
+                        numeric: true,
+                      },
+                      {
+                        id: "od",
+                        label: "逾期金额",
+                        value: (
+                          <MoneyValue
+                            value={customer.receivableSummary.overdueAmount}
+                          />
+                        ),
+                        numeric: true,
+                      },
+                      {
+                        id: "earliest",
+                        label: "最早逾期日",
+                        value:
+                          customer.receivableSummary.earliestOverdueDate ?? "—",
+                      },
+                      {
+                        id: "coll",
+                        label: "回款进度",
+                        value:
+                          customer.receivableSummary.collectionProgressLabel ??
+                          "—",
+                      },
+                      {
+                        id: "inv",
+                        label: "开票进度",
+                        value:
+                          customer.receivableSummary.invoicingProgressLabel ?? "—",
+                      },
+                    ]}
+                  />
+                  {customer.receivableSummary.reliabilityNote ? (
+                    <p className="text-xs text-muted-foreground">
+                      {customer.receivableSummary.reliabilityNote}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <BusinessEmptyState
+                  kind="no-data"
+                  title="暂无票款摘要"
+                  description="系统暂无应收数据。"
+                />
+              )}
+            </DocumentSection>
+          </div>
+        </TabsContent>
 
-      {!editBlocked ? (
-        <CustomerReviseSheet
-          open={reviseOpen}
-          onOpenChange={setReviseOpen}
-          customer={customer}
-        />
-      ) : null}
+        <TabsContent value="quality">
+          <div className="space-y-4 pt-4">
+            <DocumentSection
+              title="经营摘要"
+              description="数据由系统汇总；标签以系统返回为准。"
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  render={<Link href={qualityHref} />}
+                >
+                  打开经营质量
+                </Button>
+              }
+            >
+              <AsyncSectionState
+                status={
+                  customer.partitions.quality === "error" ? "error" : "success"
+                }
+                error="经营数据分区暂时不可用。已确认的客户主体与其它分区不受影响。"
+                errorKind="projection"
+                retryAction={
+                  <Button type="button" size="sm" onClick={() => void query.refetch()}>
+                    重试经营分区
+                  </Button>
+                }
+              >
+                {customer.partitions.quality === "ok" && customer.qualitySummary ? (
+                  <div className="space-y-3">
+                    <DocumentSummary
+                      columns="two"
+                      items={[
+                        {
+                          id: "scale",
+                          label: "规模标签",
+                          value: customer.qualitySummary.scaleLabel,
+                        },
+                        {
+                          id: "profit",
+                          label: "利润贡献",
+                          value: customer.qualitySummary.profitContributionLabel,
+                        },
+                        {
+                          id: "risk",
+                          label: "回款风险",
+                          value: customer.qualitySummary.collectionRiskLabel,
+                        },
+                        {
+                          id: "lastBiz",
+                          label: "最近业务",
+                          value: customer.qualitySummary.lastBusinessAt ?? "—",
+                        },
+                      ]}
+                    />
+                    <DataFreshness
+                      updatedAt={
+                        customer.qualitySummary.isStale ? "数据可能不是最新" : "数据"
+                      }
+                      dateTime={customer.qualitySummary.projectionAt}
+                      state={customer.qualitySummary.isStale ? "stale" : "fresh"}
+                      label="经营质量"
+                    />
+                  </div>
+                ) : customer.partitions.quality === "ok" ? (
+                  <BusinessEmptyState
+                    kind="no-data"
+                    title="暂无经营摘要"
+                    description="数据尚未生成。"
+                  />
+                ) : null}
+              </AsyncSectionState>
+            </DocumentSection>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="audit">
+          <div className="space-y-4 pt-4">
+            <DocumentSection title="归属与审计" description="每位客户只有一位负责销售；协作销售显示有效期">
+              {customer.partitions.audit === "error" ? (
+                <BusinessFailureState
+                  kind="system"
+                  description="归属审计分区失败。"
+                />
+              ) : (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  <Card size="sm">
+                    <CardHeader>
+                      <CardTitle className="text-sm">当前责任关系</CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      {customer.assignments
+                        .filter((a) => a.isCurrent)
+                        .map((a) => (
+                          <div
+                            key={a.id}
+                            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
+                          >
+                            <div>
+                              <BusinessStatusBadge
+                                context="list"
+                                label={
+                                  a.role === "OWNER" ? "负责销售" : "协作销售"
+                                }
+                                tone={a.role === "OWNER" ? "info" : "neutral"}
+                              />
+                              <span className="ml-2 font-medium">{a.userName}</span>
+                            </div>
+                            <span className="text-xs text-muted-foreground">
+                              {a.effectiveFrom}
+                              {a.effectiveTo ? ` ~ ${a.effectiveTo}` : " 起"}
+                            </span>
+                          </div>
+                        ))}
+                    </CardContent>
+                  </Card>
+                  <Card size="sm">
+                    <CardHeader>
+                      <CardTitle className="text-sm">修订时间线</CardTitle>
+                      <CardDescription>
+                        新版本不覆盖历史合同/销售单记录
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-2 text-sm">
+                      {customer.revisionTimeline.map((r) => (
+                        <div
+                          key={r.id}
+                          className="rounded-md border border-border px-3 py-2"
+                        >
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="num font-medium">v{r.revisionNo}</span>
+                            {r.isCurrent ? (
+                              <Badge variant="secondary">当前</Badge>
+                            ) : null}
+                            <span className="text-muted-foreground">{r.actor}</span>
+                          </div>
+                          <p className="mt-1 text-muted-foreground">{r.reason}</p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {r.effectiveAt}
+                          </p>
+                        </div>
+                      ))}
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+            </DocumentSection>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

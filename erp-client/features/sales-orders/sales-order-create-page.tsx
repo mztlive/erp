@@ -8,13 +8,11 @@ import { z } from "zod"
 
 import {
   ContractCombobox,
-  CustomerCombobox,
   EditableLineItemTable,
   MoneyValue,
   OwnerCombobox,
   PageHeader,
   ProductCombobox,
-  SettlementPartyCombobox,
   StickyTotalBar,
   type EditableLineItemColumn,
 } from "@/components/business"
@@ -22,7 +20,6 @@ import { toFieldErrors, useAppForm } from "@/components/form"
 import {
   DEMO_OWNER_OPTIONS,
   PAYMENT_TERM_OPTIONS,
-  SETTLEMENT_PARTY_OPTIONS,
   paymentTermLabel,
 } from "@/lib/business-options"
 import {
@@ -43,18 +40,17 @@ import {
   FieldError,
   FieldLabel,
 } from "@/components/ui/field"
-import { useContractCenterQuery, useContractsForNewSalesOrderQuery } from "@/features/contracts/queries"
-import { contractPdfError } from "@/features/contracts/pdf"
+import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
 import {
-  useCustomerCenterQuery,
-  useCustomerDirectoryQuery,
-} from "@/features/customers/queries"
+  useContractCenterQuery,
+  useContractsForNewSalesOrderQuery,
+} from "@/features/contracts/queries"
+import type { UploadContractPdfResult } from "@/features/contracts/types"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
 import { useCreateSalesOrderMutation } from "@/features/sales-orders/queries"
 import type {
   CreateSalesOrderInput,
   SalesOrderCreateIntent,
-  SalesOrderContractSource,
   SalesOrderDraftLineInput,
   SalesOrderNature,
 } from "@/features/sales-orders/types"
@@ -100,15 +96,9 @@ const draftLineSchema = z.object({
 
 const createSalesOrderSchema = z
   .object({
-    contractSource: z.enum(["existing", "upload_pdf"]),
     contractId: z.string(),
     requestedContractRevisionId: z.string(),
     contractRevisionLabel: z.string(),
-    contractPdf: z.custom<File | null>(),
-    uploadedContractNo: z.string(),
-    uploadedSignedAt: z.string(),
-    uploadedValidFrom: z.string(),
-    uploadedValidTo: z.string(),
     customerId: z.string(),
     customerName: z.string(),
     settlementPartyId: z.string(),
@@ -127,76 +117,32 @@ const createSalesOrderSchema = z
     lineItems: z.array(draftLineSchema).min(1, "至少需要一条销售明细"),
   })
   .superRefine((value, context) => {
-    if (value.contractSource === "existing") {
-      if (!value.contractId) {
-        context.addIssue({
-          code: "custom",
-          path: ["contractId"],
-          message: "请选择已有有效合同",
-        })
-      }
-      if (!value.requestedContractRevisionId || !value.contractRevisionLabel) {
-        context.addIssue({
-          code: "custom",
-          path: ["contractId"],
-          message: "合同版本尚未加载完成",
-        })
-      }
-    } else {
-      const fileError = contractPdfError(value.contractPdf)
-      if (fileError) {
-        context.addIssue({
-          code: "custom",
-          path: ["contractPdf"],
-          message: fileError,
-        })
-      }
-      if (!value.uploadedContractNo.trim()) {
-        context.addIssue({
-          code: "custom",
-          path: ["uploadedContractNo"],
-          message: "请填写合同编号",
-        })
-      }
-      if (!value.uploadedSignedAt) {
-        context.addIssue({
-          code: "custom",
-          path: ["uploadedSignedAt"],
-          message: "请选择签订日期",
-        })
-      }
-      if (!value.uploadedValidFrom || !value.uploadedValidTo) {
-        context.addIssue({
-          code: "custom",
-          path: ["uploadedValidFrom"],
-          message: "请填写合同有效期",
-        })
-      } else if (value.uploadedValidTo < value.uploadedValidFrom) {
-        context.addIssue({
-          code: "custom",
-          path: ["uploadedValidTo"],
-          message: "有效期止不能早于有效期起",
-        })
-      }
+    if (!value.contractId) {
+      context.addIssue({
+        code: "custom",
+        path: ["contractId"],
+        message: "请选择已有有效合同",
+      })
+    }
+    if (!value.requestedContractRevisionId || !value.contractRevisionLabel) {
+      context.addIssue({
+        code: "custom",
+        path: ["contractId"],
+        message: "合同版本尚未加载完成",
+      })
     }
     if (!value.customerName.trim()) {
       context.addIssue({
         code: "custom",
         path: ["customerName"],
-        message:
-          value.contractSource === "existing"
-            ? "客户尚未加载完成"
-            : "请选择客户",
+        message: "客户尚未加载完成",
       })
     }
     if (!value.settlementEntity.trim()) {
       context.addIssue({
         code: "custom",
         path: ["settlementEntity"],
-        message:
-          value.contractSource === "existing"
-            ? "结算主体尚未加载完成"
-            : "请选择结算主体",
+        message: "结算主体尚未加载完成",
       })
     }
     if (value.nature === "card_voucher" && value.lineItems.length !== 1) {
@@ -246,11 +192,6 @@ type CreateSalesOrderFormValues = z.input<typeof createSalesOrderSchema>
 const NATURE_OPTIONS = [
   { value: "physical_service", label: "实物与服务" },
   { value: "card_voucher", label: "卡券" },
-] as const
-
-const CONTRACT_SOURCE_OPTIONS = [
-  { value: "existing", label: "选择已有合同" },
-  { value: "upload_pdf", label: "同步上传合同 PDF" },
 ] as const
 
 const CARD_FORM_OPTIONS = [
@@ -311,8 +252,6 @@ function errorMessage(error: unknown): string {
     CONTRACT_NOT_SELECTABLE: "所选合同已不可用于新建销售单，请刷新后重选。",
     CONTRACT_REVISION_NOT_FOUND: "所选合同修订不存在，请刷新合同后重试。",
     CONTRACT_REVISION_NOT_CURRENT: "新销售单只能引用合同当前有效修订。",
-    CONTRACT_NO_EXISTS: "该合同编号已存在，请改为选择已有合同。",
-    CONTRACT_VALIDITY_INVALID: "合同有效期填写有误，请检查后重试。",
     LINE_ITEM_REQUIRED: "至少需要一条销售明细。",
     LINE_ITEM_INVALID: "销售明细不完整，请检查项目、数量、单位和价格。",
     VOUCHER_REQUIRES_EXACTLY_ONE_LINE: "卡券销售单必须恰好一条明细。",
@@ -333,11 +272,6 @@ export function SalesOrderCreatePage({
 }) {
   const router = useRouter()
   const contractsQuery = useContractsForNewSalesOrderQuery()
-  const customerQuery = useCustomerCenterQuery(initialCustomerId)
-  const customerDirectoryQuery = useCustomerDirectoryQuery({
-    scope: "team",
-    status: "active",
-  })
   const productsQuery = useMasterDataListQuery({
     resource: "products",
     lifecycleStatus: "enabled",
@@ -345,23 +279,10 @@ export function SalesOrderCreatePage({
   const createMutation = useCreateSalesOrderMutation()
   const [selectedContractId, setSelectedContractId] =
     React.useState(initialContractId)
+  const [uploadOpen, setUploadOpen] = React.useState(false)
   const preferredRevisionRef = React.useRef(initialContractRevisionId)
   const submitIntentRef = React.useRef<SalesOrderCreateIntent>("SAVE_DRAFT")
   const contractQuery = useContractCenterQuery(selectedContractId)
-
-  const customerComboboxItems = React.useMemo(
-    () =>
-      (customerDirectoryQuery.data?.items ?? []).map((c) => ({
-        id: c.id,
-        customerNo: c.customerNo,
-        legalName: c.legalName,
-        shortName: c.shortName,
-        statusLabel: c.statusLabel.label,
-        statusTone: c.statusLabel.tone,
-        ownerName: c.ownerName,
-      })),
-    [customerDirectoryQuery.data?.items]
-  )
 
   const productComboboxItems = React.useMemo(
     () =>
@@ -381,33 +302,11 @@ export function SalesOrderCreatePage({
     [productsQuery.data?.rows]
   )
 
-  const settlementPartyItems = React.useMemo(() => {
-    const fromContracts = (contractsQuery.data ?? []).map((c) => ({
-      partyId: c.settlementParty.partyId,
-      displayName: c.settlementParty.displayName,
-      statusLabel: "可选" as const,
-      statusTone: "neutral" as const,
-    }))
-    const byId = new Map(
-      [...SETTLEMENT_PARTY_OPTIONS, ...fromContracts].map((p) => [
-        p.partyId,
-        p,
-      ])
-    )
-    return [...byId.values()]
-  }, [contractsQuery.data])
-
   const form = useAppForm({
     defaultValues: {
-      contractSource: "existing" as SalesOrderContractSource,
       contractId: initialContractId,
       requestedContractRevisionId: initialContractRevisionId,
       contractRevisionLabel: "",
-      contractPdf: null as File | null,
-      uploadedContractNo: "",
-      uploadedSignedAt: "2026-08-02",
-      uploadedValidFrom: "2026-08-02",
-      uploadedValidTo: "2027-08-01",
       customerId: initialCustomerId,
       customerName: "",
       settlementPartyId: "",
@@ -426,27 +325,11 @@ export function SalesOrderCreatePage({
       onSubmit: createSalesOrderSchema,
     },
     onSubmit: async ({ value }) => {
-      if (value.contractSource === "upload_pdf" && !value.contractPdf) return
       const command: CreateSalesOrderInput = {
-        contract:
-          value.contractSource === "existing"
-            ? {
-                source: "existing",
-                contractId: value.contractId,
-                requestedContractRevisionId: value.requestedContractRevisionId,
-              }
-            : {
-                source: "upload_pdf",
-                pdfFile: value.contractPdf!,
-                contractNo: value.uploadedContractNo.trim(),
-                customerId:
-                  value.customerId.trim() || initialCustomerId || undefined,
-                customerName: value.customerName.trim(),
-                settlementPartyName: value.settlementEntity.trim(),
-                signedAt: value.uploadedSignedAt,
-                validFrom: value.uploadedValidFrom,
-                validTo: value.uploadedValidTo,
-              },
+        contract: {
+          contractId: value.contractId,
+          requestedContractRevisionId: value.requestedContractRevisionId,
+        },
         nature: value.nature,
         ownerName: value.ownerName,
         welfareScene: value.welfareScene,
@@ -530,13 +413,6 @@ export function SalesOrderCreatePage({
     form.setFieldValue("paymentTerms", termMatch?.value ?? "CONTRACT")
   }, [contractQuery.data, form])
 
-  React.useEffect(() => {
-    const customer = customerQuery.data
-    if (!customer || !initialCustomerId) return
-    form.setFieldValue("customerId", customer.customerId)
-    form.setFieldValue("customerName", customer.currentRevision.legalName)
-  }, [customerQuery.data, form, initialCustomerId])
-
   const handleContractChange = React.useCallback(
     (contractId: string) => {
       preferredRevisionRef.current = ""
@@ -549,28 +425,22 @@ export function SalesOrderCreatePage({
     [form]
   )
 
-  const handleContractSourceChange = React.useCallback(
-    (source: string) => {
-      if (source === "upload_pdf") {
-        preferredRevisionRef.current = ""
-        setSelectedContractId("")
-        form.setFieldValue("contractId", "")
-        form.setFieldValue("requestedContractRevisionId", "")
-        form.setFieldValue("contractRevisionLabel", "")
-        const customerName =
-          customerQuery.data?.currentRevision.legalName ?? ""
-        form.setFieldValue("customerName", customerName)
-        form.setFieldValue("settlementEntity", customerName)
-        form.setFieldValue("paymentTerms", "")
-      } else {
-        form.setFieldValue("contractPdf", null)
-      }
+  const handleUploadSuccess = React.useCallback(
+    async (result: UploadContractPdfResult) => {
+      await contractsQuery.refetch()
+      preferredRevisionRef.current = result.revisionId
+      setSelectedContractId(result.contractId)
+      form.setFieldValue("contractId", result.contractId)
+      form.setFieldValue("requestedContractRevisionId", "")
+      form.setFieldValue("contractRevisionLabel", "")
+      form.setFieldValue("customerName", "")
+      form.setFieldValue("settlementEntity", "")
     },
-    [customerQuery.data, form]
+    [contractsQuery, form]
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 pb-6 md:p-4">
+    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 pb-8 md:gap-5 md:p-5">
       <PageHeader
         density="compact"
         title="新建销售单"
@@ -588,7 +458,7 @@ export function SalesOrderCreatePage({
           <CircleAlertIcon aria-hidden="true" />
           <AlertTitle>有效合同加载失败</AlertTitle>
           <AlertDescription>
-            暂时不能选择已有合同；仍可切换为同步上传合同 PDF。
+            暂时不能选择合同。可点击加号上传新合同，或刷新页面后重试。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -608,241 +478,129 @@ export function SalesOrderCreatePage({
           void form.handleSubmit()
         }}
       >
-        <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_16.5rem]">
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_17.5rem] xl:gap-5">
           <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
-            <section className="border-b border-border p-3 md:p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
+            <section className="border-b border-border p-4 md:p-5 lg:p-6">
+              <div className="mb-4 flex items-center justify-between gap-2">
                 <h2 className="font-heading text-sm font-semibold">单据头</h2>
                 <span className="text-xs text-muted-foreground">
                   合同与商业约定
                 </span>
               </div>
 
-              <div className="space-y-3">
-                <form.AppField name="contractSource">
-                  {(field) => (
-                    <field.SelectField
-                      label="合同来源"
-                      options={CONTRACT_SOURCE_OPTIONS}
-                      onValueChange={handleContractSourceChange}
-                    />
-                  )}
-                </form.AppField>
-
+              <div className="space-y-5">
                 <form.Subscribe
                   selector={(state) => ({
-                    contractSource: state.values.contractSource,
                     contractRevisionLabel: state.values.contractRevisionLabel,
                     customerName: state.values.customerName,
                     settlementEntity: state.values.settlementEntity,
                   })}
                 >
                   {({
-                    contractSource,
                     contractRevisionLabel,
                     customerName,
                     settlementEntity,
-                  }) =>
-                    contractSource === "existing" ? (
-                      <div className="space-y-2">
-                        <form.AppField name="contractId">
-                          {(field) => {
-                            const isInvalid =
-                              field.state.meta.isTouched && !field.state.meta.isValid
-                            const errors = toFieldErrors(field.state.meta.errors)
-                            return (
-                              <Field data-invalid={isInvalid || undefined}>
-                                <FieldLabel htmlFor="contractId">
-                                  已有有效合同
-                                </FieldLabel>
-                                <ContractCombobox
-                                  value={field.state.value || undefined}
-                                  onValueChange={(id) => {
-                                    const next = id ?? ""
-                                    field.handleChange(next)
-                                    handleContractChange(next)
-                                  }}
-                                  contracts={contractComboboxItems}
-                                  disabled={
-                                    contractsQuery.isPending ||
-                                    contractsQuery.isError
-                                  }
-                                  loading={contractsQuery.isPending}
-                                  placeholder={
-                                    contractsQuery.isPending
-                                      ? "正在加载有效合同…"
-                                      : contractComboboxItems.length > 0
-                                        ? "搜索合同编号或客户"
-                                        : "当前客户暂无可用合同"
-                                  }
-                                  emptyLabel={
-                                    contractComboboxItems.length > 0
-                                      ? "没有符合条件的合同"
-                                      : "当前客户暂无可用合同"
-                                  }
-                                />
-                                {isInvalid ? (
-                                  <FieldError errors={errors} />
-                                ) : null}
-                              </Field>
-                            )
-                          }}
-                        </form.AppField>
-                        {contractRevisionLabel ||
-                        customerName ||
-                        settlementEntity ? (
-                          <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed border-border bg-muted/40 px-2.5 py-2 text-xs">
-                            {contractRevisionLabel ? (
-                              <Badge variant="outline" className="font-normal">
-                                {contractRevisionLabel}
-                              </Badge>
-                            ) : null}
-                            {customerName ? (
-                              <span className="text-muted-foreground">
-                                客户{" "}
-                                <span className="text-foreground">
-                                  {customerName}
-                                </span>
-                              </span>
-                            ) : null}
-                            {settlementEntity ? (
-                              <span className="text-muted-foreground">
-                                · 结算{" "}
-                                <span className="text-foreground">
-                                  {settlementEntity}
-                                </span>
-                              </span>
-                            ) : null}
-                            {contractQuery.isFetching ? (
-                              <span className="text-muted-foreground">
-                                加载中…
-                              </span>
-                            ) : null}
-                          </div>
-                        ) : (
-                          <p className="text-xs text-muted-foreground">
-                            选择合同后自动带出版本、客户与结算主体。
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <div className="sm:col-span-2">
-                            <form.AppField name="contractPdf">
-                              {(field) => (
-                                <field.PdfUploadField label="合同电子档" />
-                              )}
-                            </form.AppField>
-                          </div>
-                          <form.AppField name="customerId">
-                            {(field) => {
-                              const isInvalid =
-                                field.state.meta.isTouched &&
-                                !field.state.meta.isValid
-                              const errors = toFieldErrors(
-                                field.state.meta.errors
-                              )
-                              return (
-                                <Field data-invalid={isInvalid || undefined}>
-                                  <FieldLabel htmlFor="customerId">
-                                    客户
-                                  </FieldLabel>
-                                  <CustomerCombobox
+                  }) => (
+                    <div className="space-y-3">
+                      <form.AppField name="contractId">
+                        {(field) => {
+                          const isInvalid =
+                            field.state.meta.isTouched && !field.state.meta.isValid
+                          const errors = toFieldErrors(field.state.meta.errors)
+                          return (
+                            <Field data-invalid={isInvalid || undefined}>
+                              <FieldLabel htmlFor="contractId">
+                                有效合同
+                              </FieldLabel>
+                              <div className="flex items-start gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <ContractCombobox
                                     value={field.state.value || undefined}
                                     onValueChange={(id) => {
                                       const next = id ?? ""
                                       field.handleChange(next)
-                                      const customer =
-                                        customerComboboxItems.find(
-                                          (c) => c.id === next
-                                        )
-                                      form.setFieldValue(
-                                        "customerName",
-                                        customer?.legalName ?? ""
-                                      )
+                                      handleContractChange(next)
                                     }}
-                                    customers={customerComboboxItems}
-                                    loading={customerDirectoryQuery.isPending}
+                                    contracts={contractComboboxItems}
                                     disabled={
-                                      customerDirectoryQuery.isPending ||
-                                      customerDirectoryQuery.isError
+                                      contractsQuery.isPending ||
+                                      contractsQuery.isError
                                     }
-                                    placeholder="搜索客户编号或名称"
+                                    loading={contractsQuery.isPending}
+                                    placeholder={
+                                      contractsQuery.isPending
+                                        ? "正在加载有效合同…"
+                                        : contractComboboxItems.length > 0
+                                          ? "搜索合同编号或客户"
+                                          : "暂无可用合同，请点加号上传"
+                                    }
+                                    emptyLabel={
+                                      contractComboboxItems.length > 0
+                                        ? "没有符合条件的合同"
+                                        : "暂无可用合同，请点加号上传"
+                                    }
                                   />
-                                  {isInvalid ? (
-                                    <FieldError errors={errors} />
-                                  ) : null}
-                                </Field>
-                              )
-                            }}
-                          </form.AppField>
-                          <form.AppField name="settlementPartyId">
-                            {(field) => {
-                              const isInvalid =
-                                field.state.meta.isTouched &&
-                                !field.state.meta.isValid
-                              const errors = toFieldErrors(
-                                field.state.meta.errors
-                              )
-                              return (
-                                <Field data-invalid={isInvalid || undefined}>
-                                  <FieldLabel htmlFor="settlementPartyId">
-                                    结算主体
-                                  </FieldLabel>
-                                  <SettlementPartyCombobox
-                                    value={field.state.value || undefined}
-                                    onValueChange={(id) => {
-                                      const next = id ?? ""
-                                      field.handleChange(next)
-                                      const party = settlementPartyItems.find(
-                                        (p) => p.partyId === next
-                                      )
-                                      form.setFieldValue(
-                                        "settlementEntity",
-                                        party?.displayName ?? ""
-                                      )
-                                    }}
-                                    parties={settlementPartyItems}
-                                    placeholder="搜索结算主体"
-                                  />
-                                  {isInvalid ? (
-                                    <FieldError errors={errors} />
-                                  ) : null}
-                                </Field>
-                              )
-                            }}
-                          </form.AppField>
+                                </div>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="icon"
+                                  className="shrink-0"
+                                  aria-label="上传合同 PDF"
+                                  title="上传合同 PDF"
+                                  onClick={() => setUploadOpen(true)}
+                                >
+                                  <PlusIcon aria-hidden="true" />
+                                </Button>
+                              </div>
+                              {isInvalid ? (
+                                <FieldError errors={errors} />
+                              ) : null}
+                            </Field>
+                          )
+                        }}
+                      </form.AppField>
+                      {contractRevisionLabel ||
+                      customerName ||
+                      settlementEntity ? (
+                        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2.5 text-xs">
+                          {contractRevisionLabel ? (
+                            <Badge variant="outline" className="font-normal">
+                              {contractRevisionLabel}
+                            </Badge>
+                          ) : null}
+                          {customerName ? (
+                            <span className="text-muted-foreground">
+                              客户{" "}
+                              <span className="text-foreground">
+                                {customerName}
+                              </span>
+                            </span>
+                          ) : null}
+                          {settlementEntity ? (
+                            <span className="text-muted-foreground">
+                              · 结算{" "}
+                              <span className="text-foreground">
+                                {settlementEntity}
+                              </span>
+                            </span>
+                          ) : null}
+                          {contractQuery.isFetching ? (
+                            <span className="text-muted-foreground">
+                              加载中…
+                            </span>
+                          ) : null}
                         </div>
-
-                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                          <form.AppField name="uploadedContractNo">
-                            {(field) => (
-                              <field.TextField label="合同编号" />
-                            )}
-                          </form.AppField>
-                          <form.AppField name="uploadedSignedAt">
-                            {(field) => (
-                              <field.DateField label="签订日期" />
-                            )}
-                          </form.AppField>
-                          <form.AppField name="uploadedValidFrom">
-                            {(field) => (
-                              <field.DateField label="有效期起" />
-                            )}
-                          </form.AppField>
-                          <form.AppField name="uploadedValidTo">
-                            {(field) => (
-                              <field.DateField label="有效期止" />
-                            )}
-                          </form.AppField>
-                        </div>
-                      </div>
-                    )
-                  }
+                      ) : (
+                        <p className="text-xs leading-relaxed text-muted-foreground">
+                          选择合同后自动带出版本、客户与结算主体；无合同时点加号上传 PDF。
+                        </p>
+                      )}
+                    </div>
+                  )}
                 </form.Subscribe>
 
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                <div className="grid gap-x-4 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
                   <form.AppField name="nature">
                     {(field) => (
                       <field.SelectField
@@ -924,8 +682,8 @@ export function SalesOrderCreatePage({
               </div>
             </section>
 
-            <section className="border-b border-border p-3 md:p-4">
-              <div className="mb-3 flex items-center justify-between gap-2">
+            <section className="border-b border-border p-4 md:p-5 lg:p-6">
+              <div className="mb-4 flex items-center justify-between gap-2">
                 <h2 className="font-heading text-sm font-semibold">销售明细</h2>
                 <form.Subscribe selector={(state) => state.values.nature}>
                   {(nature) => (
@@ -949,7 +707,7 @@ export function SalesOrderCreatePage({
                         renderValue: ({ item }) => item.name,
                         renderEditor: ({ rowIndex }) =>
                           nature === "card_voucher" ? (
-                            <div className="flex min-w-52 items-start gap-1.5">
+                            <div className="flex min-w-52 items-start gap-2">
                               <div className="min-w-0 flex-1">
                                 <form.AppField
                                   name={`lineItems[${rowIndex}].name`}
@@ -1032,7 +790,7 @@ export function SalesOrderCreatePage({
                             nature === "card_voucher" ||
                             Boolean(line?.sku?.trim())
                           return (
-                            <div className="flex min-w-32 items-center gap-1.5">
+                            <div className="flex min-w-32 items-center gap-2">
                               <div className="w-20 shrink-0">
                                 <form.AppField
                                   name={`lineItems[${rowIndex}].quantity`}
@@ -1099,7 +857,7 @@ export function SalesOrderCreatePage({
                                 .filter(Boolean)
                                 .join(" · "),
                             renderEditor: ({ rowIndex }) => (
-                              <div className="flex min-w-56 items-start gap-1.5">
+                              <div className="flex min-w-56 items-start gap-2">
                                 <div className="w-20 shrink-0">
                                   <form.AppField
                                     name={`lineItems[${rowIndex}].faceValue`}
@@ -1216,13 +974,13 @@ export function SalesOrderCreatePage({
                         }
                       />
 
-                      <div className="mt-3">
+                      <div className="mt-5">
                         <form.AppField name="remark">
                           {(field) => (
                             <field.TextareaField
                               label="内部说明"
                               placeholder="补充客户确认、交付或内部协同说明（可选）"
-                              rows={2}
+                              rows={3}
                             />
                           )}
                         </form.AppField>
@@ -1245,7 +1003,7 @@ export function SalesOrderCreatePage({
                     : "提交后内容锁定并进入采购二次确认；生效以确认通过为准。"
                 return (
                   <StickyTotalBar
-                    className="rounded-none border-0 border-t border-border shadow-none"
+                    className="rounded-none border-0 border-t border-border px-4 py-4 shadow-none md:px-5 md:py-4"
                     items={[
                       {
                         id: "gross",
@@ -1327,23 +1085,20 @@ export function SalesOrderCreatePage({
                     ? "提交后进入销售领导 → 运营两级审批"
                     : "提交后进入采购二次确认"
                 return (
-                  <div className="sticky top-14 space-y-3 rounded-xl border border-border bg-card p-3">
+                  <div className="sticky top-14 space-y-4 rounded-xl border border-border bg-card p-4">
                     <div>
                       <h2 className="font-heading text-sm font-semibold">
                         本单摘要
                       </h2>
-                      <p className="mt-0.5 text-xs text-muted-foreground">
+                      <p className="mt-1 text-xs text-muted-foreground">
                         随填写实时更新
                       </p>
                     </div>
-                    <dl className="space-y-2 text-xs">
+                    <dl className="space-y-2.5 text-xs">
                       <div className="flex justify-between gap-2">
                         <dt className="text-muted-foreground">合同</dt>
                         <dd className="max-w-[10rem] truncate text-right font-medium">
-                          {values.contractSource === "existing"
-                            ? values.contractRevisionLabel || "未选择"
-                            : values.uploadedContractNo.trim() ||
-                              "上传 PDF 建档"}
+                          {values.contractRevisionLabel || "未选择"}
                         </dd>
                       </div>
                       <div className="flex justify-between gap-2">
@@ -1368,7 +1123,7 @@ export function SalesOrderCreatePage({
                           {values.lineItems.length} 行
                         </dd>
                       </div>
-                      <div className="border-t border-border pt-2">
+                      <div className="border-t border-border pt-3">
                         <div className="flex justify-between gap-2">
                           <dt className="text-muted-foreground">含税预估</dt>
                           <dd className="num font-semibold">
@@ -1378,7 +1133,7 @@ export function SalesOrderCreatePage({
                             />
                           </dd>
                         </div>
-                        <div className="mt-1 flex justify-between gap-2">
+                        <div className="mt-2 flex justify-between gap-2">
                           <dt className="text-muted-foreground">税额</dt>
                           <dd className="num">
                             <MoneyValue value={totals.tax} />
@@ -1386,7 +1141,7 @@ export function SalesOrderCreatePage({
                         </div>
                       </div>
                     </dl>
-                    <p className="rounded-md bg-muted/50 px-2 py-1.5 text-xs leading-relaxed text-muted-foreground">
+                    <p className="rounded-md bg-muted/50 px-2.5 py-2 text-xs leading-relaxed text-muted-foreground">
                       {nextStep}
                     </p>
                   </div>
@@ -1396,6 +1151,15 @@ export function SalesOrderCreatePage({
           </aside>
         </div>
       </form>
+
+      <ContractUploadDialog
+        open={uploadOpen}
+        onOpenChange={setUploadOpen}
+        initialCustomerId={initialCustomerId}
+        onSuccess={(result) => {
+          void handleUploadSuccess(result)
+        }}
+      />
     </div>
   )
 }
