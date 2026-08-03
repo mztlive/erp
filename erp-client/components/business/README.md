@@ -23,7 +23,7 @@
 | 页面模式 | 组件 | 文件 | 覆盖场景 |
 | --- | --- | --- | --- |
 | 应用壳 | `ErpAppShell`、`GlobalTopbar`、`TaskTabs`、`MaintenanceBanner` | `shell.tsx` | 全局导航、内部任务页签、维护与主责迁移冻结 |
-| 页面公共区 | `PageHeader`（`page` / `object-chrome`）、`PageActions`、`MetricStrip`、`MetricItem`（`detailMode`）、`DataFreshness` | `page.tsx` | 面包屑、标题、动作、工作台统计、数据水位；M4 只用 object-chrome |
+| 页面公共区 | `PageHeader`（`page` / `object-chrome`）、`PageActions`、`MetricStrip`、`MetricItem`（`detailMode`）、`DataFreshness` | `page.tsx` | 标题、动作、工作台统计、数据水位；一级 `page` 不展示面包屑；M4 用 object-chrome + 面包屑 |
 | 高密度列表 | `DataTable`、`DataTableViewOptions`、`DataTablePagination` | `data-table.tsx` | 服务端分页、排序、筛选、显隐、固定、调宽、跨页稳定选择和键盘行导航 |
 | 列表编排 | `ListToolbar`、`SelectionScopeBar`、`StatusMatrix`、`BusinessTableFrame`、`QuickPreviewSheet` | `list.tsx` | 常驻筛选、选择范围、多轨状态、加载/空态/失败、右侧快速预览 |
 | 选择与筛选 | `OptionCombobox`、`BusinessObjectCombobox`、业务实体 Combobox（合同/销售单/客户/采购单/供应商/商品/品牌/商品分类/结算主体/仓库/负责人）、`SavedViewPicker`、`AdvancedFilterSheet` | `option-combobox.tsx`、`entity-comboboxes.tsx`、`selectors.tsx` | 可搜索枚举/筛选、有效业务对象选择、个人/团队视图、高级筛选；**禁止**在业务页继续使用 `Select` / `NativeSelect`；**禁止**用自由 `Input` 录入已有业务对象 ID/名称 |

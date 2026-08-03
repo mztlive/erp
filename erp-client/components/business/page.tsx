@@ -87,6 +87,12 @@ export type PageHeaderProps = Omit<
    */
   title?: React.ReactNode
   description?: React.ReactNode
+  /**
+   * 面包屑路径。一级工作面/列表（`variant="page"` 且深度小于 3）不会渲染：
+   * 侧栏与页面 title 已表达位置，避免「销售 › 销售单」式重复导航。
+   * 对象中心（`object-chrome`）始终渲染；page 变体仅在深度 ≥ 3 时渲染
+   *（如「销售 › 销售单 › 新建」）。
+   */
   breadcrumbs?: readonly PageBreadcrumbItem[]
   breadcrumbLabel?: string
   status?: SemanticStatus
@@ -99,10 +105,23 @@ export type PageHeaderProps = Omit<
    */
   density?: PageHeaderDensity
   /**
-   * page（默认）：列表/工作台页头。
+   * page（默认）：列表/工作台页头（一级页不展示面包屑）。
    * object-chrome：对象中心导航条（面包屑 + 可选 metadata/返回），不渲染 h1 工作面名。
    */
   variant?: PageHeaderVariant
+}
+
+/**
+ * 一级工作面常见传 `[领域, 当前页]`（深度 2），与侧栏/h1 重复，不展示。
+ * object-chrome 任意深度都展示；page 仅在深度 ≥ 3（真正下级路径）时展示。
+ */
+function shouldRenderBreadcrumbs(
+  breadcrumbs: readonly PageBreadcrumbItem[],
+  objectChrome: boolean
+): boolean {
+  if (breadcrumbs.length === 0) return false
+  if (objectChrome) return true
+  return breadcrumbs.length >= 3
 }
 
 function PageHeader({
@@ -120,6 +139,7 @@ function PageHeader({
 }: PageHeaderProps) {
   const objectChrome = variant === "object-chrome"
   const compact = objectChrome || density === "compact"
+  const showBreadcrumbs = shouldRenderBreadcrumbs(breadcrumbs, objectChrome)
   const showTitleBlock =
     !objectChrome &&
     (title != null ||
@@ -139,7 +159,7 @@ function PageHeader({
       )}
       {...props}
     >
-      {breadcrumbs.length > 0 || (objectChrome && (metadata || actions)) ? (
+      {showBreadcrumbs || (objectChrome && (metadata || actions)) ? (
         <div
           className={cn(
             "flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between",
@@ -147,7 +167,7 @@ function PageHeader({
           )}
         >
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
-            {breadcrumbs.length > 0 ? (
+            {showBreadcrumbs ? (
               <Breadcrumb
                 aria-label={breadcrumbLabel}
                 className={compact ? "text-xs" : undefined}
