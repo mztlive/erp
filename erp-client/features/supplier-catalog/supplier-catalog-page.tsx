@@ -1500,32 +1500,37 @@ export function SupplierCatalogPage() {
                             .join(" / ") || "—",
                       },
                       {
-                        id: "price",
-                        label: "来源含税报价",
+                        id: "dropship",
+                        label: "一件代发底价（含税运）",
                         value:
                           item.supplierProduct.incomingRevision
-                            ?.sourceQuotedPriceGross ??
+                            ?.dropshipFloorPriceGross ??
                           item.supplierProduct.currentRevision
-                            .sourceQuotedPriceGross ??
+                            .dropshipFloorPriceGross ??
                           "—",
                         numeric: true,
                       },
                       {
-                        id: "tax",
-                        label: "进项税率",
+                        id: "bulk",
+                        label: "集采底价（含税）",
                         value:
-                          item.supplierProduct.incomingRevision?.inputTaxRate ??
-                          item.supplierProduct.currentRevision.inputTaxRate ??
+                          item.supplierProduct.incomingRevision
+                            ?.bulkFloorPriceGross ??
+                          item.supplierProduct.currentRevision
+                            .bulkFloorPriceGross ??
                           "—",
                         numeric: true,
                       },
                       {
-                        id: "region",
-                        label: "可供区域",
-                        value: (
-                          item.supplierProduct.incomingRevision?.supplyRegion ??
-                          item.supplierProduct.currentRevision.supplyRegion
-                        ).join("、") || "—",
+                        id: "moq",
+                        label: "集采起订量",
+                        value:
+                          item.supplierProduct.incomingRevision
+                            ?.bulkMinimumOrderQuantity ??
+                          item.supplierProduct.currentRevision
+                            .bulkMinimumOrderQuantity ??
+                          "—",
+                        numeric: true,
                       },
                       {
                         id: "avail",

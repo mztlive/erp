@@ -80,11 +80,11 @@ Excel 导入仍用批次对话框；API 同步由 W20 触发。三种来源入�
 
 来源报价与采购确认成本必须分开：
 
-- `source_quoted_price_gross` 是供应商原始报价快照。
-- `confirmed_cost_gross` 是采购确认后生效的供给成本。
+- `dropship_floor_price_gross` / `bulk_floor_price_gross` / `bulk_minimum_order_quantity` 是供应商目录 SKU 上的代发底价（含税运）、集采底价（含税）与集采起订量。
+- `confirmed_cost_gross` 是入池时采购确认后生效的供给成本（可参考目录底价，不自动覆盖）。
 - `sales_visible_price` 是公司给销售选品/报价使用的商品池价格。
 
-三者不能互相覆盖，也不能自动保持相等。
+上述价格事实不能互相覆盖，也不能自动保持相等。
 
 ## 5. 页面
 
@@ -124,11 +124,10 @@ Excel 导入仍用批次对话框；API 同步由 W20 触发。三种来源入�
 
 | 分区 | 与公司商品同构 | 供应商独有 | 说明 |
 | --- | --- | --- | --- |
-| 基础信息 | 名称、描述、分类、品牌、单位、条码 | 供应商、来源类型、供应商 SPU/SKU 编码 | **分类 / 品牌 / 单位**与 W14 相同：启用字典下拉，提交保存字典名称快照便于匹配展示 |
-| 图文信息 | SKU 主图、SPU 轮播图、详情图 | 归档状态 | 角色与 W14 相同：主图在 SKU，轮播/详情在 SPU |
-| SKU / 规格 | 规格维度编辑（名称 + 多取值、排序/增删） | 供应商 SKU 编码行与规格摘要 | 与 W14「商品规格」交互一致；无规格时摘要为「默认规格」；保存为结构化 attributes |
-| 来源供给 | — | 报价、税率、运费/其他费用、区域、可供状态/数量、预计发货、售后、**商品能力（多选框组）** | **不**进入公司商品或商品池销售价；能力选项固定为可取消/可退款/物流配送/电子履约/冷链/一件代发等 |
-| 映射与入池 | — | 映射状态、映射历史、商品池价摘要 | 主动作：**加入公司商品池**（仅关联已有 SKU）；**不展示**来源版本差异、供给版本时间线、发布影响；**无**从来源新建公司商品 |
+| 基础信息 | 名称、描述、分类、品牌、单位 | 供应商、来源类型、供应商 SPU 编码 | **分类 / 品牌 / 单位**与 W14 相同：启用字典下拉；SPU 级不含条码与供给 |
+| 图文信息 | SPU 轮播图、详情图 | 归档状态 | 主图不在此区；主图随 SKU |
+| SKU / 规格与供给 | 规格维度编辑（名称 + 多取值） | **可编辑 SKU 表**：规格组合生成多行；每行可编供应商 SKU 编码、条码、**1:1 主图**、**一件代发底价（含税运）**、**集采底价（含税）**、**集采起订量**、可供数量/状态 | 与 W14 商品 SKU 表同构；主图为 1:1 小方块上传/预览；SKU 价格字段仅为上述三项，**不含**统一含税报价、进项税率、运费、区域、售后、商品能力等 |
+| 映射与入池 | — | 映射状态、映射历史、商品池价摘要 | 主动作：**加入公司商品池**（仅关联已有公司 SKU）；**不展示**来源版本差异、供给版本时间线、发布影响；**无**从来源新建公司商品 |
 
 页头主动作（采购）：填写检查、保存来源版本、加入公司商品池、返回。
 
@@ -164,10 +163,10 @@ CreateSupplierCatalogItem {
   name / description / specification / source_category / source_brand
   source_base_unit / barcode / structured_attributes
   source_media[] { usage, file_asset_id?, source_url?, archive_status, sort_order }
-  source_quoted_price_gross / input_tax_rate
-  freight_amount? / other_fee_amount?
-  supply_region / available_quantity? / availability_status?
-  expected_ship_time? / after_sales_note? / capability_snapshot?
+  dropship_floor_price_gross   // 一件代发底价（含税运）
+  bulk_floor_price_gross       // 集采底价（含税）
+  bulk_minimum_order_quantity  // 集采起订量
+  available_quantity? / availability_status?
   idempotency_key
 }
 ```
@@ -246,6 +245,7 @@ PromoteSupplierProductToPool {
 12. 第二供应商关联已有公司 SKU 时，默认不修改商品池修订；销售只看到一份公司商品和一个销售可见价，采购看到逐供应商成本与条件。
 13. 供应商商品中心与 W14 商品详情分区同构（基础 / 图文 / SKU·规格 + 供应商独有来源供给）；手工新建使用全页表单而非简陋对话框。
 14. 分类、品牌、单位使用与公司商品相同的字典控件；规格使用与公司商品相同的规格维度编辑器。
-15. 商品能力为固定选项的多选框组，不得用自由文本冒充。
-16. 中心页不展示来源版本差异、供给版本时间线、发布影响。
-17. 供应商商品中心保存只形成来源修订（`ReviseSupplierCatalogProduct`），带期望修订号与幂等键。
+15. 多规格生成多 SKU 行；每行维护 1:1 主图与价格字段：一件代发底价（含税运）、集采底价（含税）、集采起订量，以及可供数量/状态。
+16. 供应商商品目录**不包含**：统一含税报价、进项税率、运费、其他费用、可供区域、预计发货、售后说明、商品能力（入池供给确认另有字段，不进目录主档）。
+17. 中心页不展示来源版本差异、供给版本时间线、发布影响。
+18. 供应商商品中心保存只形成来源修订（`ReviseSupplierCatalogProduct`，含 `skus[]`），带期望修订号与幂等键。

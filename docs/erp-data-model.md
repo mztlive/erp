@@ -2293,12 +2293,16 @@ Excel、API 和手工录入共同使用本节的供应商 SPU/SKU、映射和供
 
 **UI 同构约定（W21 供应商商品中心 ↔ W14 商品详情）**：两侧均按「基础信息 / 图文 /
 SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、规格维度**使用与公司商品相同的
-字典控件与规格编辑交互，便于采购对照目录；供应商侧额外维护「来源供给」
-观察字段（报价、税率、费用、区域、可供状态、**商品能力多选**等）以及映射与商品池摘要。
-中心页**不**作为供给版本时间线、发布影响或来源 diff 的主展示面；**不提供**从来源
-预填新建公司商品。写路径与表必须分离：内容保存只形成
-`supplier_catalog_*_revision`（`ReviseSupplierCatalogProduct`）；入池仅映射已有
-公司 SKU 并写供给/商品池修订。
+字典控件与规格编辑交互，便于采购对照目录。规格维度笛卡尔积生成**多条供应商 SKU**；
+每条 SKU 在可编辑表格中维护编码、条码、**1:1 主图**与价格字段
+（`dropship_floor_price_gross` 一件代发底价含税运、`bulk_floor_price_gross` 集采底价含税、
+`bulk_minimum_order_quantity` 集采起订量）以及可供数量/状态，对应
+`supplier_catalog_sku_revision`，不得作为 SPU 级字段编辑。供应商商品目录**不**保存
+统一含税报价、进项税率、运费、其他费用、可供区域、预计发货、售后说明、商品能力。
+映射与商品池摘要在独立分区。中心页**不**作为供给版本时间线、发布影响或来源 diff
+的主展示面；**不提供**从来源预填新建公司商品。写路径与表必须分离：内容保存只形成
+`supplier_catalog_*_revision`（`ReviseSupplierCatalogProduct` 携带 `skus[]`）；
+入池仅映射已有公司 SKU 并写供给/商品池修订。
 
 `supplier_catalog_product_revision_media` 保存来源 SPU 图文：
 
@@ -2334,13 +2338,10 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 | `source_base_unit` / `barcode` | 供应商单位快照与条码；只用于匹配和预填，不作为公司稳定身份 |
 | `structured_attributes` | 已规范化的来源规格属性；无法规范化的原值只留受控来源摘要 |
 | `source_main_image_asset_id` / `main_image_archive_status` | 来源 SKU 主图及归档状态 |
-| `source_quoted_price_gross` / `input_tax_rate` | 来源报价快照和进项税率；未确认前不是采购成本 |
-| `freight_amount` / `other_fee_amount` | 来源费用 |
-| `supply_region` | 可供区域 |
+| `dropship_floor_price_gross` | 一件代发底价（含税运）；目录观察价，未确认前不是采购成本 |
+| `bulk_floor_price_gross` | 集采底价（含税） |
+| `bulk_minimum_order_quantity` | 集采起订量 |
 | `available_quantity` / `availability_status` | 来源库存或可供状态 |
-| `expected_ship_time` | 预计发货 |
-| `after_sales_note` | 售后说明 |
-| `capability_snapshot` | 商品级能力 |
 | `source_updated_at` / `received_at` | 来源更新时间与 ERP 接收时间；手工来源可相同 |
 | `source_payload_hmac` / `hmac_key_version` | 规范化白名单字段的 keyed HMAC 及密钥版本 |
 
@@ -2360,7 +2361,7 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 - 入池时只允许映射已有公司 SKU；不支持从来源修订一键新建公司商品。
 - 若业务需要采用供应商图文，须在 W14 手工创建公司商品修订并引用已归档 `file_asset`；
   未归档 URL 不得作为公司长期媒体。启用公司 SKU 缺主图仍由 W14 阻断。
-- 供应商独有字段（报价、税费、可供条件、商品能力等）不得写入 `product`/`sku` 修订。
+- 供应商目录独有字段（代发/集采底价、集采起订量、可供数量/状态等）不得写入公司 `product`/`sku` 修订。
 
 #### `supplier_product_mapping`
 

@@ -275,7 +275,8 @@ function SupplyRelationshipListView({
         id: "price",
         accessorFn: (row) =>
           row.offering?.currentRevision?.supplyPriceGross ??
-          row.supplierProduct.currentRevision.sourceQuotedPriceGross ??
+          row.supplierProduct.currentRevision.bulkFloorPriceGross ??
+          row.supplierProduct.currentRevision.dropshipFloorPriceGross ??
           "",
         header: "采购确认成本",
         meta: {
@@ -294,7 +295,9 @@ function SupplyRelationshipListView({
             )
           }
           const quote =
-            row.original.supplierProduct.currentRevision.sourceQuotedPriceGross
+            row.original.supplierProduct.currentRevision.bulkFloorPriceGross ??
+            row.original.supplierProduct.currentRevision
+              .dropshipFloorPriceGross
           return (
             <span className="text-xs text-muted-foreground">
               {costMasked

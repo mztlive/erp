@@ -59,17 +59,16 @@ export type SupplierProductRevisionView = Readonly<{
   barcode?: string
   attributes?: readonly SupplierCatalogAttributeView[]
   media?: readonly SupplierCatalogMediaView[]
-  /** 供应商来源报价快照；无成本权时 API 可返回 null 并由 UI 掩码。 */
-  sourceQuotedPriceGross: string | null
-  inputTaxRate: string | null
-  freightAmount: string | null
-  otherFeeAmount: string | null
-  supplyRegion: string[]
+  /**
+   * 一件代发底价（含税运）；无成本权时 API 可返回 null 并由 UI 掩码。
+   */
+  dropshipFloorPriceGross: string | null
+  /** 集采底价（含税） */
+  bulkFloorPriceGross: string | null
+  /** 集采起订量 */
+  bulkMinimumOrderQuantity: string | null
   availableQuantity: string
   availabilityStatus: "AVAILABLE" | "UNAVAILABLE" | "STOPPED" | "STALE"
-  expectedShipTime?: string
-  afterSalesNote?: string
-  capabilitySnapshot: string[]
   /** 仅技术/审计短指纹，非原始报文 */
   contentFingerprintShort?: string
 }>
@@ -233,6 +232,13 @@ export type DiffChange = Readonly<{
   costSensitive?: boolean
 }>
 
+/** 供应商 SPU 下的一条 SKU 及当前来源修订（供给字段在 SKU 修订上）。 */
+export type SupplierCatalogSkuView = Readonly<{
+  id: string
+  supplierSkuCode: string
+  currentRevision: SupplierProductRevisionView
+}>
+
 export type SupplierCatalogItemBase = {
   queuePosition?: { current: number; total: number; snapshotId: string }
   supplierProduct: {
@@ -241,10 +247,14 @@ export type SupplierCatalogItemBase = {
     source: SupplierCatalogSourceView
     /** 供应商自己的 SPU/SKU 身份；无供应商编码时由 ERP 生成内部来源身份。 */
     supplierSpuCode?: string
+    /** 主展示 / 入池默认：首个或当前选中的供应商 SKU 编码 */
     supplierSkuCode: string
     status: string
+    /** SPU 内容 + 主 SKU 供给投影（兼容列表）；完整多 SKU 见 catalogSkus */
     currentRevision: SupplierProductRevisionView
     incomingRevision?: SupplierProductRevisionView
+    /** 规格组合后的多供应商 SKU；缺省时等价于仅 currentRevision 一条 */
+    catalogSkus?: readonly SupplierCatalogSkuView[]
   }
   mapping?: SupplierProductMappingView
   skuCandidates: SkuCandidateView[]
@@ -461,38 +471,70 @@ export type SessionCatalogDraft = Readonly<{
   updatedAt: string
 }>
 
-/** 与公司商品同构的内容字段 + 供应商独有供给观察字段。 */
-export type SupplierCatalogContentFields = Readonly<{
+/** SPU 级内容（名称/类目/图文等）。 */
+export type SupplierCatalogSpuContentFields = Readonly<{
   name: string
   description?: string
   specification: string
   category: string
   brand?: string
   sourceBaseUnit?: string
-  barcode?: string
   attributes: readonly SupplierCatalogAttributeView[]
+  /** SPU 轮播/详情；SKU 主图写在 skus[].media */
   media: readonly Omit<SupplierCatalogMediaView, "id">[]
-  /** 供应商原始报价快照；不因采购确认而被覆盖。 */
-  sourceQuotedPriceGross: string
-  inputTaxRate: string
-  freightAmount?: string
-  otherFeeAmount?: string
-  supplyRegion: string[]
-  availableQuantity?: string
-  availabilityStatus?: "AVAILABLE" | "UNAVAILABLE" | "STOPPED" | "STALE"
-  expectedShipTime?: string
-  afterSalesNote?: string
-  capabilitySnapshot?: readonly string[]
 }>
 
+/** 单条供应商 SKU 及来源供给（对应 sku_revision）。 */
+export type SupplierCatalogSkuWriteFields = Readonly<{
+  id?: string
+  supplierSkuCode: string
+  barcode?: string
+  specification?: string
+  attributes?: readonly SupplierCatalogAttributeView[]
+  media?: readonly Omit<SupplierCatalogMediaView, "id">[]
+  dropshipFloorPriceGross: string
+  bulkFloorPriceGross: string
+  bulkMinimumOrderQuantity: string
+  availableQuantity?: string
+  availabilityStatus?: "AVAILABLE" | "UNAVAILABLE" | "STOPPED" | "STALE"
+}>
+
+/**
+ * 兼容旧扁平字段：单 SKU 时可用顶层 barcode/价格等；
+ * 多 SKU 时必须传 skus[]，顶层价格字段取 skus[0] 投影。
+ */
+export type SupplierCatalogContentFields = SupplierCatalogSpuContentFields &
+  Partial<
+    Omit<SupplierCatalogSkuWriteFields, "id" | "specification" | "attributes" | "media">
+  > &
+  Readonly<{
+    barcode?: string
+    media: readonly Omit<SupplierCatalogMediaView, "id">[]
+    dropshipFloorPriceGross?: string
+    bulkFloorPriceGross?: string
+    bulkMinimumOrderQuantity?: string
+  }>
+
 /** Excel/API/手工三种来源共用的供应商商品录入命令。 */
-export type CreateSupplierCatalogItemInput = SupplierCatalogContentFields &
+export type CreateSupplierCatalogItemInput = SupplierCatalogSpuContentFields &
   Readonly<{
     sourceType: SupplierCatalogSourceType
     supplierId: string
     supplierName: string
     supplierSpuCode?: string
-    supplierSkuCode: string
+    /**
+     * 多规格多 SKU；至少一行。
+     * 未传时退化为 supplierSkuCode + 顶层价格字段单 SKU。
+     */
+    skus?: readonly SupplierCatalogSkuWriteFields[]
+    /** 单 SKU 兼容字段 */
+    supplierSkuCode?: string
+    barcode?: string
+    dropshipFloorPriceGross?: string
+    bulkFloorPriceGross?: string
+    bulkMinimumOrderQuantity?: string
+    availableQuantity?: string
+    availabilityStatus?: "AVAILABLE" | "UNAVAILABLE" | "STOPPED" | "STALE"
     /** 固定公司 SKU 入口使用；形成供给修订，销售侧不可见。 */
     confirmedCostGross?: string
     sourceReference?: string
@@ -506,6 +548,9 @@ export type CreateSupplierCatalogItemInput = SupplierCatalogContentFields &
     poolPriceAction?: "KEEP_EXISTING" | "SET_PRICE"
     minimumOrderQuantity: string
     supplyMode: "DROPSHIP" | "BULK"
+    /** 仅固定 SKU 入池/供给路径使用；非供应商商品目录字段 */
+    supplyRegion?: string[]
+    inputTaxRate?: string
     validFrom: string
     idempotencyKey: string
   }>
@@ -514,12 +559,12 @@ export type CreateSupplierCatalogItemInput = SupplierCatalogContentFields &
  * 在供应商商品中心保存内容：形成新的来源修订（不可变），
  * 不写公司 SKU / 商品池 / 供给确认成本。
  */
-export type ReviseSupplierCatalogProductInput = SupplierCatalogContentFields &
+export type ReviseSupplierCatalogProductInput = SupplierCatalogSpuContentFields &
   Readonly<{
     supplierProductId: string
     expectedSourceRevisionNo: number
     supplierSpuCode?: string
-    supplierSkuCode: string
+    skus: readonly SupplierCatalogSkuWriteFields[]
     changeReason: string
     idempotencyKey: string
   }>

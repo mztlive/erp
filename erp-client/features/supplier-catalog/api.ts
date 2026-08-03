@@ -23,6 +23,8 @@ import type {
   SupplierOfferingRevisionView,
   PromoteSupplierProductInput,
   ReviseSupplierCatalogProductInput,
+  SupplierCatalogSkuView,
+  SupplierCatalogSkuWriteFields,
   WorkItemLease,
 } from "@/features/supplier-catalog/types"
 import {
@@ -139,10 +141,8 @@ function maskRevision(
   if (!mask) return rev
   return {
     ...rev,
-    sourceQuotedPriceGross: maskCostValue(rev.sourceQuotedPriceGross),
-    inputTaxRate: maskCostValue(rev.inputTaxRate),
-    freightAmount: maskCostValue(rev.freightAmount),
-    otherFeeAmount: maskCostValue(rev.otherFeeAmount),
+    dropshipFloorPriceGross: maskCostValue(rev.dropshipFloorPriceGross),
+    bulkFloorPriceGross: maskCostValue(rev.bulkFloorPriceGross),
   }
 }
 
@@ -1065,6 +1065,94 @@ function writeProductPoolEntry(input: {
   return { poolEntry, change: existing ? "REVISED" : "CREATED" }
 }
 
+function normalizeSkuWrites(
+  input: CreateSupplierCatalogItemInput | ReviseSupplierCatalogProductInput,
+): SupplierCatalogSkuWriteFields[] {
+  if ("skus" in input && input.skus && input.skus.length > 0) {
+    return [...input.skus]
+  }
+  const flat = input as CreateSupplierCatalogItemInput
+  if (!flat.supplierSkuCode?.trim()) {
+    throw new Error("请至少填写一个供应商 SKU 编码")
+  }
+  return [
+    {
+      supplierSkuCode: flat.supplierSkuCode.trim(),
+      barcode: flat.barcode,
+      specification: flat.specification,
+      attributes: flat.attributes,
+      media: flat.media.filter((m) => m.usage === "SKU_MAIN"),
+      dropshipFloorPriceGross: flat.dropshipFloorPriceGross ?? "0",
+      bulkFloorPriceGross: flat.bulkFloorPriceGross ?? "0",
+      bulkMinimumOrderQuantity: flat.bulkMinimumOrderQuantity ?? "1",
+      availableQuantity: flat.availableQuantity,
+      availabilityStatus: flat.availabilityStatus,
+    },
+  ]
+}
+
+function buildCatalogSkus(input: {
+  productId: string
+  revisionNo: number
+  spuName: string
+  spuDescription?: string
+  spuCategory: string
+  spuBrand?: string
+  spuBaseUnit?: string
+  spuAttributes: readonly { name: string; value: string }[]
+  spuMedia: readonly Omit<
+    import("@/features/supplier-catalog/types").SupplierCatalogMediaView,
+    "id"
+  >[]
+  skus: readonly SupplierCatalogSkuWriteFields[]
+  now: string
+}): {
+  catalogSkus: SupplierCatalogSkuView[]
+  primary: SupplierCatalogSkuView
+  currentRevision: SupplierProductRevisionView
+} {
+  const catalogSkus: SupplierCatalogSkuView[] = input.skus.map((sku, index) => {
+    const skuMedia = [
+      ...input.spuMedia.filter((m) => m.usage !== "SKU_MAIN"),
+      ...(sku.media ?? []).filter((m) => m.usage === "SKU_MAIN"),
+    ]
+    const revision: SupplierProductRevisionView = {
+      revisionNo: input.revisionNo,
+      sourceUpdatedAt: input.now,
+      syncedAt: input.now,
+      name: input.spuName,
+      description: input.spuDescription,
+      specification: sku.specification ?? input.spuName,
+      category: input.spuCategory,
+      brand: input.spuBrand,
+      baseUnit: input.spuBaseUnit,
+      barcode: sku.barcode,
+      attributes: sku.attributes ?? input.spuAttributes,
+      media: skuMedia.map((media, mediaIndex) => ({
+        ...media,
+        id: `${input.productId}_sku${index + 1}_media_${mediaIndex + 1}`,
+      })),
+      dropshipFloorPriceGross: sku.dropshipFloorPriceGross,
+      bulkFloorPriceGross: sku.bulkFloorPriceGross,
+      bulkMinimumOrderQuantity: sku.bulkMinimumOrderQuantity,
+      availableQuantity: sku.availableQuantity?.trim() || "—",
+      availabilityStatus: sku.availabilityStatus ?? "AVAILABLE",
+      contentFingerprintShort: `r${input.revisionNo}-s${index + 1}`,
+    }
+    return {
+      id: sku.id ?? `${input.productId}_sku_${index + 1}`,
+      supplierSkuCode: sku.supplierSkuCode,
+      currentRevision: revision,
+    }
+  })
+  const primary = catalogSkus[0]!
+  return {
+    catalogSkus,
+    primary,
+    currentRevision: primary.currentRevision,
+  }
+}
+
 /**
  * 日常供应商商品录入：Excel、API 和手工共用同一命令形状。
  * API 连接只是来源元数据，不是供应商商品或供给的创建前置条件。
@@ -1079,6 +1167,8 @@ export async function createSupplierCatalogItem(
     throw new Error("登记供应商供给时必须确认采购成本")
   }
 
+  const skuWrites = normalizeSkuWrites(input)
+  const primaryWrite = skuWrites[0]!
   const seq = createdCatalogIds.length + 1
   const id = `supplier_product_manual_${seq}`
   const now = new Date().toISOString()
@@ -1087,10 +1177,13 @@ export async function createSupplierCatalogItem(
     ? createConfirmedOffering({
         offeringId,
         costGross: input.confirmedCostGross!,
-        inputTaxRate: input.inputTaxRate,
-        minimumOrderQuantity: input.minimumOrderQuantity,
+        inputTaxRate: input.inputTaxRate ?? "0.13",
+        minimumOrderQuantity:
+          input.minimumOrderQuantity ||
+          primaryWrite.bulkMinimumOrderQuantity ||
+          "1",
         supplyMode: input.supplyMode,
-        supplyRegion: input.supplyRegion,
+        supplyRegion: input.supplyRegion ?? ["全国"],
         validFrom: input.validFrom,
       })
     : undefined
@@ -1106,6 +1199,20 @@ export async function createSupplierCatalogItem(
         validFrom: input.validFrom,
       })
     : undefined
+
+  const { catalogSkus, primary, currentRevision } = buildCatalogSkus({
+    productId: id,
+    revisionNo: 1,
+    spuName: input.name,
+    spuDescription: input.description,
+    spuCategory: input.category,
+    spuBrand: input.brand,
+    spuBaseUnit: input.sourceBaseUnit,
+    spuAttributes: input.attributes,
+    spuMedia: input.media,
+    skus: skuWrites,
+    now,
+  })
 
   const base = {
     supplierProduct: {
@@ -1125,37 +1232,10 @@ export async function createSupplierCatalogItem(
         recordedBy: "采购 · 当前用户",
       },
       supplierSpuCode: input.supplierSpuCode,
-      supplierSkuCode: input.supplierSkuCode,
+      supplierSkuCode: primary.supplierSkuCode,
       status: "ACTIVE",
-      currentRevision: {
-        revisionNo: 1,
-        sourceUpdatedAt: now,
-        syncedAt: now,
-        name: input.name,
-        description: input.description,
-        specification: input.specification,
-        category: input.category,
-        brand: input.brand,
-        baseUnit: input.sourceBaseUnit,
-        barcode: input.barcode,
-        attributes: input.attributes,
-        media: input.media.map((media, index) => ({
-          ...media,
-          id: `${id}_media_${index + 1}`,
-        })),
-        sourceQuotedPriceGross: input.sourceQuotedPriceGross,
-        inputTaxRate: input.inputTaxRate,
-        freightAmount: input.freightAmount ?? "0.00",
-        otherFeeAmount: input.otherFeeAmount ?? "0.00",
-        supplyRegion: input.supplyRegion,
-        availableQuantity: input.availableQuantity?.trim() || "—",
-        availabilityStatus: input.availabilityStatus ?? "AVAILABLE",
-        expectedShipTime: input.expectedShipTime,
-        afterSalesNote: input.afterSalesNote,
-        capabilitySnapshot: input.capabilitySnapshot
-          ? [...input.capabilitySnapshot]
-          : [],
-      },
+      currentRevision,
+      catalogSkus,
     },
     skuCandidates: input.targetSkuId
       ? []
@@ -1246,16 +1326,22 @@ function buildSourceDiff(
       ["baseUnit", "来源单位", previous.baseUnit, next.baseUnit],
       ["barcode", "条码", previous.barcode, next.barcode],
       [
-        "sourceQuotedPriceGross",
-        "含税报价",
-        previous.sourceQuotedPriceGross ?? undefined,
-        next.sourceQuotedPriceGross ?? undefined,
+        "dropshipFloorPriceGross",
+        "一件代发底价（含税运）",
+        previous.dropshipFloorPriceGross ?? undefined,
+        next.dropshipFloorPriceGross ?? undefined,
       ],
       [
-        "inputTaxRate",
-        "进项税率",
-        previous.inputTaxRate ?? undefined,
-        next.inputTaxRate ?? undefined,
+        "bulkFloorPriceGross",
+        "集采底价（含税）",
+        previous.bulkFloorPriceGross ?? undefined,
+        next.bulkFloorPriceGross ?? undefined,
+      ],
+      [
+        "bulkMinimumOrderQuantity",
+        "集采起订量",
+        previous.bulkMinimumOrderQuantity ?? undefined,
+        next.bulkMinimumOrderQuantity ?? undefined,
       ],
       [
         "media",
@@ -1271,7 +1357,8 @@ function buildSourceDiff(
       field,
       before: before || "—",
       after: after || "—",
-      costSensitive: id === "sourceQuotedPriceGross" || id === "inputTaxRate",
+      costSensitive:
+        id === "dropshipFloorPriceGross" || id === "bulkFloorPriceGross",
     }))
 }
 
@@ -1293,45 +1380,29 @@ export async function reviseSupplierCatalogProduct(
     throw new Error("供应商商品来源版本已经变化，请刷新后重新保存")
   }
   const now = new Date().toISOString()
-  const nextRevision: SupplierProductRevisionView = {
-    revisionNo: previous.revisionNo + 1,
-    sourceRevisionToken: previous.sourceRevisionToken,
-    sourceUpdatedAt: now,
-    syncedAt: now,
-    name: input.name,
-    description: input.description,
-    specification: input.specification,
-    category: input.category,
-    brand: input.brand,
-    baseUnit: input.sourceBaseUnit,
-    barcode: input.barcode,
-    attributes: input.attributes,
-    media: input.media.map((media, index) => ({
-      ...media,
-      id: `${input.supplierProductId}_media_r${previous.revisionNo + 1}_${index + 1}`,
-    })),
-    sourceQuotedPriceGross: input.sourceQuotedPriceGross,
-    inputTaxRate: input.inputTaxRate,
-    freightAmount: input.freightAmount ?? previous.freightAmount,
-    otherFeeAmount: input.otherFeeAmount ?? previous.otherFeeAmount,
-    supplyRegion: input.supplyRegion,
-    availableQuantity: input.availableQuantity?.trim() || "—",
-    availabilityStatus:
-      input.availabilityStatus ?? previous.availabilityStatus,
-    expectedShipTime: input.expectedShipTime,
-    afterSalesNote: input.afterSalesNote,
-    capabilitySnapshot: input.capabilitySnapshot
-      ? [...input.capabilitySnapshot]
-      : previous.capabilitySnapshot,
-    contentFingerprintShort: `rev${previous.revisionNo + 1}`,
-  }
+  const nextRevisionNo = previous.revisionNo + 1
+  const { catalogSkus, primary, currentRevision: nextRevision } =
+    buildCatalogSkus({
+      productId: input.supplierProductId,
+      revisionNo: nextRevisionNo,
+      spuName: input.name,
+      spuDescription: input.description,
+      spuCategory: input.category,
+      spuBrand: input.brand,
+      spuBaseUnit: input.sourceBaseUnit,
+      spuAttributes: input.attributes,
+      spuMedia: input.media,
+      skus: input.skus,
+      now,
+    })
   const next: SupplierCatalogItemView = {
     ...current,
     supplierProduct: {
       ...current.supplierProduct,
       supplierSpuCode: input.supplierSpuCode,
-      supplierSkuCode: input.supplierSkuCode,
+      supplierSkuCode: primary.supplierSkuCode,
       currentRevision: nextRevision,
+      catalogSkus,
       incomingRevision: undefined,
     },
     sourceDiff: buildSourceDiff(previous, nextRevision),
@@ -1345,7 +1416,7 @@ export async function reviseSupplierCatalogProduct(
   const result: SupplierCatalogWriteResult = {
     supplierProductId: input.supplierProductId,
     poolEntryChange: "NONE",
-    reference: `SC-REV-${input.supplierProductId}-${nextRevision.revisionNo}`,
+    reference: `SC-REV-${input.supplierProductId}-${nextRevisionNo}`,
     recordedAt: now,
   }
   writeResults.set(input.idempotencyKey, result)

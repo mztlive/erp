@@ -16,14 +16,36 @@ import {
 
 type SupplierProductRevisionSeed = Omit<
   SupplierProductRevisionView,
-  "sourceQuotedPriceGross"
+  | "dropshipFloorPriceGross"
+  | "bulkFloorPriceGross"
+  | "bulkMinimumOrderQuantity"
 > & {
-  supplyPriceGross: string | null
+  /** 种子简写：同时写入代发/集采底价 */
+  supplyPriceGross?: string | null
+  dropshipFloorPriceGross?: string | null
+  bulkFloorPriceGross?: string | null
+  bulkMinimumOrderQuantity?: string | null
 }
 
 function rev(partial: SupplierProductRevisionSeed): SupplierProductRevisionView {
-  const { supplyPriceGross, ...rest } = partial
-  return { ...rest, sourceQuotedPriceGross: supplyPriceGross }
+  const {
+    supplyPriceGross,
+    dropshipFloorPriceGross,
+    bulkFloorPriceGross,
+    bulkMinimumOrderQuantity,
+    ...rest
+  } = partial
+  const floor =
+    dropshipFloorPriceGross ??
+    bulkFloorPriceGross ??
+    supplyPriceGross ??
+    null
+  return {
+    ...rest,
+    dropshipFloorPriceGross: dropshipFloorPriceGross ?? floor,
+    bulkFloorPriceGross: bulkFloorPriceGross ?? floor,
+    bulkMinimumOrderQuantity: bulkMinimumOrderQuantity ?? "1",
+  }
 }
 
 type OfferingSeed = Omit<
@@ -164,13 +186,8 @@ export const SEED_ERROR: SupplierCatalogItemView = {
       specification: "—",
       category: "办公家具",
       supplyPriceGross: "899.00",
-      inputTaxRate: "0.13",
-      freightAmount: "0.00",
-      otherFeeAmount: "0.00",
-      supplyRegion: ["华东"],
       availableQuantity: "0",
       availabilityStatus: "UNAVAILABLE",
-      capabilitySnapshot: ["cancel", "refund"],
       contentFingerprintShort: "hmac:a1b2…c9",
     }),
     incomingRevision: rev({
@@ -182,13 +199,8 @@ export const SEED_ERROR: SupplierCatalogItemView = {
       specification: "",
       category: "办公家具",
       supplyPriceGross: null,
-      inputTaxRate: null,
-      freightAmount: null,
-      otherFeeAmount: null,
-      supplyRegion: [],
       availableQuantity: "—",
       availabilityStatus: "UNAVAILABLE",
-      capabilitySnapshot: [],
       contentFingerprintShort: "hmac:d4e5…f0",
     }),
   },
@@ -294,15 +306,8 @@ export const SEED_STOPPED: SupplierCatalogItemView = {
       specification: "净含量：250g / 包装：铁罐",
       category: "茶饮",
       supplyPriceGross: "268.00",
-      inputTaxRate: "0.13",
-      freightAmount: "12.00",
-      otherFeeAmount: "0.00",
-      supplyRegion: ["华东", "华北"],
       availableQuantity: "120",
       availabilityStatus: "AVAILABLE",
-      expectedShipTime: "2 个工作日",
-      afterSalesNote: "支持 7 日无理由（未拆封）",
-      capabilitySnapshot: ["cancel", "refund", "logistics"],
       contentFingerprintShort: "hmac:11aa…22",
     }),
     incomingRevision: rev({
@@ -314,15 +319,8 @@ export const SEED_STOPPED: SupplierCatalogItemView = {
       specification: "净含量：250g / 包装：铁罐",
       category: "茶饮",
       supplyPriceGross: "268.00",
-      inputTaxRate: "0.13",
-      freightAmount: "12.00",
-      otherFeeAmount: "0.00",
-      supplyRegion: ["华东", "华北"],
       availableQuantity: "0",
       availabilityStatus: "STOPPED",
-      expectedShipTime: "—",
-      afterSalesNote: "停止供应",
-      capabilitySnapshot: ["logistics"],
       contentFingerprintShort: "hmac:33bb…44",
     }),
   },
@@ -560,15 +558,8 @@ export const SEED_NEW: SupplierCatalogItemView = {
         },
       ],
       supplyPriceGross: "420.00",
-      inputTaxRate: "0.13",
-      freightAmount: "18.00",
-      otherFeeAmount: "5.00",
-      supplyRegion: ["华东", "华南"],
       availableQuantity: "500",
       availabilityStatus: "AVAILABLE",
-      expectedShipTime: "3 个工作日",
-      afterSalesNote: "食品类不支持无理由退货",
-      capabilitySnapshot: ["logistics"],
       contentFingerprintShort: "hmac:55cc…66",
     }),
   },
@@ -672,13 +663,8 @@ export const SEED_CHANGED_PRICE: SupplierCatalogItemView = {
       specification: "316 不锈钢 / 哑光黑",
       category: "日用百货",
       supplyPriceGross: "88.00",
-      inputTaxRate: "0.13",
-      freightAmount: "6.00",
-      otherFeeAmount: "0.00",
-      supplyRegion: ["全国"],
       availableQuantity: "2000",
       availabilityStatus: "AVAILABLE",
-      capabilitySnapshot: ["cancel", "refund", "logistics"],
       contentFingerprintShort: "hmac:77dd…88",
     }),
     incomingRevision: rev({
@@ -690,13 +676,8 @@ export const SEED_CHANGED_PRICE: SupplierCatalogItemView = {
       specification: "316 不锈钢 / 哑光黑",
       category: "日用百货",
       supplyPriceGross: "96.00",
-      inputTaxRate: "0.13",
-      freightAmount: "6.00",
-      otherFeeAmount: "2.00",
-      supplyRegion: ["全国"],
       availableQuantity: "1800",
       availabilityStatus: "AVAILABLE",
-      capabilitySnapshot: ["cancel", "refund", "logistics"],
       contentFingerprintShort: "hmac:99ee…00",
     }),
   },
@@ -907,13 +888,8 @@ export const SEED_CHANGED_STOCK: SupplierCatalogItemView = {
       specification: "2.4G / 黑",
       category: "数码配件",
       supplyPriceGross: "129.00",
-      inputTaxRate: "0.13",
-      freightAmount: "8.00",
-      otherFeeAmount: "0.00",
-      supplyRegion: ["华东"],
       availableQuantity: "80",
       availabilityStatus: "AVAILABLE",
-      capabilitySnapshot: ["cancel", "logistics"],
       contentFingerprintShort: "hmac:ab12…cd",
     }),
     incomingRevision: rev({
@@ -925,13 +901,8 @@ export const SEED_CHANGED_STOCK: SupplierCatalogItemView = {
       specification: "2.4G / 黑",
       category: "数码配件",
       supplyPriceGross: "129.00",
-      inputTaxRate: "0.13",
-      freightAmount: "8.00",
-      otherFeeAmount: "0.00",
-      supplyRegion: ["华东"],
       availableQuantity: "0",
       availabilityStatus: "UNAVAILABLE",
-      capabilitySnapshot: ["cancel", "logistics"],
       contentFingerprintShort: "hmac:ef34…gh",
     }),
   },
@@ -1121,15 +1092,8 @@ function activeSupplySeed(input: ActiveSupplySeedInput): SupplierCatalogItemView
         specification: input.specification,
         category: input.category,
         supplyPriceGross: input.priceGross,
-        inputTaxRate: "0.13",
-        freightAmount: "0.00",
-        otherFeeAmount: "0.00",
-        supplyRegion: input.supplyRegion,
         availableQuantity: "500",
         availabilityStatus: "AVAILABLE",
-        expectedShipTime: "2 个工作日",
-        afterSalesNote: "按供应商售后政策执行",
-        capabilitySnapshot: ["cancel", "refund", "logistics"],
       }),
     },
     mapping: {

@@ -1,8 +1,8 @@
 /**
- * 供应商商品编辑表单模型：与 W14 公司商品分区同构，
- * 分类/品牌/单位/规格使用同一套字典与规格维度编辑；
- * 另含供应商独有字段；用于中心页详情即编辑。
- * 入池仅关联已有公司 SKU，不提供「从来源新建公司商品」。
+ * 供应商商品编辑表单模型：与 W14 公司商品分区同构。
+ * - SPU：名称、描述、分类、品牌、单位、轮播/详情图、规格维度
+ * - SKU 表：规格组合生成多行，每行可编辑编码/条码/主图/来源供给
+ * 来源供给字段属于 supplier_catalog_sku_revision。
  */
 
 import { BASE_UNIT_DICTIONARY } from "@/features/master-data/resource-fields"
@@ -18,7 +18,6 @@ export type SupplierProductEditorSectionId =
   | "basic"
   | "media"
   | "sku"
-  | "supply"
   | "mapping"
 
 export const SUPPLIER_PRODUCT_EDITOR_SECTIONS: ReadonlyArray<{
@@ -28,39 +27,42 @@ export const SUPPLIER_PRODUCT_EDITOR_SECTIONS: ReadonlyArray<{
 }> = [
   { id: "basic", label: "基础信息" },
   { id: "media", label: "图文信息" },
-  { id: "sku", label: "SKU / 规格" },
-  { id: "supply", label: "来源供给" },
+  { id: "sku", label: "SKU / 规格与供给" },
   { id: "mapping", label: "映射与入池", editOnly: true },
 ]
-
-/** 商品能力（多选），与供给/发布侧 capability 编码对齐。 */
-export const PRODUCT_CAPABILITY_OPTIONS = [
-  { value: "cancel", label: "可取消" },
-  { value: "refund", label: "可退款" },
-  { value: "logistics", label: "物流配送" },
-  { value: "electronic", label: "电子履约" },
-  { value: "cold_chain", label: "冷链" },
-  { value: "dropship", label: "一件代发" },
-] as const
-
-export type ProductCapabilityCode =
-  (typeof PRODUCT_CAPABILITY_OPTIONS)[number]["value"]
 
 export type SupplierSpecDraft = Readonly<{
   name: string
   values: readonly string[]
 }>
 
+/** 一行供应商 SKU：规格取值 + 可编辑身份与来源供给。 */
+export type SupplierSkuFormRow = Readonly<{
+  /** 稳定行键（会话内）；保存后可对应 catalog sku id */
+  rowKey: string
+  catalogSkuId?: string
+  attributeValues: readonly string[]
+  specLabel: string
+  supplierSkuCode: string
+  barcode: string
+  mainImage: string
+  /** 一件代发底价（含税运） */
+  dropshipFloorPriceGross: string
+  /** 集采底价（含税） */
+  bulkFloorPriceGross: string
+  /** 集采起订量 */
+  bulkMinimumOrderQuantity: string
+  availableQuantity: string
+  availabilityStatus: "AVAILABLE" | "UNAVAILABLE" | "STOPPED" | "STALE"
+}>
+
 export type SupplierProductFormFields = Readonly<{
-  /** 身份与来源（供应商独有） */
   supplierId: string
   supplierName: string
   sourceType: Exclude<SupplierCatalogSourceType, "API"> | "API"
   sourceReference: string
   supplierSpuCode: string
-  supplierSkuCode: string
 
-  /** 与公司商品同构的内容字段（字典 ID + 展示快照） */
   name: string
   description: string
   categoryId: string
@@ -70,28 +72,38 @@ export type SupplierProductFormFields = Readonly<{
   baseUnitId: string
   baseUnitCode: string
   baseUnit: string
-  barcode: string
-  /** 规格维度：与公司商品相同编辑方式 */
   specDrafts: readonly SupplierSpecDraft[]
   carouselImages: readonly string[]
   detailImages: readonly string[]
-  skuMainImage: string
 
-  /** 供应商独有：报价与可供条件（非公司商品池价） */
-  sourceQuotedPriceGross: string
-  inputTaxRate: string
-  freightAmount: string
-  otherFeeAmount: string
-  supplyRegionText: string
-  availableQuantity: string
-  availabilityStatus: "AVAILABLE" | "UNAVAILABLE" | "STOPPED" | "STALE"
-  expectedShipTime: string
-  afterSalesNote: string
-  /** 商品能力多选编码 */
-  capabilities: readonly string[]
+  /** 由规格维度组合生成；每行独立来源供给 */
+  skus: readonly SupplierSkuFormRow[]
 
   changeReason: string
 }>
+
+export function emptySupplierSkuFormRow(
+  partial?: Partial<SupplierSkuFormRow>,
+): SupplierSkuFormRow {
+  return {
+    rowKey: partial?.rowKey ?? newSkuRowKey(),
+    catalogSkuId: partial?.catalogSkuId,
+    attributeValues: partial?.attributeValues ?? [],
+    specLabel: partial?.specLabel ?? "默认规格",
+    supplierSkuCode: partial?.supplierSkuCode ?? "",
+    barcode: partial?.barcode ?? "",
+    mainImage: partial?.mainImage ?? "",
+    dropshipFloorPriceGross: partial?.dropshipFloorPriceGross ?? "",
+    bulkFloorPriceGross: partial?.bulkFloorPriceGross ?? "",
+    bulkMinimumOrderQuantity: partial?.bulkMinimumOrderQuantity ?? "1",
+    availableQuantity: partial?.availableQuantity ?? "",
+    availabilityStatus: partial?.availabilityStatus ?? "AVAILABLE",
+  }
+}
+
+function newSkuRowKey(): string {
+  return `sku-row-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`
+}
 
 export function emptySupplierProductFormFields(
   partial?: Partial<SupplierProductFormFields>,
@@ -102,7 +114,6 @@ export function emptySupplierProductFormFields(
     sourceType: "MANUAL",
     sourceReference: "",
     supplierSpuCode: "",
-    supplierSkuCode: "",
     name: "",
     description: "",
     categoryId: "",
@@ -112,32 +123,103 @@ export function emptySupplierProductFormFields(
     baseUnitId: "",
     baseUnitCode: "",
     baseUnit: "",
-    barcode: "",
     specDrafts: [],
     carouselImages: [],
     detailImages: [],
-    skuMainImage: "",
-    sourceQuotedPriceGross: "",
-    inputTaxRate: "0.13",
-    freightAmount: "0.00",
-    otherFeeAmount: "0.00",
-    supplyRegionText: "全国",
-    availableQuantity: "",
-    availabilityStatus: "AVAILABLE",
-    expectedShipTime: "",
-    afterSalesNote: "",
-    capabilities: [],
+    skus: [emptySupplierSkuFormRow({ supplierSkuCode: "SKU-01" })],
     changeReason: "手工录入供应商商品",
     ...partial,
   }
 }
 
+/** 笛卡尔积生成规格取值组合。无规格时返回单行空组合。 */
+export function cartesianSpecValues(
+  specs: readonly SupplierSpecDraft[],
+): readonly (readonly string[])[] {
+  const active = specs
+    .map((s) => ({
+      name: s.name.trim(),
+      values: s.values.map((v) => v.trim()).filter(Boolean),
+    }))
+    .filter((s) => s.name && s.values.length > 0)
+
+  if (active.length === 0) return [[]]
+
+  return active.reduce<readonly (readonly string[])[]>(
+    (acc, dim) => {
+      const next: string[][] = []
+      for (const prefix of acc) {
+        for (const value of dim.values) {
+          next.push([...prefix, value])
+        }
+      }
+      return next
+    },
+    [[]],
+  )
+}
+
+export function formatSpecLabel(
+  specs: readonly SupplierSpecDraft[],
+  attributeValues: readonly string[],
+): string {
+  const active = specs.filter(
+    (s) => s.name.trim() && s.values.some((v) => v.trim()),
+  )
+  if (active.length === 0 || attributeValues.length === 0) {
+    return "默认规格"
+  }
+  return active
+    .map((s, i) => `${s.name.trim()}：${attributeValues[i] ?? ""}`)
+    .join(" / ")
+}
+
+function sameAttributeValues(
+  a: readonly string[],
+  b: readonly string[],
+): boolean {
+  if (a.length !== b.length) return false
+  return a.every((v, i) => v === b[i])
+}
+
+/** 按当前规格维度重建 SKU 行；尽量按属性取值匹配保留编码/主图/供给。 */
+export function rebuildSupplierSkusFromSpecs(input: {
+  specs: readonly SupplierSpecDraft[]
+  existing: readonly SupplierSkuFormRow[]
+  skuCodePrefix?: string
+}): SupplierSkuFormRow[] {
+  const combos = cartesianSpecValues(input.specs)
+  const prefix = (input.skuCodePrefix ?? "SKU").replace(/-+$/, "")
+
+  return combos.map((attributeValues, index) => {
+    const specLabel = formatSpecLabel(input.specs, attributeValues)
+    const matched =
+      input.existing.find((sku) =>
+        sameAttributeValues(sku.attributeValues, attributeValues),
+      ) ??
+      (combos.length === 1 && input.existing.length === 1
+        ? input.existing[0]
+        : undefined)
+
+    return emptySupplierSkuFormRow({
+      ...matched,
+      rowKey: matched?.rowKey ?? newSkuRowKey(),
+      attributeValues: [...attributeValues],
+      specLabel,
+      supplierSkuCode:
+        matched?.supplierSkuCode ||
+        `${prefix}-${String(index + 1).padStart(2, "0")}`,
+    })
+  })
+}
+
 export function mediaFromRevision(
   media: readonly SupplierCatalogMediaView[] | undefined,
-): Pick<
-  SupplierProductFormFields,
-  "carouselImages" | "detailImages" | "skuMainImage"
-> {
+): {
+  carouselImages: string[]
+  detailImages: string[]
+  skuMainImage: string
+} {
   const list = media ?? []
   const names = (usage: SupplierCatalogMediaUsage) =>
     list
@@ -151,7 +233,6 @@ export function mediaFromRevision(
   }
 }
 
-/** 来源 attributes → 规格维度草稿（同名合并取值）。 */
 export function attributesToSpecDrafts(
   attributes: readonly SupplierCatalogAttributeView[] | undefined,
 ): SupplierSpecDraft[] {
@@ -167,17 +248,30 @@ export function attributesToSpecDrafts(
   return [...map.entries()].map(([name, values]) => ({ name, values }))
 }
 
-export function specDraftsToAttributes(
-  drafts: readonly SupplierSpecDraft[],
+/** 多 SKU 时 attributes 合并各行首取值 + 维度名；单 SKU 写全量。 */
+export function skusToAttributes(
+  skus: readonly SupplierSkuFormRow[],
+  specs: readonly SupplierSpecDraft[],
 ): SupplierCatalogAttributeView[] {
-  return drafts.flatMap((draft) => {
-    const name = draft.name.trim()
-    if (!name) return []
-    return draft.values
-      .map((value) => value.trim())
+  const active = specs.filter(
+    (s) => s.name.trim() && s.values.some((v) => v.trim()),
+  )
+  if (active.length === 0) return []
+  if (skus.length === 1) {
+    return active
+      .map((spec, index) => ({
+        name: spec.name.trim(),
+        value: (skus[0]?.attributeValues[index] ?? "").trim(),
+      }))
+      .filter((item) => item.name && item.value)
+  }
+  // 多 SKU：规格维度取值集中到 attributes（各维全部取值）
+  return active.flatMap((spec) =>
+    spec.values
+      .map((v) => v.trim())
       .filter(Boolean)
-      .map((value) => ({ name, value }))
-  })
+      .map((value) => ({ name: spec.name.trim(), value })),
+  )
 }
 
 export function deriveSpecification(
@@ -197,26 +291,11 @@ export function deriveSpecification(
     .join(" / ")
 }
 
-export function normalizeCapabilityCodes(
-  snapshot: readonly string[] | undefined,
-): string[] {
-  const known = new Set<string>(
-    PRODUCT_CAPABILITY_OPTIONS.map((option) => option.value),
-  )
-  const labelToCode = new Map<string, string>(
-    PRODUCT_CAPABILITY_OPTIONS.map((option) => [option.label, option.value]),
-  )
-  const next: string[] = []
-  for (const raw of snapshot ?? []) {
-    const value = raw.trim()
-    if (!value) continue
-    const code = known.has(value)
-      ? value
-      : (labelToCode.get(value) ?? value)
-    if (!next.includes(code)) next.push(code)
-  }
-  return next
-}
+export type CatalogSkuSeed = Readonly<{
+  id?: string
+  supplierSkuCode: string
+  revision: SupplierProductRevisionView
+}>
 
 export function hydrateSupplierProductForm(input: {
   supplierId: string
@@ -226,6 +305,8 @@ export function hydrateSupplierProductForm(input: {
   supplierSpuCode?: string
   supplierSkuCode: string
   revision: SupplierProductRevisionView
+  /** 多 SKU 时优先使用；否则退化为单条 currentRevision */
+  catalogSkus?: readonly CatalogSkuSeed[]
   categoryOptions?: readonly { categoryId: string; categoryName: string }[]
   brandOptions?: readonly { brandId: string; brandName: string }[]
 }): SupplierProductFormFields {
@@ -241,13 +322,90 @@ export function hydrateSupplierProductForm(input: {
   const brand = input.brandOptions?.find(
     (candidate) => candidate.brandName === input.revision.brand,
   )
+
+  const specDrafts =
+    input.catalogSkus && input.catalogSkus.length > 1
+      ? attributesToSpecDrafts(
+          input.catalogSkus.flatMap((entry) => entry.revision.attributes ?? []),
+        )
+      : attributesToSpecDrafts(input.revision.attributes)
+
+  const skuRows: SupplierSkuFormRow[] =
+    input.catalogSkus && input.catalogSkus.length > 0
+      ? input.catalogSkus.map((entry, index) => {
+          const attrs = entry.revision.attributes ?? []
+          const attributeValues = specDrafts.map((dim) => {
+            const hit = attrs.find((a) => a.name.trim() === dim.name.trim())
+            return hit?.value.trim() ?? ""
+          })
+          const main =
+            mediaFromRevision(entry.revision.media).skuMainImage ||
+            (index === 0 ? media.skuMainImage : "")
+          return emptySupplierSkuFormRow({
+            catalogSkuId: entry.id,
+            attributeValues,
+            specLabel: formatSpecLabel(specDrafts, attributeValues),
+            supplierSkuCode: entry.supplierSkuCode,
+            barcode: entry.revision.barcode ?? "",
+            mainImage: main,
+            dropshipFloorPriceGross:
+              entry.revision.dropshipFloorPriceGross ?? "",
+            bulkFloorPriceGross: entry.revision.bulkFloorPriceGross ?? "",
+            bulkMinimumOrderQuantity:
+              entry.revision.bulkMinimumOrderQuantity ?? "1",
+            availableQuantity:
+              entry.revision.availableQuantity === "—"
+                ? ""
+                : entry.revision.availableQuantity,
+            availabilityStatus: entry.revision.availabilityStatus,
+          })
+        })
+      : [
+          emptySupplierSkuFormRow({
+            attributeValues: specDrafts.map((dim) => {
+              const hit = (input.revision.attributes ?? []).find(
+                (a) => a.name.trim() === dim.name.trim(),
+              )
+              return hit?.value.trim() ?? (dim.values[0] ?? "")
+            }),
+            specLabel: formatSpecLabel(
+              specDrafts,
+              specDrafts.map((dim) => {
+                const hit = (input.revision.attributes ?? []).find(
+                  (a) => a.name.trim() === dim.name.trim(),
+                )
+                return hit?.value.trim() ?? (dim.values[0] ?? "")
+              }),
+            ),
+            supplierSkuCode: input.supplierSkuCode,
+            barcode: input.revision.barcode ?? "",
+            mainImage: media.skuMainImage,
+            dropshipFloorPriceGross:
+              input.revision.dropshipFloorPriceGross ?? "",
+            bulkFloorPriceGross: input.revision.bulkFloorPriceGross ?? "",
+            bulkMinimumOrderQuantity:
+              input.revision.bulkMinimumOrderQuantity ?? "1",
+            availableQuantity:
+              input.revision.availableQuantity === "—"
+                ? ""
+                : input.revision.availableQuantity,
+            availabilityStatus: input.revision.availabilityStatus,
+          }),
+        ]
+
+  // 规格变更后与笛卡尔积对齐（保留已匹配行）
+  const skus = rebuildSupplierSkusFromSpecs({
+    specs: specDrafts,
+    existing: skuRows,
+    skuCodePrefix: input.supplierSkuCode.replace(/-\d+$/, "") || "SKU",
+  })
+
   return emptySupplierProductFormFields({
     supplierId: input.supplierId,
     supplierName: input.supplierName,
     sourceType: input.sourceType,
     sourceReference: input.sourceReference ?? "",
     supplierSpuCode: input.supplierSpuCode ?? "",
-    supplierSkuCode: input.supplierSkuCode,
     name: input.revision.name,
     description: input.revision.description ?? "",
     categoryId: category?.categoryId ?? "",
@@ -257,35 +415,17 @@ export function hydrateSupplierProductForm(input: {
     baseUnitId: unit?.id ?? "",
     baseUnitCode: unit?.code ?? "",
     baseUnit: unit?.label ?? input.revision.baseUnit ?? "",
-    barcode: input.revision.barcode ?? "",
-    specDrafts: attributesToSpecDrafts(input.revision.attributes),
-    ...media,
-    sourceQuotedPriceGross: input.revision.sourceQuotedPriceGross ?? "",
-    inputTaxRate: input.revision.inputTaxRate ?? "0.13",
-    freightAmount: input.revision.freightAmount ?? "0.00",
-    otherFeeAmount: input.revision.otherFeeAmount ?? "0.00",
-    supplyRegionText: input.revision.supplyRegion.join("、") || "全国",
-    availableQuantity:
-      input.revision.availableQuantity === "—"
-        ? ""
-        : input.revision.availableQuantity,
-    availabilityStatus: input.revision.availabilityStatus,
-    expectedShipTime: input.revision.expectedShipTime ?? "",
-    afterSalesNote: input.revision.afterSalesNote ?? "",
-    capabilities: normalizeCapabilityCodes(input.revision.capabilitySnapshot),
+    specDrafts,
+    carouselImages: media.carouselImages,
+    detailImages: media.detailImages,
+    skus,
     changeReason: "",
   })
 }
 
-export function splitRegionText(value: string): string[] {
-  return value
-    .split(/[，,、]/)
-    .map((item) => item.trim())
-    .filter(Boolean)
-}
-
 export function formToMediaPayload(
   fields: SupplierProductFormFields,
+  sku: SupplierSkuFormRow,
 ): readonly Omit<SupplierCatalogMediaView, "id">[] {
   return [
     ...fields.carouselImages.map((fileName, index) => ({
@@ -302,18 +442,38 @@ export function formToMediaPayload(
       fileAssetId: `asset:${fileName}`,
       archiveStatus: "ARCHIVED" as const,
     })),
-    ...(fields.skuMainImage
+    ...(sku.mainImage
       ? [
           {
             usage: "SKU_MAIN" as const,
-            fileName: fields.skuMainImage,
+            fileName: sku.mainImage,
             sortOrder: 0,
-            fileAssetId: `asset:${fields.skuMainImage}`,
+            fileAssetId: `asset:${sku.mainImage}`,
             archiveStatus: "ARCHIVED" as const,
           },
         ]
       : []),
   ]
+}
+
+export function skuRowToPayload(sku: SupplierSkuFormRow) {
+  return {
+    supplierSkuCode: sku.supplierSkuCode.trim(),
+    barcode: sku.barcode.trim() || undefined,
+    mainImage: sku.mainImage.trim() || undefined,
+    specification: sku.specLabel,
+    attributes: sku.attributeValues
+      .map((value) => ({
+        name: "", // filled by caller with dim names
+        value: value.trim(),
+      }))
+      .filter((item) => item.value),
+    dropshipFloorPriceGross: sku.dropshipFloorPriceGross.trim(),
+    bulkFloorPriceGross: sku.bulkFloorPriceGross.trim(),
+    bulkMinimumOrderQuantity: sku.bulkMinimumOrderQuantity.trim(),
+    availableQuantity: sku.availableQuantity.trim() || undefined,
+    availabilityStatus: sku.availabilityStatus,
+  }
 }
 
 export function validateSupplierProductForm(
@@ -322,9 +482,6 @@ export function validateSupplierProductForm(
 ): string | null {
   if (!fields.supplierId.trim() && options?.isCreate) {
     return "请选择供应商"
-  }
-  if (fields.supplierSkuCode.trim().length < 1) {
-    return "请填写供应商 SKU 编码"
   }
   if (fields.name.trim().length < 2) return "请填写商品名称"
   if (!fields.categoryId.trim() && !fields.category.trim()) {
@@ -336,14 +493,27 @@ export function validateSupplierProductForm(
   if (!fields.baseUnitId.trim() && !fields.baseUnit.trim()) {
     return "请选择基础单位"
   }
-  if (!/^\d+(?:\.\d{1,4})?$/.test(fields.sourceQuotedPriceGross.trim())) {
-    return "请输入正确的供应商含税报价，最多 4 位小数"
-  }
-  if (!/^0(?:\.\d{1,6})?$|^1(?:\.0+)?$/.test(fields.inputTaxRate.trim())) {
-    return "请输入 0 到 1 的进项税率"
-  }
-  if (fields.supplyRegionText.trim().length < 1) {
-    return "请填写可供区域"
+  if (fields.skus.length < 1) return "至少保留一个 SKU"
+  const codes = new Set<string>()
+  for (const [index, sku] of fields.skus.entries()) {
+    const label = sku.specLabel || `第 ${index + 1} 行`
+    if (sku.supplierSkuCode.trim().length < 1) {
+      return `${label}：请填写供应商 SKU 编码`
+    }
+    const code = sku.supplierSkuCode.trim()
+    if (codes.has(code)) {
+      return `供应商 SKU 编码重复：${code}`
+    }
+    codes.add(code)
+    if (!/^\d+(?:\.\d{1,4})?$/.test(sku.dropshipFloorPriceGross.trim())) {
+      return `${label}：请输入正确的一件代发底价（含税运），最多 4 位小数`
+    }
+    if (!/^\d+(?:\.\d{1,4})?$/.test(sku.bulkFloorPriceGross.trim())) {
+      return `${label}：请输入正确的集采底价（含税），最多 4 位小数`
+    }
+    if (!/^\d+(?:\.\d{1,6})?$/.test(sku.bulkMinimumOrderQuantity.trim())) {
+      return `${label}：请输入正确的集采起订量`
+    }
   }
   if (options?.requireChangeReason && fields.changeReason.trim().length < 2) {
     return "请填写本次保存的变更原因"
@@ -364,6 +534,15 @@ export function supplierProductCompleteness(
   total: number
   percent: number
 } {
+  const allSkuPricesOk = fields.skus.every(
+    (sku) =>
+      /^\d+(?:\.\d{1,4})?$/.test(sku.dropshipFloorPriceGross.trim()) &&
+      /^\d+(?:\.\d{1,4})?$/.test(sku.bulkFloorPriceGross.trim()) &&
+      /^\d+(?:\.\d{1,6})?$/.test(sku.bulkMinimumOrderQuantity.trim()),
+  )
+  const allSkuCodesOk = fields.skus.every(
+    (sku) => sku.supplierSkuCode.trim().length >= 1,
+  )
   const checks = [
     {
       id: "name",
@@ -390,22 +569,16 @@ export function supplierProductCompleteness(
       section: "basic" as const,
     },
     {
-      id: "mainImage",
-      label: "SKU 主图（建公司品启用时必填）",
-      ok: fields.skuMainImage.trim().length >= 1,
-      section: "media" as const,
-    },
-    {
-      id: "quote",
-      label: "来源报价",
-      ok: /^\d+(?:\.\d{1,4})?$/.test(fields.sourceQuotedPriceGross.trim()),
-      section: "supply" as const,
-    },
-    {
       id: "skuCode",
-      label: "供应商 SKU 编码",
-      ok: fields.supplierSkuCode.trim().length >= 1,
-      section: "basic" as const,
+      label: "全部 SKU 编码",
+      ok: fields.skus.length > 0 && allSkuCodesOk,
+      section: "sku" as const,
+    },
+    {
+      id: "prices",
+      label: "全部 SKU 代发/集采底价与起订量",
+      ok: fields.skus.length > 0 && allSkuPricesOk,
+      section: "sku" as const,
     },
   ] as const
   const completed = checks.filter((item) => item.ok).length

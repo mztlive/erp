@@ -61,9 +61,12 @@ const intakeSchema = z.object({
   carouselImages: z.array(z.string()),
   detailImages: z.array(z.string()),
   skuMainImage: z.string(),
-  sourceQuotedPriceGross: money,
-  inputTaxRate: z.string().trim().regex(/^0(?:\.\d{1,6})?$|^1(?:\.0+)?$/, "请输入 0 到 1 的税率"),
-  supplyRegionText: z.string().trim().min(1, "请填写可供区域"),
+  dropshipFloorPriceGross: money,
+  bulkFloorPriceGross: money,
+  bulkMinimumOrderQuantity: z
+    .string()
+    .trim()
+    .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确集采起订量"),
   minimumOrderQuantity: z.string().trim().regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
   supplyMode: z.enum(["DROPSHIP", "BULK"]),
   validFrom: z.string().min(1, "请选择生效日期"),
@@ -162,9 +165,9 @@ export function SupplierCatalogIntakeDialog({
       carouselImages: [] as string[],
       detailImages: [] as string[],
       skuMainImage: "",
-      sourceQuotedPriceGross: "",
-      inputTaxRate: "0.13",
-      supplyRegionText: "全国",
+      dropshipFloorPriceGross: "",
+      bulkFloorPriceGross: "",
+      bulkMinimumOrderQuantity: "1",
       minimumOrderQuantity: "1",
       supplyMode: "BULK" as "DROPSHIP" | "BULK",
       validFrom: "2026-08-02",
@@ -219,12 +222,15 @@ export function SupplierCatalogIntakeDialog({
               }]
             : []),
         ],
-        sourceQuotedPriceGross: value.sourceQuotedPriceGross.trim(),
+        dropshipFloorPriceGross: value.dropshipFloorPriceGross.trim(),
+        bulkFloorPriceGross: value.bulkFloorPriceGross.trim(),
+        bulkMinimumOrderQuantity: value.bulkMinimumOrderQuantity.trim(),
         confirmedCostGross: fixedSku
-          ? value.sourceQuotedPriceGross.trim()
+          ? value.bulkFloorPriceGross.trim() ||
+            value.dropshipFloorPriceGross.trim()
           : undefined,
-        inputTaxRate: value.inputTaxRate.trim(),
-        supplyRegion: splitValues(value.supplyRegionText),
+        inputTaxRate: "0.13",
+        supplyRegion: fixedSku ? ["全国"] : undefined,
         sourceReference: value.sourceReference.trim() || undefined,
         targetSkuId: fixedSku?.skuId,
         targetSkuCode: fixedSku?.skuCode,
@@ -354,23 +360,32 @@ export function SupplierCatalogIntakeDialog({
                 />
               )}
             </form.AppField>
-            <form.AppField name="sourceQuotedPriceGross">
+            <form.AppField name="dropshipFloorPriceGross">
+              {(field) => (
+                <field.TextField label="一件代发底价（含税运）*" />
+              )}
+            </form.AppField>
+            <form.AppField name="bulkFloorPriceGross">
               {(field) => (
                 <field.TextField
-                  label={fixedSku ? "采购确认含税成本 *" : "供应商含税报价 *"}
+                  label="集采底价（含税）*"
                   description={
                     fixedSku
-                      ? "同时保留为本次手工来源报价；后续成本变化形成新的供给修订"
-                      : "来源报价只保存到供应商商品修订，入池时再由采购确认成本"
+                      ? "登记供给时默认用作采购确认成本"
+                      : undefined
                   }
                 />
               )}
             </form.AppField>
-            <form.AppField name="inputTaxRate">
-              {(field) => <field.TextField label="进项税率 *" />}
+            <form.AppField name="bulkMinimumOrderQuantity">
+              {(field) => <field.TextField label="集采起订量 *" />}
             </form.AppField>
             <form.AppField name="minimumOrderQuantity">
-              {(field) => <field.TextField label="最小起订量 *" />}
+              {(field) => (
+                <field.TextField
+                  label={fixedSku ? "供给起订量 *" : "最小起订量 *"}
+                />
+              )}
             </form.AppField>
             <form.AppField name="supplyMode">
               {(field) => (
@@ -390,9 +405,6 @@ export function SupplierCatalogIntakeDialog({
                   />
                 </div>
               )}
-            </form.AppField>
-            <form.AppField name="supplyRegionText">
-              {(field) => <field.TextField label="可供区域（逗号分隔）" />}
             </form.AppField>
             <form.AppField name="validFrom">
               {(field) => <field.TextField label="生效日期 *" type="date" />}
@@ -508,16 +520,21 @@ export function PromoteSupplierProductDialog({
   const form = useAppForm({
     defaultValues: {
       targetSkuId: "",
-      confirmedCostGross: sourceRevision?.sourceQuotedPriceGross ?? "",
+      confirmedCostGross:
+        sourceRevision?.bulkFloorPriceGross ??
+        sourceRevision?.dropshipFloorPriceGross ??
+        "",
       salesVisiblePrice: "",
       poolPriceAction: "SET_PRICE" as "KEEP_EXISTING" | "SET_PRICE",
-      inputTaxRate: sourceRevision?.inputTaxRate ?? "0.13",
+      inputTaxRate: "0.13",
       minimumOrderQuantity:
-        item?.offering?.proposedDefaults?.minimumOrderQuantity ?? "1",
+        item?.offering?.proposedDefaults?.minimumOrderQuantity ??
+        sourceRevision?.bulkMinimumOrderQuantity ??
+        "1",
       supplyMode:
         item?.offering?.proposedDefaults?.supplyMode ??
         ("BULK" as "DROPSHIP" | "BULK"),
-      supplyRegionText: sourceRevision?.supplyRegion.join("、") ?? "全国",
+      supplyRegionText: "全国",
       validFrom: "2026-08-02",
     },
     validators: { onSubmit: promoteSchema },
@@ -569,14 +586,20 @@ export function PromoteSupplierProductDialog({
       item.supplierProduct.incomingRevision ?? item.supplierProduct.currentRevision
     form.reset({
       targetSkuId: candidate.skuId,
-      confirmedCostGross: nextSource.sourceQuotedPriceGross ?? "",
+      confirmedCostGross:
+        nextSource.bulkFloorPriceGross ??
+        nextSource.dropshipFloorPriceGross ??
+        "",
       salesVisiblePrice: candidate.poolEntry?.salesVisiblePrice ?? "",
       poolPriceAction: candidate.poolEntry ? "KEEP_EXISTING" : "SET_PRICE",
-      inputTaxRate: nextSource.inputTaxRate ?? "0.13",
+      inputTaxRate: "0.13",
       minimumOrderQuantity:
-        item.offering?.proposedDefaults?.minimumOrderQuantity ?? "1",
+        item.offering?.proposedDefaults?.minimumOrderQuantity ??
+        nextSource.bulkMinimumOrderQuantity ??
+        "1",
       supplyMode: item.offering?.proposedDefaults?.supplyMode ?? "BULK",
-      supplyRegionText: nextSource.supplyRegion.join("、") || "全国",
+      supplyRegionText:
+        item.offering?.proposedDefaults?.supplyRegion.join("、") || "全国",
       validFrom: "2026-08-02",
     })
   }, [form, item, open, preferredProductId, skuQuery.data])

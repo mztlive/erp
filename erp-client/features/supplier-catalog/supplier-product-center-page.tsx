@@ -49,7 +49,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Checkbox } from "@/components/ui/checkbox"
 import { FileUpload } from "@/components/ui/file-upload"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -62,14 +61,14 @@ import {
   emptySupplierProductFormFields,
   formToMediaPayload,
   hydrateSupplierProductForm,
-  PRODUCT_CAPABILITY_OPTIONS,
-  specDraftsToAttributes,
-  splitRegionText,
+  rebuildSupplierSkusFromSpecs,
+  skusToAttributes,
   supplierProductCompleteness,
   SUPPLIER_PRODUCT_EDITOR_SECTIONS,
   validateSupplierProductForm,
   type SupplierProductEditorSectionId,
   type SupplierProductFormFields,
+  type SupplierSkuFormRow,
   type SupplierSpecDraft,
 } from "@/features/supplier-catalog/supplier-product-form-model"
 import {
@@ -324,6 +323,11 @@ export function SupplierProductCenterPage({
       supplierSpuCode: item.supplierProduct.supplierSpuCode,
       supplierSkuCode: item.supplierProduct.supplierSkuCode,
       revision,
+      catalogSkus: item.supplierProduct.catalogSkus?.map((sku) => ({
+        id: sku.id,
+        supplierSkuCode: sku.supplierSkuCode,
+        revision: sku.currentRevision,
+      })),
       categoryOptions,
       brandOptions,
     })
@@ -367,7 +371,51 @@ export function SupplierProductCenterPage({
     centerQuery.data?.costFieldVisibility ?? (maskCost ? "masked" : "visible")
 
   const contentPayload = (nextFields: SupplierProductFormFields) => {
-    const attributes = specDraftsToAttributes(nextFields.specDrafts)
+    const attributes = skusToAttributes(
+      nextFields.skus,
+      nextFields.specDrafts,
+    )
+    const activeDims = nextFields.specDrafts.filter(
+      (s) => s.name.trim() && s.values.some((v) => v.trim()),
+    )
+    const firstSku =
+      nextFields.skus[0] ??
+      ({
+        mainImage: "",
+        supplierSkuCode: "",
+        barcode: "",
+        attributeValues: [],
+        specLabel: "默认规格",
+        rowKey: "tmp",
+        dropshipFloorPriceGross: "",
+        bulkFloorPriceGross: "",
+        bulkMinimumOrderQuantity: "1",
+        availableQuantity: "",
+        availabilityStatus: "AVAILABLE",
+      } satisfies SupplierSkuFormRow)
+    const spuMedia = formToMediaPayload(nextFields, firstSku).filter(
+      (m) => m.usage !== "SKU_MAIN",
+    )
+
+    const skus = nextFields.skus.map((sku) => ({
+      id: sku.catalogSkuId,
+      supplierSkuCode: sku.supplierSkuCode.trim(),
+      barcode: sku.barcode.trim() || undefined,
+      specification: sku.specLabel,
+      attributes: activeDims.map((dim, index) => ({
+        name: dim.name.trim(),
+        value: (sku.attributeValues[index] ?? "").trim(),
+      })).filter((a) => a.name && a.value),
+      media: formToMediaPayload(nextFields, sku).filter(
+        (m) => m.usage === "SKU_MAIN",
+      ),
+      dropshipFloorPriceGross: sku.dropshipFloorPriceGross.trim(),
+      bulkFloorPriceGross: sku.bulkFloorPriceGross.trim(),
+      bulkMinimumOrderQuantity: sku.bulkMinimumOrderQuantity.trim(),
+      availableQuantity: sku.availableQuantity.trim() || undefined,
+      availabilityStatus: sku.availabilityStatus,
+    }))
+
     return {
       name: nextFields.name.trim(),
       description: nextFields.description.trim() || undefined,
@@ -375,19 +423,9 @@ export function SupplierProductCenterPage({
       category: nextFields.category.trim(),
       brand: nextFields.brand.trim() || undefined,
       sourceBaseUnit: nextFields.baseUnit.trim() || undefined,
-      barcode: nextFields.barcode.trim() || undefined,
       attributes,
-      media: formToMediaPayload(nextFields),
-      sourceQuotedPriceGross: nextFields.sourceQuotedPriceGross.trim(),
-      inputTaxRate: nextFields.inputTaxRate.trim(),
-      freightAmount: nextFields.freightAmount.trim() || "0.00",
-      otherFeeAmount: nextFields.otherFeeAmount.trim() || "0.00",
-      supplyRegion: splitRegionText(nextFields.supplyRegionText),
-      availableQuantity: nextFields.availableQuantity.trim() || undefined,
-      availabilityStatus: nextFields.availabilityStatus,
-      expectedShipTime: nextFields.expectedShipTime.trim() || undefined,
-      afterSalesNote: nextFields.afterSalesNote.trim() || undefined,
-      capabilitySnapshot: [...nextFields.capabilities],
+      media: spuMedia,
+      skus,
     }
   }
 
@@ -435,7 +473,6 @@ export function SupplierProductCenterPage({
           supplierId: supplier.stableId,
           supplierName: supplier.name,
           supplierSpuCode: fields.supplierSpuCode.trim() || undefined,
-          supplierSkuCode: fields.supplierSkuCode.trim(),
           ...payload,
           sourceReference: fields.sourceReference.trim() || undefined,
           minimumOrderQuantity: "1",
@@ -459,7 +496,6 @@ export function SupplierProductCenterPage({
         supplierProductId: item.supplierProduct.id,
         expectedSourceRevisionNo: expected,
         supplierSpuCode: fields.supplierSpuCode.trim() || undefined,
-        supplierSkuCode: fields.supplierSkuCode.trim(),
         ...payload,
         changeReason: fields.changeReason.trim(),
         idempotencyKey,
@@ -474,17 +510,28 @@ export function SupplierProductCenterPage({
   }
 
   const syncSpecDrafts = (next: readonly SupplierSpecDraft[]) => {
-    patchFields((previous) => ({ ...previous, specDrafts: next }))
-  }
-
-  const toggleCapability = (code: string, checked: boolean) => {
     patchFields((previous) => {
-      const set = new Set(previous.capabilities)
-      if (checked) set.add(code)
-      else set.delete(code)
-      return { ...previous, capabilities: [...set] }
+      const skus = rebuildSupplierSkusFromSpecs({
+        specs: next,
+        existing: previous.skus,
+        skuCodePrefix:
+          previous.supplierSpuCode.replace(/-+$/, "") ||
+          previous.skus[0]?.supplierSkuCode.replace(/-\d+$/, "") ||
+          "SKU",
+      })
+      return { ...previous, specDrafts: next, skus }
     })
   }
+
+  const updateSku = (index: number, patch: Partial<SupplierSkuFormRow>) => {
+    patchFields((previous) => ({
+      ...previous,
+      skus: previous.skus.map((sku, skuIndex) =>
+        skuIndex === index ? { ...sku, ...patch } : sku,
+      ),
+    }))
+  }
+
 
   if (!isCreate && centerQuery.isPending) {
     return (
@@ -523,7 +570,10 @@ export function SupplierProductCenterPage({
   const sections = SUPPLIER_PRODUCT_EDITOR_SECTIONS.filter(
     (section) => !(isCreate && section.editOnly),
   )
-  const derivedSpec = deriveSpecification(fields.specDrafts)
+  const activeSpecDims = fields.specDrafts.filter(
+    (spec) =>
+      spec.name.trim() && spec.values.some((value) => value.trim()),
+  )
   const assistantIssues = completeness.checks
     .filter((check) => !check.ok)
     .map((check) => ({
@@ -764,10 +814,12 @@ export function SupplierProductCenterPage({
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">图文</span>
                     <span className="num">
-                      {fields.carouselImages.length +
-                        fields.detailImages.length +
-                        (fields.skuMainImage ? 1 : 0)}
+                      {fields.carouselImages.length + fields.detailImages.length}
                     </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">SKU 行数</span>
+                    <span className="num">{fields.skus.length}</span>
                   </div>
                   <div className="flex items-center justify-between gap-3">
                     <span className="text-muted-foreground">映射</span>
@@ -789,7 +841,7 @@ export function SupplierProductCenterPage({
                 aria-label="供应商商品编辑分区"
                 className={cn(
                   "sticky z-10 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-background/95 p-1 shadow-sm backdrop-blur",
-                  isCreate ? "sm:grid-cols-4" : "sm:grid-cols-5",
+                  isCreate ? "sm:grid-cols-3" : "sm:grid-cols-4",
                 )}
                 style={{ top: stickyOffsetPx }}
               >
@@ -884,19 +936,6 @@ export function SupplierProductCenterPage({
                         }))
                       }
                       placeholder="可空；空时由 ERP 生成来源内稳定代码"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sku-code">供应商 SKU 编码 *</Label>
-                    <Input
-                      id="sku-code"
-                      value={fields.supplierSkuCode}
-                      onChange={(event) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          supplierSkuCode: event.target.value,
-                        }))
-                      }
                     />
                   </div>
                   <div className="space-y-1.5 sm:col-span-2">
@@ -994,19 +1033,6 @@ export function SupplierProductCenterPage({
                       className="w-full"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sp-barcode">商品条码</Label>
-                    <Input
-                      id="sp-barcode"
-                      value={fields.barcode}
-                      onChange={(event) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          barcode: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
                 </div>
               </fieldset>
 
@@ -1017,54 +1043,8 @@ export function SupplierProductCenterPage({
               >
                 <legend className="px-1 text-base font-semibold">图文信息</legend>
                 <p className="text-xs text-muted-foreground">
-                  轮播/详情在 SPU，主图在 SKU——与公司商品一致。入池仅复制已归档媒体。
+                  轮播图与详情图属于 SPU；SKU 主图在下方「SKU / 规格与供给」维护。
                 </p>
-                <section className="space-y-3">
-                  <div className="space-y-1.5">
-                    <Label>来源 SKU 主图</Label>
-                    {fields.skuMainImage ? (
-                      <div className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5">
-                        <ImageIcon
-                          className="size-4 text-muted-foreground"
-                          aria-hidden
-                        />
-                        <span className="min-w-0 flex-1 truncate text-xs">
-                          {fields.skuMainImage}
-                        </span>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="xs"
-                          onClick={() =>
-                            patchFields((previous) => ({
-                              ...previous,
-                              skuMainImage: "",
-                            }))
-                          }
-                        >
-                          移除
-                        </Button>
-                      </div>
-                    ) : (
-                      <FileUpload
-                        accept="image/jpeg,image/png,image/webp"
-                        multiple={false}
-                        label="上传 SKU 主图"
-                        description="建公司品并启用 SKU 时必填"
-                        density="compact"
-                        onFilesSelected={(files) => {
-                          if (files[0]) {
-                            patchFields((previous) => ({
-                              ...previous,
-                              skuMainImage: files[0]!.name,
-                            }))
-                          }
-                        }}
-                      />
-                    )}
-                  </div>
-                </section>
-                <div className="border-t border-border" />
                 <MediaListEditor
                   label="轮播图"
                   value={fields.carouselImages}
@@ -1095,16 +1075,18 @@ export function SupplierProductCenterPage({
                 disabled={!canEdit}
               >
                 <legend className="px-1 text-base font-semibold">
-                  SKU / 规格
+                  SKU / 规格与供给
                 </legend>
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="text-xs text-muted-foreground">
-                    与公司商品相同：添加规格维度与取值。无规格时按默认规格保存；建公司品时按维度预填。
+                    添加规格维度后自动组合出多行 SKU；每行的编码、条码、主图与来源供给均可编辑（与公司商品 SKU 表一致）。
                   </p>
                   <Badge variant="secondary">
-                    {fields.specDrafts.length} 个规格项
+                    {fields.specDrafts.length} 个规格项 · {fields.skus.length} 个
+                    SKU
                   </Badge>
                 </div>
+
                 <div className="space-y-3">
                   {fields.specDrafts.map((draft, index) => (
                     <div
@@ -1217,13 +1199,11 @@ export function SupplierProductCenterPage({
                                   syncSpecDrafts(next)
                                 }}
                                 placeholder={`请输入${draft.name || "规格"}`}
-                                aria-label={`${draft.name || `规格项 ${index + 1}`}的第 ${valueIndex + 1} 个值`}
                               />
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="icon-xs"
-                                aria-label={`删除规格值 ${specValue || valueIndex + 1}`}
                                 onClick={() => {
                                   const next = [...fields.specDrafts]
                                   next[index] = {
@@ -1274,245 +1254,239 @@ export function SupplierProductCenterPage({
                   <PlusIcon data-icon="inline-start" aria-hidden />
                   添加规格项
                 </Button>
-                <div className="overflow-x-auto rounded-xl border border-border">
-                  <table className="w-full min-w-[40rem] text-sm">
-                    <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
-                      <tr>
-                        <th className="px-3 py-2 font-medium">供应商 SKU</th>
-                        <th className="px-3 py-2 font-medium">规格摘要</th>
-                        <th className="px-3 py-2 font-medium">条码</th>
-                        <th className="px-3 py-2 font-medium">主图</th>
-                        <th className="px-3 py-2 font-medium">单位</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-t border-border">
-                        <td className="px-3 py-3 num">
-                          {fields.supplierSkuCode || "—"}
-                        </td>
-                        <td className="px-3 py-3">{derivedSpec}</td>
-                        <td className="px-3 py-3 num">
-                          {fields.barcode || "—"}
-                        </td>
-                        <td className="px-3 py-3">
-                          {fields.skuMainImage || (
-                            <span className="text-muted-foreground">未上传</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-3">
-                          {fields.baseUnit || "—"}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </fieldset>
 
-              <fieldset
-                id="supplier-product-section-supply"
-                className="scroll-mt-[var(--product-section-scroll-margin)] space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
-                disabled={!canEdit}
-              >
-                <legend className="px-1 text-base font-semibold">
-                  来源供给（供应商独有）
-                </legend>
-                <p className="text-xs text-muted-foreground">
-                  报价与可供条件只属于供应商来源；入池时采购另确认成本，销售可见价写商品池。
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sp-quote">供应商含税报价 *</Label>
-                    <Input
-                      id="sp-quote"
-                      value={
-                        costFieldVisibility === "masked"
-                          ? "***"
-                          : fields.sourceQuotedPriceGross
-                      }
-                      disabled={costFieldVisibility === "masked"}
-                      onChange={(event) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          sourceQuotedPriceGross: event.target.value,
-                        }))
-                      }
-                    />
+                <div className="min-w-0 max-w-full space-y-3 overflow-hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      规格组合生成 SKU 表；每行维护编码、条码、1:1 主图、代发/集采底价与起订量、可供状态。
+                    </p>
+                    <Badge variant="success">
+                      {fields.skus.length} / {fields.skus.length} 行
+                    </Badge>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sp-tax">进项税率 *</Label>
-                    <Input
-                      id="sp-tax"
-                      value={
-                        costFieldVisibility === "masked"
-                          ? "***"
-                          : fields.inputTaxRate
-                      }
-                      disabled={costFieldVisibility === "masked"}
-                      onChange={(event) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          inputTaxRate: event.target.value,
-                        }))
-                      }
-                    />
+                  <div className="overflow-x-auto rounded-xl border border-border">
+                    <table className="w-full min-w-[72rem] text-sm">
+                      <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
+                        <tr>
+                          {activeSpecDims.length > 0 ? (
+                            activeSpecDims.map((spec) => (
+                              <th
+                                key={spec.name}
+                                className="px-3 py-2 font-medium"
+                              >
+                                {spec.name}
+                              </th>
+                            ))
+                          ) : (
+                            <th className="px-3 py-2 font-medium">规格</th>
+                          )}
+                          <th className="border-l border-border px-3 py-2 font-medium">
+                            供应商 SKU 编码 *
+                          </th>
+                          <th className="px-3 py-2 font-medium">条码</th>
+                          <th className="px-3 py-2 font-medium">主图</th>
+                          <th className="border-l border-border px-3 py-2 font-medium">
+                            一件代发底价（含税运）*
+                          </th>
+                          <th className="px-3 py-2 font-medium">
+                            集采底价（含税）*
+                          </th>
+                          <th className="px-3 py-2 font-medium">集采起订量 *</th>
+                          <th className="px-3 py-2 font-medium">可供数量</th>
+                          <th className="px-3 py-2 font-medium">可供状态</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {fields.skus.map((sku, index) => (
+                          <React.Fragment key={sku.rowKey}>
+                            <tr className="border-t border-border align-top">
+                              {activeSpecDims.length > 0 ? (
+                                activeSpecDims.map((spec, specIndex) => (
+                                  <td
+                                    key={`${spec.name}-${specIndex}`}
+                                    className="px-3 py-3"
+                                  >
+                                    <Badge variant="secondary">
+                                      {sku.attributeValues[specIndex] || "—"}
+                                    </Badge>
+                                  </td>
+                                ))
+                              ) : (
+                                <td className="px-3 py-3">
+                                  <Badge variant="secondary">默认规格</Badge>
+                                </td>
+                              )}
+                              <td className="border-l border-border px-3 py-3">
+                                <Input
+                                  className="h-8"
+                                  value={sku.supplierSkuCode}
+                                  onChange={(event) =>
+                                    updateSku(index, {
+                                      supplierSkuCode: event.target.value,
+                                    })
+                                  }
+                                  aria-label={`${sku.specLabel} 供应商 SKU 编码`}
+                                />
+                              </td>
+                              <td className="px-3 py-3">
+                                <Input
+                                  className="h-8"
+                                  value={sku.barcode}
+                                  onChange={(event) =>
+                                    updateSku(index, {
+                                      barcode: event.target.value,
+                                    })
+                                  }
+                                  aria-label={`${sku.specLabel} 条码`}
+                                />
+                              </td>
+                              <td className="px-3 py-3">
+                                {sku.mainImage ? (
+                                  <div className="relative size-14 shrink-0 overflow-hidden rounded-md border border-border bg-surface-sunken">
+                                    <div className="flex size-full flex-col items-center justify-center gap-0.5 p-1 text-center">
+                                      <ImageIcon
+                                        className="size-4 text-muted-foreground"
+                                        aria-hidden
+                                      />
+                                      <span className="line-clamp-2 w-full break-all text-[10px] leading-tight text-muted-foreground">
+                                        {sku.mainImage}
+                                      </span>
+                                    </div>
+                                    <Button
+                                      type="button"
+                                      variant="secondary"
+                                      size="icon-xs"
+                                      className="absolute right-0.5 top-0.5 size-5"
+                                      onClick={() =>
+                                        updateSku(index, { mainImage: "" })
+                                      }
+                                      aria-label={`${sku.specLabel} 移除主图`}
+                                    >
+                                      <XIcon className="size-3" />
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <FileUpload
+                                    accept="image/jpeg,image/png,image/webp"
+                                    multiple={false}
+                                    label="主图"
+                                    description="1:1"
+                                    density="compact"
+                                    className="aspect-square size-14 gap-0.5 p-1 text-[10px] [&_[data-slot=button]]:mt-0"
+                                    onFilesSelected={(files) => {
+                                      if (files[0]) {
+                                        updateSku(index, {
+                                          mainImage: files[0].name,
+                                        })
+                                      }
+                                    }}
+                                  />
+                                )}
+                              </td>
+                              <td className="border-l border-border px-3 py-3">
+                                <Input
+                                  className="h-8"
+                                  value={
+                                    costFieldVisibility === "masked"
+                                      ? "***"
+                                      : sku.dropshipFloorPriceGross
+                                  }
+                                  disabled={costFieldVisibility === "masked"}
+                                  onChange={(event) =>
+                                    updateSku(index, {
+                                      dropshipFloorPriceGross:
+                                        event.target.value,
+                                    })
+                                  }
+                                  aria-label={`${sku.specLabel} 一件代发底价（含税运）`}
+                                />
+                              </td>
+                              <td className="px-3 py-3">
+                                <Input
+                                  className="h-8"
+                                  value={
+                                    costFieldVisibility === "masked"
+                                      ? "***"
+                                      : sku.bulkFloorPriceGross
+                                  }
+                                  disabled={costFieldVisibility === "masked"}
+                                  onChange={(event) =>
+                                    updateSku(index, {
+                                      bulkFloorPriceGross: event.target.value,
+                                    })
+                                  }
+                                  aria-label={`${sku.specLabel} 集采底价（含税）`}
+                                />
+                              </td>
+                              <td className="px-3 py-3">
+                                <Input
+                                  className="h-8"
+                                  value={sku.bulkMinimumOrderQuantity}
+                                  onChange={(event) =>
+                                    updateSku(index, {
+                                      bulkMinimumOrderQuantity:
+                                        event.target.value,
+                                    })
+                                  }
+                                  aria-label={`${sku.specLabel} 集采起订量`}
+                                />
+                              </td>
+                              <td className="px-3 py-3">
+                                <Input
+                                  className="h-8"
+                                  value={sku.availableQuantity}
+                                  onChange={(event) =>
+                                    updateSku(index, {
+                                      availableQuantity: event.target.value,
+                                    })
+                                  }
+                                  aria-label={`${sku.specLabel} 可供数量`}
+                                />
+                              </td>
+                              <td className="px-3 py-3">
+                                <OptionCombobox
+                                  value={sku.availabilityStatus}
+                                  onValueChange={(value) =>
+                                    updateSku(index, {
+                                      availabilityStatus: (value ??
+                                        "AVAILABLE") as SupplierSkuFormRow["availabilityStatus"],
+                                    })
+                                  }
+                                  options={[
+                                    { value: "AVAILABLE", label: "可供" },
+                                    { value: "UNAVAILABLE", label: "不可供" },
+                                    { value: "STOPPED", label: "停供" },
+                                    { value: "STALE", label: "过期" },
+                                  ]}
+                                  allowClear={false}
+                                  className="w-28"
+                                />
+                              </td>
+                            </tr>
+                          </React.Fragment>
+                        ))}
+                      </tbody>
+                    </table>
                   </div>
+                </div>
+
+                {!isCreate ? (
                   <div className="space-y-1.5">
-                    <Label htmlFor="sp-freight">运费</Label>
-                    <Input
-                      id="sp-freight"
-                      value={
-                        costFieldVisibility === "masked"
-                          ? "***"
-                          : fields.freightAmount
-                      }
-                      disabled={costFieldVisibility === "masked"}
-                      onChange={(event) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          freightAmount: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sp-other-fee">其他费用</Label>
-                    <Input
-                      id="sp-other-fee"
-                      value={
-                        costFieldVisibility === "masked"
-                          ? "***"
-                          : fields.otherFeeAmount
-                      }
-                      disabled={costFieldVisibility === "masked"}
-                      onChange={(event) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          otherFeeAmount: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sp-region">可供区域 *</Label>
-                    <Input
-                      id="sp-region"
-                      value={fields.supplyRegionText}
-                      onChange={(event) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          supplyRegionText: event.target.value,
-                        }))
-                      }
-                      placeholder="逗号或顿号分隔"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>可供状态</Label>
-                    <OptionCombobox
-                      value={fields.availabilityStatus}
-                      onValueChange={(value) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          availabilityStatus: (value ??
-                            "AVAILABLE") as SupplierProductFormFields["availabilityStatus"],
-                        }))
-                      }
-                      options={[
-                        { value: "AVAILABLE", label: "可供" },
-                        { value: "UNAVAILABLE", label: "不可供" },
-                        { value: "STOPPED", label: "停供" },
-                        { value: "STALE", label: "过期未刷新" },
-                      ]}
-                      allowClear={false}
-                      className="w-full"
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sp-qty">来源库存/可供数量</Label>
-                    <Input
-                      id="sp-qty"
-                      value={fields.availableQuantity}
-                      onChange={(event) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          availableQuantity: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sp-ship">预计发货</Label>
-                    <Input
-                      id="sp-ship"
-                      value={fields.expectedShipTime}
-                      onChange={(event) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          expectedShipTime: event.target.value,
-                        }))
-                      }
-                    />
-                  </div>
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label htmlFor="sp-after-sales">售后说明</Label>
+                    <Label htmlFor="sp-reason">变更原因 *</Label>
                     <Textarea
-                      id="sp-after-sales"
-                      value={fields.afterSalesNote}
+                      id="sp-reason"
+                      value={fields.changeReason}
                       onChange={(event) =>
                         patchFields((previous) => ({
                           ...previous,
-                          afterSalesNote: event.target.value,
+                          changeReason: event.target.value,
                         }))
                       }
                       rows={2}
+                      placeholder="说明本次修改内容，保存后形成新来源修订"
                     />
                   </div>
-                  <div className="space-y-2 sm:col-span-2">
-                    <Label>商品能力</Label>
-                    <p className="text-xs text-muted-foreground">
-                      多选；入池时作为来源能力快照，不写入公司商品主档。
-                    </p>
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {PRODUCT_CAPABILITY_OPTIONS.map((option) => {
-                        const checked = fields.capabilities.includes(
-                          option.value,
-                        )
-                        return (
-                          <label
-                            key={option.value}
-                            className="flex cursor-pointer items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm"
-                          >
-                            <Checkbox
-                              checked={checked}
-                              onCheckedChange={(value) =>
-                                toggleCapability(option.value, value === true)
-                              }
-                              aria-label={option.label}
-                            />
-                            <span>{option.label}</span>
-                          </label>
-                        )
-                      })}
-                    </div>
-                  </div>
-                  {!isCreate ? (
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label htmlFor="sp-reason">变更原因 *</Label>
-                      <Textarea
-                        id="sp-reason"
-                        value={fields.changeReason}
-                        onChange={(event) =>
-                          patchFields((previous) => ({
-                            ...previous,
-                            changeReason: event.target.value,
-                          }))
-                        }
-                        rows={2}
-                        placeholder="说明本次修改内容，保存后形成新来源修订"
-                      />
-                    </div>
-                  ) : null}
-                </div>
+                ) : null}
               </fieldset>
 
               {!isCreate && item ? (
