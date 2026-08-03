@@ -560,7 +560,7 @@ function ConnectionList({
         metadata={
           <DataFreshness
             updatedAt="刚刚"
-            dateTime={data?.projectedAt ?? new Date().toISOString()}
+            dateTime={data?.projectedAt}
             state="fresh"
             label="连接列表"
           />

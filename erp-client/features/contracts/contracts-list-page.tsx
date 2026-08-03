@@ -388,7 +388,6 @@ export function ContractsListPage({
         metadata={
           <DataFreshness
             updatedAt="刚刚"
-            dateTime={new Date().toISOString()}
             state="fresh"
             label="列表数据"
           />

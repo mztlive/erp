@@ -839,9 +839,7 @@ export function FulfillmentOperationsPage() {
           <div className="flex flex-wrap items-center gap-3">
             <DataFreshness
               updatedAt="刚刚"
-              dateTime={
-                context?.snapshotUpdatedAt ?? new Date().toISOString()
-              }
+              dateTime={context?.snapshotUpdatedAt}
               state="fresh"
               label={freshnessText.dataUpdatedAt}
             />
@@ -1136,8 +1134,7 @@ export function FulfillmentOperationsPage() {
                     }
                     updatedAt={{
                       label: "刚刚",
-                      dateTime:
-                        context?.snapshotUpdatedAt ?? new Date().toISOString(),
+                      dateTime: context?.snapshotUpdatedAt ?? "",
                     }}
                     allowed={task.gate.state === "SATISFIED"}
                     paymentAction={

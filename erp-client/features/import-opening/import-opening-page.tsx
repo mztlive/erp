@@ -399,7 +399,7 @@ function BatchListView({
             updatedAt={
               data?.queriedAt ? formatTime(data.queriedAt) : "刚刚"
             }
-            dateTime={data?.queriedAt ?? new Date().toISOString()}
+            dateTime={data?.queriedAt}
             state={listQuery.isFetching ? "stale" : "fresh"}
             label="导入批次"
           />

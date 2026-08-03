@@ -872,9 +872,7 @@ export function CardFundsReviewPage() {
           <div className="flex flex-wrap items-center gap-3">
             <DataFreshness
               updatedAt="刚刚"
-              dateTime={
-                context?.queueContextUpdatedAt ?? new Date().toISOString()
-              }
+              dateTime={context?.queueContextUpdatedAt}
               state="fresh"
               label={freshnessText.queueUpdatedAt}
             />

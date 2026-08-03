@@ -119,7 +119,6 @@ export function GovernanceWorkspacePage({ def }: { def: WorkspacePageDef }) {
         metadata={
           <DataFreshness
             updatedAt="刚刚"
-            dateTime={new Date().toISOString()}
             state="fresh"
             label="治理数据"
           />

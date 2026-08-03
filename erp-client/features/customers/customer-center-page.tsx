@@ -281,7 +281,7 @@ export function CustomerCenterPage() {
         metadata={
           <DataFreshness
             updatedAt="刚刚"
-            dateTime={data?.queriedAt ?? new Date().toISOString()}
+            dateTime={data?.queriedAt}
             state="fresh"
             label="客户目录"
           />

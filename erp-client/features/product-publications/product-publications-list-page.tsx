@@ -356,7 +356,7 @@ export function ProductPublicationsListPage() {
         metadata={
           <DataFreshness
             updatedAt="列表"
-            dateTime={data?.queriedAt ?? new Date().toISOString()}
+            dateTime={data?.queriedAt}
             state={listQuery.isFetching ? "stale" : "fresh"}
             label="发布列表"
           />
