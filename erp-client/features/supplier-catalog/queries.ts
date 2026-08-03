@@ -13,12 +13,14 @@ import {
   fetchSupplierCatalogQueue,
   promoteSupplierProductToPool,
   resolveUnknownSupplierCatalogResult,
+  reviseSupplierCatalogProduct,
   saveSessionDraft,
 } from "@/features/supplier-catalog/api"
 import type {
   CreateSupplierCatalogItemInput,
   DemoRole,
   PromoteSupplierProductInput,
+  ReviseSupplierCatalogProductInput,
   SupplierCatalogQueueQuery,
 } from "@/features/supplier-catalog/types"
 
@@ -50,6 +52,17 @@ export function useCreateSupplierCatalogItemMutation() {
   return useMutation({
     mutationFn: (input: CreateSupplierCatalogItemInput) =>
       createSupplierCatalogItem(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: supplierCatalogKeys.all })
+    },
+  })
+}
+
+export function useReviseSupplierCatalogProductMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ReviseSupplierCatalogProductInput) =>
+      reviseSupplierCatalogProduct(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: supplierCatalogKeys.all })
     },

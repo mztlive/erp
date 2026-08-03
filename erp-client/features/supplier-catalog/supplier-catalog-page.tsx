@@ -283,9 +283,6 @@ export function SupplierCatalogPage() {
       : "all"
   const currentSupplierProductId =
     searchParams.get("currentSupplierProductId") ?? undefined
-  const promotionSupplierProductId =
-    searchParams.get("promotionSupplierProductId") ?? undefined
-  const createdProductId = searchParams.get("createdProductId") ?? undefined
   const currentWorkItemId =
     searchParams.get("currentWorkItemId") ?? undefined
   const queueContextId =
@@ -340,8 +337,6 @@ export function SupplierCatalogPage() {
   const [manualEntryOpen, setManualEntryOpen] = React.useState(false)
   const [promotionItem, setPromotionItem] =
     React.useState<SupplierCatalogItemView | undefined>()
-  const [preferredPromotionProductId, setPreferredPromotionProductId] =
-    React.useState<string | undefined>()
 
   const view = queueQuery.data
   const items = React.useMemo(() => [...(view?.items ?? [])], [view?.items])
@@ -578,30 +573,6 @@ export function SupplierCatalogPage() {
     },
     [mode, pathname, queueContextId, router, searchParams]
   )
-
-  React.useEffect(() => {
-    if (mode !== "list" || !promotionSupplierProductId || queueQuery.isPending) {
-      return
-    }
-    const target = items.find(
-      (candidate) =>
-        candidate.supplierProduct.id === promotionSupplierProductId,
-    )
-    if (!target) return
-    setPreferredPromotionProductId(createdProductId)
-    setPromotionItem(target)
-    replaceUrl({
-      promotionSupplierProductId: null,
-      createdProductId: null,
-    })
-  }, [
-    createdProductId,
-    items,
-    mode,
-    promotionSupplierProductId,
-    queueQuery.isPending,
-    replaceUrl,
-  ])
 
   const goToItem = React.useCallback(
     (next: SupplierCatalogItemView | undefined | null) => {
@@ -1008,13 +979,9 @@ export function SupplierCatalogPage() {
         <PromoteSupplierProductDialog
           key={promotionItem?.supplierProduct.id ?? "promote-supplier-product"}
           item={promotionItem}
-          preferredProductId={preferredPromotionProductId}
           open={Boolean(promotionItem)}
           onOpenChange={(open) => {
-            if (!open) {
-              setPromotionItem(undefined)
-              setPreferredPromotionProductId(undefined)
-            }
+            if (!open) setPromotionItem(undefined)
           }}
         />
       </>

@@ -41,7 +41,8 @@ type SupplyRelationshipListViewProps = {
   sourceType: SupplierCatalogSourceType | "all"
   onSourceTypeChange: (value: SupplierCatalogSourceType | "all") => void
   onOpenExcelImport: () => void
-  onOpenManualEntry: () => void
+  /** 从 W14 固定 SKU 进入时仍用对话框一次登记供给；列表自由录入走全页同构表单。 */
+  onOpenManualEntry?: () => void
   onPromote: (item: SupplierCatalogItemView) => void
 }
 
@@ -409,10 +410,25 @@ function SupplyRelationshipListView({
               <UploadIcon className="size-3.5" />
               导入 Excel
             </Button>
-            <Button type="button" size="sm" onClick={onOpenManualEntry}>
-              <PlusIcon className="size-3.5" />
-              手工录入
-            </Button>
+            {skuId && onOpenManualEntry ? (
+              <Button type="button" size="sm" onClick={onOpenManualEntry}>
+                <PlusIcon className="size-3.5" />
+                添加供应商并登记成本
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="sm"
+                render={
+                  <Link
+                    href={`/procurement/supplier-catalog/new?returnTo=${encodeURIComponent(returnHref)}`}
+                  />
+                }
+              >
+                <PlusIcon className="size-3.5" />
+                手工录入
+              </Button>
+            )}
             <Button variant="outline" size="sm" render={<Link href={queueHref} />}>
               处理来源变化
             </Button>
@@ -537,11 +553,29 @@ function SupplyRelationshipListView({
               <BusinessEmptyState
                 kind="no-data"
                 title={skuId ? "当前 SKU 暂无供应商供给" : "暂无供应商商品"}
-                description="可以导入供应商 Excel、运行 API 同步或手工录入。三种来源使用相同数据结构。"
+                description="可以导入供应商 Excel、运行 API 同步或手工录入。三种来源使用相同数据结构；手工录入使用与公司商品同构的全页表单。"
                 action={
-                  <Button variant="outline" type="button" onClick={onOpenManualEntry}>
-                    手工录入商品
-                  </Button>
+                  skuId && onOpenManualEntry ? (
+                    <Button
+                      variant="outline"
+                      type="button"
+                      onClick={onOpenManualEntry}
+                    >
+                      添加供应商并登记成本
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="outline"
+                      type="button"
+                      render={
+                        <Link
+                          href={`/procurement/supplier-catalog/new?returnTo=${encodeURIComponent(returnHref)}`}
+                        />
+                      }
+                    >
+                      手工录入商品
+                    </Button>
+                  )
                 }
               />
             }

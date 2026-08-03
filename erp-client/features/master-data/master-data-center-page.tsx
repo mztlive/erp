@@ -55,14 +55,10 @@ export function MasterDataCenterPage({
   resource,
   stableId,
   section,
-  sourceSupplierProductId,
-  returnTo,
 }: {
   resource: string
   stableId: string
   section?: string
-  sourceSupplierProductId?: string
-  returnTo?: string
 }) {
   if (!isResource(resource)) {
     return (
@@ -82,13 +78,7 @@ export function MasterDataCenterPage({
 
   // 商品 / 供应商详情页即查看也是编辑（含新建 /new），不使用侧边 sheet / 对话框
   if (resource === "products") {
-    return (
-      <ProductDetailPage
-        stableId={stableId}
-        sourceSupplierProductId={sourceSupplierProductId}
-        returnTo={returnTo}
-      />
-    )
+    return <ProductDetailPage stableId={stableId} />
   }
   if (resource === "suppliers") {
     return <SupplierDetailPage stableId={stableId} />

@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { z } from "zod"
 
 import { OptionCombobox } from "@/components/business"
@@ -328,7 +327,7 @@ export function SupplierCatalogIntakeDialog({
               {(field) => (
                 <field.TextareaField
                   label="来源商品描述"
-                  description="作为首次创建公司商品时的预填资料；保存后由公司独立维护"
+                  description="供应商来源描述；不自动写入公司商品"
                 />
               )}
             </form.AppField>
@@ -761,19 +760,6 @@ export function PromoteSupplierProductDialog({
             </form.AppField>
           </div>
           <DialogFooter>
-            {item ? (
-              <Button
-                type="button"
-                variant="outline"
-                render={
-                  <Link
-                    href={`/master-data/products/new?sourceSupplierProductId=${encodeURIComponent(item.supplierProduct.id)}&returnTo=${encodeURIComponent(`/procurement/supplier-catalog?mode=list&promotionSupplierProductId=${encodeURIComponent(item.supplierProduct.id)}`)}`}
-                  />
-                }
-              >
-                从来源资料新建公司商品
-              </Button>
-            ) : null}
             <DialogClose render={<Button type="button" variant="outline" />}>
               关闭
             </DialogClose>

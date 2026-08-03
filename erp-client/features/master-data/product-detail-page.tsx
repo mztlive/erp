@@ -79,8 +79,6 @@ import {
   useMasterDataCenterQuery,
   useMasterDataListQuery,
 } from "@/features/master-data/queries"
-import { useSupplierCatalogCenterQuery } from "@/features/supplier-catalog/queries"
-import type { SupplierProductRevisionView } from "@/features/supplier-catalog/types"
 import type {
   MasterDataCenterView,
   MasterDataMutationResult,
@@ -436,100 +434,13 @@ function createProductDefaults(isCreate: boolean): ProductEditorFormValues {
   }
 }
 
-function createProductDefaultsFromSupplier(input: {
-  revision: SupplierProductRevisionView
-  supplierSkuCode: string
-  categoryOptions: ReturnType<typeof toCategoryComboboxItems>
-  brandOptions: ReturnType<typeof toBrandComboboxItems>
-}): ProductEditorFormValues {
-  const { revision } = input
-  const unit = BASE_UNIT_DICTIONARY.find(
-    (candidate) => candidate.label === revision.baseUnit,
-  )
-  const category = input.categoryOptions.find(
-    (candidate) => candidate.categoryName === revision.category,
-  )
-  const brand = input.brandOptions.find(
-    (candidate) => candidate.brandName === revision.brand,
-  )
-  const attributes = (revision.attributes ?? []).filter(
-    (attribute) => attribute.name.trim() && attribute.value.trim(),
-  )
-  const specs = attributes.map((attribute) => ({
-    name: attribute.name.trim(),
-    values: [attribute.value.trim()],
-  }))
-  const media = revision.media ?? []
-  const archivedMedia = media.filter(
-    (entry) => entry.archiveStatus === "ARCHIVED",
-  )
-  const mainImage = archivedMedia.find((entry) => entry.usage === "SKU_MAIN")
-  const empty = emptyProductFields()
-  const fields: ProductFields = {
-    ...empty,
-    description: revision.description ?? "",
-    baseUnitId: unit?.id ?? "",
-    baseUnitCode: unit?.code ?? "",
-    baseUnit: unit?.label ?? "",
-    categoryId: category?.categoryId ?? "",
-    category: category?.categoryName ?? "",
-    brandId: brand?.brandId ?? "",
-    brand: brand?.brandName ?? "",
-    carouselImages: archivedMedia
-      .filter((entry) => entry.usage === "SPU_CAROUSEL")
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((entry) => entry.fileName),
-    detailImages: archivedMedia
-      .filter((entry) => entry.usage === "SPU_DETAIL")
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((entry) => entry.fileName),
-    specs,
-    skus: [
-      {
-        ...empty.skus[0]!,
-        attributeValues: attributes.map((attribute) => attribute.value.trim()),
-        specLabel:
-          attributes.length > 0
-            ? attributes
-                .map((attribute) => `${attribute.name}：${attribute.value}`)
-                .join(" / ")
-            : revision.specification || "默认规格",
-        barcode: revision.barcode,
-        mainImage: mainImage?.fileName ?? "",
-        baseUnit: unit?.label ?? "",
-      },
-    ],
-  }
-  return {
-    name: revision.name,
-    effectiveFrom: "2026-08-03",
-    effectiveTo: "",
-    changeReason: `从供应商 SKU ${input.supplierSkuCode} 创建`,
-    fields,
-    specDrafts: specs.map((spec) => ({
-      name: spec.name,
-      values: [...spec.values],
-    })),
-    ...EMPTY_BATCH_REFERENCE_PRICE_FIELDS,
-  }
-}
-
 export function ProductDetailPage({
   stableId,
-  sourceSupplierProductId,
-  returnTo,
 }: {
   stableId: string
-  sourceSupplierProductId?: string
-  returnTo?: string
 }) {
   const router = useRouter()
   const isCreate = stableId === "new"
-  const safeSupplierReturnTo = returnTo?.startsWith(
-    "/procurement/supplier-catalog",
-  )
-    ? returnTo
-    : undefined
   const detailQuery = useMasterDataCenterQuery(
     "products",
     isCreate ? "" : stableId,
@@ -543,10 +454,6 @@ export function ProductDetailPage({
     resource: "brands",
     lifecycleStatus: "enabled",
     revisionTiming: "current",
-  })
-  const sourceSupplierProductQuery = useSupplierCatalogCenterQuery({
-    supplierProductId: sourceSupplierProductId ?? "",
-    enabled: isCreate && Boolean(sourceSupplierProductId),
   })
   const categoryOptions = React.useMemo(
     () => toCategoryComboboxItems(categoryListQuery.data?.rows ?? []),
@@ -585,7 +492,6 @@ export function ProductDetailPage({
   const stickyHeaderRef = React.useRef<HTMLElement>(null)
   const [stickyHeaderHeight, setStickyHeaderHeight] = React.useState(64)
   const hydratedKeyRef = React.useRef<string | null>(null)
-  const sourceHydratedKeyRef = React.useRef<string | null>(null)
   const initialFormValues = React.useMemo(
     () =>
       !isCreate && data
@@ -644,17 +550,7 @@ export function ProductDetailPage({
       })
       setResult(response)
       if (response.outcome === "succeeded") {
-        if (
-          sourceSupplierProductId &&
-          safeSupplierReturnTo
-        ) {
-          const separator = safeSupplierReturnTo.includes("?") ? "&" : "?"
-          router.replace(
-            `${safeSupplierReturnTo}${separator}createdProductId=${encodeURIComponent(response.stableId)}`,
-          )
-        } else {
-          router.replace(`/master-data/products/${response.stableId}`)
-        }
+        router.replace(`/master-data/products/${response.stableId}`)
       }
     },
   })
@@ -666,42 +562,6 @@ export function ProductDetailPage({
     form.reset(hydrateFromCenter(data))
     hydratedKeyRef.current = key
   }, [data, form, isCreate])
-
-  React.useEffect(() => {
-    if (
-      !isCreate ||
-      !sourceSupplierProductId ||
-      !sourceSupplierProductQuery.data ||
-      categoryListQuery.isPending ||
-      brandListQuery.isPending
-    ) {
-      return
-    }
-    const sourceItem = sourceSupplierProductQuery.data.item
-    const revision =
-      sourceItem.supplierProduct.incomingRevision ??
-      sourceItem.supplierProduct.currentRevision
-    const hydrationKey = `${sourceSupplierProductId}:${revision.revisionNo}`
-    if (sourceHydratedKeyRef.current === hydrationKey) return
-    form.reset(
-      createProductDefaultsFromSupplier({
-        revision,
-        supplierSkuCode: sourceItem.supplierProduct.supplierSkuCode,
-        categoryOptions,
-        brandOptions,
-      }),
-    )
-    sourceHydratedKeyRef.current = hydrationKey
-  }, [
-    brandListQuery.isPending,
-    brandOptions,
-    categoryListQuery.isPending,
-    categoryOptions,
-    form,
-    isCreate,
-    sourceSupplierProductId,
-    sourceSupplierProductQuery.data,
-  ])
 
   React.useLayoutEffect(() => {
     const el = stickyHeaderRef.current
@@ -882,12 +742,6 @@ export function ProductDetailPage({
         const changeReason = values.changeReason
         const fields = values.fields
         const specDrafts = values.specDrafts
-        const sourceSupplierItem = sourceSupplierProductQuery.data?.item
-        const sourceRevision = sourceSupplierItem
-          ? sourceSupplierItem.supplierProduct.incomingRevision ??
-            sourceSupplierItem.supplierProduct.currentRevision
-          : undefined
-        const sourceMediaCount = sourceRevision?.media?.length ?? 0
         const activeSpecs = fields.specs.filter(
           (spec) =>
             spec.name.trim() && spec.values.some((value) => value.trim()),
@@ -995,9 +849,9 @@ export function ProductDetailPage({
                       type="button"
                       size="sm"
                       variant="outline"
-                      render={<Link href={safeSupplierReturnTo ?? listHref} />}
+                      render={<Link href={listHref} />}
                     >
-                      {safeSupplierReturnTo ? "返回供应商商品" : "返回列表"}
+                      返回列表
                     </Button>
                     <Button
                       type="button"
@@ -1027,17 +881,6 @@ export function ProductDetailPage({
               </header>
 
               <div className="flex flex-col gap-4 p-4 md:p-5">
-                {isCreate && sourceSupplierItem && sourceRevision ? (
-                  <Alert>
-                    <ImageIcon aria-hidden />
-                    <AlertTitle>
-                      正在从 {sourceSupplierItem.supplierProduct.supplier.name} 的来源商品创建
-                    </AlertTitle>
-                    <AlertDescription>
-                      已预填名称、规格、条码和 {sourceMediaCount} 个来源媒体；内部分类、品牌、单位及缺失主图仍须确认。保存后公司商品内容独立维护，供应商后续更新不会自动覆盖。
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
                 {!isCreate && !canRevise && reviseBlocker ? (
                   <p className="text-xs text-muted-foreground">
                     {masterDataCopy.centerUpdateBlocked(reviseBlocker.message)}
@@ -1305,7 +1148,7 @@ export function ProductDetailPage({
                               description: event.target.value,
                             }))
                           }
-                          placeholder="公司审核后的商品描述；可由供应商来源资料预填"
+                          placeholder="公司审核后的商品描述"
                         />
                       </div>
                       <div className="space-y-1.5">

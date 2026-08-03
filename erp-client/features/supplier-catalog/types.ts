@@ -461,13 +461,8 @@ export type SessionCatalogDraft = Readonly<{
   updatedAt: string
 }>
 
-/** Excel/API/手工三种来源共用的供应商商品录入命令。 */
-export type CreateSupplierCatalogItemInput = Readonly<{
-  sourceType: SupplierCatalogSourceType
-  supplierId: string
-  supplierName: string
-  supplierSpuCode?: string
-  supplierSkuCode: string
+/** 与公司商品同构的内容字段 + 供应商独有供给观察字段。 */
+export type SupplierCatalogContentFields = Readonly<{
   name: string
   description?: string
   specification: string
@@ -479,24 +474,55 @@ export type CreateSupplierCatalogItemInput = Readonly<{
   media: readonly Omit<SupplierCatalogMediaView, "id">[]
   /** 供应商原始报价快照；不因采购确认而被覆盖。 */
   sourceQuotedPriceGross: string
-  /** 固定公司 SKU 入口使用；形成供给修订，销售侧不可见。 */
-  confirmedCostGross?: string
   inputTaxRate: string
+  freightAmount?: string
+  otherFeeAmount?: string
   supplyRegion: string[]
-  sourceReference?: string
-  targetSkuId?: string
-  targetSkuCode?: string
-  targetSkuName?: string
-  targetSpecification?: string
-  baseUnit?: string
-  salesVisiblePrice?: string
-  /** 已有商品池时默认沿用；只有显式 SET_PRICE 才允许形成新修订。 */
-  poolPriceAction?: "KEEP_EXISTING" | "SET_PRICE"
-  minimumOrderQuantity: string
-  supplyMode: "DROPSHIP" | "BULK"
-  validFrom: string
-  idempotencyKey: string
+  availableQuantity?: string
+  availabilityStatus?: "AVAILABLE" | "UNAVAILABLE" | "STOPPED" | "STALE"
+  expectedShipTime?: string
+  afterSalesNote?: string
+  capabilitySnapshot?: readonly string[]
 }>
+
+/** Excel/API/手工三种来源共用的供应商商品录入命令。 */
+export type CreateSupplierCatalogItemInput = SupplierCatalogContentFields &
+  Readonly<{
+    sourceType: SupplierCatalogSourceType
+    supplierId: string
+    supplierName: string
+    supplierSpuCode?: string
+    supplierSkuCode: string
+    /** 固定公司 SKU 入口使用；形成供给修订，销售侧不可见。 */
+    confirmedCostGross?: string
+    sourceReference?: string
+    targetSkuId?: string
+    targetSkuCode?: string
+    targetSkuName?: string
+    targetSpecification?: string
+    baseUnit?: string
+    salesVisiblePrice?: string
+    /** 已有商品池时默认沿用；只有显式 SET_PRICE 才允许形成新修订。 */
+    poolPriceAction?: "KEEP_EXISTING" | "SET_PRICE"
+    minimumOrderQuantity: string
+    supplyMode: "DROPSHIP" | "BULK"
+    validFrom: string
+    idempotencyKey: string
+  }>
+
+/**
+ * 在供应商商品中心保存内容：形成新的来源修订（不可变），
+ * 不写公司 SKU / 商品池 / 供给确认成本。
+ */
+export type ReviseSupplierCatalogProductInput = SupplierCatalogContentFields &
+  Readonly<{
+    supplierProductId: string
+    expectedSourceRevisionNo: number
+    supplierSpuCode?: string
+    supplierSkuCode: string
+    changeReason: string
+    idempotencyKey: string
+  }>
 
 /** 采购把供应商 SKU 选入公司商品池，并同时确认供给成本。 */
 export type PromoteSupplierProductInput = Readonly<{

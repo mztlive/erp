@@ -22,6 +22,7 @@ import type {
   SupplierCatalogWriteResult,
   SupplierOfferingRevisionView,
   PromoteSupplierProductInput,
+  ReviseSupplierCatalogProductInput,
   WorkItemLease,
 } from "@/features/supplier-catalog/types"
 import {
@@ -1144,12 +1145,16 @@ export async function createSupplierCatalogItem(
         })),
         sourceQuotedPriceGross: input.sourceQuotedPriceGross,
         inputTaxRate: input.inputTaxRate,
-        freightAmount: "0.00",
-        otherFeeAmount: "0.00",
+        freightAmount: input.freightAmount ?? "0.00",
+        otherFeeAmount: input.otherFeeAmount ?? "0.00",
         supplyRegion: input.supplyRegion,
-        availableQuantity: "—",
-        availabilityStatus: "AVAILABLE" as const,
-        capabilitySnapshot: [],
+        availableQuantity: input.availableQuantity?.trim() || "—",
+        availabilityStatus: input.availabilityStatus ?? "AVAILABLE",
+        expectedShipTime: input.expectedShipTime,
+        afterSalesNote: input.afterSalesNote,
+        capabilitySnapshot: input.capabilitySnapshot
+          ? [...input.capabilitySnapshot]
+          : [],
       },
     },
     skuCandidates: input.targetSkuId
@@ -1221,6 +1226,126 @@ export async function createSupplierCatalogItem(
       ? activeSupplierCountForSku(input.targetSkuId)
       : undefined,
     reference: `SC-${input.sourceType}-${String(seq).padStart(4, "0")}`,
+    recordedAt: now,
+  }
+  writeResults.set(input.idempotencyKey, result)
+  return result
+}
+
+function buildSourceDiff(
+  previous: SupplierProductRevisionView,
+  next: SupplierProductRevisionView,
+): DiffChange[] {
+  const pairs: Array<[string, string, string | undefined, string | undefined]> =
+    [
+      ["name", "名称", previous.name, next.name],
+      ["description", "描述", previous.description, next.description],
+      ["specification", "规格", previous.specification, next.specification],
+      ["category", "来源分类", previous.category, next.category],
+      ["brand", "来源品牌", previous.brand, next.brand],
+      ["baseUnit", "来源单位", previous.baseUnit, next.baseUnit],
+      ["barcode", "条码", previous.barcode, next.barcode],
+      [
+        "sourceQuotedPriceGross",
+        "含税报价",
+        previous.sourceQuotedPriceGross ?? undefined,
+        next.sourceQuotedPriceGross ?? undefined,
+      ],
+      [
+        "inputTaxRate",
+        "进项税率",
+        previous.inputTaxRate ?? undefined,
+        next.inputTaxRate ?? undefined,
+      ],
+      [
+        "media",
+        "图文数量",
+        String(previous.media?.length ?? 0),
+        String(next.media?.length ?? 0),
+      ],
+    ]
+  return pairs
+    .filter(([, , before, after]) => (before ?? "") !== (after ?? ""))
+    .map(([id, field, before, after], index) => ({
+      id: `diff_${id}_${index}`,
+      field,
+      before: before || "—",
+      after: after || "—",
+      costSensitive: id === "sourceQuotedPriceGross" || id === "inputTaxRate",
+    }))
+}
+
+/** 供应商商品中心保存：形成新的来源内容修订，不写公司主档。 */
+export async function reviseSupplierCatalogProduct(
+  input: ReviseSupplierCatalogProductInput,
+): Promise<SupplierCatalogWriteResult> {
+  await mockDelay(120)
+  const cached = writeResults.get(input.idempotencyKey)
+  if (cached) return cached
+  const current = listCatalogItems().find(
+    (item) => item.supplierProduct.id === input.supplierProductId,
+  )
+  if (!current) throw new Error("供应商商品不存在或无权访问")
+  const previous =
+    current.supplierProduct.incomingRevision ??
+    current.supplierProduct.currentRevision
+  if (previous.revisionNo !== input.expectedSourceRevisionNo) {
+    throw new Error("供应商商品来源版本已经变化，请刷新后重新保存")
+  }
+  const now = new Date().toISOString()
+  const nextRevision: SupplierProductRevisionView = {
+    revisionNo: previous.revisionNo + 1,
+    sourceRevisionToken: previous.sourceRevisionToken,
+    sourceUpdatedAt: now,
+    syncedAt: now,
+    name: input.name,
+    description: input.description,
+    specification: input.specification,
+    category: input.category,
+    brand: input.brand,
+    baseUnit: input.sourceBaseUnit,
+    barcode: input.barcode,
+    attributes: input.attributes,
+    media: input.media.map((media, index) => ({
+      ...media,
+      id: `${input.supplierProductId}_media_r${previous.revisionNo + 1}_${index + 1}`,
+    })),
+    sourceQuotedPriceGross: input.sourceQuotedPriceGross,
+    inputTaxRate: input.inputTaxRate,
+    freightAmount: input.freightAmount ?? previous.freightAmount,
+    otherFeeAmount: input.otherFeeAmount ?? previous.otherFeeAmount,
+    supplyRegion: input.supplyRegion,
+    availableQuantity: input.availableQuantity?.trim() || "—",
+    availabilityStatus:
+      input.availabilityStatus ?? previous.availabilityStatus,
+    expectedShipTime: input.expectedShipTime,
+    afterSalesNote: input.afterSalesNote,
+    capabilitySnapshot: input.capabilitySnapshot
+      ? [...input.capabilitySnapshot]
+      : previous.capabilitySnapshot,
+    contentFingerprintShort: `rev${previous.revisionNo + 1}`,
+  }
+  const next: SupplierCatalogItemView = {
+    ...current,
+    supplierProduct: {
+      ...current.supplierProduct,
+      supplierSpuCode: input.supplierSpuCode,
+      supplierSkuCode: input.supplierSkuCode,
+      currentRevision: nextRevision,
+      incomingRevision: undefined,
+    },
+    sourceDiff: buildSourceDiff(previous, nextRevision),
+    allowedActions: current.allowedActions.includes("PROMOTE_TO_PRODUCT_POOL")
+      ? current.allowedActions
+      : [...current.allowedActions, "PROMOTE_TO_PRODUCT_POOL"].filter(
+          (action, index, arr) => arr.indexOf(action) === index,
+        ),
+  }
+  catalogOverlays.set(input.supplierProductId, next)
+  const result: SupplierCatalogWriteResult = {
+    supplierProductId: input.supplierProductId,
+    poolEntryChange: "NONE",
+    reference: `SC-REV-${input.supplierProductId}-${nextRevision.revisionNo}`,
     recordedAt: now,
   }
   writeResults.set(input.idempotencyKey, result)
