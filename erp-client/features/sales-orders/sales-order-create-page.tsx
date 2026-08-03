@@ -3,13 +3,12 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { CircleAlertIcon, FilePlus2Icon, PlusIcon } from "lucide-react"
+import { CircleAlertIcon, PlusIcon } from "lucide-react"
 import { z } from "zod"
 
 import {
   ContractCombobox,
   CustomerCombobox,
-  DocumentSection,
   EditableLineItemTable,
   MoneyValue,
   OwnerCombobox,
@@ -24,7 +23,6 @@ import {
   DEMO_OWNER_OPTIONS,
   PAYMENT_TERM_OPTIONS,
   SETTLEMENT_PARTY_OPTIONS,
-  UNIT_OPTIONS,
   paymentTermLabel,
 } from "@/lib/business-options"
 import {
@@ -40,13 +38,6 @@ import {
 } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
 import {
   Field,
   FieldError,
@@ -262,13 +253,6 @@ const CONTRACT_SOURCE_OPTIONS = [
   { value: "upload_pdf", label: "同步上传合同 PDF" },
 ] as const
 
-const FULFILLMENT_OPTIONS = [
-  { value: "公司仓发", label: "公司仓发" },
-  { value: "供应商直发", label: "供应商直发" },
-  { value: "电子交付", label: "电子交付" },
-  { value: "现场服务", label: "现场服务" },
-] as const
-
 const CARD_FORM_OPTIONS = [
   { value: "电子卡", label: "电子卡" },
   { value: "实体卡", label: "实体卡" },
@@ -283,8 +267,13 @@ function createEmptyLine(nature: SalesOrderNature): SalesOrderDraftLineInput {
     name: "",
     sku: "",
     quantity: "1",
-    unit: nature === "card_voucher" ? "张" : "件",
+    /** 非卡券单位随 SKU 基础单位带出；卡券固定为张。建单页不可改。 */
+    unit: nature === "card_voucher" ? "张" : "",
     unitPriceGross: "0.00",
+    /**
+     * 建单页不提供仓发/直发选择；履约方式由后续采购二次确认写入正式结论。
+     * 提交仍带占位值以满足契约，服务端以确认结果为准。
+     */
     fulfillmentMode: nature === "physical_service" ? "公司仓发" : "",
     dueDate: "",
     faceValue: "",
@@ -376,16 +365,19 @@ export function SalesOrderCreatePage({
 
   const productComboboxItems = React.useMemo(
     () =>
-      (productsQuery.data?.rows ?? []).map((p) => ({
-        productId: p.stableId,
-        sku: p.stableNo,
-        name: p.name,
-        statusLabel: p.lifecycleStatusLabel,
-        statusTone: p.lifecycleTone,
-        description: p.keyFacts.find((f) => f.label === "基础单位")?.value
-          ? `单位 ${p.keyFacts.find((f) => f.label === "基础单位")?.value}`
-          : undefined,
-      })),
+      (productsQuery.data?.rows ?? []).map((p) => {
+        const baseUnit =
+          p.keyFacts.find((f) => f.label === "基础单位")?.value ?? ""
+        return {
+          productId: p.stableId,
+          sku: p.stableNo,
+          name: p.name,
+          statusLabel: p.lifecycleStatusLabel,
+          statusTone: p.lifecycleTone,
+          baseUnit,
+          description: baseUnit ? `单位 ${baseUnit}` : undefined,
+        }
+      }),
     [productsQuery.data?.rows]
   )
 
@@ -580,23 +572,15 @@ export function SalesOrderCreatePage({
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 pb-6 md:p-4">
       <PageHeader
+        density="compact"
         title="新建销售单"
-        description="卡券与实物/服务共用统一销售单；创建后业务性质不可修改。"
+        description="创建后业务性质不可修改；金额以提交后系统计算为准。"
         breadcrumbs={[
           { id: "sales", label: "销售", href: "/sales/orders" },
           { id: "orders", label: "销售单", href: "/sales/orders" },
           { id: "create", label: "新建", current: true },
         ]}
         status={{ label: "未创建", tone: "neutral" }}
-        actions={
-          <Button
-            type="button"
-            variant="outline"
-            render={<Link href="/sales/orders" />}
-          >
-            取消并返回
-          </Button>
-        }
       />
 
       {contractsQuery.isError ? (
@@ -618,494 +602,584 @@ export function SalesOrderCreatePage({
       ) : null}
 
       <form
-        className="space-y-3"
         onSubmit={(event) => {
           event.preventDefault()
           event.stopPropagation()
           void form.handleSubmit()
         }}
       >
-        <Card>
-          <CardHeader className="border-b border-border">
-            <CardTitle>销售单草稿</CardTitle>
-            <CardDescription>
-              提交时按所选合同、客户与结算主体版本记录；金额以提交后系统计算为准。
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DocumentSection
-              title="客户与合同"
-              description="选择已有有效合同，或随本单同步上传一份签署合同 PDF。"
-            >
-              <form.AppField name="contractSource">
-                {(field) => (
-                  <field.SelectField
-                    label="合同来源"
-                    options={CONTRACT_SOURCE_OPTIONS}
-                    onValueChange={handleContractSourceChange}
-                    description="两种方式互斥；上传成功后合同档案与销售单一次完成关联。"
-                  />
-                )}
-              </form.AppField>
-              <form.Subscribe selector={(state) => state.values.contractSource}>
-                {(contractSource) =>
-                  contractSource === "existing" ? (
-                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                      <form.AppField name="contractId">
-                        {(field) => {
-                          const isInvalid =
-                            field.state.meta.isTouched && !field.state.meta.isValid
-                          const errors = toFieldErrors(field.state.meta.errors)
-                          return (
-                            <Field data-invalid={isInvalid || undefined}>
-                              <FieldLabel htmlFor="contractId">
-                                已有有效合同
-                              </FieldLabel>
-                              <ContractCombobox
-                                value={field.state.value || undefined}
-                                onValueChange={(id) => {
-                                  const next = id ?? ""
-                                  field.handleChange(next)
-                                  handleContractChange(next)
-                                }}
-                                contracts={contractComboboxItems}
-                                disabled={
-                                  contractsQuery.isPending ||
-                                  contractsQuery.isError
-                                }
-                                loading={contractsQuery.isPending}
-                                placeholder={
-                                  contractsQuery.isPending
-                                    ? "正在加载有效合同…"
-                                    : contractComboboxItems.length > 0
-                                      ? "搜索合同编号或客户"
-                                      : "当前客户暂无可用合同"
-                                }
-                                emptyLabel={
-                                  contractComboboxItems.length > 0
-                                    ? "没有符合条件的合同"
-                                    : "当前客户暂无可用合同"
-                                }
-                              />
-                              {isInvalid ? (
-                                <FieldError errors={errors} />
-                              ) : null}
-                            </Field>
-                          )
-                        }}
-                      </form.AppField>
-                      <form.AppField name="contractRevisionLabel">
-                        {(field) => (
-                          <field.TextField
-                            label="合同精确版本"
-                            disabled
-                            description={
-                              contractQuery.data
-                                ? `${contractQuery.data.contractNo} · 当前版本已通过合同校验`
-                                : "选择合同后自动带出"
-                            }
-                          />
-                        )}
-                      </form.AppField>
-                      <form.AppField name="customerName">
-                        {(field) => <field.TextField label="客户" disabled />}
-                      </form.AppField>
-                      <form.AppField name="settlementEntity">
-                        {(field) => <field.TextField label="结算主体" disabled />}
-                      </form.AppField>
-                    </div>
-                  ) : (
-                    <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                      <div className="lg:col-span-2">
-                        <form.AppField name="contractPdf">
-                          {(field) => (
-                            <field.PdfUploadField label="合同电子档" />
-                          )}
-                        </form.AppField>
-                      </div>
-                      <form.AppField name="uploadedContractNo">
-                        {(field) => <field.TextField label="合同编号" />}
-                      </form.AppField>
-                      <form.AppField name="uploadedSignedAt">
-                        {(field) => (
-                          <field.DateField label="签订日期" />
-                        )}
-                      </form.AppField>
-                      <form.AppField name="customerId">
-                        {(field) => {
-                          const isInvalid =
-                            field.state.meta.isTouched && !field.state.meta.isValid
-                          const errors = toFieldErrors(field.state.meta.errors)
-                          return (
-                            <Field data-invalid={isInvalid || undefined}>
-                              <FieldLabel htmlFor="customerId">客户</FieldLabel>
-                              <CustomerCombobox
-                                value={field.state.value || undefined}
-                                onValueChange={(id) => {
-                                  const next = id ?? ""
-                                  field.handleChange(next)
-                                  const customer = customerComboboxItems.find(
-                                    (c) => c.id === next
-                                  )
-                                  form.setFieldValue(
-                                    "customerName",
-                                    customer?.legalName ?? ""
-                                  )
-                                }}
-                                customers={customerComboboxItems}
-                                loading={customerDirectoryQuery.isPending}
-                                disabled={
-                                  customerDirectoryQuery.isPending ||
-                                  customerDirectoryQuery.isError
-                                }
-                                placeholder="搜索客户编号或名称"
-                              />
-                              {isInvalid ? (
-                                <FieldError errors={errors} />
-                              ) : null}
-                            </Field>
-                          )
-                        }}
-                      </form.AppField>
-                      <form.AppField name="settlementPartyId">
-                        {(field) => {
-                          const isInvalid =
-                            field.state.meta.isTouched && !field.state.meta.isValid
-                          const errors = toFieldErrors(field.state.meta.errors)
-                          return (
-                            <Field data-invalid={isInvalid || undefined}>
-                              <FieldLabel htmlFor="settlementPartyId">
-                                结算主体
-                              </FieldLabel>
-                              <SettlementPartyCombobox
-                                value={field.state.value || undefined}
-                                onValueChange={(id) => {
-                                  const next = id ?? ""
-                                  field.handleChange(next)
-                                  const party = settlementPartyItems.find(
-                                    (p) => p.partyId === next
-                                  )
-                                  form.setFieldValue(
-                                    "settlementEntity",
-                                    party?.displayName ?? ""
-                                  )
-                                }}
-                                parties={settlementPartyItems}
-                                placeholder="搜索结算主体"
-                              />
-                              {isInvalid ? (
-                                <FieldError errors={errors} />
-                              ) : null}
-                            </Field>
-                          )
-                        }}
-                      </form.AppField>
-                      <form.AppField name="uploadedValidFrom">
-                        {(field) => (
-                          <field.DateField label="合同有效期起" />
-                        )}
-                      </form.AppField>
-                      <form.AppField name="uploadedValidTo">
-                        {(field) => (
-                          <field.DateField label="合同有效期止" />
-                        )}
-                      </form.AppField>
-                    </div>
-                  )
-                }
-              </form.Subscribe>
-            </DocumentSection>
+        <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_16.5rem]">
+          <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
+            <section className="border-b border-border p-3 md:p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="font-heading text-sm font-semibold">单据头</h2>
+                <span className="text-xs text-muted-foreground">
+                  合同与商业约定
+                </span>
+              </div>
 
-            <DocumentSection
-              title="商业约定"
-              description="业务性质创建后锁定；生效单的后续商业变化必须走销售变更单。"
-            >
-              <div className="grid gap-4 lg:grid-cols-3">
-                <form.AppField name="nature">
+              <div className="space-y-3">
+                <form.AppField name="contractSource">
                   {(field) => (
                     <field.SelectField
-                      label="业务性质"
-                      options={NATURE_OPTIONS}
-                      description="切换业务性质会重置当前明细。"
-                      onValueChange={(value) => {
-                        const nature = value as SalesOrderNature
-                        form.setFieldValue(
-                          "taxRatePercent",
-                          nature === "card_voucher" ? "6.00" : "13.00"
-                        )
-                        form.setFieldValue("lineItems", [createEmptyLine(nature)])
-                      }}
+                      label="合同来源"
+                      options={CONTRACT_SOURCE_OPTIONS}
+                      onValueChange={handleContractSourceChange}
                     />
                   )}
                 </form.AppField>
-                <form.AppField name="ownerUserId">
-                  {(field) => {
-                    const isInvalid =
-                      field.state.meta.isTouched && !field.state.meta.isValid
-                    const errors = toFieldErrors(field.state.meta.errors)
-                    return (
-                      <Field data-invalid={isInvalid || undefined}>
-                        <FieldLabel htmlFor="ownerUserId">负责销售</FieldLabel>
-                        <OwnerCombobox
-                          value={field.state.value || undefined}
-                          onValueChange={(id) => {
-                            const next = id ?? ""
-                            field.handleChange(next)
-                            const owner = DEMO_OWNER_OPTIONS.find(
-                              (o) => o.userId === next
-                            )
-                            form.setFieldValue(
-                              "ownerName",
-                              owner?.displayName ?? ""
+
+                <form.Subscribe
+                  selector={(state) => ({
+                    contractSource: state.values.contractSource,
+                    contractRevisionLabel: state.values.contractRevisionLabel,
+                    customerName: state.values.customerName,
+                    settlementEntity: state.values.settlementEntity,
+                  })}
+                >
+                  {({
+                    contractSource,
+                    contractRevisionLabel,
+                    customerName,
+                    settlementEntity,
+                  }) =>
+                    contractSource === "existing" ? (
+                      <div className="space-y-2">
+                        <form.AppField name="contractId">
+                          {(field) => {
+                            const isInvalid =
+                              field.state.meta.isTouched && !field.state.meta.isValid
+                            const errors = toFieldErrors(field.state.meta.errors)
+                            return (
+                              <Field data-invalid={isInvalid || undefined}>
+                                <FieldLabel htmlFor="contractId">
+                                  已有有效合同
+                                </FieldLabel>
+                                <ContractCombobox
+                                  value={field.state.value || undefined}
+                                  onValueChange={(id) => {
+                                    const next = id ?? ""
+                                    field.handleChange(next)
+                                    handleContractChange(next)
+                                  }}
+                                  contracts={contractComboboxItems}
+                                  disabled={
+                                    contractsQuery.isPending ||
+                                    contractsQuery.isError
+                                  }
+                                  loading={contractsQuery.isPending}
+                                  placeholder={
+                                    contractsQuery.isPending
+                                      ? "正在加载有效合同…"
+                                      : contractComboboxItems.length > 0
+                                        ? "搜索合同编号或客户"
+                                        : "当前客户暂无可用合同"
+                                  }
+                                  emptyLabel={
+                                    contractComboboxItems.length > 0
+                                      ? "没有符合条件的合同"
+                                      : "当前客户暂无可用合同"
+                                  }
+                                />
+                                {isInvalid ? (
+                                  <FieldError errors={errors} />
+                                ) : null}
+                              </Field>
                             )
                           }}
-                          owners={DEMO_OWNER_OPTIONS}
-                          placeholder="搜索负责人"
-                        />
-                        {isInvalid ? <FieldError errors={errors} /> : null}
-                      </Field>
-                    )
-                  }}
-                </form.AppField>
-                <form.AppField name="welfareScene">
-                  {(field) => (
-                    <field.TextField
-                      label="福利场景"
-                      placeholder="如年节礼包、慰问品、消费金"
-                    />
-                  )}
-                </form.AppField>
-                <form.AppField name="paymentTerms">
-                  {(field) => (
-                    <field.SelectField
-                      label="付款条件"
-                      options={PAYMENT_TERM_OPTIONS}
-                      description="默认带出合同约定，可按本单执行口径调整。"
-                    />
-                  )}
-                </form.AppField>
-                <form.AppField name="fulfillmentDeadline">
-                  {(field) => (
-                    <field.DateField label="全单履约期限" />
-                  )}
-                </form.AppField>
-                <form.AppField name="taxRatePercent">
-                  {(field) => (
-                    <field.TextField
-                      label="税率（%）"
-                      type="number"
-                      inputClassName="num"
-                      description="页面仅预估，提交后由系统重算。"
-                    />
-                  )}
-                </form.AppField>
-              </div>
-            </DocumentSection>
+                        </form.AppField>
+                        {contractRevisionLabel ||
+                        customerName ||
+                        settlementEntity ? (
+                          <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-dashed border-border bg-muted/40 px-2.5 py-2 text-xs">
+                            {contractRevisionLabel ? (
+                              <Badge variant="outline" className="font-normal">
+                                {contractRevisionLabel}
+                              </Badge>
+                            ) : null}
+                            {customerName ? (
+                              <span className="text-muted-foreground">
+                                客户{" "}
+                                <span className="text-foreground">
+                                  {customerName}
+                                </span>
+                              </span>
+                            ) : null}
+                            {settlementEntity ? (
+                              <span className="text-muted-foreground">
+                                · 结算{" "}
+                                <span className="text-foreground">
+                                  {settlementEntity}
+                                </span>
+                              </span>
+                            ) : null}
+                            {contractQuery.isFetching ? (
+                              <span className="text-muted-foreground">
+                                加载中…
+                              </span>
+                            ) : null}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-muted-foreground">
+                            选择合同后自动带出版本、客户与结算主体。
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <div className="sm:col-span-2">
+                            <form.AppField name="contractPdf">
+                              {(field) => (
+                                <field.PdfUploadField label="合同电子档" />
+                              )}
+                            </form.AppField>
+                          </div>
+                          <form.AppField name="customerId">
+                            {(field) => {
+                              const isInvalid =
+                                field.state.meta.isTouched &&
+                                !field.state.meta.isValid
+                              const errors = toFieldErrors(
+                                field.state.meta.errors
+                              )
+                              return (
+                                <Field data-invalid={isInvalid || undefined}>
+                                  <FieldLabel htmlFor="customerId">
+                                    客户
+                                  </FieldLabel>
+                                  <CustomerCombobox
+                                    value={field.state.value || undefined}
+                                    onValueChange={(id) => {
+                                      const next = id ?? ""
+                                      field.handleChange(next)
+                                      const customer =
+                                        customerComboboxItems.find(
+                                          (c) => c.id === next
+                                        )
+                                      form.setFieldValue(
+                                        "customerName",
+                                        customer?.legalName ?? ""
+                                      )
+                                    }}
+                                    customers={customerComboboxItems}
+                                    loading={customerDirectoryQuery.isPending}
+                                    disabled={
+                                      customerDirectoryQuery.isPending ||
+                                      customerDirectoryQuery.isError
+                                    }
+                                    placeholder="搜索客户编号或名称"
+                                  />
+                                  {isInvalid ? (
+                                    <FieldError errors={errors} />
+                                  ) : null}
+                                </Field>
+                              )
+                            }}
+                          </form.AppField>
+                          <form.AppField name="settlementPartyId">
+                            {(field) => {
+                              const isInvalid =
+                                field.state.meta.isTouched &&
+                                !field.state.meta.isValid
+                              const errors = toFieldErrors(
+                                field.state.meta.errors
+                              )
+                              return (
+                                <Field data-invalid={isInvalid || undefined}>
+                                  <FieldLabel htmlFor="settlementPartyId">
+                                    结算主体
+                                  </FieldLabel>
+                                  <SettlementPartyCombobox
+                                    value={field.state.value || undefined}
+                                    onValueChange={(id) => {
+                                      const next = id ?? ""
+                                      field.handleChange(next)
+                                      const party = settlementPartyItems.find(
+                                        (p) => p.partyId === next
+                                      )
+                                      form.setFieldValue(
+                                        "settlementEntity",
+                                        party?.displayName ?? ""
+                                      )
+                                    }}
+                                    parties={settlementPartyItems}
+                                    placeholder="搜索结算主体"
+                                  />
+                                  {isInvalid ? (
+                                    <FieldError errors={errors} />
+                                  ) : null}
+                                </Field>
+                              )
+                            }}
+                          </form.AppField>
+                        </div>
 
-            <DocumentSection
-              title="销售内容"
-              description="非卡券可增加多条明细；卡券销售版本必须恰好一条卡券明细。"
-              action={<Badge variant="outline">统一销售单明细</Badge>}
-            >
+                        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          <form.AppField name="uploadedContractNo">
+                            {(field) => (
+                              <field.TextField label="合同编号" />
+                            )}
+                          </form.AppField>
+                          <form.AppField name="uploadedSignedAt">
+                            {(field) => (
+                              <field.DateField label="签订日期" />
+                            )}
+                          </form.AppField>
+                          <form.AppField name="uploadedValidFrom">
+                            {(field) => (
+                              <field.DateField label="有效期起" />
+                            )}
+                          </form.AppField>
+                          <form.AppField name="uploadedValidTo">
+                            {(field) => (
+                              <field.DateField label="有效期止" />
+                            )}
+                          </form.AppField>
+                        </div>
+                      </div>
+                    )
+                  }
+                </form.Subscribe>
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                  <form.AppField name="nature">
+                    {(field) => (
+                      <field.SelectField
+                        label="业务性质"
+                        options={NATURE_OPTIONS}
+                        onValueChange={(value) => {
+                          const nature = value as SalesOrderNature
+                          form.setFieldValue(
+                            "taxRatePercent",
+                            nature === "card_voucher" ? "6.00" : "13.00"
+                          )
+                          form.setFieldValue("lineItems", [
+                            createEmptyLine(nature),
+                          ])
+                        }}
+                      />
+                    )}
+                  </form.AppField>
+                  <form.AppField name="ownerUserId">
+                    {(field) => {
+                      const isInvalid =
+                        field.state.meta.isTouched && !field.state.meta.isValid
+                      const errors = toFieldErrors(field.state.meta.errors)
+                      return (
+                        <Field data-invalid={isInvalid || undefined}>
+                          <FieldLabel htmlFor="ownerUserId">负责销售</FieldLabel>
+                          <OwnerCombobox
+                            value={field.state.value || undefined}
+                            onValueChange={(id) => {
+                              const next = id ?? ""
+                              field.handleChange(next)
+                              const owner = DEMO_OWNER_OPTIONS.find(
+                                (o) => o.userId === next
+                              )
+                              form.setFieldValue(
+                                "ownerName",
+                                owner?.displayName ?? ""
+                              )
+                            }}
+                            owners={DEMO_OWNER_OPTIONS}
+                            placeholder="搜索负责人"
+                          />
+                          {isInvalid ? <FieldError errors={errors} /> : null}
+                        </Field>
+                      )
+                    }}
+                  </form.AppField>
+                  <form.AppField name="welfareScene">
+                    {(field) => (
+                      <field.TextField
+                        label="福利场景"
+                        placeholder="年节礼包、慰问品…"
+                      />
+                    )}
+                  </form.AppField>
+                  <form.AppField name="paymentTerms">
+                    {(field) => (
+                      <field.SelectField
+                        label="付款条件"
+                        options={PAYMENT_TERM_OPTIONS}
+                      />
+                    )}
+                  </form.AppField>
+                  <form.AppField name="fulfillmentDeadline">
+                    {(field) => (
+                      <field.DateField label="履约期限" />
+                    )}
+                  </form.AppField>
+                  <form.AppField name="taxRatePercent">
+                    {(field) => (
+                      <field.TextField
+                        label="税率（%）"
+                        type="number"
+                        inputClassName="num"
+                      />
+                    )}
+                  </form.AppField>
+                </div>
+              </div>
+            </section>
+
+            <section className="border-b border-border p-3 md:p-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <h2 className="font-heading text-sm font-semibold">销售明细</h2>
+                <form.Subscribe selector={(state) => state.values.nature}>
+                  {(nature) => (
+                    <Badge variant="outline" className="font-normal">
+                      {nature === "card_voucher"
+                        ? "卡券 · 仅一条"
+                        : "实物/服务 · 可多行"}
+                    </Badge>
+                  )}
+                </form.Subscribe>
+              </div>
+
               <form.Subscribe selector={(state) => state.values}>
                 {(values) => {
                   const nature = values.nature
-                  const columns: EditableLineItemColumn<SalesOrderDraftLineInput>[] = [
-                    {
-                      id: "item",
-                      header: "销售项目",
-                      renderValue: ({ item }) => item.name,
-                      renderEditor: ({ rowIndex }) => (
-                        <div className="grid min-w-48 gap-2">
-                          {nature === "card_voucher" ? (
-                            <>
-                              <form.AppField name={`lineItems[${rowIndex}].name`}>
-                                {(field) => (
-                                  <field.TextField
-                                    label="销售项目"
-                                    hideLabel
-                                    placeholder="卡券类目"
-                                  />
-                                )}
-                              </form.AppField>
-                              <form.AppField name={`lineItems[${rowIndex}].sku`}>
-                                {(field) => (
-                                  <field.TextField
-                                    label="类目编码"
-                                    hideLabel
-                                    placeholder="类目编码"
-                                  />
-                                )}
-                              </form.AppField>
-                            </>
+                  const columns: EditableLineItemColumn<SalesOrderDraftLineInput>[] =
+                    [
+                      {
+                        id: "item",
+                        header: "销售项目",
+                        renderValue: ({ item }) => item.name,
+                        renderEditor: ({ rowIndex }) =>
+                          nature === "card_voucher" ? (
+                            <div className="flex min-w-52 items-start gap-1.5">
+                              <div className="min-w-0 flex-1">
+                                <form.AppField
+                                  name={`lineItems[${rowIndex}].name`}
+                                >
+                                  {(field) => (
+                                    <field.TextField
+                                      label="销售项目"
+                                      hideLabel
+                                      placeholder="卡券类目"
+                                    />
+                                  )}
+                                </form.AppField>
+                              </div>
+                              <div className="w-24 shrink-0">
+                                <form.AppField
+                                  name={`lineItems[${rowIndex}].sku`}
+                                >
+                                  {(field) => (
+                                    <field.TextField
+                                      label="类目编码"
+                                      hideLabel
+                                      placeholder="编码"
+                                    />
+                                  )}
+                                </form.AppField>
+                              </div>
+                            </div>
                           ) : (
-                            <form.AppField name={`lineItems[${rowIndex}].sku`}>
-                              {(field) => {
-                                const productId =
-                                  productComboboxItems.find(
-                                    (p) => p.sku === field.state.value
-                                  )?.productId ??
-                                  productComboboxItems.find(
-                                    (p) => p.name === values.lineItems[rowIndex]?.name
-                                  )?.productId
-                                return (
-                                  <ProductCombobox
-                                    value={productId}
-                                    onValueChange={(id) => {
-                                      const product = productComboboxItems.find(
-                                        (p) => p.productId === id
-                                      )
-                                      field.handleChange(product?.sku ?? "")
-                                      form.setFieldValue(
-                                        `lineItems[${rowIndex}].name`,
-                                        product?.name ?? ""
-                                      )
-                                      const unitHint =
-                                        product?.description?.replace(
-                                          /^单位\s*/,
-                                          ""
+                            <div className="min-w-48">
+                              <form.AppField
+                                name={`lineItems[${rowIndex}].sku`}
+                              >
+                                {(field) => {
+                                  const productId =
+                                    productComboboxItems.find(
+                                      (p) => p.sku === field.state.value
+                                    )?.productId ??
+                                    productComboboxItems.find(
+                                      (p) =>
+                                        p.name ===
+                                        values.lineItems[rowIndex]?.name
+                                    )?.productId
+                                  return (
+                                    <ProductCombobox
+                                      value={productId}
+                                      onValueChange={(id) => {
+                                        const product =
+                                          productComboboxItems.find(
+                                            (p) => p.productId === id
+                                          )
+                                        field.handleChange(product?.sku ?? "")
+                                        form.setFieldValue(
+                                          `lineItems[${rowIndex}].name`,
+                                          product?.name ?? ""
                                         )
-                                      if (unitHint) {
                                         form.setFieldValue(
                                           `lineItems[${rowIndex}].unit`,
-                                          unitHint
+                                          product?.baseUnit ?? ""
                                         )
-                                      }
-                                    }}
-                                    products={productComboboxItems}
-                                    loading={productsQuery.isPending}
-                                    placeholder="搜索 SKU 或商品名称"
-                                  />
-                                )
-                              }}
-                            </form.AppField>
-                          )}
-                        </div>
-                      ),
-                    },
-                    {
-                      id: "quantity",
-                      header: "数量 / 单位",
-                      numeric: true,
-                      renderValue: ({ item }) => `${item.quantity} ${item.unit}`,
-                      renderEditor: ({ rowIndex }) => (
-                        <div className="grid min-w-28 gap-2">
-                          <form.AppField name={`lineItems[${rowIndex}].quantity`}>
+                                      }}
+                                      products={productComboboxItems}
+                                      loading={productsQuery.isPending}
+                                      placeholder="搜索 SKU 或商品名称"
+                                    />
+                                  )
+                                }}
+                              </form.AppField>
+                            </div>
+                          ),
+                      },
+                      {
+                        id: "quantity",
+                        header: "数量 / 单位",
+                        numeric: true,
+                        renderValue: ({ item }) =>
+                          `${item.quantity} ${item.unit}`,
+                        renderEditor: ({ rowIndex }) => {
+                          const line = values.lineItems[rowIndex]
+                          const unitLocked =
+                            nature === "card_voucher" ||
+                            Boolean(line?.sku?.trim())
+                          return (
+                            <div className="flex min-w-32 items-center gap-1.5">
+                              <div className="w-20 shrink-0">
+                                <form.AppField
+                                  name={`lineItems[${rowIndex}].quantity`}
+                                >
+                                  {(field) => (
+                                    <field.TextField
+                                      label="数量"
+                                      hideLabel
+                                      type="number"
+                                      inputClassName="num"
+                                    />
+                                  )}
+                                </form.AppField>
+                              </div>
+                              <form.AppField
+                                name={`lineItems[${rowIndex}].unit`}
+                              >
+                                {(field) => (
+                                  <span
+                                    className="min-w-8 shrink-0 text-sm text-muted-foreground"
+                                    title={
+                                      unitLocked
+                                        ? nature === "card_voucher"
+                                          ? "卡券单位固定为张"
+                                          : "单位随 SKU 基础单位带出，不可改"
+                                        : "选择 SKU 后带出基础单位"
+                                    }
+                                  >
+                                    {field.state.value || "—"}
+                                  </span>
+                                )}
+                              </form.AppField>
+                            </div>
+                          )
+                        },
+                      },
+                      {
+                        id: "unitPrice",
+                        header: "含税单价",
+                        numeric: true,
+                        align: "end",
+                        renderValue: ({ item }) => item.unitPriceGross,
+                        renderEditor: ({ rowIndex }) => (
+                          <form.AppField
+                            name={`lineItems[${rowIndex}].unitPriceGross`}
+                          >
                             {(field) => (
-                              <field.TextField label="数量" hideLabel type="number" inputClassName="num" />
-                            )}
-                          </form.AppField>
-                          <form.AppField name={`lineItems[${rowIndex}].unit`}>
-                            {(field) => (
-                              <field.SelectField
-                                label="单位"
+                              <field.TextField
+                                label="含税单价"
                                 hideLabel
-                                options={UNIT_OPTIONS}
-                                placeholder="单位"
-                                allowClear={false}
+                                type="number"
+                                inputClassName="num min-w-24 text-right"
                               />
                             )}
                           </form.AppField>
-                        </div>
-                      ),
-                    },
-                    {
-                      id: "unitPrice",
-                      header: "含税单价",
-                      numeric: true,
-                      align: "end",
-                      renderValue: ({ item }) => item.unitPriceGross,
-                      renderEditor: ({ rowIndex }) => (
-                        <form.AppField name={`lineItems[${rowIndex}].unitPriceGross`}>
-                          {(field) => (
-                            <field.TextField
-                              label="含税单价"
-                              hideLabel
-                              type="number"
-                              inputClassName="num min-w-28 text-right"
-                            />
-                          )}
-                        </form.AppField>
-                      ),
-                    },
-                    nature === "card_voucher"
-                      ? {
-                          id: "voucher",
-                          header: "卡券条件",
-                          renderValue: ({ item }) => item.cardForm,
-                          renderEditor: ({ rowIndex }) => (
-                            <div className="grid min-w-40 gap-2">
-                              <form.AppField name={`lineItems[${rowIndex}].faceValue`}>
-                                {(field) => (
-                                  <field.TextField
-                                    label="面值"
-                                    hideLabel
-                                    type="number"
-                                    placeholder="面值"
-                                    inputClassName="num"
-                                  />
-                                )}
-                              </form.AppField>
-                              <form.AppField name={`lineItems[${rowIndex}].giftRate`}>
-                                {(field) => (
-                                  <field.TextField
-                                    label="配赠率（%）"
-                                    hideLabel
-                                    type="number"
-                                    placeholder="配赠率（%）"
-                                    inputClassName="num"
-                                  />
-                                )}
-                              </form.AppField>
-                              <form.AppField name={`lineItems[${rowIndex}].cardForm`}>
-                                {(field) => (
-                                  <field.SelectField
-                                    label="卡形态"
-                                    hideLabel
-                                    options={CARD_FORM_OPTIONS}
-                                  />
-                                )}
-                              </form.AppField>
-                            </div>
-                          ),
-                        }
-                      : {
-                          id: "fulfillment",
-                          header: "履约约定",
-                          renderValue: ({ item }) => item.fulfillmentMode,
-                          renderEditor: ({ rowIndex }) => (
-                            <div className="grid min-w-40 gap-2">
-                              <form.AppField name={`lineItems[${rowIndex}].fulfillmentMode`}>
-                                {(field) => (
-                                  <field.SelectField
-                                    label="履约方式"
-                                    hideLabel
-                                    options={FULFILLMENT_OPTIONS}
-                                  />
-                                )}
-                              </form.AppField>
-                              <form.AppField name={`lineItems[${rowIndex}].dueDate`}>
-                                {(field) => (
-                                  <field.DateField label="交付日期" hideLabel />
-                                )}
-                              </form.AppField>
-                            </div>
-                          ),
-                        },
-                    {
-                      id: "amount",
-                      header: "含税小计",
-                      numeric: true,
-                      align: "end",
-                      renderValue: ({ item }) => (
-                        <MoneyValue
-                          value={calculateTotals([item], values.taxRatePercent).gross}
-                          taxBasis="gross"
-                        />
-                      ),
-                    },
-                  ]
-                  const totals = calculateTotals(values.lineItems, values.taxRatePercent)
+                        ),
+                      },
+                      nature === "card_voucher"
+                        ? {
+                            id: "voucher",
+                            header: "卡券条件",
+                            renderValue: ({ item }) =>
+                              [item.faceValue, item.giftRate, item.cardForm]
+                                .filter(Boolean)
+                                .join(" · "),
+                            renderEditor: ({ rowIndex }) => (
+                              <div className="flex min-w-56 items-start gap-1.5">
+                                <div className="w-20 shrink-0">
+                                  <form.AppField
+                                    name={`lineItems[${rowIndex}].faceValue`}
+                                  >
+                                    {(field) => (
+                                      <field.TextField
+                                        label="面值"
+                                        hideLabel
+                                        type="number"
+                                        placeholder="面值"
+                                        inputClassName="num"
+                                      />
+                                    )}
+                                  </form.AppField>
+                                </div>
+                                <div className="w-20 shrink-0">
+                                  <form.AppField
+                                    name={`lineItems[${rowIndex}].giftRate`}
+                                  >
+                                    {(field) => (
+                                      <field.TextField
+                                        label="配赠率（%）"
+                                        hideLabel
+                                        type="number"
+                                        placeholder="配赠%"
+                                        inputClassName="num"
+                                      />
+                                    )}
+                                  </form.AppField>
+                                </div>
+                                <div className="min-w-20 flex-1">
+                                  <form.AppField
+                                    name={`lineItems[${rowIndex}].cardForm`}
+                                  >
+                                    {(field) => (
+                                      <field.SelectField
+                                        label="卡形态"
+                                        hideLabel
+                                        options={CARD_FORM_OPTIONS}
+                                      />
+                                    )}
+                                  </form.AppField>
+                                </div>
+                              </div>
+                            ),
+                          }
+                        : {
+                            id: "fulfillment",
+                            header: "交付日期",
+                            renderValue: ({ item }) => item.dueDate || "—",
+                            renderEditor: ({ rowIndex }) => (
+                              <div className="min-w-32">
+                                <form.AppField
+                                  name={`lineItems[${rowIndex}].dueDate`}
+                                >
+                                  {(field) => (
+                                    <field.DateField
+                                      label="交付日期"
+                                      hideLabel
+                                    />
+                                  )}
+                                </form.AppField>
+                              </div>
+                            ),
+                          },
+                      {
+                        id: "amount",
+                        header: "含税小计",
+                        numeric: true,
+                        align: "end",
+                        renderValue: ({ item }) => (
+                          <MoneyValue
+                            value={
+                              calculateTotals([item], values.taxRatePercent)
+                                .gross
+                            }
+                          />
+                        ),
+                      },
+                    ]
 
                   return (
                     <>
@@ -1123,7 +1197,11 @@ export function SalesOrderCreatePage({
                         }
                         onAddItem={
                           nature === "physical_service"
-                            ? () => form.pushFieldValue("lineItems", createEmptyLine(nature))
+                            ? () =>
+                                form.pushFieldValue(
+                                  "lineItems",
+                                  createEmptyLine(nature)
+                                )
                             : undefined
                         }
                         onRemoveItem={(_item, _rowId, rowIndex) => {
@@ -1138,88 +1216,185 @@ export function SalesOrderCreatePage({
                         }
                       />
 
-                      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                      <div className="mt-3">
                         <form.AppField name="remark">
                           {(field) => (
                             <field.TextareaField
                               label="内部说明"
-                              placeholder="补充客户确认、交付或内部协同说明"
-                              rows={4}
+                              placeholder="补充客户确认、交付或内部协同说明（可选）"
+                              rows={2}
                             />
                           )}
                         </form.AppField>
-                        <Alert variant="info">
-                          <FilePlus2Icon aria-hidden="true" />
-                          <AlertTitle>
-                            {nature === "card_voucher"
-                              ? "提交后进入两级审批"
-                              : "提交后进入采购二次确认"}
-                          </AlertTitle>
-                          <AlertDescription>
-                            {nature === "card_voucher"
-                              ? "依次由销售领导和运营审批；运营通过后才生效并形成应收。"
-                              : "提交后内容锁定，进入采购二次确认；生效以确认通过为准。"}
-                          </AlertDescription>
-                        </Alert>
                       </div>
-
-                      <StickyTotalBar
-                        className="mt-5"
-                        items={[
-                          {
-                            id: "gross",
-                            label: "含税金额",
-                            value: <MoneyValue value={totals.gross} taxBasis="gross" />,
-                          },
-                          {
-                            id: "net",
-                            label: "不含税金额",
-                            value: <MoneyValue value={totals.net} taxBasis="net" />,
-                          },
-                          {
-                            id: "tax",
-                            label: "税额",
-                            value: <MoneyValue value={totals.tax} />,
-                          },
-                        ]}
-                        note={`按税率 ${values.taxRatePercent || "0"}% 预估；正式金额以提交后系统计算为准。`}
-                        actions={
-                          <form.AppForm>
-                            <Button
-                              type="button"
-                              variant="outline"
-                              render={<Link href="/sales/orders" />}
-                            >
-                              取消
-                            </Button>
-                            <form.SubmitButton
-                              variant="outline"
-                              label="保存草稿"
-                              pendingLabel="正在创建…"
-                              onClick={() => {
-                                submitIntentRef.current = "SAVE_DRAFT"
-                              }}
-                            />
-                            <form.SubmitButton
-                              label="提交"
-                              pendingLabel="正在提交…"
-                              onClick={() => {
-                                submitIntentRef.current = "SUBMIT"
-                              }}
-                            >
-                              <PlusIcon data-icon="inline-start" aria-hidden="true" />
-                              提交
-                            </form.SubmitButton>
-                          </form.AppForm>
-                        }
-                      />
                     </>
                   )
                 }}
               </form.Subscribe>
-            </DocumentSection>
-          </CardContent>
-        </Card>
+            </section>
+
+            <form.Subscribe selector={(state) => state.values}>
+              {(values) => {
+                const totals = calculateTotals(
+                  values.lineItems,
+                  values.taxRatePercent
+                )
+                const flowNote =
+                  values.nature === "card_voucher"
+                    ? "提交后进入销售领导 → 运营两级审批，运营通过后生效并形成应收。"
+                    : "提交后内容锁定并进入采购二次确认；生效以确认通过为准。"
+                return (
+                  <StickyTotalBar
+                    className="rounded-none border-0 border-t border-border shadow-none"
+                    items={[
+                      {
+                        id: "gross",
+                        label: "含税金额",
+                        value: (
+                          <MoneyValue
+                            value={totals.gross}
+                            taxBasis="gross"
+                          />
+                        ),
+                      },
+                      {
+                        id: "net",
+                        label: "不含税金额",
+                        value: (
+                          <MoneyValue value={totals.net} taxBasis="net" />
+                        ),
+                      },
+                      {
+                        id: "tax",
+                        label: "税额",
+                        value: <MoneyValue value={totals.tax} />,
+                      },
+                    ]}
+                    note={
+                      <>
+                        税率 {values.taxRatePercent || "0"}% 预估。{flowNote}
+                      </>
+                    }
+                    actions={
+                      <form.AppForm>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          render={<Link href="/sales/orders" />}
+                        >
+                          取消
+                        </Button>
+                        <form.SubmitButton
+                          variant="outline"
+                          label="保存草稿"
+                          pendingLabel="正在创建…"
+                          onClick={() => {
+                            submitIntentRef.current = "SAVE_DRAFT"
+                          }}
+                        />
+                        <form.SubmitButton
+                          label="提交"
+                          pendingLabel="正在提交…"
+                          onClick={() => {
+                            submitIntentRef.current = "SUBMIT"
+                          }}
+                        >
+                          <PlusIcon
+                            data-icon="inline-start"
+                            aria-hidden="true"
+                          />
+                          提交
+                        </form.SubmitButton>
+                      </form.AppForm>
+                    }
+                  />
+                )
+              }}
+            </form.Subscribe>
+          </div>
+
+          <aside className="hidden xl:block">
+            <form.Subscribe selector={(state) => state.values}>
+              {(values) => {
+                const totals = calculateTotals(
+                  values.lineItems,
+                  values.taxRatePercent
+                )
+                const natureLabel =
+                  values.nature === "card_voucher" ? "卡券" : "实物/服务"
+                const nextStep =
+                  values.nature === "card_voucher"
+                    ? "提交后进入销售领导 → 运营两级审批"
+                    : "提交后进入采购二次确认"
+                return (
+                  <div className="sticky top-14 space-y-3 rounded-xl border border-border bg-card p-3">
+                    <div>
+                      <h2 className="font-heading text-sm font-semibold">
+                        本单摘要
+                      </h2>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        随填写实时更新
+                      </p>
+                    </div>
+                    <dl className="space-y-2 text-xs">
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">合同</dt>
+                        <dd className="max-w-[10rem] truncate text-right font-medium">
+                          {values.contractSource === "existing"
+                            ? values.contractRevisionLabel || "未选择"
+                            : values.uploadedContractNo.trim() ||
+                              "上传 PDF 建档"}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">客户</dt>
+                        <dd className="max-w-[10rem] truncate text-right font-medium">
+                          {values.customerName || "—"}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">结算</dt>
+                        <dd className="max-w-[10rem] truncate text-right font-medium">
+                          {values.settlementEntity || "—"}
+                        </dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">业务性质</dt>
+                        <dd className="font-medium">{natureLabel}</dd>
+                      </div>
+                      <div className="flex justify-between gap-2">
+                        <dt className="text-muted-foreground">明细行</dt>
+                        <dd className="font-medium">
+                          {values.lineItems.length} 行
+                        </dd>
+                      </div>
+                      <div className="border-t border-border pt-2">
+                        <div className="flex justify-between gap-2">
+                          <dt className="text-muted-foreground">含税预估</dt>
+                          <dd className="num font-semibold">
+                            <MoneyValue
+                              value={totals.gross}
+                              taxBasis="gross"
+                            />
+                          </dd>
+                        </div>
+                        <div className="mt-1 flex justify-between gap-2">
+                          <dt className="text-muted-foreground">税额</dt>
+                          <dd className="num">
+                            <MoneyValue value={totals.tax} />
+                          </dd>
+                        </div>
+                      </div>
+                    </dl>
+                    <p className="rounded-md bg-muted/50 px-2 py-1.5 text-xs leading-relaxed text-muted-foreground">
+                      {nextStep}
+                    </p>
+                  </div>
+                )
+              }}
+            </form.Subscribe>
+          </aside>
+        </div>
       </form>
     </div>
   )

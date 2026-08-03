@@ -440,7 +440,8 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 
 - 全宽任务页签；左侧表头字段，下方 `EditableLineItemTable`。  
 - 选客户、合同、公司商品池、供应商、结算主体、仓库、负责人：一律业务实体 Combobox（`CustomerCombobox` / `ContractCombobox` / `ProductCombobox` / `SupplierCombobox` / `SettlementPartyCombobox` / `WarehouseCombobox` / `OwnerCombobox` 等，底层 `BusinessObjectCombobox`；只出有效对象）。
-- 状态、付款条件、单位、承运方等码表：一律 `OptionCombobox` / `field.SelectField`；共享码表见 `erp-client/lib/business-options.ts`。  
+- 状态、付款条件、承运方等码表：一律 `OptionCombobox` / `field.SelectField`；共享码表见 `erp-client/lib/business-options.ts`。  
+- **销售建单明细例外（W05）**：非卡券**单位**取所选 SKU 基础单位，只读展示，禁止码表改写；**履约方式（仓发/直发等）**不在建单页选择，由 W07 采购二次确认写入；明细可编交付日期。卡券单位固定「张」。含税小计行内 `MoneyValue` 不叠 `taxBasis` Badge（表头已标明口径）。完整布局与控件表见 `ui-workspaces/w05-sales-orders.md` §4.3。
 - **禁止**用自由 `Input`/`TextField` 录入已有业务对象 ID 或名称；列表全文关键词搜索除外。  
 - 行内即时前端校验 + 提交前 `ValidationSummary`。  
 - 自动草稿保存（防抖）+ 显式「保存草稿」；`EditorPresence` 提示他人占用。  

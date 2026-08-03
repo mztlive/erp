@@ -27,7 +27,7 @@
 | 高密度列表 | `DataTable`、`DataTableViewOptions`、`DataTablePagination` | `data-table.tsx` | 服务端分页、排序、筛选、显隐、固定、调宽、跨页稳定选择和键盘行导航 |
 | 列表编排 | `ListToolbar`、`SelectionScopeBar`、`StatusMatrix`、`BusinessTableFrame`、`QuickPreviewSheet` | `list.tsx` | 常驻筛选、选择范围、多轨状态、加载/空态/失败、右侧快速预览 |
 | 选择与筛选 | `OptionCombobox`、`BusinessObjectCombobox`、业务实体 Combobox（合同/销售单/客户/采购单/供应商/商品/品牌/商品分类/结算主体/仓库/负责人）、`SavedViewPicker`、`AdvancedFilterSheet` | `option-combobox.tsx`、`entity-comboboxes.tsx`、`selectors.tsx` | 可搜索枚举/筛选、有效业务对象选择、个人/团队视图、高级筛选；**禁止**在业务页继续使用 `Select` / `NativeSelect`；**禁止**用自由 `Input` 录入已有业务对象 ID/名称 |
-| 值与状态 | `BusinessStatusBadge`、`StatusTrackSummary`、`BusinessObjectRef`、`MoneyValue`、`QuantityValue`、`RateValue`、`DocumentTotals` | `values.tsx` | 多维状态、稳定对象引用、精确十进制展示、含税/不含税口径 |
+| 值与状态 | `BusinessStatusBadge`、`StatusTrackSummary`、`BusinessObjectRef`、`MoneyValue`、`QuantityValue`、`RateValue`、`DocumentTotals` | `values.tsx` | 多维状态、稳定对象引用、精确十进制展示；`MoneyValue` 的 `taxBasis` 会叠「含税/不含税」Badge——**列头/标签已写明口径时不要传**（如销售建单「含税小计」） |
 | 正式单据/对象详情 | `DocumentHeader`（M4 用 `density="compact"` + `meta`）、`DocumentSummary`、`DocumentSection`、`RevisionTimeline`、`RelatedDocumentList`、`ResponsibilityPanel` | `document.tsx` | 销售、采购、客户、票款、发票、结算等详情与版本追溯；唯一身份头 |
 | 纸质单据预览 | `PaperDocument` | `paper-document.tsx` | 销售、采购、出入库、收付款和发票等正式单据的 A4 风格查看与打印投影 |
 | 单据编辑 | `EditableLineItemTable`、`ApprovalDecisionPanel`、`AllocationWorkspace` | `editor.tsx` | 行项目编辑、审批/确认、回款付款发票等多对多分配 |
