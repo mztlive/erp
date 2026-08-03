@@ -18,7 +18,6 @@ import {
 } from "@/components/ui/dialog"
 import { FileUpload } from "@/components/ui/file-upload"
 import { Label } from "@/components/ui/label"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   useCompanySkuOptionsQuery,
   useCreateSupplierCatalogItemMutation,
@@ -28,7 +27,6 @@ import type {
   SupplierCatalogItemView,
   SupplierCatalogSourceType,
   SupplierCatalogWriteResult,
-  SupplyMode,
 } from "@/features/supplier-catalog/types"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
 
@@ -59,47 +57,9 @@ const money = z
   .trim()
   .regex(/^\d+(?:\.\d{1,4})?$/, "请输入正确金额，最多 4 位小数")
 
-/** 供给方式多选；对话框不再收集生效日期，提交默认当日生效。 */
-const supplyModes = (): readonly SupplyMode[] => ["BULK"]
-
+/** 金额字段允许为空；不再按供给方式联动必填。 */
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
-}
-
-function SupplyModeToggle({
-  value,
-  onChange,
-}: {
-  value: readonly SupplyMode[]
-  onChange: (next: readonly SupplyMode[]) => void
-}) {
-  return (
-    <ToggleGroup
-      multiple
-      value={value}
-      onValueChange={(next) =>
-        onChange(next as readonly SupplyMode[])
-      }
-      variant="outline"
-      size="sm"
-      aria-label="供给方式（可多选）"
-    >
-      <ToggleGroupItem value="DROPSHIP">一件代发</ToggleGroupItem>
-      <ToggleGroupItem value="BULK">集采</ToggleGroupItem>
-    </ToggleGroup>
-  )
-}
-
-/** 金额字段在勾选对应供给方式时才必填；未勾选时允许为空。 */
-function supplyPriceIssue(
-  mode: SupplyMode,
-  price: string,
-  label: string,
-): { path: "dropshipFloorPriceGross" | "bulkFloorPriceGross"; message: string } | null {
-  if (!price.trim() || !money.safeParse(price.trim()).success) {
-    return { path: mode === "DROPSHIP" ? "dropshipFloorPriceGross" : "bulkFloorPriceGross", message: `勾选「${label}」时必须填写对应底价（最多 4 位小数）` }
-  }
-  return null
 }
 
 function buildIntakeSchema(requireSalesVisiblePrice: boolean) {
@@ -129,23 +89,8 @@ function buildIntakeSchema(requireSalesVisiblePrice: boolean) {
       .string()
       .trim()
       .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
-    supplyMode: z
-      .array(z.enum(["DROPSHIP", "BULK"]))
-      .min(1, "请至少选择一种供给方式"),
     salesVisiblePrice: z.string(),
   }).superRefine((value, context) => {
-    const dropship = value.supplyMode.includes("DROPSHIP")
-      ? supplyPriceIssue("DROPSHIP", value.dropshipFloorPriceGross, "一件代发")
-      : null
-    if (dropship) {
-      context.addIssue({ code: "custom", path: [dropship.path], message: dropship.message })
-    }
-    const bulk = value.supplyMode.includes("BULK")
-      ? supplyPriceIssue("BULK", value.bulkFloorPriceGross, "集采")
-      : null
-    if (bulk) {
-      context.addIssue({ code: "custom", path: [bulk.path], message: bulk.message })
-    }
     if (
       requireSalesVisiblePrice &&
       !money.safeParse(value.salesVisiblePrice.trim()).success
@@ -255,7 +200,6 @@ export function SupplierCatalogIntakeDialog({
       bulkFloorPriceGross: "",
       bulkMinimumOrderQuantity: "1",
       minimumOrderQuantity: "1",
-      supplyMode: supplyModes(),
       salesVisiblePrice: fixedSku?.hasPoolEntry ? "" : fixedSku?.salesVisiblePrice ?? "",
     },
     validators: {
@@ -329,7 +273,6 @@ export function SupplierCatalogIntakeDialog({
             : "SET_PRICE"
           : undefined,
         minimumOrderQuantity: value.minimumOrderQuantity.trim(),
-        supplyMode: value.supplyMode,
         validFrom: todayIso(),
         idempotencyKey: idempotencyKey("supplier-catalog-intake"),
       })
@@ -447,7 +390,7 @@ export function SupplierCatalogIntakeDialog({
               {(field) => (
                 <field.TextField
                   label="一件代发底价（含税运）"
-                  description="勾选「一件代发」时必填；供应商商品资料保留双底价"
+                  description="供应商商品资料保留双底价"
                 />
               )}
             </form.AppField>
@@ -457,8 +400,8 @@ export function SupplierCatalogIntakeDialog({
                   label="集采底价（含税）"
                   description={
                     fixedSku
-                      ? "勾选「集采」时必填；登记供给时默认用作采购确认成本"
-                      : "勾选「集采」时必填"
+                      ? "登记供给时默认用作采购确认成本"
+                      : "供应商商品资料保留双底价"
                   }
                 />
               )}
@@ -471,17 +414,6 @@ export function SupplierCatalogIntakeDialog({
                 <field.TextField
                   label={fixedSku ? "供给起订量 *" : "最小起订量 *"}
                 />
-              )}
-            </form.AppField>
-            <form.AppField name="supplyMode">
-              {(field) => (
-                <div className="space-y-1.5">
-                  <Label>供给方式（可多选）*</Label>
-                  <SupplyModeToggle
-                    value={field.state.value}
-                    onChange={(next) => field.handleChange([...next])}
-                  />
-                </div>
               )}
             </form.AppField>
             {fixedSku?.hasPoolEntry ? (
@@ -566,23 +498,8 @@ function buildRegisterSupplySchema(requireSalesVisiblePrice: boolean) {
       .string()
       .trim()
       .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
-    supplyMode: z
-      .array(z.enum(["DROPSHIP", "BULK"]))
-      .min(1, "请至少选择一种供给方式"),
     salesVisiblePrice: z.string(),
   }).superRefine((value, context) => {
-    const dropship = value.supplyMode.includes("DROPSHIP")
-      ? supplyPriceIssue("DROPSHIP", value.dropshipFloorPriceGross, "一件代发")
-      : null
-    if (dropship) {
-      context.addIssue({ code: "custom", path: [dropship.path], message: dropship.message })
-    }
-    const bulk = value.supplyMode.includes("BULK")
-      ? supplyPriceIssue("BULK", value.bulkFloorPriceGross, "集采")
-      : null
-    if (bulk) {
-      context.addIssue({ code: "custom", path: [bulk.path], message: bulk.message })
-    }
     if (
       requireSalesVisiblePrice &&
       !money.safeParse(value.salesVisiblePrice.trim()).success
@@ -598,10 +515,10 @@ function buildRegisterSupplySchema(requireSalesVisiblePrice: boolean) {
 
 /**
  * W14/W21 固定公司 SKU 的「添加供应商并登记成本」最小对话框。
- * 只补录供应商侧独有差异：供应商、供应商 SKU 编码、供给方式（多选）与
+ * 只补录供应商侧独有差异：供应商、供应商 SKU 编码与
  * 双底价（一件代发含税运 / 集采含税）、供给起订量；无商品池条目时追加
  * 首次销售可见价。名称/规格/分类/品牌/单位/条码/媒体从公司 SKU 反向
- * 复用为供应商商品快照；采购确认成本取勾选方式对应底价（集采优先）。
+ * 复用为供应商商品快照；采购确认成本取对应底价（集采优先）。
  */
 export function RegisterSupplyForSkuDialog({
   open,
@@ -626,7 +543,6 @@ export function RegisterSupplyForSkuDialog({
       dropshipFloorPriceGross: "",
       bulkFloorPriceGross: "",
       minimumOrderQuantity: "1",
-      supplyMode: supplyModes(),
       salesVisiblePrice: fixedSku?.hasPoolEntry
         ? ""
         : fixedSku?.salesVisiblePrice ?? "",
@@ -705,7 +621,6 @@ export function RegisterSupplyForSkuDialog({
           ? "KEEP_EXISTING"
           : "SET_PRICE",
         minimumOrderQuantity: value.minimumOrderQuantity.trim(),
-        supplyMode: value.supplyMode,
         validFrom: todayIso(),
         idempotencyKey: idempotencyKey("register-supply-for-sku"),
       })
@@ -728,7 +643,7 @@ export function RegisterSupplyForSkuDialog({
         <DialogHeader>
           <DialogTitle>添加供应商并登记成本</DialogTitle>
           <DialogDescription>
-            固定当前公司 SKU；名称、规格、分类、品牌、单位、条码和图文从公司资料复用为供应商商品快照，只补录供应商 SKU、供给方式、双底价（一件代发含税运 / 集采含税）和起订量。
+            固定当前公司 SKU；名称、规格、分类、品牌、单位、条码和图文从公司资料复用为供应商商品快照，只补录供应商 SKU、双底价（一件代发含税运 / 集采含税）和起订量。
           </DialogDescription>
         </DialogHeader>
 
@@ -796,22 +711,11 @@ export function RegisterSupplyForSkuDialog({
                 />
               )}
             </form.AppField>
-            <form.AppField name="supplyMode">
-              {(field) => (
-                <div className="space-y-1.5">
-                  <Label>供给方式（可多选）*</Label>
-                  <SupplyModeToggle
-                    value={field.state.value}
-                    onChange={(next) => field.handleChange([...next])}
-                  />
-                </div>
-              )}
-            </form.AppField>
             <form.AppField name="dropshipFloorPriceGross">
               {(field) => (
                 <field.TextField
                   label="一件代发底价（含税运）"
-                  description="勾选「一件代发」时必填；供应商商品资料保留双底价"
+                  description="供应商商品资料保留双底价"
                 />
               )}
             </form.AppField>
@@ -819,7 +723,7 @@ export function RegisterSupplyForSkuDialog({
               {(field) => (
                 <field.TextField
                   label="集采底价（含税）"
-                  description="勾选「集采」时必填；登记供给时默认用作采购确认成本"
+                  description="登记供给时默认用作采购确认成本"
                 />
               )}
             </form.AppField>
@@ -862,9 +766,6 @@ const promoteSchema = z.object({
   poolPriceAction: z.enum(["KEEP_EXISTING", "SET_PRICE"]),
   inputTaxRate: z.string().trim().min(1, "请填写税率"),
   minimumOrderQuantity: z.string().trim().min(1, "请填写起订量"),
-  supplyMode: z
-    .array(z.enum(["DROPSHIP", "BULK"]))
-    .min(1, "请至少选择一种供给方式"),
   supplyRegionText: z.string().trim().min(1, "请填写可供区域"),
   validFrom: z.string().min(1, "请选择生效日期"),
 }).superRefine((value, context) => {
@@ -907,9 +808,6 @@ export function PromoteSupplierProductDialog({
         item?.offering?.proposedDefaults?.minimumOrderQuantity ??
         sourceRevision?.bulkMinimumOrderQuantity ??
         "1",
-      supplyMode: [
-        ...(item?.offering?.proposedDefaults?.supplyMode ?? ["BULK"]),
-      ],
       supplyRegionText: "全国",
       validFrom: "2026-08-02",
     },
@@ -928,7 +826,6 @@ export function PromoteSupplierProductDialog({
         confirmedCostGross: value.confirmedCostGross,
         inputTaxRate: value.inputTaxRate,
         minimumOrderQuantity: value.minimumOrderQuantity,
-        supplyMode: value.supplyMode,
         supplyRegion: splitValues(value.supplyRegionText),
         validFrom: value.validFrom,
         salesVisiblePrice:
@@ -973,9 +870,6 @@ export function PromoteSupplierProductDialog({
         item.offering?.proposedDefaults?.minimumOrderQuantity ??
         nextSource.bulkMinimumOrderQuantity ??
         "1",
-      supplyMode: [
-        ...(item.offering?.proposedDefaults?.supplyMode ?? ["BULK"]),
-      ],
       supplyRegionText:
         item.offering?.proposedDefaults?.supplyRegion.join("、") || "全国",
       validFrom: "2026-08-02",
@@ -1133,17 +1027,6 @@ export function PromoteSupplierProductDialog({
             </form.AppField>
             <form.AppField name="minimumOrderQuantity">
               {(field) => <field.TextField label="最小起订量 *" />}
-            </form.AppField>
-            <form.AppField name="supplyMode">
-              {(field) => (
-                <div className="space-y-1.5">
-                  <Label>供给方式（可多选）*</Label>
-                  <SupplyModeToggle
-                    value={field.state.value}
-                    onChange={(next) => field.handleChange([...next])}
-                  />
-                </div>
-              )}
             </form.AppField>
             <form.AppField name="supplyRegionText">
               {(field) => <field.TextField label="可供区域" />}

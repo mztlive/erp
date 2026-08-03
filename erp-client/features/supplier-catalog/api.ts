@@ -1189,7 +1189,7 @@ export async function createSupplierCatalogItem(
           input.minimumOrderQuantity ||
           primaryWrite.bulkMinimumOrderQuantity ||
           "1",
-        supplyMode: input.supplyMode,
+        supplyMode: ["BULK"],
         supplyRegion: input.supplyRegion ?? ["全国"],
         validFrom: input.validFrom,
       })
@@ -1466,7 +1466,7 @@ export async function promoteSupplierProductToPool(
     costGross: input.confirmedCostGross,
     inputTaxRate: input.inputTaxRate,
     minimumOrderQuantity: input.minimumOrderQuantity,
-    supplyMode: input.supplyMode,
+    supplyMode: ["BULK"],
     supplyRegion: input.supplyRegion,
     validFrom: input.validFrom,
   })

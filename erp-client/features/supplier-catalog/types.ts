@@ -557,7 +557,6 @@ export type CreateSupplierCatalogItemInput = SupplierCatalogSpuContentFields &
     /** 已有商品池时默认沿用；只有显式 SET_PRICE 才允许形成新修订。 */
     poolPriceAction?: "KEEP_EXISTING" | "SET_PRICE"
     minimumOrderQuantity: string
-    supplyMode: readonly SupplyMode[]
     /** 仅固定 SKU 入池/供给路径使用；非供应商商品目录字段 */
     supplyRegion?: string[]
     inputTaxRate?: string
@@ -591,7 +590,6 @@ export type PromoteSupplierProductInput = Readonly<{
   confirmedCostGross: string
   inputTaxRate: string
   minimumOrderQuantity: string
-  supplyMode: readonly SupplyMode[]
   supplyRegion: string[]
   validFrom: string
   salesVisiblePrice?: string

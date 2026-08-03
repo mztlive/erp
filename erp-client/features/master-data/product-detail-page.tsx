@@ -47,6 +47,7 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { FileUpload } from "@/components/ui/file-upload"
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress, ProgressLabel } from "@/components/ui/progress"
@@ -369,16 +370,22 @@ function SkuMainImageField({
   return (
     <div className="space-y-1.5">
       {value ? (
-        <div className="flex items-center gap-2 rounded-md border border-border px-2 py-1.5">
-          <ImageIcon className="size-4 text-muted-foreground" aria-hidden />
-          <span className="min-w-0 flex-1 truncate text-xs">{value}</span>
+        <div className="relative size-14 overflow-hidden rounded-md border border-border bg-surface-sunken">
+          <div className="flex size-full flex-col items-center justify-center gap-0.5 p-1 text-center">
+            <ImageIcon className="size-4 text-muted-foreground" aria-hidden />
+            <span className="line-clamp-2 w-full break-all text-[10px] leading-tight text-muted-foreground">
+              {value}
+            </span>
+          </div>
           <Button
             type="button"
-            variant="ghost"
-            size="xs"
+            variant="secondary"
+            size="icon-xs"
+            className="absolute right-0.5 top-0.5 size-5"
             onClick={() => onChange("")}
+            aria-label={`移除主图 ${value}`}
           >
-            {masterDataCopy.mediaRemove}
+            <XIcon className="size-3" />
           </Button>
         </div>
       ) : (
@@ -386,8 +393,9 @@ function SkuMainImageField({
           accept="image/jpeg,image/png,image/webp"
           multiple={false}
           label={masterDataCopy.fMainImage}
-          description={masterDataCopy.productMainImageHint}
+          description="1:1"
           density="compact"
+          className="aspect-square size-14 gap-0.5 p-1 text-[10px] [&_[data-slot=button]]:mt-0"
           onFilesSelected={(files) => {
             if (files[0]) onChange(files[0].name)
           }}
@@ -1693,79 +1701,115 @@ export function ProductDetailPage({
                                 </td>
                                 <td className="border-l border-border px-3 py-3">
                                   <div className="space-y-1.5">
-                                    <Badge variant="outline">
-                                      {supplierItems.length} 家供应商
-                                    </Badge>
-                                    {supplierNames.length > 0 ? (
-                                      <span className="block max-w-40 truncate text-xs text-muted-foreground">
-                                        {supplierNames.join("、")}
-                                      </span>
-                                    ) : null}
                                     {sku.skuId && !isCreate ? (
-                                      <>
-                                        <Button
-                                          type="button"
-                                          variant="link"
-                                          size="xs"
-                                          className="h-auto justify-start p-0 text-xs"
-                                          onClick={() =>
-                                            setSupplierDialogSku({
-                                              skuId: sku.skuId!,
-                                              skuCode: sku.skuNo,
-                                              skuName: values.name,
-                                              specification: sku.specLabel,
-                                              baseUnit:
-                                                sku.baseUnit ?? fields.baseUnit,
-                                              category:
-                                                fields.category || undefined,
-                                              brand: fields.brand || undefined,
-                                              barcode: sku.barcode,
-                                              description:
-                                                fields.description || undefined,
-                                              carouselImages:
-                                                fields.carouselImages,
-                                              detailImages: fields.detailImages,
-                                              mainImage:
-                                                sku.mainImage || undefined,
-                                              salesVisiblePrice: sku.salePrice,
-                                              hasPoolEntry: Boolean(
-                                                sku.salePrice,
-                                              ),
-                                            })
+                                      <HoverCard>
+                                        <HoverCardTrigger
+                                          render={
+                                            <Badge
+                                              variant="outline"
+                                              className="cursor-pointer"
+                                            />
                                           }
                                         >
-                                          添加供应商并登记成本
-                                        </Button>
-                                        <Link
-                                          className="block text-xs text-primary hover:underline"
-                                          href={`/procurement/supplier-catalog?mode=list&skuId=${encodeURIComponent(sku.skuId)}&from=W14&returnTo=${encodeURIComponent(`/master-data/products/${stableId}#product-section-sku`)}`}
+                                          {supplierItems.length} 家供应商
+                                        </HoverCardTrigger>
+                                        <HoverCardContent
+                                          align="start"
+                                          className="w-64 space-y-3"
                                         >
-                                          查看全部供给
-                                        </Link>
-                                      </>
+                                          <div>
+                                            <p className="text-sm font-medium">
+                                              供应商列表
+                                            </p>
+                                            {supplierNames.length > 0 ? (
+                                              <ul className="mt-2 space-y-1.5">
+                                                {supplierNames.map((supplierName) => (
+                                                  <li
+                                                    key={supplierName}
+                                                    className="text-sm text-muted-foreground"
+                                                  >
+                                                    {supplierName}
+                                                  </li>
+                                                ))}
+                                              </ul>
+                                            ) : (
+                                              <p className="mt-2 text-sm text-muted-foreground">
+                                                暂无供应商
+                                              </p>
+                                            )}
+                                          </div>
+                                          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+                                            <Button
+                                              type="button"
+                                              variant="outline"
+                                              size="sm"
+                                              onClick={() =>
+                                                setSupplierDialogSku({
+                                                  skuId: sku.skuId!,
+                                                  skuCode: sku.skuNo,
+                                                  skuName: values.name,
+                                                  specification: sku.specLabel,
+                                                  baseUnit:
+                                                    sku.baseUnit ??
+                                                    fields.baseUnit,
+                                                  category:
+                                                    fields.category || undefined,
+                                                  brand:
+                                                    fields.brand || undefined,
+                                                  barcode: sku.barcode,
+                                                  description:
+                                                    fields.description ||
+                                                    undefined,
+                                                  carouselImages:
+                                                    fields.carouselImages,
+                                                  detailImages:
+                                                    fields.detailImages,
+                                                  mainImage:
+                                                    sku.mainImage || undefined,
+                                                  salesVisiblePrice:
+                                                    sku.salePrice,
+                                                  hasPoolEntry: Boolean(
+                                                    sku.salePrice,
+                                                  ),
+                                                })
+                                              }
+                                            >
+                                              添加供应商
+                                            </Button>
+                                            <Link
+                                              className="text-xs text-primary hover:underline"
+                                              href={`/procurement/supplier-catalog?mode=list&skuId=${encodeURIComponent(sku.skuId)}&from=W14&returnTo=${encodeURIComponent(`/master-data/products/${stableId}#product-section-sku`)}`}
+                                            >
+                                              查看全部供给
+                                            </Link>
+                                          </div>
+                                        </HoverCardContent>
+                                      </HoverCard>
                                     ) : (
+                                      <Badge variant="outline">
+                                        {supplierItems.length} 家供应商
+                                      </Badge>
+                                    )}
+                                    {!sku.skuId || isCreate ? (
                                       <span className="block text-xs text-muted-foreground">
                                         保存商品后可添加多家供应商
                                       </span>
-                                    )}
+                                    ) : null}
                                   </div>
                                 </td>
                                 <td className="px-3 py-3">
-                                  <div className="space-y-1">
-                                    <Badge variant="outline">独立台账</Badge>
-                                    {sku.skuId ? (
-                                      <Link
-                                        className="block text-xs text-primary hover:underline"
-                                        href={`/inventory?view=balance&skuId=${encodeURIComponent(sku.skuId)}`}
-                                      >
-                                        查看库存
-                                      </Link>
-                                    ) : (
-                                      <span className="block text-xs text-muted-foreground">
-                                        保存后维护
-                                      </span>
-                                    )}
-                                  </div>
+                                  {sku.skuId ? (
+                                    <Link
+                                      className="block text-xs text-primary hover:underline"
+                                      href={`/inventory?view=balance&skuId=${encodeURIComponent(sku.skuId)}`}
+                                    >
+                                      查看库存
+                                    </Link>
+                                  ) : (
+                                    <span className="block text-xs text-muted-foreground">
+                                      保存后维护
+                                    </span>
+                                  )}
                                 </td>
                                 <td className="px-3 py-3">
                                   <div className="flex items-center gap-2">
