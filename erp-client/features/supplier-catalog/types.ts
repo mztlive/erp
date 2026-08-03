@@ -11,6 +11,30 @@ export type CostFieldVisibility = "visible" | "masked"
 
 export type SupplierCatalogSourceType = "EXCEL" | "API" | "MANUAL"
 
+export type SupplierCatalogMediaUsage =
+  | "SPU_CAROUSEL"
+  | "SPU_DETAIL"
+  | "SKU_MAIN"
+
+/**
+ * 供应商来源媒体。来源 URL 只用于取回，正式复用前必须归档为 fileAssetId；
+ * 公司商品媒体会形成自己的修订引用，不能长期依赖供应商 URL。
+ */
+export type SupplierCatalogMediaView = Readonly<{
+  id: string
+  usage: SupplierCatalogMediaUsage
+  fileName: string
+  sortOrder: number
+  fileAssetId?: string
+  sourceUrl?: string
+  archiveStatus: "ARCHIVED" | "PENDING_IMPORT" | "FAILED"
+}>
+
+export type SupplierCatalogAttributeView = Readonly<{
+  name: string
+  value: string
+}>
+
 export type SupplierCatalogSourceView = Readonly<{
   type: SupplierCatalogSourceType
   label: string
@@ -27,8 +51,14 @@ export type SupplierProductRevisionView = Readonly<{
   sourceUpdatedAt: string
   syncedAt: string
   name: string
+  description?: string
   specification: string
   category: string
+  brand?: string
+  baseUnit?: string
+  barcode?: string
+  attributes?: readonly SupplierCatalogAttributeView[]
+  media?: readonly SupplierCatalogMediaView[]
   /** 供应商来源报价快照；无成本权时 API 可返回 null 并由 UI 掩码。 */
   sourceQuotedPriceGross: string | null
   inputTaxRate: string | null
@@ -45,13 +75,27 @@ export type SupplierProductRevisionView = Readonly<{
 }>
 
 export type SkuCandidateView = Readonly<{
+  productId?: string
   skuId: string
   skuCode: string
   skuName: string
   specification: string
   baseUnit: string
+  barcode?: string
+  brand?: string
+  category?: string
   revisionNo: number
   similarityLabel: string
+  matchSignals?: readonly string[]
+  /** 当前已生效供给的供应商数量。 */
+  activeSupplierCount?: number
+  /** 一个公司 SKU 最多一个商品池条目；多家供应商共享该条目。 */
+  poolEntry?: {
+    poolEntryId: string
+    poolEntryRevisionId: string
+    status: "ACTIVE" | "PAUSED" | "DISABLED"
+    salesVisiblePrice: string
+  }
 }>
 
 export type SupplierProductMappingView = Readonly<{
@@ -291,6 +335,12 @@ export type SupplierCatalogQueueView = Readonly<{
     skuCode: string
     specification: string
     baseUnit: string
+    poolEntry?: {
+      poolEntryId: string
+      poolEntryRevisionId: string
+      status: "ACTIVE" | "PAUSED" | "DISABLED"
+      salesVisiblePrice: string
+    }
   }
   context: {
     queueContextId: string
@@ -419,8 +469,14 @@ export type CreateSupplierCatalogItemInput = Readonly<{
   supplierSpuCode?: string
   supplierSkuCode: string
   name: string
+  description?: string
   specification: string
   category: string
+  brand?: string
+  sourceBaseUnit?: string
+  barcode?: string
+  attributes: readonly SupplierCatalogAttributeView[]
+  media: readonly Omit<SupplierCatalogMediaView, "id">[]
   /** 供应商原始报价快照；不因采购确认而被覆盖。 */
   sourceQuotedPriceGross: string
   /** 固定公司 SKU 入口使用；形成供给修订，销售侧不可见。 */
@@ -431,8 +487,11 @@ export type CreateSupplierCatalogItemInput = Readonly<{
   targetSkuId?: string
   targetSkuCode?: string
   targetSkuName?: string
+  targetSpecification?: string
   baseUnit?: string
   salesVisiblePrice?: string
+  /** 已有商品池时默认沿用；只有显式 SET_PRICE 才允许形成新修订。 */
+  poolPriceAction?: "KEEP_EXISTING" | "SET_PRICE"
   minimumOrderQuantity: string
   supplyMode: "DROPSHIP" | "BULK"
   validFrom: string
@@ -454,7 +513,10 @@ export type PromoteSupplierProductInput = Readonly<{
   supplyMode: "DROPSHIP" | "BULK"
   supplyRegion: string[]
   validFrom: string
-  salesVisiblePrice: string
+  salesVisiblePrice?: string
+  poolPriceAction: "KEEP_EXISTING" | "SET_PRICE"
+  expectedSourceRevisionNo: number
+  expectedPoolEntryRevisionId?: string
   idempotencyKey: string
 }>
 
@@ -462,6 +524,8 @@ export type SupplierCatalogWriteResult = Readonly<{
   supplierProductId: string
   supplierOfferingRevisionId?: string
   poolEntryRevisionId?: string
+  poolEntryChange: "NONE" | "CREATED" | "REVISED" | "UNCHANGED"
+  activeSupplierCount?: number
   reference: string
   recordedAt: string
 }>

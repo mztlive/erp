@@ -7,6 +7,7 @@ import {
   ArrowRightIcon,
   CircleCheckIcon,
   ExternalLinkIcon,
+  ImageIcon,
   PauseIcon,
   ShieldAlertIcon,
   TriangleAlertIcon,
@@ -282,6 +283,9 @@ export function SupplierCatalogPage() {
       : "all"
   const currentSupplierProductId =
     searchParams.get("currentSupplierProductId") ?? undefined
+  const promotionSupplierProductId =
+    searchParams.get("promotionSupplierProductId") ?? undefined
+  const createdProductId = searchParams.get("createdProductId") ?? undefined
   const currentWorkItemId =
     searchParams.get("currentWorkItemId") ?? undefined
   const queueContextId =
@@ -336,6 +340,8 @@ export function SupplierCatalogPage() {
   const [manualEntryOpen, setManualEntryOpen] = React.useState(false)
   const [promotionItem, setPromotionItem] =
     React.useState<SupplierCatalogItemView | undefined>()
+  const [preferredPromotionProductId, setPreferredPromotionProductId] =
+    React.useState<string | undefined>()
 
   const view = queueQuery.data
   const items = React.useMemo(() => [...(view?.items ?? [])], [view?.items])
@@ -572,6 +578,30 @@ export function SupplierCatalogPage() {
     },
     [mode, pathname, queueContextId, router, searchParams]
   )
+
+  React.useEffect(() => {
+    if (mode !== "list" || !promotionSupplierProductId || queueQuery.isPending) {
+      return
+    }
+    const target = items.find(
+      (candidate) =>
+        candidate.supplierProduct.id === promotionSupplierProductId,
+    )
+    if (!target) return
+    setPreferredPromotionProductId(createdProductId)
+    setPromotionItem(target)
+    replaceUrl({
+      promotionSupplierProductId: null,
+      createdProductId: null,
+    })
+  }, [
+    createdProductId,
+    items,
+    mode,
+    promotionSupplierProductId,
+    queueQuery.isPending,
+    replaceUrl,
+  ])
 
   const goToItem = React.useCallback(
     (next: SupplierCatalogItemView | undefined | null) => {
@@ -888,6 +918,10 @@ export function SupplierCatalogPage() {
     : "#"
 
   const costMasked = view?.costFieldVisibility === "masked" || maskCost
+  const displayedSourceRevision = item
+    ? item.supplierProduct.incomingRevision ??
+      item.supplierProduct.currentRevision
+    : undefined
 
   if (queueQuery.isPending) {
     return (
@@ -964,6 +998,9 @@ export function SupplierCatalogPage() {
                   skuName: view.skuContext.productName,
                   specification: view.skuContext.specification,
                   baseUnit: view.skuContext.baseUnit,
+                  salesVisiblePrice:
+                    view.skuContext.poolEntry?.salesVisiblePrice,
+                  hasPoolEntry: Boolean(view.skuContext.poolEntry),
                 }
               : undefined
           }
@@ -971,9 +1008,13 @@ export function SupplierCatalogPage() {
         <PromoteSupplierProductDialog
           key={promotionItem?.supplierProduct.id ?? "promote-supplier-product"}
           item={promotionItem}
+          preferredProductId={preferredPromotionProductId}
           open={Boolean(promotionItem)}
           onOpenChange={(open) => {
-            if (!open) setPromotionItem(undefined)
+            if (!open) {
+              setPromotionItem(undefined)
+              setPreferredPromotionProductId(undefined)
+            }
           }}
         />
       </>
@@ -1469,6 +1510,29 @@ export function SupplierCatalogPage() {
                           "—",
                       },
                       {
+                        id: "brand",
+                        label: "来源品牌",
+                        value: displayedSourceRevision?.brand || "—",
+                      },
+                      {
+                        id: "unit",
+                        label: "来源单位",
+                        value: displayedSourceRevision?.baseUnit || "—",
+                      },
+                      {
+                        id: "barcode",
+                        label: "商品条码",
+                        value: displayedSourceRevision?.barcode || "—",
+                      },
+                      {
+                        id: "attributes",
+                        label: "规格属性",
+                        value:
+                          displayedSourceRevision?.attributes
+                            ?.map((attribute) => `${attribute.name}：${attribute.value}`)
+                            .join(" / ") || "—",
+                      },
+                      {
                         id: "price",
                         label: "来源含税报价",
                         value:
@@ -1503,6 +1567,33 @@ export function SupplierCatalogPage() {
                       },
                     ]}
                   />
+                  <div className="mt-4 border-t pt-4">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <ImageIcon className="size-4" aria-hidden />
+                      来源图文
+                    </div>
+                    {displayedSourceRevision?.media?.length ? (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {displayedSourceRevision.media.map((media) => (
+                          <Badge key={media.id} variant="outline">
+                            {media.usage === "SKU_MAIN"
+                              ? "SKU 主图"
+                              : media.usage === "SPU_CAROUSEL"
+                                ? "轮播图"
+                                : "详情图"}
+                            ：{media.fileName}
+                            {media.archiveStatus !== "ARCHIVED"
+                              ? "（待归档）"
+                              : ""}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        来源未提供图片；首次创建公司商品时必须补齐启用 SKU 主图。
+                      </p>
+                    )}
+                  </div>
                 </CardContent>
               </Card>
 

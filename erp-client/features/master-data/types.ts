@@ -258,6 +258,8 @@ export type ProductSkuFields = Readonly<{
 
 /** 商品（SPU）可写字段：规格组合出 SKU；无「规格标识」手填字段。 */
 export type ProductFields = Readonly<{
+  /** 公司审核后的商品描述；可由供应商来源资料预填，但保存后独立维护。 */
+  description?: string
   /** `unit_of_measure` 稳定身份与代码；`baseUnit` 仅为显示快照。 */
   baseUnitId: string
   baseUnitCode: string
@@ -276,6 +278,7 @@ export type ProductFields = Readonly<{
 
 /** 对象中心展示用的商品详情投影。 */
 export type ProductDetailView = Readonly<{
+  description?: string
   baseUnitId: string
   baseUnitCode: string
   baseUnit: string

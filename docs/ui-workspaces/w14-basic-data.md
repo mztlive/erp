@@ -4,7 +4,7 @@
 > 页面模式：M2 高密度查询列表 + M4 对象中心
 > 主要路由：`/master-data/:resource`
 > 主要角色：采购、运营、仓储；销售及财务按职责只读
-> 最后更新：2026-08-02
+> 最后更新：2026-08-03
 
 ## 1. 定位与目标
 
@@ -124,7 +124,7 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 | 资源 | 必须包含的子区 |
 | --- | --- |
 | 公司商品池 | 对应 SKU、销售可见价、可供供应商数量、服务区域、交期、允许履约方式、有效期、被销售单引用摘要；不含采购成本 |
-| 商品与 SKU | SPU 身份、规格维度（组合生成 SKU）、基础单位（下拉）、分类/品牌、SPU 轮播/详情图、SKU 主图/条码/销售可见价与市场价、按稳定 SKU 进入 W21 的供给入口、正式业务引用 |
+| 商品与 SKU | SPU 身份、公司审核描述、规格维度（组合生成 SKU）、基础单位（下拉）、分类/品牌、SPU 轮播/详情图、SKU 主图/条码/销售可见价与市场价、按稳定 SKU 进入 W21 的供给入口、正式业务引用 |
 | 商品分类 | **树形维护页**：左侧分类树 + 右侧节点摘要；稳定分类代码、名称、上级分类、适用商品类型、启停与版本；支持新建根/子分类；被 SKU 引用摘要 |
 | 品牌 | **列表维护页**（标准 M2）：稳定品牌代码、名称、启停与版本；被 SKU 引用摘要 |
 | 卡券类目 | 卡券 SKU 身份、类目描述、启停和版本；明确“不含商城玩法” |
@@ -168,6 +168,7 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 | 分区 | 字段 | 控件 | 必填 | 归属 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | 商品信息 | 名称 | 文本 | 是 | SPU | 商品族名称 |
+| 商品信息 | 商品描述 | 多行文本 | 否 | SPU | 公司审核后的描述；可由供应商来源版本预填，保存后独立维护 |
 | 商品信息 | 基础单位 | **下拉** | 是 | SPU（下沉 SKU） | 已被正式单据引用后不可改 |
 | 商品信息 | 分类 / 品牌 | **`CategoryCombobox` / `BrandCombobox`** | 是 | SPU | 字典稳定身份；分类展示层级路径；数据来自 W14 当前启用字典 |
 | 规格 | 规格名 + 取值列表 | 多组 | 否 | SPU | 如「颜色：红、蓝」；无规格时保留一个默认 SKU |
@@ -182,6 +183,10 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 | SKU 表 | 库存 | 链接 | — | W10 | 独立台账，不在商品主数据写余额 |
 
 **供给边界**：W14 不保存默认供应商或 `supplier_ids[]`。一件代发 / 集采、采购确认成本、底价、快递、起订量、进项税率、费用、区域、能力和有效期统一由 W21 的 `supplier_offering_revision` 独立维护；同一 SKU 可关联多个供应商 SKU。W14 对话框只是固定当前 `skuId` 的 W21 写入口，不把供给字段写入商品修订。食品产品有效期、生产批次本期不进商品主数据。
+
+**从供应商来源建品**：W21 只传稳定 `supplier_catalog_product_id` 和锁定的来源修订，W14 通过查询预填名称、描述、结构化规格、条码以及已归档的主图/轮播/详情图。来源类目、品牌和单位只能在当前启用公司字典中精确匹配，无法匹配时保持待选择；启用 SKU 缺主图仍按公司商品规则阻断保存。保存成功后返回 W21 继续创建映射和供给。供应商来源后续变化不自动覆盖公司商品修订。
+
+**第二供应商**：若目标 SKU 已有公司商品池条目，W14“添加供应商并登记成本”默认沿用当前销售可见价，仅新增供应商商品、映射和供给；只有采购明确选择修改销售可见价时才形成新的商品池修订。
 
 媒体：主图跟随 SKU；轮播图、详情图跟随 SPU；除主图外均支持多张。媒体变更形成新修订，不得把短期签名 URL 当作长期业务值。
 
@@ -373,7 +378,7 @@ type MasterDataRevisionResult = {
 }
 ```
 
-正式 API 必须按资源使用强类型字段，不得直接采用示例中的通用 `Record` 作为长期契约。商品与 SKU 的 `fields` 至少包含：`spu`、`baseUnit`（单位字典 ID/代码）、`categoryId`、`brandId`、规格维度、`skus[]`；每个 SKU 含稳定 `skuId`（保存时由服务端分配）、`skuNo`（产品编码，系统生成可覆盖）、`mainImage`、可选 `barcode` / `marketPrice`，SPU 可含 `carouselImages` / `detailImages`。页面中的 `salePrice` 是 `product_pool_entry_revision.sales_visible_price` 的编辑投影，命令处理器必须拆分写入商品池，不得成为 `sku_revision` 字段。商品与 SKU 契约**不得**包含默认 `supplierId`、`fulfillmentResponsibility`、`inputTaxRate`、`dropship*` 或 `bulk*` 供给字段；这些字段只进入 W21 的强类型 `supplier_offering` 契约。分类字段含 `code`、可选 `parent` / `productKind`；品牌字段含 `code`。供应商 `fields` 至少包含：`company`（企业主体）、`contactName` / `contactPhone` / `address`、`settlement` / `capability` / `businessCategory` / `signingEntity` / `paymentEntity`、`qualification` / `contractFile` / `authorizationFile` / `foodLicense` / `legalPersonIdCard` 及对应合同与授权有效期、`taxNo` / `bankName` / `bankAccount` / `invoiceType` / `invoiceTaxRate`、`initialScore` / `supplierRating` / `currentScore`。所有表单使用 TanStack Form；生效区间、规格身份、基础单位、分类/品牌启用状态、主图完整性、供应商能力/资质及仓库占用由服务端最终校验。
+正式 API 必须按资源使用强类型字段，不得直接采用示例中的通用 `Record` 作为长期契约。商品与 SKU 的 `fields` 至少包含：`spu`、可选 `description`、`baseUnit`（单位字典 ID/代码）、`categoryId`、`brandId`、规格维度、`skus[]`；每个 SKU 含稳定 `skuId`（保存时由服务端分配）、`skuNo`（产品编码，系统生成可覆盖）、`mainImage`、可选 `barcode` / `marketPrice`，SPU 可含 `carouselImages` / `detailImages`。页面中的 `salePrice` 是 `product_pool_entry_revision.sales_visible_price` 的编辑投影，命令处理器必须拆分写入商品池，不得成为 `sku_revision` 字段。商品与 SKU 契约**不得**包含默认 `supplierId`、`fulfillmentResponsibility`、`inputTaxRate`、`dropship*` 或 `bulk*` 供给字段；这些字段只进入 W21 的强类型 `supplier_offering` 契约。分类字段含 `code`、可选 `parent` / `productKind`；品牌字段含 `code`。供应商 `fields` 至少包含：`company`（企业主体）、`contactName` / `contactPhone` / `address`、`settlement` / `capability` / `businessCategory` / `signingEntity` / `paymentEntity`、`qualification` / `contractFile` / `authorizationFile` / `foodLicense` / `legalPersonIdCard` 及对应合同与授权有效期、`taxNo` / `bankName` / `bankAccount` / `invoiceType` / `invoiceTaxRate`、`initialScore` / `supplierRating` / `currentScore`。所有表单使用 TanStack Form；生效区间、规格身份、基础单位、分类/品牌启用状态、主图完整性、供应商能力/资质及仓库占用由服务端最终校验。
 
 当 `objectType/resource="warehouses"` 时，Q1 未确认期间查询契约不变，但 `allowedActions` 不得包含创建、形成版本、停用或策略维护；所有仓库写命令由服务端以 `WAREHOUSE_WRITE_OWNER_UNCONFIRMED` fail-closed。客户端不能通过通用 `CreateMasterDataRevisionCommand`、管理员身份或隐藏入口绕过该门禁。
 

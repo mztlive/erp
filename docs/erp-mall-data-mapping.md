@@ -838,7 +838,7 @@ API 供应商原始目录、订单、动作结果、退款和账单必须逐项�
 
 | 数据集 | 必需内容 | 规范目标 |
 | --- | --- | --- |
-| 供应商商品身份与版本 | 供应商、来源类型、可选连接、供应商 SPU/SKU 编码、来源版本或摘要、名称、规格、分类、图片、说明、来源报价、进项税率、费用、区域、可供状态、预计发货和商品能力 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`；批次结果另记 `supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
+| 供应商商品身份与版本 | 供应商、来源类型、可选连接、供应商 SPU/SKU 编码、来源版本或摘要、名称、描述、品牌、规格属性、单位、条码、主图/轮播/详情图、来源报价、进项税率、费用、区域、可供状态、预计发货和商品能力 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_product_revision_media`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`；批次结果另记 `supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
 | ERP 商品映射 | 供应商商品、ERP SKU、确认人、依据和有效状态 | `supplier_product_mapping` |
 | 固定供给版本 | 公司 SKU、供应商 SKU、采购确认含税/不含税成本、进项税率、运费、服务费、区域、可供状态、商品能力、最低订购量和有效期 | `supplier_offering`、`supplier_offering_revision` |
 | 供应商子订单 | ERP 永久订单号、商城订单及明细、固定供应商和连接、固定供给版本、数量、地址快照、下单成本和进项税率 | `supplier_fulfillment_order`、`supplier_fulfillment_item` |
@@ -858,6 +858,8 @@ API 供应商原始目录、订单、动作结果、退款和账单必须逐项�
 成本口径由 ERP 按事实来源确定，不接受供应商任意声明：供应商订单确认价、履约最终价、
 人工确认价和已确认结算价记 `ACTUAL`；消费发生时点的供给版本回退值记 `STANDARD`；
 没有可用成本时记 `NONE` 且不保存零成本金额。
+
+多个供应商目录商品可以多对一映射同一 ERP SKU；这些来源记录不是公司商品副本。增加第二供应商只新增该来源映射和供给，默认复用既有公司商品池修订。来源媒体必须先归档为受控文件资产，才能作为公司商品新修订的候选；不得用供应商临时 URL 覆盖现有公司图文。
 
 - 旧 `product_spu`、`product_sku` 身份映射继续保留，用于存量商城商品关联和对账，不反向成为 ERP 商品身份。
 

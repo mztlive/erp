@@ -12,10 +12,15 @@ export default async function Page({
   searchParams,
 }: {
   params: Promise<{ resource: string; stableId: string }>
-  searchParams: Promise<{ section?: string; revision?: string }>
+  searchParams: Promise<{
+    section?: string
+    revision?: string
+    sourceSupplierProductId?: string
+    returnTo?: string
+  }>
 }) {
   const { resource, stableId } = await params
-  const { section } = await searchParams
+  const { section, sourceSupplierProductId, returnTo } = await searchParams
   return (
     <Suspense
       fallback={
@@ -29,6 +34,8 @@ export default async function Page({
         resource={resource}
         stableId={stableId}
         section={section}
+        sourceSupplierProductId={sourceSupplierProductId}
+        returnTo={returnTo}
       />
     </Suspense>
   )

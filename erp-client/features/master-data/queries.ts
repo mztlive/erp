@@ -55,7 +55,12 @@ export function useCreateMasterDataMutation() {
     mutationFn: (input: CreateMasterDataInput) => createMasterDataObject(input),
     onSuccess: async (result) => {
       if (result.outcome === "succeeded") {
-        await queryClient.invalidateQueries({ queryKey: masterDataKeys.all })
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: masterDataKeys.all }),
+          queryClient.invalidateQueries({
+            queryKey: ["supplier-catalog", "company-skus"],
+          }),
+        ])
       }
     },
   })
@@ -67,7 +72,12 @@ export function useCreateRevisionMutation() {
     mutationFn: (input: CreateRevisionInput) => createMasterDataRevision(input),
     onSuccess: async (result) => {
       if (result.outcome === "succeeded") {
-        await queryClient.invalidateQueries({ queryKey: masterDataKeys.all })
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: masterDataKeys.all }),
+          queryClient.invalidateQueries({
+            queryKey: ["supplier-catalog", "company-skus"],
+          }),
+        ])
       }
     },
   })

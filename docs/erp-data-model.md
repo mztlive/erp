@@ -314,7 +314,7 @@ erDiagram
 | 表组 | 主要表 |
 | --- | --- |
 | 供应商 API | `supplier_api_connection`、`supplier_api_capability` |
-| 供应商商品库 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`、`supplier_product_mapping`、`supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
+| 供应商商品库 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_product_revision_media`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`、`supplier_product_mapping`、`supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
 | 供给与发布 | `supplier_offering`、`supplier_offering_revision`、`product_publication`、`product_publication_revision`、`product_publication_revision_media`、`product_publication_delivery` |
 | 主责迁移 | `sales_order_owner_migration_batch`、`sales_order_owner_migration_item` |
 | 执行投影 | `sales_order_projection`、`sales_order_projection_revision`、`sales_order_projection_delivery` |
@@ -795,7 +795,7 @@ W14 以**树形维护页**管理分类：父子关系不得成环；停用后仍
 | `product_id` | `sku` | 所属 SPU |
 | `base_unit_id` | `sku` | 唯一基础单位 |
 | `specification_signature` | `sku` | 规范化规格签名，创建后不可变 |
-| `name` / `specification` | 修订表 | 名称、规格或服务内容 |
+| `name` / `description` / `specification` | 修订表 | 公司审核后的名称、描述、规格或服务内容 |
 | `category_id` / `brand_id` | 修订表 | ERP 分类和品牌 |
 | `barcode` | `sku_revision` | 条码原值；冲突时进入人工差异，不据此自动合并 SKU |
 | `weight_kg` / `volume_m3` | `sku_revision` | 定点数物流属性，单位固定为千克和立方米 |
@@ -889,6 +889,8 @@ W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中
 - `sales_visible_price_gross >= 0`；不得从最低采购成本实时计算或自动覆盖。
 - 可用供应商数量、最低/最高成本只允许从有效 `supplier_offering_revision` 聚合；
   其中成本聚合仅返回给有成本字段权限的采购/财务角色，不能固化回商品池。
+- W21 的 `KEEP_EXISTING` 必须复用当前 `product_pool_entry_revision_id`；只有显式
+  `SET_PRICE` 且 `expected_pool_entry_revision_id` 命中当前版本时才追加商品池修订。
 
 #### `warehouse`、`warehouse_revision` 与 `warehouse_sku_policy`
 
@@ -2283,9 +2285,26 @@ Excel、API 和手工录入共同使用本节的供应商 SPU/SKU、映射和供
 | `status` | 正常、停止供应、异常 |
 | `current_revision_id` | 当前来源修订 |
 
-`supplier_catalog_product_revision` 保存 `name`、来源分类、品牌/图文摘要、
-`source_revision_token`、`source_updated_at`、规范化白名单字段的 keyed HMAC、
-密钥版本和有效期。
+`supplier_catalog_product_revision` 保存来源 SPU 内容快照：`name`、`description`、
+来源分类、来源品牌、结构化描述属性、`source_revision_token`、`source_updated_at`、
+规范化白名单字段的 keyed HMAC、密钥版本和有效期。字段语义可与公司
+`product_revision` 高度重合，但必须保持独立修订和所有权；供应商变化不得直接覆盖公司
+商品。
+
+`supplier_catalog_product_revision_media` 保存来源 SPU 图文：
+
+| 字段 | 说明 |
+| --- | --- |
+| `supplier_catalog_product_revision_id` | 所属供应商 SPU 来源修订 |
+| `media_usage` | `SPU_CAROUSEL`、`SPU_DETAIL` |
+| `file_asset_id` | 已归档受控文件；归档完成后必填 |
+| `source_url_snapshot` | 来源取回地址，可空；不得作为公司商品长期媒体值 |
+| `archive_status` | `PENDING_IMPORT`、`ARCHIVED`、`FAILED` |
+| `sort_order` | 同用途展示顺序 |
+
+同一修订下 `(media_usage, sort_order)` 唯一。短期签名 URL 必须先归档到
+`file_asset` 才能自动预填公司商品；归档失败或来源无图不阻断供应商目录入库，但会进入
+建品完整度提示。
 
 `supplier_catalog_sku` 保存供应商 SKU 稳定身份：
 
@@ -2303,6 +2322,9 @@ Excel、API 和手工录入共同使用本节的供应商 SPU/SKU、映射和供
 | `supplier_catalog_sku_id` / `revision_no` | 稳定身份和 ERP 观察版本 |
 | `source_revision_token` | API/文件版本标识，可空 |
 | `name` / `specification` | 供应商商品名称和规格 |
+| `source_base_unit` / `barcode` | 供应商单位快照与条码；只用于匹配和预填，不作为公司稳定身份 |
+| `structured_attributes` | 已规范化的来源规格属性；无法规范化的原值只留受控来源摘要 |
+| `source_main_image_asset_id` / `main_image_archive_status` | 来源 SKU 主图及归档状态 |
 | `source_quoted_price_gross` / `input_tax_rate` | 来源报价快照和进项税率；未确认前不是采购成本 |
 | `freight_amount` / `other_fee_amount` | 来源费用 |
 | `supply_region` | 可供区域 |
@@ -2324,6 +2346,8 @@ Excel、API 和手工录入共同使用本节的供应商 SPU/SKU、映射和供
   `source_payload_hmac + hmac_key_version` 幂等，不保存或比较原始明文；
 - `status + source_updated_at`、`availability_status + source_updated_at` 新鲜度索引；
 - 来源修订先进入供应商商品库，不直接修改公司 SKU、公司商品池或商城商品。
+- 从来源新建公司商品时锁定供应商来源修订；已归档媒体可复制为公司修订媒体引用，
+  未归档 URL 不得复制。启用公司 SKU 缺主图仍由 W14 阻断。
 
 #### `supplier_product_mapping`
 
@@ -2339,6 +2363,7 @@ Excel、API 和手工录入共同使用本节的供应商 SPU/SKU、映射和供
 
 - 同一供应商 SKU 同一时点只能映射一个公司 SKU；
 - 一个公司 SKU 可以映射多个供应商 SKU；
+- GTIN/条码、厂家货号、品牌型号、结构化规格和包装单位只产生匹配证据，不得仅按名称自动合并；完全相同可销售单位才允许多对一映射同一公司 SKU；
 - `(supplier_catalog_sku_id, status)`、`sku_id + status` 查询索引；
 - 变更映射不得反写已支付商城订单的 SKU 快照。
 
@@ -2373,6 +2398,7 @@ Excel、API 和手工录入共同使用本节的供应商 SPU/SKU、映射和供
 - 同一供给的有效期不得重叠；
 - `sku_id + status + valid_from + valid_to` 按消费时点和发布时点查询；
 - 供货价变化形成新修订，不覆盖旧价；
+- 增加第二家供应商时只新增该供应商 SKU 的映射与供给，不覆盖第一家的供给，也不要求形成新的公司商品或商品池条目；
 - 供应商、供给模式、价格、税费、起订量、区域、能力和有效期只写 `supplier_offering_revision`，不得复制回 `product_revision` / `sku_revision`；W14 仅消费按 `sku_id` 查询的关联投影；
 - `minimum_order_quantity > 0`；旧商城 `min_nums` 只有在采购确认了供应商、SKU、
   单位和起订语义后才可迁入本字段，未确认数据进入基础资料暂存审核；
@@ -3654,6 +3680,8 @@ PREPARING
    - 选择入池时锁定供应商 SKU 来源修订和公司 SKU；
    - 同一事务写映射、`supplier_offering_revision`、必要的
      `product_pool_entry_revision`、审计和 outbox；
+   - 目标公司 SKU 已有商品池且命令为 `KEEP_EXISTING` 时，返回并复用当前商品池修订；
+     不得因为增加第二家供应商而伪造新商品池修订；
    - 任一校验失败整体回滚，不允许有映射无成本或有商品池无供给；
    - 增加第二家供应商不得覆盖第一家的供给修订。
 2. 一期快照应用：

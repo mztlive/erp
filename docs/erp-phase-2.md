@@ -1192,9 +1192,10 @@ ERP 按供应商和结算周期汇总已完成、已取消和已退款订单，�
 | --- | --- | --- |
 | `supplier_api_connection` | 供应商 API 连接配置 | 供应商、环境、状态、密钥引用 |
 | `supplier_api_capability` | 连接能力声明 | 连接、能力代码、状态、约束 |
-| `supplier_catalog_product` / `supplier_catalog_product_revision` | 供应商 SPU 稳定身份与来源修订 | 供应商、来源类型、供应商 SPU 编码；API 连接可空 |
+| `supplier_catalog_product` / `supplier_catalog_product_revision` | 供应商 SPU 稳定身份与完整来源内容修订 | 供应商、来源类型、供应商 SPU 编码、名称/描述、来源类目/品牌及结构化属性；API 连接可空 |
+| `supplier_catalog_product_revision_media` | 供应商 SPU 来源轮播/详情媒体 | 来源修订、用途、受控文件资产、归档状态和顺序 |
 | `supplier_catalog_sku` | 供应商 SKU 稳定身份 | 供应商 SPU、供应商 SKU 编码 |
-| `supplier_catalog_sku_revision` | 供应商 SKU 来源版本 | 名称、规格、来源报价、库存、区域、能力、原始摘要 |
+| `supplier_catalog_sku_revision` | 供应商 SKU 来源版本 | 名称、规格、单位、条码、主图资产、来源报价、库存、区域、能力、原始摘要 |
 | `supplier_product_mapping` | 供应商商品到 ERP SKU 的映射 | 供应商商品、ERP SKU、状态 |
 | `supplier_offering_revision` | 供应商供给版本扩展 | 公司 SKU、供应商 SKU、采购确认成本、能力、有效期 |
 | `supplier_catalog_intake_batch` | 商品导入/同步批次 | 来源类型、供应商、可选连接/文件、开始结束时间、结果 |
@@ -1204,6 +1205,8 @@ ERP 按供应商和结算周期汇总已完成、已取消和已退款订单，�
 | `product_publication_delivery` | 商城接收结果 | 发布版本、发送时间、商城确认结果 |
 
 连接密钥只保存密钥管理系统引用，不得在业务表和操作日志保存明文。
+
+多家供应商的同款商品各自保留供应商商品身份和来源版本，通过多对一映射指向同一公司 SKU；公司 SKU 最多一个商品池条目。新增第二供应商默认只追加映射和供给，不修改公司商品内容或商品池修订。
 
 ### 14.2 销售单主责迁移与执行投影
 

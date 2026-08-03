@@ -220,6 +220,36 @@ function SupplyRelationshipListView({
         },
       },
       {
+        id: "sourceContent",
+        accessorFn: (row) =>
+          (row.supplierProduct.incomingRevision ??
+            row.supplierProduct.currentRevision).media?.length ?? 0,
+        header: "来源内容",
+        meta: { label: "来源内容", width: "reference" },
+        cell: ({ row }) => {
+          const revision =
+            row.original.supplierProduct.incomingRevision ??
+            row.original.supplierProduct.currentRevision
+          const media = revision.media ?? []
+          const hasArchivedMain = media.some(
+            (entry) =>
+              entry.usage === "SKU_MAIN" &&
+              entry.archiveStatus === "ARCHIVED",
+          )
+          return (
+            <div>
+              <div className={hasArchivedMain ? "text-foreground" : "text-warning"}>
+                {hasArchivedMain ? "可预填 SKU 主图" : "缺 SKU 主图"}
+              </div>
+              <div className="text-xs text-muted-foreground">
+                {media.length} 个媒体
+                {revision.barcode ? ` · 条码 ${revision.barcode}` : " · 无条码"}
+              </div>
+            </div>
+          )
+        },
+      },
+      {
         id: "purchaseTerms",
         accessorFn: (row) =>
           row.offering?.currentRevision?.minimumOrderQuantity ?? "",

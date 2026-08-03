@@ -308,6 +308,21 @@ export function SupplierProductCenterPage({
                     value: rev.specification || "—",
                   },
                   {
+                    id: "brand",
+                    label: "来源品牌",
+                    value: rev.brand || "—",
+                  },
+                  {
+                    id: "unit",
+                    label: "来源单位",
+                    value: rev.baseUnit || "—",
+                  },
+                  {
+                    id: "barcode",
+                    label: "商品条码",
+                    value: rev.barcode || "—",
+                  },
+                  {
                     id: "price",
                     label: "含税供货价",
                     value: rev.sourceQuotedPriceGross ?? "—",
@@ -320,6 +335,27 @@ export function SupplierProductCenterPage({
                   },
                 ]}
               />
+              <div className="mt-4 border-t pt-4">
+                <p className="text-sm font-medium">来源图文</p>
+                {rev.media?.length ? (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {rev.media.map((media) => (
+                      <Badge key={media.id} variant="outline">
+                        {media.usage === "SKU_MAIN"
+                          ? "SKU 主图"
+                          : media.usage === "SPU_CAROUSEL"
+                            ? "轮播图"
+                            : "详情图"}
+                        ：{media.fileName}
+                      </Badge>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    来源未提供图片；创建公司商品时需要补齐 SKU 主图。
+                  </p>
+                )}
+              </div>
             </CardContent>
           </Card>
           <BusinessDiffPanel

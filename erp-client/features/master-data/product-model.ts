@@ -98,6 +98,7 @@ function sameAttributeValues(
 
 export function emptyProductFields(): ProductFields {
   return {
+    description: "",
     baseUnitId: "",
     baseUnitCode: "",
     baseUnit: "",

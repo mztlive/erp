@@ -86,6 +86,7 @@ function cloneProductDetail(detail: ProductDetailView): ProductDetailView {
 
 function productSnapshot(fields: ProductFields): ProductDetailView {
   return cloneProductDetail({
+    description: fields.description,
     baseUnitId: fields.baseUnitId,
     baseUnitCode: fields.baseUnitCode,
     baseUnit: fields.baseUnit,

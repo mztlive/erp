@@ -29,7 +29,10 @@ import {
   DEMO_ROLE_LABEL,
   REGISTRATION_BLOCKER_MESSAGE,
 } from "@/features/supplier-catalog/types"
-import { MASTER_DATA_CENTER_SEEDS } from "@/features/master-data/data"
+import {
+  buildW14ListResult,
+  getW14Center,
+} from "@/features/master-data/session"
 import { SUPPLIER_CATALOG_SEED } from "@/mock/supplier-catalog"
 import {
   applyWorkItemActionSession,
@@ -53,6 +56,8 @@ const drafts = new Map<string, SessionCatalogDraft>()
 const catalogOverlays = new Map<string, SupplierCatalogItemView>()
 const createdCatalogIds: string[] = []
 const writeResults = new Map<string, SupplierCatalogWriteResult>()
+type ProductPoolEntryView = NonNullable<SupplierCatalogItemView["poolEntry"]>
+const poolEntryOverlays = new Map<string, ProductPoolEntryView>()
 
 function listCatalogItems(): SupplierCatalogItemView[] {
   const seeded = SUPPLIER_CATALOG_SEED.map(
@@ -64,12 +69,47 @@ function listCatalogItems(): SupplierCatalogItemView[] {
   return [...created, ...seeded]
 }
 
+function companyProductCenters() {
+  return buildW14ListResult("products").rows.flatMap((row) => {
+    const center = getW14Center("products", row.stableId)
+    return center?.productDetail ? [center] : []
+  })
+}
+
+function currentPoolEntryForSku(skuId: string): ProductPoolEntryView | undefined {
+  const overlay = poolEntryOverlays.get(skuId)
+  if (overlay) return overlay
+  const entries = listCatalogItems().flatMap((item) =>
+    item.mapping?.mappingStatus === "ACTIVE" &&
+    item.mapping.skuId === skuId &&
+    item.poolEntry
+      ? [item.poolEntry]
+      : []
+  )
+  return entries.find((entry) => entry.status === "ACTIVE") ?? entries[0]
+}
+
+function activeSupplierCountForSku(skuId: string): number {
+  return new Set(
+    listCatalogItems().flatMap((item) => {
+      const offering = item.offering?.currentRevision
+      return item.mapping?.mappingStatus === "ACTIVE" &&
+        item.mapping.skuId === skuId &&
+        offering?.status === "ACTIVE" &&
+        offering.availabilityStatus === "AVAILABLE"
+        ? [item.supplierProduct.supplier.id]
+        : []
+    })
+  ).size
+}
+
 function resolveSkuContext(skuId?: string) {
   if (!skuId) return undefined
 
-  for (const product of Object.values(MASTER_DATA_CENTER_SEEDS)) {
-    if (product.resource !== "products" || !product.productDetail) continue
-    const sku = product.productDetail.skus.find((entry) => entry.skuId === skuId)
+  for (const product of companyProductCenters()) {
+    const detail = product.productDetail
+    if (!detail) continue
+    const sku = detail.skus.find((entry) => entry.skuId === skuId)
     if (!sku) continue
 
     return {
@@ -78,7 +118,8 @@ function resolveSkuContext(skuId?: string) {
       skuId,
       skuCode: sku.skuNo,
       specification: sku.specLabel,
-      baseUnit: sku.baseUnit ?? product.productDetail.baseUnit,
+      baseUnit: sku.baseUnit ?? detail.baseUnit,
+      poolEntry: currentPoolEntryForSku(skuId),
     }
   }
 
@@ -245,6 +286,9 @@ function projectItem(
         : undefined,
     },
     mapping,
+    poolEntry: mapping?.skuId
+      ? currentPoolEntryForSku(mapping.skuId) ?? seed.poolEntry
+      : seed.poolEntry,
     offering: offering
       ? {
           ...offering,
@@ -502,19 +546,24 @@ export async function fetchSupplierCatalogQueue(
 
 export async function fetchCompanySkuOptions() {
   await mockDelay(60)
-  return Object.values(MASTER_DATA_CENTER_SEEDS)
-    .filter((center) => center.resource === "products" && center.productDetail)
+  return companyProductCenters()
     .flatMap((center) =>
       (center.productDetail?.skus ?? [])
         .filter((sku) => sku.lifecycleStatus === "ENABLED" && sku.skuId)
         .map((sku) => ({
+          productId: center.stableId,
           skuId: sku.skuId!,
           skuCode: sku.skuNo,
           skuName: center.name,
           specification: sku.specLabel,
           baseUnit: sku.baseUnit ?? center.productDetail!.baseUnit,
+          barcode: sku.barcode,
+          brand: center.productDetail!.brand,
+          category: center.productDetail!.category,
           revisionNo: center.currentRevision.revisionNo,
-          similarityLabel: "公司商品池候选",
+          similarityLabel: "公司商品候选",
+          activeSupplierCount: activeSupplierCountForSku(sku.skuId!),
+          poolEntry: currentPoolEntryForSku(sku.skuId!),
         }))
     )
 }
@@ -973,6 +1022,48 @@ function createConfirmedOffering(input: {
   }
 }
 
+function writeProductPoolEntry(input: {
+  skuId: string
+  action: "KEEP_EXISTING" | "SET_PRICE"
+  salesVisiblePrice?: string
+  validFrom: string
+  expectedPoolEntryRevisionId?: string
+}): {
+  poolEntry: ProductPoolEntryView
+  change: "CREATED" | "REVISED" | "UNCHANGED"
+} {
+  const existing = currentPoolEntryForSku(input.skuId)
+  if (existing && input.action === "KEEP_EXISTING") {
+    return { poolEntry: existing, change: "UNCHANGED" }
+  }
+  if (!existing && input.action === "KEEP_EXISTING") {
+    throw new Error("该公司 SKU 尚未加入商品池，必须先设置销售可见价")
+  }
+  if (!input.salesVisiblePrice?.trim()) {
+    throw new Error("新建或修改公司商品池价格时必须填写销售可见价")
+  }
+  if (
+    existing &&
+    input.expectedPoolEntryRevisionId &&
+    input.expectedPoolEntryRevisionId !== existing.poolEntryRevisionId
+  ) {
+    throw new Error("公司商品池价格已经更新，请刷新后重新确认")
+  }
+
+  const revisionSuffix = existing ? Date.now().toString(36) : "r1"
+  const poolEntry: ProductPoolEntryView = {
+    poolEntryId: existing?.poolEntryId ?? `pool_${input.skuId}`,
+    poolEntryRevisionId: existing
+      ? `${existing.poolEntryId}_${revisionSuffix}`
+      : `pool_${input.skuId}_${revisionSuffix}`,
+    status: "ACTIVE",
+    salesVisiblePrice: input.salesVisiblePrice.trim(),
+    validFrom: input.validFrom,
+  }
+  poolEntryOverlays.set(input.skuId, poolEntry)
+  return { poolEntry, change: existing ? "REVISED" : "CREATED" }
+}
+
 /**
  * 日常供应商商品录入：Excel、API 和手工共用同一命令形状。
  * API 连接只是来源元数据，不是供应商商品或供给的创建前置条件。
@@ -983,11 +1074,8 @@ export async function createSupplierCatalogItem(
   await mockDelay(120)
   const cached = writeResults.get(input.idempotencyKey)
   if (cached) return cached
-  if (
-    input.targetSkuId &&
-    (!input.confirmedCostGross || !input.salesVisiblePrice)
-  ) {
-    throw new Error("加入公司商品池时必须同时确认采购成本和销售可见价")
+  if (input.targetSkuId && !input.confirmedCostGross) {
+    throw new Error("登记供应商供给时必须确认采购成本")
   }
 
   const seq = createdCatalogIds.length + 1
@@ -1002,6 +1090,18 @@ export async function createSupplierCatalogItem(
         minimumOrderQuantity: input.minimumOrderQuantity,
         supplyMode: input.supplyMode,
         supplyRegion: input.supplyRegion,
+        validFrom: input.validFrom,
+      })
+    : undefined
+  const poolWrite = input.targetSkuId
+    ? writeProductPoolEntry({
+        skuId: input.targetSkuId,
+        action:
+          input.poolPriceAction ??
+          (currentPoolEntryForSku(input.targetSkuId)
+            ? "KEEP_EXISTING"
+            : "SET_PRICE"),
+        salesVisiblePrice: input.salesVisiblePrice,
         validFrom: input.validFrom,
       })
     : undefined
@@ -1031,8 +1131,17 @@ export async function createSupplierCatalogItem(
         sourceUpdatedAt: now,
         syncedAt: now,
         name: input.name,
+        description: input.description,
         specification: input.specification,
         category: input.category,
+        brand: input.brand,
+        baseUnit: input.sourceBaseUnit,
+        barcode: input.barcode,
+        attributes: input.attributes,
+        media: input.media.map((media, index) => ({
+          ...media,
+          id: `${id}_media_${index + 1}`,
+        })),
         sourceQuotedPriceGross: input.sourceQuotedPriceGross,
         inputTaxRate: input.inputTaxRate,
         freightAmount: "0.00",
@@ -1056,16 +1165,7 @@ export async function createSupplierCatalogItem(
           stableId: offeringId,
           revisionHistory: [],
         },
-    poolEntry:
-      input.targetSkuId && input.salesVisiblePrice
-        ? {
-            poolEntryId: `pool_${input.targetSkuId}`,
-            poolEntryRevisionId: `pool_${input.targetSkuId}_r1`,
-            status: "ACTIVE" as const,
-            salesVisiblePrice: input.salesVisiblePrice,
-            validFrom: input.validFrom,
-          }
-        : undefined,
+    poolEntry: poolWrite?.poolEntry,
     publicationImpact: EMPTY_PUBLICATION_IMPACT,
     sourceContext: {
       intakeId: `intake_${input.sourceType.toLowerCase()}_${seq}`,
@@ -1087,7 +1187,7 @@ export async function createSupplierCatalogItem(
           skuCode: input.targetSkuCode,
           skuName: input.targetSkuName,
           skuRevisionId: `${input.targetSkuId}:current`,
-          specification: input.specification,
+          specification: input.targetSpecification ?? input.specification,
           baseUnit: input.baseUnit,
           approvedBy: "采购 · 当前用户",
           approvedAt: now,
@@ -1112,10 +1212,14 @@ export async function createSupplierCatalogItem(
 
   catalogOverlays.set(id, item)
   createdCatalogIds.unshift(id)
-  const result = {
+  const result: SupplierCatalogWriteResult = {
     supplierProductId: id,
     supplierOfferingRevisionId: offering?.offeringRevisionId,
     poolEntryRevisionId: item.poolEntry?.poolEntryRevisionId,
+    poolEntryChange: poolWrite?.change ?? "NONE",
+    activeSupplierCount: input.targetSkuId
+      ? activeSupplierCountForSku(input.targetSkuId)
+      : undefined,
     reference: `SC-${input.sourceType}-${String(seq).padStart(4, "0")}`,
     recordedAt: now,
   }
@@ -1137,6 +1241,19 @@ export async function promoteSupplierProductToPool(
   if (current.changeType === "ERROR") {
     throw new Error("异常来源数据必须先修复，不能直接加入公司商品池")
   }
+  const sourceRevision =
+    current.supplierProduct.incomingRevision ??
+    current.supplierProduct.currentRevision
+  if (sourceRevision.revisionNo !== input.expectedSourceRevisionNo) {
+    throw new Error("供应商商品来源版本已经变化，请刷新后重新确认")
+  }
+  if (
+    current.mapping?.mappingStatus === "ACTIVE" &&
+    current.mapping.skuId &&
+    current.mapping.skuId !== input.targetSkuId
+  ) {
+    throw new Error("该供应商 SKU 已关联其他公司 SKU，必须先走映射变更流程")
+  }
 
   const now = new Date().toISOString()
   const offeringId =
@@ -1149,6 +1266,13 @@ export async function promoteSupplierProductToPool(
     supplyMode: input.supplyMode,
     supplyRegion: input.supplyRegion,
     validFrom: input.validFrom,
+  })
+  const poolWrite = writeProductPoolEntry({
+    skuId: input.targetSkuId,
+    action: input.poolPriceAction,
+    salesVisiblePrice: input.salesVisiblePrice,
+    validFrom: input.validFrom,
+    expectedPoolEntryRevisionId: input.expectedPoolEntryRevisionId,
   })
   const { workItem: _workItem, registrationBlocker: _registrationBlocker, ...rest } =
     current as SupplierCatalogItemView & {
@@ -1182,13 +1306,7 @@ export async function promoteSupplierProductToPool(
         offering,
       ],
     },
-    poolEntry: {
-      poolEntryId: `pool_${input.targetSkuId}`,
-      poolEntryRevisionId: `pool_${input.targetSkuId}_${Date.now()}`,
-      status: "ACTIVE",
-      salesVisiblePrice: input.salesVisiblePrice,
-      validFrom: input.validFrom,
-    },
+    poolEntry: poolWrite.poolEntry,
     allowedActions: ["BROWSE", "REVISE_OFFERING"],
     actionBlockers: [],
   }
@@ -1197,6 +1315,8 @@ export async function promoteSupplierProductToPool(
     supplierProductId: input.supplierProductId,
     supplierOfferingRevisionId: offering.offeringRevisionId,
     poolEntryRevisionId: next.poolEntry?.poolEntryRevisionId,
+    poolEntryChange: poolWrite.change,
+    activeSupplierCount: activeSupplierCountForSku(input.targetSkuId),
     reference: `POOL-${input.targetSkuCode}-${Date.now().toString(36)}`,
     recordedAt: now,
   }
