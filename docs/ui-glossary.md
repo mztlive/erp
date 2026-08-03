@@ -391,7 +391,9 @@ W09 目标用户确认为一线仓储/采购经办，本轮按「全面口语化
 | 组件 | 扩展点 | 默认 |
 | --- | --- | --- |
 | `PrepaymentGate`（`components/business/domain.tsx`） | `copy?: Partial<PrepaymentGateCopy>` | 面向采购/财务的原措辞，W08 不受影响 |
+| `PrepaymentGate` | `presentation?: "panel" \| "badge"` | `panel` 完整卡片；W09 传 `badge`：顶栏结果徽章，悬停展开详情 |
 | `SequentialProcessBar`（`components/business/workflow.tsx`） | `showProcess?: boolean` | `true`；只读角色传 `false` |
+| `SequentialProcessBar` | `statusExtras?: ReactNode` | 无；W09 挂先款条件徽章（位置/租约之后） |
 
 ### 待跟进（本轮未做）
 

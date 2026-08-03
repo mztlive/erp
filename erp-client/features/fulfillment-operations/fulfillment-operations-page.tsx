@@ -813,30 +813,6 @@ export function FulfillmentOperationsPage() {
         </div>
       ) : null}
 
-      <MetricStrip columns={5}>
-        {metrics.map((m) => (
-          <MetricFilterItem
-            key={m.operationType}
-            label={m.label}
-            value={m.count}
-            detail={OPERATION_TYPE_LABEL[m.operationType]}
-            active={
-              operationTypes?.length === 1 &&
-              operationTypes[0] === m.operationType
-            }
-            onClick={() => {
-              if (
-                operationTypes?.length === 1 &&
-                operationTypes[0] === m.operationType
-              ) {
-                setTypeFilter("all")
-              } else {
-                setTypeFilter(m.operationType)
-              }
-            }}
-          />
-        ))}
-      </MetricStrip>
 
       <div className="flex flex-wrap items-center gap-2">
         <ToggleGroup
@@ -1191,7 +1167,7 @@ export function FulfillmentOperationsPage() {
                       {task.source.supplierLabel
                         ? ` · ${task.source.supplierLabel}`
                         : ""}
-                      
+
                     </CardDescription>
                   </div>
                   <BusinessStatusBadge
