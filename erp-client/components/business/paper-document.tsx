@@ -53,6 +53,8 @@ type PaperDocumentTotal = Readonly<{
   emphasized?: boolean
 }>
 
+type PaperDocumentFrame = "framed" | "bare"
+
 interface PaperDocumentProps<Row>
   extends Omit<React.ComponentProps<"article">, "children" | "title"> {
   /** 出具方名称或品牌；仅展示，不推导签约主体。 */
@@ -74,6 +76,11 @@ interface PaperDocumentProps<Row>
   signature?: React.ReactNode
   seal?: React.ReactNode
   footer?: React.ReactNode
+  /**
+   * framed：浅底外框 + 内边距，适合页面内嵌。
+   * bare：仅纸张本体，适合透明浮层预览，避免再套一层灰框。
+   */
+  frame?: PaperDocumentFrame
 }
 
 const alignmentClasses = {
@@ -107,6 +114,7 @@ function PaperDocument<Row>({
   signature,
   seal,
   footer,
+  frame = "framed",
   className,
   "aria-label": ariaLabel,
   ...props
@@ -114,13 +122,20 @@ function PaperDocument<Row>({
   return (
     <div
       data-slot="paper-document-viewport"
-      className="w-full overflow-x-auto rounded-lg border border-border bg-surface-sunken p-3 sm:p-6 print:overflow-visible print:border-0 print:bg-transparent print:p-0"
+      data-frame={frame}
+      className={cn(
+        "w-full overflow-x-auto print:overflow-visible print:border-0 print:bg-transparent print:p-0",
+        frame === "framed" &&
+          "rounded-lg border border-border bg-surface-sunken p-3 sm:p-6",
+        frame === "bare" && "bg-transparent p-0"
+      )}
     >
       <article
         data-slot="paper-document"
         aria-label={ariaLabel ?? "纸质单据预览"}
         className={cn(
           "mx-auto min-h-screen min-w-3xl max-w-5xl border border-border bg-card px-10 py-12 text-card-foreground shadow-lg print:min-h-0 print:min-w-0 print:max-w-none print:border-0 print:px-0 print:py-0 print:shadow-none",
+          frame === "bare" && "min-h-0 shadow-2xl",
           className
         )}
         {...props}
@@ -357,6 +372,7 @@ export {
   type PaperDocumentColumn,
   type PaperDocumentColumnAlignment,
   type PaperDocumentField,
+  type PaperDocumentFrame,
   type PaperDocumentParty,
   type PaperDocumentProps,
   type PaperDocumentStatus,

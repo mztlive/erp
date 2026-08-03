@@ -221,26 +221,6 @@ export function CustomerCenterPage() {
           </span>
         ),
       },
-      {
-        id: "actions",
-        header: "操作",
-        meta: { label: "操作", width: "default", align: "end" },
-        cell: ({ row }) => (
-          <div
-            className="flex justify-end gap-1"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              render={<Link href={`/sales/customers/${row.original.id}`} />}
-            >
-              打开
-            </Button>
-          </div>
-        ),
-      },
     ],
     []
   )
@@ -449,11 +429,9 @@ export function CustomerCenterPage() {
               density="compact"
               defaultColumnPinning={{
                 left: ["customer"],
-                right: ["actions"],
               }}
-              onRowOpen={(row) =>
-                router.push(`/sales/customers/${row.id}`)
-              }
+              onRowPreview={(row) => router.push(`/sales/customers/${row.id}`)}
+              onRowOpen={(row) => router.push(`/sales/customers/${row.id}`)}
             />
           }
         />

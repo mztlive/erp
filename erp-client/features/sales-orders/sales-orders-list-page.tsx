@@ -6,7 +6,6 @@ import {
   DownloadIcon,
   FilterIcon,
   PlusIcon,
-  PrinterIcon,
   SearchIcon,
 } from "lucide-react"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
@@ -25,7 +24,6 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
-  QuickPreviewSheet,
   StatusTrackSummary,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -46,8 +44,8 @@ import {
   ORIGIN_LABEL,
   OWNER_LABEL,
 } from "@/mock/sales-orders"
+import { downloadOriginalContractPdf } from "@/features/contracts/pdf"
 import { SalesOrderPaperDialog } from "@/features/sales-orders/sales-order-paper-dialog"
-import { SalesOrderPreviewPanel } from "@/features/sales-orders/sales-order-preview-panel"
 import {
   computeSalesOrderMetrics,
   filterSalesOrders,
@@ -95,7 +93,6 @@ export function SalesOrdersListPage({
     pageIndex: 0,
     pageSize: 20,
   })
-  const [previewId, setPreviewId] = React.useState<string | null>(null)
   const [paperId, setPaperId] = React.useState<string | null>(null)
   const [exportJob, setExportJob] = React.useState<{
     jobId: string
@@ -136,11 +133,6 @@ export function SalesOrdersListPage({
     return filtered.slice(start, start + pagination.pageSize)
   }, [filtered, pagination.pageIndex, pagination.pageSize])
 
-  const previewOrder = React.useMemo(
-    () => allOrders.find((item) => item.id === previewId) ?? null,
-    [allOrders, previewId]
-  )
-
   const paperOrder = React.useMemo(
     () => allOrders.find((item) => item.id === paperId) ?? null,
     [allOrders, paperId]
@@ -151,7 +143,7 @@ export function SalesOrdersListPage({
     [allOrders]
   )
 
-  const openPaper = React.useCallback((id: string) => {
+  const openPaperPreview = React.useCallback((id: string) => {
     setPaperId(id)
   }, [])
 
@@ -216,7 +208,7 @@ export function SalesOrdersListPage({
                   size="xs"
                   className="num px-0"
                   aria-label={`预览 ${row.original.documentNumber}`}
-                  onClick={() => setPreviewId(row.original.id)}
+                  onClick={() => openPaperPreview(row.original.id)}
                 >
                   {row.original.documentNumber}
                 </Button>
@@ -248,33 +240,19 @@ export function SalesOrdersListPage({
         header: "合同",
         meta: { label: "合同", width: "default" },
         cell: ({ row }) => (
-          <span className="num text-sm text-foreground">
-            {row.original.contractNumber}
-          </span>
-        ),
-      },
-      {
-        id: "originSystem",
-        header: "创建来源",
-        meta: { label: "创建来源", width: "status" },
-        cell: ({ row }) => (
-          <Badge variant="outline">
-            {ORIGIN_LABEL[row.original.originSystem]}
-          </Badge>
-        ),
-      },
-      {
-        id: "ownerSystem",
-        header: "当前主责",
-        meta: { label: "当前主责", width: "status" },
-        cell: ({ row }) => (
-          <Badge
-            variant={
-              row.original.ownerSystem === "erp" ? "info" : "secondary"
-            }
+          <Button
+            type="button"
+            variant="link"
+            size="xs"
+            className="num h-auto px-0 text-sm"
+            title="下载原始合同 PDF"
+            aria-label={`下载合同 ${row.original.contractNumber} 原始 PDF`}
+            onClick={() => {
+              downloadOriginalContractPdf(row.original.contractNumber)
+            }}
           >
-            {OWNER_LABEL[row.original.ownerSystem]}
-          </Badge>
+            {row.original.contractNumber}
+          </Button>
         ),
       },
       {
@@ -344,33 +322,17 @@ export function SalesOrdersListPage({
           <div className="flex justify-end gap-1">
             <Button
               type="button"
-              variant="ghost"
-              size="xs"
-              onClick={() => setPreviewId(row.original.id)}
-            >
-              预览
-            </Button>
-            <Button
-              type="button"
               variant="outline"
               size="xs"
               render={<Link href={`/sales/orders/${row.original.id}`} />}
             >
-              打开
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              onClick={() => openPaper(row.original.id)}
-            >
-              打印
+              查看详情
             </Button>
           </div>
         ),
       },
     ],
-    [openPaper]
+    [openPaperPreview]
   )
 
   const advancedActive =
@@ -680,81 +642,11 @@ export function SalesOrdersListPage({
             layout="flush"
             density="compact"
             defaultColumnPinning={{ left: ["document"], right: ["actions"] }}
-            onRowPreview={(row) => setPreviewId(row.id)}
-            onRowOpen={(row) => setPreviewId(row.id)}
+            onRowPreview={(row) => openPaperPreview(row.id)}
+            onRowOpen={(row) => openPaperPreview(row.id)}
           />
         }
       />
-
-      <QuickPreviewSheet
-        open={previewOrder != null}
-        onOpenChange={(open) => {
-          if (!open) setPreviewId(null)
-        }}
-        size="detail"
-        title={previewOrder?.customerName ?? "销售单预览"}
-        identity={
-          previewOrder ? (
-            <span className="num">
-              {previewOrder.documentNumber} · v{previewOrder.version} ·{" "}
-              {NATURE_LABEL[previewOrder.nature]}
-            </span>
-          ) : null
-        }
-        summary={
-          previewOrder ? (
-            <div className="flex flex-wrap items-center gap-2">
-              <BusinessStatusBadge
-                context="preview"
-                {...previewOrder.primaryStatus}
-              />
-              <Badge variant="outline">
-                {ORIGIN_LABEL[previewOrder.originSystem]}
-              </Badge>
-              <Badge
-                variant={
-                  previewOrder.ownerSystem === "erp" ? "info" : "secondary"
-                }
-              >
-                {OWNER_LABEL[previewOrder.ownerSystem]}
-              </Badge>
-              <span className="text-xs text-muted-foreground">销售单详情</span>
-            </div>
-          ) : null
-        }
-        footer={
-          previewOrder ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setPreviewId(null)}
-              >
-                关闭
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                render={<Link href={`/sales/orders/${previewOrder.id}`} />}
-              >
-                查看详情
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => openPaper(previewOrder.id)}
-              >
-                <PrinterIcon data-icon="inline-start" aria-hidden="true" />
-                纸质预览
-              </Button>
-            </>
-          ) : null
-        }
-      >
-        {previewOrder ? (
-          <SalesOrderPreviewPanel order={previewOrder} />
-        ) : null}
-      </QuickPreviewSheet>
 
       <SalesOrderPaperDialog
         order={paperOrder}

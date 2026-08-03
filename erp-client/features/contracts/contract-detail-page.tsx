@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
+import { buildDemoContractPdfBlob } from "@/features/contracts/pdf"
 import { useContractCenterQuery } from "@/features/contracts/queries"
 
 type SectionId =
@@ -425,7 +426,17 @@ export function ContractDetailPage({
                 : undefined,
             onOpen: file.canDownload
               ? () => {
-                  // 演示：短时链接下载不真实发起
+                  // 演示：本地下载演示 PDF；生产环境应为鉴权短时签名 URL。
+                  const blob = buildDemoContractPdfBlob(contract.contractNo)
+                  const url = URL.createObjectURL(blob)
+                  const anchor = document.createElement("a")
+                  anchor.href = url
+                  anchor.download = file.name
+                  anchor.rel = "noopener"
+                  document.body.appendChild(anchor)
+                  anchor.click()
+                  anchor.remove()
+                  URL.revokeObjectURL(url)
                 }
               : undefined,
           }))}

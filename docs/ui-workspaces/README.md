@@ -57,7 +57,7 @@ W 文件不得重定义业务状态机，也不得为了版面方便改变金额
 | W02 | 待办队列（统一） | M3 | `/workspace/tasks` | [w02-unified-task-queue.md](w02-unified-task-queue.md) | 草稿 |
 | W03 | 客户中心 | M4 | `/sales/customers` | [w03-customer-center.md](w03-customer-center.md) | 草稿 |
 | W04 | 合同 | M2 + M4 | `/sales/contracts` | [w04-contracts.md](w04-contracts.md) | 草稿 |
-| W05 | 销售单（统一） | M2 + M4 + M5 | `/sales/orders` | [w05-sales-orders.md](w05-sales-orders.md) | 草稿 |
+| W05 | 销售单（统一） | M2 + M4 + M5 | `/sales/orders`（列表行点纸质预览，无侧栏 Sheet） | [w05-sales-orders.md](w05-sales-orders.md) | 草稿 |
 | W06 | 客户验收 | 挂 W05 + 作业 | `/sales/orders/:salesOrderId?section=acceptance` | [w06-customer-acceptance.md](w06-customer-acceptance.md) | 草稿 |
 | W07 | 二次确认队列 | M3 | `/procurement/confirm` | [w07-procurement-confirmation-queue.md](w07-procurement-confirmation-queue.md) | 草稿 |
 | W08 | 采购单 | M2 + M4 + M5 | `/procurement/orders` | [w08-purchase-orders.md](w08-purchase-orders.md) | 草稿 |

@@ -4,10 +4,9 @@ import { MoneyValue, PaperDocument, QuantityValue } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
@@ -18,6 +17,7 @@ import type {
   SalesOrderLineItem,
   SalesOrderListItem,
 } from "@/features/sales-orders/types"
+import { XIcon } from "lucide-react"
 
 type SalesOrderPaperDialogProps = {
   order: SalesOrderListItem | null
@@ -26,7 +26,8 @@ type SalesOrderPaperDialogProps = {
 }
 
 /**
- * 已生效单据纸质投影：宽对话框承载 PaperDocument，供阅读与打印，不塞进窄侧栏。
+ * 列表行纸质预览：透明壳 + PaperDocument，弱化 Dialog 边框/标题栏/页脚痕迹。
+ * 点击遮罩或右上角关闭；不提供打印入口。
  */
 export function SalesOrderPaperDialog({
   order,
@@ -36,44 +37,37 @@ export function SalesOrderPaperDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="flex max-h-[92vh] w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-5xl"
-        showCloseButton
+        showCloseButton={false}
+        className="flex max-h-[min(96vh,56rem)] w-full max-w-[calc(100%-1.5rem)] flex-col gap-0 overflow-hidden border-0 bg-transparent p-0 shadow-none ring-0 sm:max-w-5xl dark:ring-0"
       >
-        <DialogHeader className="shrink-0 border-b border-border px-6 py-4 text-left">
-          <DialogTitle>纸质单据预览</DialogTitle>
-          <DialogDescription>
-            系统业务数据的打印件；金额与状态以系统记录为准。
-          </DialogDescription>
-        </DialogHeader>
+        <DialogTitle className="sr-only">
+          {order
+            ? `销售单 ${order.documentNumber} 纸质预览`
+            : "销售单纸质预览"}
+        </DialogTitle>
+        <DialogDescription className="sr-only">
+          系统业务数据的纸质投影；金额与状态以系统记录为准。按 Esc 或点击遮罩关闭。
+        </DialogDescription>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-surface-sunken px-3 py-4 sm:px-6">
-          {order ? <SalesOrderPaperDocument order={order} /> : null}
-        </div>
+        <div className="relative min-h-0 flex-1">
+          <DialogClose
+            render={
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon-sm"
+                className="absolute top-3 right-3 z-10 rounded-full border border-border/60 bg-card/95 shadow-md backdrop-blur-sm print:hidden"
+              />
+            }
+          >
+            <XIcon aria-hidden="true" />
+            <span className="sr-only">关闭预览</span>
+          </DialogClose>
 
-        <DialogFooter className="shrink-0 border-t border-border px-6 py-4 sm:justify-between">
-          <p className="text-xs text-muted-foreground">
-            {order
-              ? `${order.documentNumber} · ${NATURE_LABEL[order.nature]} · ${OWNER_LABEL[order.ownerSystem]}`
-              : null}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              关闭
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                window.print()
-              }}
-            >
-              打印
-            </Button>
+          <div className="max-h-[min(96vh,56rem)] overflow-y-auto overscroll-contain">
+            {order ? <SalesOrderPaperDocument order={order} /> : null}
           </div>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   )
@@ -84,6 +78,7 @@ function SalesOrderPaperDocument({ order }: { order: SalesOrderListItem }) {
 
   return (
     <PaperDocument<SalesOrderLineItem>
+      frame="bare"
       issuer={order.sellerEntity}
       title="销售单"
       subtitle={NATURE_LABEL[order.nature]}

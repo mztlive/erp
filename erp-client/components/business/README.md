@@ -29,7 +29,7 @@
 | 选择与筛选 | `OptionCombobox`、`BusinessObjectCombobox`、业务实体 Combobox（合同/销售单/客户/采购单/供应商/商品/品牌/商品分类/结算主体/仓库/负责人）、`SavedViewPicker`、`AdvancedFilterSheet` | `option-combobox.tsx`、`entity-comboboxes.tsx`、`selectors.tsx` | 可搜索枚举/筛选、有效业务对象选择、个人/团队视图、高级筛选；**禁止**在业务页继续使用 `Select` / `NativeSelect`；**禁止**用自由 `Input` 录入已有业务对象 ID/名称 |
 | 值与状态 | `BusinessStatusBadge`、`StatusTrackSummary`、`BusinessObjectRef`、`MoneyValue`、`QuantityValue`、`RateValue`、`DocumentTotals` | `values.tsx` | 多维状态、稳定对象引用、精确十进制展示；`MoneyValue` 的 `taxBasis` 会叠「含税/不含税」Badge——**列头/标签已写明口径时不要传**（如销售建单「含税小计」） |
 | 正式单据/对象详情 | `DocumentHeader`（M4 用 `density="compact"` + `meta`）、`DocumentSummary`、`DocumentSection`、`RevisionTimeline`、`RelatedDocumentList`、`ResponsibilityPanel` | `document.tsx` | 销售、采购、客户、票款、发票、结算等详情与版本追溯；唯一身份头 |
-| 纸质单据预览 | `PaperDocument` | `paper-document.tsx` | 销售、采购、出入库、收付款和发票等正式单据的 A4 风格查看与打印投影 |
+| 纸质单据预览 | `PaperDocument` | `paper-document.tsx` | 正式单据 A4 风格投影；`frame="framed"` 内嵌灰底，`frame="bare"` 透明浮层 |
 | 单据编辑 | `EditableLineItemTable`、`ApprovalDecisionPanel`、`AllocationWorkspace` | `editor.tsx` | 行项目编辑、审批/确认、回款付款发票等多对多分配 |
 | 附件 | `DocumentAttachmentList` | `attachments.tsx` | 受控上传、扫描状态、必需附件和失败重试 |
 | 正式动作与协作 | `FormalActionConfirmDialog`、`SequentialProcessBar`、`BatchImpactPreview`、`ConflictResolutionDialog`、`EditorPresence` | `workflow.tsx` | 正式提交、连续处理、批量影响预览、ETag 冲突、编辑占用 |
@@ -84,13 +84,17 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
   `meta.width` 只能使用 `reference`、`status`、`amount`、`quantity`、`rate`、`tracks`
   等主题宽度档位，不传颜色、像素宽度或任意样式；
 - `layout="inset"` 用于需要自带业务卡片内距与边界的列表，`layout="flush"` 用于边界已由
-  外部框架提供的场景；多行复合单元格使用 `density="comfortable"`；
+  外部框架（如 `BusinessTableFrame`）提供的场景；多行复合单元格使用 `density="comfortable"`；
+- **flush 分页**：`DataTablePagination` 在 `layout="flush"` 时使用 `px-(--card-spacing) py-3`，
+  与卡片头/工具条对齐；禁止分页贴左右边或贴卡片底边；
 - 页面选择只保存稳定 ID。选择“当前筛选全部结果”时必须调用批量预览 API 冻结选择快照，
   不能把客户端当前页推断为正式批量范围；
 - 正在刷新时保留已有行；初次加载、空态和失败态由业务框架明确区分；
-- 单击非交互区域用于快速预览；`Enter` 优先打开详情，未配置详情动作时回退到快速预览；
-  业务列中的明确按钮/链接提供鼠标详情入口。上下方向键在当前结果行间移动，行内交互控件
-  不会冒泡触发行级动作。
+- 单击非交互区域 / `Enter` 的语义由**页面**注入（`onRowPreview` / `onRowOpen`）：
+  - W05 销售单：二者均打开轻量 `PaperDocument` 浮层，**不用** `QuickPreviewSheet`；
+  - 其它单据列表：可打开 `QuickPreviewSheet size="detail"`；
+  - 进对象中心用行内「查看详情」等明确按钮，不要与行点读单混成两个预览入口。
+  上下方向键在当前结果行间移动，行内交互控件不会冒泡触发行级动作。
 
 ## 可搜索 Combobox 约定
 
@@ -142,7 +146,8 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 ## 组合准则
 
 1. 列表页使用 `PageHeader`（`variant="page"`，默认）+ `ListToolbar` + `BusinessTableFrame` +
-   `DataTable`，需要时组合 `SelectionScopeBar` 和 `QuickPreviewSheet`。
+   `DataTable`；需要半屏业务核对时再组合 `QuickPreviewSheet`。**W05 销售单列表不要**再挂
+   `QuickPreviewSheet` / 行内预览按钮。
 2. **M4 对象中心**使用：
    - `PageHeader variant="object-chrome"`：仅面包屑 + 轻动作（返回），**不要**再写工作面大标题；
    - `DocumentHeader density="compact"`：唯一身份头（名称 / 单号 / 版本 / 状态 / 主动作）；
@@ -153,8 +158,11 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
    **禁止** `PageHeader(title=…)` 与 `DocumentHeader` 双标题叠放。
 3. 正式详情页的版本、关联单据和并行责任分别使用 `DocumentSummary`、`RelatedDocumentList`、
    `ResponsibilityPanel` 等专用组件，不合并成单一“状态”。
-4. 需要纸张或打印投影时使用 `PaperDocument`；页面必须传入服务端已经确认的行金额、汇总、
-   状态和签章内容，组件不代替后端计算正式结果。
+4. 需要纸张或账本版式投影时使用 `PaperDocument`：
+   - 列表浮层：`frame="bare"` + **透明 Dialog 壳**（无标题栏/底栏/打印钮），见
+     `features/sales-orders/sales-order-paper-dialog.tsx`；
+   - 页面内嵌：默认 `frame="framed"`；
+   - 页面必须传入服务端已确认的行金额、汇总、状态和签章内容，组件不代替后端计算。
 5. 编辑页把 TanStack Form 字段节点传入 `EditableLineItemTable` 或 `AllocationWorkspace`；
    组件不复制字段状态和校验。
 6. 正式命令先显示 `FormalActionConfirmDialog` 或 `BatchImpactPreview`，成功后固定展示

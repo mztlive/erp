@@ -625,14 +625,21 @@ function DataTable<TData>({
       data-slot="data-table"
       data-layout={layout}
       className={cn(
-        "space-y-3",
-        layout === "inset" && "p-table-frame-inset",
+        // inset：外层统一内边距，子区间用 space-y。
+        // flush：表格全宽贴边（border-y），工具栏/分页各自对齐卡片内边距。
+        layout === "inset" && "space-y-3 p-table-frame-inset",
+        layout === "flush" && "space-y-0",
         className
       )}
       aria-busy={loading}
     >
       {renderToolbar || showColumnVisibility ? (
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div
+          className={cn(
+            "flex flex-wrap items-center justify-between gap-2",
+            layout === "flush" && "px-(--card-spacing) py-2"
+          )}
+        >
           <div className="min-w-0 flex-1">{renderToolbar?.(table)}</div>
           {showColumnVisibility ? <DataTableViewOptions table={table} /> : null}
         </div>
@@ -867,7 +874,11 @@ function DataTable<TData>({
       </div>
 
       {showPagination ? (
-        <DataTablePagination table={table} pageSizeOptions={pageSizeOptions} />
+        <DataTablePagination
+          table={table}
+          pageSizeOptions={pageSizeOptions}
+          layout={layout}
+        />
       ) : null}
     </section>
   )
@@ -1029,9 +1040,11 @@ function moveColumn<TData>(
 function DataTablePagination<TData>({
   table,
   pageSizeOptions,
+  layout = "flush",
 }: {
   table: TanStackTable<TData>
   pageSizeOptions: readonly number[]
+  layout?: DataTableLayout
 }) {
   const { pageIndex, pageSize } = table.getState().pagination
   const pageCount = table.getPageCount()
@@ -1041,18 +1054,23 @@ function DataTablePagination<TData>({
   return (
     <div
       data-slot="data-table-pagination"
-      className="grid gap-3 text-sm sm:flex sm:items-center sm:gap-2"
+      className={cn(
+        // 移动端两行；桌面单行：左侧条数，右侧每页/页码/翻页成组，组间距统一。
+        "flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between",
+        // flush 贴在全宽表格下：对齐 BusinessTableFrame / CardFooter 的卡片内边距。
+        layout === "flush" && "px-(--card-spacing) py-3"
+      )}
     >
-      <div className="flex min-w-0 items-center justify-between gap-3 sm:contents">
-        <div className="min-w-0 text-muted-foreground sm:mr-auto">
-          <span className="num">共 {rowCount.toLocaleString("zh-CN")} 条</span>
-          {selectedCount > 0 ? (
-            <span className="num">
-              ，已选择 {selectedCount.toLocaleString("zh-CN")} 条
-            </span>
-          ) : null}
-        </div>
+      <div className="min-w-0 text-muted-foreground">
+        <span className="num">共 {rowCount.toLocaleString("zh-CN")} 条</span>
+        {selectedCount > 0 ? (
+          <span className="num">
+            ，已选择 {selectedCount.toLocaleString("zh-CN")} 条
+          </span>
+        ) : null}
+      </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:justify-end">
         <label className="flex shrink-0 items-center gap-2 text-muted-foreground">
           每页
           <OptionCombobox
@@ -1071,12 +1089,11 @@ function DataTablePagination<TData>({
             className="w-[5.5rem]"
           />
         </label>
-      </div>
 
-      <div className="flex items-center justify-between gap-3 sm:contents">
-        <span className="num min-w-24 text-center text-muted-foreground">
+        <span className="num shrink-0 text-muted-foreground">
           第 {pageCount === 0 ? 0 : pageIndex + 1} / {pageCount} 页
         </span>
+
         <div role="group" aria-label="翻页" className="flex items-center gap-1">
           <Button
             type="button"
