@@ -293,7 +293,7 @@ erDiagram
 | `warehouse` / `warehouse_revision` | 一期 | 自有仓库基础资料 |
 | `warehouse_sku_policy` | 一期 | 仓库级 SKU 最低可用量预警策略，不承载库存余额 |
 
-### 5.3 一期业务单据与台账
+### 5.3 一期业务单据、台账、供应商商品库与供给
 
 | 表组 | 主要表 |
 | --- | --- |
@@ -308,14 +308,19 @@ erDiagram
 | 退拒纠错 | `sales_return_case`、`sales_return_line`、`purchase_return_order`、`purchase_return_line`、`customer_refund`、`supplier_refund`、`receipt_reversal`、`payment_reversal` |
 | 旧数据导入 | `legacy_import_batch`、`legacy_import_row` |
 | 商城拉取 | `mall_sales_sync_job`、`mall_sales_sync_cursor`、`mall_sales_sync_cursor_tie`、`mall_sales_order_snapshot`、`mall_sales_reconciliation_job`、`mall_sales_reconciliation_item`、`master_mapping_task` |
+| 供应商商品库 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_product_revision_media`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`、`supplier_product_mapping`、`supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
+| 多供应商供给 | `supplier_offering`、`supplier_offering_revision` |
+
+供应商商品库、供应商 SKU 映射和多供应商供给全部在第一期启用。第一期来源仅开放
+`MANUAL` / `EXCEL`；API 连接、自动同步和 API 变化处理在第二期启用，但继续写入上述同一套
+稳定身份、修订、映射与供给表，不建立 API 专属目录或第二套供给表。
 
 ### 5.4 二期扩展
 
 | 表组 | 主要表 |
 | --- | --- |
 | 供应商 API | `supplier_api_connection`、`supplier_api_capability` |
-| 供应商商品库 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_product_revision_media`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`、`supplier_product_mapping`、`supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
-| 供给与发布 | `supplier_offering`、`supplier_offering_revision`、`product_publication`、`product_publication_revision`、`product_publication_revision_media`、`product_publication_delivery` |
+| 商品发布 | `product_publication`、`product_publication_revision`、`product_publication_revision_media`、`product_publication_delivery` |
 | 主责迁移 | `sales_order_owner_migration_batch`、`sales_order_owner_migration_item` |
 | 执行投影 | `sales_order_projection`、`sales_order_projection_revision`、`sales_order_projection_delivery` |
 | 卡实例与余额 | `mall_consumption_cutover`、`mall_consumption_cutover_check`、`mall_consumption_cutover_migration_batch`、`mall_card_instance`、`mall_card_instance_correction`、`mall_balance_snapshot` |
