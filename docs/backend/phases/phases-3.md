@@ -68,6 +68,16 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
 - `CreateSupplierOffering`、`AppendSupplierOfferingRevision`、`EndSupplierOffering`；
 - `PromoteMappedSupplierSkuToPool`：按供应商 SKU 粒度，不接受仅 SPU 身份。
 
+前端当前存在三种创建能力，本 phase 按实际边界实现：
+
+- W14 `/master-data/products/new` 独立创建公司商品及一个或多个公司 SKU，不读取供应商来源
+  预填；W21“加入公司商品池”只查询和选择这些已存在且启用的公司 SKU；
+- W21 手工录入独立创建供应商商品及一个或多个供应商 SKU，不建立公司映射；
+- W14 可固定公司 `sku_id` 反向发起 W21 创建供应商商品/SKU，并在同一业务动作中建立精确
+  映射、供给与必要的商品池修订；
+- 页面导航中的 `supplierProductId`、SPU 或其他上下文不得替代正式
+  `supplier_catalog_sku_id → sku_id` 映射，也不得因来源变化自动覆盖另一侧修订。
+
 ### 4.3 查询与权限投影
 
 - W14 公司商品、SKU、商品池及供给摘要；

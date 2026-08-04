@@ -116,6 +116,11 @@ Phase 10 自身也从 `BACKEND_PHASE_BASE_SHA` 创建，按下列审查顺序 `-
    必须同时保存一件代发供给价、集采供给价和集采起订量，不能折叠成单一确认成本；目录
    修订中的进项税率仍须移到供给修订。当前前端仍以 `supplierProductId` 提交入池，属于待
    同步的代码契约缺口，不能据此改变已确认模型。
+   前端当前的公司 SKU 正向创建仅是 W14 `/master-data/products/new` 独立空白表单；W21
+   「前往商品资料」虽然把 `supplierProductId/returnTo/queueContextId` 放进列表 URL，W14
+   当前不读取这些参数，不做来源预填或自动返回。已实现的跨域反向链路是 W14 固定公司 SKU
+   后在 W21 创建供应商商品/SKU、映射和供给。入池提交仍必须补精确
+   `supplier_catalog_sku_id`，导航上下文不能充当正式映射键。
 5. **采购确认供给引用**：补精确 `supplier_offering_revision_id`，校验供应商、SKU、
    业务日期和有效期一致。
 6. **商品池启用 guard**：固化“至少一条有效供给 + 有效销售可见价 + 有效 SKU”的
