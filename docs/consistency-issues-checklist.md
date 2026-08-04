@@ -71,7 +71,8 @@
 - **涉及文档**：erp-phase-1.md §10.1（L1106-1113）；erp-data-model.md §7.5（L3627-3635）、§6.8（L1785）
 - **冲突点**：phase-1 通用状态词"已生效/已作废"；数据模型 customer_receipt.status = 草稿/已过账/已冲正
 - **建议方向**：统一为数据模型口径（过账/冲正），phase-1 同步
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）
+- **决议**：补映射注明——phase-1 §10.1 通用状态表追加映射说明：已生效→POSTED（界面"已确认入账"）、已作废→REVERSED（"已冲正"）、销售单主状态 EFFECTIVE/VOIDED；界面不使用"过账"（G5）。
 
 ### D-06 【低】W13 页面文案使用「正式过账」，违反 ui-glossary 且不在漂移清单内
 
@@ -131,14 +132,14 @@
 
 | 编号 | 主题 | 位置 | 冲突点 | 建议方向 |
 | --- | --- | --- | --- | --- |
-| C-19 | W23 对象态在 page 变体下叠 DocumentHeader | execution-projections-page.tsx:696、1095-1127 | 违反 erp-ui-design §4.5.1"列表+对象同页混合壳"字面契约 | 确认 Sheet 浮层场景豁免或调整 |
+| C-19 | W23 对象态在 page 变体下叠 DocumentHeader | execution-projections-page.tsx:696、1095-1127 | 违反 erp-ui-design §4.5.1"列表+对象同页混合壳"字面契约 | ✅ 已修复（2026-08-04）：§4.5.1 补 Sheet 浮层边界豁免条款 |
 | C-20 | P2 散词残留（掩码/工作面/会话/快照） | purchase-orders、supplier-api-connections、procurement-confirmation、unified-task-queue、supplier-catalog、master-data、product-publications 等 | glossary P2：掩码→打码、工作面→页面、会话→本次操作、快照→历史记录 | 替换 |
-| C-21 | maskCost/noSensitive 被查询消费但无 UI 控件 | supplier-order-center-page.tsx:117-136 | 违反 README 规则 9（隐形状态） | 补控件或从查询摘除 |
+| C-21 | maskCost/noSensitive 被查询消费但无 UI 控件 | supplier-order-center-page.tsx:117-136 | 违反 README 规则 9（隐形状态） | ✅ 已修复（2026-08-04）：从查询/URL 完全摘除（url-state/list/detail/api），tsc 通过 |
 | C-22 | 侧栏导航结构漂移 | lib/workspace-registry.ts:329-609 vs erp-ui-design.md §3.3 | IA 演进未回写文档 | ✅ 已修复（2026-08-04）：§3.3 按 registry 11 组重写 |
 | C-23 | 检查产物 W21 模式过时 | w-routes-inventory.txt:21（M3+M4）vs README/registry（M2+M3+M4） | 检查产物未更新 | ✅ 已修复（2026-08-04）：脚本修正后重新生成 |
 | C-24 | W09 文档自述状态与 README 矛盾 + 正文仍写"暂挂" | w09-fulfillment-operations.md:3、61-63、104 vs README:64；代码已按 G1 落地 | 文档未更新 | ✅ 已修复（随 D-04）：全文替换为先跳过/确认，状态同步"已实现" |
 
-- **状态**：待讨论
+- **状态**：C-19~C-24 ✅ 全部已修复（2026-08-04）
 
 ---
 
@@ -221,3 +222,6 @@
 | 2026-08-04 | B-07 | 迟到快照直接丢弃（以 phase-1 为权威）：不持久化、不保留证据、不回退当前版本；mapping_status 移除"迟到丢弃"枚举 | erp-data-model.md §6.13/L2228/L2237、erp-mall-data-mapping.md §3.4/L224/L908、phases-8.md §5.2/L96、w17 L166 |
 | 2026-08-04 | B-02+B-03+B-04 | 命名统一以数据模型为准：phase-2 §14.3 消费表改 mall_consumption_entry+成本拆 mall_consumption_cost_assessment、§14.5 对账表改 reconciliation_*；mall-mapping/W14/W21 字段统一 sales_visible_price_gross；前端 9 文件 55 处 salesVisiblePrice→salesVisiblePriceGross（含测试脚本 3 处），tsc/eslint 通过 | erp-phase-2.md §14.3/§14.5、erp-mall-data-mapping.md、w14、w21、erp-client supplier-catalog/master-data 9 文件 + scripts/test-product-supply-links.mjs |
 | 2026-08-04 | C-18+D-07+C-23+B-06+D-06+C-22 | 文档状态同步批次：README 索引 29 工作面全部"已实现"、W04 头部同步；verify 脚本 W21 模式修正并重新生成产物；phases-3 过时陈述标已解决；W13 正式过账→确认入账；ui-design §3.3 侧栏按 registry 11 组重写 | ui-workspaces/README.md、w04-contracts.md、w-routes-inventory.txt、w-page-coverage.md、verify-workspaces.mjs、phases-3.md、w13-card-funds-review.md、erp-ui-design.md §3.3 |
+| 2026-08-04 | D-05 | phase-1 §10.1 通用状态表补映射说明：已生效→POSTED（界面"已确认入账"）、已作废→REVERSED（"已冲正"）、销售单主状态 EFFECTIVE/VOIDED | erp-phase-1.md §10.1 |
+| 2026-08-04 | C-19 | erp-ui-design §4.5.1 补 Sheet 浮层边界豁免：浮层内 DocumentHeader 合法，背景列表态 PageHeader 保留 | erp-ui-design.md §4.5.1 |
+| 2026-08-04 | C-21 | maskCost/noSensitive 隐形参数从查询摘除（URL 解析、列表/详情查询、api 参数全清），tsc 通过 | erp-client/features/supplier-orders/（url-state.ts、list-page、center-page、queries.ts、api.ts） |

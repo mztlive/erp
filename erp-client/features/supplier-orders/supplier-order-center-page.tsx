@@ -114,12 +114,6 @@ export function SupplierOrderCenterPage({
   const router = useRouter()
   const searchParams = useSearchParams()
   const role = (searchParams.get("role") as DemoRole) || "procurement"
-  const maskCost =
-    searchParams.get("maskCost") === "1" ||
-    searchParams.get("maskCost") === "true"
-  const noSensitive =
-    searchParams.get("noSensitive") === "1" ||
-    searchParams.get("noSensitive") === "true"
   const from = searchParams.get("from")
   const sourceId = searchParams.get("sourceId")
   const workItemId = searchParams.get("workItemId") ?? undefined
@@ -131,8 +125,6 @@ export function SupplierOrderCenterPage({
   const query = useSupplierOrderDetailQuery({
     orderId: supplierOrderId,
     role,
-    maskCost,
-    noSensitive,
   })
   const queryResultMutation = useQueryResultMutation()
   const replayMutation = useReplayOrderMutation()

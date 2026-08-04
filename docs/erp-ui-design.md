@@ -435,6 +435,8 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 
 列表+对象同页的混合壳（如导入批次列表进详情）：**列表态**用 `variant="page"`；**对象/批次详情态**改 `object-chrome` + `DocumentHeader density="compact"`，不得两套 title 并存。
 
+**边界豁免（2026-08-04 决议）**：对象详情以 `QuickPreviewSheet` / `Sheet` 浮层呈现的 M4 工作面（如 W23 执行投影列表 + 详情 Sheet）：背景保留列表态 `PageHeader variant="page"`，浮层内使用 `DocumentHeader density="compact"` 承担唯一对象身份——两套 title 分属列表与浮层两个独立视口，不构成"同页双标题"；浮层关闭即恢复列表态。此模式仅在浮层承载对象详情时允许，禁止在页面主体区同时渲染两套 title。
+
 **概览**：`DocumentSummary` + 客户/合同引用 + 责任人 + 关键日期。  
 **明细**：卡券用 `CardVoucherLineItem`（唯一明细）；实物服务用行表。  
 **履约**：时间线式责任段（`ResponsibilityPanel` + `RelatedDocumentList`），展示已产生单据与「去开单」入口（权限内）。  

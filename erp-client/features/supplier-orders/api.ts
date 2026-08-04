@@ -107,13 +107,11 @@ function findSeed(orderId: string): SeedOrder | undefined {
   return SUPPLIER_ORDER_SEEDS.find((x) => x.orderId === orderId)
 }
 
-function costVisible(role: DemoRole, forceMask?: boolean): boolean {
-  if (forceMask) return false
+function costVisible(role: DemoRole): boolean {
   return role === "procurement" || role === "finance" || role === "admin"
 }
 
-function sensitiveAllowed(role: DemoRole, noSensitive?: boolean): boolean {
-  if (noSensitive) return false
+function sensitiveAllowed(role: DemoRole): boolean {
   return role === "procurement" || role === "cs" || role === "admin"
 }
 
@@ -419,12 +417,8 @@ export async function fetchSupplierOrders(
   }
 }
 
-function projectCost(
-  seed: SeedOrder,
-  role: DemoRole,
-  maskCost?: boolean
-): CostView {
-  const visible = costVisible(role, maskCost)
+function projectCost(seed: SeedOrder, role: DemoRole): CostView {
+  const visible = costVisible(role)
   if (!visible) {
     return {
       costMasked: true,
@@ -451,16 +445,15 @@ function projectCost(
 
 function projectDetail(
   seed: SeedOrder,
-  role: DemoRole,
-  opts?: { maskCost?: boolean; noSensitive?: boolean }
+  role: DemoRole
 ): SupplierOrderDetailView {
   const session = getSession(seed.orderId)
   const fulfillment = session.fulfillmentStatus ?? seed.fulfillmentStatus
   const cancel = session.cancelStatus ?? seed.cancelStatus
   const refund = session.refundStatus ?? seed.refundStatus
   const { allowed, blockers } = computeAllowedActions(seed, session, role)
-  const cost = projectCost(seed, role, opts?.maskCost)
-  const canReveal = sensitiveAllowed(role, opts?.noSensitive)
+  const cost = projectCost(seed, role)
+  const canReveal = sensitiveAllowed(role)
   const reveal = revealSessions.get(seed.orderId)
   const revealActive = reveal && reveal.expiresAt > Date.now()
 
@@ -595,16 +588,11 @@ function projectDetail(
 export async function fetchSupplierOrderDetail(input: {
   orderId: string
   role?: DemoRole
-  maskCost?: boolean
-  noSensitive?: boolean
 }): Promise<SupplierOrderDetailView | null> {
   await mockDelay(60)
   const seed = findSeed(input.orderId)
   if (!seed) return null
-  return projectDetail(seed, input.role ?? "procurement", {
-    maskCost: input.maskCost,
-    noSensitive: input.noSensitive,
-  })
+  return projectDetail(seed, input.role ?? "procurement")
 }
 
 export async function querySupplierResult(

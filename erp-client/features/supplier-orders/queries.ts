@@ -25,19 +25,12 @@ export const supplierOrderKeys = {
   all: ["supplier-orders"] as const,
   list: (query: SupplierOrderListQuery) =>
     [...supplierOrderKeys.all, "list", query] as const,
-  detail: (
-    orderId: string,
-    role: DemoRole,
-    maskCost: boolean,
-    noSensitive: boolean
-  ) =>
+  detail: (orderId: string, role: DemoRole) =>
     [
       ...supplierOrderKeys.all,
       "detail",
       orderId,
       role,
-      maskCost,
-      noSensitive,
     ] as const,
 }
 
@@ -51,26 +44,15 @@ export function useSupplierOrdersQuery(query: SupplierOrderListQuery) {
 export function useSupplierOrderDetailQuery(input: {
   orderId: string
   role?: DemoRole
-  maskCost?: boolean
-  noSensitive?: boolean
   enabled?: boolean
 }) {
   const role = input.role ?? "procurement"
-  const maskCost = Boolean(input.maskCost)
-  const noSensitive = Boolean(input.noSensitive)
   return useQuery({
-    queryKey: supplierOrderKeys.detail(
-      input.orderId,
-      role,
-      maskCost,
-      noSensitive
-    ),
+    queryKey: supplierOrderKeys.detail(input.orderId, role),
     queryFn: () =>
       fetchSupplierOrderDetail({
         orderId: input.orderId,
         role,
-        maskCost,
-        noSensitive,
       }),
     enabled: input.enabled !== false && Boolean(input.orderId),
   })

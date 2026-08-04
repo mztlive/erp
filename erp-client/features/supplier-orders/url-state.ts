@@ -26,8 +26,6 @@ export type SupplierOrdersUrlState = {
   pageSize: number
   preview?: string
   role: DemoRole
-  maskCost?: boolean
-  noSensitive?: boolean
   section: OrderSection
   workItemId?: string
   from?: string
@@ -100,13 +98,6 @@ export function parseSupplierOrdersSearchParams(
       ? (roleRaw as DemoRole)
       : "procurement"
 
-  const maskCost =
-    searchParams.get("maskCost") === "1" ||
-    searchParams.get("maskCost") === "true"
-  const noSensitive =
-    searchParams.get("noSensitive") === "1" ||
-    searchParams.get("noSensitive") === "true"
-
   const sectionRaw = searchParams.get("section")
   const section: OrderSection =
     sectionRaw && SECTION_SET.has(sectionRaw)
@@ -133,8 +124,6 @@ export function parseSupplierOrdersSearchParams(
     pageSize,
     preview,
     role,
-    maskCost: maskCost || undefined,
-    noSensitive: noSensitive || undefined,
     section,
     workItemId,
     from,
@@ -160,8 +149,6 @@ export function buildSupplierOrdersSearchParams(
   if (state.pageSize !== 50) params.set("pageSize", String(state.pageSize))
   if (state.preview) params.set("preview", state.preview)
   if (state.role !== "procurement") params.set("role", state.role)
-  if (state.maskCost) params.set("maskCost", "1")
-  if (state.noSensitive) params.set("noSensitive", "1")
   if (state.section !== "overview") params.set("section", state.section)
   if (state.workItemId) params.set("workItemId", state.workItemId)
   if (state.from) params.set("from", state.from)

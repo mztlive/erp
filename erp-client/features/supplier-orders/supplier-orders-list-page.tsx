@@ -102,8 +102,6 @@ export function SupplierOrdersListPage() {
       page: url.page,
       pageSize: url.pageSize,
       role: url.role,
-      maskCost: url.maskCost,
-      noSensitive: url.noSensitive,
     }),
     [url]
   )
@@ -112,8 +110,6 @@ export function SupplierOrdersListPage() {
   const previewQuery = useSupplierOrderDetailQuery({
     orderId: url.preview ?? "",
     role: url.role,
-    maskCost: url.maskCost,
-    noSensitive: url.noSensitive,
     enabled: Boolean(url.preview),
   })
   const queryResultMutation = useQueryResultMutation()
