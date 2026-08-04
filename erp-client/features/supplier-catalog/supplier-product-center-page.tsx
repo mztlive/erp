@@ -1517,7 +1517,7 @@ export function SupplierProductCenterPage({
                         />
                         {item.poolEntry ? (
                           <Badge variant="secondary">
-                            商品池价 ¥{item.poolEntry.salesVisiblePrice}
+                            商品池价 ¥{item.poolEntry.salesVisiblePriceGross}
                           </Badge>
                         ) : (
                           <Badge variant="outline">未入池</Badge>

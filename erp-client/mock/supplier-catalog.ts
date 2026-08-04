@@ -102,14 +102,14 @@ const noPause: PublicationImpactView = {
 
 function poolEntryForSku(
   skuId: string,
-  salesVisiblePrice: string,
+  salesVisiblePriceGross: string,
   status: "ACTIVE" | "PAUSED" = "ACTIVE"
 ) {
   return {
     poolEntryId: `pool_${skuId}`,
     poolEntryRevisionId: `pool_${skuId}_r1`,
     status,
-    salesVisiblePrice,
+    salesVisiblePriceGross,
     validFrom: "2026-01-01",
   } as const
 }
@@ -1043,7 +1043,7 @@ type ActiveSupplySeedInput = {
   baseUnit: string
   priceGross: string
   priceNet: string
-  salesVisiblePrice: string
+  salesVisiblePriceGross: string
   minimumOrderQuantity: string
   supplyRegion: string[]
 }
@@ -1124,7 +1124,7 @@ function activeSupplySeed(input: ActiveSupplySeedInput): SupplierCatalogItemView
       currentRevision: revision,
       revisionHistory: [revision],
     },
-    poolEntry: poolEntryForSku(input.skuId, input.salesVisiblePrice),
+    poolEntry: poolEntryForSku(input.skuId, input.salesVisiblePriceGross),
     publicationImpact: {
       ...noPause,
       activePublicationCount: 1,
@@ -1160,7 +1160,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "套",
     priceGross: "118.00",
     priceNet: "104.42",
-    salesVisiblePrice: "168.00",
+    salesVisiblePriceGross: "168.00",
     minimumOrderQuantity: "10",
     supplyRegion: ["华东", "华北"],
   }),
@@ -1181,7 +1181,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "套",
     priceGross: "82.00",
     priceNet: "72.57",
-    salesVisiblePrice: "128.00",
+    salesVisiblePriceGross: "128.00",
     minimumOrderQuantity: "20",
     supplyRegion: ["华东", "华南"],
   }),
@@ -1202,7 +1202,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "盒",
     priceGross: "42.00",
     priceNet: "37.17",
-    salesVisiblePrice: "58.00",
+    salesVisiblePriceGross: "58.00",
     minimumOrderQuantity: "12",
     supplyRegion: ["华东", "华南"],
   }),
@@ -1223,7 +1223,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "盒",
     priceGross: "49.00",
     priceNet: "43.36",
-    salesVisiblePrice: "68.00",
+    salesVisiblePriceGross: "68.00",
     minimumOrderQuantity: "12",
     supplyRegion: ["华东", "华南"],
   }),
@@ -1244,7 +1244,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "盒",
     priceGross: "65.00",
     priceNet: "57.52",
-    salesVisiblePrice: "88.00",
+    salesVisiblePriceGross: "88.00",
     minimumOrderQuantity: "8",
     supplyRegion: ["全国"],
   }),
@@ -1265,7 +1265,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
     baseUnit: "盒",
     priceGross: "72.00",
     priceNet: "63.72",
-    salesVisiblePrice: "98.00",
+    salesVisiblePriceGross: "98.00",
     minimumOrderQuantity: "8",
     supplyRegion: ["全国"],
   }),

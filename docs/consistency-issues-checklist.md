@@ -176,8 +176,8 @@
 - **性质**：数据模型冲突（前端契约两种拼写；W21 文件内部自相矛盾）
 - **涉及文档**：erp-data-model.md §6.3（L823，权威 `sales_visible_price_gross`）vs erp-mall-data-mapping.md §2.2（L101-102）、W14（L154、187）、W21（L27、114 vs L258）
 - **建议方向**：统一为 `sales_visible_price_gross`（mall-mapping、W14、W21 同步修正）
-- **状态**：✅ 文档侧已修复（2026-08-04）；前端 55 处 `salesVisiblePrice` 字段名待定（见讨论记录）
-- **决议**：文档全部统一 `sales_visible_price_gross`。遗留前端字段名：erp-client features/supplier-catalog、master-data 共 55 处 `salesVisiblePrice`（mock/types/api/页面），与数据模型命名不一致，是否同步改名待用户决定。
+- **状态**：✅ 已修复（2026-08-04，文档 + 前端 55 处字段名同步，tsc/eslint 通过）
+- **决议**：文档全部统一 `sales_visible_price_gross`；前端 supplier-catalog/master-data 9 文件 55 处 `salesVisiblePrice` → `salesVisiblePriceGross`（含 scripts/test-product-supply-links.mjs 3 处），与数据模型完全一致。
 
 ### B-05 【中】一期卡券快照/指纹字段集不一致（phase-1 缺"项目名称/业务备注"）
 
@@ -219,4 +219,4 @@
 | 2026-08-04 | B-05 | 指纹字段集移除项目名称/业务备注（仍随版本保存但不参与 content_hash），以 phase-1 §8.2 为权威 | erp-data-model.md §6.13/L1071/L3948、erp-mall-data-mapping.md §3.3/L266、phases-8.md §5.1 |
 | 2026-08-04 | D-04+C-24 | W09 文档按 glossary G1/G5 全面替换（过账→确认入库/仓发/交付、暂挂→先跳过约40处），保留枚举/字段名与 Q1 待确认标注；文件状态与 README 索引同步"已实现" | w09-fulfillment-operations.md、ui-workspaces/README.md |
 | 2026-08-04 | B-07 | 迟到快照直接丢弃（以 phase-1 为权威）：不持久化、不保留证据、不回退当前版本；mapping_status 移除"迟到丢弃"枚举 | erp-data-model.md §6.13/L2228/L2237、erp-mall-data-mapping.md §3.4/L224/L908、phases-8.md §5.2/L96、w17 L166 |
-| 2026-08-04 | B-02+B-03+B-04 | 命名统一以数据模型为准：phase-2 §14.3 消费表改 mall_consumption_entry+成本拆 mall_consumption_cost_assessment、§14.5 对账表改 reconciliation_*；mall-mapping/W14/W21 字段统一 sales_visible_price_gross。遗留：前端 55 处 salesVisiblePrice 字段名待定 | erp-phase-2.md §14.3/§14.5、erp-mall-data-mapping.md L101/471/521、w14-basic-data.md L154/187/209、w21-supplier-catalog.md L27/114 |
+| 2026-08-04 | B-02+B-03+B-04 | 命名统一以数据模型为准：phase-2 §14.3 消费表改 mall_consumption_entry+成本拆 mall_consumption_cost_assessment、§14.5 对账表改 reconciliation_*；mall-mapping/W14/W21 字段统一 sales_visible_price_gross；前端 9 文件 55 处 salesVisiblePrice→salesVisiblePriceGross（含测试脚本 3 处），tsc/eslint 通过 | erp-phase-2.md §14.3/§14.5、erp-mall-data-mapping.md、w14、w21、erp-client supplier-catalog/master-data 9 文件 + scripts/test-product-supply-links.mjs |

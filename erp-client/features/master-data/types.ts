@@ -295,7 +295,7 @@ export type ProductDetailView = Readonly<{
 export type SellableItemFields = Readonly<{
   sku: string
   /** 采购发布给销售的公司商品池价格；不是任何一家供应商的成本。 */
-  salesVisiblePrice: string
+  salesVisiblePriceGross: string
   /** 从 supplier_offering 聚合的可用供应商数量，只读投影。 */
   supplierCount?: string
   region?: string

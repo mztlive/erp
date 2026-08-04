@@ -93,7 +93,7 @@ export type SkuCandidateView = Readonly<{
     poolEntryId: string
     poolEntryRevisionId: string
     status: "ACTIVE" | "PAUSED" | "DISABLED"
-    salesVisiblePrice: string
+    salesVisiblePriceGross: string
   }
 }>
 
@@ -271,7 +271,7 @@ export type SupplierCatalogItemBase = {
     poolEntryId: string
     poolEntryRevisionId: string
     status: "ACTIVE" | "PAUSED" | "DISABLED"
-    salesVisiblePrice: string
+    salesVisiblePriceGross: string
     validFrom: string
     validTo?: string
   }
@@ -359,7 +359,7 @@ export type SupplierCatalogQueueView = Readonly<{
       poolEntryId: string
       poolEntryRevisionId: string
       status: "ACTIVE" | "PAUSED" | "DISABLED"
-      salesVisiblePrice: string
+      salesVisiblePriceGross: string
     }
   }
   context: {
@@ -553,7 +553,7 @@ export type CreateSupplierCatalogItemInput = SupplierCatalogSpuContentFields &
     targetSkuName?: string
     targetSpecification?: string
     baseUnit?: string
-    salesVisiblePrice?: string
+    salesVisiblePriceGross?: string
     /** 已有商品池时默认沿用；只有显式 SET_PRICE 才允许形成新修订。 */
     poolPriceAction?: "KEEP_EXISTING" | "SET_PRICE"
     minimumOrderQuantity: string
@@ -592,7 +592,7 @@ export type PromoteSupplierProductInput = Readonly<{
   minimumOrderQuantity: string
   supplyRegion: string[]
   validFrom: string
-  salesVisiblePrice?: string
+  salesVisiblePriceGross?: string
   poolPriceAction: "KEEP_EXISTING" | "SET_PRICE"
   expectedSourceRevisionNo: number
   expectedPoolEntryRevisionId?: string

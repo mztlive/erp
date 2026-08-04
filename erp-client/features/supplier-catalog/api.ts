@@ -1033,7 +1033,7 @@ function createConfirmedOffering(input: {
 function writeProductPoolEntry(input: {
   skuId: string
   action: "KEEP_EXISTING" | "SET_PRICE"
-  salesVisiblePrice?: string
+  salesVisiblePriceGross?: string
   validFrom: string
   expectedPoolEntryRevisionId?: string
 }): {
@@ -1047,7 +1047,7 @@ function writeProductPoolEntry(input: {
   if (!existing && input.action === "KEEP_EXISTING") {
     throw new Error("该公司 SKU 尚未加入商品池，必须先设置销售可见价")
   }
-  if (!input.salesVisiblePrice?.trim()) {
+  if (!input.salesVisiblePriceGross?.trim()) {
     throw new Error("新建或修改公司商品池价格时必须填写销售可见价")
   }
   if (
@@ -1065,7 +1065,7 @@ function writeProductPoolEntry(input: {
       ? `${existing.poolEntryId}_${revisionSuffix}`
       : `pool_${input.skuId}_${revisionSuffix}`,
     status: "ACTIVE",
-    salesVisiblePrice: input.salesVisiblePrice.trim(),
+    salesVisiblePriceGross: input.salesVisiblePriceGross.trim(),
     validFrom: input.validFrom,
   }
   poolEntryOverlays.set(input.skuId, poolEntry)
@@ -1202,7 +1202,7 @@ export async function createSupplierCatalogItem(
           (currentPoolEntryForSku(input.targetSkuId)
             ? "KEEP_EXISTING"
             : "SET_PRICE"),
-        salesVisiblePrice: input.salesVisiblePrice,
+        salesVisiblePriceGross: input.salesVisiblePriceGross,
         validFrom: input.validFrom,
       })
     : undefined
@@ -1473,7 +1473,7 @@ export async function promoteSupplierProductToPool(
   const poolWrite = writeProductPoolEntry({
     skuId: input.targetSkuId,
     action: input.poolPriceAction,
-    salesVisiblePrice: input.salesVisiblePrice,
+    salesVisiblePriceGross: input.salesVisiblePriceGross,
     validFrom: input.validFrom,
     expectedPoolEntryRevisionId: input.expectedPoolEntryRevisionId,
   })

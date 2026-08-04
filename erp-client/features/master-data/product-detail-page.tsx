@@ -1766,7 +1766,7 @@ export function ProductDetailPage({
                                                     fields.detailImages,
                                                   mainImage:
                                                     sku.mainImage || undefined,
-                                                  salesVisiblePrice:
+                                                  salesVisiblePriceGross:
                                                     sku.salePrice,
                                                   hasPoolEntry: Boolean(
                                                     sku.salePrice,

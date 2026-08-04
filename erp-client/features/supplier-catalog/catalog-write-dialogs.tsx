@@ -48,7 +48,7 @@ type FixedSku = Readonly<{
   carouselImages?: readonly string[]
   detailImages?: readonly string[]
   mainImage?: string
-  salesVisiblePrice?: string
+  salesVisiblePriceGross?: string
   hasPoolEntry?: boolean
 }>
 
@@ -89,15 +89,15 @@ function buildIntakeSchema(requireSalesVisiblePrice: boolean) {
       .string()
       .trim()
       .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
-    salesVisiblePrice: z.string(),
+    salesVisiblePriceGross: z.string(),
   }).superRefine((value, context) => {
     if (
       requireSalesVisiblePrice &&
-      !money.safeParse(value.salesVisiblePrice.trim()).success
+      !money.safeParse(value.salesVisiblePriceGross.trim()).success
     ) {
       context.addIssue({
         code: "custom",
-        path: ["salesVisiblePrice"],
+        path: ["salesVisiblePriceGross"],
         message: "该公司 SKU 尚未进入商品池，请填写销售可见价（最多 4 位小数）",
       })
     }
@@ -200,7 +200,7 @@ export function SupplierCatalogIntakeDialog({
       bulkFloorPriceGross: "",
       bulkMinimumOrderQuantity: "1",
       minimumOrderQuantity: "1",
-      salesVisiblePrice: fixedSku?.hasPoolEntry ? "" : fixedSku?.salesVisiblePrice ?? "",
+      salesVisiblePriceGross: fixedSku?.hasPoolEntry ? "" : fixedSku?.salesVisiblePriceGross ?? "",
     },
     validators: {
       onSubmit: buildIntakeSchema(Boolean(fixedSku && !fixedSku.hasPoolEntry)),
@@ -264,8 +264,8 @@ export function SupplierCatalogIntakeDialog({
         targetSkuName: fixedSku?.skuName,
         targetSpecification: fixedSku?.specification,
         baseUnit: fixedSku?.baseUnit,
-        salesVisiblePrice: fixedSku
-          ? value.salesVisiblePrice.trim() || undefined
+        salesVisiblePriceGross: fixedSku
+          ? value.salesVisiblePriceGross.trim() || undefined
           : undefined,
         poolPriceAction: fixedSku
           ? fixedSku.hasPoolEntry
@@ -420,11 +420,11 @@ export function SupplierCatalogIntakeDialog({
               <Alert className="sm:col-span-2">
                 <AlertTitle>沿用现有公司商品池价格</AlertTitle>
                 <AlertDescription>
-                  当前销售可见价 ¥{fixedSku.salesVisiblePrice ?? "—"}；本次只新增供应商映射和供给，不形成商品池价格修订。
+                  当前销售可见价 ¥{fixedSku.salesVisiblePriceGross ?? "—"}；本次只新增供应商映射和供给，不形成商品池价格修订。
                 </AlertDescription>
               </Alert>
             ) : fixedSku ? (
-              <form.AppField name="salesVisiblePrice">
+              <form.AppField name="salesVisiblePriceGross">
                 {(field) => (
                   <field.TextField
                     label="销售可见价"
@@ -498,15 +498,15 @@ function buildRegisterSupplySchema(requireSalesVisiblePrice: boolean) {
       .string()
       .trim()
       .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
-    salesVisiblePrice: z.string(),
+    salesVisiblePriceGross: z.string(),
   }).superRefine((value, context) => {
     if (
       requireSalesVisiblePrice &&
-      !money.safeParse(value.salesVisiblePrice.trim()).success
+      !money.safeParse(value.salesVisiblePriceGross.trim()).success
     ) {
       context.addIssue({
         code: "custom",
-        path: ["salesVisiblePrice"],
+        path: ["salesVisiblePriceGross"],
         message: "该公司 SKU 尚未进入商品池，请填写销售可见价（最多 4 位小数）",
       })
     }
@@ -543,9 +543,9 @@ export function RegisterSupplyForSkuDialog({
       dropshipFloorPriceGross: "",
       bulkFloorPriceGross: "",
       minimumOrderQuantity: "1",
-      salesVisiblePrice: fixedSku?.hasPoolEntry
+      salesVisiblePriceGross: fixedSku?.hasPoolEntry
         ? ""
-        : fixedSku?.salesVisiblePrice ?? "",
+        : fixedSku?.salesVisiblePriceGross ?? "",
     },
     validators: {
       onSubmit: buildRegisterSupplySchema(Boolean(
@@ -614,9 +614,9 @@ export function RegisterSupplyForSkuDialog({
         targetSkuName: fixedSku.skuName,
         targetSpecification: fixedSku.specification,
         baseUnit: fixedSku.baseUnit,
-        salesVisiblePrice: fixedSku.hasPoolEntry
+        salesVisiblePriceGross: fixedSku.hasPoolEntry
           ? undefined
-          : value.salesVisiblePrice.trim() || undefined,
+          : value.salesVisiblePriceGross.trim() || undefined,
         poolPriceAction: fixedSku.hasPoolEntry
           ? "KEEP_EXISTING"
           : "SET_PRICE",
@@ -671,7 +671,7 @@ export function RegisterSupplyForSkuDialog({
             </div>
             {fixedSku.hasPoolEntry ? (
               <p className="mt-1 text-xs text-muted-foreground">
-                当前销售可见价 ¥{fixedSku.salesVisiblePrice ?? "—"}；本次只新增供应商映射和供给，不形成商品池价格修订。
+                当前销售可见价 ¥{fixedSku.salesVisiblePriceGross ?? "—"}；本次只新增供应商映射和供给，不形成商品池价格修订。
               </p>
             ) : (
               <p className="mt-1 text-xs text-muted-foreground">
@@ -731,7 +731,7 @@ export function RegisterSupplyForSkuDialog({
               {(field) => <field.TextField label="供给起订量 *" />}
             </form.AppField>
             {!fixedSku?.hasPoolEntry ? (
-              <form.AppField name="salesVisiblePrice">
+              <form.AppField name="salesVisiblePriceGross">
                 {(field) => (
                   <field.TextField
                     label="销售可见价 *"
@@ -762,7 +762,7 @@ export function RegisterSupplyForSkuDialog({
 const promoteSchema = z.object({
   targetSkuId: z.string().min(1, "请选择公司 SKU"),
   confirmedCostGross: money,
-  salesVisiblePrice: z.string(),
+  salesVisiblePriceGross: z.string(),
   poolPriceAction: z.enum(["KEEP_EXISTING", "SET_PRICE"]),
   inputTaxRate: z.string().trim().min(1, "请填写税率"),
   minimumOrderQuantity: z.string().trim().min(1, "请填写起订量"),
@@ -770,10 +770,10 @@ const promoteSchema = z.object({
   validFrom: z.string().min(1, "请选择生效日期"),
 }).superRefine((value, context) => {
   if (value.poolPriceAction !== "SET_PRICE") return
-  if (!/^\d+(?:\.\d{1,4})?$/.test(value.salesVisiblePrice.trim())) {
+  if (!/^\d+(?:\.\d{1,4})?$/.test(value.salesVisiblePriceGross.trim())) {
     context.addIssue({
       code: "custom",
-      path: ["salesVisiblePrice"],
+      path: ["salesVisiblePriceGross"],
       message: "请输入正确销售可见价，最多 4 位小数",
     })
   }
@@ -801,7 +801,7 @@ export function PromoteSupplierProductDialog({
         sourceRevision?.bulkFloorPriceGross ??
         sourceRevision?.dropshipFloorPriceGross ??
         "",
-      salesVisiblePrice: "",
+      salesVisiblePriceGross: "",
       poolPriceAction: "SET_PRICE" as "KEEP_EXISTING" | "SET_PRICE",
       inputTaxRate: "0.13",
       minimumOrderQuantity:
@@ -828,9 +828,9 @@ export function PromoteSupplierProductDialog({
         minimumOrderQuantity: value.minimumOrderQuantity,
         supplyRegion: splitValues(value.supplyRegionText),
         validFrom: value.validFrom,
-        salesVisiblePrice:
+        salesVisiblePriceGross:
           value.poolPriceAction === "SET_PRICE"
-            ? value.salesVisiblePrice.trim()
+            ? value.salesVisiblePriceGross.trim()
             : undefined,
         poolPriceAction: value.poolPriceAction,
         expectedSourceRevisionNo: sourceRevision?.revisionNo ?? 0,
@@ -863,7 +863,7 @@ export function PromoteSupplierProductDialog({
         nextSource.bulkFloorPriceGross ??
         nextSource.dropshipFloorPriceGross ??
         "",
-      salesVisiblePrice: candidate.poolEntry?.salesVisiblePrice ?? "",
+      salesVisiblePriceGross: candidate.poolEntry?.salesVisiblePriceGross ?? "",
       poolPriceAction: candidate.poolEntry ? "KEEP_EXISTING" : "SET_PRICE",
       inputTaxRate: "0.13",
       minimumOrderQuantity:
@@ -931,8 +931,8 @@ export function PromoteSupplierProductDialog({
                       selected?.poolEntry ? "KEEP_EXISTING" : "SET_PRICE"
                     )
                     form.setFieldValue(
-                      "salesVisiblePrice",
-                      selected?.poolEntry?.salesVisiblePrice ?? ""
+                      "salesVisiblePriceGross",
+                      selected?.poolEntry?.salesVisiblePriceGross ?? ""
                     )
                   }}
                   options={skuOptions}
@@ -965,7 +965,7 @@ export function PromoteSupplierProductDialog({
                         该公司 SKU 已有 {selected.activeSupplierCount ?? 0} 家有效供应商
                       </AlertTitle>
                       <AlertDescription>
-                        当前销售可见价 ¥{selected.poolEntry.salesVisiblePrice}。默认只增加本供应商的映射和供给，商品池条目保持唯一。
+                        当前销售可见价 ¥{selected.poolEntry.salesVisiblePriceGross}。默认只增加本供应商的映射和供给，商品池条目保持唯一。
                       </AlertDescription>
                     </Alert>
                   ) : (
@@ -1000,7 +1000,7 @@ export function PromoteSupplierProductDialog({
                     </form.AppField>
                   ) : null}
                   {poolPriceAction === "SET_PRICE" ? (
-                    <form.AppField name="salesVisiblePrice">
+                    <form.AppField name="salesVisiblePriceGross">
                       {(field) => (
                         <field.TextField
                           label="销售可见价 *"

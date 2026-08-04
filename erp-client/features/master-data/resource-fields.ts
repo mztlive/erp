@@ -139,7 +139,7 @@ export const RESOURCE_FIELDS: Readonly<
       listFact: true,
     },
     {
-      key: "salesVisiblePrice",
+      key: "salesVisiblePriceGross",
       label: masterDataCopy.fSalesVisiblePrice,
       kind: "text",
       required: true,
@@ -537,7 +537,7 @@ export function buildResourceFields(
     case "sellable-items":
       return {
         sku: pickField(values, "sku") ?? "",
-        salesVisiblePrice: pickField(values, "salesVisiblePrice") ?? "",
+        salesVisiblePriceGross: pickField(values, "salesVisiblePriceGross") ?? "",
         supplierCount: pickField(values, "supplierCount"),
         region: pickField(values, "region"),
         leadTime: pickField(values, "leadTime"),

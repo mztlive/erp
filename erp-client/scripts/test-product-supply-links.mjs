@@ -163,7 +163,7 @@ const excelCenterAfter = await fetchSupplierCatalogCenter({
 assert(
     excelCenterAfter?.item.mapping?.skuId === "sku_tea_04" &&
     excelCenterAfter.item.offering?.currentRevision?.supplyPriceGross === "40.00" &&
-    excelCenterAfter.item.poolEntry?.salesVisiblePrice === existingTeaPool?.salesVisiblePrice &&
+    excelCenterAfter.item.poolEntry?.salesVisiblePriceGross === existingTeaPool?.salesVisiblePriceGross &&
     excelCenterAfter.item.poolEntry?.poolEntryRevisionId === existingTeaPool?.poolEntryRevisionId &&
     promoteResult.poolEntryChange === "UNCHANGED" &&
     (promoteResult.activeSupplierCount ?? 0) >= 2,
@@ -177,7 +177,7 @@ const operationsView = await fetchSupplierCatalogCenter({
 assert(
   operationsView?.costFieldVisibility === "masked" &&
     operationsView.item.offering?.currentRevision?.supplyPriceGross === "***" &&
-    operationsView.item.poolEntry?.salesVisiblePrice === existingTeaPool?.salesVisiblePrice,
+    operationsView.item.poolEntry?.salesVisiblePriceGross === existingTeaPool?.salesVisiblePriceGross,
   "operations sees the pool price but not procurement cost"
 )
 
@@ -247,7 +247,7 @@ const firstPoolResult = newCompanySku
       supplyMode: ["BULK"],
       supplyRegion: ["全国"],
       validFrom: "2026-08-03",
-      salesVisiblePrice: "88.00",
+      salesVisiblePriceGross: "88.00",
       poolPriceAction: "SET_PRICE",
       expectedSourceRevisionNo: 1,
       idempotencyKey: "test-first-source-promote-1",
