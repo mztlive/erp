@@ -810,7 +810,7 @@ W14 以**树形维护页**管理分类：父子关系不得成环；停用后仍
 
 `sku_no` 对应采购「产品编码」：系统按规格组合默认生成，允许业务手动覆盖；仍须全局唯一。
 
-W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中保存一件代发或集采草稿。供应商、供给模式、成本/底价、快递、进项税率、费用、起订量、区域、能力和有效期全部由 W21 的 `supplier_offering` 及其不可变修订维护；W14 仅按稳定 `sku_id` 提供关联摘要和进入 W21 的链接。这样同一 SKU 才能同时拥有多个供应商商品及多条独立供给，不会被 SKU 上的一组字段覆盖。W14 SKU 表格中的“销售可见价”是 `product_pool_entry_revision` 的编辑投影，命令处理器必须拆分写入商品池修订，不得复制到 `sku_revision`。
+W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中保存一件代发或集采价格。供应商、一件代发/集采两项供给价、快递、进项税率、费用、集采起订量、区域、能力和有效期全部由 W21 的 `supplier_offering` 及其不可变修订维护；系统不设置 `supply_mode`，每条供给默认同时支持一件代发与集采。W14 仅按稳定 `sku_id` 提供关联摘要和进入 W21 的链接。这样同一 SKU 才能同时拥有多个供应商商品及多条独立供给，不会被 SKU 上的一组字段覆盖。W14 SKU 表格中的“销售可见价”是 `product_pool_entry_revision` 的编辑投影，命令处理器必须拆分写入商品池修订，不得复制到 `sku_revision`。
 
 食品产品有效期、生产批次不进入 `product` / `sku` 主数据（批次事实走入库/库存域，本期不做）。
 
@@ -2399,12 +2399,12 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 | `status` | 启用、暂停、停止 |
 | `current_revision_id` | 当前供给版本 |
 | `revision_no` | 修订号（修订表） |
-| `confirmed_cost_gross` / `confirmed_cost_net` / `input_tax_rate` | 采购确认成本（含税/不含税）与进项税率；不得直接复用来源报价字段 |
-| `floor_price_gross` | 供应商给我们的底价（含税）；控价参考，非正式结算事实 |
-| `supply_mode` | 供给模式：`DROPSHIP`（一件代发，价含税运）/ `BULK`（集采，价含税）；同一 SKU 可对应多条供给 |
-| `dropship_express` | 一件代发快递说明（自由文本）；仅 `DROPSHIP` |
+| `dropship_supply_price_gross` / `dropship_supply_price_net` | 采购确认的一件代发供给价；含税价已包含包装、发货等费用，不得重复登记物流费用 |
+| `bulk_supply_price_gross` / `bulk_supply_price_net` | 采购确认的集采供给价；与一件代发供给价同时存在、分别生效 |
+| `input_tax_rate` | 两项供给价共同使用的进项税率；含税/不含税金额按统一定点规则换算 |
+| `dropship_express` | 一件代发快递说明（自由文本） |
 | `freight_amount` / `service_fee_amount` | 费用 |
-| `minimum_order_quantity` | 供应商在本供给版本下确认的最小起订量，按 ERP 基本单位；一件代发默认 1 |
+| `bulk_minimum_order_quantity` | 集采起订量，按 ERP 基本单位；一件代发固定从 1 件起，不另存起订量 |
 | `supply_region` | 可供区域 |
 | `availability_status` / `available_quantity` | 可供状态 |
 | `product_capabilities` | 商品级取消、退款、物流等能力 |
@@ -2418,8 +2418,9 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 - `sku_id + status + valid_from + valid_to` 按消费时点和发布时点查询；
 - 供货价变化形成新修订，不覆盖旧价；
 - 增加第二家供应商时只新增该供应商 SKU 的映射与供给，不覆盖第一家的供给，也不要求形成新的公司商品或商品池条目；
-- 供应商、供给模式、价格、税费、起订量、区域、能力和有效期只写 `supplier_offering_revision`，不得复制回 `product_revision` / `sku_revision`；W14 仅消费按 `sku_id` 查询的关联投影；
-- `minimum_order_quantity > 0`；旧商城 `min_nums` 只有在采购确认了供应商、SKU、
+- 不设置 `supply_mode`；每条有效供给修订必须同时具备一件代发供给价和集采供给价，两项价格不得互相覆盖或择一折叠；
+- 供应商、两项供给价、税费、集采起订量、区域、能力和有效期只写 `supplier_offering_revision`，不得复制回 `product_revision` / `sku_revision`；W14 仅消费按 `sku_id` 查询的关联投影；
+- `bulk_minimum_order_quantity > 0`；旧商城 `min_nums` 只有在采购确认了供应商、SKU、
   单位和起订语义后才可迁入本字段，未确认数据进入基础资料暂存审核；
 - 历史消费取标准成本时必须命中消费发生时点的有效修订，不得取当前价或就近价。
 
@@ -2497,7 +2498,7 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 - 每个发布修订恰好绑定一个供给修订；
 - `category_id`、`sales_description` 和至少一张主图是提交发布的必填快照；
 - `minimum_purchase_quantity > 0`，它是商城销售策略，不得从供应商
-  `minimum_order_quantity` 自动复制；只有运营确认后才写入；
+  `bulk_minimum_order_quantity` 自动复制；只有运营确认后才写入；
 - `sales_price_gross` 与供货价分开，供货价变化不得自动改商城销售价；
 - 商城成功确认前不得把该版标记为商城已生效；
 - 供应商不可供或数据过期时形成暂停发布版本或明确暂停动作；
@@ -3794,7 +3795,7 @@ PREPARING
 
 - Excel、API、手工录入的供应商商品共用同一 SPU/SKU 模型；API 连接只对 API 来源必填。
 - 一个供应商 SKU 同一时点只映射一个公司 SKU；一个公司 SKU 可以有多家供应商供给。
-- 来源报价、采购确认成本、公司商品池销售可见价和商城发布价是四类不同事实，不得互相覆盖。
+- 来源代发/集采报价、采购确认后的两项供给价、公司商品池销售可见价和商城发布价是不同事实，不得互相覆盖；供给价始终保留一件代发与集采两项，不以单一确认成本折叠。
 - 销售查询和导出只读取公司商品池；供应商成本不得出现在销售投影、搜索索引或导出。
 
 - 商城只发送五类成功结果事实，不发送处理中事实。

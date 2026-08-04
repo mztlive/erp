@@ -91,7 +91,7 @@
 | `supplier_catalog_product` / `supplier_catalog_product_revision` | 供应商 SPU 稳定身份及 Excel/API/手工来源修订 |
 | `supplier_catalog_sku` / `supplier_catalog_sku_revision` | 供应商 SKU 稳定身份、来源报价及目录版本；API 连接可空 |
 | `supplier_product_mapping` | 供应商商品到 ERP SKU 的确认映射 |
-| `supplier_offering` / `supplier_offering_revision` | 公司 SKU 与供应商 SKU 的供给稳定身份，以及采购确认成本、区域、可供状态和有效期版本 |
+| `supplier_offering` / `supplier_offering_revision` | 公司 SKU 与供应商 SKU 的供给稳定身份，以及采购确认的一件代发/集采两项供给价、集采起订量、区域、可供状态和有效期版本；不设置供给方式字段 |
 | `product_publication` / `product_publication_revision` | 商城发布稳定身份，以及展示、销售价、区域、上下架和固定供给版本 |
 | `product_revision_media` / `product_publication_revision_media` | 经审核的商品版本媒体和商城发布媒体，统一关联 `file_asset` |
 | `warehouse_sku_policy` | 按仓库和 SKU 维护的库存预警策略，不接受来源全局阈值直接覆盖 |
@@ -505,7 +505,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | `pic_url`、`pic_urls` | `file_asset`、`product_revision_media` 或 `product_publication_revision_media` 候选 | 完成安全校验、用途、排序和替代文本审核后进入相应版本关系 |
 | `description` | `product_publication_revision.sales_description` 候选 | 只有运营确认属于商城销售说明时才进入发布版本，否则只留白名单暂存 |
 | `supplier_sku_id`、`supplier_type` | 供应商外部 SKU 候选 | 必须结合补充的供应商连接和供应商商品身份，确认后建立 `supplier_product_mapping` / `supplier_offering` |
-| `min_nums` | `supplier_offering_revision.minimum_order_quantity` 候选 | 默认只作为供应商最低订购量候选，经采购确认后写供给版本；不得自动同时写商城最低购买量。只有运营用独立证据确认商城购买约束时，才写 `product_publication_revision.minimum_purchase_quantity` |
+| `min_nums` | `supplier_offering_revision.bulk_minimum_order_quantity` 候选 | 默认只作为供应商集采起订量候选，经采购确认后写供给版本；不得自动同时写商城最低购买量。只有运营用独立证据确认商城购买约束时，才写 `product_publication_revision.minimum_purchase_quantity` |
 | `stock_warning` | `warehouse_sku_policy.minimum_available_quantity` 人工候选 | 来源没有仓库维度，不能直写全局正式值；必须由仓储为明确 `warehouse_id + sku_id` 逐项确认后建立或更新仓库级策略 |
 | `status` | SKU 来源状态 | 通过专用字典转换，不直接等同 ERP 启用状态 |
 | `create_time`、`update_time`、`creator`、`updater` | 来源审计 | `updater` 的旧类型异常不影响 ERP 审计模型，统一按安全字符串解析来源值 |
@@ -843,7 +843,7 @@ API 供应商原始目录、订单、动作结果、退款和账单必须逐项�
 | --- | --- | --- |
 | 供应商商品身份与版本 | 供应商、来源类型、可选连接、供应商 SPU/SKU 编码、来源版本或摘要、名称、描述、品牌、规格属性、单位、条码、主图（SKU 1:1）/轮播/详情图、一件代发底价（含税运）、集采底价（含税）、集采起订量、可供数量/状态 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_product_revision_media`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`；批次结果另记 `supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
 | ERP 商品映射 | 供应商商品、ERP SKU、确认人、依据和有效状态 | `supplier_product_mapping` |
-| 固定供给版本 | 公司 SKU、供应商 SKU、采购确认含税/不含税成本、进项税率、运费、服务费、区域、可供状态、商品能力、最低订购量和有效期 | `supplier_offering`、`supplier_offering_revision` |
+| 固定供给版本 | 公司 SKU、供应商 SKU、一件代发供给价（含税/不含税）、集采供给价（含税/不含税）、进项税率、运费、服务费、区域、可供状态、商品能力、集采起订量和有效期；不设置 `supply_mode` | `supplier_offering`、`supplier_offering_revision` |
 | 供应商子订单 | ERP 永久订单号、商城订单及明细、固定供应商和连接、固定供给版本、数量、地址快照、下单成本和进项税率 | `supplier_fulfillment_order`、`supplier_fulfillment_item` |
 | 下单、查询、取消、退款动作 | 原供应商订单、动作类型、商城售后请求、稳定幂等键、供应商请求号、脱敏请求/响应摘要和结果 | `supplier_order_action`；结果未知先按原请求查询，重试沿用原幂等键 |
 | 状态回调 | 外部事件 ID、供应商状态版本、原状态、新状态、发生时间和接收时间 | `supplier_order_status_history`；按版本和发生时间拒绝状态倒退 |
