@@ -1,7 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import {
   BoxesIcon,
-  Building2Icon,
   ClipboardCheckIcon,
   ClipboardListIcon,
   FileStackIcon,
@@ -74,7 +73,6 @@ export type WorkspaceId =
   | "W21"
   | "W22"
   | "W23"
-  | "W24"
   | "W25"
   | "W26"
   | "W27"
@@ -273,13 +271,6 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
     mode: "M2+M4",
     mainRoute: "/commerce/execution-projections",
     navHref: "/commerce/execution-projections",
-  },
-  {
-    id: "W24",
-    name: "主责迁移批次",
-    mode: "M7",
-    mainRoute: "/governance/ownership-migrations",
-    navHref: "/governance/ownership-migrations",
   },
   {
     id: "W25",
@@ -574,12 +565,6 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
         href: "/governance/imports",
         label: "导入与期初",
         icon: UploadIcon,
-      },
-      {
-        id: "W24",
-        href: "/governance/ownership-migrations",
-        label: "主责迁移",
-        icon: Building2Icon,
       },
       {
         id: "W29",

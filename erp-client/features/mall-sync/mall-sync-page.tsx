@@ -120,7 +120,6 @@ function parseRole(raw: string | null): DemoRole {
 function parseStage(raw: string | null): OwnershipStage | undefined {
   if (
     raw === "FIRST_PHASE_MALL_OWNED" ||
-    raw === "MIGRATION_FROZEN" ||
     raw === "SECOND_PHASE_ERP_OWNED"
   ) {
     return raw
@@ -282,7 +281,6 @@ export function MallSyncPage() {
   const policyMissing = policyState?.state === "MISSING"
   const stage = ownership?.stage ?? "FIRST_PHASE_MALL_OWNED"
   const firstPhase = stage === "FIRST_PHASE_MALL_OWNED"
-  const frozen = stage === "MIGRATION_FROZEN"
   const sealed = stage === "SECOND_PHASE_ERP_OWNED"
 
   const mappingTask = data?.selectedMappingTask
@@ -601,9 +599,7 @@ export function MallSyncPage() {
   const canManualSync =
     demoRole === "admin" && firstPhase && !policyMissing && !context?.sourceUnavailable
   const manualSyncDisabledReason = !firstPhase
-    ? frozen
-      ? "迁移冻结：普通立即增量/按单补拉禁用，请从主责迁移批次执行"
-      : "已封存：无第一期写动作"
+    ? "已封存：无第一期写动作"
     : policyMissing
       ? "MANUAL_GOVERNANCE_POLICY_MISSING：人工策略未配置"
       : demoRole !== "admin"
@@ -1019,16 +1015,12 @@ export function MallSyncPage() {
       {/* OwnershipBanner — 始终可见 */}
       {ownership ? (
         <MaintenanceBanner
-          tone={
-            sealed ? "info" : frozen ? "warning" : "info"
-          }
-          icon={sealed || frozen ? ShieldAlertIcon : undefined}
+          tone={sealed ? "info" : "info"}
+          icon={sealed ? ShieldAlertIcon : undefined}
           title={
             sealed
               ? `第一期已封存 · ${DIRECTION_LABEL[ownership.syncDirection]}`
-              : frozen
-                ? `迁移维护窗口已冻结 · 商城主责 ${ownership.mallOwnedOrderCount ?? 0} / ERP 主责 ${ownership.erpOwnedOrderCount ?? 0}`
-                : `当前主责：${STAGE_LABEL[ownership.stage]} · 方向 ${DIRECTION_LABEL[ownership.syncDirection]}`
+              : `当前主责：${STAGE_LABEL[ownership.stage]} · 方向 ${DIRECTION_LABEL[ownership.syncDirection]}`
           }
           description={
             <div className="space-y-1 text-sm">
@@ -1048,35 +1040,18 @@ export function MallSyncPage() {
                     : ""}
                 </p>
               ) : null}
-              {ownership.writeFrozenAt ? (
-                <p>写入冻结自 {formatTime(ownership.writeFrozenAt)}</p>
-              ) : null}
               <p className="text-muted-foreground">
                 无「编辑来源数据」「向商城回写商业修改」「手工标记同步成功」入口。
               </p>
             </div>
           }
-          action={
-            frozen || sealed
-              ? {
-                  label: "前往迁移 / 执行信息 / 错误中心",
-                  onClick: () => {
-                    router.push("/governance/ownership-migrations")
-                  },
-                }
-              : undefined
-          }
         />
       ) : null}
 
-      {(frozen || sealed) && (
+      {sealed && (
         <div className="flex flex-wrap gap-2 text-sm">
           <Button variant="link" size="sm" render={<Link href="/commerce/execution-projections" />}>
             W23 执行信息
-            <ExternalLinkIcon className="size-3.5" />
-          </Button>
-          <Button variant="link" size="sm" render={<Link href="/governance/ownership-migrations" />}>
-            W24 主责迁移
             <ExternalLinkIcon className="size-3.5" />
           </Button>
           <Button variant="link" size="sm" render={<Link href="/governance/integration-errors" />}>
@@ -1187,7 +1162,6 @@ export function MallSyncPage() {
                   value: "FIRST_PHASE_MALL_OWNED",
                   label: "第一阶段 · 商城主责",
                 },
-                { value: "MIGRATION_FROZEN", label: "迁移冻结" },
                 {
                   value: "SECOND_PHASE_ERP_OWNED",
                   label: "已封存 · ERP 主责",
@@ -2085,7 +2059,7 @@ export function MallSyncPage() {
             <Alert>
               <AlertTitle>历史只读</AlertTitle>
               <AlertDescription>
-                第一期同步已完成归档。请前往执行信息、主责迁移与对账工作区查看后续内容。
+                第一期同步已完成归档。请前往执行信息与对账工作区查看后续内容。
               </AlertDescription>
             </Alert>
           ) : null}

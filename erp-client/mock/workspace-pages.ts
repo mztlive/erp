@@ -1362,69 +1362,6 @@ export const WORKSPACE_PAGE_DEFS: Partial<
     },
   },
 
-  W24: {
-    id: "W24",
-    title: "主责迁移批次",
-    description:
-      "治理销售单主责在商城与 ERP 之间的迁移批次、预检与切换确认。",
-    mode: "M7",
-    breadcrumbs: [
-      { id: "gov", label: "治理", href: "/governance/ownership-migrations" },
-      { id: "om", label: "主责迁移" },
-    ],
-    shell: {
-      kind: "governance",
-      payload: {
-        stages: [
-          { key: "prep", label: "预检", status: "complete" },
-          { key: "freeze", label: "维护冻结", status: "current" },
-          { key: "cutover", label: "切换确认", status: "pending" },
-          { key: "seal", label: "封存", status: "pending" },
-        ],
-        metrics: [
-          { key: "batches", label: "进行中批次", value: 2 },
-          { key: "orders", label: "覆盖销售单", value: 186 },
-          { key: "blockers", label: "预检阻塞", value: 4 },
-          { key: "ready", label: "可切换", value: 172 },
-        ],
-        batchColumns: [
-          { key: "batch", header: "批次编号" },
-          { key: "customer", header: "客户范围" },
-          { key: "fingerprint", header: "版本摘要" },
-          { key: "status", header: "状态", status: true },
-        ],
-        batches: listRows([
-          {
-            id: "mb1",
-            cells: {
-              batch: "OM-20260801-002",
-              customer: "星河制造及 3 家关联",
-              fingerprint: "a91c…e2",
-              status: "维护冻结",
-            },
-            status: { label: "维护冻结", tone: "warning" },
-          },
-        ]),
-        issues: [
-          {
-            id: "mi1",
-            severity: "error",
-            message: "存在未关闭履约任务，禁止切换",
-            objectLabel: "XS20260327012",
-          },
-        ],
-        diffEntries: [
-          {
-            id: "md1",
-            field: "主责系统",
-            before: "商城",
-            after: "ERP",
-          },
-        ],
-      },
-    },
-  },
-
   W25: {
     id: "W25",
     title: "商城消费订单",

@@ -21,7 +21,6 @@ W20	/supplier-api/connections	M2+M4	app/(workspace)/supplier-api/connections/pag
 W21	/procurement/supplier-catalog	M3+M4	app/(workspace)/procurement/supplier-catalog/page.tsx	OK
 W22	/commerce/publications	M2+M4	app/(workspace)/commerce/publications/page.tsx	OK
 W23	/commerce/execution-projections	M2+M4	app/(workspace)/commerce/execution-projections/page.tsx	OK
-W24	/governance/ownership-migrations	M7	app/(workspace)/governance/ownership-migrations/page.tsx	OK
 W25	/commerce/consumption-orders	M2+M4	app/(workspace)/commerce/consumption-orders/page.tsx	OK
 W26	/supplier-api/orders	M2+M4	app/(workspace)/supplier-api/orders/page.tsx	OK
 W27	/supplier-api/settlements	M2+M4	app/(workspace)/supplier-api/settlements/page.tsx	OK

@@ -132,7 +132,6 @@ const WORKSPACE_SHORT_LABEL: Partial<Record<WorkspaceId, string>> = {
   W21: "商品供给",
   W22: "商品发布",
   W23: "执行信息",
-  W24: "主责迁移",
   W25: "商城消费订单",
   W26: "供应商订单",
   W27: "API 结算",

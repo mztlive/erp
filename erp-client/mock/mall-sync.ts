@@ -579,26 +579,9 @@ export const MALL_HISTORY: HistoryArchiveEntry[] = [
     kind: "SEAL",
     title: "第一期同步已封存（演示样本）",
     summary:
-      "最终基线确认后封存；当前执行信息转执行信息页，迁移转主责迁移，通用错误与对账转接口错误中心。",
+      "最终基线确认后封存；当前执行信息转执行信息页，通用错误与对账转接口错误中心。",
     recordedAt: "2026-07-15T18:00:00+08:00",
     watermark: "wm_final_phase1_20260715",
     reference: "SEAL-PHASE1-001",
-  },
-  {
-    id: "hist_final_sync",
-    kind: "FINAL_SYNC",
-    title: "迁移最终增量",
-    summary: "W24 批次授权下完成最终捕获；业务写入保持冻结。",
-    recordedAt: "2026-07-15T16:30:00+08:00",
-    watermark: "wm_mig_final_20260715",
-    reference: "MIG-FINAL-INC-001",
-  },
-  {
-    id: "hist_final_recon",
-    kind: "FINAL_RECON",
-    title: "迁移全量数据标识核对",
-    summary: "完整商业数据标识核对完成，差异证据回写主责迁移基线。",
-    recordedAt: "2026-07-15T17:10:00+08:00",
-    reference: "MIG-FULL-RECON-001",
   },
 ]

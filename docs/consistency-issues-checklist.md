@@ -33,7 +33,8 @@
   - 数据模型 §6.4：`review_status` 又列有"待采购确认、待销售领导、待运营"
   - W05：把 `PENDING_PROCUREMENT_CONFIRMATION / PENDING_SALES_LEAD / PENDING_OPERATIONS` 全部用作 `salesOrderReviewStatus`（站在 phase-1 一侧）
 - **建议方向**：中间环节统一归 `review_status`；§7.1/§7.3 状态图改为"主状态 + review 轨"双层表达
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）
+- **决议**：主状态 4 值 + review 轨。`commercial_status` 仅保存 `DRAFT / PENDING_REVIEW / EFFECTIVE / VOIDED`；待采购确认/待销售领导/待运营等全部归 `review_status`。已同步修改 erp-data-model.md §7.1/§7.3 状态图，与 phase-1 §9.3、W05 对齐。`PENDING_REVIEW` 命名与数据模型 §7.5 资金单据状态命名风格一致。
 
 ### D-02 【高】员工手机号"ERP 不保存"与"收货手机号加密快照保存"直接矛盾
 
@@ -43,7 +44,8 @@
   - phase-1 §11.1：「ERP 不保存卡号、卡密和员工手机号；员工的绑定和消费信息留在商城」
   - phase-2 §9.4 / 数据模型 L2934 / mall-mapping L783：「收货人、手机号和地址仅在供应商履约需要时保存订单快照，完整值加密存储」
 - **建议方向**：phase-1 §11.1 改为"不保存卡实例绑定手机号及其可逆映射；履约收货手机号仅加密快照"
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）
+- **决议**：区分两类手机号：ERP 不保存卡号/卡密/卡实例绑定手机号及其可逆映射；履约收货手机号仅加密快照（与 phase-2 §9.4、数据模型 §6.17、mall-mapping 一致）。
 
 ### D-03 【中】供应商订单状态机两套画法（phase-2 扁平 13 值 vs 数据模型正交三轨）
 
@@ -148,7 +150,8 @@
   - phase-2：建 `sales_order_ownership`（当前主责副表）+ `sales_order_ownership_migration`
   - 数据模型/W24/mall-mapping：主责只改 `sales_order.owner_system` 字段，迁移历史写 `sales_order_owner_migration_batch/item`，**不建当前主责副表**
 - **建议方向**：phase-2 §14.2 删除 `sales_order_ownership` 副表，迁移表改名 `sales_order_owner_migration_batch`
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）
+- **决议**：彻底简化。主责迁移是一次性运营行为（停止从商城开单，存量单 `owner_system` MALL→ERP），非数据实体：删除全部专用表（`sales_order_ownership`、`sales_order_owner_migration_batch/item`、`sales_order_ownership_migration`），无批次/冻结窗口/scope_hash/基线确认/迁移授权；仅保留 `origin_system` + `owner_system` 字段 + 通用审计；**W24 页面取消**（路由、feature、mock、侧栏、registry 全部删除）；W17 删除冻结逻辑保留封存只读态；执行投影三表保留。涉及 12 个文档 + 前端 10 个文件（verify 29 工作面通过、tsc 通过）。
 
 ### B-02 【中】二期消费事实实体名冲突：`mall_consumption_fact` vs `mall_consumption_entry`
 
@@ -198,3 +201,9 @@
 ## 四、讨论记录
 
 （每解决一条，在此追加一行：编号、决议内容、修改的文件、日期）
+
+| 日期 | 编号 | 决议 | 修改文件 |
+| --- | --- | --- | --- |
+| 2026-08-04 | D-01 | commercial_status 仅保存 4 值主状态（DRAFT/PENDING_REVIEW/EFFECTIVE/VOIDED），中间审核环节全部归 review_status | erp-data-model.md §7.1、§7.3 |
+| 2026-08-04 | D-02 | 区分两类手机号：不保存卡实例绑定手机号及可逆映射；履约收货手机号仅加密快照 | erp-phase-1.md §11.1 L1154、w03-customer-center.md L33 |
+| 2026-08-04 | B-01 | 主责迁移=一次性运营行为：删全部专用表（ownership/batch/item），仅 origin_system+owner_system 字段+通用审计；W24 页面取消（前端 feature/路由/registry/mock 全删，verify 29 工作面通过）；W17 删冻结逻辑保留封存态；执行投影三表保留 | erp-data-model.md §6.16/§7.8/§10、erp-phase-2.md §14.2/§15/§17/§20、w17 全文、w24 改为取消说明、README 索引、mall-mapping §10、w05/w18/w23/w25/w29/w30、ui-design/ui-flows/glossary、phase-1 L856、erp-client 10 文件 |

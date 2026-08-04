@@ -33,7 +33,6 @@ import {
 } from "@/components/ui/sidebar"
 import { isNavItemActive } from "@/lib/nav-active"
 import { WORKSPACE_NAV_GROUPS } from "@/lib/workspace-registry"
-import { OwnershipMigrationGlobalFreezeBanner } from "@/features/ownership-migration/global-freeze-banner"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
 
 function AppSidebarNav() {
@@ -534,7 +533,6 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
           ) : null}
         </div>
       }
-      // maintenanceBanner={<OwnershipMigrationGlobalFreezeBanner />}
       taskTabs={
         <TaskTabs
           value={activeTab}

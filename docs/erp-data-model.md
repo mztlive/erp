@@ -15,8 +15,8 @@
 2. 卡券销售单与实物及服务销售单共用 `sales_order` 聚合。`business_type`
    表示卖什么，`owner_system` 表示谁有商业字段写权，两个维度不得合并。
 3. `sales_order.owner_system` 保存当前值。第一期商城主责卡券单取 `MALL`，
-   第二期迁移后改为 `ERP`；迁移历史只写
-   `sales_order_owner_migration_item`，不再建立当前主责副表。
+   第二期迁移后改为 `ERP`；迁移是一次性运营行为，只改 `owner_system` 值并记录
+   通用变更审计（操作人、时间），不建立任何迁移专用表。
 4. 业务基础资料采用“稳定身份 + 不可变修订”；正式单据采用“稳定单号 +
    不可变生效版本 + 结构化业务快照”。
 5. 已发生的收付款、发票、出入库、消费、退款、余额恢复、成本和结算事实只追加，
@@ -63,7 +63,6 @@
 | 供应商供给 | `supplier_offering` | 不可变供给修订 | 公司 SKU、供应商 SKU |
 | 商品发布 | `product_publication` | 不可变发布修订、商城投递 | SKU、供给修订、目标商城 |
 | 销售执行投影 | `sales_order_projection` | 投影修订、投递和接收确认 | 销售单版本、目标商城 |
-| 主责迁移 | `sales_order_owner_migration_batch` | 迁移项、最终基线确认 | 存量卡券销售单 |
 | 商城消费 | `mall_order` | 商品明细、支付来源、明细分摊、关键事实 | 卡实例、发布版本、销售单 |
 | 商城售后 | `mall_after_sales_request` | 取消/退款动作、结果事实、余额恢复 | 商城订单、供应商订单 |
 | 供应商履约 | `supplier_fulfillment_order` | 子订单明细、动作、状态历史、退款事实 | 商城商品明细、固定供给 |
@@ -319,9 +318,8 @@ erDiagram
 | --- | --- |
 | 供应商 API | `supplier_api_connection`、`supplier_api_capability` |
 | 商品发布 | `product_publication`、`product_publication_revision`、`product_publication_revision_media`、`product_publication_delivery` |
-| 主责迁移 | `sales_order_owner_migration_batch`、`sales_order_owner_migration_item` |
 | 执行投影 | `sales_order_projection`、`sales_order_projection_revision`、`sales_order_projection_delivery` |
-| 卡实例与余额 | `mall_consumption_cutover`、`mall_consumption_cutover_check`、`mall_consumption_cutover_migration_batch`、`mall_card_instance`、`mall_card_instance_correction`、`mall_balance_snapshot` |
+| 卡实例与余额 | `mall_consumption_cutover`、`mall_consumption_cutover_check`、`mall_card_instance`、`mall_card_instance_correction`、`mall_balance_snapshot` |
 | 商城关键事实 | `mall_consumption_cutover`、`mall_order_fact`、`mall_order_cancel_fact`、`mall_order_completion_fact`、`mall_order`、`mall_order_item`、`mall_payment_source`、`mall_item_funding_allocation`、`mall_consumption_entry`、`mall_consumption_cost_assessment` |
 | 商城售后 | `mall_after_sales_request`、`mall_after_sales_request_line`、`mall_refund`、`mall_refund_line`、`mall_refund_allocation`、`mall_balance_restoration`、`mall_balance_restoration_allocation` |
 | 历史回填 | `mall_consumption_backfill_job`、`mall_consumption_backfill_item` |
@@ -467,7 +465,7 @@ erDiagram
 
 | 字段 | 说明 |
 | --- | --- |
-| `work_item_type` | 采购确认、低毛利上级确认、审批、迁移确认、复核、异常等固定类型 |
+| `work_item_type` | 采购确认、低毛利上级确认、审批、复核、异常等固定类型 |
 | `business_object_type` / `business_object_id` | 任务对应的稳定业务对象 |
 | `subject_version` / `subject_hash` | 任务针对的对象版本和内容指纹 |
 | `status` | 待领取、待处理、处理中、已完成、已转交、已关闭 |
@@ -522,7 +520,7 @@ erDiagram
 - `(selection_snapshot_id, object_type, object_id)` 唯一；
 - 快照确认后目标集合、截止水位和预期版本不可修改；
 - 执行逐项重验当前权限、数据范围、状态和版本；预览后新增对象不自动纳入；
-- 本结构只冻结普通批量作用域，不用于绕过正式审批或主责迁移的原子批次规则。
+- 本结构只冻结普通批量作用域，不用于绕过正式审批规则。
 
 #### `background_job` 与 `background_job_item`
 
@@ -557,7 +555,7 @@ erDiagram
 必需约束与索引：
 
 - `job_no`、`request_id` 分别唯一；`(background_job_id, item_no)` 唯一；
-- 普通任务允许逐项提交并显示部分成功；主责迁移批次不得使用本表的部分成功语义；
+- 普通任务允许逐项提交并显示部分成功；
 - 任务执行逐项重验当前权限、数据范围、状态和版本；发起时权限摘要不能替代当前鉴权；
 - 导出必须保存选择快照、字段清单和遮罩规则；下载时再次校验当前用户对每类业务对象
   和敏感字段的权限，使用短时链接并记录下载审计；
@@ -2592,58 +2590,17 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 
 ### 6.16 第二期销售单主责迁移和执行投影
 
-#### `sales_order_owner_migration_batch` 与迁移项
+**主责迁移**
 
-`sales_order_owner_migration_batch`：
+主责迁移是第二期上线时的一次性运营行为，不是数据实体，不建立任何专用表。
+上线时停止从商城开设新销售单，将存量商城主责卡券单的 `sales_order.owner_system`
+从 `MALL` 改为 `ERP`：
 
-| 字段 | 说明 |
-| --- | --- |
-| `batch_no` | 迁移批次 |
-| `source_mall_id` | 来源商城 |
-| `customer_id` | 本批唯一客户；第二期按客户分批迁移 |
-| `scope_hash` | 本批销售单、当前版本、票款和基线引用的规范化摘要 |
-| `status` | 准备中、已冻结、基线已确认、执行中、完成、失败 |
-| `sales_confirmed_by` / `sales_confirmed_at` / `sales_subject_hash` | 销售清单确认及其对象摘要 |
-| `finance_confirmed_by` / `finance_confirmed_at` / `finance_subject_hash` | 财务清单确认及其对象摘要 |
-| `freeze_started_at` | 维护窗口冻结时间 |
-| `baseline_confirmed_by` / `baseline_confirmed_at` / `baseline_subject_hash` | 最终权威基线确认及对象摘要 |
-| `last_sync_watermark` | 最后一期同步水位 |
-
-`sales_order_owner_migration_item`：
-
-| 字段 | 说明 |
-| --- | --- |
-| `batch_id` / `sales_order_id` | 批次和存量销售单 |
-| `source_identity_id` | 来源商城销售单身份 |
-| `before_owner_system` / `after_owner_system` | 固定为 `MALL` → `ERP` |
-| `baseline_sales_order_revision_id` | 最终 ERP 当前版本 |
-| `baseline_projection_revision_id` | 迁移执行基线 |
-| `status` | 待迁移、已迁移、失败 |
-| `migrated_at` / `migrated_by` | 迁移审计 |
-| `error_summary` | 失败原因 |
-
-必需约束与索引：
-
-- `batch_no` 唯一；
-- `(batch_id, sales_order_id)` 唯一；
-- 同一批次全部销售单必须属于 `batch.customer_id`，一位客户需要多个批次时各批使用独立编号；
-- 每张销售单最多一条成功迁移记录；
-- 迁移范围只含已生效及之后状态、未作废的正式存量卡券销售单；
-- 商城草稿不进入迁移表；
-- 迁移前必须完成客户、合同、卡券类目、唯一明细和卡实例基线校验；
-- 销售和财务分别确认其清单；范围、销售版本、票款、卡实例、初始余额或映射差异变化
-  时重新计算 `scope_hash` 并使相关确认失效；
-- 上线负责人只能在冻结、最后一次一期同步和最终全量核对完成后确认权威基线；
-- 系统管理员执行前要求销售、财务和最终基线三个对象摘要都与当前 `scope_hash` 及其
-  对应分面一致，不能替代任一业务确认；
-- 基线确认不产生新销售单版本；
-- 一个客户批次在同一原子事务中重新校验全部迁移项、更新
-  `sales_order.owner_system` 并写迁移项和审计；任一项失败时该批全部变化回滚，
-  不允许形成批次内部分成功；
-- 成功迁移不换单号、不复制销售单、不改变应收、回款和发票；
-- 批次失败保持写入冻结并以原批次幂等续跑；其他已经完成的客户批次不回退，
-  不把任何已迁移单改回商城主责；
-- 迁移完成后不恢复一期轮询，商城 B2B 建单入口不重开。
+- 只改 `owner_system` 值并记录通用变更审计（操作人、时间）；不换单号、不复制
+  销售单、不生成新销售版本，应收、回款和发票不变；
+- 创建来源仍由 `sales_order.origin_system` 表达，不随迁移变化；
+- 迁移范围只含已生效及之后状态、未作废的正式存量卡券销售单，商城草稿不迁移；
+- 迁移完成后不恢复一期轮询，商城 B2B 建单入口不重开，不把任何已迁移单改回商城主责。
 
 #### `sales_order_projection`、修订与投递
 
@@ -2660,8 +2617,8 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 | 字段 | 说明 |
 | --- | --- |
 | `projection_id` / `revision_no` | 投影稳定身份和版本 |
-| `projection_source` | 迁移基线或 ERP 销售版本 |
-| `sales_order_revision_id` | ERP 版本；迁移基线也指向当前版本 |
+| `projection_source` | 存量单迁移时的当前 ERP 销售版本或后续 ERP 销售版本 |
+| `sales_order_revision_id` | ERP 销售版本；首版投影也指向迁移时的当前版本 |
 | `customer_external_identity` | 商城客户标识 |
 | `voucher_category_external_identity` | 商城卡券类目标识 |
 | `voucher_expiry_at` | 表头履约期限 |
@@ -2700,14 +2657,11 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 | 字段 | 说明 |
 | --- | --- |
 | `mall_id` | 目标商城 |
-| `migration_scope_digest` | 全部目标销售单及已完成客户迁移批次的摘要 |
+| `migration_scope_digest` | 全部目标销售单及主责迁移完成状态的摘要 |
 | `enabled_at` | 消费回流和自动履约启用时间 `T` |
 | `enabled_by` | 上线负责人 |
 | `status` | 准备、已启用 |
 | `confirmation_digest` | P0/P1 完整链路开放确认摘要 |
-
-`mall_consumption_cutover_migration_batch(cutover_id, migration_batch_id)` 关联本次开放覆盖的
-全部客户迁移批次，组合唯一；一个迁移批次只能属于一个已启用切换。
 
 `mall_consumption_cutover_check` 保存上线负责人最终确认时看到的结构化证据快照，
 不是另一套自动化阶段退出平台。
@@ -2744,11 +2698,11 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 - `BACKFILL_CAPABILITY` 只证明回填程序、幂等键和报告能力在 `T` 前已就绪，
   正式历史回填任务必须在登记 `T` 后执行；
 - `enabled_at` 一经启用不可修改或删除；
-- 必须在目标范围内每张销售单恰好被一个已完成客户迁移批次覆盖、一期轮询停止且
-  P0/P1 闭环确认后写入；
-- `migration_scope_digest` 必须由关联的全部已完成批次和目标销售单重算一致；
+- 必须在目标范围内每张存量卡券销售单已完成主责迁移（`owner_system = ERP`）、
+  一期轮询停止且 P0/P1 闭环确认后写入；
+- `migration_scope_digest` 必须由目标销售单的主责迁移完成状态和目标销售单重算一致；
 - 登记 `T` 必须以商城为粒度串行化：上线负责人在同一事务锁定切换记录，重新校验
-  全部客户迁移批次、一期轮询封存和全部检查链尾，再一次性写
+  目标销售单主责迁移完成状态、一期轮询封存和全部检查链尾，再一次性写
   `enabled_at + enabled_by + confirmation_digest`；任一校验失败不得留下部分启用；
 - `mall_order.fulfillment_chain` 以支付成功事实的 `occurred_at` 与本表 `enabled_at`
   比较，不能以 ERP 接收时间或回填时间判断。
@@ -3551,15 +3505,17 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 
 ```text
 DRAFT
-  → PENDING_PROCUREMENT_CONFIRMATION
+  → PENDING_REVIEW（进入 review_status 审核轨，如待采购确认/待低毛利上级确认）
   → EFFECTIVE
   → CLOSED
 ```
 
 其中 `FULFILLING → CLOSED` 不是主状态迁移：`FULFILLING` 是"履约中"展示复合态，
 由 `fulfillment_progress` 推导；进入 `CLOSED` 只表示 `close_status` 置为关闭。
-正式主状态 `commercial_status` 仅保存 `DRAFT / PENDING_PROCUREMENT_CONFIRMATION /
-EFFECTIVE / VOIDED` 4 值，禁止把展示复合态写回主状态。
+正式主状态 `commercial_status` 仅保存 `DRAFT / PENDING_REVIEW / EFFECTIVE /
+VOIDED` 4 值；待采购确认（`PENDING_PROCUREMENT_CONFIRMATION`）等中间审核环节
+一律属于 `review_status` 审核轨，禁止把审核环节值写回主状态，也禁止把展示
+复合态写回主状态。
 
 分支：
 
@@ -3585,8 +3541,7 @@ EFFECTIVE / VOIDED` 4 值，禁止把展示复合态写回主状态。
 
 ```text
 DRAFT
-  → PENDING_SALES_LEAD
-  → PENDING_OPERATIONS
+  → PENDING_REVIEW（进入 review_status 审核轨：待销售领导 → 待运营）
   → EFFECTIVE
   → CLOSED
 ```
@@ -3686,17 +3641,15 @@ PENDING → SENDING → DELIVERED
 
 ### 7.8 主责迁移
 
-```text
-PREPARING
-  → FROZEN
-  → BASELINE_CONFIRMED
-  → MIGRATING
-  → COMPLETED
-```
+主责迁移是第二期上线时的一次性运营行为，不是单据，没有批次状态机：
+停止从商城开设新销售单后，将存量商城主责卡券单的 `sales_order.owner_system`
+从 `MALL` 改为 `ERP`，并记录通用变更审计（操作人、时间）。
 
-- 失败时保持 `FROZEN`，修复后以原批次续跑；
-- 成功迁移项不回退；
-- 目标范围全部客户批次完成后进入商城级切换验证；停止一期轮询只形成
+- 只允许 `MALL` → `ERP` 一次，其他方向和第二次变化均拒绝；
+- 迁移只改 `owner_system` 值，不换单号、不复制销售单、不生成新销售版本；
+- 创建来源仍由 `origin_system` 表达；
+- 成功迁移不回退，不恢复一期轮询；
+- 目标范围全部存量单迁移完成后进入商城级切换验证；停止一期轮询只形成
   `PHASE1_POLLING_STOPPED` 证据，不能单独登记 `T`；
 - 仅当第 6.17 节全部固定检查代码的当前链尾均为 `PASSED` 时，才由上线负责人按
   第 8.4 节原子登记唯一 `T`；
@@ -3848,7 +3801,7 @@ PREPARING
    - 不修改旧评估、支付矩阵或原消费。
 8. 切换启用：
    - 以上线负责人为操作者锁定商城切换记录；
-   - 重算全部客户迁移批次覆盖、一期轮询封存、P0/P1 检查链尾和范围摘要；
+   - 重算目标销售单主责迁移完成状态、一期轮询封存、P0/P1 检查链尾和范围摘要；
    - 全部通过后原子写唯一 `T`、`enabled_by` 与确认摘要，失败不留下部分启用。
 
 所有正式分配、抵销和纠错在过账后不可更新或删除。退款、成本、应收/应付、付款和
@@ -3923,11 +3876,11 @@ PREPARING
 | 应付、付款、进项票 | 采购单来源 | 增加供应商结算单来源 | 同一核销内核 |
 | 退货、拒收、退款、冲正、红票、库存调整 | 启用 | 复用 | 二期商城/供应商退款事实另行追加 |
 | 一期商城销售拉取 | 基线、增量、每日全量清单核对（含已关闭、作废及来源缺失） | 迁移完成后停止 | 快照、每日差异和历史版本永久可查，水位封存 |
-| `sales_order.owner_system` | 商城存量卡券单为 `MALL` | 迁移一次为 `ERP` | 迁移历史写迁移项，不建当前主责副表 |
+| `sales_order.owner_system` | 商城存量卡券单为 `MALL` | 迁移一次为 `ERP` | 迁移为一次性运营行为，仅改字段并记录通用审计 |
 | 供应商商品库、映射、供给 | Excel/手工来源启用 | 增加 API 来源和自动变化处理 | 复用同一供应商 SPU/SKU 与供给身份，不迁移成第二套表 |
 | 供应商 API 连接 | 仅登记供应商 API 能力 | 启用连接、同步与履约接口 | API 连接只作为来源元数据，不成为非 API 商品父对象 |
 | 商品发布与商城确认 | 不启用 | 启用 | 引用一期 SKU |
-| 销售执行投影 | 不启用 | 启用 | 迁移基线为首个投影修订，不生成销售版本 |
+| 销售执行投影 | 不启用 | 启用 | 以存量单迁移时的当前 ERP 销售单版本作为第一份执行投影版本，不生成销售版本 |
 | 卡实例稳定引用和余额快照 | 不启用 | 启用 | 不导入卡号、卡密、手机号 |
 | 商城关键事实和历史回填 | 不启用 | `T` 后实时并回填 `T` 前历史 | 同一业务事实键去重 |
 | 组合支付分摊 | 不启用 | 启用 | 仅卡券和微信 |

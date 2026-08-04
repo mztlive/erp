@@ -25,7 +25,6 @@
 | W21 | `/procurement/supplier-catalog` | M3+M4 | yes | yes | yes | yes | yes |
 | W22 | `/commerce/publications` | M2+M4 | yes | yes | yes | yes | yes |
 | W23 | `/commerce/execution-projections` | M2+M4 | yes | yes | yes | yes | yes |
-| W24 | `/governance/ownership-migrations` | M7 | yes | yes | yes | yes | yes |
 | W25 | `/commerce/consumption-orders` | M2+M4 | yes | yes | yes | yes | yes |
 | W26 | `/supplier-api/orders` | M2+M4 | yes | yes | yes | yes | yes |
 | W27 | `/supplier-api/settlements` | M2+M4 | yes | yes | yes | yes | yes |

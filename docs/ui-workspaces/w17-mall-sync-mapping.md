@@ -4,7 +4,7 @@
 > 页面模式：M7 治理与导入（映射任务使用连续处理语言）
 > 主要路由：`/governance/mall-sync`
 > 主要角色：系统管理员、销售、运营；财务按任务与字段权限参与
-> 最后更新：2026-08-01
+> 最后更新：2026-08-04
 
 ## 1. 定位与目标
 
@@ -26,7 +26,7 @@ W17 把第一期卡券销售单的商城同步运行状态、来源快照、业�
 - 将同步技术故障和业务映射差异分开归责，同时在一个工作面中保留完整链路证据。
 - 映射失败时阻止错误客户、应收、收入和经营归属，但不阻塞商城销售、制卡、绑定、激活和消费。
 - 补拉、重试、映射解决和重新归集均沿用原来源身份、快照和幂等依据，不手工补建第二张销售单。
-- 主责迁移到 ERP 后封存第一期轮询与核对；W17 保留历史证据，当前执行投影转 W23、迁移转 W24、通用接口错误与对账转 W29。
+- 主责迁移是一次性运营行为（停止从商城开新单，存量单主责迁移到 ERP）；迁移完成后 W17 封存为只读历史态，保留历史证据，当前执行投影转 W23、通用接口错误与对账转 W29。
 
 ### 1.3 不在本工作面完成
 
@@ -35,7 +35,7 @@ W17 把第一期卡券销售单的商城同步运行状态、来源快照、业�
 - 不允许系统管理员替销售、运营或财务确认业务映射。
 - 不在差异页直接覆盖 ERP 销售版本、应收、回款、发票或经营事实。
 - 不以“手工标记成功”“移动水位”或关闭任务代替可验证同步结果。
-- 二期供应商商品映射进入 W21，销售执行投影进入 W23，主责迁移进入 W24，通用错误和对账进入 W29；W17 不复制这些工作面。
+- 二期供应商商品映射进入 W21，销售执行投影进入 W23，主责迁移由一次性运营行为完成，通用错误和对账进入 W29；W17 不复制这些工作面。
 
 ## 2. 用户、权限与数据范围
 
@@ -58,7 +58,7 @@ W17 把第一期卡券销售单的商城同步运行状态、来源快照、业�
 | 只有业务映射权限 | 只看指派任务与业务白名单字段；不可查看连接配置、原始报文或触发全量任务 |
 | 无敏感字段权限 | 客户联系方式、税务、合同附件等值掩码；卡密等禁止字段任何角色均不可见 |
 | 人工同步治理策略未配置 | “立即增量”和“按单号补拉”保留解释但禁用，显示 `MANUAL_GOVERNANCE_POLICY_MISSING`；服务端拒绝旧页面或重放请求。系统定时增量仍按调度契约运行，不受该人工策略影响 |
-| 已进入迁移维护窗口或主责已迁移 | 冻结范围内的新建、变更和执行类业务写入持续禁用；基线封存前仅允许由 W24 批次约束的最终增量同步、全量指纹核对和必要映射修复。最终基线确认并封存后，W17 切历史只读态并引导 W23/W29 |
+| 主责已迁移（封存） | W17 转为只读历史态：不再从商城拉取新商业事实，同步、核对及执行类写动作全部禁用，历史证据保留可查；当前动作引导至 W23/W29 |
 | 权限运行中收回 | 清除来源快照和候选对象缓存，保留任务稳定身份与返回上下文 |
 
 所有总数、差异数和任务列表均由服务端按来源系统、角色、客户数据范围与字段权限计算。前端不得下载全量快照后自行裁剪。
@@ -75,7 +75,7 @@ W17 子视图使用固定 `view`：`overview`、`jobs`、`snapshots`、`mapping`
 | 查看来源快照 | 销售单协同提示 / 同步任务 | `view=snapshots&snapshotId={id}` | 返回原销售单或任务 |
 | 查看核对差异 | 总览 / 告警 | `view=reconciliation&jobId={id}&differenceId={id}` | 后退恢复核对批次列表 |
 | 打开 ERP 销售单 | 已应用快照 / 映射结果 | 新任务页签打开 W05 稳定销售单 | 关闭后恢复 W17 任务焦点 |
-| 维护窗口或主责迁移后进入 | 历史链接 | 迁移冻结中展示最终同步、核对和映射修复状态；最终基线确认并封存后自动落 `view=history`，显示封存时间/水位 | 当前协同按对象导向 W23/W24/W29 |
+| 主责迁移后进入 | 历史链接 | 已封存为只读历史：不展示同步、核对或映射写动作，自动落 `view=history`，显示封存时间/水位 | 当前协同按对象导向 W23/W29 |
 
 TaskTabs 身份：工作面为 `governance:mall-sync:{sourceSystemId}`；映射连续处理仍在该页签内，当前任务、队列位置和筛选写入 URL。重复打开同一来源商城聚焦已有页签。
 
@@ -89,7 +89,7 @@ TaskTabs 身份：工作面为 `governance:mall-sync:{sourceSystemId}`；映射�
 ┌ PageHeader：商城同步与映射    来源：福利商城生产   [数据水位] [立即增量（按策略）]
 ├ OwnershipBanner
 │ 当前方向：商城 → ERP 商业事实  · 商城主责 · ERP 只读接收
-│ 或：迁移维护窗口已冻结（仅最终同步/核对/映射修复）/ 第一期已封存 · [前往迁移/投影/错误中心]
+│ 或：第一期已封存（一次性运营迁移完成，只读历史） · [前往投影/错误中心]
 ├ MetricStrip：同步延迟 | 失败任务 | 待映射 | 核对差异 | 待重新归集
 ├ 子视图：运行总览 | 同步任务 | 来源快照 | 映射任务 | 每日核对 | 历史
 ├──────────────────────────────────┬──────────────────────────────────┐
@@ -129,9 +129,9 @@ TaskTabs 身份：工作面为 `governance:mall-sync:{sourceSystemId}`；映射�
 
 | 区域 | 字段 | 用户文案 | 数据来源 | 口径 / 格式 | 权限规则 |
 | --- | --- | --- | --- | --- | --- |
-| 边界 | `ownershipStage` | 商城主责 / 迁移冻结 / ERP 主责 | 销售单主责与迁移投影 | 迁移中同时显示两侧主责数量；不用“原生/影子单”等旧称 | 全部有权用户 |
-| 边界 | `syncDirection` | 商城 → ERP 商业事实 / 迁移冻结待封存 / 已封存 | 服务端阶段状态 | 第一期只读拉取；冻结期仍可在 W24 批次控制下完成最终同步、全量核对和必要映射修复，业务写入保持冻结；基线封存后不再捕获或应用一期快照 | 全部有权用户 |
-| 边界 | `sealedAt/finalWatermark` | 封存时间 / 最终水位 | 迁移与同步封存事实 | 绝对时间和证据引用 | 有历史权限 |
+| 边界 | `ownershipStage` | 商城主责 / ERP 主责（已迁移，只读历史） | 销售单主责 | 迁移完成后仅历史只读，不回写商城；不用“原生/影子单”等旧称 | 全部有权用户 |
+| 边界 | `syncDirection` | 商城 → ERP 商业事实 / 已封存（不再拉取） | 服务端阶段状态 | 第一阶段只读拉取；迁移完成后停止从商城拉取新商业事实，不再捕获或应用一期快照 | 全部有权用户 |
+| 边界 | `sealedAt/finalWatermark` | 封存时间 / 最终水位 | 一次性运营迁移与同步封存事实 | 绝对时间和证据引用 | 有历史权限 |
 | 治理 | `manualGovernancePolicy` | 人工同步治理 | 服务端治理策略 | 未配置 / 单人理由 / 双人授权；仅约束立即增量和按单补拉，定时同步不受影响 | 管理员可见配置态；策略内容按权限裁剪 |
 | 指标 | `syncLagSeconds` | 同步延迟 | 安全水位与来源安全时间 | 服务端计算；显示最近成功时间 | 管理员；业务只看等级 |
 | 指标 | `failedJobCount` | 失败任务 | `mall_sales_sync_job` | 当前未恢复失败/部分失败数 | 管理员 |
@@ -213,7 +213,7 @@ detail 只展示安全白名单商业字段：状态、客户、合同、结算�
 
 指标点击切换相应子视图和筛选，具有 `aria-pressed`、筛选摘要和结果数。1440×900 下列表至少展示 6–8 行；身份列、状态列和主动作固定。
 
-进入迁移维护窗口后，默认展示最终基线与冻结说明。冻结范围内普通增量触发、业务新建/变更和执行写入不可用；仅保留由 W24 当前迁移批次授权的最终同步、全量指纹核对及必要映射修复。最终基线确认并封存后默认进入历史，不再显示第一阶段活动筛选，也不把历史任务算作当前积压。
+一次性运营迁移完成后，W17 转只读历史态：不再从商城拉取新商业事实，普通增量触发、业务新建/变更和执行写入均不可用；默认进入历史视图，不再显示第一阶段活动筛选，也不把历史任务算作当前积压。
 
 ## 7. 操作契约
 
@@ -222,27 +222,26 @@ detail 只展示安全白名单商业字段：状态、客户、合同、结算�
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
 | 立即执行增量 | 页头 / 总览 | 管理员；阶段严格为 `FIRST_PHASE_MALL_OWNED` 且轮询启用；同来源无有效推进任务；人工治理策略已配置 | 展示当前安全水位、系统计算范围、“不修改来源”及本次采用单人理由或双人授权 | 按当前策略携带理由或有效双人授权后创建后台任务；完成后分别展示来源捕获水位和后续映射积压 | 策略缺失、版本变化或授权无效时服务端拒绝且不创建任务；其它失败使用原任务查询/重试，水位规则不变 |
-| 执行迁移最终同步 / 全量核对 | W24 迁移批次上下文 / 冻结 Banner | 管理员；阶段为 `MIGRATION_FROZEN`；W24 当前批次授权；最终基线尚未确认；业务写入仍冻结 | 展示批次、冻结范围、当前水位和“只完成最终捕获与核对” | 分别使用 `MIGRATION_FINAL_INCREMENTAL` / `MIGRATION_FULL_RECONCILIATION`，沿原一期身份完成最终增量与完整指纹核对，结果回写 W24 基线证据 | 原批次幂等续跑；失败保持冻结，不得用普通增量绕过批次 |
-| 按单号补拉 | 差异 / 快照 / 管理员动作 | 管理员；有效来源单号；阶段严格为 `FIRST_PHASE_MALL_OWNED`；人工治理策略已配置 | 确认来源、单号、影响、原身份，以及单人模式理由或双人模式授权信息 | 按当前策略使用原来源身份创建单号补拉任务 | 策略缺失、版本变化或授权无效时服务端拒绝；其它失败保留差异并沿原幂等身份重试；冻结期入口禁用且服务端拒绝 |
-| 重试失败任务 | 任务 detail | 管理员；阶段严格为 `FIRST_PHASE_MALL_OWNED`；原任务属于普通一期且错误类别允许重试 | 展示原范围、原水位和错误分类 | 新增重试尝试/任务并关联原任务 | 明确失败；不手工改成功或推进水位；冻结期最终任务只能回到 W24 原批次续跑 |
-| 执行每日核对 | 核对子视图 | 管理员；阶段严格为 `FIRST_PHASE_MALL_OWNED`；无同边界运行任务 | 展示清单边界与比较内容 | 后台产生核对批次和逐单差异 | 同边界使用 `rerunNo` 重跑，旧证据不覆盖；冻结期只能执行 W24 授权的全量核对 |
+| 按单号补拉 | 差异 / 快照 / 管理员动作 | 管理员；有效来源单号；阶段严格为 `FIRST_PHASE_MALL_OWNED`；人工治理策略已配置 | 确认来源、单号、影响、原身份，以及单人模式理由或双人模式授权信息 | 按当前策略使用原来源身份创建单号补拉任务 | 策略缺失、版本变化或授权无效时服务端拒绝；其它失败保留差异并沿原幂等身份重试；迁移时点后入口禁用且服务端拒绝 |
+| 重试失败任务 | 任务 detail | 管理员；阶段严格为 `FIRST_PHASE_MALL_OWNED`；原任务属于普通一期且错误类别允许重试 | 展示原范围、原水位和错误分类 | 新增重试尝试/任务并关联原任务 | 明确失败；不手工改成功或推进水位；迁移时点后重试入口不可用 |
+| 执行每日核对 | 核对子视图 | 管理员；阶段严格为 `FIRST_PHASE_MALL_OWNED`；无同边界运行任务 | 展示清单边界与比较内容 | 后台产生核对批次和逐单差异 | 同边界使用 `rerunNo` 重跑，旧证据不覆盖；迁移时点后每日核对停止，W17 转只读历史态 |
 | 指派映射任务 | 映射 detail | 管理员；目标角色有业务权限 | 确认责任类型和截止 | 追加指派审计并进入责任人待办 | 失败保留原责任；管理员不能代确认 |
 
-“立即增量”不能让用户输入或移动高水位；服务端按当前水位、重叠窗口、`safeNow` 和稳定分页形成范围。人工治理策略未配置时，“立即增量”和“按单号补拉”均 fail-closed，定时同步继续按既有调度契约运行；策略配置后，服务端按其固定的单人理由或双人授权模式校验每次人工动作。来源不可用时商城继续运行，ERP 水位保持不变。按单补拉、普通失败重试和普通每日核对均是 `FIRST_PHASE_MALL_OWNED` 专属动作：一旦进入 `MIGRATION_FROZEN`，即使用户保留旧页面或重放旧请求，服务端也必须拒绝；冻结期只能从 W24 当前批次签发的执行上下文发起最终增量、全量指纹核对，并沿该批次续跑失败操作。
+“立即增量”不能让用户输入或移动高水位；服务端按当前水位、重叠窗口、`safeNow` 和稳定分页形成范围。人工治理策略未配置时，“立即增量”和“按单号补拉”均 fail-closed，定时同步继续按既有调度契约运行；策略配置后，服务端按其固定的单人理由或双人授权模式校验每次人工动作。来源不可用时商城继续运行，ERP 水位保持不变。按单补拉、普通失败重试和普通每日核对均是 `FIRST_PHASE_MALL_OWNED` 专属动作：迁移时点后普通增量与核对停止，即使用户保留旧页面或重放旧请求，服务端也必须拒绝；W17 转只读历史态，仅保留历史查询与证据追溯。
 
 ### 7.2 业务映射操作
 
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
-| 确认映射 | 映射处理区 | 当前 `work_item` 领取人、租约、对象版本和 `subjectHash` 均有效；对应唯一 `ownerRole`；目标对象类型正确且当前可用；阶段为正常一期，或冻结期内具有 W24 当前批次的必要映射修复授权 | 展示来源身份、ERP 目标、关系角色、依据和影响；冻结期额外展示批次号和授权范围 | 同一事务追加可审计映射目标、把 `mappingTaskStatus` 置为已解决并完成当前正式待办；不立即伪称已形成销售版本 | 冲突时保留选择并刷新当前谱系，不静默覆盖；结算主体未配置责任，或冻结期批次/版本/授权不匹配时 fail-closed |
+| 确认映射 | 映射处理区 | 当前 `work_item` 领取人、租约、对象版本和 `subjectHash` 均有效；对应唯一 `ownerRole`；目标对象类型正确且当前可用；阶段为 `FIRST_PHASE_MALL_OWNED` | 展示来源身份、ERP 目标、关系角色、依据和影响 | 同一事务追加可审计映射目标、把 `mappingTaskStatus` 置为已解决并完成当前正式待办；不立即伪称已形成销售版本 | 冲突时保留选择并刷新当前谱系，不静默覆盖；结算主体未配置责任，或阶段已封存时 fail-closed |
 | 请求来源修复 | 映射处理区 | 来源事实确有缺失/矛盾；当前正式待办租约有效 | 必填内部说明、所需修复内容和证据引用；明确当前不创建跨系统协同对象 | 使用 `WorkItemActionEnvelope<RequestSourceFixAction>` 只向当前映射任务追加内部证据记录；`mappingTaskStatus` 与正式待办保持 `PENDING/IN_PROGRESS`，不终结、不自动下一项 | 新来源快照沿原身份到达后继续当前任务，不编辑旧快照；提交失败保留当前项并用本次动作幂等键查询/重试 |
 | 转交映射责任 | 任务更多菜单 | 当前责任路由已配置但实际责任人/角色需变更；有转交权限和有效租约 | 展示目标责任、原因、原租约失效和后继待办 | 使用 `TransferWorkItemEnvelope<MappingWorkItemTransfer>` 原子把原待办置为 `TRANSFERRED`、失效原租约并创建 `UNCLAIMED/PENDING` 后继待办；`mappingTaskStatus` 保持待处理 | 失败保留原任务、原租约和输入；不得用来源修复动作顺带改责任人 |
 | 拒绝错误候选 | 候选行 | 有映射权限 | 无正式业务动作确认；需记录依据 | 只更新本任务候选判断，不停用 ERP 对象 | 保留其它候选和输入 |
-| 重新归集 | 已解决任务固定下一步 | `mappingTaskStatus=RESOLVED`；原快照仍有效；正常一期阶段，或迁移冻结期内由 W24 批次授权的必要修复；最终基线尚未封存 | 展示将重用原快照和幂等身份 | 独立重新归集操作后台应用快照；成功固定展示 ERP 销售单/版本和应收结果 | 结果未知只把 `reapplyOperationStatus` 标为 `UNKNOWN` 并停留当前项；映射仍保持已解决，不得自动下一项 |
+| 重新归集 | 已解决任务固定下一步 | `mappingTaskStatus=RESOLVED`；原快照仍有效；阶段为 `FIRST_PHASE_MALL_OWNED` | 展示将重用原快照和幂等身份 | 独立重新归集操作后台应用快照；成功固定展示 ERP 销售单/版本和应收结果 | 结果未知只把 `reapplyOperationStatus` 标为 `UNKNOWN` 并停留当前项；映射仍保持已解决，不得自动下一项 |
 | 暂挂当前映射 | 连续处理条 | 当前正式待办租约有效；输入已保存 | 必选结构化原因，可填备注；展示本轮 `queueContextId` | 使用 `DeferMappingTaskCommand` 追加非终结动作；`mappingTaskStatus` 不变，待办保持 `PENDING/IN_PROGRESS`，不写 `paused`、不完成任务。租约按服务端结果保留或释放，界面只按返回值移动本轮队列游标 | 提交失败停原项并保留输入；结果未知不释放本地处理权或移动游标，按本次动作幂等键查询 |
 | 浏览上一项 / 下一项 | 连续处理条 | 当前无脏输入；目标仍属于本轮队列快照 | 无 | 只更新 URL 和本轮队列游标，不提交任务动作、不改变待办、映射或租约状态 | 目标失效时按服务端快照定位下一有效项；失败停原项 |
 
-只有“确认映射”使用 `CompleteWorkItemEnvelope`：它携带 `mappingTaskId`、`workItemId`、`subjectHash`、领取令牌、租约版本、映射任务版本、来源快照 ID 和当前映射谱系版本，领域映射变化与正式待办完成在同一事务提交。“请求来源修复”和“暂挂当前映射”是非终结任务动作，使用 `WorkItemActionEnvelope`；前者只追加当前映射任务内部证据/说明，不创建外部协同对象、外部责任人或外部状态，也不引入 `WAITING_SOURCE_FIX` 正式状态；改变责任人只使用 `TransferWorkItemEnvelope`。重新归集使用独立 operation ID、幂等键和状态。冻结期的确认映射与重新归集还必须绑定 W24 当前批次的 `migrationBatchId`、批次版本和稳定授权引用，缺任一项或授权范围不含“必要映射修复”即 fail-closed。映射提交结果不确定时不得在前端标记已解决；重新归集结果不确定时不回滚已经服务端确认的映射结论，且不得形成前端应收或自动跳下一项。
+只有“确认映射”使用 `CompleteWorkItemEnvelope`：它携带 `mappingTaskId`、`workItemId`、`subjectHash`、领取令牌、租约版本、映射任务版本、来源快照 ID 和当前映射谱系版本，领域映射变化与正式待办完成在同一事务提交。“请求来源修复”和“暂挂当前映射”是非终结任务动作，使用 `WorkItemActionEnvelope`；前者只追加当前映射任务内部证据/说明，不创建外部协同对象、外部责任人或外部状态，也不引入 `WAITING_SOURCE_FIX` 正式状态；改变责任人只使用 `TransferWorkItemEnvelope`。重新归集使用独立 operation ID、幂等键和状态。映射提交结果不确定时不得在前端标记已解决；重新归集结果不确定时不回滚已经服务端确认的映射结论，且不得形成前端应收或自动跳下一项。
 
 ### 7.3 禁止动作
 
@@ -275,8 +274,6 @@ type MallSyncQuery = {
     | "BASELINE"
     | "INCREMENTAL"
     | "SINGLE_ORDER"
-    | "MIGRATION_FINAL_INCREMENTAL"
-    | "MIGRATION_FULL_RECONCILIATION"
   mappingType?: string[]
   owner?: "mine" | string
   differenceType?: string[]
@@ -294,16 +291,6 @@ type MallSyncQuery = {
 
 type FirstPhaseMallSyncExecutionContext = {
   executionStage: "FIRST_PHASE_MALL_OWNED"
-  migrationBatchId?: never
-  expectedMigrationBatchVersion?: never
-  migrationAuthorizationId?: never
-}
-
-type MigrationFrozenMallSyncExecutionContext = {
-  executionStage: "MIGRATION_FROZEN"
-  migrationBatchId: string
-  expectedMigrationBatchVersion: string
-  migrationAuthorizationId: string
 }
 
 type ManualMallSyncGovernancePolicyView =
@@ -322,26 +309,16 @@ type MallSyncContext = {
   manualGovernancePolicy: ManualMallSyncGovernancePolicyView
   ownership: {
     businessType: "VOUCHER"
-    stage: "FIRST_PHASE_MALL_OWNED" | "MIGRATION_FROZEN" | "SECOND_PHASE_ERP_OWNED"
-    ownerSystemSummary: "MALL" | "MIXED" | "ERP"
+    stage: "FIRST_PHASE_MALL_OWNED" | "ARCHIVED"
+    ownerSystemSummary: "MALL" | "ERP"
     mallOwnedOrderCount?: number
     erpOwnedOrderCount?: number
     syncDirection:
       | "MALL_TO_ERP_COMMERCIAL_FACT"
-      | "FROZEN_FOR_MIGRATION"
       | "SEALED_HISTORY"
     firstPhasePollingEnabled: boolean
-    writeFrozenAt?: string
     sealedAt?: string
     finalWatermark?: string
-    migrationReference?: string
-    migrationExecutionContext?: MigrationFrozenMallSyncExecutionContext & {
-      allowedModes: Array<
-        | "MIGRATION_FINAL_INCREMENTAL"
-        | "MIGRATION_FULL_RECONCILIATION"
-        | "NECESSARY_MAPPING_REPAIR"
-      >
-    }
   }
   freshness: {
     currentWatermark?: string
@@ -473,7 +450,7 @@ type MappingTaskView =
 - 来源快照 detail 仅返回当前角色允许的白名单字段；禁止字段不得先返回再在组件隐藏。
 - `manualGovernancePolicy` 缺失时，服务端不得在 `allowedActions` 返回人工立即增量或按单补拉；配置后返回固定执行模式和版本。系统定时增量不读取该人工策略，也不因其缺失停摆。
 - `MappingTaskView` 以 `ownerRoutingState` 强判别：`MISSING` 分支禁止 `ownerRole` 和 `workItem`，`CONFIGURED` 分支强制返回唯一 `ownerRole` 与正式 `workItem`；前端不得把可选字段补成可执行责任路由。
-- `migrationExecutionContext` 仅在 W24 当前批次、冻结状态和用户权限均有效时返回；缺失时冻结期所有执行与必要映射写动作保持禁用。它是可审计执行上下文，不代替服务端逐次授权校验。
+- 封存（`ARCHIVED`）后 `allowedActions` 不再返回任何同步、核对或映射写动作；历史查询与证据追溯仍可用。主责迁移是一次性运营行为，不属于 W17 可执行工作面，契约不提供任何迁移执行上下文。
 
 ### 8.2 提交
 
@@ -565,39 +542,9 @@ type FirstPhaseTriggerMallSyncCommand =
   | ManualSingleOrderMallSyncCommand
   | FirstPhaseOperationalMallSyncCommand
 
-type MigrationFrozenTriggerMallSyncCommand =
-  MallSyncCommandBase &
-  MigrationFrozenMallSyncExecutionContext &
-  (
-    | {
-        mode: "MIGRATION_FINAL_INCREMENTAL"
-        reason: string
-        baseCursorVersion?: number
-        reconciliationBoundary?: never
-        externalOrderNo?: never
-        failedJobId?: never
-      }
-    | {
-        mode: "MIGRATION_FULL_RECONCILIATION"
-        reason: string
-        reconciliationBoundary: { asOf: string; sourceDigest?: string }
-        baseCursorVersion?: never
-        externalOrderNo?: never
-        failedJobId?: never
-      }
-  )
+type TriggerMallSyncCommand = FirstPhaseTriggerMallSyncCommand
 
-type TriggerMallSyncCommand =
-  | FirstPhaseTriggerMallSyncCommand
-  | MigrationFrozenTriggerMallSyncCommand
-
-type MallMappingExecutionContext =
-  | (FirstPhaseMallSyncExecutionContext & {
-      migrationPurpose?: never
-    })
-  | (MigrationFrozenMallSyncExecutionContext & {
-      migrationPurpose: "NECESSARY_MAPPING_REPAIR"
-    })
+type MallMappingExecutionContext = FirstPhaseMallSyncExecutionContext
 
 type ConfirmMappingDecisionPayload = {
   mappingTaskId: string
@@ -711,18 +658,18 @@ type GovernanceActionResult = {
 
 W17 直接复用 W02 的 `WorkItemActionEnvelope`、`CompleteWorkItemEnvelope`、`TransferWorkItemEnvelope` 及对应结果类型，不重定义同名或私有领取信封。`completionAction` 由服务端当前 `work_item` 元数据约束；客户端不能另传任意完成动作。
 
-- `TriggerMallSyncCommand` 以 `executionStage` 强判别：`FIRST_PHASE_MALL_OWNED` 只能使用普通增量、按单补拉、普通失败重试或普通核对，并通过 `never` 禁止携带任何迁移字段；`MIGRATION_FROZEN` 只接受 `MIGRATION_FINAL_INCREMENTAL` 或 `MIGRATION_FULL_RECONCILIATION`，且强制携带 W24 当前 `migrationBatchId`、`expectedMigrationBatchVersion` 与 `migrationAuthorizationId`。`migrationAuthorizationId` 只是稳定授权记录引用，不是令牌或秘密，不能单独构成授权。
+- `TriggerMallSyncCommand` 以 `executionStage` 强判别：`FIRST_PHASE_MALL_OWNED` 只能使用普通增量、按单补拉、普通失败重试或普通核对；阶段已封存时同步、核对及一切执行类写命令整体拒绝。
 - 定时增量只走 `ScheduledIncrementalMallSyncCommand`，显式禁止人工治理字段，不依赖人工策略。人工立即增量与按单补拉只能走对应 manual 分支：服务端必须重读当前策略及版本，并校验提交模式与策略一致；单人模式要求理由，双人模式要求有效、未消费且满足岗位分离的 `dualControlAuthorizationId`，两种控制不由客户端混用或降级。策略缺失、版本不一致、模式不一致或授权无效均整体拒绝，不创建同步任务。
-- `executionStage` 是并发校验值，不是客户端可选择的放行开关。所有同步、确认映射与重新归集提交都先由服务端重读当前主责阶段；实际已冻结却提交普通一期分支时必须整体拒绝，未知迁移字段也按契约错误拒绝而不是忽略。
-- `INCREMENTAL` 和 `MIGRATION_FINAL_INCREMENTAL` 的实际查询范围由服务端根据安全水位、重叠窗口和 `safeNow` 生成；客户端不能传任意范围覆盖水位。
-- 普通按单补拉必须使用协议规范化后的原来源单号，不创建新的来源身份；冻结期不存在单号补拉、普通失败重试或普通每日核对分支，旧页面请求也必须被服务端拒绝。
-- 冻结分支在接受前必须重读 W24 当前批次，校验批次仍处于冻结、版本一致、授权记录仍有效且来源/范围/动作匹配；失败即不创建任务、不推进水位、不写核对证据。冻结任务失败只能沿同一批次和授权上下文查询或幂等续跑，不能降级到一期普通重试。
+- `executionStage` 是并发校验值，不是客户端可选择的放行开关。所有同步、确认映射与重新归集提交都先由服务端重读当前主责阶段；实际已封存却提交普通一期分支时必须整体拒绝，未知阶段值也按契约错误拒绝而不是忽略。
+- `INCREMENTAL` 的实际查询范围由服务端根据安全水位、重叠窗口和 `safeNow` 生成；客户端不能传任意范围覆盖水位。
+- 普通按单补拉必须使用协议规范化后的原来源单号，不创建新的来源身份；已封存后不存在单号补拉、普通失败重试或普通每日核对分支，旧页面请求也必须被服务端拒绝。
+- 已封存（`ARCHIVED`）后服务端不再接受任何增量、补拉、重试、核对、确认映射或重新归集写命令；旧页面或重放请求一律整体拒绝，只保留历史证据查询与追溯。
 - 映射目标类型、稳定身份、有效性和关系角色由服务端校验；相似候选不构成确认。
-- `ConfirmMappingCommand` 同时校验 `work_item` 领取人、不可伪造领取令牌、租约版本、任务对象版本、`subjectHash` 和岗位分离；追加映射结论、更新 `master_mapping_task` 与完成当前 `work_item` 必须处于同一事务。完成待办本身不能脱离该强类型事务修改业务事实。若 `executionStage=MIGRATION_FROZEN`，同一事务还必须校验当前 W24 批次版本及 `migrationAuthorizationId` 覆盖 `NECESSARY_MAPPING_REPAIR`；缺失、失效或越界均整体不提交。
+- `ConfirmMappingCommand` 同时校验 `work_item` 领取人、不可伪造领取令牌、租约版本、任务对象版本、`subjectHash` 和岗位分离；追加映射结论、更新 `master_mapping_task` 与完成当前 `work_item` 必须处于同一事务。完成待办本身不能脱离该强类型事务修改业务事实。若 `executionStage=ARCHIVED`，确认映射整体不提交。
 - `RequestSourceFixCommand` 只向当前 `master_mapping_task` 追加内部说明和证据，成功返回 `mappingEvidenceEntryId`，并保持正式待办 `PENDING/IN_PROGRESS`、`mappingTaskStatus=PENDING`；不得创建外部协同对象、外部 `assignee/status`，不得写 `WAITING_SOURCE_FIX`，也不得完成、关闭、转交任务或自动下一项。新快照沿原来源身份到达后继续同一映射任务。
 - `DeferMappingTaskCommand` 只追加结构化暂挂原因、备注和本轮 `queueContextId`。成功必须返回 `DeferMappingTaskResult`，其统一信封状态为 `PENDING/IN_PROGRESS`，不写也不改变 `mappingTaskStatus`，且没有 `paused` 状态；`leaseDisposition` 决定是否清除当前会话租约，`nextQueueCursor` 只能移动同一 `queueContextId` 内的浏览位置，不能重排正式队列或暗示任务完成。
 - 若需改变责任人，必须另交 `TransferMappingWorkItemCommand`；原任务转交、原租约失效和后继任务创建服从 W02 原子语义，不写映射结论、不改变 `mappingTaskStatus`。
-- 重新归集复用原快照、原销售来源身份和业务幂等约束；不得建立第二张销售单。冻结期 `ConfirmMappingResult` 回显已提交的批次执行上下文，后续 `ReapplyMallSnapshotCommand` 必须携带完全相同的 `migrationBatchId`、`expectedMigrationBatchVersion`、`migrationAuthorizationId` 与用途并再次服务端校验；不能从普通一期命令继承、补默认值或由前端伪造。若批次版本已变化，服务端 fail-closed，并要求回 W24 重新取得当前授权上下文后再处理。
+- 重新归集复用原快照、原销售来源身份和业务幂等约束；不得建立第二张销售单。已封存后不再接受重新归集命令；历史证据经 `view=history` 只读追溯。
 - 确认映射提交 `UNKNOWN` 时保留查询前状态；来源修复请求或转交结果未知时同样不乐观改变任务/责任并停留当前项。重新归集 `UNKNOWN` 时映射仍保持 `RESOLVED`。各动作按自身 operation/idempotency identity 查询最终结果；只有明确无结果且服务端确认安全时，才使用原幂等键重试。
 
 ### 8.3 前端边界
@@ -746,10 +693,10 @@ W17 直接复用 W02 的 `WorkItemActionEnvelope`、`CompleteWorkItemEnvelope`�
 | 查询失败且无缓存 | `BusinessFailureState`，区分权限、网络、来源和投影故障 | 重试、返回其它模块 | 查询成功 |
 | 查询失败但有缓存 | 保留旧内容，水位标陈旧/刷新失败 | 允许只读查看；动作服务端重校验 | 重试成功 |
 | 人工同步治理策略未配置 | 页头与差异区保留“立即增量”“按单号补拉”的只读解释，动作禁用并显示 `MANUAL_GOVERNANCE_POLICY_MISSING` | 查看定时同步、历史水位与配置入口；不能人工触发 | 策略正式配置后重新查询，按返回的单人理由或双人授权模式执行 |
-| 来源商城不可用 | 明确“商城继续运行，ERP 水位未推进”及最近成功水位 | 正常一期可安全重试；冻结期只能回 W24 当前批次续跑；业务映射旧快照仍按阶段条件处理 | 来源恢复后按对应阶段的原水位与执行上下文补齐 |
-| 冻结期收到普通一期动作 | 入口隐藏或禁用；旧页面请求显示“必须从 W24 当前迁移批次执行”，不创建后台任务 | 仅查看原请求和批次入口；不可按单补拉、普通重试或普通每日核对 | 返回 W24 取得当前批次授权，按最终增量/全量核对专用模式执行 |
+| 来源商城不可用 | 明确“商城继续运行，ERP 水位未推进”及最近成功水位 | 正常一期可安全重试；已封存后不重试、不推进；业务映射旧快照仍按阶段条件处理 | 来源恢复后按对应阶段的原水位补齐 |
+| 已封存后收到普通一期动作 | 入口隐藏或禁用；旧页面请求显示“W17 已封存为只读历史”，不创建后台任务 | 仅查看历史证据；不可按单补拉、普通重试或普通每日核对 | 历史证据经 `view=history` 只读追溯，当前动作转 W23/W29 |
 | 后台任务运行 | 常驻进度、范围和已处理数量 | 可离开页面；禁止重复触发同来源推进任务 | 任务终态刷新 |
-| 来源捕获部分失败 | 列出失败分页/对象；来源读取、白名单规范化或快照持久化未完成时明确“水位未推进” | 正常一期可安全重试/按单补拉；冻结期仅能沿 W24 原批次授权上下文续跑 | 原身份按对应阶段合法命令续跑并安全持久化成功 |
+| 来源捕获部分失败 | 列出失败分页/对象；来源读取、白名单规范化或快照持久化未完成时明确“水位未推进” | 正常一期可安全重试/按单补拉；已封存后不续跑 | 原身份按对应阶段合法命令续跑并安全持久化成功 |
 | 映射/应用失败 | 来源快照与已推进捕获水位保持不变，独立显示 `mappingTaskStatus`、责任待办、重新归集状态和业务影响 | 领取正式待办、修复映射、按原快照重新归集 | 映射与重新归集分别取得终态 |
 | 映射冲突 | 左右差异和当前谱系并列，提交禁用 | 刷新候选、请求责任人确认 | 形成明确映射或来源修复 |
 | 来源修复说明已记录 | 显示当前映射任务内的证据记录号、说明和证据；不显示外部责任人或外部状态；`mappingTaskStatus=PENDING`、待办保持 `PENDING/IN_PROGRESS` | 继续补充内部证据；如需换当前待办责任另行转交 | 新快照沿原身份到达后继续当前映射任务 |
@@ -758,8 +705,7 @@ W17 直接复用 W02 的 `WorkItemActionEnvelope`、`CompleteWorkItemEnvelope`�
 | 确认映射 / 重新归集成功 | `FormalActionResult` 固定展示映射/归集结果、销售单或应收引用、时间和下一步 | 打开 W05/W11、下一项 | 等待正式查询水位刷新 |
 | 重新归集结果不确定 | 固定结果区，`reapplyOperationStatus=UNKNOWN`；映射结论和已完成映射待办不回滚，不自动下一项 | 按 operation ID 查询最终结果、原幂等重试（服务端允许时） | 取得销售版本/应收终态 |
 | 字段级隐藏 | 来源字段标签保留、值掩码；候选按权限过滤 | 其余授权处理 | 权限更新后重查 |
-| 迁移维护窗口 | Banner 显示冻结时间、最终基线及商城/ERP 主责数量；业务写入、按单补拉、普通失败重试和普通每日核对禁用 | 查看证据；仅在 W24 当前批次授权下执行专用最终同步、全量核对和绑定同一上下文的必要映射确认/重新归集 | 最终基线确认后转封存；失败保持冻结并沿原批次授权上下文续跑 |
-| 主责已迁移 | Banner 显示封存时间/最终水位，活动写动作隐藏 | 查看历史、前往 W23/W24/W29 | 不恢复第一期写模式 |
+| 主责已迁移（封存） | Banner 显示封存时间/最终水位，活动写动作隐藏 | 查看历史、前往 W23/W29 | 不恢复第一期写模式 |
 | 权限收回 | 清除快照、候选和历史敏感值，切权限态 | 返回有权模块 | 权限恢复后重查 |
 
 ## 10. 响应式与键盘
@@ -793,7 +739,6 @@ W17 直接复用 W02 的 `WorkItemActionEnvelope`、`CompleteWorkItemEnvelope`�
 | 基础资料 | W14 | 卡券类目 SKU 候选稳定 ID/版本 | 返回后重新校验类目目标有效性 |
 | 导入与期初 | W18 | 期初基线批次、来源身份 | 基线完成后持续同步沿用同一来源身份 |
 | 执行投影 | W23 | 迁移后 ERP 销售版本和商城接收状态 | W17 只保留第一阶段历史，不处理当前投影 |
-| 主责迁移 | W24 | 最终水位、未解决映射、最终基线和封存证据 | 迁移完成后 W17 切历史态 |
 | 接口错误与对账 | W29 | 二期通用消息/错误/对账身份 | 返回 W17 时不混入第一阶段专用核对状态 |
 | 权限与审计 | W19 | 来源、任务、快照、映射或处理动作身份 | 返回原 detail |
 
@@ -808,10 +753,10 @@ W17 直接复用 W02 的 `WorkItemActionEnvelope`、`CompleteWorkItemEnvelope`�
 - [ ] 来源读取、规范化或快照安全持久化失败时捕获水位不推进；异步映射/重新归集失败保留差异但不回退已安全捕获水位，也不阻塞商城执行。
 - [x] 同步失败或差异处理不存在“在 ERP 手工补建销售单”入口。
 - [ ] 同一来源快照重复处理幂等；迟到、同刻冲突和 A→B→A 均按服务端证据展示。
-- [ ] 按单补拉、普通失败重试和普通每日核对只在 `FIRST_PHASE_MALL_OWNED` 可用；迁移冻结后旧页面或重放请求也不能绕过 W24。
+- [ ] 按单补拉、普通失败重试和普通每日核对只在 `FIRST_PHASE_MALL_OWNED` 可用；迁移时点后普通增量与核对停止，W17 转只读历史态，旧页面或重放请求也不能恢复。
 - [ ] 人工治理策略未配置时立即增量和按单补拉在界面禁用、服务端拒绝，定时增量不受影响；配置后服务端按策略版本严格执行单人理由或双人授权，不能由客户端降级。
-- [ ] `TriggerMallSyncCommand` 以阶段强判别：普通分支禁止迁移字段，冻结分支只允许专用最终增量/全量核对模式并强制携带当前批次、批次版本与稳定授权引用；任一不匹配整体不提交。
-- [ ] 迁移维护窗口内业务写入冻结并显示两侧主责数量，但 W24 当前批次仍能完成最终同步、全量核对和必要映射修复；最终基线确认后才永久封存，历史证据可查，当前动作正确导向 W23/W24/W29。
+- [ ] `TriggerMallSyncCommand` 以阶段强判别：`FIRST_PHASE_MALL_OWNED` 分支只允许普通增量、按单补拉、失败重试与核对；已封存后全部执行类命令整体拒绝，不允许以旧页面或重放绕过。
+- [ ] 一次性运营迁移完成后 W17 进入只读历史态（封存）：不再从商城拉取新商业事实，历史证据保留可查；当前动作正确导向 W23（执行投影）与 W29（通用错误对账）。
 
 ### 12.2 映射与核对
 
@@ -823,7 +768,7 @@ W17 直接复用 W02 的 `WorkItemActionEnvelope`、`CompleteWorkItemEnvelope`�
 - [x] `MappingTaskView` 按 `ownerRoutingState` 强判别：`MISSING` 不含 `ownerRole/workItem`，`CONFIGURED` 必含唯一 `ownerRole/workItem`。
 - [x] 映射处理清楚展示来源事实、ERP 候选、当前谱系、业务影响和确认依据。
 - [ ] 差异解决后使用原快照和原来源身份重新归集，不创建重复销售单。
-- [ ] 冻结期必要映射确认与重新归集携带并服务端校验同一 W24 批次执行上下文；实际阶段已冻结却提交普通一期分支，以及上下文缺失、过期、版本变化或授权越界，均 fail-closed，不从普通一期命令补默认值。
+- [ ] 已封存后确认映射与重新归集不可执行，普通一期写命令整体 fail-closed，不从历史态恢复任何写动作。
 - [ ] 未完成映射不得形成错误应收、收入或经营归属。
 - [ ] 每日核对比较完整内容指纹而非仅状态/金额，并只产生差异和任务。
 - [ ] 映射状态与重新归集操作状态独立；重新归集成功有 ERP 销售单、版本及适用应收结果，结果未知不回滚已解决映射、不自动完成/下一项。

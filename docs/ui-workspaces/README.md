@@ -76,7 +76,6 @@ W 文件不得重定义业务状态机，也不得为了版面方便改变金额
 | W21 | 供应商商品库与供给管理 | M2 + M3 + M4 | `/procurement/supplier-catalog` | [w21-supplier-catalog.md](w21-supplier-catalog.md) | 已确认业务方向 |
 | W22 | 商品发布 | M2 + M4 | `/commerce/publications` | [w22-product-publication.md](w22-product-publication.md) | 草稿 |
 | W23 | 执行投影 | M2 + M4 | `/commerce/execution-projections` | [w23-execution-projection.md](w23-execution-projection.md) | 草稿 |
-| W24 | 主责迁移批次 | M7 | `/governance/ownership-migrations` | [w24-ownership-migration.md](w24-ownership-migration.md) | 草稿 |
 | W25 | 商城消费订单 | M2 + M4 | `/commerce/consumption-orders` | [w25-mall-consumption-orders.md](w25-mall-consumption-orders.md) | 草稿 |
 | W26 | 供应商订单 | M2 + M4 | `/supplier-api/orders` | [w26-supplier-orders.md](w26-supplier-orders.md) | 草稿 |
 | W27 | API 结算 | M2 + M4 | `/supplier-api/settlements` | [w27-api-settlement.md](w27-api-settlement.md) | 草稿 |
@@ -85,3 +84,5 @@ W 文件不得重定义业务状态机，也不得为了版面方便改变金额
 | W30 | 历史消费回填 | M7 | `/governance/history-backfill` | [w30-historical-consumption-backfill.md](w30-historical-consumption-backfill.md) | 草稿 |
 
 索引中的路由是工作面级导航契约。对象详情、编辑态、侧栏和弹窗的具体路径或状态由各 W 文件定义；若调整主路由，必须同步本索引、导航配置和所有跨 W 跳转。
+
+> 注：W24 主责迁移已于 2026-08-04 取消（主责迁移为一次性运营行为，不建专用数据与页面，见 erp-data-model.md §6.16）。

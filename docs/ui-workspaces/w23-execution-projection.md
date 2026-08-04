@@ -123,7 +123,7 @@ W23 对象页签身份为 `sales-projection:{projectionId}`，标题为 `投影 
 | 身份 | `salesOrderId` / `salesOrderNo` | 销售单 | `sales_order` | 稳定身份；列表固定列 | 按销售单数据范围 |
 | 版本 | `salesOrderRevisionNo` | ERP 销售版本 | `sales_order_projection_revision.sales_order_revision_id` | 不可变版本号 | 可见投影即可见 |
 | 版本 | `projectionRevisionNo` | 执行投影版本 | 投影修订 | 与 ERP 版本一对一 | 可见 |
-| 来源 | `projectionSource` | 版本来源 | 迁移基线 / ERP 销售版本 | 迁移基线明确标注，不声称新销售版本 | 可见 |
+| 来源 | `projectionSource` | 版本来源 | 迁移时点当前 ERP 销售版本 / ERP 销售版本 | 迁移时点版本明确标注，不声称新销售版本 | 可见 |
 | 商城 | `targetMallName` | 目标商城 | 稳定投影 | 按商城范围 | 可见 |
 | 销售事实 | `salesOrderStatus` | 销售单状态 | W05 查询投影 | 只读摘要；失败时仍显示已生效 | 按销售权限 |
 | 接收 | `deliveryStatus` | 商城接收状态 | `sales_order_projection_delivery` | 待发送、发送中、重试中、已确认、失败、转人工 | 可见 |
@@ -164,7 +164,7 @@ W23 在任何角色下都不得增加玩法规则、成交金额、配赠、税�
 | 搜索 | 空 | `q` | 精确销售单号、投影编号；客户名按权限模糊搜索 |
 | 目标商城 | 全部有权商城 | `mall` | 服务端过滤 |
 | 接收状态 | 待处理 + 失败 | `deliveryStatus` | 运营默认关注未确认；销售从 W05 进入不套此默认 |
-| 投影来源 | 全部 | `source` | 迁移基线 / ERP 销售版本 |
+| 投影来源 | 全部 | `source` | 迁移时点当前 ERP 销售版本 / ERP 销售版本 |
 | 超时分组 | 全部 | `latency` | 正常、接近 SLA、超过 SLA；阈值来自服务端配置 |
 | 版本差异 | 全部 | `reconciliation` | 只查看 ERP 当前与商城确认不一致项 |
 | 负责人 | 当前角色范围 | `owner` | 自动重试、运营协同、人工错误责任队列 |
@@ -403,7 +403,7 @@ type ProjectionDeliveryResult = {
 | 今日工作台 / 待办 | W01 / W02 | 正式错误待办只携带 `workItemId` 打开 W29，不直接进入 W23 | W29 完成或转交后回原任务队列 |
 | 销售单统一中心 | W05 | `salesOrderId`、`salesOrderRevisionId`、`section=collaboration` | W05 是单单据主入口；返回保留选中投影 |
 | 商品发布 | W22 | 无直接内容写入；仅目标商城协同状态 | 返回保留原投影筛选 |
-| 主责迁移 | W24 | `baselineProjectionRevisionId`、迁移批次 | 迁移基线只读；不在 W23 修改 |
+| 主责迁移 | 一次性运营行为 | 迁移时点当前版本（第一份投影修订） | 迁移时点版本只读；不在 W23 修改 |
 | 商城消费订单 | W25 | 原销售单身份；消费不按投影版本归集 | 返回保留消费订单上下文 |
 | 接口错误与对账 | W29 | `deliveryId`、`errorTaskId`、对账差异、原幂等键 | 处理后回 W23 刷新明确结果 |
 

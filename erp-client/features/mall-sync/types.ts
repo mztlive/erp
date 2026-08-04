@@ -15,12 +15,10 @@ export type DemoRole = "admin" | "sales" | "operations" | "finance"
 
 export type OwnershipStage =
   | "FIRST_PHASE_MALL_OWNED"
-  | "MIGRATION_FROZEN"
   | "SECOND_PHASE_ERP_OWNED"
 
 export type SyncDirection =
   | "MALL_TO_ERP_COMMERCIAL_FACT"
-  | "FROZEN_FOR_MIGRATION"
   | "SEALED_HISTORY"
 
 export type ManualGovernancePolicy =
@@ -33,17 +31,6 @@ export type ManualGovernancePolicy =
       policyVersion: string
       executionMode: "SINGLE_OPERATOR_REASON" | "DUAL_CONTROL_AUTHORIZATION"
     }
-
-export type MigrationExecutionContext = {
-  migrationBatchId: string
-  expectedMigrationBatchVersion: string
-  migrationAuthorizationId: string
-  allowedModes: Array<
-    | "MIGRATION_FINAL_INCREMENTAL"
-    | "MIGRATION_FULL_RECONCILIATION"
-    | "NECESSARY_MAPPING_REPAIR"
-  >
-}
 
 export type MallSyncMetric = {
   key: string
@@ -64,11 +51,8 @@ export type MallSyncOwnership = {
   erpOwnedOrderCount?: number
   syncDirection: SyncDirection
   firstPhasePollingEnabled: boolean
-  writeFrozenAt?: string
   sealedAt?: string
   finalWatermark?: string
-  migrationReference?: string
-  migrationExecutionContext?: MigrationExecutionContext
   /** 商城可写边界文案 */
   mallWriteBoundary: string
   /** ERP 可写边界文案 */
@@ -110,8 +94,6 @@ export type MallSyncJobRow = {
     | "BASELINE"
     | "INCREMENTAL"
     | "SINGLE_ORDER"
-    | "MIGRATION_FINAL_INCREMENTAL"
-    | "MIGRATION_FULL_RECONCILIATION"
     | "RECONCILIATION"
   jobTypeLabel: string
   rangeStart?: string
@@ -289,7 +271,7 @@ export type ReconciliationBatch = {
 
 export type HistoryArchiveEntry = {
   id: string
-  kind: "SEAL" | "FINAL_SYNC" | "FINAL_RECON" | "MAPPING"
+  kind: "SEAL" | "MAPPING"
   title: string
   summary: string
   recordedAt: string
@@ -407,13 +389,11 @@ export const DEMO_ROLE_LABEL: Record<DemoRole, string> = {
 
 export const STAGE_LABEL: Record<OwnershipStage, string> = {
   FIRST_PHASE_MALL_OWNED: "商城主责",
-  MIGRATION_FROZEN: "迁移冻结",
   SECOND_PHASE_ERP_OWNED: "ERP 主责（已封存）",
 }
 
 export const DIRECTION_LABEL: Record<SyncDirection, string> = {
   MALL_TO_ERP_COMMERCIAL_FACT: "商城 → ERP 商业记录",
-  FROZEN_FOR_MIGRATION: "迁移冻结待封存",
   SEALED_HISTORY: "已封存 · 历史只读",
 }
 
@@ -437,8 +417,6 @@ export const JOB_TYPE_LABEL: Record<MallSyncJobRow["jobType"], string> = {
   BASELINE: "期初基线",
   INCREMENTAL: "增量拉取",
   SINGLE_ORDER: "单号补拉",
-  MIGRATION_FINAL_INCREMENTAL: "迁移最终增量",
-  MIGRATION_FULL_RECONCILIATION: "迁移全量核对",
   RECONCILIATION: "每日核对",
 }
 

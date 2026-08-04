@@ -31,7 +31,6 @@ WORKSPACE_NAV_GROUPS hrefs:
  - /supplier-api/settlements
  - /governance/mall-sync
  - /governance/imports
- - /governance/ownership-migrations
  - /governance/integration-errors
  - /governance/history-backfill
  - /system/access-audit
@@ -60,7 +59,6 @@ Registry navHrefs:
  - W21: /procurement/supplier-catalog
  - W22: /commerce/publications
  - W23: /commerce/execution-projections
- - W24: /governance/ownership-migrations
  - W25: /commerce/consumption-orders
  - W26: /supplier-api/orders
  - W27: /supplier-api/settlements

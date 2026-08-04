@@ -586,7 +586,7 @@ type ConsumptionOrderUtilityCommand =
 | 销售单中心 | W05 | `originSalesOrderId`、唯稳定一卡券明细、来源消费 ID | 返回聚焦 W25 来源追溯区 |
 | 商品 / SKU | W14 | `skuId`、下单快照 | 当前基础资料只作对照，不覆盖历史 |
 | 商品发布 | W22 | `productPublicationRevisionId` | 打开下单时修订；返回聚焦商品行 |
-| 主责迁移 / T | W24 | `cutoverId`、`enabledAt` | 只读追溯，W25 不改履约链 |
+| 主责迁移 | 一次性运营行为 | `cutoverId`、`enabledAt` | 只读追溯，W25 不改履约链 |
 | 供应商订单 | W26 | `supplierFulfillmentOrderId`、来源订单/明细 | W26 处理动作；返回保留子订单卡片 |
 | API 结算 | W27 | 供应商订单、成本/退款来源 | 返回 W25 成本区 |
 | 卡券消费与经营 | W28 | 客户、原销售单、卡实例、期间、消费条目 | 下钻打开 W25，返回保留分析筛选 |

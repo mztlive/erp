@@ -339,32 +339,6 @@ function projectMappingTask(
 }
 
 function buildOwnership(stage: OwnershipStage) {
-  if (stage === "MIGRATION_FROZEN") {
-    return {
-      businessType: "VOUCHER" as const,
-      stage,
-      ownerSystemSummary: "MIXED" as const,
-      mallOwnedOrderCount: 486,
-      erpOwnedOrderCount: 1_562,
-      syncDirection: "FROZEN_FOR_MIGRATION" as const,
-      firstPhasePollingEnabled: false,
-      writeFrozenAt: "2026-08-01T00:00:00+08:00",
-      migrationReference: "W24 · MIG-BATCH-202608",
-      migrationExecutionContext: {
-        migrationBatchId: "mig_batch_202608",
-        expectedMigrationBatchVersion: "v4",
-        migrationAuthorizationId: "auth_mig_202608_final",
-        allowedModes: [
-          "MIGRATION_FINAL_INCREMENTAL" as const,
-          "MIGRATION_FULL_RECONCILIATION" as const,
-          "NECESSARY_MAPPING_REPAIR" as const,
-        ],
-      },
-      mallWriteBoundary: "商城：冻结范围内业务写入禁用（由主责迁移批次约束）",
-      erpWriteBoundary:
-        "ERP：仅允许主责迁移授权的最终同步 / 全量核对 / 必要映射修复；禁止普通增量与按单补拉",
-    }
-  }
   if (stage === "SECOND_PHASE_ERP_OWNED") {
     return {
       businessType: "VOUCHER" as const,
@@ -376,9 +350,8 @@ function buildOwnership(stage: OwnershipStage) {
       firstPhasePollingEnabled: false,
       sealedAt: "2026-07-15T18:00:00+08:00",
       finalWatermark: "wm_final_phase1_20260715",
-      migrationReference: "W24 · 已封存",
       mallWriteBoundary: "第一期同步已封存；商城执行信息见执行信息页",
-      erpWriteBoundary: "ERP 主责；商城同步仅历史只读，当前治理见执行信息 / 主责迁移 / 接口错误中心",
+      erpWriteBoundary: "ERP 主责；商城同步仅历史只读，当前治理见执行信息 / 接口错误中心",
     }
   }
   return {
@@ -508,7 +481,7 @@ export async function fetchMallSyncPage(
       blockers.push({
         action: "RETRY_FAILED_JOB",
         code: "STAGE_NOT_FIRST_PHASE",
-        message: "按单补拉与普通失败重试仅在第一阶段可用；冻结期请回主责迁移批次续跑",
+        message: "按单补拉与普通失败重试仅在第一阶段可用；已封存后无第一期写动作",
       })
     }
     if (role !== "admin") {
@@ -692,7 +665,7 @@ export async function triggerManualIncremental(input: {
     return {
       status: "failed",
       code: "STAGE_NOT_FIRST_PHASE",
-      message: "立即增量仅在第一阶段可用；冻结期请从主责迁移当前批次执行最终同步",
+      message: "立即增量仅在第一阶段可用；已封存后无第一期写动作",
     }
   }
   const missing = assertManualGovernance(policy)
@@ -773,7 +746,7 @@ export async function triggerSingleOrderPull(input: {
     return {
       status: "failed",
       code: "STAGE_NOT_FIRST_PHASE",
-      message: "按单补拉仅在 FIRST_PHASE_MALL_OWNED 可用；冻结期旧请求亦被拒绝",
+      message: "按单补拉仅在 FIRST_PHASE_MALL_OWNED 可用；已封存后无第一期写动作",
     }
   }
   const missing = assertManualGovernance(policy)
@@ -841,7 +814,7 @@ export async function retryFailedJob(input: {
     return {
       status: "failed",
       code: "STAGE_NOT_FIRST_PHASE",
-      message: "普通失败重试仅第一阶段可用；冻结期回主责迁移原批次续跑",
+      message: "普通失败重试仅第一阶段可用；已封存后无第一期写动作",
     }
   }
   const job = [...sessionManualJobs, ...MALL_SYNC_JOBS].find(

@@ -33,7 +33,6 @@ const INDEX = [
   ["W21", "/procurement/supplier-catalog", "M3+M4"],
   ["W22", "/commerce/publications", "M2+M4"],
   ["W23", "/commerce/execution-projections", "M2+M4"],
-  ["W24", "/governance/ownership-migrations", "M7"],
   ["W25", "/commerce/consumption-orders", "M2+M4"],
   ["W26", "/supplier-api/orders", "M2+M4"],
   ["W27", "/supplier-api/settlements", "M2+M4"],
