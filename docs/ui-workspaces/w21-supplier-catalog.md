@@ -250,7 +250,7 @@ CreateOrLinkCompanySkuFromSupplierCatalog {
           detail_file_asset_ids[]?
         }
         company_sku {
-          sku_no?                 // 系统生成，可由采购覆盖
+          sku_no?                 // 仅业务编码；系统生成，可由采购覆盖，不参与身份恢复
           base_unit_id
           attribute_values[]      // 服务端派生 specification_signature
           barcode?
@@ -298,6 +298,11 @@ CreateOrLinkCompanySkuFromSupplierCatalog {
 分类必须允许最终确认的类型。字典项无法精确匹配、
 媒体未归档或启用 SKU 缺主图时必须补齐；不得伪造字典 ID 或长期媒体地址。新建公司的销售可见价和
 市场价均必填，写入新建 `sku_revision`，且不得由来源底价、正式供给价或彼此自动推导。关联已有公司 SKU 时不传也不修改这两项价格。
+
+新建分支不得接收客户端提供的 `company_sku_id`，也不得按来源 SKU 编码、拟定的公司
+`sku_no`、表格位置或“只有一个规格”猜测并复用既有公司 SKU 身份；服务端按规范化属性
+代码/值代码派生新 `specification_signature` 并分配新 `company_sku_id`。已有分支只引用已选定的
+`company_sku_id + expected_company_sku_revision_id`，且不能借关联命令改变其规格签名。
 
 `CREATE_COMPANY_PRODUCT_AND_SKU` 是单一数据库事务：创建公司 product/SKU 及其包含销售可见价和市场价的 `sku_revision`、精确
 SKU 映射、双价 offering 修订、审计、幂等结果与 outbox 必须一起

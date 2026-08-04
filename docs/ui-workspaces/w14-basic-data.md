@@ -162,6 +162,12 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 
 以 **SPU 为列表/详情主对象**，规格维度取值**组合生成 SKU**。界面**不展示、不手填「规格标识」**（`specification_signature` 由属性组合系统内部派生）。
 
+规格编辑必须先按规范化属性代码/值代码计算组合并展示“保留 / 新增 / 将停用”摘要。只有
+签名未变的组合沿用原 `skuId`；新组合不携带旧 `skuId`，由服务端分配新身份；被移除的组合
+不从历史中删除，而在同一保存事务中停用原 SKU。`skuNo` 允许为新组合生成或由业务覆盖，
+但只是全局唯一业务编码，不能按编号、行序号或“当前仅一行”恢复旧 `skuId`，也不能重用已
+停用 SKU 的编号绑定新组合。
+
 | 分区 | 字段 | 控件 | 必填 | 归属 | 说明 |
 | --- | --- | --- | --- | --- | --- |
 | 商品信息 | 名称 | 文本 | 是 | SPU | 商品族名称 |
@@ -245,7 +251,7 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 - 默认展示“当前时点生效版本”；未来版本明确标“待生效”，历史版本明确标“已结束”。启用/停用始终作为独立生命周期字段展示，不把 `FUTURE` 或 `HISTORICAL` 填入启停状态。
 - 同一对象同类修订的生效区间不得重叠；创建新版本时服务端返回冲突位置。
 - 停用不是删除。已被历史单据引用的身份和版本永久保留。
-- 规格取值组合决定 SKU 身份；系统内部计算 `specification_signature`，UI 不展示手填「规格标识」。同一 SKU 不得通过修订改掉已落库的规格身份组合。
+- 规格取值组合决定 SKU 身份；系统内部计算 `specification_signature`，UI 不展示手填「规格标识」。同一 SKU 不得通过修订改掉已落库的规格身份组合。编辑时按签名原子完成：未变组合保留身份、新组合创建新 SKU、移除组合停用旧 SKU；`skuNo` 不能参与身份匹配。
 - 已被正式单据使用的 SKU 不得修改基础单位；界面提供“停用并新建 SKU”，不提供强行修改。
 - 仓库仍有库存或有效预占时不得停用；阻塞原因必须展示数量摘要和 W10 钻取入口。
 
@@ -392,7 +398,7 @@ type MasterDataRevisionResult = {
 }
 ```
 
-正式 API 必须按资源使用强类型字段，不得直接采用示例中的通用 `Record` 作为长期契约。商品与 SKU 的 `fields` 至少包含：`spu`、必填 `productKind`、可选 `description`、`baseUnit`（单位字典 ID/代码）、`categoryId`、`brandId`、规格维度、`skus[]`；`productKind` 写入 `product.product_kind`，创建后不可变，不得从 `categoryId` 推导。每个 SKU 含稳定 `skuId`（保存时由服务端分配）、`skuNo`（产品编码，系统生成可覆盖）、`mainImage`、可选 `barcode`、`salesVisiblePrice` 与 `marketPrice`；后两项属于 `sku_revision`，不是独立商品池条目或修订。SPU 可含 `carouselImages` / `detailImages`。销售侧的「公司商品池」查询只投影 SKU 启用状态、当前 `salesVisiblePrice` 和有效 offering 所得资格，不产生独立 ID 或写入命令。商品与 SKU 契约**不得**包含默认 `supplierId`、`fulfillmentResponsibility`、`inputTaxRate`、`dropship*` 或 `bulk*` 供给字段；这些字段只进入 W21 的强类型 `supplier_offering` 契约。分类字段含 `code`、可选 `parent` / `productKind`；分类的适用类型只用于校验与筛选，不能成为公司商品类型的事实来源。品牌字段含 `code`。供应商 `fields` 至少包含：`company`（企业主体）、`contactName` / `contactPhone` / `address`、`settlement` / `capability` / `businessCategory` / `signingEntity` / `paymentEntity`、`qualification` / `contractFile` / `authorizationFile` / `foodLicense` / `legalPersonIdCard` 及对应合同与授权有效期、`taxNo` / `bankName` / `bankAccount` / `invoiceType` / `invoiceTaxRate`、`initialScore` / `supplierRating` / `currentScore`。所有表单使用 TanStack Form；生效区间、规格身份、基础单位、商品类型与分类兼容性、分类/品牌启用状态、主图完整性、供应商能力/资质及仓库占用由服务端最终校验。
+正式 API 必须按资源使用强类型字段，不得直接采用示例中的通用 `Record` 作为长期契约。商品与 SKU 的 `fields` 至少包含：`spu`、必填 `productKind`、可选 `description`、`baseUnit`（单位字典 ID/代码）、`categoryId`、`brandId`、规格维度、`skus[]`；`productKind` 写入 `product.product_kind`，创建后不可变，不得从 `categoryId` 推导。每个 SKU 含 `skuNo`（产品编码，系统生成可覆盖）、属性值、`mainImage`、可选 `barcode`、`salesVisiblePrice` 与 `marketPrice`；编辑既有且签名未变的行还须携带稳定 `skuId` 与 `expectedSkuRevisionId`，新增签名不得由客户端指定或猜测旧 `skuId`。服务端规范化属性代码/值代码后核对签名，以商品期望修订和所有受影响 SKU 期望修订原子提交“保留 / 新建 / 停用”集合；不得按 `skuNo`、数组位置或单行回退匹配身份。两项价格属于 `sku_revision`，不是独立商品池条目或修订。SPU 可含 `carouselImages` / `detailImages`。销售侧的「公司商品池」查询只投影 SKU 启用状态、当前 `salesVisiblePrice` 和有效 offering 所得资格，不产生独立 ID 或写入命令。商品与 SKU 契约**不得**包含默认 `supplierId`、`fulfillmentResponsibility`、`inputTaxRate`、`dropship*` 或 `bulk*` 供给字段；这些字段只进入 W21 的强类型 `supplier_offering` 契约。分类字段含 `code`、可选 `parent` / `productKind`；分类的适用类型只用于校验与筛选，不能成为公司商品类型的事实来源。品牌字段含 `code`。供应商 `fields` 至少包含：`company`（企业主体）、`contactName` / `contactPhone` / `address`、`settlement` / `capability` / `businessCategory` / `signingEntity` / `paymentEntity`、`qualification` / `contractFile` / `authorizationFile` / `foodLicense` / `legalPersonIdCard` 及对应合同与授权有效期、`taxNo` / `bankName` / `bankAccount` / `invoiceType` / `invoiceTaxRate`、`initialScore` / `supplierRating` / `currentScore`。所有表单使用 TanStack Form；生效区间、规格身份、基础单位、商品类型与分类兼容性、分类/品牌启用状态、主图完整性、供应商能力/资质及仓库占用由服务端最终校验。
 
 当 `objectType/resource="warehouses"` 时，Q1 未确认期间查询契约不变，但 `allowedActions` 不得包含创建、形成版本、停用或策略维护；所有仓库写命令由服务端以 `WAREHOUSE_WRITE_OWNER_UNCONFIRMED` fail-closed。客户端不能通过通用 `CreateMasterDataRevisionCommand`、管理员身份或隐藏入口绕过该门禁。
 
@@ -471,7 +477,7 @@ type MasterDataRevisionResult = {
 - [ ] 商品与 SKU 使用详情页维护；`product_kind` 必须作为独立必填下拉并在创建后只读，不能由分类派生；基础单位 / 分类 / 品牌为下拉且分类须兼容商品类型；主图必填且以 1:1 小方块上传/预览，轮播图与详情图允许空；销售可见价与市场价写 SKU 修订；每个已保存 SKU 的供给列只显示供应商数量，悬停面板展示供应商列表并可「添加供应商」或「查看全部供给」；库存列只有「查看库存」链接，不再展示独立台账徽标。当前前端尚缺公司商品 `product_kind` 字段；若仍保留独立 `product_pool_entry` / `sellable-items` mock，也须迁为公司 SKU 的销售资格查询视图，因此本项不能标记已完成。
 - [x] 商品分类、品牌可在 W14 独立维护，并作为 SKU 下拉数据源。
 - [x] 商品分类采用树形维护（父子关系、路径、防环）；业务组件提供 `CategoryCombobox`、`BrandCombobox`。
-- [ ] 有效期重叠、SKU 规格身份变化、基础单位变更和有库存仓库停用均被阻断并解释。
+- [ ] 有效期重叠、SKU 规格身份变化、基础单位变更和有库存仓库停用均被阻断并解释；规格编辑可证明签名未变保留 `skuId`、新签名分配新 `skuId`、移除签名停用旧 SKU 且保留历史，并拒绝按 `skuNo` 或单行回退重绑身份。当前前端 `session.ts::withStableSkuIds` 仍按 `skuNo` 恢复 `skuId`，`product-model.ts::rebuildSkusFromSpecs` 仍在新旧都只有一行时无条件复用旧行，属于一期代码缺口，本项不能标记完成。
 
 ### 12.2 业务页选用与 W14 边界
 
