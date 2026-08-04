@@ -3490,9 +3490,13 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 DRAFT
   → PENDING_PROCUREMENT_CONFIRMATION
   → EFFECTIVE
-  → FULFILLING
   → CLOSED
 ```
+
+其中 `FULFILLING → CLOSED` 不是主状态迁移：`FULFILLING` 是"履约中"展示复合态，
+由 `fulfillment_progress` 推导；进入 `CLOSED` 只表示 `close_status` 置为关闭。
+正式主状态 `commercial_status` 仅保存 `DRAFT / PENDING_PROCUREMENT_CONFIRMATION /
+EFFECTIVE / VOIDED` 4 值，禁止把展示复合态写回主状态。
 
 分支：
 
