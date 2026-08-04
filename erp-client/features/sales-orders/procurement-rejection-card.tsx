@@ -39,7 +39,20 @@ import type {
   ProcurementRejectionResolution,
   SalesOrderListItem,
 } from "@/features/sales-orders/types"
-import { resultText, versionText } from "@/lib/ui-text"
+import { resultText } from "@/lib/ui-text"
+
+const REJECT_REASON_LABEL: Record<string, string> = {
+  MARGIN_TOO_LOW: "预计毛利过低",
+  COST_TOO_HIGH: "采购成本过高",
+  ITEM_UNAVAILABLE: "商品/服务无法采购",
+  TERMS_UNCLEAR: "商业条件不清晰",
+}
+
+const WORK_ITEM_STATUS_LABEL: Record<string, string> = {
+  UNCLAIMED: "待领取",
+  CLAIMED: "处理中",
+  COMPLETED: "已完成",
+}
 
 const priceSchema = z.object({
   unitPriceGross: z
@@ -50,7 +63,7 @@ const priceSchema = z.object({
 })
 
 const lowMarginSchema = z.object({
-  reason: z.string().trim().min(8, "请填写至少 8 字的承接理由"),
+  reason: z.string().trim().min(8, "请填写至少 8 字的理由"),
 })
 
 const voidSchema = z.object({
@@ -70,8 +83,7 @@ type ProcurementRejectionCardProps = {
 }
 
 /**
- * 采购驳回后仅三条固定出路：改品/改价重提、低毛利承接、不做并作废。
- * 不提供通用重提或恢复旧 W07 任务入口。
+ * 采购驳回后三条处理方式：改完再报、低价请领导批、不做了作废。
  */
 export function ProcurementRejectionCard({
   order,
@@ -115,10 +127,9 @@ export function ProcurementRejectionCard({
       })
       setResult({
         status: "succeeded",
-        title: "草稿已改价",
-        description:
-          "已相对被驳回提交修改销售价格，可「改品/改价后重提」。",
-        reference: `DRAFT-${order.documentNumber}`,
+        title: "改价已保存",
+        description: "可以点「改完再报给采购」继续。",
+        reference: order.documentNumber,
       })
     },
   })
@@ -130,11 +141,11 @@ export function ProcurementRejectionCard({
       setPendingPayload({ lowMarginReason: value.reason.trim() })
       setConfirm({
         action: "REQUEST_LOW_MARGIN_ACCEPTANCE",
-        title: "确认申请照原条件低毛利承接",
+        title: "确认：按原条件请领导批低毛利",
         effects: [
-          "冻结新提交并记录提交内容版本",
-          "申请低毛利上级确认",
-          "此时不创建采购确认任务、不使销售生效",
+          "按被驳回时的商品与价格申请",
+          "交给销售上级确认是否接受低毛利",
+          "领导通过前不会再推给采购，本单也不会生效",
         ],
       })
     },
@@ -147,11 +158,11 @@ export function ProcurementRejectionCard({
       setPendingPayload({ voidReason: value.reason.trim() })
       setConfirm({
         action: "VOID_AFTER_REJECTION",
-        title: "确认不做并作废",
+        title: "确认：不做了，作废本单",
         effects: [
-          "生效前销售单置为作废",
-          "完整保留旧提交、采购驳回与任务历史",
-          "不创建任何后继任务",
+          "本单作废，不能再继续履约",
+          "采购驳回与历史记录会保留备查",
+          "不会再生成后续采购确认",
         ],
       })
     },
@@ -171,6 +182,14 @@ export function ProcurementRejectionCard({
     rejection.reviewStatus === "VOIDED" ||
     Boolean(rejection.resolutionOutcome)
 
+  const reasonLabel =
+    REJECT_REASON_LABEL[rejection.rejectReasonCode] ??
+    rejection.rejectReasonCode
+
+  const resubmitBlockerText = resubmitBlocker
+    ? friendlyResubmitBlocker(resubmitBlocker.reason)
+    : null
+
   return (
     <Card size="sm" className="border-warning/40">
       <CardHeader className="border-b">
@@ -179,19 +198,19 @@ export function ProcurementRejectionCard({
             className="size-4 text-warning"
             aria-hidden="true"
           />
-          <CardTitle>采购驳回 · 固定出路</CardTitle>
+          <CardTitle>采购未通过，请销售处理</CardTitle>
           <Badge variant="warning">
             {rejection.reviewStatus === "PENDING_LOW_MARGIN_MANAGER"
-              ? "待低毛利上级确认"
+              ? "等领导批低毛利"
               : rejection.reviewStatus === "VOIDED"
                 ? "已作废"
                 : rejection.reviewStatus === "RESOLVED"
                   ? "已处理"
-                  : "待销售处理"}
+                  : "待你处理"}
           </Badge>
         </div>
         <CardDescription>
-          仅提供改品/改价重提、照原条件低毛利承接、不做并作废三条出路；旧任务仅作历史引用。
+          任选一种：改商品/改价后再报采购、按原条件请领导批低毛利，或作废本单。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -204,8 +223,8 @@ export function ProcurementRejectionCard({
             facts={[
               { label: "销售单", value: order.documentNumber },
               {
-                label: "原提交",
-                value: `#${rejection.rejectedSubmissionNo}`,
+                label: "被驳回的那一版",
+                value: `第 ${rejection.rejectedSubmissionNo} 次报给采购`,
               },
             ]}
           />
@@ -219,48 +238,26 @@ export function ProcurementRejectionCard({
                 : "success"
             }
           >
-            <AlertTitle>
-              处理结果 · {rejection.resolutionOutcome.reference}
-            </AlertTitle>
+            <AlertTitle>处理结果</AlertTitle>
             <AlertDescription>
               {rejection.resolutionOutcome.detail}
               {rejection.resolutionOutcome.newWorkItemId
-                ? ` · 新任务 ${rejection.resolutionOutcome.newWorkItemId}`
+                ? " · 已生成后续待办，请相关同事继续处理。"
                 : null}
             </AlertDescription>
           </Alert>
         ) : null}
 
-        <section aria-label="被驳回提交">
-          <h3 className="text-sm font-semibold">被驳回提交（只读）</h3>
+        <section aria-label="采购驳回说明">
+          <h3 className="text-sm font-semibold">采购为什么驳回</h3>
           <dl className="mt-2 grid gap-px overflow-hidden rounded-lg border border-grid bg-grid sm:grid-cols-2">
+            <Fact label="原因" value={reasonLabel} />
             <Fact
-              label="提交号"
-              value={`#${rejection.rejectedSubmissionNo}`}
-              numeric
-            />
-            <Fact
-              label="提交身份"
-              value={rejection.rejectedSubmissionId}
-              numeric
-            />
-            <Fact
-              label={versionText.dataVersion}
-              value={rejection.rejectedSubjectHash}
-              numeric
-            />
-            <Fact
-              label="采购确认"
-              value={rejection.rejectedProcurementConfirmationId}
-              numeric
-            />
-            <Fact label="驳回原因码" value={rejection.rejectReasonCode} />
-            <Fact
-              label="处理人 / 时间"
+              label="谁驳回 / 何时"
               value={`${rejection.rejectedByLabel} · ${rejection.rejectedAt}`}
             />
             <Fact
-              label="驳回说明"
+              label="说明"
               value={rejection.rejectComment}
               className="sm:col-span-2"
             />
@@ -282,11 +279,16 @@ export function ProcurementRejectionCard({
                 numeric
               />
             ) : null}
+            <Fact
+              label="报给采购的次数"
+              value={`第 ${rejection.rejectedSubmissionNo} 次`}
+              numeric
+            />
           </dl>
         </section>
 
-        <section aria-label="草稿差异">
-          <h3 className="text-sm font-semibold">相对被驳回提交的草稿差异</h3>
+        <section aria-label="你已改了什么">
+          <h3 className="text-sm font-semibold">相对被驳回内容，草稿有何变化</h3>
           <ul className="mt-2 space-y-1.5 text-sm" role="list">
             {rejection.draftDifference.diffSummary.map((item) => (
               <li
@@ -301,14 +303,16 @@ export function ProcurementRejectionCard({
             ))}
           </ul>
           <p className="mt-2 text-xs text-muted-foreground">
-            改品/改价：
+            商品/价格：
             {rejection.draftDifference.changedItemOrService ||
             rejection.draftDifference.changedSalesPrice
-              ? "已检测到变化"
-              : "未变化"}
+              ? "已有改动"
+              : "还没改"}
             {" · "}
-            商业条件未变：
-            {rejection.draftDifference.commercialTermsUnchanged ? "是" : "否"}
+            与原报采购内容是否一致：
+            {rejection.draftDifference.commercialTermsUnchanged
+              ? "一致（适合走低毛利申请）"
+              : "已不一致"}
           </p>
         </section>
 
@@ -316,24 +320,22 @@ export function ProcurementRejectionCard({
         rejection.activeLowMarginManagerTask ? (
           <section
             className="space-y-3 rounded-lg border border-info/30 bg-info-soft/30 p-3"
-            aria-label="低毛利上级确认"
+            aria-label="领导批低毛利"
           >
             <div className="flex flex-wrap items-center gap-2">
               <CircleDollarSignIcon className="size-4" aria-hidden="true" />
-              <h3 className="text-sm font-semibold">
-                低毛利上级确认
-              </h3>
+              <h3 className="text-sm font-semibold">等销售领导批低毛利</h3>
               <Badge variant="info">
-                {rejection.activeLowMarginManagerTask.workItemStatus}
+                {WORK_ITEM_STATUS_LABEL[
+                  rejection.activeLowMarginManagerTask.workItemStatus
+                ] ?? rejection.activeLowMarginManagerTask.workItemStatus}
               </Badge>
             </div>
             <p className="text-xs text-muted-foreground">
-              任务 {rejection.activeLowMarginManagerTask.workItemId} · 版本{" "}
-              {rejection.activeLowMarginManagerTask.subjectHash}
+              按被驳回时的原条件申请。领导通过后才会再推给采购；驳回则回到下面三种处理方式。
               {rejection.lowMarginSubmission
-                ? ` · 新提交 #${rejection.lowMarginSubmission.submissionNo}`
+                ? `（申请序号 #${rejection.lowMarginSubmission.submissionNo}）`
                 : null}
-              。商业条件须与被驳回提交一致；上级通过后才创建新采购确认，驳回则回到三条出路。
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
@@ -349,13 +351,13 @@ export function ProcurementRejectionCard({
                   })
                   setResult({
                     status: "succeeded",
-                    title: "低毛利承接已通过",
+                    title: "领导已同意低毛利",
                     description: outcome.detail,
                     reference: outcome.reference,
                   })
                 }}
               >
-                上级通过（演示）
+                领导通过（演示）
               </Button>
               <Button
                 type="button"
@@ -372,13 +374,13 @@ export function ProcurementRejectionCard({
                   })
                   setResult({
                     status: "rejected",
-                    title: "低毛利承接已驳回",
+                    title: "领导未同意低毛利",
                     description: outcome.detail,
                     reference: outcome.reference,
                   })
                 }}
               >
-                上级驳回（演示）
+                领导驳回（演示）
               </Button>
             </div>
           </section>
@@ -388,14 +390,13 @@ export function ProcurementRejectionCard({
           <>
             <Separator />
             <div className="grid gap-4 lg:grid-cols-3">
-              {/* 出路 1 */}
               <section className="space-y-3 rounded-lg border border-border p-3">
                 <div className="flex items-center gap-2">
                   <RefreshCwIcon className="size-4" aria-hidden="true" />
-                  <h3 className="text-sm font-semibold">改品/改价后重提</h3>
+                  <h3 className="text-sm font-semibold">改完再报给采购</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  须确有商品/服务或销售价格变化，并附客户重新确认依据；将创建全新采购确认任务。
+                  需要改商品/服务或销售价，并写明客户已确认。会作为新一版再给采购确认。
                 </p>
                 <form
                   className="space-y-3"
@@ -415,7 +416,7 @@ export function ProcurementRejectionCard({
                   <priceForm.AppField name="note">
                     {(field) => (
                       <field.TextareaField
-                        label="调整说明 / 客户确认依据"
+                        label="调整说明 / 客户确认情况"
                         rows={2}
                         placeholder="客户已确认改价…"
                       />
@@ -423,7 +424,7 @@ export function ProcurementRejectionCard({
                   </priceForm.AppField>
                   <priceForm.AppForm>
                     <priceForm.SubmitButton
-                      label="保存改价草稿"
+                      label="先保存改价"
                       pendingLabel="保存中"
                     />
                   </priceForm.AppForm>
@@ -433,35 +434,33 @@ export function ProcurementRejectionCard({
                   size="sm"
                   className="w-full"
                   disabled={!canResubmit || resolveMutation.isPending}
-                  title={resubmitBlocker?.reason}
+                  title={resubmitBlockerText ?? undefined}
                   onClick={() =>
                     setConfirm({
                       action: "RESUBMIT_CHANGED_TERMS",
-                      title: "确认改品/改价后重提",
+                      title: "确认改完再报给采购",
                       effects: [
-                        "冻结递增提交号并创建新的采购确认",
-                        "记录提交内容版本",
-                        "创建唯一新采购确认",
-                        "旧提交与旧采购二次确认任务不变",
+                        "按当前草稿生成新一版报给采购",
+                        "采购会收到新的确认待办",
+                        "以前被驳回的那一版记录仍保留",
                       ],
                     })
                   }
                 >
-                  重新提交采购确认
+                  改完再报给采购
                 </Button>
-                {!canResubmit && resubmitBlocker ? (
-                  <p className="text-xs text-warning">{resubmitBlocker.reason}</p>
+                {!canResubmit && resubmitBlockerText ? (
+                  <p className="text-xs text-warning">{resubmitBlockerText}</p>
                 ) : null}
               </section>
 
-              {/* 出路 2 */}
               <section className="space-y-3 rounded-lg border border-border p-3">
                 <div className="flex items-center gap-2">
                   <CircleDollarSignIcon className="size-4" aria-hidden="true" />
-                  <h3 className="text-sm font-semibold">照原条件低毛利承接</h3>
+                  <h3 className="text-sm font-semibold">按原条件请领导批</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  商业条件须与被驳回提交一致；须由销售上级确认，尚不会回采购。
+                  不改商品和价格，接受较低毛利。先由销售领导批，通过前不会再推给采购。
                 </p>
                 <form
                   className="space-y-3"
@@ -473,15 +472,15 @@ export function ProcurementRejectionCard({
                   <lowMarginForm.AppField name="reason">
                     {(field) => (
                       <field.TextareaField
-                        label="低毛利承接理由"
+                        label="为什么接受低毛利"
                         rows={3}
-                        placeholder="说明承担低毛利的业务依据…"
+                        placeholder="说明业务依据、客户重要性等…"
                       />
                     )}
                   </lowMarginForm.AppField>
                   <lowMarginForm.AppForm>
                     <lowMarginForm.SubmitButton
-                      label="申请上级确认"
+                      label="提交给领导"
                       pendingLabel="校验中"
                       disabled={!canLowMargin}
                     />
@@ -489,14 +488,13 @@ export function ProcurementRejectionCard({
                 </form>
               </section>
 
-              {/* 出路 3 */}
               <section className="space-y-3 rounded-lg border border-border p-3">
                 <div className="flex items-center gap-2">
                   <BanIcon className="size-4" aria-hidden="true" />
-                  <h3 className="text-sm font-semibold">不做并作废</h3>
+                  <h3 className="text-sm font-semibold">不做了，作废本单</h3>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  生效前且无有效后继任务时可作废；历史提交与驳回记录完整保留，不可恢复。
+                  本单尚未生效时可作废。历史与驳回原因会保留，作废后不能恢复。
                 </p>
                 <form
                   className="space-y-3"
@@ -510,7 +508,7 @@ export function ProcurementRejectionCard({
                       <field.TextareaField
                         label="作废原因"
                         rows={3}
-                        placeholder="客户取消 / 无法达成商业条件…"
+                        placeholder="客户取消 / 谈不拢条件…"
                       />
                     )}
                   </voidForm.AppField>
@@ -533,17 +531,13 @@ export function ProcurementRejectionCard({
             if (!open) setConfirm(null)
           }}
           title={confirm?.title ?? "确认操作"}
-          actionLabel="提交处理结果"
+          actionLabel="提交"
           confirmLabel="确认执行"
-          fromStatus={{ label: "采购已驳回", tone: "warning" }}
+          fromStatus={{ label: "采购未通过", tone: "warning" }}
           toStatus={{ label: "处理中", tone: "info" }}
-          lockedFields={[
-            "被驳回提交号",
-            "提交内容版本",
-            "采购确认身份",
-          ]}
+          lockedFields={["销售单号", "被驳回的内容"]}
           effects={confirm?.effects ?? []}
-          nextDepartment="采购 / 销售上级"
+          nextDepartment="采购 / 销售领导"
           onConfirm={async () => {
             if (!confirm) return
             try {
@@ -561,11 +555,11 @@ export function ProcurementRejectionCard({
                     : "succeeded",
                 title:
                   outcome.outcome === "CHANGED_TERMS_RESUBMITTED"
-                    ? "已改品/改价并重提"
+                    ? "已改完并再报给采购"
                     : outcome.outcome ===
                         "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
-                      ? "已申请低毛利上级确认"
-                      : "销售单已作废",
+                      ? "已提交，等领导批低毛利"
+                      : "本单已作废",
                 description: outcome.detail,
                 reference: outcome.reference,
               })
@@ -577,9 +571,9 @@ export function ProcurementRejectionCard({
                 title: resultText.operationBlocked,
                 description:
                   message === "NO_COMMERCIAL_CHANGE"
-                    ? "尚未修改商品或价格，无法按此路径重提；请先调整草稿。"
+                    ? "还没改商品或价格，不能走「改完再报」。请先保存改价或改明细。"
                     : message,
-                reference: idempotencyKey,
+                reference: order.documentNumber,
               })
             } finally {
               setConfirm(null)
@@ -589,6 +583,17 @@ export function ProcurementRejectionCard({
       </CardContent>
     </Card>
   )
+}
+
+function friendlyResubmitBlocker(reason: string): string {
+  if (
+    reason.includes("尚无改品") ||
+    reason.includes("改品/改价") ||
+    reason.includes("NO_COMMERCIAL")
+  ) {
+    return "还没改商品或价格。请先保存改价，再点「改完再报给采购」。"
+  }
+  return reason
 }
 
 function Fact({

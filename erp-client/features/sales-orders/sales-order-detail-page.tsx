@@ -2,16 +2,18 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeftIcon,
+  ChevronDownIcon,
   ClipboardCheckIcon,
   FilePenLineIcon,
   HistoryIcon,
-  WalletIcon,
-  LockIcon,
+  PackageIcon,
   ShieldAlertIcon,
   ShieldCheckIcon,
+  StoreIcon,
+  WalletIcon,
 } from "lucide-react"
 
 import {
@@ -34,6 +36,17 @@ import {
 } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
 import { AcceptanceWorkspace } from "@/features/sales-orders/acceptance-workspace"
 import { CardSalesApprovalPanel } from "@/features/sales-orders/card-sales-approval-panel"
 import { CloseConditionsCard } from "@/features/sales-orders/close-conditions-card"
@@ -44,11 +57,14 @@ import {
   useSalesOrderDetailQuery,
   useStartSalesChangeOrderMutation,
 } from "@/features/sales-orders/queries"
+import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import {
   NATURE_LABEL,
   ORIGIN_LABEL,
   OWNER_LABEL,
 } from "@/mock/sales-orders"
+import { sumFixed } from "@/lib/fixed-decimal"
+import { cn } from "@/lib/utils"
 
 type SectionId =
   | "overview"
@@ -58,6 +74,14 @@ type SectionId =
   | "collaboration"
   | "versions"
   | "close"
+
+type FocusTask = {
+  id: SectionId
+  title: string
+  description: string
+  actionLabel: string
+  tone: "warning" | "info"
+}
 
 function resolveSection(section?: string): SectionId {
   if (
@@ -73,6 +97,81 @@ function resolveSection(section?: string): SectionId {
   return "overview"
 }
 
+function remainingReceivable(gross: string, received: string) {
+  try {
+    return sumFixed([gross, `-${received}`], {
+      maxScale: 2,
+      outputScale: 2,
+      allowNegative: true,
+    })
+  } catch {
+    return gross
+  }
+}
+
+function isOpenProcurementRejection(order: SalesOrderListItem) {
+  const rejection = order.procurementRejection
+  if (!rejection) return false
+  return (
+    rejection.reviewStatus !== "RESOLVED" &&
+    rejection.reviewStatus !== "VOIDED"
+  )
+}
+
+const WORK_ITEM_STATUS_ZH: Record<string, string> = {
+  UNCLAIMED: "待领取",
+  CLAIMED: "处理中",
+  COMPLETED: "已完成",
+}
+
+function resolveFocusTask(
+  order: SalesOrderListItem,
+  canAccept: boolean
+): FocusTask | null {
+  if (isOpenProcurementRejection(order) && order.procurementRejection) {
+    return {
+      id: "procurement-rejection",
+      title: "采购未通过，需要你处理",
+      description:
+        order.procurementRejection.rejectComment ||
+        "可以改价后再报采购、请领导批低毛利，或作废本单。",
+      actionLabel: "去处理",
+      tone: "warning",
+    }
+  }
+  if (order.activeCardSalesApproval) {
+    const st =
+      WORK_ITEM_STATUS_ZH[order.activeCardSalesApproval.workItemStatus] ??
+      order.activeCardSalesApproval.workItemStatus
+    return {
+      id: "approval",
+      title: "卡券销售等审批",
+      description: `当前：${st}。审批通过后本单才会生效。`,
+      actionLabel: "去审批",
+      tone: "info",
+    }
+  }
+  if (canAccept) {
+    return {
+      id: "acceptance",
+      title: "可以做客户验收",
+      description: "客户确认完成后，本单才算交付完毕。",
+      actionLabel: "去验收",
+      tone: "info",
+    }
+  }
+  if (order.activeChangeOrder) {
+    return {
+      id: "versions",
+      title: "有一笔改单还在走",
+      description: `状态：${order.activeChangeOrder.statusLabel}（基于 v${order.activeChangeOrder.baseRevisionNo}）。改单生效前，客户仍按当前版本执行。`,
+      actionLabel: "看历史版本",
+      tone: "warning",
+    }
+  }
+  return null
+}
+
 export function SalesOrderDetailPage({
   salesOrderId,
   section,
@@ -80,6 +179,7 @@ export function SalesOrderDetailPage({
   salesOrderId: string
   section?: string
 }) {
+  const router = useRouter()
   const searchParams = useSearchParams()
   const returnTo = searchParams.get("returnTo")
   const fromWorkspace = searchParams.get("from")
@@ -103,6 +203,24 @@ export function SalesOrderDetailPage({
     order?.allowedActions.includes("START_SALES_CHANGE") ?? false
   const changeBlocker = order?.actionBlockers.find(
     (b) => b.action === "START_SALES_CHANGE"
+  )
+
+  const selectSection = React.useCallback(
+    (next: SectionId) => {
+      // 保留从队列带来的 returnTo / from，避免切 Tab 丢返回上下文
+      const params = new URLSearchParams()
+      if (next !== "overview") params.set("section", next)
+      if (returnTo) params.set("returnTo", returnTo)
+      if (fromWorkspace) params.set("from", fromWorkspace)
+      const qs = params.toString()
+      router.replace(
+        qs
+          ? `/sales/orders/${salesOrderId}?${qs}`
+          : `/sales/orders/${salesOrderId}`,
+        { scroll: false }
+      )
+    },
+    [fromWorkspace, returnTo, router, salesOrderId]
   )
 
   if (query.isPending) {
@@ -129,47 +247,99 @@ export function SalesOrderDetailPage({
 
   const isCard = order.nature === "card_voucher"
   const baseHref = `/sales/orders/${order.id}`
+  const sectionQuery =
+    activeSection === "overview" ? "" : `?section=${activeSection}`
+  const selfReturn = encodeURIComponent(`${baseHref}${sectionQuery}`)
+  const fromQueue =
+    Boolean(returnTo) &&
+    (fromWorkspace === "W07" || fromWorkspace === "W09")
+  const backHref =
+    fromQueue && returnTo ? returnTo : "/sales/orders"
+  const backLabel =
+    fromWorkspace === "W07"
+      ? "返回采购确认"
+      : fromWorkspace === "W09"
+        ? "返回履约处理"
+        : "返回列表"
 
-  const navItems: { id: SectionId; label: string; href: string; show: boolean }[] =
-    [
-      { id: "overview", label: "概览", href: baseHref, show: true },
-      {
-        id: "procurement-rejection",
-        label: "采购驳回处理",
-        href: `${baseHref}?section=procurement-rejection`,
-        show: Boolean(order.procurementRejection),
-      },
-      {
-        id: "approval",
-        label: "卡券审批",
-        href: `${baseHref}?section=approval`,
-        show: Boolean(order.activeCardSalesApproval),
-      },
-      {
-        id: "collaboration",
-        label: "商城协同",
-        href: `${baseHref}?section=collaboration`,
-        show: isCard,
-      },
-      {
-        id: "acceptance",
-        label: "客户验收",
-        href: `${baseHref}?section=acceptance`,
-        show: order.nature === "physical_service",
-      },
-      {
-        id: "close",
-        label: "关闭条件",
-        href: `${baseHref}?section=close`,
-        show: true,
-      },
-      {
-        id: "versions",
-        label: "版本记录",
-        href: `${baseHref}?section=versions`,
-        show: true,
-      },
-    ]
+  const focusTask = resolveFocusTask(order, Boolean(canAccept))
+  const openRejection = isOpenProcurementRejection(order)
+  const receivableLeft = remainingReceivable(
+    order.amountGross,
+    order.receivedAmount
+  )
+
+  const navItems: {
+    id: SectionId
+    label: string
+    show: boolean
+    group: "document" | "work" | "reference"
+    icon?: React.ComponentType<{ className?: string; "data-icon"?: string }>
+  }[] = [
+    {
+      id: "overview",
+      label: "本单内容",
+      show: true,
+      group: "document",
+    },
+    {
+      id: "procurement-rejection",
+      label: "采购未通过",
+      show: Boolean(order.procurementRejection),
+      group: "work",
+      icon: ShieldAlertIcon,
+    },
+    {
+      id: "approval",
+      label: "卡券审批",
+      show: Boolean(order.activeCardSalesApproval),
+      group: "work",
+      icon: ShieldCheckIcon,
+    },
+    {
+      id: "acceptance",
+      label: "客户验收",
+      show: order.nature === "physical_service",
+      group: "work",
+      icon: ClipboardCheckIcon,
+    },
+    {
+      id: "close",
+      label: "进度与结案",
+      show: true,
+      group: "reference",
+    },
+    {
+      id: "collaboration",
+      label: "商城对接",
+      show: isCard,
+      group: "reference",
+      icon: StoreIcon,
+    },
+    {
+      id: "versions",
+      label: "历史版本",
+      show: true,
+      group: "reference",
+      icon: HistoryIcon,
+    },
+  ]
+
+  const visibleNav = navItems.filter((item) => item.show)
+
+  const primaryTaskAction =
+    focusTask &&
+    (focusTask.id === "procurement-rejection" ||
+      focusTask.id === "approval" ||
+      focusTask.id === "acceptance") ? (
+      <Button
+        type="button"
+        size="sm"
+        onClick={() => selectSection(focusTask.id)}
+      >
+        {focusTask.actionLabel}
+      </Button>
+    ) : null
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
@@ -189,67 +359,22 @@ export function SalesOrderDetailPage({
             actions={[
               {
                 actionKey: "back",
-                label:
-                  returnTo && fromWorkspace === "W07"
-                    ? "返回采购确认队列"
-                    : returnTo && fromWorkspace === "W09"
-                      ? "返回作业队列"
-                      : "返回列表",
+                label: backLabel,
                 icon: ArrowLeftIcon,
                 variant: "outline",
-                render: (
-                  <Link
-                    href={
-                      returnTo &&
-                      (fromWorkspace === "W07" || fromWorkspace === "W09")
-                        ? returnTo
-                        : "/sales/orders"
-                    }
-                  />
-                ),
+                render: <Link href={backHref} />,
               },
-              {
-                actionKey: "change",
-                label: "发起销售变更",
-                icon: FilePenLineIcon,
-                variant: "outline",
-                mobileVisibility: "hide",
-                disabled: !canStartChange || changeMutation.isPending,
-                onClick: () => setChangeConfirmOpen(true),
-              },
-              ...(canAccept
-                ? [
-                    {
-                      actionKey: "acceptance",
-                      label: "客户验收",
-                      icon: ClipboardCheckIcon,
-                      mobileVisibility: "hide" as const,
-                      variant:
-                        activeSection === "acceptance"
-                          ? ("default" as const)
-                          : ("outline" as const),
-                      render: (
-                        <Link href={`${baseHref}?section=acceptance`} />
-                      ),
-                    },
-                  ]
-                : []),
             ]}
           />
         }
       />
 
-      {returnTo && (fromWorkspace === "W07" || fromWorkspace === "W09") ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm">
-          <span className="text-muted-foreground">
-            {fromWorkspace === "W09"
-              ? "自履约处理打开 · 关闭后可返回原队列位置、类型与筛选"
-              : "自采购二次确认队列打开 · 关闭后可返回原队列位置与筛选"}
-          </span>
-          <Button type="button" size="sm" variant="outline" render={<Link href={returnTo} />}>
-            {fromWorkspace === "W09" ? "返回作业队列" : "返回二次确认队列"}
-          </Button>
-        </div>
+      {fromQueue ? (
+        <p className="text-xs text-muted-foreground">
+          {fromWorkspace === "W09"
+            ? "从履约处理打开 · 处理完可点上方返回，回到原来的列表位置"
+            : "从采购确认打开 · 处理完可点上方返回，回到原来的列表位置"}
+        </p>
       ) : null}
 
       <DocumentHeader
@@ -258,8 +383,33 @@ export function SalesOrderDetailPage({
         documentNumber={order.documentNumber}
         version={order.version}
         primaryStatus={order.primaryStatus}
+        meta={
+          <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <Badge variant="secondary" className="font-normal">
+              {NATURE_LABEL[order.nature]}
+            </Badge>
+            <span aria-hidden="true">·</span>
+            <span>
+              负责人{" "}
+              <span className="font-medium text-foreground">
+                {order.ownerName}
+              </span>
+            </span>
+            {isCard ? (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>到期算交付完成</span>
+              </>
+            ) : (
+              <>
+                <span aria-hidden="true">·</span>
+                <span>客户验收后算交付完成</span>
+              </>
+            )}
+          </span>
+        }
         statuses={[
-          { id: "fulfillment", label: "履约", status: order.fulfillment },
+          { id: "fulfillment", label: "交付", status: order.fulfillment },
           { id: "collection", label: "回款", status: order.collection },
           { id: "invoicing", label: "开票", status: order.invoicing },
         ]}
@@ -271,174 +421,156 @@ export function SalesOrderDetailPage({
               variant="outline"
               render={
                 <Link
-                  href={`/finance/customer-accounts?view=receivable&salesOrderId=${encodeURIComponent(order.id)}&q=${encodeURIComponent(order.documentNumber)}&from=W05&returnTo=${encodeURIComponent(
-                    `${baseHref}${activeSection === "overview" ? "" : `?section=${activeSection}`}`
-                  )}`}
+                  href={`/finance/customer-accounts?view=receivable&salesOrderId=${encodeURIComponent(order.id)}&q=${encodeURIComponent(order.documentNumber)}&from=W05&returnTo=${selfReturn}`}
                 />
               }
             >
               <WalletIcon data-icon="inline-start" aria-hidden="true" />
-              登记回款
+              记一笔回款
             </Button>
-            {order.nature === "physical_service" ? (
+            {!isCard ? (
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
                 render={
                   <Link
-                    /* 不带 lane：一张销售单可能落在仓发，也可能落在电子/服务，
-                       这里替用户选岗位会让页头对着电子交付写「收货与发货」 */
-                    href={`/fulfillment?scope=mine&salesOrderId=${order.id}&from=W05&returnTo=${encodeURIComponent(
-                      `${baseHref}${activeSection === "overview" ? "" : `?section=${activeSection}`}`
-                    )}`}
+                    href={`/fulfillment?scope=mine&salesOrderId=${order.id}&from=W05&returnTo=${selfReturn}`}
                   />
                 }
               >
-                去处理
+                <PackageIcon data-icon="inline-start" aria-hidden="true" />
+                去发货/交付
               </Button>
             ) : null}
-          </div>
-        }
-        primaryAction={
-          order.procurementRejection &&
-          order.procurementRejection.reviewStatus !== "RESOLVED" &&
-          order.procurementRejection.reviewStatus !== "VOIDED" ? (
-            <Button
-              type="button"
-              size="sm"
-              render={
-                <Link href={`${baseHref}?section=procurement-rejection`} />
-              }
-            >
-              处理采购驳回
-            </Button>
-          ) : order.activeCardSalesApproval ? (
-            <Button
-              type="button"
-              size="sm"
-              render={<Link href={`${baseHref}?section=approval`} />}
-            >
-              处理卡券审批
-            </Button>
-          ) : canAccept ? (
-            <Button
-              type="button"
-              size="sm"
-              render={<Link href={`${baseHref}?section=acceptance`} />}
-            >
-              进入验收作业
-            </Button>
-          ) : (
             <Button
               type="button"
               size="sm"
               variant="outline"
-              render={<Link href={`${baseHref}?section=close`} />}
+              disabled={!canStartChange || changeMutation.isPending}
+              title={
+                !canStartChange
+                  ? (changeBlocker?.reason ?? "当前不能改单")
+                  : undefined
+              }
+              onClick={() => setChangeConfirmOpen(true)}
             >
-              查看关闭条件
+              <FilePenLineIcon data-icon="inline-start" aria-hidden="true" />
+              发起改单
             </Button>
-          )
+          </div>
         }
+        primaryAction={primaryTaskAction}
       />
 
-      <div className="flex flex-wrap items-center gap-2">
-        <Badge variant="secondary">{NATURE_LABEL[order.nature]}</Badge>
-        {order.natureLocked ? (
-          <Badge variant="outline">
-            <LockIcon data-icon="inline-start" aria-hidden="true" />
-            业务性质已锁定
-          </Badge>
-        ) : null}
-        <Badge variant="outline">{ORIGIN_LABEL[order.originSystem]}</Badge>
-        <Badge variant={order.ownerSystem === "erp" ? "info" : "secondary"}>
-          {OWNER_LABEL[order.ownerSystem]}
-        </Badge>
-        {order.originSystem !== order.ownerSystem ? (
-          <Badge variant="warning">当前处理责任已变更，销售单身份不变</Badge>
-        ) : null}
-        {order.commercialReadOnly ? (
-          <Badge variant="secondary">商业字段只读</Badge>
-        ) : null}
-        {order.activeChangeOrder ? (
-          <Badge variant="warning">
-            变更中 {order.activeChangeOrder.id}
-          </Badge>
-        ) : null}
-      </div>
-
-      {order.commercialReadOnlyReason ? (
-        <Alert variant="info">
-          <LockIcon aria-hidden="true" />
-          <AlertTitle>写入主责与只读边界</AlertTitle>
-          <AlertDescription>
-            {order.commercialReadOnlyReason}
-            {" "}创建来源 {ORIGIN_LABEL[order.originSystem]}
-            ，当前唯一写入主责 {OWNER_LABEL[order.ownerSystem]}
-            。已生效单无直接编辑入口。
+      {/* 当前要办：只保留一条叙事，动作只在此处与 Header 主按钮出现 */}
+      {focusTask ? (
+        <Alert variant={focusTask.tone === "warning" ? "warning" : "info"}>
+          {focusTask.tone === "warning" ? (
+            <ShieldAlertIcon aria-hidden="true" />
+          ) : focusTask.id === "approval" ? (
+            <ShieldCheckIcon aria-hidden="true" />
+          ) : focusTask.id === "acceptance" ? (
+            <ClipboardCheckIcon aria-hidden="true" />
+          ) : (
+            <FilePenLineIcon aria-hidden="true" />
+          )}
+          <AlertTitle>{focusTask.title}</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <span>{focusTask.description}</span>
+            {activeSection !== focusTask.id ? (
+              <Button
+                type="button"
+                size="sm"
+                className="shrink-0 self-start"
+                onClick={() => selectSection(focusTask.id)}
+              >
+                {focusTask.actionLabel}
+              </Button>
+            ) : null}
           </AlertDescription>
         </Alert>
       ) : null}
 
-      {!canStartChange && changeBlocker ? (
+      {order.commercialReadOnly ? (
+        <Collapsible className="rounded-lg border border-border bg-card px-3 py-2">
+          <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 text-left text-sm text-muted-foreground hover:text-foreground">
+            <span>
+              金额和明细不能直接改
+              {order.originSystem !== order.ownerSystem
+                ? ` · 当前由${order.ownerSystem === "mall" ? "商城" : "本系统"}维护`
+                : null}
+            </span>
+            <ChevronDownIcon
+              aria-hidden="true"
+              className="size-4 shrink-0 transition-transform group-aria-expanded:rotate-180"
+            />
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-2 text-sm text-muted-foreground">
+            <p>
+              {order.commercialReadOnlyReason ??
+                "已生效的销售单不能在这里直接改价或改明细；需要改请点「发起改单」。"}
+            </p>
+            <p className="mt-1 text-xs">
+              {ORIGIN_LABEL[order.originSystem]}
+              {" · "}
+              {OWNER_LABEL[order.ownerSystem]}
+              {" · "}
+              订单类型建单后不能改
+            </p>
+            {!canStartChange && changeBlocker ? (
+              <p className="mt-1 text-xs">
+                暂时不能改单：{changeBlocker.reason}
+              </p>
+            ) : null}
+          </CollapsibleContent>
+        </Collapsible>
+      ) : !canStartChange && changeBlocker ? (
         <p className="text-xs text-muted-foreground">
-          销售变更不可用：{changeBlocker.reason}
+          暂时不能改单：{changeBlocker.reason}
         </p>
       ) : null}
 
-      <MetricStrip columns={4} aria-label="销售单摘要指标">
+      <MetricStrip
+        columns={4}
+        density="compact"
+        aria-label="销售单金额摘要"
+      >
         <MetricItem
+          density="compact"
           label="成交金额（含税）"
           value={<MoneyValue value={order.amountGross} taxBasis="gross" />}
           detail={NATURE_LABEL[order.nature]}
+          detailMode="tooltip"
         />
         <MetricItem
+          density="compact"
           label="已回款"
-          value={<MoneyValue value={order.receivedAmount} taxBasis="gross" />}
+          value={
+            <MoneyValue value={order.receivedAmount} taxBasis="gross" />
+          }
+          detail={order.collection.label}
+          detailMode="inline"
         />
         <MetricItem
+          density="compact"
+          label="待回款"
+          value={<MoneyValue value={receivableLeft} taxBasis="gross" />}
+          detail={
+            order.closeEligibility.receivableSettled ? "已收齐" : undefined
+          }
+          detailMode="inline"
+        />
+        <MetricItem
+          density="compact"
           label="已开票"
-          value={<MoneyValue value={order.invoicedAmount} taxBasis="gross" />}
-          detail="不阻塞关闭"
-        />
-        <MetricItem
-          label="当前主责"
-          value={OWNER_LABEL[order.ownerSystem]}
-          detail={`${ORIGIN_LABEL[order.originSystem]} · ${order.ownerName}`}
+          value={
+            <MoneyValue value={order.invoicedAmount} taxBasis="gross" />
+          }
+          detail="开票不挡结案"
+          detailMode="tooltip"
         />
       </MetricStrip>
-
-      <nav
-        aria-label="对象分区"
-        className="flex flex-wrap gap-2 border-b border-border pb-2"
-      >
-        {navItems
-          .filter((item) => item.show)
-          .map((item) => {
-            const active = activeSection === item.id
-            return (
-              <Button
-                key={item.id}
-                type="button"
-                size="sm"
-                variant={active ? "secondary" : "ghost"}
-                aria-current={active ? "page" : undefined}
-                render={<Link href={item.href} />}
-              >
-                {item.id === "procurement-rejection" ? (
-                  <ShieldAlertIcon data-icon="inline-start" aria-hidden="true" />
-                ) : null}
-                {item.id === "approval" ? (
-                  <ShieldCheckIcon data-icon="inline-start" aria-hidden="true" />
-                ) : null}
-                {item.id === "versions" ? (
-                  <HistoryIcon data-icon="inline-start" aria-hidden="true" />
-                ) : null}
-                {item.label}
-              </Button>
-            )
-          })}
-      </nav>
 
       {result ? (
         <FormalActionResult
@@ -453,135 +585,75 @@ export function SalesOrderDetailPage({
         />
       ) : null}
 
-      {activeSection === "procurement-rejection" && order.procurementRejection ? (
-        <ProcurementRejectionCard
-          order={order}
-          rejection={order.procurementRejection}
-        />
-      ) : null}
+      <Tabs
+        value={activeSection}
+        onValueChange={(next) => {
+          const target = resolveSection(next)
+          if (target !== activeSection) selectSection(target)
+        }}
+      >
+        <TabsList
+          variant="line"
+          className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-border bg-background/95 py-1 backdrop-blur supports-backdrop-filter:bg-background/80"
+        >
+          {visibleNav.map((item) => {
+            const Icon = item.icon
+            const isActiveWork =
+              item.group === "work" &&
+              focusTask?.id === item.id &&
+              (item.id === "procurement-rejection"
+                ? openRejection
+                : item.id === "approval"
+                  ? Boolean(order.activeCardSalesApproval)
+                  : item.id === "acceptance"
+                    ? canAccept
+                    : false)
+            return (
+              <TabsTrigger
+                key={item.id}
+                value={item.id}
+                className={cn(
+                  "flex-none",
+                  isActiveWork && "text-foreground"
+                )}
+              >
+                {Icon ? (
+                  <Icon data-icon="inline-start" aria-hidden="true" />
+                ) : null}
+                {item.label}
+                {isActiveWork ? (
+                  <Badge
+                    variant={
+                      item.id === "procurement-rejection"
+                        ? "warning"
+                        : "info"
+                    }
+                    className="ml-1 h-5 px-1.5 text-[10px] font-normal"
+                  >
+                    待办
+                  </Badge>
+                ) : null}
+              </TabsTrigger>
+            )
+          })}
+        </TabsList>
 
-      {activeSection === "approval" && order.activeCardSalesApproval ? (
-        <CardSalesApprovalPanel
-          order={order}
-          approval={order.activeCardSalesApproval}
-        />
-      ) : null}
-
-      {activeSection === "close" ? <CloseConditionsCard order={order} /> : null}
-
-      {activeSection === "collaboration" && isCard ? (
-        <SalesOrderCollaborationCard
-          salesOrderId={order.id}
-          salesOrderNo={order.documentNumber}
-        />
-      ) : null}
-
-      {activeSection === "versions" ? (
-        <RevisionHistoryCard
-          revisions={order.revisions}
-          currentVersion={order.version}
-          contractRevisionLabel={order.contractRevisionLabel}
-        />
-      ) : null}
-
-      {activeSection === "acceptance" ? (
-        isCard ? (
-          <Alert variant="warning">
-            <AlertTitle>卡券不适用客户验收</AlertTitle>
-            <AlertDescription>
-              卡券以履约期限到期视为履约完成，不登记客户验收。
-              请查看关闭条件与履约期限 {order.fulfillmentDeadline}。
-            </AlertDescription>
-          </Alert>
-        ) : (
-          <AcceptanceWorkspace salesOrderId={order.id} />
-        )
-      ) : null}
-
-      {activeSection === "overview" ? (
-        <>
-          {order.procurementRejection &&
-          order.procurementRejection.reviewStatus !== "RESOLVED" &&
-          order.procurementRejection.reviewStatus !== "VOIDED" ? (
-            <Alert variant="warning">
-              <ShieldAlertIcon aria-hidden="true" />
-              <AlertTitle>采购二次确认已驳回</AlertTitle>
-              <AlertDescription className="flex flex-wrap items-center gap-2">
-                <span>
-                  {order.procurementRejection.rejectComment} 请在固定三路中处理。
-                </span>
-                <Button
-                  type="button"
-                  size="xs"
-                  render={
-                    <Link href={`${baseHref}?section=procurement-rejection`} />
-                  }
-                >
-                  打开处理卡
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          {order.activeCardSalesApproval ? (
-            <Alert variant="info">
-              <ShieldCheckIcon aria-hidden="true" />
-              <AlertTitle>存在卡券销售审批任务</AlertTitle>
-              <AlertDescription className="flex flex-wrap items-center gap-2">
-                <span>
-                  {order.activeCardSalesApproval.workItemType} ·{" "}
-                  {order.activeCardSalesApproval.workItemStatus}
-                </span>
-                <Button
-                  type="button"
-                  size="xs"
-                  render={<Link href={`${baseHref}?section=approval`} />}
-                >
-                  打开审批区
-                </Button>
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          {order.activeChangeOrder ? (
-            <Alert variant="warning">
-              <FilePenLineIcon aria-hidden="true" />
-              <AlertTitle>进行中的销售变更单</AlertTitle>
-              <AlertDescription>
-                {order.activeChangeOrder.id} ·{" "}
-                {order.activeChangeOrder.statusLabel} · 基准版本 v
-                {order.activeChangeOrder.baseRevisionNo}
-                。历史版本继续有效；
-                {order.activeChangeOrder.impactPath === "operations"
-                  ? "卡券须运营执行影响确认后财务复核。"
-                  : "非卡券须采购履约影响确认后财务复核。"}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          <DocumentSection title="商业内容与明细">
+        <TabsContent value="overview" className="space-y-4 pt-4">
+          <DocumentSection
+            title="订单信息"
+            description={
+              isCard
+                ? "以当前版本为准；卡密、玩法等敏感信息不在此展示"
+                : "以当前版本为准"
+            }
+          >
             <DocumentSummary
               columns="three"
               items={[
                 {
                   id: "contract",
-                  label: "合同修订",
+                  label: "关联合同",
                   value: order.contractRevisionLabel,
-                },
-                {
-                  id: "nature",
-                  label: "业务性质",
-                  value: `${NATURE_LABEL[order.nature]}（不可改）`,
-                },
-                {
-                  id: "origin",
-                  label: "创建来源",
-                  value: ORIGIN_LABEL[order.originSystem],
-                },
-                {
-                  id: "owner",
-                  label: "当前主责",
-                  value: OWNER_LABEL[order.ownerSystem],
                 },
                 {
                   id: "scene",
@@ -595,7 +667,7 @@ export function SalesOrderDetailPage({
                 },
                 {
                   id: "deadline",
-                  label: isCard ? "履约期限（到期完成）" : "履约期限",
+                  label: isCard ? "履约期限（到期交付）" : "履约期限",
                   value: order.fulfillmentDeadline,
                   numeric: true,
                 },
@@ -606,23 +678,31 @@ export function SalesOrderDetailPage({
                 },
                 {
                   id: "version",
-                  label: "商业版本",
+                  label: "当前版本",
                   value: `v${order.version}`,
                   numeric: true,
                 },
               ]}
             />
-            <div className="mt-4 overflow-hidden rounded-lg border border-border">
+          </DocumentSection>
+
+          <DocumentSection
+            title={isCard ? "卡券明细" : "销售明细"}
+            description={
+              isCard ? "卡券明细一行" : `共 ${order.lineItems.length} 行`
+            }
+          >
+            <div className="overflow-hidden rounded-lg border border-border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-left">
                   <tr>
-                    <th className="px-3 py-2 font-medium">
-                      {isCard ? "卡券明细（每版本恰好一行）" : "明细"}
-                    </th>
+                    <th className="px-3 py-2 font-medium">项目</th>
                     <th className="px-3 py-2 font-medium">数量</th>
                     {isCard ? (
                       <th className="px-3 py-2 font-medium">面额 / 形态</th>
-                    ) : null}
+                    ) : (
+                      <th className="px-3 py-2 font-medium">交付方式</th>
+                    )}
                     <th className="px-3 py-2 font-medium text-right">
                       含税金额
                     </th>
@@ -633,9 +713,11 @@ export function SalesOrderDetailPage({
                     <tr key={line.id} className="border-t border-border">
                       <td className="px-3 py-2">
                         <div>{line.name}</div>
-                        <div className="num text-xs text-muted-foreground">
-                          {line.sku}
-                        </div>
+                        {line.sku ? (
+                          <div className="num text-xs text-muted-foreground">
+                            {line.sku}
+                          </div>
+                        ) : null}
                       </td>
                       <td className="num px-3 py-2">
                         {line.quantity} {line.unit}
@@ -653,7 +735,16 @@ export function SalesOrderDetailPage({
                             </span>
                           ) : null}
                         </td>
-                      ) : null}
+                      ) : (
+                        <td className="px-3 py-2 text-sm text-muted-foreground">
+                          <div>{line.fulfillmentMode ?? "—"}</div>
+                          {line.dueDate ? (
+                            <div className="num mt-0.5 text-xs">
+                              {line.dueDate}
+                            </div>
+                          ) : null}
+                        </td>
+                      )}
                       <td className="px-3 py-2 text-right">
                         <MoneyValue
                           value={line.amountGross}
@@ -667,76 +758,167 @@ export function SalesOrderDetailPage({
             </div>
             {isCard ? (
               <p className="mt-2 text-xs text-muted-foreground">
-                页面不展示玩法、卡号、卡密或完整手机号；联系人已掩码。
+                卡号、卡密和完整手机号不在此展示。
               </p>
             ) : null}
           </DocumentSection>
 
-          <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-            <DocumentSection title="进度与协同">
-              <StatusTrackSummary
-                tracks={[
-                  {
-                    id: "fulfillment",
-                    label: "履约",
-                    status: order.fulfillment,
-                  },
-                  {
-                    id: "collection",
-                    label: "回款",
-                    status: order.collection,
-                  },
-                  {
-                    id: "invoicing",
-                    label: "开票",
-                    status: order.invoicing,
-                  },
-                ]}
-              />
-              <p className="mt-3 text-sm text-muted-foreground">
-                关联：采购单 {order.related.purchaseOrders} · 履约{" "}
-                {order.related.fulfillments} · 回款 {order.related.receipts} ·
-                开票 {order.related.invoices}
-              </p>
-              {isCard ? (
-                <p className="mt-2 text-xs text-muted-foreground">
-                  卡券履约不受消费进度影响，也不增加关闭条件。
-                </p>
-              ) : null}
-            </DocumentSection>
-            <CloseConditionsCard order={order} />
-          </div>
+          <DocumentSection
+            title="相关业务"
+            description="本单关联的采购、交付、回款与发票数量"
+          >
+            <div className="flex flex-wrap gap-3 text-sm">
+              <span className="rounded-md bg-muted px-2.5 py-1.5">
+                采购单{" "}
+                <span className="num font-medium">
+                  {order.related.purchaseOrders}
+                </span>
+              </span>
+              <span className="rounded-md bg-muted px-2.5 py-1.5">
+                交付{" "}
+                <span className="num font-medium">
+                  {order.related.fulfillments}
+                </span>
+              </span>
+              <span className="rounded-md bg-muted px-2.5 py-1.5">
+                回款{" "}
+                <span className="num font-medium">
+                  {order.related.receipts}
+                </span>
+              </span>
+              <span className="rounded-md bg-muted px-2.5 py-1.5">
+                开票{" "}
+                <span className="num font-medium">
+                  {order.related.invoices}
+                </span>
+              </span>
+            </div>
+            <p className="mt-3 text-xs text-muted-foreground">
+              交付/回款进度与结案说明见「进度与结案」；改过哪些内容见「历史版本」。
+              {isCard ? " 与商城的对接情况见「商城对接」。" : null}
+            </p>
+          </DocumentSection>
+        </TabsContent>
 
+        <TabsContent value="procurement-rejection" className="pt-4">
+          {order.procurementRejection ? (
+            <ProcurementRejectionCard
+              order={order}
+              rejection={order.procurementRejection}
+            />
+          ) : (
+            <EmptySection message="没有需要处理的采购驳回。" />
+          )}
+        </TabsContent>
+
+        <TabsContent value="approval" className="pt-4">
+          {order.activeCardSalesApproval ? (
+            <CardSalesApprovalPanel
+              order={order}
+              approval={order.activeCardSalesApproval}
+            />
+          ) : (
+            <EmptySection message="当前没有待办的卡券审批。" />
+          )}
+        </TabsContent>
+
+        <TabsContent value="acceptance" className="pt-4">
+          {isCard ? (
+            <Alert variant="warning">
+              <AlertTitle>卡券单不用做客户验收</AlertTitle>
+              <AlertDescription>
+                卡券到履约期限即算交付完成。期限{" "}
+                {order.fulfillmentDeadline}，结案说明见「进度与结案」。
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <AcceptanceWorkspace salesOrderId={order.id} />
+          )}
+        </TabsContent>
+
+        <TabsContent value="close" className="space-y-4 pt-4">
+          <DocumentSection title="当前进度">
+            <StatusTrackSummary
+              tracks={[
+                {
+                  id: "fulfillment",
+                  label: "交付",
+                  status: order.fulfillment,
+                },
+                {
+                  id: "collection",
+                  label: "回款",
+                  status: order.collection,
+                },
+                {
+                  id: "invoicing",
+                  label: "开票",
+                  status: order.invoicing,
+                },
+              ]}
+            />
+            {isCard ? (
+              <p className="mt-3 text-sm text-muted-foreground">
+                持卡人消费多少都不影响本单是否算交付完成；到期即可。开票进度单独看，不挡结案。
+              </p>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">
+                客户验收完成后才算交付完成。开票进度单独看，不挡结案。
+              </p>
+            )}
+          </DocumentSection>
+          <CloseConditionsCard order={order} />
+        </TabsContent>
+
+        <TabsContent value="collaboration" className="pt-4">
           {isCard ? (
             <SalesOrderCollaborationCard
               salesOrderId={order.id}
               salesOrderNo={order.documentNumber}
             />
-          ) : null}
+          ) : (
+            <EmptySection message="只有卡券销售单会与商城对接。" />
+          )}
+        </TabsContent>
 
+        <TabsContent value="versions" className="pt-4">
           <RevisionHistoryCard
             revisions={order.revisions}
             currentVersion={order.version}
             contractRevisionLabel={order.contractRevisionLabel}
           />
-        </>
-      ) : null}
+          {order.activeChangeOrder ? (
+            <Alert variant="warning" className="mt-4">
+              <FilePenLineIcon aria-hidden="true" />
+              <AlertTitle>改单进行中</AlertTitle>
+              <AlertDescription>
+                {order.activeChangeOrder.statusLabel}（基于 v
+                {order.activeChangeOrder.baseRevisionNo}
+                ）。
+                {order.activeChangeOrder.impactPath === "operations"
+                  ? "还需运营确认影响，再由财务复核后生效。"
+                  : "还需采购确认交付影响，再由财务复核后生效。"}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+        </TabsContent>
+      </Tabs>
 
       <FormalActionConfirmDialog
         open={changeConfirmOpen}
         onOpenChange={setChangeConfirmOpen}
-        title="发起销售变更单"
-        actionLabel="创建变更"
+        title="发起改单"
+        actionLabel="创建改单"
         confirmLabel="确认创建"
-        fromStatus={{ label: `v${order.version}`, tone: "success" }}
-        toStatus={{ label: "变更工作副本", tone: "warning" }}
-        lockedFields={["销售版本", "业务性质", "稳定销售单号"]}
+        fromStatus={{ label: `当前 v${order.version}`, tone: "success" }}
+        toStatus={{ label: "改单草稿", tone: "warning" }}
+        lockedFields={["销售单号", "订单类型", "已生效版本"]}
         effects={[
-          "创建 sales_change_order 与工作副本",
-          "历史版本与既有履约/票款不被覆盖",
+          "生成一笔改单，不改掉当前客户正在执行的版本",
+          "已有交付、回款、开票记录都会保留",
           isCard
-            ? "卡券：运营执行影响确认 → 财务复核"
-            : "非卡券：采购履约影响确认 → 财务复核",
+            ? "卡券：运营确认影响 → 财务复核后新版本生效"
+            : "实物/服务：采购确认影响 → 财务复核后新版本生效",
         ]}
         nextDepartment={isCard ? "运营与财务" : "采购与财务"}
         onConfirm={async () => {
@@ -748,20 +930,28 @@ export function SalesOrderDetailPage({
             })
             setResult({
               status: "succeeded",
-              title: "销售变更单已创建",
-              description: `${change.id} 已进入「${change.statusLabel}」。原版本继续有效。`,
+              title: "改单已创建",
+              description: `已进入「${change.statusLabel}」。当前版本对客户仍然有效。`,
               reference: change.id,
             })
           } catch {
             setResult({
               status: "blocked",
-              title: "无法创建销售变更",
+              title: "无法创建改单",
               description: changeBlocker?.reason ?? "请刷新后重试。",
               reference: order.documentNumber,
             })
           }
         }}
       />
+    </div>
+  )
+}
+
+function EmptySection({ message }: { message: string }) {
+  return (
+    <div className="rounded-lg border border-dashed border-border px-4 py-8 text-center text-sm text-muted-foreground">
+      {message}
     </div>
   )
 }

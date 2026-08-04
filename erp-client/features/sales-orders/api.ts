@@ -227,7 +227,7 @@ function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
                 {
                   action: "RESUBMIT_CHANGED_TERMS",
                   reason:
-                    "草稿相对被驳回提交尚无改品/改价；请先调整后再重提。",
+                    "还没改商品或价格，请先保存改价后再报给采购。",
                 },
               ],
         }
@@ -258,11 +258,11 @@ function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
           actionBlockers: [
             {
               action: "APPROVE",
-              reason: "须先领取运营审批任务。",
+              reason: "请先领取后再审批。",
             },
             {
               action: "REJECT",
-              reason: "须先领取运营审批任务。",
+              reason: "请先领取后再审批。",
             },
           ],
         }
@@ -278,7 +278,7 @@ function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
           activeCardSalesApproval: null,
           commercialReadOnly: true,
           commercialReadOnlyReason:
-            "版本只读；商业变化须通过销售变更单并完成影响确认与财务复核。",
+            "本单已生效，不能直接改；改内容请「发起改单」，并完成后续确认与财务复核。",
         }
       } else {
         next = {
@@ -468,8 +468,8 @@ export async function createSalesOrder(
           expectedReviewStatus: "PENDING_SALES_LEAD",
           allowedActions: ["CLAIM"],
           actionBlockers: [
-            { action: "APPROVE", reason: "须先领取销售领导审批任务。" },
-            { action: "REJECT", reason: "须先领取销售领导审批任务。" },
+            { action: "APPROVE", reason: "请先领取后再审批。" },
+            { action: "REJECT", reason: "请先领取后再审批。" },
           ],
         }
       : null

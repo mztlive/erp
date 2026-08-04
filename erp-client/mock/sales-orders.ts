@@ -45,7 +45,7 @@ const rejectionSo1001: ProcurementRejectionResolution = {
   actionBlockers: [
     {
       action: "RESUBMIT_CHANGED_TERMS",
-      reason: "草稿相对被驳回提交尚无改品/改价；请先调整明细或价格后再重提。",
+      reason: "还没改商品或价格，请先保存改价后再报给采购。",
     },
   ],
 }
@@ -63,11 +63,11 @@ const cardApprovalSo1013: CardSalesApproval = {
   actionBlockers: [
     {
       action: "APPROVE",
-      reason: "须先领取任务并取得处理权限。",
+      reason: "请先领取后再审批。",
     },
     {
       action: "REJECT",
-      reason: "须先领取任务并取得处理权限。",
+      reason: "请先领取后再审批。",
     },
   ],
 }

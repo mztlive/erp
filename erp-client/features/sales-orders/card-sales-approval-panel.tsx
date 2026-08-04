@@ -34,9 +34,26 @@ import type {
   CardSalesApproval,
   SalesOrderListItem,
 } from "@/features/sales-orders/types"
+import { leaseText } from "@/lib/ui-text"
+
+const WORK_ITEM_STATUS_LABEL: Record<
+  CardSalesApproval["workItemStatus"],
+  string
+> = {
+  UNCLAIMED: "待领取",
+  CLAIMED: "处理中",
+  COMPLETED: "已完成",
+}
+
+const EXPECTED_REVIEW_LABEL: Record<string, string> = {
+  PENDING_SALES_LEAD: "待销售领导审批",
+  PENDING_OPERATIONS: "待运营审批",
+  APPROVED: "已通过",
+  REJECTED: "已驳回",
+}
 
 const rejectSchema = z.object({
-  reasonCode: z.string().trim().min(2, "请填写驳回原因码"),
+  reasonCode: z.string().trim().min(2, "请填写驳回原因（简短分类即可）"),
   comment: z.string().trim().min(4, "请填写驳回说明"),
 })
 
@@ -46,8 +63,8 @@ type CardSalesApprovalPanelProps = {
 }
 
 /**
- * 卡券双审批：领导 / 运营共用任务处理器形态。
- * claimToken 仅存会话内存，不进 URL；对象中心无绕过任务的状态按钮。
+ * 卡券双审批：领导 / 运营共用处理区。
+ * claimToken 仅存会话内存，不进 URL。
  */
 export function CardSalesApprovalPanel({
   order,
@@ -96,19 +113,27 @@ export function CardSalesApprovalPanel({
     approval.allowedActions.includes("APPROVE") &&
     Boolean(claimRef.current)
 
+  const statusLabel =
+    WORK_ITEM_STATUS_LABEL[approval.workItemStatus] ?? approval.workItemStatus
+  const expectedLabel =
+    EXPECTED_REVIEW_LABEL[approval.expectedReviewStatus] ??
+    approval.expectedReviewStatus
+  const isManager =
+    approval.workItemType === "CARD_SALES_MANAGER_APPROVAL"
+
   return (
     <Card size="sm" className="border-info/40">
       <CardHeader className="border-b">
         <div className="flex flex-wrap items-center gap-2">
           <ShieldCheckIcon className="size-4 text-info" aria-hidden="true" />
-          <CardTitle>卡券销售审批任务</CardTitle>
+          <CardTitle>卡券销售审批</CardTitle>
           <Badge variant="info">
             {CARD_APPROVAL_TYPE_LABEL[approval.workItemType]}
           </Badge>
-          <Badge variant="secondary">{approval.workItemStatus}</Badge>
+          <Badge variant="secondary">{statusLabel}</Badge>
         </div>
         <CardDescription>
-          审批须在待办队列中完成；本页仅展示任务状态，不提供跳过审批的操作。
+          请先领取再决定通过或驳回。审批未完成前，卡券单不会生效。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -120,33 +145,31 @@ export function CardSalesApprovalPanel({
             reference={result.reference}
             facts={[
               { label: "销售单", value: order.documentNumber },
-              { label: "任务", value: approval.workItemId },
+              { label: "审批环节", value: CARD_APPROVAL_TYPE_LABEL[approval.workItemType] },
             ]}
           />
         ) : null}
 
         <Alert variant="info">
-          <AlertTitle>冻结提交（只读）</AlertTitle>
+          <AlertTitle>待审批内容（只读）</AlertTitle>
           <AlertDescription>
             {approval.frozenSubmissionSummary}
-            <span className="mt-1 block num text-xs">
-              任务 {approval.workItemId} · 版本 {approval.subjectHash} · 版本{" "}
-              {approval.subjectVersion} · 期望状态{" "}
-              {approval.expectedReviewStatus}
+            <span className="mt-1 block text-xs text-muted-foreground">
+              当前环节：{expectedLabel}
             </span>
           </AlertDescription>
         </Alert>
 
         {approval.claimedByLabel ? (
           <p className="text-xs text-muted-foreground">
-            领取人 {approval.claimedByLabel}
+            处理人 {approval.claimedByLabel}
             {approval.leaseExpiresAt
-              ? ` · 处理有效期至 ${new Date(approval.leaseExpiresAt).toLocaleString("zh-CN")}`
+              ? ` · 请在 ${new Date(approval.leaseExpiresAt).toLocaleString("zh-CN")} 前完成`
               : null}
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
-            任务待领取。领取后才显示通过/驳回；他人领取时本区只读。
+            {leaseText.reclaimHint}；若已被他人领取，此处只能查看。
           </p>
         )}
 
@@ -167,30 +190,25 @@ export function CardSalesApprovalPanel({
                 }
                 setResult({
                   status: "succeeded",
-                  title: "任务已领取",
-                  description:
-                    "处理信息已保存在当前页面，未进入 URL。请在处理有效期内完成决定。",
-                  reference: `CLAIM-${approval.workItemId}`,
+                  title: "已领取，可以审批了",
+                  description: "请在有效时间内完成通过或驳回；刷新页面后需重新领取。",
+                  reference: order.documentNumber,
                 })
               }}
             >
-              领取任务
+              领取并开始审批
             </Button>
           ) : null}
 
           {canDecide ? (
-            <>
-              <Button
-                type="button"
-                size="sm"
-                disabled={completeMutation.isPending}
-                onClick={() => setConfirmApprove(true)}
-              >
-                {approval.workItemType === "CARD_SALES_MANAGER_APPROVAL"
-                  ? "领导通过"
-                  : "运营通过并生效"}
-              </Button>
-            </>
+            <Button
+              type="button"
+              size="sm"
+              disabled={completeMutation.isPending}
+              onClick={() => setConfirmApprove(true)}
+            >
+              {isManager ? "领导通过" : "运营通过并生效"}
+            </Button>
           ) : null}
         </div>
 
@@ -202,12 +220,12 @@ export function CardSalesApprovalPanel({
               void rejectForm.handleSubmit()
             }}
           >
-            <h3 className="text-sm font-semibold">驳回至销售</h3>
+            <h3 className="text-sm font-semibold">驳回给销售</h3>
             <rejectForm.AppField name="reasonCode">
               {(field) => (
                 <field.TextField
-                  label="驳回原因码"
-                  placeholder="例如 CONTENT_INCOMPLETE"
+                  label="驳回原因分类"
+                  placeholder="例如：资料不齐"
                 />
               )}
             </rejectForm.AppField>
@@ -216,7 +234,7 @@ export function CardSalesApprovalPanel({
                 <field.TextareaField
                   label="驳回说明"
                   rows={2}
-                  placeholder="结构化说明，修改后须从领导审批重启"
+                  placeholder="写清要销售改什么；改完后需重新从领导审批走"
                 />
               )}
             </rejectForm.AppField>
@@ -232,46 +250,31 @@ export function CardSalesApprovalPanel({
         <FormalActionConfirmDialog
           open={confirmApprove}
           onOpenChange={setConfirmApprove}
-          title={
-            approval.workItemType === "CARD_SALES_MANAGER_APPROVAL"
-              ? "确认领导通过"
-              : "确认运营通过并生效"
-          }
+          title={isManager ? "确认领导通过" : "确认运营通过并生效"}
           actionLabel="通过"
           confirmLabel="确认通过"
           fromStatus={{
-            label:
-              approval.workItemType === "CARD_SALES_MANAGER_APPROVAL"
-                ? "待销售领导审批"
-                : "待运营审批",
+            label: isManager ? "待销售领导审批" : "待运营审批",
             tone: "warning",
           }}
           toStatus={{
-            label:
-              approval.workItemType === "CARD_SALES_MANAGER_APPROVAL"
-                ? "待运营审批"
-                : "已生效",
+            label: isManager ? "待运营审批" : "已生效",
             tone: "success",
           }}
-          lockedFields={["冻结提交", "提交版本", "处理状态"]}
+          lockedFields={["待审批内容", "销售单号"]}
           effects={
-            approval.workItemType === "CARD_SALES_MANAGER_APPROVAL"
+            isManager
               ? [
-                  "追加领导 sales_order_review 与 workflow_action",
-                  "完成当前任务",
-                  "原子创建唯一运营审批任务",
+                  "记录领导审批通过",
+                  "结束本环节，交给运营审批",
                 ]
               : [
-                  "追加运营审批记录与 workflow_action",
-                  "形成首个销售版本与应收",
-                  "写入执行信息同步",
+                  "记录运营审批通过",
+                  "销售单正式生效，并生成应收",
+                  "向商城同步执行信息",
                 ]
           }
-          nextDepartment={
-            approval.workItemType === "CARD_SALES_MANAGER_APPROVAL"
-              ? "运营"
-              : "票款与执行信息"
-          }
+          nextDepartment={isManager ? "运营" : "票款与商城执行"}
           onConfirm={async () => {
             const claim = claimRef.current
             if (!claim) return
@@ -289,17 +292,17 @@ export function CardSalesApprovalPanel({
                 status: "succeeded",
                 title:
                   outcome.outcome === "MANAGER_APPROVED"
-                    ? "领导已通过"
-                    : "运营已通过，销售单生效",
+                    ? "领导已通过，请运营继续审批"
+                    : "运营已通过，销售单已生效",
                 description: outcome.detail,
                 reference: outcome.reference,
               })
             } catch {
               setResult({
                 status: "blocked",
-                title: "操作已失效或冲突",
-                description: "请重新领取任务并重查冻结提交与版本，勿自行推进状态。",
-                reference: approval.workItemId,
+                title: leaseText.lostRefresh,
+                description: "请重新领取后再审批，不要重复提交。",
+                reference: order.documentNumber,
               })
             }
           }}
@@ -308,16 +311,16 @@ export function CardSalesApprovalPanel({
         <FormalActionConfirmDialog
           open={confirmReject}
           onOpenChange={setConfirmReject}
-          title="确认驳回卡券销售审批"
+          title="确认驳回卡券审批"
           actionLabel="驳回"
           confirmLabel="确认驳回"
           fromStatus={{ label: "审批中", tone: "warning" }}
           toStatus={{ label: "退回销售", tone: "destructive" }}
-          lockedFields={["冻结提交", "任务身份"]}
+          lockedFields={["待审批内容", "销售单号"]}
           effects={[
-            "追加驳回 sales_order_review 与 workflow_action",
-            "完成当前任务，不创建下阶段任务",
-            "销售修改后须从领导审批重新开始",
+            "记录驳回原因与说明",
+            "结束本环节审批，不进入下一环节",
+            "销售修改后需重新从领导审批开始",
           ]}
           nextDepartment="销售"
           onConfirm={async () => {
@@ -336,16 +339,16 @@ export function CardSalesApprovalPanel({
               claimRef.current = null
               setResult({
                 status: "rejected",
-                title: "审批已驳回",
+                title: "已驳回，请销售修改后重提",
                 description: outcome.detail,
                 reference: outcome.reference,
               })
             } catch {
               setResult({
                 status: "blocked",
-                title: "操作已失效或冲突",
-                description: "结果未知期间不移动任务；请用原任务号查询。",
-                reference: approval.workItemId,
+                title: leaseText.lostRefresh,
+                description: "结果未确认，请勿重复提交；可刷新后重新领取再试。",
+                reference: order.documentNumber,
               })
             }
           }}

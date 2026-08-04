@@ -48,8 +48,8 @@ export function SalesOrderCollaborationCard({
   if (query.isPending) {
     return (
       <DocumentSection
-        title="商城执行协同"
-        description="正在读取执行信息…"
+        title="与商城对接"
+        description="正在读取对接情况…"
       >
         <div className="h-24 animate-pulse rounded-xl bg-muted" />
       </DocumentSection>
@@ -60,15 +60,15 @@ export function SalesOrderCollaborationCard({
   if (!data?.hasProjection) {
     return (
       <DocumentSection
-        title="商城执行协同"
-        description="卡券销售版本生效后自动形成执行信息。"
+        title="与商城对接"
+        description="卡券销售单生效后，系统会自动把信息推给商城。"
       >
         <Alert>
           <RadarIcon aria-hidden="true" />
-          <AlertTitle>尚无执行信息</AlertTitle>
+          <AlertTitle>还没推给商城</AlertTitle>
           <AlertDescription>
             {data?.note ??
-              "当前销售单尚无执行信息。生效后无需手工新建；跨单监控见执行信息。"}
+              "本单生效后会自动生成给商城的信息，不用手工新建。多单汇总可在执行信息里查。"}
           </AlertDescription>
         </Alert>
         <div className="mt-3">
@@ -82,7 +82,7 @@ export function SalesOrderCollaborationCard({
               />
             }
           >
-            在执行信息中按单号查询
+            按单号查执行信息
           </Button>
         </div>
       </DocumentSection>
@@ -94,8 +94,8 @@ export function SalesOrderCollaborationCard({
 
   return (
     <DocumentSection
-      title="商城执行协同"
-      description="销售生效、信息发送与商城确认为独立环节；本区只读。"
+      title="与商城对接"
+      description="本区只读：看销售是否生效、信息是否发出、商城是否确认。"
       action={
         <div className="flex flex-wrap gap-2">
           {data.historyHref ? (
@@ -106,7 +106,7 @@ export function SalesOrderCollaborationCard({
               render={<Link href={data.historyHref} />}
             >
               <HistoryIcon data-icon="inline-start" aria-hidden="true" />
-              查看执行信息历史
+              查看推送历史
             </Button>
           ) : null}
           {data.w23Href ? (
@@ -125,21 +125,21 @@ export function SalesOrderCollaborationCard({
     >
       <Alert className="mb-4">
         <RadarIcon aria-hidden="true" />
-        <AlertTitle>只读边界</AlertTitle>
+        <AlertTitle>说明</AlertTitle>
         <AlertDescription>
           {data.note}
-          接收失败不回退销售记录或应收；内容变更须走销售变更单。
+          商城接收失败不会撤销本单或应收；要改内容请走「发起改单」。
         </AlertDescription>
       </Alert>
 
       {tracks ? (
         <StatusTrackSummary
-          aria-label="销售单协同三轨状态"
+          aria-label="与商城对接进度"
           variant="table"
           tracks={[
             {
               id: "sales-fact",
-              label: "销售记录",
+              label: "销售生效",
               status: {
                 label: tracks.salesFact.label,
                 tone: tracks.salesFact.tone,
@@ -148,7 +148,7 @@ export function SalesOrderCollaborationCard({
             },
             {
               id: "projection-delivery",
-              label: "信息发送",
+              label: "信息发出",
               status: {
                 label: tracks.projectionDelivery.label,
                 tone: tracks.projectionDelivery.tone,
@@ -171,14 +171,14 @@ export function SalesOrderCollaborationCard({
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
         <Card size="sm">
           <CardHeader className="border-b">
-            <CardTitle className="text-sm">当前执行信息</CardTitle>
+            <CardTitle className="text-sm">当前推送</CardTitle>
             <CardDescription>
               {data.projectionNo}
               {data.projectionRevisionNo != null
-                ? ` · 数据 v${data.projectionRevisionNo}`
+                ? ` · 推送 v${data.projectionRevisionNo}`
                 : ""}
               {data.salesOrderRevisionNo != null
-                ? ` · 来源销售 v${data.salesOrderRevisionNo}`
+                ? ` · 对应销售 v${data.salesOrderRevisionNo}`
                 : ""}
             </CardDescription>
           </CardHeader>
@@ -202,7 +202,7 @@ export function SalesOrderCollaborationCard({
             ) : null}
             {data.currentAckedRevisionNo != null ? (
               <div className="text-muted-foreground">
-                商城已确认信息版本{" "}
+                商城已确认版本{" "}
                 <span className="num text-foreground">
                   v{data.currentAckedRevisionNo}
                 </span>
@@ -221,16 +221,16 @@ export function SalesOrderCollaborationCard({
               </p>
             ) : null}
             <p className="text-xs text-muted-foreground">
-              历史修订 {data.historyCount} 份；历史数据固定显示来源销售版本。
+              共 {data.historyCount} 次推送记录；历史会写明对应哪一版销售单。
             </p>
           </CardContent>
         </Card>
 
         <Card size="sm">
           <CardHeader className="border-b">
-            <CardTitle className="text-sm">执行字段（白名单）</CardTitle>
+            <CardTitle className="text-sm">推给商城的内容</CardTitle>
             <CardDescription>
-              字段以系统数据修订为准，不含金额、配赠、税率、开票、应收与玩法。
+              只含卡券基础信息，不含金额、税率、开票和玩法。
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -258,16 +258,16 @@ export function SalesOrderCollaborationCard({
                 </div>
               </dl>
             ) : (
-              <p className="text-sm text-muted-foreground">无白名单摘要</p>
+              <p className="text-sm text-muted-foreground">暂无摘要</p>
             )}
           </CardContent>
         </Card>
 
         <Card size="sm" className="sm:col-span-2">
           <CardHeader className="border-b">
-            <CardTitle className="text-sm">商城消费汇总</CardTitle>
+            <CardTitle className="text-sm">商城侧消费情况</CardTitle>
             <CardDescription>
-              支付、退款与余额恢复仅为追溯记录，不影响销售单关闭条件。
+              仅供查阅；持卡人消费多少都不决定本单是否结案。
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
@@ -297,7 +297,8 @@ export function SalesOrderCollaborationCard({
             )}
             <div className="flex flex-wrap items-center justify-between gap-2">
               <p className="text-xs text-muted-foreground">
-                最近记录 {consumptionQuery.data?.latestFactAt ?? "暂无"}；履约关闭仍以履约与票款条件为准。
+                最近记录 {consumptionQuery.data?.latestFactAt ?? "暂无"}
+                ；本单结案仍看交付与回款是否完成。
               </p>
               <Button
                 type="button"
@@ -310,7 +311,7 @@ export function SalesOrderCollaborationCard({
                 }
               >
                 <ExternalLinkIcon data-icon="inline-start" aria-hidden="true" />
-                打开商城消费订单追溯
+                查看商城消费订单
               </Button>
             </div>
           </CardContent>

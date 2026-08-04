@@ -20,7 +20,7 @@ type RevisionHistoryCardProps = {
 }
 
 /**
- * 历史销售版本快照：合同/主数据精确修订，不被当前值覆盖。
+ * 历史销售版本：当时的合同、客户与金额快照，不被后来修改盖掉。
  */
 export function RevisionHistoryCard({
   revisions,
@@ -33,13 +33,16 @@ export function RevisionHistoryCard({
     <Card size="sm">
       <CardHeader className="border-b">
         <div className="flex flex-wrap items-center gap-2">
-          <HistoryIcon className="size-4 text-muted-foreground" aria-hidden="true" />
-          <CardTitle>版本与审计记录</CardTitle>
+          <HistoryIcon
+            className="size-4 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <CardTitle>历史版本</CardTitle>
           <Badge variant="secondary">当前 v{currentVersion}</Badge>
         </div>
         <CardDescription>
-          当前合同修订 {contractRevisionLabel}
-          。历史版本保留当时的合同、客户修订与金额记录，不受当前修改影响。
+          关联合同 {contractRevisionLabel}
+          。改单生效后旧版本仍保留，方便对照当时卖了什么、多少钱。
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -55,13 +58,13 @@ export function RevisionHistoryCard({
                   <div className="flex items-center gap-2">
                     <span className="num font-medium">v{rev.revisionNo}</span>
                     {isCurrent ? (
-                      <Badge variant="info">当前生效</Badge>
+                      <Badge variant="info">当前在用</Badge>
                     ) : (
-                      <Badge variant="outline">历史记录</Badge>
+                      <Badge variant="outline">历史</Badge>
                     )}
                     {rev.changeOrderId ? (
                       <span className="num text-xs text-muted-foreground">
-                        {rev.changeOrderId}
+                        改单 {rev.changeOrderId}
                       </span>
                     ) : null}
                   </div>
@@ -71,17 +74,17 @@ export function RevisionHistoryCard({
                 </div>
                 <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
                   <div>
-                    <dt className="text-muted-foreground">合同修订</dt>
+                    <dt className="text-muted-foreground">当时合同</dt>
                     <dd className="num font-medium">
                       {rev.contractRevisionLabel}
                     </dd>
                   </div>
                   <div>
-                    <dt className="text-muted-foreground">客户记录</dt>
+                    <dt className="text-muted-foreground">当时客户</dt>
                     <dd className="font-medium">{rev.customerSnapshot}</dd>
                   </div>
                   <div>
-                    <dt className="text-muted-foreground">含税金额记录</dt>
+                    <dt className="text-muted-foreground">当时成交金额</dt>
                     <dd>
                       <MoneyValue value={rev.amountGross} taxBasis="gross" />
                     </dd>

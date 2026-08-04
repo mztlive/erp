@@ -6,10 +6,10 @@ import type {
 import { compareDecimal } from "@/lib/fixed-decimal"
 
 /**
- * 关闭规则（W05 §5.3 / §12）：
- * - 非卡券：履约以验收完成判定
- * - 卡券：履约以履约期限到期完成，不因已消费完提前完成
- * - 关闭门槛：履约完成 AND 应收结清；开票未完成不阻塞
+ * 结案规则（W05 §5.3 / §12）：
+ * - 非卡券：交付以客户验收完成判定
+ * - 卡券：交付以履约期限到期完成，不因已消费完提前完成
+ * - 结案门槛：交付完成 AND 回款收齐；开票未完成不挡结案
  */
 export function computeCloseEligibility(input: {
   nature: SalesOrderNature
@@ -44,13 +44,13 @@ export function computeCloseEligibility(input: {
       blockers: closed
         ? []
         : primaryStatusLabel === "已作废"
-          ? ["销售单已作废，不适用关闭"]
-          : ["草稿未生效，不适用关闭"],
+          ? ["本单已作废，不会再结案"]
+          : ["草稿尚未生效，谈不上结案"],
       note: closed
-        ? "履约完成且应收已结清，系统已自动关闭。开票状态不影响关闭。"
+        ? "交付与回款都已完成，本单已自动结案。开票是否做完不影响结案。"
         : primaryStatusLabel === "已作废"
-          ? "作废单保留历史提交与驳回记录，不可关闭也不可恢复。"
-          : "草稿尚未进入当前状态。",
+          ? "作废单只保留历史记录，不能结案，也不能恢复。"
+          : "草稿还没生效，先完成提交与确认。",
     }
   }
 
@@ -68,12 +68,12 @@ export function computeCloseEligibility(input: {
   if (!fulfillmentComplete) {
     blockers.push(
       nature === "card_voucher"
-        ? "卡券履约尚未到期完成（不因已消费完提前完成）"
-        : "非卡券履约尚未验收完成"
+        ? "卡券还没到履约期限（持卡人是否消费完都不提前算交付完成）"
+        : "客户验收还没做完"
     )
   }
   if (!receivableSettled) {
-    blockers.push("应收尚未结清")
+    blockers.push("客户回款还没收齐")
   }
 
   const eligibleToClose = fulfillmentComplete && receivableSettled
@@ -85,8 +85,8 @@ export function computeCloseEligibility(input: {
     eligibleToClose,
     blockers,
     note: eligibleToClose
-      ? "关闭条件已满足：履约完成且应收结清。系统将自动关闭；开票未完成不阻塞关闭，页面无人工关闭按钮。"
-      : `关闭条件未满足：${blockers.join("；")}。开票进度不参与关闭门槛。`,
+      ? "交付和回款都齐了，系统会自动结案。发票开没开完都不挡结案，也无需人工点「关闭」。"
+      : `还不能结案：${blockers.join("；")}。开票进度不参与是否结案。`,
   }
 }
 
@@ -113,7 +113,7 @@ export function canStartSalesChange(input: {
   if (input.ownerSystem !== "erp") {
     return {
       allowed: false,
-      reason: "当前由商城主责，ERP 不可发起销售变更；一期商业字段只读。",
+      reason: "这单目前由商城侧维护，请在商城改内容；本系统只能查看。",
     }
   }
   if (
@@ -123,7 +123,7 @@ export function canStartSalesChange(input: {
   ) {
     return {
       allowed: false,
-      reason: `状态「${input.primaryStatusLabel}」不可发起销售变更。`,
+      reason: `当前状态是「${input.primaryStatusLabel}」，不能发起改单。`,
     }
   }
   if (
@@ -134,13 +134,13 @@ export function canStartSalesChange(input: {
   ) {
     return {
       allowed: false,
-      reason: "生效前处理中，请先完成确认/审批或驳回出路，不可并行发起变更。",
+      reason: "本单还在确认/审批中，请先处理完当前待办，再发起改单。",
     }
   }
   if (input.hasActiveChangeOrder) {
     return {
       allowed: false,
-      reason: "同一基准版本已有进行中的销售变更单。",
+      reason: "已有一笔改单在处理中，请等它走完再发起新的。",
     }
   }
   return { allowed: true }

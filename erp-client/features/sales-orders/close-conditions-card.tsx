@@ -30,7 +30,7 @@ type CloseConditionsCardProps = {
 }
 
 /**
- * 关闭规则只读面板：履约完成 + 应收结清；开票不阻塞；无人工关闭按钮。
+ * 结案说明（只读）：交付完成 + 回款收齐；开票不挡结案；无人工关闭按钮。
  */
 export function CloseConditionsCard({ order }: CloseConditionsCardProps) {
   const { closeEligibility: close, nature } = order
@@ -40,36 +40,37 @@ export function CloseConditionsCard({ order }: CloseConditionsCardProps) {
     <Card size="sm">
       <CardHeader className="border-b">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <CardTitle>关闭条件</CardTitle>
+          <CardTitle>何时结案</CardTitle>
           <Badge variant={close.eligibleToClose ? "success" : "secondary"}>
             {order.primaryStatus.label === "已关闭"
-              ? "已自动关闭"
+              ? "已结案"
               : close.eligibleToClose
-                ? "条件已满足 · 待系统关闭"
-                : "条件未满足"}
+                ? "可以结案 · 系统自动处理"
+                : "还差条件"}
           </Badge>
         </div>
         <CardDescription>
           {isCard
-            ? "卡券以履约期限到期视为履约完成。"
-            : "非卡券以客户验收完成履约。"}
-          {" "}开票未完成不阻塞关闭；页面不提供人工关闭。
+            ? "卡券：到了履约期限就算交付完成。"
+            : "实物/服务：客户验收完成才算交付完成。"}
+          {" "}
+          发票开没开完都不影响结案；这里不能手动点「关闭」。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         <ul className="space-y-2 text-sm" role="list">
           <ConditionRow
             ok={close.fulfillmentComplete}
-            label="履约完成"
+            label="交付完成"
             detail={
               isCard
                 ? `期限 ${order.fulfillmentDeadline} · 当前 ${order.fulfillment.label}`
-                : `验收/履约进度 · 当前 ${order.fulfillment.label}`
+                : `验收进度 · 当前 ${order.fulfillment.label}`
             }
           />
           <ConditionRow
             ok={close.receivableSettled}
-            label="应收结清"
+            label="回款收齐"
             detail={
               <>
                 已回款{" "}
@@ -83,25 +84,23 @@ export function CloseConditionsCard({ order }: CloseConditionsCardProps) {
           />
           <ConditionRow
             ok={close.invoiceComplete}
-            label="开票完成（不阻塞）"
+            label="开票完成（仅供参考）"
             optional
-            detail={`当前 ${order.invoicing.label} · 未完成不阻止关闭`}
+            detail={`当前 ${order.invoicing.label} · 未开完也不挡结案`}
           />
         </ul>
 
         <Alert variant={close.eligibleToClose ? "success" : "warning"}>
           <LockIcon aria-hidden="true" />
           <AlertTitle>
-            {close.eligibleToClose
-              ? "系统关闭资格已具备"
-              : "系统关闭条件未满足"}
+            {close.eligibleToClose ? "可以结案了" : "还不能结案"}
           </AlertTitle>
           <AlertDescription>{close.note}</AlertDescription>
         </Alert>
 
         {close.blockers.length > 0 ? (
           <p className="text-xs text-muted-foreground">
-            阻断项：{close.blockers.join("；")}
+            还差：{close.blockers.join("；")}
           </p>
         ) : null}
       </CardContent>
@@ -120,11 +119,7 @@ function ConditionRow({
   detail: React.ReactNode
   optional?: boolean
 }) {
-  const Icon = optional
-    ? CircleDashedIcon
-    : ok
-      ? CheckIcon
-      : XIcon
+  const Icon = optional ? CircleDashedIcon : ok ? CheckIcon : XIcon
   return (
     <li className="flex items-start gap-2 rounded-lg border border-border px-3 py-2">
       <Icon
@@ -142,7 +137,7 @@ function ConditionRow({
           {label}
           {optional ? (
             <span className="ml-1 text-xs font-normal text-muted-foreground">
-              （参考）
+              （不挡结案）
             </span>
           ) : null}
         </div>

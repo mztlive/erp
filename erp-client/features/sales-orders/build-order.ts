@@ -67,14 +67,14 @@ export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
 
   const commercialReadOnlyReason =
     input.ownerSystem === "mall"
-      ? "当前由商城主责：一期卡券商业字段在 ERP 只读，二期迁移仅改主责不换单号/版本。"
+      ? "这单目前由商城维护，本系统只能查看；改内容请在商城处理。"
       : input.activeCardSalesApproval
-        ? "卡券销售审批进行中：冻结提交只读，须通过任务处理页决定。"
+        ? "卡券审批进行中，内容暂不能改；请先完成审批。"
         : input.primaryStatus.label === "已关闭" ||
             input.primaryStatus.label === "已作废"
-          ? "已生效记录不可直接编辑；历史版本记录不被当前基础资料覆盖。"
+          ? "本单已结束，不能直接改内容；历史版本仍可查看。"
           : commercialReadOnly
-            ? "商业内容只读；变更须走销售变更单。"
+            ? "金额和明细不能直接改；需要改请点「发起改单」。"
             : undefined
 
   const closeEligibility = computeCloseEligibility({

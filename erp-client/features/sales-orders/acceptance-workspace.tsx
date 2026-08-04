@@ -421,8 +421,8 @@ export function AcceptanceWorkspace({
         setFormalResult({
           kind: "post",
           status: "succeeded",
-          title: "客户验收已过账",
-          description: `${result.factOnlyNotice} 剩余待验收 ${result.remainingEligibleCount} 批 · 约 ${result.remainingEligibleQuantityLabel}。`,
+          title: "客户验收已登记",
+          description: `${result.factOnlyNotice} 还剩待验收 ${result.remainingEligibleCount} 批 · 约 ${result.remainingEligibleQuantityLabel}。`,
           reference: result.acceptanceNo,
           facts: [
             {
@@ -452,7 +452,7 @@ export function AcceptanceWorkspace({
         setFormalResult({
           kind: "post",
           status: "failed",
-          title: "验收过账失败",
+          title: "验收登记失败",
           description: result.message,
           facts: [],
         })
@@ -470,7 +470,7 @@ export function AcceptanceWorkspace({
         status: "unknown",
         title: resultText.unknown,
         description:
-          "请求超时或网络中断，结果未确认；请查询最终结果或重试，避免重复过账。",
+          "请求超时或网络中断，结果未确认；请查询最终结果或重试，避免重复登记。",
         facts: [{ label: resultText.originalTaskNo, value: idempotencyKey }],
       })
     },
@@ -616,8 +616,8 @@ export function AcceptanceWorkspace({
     return (
       <BusinessEmptyState
         kind="no-data"
-        title="验收工作区加载失败"
-        description="无法获取可验收履约记录。请重试或返回销售单概览。"
+        title="验收内容加载失败"
+        description="暂时拿不到可验收的交付记录。请重试，或返回销售单。"
         action={
           <Button type="button" onClick={() => void workspaceQuery.refetch()}>
             重试
@@ -660,7 +660,7 @@ export function AcceptanceWorkspace({
     <div className="flex min-w-0 flex-col gap-4">
       {view.workItemConfigBlocker ? (
         <Alert variant="warning" role="alert">
-          <AlertTitle>任务入口未启用</AlertTitle>
+          <AlertTitle>验收入口暂不可用</AlertTitle>
           <AlertDescription>{view.workItemConfigBlocker}</AlertDescription>
         </Alert>
       ) : null}
@@ -699,7 +699,7 @@ export function AcceptanceWorkspace({
                   variant="outline"
                   onClick={() => setFormalResult(null)}
                 >
-                  继续登记
+                  继续验收
                 </Button>
               )
             }
@@ -708,21 +708,21 @@ export function AcceptanceWorkspace({
       ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <MetricStrip columns={4} aria-label="待验收摘要（系统净记录）">
+        <MetricStrip columns={4} aria-label="待验收摘要">
           <MetricItem
             label="待验收批次"
             value={String(view.metrics.eligibleFulfillmentCount)}
-            detail="净可验收履约记录"
+            detail="还可验收的交付记录"
           />
           <MetricItem
             label="待验收数量"
             value={eligibleLabel}
-            detail="按单位分组 · 不跨单位相加"
+            detail="按单位分别统计"
           />
           <MetricItem
-            label="履约进度"
+            label="交付进度"
             value={view.salesOrder.fulfillmentProgress}
-            detail="系统履约数据"
+            detail="本单交付情况"
           />
           <MetricItem
             label={freshnessText.dataUpdatedAt}
@@ -731,7 +731,7 @@ export function AcceptanceWorkspace({
                 updatedAt="刚刚"
                 dateTime={view.freshness.factsUpdatedAt}
                 state={view.freshness.state}
-                label="履约/验收记录"
+                label="交付/验收记录"
               />
             }
           />
@@ -739,7 +739,7 @@ export function AcceptanceWorkspace({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 text-sm">
-        <span className="text-muted-foreground">履约记录筛选</span>
+        <span className="text-muted-foreground">交付记录筛选</span>
         <Button
           type="button"
           size="sm"
@@ -791,17 +791,17 @@ export function AcceptanceWorkspace({
       {isCard || !canCreate ? (
         <BusinessEmptyState
           kind="no-data"
-          title={isCard ? "卡券单不适用客户验收" : "当前不可登记验收"}
+          title={isCard ? "卡券单不用做客户验收" : "当前不能验收"}
           description={
             postBlocker?.message ??
-            "请确认业务类型与权限后从有权入口继续。"
+            "请确认本单类型与你的权限后再试。"
           }
           action={
             <Button
               render={<Link href={`/sales/orders/${salesOrderId}`} />}
               variant="outline"
             >
-              返回概览
+              返回本单
             </Button>
           }
         />
@@ -809,15 +809,15 @@ export function AcceptanceWorkspace({
         view.history.length === 0 ? (
         <BusinessEmptyState
           kind="no-data"
-          title="当前没有待验收的履约记录"
-          description="请先在收货与发货或交付与代发中完成登记；也可查看历史验收。"
+          title="还没有可验收的交付记录"
+          description="请先完成收货/发货或服务交付登记；也可以查看历史验收。"
           action={
             <Button
               /* 销售只读，没有归属岗位：不带 lane，走中性页头 */
               render={<Link href="/fulfillment" />}
               variant="outline"
             >
-              打开履约处理
+              去发货/交付
             </Button>
           }
         />
@@ -833,11 +833,10 @@ export function AcceptanceWorkspace({
               <CardHeader className="border-b">
                 <CardTitle className="flex items-center gap-2">
                   <PackageIcon className="size-4" aria-hidden="true" />
-                  可验收履约记录
+                  可验收的交付记录
                 </CardTitle>
                 <CardDescription>
-                  数量来自服务端净成功履约与净验收分配（APPLY − REVERSE），前端不按表头状态推断。
-                  一次验收可勾选多个批次；同一批次可在多次验收中分摊。
+                  可选一条或多条交付批次验收；同一批次也可以分多次验收。
                 </CardDescription>
               </CardHeader>
               <CardContent className="max-h-[min(32rem,70vh)] space-y-4 overflow-y-auto pt-4">
