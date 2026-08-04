@@ -115,7 +115,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 
 | 任务族 | 典型 `work_item_type` | 默认展开 |
 | --- | --- | --- |
-| 审批与确认 | `PROCUREMENT_CONFIRMATION`、`LOW_MARGIN_MANAGER_CONFIRMATION`、销售审批、采购审核 | 是 |
+| 审批与确认 | `PROCUREMENT_CONFIRMATION`、`LOW_MARGIN_MANAGER_CONFIRMATION`、`IMPORT_BUSINESS_CONFIRMATION`、销售审批、采购审核 | 是 |
 | 票款与结算 | `CARD_FUNDS_REVIEW`、`CARD_FUNDS_DELTA_REVIEW`、`SUPPLIER_SETTLEMENT_REVIEW`、财务纠错 | 有任务时展开 |
 | 履约与库存 | 库存调整审核、履约相关 `BUSINESS_EXCEPTION` | 有超期时展开，否则折叠 |
 | 数据治理与异常 | `INTEGRATION_RESULT_UNKNOWN`、`BUSINESS_EXCEPTION` （映射任务使用 `business_object_type=MASTER_MAPPING_TASK`） | 管理员/责任角色展开，其余按权限隐藏 |
@@ -211,6 +211,9 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 - 跨工作面队列上下文只使用 `queueContextId`，任务条目身份使用 `workItemId`；目标队列定位当前项时使用 `currentWorkItemId=workItemId`，不接受平行别名。
 - 前端根据服务端返回的 `destinationWorkspaceId` 和稳定对象身份查本地路由注册表；不接受服务端任意 URL，避免开放跳转。
 - 已被他人有效领取的任务仍可按权限查看，但处理按钮禁用并显示领取人和租约状态。
+- `IMPORT_BUSINESS_CONFIRMATION` 固定路由到 W18：以 `LEGACY_IMPORT_BATCH` 的稳定批次身份生成
+  `section=confirm&confirmationScope={scope}&workItemId={workItemId}&queueContextId={queueContextId}`。
+  `confirmationScope` 仅用于定位被分派的责任确认，`workItemId` 仍是唯一任务身份；领取、完成和返回均由 W18 的受控 handler 处理。
 
 ## 8. 数据契约
 
@@ -289,6 +292,8 @@ type WorkspaceWorkItem = {
   impactSummary: string
   allowedActions: Array<"VIEW" | "PROCESS">
   actionBlockers: Array<{ action: "VIEW" | "PROCESS"; code: string; message: string }>
+  handlerKey: string
+  routeContext?: { confirmationScope?: string }
   destinationWorkspaceId: string
   queueContextId: string
 }
@@ -305,7 +310,7 @@ type WorkspaceWarning = {
 }
 ```
 
-`WorkspaceWorkItem.status` 直接复用 W02 `WorkItemStatus`；每条正式待办都返回 `workItemId` 和 `queueContextId`。W01 只把 `workItemId` 映射为目标队列的 `currentWorkItemId`，不创建新的任务身份或队列上下文别名。
+`WorkspaceWorkItem.status` 直接复用 W02 `WorkItemStatus`；每条正式待办都返回 `workItemId` 和 `queueContextId`。W01 对 W02 类目标队列只把 `workItemId` 映射为 `currentWorkItemId`，不创建新的任务身份或队列上下文别名；W18 不是 W02 队列位置，按其受控 handler 契约原样传递 `workItemId`、`confirmationScope` 与 `queueContextId`。
 
 ### 8.3 数据新鲜度与计算边界
 
@@ -403,6 +408,7 @@ W01 没有业务写提交接口。
 - [x] 筛选进入 URL，刷新和浏览器后退能恢复。
 - [x] 从目标页返回后恢复原筛选和任务焦点。
 - [ ] 任务已被他人领取、完成或权限变化时，目标页重新校验并给出明确结果。
+- [ ] `IMPORT_BUSINESS_CONFIRMATION` 能以受控 W18 路由携带批次、责任范围、任务和队列上下文；未接线时不显示为可处理。
 
 ### 12.4 状态与响应式
 

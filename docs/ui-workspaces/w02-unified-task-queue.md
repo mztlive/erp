@@ -21,7 +21,7 @@
 
 - 以正式 `work_item` 为唯一待办事实源，不从各业务单据状态在前端反推任务。
 - 用同一套查找、领取、租约、转交和完成反馈契约承载全部固定任务类型。
-- 为 W07、W13、财务审核、卡券审批和异常处理提供共用队列容器；业务表单由相应任务类型处理器提供。
+- 为 W07、W13、W18、财务审核、卡券审批和异常处理提供共用队列容器；业务表单由相应任务类型处理器提供。
 - 确保任务完成和正式业务状态变化属于同一强类型业务事务，前端不先行标记完成。
 
 ### 1.3 不在本工作面完成
@@ -126,6 +126,13 @@ TaskTabs 身份为 `workspace:tasks:{userId}`。筛选、队列位置和当前�
 | `completionAction` | 该任务唯一允许的完成动作身份 |
 | `resultQueryKey` | 结果不确定时查询最终结果，不包含任意 URL |
 
+`IMPORT_BUSINESS_CONFIRMATION` 的受控登记固定为：`business_object_type=LEGACY_IMPORT_BATCH`、
+`handlerKey=import_business_confirmation`、`destinationWorkspaceId=W18`、
+`completionAction=COMPLETE_IMPORT_BUSINESS_CONFIRMATION`。每个
+`batchId × confirmationScope × trialVersion × subjectHash` 最多一个有效任务，
+`subjectHash` 必须包含责任范围，`confirmationScope + ownerRole` 决定责任范围；前端尚未注册该 handler 时必须返回 blocker，
+不能回退到通用完成表单或 `BUSINESS_EXCEPTION`。
+
 ## 6. 搜索、筛选、排序与默认视图
 
 | 能力 | 默认值 | URL 状态 | 行为 |
@@ -200,7 +207,7 @@ type UnifiedTaskQueueView = {
 }
 ```
 
-`queueContextId` 是跨 W01/W02/W07 恢复筛选、稳定顺序和返回焦点的唯一队列上下文字段。首次进入没有该值时由服务端创建并在响应与 URL 中固定，不接受平行别名。任务身份统一使用 `workItemId`，队列定位只使用 `currentWorkItemId`、`previousWorkItemId` 和 `nextWorkItemId`。
+`queueContextId` 是跨 W01/W02/W07/W18 恢复筛选、稳定顺序和返回焦点的唯一队列上下文字段。首次进入没有该值时由服务端创建并在响应与 URL 中固定，不接受平行别名。任务身份统一使用 `workItemId`；W02 队列定位只使用 `currentWorkItemId`、`previousWorkItemId` 和 `nextWorkItemId`，W18 则按其 handler 契约传递原 `workItemId`，不伪造 W02 队列位置。
 
 查询要求：
 
@@ -347,6 +354,10 @@ type TransferWorkItemResult = {
 - `WorkItemActionEnvelope.action` 只承载查询、重放、保存证据、暂挂等**不终结任务**的强类型动作；它的 `idempotencyKey` 只标识本次任务动作，不得兼作外部接口原动作或业务事实的幂等键。
 - 任务内动作成功必须返回服务端正式非终结状态 `workItemStatus: "PENDING" | "IN_PROGRESS"`；可同时返回动作证据和不含 token 的 `WorkItemLeaseState`。该结果不等于任务完成，前端不能仅因动作成功自动移到下一项；只有用户显式执行 `DEFER` 等处理器动作且其契约要求切换时，才在固定结果后更新 `currentWorkItemId`。
 - `CompleteWorkItemEnvelope` 只用于处理器注册的正式业务完成动作。决策表单由各 `handlerKey` 定义，正式业务结果与任务 `COMPLETED` 必须同一事务返回；它不能返回 `CLOSED`，前端也不再单独调用“标记已完成”。
+- `IMPORT_BUSINESS_CONFIRMATION` 只接受 `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`：二者都由
+  `import_business_confirmation` 在同一事务写确认/退回事实、`workflow_action` 和当前任务
+  `COMPLETED`。后者业务结论为 `REJECTED`，不是 `TRANSFERRED`、`CLOSED` 或暂挂；修复并产生新
+  `trialVersion` 或 `subjectHash` 后才创建新任务。
 - `CloseWorkItemEnvelope` 只用于服务端确认可关闭的重复、误派或已有替代任务场景；所有分支强制结构化 `reasonCode` 与 `closureEvidenceReference`，重复/替代分支还必须给出 `replacementWorkItemId`。审批、确认、结果未知、未完成补偿以及处理器禁止关闭的任务一律拒绝；关闭只追加任务关闭证据，不写正式业务结论。
 - `TransferWorkItemEnvelope` 只用于转交：同一事务把原任务置为 `TRANSFERRED`、使原租约失效、追加转交记录并创建一个 `UNCLAIMED/PENDING` 后继任务；转交不完成任务、不写正式业务结论，也不允许直接覆盖责任人。
 - 超时或网络中断不改本地业务状态；使用同一幂等键查询最终结果，确认后再移到下一项。
@@ -409,6 +420,7 @@ type TransferWorkItemResult = {
 | 今日工作台 | W01 | `scope`、`family`、`due`、来源 `workItemId` 焦点 | 返回 W01 恢复原筛选 |
 | 客户、合同、销售单 | W03 / W04 / W05 | `businessObjectId`、`workItemId`、只读来源 | 对象页签关闭后回当前任务 |
 | 采购二次确认 | W07 | `currentWorkItemId=workItemId`、`queueContextId` | W07 处理后按同一上下文恢复 W02 行焦点 |
+| 导入业务确认 | W18 | `LEGACY_IMPORT_BATCH`、`confirmationScope`、`workItemId`、`queueContextId`；受控路由定位 `section=confirm` | W18 完成确认/退回后回原队列焦点或留在批次结果；未注册 handler 时保持 blocker |
 | 采购/履约对象 | W08 / W09 | 业务对象稳定 ID、来源 `workItemId` | 返回仍保留队列位置 |
 | 票款与复核 | W11 / W12 / W13 | 客户/供应商主体、对应单据、任务 | W11/W12 只形成回款、付款、发票等领域事实或纠错申请并返回原处理器重算指纹；只有 W13 或对应 W02 handler 的任务绑定决定，才通过共享信封与业务结果同事务完成/转交 `work_item` |
 | 同步、映射与错误 | W17 / W21 / W29 | 差异/错误任务身份、原对象 | 处理完等待正式任务查询更新 |
@@ -443,6 +455,7 @@ type TransferWorkItemResult = {
 - [ ] 第 9 节全部状态通过组件或浏览器验收。
 - [ ] 1440、1280、1024、768、375 五档视口符合第 10.1 节。
 - [x] 仅用键盘可完成筛选、领取、打开对象、做决定和继续下一项。
+- [ ] `IMPORT_BUSINESS_CONFIRMATION` 的受控 handler、W18 深链、共享完成信封和结果查询完成端到端验证。
 
 ## 13. 待确认事项
 

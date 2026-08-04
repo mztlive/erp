@@ -67,8 +67,15 @@ Phase 4、6、7 或 Phase 1 的存储。规范 `source_system` / `external_ident
 - `MappingResolutionIntent`、`ReapplySnapshotIntent`、`ReconciliationDifferenceIntent`。
 - `SupplierCatalogImportIntent` 等领域导入意图；W18 只编排批次和确认，目录行的正式校验/
   应用仍由 Phase 3 唯一负责。
+- `ImportBusinessConfirmationIntent`：固定任务
+  `IMPORT_BUSINESS_CONFIRMATION`，业务对象 `LEGACY_IMPORT_BATCH`，按
+  `batchId × confirmationScope × trialVersion × subjectHash` 生成一个有效责任确认；
+  `subjectHash` 必须包含责任范围，`confirmationScope + ownerRole` 分责，handler 为 `import_business_confirmation`，完成动作为
+  `COMPLETE_IMPORT_BUSINESS_CONFIRMATION`，decision 仅为 `CONFIRM_SCOPE | RETURN_FOR_FIX`。
 
-Phase 10 才将这些意图绑定到销售、库存、财务和任务的真实同事务写入。
+Phase 10 才将这些意图绑定到销售、库存、财务和任务的真实同事务写入。确认完成事务必须同时写
+确认/退回事实、`workflow_action` 和当前任务 `COMPLETED`；`RETURN_FOR_FIX` 的业务结论为
+`REJECTED`，不是转交、关闭或暂挂。修复并形成新的 `trialVersion` 或 `subjectHash` 后才可创建新任务。
 
 ## 5. 状态与不变量
 
@@ -95,6 +102,8 @@ Phase 10 才将这些意图绑定到销售、库存、财务和任务的真实�
 ### 5.3 导入与映射
 
 - 导入经过接收、校验、试算、按责任范围确认、应用和结果阶段；生产应用前先在验证环境。
+- 正常导入确认只使用 `IMPORT_BUSINESS_CONFIRMATION`，不得借用 `BUSINESS_EXCEPTION`；handler
+  未在后端和 W01/W02/W18 受控注册表实际接线前，确认能力保持 fail-closed。
 - 已成功对象不因取消、失败重跑或新文件回滚；同来源身份重跑幂等跳过已成功项。
 - 零/多卡券明细、未知状态、金额/税率解析失败、客户/合同/结算主体/类目无法映射时，
   只形成差异，不生成销售、应收、库存或经营归属。
@@ -115,7 +124,9 @@ Phase 10 才将这些意图绑定到销售、库存、财务和任务的真实�
 2. 重复、乱序、跨页重试、同刻多单、页失败和进程中断的游标性质测试。
 3. 基线 `B` 期间变化、迟到快照、A→B→A、同刻不同内容和商城不可用。
 4. 全量清单的商城缺失、ERP 缺失、状态/内容差异和重复身份；只产差异。
-5. 验证环境确认、试算失效、生产应用、部分失败和成功行幂等重跑。
+5. 验证环境确认、试算失效、生产应用、部分失败和成功行幂等重跑；覆盖
+   `IMPORT_BUSINESS_CONFIRMATION` 的 scope/owner 分责、同版本去重、`CONFIRM_SCOPE` 与
+   `RETURN_FOR_FIX` 的同事务完成，以及新 `trialVersion` / `subjectHash` 才产生新任务。
 6. 期初库存只接受实盘；商城 stock、历史流水和实体卡库存全部拒绝。
 7. 期初卡券应收固定零已收/已开，商城支付字段不能生成回款。
 8. 敏感字段扫描、日志脱敏、资产保留到期和下载再鉴权意图。
@@ -132,8 +143,8 @@ Phase 10 才将这些意图绑定到销售、库存、财务和任务的真实�
 - W18 Q1～Q4：确认矩阵、生产双人复核、批次上限和验证结果有效期必须由版本化策略提供。
 - W18 Q5：只接受已登记的治理型批量导入对象集；日常正式业务不得借 W18 绕过对象工作面，
   未登记对象类型直接拒绝。
-- W18 Q6：正常导入确认任务类型未登记，确认入口保持 blocker，禁止借用
-  `BUSINESS_EXCEPTION`。
+- W18 正常导入确认的类型、对象、handler、去向和完成动作已经固定；在 Phase 10 的真实任务
+  注册、W01/W02 展示映射、W18 handler 与结果查询全部接线并验证前，确认入口仍保持 blocker。
 - W17 文档含第二期冻结/封存内容；本 phase 仅实现第一期运行态，Phase 10 不得误注册
   主责迁移命令。
 

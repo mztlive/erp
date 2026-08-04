@@ -303,10 +303,11 @@ erDiagram
 | 发票 | `invoice`、`sales_invoice_allocation`、`purchase_invoice_allocation` |
 | 成本 | `cost_entry`、`cost_allocation` |
 | 退拒纠错 | `sales_return_case`、`sales_return_line`、`purchase_return_order`、`purchase_return_line`、`customer_refund`、`supplier_refund`、`receipt_reversal`、`payment_reversal` |
-| 旧数据导入 | `legacy_import_batch`、`legacy_import_row` |
+| 旧数据导入 | `legacy_import_batch`、`legacy_import_row`、`legacy_import_confirmation` |
 | 商城拉取 | `mall_sales_sync_job`、`mall_sales_sync_cursor`、`mall_sales_sync_cursor_tie`、`mall_sales_order_snapshot`、`mall_sales_reconciliation_job`、`mall_sales_reconciliation_item`、`master_mapping_task` |
 | 供应商商品库 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_product_revision_media`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`、`supplier_product_mapping`、`supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
 | 多供应商供给 | `supplier_offering`、`supplier_offering_revision` |
+| 内部可靠事件 | `outbox_message`（一期仅允许内部投影消费者，不配置外部 endpoint） |
 
 供应商商品库、供应商 SKU 映射和多供应商供给全部在第一期启用。第一期来源仅开放
 `MANUAL` / `EXCEL`；API 连接、自动同步和 API 变化处理在第二期启用，但继续写入上述同一套
@@ -326,7 +327,12 @@ erDiagram
 | 历史回填 | `mall_consumption_backfill_job`、`mall_consumption_backfill_item` |
 | 供应商履约 | `supplier_fulfillment_order`、`supplier_fulfillment_item`、`supplier_order_action`、`supplier_order_action_line`、`supplier_order_status_history`、`supplier_refund_fact`、`supplier_refund_allocation` |
 | 供应商结算 | `supplier_settlement_statement`、`supplier_settlement_item`、`supplier_settlement_difference` |
-| 集成治理 | `outbox_message`、`inbox_message`、`integration_attempt`、`integration_error_task`、`reconciliation_job`、`reconciliation_difference`、`reconciliation_difference_resolution` |
+| 双向集成治理 | `inbox_message`、`integration_attempt`、`integration_error_task`、`reconciliation_job`、`reconciliation_difference`、`reconciliation_difference_resolution`；复用一期 `outbox_message`，不新建第二张 outbox 或 `integration_message` 同义表 |
+
+一期已经建设唯一的 `outbox_message`，只用于 ERP 内部正式事实变更流和 W01/W15/W16 等
+可重建投影；一期不配置外部 endpoint、webhook、供应商 API 外发、外部 dispatcher 或
+`inbox_message`。二期复用同一张 outbox 表并开启外部投递能力，同时新增 inbox、协议尝试、
+错误中心和通用对账。`integration_message` 只能作为 outbox/inbox 的概念总称，不是第三张物理表。
 
 ---
 
@@ -443,8 +449,21 @@ erDiagram
 `CARD_SALES_OPERATION_APPROVAL`、`OWNERSHIP_MIGRATION_SALES_CONFIRMATION`、
 `OWNERSHIP_MIGRATION_FINANCE_CONFIRMATION`、`INVENTORY_ADJUSTMENT_REVIEW`、
 `FINANCE_CORRECTION_REVIEW`、`SUPPLIER_SETTLEMENT_REVIEW`、
+`IMPORT_BUSINESS_CONFIRMATION`、
 `INTEGRATION_RESULT_UNKNOWN` 和 `BUSINESS_EXCEPTION`。页面、接口和后台任务不得
 临时创造同义代码。
+
+一期正常导入确认的固定注册如下；不得按销售、采购、运营、仓储、财务拆成五个同义任务类型：
+
+| `work_item_type` | `business_object_type` | `handler_key` | 目标工作面 | 唯一 `completion_action` |
+| --- | --- | --- | --- | --- |
+| `IMPORT_BUSINESS_CONFIRMATION` | `LEGACY_IMPORT_BATCH` | `import_business_confirmation` | `W18` | `COMPLETE_IMPORT_BUSINESS_CONFIRMATION` |
+
+该完成动作的领域 decision 仅允许 `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`。每个“批次 ×
+`confirmation_scope` × `trial_version` / `subject_hash`”创建一个任务；责任差异由
+`confirmation_scope + owner_role` 表达，不改变任务类型、handler 或完成动作。`subject_hash`
+必须覆盖批次、责任范围、试算版本、规则版本和 manifest 摘要，确保同一批次多个范围不会
+因共用任务类型而错误去重。
 
 | 字段 | 说明 |
 | --- | --- |
@@ -2098,7 +2117,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | `status` | 待校验、校验中、待确认、导入中、完成、部分失败、失败 |
 | `total_rows` / `success_rows` / `failed_rows` | 处理统计 |
 | `failure_code_summary` | 脱敏错误码及计数，不含原值和行列明细 |
-| `confirmed_by` / `confirmed_at` | 业务确认 |
+| `confirmation_status_summary` | 各必要 `legacy_import_confirmation` 的派生摘要；不保存单个确认人作为多范围事实源 |
 
 #### `legacy_import_row`
 
@@ -2113,7 +2132,36 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | `error_code` / `error_detail` | 失败原因 |
 | `target_document_id` / `target_object_reference` | 成功结果 |
 
+#### `legacy_import_confirmation`
+
+| 字段 | 说明 |
+| --- | --- |
+| `legacy_import_confirmation_id` / `batch_id` | 确认事实身份和所属导入批次 |
+| `confirmation_scope` / `owner_role` | 销售、采购、运营、仓储、财务等责任范围及责任角色 |
+| `batch_version` / `trial_version` | 本次确认针对的批次与试算版本 |
+| `import_rule_version` / `manifest_digest` / `subject_hash` | 规则、输入清单与完整确认对象指纹 |
+| `status` | `PENDING`、`CONFIRMED`、`REJECTED`、`INVALIDATED` |
+| `decision` | `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`；待确认/失效时为空 |
+| `reason_code` / `comment` | 退回原因必填；确认意见可选 |
+| `work_item_id` | 对应 `IMPORT_BUSINESS_CONFIRMATION` 正式任务 |
+| `decided_by` / `decided_at` | 实际确认或退回人及时间 |
+| `invalidated_at` / `replacement_confirmation_id` | 新试算、规则或 manifest 变化后的失效与替代关系 |
+
 必需约束与索引：
+
+- `(batch_id, confirmation_scope, trial_version, subject_hash)` 唯一，`work_item_id` 唯一；
+- 每个批次按版本化确认矩阵为必要范围各创建一个任务，系统管理员不得替代责任角色确认；
+- `CONFIRM_SCOPE` 与 `RETURN_FOR_FIX` 都通过 W02 `CompleteWorkItemEnvelope` 调用
+  `COMPLETE_IMPORT_BUSINESS_CONFIRMATION`；同一事务写确认事实、`workflow_action`、批次新版本
+  和当前任务 `COMPLETED`，不得随后再调用通用“标记完成”；
+- `RETURN_FOR_FIX` 形成 `REJECTED` 业务结论，不转交、不创建后继任务；修复并产生新
+  `trial_version` / `subject_hash` 后才创建新的确认事实和任务；
+- 已完成的 `CONFIRMED` / `REJECTED` 永久保留；尚未完成但已被新试算取代的任务由系统按
+  `SUBJECT_SUPERSEDED` 关闭并关联 replacement，不能继续领取或完成；
+- 只有当前版本全部必要范围均 `CONFIRMED`，生产应用 guard 才能通过；批次上的确认状态仅为
+  这些事实的派生摘要。
+
+`legacy_import_batch` / `legacy_import_row` 必需约束与索引：
 
 - `batch_no` 唯一；
 - `(batch_id, source_object_type, source_row_key)` 唯一；
@@ -3344,7 +3392,13 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 - 确认后的差额以追加 `cost_entry` 表达；
 - 结算单应付复用第一期付款、进项发票和多对多核销。
 
-### 6.21 集成消息、错误中心与对账
+### 6.21 一期内部 outbox 与二期双向集成治理
+
+阶段边界：一期只启用本节的 `outbox_message`，用于 ERP 内部事件消费者和可重建查询投影；
+不启用外部 endpoint、webhook、外部 dispatcher、`inbox_message`、`integration_attempt`、
+接口错误中心或通用接口对账。二期复用同一 outbox 表并开放外部目的地，同时启用本节其余
+双向治理表。商城一期主动轮询和每日全量核对继续使用专用 `mall_sales_sync_*` /
+`mall_sales_reconciliation_*`，不伪装成 inbox 或二期通用对账。
 
 #### `outbox_message`
 
@@ -3352,8 +3406,9 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 | --- | --- |
 | `event_id` | ERP 消息事件 ID |
 | `aggregate_type` / `aggregate_id` / `aggregate_revision` | 来源聚合及版本 |
-| `event_type` | 商品发布、销售投影、供应商动作等 |
-| `idempotency_key` | 对外动作幂等键 |
+| `event_type` | 一期内部正式事实事件；二期扩展商品发布、销售投影、供应商动作等外部事件 |
+| `delivery_scope` / `destination_key` | `INTERNAL_PROJECTION` 或 `EXTERNAL_ENDPOINT` 及受控消费者/目的地；一期只允许前者 |
+| `idempotency_key` | 消费或投递幂等键 |
 | `payload_schema_version` | 契约版本 |
 | `payload_reference` / `payload_digest` | 规范化消息内容和摘要 |
 | `status` | 待发送、发送中、待重试、已送达、死信、人工关闭 |
@@ -3362,7 +3417,8 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 
 必需约束与索引：
 
-- `event_id` 和 `idempotency_key` 分别唯一；
+- `event_id` 和 `idempotency_key` 分别唯一；一期 capability gate 必须拒绝
+  `delivery_scope = EXTERNAL_ENDPOINT`；
 - `status + available_at` 投递扫描索引；
 - `aggregate_type + aggregate_id + aggregate_revision` 追溯索引；
 - 业务事务成功而 outbox 失败时整个业务事务回滚；
@@ -3878,7 +3934,7 @@ PREPARING
 | 自动供应商订单 | 不启用 | 仅 `T` 后支付启用 | `T` 前订单保持原人工履约链 |
 | 供应商取消、退款、余额恢复闭环 | 不启用 | 与自动下单同批启用 | 未就绪不得切换主责 |
 | 供应商周期结算 | 不启用 | 启用 | 确认后进入一期应付 |
-| outbox、inbox、错误和对账 | 一期先启用 outbox 基础、拉取任务和差异 | 补齐完整双向治理 | 正式事实与消息同事务 |
+| outbox、inbox、错误和对账 | 启用唯一 `outbox_message`，仅内部事实事件/投影消费；商城主动拉取与每日核对使用专用表；无 inbox、外部 dispatcher 或通用接口治理 | 复用一期 outbox 开启外部目的地；新增 inbox、协议尝试、错误中心和通用对账 | 不建立第二张 outbox 或 `integration_message` 同义表；正式事实与 outbox 同事务 |
 | 经营分析 | 非卡券实际盈亏；卡券标记成本未覆盖 | 增加卡券消费、成本、余额和覆盖率 | 查询投影可重建 |
 
 第二期 P0 与 P1 必须同批具备生产能力。商品发布、销售投影、支付回流、

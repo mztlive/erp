@@ -48,7 +48,7 @@ backend/modules/analytics-projections/
 - `ReceivableSettlementSnapshot`、`CardFundsReviewSnapshot`；
 - `FulfillmentSnapshot`、`ActualCostSnapshot`、`ExceptionSnapshot`；
 - `CustomerAssignmentSnapshot`、`PermissionScopeSnapshot`；
-- `ProjectionWatermark` / outbox 消费位置。
+- `ProjectionWatermark` / 第一期 `outbox_message` 内部消费位置；该输入只表示 ERP 正式事实的内部可靠事件，不代表外部投递状态。
 
 查询至少返回：统计期间、口径/规则版本、数据水位、可靠性、样本数、权限裁剪结果和可下钻
 的稳定对象引用。未知、部分覆盖或策略缺失时返回 `UNAVAILABLE` / `PARTIAL` 和 blocker，
@@ -74,15 +74,15 @@ backend/modules/analytics-projections/
 
 ### 5.3 水位和重建
 
-- 正式任务、库存、票款同步更新；分析投影允许一分钟内异步刷新。
-- 每个投影记录 consumed watermark、规则版本和构建时间。
+- 正式任务、库存、票款同步更新；分析投影只消费第一期内部 outbox，允许一分钟内异步刷新。
+- 每个投影记录已消费的内部 outbox watermark、规则版本和构建时间；不得把二期外部 dispatcher、inbox 或回调状态当作一期输入。
 - 每晚从正式版本、流水、分配和纠错事实全量核对重建；重建失败只影响新鲜度，
   不修改正式事实或旧的最后成功快照。
 - 增量投影和全量重建对同一截止水位必须得到一致结果。
 
 ## 6. 测试要求
 
-1. 同事实乱序/重复消费、投影水位推进和幂等重建。
+1. 第一期内部 outbox 的乱序/重复消费、投影水位推进和幂等重建；不得要求外部消息、inbox 或回调才能形成一期投影。
 2. 客户负责人变化后的数据范围和历史参与者下钻。
 3. 卡券票款未复核整体排除，复核后纳入且不补造成本利润。
 4. 非卡券不含税利润公式、成本冲减、退款后净收入和利润率不适用。
@@ -108,4 +108,4 @@ backend/modules/analytics-projections/
 - 投影只读且可重建，无法反向修改正式事实。
 - 客户质量、非卡券利润、水位、可靠性和权限裁剪均有测试。
 - 卡券“未覆盖不是零成本”和第一期不算实际利润由类型/测试证明。
-- 仅写独占目录，并向 Phase 10 交付输入端口、投影 schema、算法版本、错误码和 blockers。
+- 仅写独占目录，并向 Phase 10 交付内部 outbox 输入端口、投影 schema、算法版本、错误码和 blockers；不要求或实现二期外部集成适配器。

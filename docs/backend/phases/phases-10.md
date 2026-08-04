@@ -104,11 +104,19 @@ Phase 10 自身也从 `BACKEND_PHASE_BASE_SHA` 创建，按下列审查顺序 `-
    供应商。二期仅增加 API 连接、自动同步和 API 变化处理，并复用一期同一套目录、映射、
    供给与公司 SKU 销售查询，不建立独立商品池实体。该决策已同步到 `erp-data-model.md` 表目录与阶段矩阵、
    `erp-ui-design.md` W21 阶段矩阵、W21 工作面和 `erp-phase-2.md` 增量范围。
-2. **outbox 阶段归属**：`erp-data-model.md` §5.4 将 outbox/inbox 列为二期扩展，§10
-   又要求一期启用 outbox 基础。必须明确一期所需表、事件类型、投递范围和调度器；
-   二期 inbox、双向事实和通用对账保持关闭。
-3. **W18 任务登记自相矛盾**：正文称正常导入确认类型未登记并 blocker，验收项又有已完成
-   表述。未真正写入权威任务注册表前按未登记处理。
+2. **[已确认，2026-08-04] outbox 阶段归属**：一期建设唯一 `outbox_message`，只承载 ERP
+   内部正式事实事件和可重建投影消费，不配置外部 endpoint、webhook、供应商 API 外发、
+   外部 dispatcher 或 inbox；一期商城主动轮询/每日核对继续使用专用表。二期复用同一
+   outbox 开启外部目的地，并新增 `inbox_message`、`integration_attempt`、错误中心和通用
+   对账。`integration_message` 仅可作概念总称，不建立第三张同义物理表。
+3. **[已确认，2026-08-04] W18 正常导入确认任务**：统一注册
+   `IMPORT_BUSINESS_CONFIRMATION → import_business_confirmation → W18 →
+   COMPLETE_IMPORT_BUSINESS_CONFIRMATION`。每个“批次 × 责任范围 × 试算版本/指纹”创建一个
+   任务，责任由 `confirmationScope + ownerRole` 区分，不拆五类任务。完成 decision 仅为
+   `CONFIRM_SCOPE | RETURN_FOR_FIX`；确认事实、workflow action、批次版本和任务完成同事务。
+   新增 `legacy_import_confirmation` 保存多范围历史，批次单个 `confirmed_by/at` 不再是事实源。
+   当前前端仍保持 fail-closed，尚无 W01/W02 fixture、handler、URL 上下文或完成 mutation，
+   因此不能因文档登记而把实施验收标为完成。
 4. **[已确认，2026-08-04] W21 映射与入池粒度**：唯一正式映射为
    `supplier_catalog_sku_id → company_sku_id`；supplier product/SPU 只作为页面容器和批量
    选择范围。单项命令必须携带精确供应商 SKU，批量入池必须提交 SKU 级 `items[]`，不得
@@ -162,6 +170,8 @@ Phase 10 自身也从 `BACKEND_PHASE_BASE_SHA` 创建，按下列审查顺序 `-
 - 将各 phase 逻辑约束编排为唯一、可顺序执行的真实 migrations；以统一模型表名为准，
   不增加同义通用表。
 - 提供统一 Unit of Work、稳定锁顺序、乐观版本、幂等结果持久化和提交后 outbox。
+- 一期 outbox dispatcher 只允许投递给已登记的内部投影消费者；外部目的地与 inbox 受二期
+  capability gate 保护。二期启用时复用同表迁移，不创建 `integration_message` 或第二 outbox。
 - 从空库执行全部迁移，并提供上一发布版本到当前版本的升级验证；首版也要验证重复执行
   和失败恢复。
 - 数据库约束、事务校验和每日复核共同覆盖跨行断言，不能只依赖 ORM 校验。
@@ -181,6 +191,8 @@ Phase 10 自身也从 `BACKEND_PHASE_BASE_SHA` 创建，按下列审查顺序 `-
 - 服务端实现模块/动作、数据范围、字段、对象状态和业务 blocker；不得仅靠前端按钮。
 - 注册固定 `work_item_type → handler → completion action`；未登记类型一律拒绝，禁止用
   `BUSINESS_EXCEPTION` 冒充普通业务任务。
+- 注册 W18 `IMPORT_BUSINESS_CONFIRMATION` 的五类责任 scope、W01/W02 展示映射、受控 handler
+  和唯一完成动作；任务 subject hash 必须包含 scope、试算、规则和 manifest 指纹。
 - `claimToken`、密钥、卡密、完整敏感字段和签名 URL 不进入 URL、日志、审计正文或
   长期缓存。
 - 正式导出冻结范围/字段/遮罩，执行和下载时均重新鉴权并留审计。
@@ -235,11 +247,14 @@ Phase 10 自身也从 `BACKEND_PHASE_BASE_SHA` 创建，按下列审查顺序 `-
 5. 客户回款/发票核销、供应商付款/进项票核销、退货/冲正/红票。
 6. 商城卡券基线 → 映射 → 销售版本/应收 → 逐单票款复核 → 每日全量核对。
 7. 期初实盘库存和基础资料导入的验证、确认、生产应用和幂等重跑。
+   正常确认按 `IMPORT_BUSINESS_CONFIRMATION` 从 W01/W02 进入 W18；五类 scope 分别形成
+   `legacy_import_confirmation`，确认/退回与任务完成同事务，旧指纹不能完成新试算。
 8. W01/W02/W19 的权限、租约、任务完成、导出和审计安全路径。
 
 ### 8.4 故障恢复与安全
 
-- DB commit 后 outbox 未投递、消费者崩溃、重复投递和死信重放。
+- DB commit 后一期内部 outbox 未消费、内部消费者崩溃、重复消费和死信重放；二期另测外部
+  dispatcher、inbox 去重、结果未知和接口错误中心。
 - 商城分页中断、同刻记录、停机恢复、迟到快照和 A→B→A。
 - 导入取消、部分失败、结果未知、成功行重跑。
 - 权限在请求中途收回、短时下载过期、字段遮罩、敏感日志/错误扫描。
@@ -265,7 +280,8 @@ Phase 10 自身也从 `BACKEND_PHASE_BASE_SHA` 创建，按下列审查顺序 `-
 - W09 Q1 未决时可以编译，但正常履约入口必须关闭，不能声称一期履约可上线。
 - W05 撤回、W07 角色池直转、库存调整任务链未按第 5 节接线时，对应入口保持关闭。
 - W06 Q2 未决时可保留 `DIRECT_OBJECT` 验收，但 W01/W02 验收任务入口关闭。
-- W18 Q6 未决且生产确认矩阵未落地时，生产期初导入不能放行。
+- W18 `IMPORT_BUSINESS_CONFIRMATION` 的真实 handler、五类 scope 任务映射或生产确认矩阵任一
+  未落地时，生产期初导入不能放行；Q6 已裁决，不能再以“任务类型未决定”描述 blocker。
 - W19 Q1～Q4 未决时核心服务端鉴权仍必须上线；高风险授权、角色时间策略、字段策略写入
   和审计导出按各自 blocker 关闭。
 
