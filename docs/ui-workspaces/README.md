@@ -53,35 +53,35 @@ W 文件不得重定义业务状态机，也不得为了版面方便改变金额
 
 | ID | 工作面 | 模式 | 主要路由 | 文档 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| W01 | 今日工作台 | M1 | `/workspace` | [w01-today-workspace.md](w01-today-workspace.md) | 样板 |
-| W02 | 待办队列（统一） | M3 | `/workspace/tasks` | [w02-unified-task-queue.md](w02-unified-task-queue.md) | 草稿 |
-| W03 | 客户中心 | M4 | `/sales/customers` | [w03-customer-center.md](w03-customer-center.md) | 草稿 |
-| W04 | 合同 | M2 + M4 | `/sales/contracts` | [w04-contracts.md](w04-contracts.md) | 草稿 |
-| W05 | 销售单（统一） | M2 + M4 + M5 | `/sales/orders`（列表行点纸质预览，无侧栏 Sheet） | [w05-sales-orders.md](w05-sales-orders.md) | 草稿 |
-| W06 | 客户验收 | 挂 W05 + 作业 | `/sales/orders/:salesOrderId?section=acceptance` | [w06-customer-acceptance.md](w06-customer-acceptance.md) | 草稿 |
-| W07 | 二次确认队列 | M3 | `/procurement/confirm` | [w07-procurement-confirmation-queue.md](w07-procurement-confirmation-queue.md) | 草稿 |
-| W08 | 采购单 | M2 + M4 + M5 | `/procurement/orders` | [w08-purchase-orders.md](w08-purchase-orders.md) | 草稿 |
+| W01 | 今日工作台 | M1 | `/workspace` | [w01-today-workspace.md](w01-today-workspace.md) | 已实现 |
+| W02 | 待办队列（统一） | M3 | `/workspace/tasks` | [w02-unified-task-queue.md](w02-unified-task-queue.md) | 已实现 |
+| W03 | 客户中心 | M4 | `/sales/customers` | [w03-customer-center.md](w03-customer-center.md) | 已实现 |
+| W04 | 合同 | M2 + M4 | `/sales/contracts` | [w04-contracts.md](w04-contracts.md) | 已实现 |
+| W05 | 销售单（统一） | M2 + M4 + M5 | `/sales/orders`（列表行点纸质预览，无侧栏 Sheet） | [w05-sales-orders.md](w05-sales-orders.md) | 已实现 |
+| W06 | 客户验收 | 挂 W05 + 作业 | `/sales/orders/:salesOrderId?section=acceptance` | [w06-customer-acceptance.md](w06-customer-acceptance.md) | 已实现 |
+| W07 | 二次确认队列 | M3 | `/procurement/confirm` | [w07-procurement-confirmation-queue.md](w07-procurement-confirmation-queue.md) | 已实现 |
+| W08 | 采购单 | M2 + M4 + M5 | `/procurement/orders` | [w08-purchase-orders.md](w08-purchase-orders.md) | 已实现 |
 | W09 | 收货与发货 / 交付与代发 | M3 + M5 | `/fulfillment?lane=warehouse\|procurement` | [w09-fulfillment-operations.md](w09-fulfillment-operations.md) | 已实现 |
-| W10 | 库存台账 | M2 + M6 | `/inventory` | [w10-inventory-ledger.md](w10-inventory-ledger.md) | 草稿 |
-| W11 | 客户往来 | M2 + M5 | `/finance/customer-accounts` | [w11-customer-receivables.md](w11-customer-receivables.md) | 草稿 |
-| W12 | 供应商往来 | M2 + M5 | `/finance/supplier-accounts` | [w12-supplier-payables.md](w12-supplier-payables.md) | 草稿 |
-| W13 | 卡券票款复核 | M3 | `/finance/card-funds-review` | [w13-card-funds-review.md](w13-card-funds-review.md) | 草稿 |
-| W14 | 商品与 SKU（公司商品池）、商品分类、品牌、卡券类目、供应商与仓库 | M2 + M4 | `/master-data/:resource` | [w14-basic-data.md](w14-basic-data.md) | 草稿 |
-| W15 | 客户经营质量 | M6 | `/analytics/customer-quality` | [w15-customer-business-quality.md](w15-customer-business-quality.md) | 草稿 |
-| W16 | 实际经营盈亏 | M6 | `/analytics/profit-loss` | [w16-actual-profit-loss.md](w16-actual-profit-loss.md) | 草稿 |
-| W17 | 商城同步与映射 | M7 | `/governance/mall-sync` | [w17-mall-sync-mapping.md](w17-mall-sync-mapping.md) | 草稿 |
-| W18 | 导入与期初 | M7 | `/governance/imports` | [w18-import-opening.md](w18-import-opening.md) | 草稿 |
-| W19 | 权限与审计 | M2 | `/system/access-audit` | [w19-permissions-audit.md](w19-permissions-audit.md) | 草稿 |
-| W20 | API 供应商连接 | M2 + M4 | `/supplier-api/connections` | [w20-supplier-api-connections.md](w20-supplier-api-connections.md) | 草稿 |
-| W21 | 供应商商品库与供给管理 | M2 + M3 + M4 | `/procurement/supplier-catalog` | [w21-supplier-catalog.md](w21-supplier-catalog.md) | 已确认业务方向 |
-| W22 | 商品发布 | M2 + M4 | `/commerce/publications` | [w22-product-publication.md](w22-product-publication.md) | 草稿 |
-| W23 | 执行投影 | M2 + M4 | `/commerce/execution-projections` | [w23-execution-projection.md](w23-execution-projection.md) | 草稿 |
-| W25 | 商城消费订单 | M2 + M4 | `/commerce/consumption-orders` | [w25-mall-consumption-orders.md](w25-mall-consumption-orders.md) | 草稿 |
-| W26 | 供应商订单 | M2 + M4 | `/supplier-api/orders` | [w26-supplier-orders.md](w26-supplier-orders.md) | 草稿 |
-| W27 | API 结算 | M2 + M4 | `/supplier-api/settlements` | [w27-api-settlement.md](w27-api-settlement.md) | 草稿 |
-| W28 | 卡券消费台账与经营分析 | M6 | `/analytics/card-business` | [w28-card-consumption-analytics.md](w28-card-consumption-analytics.md) | 草稿 |
-| W29 | 接口错误与对账中心 | M7 | `/governance/integration-errors` | [w29-integration-error-reconciliation.md](w29-integration-error-reconciliation.md) | 草稿 |
-| W30 | 历史消费回填 | M7 | `/governance/history-backfill` | [w30-historical-consumption-backfill.md](w30-historical-consumption-backfill.md) | 草稿 |
+| W10 | 库存台账 | M2 + M6 | `/inventory` | [w10-inventory-ledger.md](w10-inventory-ledger.md) | 已实现 |
+| W11 | 客户往来 | M2 + M5 | `/finance/customer-accounts` | [w11-customer-receivables.md](w11-customer-receivables.md) | 已实现 |
+| W12 | 供应商往来 | M2 + M5 | `/finance/supplier-accounts` | [w12-supplier-payables.md](w12-supplier-payables.md) | 已实现 |
+| W13 | 卡券票款复核 | M3 | `/finance/card-funds-review` | [w13-card-funds-review.md](w13-card-funds-review.md) | 已实现 |
+| W14 | 商品与 SKU（公司商品池）、商品分类、品牌、卡券类目、供应商与仓库 | M2 + M4 | `/master-data/:resource` | [w14-basic-data.md](w14-basic-data.md) | 已实现 |
+| W15 | 客户经营质量 | M6 | `/analytics/customer-quality` | [w15-customer-business-quality.md](w15-customer-business-quality.md) | 已实现 |
+| W16 | 实际经营盈亏 | M6 | `/analytics/profit-loss` | [w16-actual-profit-loss.md](w16-actual-profit-loss.md) | 已实现 |
+| W17 | 商城同步与映射 | M7 | `/governance/mall-sync` | [w17-mall-sync-mapping.md](w17-mall-sync-mapping.md) | 已实现 |
+| W18 | 导入与期初 | M7 | `/governance/imports` | [w18-import-opening.md](w18-import-opening.md) | 已实现 |
+| W19 | 权限与审计 | M2 | `/system/access-audit` | [w19-permissions-audit.md](w19-permissions-audit.md) | 已实现 |
+| W20 | API 供应商连接 | M2 + M4 | `/supplier-api/connections` | [w20-supplier-api-connections.md](w20-supplier-api-connections.md) | 已实现 |
+| W21 | 供应商商品库与供给管理 | M2 + M3 + M4 | `/procurement/supplier-catalog` | [w21-supplier-catalog.md](w21-supplier-catalog.md) | 已实现 |
+| W22 | 商品发布 | M2 + M4 | `/commerce/publications` | [w22-product-publication.md](w22-product-publication.md) | 已实现 |
+| W23 | 执行投影 | M2 + M4 | `/commerce/execution-projections` | [w23-execution-projection.md](w23-execution-projection.md) | 已实现 |
+| W25 | 商城消费订单 | M2 + M4 | `/commerce/consumption-orders` | [w25-mall-consumption-orders.md](w25-mall-consumption-orders.md) | 已实现 |
+| W26 | 供应商订单 | M2 + M4 | `/supplier-api/orders` | [w26-supplier-orders.md](w26-supplier-orders.md) | 已实现 |
+| W27 | API 结算 | M2 + M4 | `/supplier-api/settlements` | [w27-api-settlement.md](w27-api-settlement.md) | 已实现 |
+| W28 | 卡券消费台账与经营分析 | M6 | `/analytics/card-business` | [w28-card-consumption-analytics.md](w28-card-consumption-analytics.md) | 已实现 |
+| W29 | 接口错误与对账中心 | M7 | `/governance/integration-errors` | [w29-integration-error-reconciliation.md](w29-integration-error-reconciliation.md) | 已实现 |
+| W30 | 历史消费回填 | M7 | `/governance/history-backfill` | [w30-historical-consumption-backfill.md](w30-historical-consumption-backfill.md) | 已实现 |
 
 索引中的路由是工作面级导航契约。对象详情、编辑态、侧栏和弹窗的具体路径或状态由各 W 文件定义；若调整主路由，必须同步本索引、导航配置和所有跨 W 跳转。
 

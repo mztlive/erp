@@ -22,7 +22,7 @@
 | W18 | `/governance/imports` | M7 | yes | yes | yes | yes | yes |
 | W19 | `/system/access-audit` | M2 | yes | yes | yes | yes | yes |
 | W20 | `/supplier-api/connections` | M2+M4 | yes | yes | yes | yes | yes |
-| W21 | `/procurement/supplier-catalog` | M3+M4 | yes | yes | yes | yes | yes |
+| W21 | `/procurement/supplier-catalog` | M2+M3+M4 | yes | yes | yes | yes | yes |
 | W22 | `/commerce/publications` | M2+M4 | yes | yes | yes | yes | yes |
 | W23 | `/commerce/execution-projections` | M2+M4 | yes | yes | yes | yes | yes |
 | W25 | `/commerce/consumption-orders` | M2+M4 | yes | yes | yes | yes | yes |

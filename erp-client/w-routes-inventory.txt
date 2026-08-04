@@ -18,7 +18,7 @@ W17	/governance/mall-sync	M7	app/(workspace)/governance/mall-sync/page.tsx	OK
 W18	/governance/imports	M7	app/(workspace)/governance/imports/page.tsx	OK
 W19	/system/access-audit	M2	app/(workspace)/system/access-audit/page.tsx	OK
 W20	/supplier-api/connections	M2+M4	app/(workspace)/supplier-api/connections/page.tsx	OK
-W21	/procurement/supplier-catalog	M3+M4	app/(workspace)/procurement/supplier-catalog/page.tsx	OK
+W21	/procurement/supplier-catalog	M2+M3+M4	app/(workspace)/procurement/supplier-catalog/page.tsx	OK
 W22	/commerce/publications	M2+M4	app/(workspace)/commerce/publications/page.tsx	OK
 W23	/commerce/execution-projections	M2+M4	app/(workspace)/commerce/execution-projections/page.tsx	OK
 W25	/commerce/consumption-orders	M2+M4	app/(workspace)/commerce/consumption-orders/page.tsx	OK

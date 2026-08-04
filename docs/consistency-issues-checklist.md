@@ -79,7 +79,7 @@
 - **涉及文档**：w13-card-funds-review.md（L169）；ui-glossary.md §2 P2（L85）、§7 待跟进（L419-421）
 - **冲突点**：W13「登记事实已正式过账」；glossary P2「正式过账 → 过账 / 确认入账」，待跟进清单未含 W13
 - **建议方向**：W13 改文案，并补入 glossary 漂移清单
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）：W13 L169"正式过账"→"确认入账"
 
 ### D-07 【低】ui-workspaces/README 索引状态过时（W04/W09/W21 状态值不在规范定义内）
 
@@ -87,7 +87,7 @@
 - **涉及文档**：ui-workspaces/README.md（L45-50、L59、L64、L76）；w04-contracts.md（L3）；w09-fulfillment-operations.md（L3）；w21-supplier-catalog.md（L3）
 - **冲突点**：README 状态定义仅六种（样板/草稿/评审中/已确认/已实现/已验收），索引却标 W04「草稿」（文件自述「执行规范」）、W09「草稿」（自述「部分已实现」）、W21「已确认业务方向」（非规范状态值）
 - **建议方向**：README 索引状态与文件头部同步，W21 状态值归入规范
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）：README 索引 29 工作面全部"已实现"，W04/W09/W21 头部状态同步
 
 ---
 
@@ -125,7 +125,7 @@
 | C-17 | W09 跳 W06 用 ?tab=acceptance 而 W06 只认 section | fulfillment-operations-page.tsx:1009 vs sales-order-detail-page.tsx:212、app/.../page.tsx | 跳转后验收页不会自动定位 | ✅ 已修复：改 ?section=acceptance（tsc 通过） |
 | C-18 | README 索引状态全部"样板/草稿"但 30 页均已实现 | ui-workspaces/README.md:56-85 vs w-page-coverage.md、verify-workspaces.mjs（30/30 通过） | 文档未更新 | 批量更新索引状态为"已实现/已验收" |
 
-- **状态**：C-11~C-16 ✅ 已修复（2026-08-04）；C-17 ✅ 已修复（2026-08-04）；C-18 待讨论
+- **状态**：C-11~C-16 ✅ 已修复（2026-08-04）；C-17 ✅ 已修复（2026-08-04）；C-18 ✅ 已修复（2026-08-04，README 索引 29 工作面全部"已实现"）
 
 ### 低严重度（C-19 ~ C-24）
 
@@ -134,8 +134,8 @@
 | C-19 | W23 对象态在 page 变体下叠 DocumentHeader | execution-projections-page.tsx:696、1095-1127 | 违反 erp-ui-design §4.5.1"列表+对象同页混合壳"字面契约 | 确认 Sheet 浮层场景豁免或调整 |
 | C-20 | P2 散词残留（掩码/工作面/会话/快照） | purchase-orders、supplier-api-connections、procurement-confirmation、unified-task-queue、supplier-catalog、master-data、product-publications 等 | glossary P2：掩码→打码、工作面→页面、会话→本次操作、快照→历史记录 | 替换 |
 | C-21 | maskCost/noSensitive 被查询消费但无 UI 控件 | supplier-order-center-page.tsx:117-136 | 违反 README 规则 9（隐形状态） | 补控件或从查询摘除 |
-| C-22 | 侧栏导航结构漂移 | lib/workspace-registry.ts:329-609 vs erp-ui-design.md §3.3 | IA 演进未回写文档 | 更新 erp-ui-design §3.3 |
-| C-23 | 检查产物 W21 模式过时 | w-routes-inventory.txt:21（M3+M4）vs README/registry（M2+M3+M4） | 检查产物未更新 | 重新生成检查产物 |
+| C-22 | 侧栏导航结构漂移 | lib/workspace-registry.ts:329-609 vs erp-ui-design.md §3.3 | IA 演进未回写文档 | ✅ 已修复（2026-08-04）：§3.3 按 registry 11 组重写 |
+| C-23 | 检查产物 W21 模式过时 | w-routes-inventory.txt:21（M3+M4）vs README/registry（M2+M3+M4） | 检查产物未更新 | ✅ 已修复（2026-08-04）：脚本修正后重新生成 |
 | C-24 | W09 文档自述状态与 README 矛盾 + 正文仍写"暂挂" | w09-fulfillment-operations.md:3、61-63、104 vs README:64；代码已按 G1 落地 | 文档未更新 | ✅ 已修复（随 D-04）：全文替换为先跳过/确认，状态同步"已实现" |
 
 - **状态**：待讨论
@@ -192,7 +192,7 @@
 - **性质**：文档间引用过时（矛盾已解决，残留旧陈述）
 - **涉及文档**：phases-3.md（L132-135）vs erp-data-model.md §5.3（L308-314）、§10（L3927）、phases-10.md（L102-106）
 - **建议方向**：删除/修正 phases-3 过时陈述
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）：phases-3 §6 问题标记为已解决并引用 phases-10 决策记录
 
 ### B-07 【中】迟到快照：phase-1 说"丢弃"，phases-8/数据模型/mall-mapping 说"保留为迟到证据"
 
@@ -220,3 +220,4 @@
 | 2026-08-04 | D-04+C-24 | W09 文档按 glossary G1/G5 全面替换（过账→确认入库/仓发/交付、暂挂→先跳过约40处），保留枚举/字段名与 Q1 待确认标注；文件状态与 README 索引同步"已实现" | w09-fulfillment-operations.md、ui-workspaces/README.md |
 | 2026-08-04 | B-07 | 迟到快照直接丢弃（以 phase-1 为权威）：不持久化、不保留证据、不回退当前版本；mapping_status 移除"迟到丢弃"枚举 | erp-data-model.md §6.13/L2228/L2237、erp-mall-data-mapping.md §3.4/L224/L908、phases-8.md §5.2/L96、w17 L166 |
 | 2026-08-04 | B-02+B-03+B-04 | 命名统一以数据模型为准：phase-2 §14.3 消费表改 mall_consumption_entry+成本拆 mall_consumption_cost_assessment、§14.5 对账表改 reconciliation_*；mall-mapping/W14/W21 字段统一 sales_visible_price_gross；前端 9 文件 55 处 salesVisiblePrice→salesVisiblePriceGross（含测试脚本 3 处），tsc/eslint 通过 | erp-phase-2.md §14.3/§14.5、erp-mall-data-mapping.md、w14、w21、erp-client supplier-catalog/master-data 9 文件 + scripts/test-product-supply-links.mjs |
+| 2026-08-04 | C-18+D-07+C-23+B-06+D-06+C-22 | 文档状态同步批次：README 索引 29 工作面全部"已实现"、W04 头部同步；verify 脚本 W21 模式修正并重新生成产物；phases-3 过时陈述标已解决；W13 正式过账→确认入账；ui-design §3.3 侧栏按 registry 11 组重写 | ui-workspaces/README.md、w04-contracts.md、w-routes-inventory.txt、w-page-coverage.md、verify-workspaces.mjs、phases-3.md、w13-card-funds-review.md、erp-ui-design.md §3.3 |
