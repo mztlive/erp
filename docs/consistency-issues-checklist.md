@@ -197,7 +197,8 @@
 - **性质**：行为/状态机冲突（是否持久化迟到快照，直接决定同步表保留策略与每日核对能力）
 - **涉及文档**：erp-phase-1.md §8.3（L898）、§8.5（L938）、§12（L1203）vs phases-8.md §5.2（L95-96）、erp-data-model.md §6.13（mapping_status=迟到丢弃）、erp-mall-data-mapping.md §3.4（L224-225）
 - **建议方向**：phase-1 改为"迟到快照保留为『迟到丢弃』证据，不回退当前版本"
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）
+- **决议**：以 phase-1 为权威，迟到快照**直接丢弃**（不持久化、不保留证据、不回退当前版本）；`mapping_status` 移除"迟到丢弃"枚举值。已同步数据模型 §6.13/L2228、mall-mapping §3.4/L224/L908、phases-8 §5.2/L96、W17 L166。
 
 ---
 
@@ -215,3 +216,4 @@
 | 2026-08-04 | C-17 | W09→W06 跳转参数 tab 改 section，与 W06 路由契约对齐（tsc 通过） | erp-client/features/fulfillment-operations/fulfillment-operations-page.tsx:1009 |
 | 2026-08-04 | B-05 | 指纹字段集移除项目名称/业务备注（仍随版本保存但不参与 content_hash），以 phase-1 §8.2 为权威 | erp-data-model.md §6.13/L1071/L3948、erp-mall-data-mapping.md §3.3/L266、phases-8.md §5.1 |
 | 2026-08-04 | D-04+C-24 | W09 文档按 glossary G1/G5 全面替换（过账→确认入库/仓发/交付、暂挂→先跳过约40处），保留枚举/字段名与 Q1 待确认标注；文件状态与 README 索引同步"已实现" | w09-fulfillment-operations.md、ui-workspaces/README.md |
+| 2026-08-04 | B-07 | 迟到快照直接丢弃（以 phase-1 为权威）：不持久化、不保留证据、不回退当前版本；mapping_status 移除"迟到丢弃"枚举 | erp-data-model.md §6.13/L2228/L2237、erp-mall-data-mapping.md §3.4/L224/L908、phases-8.md §5.2/L96、w17 L166 |

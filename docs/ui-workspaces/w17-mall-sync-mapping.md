@@ -163,7 +163,7 @@ TaskTabs 身份：工作面为 `governance:mall-sync:{sourceSystemId}`；映射�
 | `observedAt` | ERP 观察时间 | 快照事实 | 判断同步延迟 |
 | `sourceStatusLabel` | 商城状态 | 来源状态字典 | 未知代码显示未知并进差异，不默认启用/完成 |
 | `contentHashShort` | 商业内容指纹 | `content_hash` | 默认缩略；完整值仅技术复制，不用于业务判断 |
-| `mappingStatus` | 待映射/已应用/差异/迟到丢弃/无变化 | 快照处理状态 | A→B→A 第三次 A 仍为新观察 |
+| `mappingStatus` | 待映射/已应用/差异/无变化 | 快照处理状态 | A→B→A 第三次 A 仍为新观察 |
 | `appliedRevision` | ERP 已形成版本 | 应用结果 | 链到 W05；无结果显示原因而非 0 |
 | `syncJobNo` | 来源同步任务 | 快照来源 | 可回溯任务 |
 

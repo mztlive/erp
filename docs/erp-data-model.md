@@ -2225,7 +2225,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | `normalized_snapshot` | 规范化外部快照归档 |
 | `raw_payload_reference` | 可选的加密原始报文引用 |
 | `observed_at` | ERP 实际观察时间 |
-| `mapping_status` | 待映射、已应用、差异、迟到丢弃、无变化 |
+| `mapping_status` | 待映射、已应用、差异、无变化 |
 | `applied_sales_order_revision_id` | 成功形成的销售版本 |
 | `sync_job_id` | 来源任务 |
 
@@ -2234,7 +2234,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 - `(source_system_id, external_order_key, source_updated_at, content_hash)` 唯一；
 - `source_system_id + source_updated_at + external_order_key` 增量处理索引；
 - `mapping_status + observed_at` 差异处理索引；
-- 同一来源单收到更早 `source_updated_at` 的快照标记迟到，不推进当前版本；
+- 同一来源单收到更早 `source_updated_at` 的快照直接丢弃，不持久化、不推进当前版本；
 - 只有指纹与**当前销售版本**相同才只更新最近同步时间，不创建新销售版本；
 - 来源内容出现 A → B → A 时，第三次 A 的来源更新时间不同，必须保留新的观测快照并
   再形成销售版本；不能因历史上曾出现相同 `content_hash` 而吞掉有效回变；
