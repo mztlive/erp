@@ -170,8 +170,7 @@ Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`Quic
   · 卡券票款复核（一期重点）
 
 基础资料
-  · 公司商品池
-  · 商品与 SKU
+  · 公司商品与 SKU（销售查询称公司商品池）
   · 商品分类
   · 品牌
   · 卡券类目
@@ -445,7 +444,7 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 #### 4.6.1 建单 / 改单
 
 - 全宽任务页签；左侧表头字段，下方 `EditableLineItemTable`。  
-- 选客户、合同、公司商品池、供应商、结算主体、仓库、负责人：一律业务实体 Combobox（`CustomerCombobox` / `ContractCombobox` / `ProductCombobox` / `SupplierCombobox` / `SettlementPartyCombobox` / `WarehouseCombobox` / `OwnerCombobox` 等，底层 `BusinessObjectCombobox`；只出有效对象）。
+- 选客户、合同、公司商品池（符合销售资格的公司 SKU 查询）、供应商、结算主体、仓库、负责人：一律使用对应业务 Combobox（`CustomerCombobox` / `ContractCombobox` / `ProductCombobox` / `SupplierCombobox` / `SettlementPartyCombobox` / `WarehouseCombobox` / `OwnerCombobox` 等，底层 `BusinessObjectCombobox`；只出有效对象）。公司商品池不产生独立业务 ID，`ProductCombobox` 返回精确 `sku_revision_id`。
 - 状态、付款条件、承运方等码表：一律 `OptionCombobox` / `field.SelectField`；共享码表见 `erp-client/lib/business-options.ts`。  
 - **销售建单明细例外（W05）**：非卡券**单位**取所选 SKU 基础单位，只读展示，禁止码表改写；**履约方式（仓发/直发等）**不在建单页选择，由 W07 采购二次确认写入；明细可编交付日期。卡券单位固定「张」。含税小计行内 `MoneyValue` 不叠 `taxBasis` Badge（表头已标明口径）。完整布局与控件表见 `ui-workspaces/w05-sales-orders.md` §4.3。
 - **禁止**用自由 `Input`/`TextField` 录入已有业务对象 ID 或名称；列表全文关键词搜索除外。  
@@ -750,7 +749,7 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 | W11 | 客户往来 | M2+M5 | ✓ | ✓ | 财务 |
 | W12 | 供应商往来 | M2+M5 | ✓ | ✓ | 财务 |
 | W13 | 卡券票款复核 | M3 | ✓ | 延续 | 财务 |
-| W14 | 公司商品池/商品/类目/供应商/仓库 | M2+M4 | ✓ | ✓ | 采购/运营 |
+| W14 | 公司商品与 SKU（销售查询称公司商品池）/类目/供应商/仓库 | M2+M4 | ✓ | ✓ | 采购/运营 |
 | W15 | 客户经营质量 | M6 | ✓ | ✓ | 管理/销售/财务 |
 | W16 | 实际经营盈亏 | M6 | ✓ | ✓ | 财务/管理 |
 | W17 | 商城同步与映射 | M7 | ✓ | ✓ | 管理员/销售/运营 |

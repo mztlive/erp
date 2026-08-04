@@ -136,7 +136,7 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 - 每条分行从 W21 当前有效供给中选择 `supplier_offering_revision_id`，完整展示供应商、确认数量、采购含税成本、进项税率、预计交期、履约方式和能力版本。
 - 页面实时显示“已确认数量 / 承诺数量”，但最终覆盖校验由服务端完成。
 - 供应商选择器使用 `SupplierCombobox`（不自由输入供应商名称）；只返回当前业务日期有效、能力匹配、资质有效且在用户数据范围内的供应商。
-- 销售提交只携带公司商品池修订和销售成交条件，不携带或展示采购成本；采购侧自行查询有权查看的有效供给。
+- 销售提交只携带 `sku_revision_id` 与销售成交快照（公司商品池只是公司 SKU 集合的查询称呼），不携带或展示采购成本；采购侧自行查询有权查看的有效供给。`sales_visible_price` 属于 SKU 修订，成交价格以提交快照为准。
 
 ### 4.5 驳回结果与再次进入队列
 
@@ -183,7 +183,7 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 | `itemSnapshot` | 商品/服务与规格 | 销售提交快照 | 不用当前 SKU 名替换 |
 | `committedQuantity` | 客户承诺数量 | 销售提交明细 | 基础单位，最多 6 位 |
 | `requestedDeliveryDate` | 客户期望交期 | 销售提交履约字段 | 业务日期 |
-| `productPoolEntryRevisionId` | 公司商品池修订 | 销售提交快照 | 只读；包含销售可见价，不包含供应商成本 |
+| `skuRevisionId` | SKU 版本 | `sales_order_submission_line.sku_revision_id` + 成交快照 | 只读；销售可见价来源于该 SKU 修订，提交价格、品名和规格以成交快照为准；不包含供应商成本 |
 | `supplierOfferingRevisionId` | 确认供应商供给 | `procurement_confirmation_line.supplier_offering_revision_id` | 从 W21 当前有效供给选择；需能力/资质有效，可多供应商拆分 |
 | `supplierId` | 确认供应商 | 从供给修订固定的供应商 | 不接受名称自由输入，不允许与供给修订供应商不一致 |
 | `confirmedQuantity` | 确认可供数量 | `confirmed_quantity` | 分行 >0；明细合计覆盖承诺量才可整单通过 |
@@ -490,7 +490,7 @@ type CompleteProcurementConfirmationResult =
 ### 8.4 前端边界
 
 - 前端只做输入格式、覆盖提示和服务端结果展示；供应商有效性、资质、数量守恒、正式成本/毛利、销售生效均由服务端决定。
-- 前端不得把公司商品池销售可见价当作采购成本；从 W21 供给修订带入的成本必须标明版本和有效期，并要求采购确认。
+- 前端不得把 SKU 修订上的销售可见价或销售成交快照当作采购成本；从 W21 供给修订带入的成本必须标明版本和有效期，并要求采购确认。
 - `subjectHash`、`allowedActions` 和 blockers 必须从服务端当前响应取得，不从历史页面缓存推断。
 - 任务完成后不由客户端删除；服务端正式事务更新后重新查询队列。
 - TanStack Query 管理队列和对象缓存，TanStack Form 管理确认分行与驳回表单；组件内不得裸 `fetch` 管理竞态。
@@ -556,7 +556,7 @@ type CompleteProcurementConfirmationResult =
 | 销售单 | W05 | 销售单 ID、提交 ID、来源 `workItemId`；驳回后只传稳定确认/提交身份 | W07 页签和队列位置保持；销售在 W05 选择固定三路，新任务形成后以新提交/新指纹重新进入 W07 |
 | 采购单 | W08 | 通过结果中的销售单版本、确认分行与采购创建依据稳定 ID；不携采购建单 `workItemId` | 建单完成可回 W07 固定结果或继续队列 |
 | 履约处理 | W09 | 确认履约方式仅作为采购建单依据 | W07 不直接创建履约事实 |
-| 公司商品池/供应商 | W14 | 供应商、能力/资质版本、公司商品池 | 只读钻取；修改基础资料后返回必须重验 |
+| 公司商品池（公司 SKU 集合）/供应商 | W14 | 供应商、能力/资质版本、SKU 修订 | 只读钻取；修改基础资料后返回必须重验 |
 | 权限与审计 | W19 | 工作流动作、任务、处理人和请求追踪号 | 只读返回原确认结果 |
 
 跨工作面只传稳定身份与来源上下文；提交字段、成本、资质、权限和状态在目标工作面重新查询。W07 驳回结果不跨页传“允许重提”布尔值，也不把旧 `workItemId` 当后继任务；W05 与 W02 的正式事务返回新 `submissionId`、新 `subjectHash` 和新任务身份后，W07 才能查询并处理。

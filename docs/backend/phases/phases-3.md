@@ -1,4 +1,4 @@
-# Phase 3：供应商商品库、供给与公司商品池
+# Phase 3：供应商商品库、供给与公司商品销售查询
 
 ## 1. 分支与隔离
 
@@ -19,8 +19,8 @@
 - 公司 `product` / `sku` 稳定身份和不可变修订；
 - 供应商商品 SPU/SKU、来源修订、映射和导入批次语义；
 - `supplier_offering` / `supplier_offering_revision` 多供应商供给；
-- `product_pool_entry` / revision 和销售可见价；
-- W14 商品/SKU/商品池与 W21 供应商商品库所需查询和命令。
+- 公司 `sku_revision` 中的销售可见价，以及由 SKU 和供给派生的销售资格；
+- W14 商品/SKU 与 W21 供应商商品库所需查询和命令。
 
 对象所有权必须严格分开：
 
@@ -28,7 +28,7 @@
   代发/起批等供给字段。
 - 供应商商品库保存来源身份和来源报价，不直接成为公司 SKU。
 - 逐供应商的一件代发供给价、集采供给价、集采起订量、税率和有效期只属于供给修订；不设置供给方式字段，每条供给默认同时支持一件代发与集采。
-- 公司商品池保存销售可见价；销售查询/搜索/导出只读商品池，绝不返回供应商成本。
+- 公司商品池只是公司 `product` / `sku` 的业务称呼和销售查询视图，不是独立聚合、稳定对象或修订表。`sales_visible_price_gross` 保存于 `sku_revision`；销售查询/搜索/导出只读符合资格的 SKU 修订，绝不返回供应商成本。
 
 依据：`erp-phase-1.md` §4.4、§5.1、§5.3；`erp-data-model.md` §6.3、§6.14、§10；
 W14、W21。
@@ -36,8 +36,8 @@ W14、W21。
 ## 3. 独立目录结构
 
 ```text
-backend/modules/catalog-product-pool/
-  domain/{dictionary,company_product,supplier_catalog,sku_mapping,offering,product_pool}/
+backend/modules/catalog-product/
+  domain/{dictionary,company_product,supplier_catalog,sku_mapping,offering,sales_catalog}/
   application/{commands,queries}/
   ports/
   contracts/
@@ -51,14 +51,15 @@ Phase 2 的供应商和 Phase 5 的采购都只通过稳定引用端口交互，
 
 ## 4. 核心命令和查询
 
-### 4.1 公司商品与商品池
+### 4.1 公司商品与销售查询
 
 - `CreateCompanyProduct`、`AppendCompanyProductRevision`；
 - `CreateCompanySku`、`AppendCompanySkuRevision`；
-- `CreateProductPoolEntry`、`AppendProductPoolRevision`、`SetProductPoolStatus`。
 
-启用商品池前必须确认 SKU 有效、销售可见价有效，并存在至少一条业务日有效供给；
-Phase 10 负责把该跨对象 guard 绑定到真实事务。
+`sales_visible_price_gross` 与 `market_price` 属于 `sku_revision`。公司商品池不接受创建、
+修订或启停命令；销售资格由“SKU 启用、当前业务日有效的 SKU 修订有非负销售可见价、
+至少一条有效 `supplier_offering_revision`”在查询和销售提交时派生，Phase 10 负责把该
+跨对象 guard 绑定到真实事务。
 
 ### 4.2 供应商商品与供给
 
@@ -66,7 +67,8 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
 - `AppendSupplierCatalogProductRevision`、`AppendSupplierCatalogSkuRevision`；
 - `MapSupplierSkuToCompanySku`；
 - `CreateSupplierOffering`、`AppendSupplierOfferingRevision`、`EndSupplierOffering`；
-- `PromoteMappedSupplierSkuToPool`：按供应商 SKU 粒度，不接受仅 SPU 身份。
+- `CreateCompanySkuAndMapSupplierCatalogSku`：按供应商 SKU 粒度原子反向创建公司商品/SKU、
+  映射和供给；不接受仅 SPU 身份。
 
 前端当前存在三种创建能力；本次确认新增供应商 SKU 反向建公司 SKU 的入池分支。本 phase
 按以下边界实现：
@@ -74,11 +76,12 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
 - W14 `/master-data/products/new` 继续独立创建公司商品及一个或多个公司 SKU；
 - W21 手工录入独立创建供应商商品及一个或多个供应商 SKU，不建立公司映射；
 - W14 可固定公司 `sku_id` 正向发起 W21 创建供应商商品/SKU，并在同一业务动作中建立精确
-  映射、供给与必要的商品池修订；
-- W21 入池可选择已有公司 SKU；没有同款时调用
-  `CreateCompanySkuAndPromoteSupplierCatalogSku`。命令固定一个 `supplierCatalogSkuId`，以
+  映射与供给；不得写公司 `product` / `sku` 修订或改变销售可见价；
+- W21 可选择已有公司 SKU；没有同款时调用
+  `CreateCompanySkuAndMapSupplierCatalogSku`。命令固定一个 `supplierCatalogSkuId`，以
   来源同字段预填公司草稿并允许采购修改；独立 `productKind`、销售可见价和市场价必填。公司商品/SKU、映射、
-  双价供给修订、商品池修订、审计、幂等结果和 outbox 必须在单一数据库事务提交；
+  双价供给修订、审计、幂等结果和 outbox 必须在单一数据库事务提交；销售可见价和市场价写入
+  新创建的 `sku_revision`，不创建商品池对象；
 - W14 正向创建与 W21 反向创建都必须显式提交独立必填 `productKind`。它写入
   `product.product_kind` 后永久不可变，决定商品业务作用；`categoryId` 只参与兼容性校验，
   不得用于派生或覆盖 `productKind`。反向创建可由可靠 `sourceProductKind` 预填，但采购必须
@@ -88,9 +91,12 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
 
 ### 4.3 查询与权限投影
 
-- W14 公司商品、SKU、商品池及供给摘要；
+- W14 公司商品、SKU、销售资格及供给摘要；
 - W21 供应商商品、映射、逐供应商供给和修订时间线；
-- 销售端 `SalesCatalogQuery`：只返回启用、业务日/区域/履约方式匹配的商品池修订；
+- 销售端 `SalesCatalogQuery`：只返回 SKU 已启用、当前业务日有效的 `sku_revision` 含非负销售
+  可见价、且至少有一条有效供给并匹配区域/履约方式的公司 SKU；返回精确 `sku_revision_id`；
+- 销售单行必须保存 `sku_revision_id` 与当次 `unit_price_gross` 成交价快照；后续 SKU 价格或
+  供给变化不得改写历史行，不引用商品池条目或修订；
 - 采购端 `ProcurementOfferingQuery`：返回授权的供应商供给和成本事实；
 - 销售导出使用专门 DTO，类型上不包含 supplier、cost、input tax、MOQ 字段。
 
@@ -103,10 +109,11 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
   `legacy_import_batch/row` 是开账治理记录。两者通过稳定批次引用关联，不能各自重复写
   同一供应商目录/供给事实。
 - 同一供应商 SKU 同一时点只映射一个公司 SKU；一个公司 SKU 可以有多家供应商供给。
-- 供应商商品修订、映射、供给修订和商品池修订是不同事实，不能互相覆盖。
+- 供应商商品修订、映射、供给修订和公司 SKU 修订是不同事实，不能互相覆盖。
 - 来源代发/集采报价、采购确认后的两项供给价、销售可见价和未来商城发布价是不同价格事实。
 - 供给有效期不得重叠；采购提交按业务日期重验供给修订、能力、资质和供应商状态。
-- 商品池启用不能凭 UI 摘要决定，必须在提交事务内重验有效供给。
+- 销售资格不能凭 UI 摘要或独立商品池状态决定；必须在查询和销售提交事务内重验 SKU 启用、
+  销售可见价和有效供给。
 - 规格身份和基础单位被正式单据引用后不能就地改变；以新 SKU 或纠正修订处理。
 - 销售查询、缓存、索引、导出和错误信息都不得包含采购成本。
 
@@ -116,8 +123,8 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
 
 1. `erp-phase-1.md` 明确把供应商商品库、多供应商供给列入一期；
    `erp-data-model.md` §5.4 却把相关表列为二期扩展。第一期最小闭环按业务文档实现
-   `MANUAL/EXCEL → supplier SKU → mapping → offering → pool`，但 Phase 10 必须先修正
-   阶段启用目录，禁止出现两套物理表。
+   `MANUAL/EXCEL → supplier SKU → mapping → offering → 可销售公司 SKU 查询`，但 Phase 10
+   必须先修正阶段启用目录，禁止出现两套物理表或独立商品池表。
 2. 一期只登记 API 能力，不建设 API 连接/同步；W21 文档混有 API 来源入口。
    本 phase 保留 `source_type=API` 的未来兼容语义但运行时拒绝 API intake，W20 属第二期。
 3. W21 修订命令出现 `input_tax_rate`，而统一模型不允许供应商目录保存进项税率；该字段必须
@@ -140,7 +147,7 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
 1. 同一来源批次/行幂等，A→B→A 修订仍保留历史。
 2. 供应商 SKU 并发映射、一个有效映射限制和多供应商供给。
 3. 供给生效区间重叠、未来生效、失效和业务日重验。
-4. 商品池启用时无有效供给、无价格、SKU 停用均拒绝。
+4. `SalesCatalogQuery` 与销售提交在 SKU 停用、当前 `sku_revision` 无销售可见价或无有效供给时均拒绝；不以独立商品池状态判断。
 5. 销售 DTO、搜索索引和导出结构无成本/供应商敏感字段。
 6. 采购端在权限不足时只返回可销售事实，不通过错误文案泄露成本。
 7. 同一 SPU 的多个供应商 SKU 可分别映射不同公司 SKU；部分选择不得影响未选 SKU，
@@ -154,7 +161,7 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
 
 ## 8. 完成标准
 
-- W14 与 W21 的对象归属、价格事实和权限边界由类型与测试共同证明。
+- W14 与 W21 的对象归属、SKU 修订价格事实、派生销售资格和权限边界由类型与测试共同证明。
 - 仅写独占目录，不创建全局路由、物理 DDL 或跨 phase 外键。
 - API 供应商连接、商城商品发布等二期能力没有被一期入口误启用。
 - 向 Phase 10 交付逻辑 schema、端口、DTO、错误码、跨对象 guard 和六项文档冲突清单。

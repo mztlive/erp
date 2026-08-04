@@ -66,7 +66,7 @@ W 文件不得重定义业务状态机，也不得为了版面方便改变金额
 | W11 | 客户往来 | M2 + M5 | `/finance/customer-accounts` | [w11-customer-receivables.md](w11-customer-receivables.md) | 草稿 |
 | W12 | 供应商往来 | M2 + M5 | `/finance/supplier-accounts` | [w12-supplier-payables.md](w12-supplier-payables.md) | 草稿 |
 | W13 | 卡券票款复核 | M3 | `/finance/card-funds-review` | [w13-card-funds-review.md](w13-card-funds-review.md) | 草稿 |
-| W14 | 公司商品池、商品与 SKU、商品分类、品牌、卡券类目、供应商与仓库 | M2 + M4 | `/master-data/:resource` | [w14-basic-data.md](w14-basic-data.md) | 草稿 |
+| W14 | 商品与 SKU（公司商品池）、商品分类、品牌、卡券类目、供应商与仓库 | M2 + M4 | `/master-data/:resource` | [w14-basic-data.md](w14-basic-data.md) | 草稿 |
 | W15 | 客户经营质量 | M6 | `/analytics/customer-quality` | [w15-customer-business-quality.md](w15-customer-business-quality.md) | 草稿 |
 | W16 | 实际经营盈亏 | M6 | `/analytics/profit-loss` | [w16-actual-profit-loss.md](w16-actual-profit-loss.md) | 草稿 |
 | W17 | 商城同步与映射 | M7 | `/governance/mall-sync` | [w17-mall-sync-mapping.md](w17-mall-sync-mapping.md) | 草稿 |

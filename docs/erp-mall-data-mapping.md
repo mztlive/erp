@@ -86,8 +86,7 @@
 | 规范对象 | 主要职责 |
 | --- | --- |
 | `product` / `product_revision` | 商品族稳定身份、名称、分类、品牌和历史版本 |
-| `sku` / `sku_revision` | 正式销售、采购、履约和库存引用的最小稳定身份 |
-| `product_pool_entry` / `product_pool_entry_revision` | 公司商品池销售可见价、可售条件和有效期；不含供应商或成本 |
+| `sku` / `sku_revision` | 正式销售、采购、履约和库存引用的最小稳定身份，以及公司销售可见价、市场价和启停状态 |
 | `supplier_catalog_product` / `supplier_catalog_product_revision` | 供应商 SPU 稳定身份及 Excel/API/手工来源修订 |
 | `supplier_catalog_sku` / `supplier_catalog_sku_revision` | 供应商 SKU 稳定身份、来源报价及目录版本；API 连接可空 |
 | `supplier_product_mapping` | 供应商 SKU 到公司 SKU 的逐 SKU 确认映射；SPU 不形成映射 |
@@ -98,8 +97,12 @@
 | `stock_movement` / `stock_balance` | 正式库存流水及其可重建余额 |
 
 SPU 可以作为商品族，但所有正式销售、采购和库存动作最终落到 SKU。每个 SKU 必须有一个基础计量单位。
-旧商城商品价格只可能成为发布或供给候选；实际采购成本来自正式采购、供应商订单
-和成本事实。旧商城库存只作来源核对，不能写入 `stock_balance`。
+“公司商品池”只是公司 `product` / `sku` 的业务称呼和销售查询视图，不建立
+`product_pool_entry` 或其修订。`sales_visible_price`、`market_price` 均属于公司
+`sku_revision`；销售资格由启用 SKU、已维护销售可见价和至少一条业务时点有效的
+`supplier_offering_revision` 派生。供应商供给仍是独立关系和独立修订，不能复制进公司 SKU。
+旧商城价格只能在逐 SKU 确认后成为公司 `sku_revision` 的销售可见价/市场价、商城发布价或
+供应商供给价候选；实际采购成本来自正式采购、供应商订单和成本事实。旧商城库存只作来源核对，不能写入 `stock_balance`。
 
 ### 2.3 销售单
 
@@ -438,7 +441,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | 财务使用 | 银行账户未进入加密链路；税率、结算周期或付款方式代码未知 | 不阻断身份及非资金资料 |
 | 正式过账 | 任一旧累计金额被当作付款、应付、实际成本或期初余额 | 所有旧累计字段继续只作核对，不形成正式事实 |
 
-只有经过采购确认的有效能力和必要资质才能用于新公司商品池、供给关系和采购单。
+只有经过采购确认的有效能力和必要资质才能用于为公司 SKU 创建或延续有效供给，以及用于采购单。
 
 ---
 
@@ -465,7 +468,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 
 ### 7.2 拒绝照搬
 
-- `price`、`market_price`、`cost_price`、`company_cost_price`、`suggested_retail_price` 不继续放在 SPU 主表。经确认的销售价候选进入 `product_publication_revision`，供货价候选进入 `supplier_offering_revision`，实际成本来自正式业务事实。
+- `price`、`market_price`、`cost_price`、`company_cost_price`、`suggested_retail_price` 不继续放在 SPU 主表。经采购确认的 `price` 与 `market_price` 分别进入公司 `sku_revision.sales_visible_price` 与 `sku_revision.market_price`；`suggested_retail_price` 仅可作为商城发布价候选，供货价候选进入 `supplier_offering_revision`，实际成本来自正式业务事实。
 - `stock`、`total_stock` 不形成 ERP 正式库存。期初库存以基准日实盘为准，按 SKU 和仓库导入。
 - `give_integral`、`sub_commission_type` 属于商城营销或分销规则。
 - `sales_count`、`virtual_sales_count`、`browse_count`、`is_profit` 是派生指标，不进入正式业务事实。
@@ -515,7 +518,9 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 
 | 旧字段 | 规范去向 |
 | --- | --- |
-| `price`、`market_price`、`suggested_retail_price` | `product_publication_revision` 销售价候选 |
+| `price` | 经采购确认后写 `sku_revision.sales_visible_price`；不是商城发布价的自动来源 |
+| `market_price` | 经采购确认后写 `sku_revision.market_price`；不得由销售价或成本推导 |
+| `suggested_retail_price` | 商城 `product_publication_revision` 销售价候选；仍须运营确认 |
 | `cost_price`、`company_cost_price`、`third_channel_cost_price` | `supplier_offering_revision` 供货价或旧成本参考候选，不形成实际成本 |
 | `stock`、`total_stock` | 来源库存快照；自有库存以实盘和库存流水为准 |
 | `stock_release_day`、`stock_release_count`、`stock_release_time` | 旧商城库存释放策略；除非业务重新确认需要，否则不进入 ERP |
@@ -862,9 +867,9 @@ API 供应商原始目录、订单、动作结果、退款和账单必须逐项�
 人工确认价和已确认结算价记 `ACTUAL`；消费发生时点的供给版本回退值记 `STANDARD`；
 没有可用成本时记 `NONE` 且不保存零成本金额。
 
-多个供应商目录 SKU 可以多对一映射同一公司 SKU；这些来源记录不是公司商品副本。增加第二供应商只新增该来源 SKU 的映射和供给，默认复用既有公司商品池修订。来源媒体必须先归档为受控文件资产，才能作为公司商品新修订的候选；不得用供应商临时 URL 覆盖现有公司图文。
+多个供应商目录 SKU 可以多对一映射同一公司 SKU；这些来源记录不是公司商品副本。增加第二供应商只新增该来源 SKU 的映射和供给，不创建或修改公司商品/SKU 修订、销售可见价或市场价。来源媒体必须先归档为受控文件资产，才能作为公司商品新修订的候选；不得用供应商临时 URL 覆盖现有公司图文。
 
-供应商商品库与公司商品在内容字段上同构（名称、描述、规格维度、分类/品牌/单位字典、条码、主图/轮播/详情等），但所有权与修订独立；UI 上 W21 中心页与 W14 商品详情分区及编辑控件对齐，便于对照目录。SKU 主图为 1:1；目录价格为代发底价（含税运）、集采底价（含税）与集采起订量。入池必须逐个供应商 SKU 操作：有同款时映射已有公司 SKU；没有同款时把语义相同字段自动预填为公司商品/SKU 草稿，采购可修改，并在销售可见价和市场价均确认后原子创建、映射、确认双价供给并入池。W14 也可从固定公司 SKU 创建供应商商品/SKU。SPU 只提供页面和批量选择上下文，不形成正式映射，也不隐式处理未选择的兄弟 SKU。
+供应商商品库与公司商品在内容字段上同构（名称、描述、规格维度、分类/品牌/单位字典、条码、主图/轮播/详情等），但所有权与修订独立；UI 上 W21 中心页与 W14 商品详情分区及编辑控件对齐，便于对照目录。SKU 主图为 1:1；目录价格为代发底价（含税运）、集采底价（含税）与集采起订量。采购必须逐个供应商 SKU 操作：有同款公司 SKU 的正向路径只建立精确映射和该供应商的双价供给；没有同款时，“加入公司商品池”是反向创建公司商品/SKU 的业务名称，把语义相同字段自动预填为公司商品/SKU 草稿，采购可修改，并在确认销售可见价与市场价后，在同一事务创建公司商品/SKU 及其修订、精确映射和双价供给。两个价格只写公司 `sku_revision`。销售查询仅展示启用、具有销售可见价且有业务时点有效供给的公司 SKU。W14 也可从固定公司 SKU 创建供应商商品/SKU；该正向路径只创建映射和供给。SPU 只提供页面和批量选择上下文，不形成正式映射，也不隐式处理未选择的兄弟 SKU。
 
 - 旧 `product_spu`、`product_sku` 身份映射继续保留，用于存量商城商品关联和对账，不反向成为 ERP 商品身份。
 
