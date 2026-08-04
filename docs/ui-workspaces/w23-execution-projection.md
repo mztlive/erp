@@ -125,7 +125,7 @@ W23 对象页签身份为 `sales-projection:{projectionId}`，标题为 `投影 
 | 版本 | `projectionRevisionNo` | 执行投影版本 | 投影修订 | 与 ERP 版本一对一 | 可见 |
 | 来源 | `projectionSource` | 版本来源 | 迁移时点当前 ERP 销售版本 / ERP 销售版本 | 迁移时点版本明确标注，不声称新销售版本 | 可见 |
 | 商城 | `targetMallName` | 目标商城 | 稳定投影 | 按商城范围 | 可见 |
-| 销售事实 | `salesOrderStatus` | 销售单状态 | W05 查询投影 | 只读摘要；失败时仍显示已生效 | 按销售权限 |
+| 销售事实 | `salesOrderCommercialStatus` | 销售单状态 | W05 查询投影 | 只读摘要；失败时仍显示已生效 | 按销售权限 |
 | 接收 | `deliveryStatus` | 商城接收状态 | `sales_order_projection_delivery` | 待发送、发送中、重试中、已确认、失败、转人工 | 可见 |
 | 水位 | `currentAckedRevisionNo` | 商城最后确认版本 | `current_acked_revision_id` | 无确认时明确“尚未确认” | 可见 |
 | 延迟 | `pendingDuration` / `nextAttemptAt` | 等待时长 / 下次处理 | 服务端投递查询 | 服务端基于公司时钟返回 | 可见 |
@@ -223,7 +223,7 @@ type ExecutionProjectionRow = {
   salesOrderNo: string
   salesOrderRevisionId: string
   salesOrderRevisionNo: number
-  salesOrderStatus: string
+  salesOrderCommercialStatus: string
   customerLabel: string
   targetMallId: string
   targetMallName: string

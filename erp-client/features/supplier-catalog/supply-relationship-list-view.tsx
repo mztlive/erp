@@ -259,13 +259,14 @@ function SupplyRelationshipListView({
         cell: ({ row }) => {
           const offering = row.original.offering?.currentRevision
           if (!offering) return <span className="text-muted-foreground">—</span>
-          const mode = offering.supplyMode
-            .map((m) => (m === "DROPSHIP" ? "一件代发" : "集采"))
-            .join(" / ")
           const unit = row.original.mapping?.baseUnit ?? currentSku?.baseUnit ?? "件"
           return (
             <div>
-              <div>{mode}</div>
+              <div>
+                {offering.dropshipSupplyPriceGross ?? "—"}
+                {" / "}
+                {offering.bulkSupplyPriceGross ?? "—"}
+              </div>
               <div className="text-xs text-muted-foreground">
                 {offering.minimumOrderQuantity} {unit}起订
               </div>

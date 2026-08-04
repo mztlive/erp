@@ -2292,6 +2292,7 @@ function DifferencesWorkspace({
               <span className="font-medium">{d.typeLabel}</span>
               <span className="text-xs text-muted-foreground">
                 {d.statusLabel}
+                {d.requiresProcurementEvidence ? " · 待举证" : ""}
                 {d.blocking ? " · 阻断" : ""}
               </span>
             </button>
@@ -2320,6 +2321,12 @@ function DifferencesWorkspace({
                   label={activeDiff.statusLabel}
                   tone={activeDiff.statusTone}
                 />
+                {activeDiff.requiresProcurementEvidence ? (
+                  <Badge variant="outline">需采购举证</Badge>
+                ) : null}
+                {activeDiff.blocking ? (
+                  <Badge variant="destructive">阻塞</Badge>
+                ) : null}
               </div>
             </CardHeader>
             <CardContent className="space-y-3 pt-4">
@@ -2411,7 +2418,7 @@ function DifferencesWorkspace({
                 ) : null}
                 {role === "finance_prep" &&
                 allowed.has("RESOLVE_DIFFERENCE") &&
-                activeDiff.status !== "RESOLVED" ? (
+                activeDiff.status === "PENDING" ? (
                   <Button type="button" size="sm" onClick={onResolve}>
                     登记结论
                   </Button>

@@ -27,9 +27,11 @@ import {
   MetricFilterItem,
   MetricStrip,
   MoneyValue,
+  MultiOptionCombobox,
   OptionCombobox,
   PageActions,
   PageHeader,
+  QuickPreviewSheet,
 } from "@/components/business"
 import {
   Alert,
@@ -38,33 +40,41 @@ import {
 } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { DateRangePicker } from "@/components/ui/date-picker"
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
 import {
+  useConsumptionOrderDetailQuery,
   useConsumptionOrderExportMutation,
   useConsumptionOrderListQuery,
 } from "@/features/mall-consumption-orders/queries"
+import { ConsumptionOrderPreviewPanel } from "@/features/mall-consumption-orders/consumption-order-preview-panel"
 import type {
   AttributionStatus,
   CostBasis,
+  FactType,
   FulfillmentChain,
   ListDemoFlag,
   MallConsumptionOrderListQuery,
   MallConsumptionOrderMetricKey,
   MallConsumptionOrderRow,
+  MallConsumptionOrderView,
   PaymentSourceFilter,
+  SupplierFulfillmentStatus,
 } from "@/features/mall-consumption-orders/types"
 import {
   ATTRIBUTION_STATUS_LABEL,
   ATTRIBUTION_STATUS_TONE,
   COST_BASIS_LABEL,
   COST_BASIS_TONE,
+  DATA_SOURCE_LABEL,
   FACT_TYPE_LABEL,
   FULFILLMENT_CHAIN_LABEL,
   FULFILLMENT_CHAIN_TONE,
+  SUPPLIER_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
 
 function formatTime(iso: string) {
@@ -102,6 +112,25 @@ function parseDemoFlag(raw: string | null): ListDemoFlag | undefined {
   }
   return undefined
 }
+
+/** 逗号分隔多值 URL 参数 → 白名单过滤后的数组；非法值忽略。 */
+function parseMultiValue<T extends string>(
+  raw: string | null,
+  allowed: readonly T[]
+): T[] {
+  if (!raw) return []
+  const set = new Set<string>(allowed)
+  return raw
+    .split(",")
+    .map((v) => v.trim())
+    .filter((v): v is T => v !== "" && set.has(v))
+}
+
+const FACT_TYPES = Object.keys(FACT_TYPE_LABEL) as FactType[]
+const SUPPLIER_STATUSES = Object.keys(
+  SUPPLIER_STATUS_LABEL
+) as SupplierFulfillmentStatus[]
+const DATA_SOURCES = ["REALTIME", "BACKFILL"] as const
 
 function paymentCompositionLabel(row: MallConsumptionOrderRow) {
   const { cardAmount, wechatAmount, sourceCount } = row.paymentComposition
@@ -144,6 +173,13 @@ function supplierSummaryLabel(row: MallConsumptionOrderRow) {
   return `${s.total} 单 · ${s.statuses.join("/")}${s.hasException ? " · 异常" : ""}`
 }
 
+function previewDataSourceLabel(view: MallConsumptionOrderView): string {
+  if (view.facts.length === 0) return "—"
+  const kinds = Array.from(new Set(view.facts.map((f) => f.dataSource)))
+  if (kinds.length === 1) return DATA_SOURCE_LABEL[kinds[0]]
+  return DATA_SOURCE_LABEL.MIXED
+}
+
 export function ConsumptionOrdersListPage() {
   const router = useRouter()
   const pathname = usePathname()
@@ -155,8 +191,18 @@ export function ConsumptionOrdersListPage() {
   const attributionStatus = searchParams.get("attributionStatus") ?? "all"
   const paymentSource = searchParams.get("paymentSource") ?? "all"
   const costBasis = searchParams.get("costBasis") ?? "all"
+  const occurredFrom = searchParams.get("occurredFrom") ?? ""
+  const occurredTo = searchParams.get("occurredTo") ?? ""
+  const factTypes = parseMultiValue(searchParams.get("factType"), FACT_TYPES)
+  const supplierStatuses = parseMultiValue(
+    searchParams.get("supplierStatus"),
+    SUPPLIER_STATUSES
+  )
+  const dataSources = parseMultiValue(searchParams.get("dataSource"), DATA_SOURCES)
+  const periodSelected = Boolean(occurredFrom && occurredTo)
   const metric = parseMetric(searchParams.get("metric"))
   const demoFlag = parseDemoFlag(searchParams.get("demo"))
+  const previewId = searchParams.get("preview")
   const pageFromUrl = Math.max(1, Number(searchParams.get("page") ?? "1") || 1)
 
   const [searchInput, setSearchInput] = React.useState(qParam)
@@ -218,6 +264,9 @@ export function ConsumptionOrdersListPage() {
     () => ({
       q: qParam || undefined,
       mallIds: mallId === "all" ? undefined : [mallId],
+      occurredFrom: occurredFrom || undefined,
+      occurredTo: occurredTo || undefined,
+      factTypes: factTypes.length ? factTypes : undefined,
       fulfillmentChains:
         fulfillmentChain === "all"
           ? undefined
@@ -230,7 +279,13 @@ export function ConsumptionOrdersListPage() {
         paymentSource === "all"
           ? undefined
           : [paymentSource as PaymentSourceFilter],
+      supplierStatuses: supplierStatuses.length
+        ? supplierStatuses
+        : undefined,
       costBases: costBasis === "all" ? undefined : [costBasis as CostBasis],
+      dataSources: dataSources.length
+        ? dataSources
+        : undefined,
       metric: metric === "all" ? undefined : metric,
       page: pagination.pageIndex + 1,
       pageSize: pagination.pageSize,
@@ -240,23 +295,32 @@ export function ConsumptionOrdersListPage() {
     [
       attributionStatus,
       costBasis,
+      dataSources,
       demoFlag,
+      factTypes,
       fulfillmentChain,
       mallId,
       metric,
+      occurredFrom,
+      occurredTo,
       pagination.pageIndex,
       pagination.pageSize,
       paymentSource,
       qParam,
+      supplierStatuses,
     ]
   )
 
-  const listQuery = useConsumptionOrderListQuery(listQueryInput)
+  const listQuery = useConsumptionOrderListQuery(listQueryInput, {
+    enabled: periodSelected,
+  })
   const data = listQuery.data
   const rows = data?.rows ?? []
   const metrics = data?.metrics ?? []
   const metricValue = (key: MallConsumptionOrderMetricKey) =>
     metrics.find((m) => m.key === key)?.value ?? "—"
+
+  const previewQuery = useConsumptionOrderDetailQuery(previewId)
 
   const replaceParams = React.useCallback(
     (patch: Record<string, string | undefined>, resetPage = true) => {
@@ -286,6 +350,17 @@ export function ConsumptionOrdersListPage() {
     },
     [pathname, router, searchParams]
   )
+
+  const openPreview = React.useCallback(
+    (mallOrderId: string) => {
+      replaceParams({ preview: mallOrderId }, false)
+    },
+    [replaceParams]
+  )
+
+  const closePreview = React.useCallback(() => {
+    replaceParams({ preview: undefined }, false)
+  }, [replaceParams])
 
   const commitSearch = () => {
     replaceParams({ q: searchInput.trim() || undefined })
@@ -459,20 +534,21 @@ export function ConsumptionOrdersListPage() {
                 />
               }
             >
-              打开
+              打开中心
             </Button>
-            {row.original.allowedActions.includes("OPEN_W29") ? (
+            {row.original.allowedActions.includes("OPEN_W29") &&
+            row.original.workItemId ? (
               <Button
                 type="button"
                 variant="ghost"
                 size="xs"
                 render={
                   <Link
-                    href={`/governance/integration-errors?from=W25&mallOrderId=${row.original.mallOrderId}`}
+                    href={`/governance/integration-errors?resolveWorkItemId=${row.original.workItemId}&queueContextId=queue:W29:mine:all`}
                   />
                 }
               >
-                W29
+                接口错误
               </Button>
             ) : null}
           </div>
@@ -756,6 +832,24 @@ export function ConsumptionOrdersListPage() {
                   aria-label="来源商城"
                   placeholder="全部商城"
                 />
+                <DateRangePicker
+                  value={
+                    occurredFrom || occurredTo
+                      ? {
+                          from: occurredFrom || undefined,
+                          to: occurredTo || undefined,
+                        }
+                      : undefined
+                  }
+                  onValueChange={(range) =>
+                    replaceParams({
+                      occurredFrom: range?.from || undefined,
+                      occurredTo: range?.to || undefined,
+                    })
+                  }
+                  placeholder="记录发生时间"
+                  className="w-56"
+                />
                 <OptionCombobox
                   value={fulfillmentChain}
                   onValueChange={(v) =>
@@ -792,6 +886,54 @@ export function ConsumptionOrdersListPage() {
                   allowClear={false}
                   aria-label="归集状态"
                   placeholder="归集"
+                />
+                <MultiOptionCombobox
+                  value={factTypes}
+                  onValueChange={(v) =>
+                    replaceParams({
+                      factType: v.length ? v.join(",") : undefined,
+                    })
+                  }
+                  options={FACT_TYPES.map((t) => ({
+                    value: t,
+                    label: FACT_TYPE_LABEL[t],
+                  }))}
+                  className="w-40"
+                  size="sm"
+                  aria-label="事实类型"
+                  placeholder="事实类型"
+                />
+                <MultiOptionCombobox
+                  value={supplierStatuses}
+                  onValueChange={(v) =>
+                    replaceParams({
+                      supplierStatus: v.length ? v.join(",") : undefined,
+                    })
+                  }
+                  options={SUPPLIER_STATUSES.map((s) => ({
+                    value: s,
+                    label: SUPPLIER_STATUS_LABEL[s],
+                  }))}
+                  className="w-40"
+                  size="sm"
+                  aria-label="供应商状态"
+                  placeholder="供应商状态"
+                />
+                <MultiOptionCombobox
+                  value={dataSources}
+                  onValueChange={(v) =>
+                    replaceParams({
+                      dataSource: v.length ? v.join(",") : undefined,
+                    })
+                  }
+                  options={DATA_SOURCES.map((d) => ({
+                    value: d,
+                    label: DATA_SOURCE_LABEL[d],
+                  }))}
+                  className="w-32"
+                  size="sm"
+                  aria-label="数据来源"
+                  placeholder="数据来源"
                 />
                 <OptionCombobox
                   value={paymentSource}
@@ -850,7 +992,13 @@ export function ConsumptionOrdersListPage() {
             title="消费订单列表"
             description="商城订单与操作列固定；金额为人民币含税实付。Enter 查看详情。"
             table={
-              listQuery.isPending ? (
+              !periodSelected ? (
+                <BusinessEmptyState
+                  kind="filter"
+                  title="请选择记录发生起止时间"
+                  description="默认期间策略未配置：请选择完整的事实发生起止时间后再查询，不静默拉取全量记录。"
+                />
+              ) : listQuery.isPending ? (
                 <div
                   className="h-64 animate-pulse rounded-lg bg-muted"
                   aria-busy
@@ -885,10 +1033,15 @@ export function ConsumptionOrdersListPage() {
                         replaceParams({
                           q: undefined,
                           mall: undefined,
+                          occurredFrom: undefined,
+                          occurredTo: undefined,
+                          factType: undefined,
                           fulfillmentChain: undefined,
                           attributionStatus: undefined,
+                          supplierStatus: undefined,
                           paymentSource: undefined,
                           costBasis: undefined,
+                          dataSource: undefined,
                           metric: undefined,
                         })
                       }}
@@ -917,11 +1070,8 @@ export function ConsumptionOrdersListPage() {
                   rowCount={data?.pageInfo.total ?? 0}
                   manualPagination
                   loading={listQuery.isFetching}
-                  onRowOpen={(row) => {
-                    router.push(
-                      `/commerce/consumption-orders/${row.mallOrderId}?section=overview`
-                    )
-                  }}
+                  onRowPreview={(row) => openPreview(row.mallOrderId)}
+                  onRowOpen={(row) => openPreview(row.mallOrderId)}
                   showPagination
                   pageSizeOptions={[8, 10, 20]}
                 />
@@ -938,6 +1088,85 @@ export function ConsumptionOrdersListPage() {
           </div>
         </>
       )}
+
+      <QuickPreviewSheet
+        open={Boolean(previewId)}
+        onOpenChange={(open) => {
+          if (!open) closePreview()
+        }}
+        size="detail"
+        title={previewQuery.data?.identity.externalOrderNo ?? "商城消费订单预览"}
+        identity={
+          previewQuery.data ? (
+            <span className="num">
+              {previewQuery.data.identity.mallOrderId}
+              <span className="mx-1">·</span>
+              {previewQuery.data.identity.mallName}
+            </span>
+          ) : null
+        }
+        summary={
+          previewQuery.data ? (
+            <div className="flex flex-wrap items-center gap-2">
+              <BusinessStatusBadge
+                context="preview"
+                label={
+                  FULFILLMENT_CHAIN_LABEL[previewQuery.data.fulfillment.chain]
+                }
+                tone={
+                  FULFILLMENT_CHAIN_TONE[previewQuery.data.fulfillment.chain]
+                }
+              />
+              <BusinessStatusBadge
+                context="preview"
+                label={
+                  ATTRIBUTION_STATUS_LABEL[
+                    previewQuery.data.customer.attributionStatus
+                  ]
+                }
+                tone={
+                  ATTRIBUTION_STATUS_TONE[
+                    previewQuery.data.customer.attributionStatus
+                  ]
+                }
+              />
+              <Badge variant="secondary">
+                {previewDataSourceLabel(previewQuery.data)}
+              </Badge>
+            </div>
+          ) : null
+        }
+        footer={
+          previewQuery.data ? (
+            <>
+              <Button type="button" variant="outline" onClick={closePreview}>
+                关闭
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                render={
+                  <Link
+                    href={`/commerce/consumption-orders/${previewQuery.data.identity.mallOrderId}?section=overview`}
+                  />
+                }
+              >
+                打开中心
+              </Button>
+            </>
+          ) : null
+        }
+      >
+        {previewQuery.isPending ? (
+          <div className="p-5 text-sm text-muted-foreground">加载预览…</div>
+        ) : previewQuery.data ? (
+          <ConsumptionOrderPreviewPanel view={previewQuery.data} />
+        ) : (
+          <div className="p-5 text-sm text-muted-foreground">
+            未找到该消费订单
+          </div>
+        )}
+      </QuickPreviewSheet>
     </div>
   )
 }

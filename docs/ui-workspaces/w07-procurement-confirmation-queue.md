@@ -136,7 +136,7 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 - 每条分行从 W21 当前有效供给中选择 `supplier_offering_revision_id`，完整展示供应商、确认数量、采购含税成本、进项税率、预计交期、履约方式和能力版本。
 - 页面实时显示“已确认数量 / 承诺数量”，但最终覆盖校验由服务端完成。
 - 供应商选择器使用 `SupplierCombobox`（不自由输入供应商名称）；只返回当前业务日期有效、能力匹配、资质有效且在用户数据范围内的供应商。
-- 销售提交只携带 `sku_revision_id` 与销售成交快照（公司商品池只是公司 SKU 集合的查询称呼），不携带或展示采购成本；采购侧自行查询有权查看的有效供给。`sales_visible_price` 属于 SKU 修订，成交价格以提交快照为准。
+- 销售提交只携带 `sku_revision_id` 与销售成交快照（公司商品池只是公司 SKU 集合的查询称呼），不携带或展示采购成本；采购侧自行查询有权查看的有效供给。`sales_visible_price_gross` 属于 SKU 修订，成交价格以提交快照为准。
 
 ### 4.5 驳回结果与再次进入队列
 

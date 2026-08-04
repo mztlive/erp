@@ -374,6 +374,8 @@ export type HistoryBackfillItemView = {
     formalFactSummary: string
   }
   unattributedReason?: string
+  /** 命中 W29 错误任务/对账差异时携带的稳定 work item（去接口错误中心入口用） */
+  workItemId?: string
   failure?: {
     errorCode: string
     stage: string

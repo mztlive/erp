@@ -31,11 +31,13 @@ export function useSalesOrderConsumptionSummaryQuery(salesOrderId: string) {
 }
 
 export function useConsumptionOrderListQuery(
-  query: MallConsumptionOrderListQuery
+  query: MallConsumptionOrderListQuery,
+  options?: { enabled?: boolean }
 ) {
   return useQuery({
     queryKey: consumptionOrderKeys.list(query),
     queryFn: () => fetchConsumptionOrderList(query),
+    enabled: options?.enabled,
   })
 }
 

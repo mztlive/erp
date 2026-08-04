@@ -1818,7 +1818,11 @@ function ItemsTable({
                 <Button
                   render={
                     <Link
-                      href={`/governance/integration-errors?from=W30&jobId=${item.jobId}&factKey=${encodeURIComponent(item.businessFactKeySummary)}`}
+                      href={
+                        item.workItemId
+                          ? `/governance/integration-errors?resolveWorkItemId=${item.workItemId}&queueContextId=queue:W29:mine:all`
+                          : "/governance/integration-errors?view=mine"
+                      }
                     />
                   }
                   size="sm"

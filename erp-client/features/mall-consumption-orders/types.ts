@@ -20,6 +20,13 @@ export type PaymentSourceFilter = PaymentSourceType | "MIXED"
 
 export type DataSource = "REALTIME" | "BACKFILL" | "MIXED"
 
+export type ProcessingStatus =
+  | "SAVED"
+  | "PENDING_ATTRIBUTION"
+  | "ATTRIBUTED"
+  | "DIFFERENCE"
+  | "REJECTED"
+
 export type FactType =
   | "PAYMENT_SUCCEEDED"
   | "ORDER_CANCELED"
@@ -60,6 +67,14 @@ export const ATTRIBUTION_STATUS_LABEL: Record<AttributionStatus, string> = {
   ATTRIBUTED: "已归集",
   PENDING: "待归集",
   DIFFERENCE: "差异",
+}
+
+export const PROCESSING_STATUS_LABEL: Record<ProcessingStatus, string> = {
+  SAVED: "已保存",
+  PENDING_ATTRIBUTION: "待归集",
+  ATTRIBUTED: "已归集",
+  DIFFERENCE: "差异",
+  REJECTED: "拒绝",
 }
 
 export const ATTRIBUTION_STATUS_TONE: Record<AttributionStatus, StatusTone> = {
@@ -123,16 +138,20 @@ export type ActionBlocker = {
 export type MallConsumptionOrderListQuery = {
   q?: string
   mallIds?: string[]
-  /** 记录发生期间；未配置默认策略时前端可不预填，mock 允许省略 */
+  /**
+   * 记录发生期间（按记录发生时间 occurredAt 过滤，非 ERP 接收时间）。
+   * 角色默认期间策略未配置时不预填：必须由用户显式选择完整起止时间后才允许查询，
+   * 不静默回退到任意默认期间。
+   */
   occurredFrom?: string
   occurredTo?: string
   factTypes?: FactType[]
   fulfillmentChains?: FulfillmentChain[]
   attributionStatuses?: AttributionStatus[]
   paymentSources?: PaymentSourceFilter[]
-  supplierStatuses?: string[]
+  supplierStatuses?: SupplierFulfillmentStatus[]
   costBases?: CostBasis[]
-  dataSources?: Array<"REALTIME" | "BACKFILL">
+  dataSources?: Array<Exclude<DataSource, "MIXED">>
   /** 指标快捷：paid | pending_attr | fact_diff | auto_exception | cost_none */
   metric?: string
   sort?: string
@@ -193,6 +212,8 @@ export type MallConsumptionOrderRow = {
   costBasisBreakdown: CostBasisBreakdownItem[]
   dataSource: DataSource
   allowedActions: string[]
+  /** 命中 W29 错误任务/对账差异时携带的稳定 work item（钻取入口用） */
+  workItemId?: string
   actionBlockers: ActionBlocker[]
   costBasisPolicyState: "CONFIGURED" | "UNCONFIGURED"
   normalizedCostBasis?: CostBasis | "MIXED"
@@ -239,7 +260,7 @@ export type MallOrderFactView = {
   occurredAt: string
   receivedAt: string
   dataSource: "REALTIME" | "BACKFILL"
-  processingStatus: string
+  processingStatus: ProcessingStatus
   resultDetails: Record<string, string | number | null>
 }
 

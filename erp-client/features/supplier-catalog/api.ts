@@ -6,6 +6,7 @@
 import { mockDelay } from "@/features/workspace-kit/delay"
 import type {
   CostFieldVisibility,
+  CreateCompanyProductFromSupplierSkuInput,
   CreateSupplierCatalogItemInput,
   DemoRole,
   DiffChange,
@@ -34,6 +35,7 @@ import {
 } from "@/features/supplier-catalog/types"
 import {
   buildW14ListResult,
+  createW14Object,
   getW14Center,
 } from "@/features/master-data/session"
 import { SUPPLIER_CATALOG_SEED } from "@/mock/supplier-catalog"
@@ -57,16 +59,24 @@ import {
 
 const drafts = new Map<string, SessionCatalogDraft>()
 const catalogOverlays = new Map<string, SupplierCatalogItemView>()
-const createdCatalogIds: string[] = []
+const createdCatalogSkuIds: string[] = []
 const writeResults = new Map<string, SupplierCatalogWriteResult>()
 type ProductPoolEntryView = NonNullable<SupplierCatalogItemView["poolEntry"]>
 const poolEntryOverlays = new Map<string, ProductPoolEntryView>()
 
+/**
+ * 唯一正式供应商 SKU 身份（supplier_catalog_sku_id）：
+ * 多 SKU 取 catalogSkus 中对应行，缺省退化为单 SKU 的 `{productId}_sku`。
+ */
+function primarySupplierSkuId(item: SupplierCatalogItemView): string {
+  return item.supplierProduct.catalogSkus?.[0]?.id ?? `${item.supplierProduct.id}_sku`
+}
+
 function listCatalogItems(): SupplierCatalogItemView[] {
   const seeded = SUPPLIER_CATALOG_SEED.map(
-    (item) => catalogOverlays.get(item.supplierProduct.id) ?? item
+    (item) => catalogOverlays.get(primarySupplierSkuId(item)) ?? item
   )
-  const created = createdCatalogIds
+  const created = createdCatalogSkuIds
     .map((id) => catalogOverlays.get(id))
     .filter((item): item is SupplierCatalogItemView => Boolean(item))
   return [...created, ...seeded]
@@ -163,6 +173,8 @@ function maskOffering(
     supplyPriceGross: maskCostValue(o.supplyPriceGross),
     supplyPriceNet: maskCostValue(o.supplyPriceNet),
     floorPriceGross: maskCostValue(o.floorPriceGross),
+    dropshipSupplyPriceGross: maskCostValue(o.dropshipSupplyPriceGross),
+    bulkSupplyPriceGross: maskCostValue(o.bulkSupplyPriceGross),
     inputTaxRate: maskCostValue(o.inputTaxRate),
     freightAmount: maskCostValue(o.freightAmount),
     serviceFeeAmount: maskCostValue(o.serviceFeeAmount),
@@ -257,7 +269,7 @@ function projectItem(
       : null
 
   const ep = seed.supplierProduct
-  const draft = drafts.get(ep.id)
+  const draft = drafts.get(primarySupplierSkuId(seed))
 
   let mapping = seed.mapping
   if (draft?.selectedSkuId && mapping) {
@@ -620,7 +632,7 @@ export async function fetchSupplierCatalogCenter(input: {
               {
                 id: "te1",
                 label: "接口错误与对账",
-                href: `/governance/integration-errors?from=W21&supplierProductId=${item.supplierProduct.id}`,
+                href: `/governance/integration-errors?from=W21&supplierCatalogSkuId=${encodeURIComponent(primarySupplierSkuId(item))}`,
               },
             ]
           : [],
@@ -629,13 +641,13 @@ export async function fetchSupplierCatalogCenter(input: {
 }
 
 export function getSessionDraft(
-  supplierProductId: string
+  supplierCatalogSkuId: string
 ): SessionCatalogDraft | null {
-  return drafts.get(supplierProductId) ?? null
+  return drafts.get(supplierCatalogSkuId) ?? null
 }
 
 export async function saveSessionDraft(input: {
-  supplierProductId: string
+  supplierCatalogSkuId: string
   selectedSkuId?: string
   offeringDraft?: SessionCatalogDraft["offeringDraft"]
   substituteCandidateSkuIds?: string[]
@@ -643,14 +655,14 @@ export async function saveSessionDraft(input: {
 }): Promise<SessionCatalogDraft> {
   await mockDelay(60)
   const next: SessionCatalogDraft = {
-    supplierProductId: input.supplierProductId,
+    supplierCatalogSkuId: input.supplierCatalogSkuId,
     selectedSkuId: input.selectedSkuId,
     offeringDraft: input.offeringDraft,
     substituteCandidateSkuIds: input.substituteCandidateSkuIds,
     note: input.note,
     updatedAt: new Date().toISOString(),
   }
-  drafts.set(input.supplierProductId, next)
+  drafts.set(input.supplierCatalogSkuId, next)
   return next
 }
 
@@ -842,6 +854,7 @@ export async function completeSupplierCatalogWorkItem(input: {
     const business = {
       decisionKind: input.decision.kind,
       supplierProductId: seed.supplierProduct.id,
+      supplierCatalogSkuId: primarySupplierSkuId(seed),
       auditEventId: result.completionRecordId,
       publicationImpact: seed.publicationImpact,
       reference: `W21-DONE-${input.workItemId.toUpperCase()}`,
@@ -940,6 +953,7 @@ export async function resolveUnknownSupplierCatalogResult(input: {
                 | "CONFIRM_ERROR_RESOLVED"
                 | "CONFIRM_STOP_SUPPLY") ?? "CONFIRM_ERROR_RESOLVED",
             supplierProductId: "",
+            supplierCatalogSkuId: "",
             auditEventId: payload.completionRecordId,
             publicationImpact: {
               activePublicationCount: 0,
@@ -1001,12 +1015,19 @@ const EMPTY_PUBLICATION_IMPACT = {
 function createConfirmedOffering(input: {
   offeringId: string
   costGross: string
+  dropshipSupplyPriceGross?: string
+  bulkSupplyPriceGross?: string
   inputTaxRate: string
   minimumOrderQuantity: string
-  supplyMode: readonly import("@/features/supplier-catalog/types").SupplyMode[]
   supplyRegion: string[]
   validFrom: string
 }): SupplierOfferingRevisionView {
+  if (!input.inputTaxRate.trim()) {
+    throw new Error("进项税率缺失，需补充来源后才能登记供给")
+  }
+  const dropshipSupplyPriceGross =
+    input.dropshipSupplyPriceGross ?? input.costGross
+  const bulkSupplyPriceGross = input.bulkSupplyPriceGross ?? input.costGross
   return {
     offeringId: input.offeringId,
     offeringRevisionId: `${input.offeringId}_r1`,
@@ -1015,7 +1036,8 @@ function createConfirmedOffering(input: {
     supplyPriceGross: input.costGross,
     supplyPriceNet: input.costGross,
     floorPriceGross: input.costGross,
-    supplyMode: input.supplyMode,
+    dropshipSupplyPriceGross,
+    bulkSupplyPriceGross,
     inputTaxRate: input.inputTaxRate,
     freightAmount: "0.00",
     serviceFeeAmount: "0.00",
@@ -1176,7 +1198,7 @@ export async function createSupplierCatalogItem(
 
   const skuWrites = normalizeSkuWrites(input)
   const primaryWrite = skuWrites[0]!
-  const seq = createdCatalogIds.length + 1
+  const seq = createdCatalogSkuIds.length + 1
   const id = `supplier_product_manual_${seq}`
   const now = new Date().toISOString()
   const offeringId = `supplier_offering_${seq}`
@@ -1184,12 +1206,11 @@ export async function createSupplierCatalogItem(
     ? createConfirmedOffering({
         offeringId,
         costGross: input.confirmedCostGross!,
-        inputTaxRate: input.inputTaxRate ?? "0.13",
+        inputTaxRate: input.inputTaxRate ?? "",
         minimumOrderQuantity:
           input.minimumOrderQuantity ||
           primaryWrite.bulkMinimumOrderQuantity ||
           "1",
-        supplyMode: ["BULK"],
         supplyRegion: input.supplyRegion ?? ["全国"],
         validFrom: input.validFrom,
       })
@@ -1302,10 +1323,12 @@ export async function createSupplierCatalogItem(
         actionBlockers: [],
       }
 
-  catalogOverlays.set(id, item)
-  createdCatalogIds.unshift(id)
+  const supplierSkuId = primarySupplierSkuId(item)
+  catalogOverlays.set(supplierSkuId, item)
+  createdCatalogSkuIds.unshift(supplierSkuId)
   const result: SupplierCatalogWriteResult = {
     supplierProductId: id,
+    supplierCatalogSkuId: supplierSkuId,
     supplierOfferingRevisionId: offering?.offeringRevisionId,
     poolEntryRevisionId: item.poolEntry?.poolEntryRevisionId,
     poolEntryChange: poolWrite?.change ?? "NONE",
@@ -1419,9 +1442,10 @@ export async function reviseSupplierCatalogProduct(
           (action, index, arr) => arr.indexOf(action) === index,
         ),
   }
-  catalogOverlays.set(input.supplierProductId, next)
+  catalogOverlays.set(primarySupplierSkuId(next), next)
   const result: SupplierCatalogWriteResult = {
     supplierProductId: input.supplierProductId,
+    supplierCatalogSkuId: primarySupplierSkuId(next),
     poolEntryChange: "NONE",
     reference: `SC-REV-${input.supplierProductId}-${nextRevisionNo}`,
     recordedAt: now,
@@ -1438,11 +1462,14 @@ export async function promoteSupplierProductToPool(
   const cached = writeResults.get(input.idempotencyKey)
   if (cached) return cached
   const current = listCatalogItems().find(
-    (item) => item.supplierProduct.id === input.supplierProductId
+    (item) => primarySupplierSkuId(item) === input.supplierCatalogSkuId
   )
-  if (!current) throw new Error("供应商商品不存在或无权访问")
+  if (!current) throw new Error("供应商 SKU 不存在或无权访问")
   if (current.changeType === "ERROR") {
     throw new Error("异常来源数据必须先修复，不能直接加入公司商品池")
+  }
+  if (!input.productKind.trim()) {
+    throw new Error("商品类型缺失：无可靠来源时必须补充商品类型后才能入池")
   }
   const sourceRevision =
     current.supplierProduct.incomingRevision ??
@@ -1459,14 +1486,12 @@ export async function promoteSupplierProductToPool(
   }
 
   const now = new Date().toISOString()
-  const offeringId =
-    current.offering?.stableId ?? `offering_${input.supplierProductId}`
+  const offeringId = current.offering?.stableId ?? `offering_${input.supplierCatalogSkuId}`
   const offering = createConfirmedOffering({
     offeringId,
     costGross: input.confirmedCostGross,
     inputTaxRate: input.inputTaxRate,
     minimumOrderQuantity: input.minimumOrderQuantity,
-    supplyMode: ["BULK"],
     supplyRegion: input.supplyRegion,
     validFrom: input.validFrom,
   })
@@ -1498,7 +1523,7 @@ export async function promoteSupplierProductToPool(
       approvedBy: "采购 · 当前用户",
       approvedAt: now,
       reason: "采购确认加入公司商品池",
-      mappingVersion: `map_${input.supplierProductId}_${Date.now()}`,
+      mappingVersion: `map_${input.supplierCatalogSkuId}_${Date.now()}`,
       history: current.mapping?.history ?? [],
     },
     offering: {
@@ -1513,14 +1538,179 @@ export async function promoteSupplierProductToPool(
     allowedActions: ["BROWSE", "REVISE_OFFERING"],
     actionBlockers: [],
   }
-  catalogOverlays.set(input.supplierProductId, next)
+  catalogOverlays.set(input.supplierCatalogSkuId, next)
   const result = {
-    supplierProductId: input.supplierProductId,
+    supplierProductId: current.supplierProduct.id,
+    supplierCatalogSkuId: input.supplierCatalogSkuId,
+    productKind: input.productKind,
     supplierOfferingRevisionId: offering.offeringRevisionId,
     poolEntryRevisionId: next.poolEntry?.poolEntryRevisionId,
     poolEntryChange: poolWrite.change,
     activeSupplierCount: activeSupplierCountForSku(input.targetSkuId),
     reference: `POOL-${input.targetSkuCode}-${Date.now().toString(36)}`,
+    recordedAt: now,
+  }
+  writeResults.set(input.idempotencyKey, result)
+  return result
+}
+
+/**
+ * 反向创建入池复合命令：先有供应商 SKU，无同款公司 SKU 时，
+ * 原子创建公司商品/SKU、精确映射与双价供给。
+ * 销售可见价与市场价写入新建 sku_revision（公司 SKU 记录）。
+ */
+export async function createCompanyProductFromSupplierSku(
+  input: CreateCompanyProductFromSupplierSkuInput
+): Promise<SupplierCatalogWriteResult> {
+  await mockDelay(160)
+  const cached = writeResults.get(input.idempotencyKey)
+  if (cached) return cached
+  const current = listCatalogItems().find(
+    (item) => primarySupplierSkuId(item) === input.supplierCatalogSkuId
+  )
+  if (!current) throw new Error("供应商 SKU 不存在或无权访问")
+  if (current.changeType === "ERROR") {
+    throw new Error("异常来源数据必须先修复，不能直接创建公司商品")
+  }
+  if (current.mapping?.mappingStatus === "ACTIVE" && current.mapping.skuId) {
+    throw new Error("该供应商 SKU 已有关联公司 SKU，无需创建新商品")
+  }
+  const sourceRevision =
+    current.supplierProduct.incomingRevision ??
+    current.supplierProduct.currentRevision
+  if (sourceRevision.revisionNo !== input.expectedSourceRevisionNo) {
+    throw new Error("供应商商品来源版本已经变化，请刷新后重新确认")
+  }
+
+  const product = input.companyProduct
+  if (!product.productKind.trim()) {
+    throw new Error("商品类型缺失：无可靠来源时必须补充商品类型后才能创建")
+  }
+  if (!input.salesVisiblePriceGross.trim()) {
+    throw new Error("销售可见价缺失：创建公司商品时必须填写销售可见价")
+  }
+  if (!input.marketPrice.trim()) {
+    throw new Error("市场价缺失：创建公司商品时必须填写市场价")
+  }
+  if (!input.offering.inputTaxRate.trim()) {
+    throw new Error("进项税率缺失，需补充来源后才能登记供给")
+  }
+  if (!input.offering.bulkMinimumOrderQuantity.trim()) {
+    throw new Error("集采起订量缺失：创建公司商品时必须填写集采起订量")
+  }
+
+  const now = new Date().toISOString()
+  const companyFields: import("@/features/master-data/types").ProductFields = {
+    description: product.description,
+    baseUnitId: product.baseUnitId,
+    baseUnitCode: product.baseUnitCode,
+    baseUnit: product.baseUnit,
+    categoryId: product.categoryId,
+    category: product.category,
+    brandId: product.brandId,
+    brand: product.brand,
+    productKind: product.productKind,
+    carouselImages: product.carouselImages ?? [],
+    detailImages: product.detailImages ?? [],
+    specs: [],
+    skus: [
+      {
+        skuNo: product.skuNo.trim(),
+        attributeValues: [],
+        specLabel: product.specLabel,
+        barcode: product.barcode,
+        mainImage: product.mainImage ?? "",
+        salePrice: input.salesVisiblePriceGross.trim(),
+        marketPrice: input.marketPrice.trim(),
+        baseUnit: product.baseUnit,
+        lifecycleStatus: "ENABLED",
+      },
+    ],
+  }
+  const created = createW14Object({
+    resource: "products",
+    name: product.name.trim(),
+    effectiveFrom: input.offering.validFrom,
+    changeReason: "从供应商 SKU 反向创建公司商品",
+    fields: companyFields,
+    idempotencyKey: `${input.idempotencyKey}:company`,
+  })
+  if (created.outcome !== "succeeded" || !created.stableId) {
+    throw new Error(
+      created.outcome === "blocked" ? created.message : "公司商品创建失败，请重试"
+    )
+  }
+  const companyCenter = getW14Center("products", created.stableId)
+  const companySkuId = companyCenter?.productDetail?.skus[0]?.skuId
+  if (!companySkuId) {
+    throw new Error("公司 SKU 创建失败，请刷新后重试")
+  }
+
+  const offeringId = `offering_${input.supplierCatalogSkuId}`
+  const offering = createConfirmedOffering({
+    offeringId,
+    costGross: input.offering.bulkSupplyPriceGross,
+    dropshipSupplyPriceGross: input.offering.dropshipSupplyPriceGross,
+    bulkSupplyPriceGross: input.offering.bulkSupplyPriceGross,
+    inputTaxRate: input.offering.inputTaxRate,
+    minimumOrderQuantity: input.offering.bulkMinimumOrderQuantity,
+    supplyRegion: input.offering.supplyRegion,
+    validFrom: input.offering.validFrom,
+  })
+  const poolWrite = writeProductPoolEntry({
+    skuId: companySkuId,
+    action: "SET_PRICE",
+    salesVisiblePriceGross: input.salesVisiblePriceGross,
+    validFrom: input.offering.validFrom,
+  })
+  const {
+    workItem: _workItem,
+    registrationBlocker: _registrationBlocker,
+    ...rest
+  } = current as SupplierCatalogItemView & {
+    workItem?: unknown
+    registrationBlocker?: unknown
+  }
+  void _workItem
+  void _registrationBlocker
+  const next: SupplierCatalogItemView = {
+    ...rest,
+    changeType: "UNCHANGED",
+    mapping: {
+      mappingStatus: "ACTIVE",
+      skuId: companySkuId,
+      skuCode: companyCenter?.productDetail?.skus[0]?.skuNo,
+      skuName: product.name.trim(),
+      skuRevisionId: `${created.stableId}:${companySkuId}`,
+      specification: product.specLabel,
+      baseUnit: product.baseUnit,
+      approvedBy: "采购 · 当前用户",
+      approvedAt: now,
+      reason: "反向创建公司商品并精确映射",
+      mappingVersion: `map_${input.supplierCatalogSkuId}_${Date.now()}`,
+      history: current.mapping?.history ?? [],
+    },
+    offering: {
+      stableId: offeringId,
+      currentRevision: offering,
+      revisionHistory: [...(current.offering?.revisionHistory ?? []), offering],
+    },
+    poolEntry: poolWrite.poolEntry,
+    allowedActions: ["BROWSE", "REVISE_OFFERING"],
+    actionBlockers: [],
+  }
+  catalogOverlays.set(input.supplierCatalogSkuId, next)
+  const result: SupplierCatalogWriteResult = {
+    supplierProductId: current.supplierProduct.id,
+    supplierCatalogSkuId: input.supplierCatalogSkuId,
+    companyProductId: created.stableId,
+    companySkuId,
+    productKind: product.productKind.trim(),
+    supplierOfferingRevisionId: offering.offeringRevisionId,
+    poolEntryRevisionId: next.poolEntry?.poolEntryRevisionId,
+    poolEntryChange: poolWrite.change,
+    activeSupplierCount: activeSupplierCountForSku(companySkuId),
+    reference: `POOL-REVERSE-${product.skuNo.trim()}-${Date.now().toString(36)}`,
     recordedAt: now,
   }
   writeResults.set(input.idempotencyKey, result)

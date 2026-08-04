@@ -577,6 +577,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     consumptionAmountGross: "¥220.00",
     fulfillmentChain: "LEGACY_MANUAL",
     unattributedReason: "供应商商品映射缺失 · 消费时点供给版本不可判定",
+    workItemId: "wi_iet_map_002",
     whitelistFields: [
       { field: "productRef", label: "商城商品", value: "SKU-EXT-****771" },
       { field: "mapGap", label: "归集缺口", value: "W21 映射 / 税口径" },
@@ -595,6 +596,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     consumptionAmountGross: "¥68.00",
     fulfillmentChain: "LEGACY_MANUAL",
     unattributedReason: "卡实例归属销售单无法解析",
+    workItemId: "wi_rd_diff_010",
     whitelistFields: [
       { field: "cardInstanceRef", label: "卡实例引用", value: "CI-****012N" },
       { field: "mapGap", label: "归集缺口", value: "销售单主责 / 卡实例" },

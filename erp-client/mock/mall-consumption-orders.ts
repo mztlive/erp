@@ -127,7 +127,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-08-01T08:12:00+08:00",
           receivedAt: "2026-08-01T08:12:04+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: {
             paidAmount: "680.00",
             orderVersion: "v3",
@@ -437,7 +437,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-07-31T14:22:00+08:00",
           receivedAt: "2026-07-31T14:22:08+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: { paidAmount: "1280.00" },
         }),
         fact({
@@ -448,7 +448,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-08-01T06:00:00+08:00",
           receivedAt: "2026-08-01T06:00:12+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: { completedVersion: "v2" },
         }),
       ],
@@ -673,7 +673,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-07-28T11:05:00+08:00",
           receivedAt: "2026-07-28T11:05:06+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: { paidAmount: "450.00" },
         }),
         fact({
@@ -686,7 +686,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-07-29T10:00:00+08:00",
           receivedAt: "2026-07-29T10:00:15+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: {
             refundAmount: "100.00",
             refundNo: "RF-88901-1",
@@ -703,7 +703,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-07-29T10:00:30+08:00",
           receivedAt: "2026-07-29T10:00:40+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: {
             restoreAmount: "100.00",
             cardInstanceRef: "…A17",
@@ -720,7 +720,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-07-30T16:40:00+08:00",
           receivedAt: "2026-07-30T16:40:20+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: {
             refundAmount: "50.00",
             refundNo: "RF-88901-2",
@@ -737,7 +737,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-07-30T16:41:00+08:00",
           receivedAt: "2026-07-30T16:41:18+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: {
             restoreAmount: "50.00",
             cardInstanceRef: "…A17",
@@ -1016,7 +1016,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-06-10T09:30:00+08:00",
           receivedAt: "2026-07-15T11:00:00+08:00",
           dataSource: "BACKFILL",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: {
             paidAmount: "320.00",
             note: "历史回填 · 仅记账",
@@ -1030,7 +1030,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-06-12T18:00:00+08:00",
           receivedAt: "2026-07-15T11:00:20+08:00",
           dataSource: "BACKFILL",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: { completedVersion: "v2" },
         }),
       ],
@@ -1208,6 +1208,7 @@ const seeds: ConsumptionOrderSeed[] = [
       costBasisBreakdown: [{ basis: "NONE", lineCount: 1 }],
       dataSource: "REALTIME",
       allowedActions: ["EXPORT", "OPEN_SUPPLIER", "OPEN_W29"],
+      workItemId: "wi_iet_ru_001",
       actionBlockers: [
         {
           action: "RETRY_SUPPLIER",
@@ -1255,7 +1256,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-07-31T18:45:00+08:00",
           receivedAt: "2026-07-31T18:45:05+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: { paidAmount: "198.00" },
         }),
       ],
@@ -1386,7 +1387,7 @@ const seeds: ConsumptionOrderSeed[] = [
       },
       boundaryNotice:
         "支付记录与消费记录保持；履约异常不改变支付已发生记录。",
-      workItemIds: ["wi-w29-77120"],
+      workItemIds: ["wi_iet_ru_001"],
     },
   },
 
@@ -1422,6 +1423,7 @@ const seeds: ConsumptionOrderSeed[] = [
       costBasisBreakdown: [{ basis: "NONE", lineCount: 1 }],
       dataSource: "REALTIME",
       allowedActions: ["EXPORT", "OPEN_W29"],
+      workItemId: "wi_rd_diff_010",
       actionBlockers: [
         {
           action: "OPEN_SALES_ORDER",
@@ -1469,7 +1471,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-08-01T07:55:00+08:00",
           receivedAt: "2026-08-01T07:55:03+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: {
             paidAmount: "560.00",
             note: "支付记录与唯一商城订单已保存；归集待处理",
@@ -1504,7 +1506,7 @@ const seeds: ConsumptionOrderSeed[] = [
           attributionIssue: {
             type: "SOURCE_OBJECT_MISSING",
             ownerRole: "OPERATIONS",
-            workItemId: "wi-w29-6601",
+            workItemId: "wi_rd_diff_010",
           },
         },
       ],
@@ -1576,7 +1578,7 @@ const seeds: ConsumptionOrderSeed[] = [
       },
       boundaryNotice:
         "归集条件缺失不删订单；补齐后使用原记录键续归集，不生成第二份订单。",
-      workItemIds: ["wi-w29-6601"],
+      workItemIds: ["wi_rd_diff_010"],
     },
   },
 
@@ -1613,6 +1615,7 @@ const seeds: ConsumptionOrderSeed[] = [
       costBasisBreakdown: [{ basis: "NONE", lineCount: 2 }],
       dataSource: "REALTIME",
       allowedActions: ["EXPORT", "OPEN_W29", "OPEN_SALES_ORDER"],
+      workItemId: "wi_iet_map_002",
       actionBlockers: [
         {
           action: "OPEN_SUPPLIER",
@@ -1662,7 +1665,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-08-01T09:10:00+08:00",
           receivedAt: "2026-08-01T09:10:04+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: {
             paidAmount: "890.00",
             note: "支付保留 · 供给差异",
@@ -1820,7 +1823,7 @@ const seeds: ConsumptionOrderSeed[] = [
       },
       boundaryNotice:
         "缺失供给 → 差异登记，不得拒收支付或生成第二份订单。",
-      workItemIds: ["wi-w29-8120"],
+      workItemIds: ["wi_iet_map_002"],
     },
   },
 
@@ -1859,6 +1862,7 @@ const seeds: ConsumptionOrderSeed[] = [
       ],
       dataSource: "REALTIME",
       allowedActions: ["EXPORT", "OPEN_W29", "OPEN_SUPPLIER"],
+      workItemId: "wi_iet_map_002",
       actionBlockers: [
         {
           action: "OVERRIDE_BASELINE",
@@ -1906,7 +1910,7 @@ const seeds: ConsumptionOrderSeed[] = [
           occurredAt: "2026-07-30T13:20:00+08:00",
           receivedAt: "2026-07-30T13:20:07+08:00",
           dataSource: "REALTIME",
-          processingStatus: "COMMITTED",
+          processingStatus: "SAVED",
           resultDetails: { paidAmount: "240.00" },
         }),
       ],
@@ -1944,7 +1948,7 @@ const seeds: ConsumptionOrderSeed[] = [
           attributionIssue: {
             type: "BASELINE_CONFLICT",
             ownerRole: "FINANCE",
-            workItemId: "wi-fcr-4402",
+            workItemId: "wi_iet_map_002",
             correctionId: "corr-pending-4402",
           },
           origin: {
@@ -2057,7 +2061,7 @@ const seeds: ConsumptionOrderSeed[] = [
       },
       boundaryNotice:
         "既有初始数据冲突不得由运营直接覆盖；仅财务复核后追加纠错。",
-      workItemIds: ["wi-fcr-4402"],
+      workItemIds: ["wi_iet_map_002"],
     },
   },
 ]

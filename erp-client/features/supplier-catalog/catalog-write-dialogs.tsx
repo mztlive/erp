@@ -29,6 +29,11 @@ import type {
   SupplierCatalogWriteResult,
 } from "@/features/supplier-catalog/types"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
+import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
+
+const PRODUCT_KIND_BY_LABEL: Record<string, string> = Object.fromEntries(
+  Object.entries(PRODUCT_KIND_LABELS).map(([code, label]) => [label, code])
+)
 
 /**
  * W14 固定 SKU 的「添加供应商并登记成本」上下文。
@@ -89,6 +94,7 @@ function buildIntakeSchema(requireSalesVisiblePrice: boolean) {
       .string()
       .trim()
       .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
+    inputTaxRate: z.string(),
     salesVisiblePriceGross: z.string(),
   }).superRefine((value, context) => {
     if (
@@ -200,6 +206,7 @@ export function SupplierCatalogIntakeDialog({
       bulkFloorPriceGross: "",
       bulkMinimumOrderQuantity: "1",
       minimumOrderQuantity: "1",
+      inputTaxRate: "",
       salesVisiblePriceGross: fixedSku?.hasPoolEntry ? "" : fixedSku?.salesVisiblePriceGross ?? "",
     },
     validators: {
@@ -256,7 +263,7 @@ export function SupplierCatalogIntakeDialog({
           ? value.bulkFloorPriceGross.trim() ||
             value.dropshipFloorPriceGross.trim()
           : undefined,
-        inputTaxRate: "0.13",
+        inputTaxRate: value.inputTaxRate.trim(),
         supplyRegion: fixedSku ? ["全国"] : undefined,
         sourceReference: value.sourceReference.trim() || undefined,
         targetSkuId: fixedSku?.skuId,
@@ -416,6 +423,14 @@ export function SupplierCatalogIntakeDialog({
                 />
               )}
             </form.AppField>
+            <form.AppField name="inputTaxRate">
+              {(field) => (
+                <field.TextField
+                  label="进项税率"
+                  description="无可靠来源时留空；缺失时无法保存，需先补充来源"
+                />
+              )}
+            </form.AppField>
             {fixedSku?.hasPoolEntry ? (
               <Alert className="sm:col-span-2">
                 <AlertTitle>沿用现有公司商品池价格</AlertTitle>
@@ -498,6 +513,7 @@ function buildRegisterSupplySchema(requireSalesVisiblePrice: boolean) {
       .string()
       .trim()
       .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
+    inputTaxRate: z.string(),
     salesVisiblePriceGross: z.string(),
   }).superRefine((value, context) => {
     if (
@@ -543,6 +559,7 @@ export function RegisterSupplyForSkuDialog({
       dropshipFloorPriceGross: "",
       bulkFloorPriceGross: "",
       minimumOrderQuantity: "1",
+      inputTaxRate: "",
       salesVisiblePriceGross: fixedSku?.hasPoolEntry
         ? ""
         : fixedSku?.salesVisiblePriceGross ?? "",
@@ -607,7 +624,7 @@ export function RegisterSupplyForSkuDialog({
         confirmedCostGross:
           value.bulkFloorPriceGross.trim() ||
           value.dropshipFloorPriceGross.trim(),
-        inputTaxRate: "0.13",
+        inputTaxRate: value.inputTaxRate.trim(),
         supplyRegion: ["全国"],
         targetSkuId: fixedSku.skuId,
         targetSkuCode: fixedSku.skuCode,
@@ -730,6 +747,14 @@ export function RegisterSupplyForSkuDialog({
             <form.AppField name="minimumOrderQuantity">
               {(field) => <field.TextField label="供给起订量 *" />}
             </form.AppField>
+            <form.AppField name="inputTaxRate">
+              {(field) => (
+                <field.TextField
+                  label="进项税率"
+                  description="无可靠来源时留空；缺失时无法保存，需先补充来源"
+                />
+              )}
+            </form.AppField>
             {!fixedSku?.hasPoolEntry ? (
               <form.AppField name="salesVisiblePriceGross">
                 {(field) => (
@@ -761,10 +786,11 @@ export function RegisterSupplyForSkuDialog({
 
 const promoteSchema = z.object({
   targetSkuId: z.string().min(1, "请选择公司 SKU"),
+  productKind: z.string().trim().min(1, "请选择商品类型"),
   confirmedCostGross: money,
   salesVisiblePriceGross: z.string(),
   poolPriceAction: z.enum(["KEEP_EXISTING", "SET_PRICE"]),
-  inputTaxRate: z.string().trim().min(1, "请填写税率"),
+  inputTaxRate: z.string(),
   minimumOrderQuantity: z.string().trim().min(1, "请填写起订量"),
   supplyRegionText: z.string().trim().min(1, "请填写可供区域"),
   validFrom: z.string().min(1, "请选择生效日期"),
@@ -791,19 +817,25 @@ export function PromoteSupplierProductDialog({
   preferredProductId?: string
 }) {
   const skuQuery = useCompanySkuOptionsQuery()
+  const categoryListQuery = useMasterDataListQuery({
+    resource: "categories",
+    lifecycleStatus: "enabled",
+    revisionTiming: "current",
+  })
   const promoteMutation = usePromoteSupplierProductMutation()
   const [result, setResult] = React.useState<SupplierCatalogWriteResult | null>(null)
   const sourceRevision = item?.supplierProduct.incomingRevision ?? item?.supplierProduct.currentRevision
   const form = useAppForm({
     defaultValues: {
       targetSkuId: "",
+      productKind: "",
       confirmedCostGross:
         sourceRevision?.bulkFloorPriceGross ??
         sourceRevision?.dropshipFloorPriceGross ??
         "",
       salesVisiblePriceGross: "",
       poolPriceAction: "SET_PRICE" as "KEEP_EXISTING" | "SET_PRICE",
-      inputTaxRate: "0.13",
+      inputTaxRate: "",
       minimumOrderQuantity:
         item?.offering?.proposedDefaults?.minimumOrderQuantity ??
         sourceRevision?.bulkMinimumOrderQuantity ??
@@ -817,14 +849,17 @@ export function PromoteSupplierProductDialog({
       const sku = skuQuery.data?.find((candidate) => candidate.skuId === value.targetSkuId)
       if (!sku) return
       const response = await promoteMutation.mutateAsync({
-        supplierProductId: item.supplierProduct.id,
+        supplierCatalogSkuId:
+          item.supplierProduct.catalogSkus?.[0]?.id ??
+          `${item.supplierProduct.id}_sku`,
         targetSkuId: sku.skuId,
         targetSkuCode: sku.skuCode,
         targetSkuName: sku.skuName,
         specification: sku.specification,
         baseUnit: sku.baseUnit,
+        productKind: value.productKind.trim() as import("@/features/master-data/types").ProductKind,
         confirmedCostGross: value.confirmedCostGross,
-        inputTaxRate: value.inputTaxRate,
+        inputTaxRate: value.inputTaxRate.trim(),
         minimumOrderQuantity: value.minimumOrderQuantity,
         supplyRegion: splitValues(value.supplyRegionText),
         validFrom: value.validFrom,
@@ -857,15 +892,22 @@ export function PromoteSupplierProductDialog({
     if (!candidate) return
     const nextSource =
       item.supplierProduct.incomingRevision ?? item.supplierProduct.currentRevision
+    const category = (categoryListQuery.data?.rows ?? []).find(
+      (row) => row.name === candidate.category
+    )
     form.reset({
       targetSkuId: candidate.skuId,
+      productKind:
+        (category?.productKind
+          ? PRODUCT_KIND_BY_LABEL[category.productKind]
+          : undefined) ?? "",
       confirmedCostGross:
         nextSource.bulkFloorPriceGross ??
         nextSource.dropshipFloorPriceGross ??
         "",
       salesVisiblePriceGross: candidate.poolEntry?.salesVisiblePriceGross ?? "",
       poolPriceAction: candidate.poolEntry ? "KEEP_EXISTING" : "SET_PRICE",
-      inputTaxRate: "0.13",
+      inputTaxRate: "",
       minimumOrderQuantity:
         item.offering?.proposedDefaults?.minimumOrderQuantity ??
         nextSource.bulkMinimumOrderQuantity ??
@@ -874,7 +916,7 @@ export function PromoteSupplierProductDialog({
         item.offering?.proposedDefaults?.supplyRegion.join("、") || "全国",
       validFrom: "2026-08-02",
     })
-  }, [form, item, open, preferredProductId, skuQuery.data])
+  }, [form, item, open, preferredProductId, skuQuery.data, categoryListQuery.data])
 
   const skuOptions = (skuQuery.data ?? []).map((sku) => {
     const signals = sourceRevision
@@ -885,6 +927,15 @@ export function PromoteSupplierProductDialog({
       label: `${sku.skuCode} · ${sku.skuName} · ${sku.specification}${signals.length ? ` · ${signals.join("/")}` : ""}`,
     }
   })
+
+  const productKindOptions = React.useMemo(
+    () =>
+      Object.entries(PRODUCT_KIND_LABELS).map(([value, label]) => ({
+        value,
+        label,
+      })),
+    []
+  )
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -926,6 +977,9 @@ export function PromoteSupplierProductDialog({
                     const nextId = value ?? ""
                     field.handleChange(nextId)
                     const selected = skuQuery.data?.find((sku) => sku.skuId === nextId)
+                    const category = (categoryListQuery.data?.rows ?? []).find(
+                      (row) => row.name === selected?.category
+                    )
                     form.setFieldValue(
                       "poolPriceAction",
                       selected?.poolEntry ? "KEEP_EXISTING" : "SET_PRICE"
@@ -933,6 +987,12 @@ export function PromoteSupplierProductDialog({
                     form.setFieldValue(
                       "salesVisiblePriceGross",
                       selected?.poolEntry?.salesVisiblePriceGross ?? ""
+                    )
+                    form.setFieldValue(
+                      "productKind",
+                      (category?.productKind
+                        ? PRODUCT_KIND_BY_LABEL[category.productKind]
+                        : undefined) ?? ""
                     )
                   }}
                   options={skuOptions}
@@ -1014,6 +1074,25 @@ export function PromoteSupplierProductDialog({
             }}
           </form.Subscribe>
           <div className="grid gap-4 sm:grid-cols-2">
+            <form.AppField name="productKind">
+              {(field) => (
+                <div className="space-y-1.5">
+                  <Label>商品类型 *</Label>
+                  <OptionCombobox
+                    value={field.state.value || null}
+                    onValueChange={(value) =>
+                      field.handleChange(value ?? "")
+                    }
+                    options={productKindOptions}
+                    placeholder="选择商品类型"
+                    className="w-full"
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    来源分类有适用类型时自动预填；无可靠来源时必须手动选择
+                  </p>
+                </div>
+              )}
+            </form.AppField>
             <form.AppField name="confirmedCostGross">
               {(field) => (
                 <field.TextField
@@ -1023,7 +1102,12 @@ export function PromoteSupplierProductDialog({
               )}
             </form.AppField>
             <form.AppField name="inputTaxRate">
-              {(field) => <field.TextField label="进项税率 *" />}
+              {(field) => (
+                <field.TextField
+                  label="进项税率"
+                  description="无可靠来源时留空；缺失时无法提交，需先补充来源"
+                />
+              )}
             </form.AppField>
             <form.AppField name="minimumOrderQuantity">
               {(field) => <field.TextField label="最小起订量 *" />}

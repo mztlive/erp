@@ -8,6 +8,7 @@ import type {
   ProductSkuFields,
   ProductSpecDimension,
 } from "@/features/master-data/types"
+import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
 
 /** 笛卡尔积生成规格取值组合。无规格时返回单行空组合。 */
@@ -52,7 +53,33 @@ export function formatSpecLabel(
     .join(" / ")
 }
 
-/** 按当前规格维度重建 SKU 行；尽量按属性取值匹配保留已有主图/价格/供给等。 */
+/**
+ * 计算规范化规格签名（`specification_signature` 的演示简化版）。
+ * 取有值规格的「规格名=取值」对，按规格名排序后拼接，与输入顺序无关；
+ * 无规格时返回固定空签名（同一 SPU 最多一个无规格 SKU）。
+ * 数据模型按属性代码 / 属性值代码排序的规范化序列计算，此处以规格名 /
+ * 取值文本近似，差距见任务遗留说明。
+ */
+export function computeSpecificationSignature(
+  specs: readonly ProductSpecDimension[],
+  attributeValues: readonly string[]
+): string {
+  const active = specs
+    .map((spec, index) => ({
+      name: spec.name.trim(),
+      value: (attributeValues[index] ?? "").trim(),
+      values: spec.values.map((v) => v.trim()).filter(Boolean),
+    }))
+    .filter((s) => s.name && s.values.length > 0)
+  if (active.length === 0) return ""
+  return active
+    .filter((s) => s.value)
+    .sort((a, b) => a.name.localeCompare(b.name))
+    .map((s) => `${s.name}=${s.value}`)
+    .join("|")
+}
+
+/** 按当前规格维度重建 SKU 行；仅签名一致时复用旧行，否则新建。 */
 export function rebuildSkusFromSpecs(input: {
   specs: readonly ProductSpecDimension[]
   existing: readonly ProductSkuFields[]
@@ -61,23 +88,26 @@ export function rebuildSkusFromSpecs(input: {
 }): ProductSkuFields[] {
   const combos = cartesianSpecValues(input.specs)
   const prefix = (input.skuNoPrefix ?? "SKU").replace(/-+$/, "")
+  const existingBySignature = new Map<string, ProductSkuFields>()
+  for (const sku of input.existing) {
+    const signature =
+      sku.specificationSignature ??
+      computeSpecificationSignature(input.specs, sku.attributeValues)
+    if (!existingBySignature.has(signature)) {
+      existingBySignature.set(signature, sku)
+    }
+  }
 
   return combos.map((attributeValues, index) => {
-    const specLabel = formatSpecLabel(input.specs, attributeValues)
-    const matched =
-      input.existing.find((sku) =>
-        sameAttributeValues(sku.attributeValues, attributeValues)
-      ) ??
-      (combos.length === 1 && input.existing.length === 1
-        ? input.existing[0]
-        : undefined)
-
+    const signature = computeSpecificationSignature(input.specs, attributeValues)
+    const matched = existingBySignature.get(signature)
     return {
       skuId: matched?.skuId,
+      specificationSignature: signature,
       /** 系统默认生成；已有编号或用户覆盖则保留。 */
       skuNo: matched?.skuNo || `${prefix}-${String(index + 1).padStart(2, "0")}`,
       attributeValues: [...attributeValues],
-      specLabel,
+      specLabel: formatSpecLabel(input.specs, attributeValues),
       barcode: matched?.barcode,
       mainImage: matched?.mainImage ?? "",
       salePrice: matched?.salePrice,
@@ -86,14 +116,6 @@ export function rebuildSkusFromSpecs(input: {
       lifecycleStatus: matched?.lifecycleStatus ?? "ENABLED",
     }
   })
-}
-
-function sameAttributeValues(
-  a: readonly string[],
-  b: readonly string[]
-): boolean {
-  if (a.length !== b.length) return false
-  return a.every((v, i) => v === b[i])
 }
 
 export function emptyProductFields(): ProductFields {
@@ -106,12 +128,14 @@ export function emptyProductFields(): ProductFields {
     category: "",
     brandId: "",
     brand: "",
+    productKind: "",
     carouselImages: [],
     detailImages: [],
     specs: [],
     skus: [
       {
         skuNo: "SKU-01",
+        specificationSignature: "",
         attributeValues: [],
         specLabel: "默认规格",
         mainImage: "",
@@ -152,6 +176,10 @@ export function productListFacts(fields: ProductFields): ReadonlyArray<{
 }> {
   const facts: { label: string; value: string }[] = [
     { label: "基础单位", value: fields.baseUnit },
+    {
+      label: "商品类型",
+      value: fields.productKind ? PRODUCT_KIND_LABELS[fields.productKind] : "",
+    },
     { label: "分类", value: fields.category },
     { label: "品牌", value: fields.brand },
   ]
@@ -177,6 +205,7 @@ export function productListFacts(fields: ProductFields): ReadonlyArray<{
 
 /** 校验：每个启用 SKU 必须有主图；SPU 级字段完整。 */
 export function validateProductFields(fields: ProductFields): string | null {
+  if (!fields.productKind) return "请选择商品类型"
   if (!fields.baseUnitId.trim() || !fields.baseUnitCode.trim() || !fields.baseUnit.trim()) {
     return "请选择有效的基础单位"
   }

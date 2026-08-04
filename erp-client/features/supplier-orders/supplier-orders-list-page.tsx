@@ -11,6 +11,8 @@ import {
 } from "lucide-react"
 
 import {
+  BackgroundJobProgress,
+  BatchImpactPreview,
   BusinessEmptyState,
   BusinessStatusBadge,
   BusinessTableFrame,
@@ -20,6 +22,7 @@ import {
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
+  MultiOptionCombobox,
   OptionCombobox,
   PageHeader,
   QuickPreviewSheet,
@@ -39,12 +42,14 @@ import { listSupplierOptions } from "@/features/supplier-orders/api"
 import {
   useQueryResultMutation,
   useSupplierOrderDetailQuery,
+  useSupplierOrderExportMutation,
   useSupplierOrdersQuery,
 } from "@/features/supplier-orders/queries"
 import { SupplierOrderPreviewPanel } from "@/features/supplier-orders/supplier-order-preview-panel"
 import type {
   CancelStatus,
   DemoRole,
+  ExportCommand,
   ListView,
   RefundStatus,
   SupplierFulfillmentStatus,
@@ -92,9 +97,7 @@ export function SupplierOrdersListPage() {
       view: url.view,
       q: url.q,
       supplierId: url.supplierId,
-      fulfillmentStatuses: url.fulfillmentStatus
-        ? [url.fulfillmentStatus]
-        : undefined,
+      fulfillmentStatuses: url.fulfillmentStatuses,
       cancelStatuses: url.cancelStatus ? [url.cancelStatus] : undefined,
       refundStatuses: url.refundStatus ? [url.refundStatus] : undefined,
       paidFrom: url.paidFrom,
@@ -124,6 +127,19 @@ export function SupplierOrdersListPage() {
     description: string
     reference?: string
   } | null>(null)
+  const [exportPreviewOpen, setExportPreviewOpen] = React.useState(false)
+  const [pendingExport, setPendingExport] =
+    React.useState<ExportCommand | null>(null)
+  const [exportResult, setExportResult] = React.useState<{
+    jobId: string
+    rowCount: number
+    permissionVersion: string
+    maskDisclaimer: string
+    downloadLabel: string
+    expiresAt: string
+  } | null>(null)
+
+  const exportMutation = useSupplierOrderExportMutation()
 
   React.useEffect(() => {
     setSearchDraft(url.q ?? "")
@@ -175,7 +191,7 @@ export function SupplierOrdersListPage() {
 
   React.useEffect(() => {
     setFocusedIndex(0)
-  }, [url.view, url.q, url.fulfillmentStatus, url.page, rows.length])
+  }, [url.view, url.q, url.fulfillmentStatuses, url.page, rows.length])
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -462,40 +478,36 @@ export function SupplierOrdersListPage() {
     [focusedIndex, openPreview, queryResultMutation.isPending, rows]
   )
 
-  const exportCsv = () => {
-    const quote = (v: string) => `"${v.replaceAll('"', '""')}"`
-    const lines = rows.map((r) =>
-      [
-        r.orderNo,
-        r.mallOrderNo,
-        r.supplierName,
-        r.fulfillmentLabel,
-        r.cancelLabel,
-        r.refundLabel,
-        r.externalOrderNo ?? "尚未返回",
-        r.lastBusinessAt,
-      ]
-        .map((x) => quote(String(x)))
-        .join(",")
-    )
-    const csv = [
-      "供应商订单,商城单号,供应商,履约,取消,退款,外部单号,更新时间",
-      ...lines,
-    ].join("\n")
-    const urlObj = URL.createObjectURL(
-      new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" })
-    )
-    const a = document.createElement("a")
-    a.href = urlObj
-    a.download = "供应商订单列表.csv"
-    a.click()
-    URL.revokeObjectURL(urlObj)
-    setActionResult({
-      status: "succeeded",
-      title: "导出已生成",
-      description: `已下载当前页 ${rows.length} 条（不含敏感地址）。`,
-      reference: `EXP-W26-${rows.length}`,
+  const confirmExport = async () => {
+    const requestId = `req-w26-export-${Date.now()}`
+    const command: ExportCommand = {
+      selectionSnapshotId: `snap-${requestId}`,
+      fieldSetId: "w26-list-default-masked",
+      requestId,
+      rowCount: listQuery.data?.pageInfo.total ?? 0,
+      filterSummary: listQuery.data?.filterSummary ?? "",
+    }
+    setPendingExport(command)
+    await runExport(command)
+  }
+
+  const retryExport = async () => {
+    if (!pendingExport) return
+    await runExport(pendingExport)
+  }
+
+  const runExport = async (command: ExportCommand) => {
+    const result = await exportMutation.mutateAsync(command)
+    setExportResult({
+      jobId: result.jobId,
+      rowCount: result.rowCount,
+      permissionVersion: result.permissionVersion,
+      maskDisclaimer: result.maskDisclaimer,
+      downloadLabel: result.downloadLabel,
+      expiresAt: result.expiresAt,
     })
+    setPendingExport(null)
+    setExportPreviewOpen(false)
   }
 
   return (
@@ -536,7 +548,12 @@ export function SupplierOrdersListPage() {
               type="button"
               variant="outline"
               size="sm"
-              onClick={exportCsv}
+              disabled={
+                !listQuery.data ||
+                total === 0 ||
+                exportMutation.isPending
+              }
+              onClick={() => setExportPreviewOpen(true)}
             >
               <DownloadIcon className="size-3.5" />
               导出
@@ -553,15 +570,16 @@ export function SupplierOrdersListPage() {
             value={m.value}
             active={
               m.fulfillmentStatus
-                ? url.fulfillmentStatus === m.fulfillmentStatus
+                ? url.fulfillmentStatuses?.includes(m.fulfillmentStatus) ??
+                  false
                 : m.view
-                  ? url.view === m.view && !url.fulfillmentStatus
+                  ? url.view === m.view && !url.fulfillmentStatuses?.length
                   : false
             }
             onClick={() => {
               if (m.fulfillmentStatus) {
                 pushUrl({
-                  fulfillmentStatus: m.fulfillmentStatus,
+                  fulfillmentStatuses: [m.fulfillmentStatus],
                   view:
                     m.fulfillmentStatus === "RESULT_UNKNOWN"
                       ? "all"
@@ -571,7 +589,7 @@ export function SupplierOrdersListPage() {
               } else if (m.view) {
                 pushUrl({
                   view: m.view,
-                  fulfillmentStatus: undefined,
+                  fulfillmentStatuses: undefined,
                   page: 1,
                 })
               } else if (m.aftersalePending) {
@@ -607,6 +625,89 @@ export function SupplierOrdersListPage() {
             </Button>
           }
         />
+      ) : null}
+
+      {exportResult ? (
+        <div className="space-y-2">
+          <FormalActionResult
+            status="succeeded"
+            title="导出任务已创建"
+            description={exportResult.maskDisclaimer}
+            reference={exportResult.jobId}
+            facts={[
+              { label: "行数", value: String(exportResult.rowCount) },
+              {
+                label: "权限版本",
+                value: exportResult.permissionVersion,
+              },
+              {
+                label: "文件",
+                value: exportResult.downloadLabel,
+              },
+              {
+                label: "到期",
+                value: formatTime(exportResult.expiresAt),
+              },
+            ]}
+          />
+          <BackgroundJobProgress
+            mode="all-or-nothing"
+            status="succeeded"
+            label="导出作业"
+            description={`筛选快照 · 字段打码 · ${exportResult.jobId}`}
+            total={exportResult.rowCount}
+            completed={exportResult.rowCount}
+            succeeded={exportResult.rowCount}
+          />
+        </div>
+      ) : null}
+
+      {exportPreviewOpen ? (
+        <div className="space-y-3 rounded-2xl border border-border p-4">
+          <BatchImpactPreview
+            title="导出当前筛选全部"
+            description="按当前筛选快照导出，不限于当前页；结果 7 天内可下载，下载时将重新校验权限。"
+            filterSummary={listQuery.data?.filterSummary ?? "—"}
+            selectionScope="当前筛选全部"
+            estimated={total}
+            processable={total}
+            skipped={0}
+            background
+            sensitiveFields={["收货地址", "手机号", "未授权成本金额"]}
+            skippedReason="无权限字段以打码形式导出，默认列不含收货地址"
+          />
+          <div className="flex flex-wrap gap-2">
+            {exportMutation.isError ? (
+              <p className="w-full text-sm text-destructive" aria-live="polite">
+                导出任务创建失败，可按原筛选快照重试。
+              </p>
+            ) : null}
+            <Button
+              type="button"
+              size="sm"
+              disabled={exportMutation.isPending}
+              onClick={() => {
+                if (exportMutation.isError && pendingExport) {
+                  void retryExport()
+                } else {
+                  void confirmExport()
+                }
+              }}
+            >
+              {exportMutation.isError && pendingExport
+                ? "按原快照重试"
+                : "确认导出"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => setExportPreviewOpen(false)}
+            >
+              取消
+            </Button>
+          </div>
+        </div>
       ) : null}
 
       <BusinessTableFrame
@@ -679,26 +780,24 @@ export function SupplierOrdersListPage() {
                   placeholder="全部供应商"
                 />
 
-                <OptionCombobox
-                  value={url.fulfillmentStatus ?? ""}
-                  onValueChange={(v) =>
+                <MultiOptionCombobox
+                  value={url.fulfillmentStatuses ?? []}
+                  onValueChange={(values) =>
                     pushUrl({
-                      fulfillmentStatus: (v ||
-                        undefined) as SupplierFulfillmentStatus | undefined,
+                      fulfillmentStatuses:
+                        values.length > 0
+                          ? (values as SupplierFulfillmentStatus[])
+                          : undefined,
                       page: 1,
                     })
                   }
-                  options={[
-                    { value: "", label: "履约·全部" },
-                    ...FULFILLMENT_STATUSES.map((s) => ({
-                      value: s,
-                      label: FULFILLMENT_STATUS_LABEL[s],
-                    })),
-                  ]}
+                  options={FULFILLMENT_STATUSES.map((s) => ({
+                    value: s,
+                    label: FULFILLMENT_STATUS_LABEL[s],
+                  }))}
                   aria-label="履约状态"
-                  className="w-[8.5rem]"
+                  className="w-[10rem]"
                   size="sm"
-                  allowClear={false}
                   placeholder="履约·全部"
                 />
 
@@ -781,7 +880,7 @@ export function SupplierOrdersListPage() {
                 <span aria-live="polite">
                   共 {total.toLocaleString("zh-CN")} 条
                 </span>
-                {(url.fulfillmentStatus ||
+                {(url.fulfillmentStatuses?.length ||
                   url.cancelStatus ||
                   url.refundStatus ||
                   url.q ||
@@ -792,7 +891,7 @@ export function SupplierOrdersListPage() {
                     variant="ghost"
                     onClick={() =>
                       pushUrl({
-                        fulfillmentStatus: undefined,
+                        fulfillmentStatuses: undefined,
                         cancelStatus: undefined,
                         refundStatus: undefined,
                         q: undefined,

@@ -27,6 +27,7 @@ import {
   DEMO_ROLE_LABEL,
   DIFF_TYPE_LABEL,
   RESOLUTION_LABEL,
+  RESOLUTION_TO_STATUS,
   STATUS_LABEL,
   STATUS_TONE,
   roleToActor,
@@ -156,9 +157,14 @@ function refreshCutoffPolicy() {
   return { ...DEFAULT_REFRESH_CUTOFF }
 }
 
+/** 差异是否已有处理结论（status 为 5 值结论状态，非 PENDING 即已结论） */
+function isConcludedStatus(status: string): boolean {
+  return status !== "PENDING"
+}
+
 function unresolvedCount(seed: SeedStatement): number {
   return seed.differences.filter(
-    (d) => d.status !== "RESOLVED" && d.blocking
+    (d) => d.status === "PENDING" && d.blocking
   ).length
 }
 
@@ -172,7 +178,7 @@ function roleActions(
   const prepId = seed.preparedBy?.userId
   const userId = roleToUserId(role)
   const openBlocking = seed.differences.some(
-    (d) => d.blocking && d.status !== "RESOLVED"
+    (d) => d.blocking && d.status === "PENDING"
   )
   const cutoff = refreshCutoffPolicy()
 
@@ -372,11 +378,11 @@ function toDetail(seed: SeedStatement, role: DemoRole): SettlementDetailView {
   const meta = statusMeta(seed.status)
   const dir = withDirection(seed)
   const diffs = seed.differences.map(projectDifference)
-  const open = diffs.filter((d) => d.status !== "RESOLVED").length
+  const open = diffs.filter((d) => d.status === "PENDING").length
   const blocking = diffs.filter(
-    (d) => d.blocking && d.status !== "RESOLVED"
+    (d) => d.blocking && d.status === "PENDING"
   ).length
-  const resolved = diffs.filter((d) => d.status === "RESOLVED").length
+  const resolved = diffs.filter((d) => isConcludedStatus(d.status)).length
 
   return {
     statement: {
@@ -583,7 +589,7 @@ export async function fetchSettlementList(
     seeds = seeds.filter((s) =>
       s.differences.some(
         (d) =>
-          d.type === input.differenceType && d.status !== "RESOLVED"
+          d.type === input.differenceType && d.status === "PENDING"
       )
     )
   }
@@ -962,7 +968,6 @@ export async function appendDifferenceEvidence(
     return {
       ...d,
       version: d.version + 1,
-      status: d.status === "OPEN" ? "EVIDENCE_PENDING" : d.status,
       evidence: [
         ...d.evidence,
         {
@@ -1088,7 +1093,7 @@ export async function resolveDifference(
     return {
       ...d,
       version: d.version + 1,
-      status: "RESOLVED" as const,
+      status: RESOLUTION_TO_STATUS[input.resolution],
       blocking: false,
       resolution: {
         resolutionId: `res_${input.operationId}`,
@@ -1103,7 +1108,7 @@ export async function resolveDifference(
     }
   })
   const stillBlocking = o.differences!.some(
-    (d) => d.blocking && d.status !== "RESOLVED"
+    (d) => d.blocking && d.status === "PENDING"
   )
   if (!stillBlocking && seed.status === "HAS_DIFFERENCE") {
     o.status = "PENDING_RECONCILE"
@@ -1210,7 +1215,7 @@ export async function submitSettlementReview(
     }
   }
   if (
-    seed.differences.some((d) => d.blocking && d.status !== "RESOLVED")
+    seed.differences.some((d) => d.blocking && d.status === "PENDING")
   ) {
     return {
       status: "blocked",
@@ -1333,7 +1338,7 @@ export async function decideSettlementReview(
     }
   }
   if (
-    seed.differences.some((d) => d.blocking && d.status !== "RESOLVED")
+    seed.differences.some((d) => d.blocking && d.status === "PENDING")
   ) {
     return {
       status: "blocked",

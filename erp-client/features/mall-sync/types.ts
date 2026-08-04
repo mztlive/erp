@@ -130,7 +130,6 @@ export type MallSnapshotRow = {
     | "PENDING_MAPPING"
     | "APPLIED"
     | "DIFF"
-    | "LATE_DISCARDED"
     | "UNCHANGED"
   mappingStatusLabel: string
   appliedSalesOrderId?: string
@@ -250,7 +249,7 @@ export type ReconciliationDifference = {
   sourceFingerprintShort?: string
   erpSalesOrderNo?: string
   erpFingerprintShort?: string
-  status: "OPEN" | "PULLING" | "RESOLVED" | "UNCONFIRMABLE"
+  status: "OPEN" | "PULLING" | "RESOLVED" | "CONFIRMED"
   statusLabel: string
   statusTone: "warning" | "info" | "success" | "destructive" | "neutral"
   impactSummary: string
@@ -263,7 +262,7 @@ export type ReconciliationBatch = {
   mallCount: number
   erpCount: number
   differenceCount: number
-  status: "RUNNING" | "SUCCEEDED" | "PARTIAL_FAILED" | "FAILED"
+  status: "RUNNING" | "SUCCEEDED" | "DIFFERENCE" | "FAILED"
   statusLabel: string
   startedAt: string
   finishedAt?: string

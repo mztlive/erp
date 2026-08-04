@@ -85,8 +85,13 @@ import type {
   MasterDataMutationResult,
   ProductDetailView,
   ProductFields,
+  ProductKind,
   ProductSkuFields,
   ProductSpecDimension,
+} from "@/features/master-data/types"
+import {
+  PRODUCT_KIND_LABELS,
+  PRODUCT_KIND_VALUES,
 } from "@/features/master-data/types"
 import { cn } from "@/lib/utils"
 
@@ -224,6 +229,7 @@ function productDetailToFields(detail: ProductDetailView): ProductFields {
     category: detail.category,
     brandId: detail.brandId,
     brand: detail.brand,
+    productKind: "",
     carouselImages: [...detail.carouselImages],
     detailImages: [...detail.detailImages],
     specs: detail.specs.map((s) => ({
@@ -421,7 +427,10 @@ function hydrateFromCenter(
     effectiveFrom: data.currentRevision.effectiveFrom,
     effectiveTo: data.currentRevision.effectiveTo ?? "",
     changeReason: "",
-    fields,
+    fields: {
+      ...fields,
+      productKind: data.productKind ?? "",
+    },
     specDrafts: fields.specs.map((s) => ({
       name: s.name,
       values: [...s.values],
@@ -663,6 +672,7 @@ export function ProductDetailPage({
           Boolean(values.fields.baseUnit.trim()),
           Boolean(values.fields.category.trim()),
           Boolean(values.fields.brand.trim()),
+          Boolean(values.fields.productKind),
           values.fields.skus.length > 0,
           values.fields.skus.every(
             (sku) =>
@@ -683,16 +693,17 @@ export function ProductDetailPage({
           ...(!requiredChecks[0] ||
           !requiredChecks[1] ||
           !requiredChecks[2] ||
-          !requiredChecks[3]
+          !requiredChecks[3] ||
+          !requiredChecks[4]
             ? [
                 {
                   section: "basic" as const,
                   title: "基础信息待完善",
-                  description: "名称、单位、分类和品牌是必填项。",
+                  description: "名称、单位、商品类型、分类和品牌是必填项。",
                 },
               ]
             : []),
-          ...(!requiredChecks[4] || !requiredChecks[5]
+          ...(!requiredChecks[5] || !requiredChecks[6]
             ? [
                 {
                   section: "sku" as const,
@@ -701,7 +712,7 @@ export function ProductDetailPage({
                 },
               ]
             : []),
-          ...(!requiredChecks[6]
+          ...(!requiredChecks[7]
             ? [
                 {
                   section: "effective" as const,
@@ -1057,6 +1068,14 @@ export function ProductDetailPage({
                         <span>SPU</span>
                       </div>
                       <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">商品类型</span>
+                        <span>
+                          {fields.productKind
+                            ? PRODUCT_KIND_LABELS[fields.productKind]
+                            : "待选择"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">SKU 数量</span>
                         <span className="num">{fields.skus.length}</span>
                       </div>
@@ -1158,6 +1177,36 @@ export function ProductDetailPage({
                           }
                           placeholder="公司审核后的商品描述"
                         />
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>商品类型</Label>
+                        {isCreate ? (
+                          <OptionCombobox
+                            value={fields.productKind || null}
+                            onValueChange={(value) =>
+                              setFields((previous) => ({
+                                ...previous,
+                                productKind: (value ?? "") as ProductKind,
+                              }))
+                            }
+                            options={PRODUCT_KIND_VALUES.map((kind) => ({
+                              value: kind,
+                              label: PRODUCT_KIND_LABELS[kind],
+                            }))}
+                            allowClear={false}
+                            placeholder="请选择商品类型"
+                            className="w-full"
+                          />
+                        ) : (
+                          <div className="flex h-9 items-center rounded-md border border-border bg-muted/40 px-3 text-sm">
+                            {fields.productKind
+                              ? PRODUCT_KIND_LABELS[fields.productKind]
+                              : "—"}
+                          </div>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          决定商品业务作用；创建后不可变，也不随分类变化。
+                        </p>
                       </div>
                       <div className="space-y-1.5">
                         <Label>{masterDataCopy.fBaseUnit}</Label>

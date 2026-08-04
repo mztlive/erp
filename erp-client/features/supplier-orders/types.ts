@@ -202,10 +202,6 @@ export type SupplierOrderListQuery = {
   page: number
   pageSize: number
   role: DemoRole
-  /** 演示：成本字段强制掩码 */
-  maskCost?: boolean
-  /** 演示：敏感地址无权限 */
-  noSensitive?: boolean
 }
 
 export type SupplierOrderListRow = {
@@ -252,6 +248,27 @@ export type SupplierOrderListResult = {
   permissionVersion: string
   sourceAsOf: string
   queriedAt: string
+  filterSummary: string
+}
+
+export type ExportCommand = {
+  selectionSnapshotId: string
+  fieldSetId: string
+  requestId: string
+  rowCount: number
+  filterSummary: string
+}
+
+export type ExportJobResult = {
+  jobId: string
+  requestId: string
+  rowCount: number
+  permissionVersion: string
+  fieldSetId: string
+  maskDisclaimer: string
+  expiresAt: string
+  downloadLabel: string
+  status: "queued" | "succeeded"
 }
 
 export type SupplierOrderItemView = {

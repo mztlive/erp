@@ -17,7 +17,7 @@ export type SupplierOrdersUrlState = {
   view: ListView
   q?: string
   supplierId?: string
-  fulfillmentStatus?: SupplierFulfillmentStatus
+  fulfillmentStatuses?: SupplierFulfillmentStatus[]
   cancelStatus?: CancelStatus
   refundStatus?: RefundStatus
   paidFrom?: string
@@ -58,9 +58,17 @@ export function parseSupplierOrdersSearchParams(
   const supplierId = searchParams.get("supplierId") ?? undefined
 
   const ffRaw = searchParams.get("fulfillmentStatus")
-  const fulfillmentStatus =
-    ffRaw && FULFILLMENT_SET.has(ffRaw)
-      ? (ffRaw as SupplierFulfillmentStatus)
+  const fulfillmentStatuses = ffRaw
+    ? ffRaw
+        .split(",")
+        .map((s) => s.trim())
+        .filter(
+          (s): s is SupplierFulfillmentStatus => FULFILLMENT_SET.has(s)
+        )
+    : undefined
+  const fulfillmentStatusList =
+    fulfillmentStatuses && fulfillmentStatuses.length > 0
+      ? fulfillmentStatuses
       : undefined
 
   const cancelRaw = searchParams.get("cancelStatus")
@@ -115,7 +123,7 @@ export function parseSupplierOrdersSearchParams(
     view,
     q,
     supplierId,
-    fulfillmentStatus,
+    fulfillmentStatuses: fulfillmentStatusList,
     cancelStatus,
     refundStatus,
     paidFrom,
@@ -138,8 +146,8 @@ export function buildSupplierOrdersSearchParams(
   if (state.view !== "actionable") params.set("view", state.view)
   if (state.q?.trim()) params.set("q", state.q.trim())
   if (state.supplierId) params.set("supplierId", state.supplierId)
-  if (state.fulfillmentStatus) {
-    params.set("fulfillmentStatus", state.fulfillmentStatus)
+  if (state.fulfillmentStatuses?.length) {
+    params.set("fulfillmentStatus", state.fulfillmentStatuses.join(","))
   }
   if (state.cancelStatus) params.set("cancelStatus", state.cancelStatus)
   if (state.refundStatus) params.set("refundStatus", state.refundStatus)

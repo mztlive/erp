@@ -48,7 +48,7 @@ backend/modules/sales-confirmation/
 
 非卡券销售草稿、提交和正式版本的每一行均固定引用 `sku_revision_id`，并保留品名、
 规格、成交单价、税率等成交快照。公司商品池只是业务日期有效公司 SKU 的查询视图，
-不是独立实体；`sales_visible_price` 归 `sku_revision` 所有，销售行唯一商品关联为
+不是独立实体；`sales_visible_price_gross` 归 `sku_revision` 所有，销售行唯一商品关联为
 `sku_revision_id`。
 
 - `CreateGoodsServiceSalesDraft`；
@@ -89,7 +89,7 @@ Phase 10 必须把这些写入同一真实事务。前置 phase 不可用多次�
 - `business_type` 创建后终身不变；卡券与实物服务不得混单。
 - 每个卡券销售版本恰好一条卡券明细；实物服务销售单至少一条有效明细。
 - 合同与销售单一对多；提交冻结客户、合同、结算主体、明细、价格、税率和履约承诺。
-- 销售只能从业务日期有效的公司商品池（公司 SKU 集合）选品；系统以 `sku_revision_id` 重验 SKU 可售资格和 `sales_visible_price`，销售提交/正式版本保留成交快照。
+- 销售只能从业务日期有效的公司商品池（公司 SKU 集合）选品；系统以 `sku_revision_id` 重验 SKU 可售资格和 `sales_visible_price_gross`，销售提交/正式版本保留成交快照。
 - 采购确认只读取不可变提交，不读取可变草稿。
 - 一个有效提交和指纹最多一个有效采购确认任务；幂等重放不重复生成版本或任务。
 - 生效后商业变化只能追加销售变更和新版本；已发生履约、票款和旧版本不可回退。

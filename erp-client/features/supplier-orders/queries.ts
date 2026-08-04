@@ -8,6 +8,7 @@ import {
 
 import {
   addCollaborationNote,
+  createSupplierOrderExportJob,
   deferSupplierOrderTask,
   fetchSupplierOrderDetail,
   fetchSupplierOrders,
@@ -18,6 +19,7 @@ import {
 } from "@/features/supplier-orders/api"
 import type {
   DemoRole,
+  ExportCommand,
   SupplierOrderListQuery,
 } from "@/features/supplier-orders/types"
 
@@ -123,6 +125,17 @@ export function useAddNoteMutation() {
   const invalidate = useInvalidateOrders()
   return useMutation({
     mutationFn: addCollaborationNote,
+    onSuccess: async (result) => {
+      if (result.status === "succeeded") await invalidate()
+    },
+  })
+}
+
+export function useSupplierOrderExportMutation() {
+  const invalidate = useInvalidateOrders()
+  return useMutation({
+    mutationFn: (command: ExportCommand) =>
+      createSupplierOrderExportJob(command),
     onSuccess: async (result) => {
       if (result.status === "succeeded") await invalidate()
     },

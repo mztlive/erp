@@ -56,6 +56,7 @@ import {
   FULFILLMENT_CHAIN_LABEL,
   FULFILLMENT_CHAIN_TONE,
   OBJECT_CENTER_SECTIONS,
+  PROCESSING_STATUS_LABEL,
   SUPPLIER_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
 import { cn } from "@/lib/utils"
@@ -284,7 +285,7 @@ function FactCard({
         </div>
         <div>
           <dt className="text-muted-foreground">处理状态</dt>
-          <dd>{fact.processingStatus}</dd>
+          <dd>{PROCESSING_STATUS_LABEL[fact.processingStatus]}</dd>
         </div>
         {fact.afterSalesRequestId ? (
           <div>
@@ -547,7 +548,7 @@ export function ConsumptionOrderCenterPage({
                   variant="outline"
                   render={
                     <Link
-                      href={`/governance/integration-errors?workItemId=${view.workItemIds[0]}&from=W25&mallOrderId=${view.identity.mallOrderId}`}
+                      href={`/governance/integration-errors?resolveWorkItemId=${view.workItemIds[0]}&queueContextId=queue:W29:mine:all`}
                     />
                   }
                 >
@@ -658,15 +659,16 @@ export function ConsumptionOrderCenterPage({
                 },
                 {
                   id: "f-8625",
-                  label: "T / 履约判定",
+                  label: "履约判定",
                   value: (
                     <span className="text-sm">
                       {FULFILLMENT_CHAIN_LABEL[view.fulfillment.chain]}
                       <span className="mx-1 text-muted-foreground">·</span>
-                      paidAt {formatTime(view.fulfillment.decidedByOccurredAt)}
+                      支付成功时间{" "}
+                      {formatTime(view.fulfillment.decidedByOccurredAt)}
                       {view.fulfillment.chain === "LEGACY_MANUAL"
-                        ? " < T"
-                        : " ≥ T"}
+                        ? "，早于切换时点"
+                        : "，不早于切换时点"}
                     </span>
                   ),
                 },
@@ -944,7 +946,7 @@ export function ConsumptionOrderCenterPage({
                             {" · "}
                             <Link
                               className="underline"
-                              href={`/governance/integration-errors?workItemId=${s.attributionIssue.workItemId}&from=W25`}
+                              href={`/governance/integration-errors?resolveWorkItemId=${s.attributionIssue.workItemId}&queueContextId=queue:W29:mine:all`}
                             >
                               打开接口错误 / 复核任务
                             </Link>
@@ -1041,7 +1043,7 @@ export function ConsumptionOrderCenterPage({
                       variant="outline"
                       render={
                         <Link
-                          href={`/governance/integration-errors?workItemId=${view.workItemIds[0]}&from=W25`}
+                          href={`/governance/integration-errors?resolveWorkItemId=${view.workItemIds[0]}&queueContextId=queue:W29:mine:all`}
                         />
                       }
                     >
@@ -1431,7 +1433,7 @@ export function ConsumptionOrderCenterPage({
                     variant="outline"
                     render={
                       <Link
-                        href={`/governance/integration-errors?workItemId=${view.workItemIds[0]}&from=W25`}
+                        href={`/governance/integration-errors?resolveWorkItemId=${view.workItemIds[0]}&queueContextId=queue:W29:mine:all`}
                       />
                     }
                   >

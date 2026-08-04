@@ -157,15 +157,15 @@ function decimalAtMost(value: string, maximum: string, maxScale: number) {
 }
 
 const offeringDraftSchema = z.object({
-  supplyMode: z
-    .array(z.enum(["DROPSHIP", "BULK"]))
-    .min(1, "请至少选择一种供给方式"),
   supplyPriceGross: decimalString("含税供货价", 4, true),
   floorPriceGross: decimalString("含税底价", 4),
   dropshipExpress: z.string(),
-  inputTaxRate: decimalString("进项税率", 6).refine(
-    (value) => decimalAtMost(value, "1", 6),
-    "进项税率必须为 0 到 1 的十进制数"
+  inputTaxRate: z.string().refine(
+    (value) =>
+      !value.trim() ||
+      (/^\d+(?:\.\d{1,6})?$/.test(value.trim()) &&
+        decimalAtMost(value, "1", 6)),
+    "进项税率必须为 0 到 1 的十进制数，或留空待补充来源"
   ),
   freightAmount: decimalString("运费", 2),
   serviceFeeAmount: decimalString("服务费", 2),
@@ -382,7 +382,6 @@ export function SupplierCatalogPage() {
 
   const offeringForm = useAppForm({
     defaultValues: {
-      supplyMode: ["BULK"] as ("DROPSHIP" | "BULK")[],
       supplyPriceGross: "",
       floorPriceGross: "",
       dropshipExpress: "",
@@ -401,17 +400,16 @@ export function SupplierCatalogPage() {
       if (!item?.offering?.proposedDefaults) return
       try {
         await saveDraftMutation.mutateAsync({
-          supplierProductId: item.supplierProduct.id,
+          supplierCatalogSkuId:
+            item.supplierProduct.catalogSkus?.[0]?.id ??
+            `${item.supplierProduct.id}_sku`,
           selectedSkuId: selectedSkuId || undefined,
           offeringDraft: {
-            supplyMode: value.supplyMode,
             supplyPriceGross: value.supplyPriceGross,
             floorPriceGross: value.floorPriceGross,
             dropshipExpress:
-              value.supplyMode.includes("DROPSHIP")
-                ? value.dropshipExpress.trim() || undefined
-                : undefined,
-            inputTaxRate: value.inputTaxRate,
+              value.dropshipExpress.trim() || undefined,
+            inputTaxRate: value.inputTaxRate.trim(),
             freightAmount: value.freightAmount,
             serviceFeeAmount: value.serviceFeeAmount,
             minimumOrderQuantity: value.minimumOrderQuantity,
@@ -459,9 +457,6 @@ export function SupplierCatalogPage() {
       contextSkuId ?? item.mapping?.skuId ?? item.skuCandidates[0]?.skuId ?? ""
     )
     offeringForm.reset({
-      supplyMode: [
-        ...(proposed?.supplyMode ?? (["BULK"] as ("DROPSHIP" | "BULK")[])),
-      ],
       supplyPriceGross: proposed?.supplyPriceGross ?? "",
       floorPriceGross: proposed?.floorPriceGross ?? "",
       dropshipExpress: proposed?.dropshipExpress ?? "",
@@ -887,7 +882,7 @@ export function SupplierCatalogPage() {
     ? `/supplier-api/connections?connectionId=${encodeURIComponent(item.supplierProduct.source.connection.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
     : "/supplier-api/connections"
   const w29Href = item
-    ? `/governance/integration-errors?from=W21&supplierProductId=${encodeURIComponent(item.supplierProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
+    ? `/governance/integration-errors?from=W21&supplierCatalogSkuId=${encodeURIComponent(item.supplierProduct.catalogSkus?.[0]?.id ?? `${item.supplierProduct.id}_sku`)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
     : "/governance/integration-errors"
   const centerHref = item
     ? `/procurement/supplier-catalog/${item.supplierProduct.id}?section=overview&queueContextId=${encodeURIComponent(queueContextId)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
@@ -1821,8 +1816,8 @@ export function SupplierCatalogPage() {
                         },
                         {
                           id: "mode",
-                          label: "供给模式 / 快递",
-                          value: `${item.offering.currentRevision.supplyMode.map((mode) => (mode === "DROPSHIP" ? "一件代发" : "集采")).join(" / ")} / ${item.offering.currentRevision.dropshipExpress ?? "—"}`,
+                          label: "件代发价 / 集采价 / 快递",
+                          value: `${item.offering.currentRevision.dropshipSupplyPriceGross ?? "—"} / ${item.offering.currentRevision.bulkSupplyPriceGross ?? "—"} / ${item.offering.currentRevision.dropshipExpress ?? "—"}`,
                         },
                         {
                           id: "moq",
@@ -1850,33 +1845,6 @@ export function SupplierCatalogPage() {
                         供货条件草稿 · 保存后不会立即生效
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <offeringForm.AppField name="supplyMode">
-                          {(field) => (
-                            <div className="space-y-1.5">
-                              <Label>供给模式（可多选）</Label>
-                              <ToggleGroup
-                                multiple
-                                value={field.state.value}
-                                onValueChange={(next) =>
-                                  field.handleChange(
-                                    next as unknown as ("DROPSHIP" | "BULK")[],
-                                  )
-                                }
-                                variant="outline"
-                                size="sm"
-                                disabled={demoRole !== "procurement"}
-                                aria-label="供给模式（可多选）"
-                              >
-                                <ToggleGroupItem value="DROPSHIP">
-                                  一件代发（含税运）
-                                </ToggleGroupItem>
-                                <ToggleGroupItem value="BULK">
-                                  集采（含税）
-                                </ToggleGroupItem>
-                              </ToggleGroup>
-                            </div>
-                          )}
-                        </offeringForm.AppField>
                         <offeringForm.AppField name="supplyPriceGross">
                           {(field) => <field.TextField label="含税供货价" />}
                         </offeringForm.AppField>
@@ -1884,7 +1852,12 @@ export function SupplierCatalogPage() {
                           {(field) => <field.TextField label="含税底价（控价参考）" />}
                         </offeringForm.AppField>
                         <offeringForm.AppField name="inputTaxRate">
-                          {(field) => <field.TextField label="进项税率（如 0.13）" />}
+                          {(field) => (
+                            <field.TextField
+                              label="进项税率"
+                              description="无可靠来源时留空；缺失时需补充来源"
+                            />
+                          )}
                         </offeringForm.AppField>
                         <offeringForm.AppField name="freightAmount">
                           {(field) => <field.TextField label="运费" />}

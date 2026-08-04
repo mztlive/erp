@@ -24,6 +24,26 @@ export const MASTER_DATA_ROLE_DEFAULT: Readonly<
 export type MasterDataResource =
   (typeof MASTER_DATA_RESOURCES)[number]["key"]
 
+/**
+ * 公司商品类型（`product.product_kind`）：决定商品业务作用的独立必填稳定属性，
+ * 创建后不可变；分类的适用类型只做兼容性校验，不得派生或覆盖它。
+ */
+export const PRODUCT_KIND_VALUES = [
+  "PHYSICAL",
+  "VIRTUAL",
+  "OFFLINE_SERVICE",
+  "VOUCHER",
+] as const
+
+export type ProductKind = (typeof PRODUCT_KIND_VALUES)[number]
+
+export const PRODUCT_KIND_LABELS: Readonly<Record<ProductKind, string>> = {
+  PHYSICAL: "实物",
+  VIRTUAL: "虚拟",
+  OFFLINE_SERVICE: "服务",
+  VOUCHER: "卡券",
+}
+
 export type LifecycleStatus = "ENABLED" | "DISABLED"
 export type RevisionTiming = "CURRENT" | "FUTURE" | "HISTORICAL"
 
@@ -207,6 +227,8 @@ export type MasterDataCenterView = Readonly<{
    * 主图在 SKU；轮播图 / 详情图在 SPU。
    */
   productDetail?: ProductDetailView
+  /** 公司商品类型（`product.product_kind`）；SPU 稳定身份，创建后不可变。 */
+  productKind?: ProductKind
   allowedActions: readonly string[]
   actionBlockers: readonly ActionBlocker[]
   auditEvents: readonly {
@@ -237,8 +259,14 @@ export type ProductSpecDimension = Readonly<{
 export type ProductSkuFields = Readonly<{
   skuId?: string
   /**
+   * 规范化规格签名（`specification_signature`）：系统按规格属性组合派生，
+   * 创建后不可变；用于判断某行能否延续原 `sku_id`。业务 UI 不展示、不手填。
+   */
+  specificationSignature?: string
+  /**
    * 产品编码 = `sku_no`。
-   * 系统按规格组合默认生成，允许手动覆盖。
+   * 系统按规格组合默认生成，允许手动覆盖；仅为全局唯一业务编码，
+   * 不能作为身份恢复或重绑键。
    */
   skuNo: string
   /** 与 specs 顺序对齐的属性取值。 */
@@ -268,6 +296,12 @@ export type ProductFields = Readonly<{
   category: string
   brandId: string
   brand: string
+  /**
+   * 公司商品类型（`product.product_kind`）：独立必填稳定属性，
+   * W14 正向创建必须显式提交，写入后不可变；分类仅校验兼容性。
+   * 空字符串表示草稿未选择，提交前 fail-closed。
+   */
+  productKind: ProductKind | ""
   /** SPU 轮播图（多张，可空）。 */
   carouselImages: readonly string[]
   /** SPU 详情图（多张，可空）。 */
@@ -290,6 +324,25 @@ export type ProductDetailView = Readonly<{
   detailImages: readonly string[]
   specs: readonly ProductSpecDimension[]
   skus: readonly ProductSkuFields[]
+}>
+
+/**
+ * mock 落库的 `sku_revision` 记录：公司 SKU 修订。
+ * `salesVisiblePriceGross` 是公司对销售可见的含税价；供应商成本、供给模式等
+ * 归 W21 `supplier_offering_revision`，绝不写入 SKU 修订。
+ */
+export type SkuRevisionRecord = Readonly<{
+  skuId: string
+  skuNo: string
+  specificationSignature: string
+  /** 对应 `sku_revision.sales_visible_price_gross`。 */
+  salesVisiblePriceGross?: string
+  marketPrice?: string
+  lifecycleStatus: LifecycleStatus
+  revisionId: string
+  effectiveFrom: string
+  recordedAt: string
+  isCurrent: boolean
 }>
 
 export type SellableItemFields = Readonly<{

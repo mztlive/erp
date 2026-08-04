@@ -437,9 +437,9 @@ export async function fetchCardBusinessAnalytics(
       canExport: true,
     },
     governanceLinks: {
-      noneCoverageHref: `/governance/integration-errors?reason=NONE_COST&from=${encodeURIComponent(query.from)}&to=${encodeURIComponent(query.to)}`,
+      noneCoverageHref: `/governance/integration-errors?view=mine`,
       backfillHref: `/governance/history-backfill?from=${encodeURIComponent(query.from)}&to=${encodeURIComponent(query.to)}&costBasis=NONE`,
-      integrationErrorsHref: `/governance/integration-errors?from=${encodeURIComponent(query.from)}&to=${encodeURIComponent(query.to)}`,
+      integrationErrorsHref: `/governance/integration-errors?view=mine`,
     },
   }
 }

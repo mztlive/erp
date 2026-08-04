@@ -16,6 +16,8 @@ import type {
   DeferTaskInput,
   DeferTaskResult,
   DemoRole,
+  ExportCommand,
+  ExportJobResult,
   FormalActionResponse,
   InvestigationEvidenceView,
   NoteInput,
@@ -376,6 +378,46 @@ function buildMetrics(rows: SupplierOrderListRow[]): SupplierOrderMetric[] {
   ]
 }
 
+const PERMISSION_VERSION = "pv-w26-1"
+
+function filterSummary(
+  query: SupplierOrderListQuery,
+  total: number
+): string {
+  const parts: string[] = []
+  if (query.view === "actionable") parts.push("可操作")
+  else if (query.view === "recent_completed") parts.push("最近完成")
+  else parts.push("全部")
+  if (query.q?.trim()) parts.push(`搜索「${query.q.trim()}」`)
+  if (query.supplierId) {
+    parts.push(
+      SUPPLIER_ORDER_SEEDS.find((s) => s.supplierId === query.supplierId)
+        ?.supplierName ?? query.supplierId
+    )
+  }
+  if (query.fulfillmentStatuses?.length) {
+    parts.push(
+      query.fulfillmentStatuses
+        .map((s) => FULFILLMENT_STATUS_LABEL[s])
+        .join("/")
+    )
+  }
+  if (query.cancelStatuses?.length) {
+    parts.push(
+      query.cancelStatuses.map((s) => CANCEL_STATUS_LABEL[s]).join("/")
+    )
+  }
+  if (query.refundStatuses?.length) {
+    parts.push(
+      query.refundStatuses.map((s) => REFUND_STATUS_LABEL[s]).join("/")
+    )
+  }
+  if (query.paidFrom) parts.push(`支付自 ${query.paidFrom}`)
+  if (query.paidTo) parts.push(`至 ${query.paidTo}`)
+  parts.push(`${total} 条`)
+  return parts.join(" · ")
+}
+
 export async function fetchSupplierOrders(
   query: SupplierOrderListQuery
 ): Promise<SupplierOrderListResult> {
@@ -411,9 +453,10 @@ export async function fetchSupplierOrders(
     rows,
     pageInfo: { page, pageSize, total: filtered.length },
     metrics,
-    permissionVersion: "pv-w26-1",
+    permissionVersion: PERMISSION_VERSION,
     sourceAsOf: now,
     queriedAt: now,
+    filterSummary: filterSummary(query, filtered.length),
   }
 }
 
@@ -1046,6 +1089,28 @@ export function listSupplierOptions(): { id: string; name: string }[] {
     map.set(s.supplierId, s.supplierName)
   }
   return [...map.entries()].map(([id, name]) => ({ id, name }))
+}
+
+export async function createSupplierOrderExportJob(
+  command: ExportCommand
+): Promise<ExportJobResult> {
+  await mockDelay(120)
+  const jobId = `exp-w26-${command.requestId.slice(-8)}`
+  const expiresAt = new Date(
+    Date.now() + 7 * 24 * 60 * 60 * 1000
+  ).toISOString()
+  return {
+    jobId,
+    requestId: command.requestId,
+    rowCount: command.rowCount,
+    permissionVersion: PERMISSION_VERSION,
+    fieldSetId: command.fieldSetId,
+    maskDisclaimer:
+      "导出使用系统筛选快照与字段权限打码：收货地址、手机号不会以明文写入文件，导出默认列不含敏感地址；下载时重新鉴权，结果 7 天内可下载。",
+    expiresAt,
+    downloadLabel: `供应商订单_${jobId}.csv`,
+    status: "succeeded",
+  }
 }
 
 export function formatCostDisplay(

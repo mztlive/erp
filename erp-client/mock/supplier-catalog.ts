@@ -50,12 +50,19 @@ function rev(partial: SupplierProductRevisionSeed): SupplierProductRevisionView 
 
 type OfferingSeed = Omit<
   SupplierOfferingRevisionView,
-  "offeringRevisionId" | "floorPriceGross" | "supplyMode" | "dropshipExpress"
+  | "offeringRevisionId"
+  | "floorPriceGross"
+  | "dropshipExpress"
+  | "dropshipSupplyPriceGross"
+  | "bulkSupplyPriceGross"
 > &
   Partial<
     Pick<
       SupplierOfferingRevisionView,
-      "floorPriceGross" | "supplyMode" | "dropshipExpress"
+      | "floorPriceGross"
+      | "dropshipExpress"
+      | "dropshipSupplyPriceGross"
+      | "bulkSupplyPriceGross"
     >
   >
 
@@ -63,8 +70,11 @@ function offering(partial: OfferingSeed): SupplierOfferingRevisionView {
   return {
     offeringRevisionId: `${partial.offeringId}_r${partial.revisionNo}`,
     floorPriceGross: partial.supplyPriceGross,
-    supplyMode: ["BULK"],
     ...partial,
+    dropshipSupplyPriceGross:
+      partial.dropshipSupplyPriceGross ?? partial.supplyPriceGross ?? null,
+    bulkSupplyPriceGross:
+      partial.bulkSupplyPriceGross ?? partial.supplyPriceGross ?? null,
     immutable: true as const,
   }
 }
@@ -574,7 +584,6 @@ export const SEED_NEW: SupplierCatalogItemView = {
     proposedDefaults: {
       supplyPriceGross: "420.00",
       floorPriceGross: "398.00",
-      supplyMode: ["BULK"],
       inputTaxRate: "0.13",
       freightAmount: "18.00",
       serviceFeeAmount: "5.00",
@@ -775,7 +784,6 @@ export const SEED_CHANGED_PRICE: SupplierCatalogItemView = {
     proposedDefaults: {
       supplyPriceGross: "96.00",
       floorPriceGross: "92.00",
-      supplyMode: ["DROPSHIP"],
       dropshipExpress: "顺丰速运",
       inputTaxRate: "0.13",
       freightAmount: "6.00",

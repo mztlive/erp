@@ -137,7 +137,7 @@ TaskTabs 身份：工作面为 `governance:mall-sync:{sourceSystemId}`；映射�
 | 指标 | `failedJobCount` | 失败任务 | `mall_sales_sync_job` | 当前未恢复失败/部分失败数 | 管理员 |
 | 指标 | `pendingMappingCount` | 待映射 | `master_mapping_task` | 当前角色/范围内进行中任务 | 按任务角色过滤 |
 | 指标 | `pendingReapplyCount` | 待重新归集 | 快照处理投影 | 映射已解决但未取得正式应用终态 | 对应责任角色 |
-| 指标 | `reconciliationDifferenceCount` | 核对差异 | 最近有效核对批次 | 待处理、补拉中和无法确认 | 按范围过滤 |
+| 指标 | `reconciliationDifferenceCount` | 核对差异 | 最近有效核对批次 | 待处理、补拉中（按单补拉与人工排查） | 按范围过滤 |
 
 ### 5.2 同步任务与水位
 

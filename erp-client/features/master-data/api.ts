@@ -5,6 +5,7 @@ import {
   createW14Object,
   disableW14Object,
   getW14Center,
+  getW14SkuRevisions,
   queryW14Idempotency,
   reviseW14Object,
 } from "@/features/master-data/session"
@@ -17,6 +18,7 @@ import type {
   MasterDataListResult,
   MasterDataMutationResult,
   MasterDataResource,
+  SkuRevisionRecord,
 } from "@/features/master-data/types"
 import { filterMasterDataRows } from "@/features/master-data/filter"
 
@@ -67,6 +69,14 @@ export async function queryMasterDataIdempotency(
 ): Promise<MasterDataMutationResult | null> {
   await mockDelay(60)
   return queryW14Idempotency(idempotencyKey)
+}
+
+/** 读取公司 SKU 修订（mock 落库的 `sku_revision.sales_visible_price_gross`）。 */
+export async function fetchW14SkuRevisions(
+  skuId: string
+): Promise<readonly SkuRevisionRecord[] | undefined> {
+  await mockDelay(40)
+  return getW14SkuRevisions(skuId)
 }
 
 export async function revealMasterDataSensitive(

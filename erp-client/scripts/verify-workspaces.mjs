@@ -61,11 +61,14 @@ function exists(file) {
 }
 
 const registry = read("lib/workspace-registry.ts")
-const shell = read("components/layout/workspace-shell.tsx")
 const mockPages = read("mock/workspace-pages.ts")
 
 const failures = []
 const coverage = []
+
+// WORKSPACE_NAV_GROUPS 导航组条目 href（workspace-registry.ts 内所有 href: "…" 均为导航条目）
+const navHrefs = [...registry.matchAll(/href: "([^"]+)"/g)].map((m) => m[1])
+const navGroupHrefs = new Set(navHrefs)
 
 for (const [id, mainRoute, mode] of INDEX) {
   const pageFile = routeToAppPath(mainRoute)
@@ -76,15 +79,14 @@ for (const [id, mainRoute, mode] of INDEX) {
     new RegExp(`id: "${id}"[\\s\\S]*?navHref: "([^"]+)"`)
   )
   const navHref = navHrefMatch?.[1] ?? ""
+  // 真实断言：非嵌套主路由的 navHref 必须属于 WORKSPACE_NAV_GROUPS 某个条目
+  //（嵌套钻取页 W06 不要求独立导航条目，仅校验注册了钻取 href）
   const navInShell =
     id === "W06"
-      ? shell.includes("WORKSPACE_NAV_GROUPS") &&
-        registry.includes('navHref: "/sales/orders/so_1002?section=acceptance"')
-      : shell.includes("WORKSPACE_NAV_GROUPS") &&
-        (registry.includes(`href: "${navHref}"`) ||
-          navHref === "" ||
-          shell.includes(navHref) ||
-          true)
+      ? registry.includes(
+          'navHref: "/sales/orders/so_1002?section=acceptance"'
+        )
+      : navHref !== "" && navGroupHrefs.has(navHref)
 
   // Prefer concrete feature sources for quality notes
   let featureSource = pageSource
@@ -125,10 +127,14 @@ for (const [id, mainRoute, mode] of INDEX) {
     featureSource.includes("useQuery") ||
     /\buse[A-Z][A-Za-z0-9]*Query\b/.test(featureSource)
 
-  const noMCodeInUiCopy =
-    !/["'`]M[1-7]["'`]/.test(featureSource) ||
-    // mode strings exist in types/registry, ensure Chinese page titles present
-    true
+  // 真实断言：UI 文案（JSX 文本/字符串）不得出现 M1~M7 代号
+  // mode: "M…" 是工作面定义元数据（非上屏文案），排除；mall 单号 M2026… 非代号
+  const noMCodeInUiCopy = !featureSource
+    .split("\n")
+    .some(
+      (line) =>
+        /\bM[1-7]\b/.test(line) && !/^\s*mode:\s*["'`]/.test(line)
+    )
 
   if (!pageOk) failures.push(`${id}: missing page ${pageFile}`)
   if (!registryOk) failures.push(`${id}: missing registry entry`)
@@ -153,17 +159,13 @@ for (const [id, mainRoute, mode] of INDEX) {
 }
 
 // Nav groups must include every non-nested main route
-const navHrefs = [...registry.matchAll(/href: "([^"]+)"/g)].map((m) => m[1])
 for (const [id, mainRoute] of INDEX) {
   if (id === "W06") continue
   const entry = registry.match(
     new RegExp(`id: "${id}"[\\s\\S]*?navHref: "([^"]+)"`)
   )
   const href = entry?.[1]
-  if (href && !navHrefs.includes(href) && id !== "W01") {
-    // W01 is in nav as /workspace
-  }
-  if (href && !navHrefs.includes(href)) {
+  if (href && !navGroupHrefs.has(href)) {
     failures.push(`${id}: nav href ${href} not in WORKSPACE_NAV_GROUPS items`)
   }
 }
@@ -251,11 +253,11 @@ fs.writeFileSync(
   [
     "# W01–W30 page coverage",
     "",
-    "| ID | Route | Mode | Page | Client | Business | Query | Nav |",
-    "| --- | --- | --- | --- | --- | --- | --- | --- |",
+    "| ID | Route | Mode | Page | Client | Business | Query | Nav | M 代号不上屏 |",
+    "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ...coverage.map(
       (c) =>
-        `| ${c.id} | \`${c.mainRoute}\` | ${c.mode} | ${c.pageOk ? "yes" : "NO"} | ${c.hasUseClient ? "yes" : "NO"} | ${c.usesBusiness ? "yes" : "NO"} | ${c.usesQuery ? "yes" : "NO"} | ${c.navInShell ? "yes" : "NO"} |`
+        `| ${c.id} | \`${c.mainRoute}\` | ${c.mode} | ${c.pageOk ? "yes" : "NO"} | ${c.hasUseClient ? "yes" : "NO"} | ${c.usesBusiness ? "yes" : "NO"} | ${c.usesQuery ? "yes" : "NO"} | ${c.navInShell ? "yes" : "NO"} | ${c.noMCodeInUiCopy ? "yes" : "NO"} |`
     ),
     "",
     failures.length

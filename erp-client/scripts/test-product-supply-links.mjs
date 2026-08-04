@@ -12,6 +12,7 @@ const scratch = process.env.SCRATCH
 
 const runner = `
 import {
+  createCompanyProductFromSupplierSku,
   createSupplierCatalogItem,
   fetchCompanySkuOptions,
   fetchSupplierCatalogCenter,
@@ -121,7 +122,6 @@ const excelResult = await createSupplierCatalogItem({
   supplyRegion: ["全国"],
   sourceReference: "supplier-catalog-test.xlsx",
   minimumOrderQuantity: "1",
-  supplyMode: ["BULK"],
   validFrom: "2026-08-02",
   idempotencyKey: "test-excel-intake-1",
 })
@@ -140,16 +140,16 @@ const existingTeaPool = SUPPLIER_CATALOG_SEED.find(
   (item) => item.mapping?.skuId === "sku_tea_04" && item.poolEntry
 )?.poolEntry
 const promoteResult = await promoteSupplierProductToPool({
-  supplierProductId: excelResult.supplierProductId,
+  supplierCatalogSkuId: \`\${excelResult.supplierProductId}_sku_1\`,
   targetSkuId: "sku_tea_04",
   targetSkuCode: "SKU-TEA-250-TIN",
   targetSkuName: "礼盒红茶",
   specification: "250g 罐装",
   baseUnit: "盒",
+  productKind: "实物",
   confirmedCostGross: "40.00",
   inputTaxRate: "0.13",
   minimumOrderQuantity: "2",
-  supplyMode: ["BULK"],
   supplyRegion: ["全国"],
   validFrom: "2026-08-02",
   poolPriceAction: "KEEP_EXISTING",
@@ -195,6 +195,7 @@ const newCompanyProduct = await createMasterDataObject({
     category: "零食",
     brandId: "md_brand_corp",
     brand: "企业优选",
+    productKind: "PHYSICAL",
     carouselImages: ["source-carousel.webp"],
     detailImages: ["source-detail.webp"],
     specs: [],
@@ -229,22 +230,21 @@ const firstSupplierResult = await createSupplierCatalogItem({
   inputTaxRate: "0.13",
   supplyRegion: ["全国"],
   minimumOrderQuantity: "1",
-  supplyMode: ["BULK"],
   validFrom: "2026-08-03",
   idempotencyKey: "test-first-source-intake-1",
 })
 const firstPoolResult = newCompanySku
   ? await promoteSupplierProductToPool({
-      supplierProductId: firstSupplierResult.supplierProductId,
+      supplierCatalogSkuId: \`\${firstSupplierResult.supplierProductId}_sku_1\`,
       targetSkuId: newCompanySku.skuId,
       targetSkuCode: newCompanySku.skuCode,
       targetSkuName: newCompanySku.skuName,
       specification: newCompanySku.specification,
       baseUnit: newCompanySku.baseUnit,
+      productKind: "实物",
       confirmedCostGross: "58.00",
       inputTaxRate: "0.13",
       minimumOrderQuantity: "1",
-      supplyMode: ["BULK"],
       supplyRegion: ["全国"],
       validFrom: "2026-08-03",
       salesVisiblePriceGross: "88.00",
@@ -256,6 +256,72 @@ const firstPoolResult = newCompanySku
 assert(
   firstPoolResult?.poolEntryChange === "CREATED",
   "first supplier promotion creates the singleton company pool entry"
+)
+
+const reverseSourceResult = await createSupplierCatalogItem({
+  sourceType: "MANUAL",
+  supplierId: "supplier_reverse_test",
+  supplierName: "反向创建供应商",
+  supplierSkuCode: "SUP-REVERSE-01",
+  name: "反向创建测试商品",
+  specification: "默认规格",
+  category: "零食",
+  sourceBaseUnit: "盒",
+  attributes: [],
+  media: [],
+  inputTaxRate: "0.13",
+  supplyRegion: ["全国"],
+  minimumOrderQuantity: "1",
+  validFrom: "2026-08-04",
+  idempotencyKey: "test-reverse-source-intake-1",
+})
+const reverseResult = await createCompanyProductFromSupplierSku({
+  supplierCatalogSkuId: \`\${reverseSourceResult.supplierProductId}_sku_1\`,
+  expectedSourceRevisionNo: 1,
+  companyProduct: {
+    name: "反向创建测试商品",
+    description: "由供应商 SKU 反向创建",
+    categoryId: "md_cat_snack",
+    category: "零食",
+    brandId: "md_brand_corp",
+    brand: "企业优选",
+    baseUnitId: "uom_box",
+    baseUnitCode: "BOX",
+    baseUnit: "盒",
+    productKind: "实物",
+    skuNo: "SKU-REVERSE-01",
+    specLabel: "默认规格",
+    barcode: "6900000000002",
+    mainImage: "reverse-main.webp",
+  },
+  salesVisiblePriceGross: "99.00",
+  marketPrice: "129.00",
+  offering: {
+    dropshipSupplyPriceGross: "52.00",
+    bulkSupplyPriceGross: "49.00",
+    bulkMinimumOrderQuantity: "3",
+    inputTaxRate: "0.13",
+    supplyRegion: ["全国"],
+    validFrom: "2026-08-04",
+  },
+  idempotencyKey: "test-reverse-create-1",
+})
+assert(
+  Boolean(reverseResult.companyProductId && reverseResult.companySkuId) &&
+    reverseResult.poolEntryChange === "CREATED" &&
+    reverseResult.productKind === "实物",
+  "reverse create atomically creates company product/SKU, exact mapping and dual-price offering"
+)
+const reverseCenter = await fetchSupplierCatalogCenter({
+  supplierProductId: reverseSourceResult.supplierProductId,
+})
+assert(
+  reverseCenter?.item.mapping?.skuId === reverseResult.companySkuId &&
+    reverseCenter.item.offering?.currentRevision?.dropshipSupplyPriceGross === "52.00" &&
+    reverseCenter.item.offering?.currentRevision?.bulkSupplyPriceGross === "49.00" &&
+    reverseCenter.item.offering?.currentRevision?.minimumOrderQuantity === "3" &&
+    reverseCenter.item.poolEntry?.salesVisiblePriceGross === "99.00",
+  "reverse create writes exact mapping, dual-price offering and sales visible price into sku_revision"
 )
 
 if (failed) process.exit(1)

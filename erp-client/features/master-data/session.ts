@@ -16,6 +16,7 @@ import type {
   CreateMasterDataInput,
   CreateRevisionInput,
   DisableMasterDataInput,
+  LifecycleStatus,
   MasterDataCenterView,
   MasterDataListItem,
   MasterDataListResult,
@@ -23,8 +24,15 @@ import type {
   MasterDataResource,
   ProductDetailView,
   ProductFields,
+  ProductKind,
+  ProductSkuFields,
+  SkuRevisionRecord,
 } from "@/features/master-data/types"
-import { productListFacts } from "@/features/master-data/product-model"
+import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
+import {
+  computeSpecificationSignature,
+  productListFacts,
+} from "@/features/master-data/product-model"
 import {
   RESOURCE_FIELDS,
   resourceFieldsToFacts,
@@ -101,50 +109,208 @@ function productSnapshot(fields: ProductFields): ProductDetailView {
   })
 }
 
+/** 历史上已移除（停用）的规格签名 → 原 skuId；签名再次出现时复用原身份。 */
+const retiredSkuIdsBySignature = new Map<string, string>()
+
+/** mock 落库的 `sku_revision`（公司 SKU 修订），按 skuId 分组、修订时间有序。 */
+const skuRevisionStore = new Map<string, MutableSkuRevisionRecord[]>()
+
+type MutableSkuRevisionRecord = {
+  skuId: string
+  skuNo: string
+  specificationSignature: string
+  salesVisiblePriceGross?: string
+  marketPrice?: string
+  lifecycleStatus: LifecycleStatus
+  revisionId: string
+  effectiveFrom: string
+  recordedAt: string
+  isCurrent: boolean
+}
+
 /**
- * W14 owns the stable company SKU identity. The supplier catalog may only
- * reference this ID; it must never invent a second company SKU identity.
+ * W14 拥有稳定的公司 SKU 身份。供应商目录只能引用该 ID，绝不允许发明第二套
+ * 公司 SKU 身份；`sku_no` 只是全局唯一业务编码，不能作为身份恢复或重绑键。
+ *
+ * 身份匹配只按规范化 `specification_signature`：签名未变的组合延续原 skuId；
+ * 新签名新建 SKU；历史已停用签名再次出现时复用原 skuId（mock 层直接复用，
+ * 显式重新启用确认流程见遗留说明）。移除的组合在 `persistSkuRevisions`
+ * 中保留历史并停用旧 SKU。
  */
 function withStableSkuIds(
   fields: ProductFields,
   stableProductId: string,
   previous?: ProductDetailView,
 ): ProductFields {
-  const previousIds = new Map(
-    (previous?.skus ?? [])
-      .filter((sku) => Boolean(sku.skuId))
-      .map((sku) => [sku.skuNo, sku.skuId!]),
-  )
-  const usedIds = new Set(
-    fields.skus.flatMap((sku) => (sku.skuId ? [sku.skuId] : [])),
-  )
-  return {
-    ...fields,
-    skus: fields.skus.map((sku, index) => {
-      const previousId = previousIds.get(sku.skuNo)
-      if (sku.skuId || previousId) {
-        const skuId = sku.skuId ?? previousId!
-        usedIds.add(skuId)
-        return { ...sku, skuId }
-      }
-
-      const identitySuffix =
-        sku.skuNo
-          .trim()
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, "_")
-          .replace(/^_+|_+$/g, "") || String(index + 1).padStart(2, "0")
-      const baseId = `${stableProductId}_sku_${identitySuffix}`
-      let skuId = baseId
-      let collision = 2
-      while (usedIds.has(skuId)) {
-        skuId = `${baseId}_${collision}`
-        collision += 1
-      }
-      usedIds.add(skuId)
-      return { ...sku, skuId }
-    }),
+  const previousBySignature = new Map<string, string>()
+  for (const prevSku of previous?.skus ?? []) {
+    if (!prevSku.skuId) continue
+    const signature =
+      prevSku.specificationSignature ??
+      computeSpecificationSignature(previous!.specs, prevSku.attributeValues)
+    if (!previousBySignature.has(signature)) {
+      previousBySignature.set(signature, prevSku.skuId)
+    }
   }
+  const usedIds = new Set<string>([
+    ...fields.skus.flatMap((sku) => (sku.skuId ? [sku.skuId] : [])),
+    ...(previous?.skus ?? []).flatMap((sku) => (sku.skuId ? [sku.skuId] : [])),
+    ...retiredSkuIdsBySignature.values(),
+  ])
+  const nextSkus = fields.skus.map((sku) => {
+    const signature =
+      sku.specificationSignature ??
+      computeSpecificationSignature(fields.specs, sku.attributeValues)
+    if (sku.skuId) {
+      usedIds.add(sku.skuId)
+      return { ...sku, specificationSignature: signature }
+    }
+
+    const matchedId =
+      previousBySignature.get(signature) ??
+      retiredSkuIdsBySignature.get(signature)
+    if (matchedId) {
+      usedIds.add(matchedId)
+      return { ...sku, skuId: matchedId, specificationSignature: signature }
+    }
+
+    // 新建 SKU：跳过全部历史/现有/停用身份，顺序取下一个空闲序号。
+    let suffix = 1
+    let skuId = `${stableProductId}_sku_${String(suffix).padStart(2, "0")}`
+    while (usedIds.has(skuId)) {
+      suffix += 1
+      skuId = `${stableProductId}_sku_${String(suffix).padStart(2, "0")}`
+    }
+    usedIds.add(skuId)
+    return { ...sku, skuId, specificationSignature: signature }
+  })
+  recordRetiredSignatures(previous, nextSkus)
+  return { ...fields, skus: nextSkus }
+}
+
+/** 提交后不再出现的旧签名：保留历史（revisionTimeline 快照）并记录停用身份。 */
+function recordRetiredSignatures(
+  previous: ProductDetailView | undefined,
+  nextSkus: readonly ProductSkuFields[],
+): void {
+  if (!previous) return
+  const nextSignatures = new Set(
+    nextSkus.map((sku) => sku.specificationSignature ?? ""),
+  )
+  for (const prevSku of previous.skus) {
+    if (!prevSku.skuId) continue
+    const signature =
+      prevSku.specificationSignature ??
+      computeSpecificationSignature(previous.specs, prevSku.attributeValues)
+    if (nextSignatures.has(signature)) continue
+    retiredSkuIdsBySignature.set(signature, prevSku.skuId)
+  }
+}
+
+/**
+ * 复合提交的 mock 落库：把每个 SKU 的 `salePrice`（表单草稿字段）写入
+ * `sku_revision.sales_visible_price_gross`，并落 marketPrice、签名与生命周期；
+ * 移除的规格组合追加停用修订（保留历史，不物理删除）。
+ */
+function persistSkuRevisions(input: {
+  fields: ProductFields
+  revisionId: string
+  effectiveFrom: string
+  previous?: ProductDetailView
+}): void {
+  const { fields, revisionId, effectiveFrom, previous } = input
+  const recordedAt = new Date().toISOString()
+  const submittedSignatures = new Set(
+    fields.skus.map(
+      (sku) =>
+        sku.specificationSignature ??
+        computeSpecificationSignature(fields.specs, sku.attributeValues),
+    ),
+  )
+
+  for (const prevSku of previous?.skus ?? []) {
+    if (!prevSku.skuId) continue
+    const signature =
+      prevSku.specificationSignature ??
+      computeSpecificationSignature(previous!.specs, prevSku.attributeValues)
+    if (submittedSignatures.has(signature)) continue
+    const entries = skuRevisionStore.get(prevSku.skuId) ?? []
+    for (const entry of entries) entry.isCurrent = false
+    entries.push({
+      skuId: prevSku.skuId,
+      skuNo: prevSku.skuNo,
+      specificationSignature: signature,
+      salesVisiblePriceGross: prevSku.salePrice,
+      marketPrice: prevSku.marketPrice,
+      lifecycleStatus: "DISABLED",
+      revisionId,
+      effectiveFrom,
+      recordedAt,
+      isCurrent: true,
+    })
+    skuRevisionStore.set(prevSku.skuId, entries)
+  }
+
+  for (const sku of fields.skus) {
+    if (!sku.skuId) continue
+    const signature =
+      sku.specificationSignature ??
+      computeSpecificationSignature(fields.specs, sku.attributeValues)
+    const entries = skuRevisionStore.get(sku.skuId) ?? []
+    for (const entry of entries) entry.isCurrent = false
+    entries.push({
+      skuId: sku.skuId,
+      skuNo: sku.skuNo,
+      specificationSignature: signature,
+      salesVisiblePriceGross: sku.salePrice,
+      marketPrice: sku.marketPrice,
+      lifecycleStatus: sku.lifecycleStatus,
+      revisionId,
+      effectiveFrom,
+      recordedAt,
+      isCurrent: true,
+    })
+    skuRevisionStore.set(sku.skuId, entries)
+  }
+}
+
+/** 商品提交的商品类型与分类兼容性校验（fail-closed）。 */
+function productKindIssue(
+  fields: ProductFields,
+): { code: string; message: string; detail?: string } | null {
+  if (!fields.productKind) {
+    return {
+      code: "PRODUCT_KIND_REQUIRED",
+      message: "请选择商品类型后再保存。",
+      detail: "商品类型决定商品业务作用，保存后不可修改。",
+    }
+  }
+  const label = PRODUCT_KIND_LABELS[fields.productKind]
+  const categoryRow = listW14Rows("categories").find(
+    (row) => row.stableId === fields.categoryId,
+  )
+  const allowedKind = categoryRow?.productKind
+  if (allowedKind && label && allowedKind !== label) {
+    return {
+      code: "CATEGORY_KIND_INCOMPATIBLE",
+      message: `分类「${categoryRow.name}」不兼容商品类型「${label}」，请更换分类或商品类型。`,
+    }
+  }
+  return null
+}
+
+function blockedResult(
+  input: { idempotencyKey: string },
+  issue: { code: string; message: string; detail?: string },
+): MasterDataMutationResult {
+  const blocked: MasterDataMutationResult = {
+    outcome: "blocked",
+    code: issue.code,
+    message: issue.message,
+    detail: issue.detail,
+  }
+  idempotencyResults.set(input.idempotencyKey, blocked)
+  return blocked
 }
 
 function listKey(resource: MasterDataResource, stableId: string) {
@@ -275,6 +441,10 @@ export function createW14Object(
     input.resource === "products"
       ? (input.fields as ProductFields)
       : undefined
+  if (submittedProductFields) {
+    const kindIssue = productKindIssue(submittedProductFields)
+    if (kindIssue) return blockedResult(input, kindIssue)
+  }
   const productFields = submittedProductFields
     ? withStableSkuIds(submittedProductFields, stableId)
     : undefined
@@ -389,6 +559,7 @@ export function createW14Object(
         }
       : undefined,
     productDetail: productFields ? productSnapshot(productFields) : undefined,
+    productKind: productFields ? productFields.productKind || undefined : undefined,
     allowedActions: ["VIEW", "CREATE_REVISION", "DISABLE"],
     actionBlockers: [],
     auditEvents: [
@@ -401,6 +572,14 @@ export function createW14Object(
       },
     ],
     sections: ["overview", "versions", "relations", "audit"],
+  }
+
+  if (productFields) {
+    persistSkuRevisions({
+      fields: productFields,
+      revisionId,
+      effectiveFrom,
+    })
   }
 
   listOverlays.set(listKey(input.resource, stableId), listItem)
@@ -497,6 +676,21 @@ export function reviseW14Object(
     input.resource === "products"
       ? (input.fields as ProductFields)
       : undefined
+  if (submittedProductFields) {
+    const storedKind: ProductKind | undefined = center.productKind
+    if (storedKind && submittedProductFields.productKind !== storedKind) {
+      const blocked: MasterDataMutationResult = {
+        outcome: "blocked",
+        code: "PRODUCT_KIND_IMMUTABLE",
+        message: "商品类型创建后不可修改。",
+        detail: `当前商品类型为「${PRODUCT_KIND_LABELS[storedKind]}」。`,
+      }
+      idempotencyResults.set(input.idempotencyKey, blocked)
+      return blocked
+    }
+    const kindIssue = productKindIssue(submittedProductFields)
+    if (kindIssue) return blockedResult(input, kindIssue)
+  }
   const productFields = submittedProductFields
     ? withStableSkuIds(submittedProductFields, input.stableId, center.productDetail)
     : undefined
@@ -665,6 +859,15 @@ export function reviseW14Object(
   }
 
   centerOverlays.set(listKey(input.resource, input.stableId), nextCenter)
+
+  if (productFields) {
+    persistSkuRevisions({
+      fields: productFields,
+      revisionId,
+      effectiveFrom: input.effectiveFrom,
+      previous: center.productDetail,
+    })
+  }
 
   const result: MasterDataMutationResult = {
     outcome: "succeeded",
@@ -878,4 +1081,12 @@ export function queryW14Idempotency(
   key: string
 ): MasterDataMutationResult | null {
   return idempotencyResults.get(key) ?? null
+}
+
+/** 读取 mock 落库的 `sku_revision` 记录（按 skuId）。 */
+export function getW14SkuRevisions(
+  skuId: string
+): readonly SkuRevisionRecord[] | undefined {
+  const entries = skuRevisionStore.get(skuId)
+  return entries ? entries.map((entry) => ({ ...entry })) : undefined
 }

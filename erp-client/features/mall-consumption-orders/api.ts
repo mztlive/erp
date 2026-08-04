@@ -14,11 +14,15 @@ import type {
   MallConsumptionOrderRow,
   MallConsumptionOrderView,
   SalesOrderConsumptionSummary,
+  SupplierFulfillmentStatus,
 } from "@/features/mall-consumption-orders/types"
 import {
   ATTRIBUTION_STATUS_LABEL,
   COST_BASIS_LABEL,
+  DATA_SOURCE_LABEL,
+  FACT_TYPE_LABEL,
   FULFILLMENT_CHAIN_LABEL,
+  SUPPLIER_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
 import {
   CONSUMPTION_ORDER_SEEDS,
@@ -64,6 +68,17 @@ function hasAutoException(row: MallConsumptionOrderRow): boolean {
     (row.supplierOrderSummary.hasException ||
       row.attributionStatus === "DIFFERENCE")
   )
+}
+
+/** 期间边界：纯日期按业务时区当日 00:00 / 23:59:59.999，带时间则原样。 */
+function periodBoundary(value: string, endOfDay: boolean): number {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return new Date(
+      `${value}T${endOfDay ? "23:59:59.999" : "00:00:00"}+08:00`
+    ).getTime()
+  }
+  const time = new Date(value).getTime()
+  return endOfDay ? time + 24 * 60 * 60 * 1000 - 1 : time
 }
 
 function computeMetrics(
@@ -121,6 +136,17 @@ function applyFilters(
     )
   }
 
+  if (query.occurredFrom && query.occurredTo) {
+    const from = periodBoundary(query.occurredFrom, false)
+    const to = periodBoundary(query.occurredTo, true)
+    next = next.filter((r) =>
+      r.factSummary.some((f) => {
+        const t = new Date(f.latestOccurredAt).getTime()
+        return t >= from && t <= to
+      })
+    )
+  }
+
   if (query.mallIds?.length) {
     const set = new Set(query.mallIds)
     next = next.filter((r) => set.has(r.mallId))
@@ -159,7 +185,7 @@ function applyFilters(
       if (r.dataSource === "MIXED") {
         return set.has("REALTIME") || set.has("BACKFILL")
       }
-      return set.has(r.dataSource as "REALTIME" | "BACKFILL")
+      return set.has(r.dataSource)
     })
   }
 
@@ -173,7 +199,9 @@ function applyFilters(
   if (query.supplierStatuses?.length) {
     const set = new Set(query.supplierStatuses)
     next = next.filter((r) =>
-      r.supplierOrderSummary.statuses.some((s) => set.has(s))
+      r.supplierOrderSummary.statuses.some((s) =>
+        set.has(s as SupplierFulfillmentStatus)
+      )
     )
   }
 
@@ -203,14 +231,32 @@ function applyFilters(
     }
   }
 
-  // sort by paidAt desc default
-  next = [...next].sort((a, b) => {
-    const da = new Date(a.paidAt).getTime()
-    const db = new Date(b.paidAt).getTime()
-    return db - da
-  })
+  // W25 §6：sort=occurredAt.desc 时按事实发生时间降序，相同时间按稳定 ID 升序
+  if (query.sort === "occurredAt.desc") {
+    next = [...next].sort((a, b) => {
+      const da = latestFactAt(a)
+      const db = latestFactAt(b)
+      if (da !== db) return db - da
+      return a.mallOrderId.localeCompare(b.mallOrderId)
+    })
+  } else {
+    next = [...next].sort((a, b) => {
+      const da = new Date(a.paidAt).getTime()
+      const db = new Date(b.paidAt).getTime()
+      return db - da
+    })
+  }
 
   return next
+}
+
+function latestFactAt(row: MallConsumptionOrderRow): number {
+  let latest = 0
+  for (const f of row.factSummary) {
+    const t = new Date(f.latestOccurredAt).getTime()
+    if (t > latest) latest = t
+  }
+  return latest
 }
 
 function filterSummary(
@@ -246,6 +292,24 @@ function filterSummary(
         .map((s) => ATTRIBUTION_STATUS_LABEL[s])
         .join("/")
     )
+  }
+  if (query.occurredFrom || query.occurredTo) {
+    parts.push(
+      `记录发生 ${query.occurredFrom ?? "…"} ~ ${query.occurredTo ?? "…"}`
+    )
+  }
+  if (query.factTypes?.length) {
+    parts.push(query.factTypes.map((t) => FACT_TYPE_LABEL[t]).join("/"))
+  }
+  if (query.supplierStatuses?.length) {
+    parts.push(
+      query.supplierStatuses
+        .map((s) => SUPPLIER_STATUS_LABEL[s] ?? s)
+        .join("/")
+    )
+  }
+  if (query.dataSources?.length) {
+    parts.push(query.dataSources.map((d) => DATA_SOURCE_LABEL[d]).join("/"))
   }
   if (query.costBases?.length) {
     parts.push(query.costBases.map((b) => COST_BASIS_LABEL[b]).join("/"))
@@ -340,10 +404,28 @@ export async function fetchConsumptionOrderList(
     }
   }
 
+  // 期间门禁（mock 侧防线）：未选择完整起止期间时绝不返回全量
+  if (!query.occurredFrom || !query.occurredTo) {
+    return {
+      rows: [],
+      pageInfo: { page: 1, pageSize: query.pageSize ?? 8, total: 0 },
+      metrics: [],
+      malls: [...MALLS],
+      filterSummary: "请先选择记录发生起止时间后查询",
+      emptyReason: "FILTER_EMPTY",
+      hasModulePermission: true,
+      hasDataScope: true,
+      permissionVersion: PERMISSION_VERSION,
+      dataScopeVersion: DATA_SCOPE_VERSION,
+      factWatermark: FACT_WATERMARK,
+      queriedAt: nowIso(),
+      boundaryNotice: BOUNDARY_NOTICE,
+    }
+  }
+
   const allRows = CONSUMPTION_ORDER_SEEDS.map((s) => s.row)
   const metrics = computeMetrics(allRows)
   const filtered = applyFilters(allRows, query)
-
   const page = Math.max(1, query.page ?? 1)
   const pageSize = Math.max(1, query.pageSize ?? 8)
   const start = (page - 1) * pageSize
@@ -359,6 +441,7 @@ export async function fetchConsumptionOrderList(
       Boolean(query.paymentSources?.length) ||
       Boolean(query.costBases?.length) ||
       Boolean(query.metric && query.metric !== "all") ||
+      Boolean(query.occurredFrom && query.occurredTo) ||
       Boolean(query.factTypes?.length) ||
       Boolean(query.supplierStatuses?.length) ||
       Boolean(query.dataSources?.length)

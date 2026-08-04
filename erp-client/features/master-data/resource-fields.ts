@@ -553,6 +553,7 @@ export function buildResourceFields(
         category: pickField(values, "category") ?? "",
         brandId: "",
         brand: pickField(values, "brand") ?? "",
+        productKind: "",
         carouselImages: [],
         detailImages: [],
         specs: [],

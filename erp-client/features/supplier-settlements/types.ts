@@ -32,17 +32,39 @@ export type DifferenceType =
   | "REFUND"
   | "STATUS"
 
+/**
+ * 差异结论状态（单轨，5 值固定枚举，对齐 docs/erp-data-model.md §6.20）：
+ * 结论即状态。「待举证」/「阻塞」是标志而非状态，由
+ * `requiresProcurementEvidence` / `blocking` 字段表达。
+ */
 export type DifferenceStatus =
-  | "OPEN"
-  | "EVIDENCE_PENDING"
-  | "RESOLVED"
-  | "BLOCKING"
+  | "PENDING"
+  | "SUPPLIER_ACCEPTED"
+  | "ERP_ACCEPTED"
+  | "COMPENSATED"
+  | "CLOSED"
 
+/**
+ * 处理动作/结论记录（提交结论动作枚举，值不变）。
+ * `status` 是结论状态（单轨），`resolution` 是追加式处理记录，
+ * 两者并存：`DifferenceResolutionRecord.resolution` 与 `status` 对应但不互斥。
+ */
 export type DifferenceResolution =
   | "SUPPLIER_ACCEPTED"
   | "ERP_ACCEPTED"
   | "COMPENSATED"
   | "CLOSED_NO_ADJUSTMENT"
+
+/** 处理动作 → 结论状态（CLOSED_NO_ADJUSTMENT 动作落为 CLOSED 状态） */
+export const RESOLUTION_TO_STATUS: Record<
+  DifferenceResolution,
+  DifferenceStatus
+> = {
+  SUPPLIER_ACCEPTED: "SUPPLIER_ACCEPTED",
+  ERP_ACCEPTED: "ERP_ACCEPTED",
+  COMPENSATED: "COMPENSATED",
+  CLOSED_NO_ADJUSTMENT: "CLOSED",
+}
 
 export type SettlementSection =
   | "overview"
@@ -451,10 +473,11 @@ export const DIFF_TYPE_LABEL: Record<DifferenceType, string> = {
 }
 
 export const DIFF_STATUS_LABEL: Record<DifferenceStatus, string> = {
-  OPEN: "未处理",
-  EVIDENCE_PENDING: "待采购证据",
-  RESOLVED: "已处理",
-  BLOCKING: "阻断确认",
+  PENDING: "待处理",
+  SUPPLIER_ACCEPTED: "供应商认可",
+  ERP_ACCEPTED: "ERP 认可",
+  COMPENSATED: "已补偿",
+  CLOSED: "关闭",
 }
 
 export const RESOLUTION_LABEL: Record<DifferenceResolution, string> = {

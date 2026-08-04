@@ -7,6 +7,7 @@ import {
   attemptUnregisteredFormalWrite,
   claimSupplierCatalogWorkItem,
   completeSupplierCatalogWorkItem,
+  createCompanyProductFromSupplierSku,
   createSupplierCatalogItem,
   fetchSupplierCatalogCenter,
   fetchCompanySkuOptions,
@@ -17,6 +18,7 @@ import {
   saveSessionDraft,
 } from "@/features/supplier-catalog/api"
 import type {
+  CreateCompanyProductFromSupplierSkuInput,
   CreateSupplierCatalogItemInput,
   DemoRole,
   PromoteSupplierProductInput,
@@ -74,6 +76,17 @@ export function usePromoteSupplierProductMutation() {
   return useMutation({
     mutationFn: (input: PromoteSupplierProductInput) =>
       promoteSupplierProductToPool(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: supplierCatalogKeys.all })
+    },
+  })
+}
+
+export function useCreateCompanyProductFromSupplierSkuMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CreateCompanyProductFromSupplierSkuInput) =>
+      createCompanyProductFromSupplierSku(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: supplierCatalogKeys.all })
     },

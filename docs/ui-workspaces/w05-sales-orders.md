@@ -165,7 +165,7 @@ W05 列表**不使用** `QuickPreviewSheet` 半屏 detail，也**不提供**「�
 - 客户 / 结算主体 / 合同精确版本由所选合同快照**只读摘要条**带出（不渲染 disabled 输入框；建单页不再内嵌随单上传表单）。
 - 负责销售：`OwnerCombobox`；付款条件码表 `SelectField`。
 - 非卡券明细商品/SKU：`ProductCombobox`（公司商品池，即业务日期有效且可销售的公司 SKU 集合）。选择结果是精确 `skuRevisionId`；公司商品池不是独立业务实体。
-- 选中 SKU 后，草稿和提交行的唯一商品关联为 `sku_revision_id`，并保存品名、规格、销售单价、税率等**成交快照**。默认销售可见价来自该 `sku_revision.sales_visible_price`。
+- 选中 SKU 后，草稿和提交行的唯一商品关联为 `sku_revision_id`，并保存品名、规格、销售单价、税率等**成交快照**。默认销售可见价来自该 `sku_revision.sales_visible_price_gross`。
 - **单位**：随所选 SKU 的**基础单位**自动带出并**只读展示**；建单页禁止 `SelectField` 改单位。卡券明细单位固定为「张」。未选 SKU 时显示「—」。
 - **履约方式（仓发 / 直发等）**：建单页**不可选择、不展示下拉**。明细列仅保留可编辑的**交付日期**；正式履约方式由 W07 采购二次确认写入。前端提交可带契约占位值，服务端以确认结论为准。
 - 含税小计列使用 `MoneyValue` **不传** `taxBasis`（表头已写「含税小计」，行内不再叠「含税」Badge）。合计栏金额标签已区分含税/不含税，口径以标签为准。
@@ -644,7 +644,7 @@ type CardSalesApprovalBusinessResult =
       salesOrderId: string
       salesOrderReviewId: string
       workflowActionId: string
-      salesOrderStatus: "PENDING_OPERATIONS"
+      salesOrderCommercialStatus: "PENDING_OPERATIONS"
       nextWorkItemId: string
       nextWorkItemStatus: "UNCLAIMED" | "PENDING"
     }
@@ -653,7 +653,7 @@ type CardSalesApprovalBusinessResult =
       salesOrderId: string
       salesOrderReviewId: string
       workflowActionId: string
-      salesOrderStatus: "EFFECTIVE"
+      salesOrderCommercialStatus: "EFFECTIVE"
       salesOrderRevisionId: string
       receivableAccountId: string
       executionProjectionOperationId: string
@@ -663,7 +663,7 @@ type CardSalesApprovalBusinessResult =
       salesOrderId: string
       salesOrderReviewId: string
       workflowActionId: string
-      salesOrderStatus: string
+      salesOrderCommercialStatus: string
     }
 
 type CompleteCardSalesApprovalResult =

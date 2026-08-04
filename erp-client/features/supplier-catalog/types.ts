@@ -3,6 +3,8 @@
  * Excel、API 与手工录入只代表来源渠道，统一形成供应商 SPU/SKU。
  */
 
+import type { ProductKind } from "@/features/master-data/types"
+
 export type ChangeType = "NEW" | "CHANGED" | "STOPPED" | "ERROR" | "UNCHANGED"
 
 export type DemoRole = "procurement" | "operations" | "admin" | "ops_tech"
@@ -118,8 +120,6 @@ export type SupplierProductMappingView = Readonly<{
   }[]
 }>
 
-export type SupplyMode = "DROPSHIP" | "BULK"
-
 export type SupplierOfferingRevisionView = Readonly<{
   offeringId: string
   offeringRevisionId: string
@@ -128,7 +128,10 @@ export type SupplierOfferingRevisionView = Readonly<{
   supplyPriceGross: string | null
   supplyPriceNet: string | null
   floorPriceGross: string | null
-  supplyMode: readonly SupplyMode[]
+  /** 一件代发供给价（含税）；与集采供给价同版保存，不折叠成单一确认成本。 */
+  dropshipSupplyPriceGross: string | null
+  /** 集采供给价（含税） */
+  bulkSupplyPriceGross: string | null
   dropshipExpress?: string
   inputTaxRate: string | null
   freightAmount: string | null
@@ -147,7 +150,6 @@ export type SupplierOfferingRevisionView = Readonly<{
 export type SafeOfferingDraftView = Readonly<{
   supplyPriceGross: string
   floorPriceGross: string
-  supplyMode: readonly SupplyMode[]
   dropshipExpress?: string
   inputTaxRate: string
   freightAmount: string
@@ -443,6 +445,8 @@ export type SupplierCatalogDecision =
 export type SupplierCatalogBusinessResult = Readonly<{
   decisionKind: SupplierCatalogDecision["kind"]
   supplierProductId: string
+  /** 精确供应商 SKU；错误中心/审计以此为准。 */
+  supplierCatalogSkuId: string
   auditEventId: string
   offeringRevision?: string
   publicationImpact: PublicationImpactView
@@ -471,9 +475,9 @@ export type FormalActionResponse =
   | { status: "failed"; message: string; code: string }
   | { status: "unknown"; message: string; idempotencyKey: string }
 
-/** 会话内映射/供给草稿（非正式） */
+/** 会话内映射/供给草稿（非正式）；按供应商 SKU 为粒度。 */
 export type SessionCatalogDraft = Readonly<{
-  supplierProductId: string
+  supplierCatalogSkuId: string
   selectedSkuId?: string
   offeringDraft?: SafeOfferingDraftView
   substituteCandidateSkuIds?: string[]
@@ -580,12 +584,15 @@ export type ReviseSupplierCatalogProductInput = SupplierCatalogSpuContentFields 
 
 /** 采购把供应商 SKU 选入公司商品池，并同时确认供给成本。 */
 export type PromoteSupplierProductInput = Readonly<{
-  supplierProductId: string
+  /** 唯一正式入池键：精确供应商 SKU（supplier_catalog_sku_id）。 */
+  supplierCatalogSkuId: string
   targetSkuId: string
   targetSkuCode: string
   targetSkuName: string
   specification: string
   baseUnit: string
+  /** 公司商品类型（ProductKind 编码）；无可靠来源时空白必填，来源只可预填。 */
+  productKind: ProductKind
   /** 采购私密成本；与来源报价和销售可见价均为不同事实。 */
   confirmedCostGross: string
   inputTaxRate: string
@@ -601,12 +608,68 @@ export type PromoteSupplierProductInput = Readonly<{
 
 export type SupplierCatalogWriteResult = Readonly<{
   supplierProductId: string
+  /** 本次写入的精确供应商 SKU。 */
+  supplierCatalogSkuId?: string
+  /** 反向创建分支：新公司商品/SKU。 */
+  companyProductId?: string
+  companySkuId?: string
+  /** 入池/反向创建确认的商品类型。 */
+  productKind?: string
   supplierOfferingRevisionId?: string
   poolEntryRevisionId?: string
   poolEntryChange: "NONE" | "CREATED" | "REVISED" | "UNCHANGED"
   activeSupplierCount?: number
   reference: string
   recordedAt: string
+}>
+
+/** 反向创建：公司商品基础字段（W21 来源预填、采购可改）。 */
+export type CompanyProductCreateFields = Readonly<{
+  name: string
+  description?: string
+  categoryId: string
+  category: string
+  brandId: string
+  brand: string
+  baseUnitId: string
+  baseUnitCode: string
+  baseUnit: string
+  carouselImages?: readonly string[]
+  detailImages?: readonly string[]
+  /** 独立必填、不可变；来源类型只可预填，无可靠来源时空白必填。 */
+  productKind: ProductKind
+  /** 新建公司 SKU 编码（sku_no）与展示规格。 */
+  skuNo: string
+  specLabel: string
+  barcode?: string
+  mainImage?: string
+}>
+
+/** 双价供给项：件代发供给价、集采供给价与集采起订量同版保存。 */
+export type ReverseCreateOfferingWrite = Readonly<{
+  dropshipSupplyPriceGross: string
+  bulkSupplyPriceGross: string
+  bulkMinimumOrderQuantity: string
+  inputTaxRate: string
+  supplyRegion: string[]
+  validFrom: string
+}>
+
+/**
+ * 反向创建入池复合命令：先有供应商 SKU，无同款公司 SKU 时，
+ * 原子创建公司商品/SKU、精确映射与双价供给；
+ * 销售可见价与市场价写入新建 sku_revision。
+ */
+export type CreateCompanyProductFromSupplierSkuInput = Readonly<{
+  supplierCatalogSkuId: string
+  expectedSourceRevisionNo: number
+  companyProduct: CompanyProductCreateFields
+  /** 必填；写入新建 sku_revision.sales_visible_price_gross。 */
+  salesVisiblePriceGross: string
+  /** 必填市场价；写入新建 sku_revision。 */
+  marketPrice: string
+  offering: ReverseCreateOfferingWrite
+  idempotencyKey: string
 }>
 
 export const CHANGE_TYPE_LABEL: Record<ChangeType, string> = {

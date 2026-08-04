@@ -121,9 +121,9 @@ function item(
 function diffTone(
   status: SeedDifference["status"]
 ): StatusTone {
-  if (status === "RESOLVED") return "success"
-  if (status === "BLOCKING" || status === "OPEN") return "warning"
-  return "info"
+  if (status === "PENDING") return "warning"
+  if (status === "CLOSED") return "neutral"
+  return "success"
 }
 
 export function projectDifference(
@@ -232,7 +232,7 @@ export const SEED_STATEMENTS: SeedStatement[] = [
       {
         differenceId: "df_jd_amt",
         type: "AMOUNT",
-        status: "OPEN",
+        status: "PENDING",
         blocking: true,
         erpSideLabel: "ERP 明细汇总（含税）",
         erpSideAmount: "48500.00",
@@ -263,7 +263,7 @@ export const SEED_STATEMENTS: SeedStatement[] = [
       {
         differenceId: "df_jd_miss",
         type: "MISSING_ORDER",
-        status: "EVIDENCE_PENDING",
+        status: "PENDING",
         blocking: true,
         erpSideLabel: "ERP 无对应完成记录",
         supplierSideLabel: "账单含 JD-EX-9100",
@@ -443,7 +443,7 @@ export const SEED_STATEMENTS: SeedStatement[] = [
       {
         differenceId: "df_mt_closed",
         type: "REFUND",
-        status: "RESOLVED",
+        status: "ERP_ACCEPTED",
         blocking: false,
         erpSideLabel: "退款记录 −¥1,200.00",
         supplierSideLabel: "账单已扣减",
@@ -649,7 +649,7 @@ export const SEED_STATEMENTS: SeedStatement[] = [
       {
         differenceId: "df_mt4",
         type: "AMOUNT",
-        status: "RESOLVED",
+        status: "SUPPLIER_ACCEPTED",
         blocking: false,
         erpSideLabel: "ERP 含税",
         erpSideAmount: "89600.00",
@@ -753,7 +753,7 @@ export const SEED_STATEMENTS: SeedStatement[] = [
       {
         differenceId: "df_jd8",
         type: "AMOUNT",
-        status: "OPEN",
+        status: "PENDING",
         blocking: true,
         erpSideLabel: "ERP 含税",
         erpSideAmount: "101000.00",
