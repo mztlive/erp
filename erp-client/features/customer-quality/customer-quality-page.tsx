@@ -1870,7 +1870,7 @@ export function CustomerQualityPage() {
               经营标签说明
             </DialogTitle>
             <DialogDescription>
-              标签由服务端固定规则生成，页面不提供人工修改入口。
+              标签由系统固定规则生成，页面不提供人工修改入口。
             </DialogDescription>
           </DialogHeader>
           {tagDialog ? (

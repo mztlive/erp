@@ -2143,13 +2143,13 @@ function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
               href={item.href}
               className="text-xs text-primary underline-offset-2 hover:underline"
             >
-              打开关联工作面
+              打开关联页面
             </Link>
           </CardContent>
         </Card>
       ))}
       <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
-        进入相关工作面时将重新获取最新状态。
+        进入相关页面时将重新获取最新状态。
       </p>
     </div>
   )

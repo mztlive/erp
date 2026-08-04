@@ -845,7 +845,7 @@ export function AllocationSession({
         description="提交后形成不可编辑记录；纠错须追加冲正/红票。提交时系统将校验供应商、余额与策略版本。"
         confirmLabel="确认提交"
         fromStatus={{ label: "本次草稿", tone: "neutral" }}
-        toStatus={{ label: "已过账", tone: "success" }}
+        toStatus={{ label: "已确认", tone: "success" }}
         lockedFields={[
           `供应商 ${session.supplierName}`,
           `目标 ${selected.size} 笔`,
@@ -859,7 +859,7 @@ export function AllocationSession({
           "未分配余额保留在待核销视图",
           "来源页须重查付款门禁，未核销付款不满足",
         ]}
-        irreversibleEffects={["已过账记录不可编辑删除，纠错追加反向记录"]}
+        irreversibleEffects={["已确认记录不可编辑删除，纠错追加反向记录"]}
         pending={submitPayment.isPending || submitInvoice.isPending}
         onConfirm={() => void doSubmit()}
       />

@@ -46,7 +46,7 @@ export function SalesOrderPaperDialog({
             : "销售单纸质预览"}
         </DialogTitle>
         <DialogDescription className="sr-only">
-          系统业务数据的纸质投影；金额与状态以系统记录为准。按 Esc 或点击遮罩关闭。
+          系统业务数据的打印件；金额与状态以系统记录为准。按 Esc 或点击遮罩关闭。
         </DialogDescription>
 
         <div className="relative min-h-0 flex-1">

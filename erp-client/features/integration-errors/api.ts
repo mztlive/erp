@@ -174,7 +174,7 @@ function baseAllowed(
         action: "RESOLVE",
         code: "EVIDENCE_POLICY_MISSING",
         message:
-          "解决证据规则尚未配置，只能补证、暂挂或转交",
+          "解决证据规则尚未配置，只能补证、先跳过或转交",
       })
     }
   } else {
@@ -248,7 +248,11 @@ function projectItem(
     at: h.recordedAt,
     actor: "当前用户",
     action: h.actionKind,
-    detail: h.evidenceNote ?? `任务状态 ${h.workItemStatus}`,
+    detail:
+      h.evidenceNote ??
+      `任务状态 ${
+        h.workItemStatus === "IN_PROGRESS" ? "处理中" : "待处理"
+      }`,
   }))
 
   const isHeld =
@@ -281,7 +285,7 @@ function projectItem(
     workItem,
     status: {
       code: overlay.statusCode ?? (isHeld ? "HELD" : seed.status.code),
-      label: overlay.statusLabel ?? (isHeld ? "已暂挂" : seed.status.label),
+      label: overlay.statusLabel ?? (isHeld ? "已跳过" : seed.status.label),
     },
     queryStage: overlay.queryStage ?? seed.queryStage,
     linkedEvidence: [...seed.linkedEvidence, ...overlay.linkedEvidence],
@@ -517,7 +521,7 @@ export async function applyIntegrationTaskAction(
     return {
       status: "blocked",
       title: "动作不可用",
-      description: blocker?.message ?? `${input.kind} 不在 allowedActions 中`,
+      description: blocker?.message ?? "该动作不在当前可操作范围内",
       stayOnItem: true,
     }
   }
@@ -732,7 +736,7 @@ export async function applyIntegrationTaskAction(
         title:
           input.kind === "LINK_COMPENSATION" ? "已关联补偿证据" : "已追加证据",
         description:
-          "证据为追加式，不可覆盖历史。任务仍为 PENDING/IN_PROGRESS。",
+          "证据为追加式，不可覆盖历史。任务仍在待处理列表。",
         reference: input.operationId,
         outcome:
           input.kind === "LINK_COMPENSATION"
@@ -769,7 +773,7 @@ export async function applyIntegrationTaskAction(
         status: "succeeded",
         title: "已发起重新归集",
         description:
-          "使用原业务记录键重新归集；任务仍为 PENDING/IN_PROGRESS。",
+          "使用原业务记录键重新归集；任务仍在待处理列表。",
         reference: input.operationId,
         outcome: "REATTRIBUTED",
         workItemStatus: "IN_PROGRESS",
@@ -798,11 +802,11 @@ export async function applyIntegrationTaskAction(
       // SKIP: stay in queue, may advance focus (caller decides)
       return {
         status: "succeeded",
-        title: input.kind === "DEFER" ? "已暂挂" : "已跳过当前项",
+        title: input.kind === "DEFER" ? "已跳过" : "已跳过当前项",
         description:
           input.kind === "DEFER"
             ? "任务仍在待处理队列，未完成。本次处理已结束；可稍后继续。"
-            : "已记录跳过；任务仍为 PENDING/IN_PROGRESS，未终结。",
+            : "已记录跳过；任务仍在待处理列表，未终结。",
         reference: input.operationId,
         outcome: input.kind === "DEFER" ? "DEFERRED" : "SKIPPED",
         workItemStatus: "PENDING",
@@ -849,7 +853,7 @@ export async function resolveIntegrationTask(
       title: "不能标记已解决",
       description:
         blocker?.message ??
-        "证据策略未命中或证据不全；只能补证、暂挂或转交。",
+        "证据策略未命中或证据不全；只能补证、先跳过或转交。",
       stayOnItem: true,
     }
   }
@@ -862,7 +866,7 @@ export async function resolveIntegrationTask(
     return {
       status: "blocked",
       title: "证据策略不匹配",
-      description: "必须引用当前命中的 evidencePolicyId/version。",
+      description: "必须引用当前命中的证据策略及版本。",
       stayOnItem: true,
     }
   }
@@ -870,7 +874,7 @@ export async function resolveIntegrationTask(
     return {
       status: "blocked",
       title: "证据不能为空",
-      description: "RESOLVE 要求非空强类型 evidenceRefs。",
+      description: "处理完成要求提供非空的处理证据。",
       stayOnItem: true,
     }
   }
@@ -902,14 +906,14 @@ export async function resolveIntegrationTask(
       status: "succeeded",
       title: "已标记解决",
       description:
-        "CompleteWorkItemEnvelope 已提交；任务 COMPLETED，可进入下一项。",
+        "处理已完成，可进入下一项。",
       reference: result.completionRecordId,
       outcome: "RESOLVED",
       workItemStatus: "COMPLETED",
       stayOnItem: false,
       terminal: true,
       facts: [
-        { label: "策略", value: `${input.evidencePolicyId}@v${input.evidencePolicyVersion}` },
+        { label: "证据策略", value: `版本 v${input.evidencePolicyVersion}` },
         { label: "证据数", value: String(input.evidenceRefs.length) },
         { label: "任务状态", value: "已完成" },
       ],
@@ -981,7 +985,7 @@ export async function closeIntegrationTask(
     status: "succeeded",
     title: input.kind === "CLOSE_DUPLICATE" ? "已关闭重复任务" : "已关闭误派",
     description:
-      "CloseWorkItemEnvelope 返回 CLOSED；不写业务解决结论，不影响业务记录。",
+      "仅关闭任务本身；不写业务解决结论，不影响业务记录。",
     reference: result.closureRecordId,
     outcome:
       input.kind === "CLOSE_DUPLICATE" ? "CLOSED_DUPLICATE" : "CLOSED_MISROUTED",
@@ -990,13 +994,16 @@ export async function closeIntegrationTask(
     terminal: true,
     replacementWorkItemId: input.replacementWorkItemId,
     facts: [
-      { label: "原因", value: input.reasonCode },
+      {
+        label: "原因",
+        value: input.reasonCode === "DUPLICATE" ? "重复" : "错误路由",
+      },
       { label: "关闭证据", value: input.closureEvidenceReference },
       {
         label: "替代任务",
-        value: input.replacementWorkItemId ?? "—",
+        value: input.replacementWorkItemId ? "已指定" : "—",
       },
-      { label: "任务状态", value: "CLOSED" },
+      { label: "任务状态", value: "已关闭" },
     ],
   }
 }
@@ -1032,7 +1039,7 @@ export async function transferIntegrationTask(
     status: "succeeded",
     title: "已转交",
     description:
-      "原任务 TRANSFERRED，已创建 UNCLAIMED/PENDING 后继任务。转交不是解决。",
+      "原任务已转交，已创建待处理的后继任务。转交不是解决。",
     reference: result.transferRecordId,
     outcome: "TRANSFERRED",
     workItemStatus: "TRANSFERRED",
@@ -1041,8 +1048,8 @@ export async function transferIntegrationTask(
     successorWorkItemId: result.successorWorkItemId,
     facts: [
       { label: "目标角色", value: input.targetRole },
-      { label: "后继任务", value: result.successorWorkItemId },
-      { label: "原任务状态", value: "TRANSFERRED" },
+      { label: "后继任务", value: "已创建" },
+      { label: "原任务状态", value: "已转交" },
     ],
   }
 }
@@ -1158,7 +1165,7 @@ export async function applyDirectReconciliation(
     at: new Date().toISOString(),
     actor: "当前用户",
     action: terminalDecision.conclusion,
-    detail: `reason=${reason.registeredReasonId} · 非 CLOSED`,
+    detail: "按注册原因确认 · 任务未关闭",
   })
   setIdempotencySucceeded(input.idempotencyKey, terminalDecision.conclusion, {
     differenceId: input.differenceId,
@@ -1179,8 +1186,14 @@ export async function applyDirectReconciliation(
     terminal: true,
     facts: [
       { label: "注册原因", value: reason.label },
-      { label: "差异终态", value: terminalOutcome },
-      { label: "任务 CLOSED", value: "否（直接对账）" },
+      {
+        label: "差异结果",
+        value:
+          terminalOutcome === "CONFIRMED_NO_ERROR"
+            ? "确认无误"
+            : "确认有效差异",
+      },
+      { label: "任务已关闭", value: "否（直接对账）" },
     ],
   }
 }

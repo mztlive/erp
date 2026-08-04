@@ -881,7 +881,7 @@ export function SupplierProductCenterPage({
                   <CheckCircle2Icon aria-hidden />
                   <AlertTitle>填写检查通过</AlertTitle>
                   <AlertDescription>
-                    必填项完整，保存时仍以服务端校验结果为准。
+                    必填项完整，保存时仍以系统校验结果为准。
                   </AlertDescription>
                 </Alert>
               ) : null}

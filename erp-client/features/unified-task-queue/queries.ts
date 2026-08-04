@@ -79,8 +79,8 @@ function toViewItem(fixture: WorkItemFixture): QueueWorkItemView | null {
 
   if (held) {
     effectiveStatusCode = "PENDING"
-    status = { label: "已暂挂", tone: "warning" }
-    if (!scopeTags.includes("已暂挂")) scopeTags.push("已暂挂")
+    status = { label: "已跳过", tone: "warning" }
+    if (!scopeTags.includes("已跳过")) scopeTags.push("已跳过")
   } else if (lease && fixture.statusCode === "UNCLAIMED") {
     effectiveStatusCode = "IN_PROGRESS"
     status = { label: "处理中", tone: "info" }

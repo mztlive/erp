@@ -1134,7 +1134,7 @@ export function CustomerReceivablesPage() {
                       <BusinessEmptyState
                         kind="no-data"
                         title="无待分配回款"
-                        description="已过账且仍有未分配余额的回款将出现在此。"
+                        description="已确认且仍有未分配余额的回款将出现在此。"
                       />
                     ) : (
                       <DataTable
@@ -1445,8 +1445,8 @@ export function CustomerReceivablesPage() {
                 : "登记销项发票 — 选择往来主体"}
             </DialogTitle>
             <DialogDescription>
-              核销会话创建后锁定往来主体，中途不可更换。
-              经营客户与结算主体可能不同。
+               本次核销创建后锁定往来主体，中途不可更换。
+               经营客户与结算主体可能不同。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -1509,7 +1509,7 @@ export function CustomerReceivablesPage() {
                   : "发起回款冲正"}
             </DialogTitle>
             <DialogDescription>
-              不编辑、不删除已过账记录与分配；仅追加反向记录。原单{" "}
+              不编辑、不删除已确认记录与分配；仅追加反向记录。原单{" "}
               {reverseConfirm?.label}。
             </DialogDescription>
           </DialogHeader>
@@ -1607,9 +1607,9 @@ function ReceiptDetailBody({ row }: { row: ReceiptRow }) {
   return (
     <div className="space-y-5 overflow-auto p-6">
       <Alert variant="info">
-        <AlertTitle>已过账记录只读</AlertTitle>
+        <AlertTitle>已确认记录只读</AlertTitle>
         <AlertDescription>
-          已过账记录不可编辑、不可删除；纠错仅能追加退款/冲正。
+          已确认记录不可编辑、不可删除；纠错仅能追加退款/冲正。
         </AlertDescription>
       </Alert>
       <div className="grid grid-cols-2 gap-3">
@@ -1659,7 +1659,7 @@ function ReceiptDetailBody({ row }: { row: ReceiptRow }) {
                 <div className="text-xs text-muted-foreground">
                   {formatDateTime(a.occurredAt)}
                   {a.reverseOfAllocationId
-                    ? ` · 反向于 ${a.reverseOfAllocationId}`
+                    ? " · 冲减原分配"
                     : null}
                 </div>
               </li>
@@ -1727,7 +1727,7 @@ function InvoiceDetailBody({ row }: { row: SalesInvoiceRow }) {
                         a.action === "REVERSE" ? "warning" : "secondary"
                       }
                     >
-                      {a.action}
+                      {a.action === "REVERSE" ? "反向记录" : "分配"}
                     </Badge>{" "}
                     {a.targetLabel}
                   </span>

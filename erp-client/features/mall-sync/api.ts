@@ -207,7 +207,7 @@ function projectMappingTask(
       ...resolutionHistory,
       {
         action: "DEFER_MAPPING_TASK",
-        result: `暂挂：${deferred.reasonCode}${deferred.note ? ` · ${deferred.note}` : ""}（任务仍待处理）`,
+        result: `先跳过：${deferred.reasonCode}${deferred.note ? ` · ${deferred.note}` : ""}（任务仍待处理）`,
         handledBy: DEMO_ROLE_LABEL[role],
         handledAt: deferred.at,
       },
@@ -300,7 +300,7 @@ function projectMappingTask(
               ? ("PENDING" as const)
               : seed.workItem.status,
           statusLabel: held.has(seed.workItem.workItemId)
-            ? "已暂挂（仍待处理）"
+            ? "已跳过（仍待处理）"
             : seed.workItem.statusLabel,
           leaseVersion: publicLease?.leaseVersion ?? seed.workItem.leaseVersion,
           leaseExpiresAt: publicLease?.leaseExpiresAt ?? seed.workItem.leaseExpiresAt,
@@ -719,7 +719,7 @@ export async function triggerManualIncremental(input: {
     status: "succeeded",
     jobId,
     jobNo,
-    message: `已创建增量任务 ${jobNo}。范围由服务端按同步点生成，客户端不可改写同步进度。`,
+    message: `已创建增量任务 ${jobNo}。范围由系统按同步点生成，页面不可改写同步进度。`,
   }
 }
 
@@ -1014,14 +1014,14 @@ export async function deferMapping(input: {
     return {
       status: "failed",
       code: "ADMIN_DEFER_N_A",
-      message: "管理员请使用指派；暂挂由业务责任人操作",
+      message: "管理员请使用指派；跳过由业务责任人操作",
     }
   }
   if (!input.reasonCode) {
     return {
       status: "failed",
       code: "REASON_REQUIRED",
-      message: "暂挂须选择结构化原因",
+      message: "跳过须选择结构化原因",
     }
   }
   try {
@@ -1056,7 +1056,7 @@ export async function deferMapping(input: {
     mappingTaskStatus: "PENDING",
     leaseDisposition: "RELEASED",
     message:
-      "已记录暂挂原因。映射任务仍为待处理，不会暂停或完成任务。",
+      "已记录跳过原因。映射任务仍为待处理，不会暂停或完成任务。",
   }
 }
 

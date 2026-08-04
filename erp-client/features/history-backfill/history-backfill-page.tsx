@@ -421,7 +421,7 @@ function JobListView({
       },
       {
         id: "range",
-        header: "范围 [start,T)",
+        header: "范围起点至截止时点",
         cell: ({ row }) => (
           <span className="num font-mono text-xs">
             {row.original.rangeLabel}
@@ -517,7 +517,7 @@ function JobListView({
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
           title="历史消费回填"
-          description="管理 [requiredHistoryStart, T) 历史回填任务。"
+          description="管理范围起点至截止时点间的历史回填任务。"
         />
         <BusinessEmptyState
           kind="no-scope"
@@ -792,7 +792,7 @@ function JobListView({
         <ShieldAlertIcon />
         <AlertTitle>范围与敏感边界</AlertTitle>
         <AlertDescription>
-          半开区间 [rangeStart, T)，occurredAt = T 不进历史回填。技术处理完成 ≠
+          从范围起点至截止时点（截止时点当天除外），截止时点当天发生的记录不进历史回填。技术处理完成 ≠
           报告已确认 ≠ 全历史业务完成。页面与导出不含卡号、卡密、绑定手机、完整地址或原始消息内容。
         </AlertDescription>
       </Alert>
@@ -811,7 +811,7 @@ function JobListView({
       ) : (
         <BusinessTableFrame
           title="回填任务"
-          description={`共 ${data?.totalCount ?? 0} 个任务 · processingStatus 与 reportReviewStatus 分列`}
+          description={`共 ${data?.totalCount ?? 0} 个任务 · 处理状态与报告确认状态分列`}
           table={
             <DataTable
               data={[...(data?.rows ?? [])]}
@@ -930,9 +930,9 @@ function CreateBackfillSheet({
 
             <Alert>
               <TriangleAlertIcon />
-              <AlertTitle>T 前支付只补台账</AlertTitle>
+              <AlertTitle>截止时点前支付只补台账</AlertTitle>
               <AlertDescription>
-                履约链固定 LEGACY_MANUAL，不创建供应商订单。occurredAt = T
+                履约链固定为历史手工口径，不创建供应商订单。截止时点当天发生的记录
                 不在回填范围内。
               </AlertDescription>
             </Alert>
@@ -970,7 +970,7 @@ function CreateBackfillSheet({
                 <AlertTitle>禁止重叠业务批次</AlertTitle>
                 <AlertDescription>
                   已存在回填任务 {context.overlappingJobNo}
-                  。修复只能续跑原任务，不能新建覆盖同一 [rangeStart, T) 的批次。
+                  。修复只能续跑原任务，不能新建覆盖同一范围的批次。
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -1196,8 +1196,9 @@ function JobDetailView({
         version={`lv-${currentJob.lockVersion}`}
         meta={
           <span className="text-muted-foreground">
-            {ENVIRONMENT_LABEL[currentJob.environment]} · [
-            {formatDay(currentJob.rangeStart)}, {formatDay(currentJob.rangeEnd)})
+            {ENVIRONMENT_LABEL[currentJob.environment]} · 范围起点{" "}
+            {formatDay(currentJob.rangeStart)} 至 截止时点{" "}
+            {formatDay(currentJob.rangeEnd)}
           </span>
         }
         statuses={[
@@ -1222,7 +1223,7 @@ function JobDetailView({
             id: "range",
             label: "范围",
             status: {
-              label: `[${formatDay(currentJob.rangeStart)}, ${formatDay(currentJob.rangeEnd)})`,
+              label: `${formatDay(currentJob.rangeStart)} 至 ${formatDay(currentJob.rangeEnd)}`,
               tone: "neutral",
             },
           },
@@ -1293,7 +1294,7 @@ function JobDetailView({
             技术处理完成 ≠ 报告已确认 / 全历史业务完成
           </AlertTitle>
           <AlertDescription>
-            processingStatus=COMPLETED 仅表示技术处理完成。当前报告确认状态为「
+            技术处理完成仅表示处理完成。当前报告确认状态为「
             {REPORT_REVIEW_STATUS_LABEL[currentJob.reportReviewStatus]}
             」。下游功能门禁：
             {currentJob.formalDownstreamUnlocked ? "已解锁" : "保持关闭"}。
@@ -1305,12 +1306,12 @@ function JobDetailView({
         <Alert variant="destructive">
           <AlertTitle>全历史覆盖不足 · 阻断执行</AlertTitle>
           <AlertDescription>
-            requiredHistoryStart={formatDay(currentJob.requiredHistoryStart)}，
-            sourceCoverageStart=
+            必须覆盖起点={formatDay(currentJob.requiredHistoryStart)}，
+            来源覆盖起点=
             {currentJob.sourceCoverageStart
               ? formatDay(currentJob.sourceCoverageStart)
               : "—"}
-            。不得把较晚时间改成 rangeStart 后宣称全历史完成。
+            。不得把较晚时间改成范围起点后宣称全历史完成。
             <ul className="mt-2 list-disc pl-4">
               {currentJob.coverageGaps.map((g) => (
                 <li key={`${g.from}-${g.to}`}>
@@ -1496,8 +1497,8 @@ function JobDetailView({
         }}
         toStatus={{ label: "运行中", tone: "info" }}
         lockedFields={[
-          `rangeStart = requiredHistoryStart = ${formatDay(currentJob.requiredHistoryStart)}`,
-          `rangeEnd = T = ${formatDay(currentJob.rangeEnd)}`,
+          `范围起点 = 必须覆盖起点 = ${formatDay(currentJob.requiredHistoryStart)}`,
+          `截止时点 = ${formatDay(currentJob.rangeEnd)}`,
           `商城 ${currentJob.mallName} · ${ENVIRONMENT_LABEL[currentJob.environment]}`,
         ]}
         effects={[
@@ -1526,8 +1527,8 @@ function JobDetailView({
         toStatus={{ label: "运行中", tone: "info" }}
         lockedFields={[
           `任务 ${currentJob.jobNo}`,
-          `范围 [${formatDay(currentJob.rangeStart)}, ${formatDay(currentJob.rangeEnd)})`,
-          `原任务标识 ${currentJob.idempotencyNamespace}`,
+          `范围起点 ${formatDay(currentJob.rangeStart)} 至 截止时点 ${formatDay(currentJob.rangeEnd)}`,
+          "提交身份已沿用",
           `已成功 ${currentJob.progress.insertedCount} · 待处理剩余项`,
         ]}
         effects={["逐项仍使用相同业务记录键", "已成功记录保持不变"]}
@@ -1961,7 +1962,7 @@ function ReportSection({
       <BusinessEmptyState
         kind="no-data"
         title="技术报告尚未生成"
-        description="processingStatus 达到部分完成或技术处理完成后可生成可审计报告。"
+        description="处理状态达到部分完成或技术处理完成后可生成可审计报告。"
       />
     )
   }

@@ -574,7 +574,7 @@ export function InventoryLedgerPage() {
       setLastResult({
         status: "succeeded",
         title: "调整已提交待复核",
-        description: `单号 ${result.outcome.adjustmentNo}。下一责任方：${result.outcome.nextResponsible}。余额尚未变化，过账后由服务端刷新。`,
+        description: `单号 ${result.outcome.adjustmentNo}。下一责任方：${result.outcome.nextResponsible}。余额尚未变化，确认入账后由系统刷新。`,
         reference: result.outcome.reference,
       })
       setConfirmOpen(false)
@@ -1008,13 +1008,13 @@ export function InventoryLedgerPage() {
       },
       {
         id: "time",
-        header: "创建 / 过账",
+        header: "创建 / 确认入账",
         meta: { label: "时间", width: "default", numeric: true },
         cell: ({ row }) => (
           <div className="num text-xs text-muted-foreground">
             <div>创建 {formatDateTime(row.original.createdAt)}</div>
             <div>
-              过账{" "}
+              确认入账{" "}
               {row.original.postedAt
                 ? formatDateTime(row.original.postedAt)
                 : "—"}
@@ -2153,7 +2153,7 @@ export function InventoryLedgerPage() {
         confirmLabel="确认提交"
         fromStatus={{ label: "草稿", tone: "neutral" }}
         toStatus={{ label: "待仓储复核", tone: "warning" }}
-        description="确认后形成调整单，进入仓储复核队列。余额在过账前不会变化。"
+        description="确认后形成调整单，进入仓储复核队列。余额在确认入账前不会变化。"
         lockedFields={[
           adjustMeta
             ? `${adjustMeta.warehouseName} / ${adjustMeta.skuCode}`
@@ -2163,7 +2163,7 @@ export function InventoryLedgerPage() {
         effects={[
           "创建待仓储复核的库存调整单",
           "不立即修改 on_hand / reserved / available",
-          "经办人不得自行复核过账",
+          "经办人不得自行复核或确认入账",
         ]}
         nextDepartment="仓储复核"
         irreversibleEffects={["形成调整单号并进入连续队列"]}

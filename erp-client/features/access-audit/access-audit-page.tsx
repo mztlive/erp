@@ -1602,9 +1602,10 @@ export function AccessAuditPage() {
         <p className="text-xs text-muted-foreground" aria-live="polite">
           权限版本{" "}
           <span className="font-mono">{data.permissionVersion}</span> ·
-          任务流：{data.workItemSupport === "DISABLED_Q1"
+          任务流：
+          {data.workItemSupport === "DISABLED_Q1"
             ? "策略确定前关闭"
-            : data.workItemSupport}
+            : "已开启"}
         </p>
       ) : null}
 
@@ -2123,7 +2124,7 @@ export function AccessAuditPage() {
                     <span className="font-mono">
                       {pendingCommand?.expectedPermissionVersion}
                     </span>
-                    ；Q1 前本命令不携带 workItemId / claimToken。
+                    ；复核策略确定前本命令不携带任务标识。
                   </p>
                   <DialogFooter>
                     <Button

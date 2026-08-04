@@ -167,7 +167,7 @@ function projectTask(
             },
           ]
         : [],
-    riskLabel: held ? "已暂挂" : seed.riskLabel,
+    riskLabel: held ? "已跳过" : seed.riskLabel,
     riskTone: held ? "warning" : seed.riskTone,
   }
 }
@@ -609,7 +609,7 @@ export async function deferProcurementConfirmation(input: {
       leaseVersion: input.leaseVersion,
       expectedSubjectHash: seed.salesSubmission.subjectHash,
       idempotencyKey: input.idempotencyKey,
-      action: { kind: "DEFER", note: "采购确认暂挂" },
+      action: { kind: "DEFER", note: "采购确认跳过" },
     })
     markQueueTaskHeld("W07", input.workItemId)
     const outcome: FormalOutcome = {

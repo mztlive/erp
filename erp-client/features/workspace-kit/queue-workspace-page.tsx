@@ -169,12 +169,12 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
       })
       const titles = {
         succeeded: "处理已完成",
-        blocked: "当前项已暂挂",
+        blocked: "当前项已跳过",
         rejected: "已退回补充",
       } as const
       const descriptions = {
         succeeded: "已完成，刷新后该项不再出现在队列中。",
-        blocked: "已暂挂，仍保留在队列；已打开下一条。",
+        blocked: "已跳过，仍保留在队列；已打开下一条。",
         rejected: "已退回并移出队列。",
       } as const
       setLastResult({
@@ -419,7 +419,7 @@ export function QueueWorkspacePage({ def }: { def: WorkspacePageDef }) {
                     }}
                   >
                     <PauseIcon data-icon="inline-start" aria-hidden="true" />
-                    暂挂并看下一条
+                    先跳过并看下一条
                   </Button>
                   <Button
                     type="button"

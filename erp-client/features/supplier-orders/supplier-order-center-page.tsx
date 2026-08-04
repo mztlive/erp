@@ -201,14 +201,32 @@ export function SupplierOrderCenterPage({
       setDeferOpen(false)
       setResult({
         status: res.status === "succeeded" ? "succeeded" : "blocked",
-        title: res.status === "succeeded" ? "已暂挂本轮" : "暂挂失败",
+        title: res.status === "succeeded" ? "已跳过本轮" : "跳过失败",
         description: res.message,
         reference: res.reference,
         facts: res.data
           ? [
-              { label: "任务状态", value: res.data.workItemStatus },
-              { label: "处理状态", value: res.data.leaseDisposition },
-              { label: "原因", value: res.data.reasonCode },
+              {
+                label: "任务状态",
+                value:
+                  res.data.workItemStatus === "PENDING"
+                    ? "待处理"
+                    : res.data.workItemStatus,
+              },
+              {
+                label: "处理状态",
+                value:
+                  res.data.leaseDisposition === "RELEASED"
+                    ? "本次处理已结束"
+                    : res.data.leaseDisposition,
+              },
+              {
+                label: "原因",
+                value:
+                  DEFER_REASON_OPTIONS.find(
+                    (o) => o.value === res.data?.reasonCode
+                  )?.label ?? res.data?.reasonCode ?? "—",
+              },
             ]
           : undefined,
       })
@@ -574,8 +592,7 @@ export function SupplierOrderCenterPage({
                 variant="outline"
                 onClick={() => setDeferOpen(true)}
               >
-                暂挂
-              </Button>
+                先跳过              </Button>
             ) : null}
             {detail.allowedActions.includes("ESCALATE_W29") ? (
               <Button
@@ -675,7 +692,7 @@ export function SupplierOrderCenterPage({
             <CardTitle className="text-sm">关联任务</CardTitle>
             <CardDescription className="text-xs">
               {detail.workItem.workItemType} · {detail.workItem.workItemId}
-              {detail.workItem.held ? " · 已暂挂（任务仍待处理）" : ""}
+              {detail.workItem.held ? " · 已跳过（任务仍在待处理列表）" : ""}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3 text-xs text-muted-foreground">
@@ -1242,9 +1259,9 @@ export function SupplierOrderCenterPage({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <Card className="w-full max-w-md">
             <CardHeader>
-              <CardTitle className="text-base">暂挂 / 本轮跳过</CardTitle>
+              <CardTitle className="text-base">本轮跳过</CardTitle>
               <CardDescription className="text-xs">
-                非终结动作：任务不完成、不转交、不写 paused。
+                非终结动作：任务不完成、不转交、不会暂停。
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -1299,7 +1316,7 @@ export function SupplierOrderCenterPage({
                     取消
                   </Button>
                   <deferForm.AppForm>
-                    <deferForm.SubmitButton label="确认暂挂" />
+                    <deferForm.SubmitButton label="确认跳过" />
                   </deferForm.AppForm>
                 </div>
               </form>

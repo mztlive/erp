@@ -1099,7 +1099,7 @@ function SettlementList({
           <DialogHeader>
             <DialogTitle>新建结算草稿</DialogTitle>
             <DialogDescription>
-              必须引用服务端当前供应商结算期间策略及版本，并选择其返回的完整周期；策略缺失或版本过期时将拒绝创建。
+              必须引用系统当前供应商结算期间策略及版本，并选择其返回的完整周期；策略缺失或版本过期时将拒绝创建。
             </DialogDescription>
           </DialogHeader>
           {policy?.state !== "CONFIGURED" ? (
@@ -1931,7 +1931,7 @@ function SettlementCenter({
           <CardHeader className="border-b py-3">
             <CardTitle className="text-base">复核记录</CardTitle>
             <CardDescription>
-              提交 / 驳回 / 确认追加式记录；岗位分离由服务端校验
+              提交 / 驳回 / 确认追加式记录；岗位分离由系统校验
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 pt-4">
@@ -1939,10 +1939,8 @@ function SettlementCenter({
               <Alert variant="info">
                 <AlertTitle>复核任务</AlertTitle>
                 <AlertDescription>
-                  {detail.workItem.workItemId} · subjectHash=
-                  <span className="num font-mono">
-                    {detail.workItem.subjectHash}
-                  </span>
+                  {detail.statement.statementNo} · 供应商{" "}
+                  {detail.statement.supplierName}
                   {detail.workItem.claimedBy
                     ? ` · 领取人 ${detail.workItem.claimedBy.displayName}`
                     : " · 待领取"}
@@ -2153,10 +2151,10 @@ function SettlementCenter({
         toStatus={{ label: "待复核", tone: "warning" }}
         lockedFields={[
           st.statementNo,
-          `sourceSnapshotHash ${st.sourceSnapshotHash}`,
-          `subjectHash ${st.subjectHash ?? "—"}`,
+          "来源数据版本已锁定",
+          "数据版本已锁定",
           detail.refreshCutoffPolicy.state === "CONFIGURED"
-            ? `截止策略 ${detail.refreshCutoffPolicy.policyId}@${detail.refreshCutoffPolicy.policyVersion}`
+            ? "截止策略已确认"
             : "截止策略未配置",
         ]}
         effects={["冻结来源数据与差异结论", "创建结算复核待办"]}
@@ -2198,7 +2196,7 @@ function SettlementCenter({
           "锁定处理结果，不可撤回确认",
         ]}
         irreversibleEffects={["确认后付款/进项发票/核销进入供应商往来"]}
-        nextDepartment="W12 供应商往来"
+        nextDepartment="供应商往来"
         pending={decisionMutation.isPending}
         onConfirm={async () => {
           await onConfirm()

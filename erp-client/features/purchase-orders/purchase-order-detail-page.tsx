@@ -345,9 +345,9 @@ export function PurchaseOrderDetailPage({
         reference: response.reference,
         facts: [
           { label: "单据编号", value: response.data.purchaseNo },
-          { label: "submissionId", value: response.data.submissionId },
-          { label: "subjectHash", value: response.data.subjectHash },
-          { label: "审核任务", value: response.data.workItemId },
+          { label: "提交编号", value: response.data.submissionId },
+          { label: "数据版本", value: response.data.subjectHash },
+          { label: "审核任务", value: "已创建" },
         ],
       })
       router.replace(

@@ -75,10 +75,10 @@ export async function fetchWorkspaceQueueTasks(
     .map((task) => {
       if (!held.has(task.id)) return task
       const tags = new Set(task.scopeTags ?? [])
-      tags.add("已暂挂")
+      tags.add("已跳过")
       return {
         ...task,
-        status: { label: "已暂挂", tone: "warning" as const },
+        status: { label: "已跳过", tone: "warning" as const },
         scopeTags: [...tags],
       }
     })

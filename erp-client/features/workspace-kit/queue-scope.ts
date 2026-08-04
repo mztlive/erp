@@ -7,7 +7,7 @@ const DEFAULT_SLUG_BY_LABEL: Record<string, string> = {
   待领取: "role_pool",
   团队: "team",
   [sequentialText.minePending]: "mine",
-  已暂挂: "hold",
+  已跳过: "hold",
   待复核: "review",
   有差异: "diff",
   已通过: "passed",

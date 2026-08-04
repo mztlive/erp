@@ -1088,7 +1088,7 @@ export function getW19EffectiveAccess(
           id: "b1",
           code: "OBJECT_STATE",
           message:
-            "对象状态/岗位分离等业务条件以各对象 allowedActions / actionBlockers 表达，不在此合并为「没权限」。",
+            "对象状态/岗位分离等业务条件按各对象的可操作范围表达，不在此合并为「没权限」。",
           layer: "OBJECT_STATE",
           layerLabel: "对象状态与业务条件",
           sourceType: "OBJECT_ALLOWED_ACTIONS",

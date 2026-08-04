@@ -767,7 +767,7 @@ export function PublicationCenterPage({
         <Alert variant="warning" role="status">
           <AlertTitle>本次编辑 · 未保存</AlertTitle>
           <AlertDescription>
-            当前输入仅存在于本页签内存，无草稿保存、无自动保存、无本地持久化。刷新或关闭前将提示丢失。
+            当前输入仅存在于本页签内存，无草稿保存、无自动保存。刷新或关闭前将提示丢失。
             <div className="mt-2 flex gap-2">
               <Button type="button" size="sm" variant="outline" onClick={discardSession}>
                 放弃输入
@@ -1217,7 +1217,7 @@ export function PublicationCenterPage({
                   </form.AppField>
                 </div>
                 <div className="space-y-2 rounded-lg border p-3">
-                  <div className="text-sm font-medium">发布媒体快照</div>
+                  <div className="text-sm font-medium">发布媒体资料</div>
                   {sessionEdit?.media.map((media, index) => (
                     <div key={media.fileAssetId} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_2fr]">
                       <div className="text-xs text-muted-foreground">

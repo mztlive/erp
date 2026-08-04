@@ -461,8 +461,9 @@ export function UnifiedTaskQueuePage() {
       setClaimEpoch((n) => n + 1)
       setLastResult({
         status: "blocked",
-        title: "已暂挂",
-        description: `任务内动作 DEFER 成功；状态 ${record.workItemStatus}，仍在有效队列。按契约打开下一项。`,
+        title: "已跳过",
+        description:
+          "已记录跳过原因，任务仍在待处理列表，已自动打开下一项。",
         reference: record.actionRecordId,
       })
       // DEFER opens next per §7
@@ -861,7 +862,7 @@ export function UnifiedTaskQueuePage() {
               ["mine", "我的待办", queueQuery.data?.counts.mine],
               ["role_pool", "待领取", queueQuery.data?.counts.rolePool],
               ["team", "团队", undefined],
-              ["hold", "已暂挂", undefined],
+              ["hold", "已跳过", undefined],
             ] as const
           ).map(([value, label, count]) => (
             <ToggleGroupItem key={value} value={value}>
@@ -1380,7 +1381,7 @@ export function UnifiedTaskQueuePage() {
                     onClick={() => void onDefer()}
                   >
                     <PauseIcon data-icon="inline-start" aria-hidden="true" />
-                    暂挂并看下一条
+                    先跳过并看下一条
                   </Button>
                   {task.allowedActions.includes("TRANSFER") ? (
                     <Button
@@ -1435,7 +1436,7 @@ export function UnifiedTaskQueuePage() {
                         status: "rejected",
                         title: "退回需在任务对应页面处理",
                         description:
-                          "统一队列不提供独立“标记退回完成”伪动作；请前往任务对应页面提交业务退回，或暂挂后转交。",
+                          "统一队列不提供独立“标记退回完成”伪动作；请前往任务对应页面提交业务退回，或先跳过后再转交。",
                         reference: task.id,
                       })
                     }}
@@ -1468,7 +1469,7 @@ export function UnifiedTaskQueuePage() {
                 {/* Demo controls for concurrency states (honest mock, labeled) */}
                 <details className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
                   <summary className="cursor-pointer font-medium text-foreground">
-                    会话模拟（验收用）
+                    页面内模拟（验收用）
                   </summary>
                   <div className="mt-2 flex flex-wrap gap-2">
                     <Button

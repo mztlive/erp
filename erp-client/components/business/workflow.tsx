@@ -736,7 +736,7 @@ function ConflictResolutionDialog({
           <dl className="grid gap-3 sm:grid-cols-2">
             <div className="rounded-xl border border-border bg-muted p-4">
               <dt className="text-sm font-medium text-muted-foreground">
-                当前服务端版本
+                当前系统版本
               </dt>
               <dd className="mt-2 flex flex-wrap items-center gap-2">
                 <StatusBadge

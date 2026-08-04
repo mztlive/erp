@@ -396,7 +396,7 @@ export function AllocationSessionPanel({
         <Alert variant="info">
           <AlertTitle>来自销售单票款区</AlertTitle>
           <AlertDescription>
-            完成或取消后可回到销售单原入口；筛选与主体在本会话内保留。
+            完成或取消后可回到销售单原入口；筛选与主体在本次核销内保留。
             <Button
               type="button"
               size="sm"
@@ -459,7 +459,7 @@ export function AllocationSessionPanel({
             {isReceipt ? "回款记录" : "销项发票记录"}
           </h3>
           <p className="text-xs text-muted-foreground">
-            已过账记录不可编辑删除；此处仅用于新登记或继续核销。
+            已确认记录不可编辑删除；此处仅用于新登记或继续核销。
           </p>
           {isReceipt ? (
             <div className="space-y-3">
@@ -723,7 +723,7 @@ export function AllocationSessionPanel({
         <Field className="max-w-xs">
           <FieldLabel className="text-xs">主体锁定</FieldLabel>
           <FieldDescription>
-            会话创建后不可更换往来主体
+            本次核销创建后不可更换往来主体
           </FieldDescription>
         </Field>
       </div>
@@ -736,7 +736,7 @@ export function AllocationSessionPanel({
         confirmLabel="确认提交"
         fromStatus={{ label: "本次草稿", tone: "warning" }}
         toStatus={{
-          label: isReceipt ? "已过账回款" : "已登记发票",
+          label: isReceipt ? "已确认回款" : "已登记发票",
           tone: "success",
         }}
         lockedFields={["往来主体", "记录编号（提交后）", "既有分配行"]}

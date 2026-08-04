@@ -198,7 +198,7 @@ function filterSummary(q: CardFundsReviewQueueQuery): string {
       : q.type === "delta"
         ? "差额 SYNC_DELTA"
         : "全部类型",
-    q.status === "held" ? "已暂挂" : "待处理有效队列",
+    q.status === "held" ? "已跳过" : "待处理有效队列",
     q.due === "overdue" ? "已超期" : q.due === "today" ? "今日到期" : "全部时限",
   ]
   if (q.q) parts.push(`搜索 ${q.q}`)
@@ -360,7 +360,7 @@ export async function holdCardFundsReview(input: {
       workItemStatus: "IN_PROGRESS",
       heldAt: new Date().toISOString(),
       resumeHint:
-        "任务仍为 PENDING/IN_PROGRESS，已暂挂标记保留在有效队列；可在「已暂挂」范围查看并手动恢复。未形成复核记录。",
+        "任务仍在待处理列表，跳过标记已保留；可在「已跳过」范围查看并手动恢复。未形成复核记录。",
       reference: `W13-HOLD-${input.workItemId.toUpperCase()}`,
       nextWorkItemId: input.nextWorkItemId,
     }

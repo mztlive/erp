@@ -1616,7 +1616,7 @@ export function ActualProfitLossPage() {
                   演示：来源纠错后等待刷新
                 </Button>
                 <span className="text-xs text-muted-foreground self-center">
-                  纠错后不本地改金额；固定提示等待数据追平。
+                  纠错后不改本页金额；固定提示等待数据追平。
                 </span>
               </div>
             </>

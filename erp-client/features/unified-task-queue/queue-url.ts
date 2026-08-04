@@ -67,6 +67,6 @@ export function scopeLabel(scope: QueueScopeSlug): string {
     case "team":
       return "团队"
     case "hold":
-      return "已暂挂"
+      return "已跳过"
   }
 }

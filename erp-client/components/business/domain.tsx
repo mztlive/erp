@@ -492,7 +492,7 @@ export type PrepaymentGateCopy = {
 
 const PREPAYMENT_GATE_COPY: PrepaymentGateCopy = {
   title: "先款后货门禁",
-  description: "仅按已过账付款的有效净分配判断，不以付款申请或附件代替。",
+  description: "仅按已确认付款的有效净分配判断，不以付款申请或附件代替。",
   allowedBadge: "允许继续履约",
   blockedBadge: "履约已阻断",
   amountTerm: "最低有效付款金额",
@@ -1335,7 +1335,7 @@ function InterfaceErrorResolutionPanel({
       <CardHeader className="border-b border-border">
         <CardTitle>接口错误处理</CardTitle>
         <CardDescription>
-          先确认原请求终态，再决定重试、转人工或关闭任务。
+          先确认原请求的处理结果，再决定重试、转人工或关闭任务。
         </CardDescription>
         <CardAction className="flex flex-wrap items-center justify-end gap-2">
           {errorCode != null ? (
@@ -1445,7 +1445,7 @@ function InterfaceErrorResolutionPanel({
       </CardContent>
 
       <CardFooter className="border-t border-border text-xs text-muted-foreground">
-        本组件不提供“直接标记成功”；成功必须来自可验证终态或已复核的补偿记录。
+        本组件不提供“直接标记成功”；成功必须来自可验证的处理结果或已复核的补偿记录。
       </CardFooter>
     </Card>
   )

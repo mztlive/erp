@@ -1514,7 +1514,7 @@ export function ExecutionProjectionsPage() {
                     {detail.deliveries[0].workItemId ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2">
                         <Badge variant="secondary">
-                          任务 {detail.deliveries[0].workItemId}
+                          关联错误任务
                         </Badge>
                         <Button
                           type="button"

@@ -512,7 +512,7 @@ export function MallSyncPage() {
     if (res.status === "succeeded") {
       setResult({
         status: "succeeded",
-        title: "已暂挂（任务仍在队列）",
+        title: "已跳过（任务仍在待处理列表）",
         description: res.message,
       })
       setSessionLease(null)
@@ -1078,7 +1078,7 @@ export function MallSyncPage() {
           <AlertDescription className="space-y-1">
             <p>
               代码 <code className="text-xs">MANUAL_GOVERNANCE_POLICY_MISSING</code>
-              ：「立即增量」「按单补拉」已禁用（界面与服务端均拒绝）。
+              ：「立即增量」「按单补拉」已禁用（界面与系统均拒绝）。
             </p>
             <p className="text-muted-foreground">
               {context?.scheduledIncrementalNote}
@@ -1287,7 +1287,7 @@ export function MallSyncPage() {
                 size="sm"
                 onClick={() => void handleResolveUnknownReapply()}
               >
-                查询重新归集终态
+                查询重新归集处理结果
               </Button>
             ) : undefined
           }
@@ -1816,7 +1816,7 @@ export function MallSyncPage() {
                             onClick={() => setDeferOpen(true)}
                           >
                             <PauseIcon className="size-4" />
-                            暂挂
+                            先跳过
                           </Button>
                         </div>
                       </form>
@@ -1915,7 +1915,7 @@ export function MallSyncPage() {
                                 variant="secondary"
                                 onClick={() => void handleResolveUnknownReapply()}
                               >
-                                查询终态
+                                查询处理结果
                               </Button>
                             ) : null}
                           </div>
@@ -2087,7 +2087,7 @@ export function MallSyncPage() {
           <DialogHeader>
             <DialogTitle>立即执行增量</DialogTitle>
             <DialogDescription>
-              不修改来源；范围由服务端按安全同步点计算。禁止客户端改写同步进度。
+              不修改来源；范围由系统按安全同步点计算。禁止页面改写同步进度。
             </DialogDescription>
           </DialogHeader>
           {policyMissing ? (
@@ -2186,10 +2186,9 @@ export function MallSyncPage() {
       <Dialog open={deferOpen} onOpenChange={setDeferOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>暂挂当前映射</DialogTitle>
+            <DialogTitle>先跳过当前映射</DialogTitle>
             <DialogDescription>
-              只记录结构化原因与队列上下文；不改 mappingTaskStatus、不写
-              paused、不完成任务。
+              只记录结构化原因与队列上下文；不会暂停或完成任务。
             </DialogDescription>
           </DialogHeader>
           <form
@@ -2236,7 +2235,7 @@ export function MallSyncPage() {
                 取消
               </DialogClose>
               <deferForm.AppForm>
-                <deferForm.SubmitButton label="确认暂挂" />
+                <deferForm.SubmitButton label="确认跳过" />
               </deferForm.AppForm>
             </DialogFooter>
           </form>

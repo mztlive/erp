@@ -417,7 +417,7 @@ export function SalesOrdersListPage({
             mode="all-or-nothing"
             status="succeeded"
             label="导出作业"
-            description={`审计标签 ${exportJob.jobId} · 客户端筛选结果`}
+            description={`审计标签 ${exportJob.jobId} · 页面筛选结果`}
             total={exportJob.rowCount}
             completed={exportJob.rowCount}
             succeeded={exportJob.rowCount}

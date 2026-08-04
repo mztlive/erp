@@ -100,15 +100,15 @@
 | C-01 | features/card-funds-review/api.ts:363 | "任务仍为 PENDING/IN_PROGRESS" | 任务仍在待处理列表 |
 | C-02 | features/supplier-settlements/supplier-settlements-page.tsx:1942-1948 | `{workItemId} · subjectHash={...}` | 业务 ID / 数据版本 |
 | C-03 | 同上 :2156-2157 | lockedFields 显示 sourceSnapshotHash/subjectHash | 字段名不上屏 |
-| C-04 | features/ownership-migration/ownership-migration-page.tsx:1325 | "scopeHash / 分面变化…" | 数据版本 / 分面变化 |
-| C-05 | 同上 :2061、2105、2121、2124-2133 | "T：…"、enabledAt/enabledBy/migrationScopeDigest/confirmationDigest | 截止时点、生效人、数据版本等业务词 |
+| C-04 | ~~features/ownership-migration/ownership-migration-page.tsx:1325~~ | "scopeHash / 分面变化…" | W24 已删除，随 B-01 关闭 |
+| C-05 | ~~同上 :2061、2105、2121、2124-2133~~ | "T：…"、enabledAt/enabledBy/migrationScopeDigest/confirmationDigest | W24 已删除，随 B-01 关闭 |
 | C-06 | features/integration-errors/integration-errors-page.tsx:1370 | "客户端不得传入 originalActionIdempotencyKey" | 系统不得传入…（字段名去除） |
 | C-07 | 同上 :1605 | "RESOLVE 已从 allowedActions 排除" | 处理完成已从可操作范围排除 |
 | C-08 | features/history-backfill/history-backfill-page.tsx:795、973、1313、1499-1500 | "[rangeStart, T)、occurredAt、rangeEnd = T" | 切换编号/范围起点/截止时点（代码 1651-1658 已改，此处漏改） |
 | C-09 | features/access-audit/access-audit-page.tsx:2126、1605 | "Q1 前本命令不携带 workItemId / claimToken"、raw workItemSupport | 策略业务名、内部 ID 不上屏 |
 | C-10 | features/sales-orders/acceptance-workspace.tsx:1202 | "REVERSE 分配纠正" | 反向记录/冲减分配纠正 |
 
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04，批量文案修复，见讨论记录）
 
 ### 中严重度（C-11 ~ C-18）
 
@@ -123,7 +123,7 @@
 | C-17 | W09 跳 W06 用 ?tab=acceptance 而 W06 只认 section | fulfillment-operations-page.tsx:1009 vs sales-order-detail-page.tsx:212、app/.../page.tsx | 跳转后验收页不会自动定位 | 改 ?section=acceptance |
 | C-18 | README 索引状态全部"样板/草稿"但 30 页均已实现 | ui-workspaces/README.md:56-85 vs w-page-coverage.md、verify-workspaces.mjs（30/30 通过） | 文档未更新 | 批量更新索引状态为"已实现/已验收" |
 
-- **状态**：待讨论
+- **状态**：C-11~C-16 ✅ 已修复（2026-08-04）；C-17、C-18 待讨论
 
 ### 低严重度（C-19 ~ C-24）
 
@@ -207,3 +207,4 @@
 | 2026-08-04 | D-01 | commercial_status 仅保存 4 值主状态（DRAFT/PENDING_REVIEW/EFFECTIVE/VOIDED），中间审核环节全部归 review_status | erp-data-model.md §7.1、§7.3 |
 | 2026-08-04 | D-02 | 区分两类手机号：不保存卡实例绑定手机号及可逆映射；履约收货手机号仅加密快照 | erp-phase-1.md §11.1 L1154、w03-customer-center.md L33 |
 | 2026-08-04 | B-01 | 主责迁移=一次性运营行为：删全部专用表（ownership/batch/item），仅 origin_system+owner_system 字段+通用审计；W24 页面取消（前端 feature/路由/registry/mock 全删，verify 29 工作面通过）；W17 删冻结逻辑保留封存态；执行投影三表保留 | erp-data-model.md §6.16/§7.8/§10、erp-phase-2.md §14.2/§15/§17/§20、w17 全文、w24 改为取消说明、README 索引、mall-mapping §10、w05/w18/w23/w25/w29/w30、ui-design/ui-flows/glossary、phase-1 L856、erp-client 10 文件 |
+| 2026-08-04 | C-01~C-16、C-20 | 全部文案一批修复：P0 枚举/字段名/内部ID上屏清零（C-01~C-10，其中 C-04/C-05 随 W24 删除关闭），过账/暂挂/架构词/核销会话/终态/散词按 glossary 映射替换（C-11~C-16、C-20），tsc/eslint 通过 | erp-client/features 约 48 个文件（card-funds-review、supplier-settlements、integration-errors、history-backfill、access-audit、sales-orders、customer-receivables、supplier-payables、inventory、unified-task-queue、procurement-confirmation、mall-sync、supplier-orders、supplier-catalog、master-data、purchase-orders、supplier-api-connections、actual-profit-loss、product-publications、workspace-kit 等） |

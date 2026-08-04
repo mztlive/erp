@@ -920,7 +920,7 @@ export function AcceptanceWorkspace({
                                     </div>
                                   ) : null}
                                   <div className="mt-0.5 text-[0.65rem] uppercase tracking-wide opacity-70">
-                                    来源履约记录 · 可验收量=服务端净记录
+                                    来源履约记录 · 可验收量以系统净记录为准
                                   </div>
                                 </div>
                                 {checked ? (
@@ -1187,7 +1187,7 @@ export function AcceptanceWorkspace({
                     disabled={!canPost || postMutation.isPending}
                   >
                     <CheckIcon data-icon="inline-start" aria-hidden="true" />
-                    确认并过账验收
+                    确认并完成验收
                   </Button>
                 </CardFooter>
               </Card>
@@ -1199,13 +1199,13 @@ export function AcceptanceWorkspace({
                     验收历史
                   </CardTitle>
                   <CardDescription>
-                    已过账不可编辑；误录通过新反向记录与 REVERSE 分配纠正。
+                    已确认不可编辑；误录通过新的反向记录分配纠正。
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
                   {view.history.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      暂无历史过账记录。
+                      暂无历史记录。
                     </p>
                   ) : (
                     <ul className="space-y-3" role="list">
@@ -1226,7 +1226,7 @@ export function AcceptanceWorkspace({
                                     ? "冲正记录"
                                     : item.status === "REVERSED"
                                       ? "已冲正"
-                                      : "已过账"
+                                      : "已确认"
                                 }
                                 tone={
                                   item.status === "REVERSED"
@@ -1322,7 +1322,7 @@ export function AcceptanceWorkspace({
                 size="sm"
                 disabled={!canPost || postMutation.isPending}
               >
-                确认并过账验收
+                确认并完成验收
               </Button>
             </div>
           </div>
@@ -1332,9 +1332,9 @@ export function AcceptanceWorkspace({
       <FormalActionConfirmDialog
         open={confirmOpen}
         onOpenChange={setConfirmOpen}
-        title="确认过账客户验收"
-        actionLabel="过账验收"
-        confirmLabel="确认过账"
+        title="确认客户验收"
+        actionLabel="确认验收"
+        confirmLabel="确认验收"
         fromStatus={{ label: "草稿", tone: "warning" }}
         toStatus={{
           label: OVERALL_RESULT_LABEL[overallPreview],
@@ -1400,7 +1400,7 @@ export function AcceptanceWorkspace({
         title="确认冲正误录验收"
         actionLabel="冲正"
         confirmLabel="确认冲正"
-        fromStatus={{ label: "已过账", tone: "success" }}
+        fromStatus={{ label: "已确认", tone: "success" }}
         toStatus={{ label: "已冲正（新增反向记录）", tone: "warning" }}
         lockedFields={["原验收单号", "原分配明细"]}
         effects={[

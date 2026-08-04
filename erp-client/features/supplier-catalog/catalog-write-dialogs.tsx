@@ -643,7 +643,7 @@ export function RegisterSupplyForSkuDialog({
         <DialogHeader>
           <DialogTitle>添加供应商并登记成本</DialogTitle>
           <DialogDescription>
-            固定当前公司 SKU；名称、规格、分类、品牌、单位、条码和图文从公司资料复用为供应商商品快照，只补录供应商 SKU、双底价（一件代发含税运 / 集采含税）和起订量。
+            固定当前公司 SKU；名称、规格、分类、品牌、单位、条码和图文从公司资料复用为供应商商品基础，只补录供应商 SKU、双底价（一件代发含税运 / 集采含税）和起订量。
           </DialogDescription>
         </DialogHeader>
 

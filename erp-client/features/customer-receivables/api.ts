@@ -174,7 +174,7 @@ function projectReceipt(
       ? "草稿"
       : seed.status === "reversed"
         ? "已冲正"
-        : "已过账"
+        : "已确认"
   const statusTone =
     seed.status === "reversed"
       ? "destructive"

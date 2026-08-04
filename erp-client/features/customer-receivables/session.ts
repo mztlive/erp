@@ -203,7 +203,7 @@ export function createW11AllocationSession(
   if (input.mode === "receipt" && input.existingFactId) {
     const r = getW11Receipt(input.existingFactId)
     if (!r || r.status !== "posted") {
-      throw new Error("只能对已过账且有余额的回款继续核销。")
+      throw new Error("只能对已确认且有余额的回款继续核销。")
     }
     if (r.counterpartyPartyId !== input.counterpartyPartyId) {
       throw new Error("回款往来主体与本次核销主体不一致。")
@@ -347,7 +347,7 @@ export function saveW11AllocationDraft(
   }
   const s = sessions.get(input.draftSessionId)
   if (!s || s.status !== "draft") {
-    throw new Error("草稿已不存在或已过账。")
+    throw new Error("草稿已不存在或已确认。")
   }
   if (input.editVersion !== s.editVersion) {
     throw new Error("草稿数据已更新，请刷新后重试。")
@@ -390,7 +390,7 @@ export function postW11Allocation(
     const unknown: PostAllocationResult = {
       status: "unknown",
       message:
-        "提交结果不确定。请按原任务号查询最终结果，勿重复过账。",
+        "提交结果不确定。请按原任务号查询最终结果，勿重复提交。",
       idempotencyKey: input.idempotencyKey,
       operationId: `op_pending_${input.idempotencyKey.slice(-8)}`,
     }
@@ -792,7 +792,7 @@ export function reverseW11Fact(input: ReverseFactInput): ReverseFactResult {
       return {
         status: "failed",
         code: "INVALID_SOURCE",
-        message: "仅可对已过账回款发起冲正/退款，原记录不可编辑删除。",
+        message: "仅可对已确认回款发起冲正/退款，原记录不可编辑删除。",
       }
     }
     // 追加反向分配，不改原 APPLY 行

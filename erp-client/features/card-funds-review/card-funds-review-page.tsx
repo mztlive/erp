@@ -607,7 +607,7 @@ export function CardFundsReviewPage() {
         claimToken: lease.claimToken,
         leaseVersion: lease.leaseVersion,
         reasonCode: "NEED_MORE_EVIDENCE",
-        note: comment.trim() || "暂挂：待补充票款证据",
+        note: comment.trim() || "跳过：待补充票款证据",
         idempotencyKey: idempotencyRef.current.hold,
         nextWorkItemId: nextId,
       })
@@ -620,7 +620,7 @@ export function CardFundsReviewPage() {
       setLeaseEpoch((n) => n + 1)
       setLastResult({
         status: "blocked",
-        title: "当前项已暂挂 · 仍在有效队列",
+        title: "当前项已跳过 · 仍在待处理列表",
         description: response.outcome.resumeHint,
         reference: response.outcome.reference,
         outcome: response.outcome,
@@ -628,7 +628,7 @@ export function CardFundsReviewPage() {
       // 暂挂：手动浏览下一项，不冒充任务完成；不自动「完成成功」语义
       if (nextId) goToWorkItem(nextId)
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "暂挂失败")
+      setActionError(error instanceof Error ? error.message : "跳过失败")
     }
   }, [comment, ensureLease, goToWorkItem, holdMutation, neighborId, task])
 
@@ -912,7 +912,7 @@ export function CardFundsReviewPage() {
           aria-label="队列范围"
         >
           <ToggleGroupItem value="pending">待处理</ToggleGroupItem>
-          <ToggleGroupItem value="held">已暂挂</ToggleGroupItem>
+          <ToggleGroupItem value="held">已跳过</ToggleGroupItem>
         </ToggleGroup>
         <div className="flex items-center gap-2">
           <Label htmlFor="auto-next" className="text-muted-foreground">
@@ -1053,7 +1053,7 @@ export function CardFundsReviewPage() {
         <BusinessEmptyState
           kind="no-tasks"
           title="当前筛选项已处理完"
-          description="卡券票款复核有效队列已清空。可切换类型/暂挂范围，或返回工作台。"
+          description="卡券票款复核有效队列已清空。可切换类型/跳过范围，或返回工作台。"
           action={
             <Button render={<Link href="/workspace" />}>返回今日工作台</Button>
           }
@@ -1123,7 +1123,7 @@ export function CardFundsReviewPage() {
                     {task.workItem.held ? (
                       <BusinessStatusBadge
                         context="list"
-                        label="已暂挂 · 仍在有效队列"
+                        label="已跳过 · 仍在待处理列表"
                         tone="warning"
                       />
                     ) : null}
@@ -1633,7 +1633,7 @@ export function CardFundsReviewPage() {
                       onClick={() => setConfirmMode({ kind: "hold" })}
                     >
                       <PauseIcon data-icon="inline-start" />
-                      暂挂
+                      先跳过
                     </Button>
                     <Button
                       type="button"
@@ -1832,14 +1832,14 @@ export function CardFundsReviewPage() {
         onOpenChange={(open) => {
           if (!open) setConfirmMode(null)
         }}
-        title="暂挂当前复核任务"
-        description="暂挂后任务仍保留在有效队列与「已暂挂」范围；不生成复核记录。可手动浏览下一项。"
-        actionLabel="暂挂"
-        confirmLabel="确认暂挂"
+        title="先跳过当前复核任务"
+        description="跳过当前任务后，任务仍保留在待处理列表与「已跳过」范围；不生成复核记录。可手动浏览下一项。"
+        actionLabel="先跳过"
+        confirmLabel="确认跳过"
         fromStatus={{ label: "处理中", tone: "info" }}
-        toStatus={{ label: "已暂挂（仍在队列）", tone: "warning" }}
+        toStatus={{ label: "已跳过（仍在待处理列表）", tone: "warning" }}
         effects={[
-          "任务保留在有效队列",
+          "任务保留在待处理列表",
           "不生成复核记录",
           "不自动下一项成功语义",
         ]}
@@ -1935,8 +1935,8 @@ function buildResultFacts(
   if (!outcome) return []
   if (outcome.kind === "HELD") {
     return [
-      { label: "任务状态", value: outcome.workItemStatus },
-      { label: "暂挂时间", value: outcome.heldAt },
+      { label: "任务状态", value: outcome.workItemStatus === "IN_PROGRESS" ? "处理中" : outcome.workItemStatus },
+      { label: "跳过时间", value: outcome.heldAt },
       { label: "恢复提示", value: outcome.resumeHint },
     ]
   }

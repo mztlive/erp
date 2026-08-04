@@ -498,7 +498,7 @@ export function SupplierAccountsPage() {
             tone={row.original.statusTone}
             description={
               row.original.status === "POSTED"
-                ? "已过账不可编辑；纠错请冲正"
+                ? "已确认不可编辑；纠错请冲正"
                 : undefined
             }
           />
@@ -1468,7 +1468,7 @@ export function SupplierAccountsPage() {
                 : "选择供应商 · 登记进项发票"}
             </DialogTitle>
             <DialogDescription>
-              核销会话创建后锁定供应商；不同供应商目标不会进入同一核销池。
+              本次核销创建后锁定供应商；不同供应商目标不会进入同一核销池。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
@@ -1510,7 +1510,7 @@ export function SupplierAccountsPage() {
                 })
               }}
             >
-              进入核销会话
+              进入本次核销
             </Button>
           </DialogFooter>
         </DialogContent>

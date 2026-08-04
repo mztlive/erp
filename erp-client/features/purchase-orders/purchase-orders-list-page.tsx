@@ -650,7 +650,7 @@ export function PurchaseOrdersListPage() {
         </ToggleGroup>
         {(viewerRole === "sales" || viewerRole === "warehouse") && (
           <span className="text-xs text-muted-foreground">
-            成本金额已掩码
+            成本金额已打码
           </span>
         )}
       </div>

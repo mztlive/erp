@@ -102,6 +102,22 @@ function newKey(prefix: string) {
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
 }
 
+const ACTION_LABEL: Record<string, string> = {
+  QUERY_ORIGINAL_RESULT: "查询原结果",
+  REPLAY_ORIGINAL: "重新提交",
+  ADD_EVIDENCE: "补充证据",
+  LINK_COMPENSATION: "关联补偿",
+  REATTRIBUTE: "重新归集",
+  TRANSFER: "转交",
+  RESOLVE: "处理完成",
+  DEFER: "先跳过",
+  SKIP: "跳过当前项",
+  CLOSE_DUPLICATE: "关闭重复",
+  CLOSE_MISROUTED: "关闭错误路由",
+  CONFIRM_NO_ERROR: "确认无误",
+  CONFIRM_VALID_DIFFERENCE: "确认有效差异",
+}
+
 function severityTone(
   s: IntegrationResolutionItemView["classification"]["severity"]
 ): "destructive" | "warning" | "info" | "neutral" {
@@ -1125,7 +1141,7 @@ export function IntegrationErrorsPage({
           checked={forceUnknownOnce}
           onChange={(e) => setForceUnknownOnce(e.target.checked)}
         />
-        下次「查询原结果」模拟仍未知（RESULT_UNKNOWN · 不自动下一项）
+        下次「查询原结果」模拟仍未知（结果仍未知 · 不自动下一项）
       </label>
 
       {lastResult ? (
@@ -1308,7 +1324,7 @@ export function IntegrationErrorsPage({
                     onClick={() => void runTaskAction("DEFER")}
                   >
                     <PauseIcon data-icon="inline-start" aria-hidden />
-                    暂挂（保留队列）
+                    先跳过（保留队列）
                   </Button>
                   <Button
                     type="button"
@@ -1336,7 +1352,7 @@ export function IntegrationErrorsPage({
                         ? "错误任务"
                         : "对账差异"}
                       {item.workItem
-                        ? ` · workItem ${item.workItem.workItemId}`
+                        ? " · 关联任务"
                         : " · 无关联任务（直接对账）"}
                     </CardDescription>
                     <div className="flex flex-wrap gap-2 pt-1">
@@ -1366,8 +1382,8 @@ export function IntegrationErrorsPage({
                         <ShieldAlertIcon aria-hidden />
                         <AlertTitle>结果未知</AlertTitle>
                         <AlertDescription>
-                          主动作仅为「查询原结果」。禁止直接重放下单/取消/退款。
-                          客户端不得传入 originalActionIdempotencyKey。
+                          主动作仅为「查询原结果」。禁止直接重新提交下单/取消/退款。
+                          系统不得传入重复请求标识。
                         </AlertDescription>
                       </Alert>
                     ) : null}
@@ -1557,7 +1573,7 @@ export function IntegrationErrorsPage({
                       <AuditTimeline
                         entries={item.auditTrail.map((e) => ({
                           id: e.id,
-                          action: e.action,
+                          action: ACTION_LABEL[e.action] ?? e.action,
                           operator: e.actor,
                           occurredAt: e.at,
                           occurredAtLabel: formatTime(e.at),
@@ -1602,7 +1618,7 @@ export function IntegrationErrorsPage({
                       <Alert variant="warning">
                         <AlertTitle>解决证据规则尚未配置</AlertTitle>
                         <AlertDescription>
-                          RESOLVE 已从 allowedActions 排除；只允许补证、暂挂或转交。
+                          处理完成已从可操作范围排除；只允许补证、先跳过或转交。
                         </AlertDescription>
                       </Alert>
                     ) : null}
@@ -1647,7 +1663,7 @@ export function IntegrationErrorsPage({
                   <CardHeader className="border-b">
                     <CardTitle>处理动作</CardTitle>
                     <CardDescription>
-                      仅展示 allowedActions；阻断原因见 actionBlockers
+                      仅展示可操作范围；阻断原因见下方说明
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3 pt-4">
@@ -1656,7 +1672,7 @@ export function IntegrationErrorsPage({
                         {item.actionBlockers.map((b) => (
                           <li key={`${b.action}-${b.code}`}>
                             <span className="font-medium text-foreground">
-                              {b.action}
+                              {ACTION_LABEL[b.action] ?? b.action}
                             </span>
                             ：{b.message}
                           </li>
@@ -1799,7 +1815,7 @@ export function IntegrationErrorsPage({
                           直接对账（无关联任务）
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          终结只能「确认无误 / 确认有效差异」，引用原因注册表与受控证据；不得伪造任务 CLOSED。
+                          终结只能「确认无误 / 确认有效差异」，引用原因注册表与受控证据；不得伪造任务已关闭。
                         </p>
                         {item.reconciliationReasonRegistry ? (
                           <>
@@ -1896,8 +1912,10 @@ export function IntegrationErrorsPage({
                     ) : null}
 
                     <p className="text-xs text-muted-foreground">
-                      当前 allowedActions：
-                      {item.allowedActions.join(", ") || "（无）"}
+                      当前可操作范围：
+                      {item.allowedActions
+                        .map((a) => ACTION_LABEL[a] ?? a)
+                        .join("、") || "（无）"}
                     </p>
                   </CardContent>
                 </Card>

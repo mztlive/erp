@@ -46,7 +46,7 @@ export function filterAndSortWorkItems(
   } else if (filters.scope === "hold") {
     result = result.filter(
       (item) =>
-        item.status.label === "已暂挂" || item.scopeTags.includes("已暂挂")
+        item.status.label === "已跳过" || item.scopeTags.includes("已跳过")
     )
   }
 
@@ -111,7 +111,7 @@ export function buildFilterSummary(
         ? "待领取"
         : filters.scope === "team"
           ? "团队"
-          : "已暂挂"
+          : "已跳过"
   parts.push(scopeLabel)
   if (filters.family) parts.push(`族:${filters.family}`)
   if (filters.workItemType) parts.push(`类型已收敛`)

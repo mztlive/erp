@@ -698,7 +698,7 @@ export function ProcurementConfirmationPage() {
       setLeaseEpoch((n) => n + 1)
       setLastResult({
         status: "blocked",
-        title: "当前项已暂挂",
+        title: "当前项已跳过",
         description:
           "任务仍保留在待处理队列，未形成通过或驳回结论。本次已结束并打开下一条。",
         reference: response.outcome.reference,
@@ -706,7 +706,7 @@ export function ProcurementConfirmationPage() {
       })
       if (nextId) goToWorkItem(nextId)
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "暂挂失败")
+      setActionError(error instanceof Error ? error.message : "跳过失败")
     }
   }, [
     dirty,
@@ -932,11 +932,11 @@ export function ProcurementConfirmationPage() {
             aria-describedby="auto-next-hint"
           />
           <span id="auto-next-hint" className="sr-only">
-            该偏好仅在本次会话内生效
+            该偏好仅在本次操作内生效
           </span>
         </div>
         <Badge variant="outline" className="font-normal">
-          该偏好仅在本次会话内生效
+          该偏好仅在本次操作内生效
         </Badge>
         <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
           <input
@@ -1543,7 +1543,7 @@ export function ProcurementConfirmationPage() {
                         className="size-4"
                         aria-hidden="true"
                       />
-                      当前编辑态覆盖完整（最终以服务端重验为准）
+                      当前编辑态覆盖完整（最终以系统重验为准）
                     </p>
                   )}
                   {(task.decisionSummary.warnings.length > 0
@@ -1613,7 +1613,7 @@ export function ProcurementConfirmationPage() {
               disabled={formalPending || lastResult?.status === "unknown"}
             >
               <PauseIcon data-icon="inline-start" aria-hidden="true" />
-              暂挂
+              先跳过
             </Button>
             <Button
               type="button"

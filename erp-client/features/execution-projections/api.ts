@@ -840,7 +840,7 @@ export async function submitBulkProjectionCommand(
     throw new Error("请先逐项显式勾选失败/可处理项")
   }
   if (input.projectionIds.length > BULK_LIMIT) {
-    throw new Error(`批量上限 ${BULK_LIMIT} 条（服务端保守约束）`)
+    throw new Error(`批量上限 ${BULK_LIMIT} 条（系统保守约束）`)
   }
 
   const snapshotId = `snap-${input.requestId}`

@@ -114,7 +114,7 @@ function projectJob(seed: HistoryBackfillJobCore): HistoryBackfillJobCore {
 function formatRange(start: string, end: string) {
   const s = start.slice(0, 10)
   const e = end.slice(0, 10)
-  return `[${s}, ${e})`
+  return `${s} 至 ${e}`
 }
 
 function toListItem(job: HistoryBackfillJobCore): HistoryBackfillListItem {
@@ -170,7 +170,7 @@ function getCreateContext(): CreateBackfillContext {
       canCreateDraft: false,
       blockReasons: [
         ...base.blockReasons,
-        `已存在回填任务 ${overlapping.jobNo} 覆盖同一 [requiredHistoryStart, T)，禁止新建重叠批次；请续跑原任务。`,
+        `已存在回填任务 ${overlapping.jobNo} 覆盖同一范围起点至截止时点的批次，禁止新建重叠批次；请续跑原任务。`,
       ],
     }
   }
@@ -452,7 +452,7 @@ export async function submitHistoryBackfillCommand(
     if (input.rangeStart && input.rangeStart !== rangeStart) {
       return {
         status: "BLOCKED",
-        title: "rangeStart 非法",
+        title: "范围起点非法",
         description:
           "不能选择更晚的起点；范围起点必须等于系统登记的「必须覆盖起点」。",
         operationId,
@@ -498,9 +498,9 @@ export async function submitHistoryBackfillCommand(
       sourceAsOf: nowIso(),
       fulfillmentNote: "历史记录追加写入，不覆盖实时记录",
       scopeNote:
-        "生效范围半开区间 [rangeStart, T)。occurredAt = T 的记录不进入历史回填，按实时/补投契约处理。",
+        "生效范围从范围起点至截止时点（截止时点当天除外）；截止时点当天发生的记录不进入历史回填，按实时/补录规则处理。",
       legacyManualNote:
-        "T 前支付只补台账，履约链固定 LEGACY_MANUAL，不创建供应商订单。",
+        "截止时点前支付只补台账，履约链固定为历史手工口径，不创建供应商订单。",
       progress: {
         totalCount: ctx.estimatedFactCount,
         processedCount: 0,
@@ -530,7 +530,7 @@ export async function submitHistoryBackfillCommand(
     const result: HistoryBackfillCommandResult = {
       status: "COMMITTED",
       title: "已创建回填任务草稿",
-      description: `任务 ${jobNo} 范围固定为 ${formatRange(rangeStart, ctx.rangeEnd)}；T 前不下单，只追加缺失记录。`,
+      description: `任务 ${jobNo} 范围固定为 ${formatRange(rangeStart, ctx.rangeEnd)}；截止时点前不下单，只追加缺失记录。`,
       jobId: id,
       jobNo,
       operationId,
@@ -590,7 +590,7 @@ export async function submitHistoryBackfillCommand(
     const result: HistoryBackfillCommandResult = {
       status: "COMMITTED",
       title: "来源校验通过",
-      description: "五类记录在 [requiredHistoryStart, T) 连续可取，可开始回填。",
+      description: "五类记录在范围起点至截止时点间连续可取，可开始回填。",
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,
@@ -635,7 +635,7 @@ export async function submitHistoryBackfillCommand(
       return {
         status: "BLOCKED",
         title: "范围非法",
-        description: "rangeStart 必须等于 requiredHistoryStart。",
+        description: "范围起点必须等于必须覆盖起点。",
         operationId,
         idempotencyKey,
         jobId: job.id,
@@ -647,7 +647,7 @@ export async function submitHistoryBackfillCommand(
       return {
         status: "BLOCKED",
         title: "覆盖不足 · 禁止开始",
-        description: "来源覆盖不完整时不得 START，也不能改晚 rangeStart。",
+        description: "来源覆盖不完整时不得开始，也不能改晚范围起点。",
         operationId,
         idempotencyKey,
         jobId: job.id,
@@ -772,7 +772,7 @@ export async function submitHistoryBackfillCommand(
     const result: HistoryBackfillCommandResult = {
       status: "COMMITTED",
       title: "已续跑原任务",
-      description: `沿 ${job.jobNo} 原范围 ${formatRange(job.rangeStart, job.rangeEnd)} 与原任务标识 ${job.idempotencyNamespace} 续跑；已成功记录不回滚。`,
+      description: `沿 ${job.jobNo} 原范围 ${formatRange(job.rangeStart, job.rangeEnd)} 与提交身份续跑；已成功记录不回滚。`,
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,
@@ -842,7 +842,7 @@ export async function submitHistoryBackfillCommand(
       return {
         status: "BLOCKED",
         title: "技术处理未完成",
-        description: "仅 processingStatus=COMPLETED 后可进入报告确认。",
+        description: "仅处理完成后可进入报告确认。",
         operationId,
         idempotencyKey,
         jobId: job.id,
@@ -886,7 +886,7 @@ export async function submitHistoryBackfillCommand(
       status: "COMMITTED",
       title: "报告已确认",
       description:
-        "仅迁移 reportReviewStatus；不改写已入库记录或 processingStatus。",
+        "仅更新报告确认状态；不改写已入库记录或处理状态。",
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,

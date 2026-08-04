@@ -853,7 +853,7 @@ export async function deferSupplierOrderTask(
   await mockDelay(80)
   const seed = findSeed(input.orderId)
   if (!seed?.workItem) {
-    return { status: "failed", message: "无关联任务，无法暂挂" }
+    return { status: "failed", message: "无关联任务，无法跳过" }
   }
   const session = getSession(input.orderId)
   session.workItemHeld = true
@@ -863,14 +863,14 @@ export async function deferSupplierOrderTask(
   session.leaseVersion = undefined
   session.leaseExpiresAt = undefined
   session.notes.push(
-    `暂挂：${input.reasonCode}${input.comment ? ` · ${input.comment}` : ""}`
+    `跳过：${input.reasonCode}${input.comment ? ` · ${input.comment}` : ""}`
   )
   session.actionsExtra = [
     ...session.actionsExtra,
     {
       actionId: `act-defer-${Date.now()}`,
       actionType: "NOTE",
-      actionLabel: "暂挂/本轮跳过",
+      actionLabel: "本轮跳过",
       at: new Date().toISOString(),
       actor: "当前用户",
       outcomeLabel: "任务仍待处理",
@@ -882,7 +882,7 @@ export async function deferSupplierOrderTask(
 
   return {
     status: "succeeded",
-    message: "已记录暂挂原因。任务未完成、未转交，不存在 paused 状态。",
+    message: "已记录跳过原因。任务未完成、未转交，仍为待处理。",
     reference: input.workItemId,
     data: {
       reasonCode: input.reasonCode,

@@ -121,7 +121,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
         <Alert variant="success">
           <AlertTitle>行列守恒有效</AlertTitle>
           <AlertDescription>
-            行合计、列合计与订单实付均由服务端给出：
+            行合计、列合计与订单实付均由系统给出：
             <span className="num mx-1">
               {view.conservation.orderTotal.actual}
             </span>
@@ -271,11 +271,11 @@ function FactCard({
       </div>
       <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
         <div>
-          <dt className="text-muted-foreground">发生时间 occurredAt</dt>
+          <dt className="text-muted-foreground">发生时间</dt>
           <dd className="num">{formatTime(fact.occurredAt)}</dd>
         </div>
         <div>
-          <dt className="text-muted-foreground">接收时间 receivedAt</dt>
+          <dt className="text-muted-foreground">接收时间</dt>
           <dd className="num">{formatTime(fact.receivedAt)}</dd>
         </div>
         <div>
@@ -1024,7 +1024,7 @@ export function ConsumptionOrderCenterPage({
             <Alert variant="default">
               <AlertTitle>原人工履约链 · 无供应商子订单</AlertTitle>
               <AlertDescription>
-                T 前支付只显示原人工履约，历史回填只记账。不创建供应商子订单，也不显示缺单错误。
+                截止时点前支付只显示原人工履约，历史回填只记账。不创建供应商子订单，也不显示缺单错误。
               </AlertDescription>
             </Alert>
           ) : view.supplierOrders.length === 0 ? (

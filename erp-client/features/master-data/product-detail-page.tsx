@@ -1119,7 +1119,7 @@ export function ProductDetailPage({
                       <CheckCircle2Icon aria-hidden />
                       <AlertTitle>填写检查通过</AlertTitle>
                       <AlertDescription>
-                        必填项完整，保存时仍以服务端校验结果为准。
+                        必填项完整，保存时仍以系统校验结果为准。
                       </AlertDescription>
                     </Alert>
                   ) : null}
@@ -1960,7 +1960,7 @@ export function ProductDetailPage({
                                 {rev.productSnapshot ? (
                                   <details className="mt-2 rounded-lg border bg-muted/30 p-2 text-xs">
                                     <summary className="cursor-pointer font-medium">
-                                      查看本版本完整 SKU 与价格快照
+                                      查看本版本的完整 SKU 与价格明细
                                     </summary>
                                     <div className="mt-2 space-y-2">
                                       <div>

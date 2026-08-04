@@ -847,7 +847,7 @@ export async function refreshSettlementTrial(
       status: "failed",
       code: "VERSION_CONFLICT",
       title: "数据已更新",
-      message: "请重新加载后基于最新 lockVersion 与 sourceSnapshotHash 刷新",
+      message: "数据已更新，请刷新后重新加载试算",
     }
   }
   if (seed.sourceSnapshotHash !== input.expectedSourceSnapshotHash) {
@@ -856,7 +856,7 @@ export async function refreshSettlementTrial(
       code: "SNAPSHOT_STALE",
       title: "来源数据已过期",
       message:
-        "expectedSourceSnapshotHash 与当前不一致；旧提交已失效，请使用最新数据重试",
+        "来源数据版本与当前不一致；旧提交已失效，请使用最新数据重试",
     }
   }
 
@@ -881,7 +881,7 @@ export async function refreshSettlementTrial(
       at: now,
       actor: ACTORS.prep.displayName,
       action: "REFRESH_TRIAL",
-      summary: `刷新试算 · sourceAsOf=${now} · hash=${o.sourceSnapshotHash}`,
+      summary: `刷新试算 · 来源时间 ${now} · 数据版本 ${o.sourceSnapshotHash}`,
       auditNo: `AUD-W27-${Date.now().toString().slice(-4)}`,
     },
     ...seed.auditEvents,
@@ -891,17 +891,17 @@ export async function refreshSettlementTrial(
     status: "succeeded",
     title: "明细试算已刷新",
     message:
-      "已更新可变草稿试算版本与 sourceSnapshotHash；不修改原订单或供应商账单原值。",
+      "已更新草稿试算版本，不修改原订单或供应商账单原值。",
     reference: seed.statementNo,
     statementId: seed.statementId,
     sourceSnapshotHash: o.sourceSnapshotHash,
     subjectHash: o.subjectHash,
     lockVersion: o.lockVersion,
     facts: [
-      { label: "sourceAsOf", value: now },
-      { label: "sourceSnapshotHash", value: o.sourceSnapshotHash! },
-      { label: "lockVersion", value: String(o.lockVersion) },
-      { label: "requestId", value: input.requestId },
+      { label: "来源时间", value: now },
+      { label: "数据版本", value: o.sourceSnapshotHash! },
+      { label: "版本号", value: String(o.lockVersion) },
+      { label: "请求编号", value: input.requestId },
     ],
   }
   setIdempotencySucceeded(input.idempotencyKey, `${WORKSPACE}:REFRESH`, result)
@@ -982,7 +982,7 @@ export async function appendDifferenceEvidence(
       at: now,
       actor: ACTORS.procurement.displayName,
       action: "APPEND_EVIDENCE",
-      summary: `追加采购证据 · ${input.differenceId}（结论未变）`,
+      summary: `追加采购证据 · ${DIFF_TYPE_LABEL[diff.type]}（结论未变）`,
       auditNo: `AUD-W27-${Date.now().toString().slice(-4)}`,
     },
     ...seed.auditEvents,
@@ -995,7 +995,7 @@ export async function appendDifferenceEvidence(
     reference: input.requestId,
     statementId: seed.statementId,
     facts: [
-      { label: "差异", value: input.differenceId },
+      { label: "差异", value: DIFF_TYPE_LABEL[diff.type] },
       { label: "说明", value: input.comment ?? "—" },
     ],
   }
@@ -1186,7 +1186,7 @@ export async function submitSettlementReview(
       status: "failed",
       code: "SUBJECT_HASH_MISMATCH",
       title: "数据版本不一致",
-      message: "subjectHash 不匹配，请刷新后重提",
+      message: "数据版本不一致，请刷新后重试",
     }
   }
   const cutoff = refreshCutoffPolicy()
@@ -1389,7 +1389,13 @@ export async function decideSettlementReview(
         at: now,
         actor: ACTORS.review.displayName,
         action: "REJECT",
-        summary: `驳回 · ${input.reasonCode}`,
+        summary: `驳回 · ${
+          input.reasonCode === "NEEDS_MORE_EVIDENCE"
+            ? "证据不足"
+            : input.reasonCode === "AMOUNT_MISMATCH"
+              ? "金额仍不一致"
+              : "其他"
+        }`,
         auditNo: `AUD-W27-${Date.now().toString().slice(-4)}`,
       },
       ...seed.auditEvents,
@@ -1401,7 +1407,15 @@ export async function decideSettlementReview(
       reference: input.operationId,
       statementId: seed.statementId,
       facts: [
-        { label: "原因", value: input.reasonCode },
+        {
+          label: "原因",
+          value:
+            input.reasonCode === "NEEDS_MORE_EVIDENCE"
+              ? "证据不足"
+              : input.reasonCode === "AMOUNT_MISMATCH"
+                ? "金额仍不一致"
+                : "其他",
+        },
         { label: "说明", value: input.comment ?? "—" },
       ],
     }
