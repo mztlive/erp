@@ -1006,7 +1006,7 @@ export function FulfillmentOperationsPage() {
                     variant="outline"
                     render={
                       <Link
-                        href={`/sales/orders/${lastResult.outcome.salesOrderId}?tab=acceptance&from=W09&returnTo=${encodeURIComponent(
+                        href={`/sales/orders/${lastResult.outcome.salesOrderId}?section=acceptance&from=W09&returnTo=${encodeURIComponent(
                           `${pathname}?${searchParams.toString()}`
                         )}`}
                       />

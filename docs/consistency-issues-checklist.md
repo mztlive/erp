@@ -53,7 +53,8 @@
 - **涉及文档**：erp-phase-2.md §10.3（L845-863）；erp-data-model.md §7.6（L3662-3672）、§6.19（L3217-3219、L3250-3252）
 - **冲突点**：phase-2 列 13 个扁平状态（含 CANCEL_PENDING/CANCELED/REFUND_PENDING/REFUNDED）；数据模型拆为 `fulfillment_status` + `cancel_status` + `refund_status` 三条正交轨道，且 refund_status 含部分退款/退款失败/待人工终态
 - **建议方向**：更新 phase-2 §10.3 为"主轨 + 取消轨 + 退款轨"并补充 PARTIAL/FAILED/MANUAL 值
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）
+- **决议**：以数据模型三轨为准。phase-2 §10.3 重写为三轨正交：履约轨 9 值 + 取消轨 5 值（NONE/CANCEL_PENDING/CANCELED/FAILED/MANUAL）+ 退款轨 6 值（NONE/REFUND_PENDING/PARTIAL/REFUNDED/REFUND_FAILED/MANUAL），互不折算，与数据模型 §6.19/§7.6、W26 一致。
 
 ### D-04 【中】W09 设计文档与 ui-glossary"W09 已落地"声明互相矛盾（过账/暂挂未同步）
 
@@ -120,10 +121,10 @@
 | C-14 | 架构词上屏（服务端/客户端/本地/前端） | 12+ 文件（supplier-settlements、supplier-catalog、master-data、mall-sync、customer-quality、actual-profit-loss、product-publications 等） | glossary P1：服务端→系统、本地→本页/你输入的、客户端→删除 | 按 glossary 替换 |
 | C-15 | "核销会话"未按 P2 替换 | customer-receivables、supplier-payables 5 处 | glossary P2：核销会话→本次核销 | 替换 |
 | C-16 | "终态"残留 | mall-sync-page.tsx:1316、1944 | glossary P2：终态→处理结果/处理完成 | 替换 |
-| C-17 | W09 跳 W06 用 ?tab=acceptance 而 W06 只认 section | fulfillment-operations-page.tsx:1009 vs sales-order-detail-page.tsx:212、app/.../page.tsx | 跳转后验收页不会自动定位 | 改 ?section=acceptance |
+| C-17 | W09 跳 W06 用 ?tab=acceptance 而 W06 只认 section | fulfillment-operations-page.tsx:1009 vs sales-order-detail-page.tsx:212、app/.../page.tsx | 跳转后验收页不会自动定位 | ✅ 已修复：改 ?section=acceptance（tsc 通过） |
 | C-18 | README 索引状态全部"样板/草稿"但 30 页均已实现 | ui-workspaces/README.md:56-85 vs w-page-coverage.md、verify-workspaces.mjs（30/30 通过） | 文档未更新 | 批量更新索引状态为"已实现/已验收" |
 
-- **状态**：C-11~C-16 ✅ 已修复（2026-08-04）；C-17、C-18 待讨论
+- **状态**：C-11~C-16 ✅ 已修复（2026-08-04）；C-17 ✅ 已修复（2026-08-04）；C-18 待讨论
 
 ### 低严重度（C-19 ~ C-24）
 
@@ -208,3 +209,4 @@
 | 2026-08-04 | D-02 | 区分两类手机号：不保存卡实例绑定手机号及可逆映射；履约收货手机号仅加密快照 | erp-phase-1.md §11.1 L1154、w03-customer-center.md L33 |
 | 2026-08-04 | B-01 | 主责迁移=一次性运营行为：删全部专用表（ownership/batch/item），仅 origin_system+owner_system 字段+通用审计；W24 页面取消（前端 feature/路由/registry/mock 全删，verify 29 工作面通过）；W17 删冻结逻辑保留封存态；执行投影三表保留 | erp-data-model.md §6.16/§7.8/§10、erp-phase-2.md §14.2/§15/§17/§20、w17 全文、w24 改为取消说明、README 索引、mall-mapping §10、w05/w18/w23/w25/w29/w30、ui-design/ui-flows/glossary、phase-1 L856、erp-client 10 文件 |
 | 2026-08-04 | C-01~C-16、C-20 | 全部文案一批修复：P0 枚举/字段名/内部ID上屏清零（C-01~C-10，其中 C-04/C-05 随 W24 删除关闭），过账/暂挂/架构词/核销会话/终态/散词按 glossary 映射替换（C-11~C-16、C-20），tsc/eslint 通过 | erp-client/features 约 48 个文件（card-funds-review、supplier-settlements、integration-errors、history-backfill、access-audit、sales-orders、customer-receivables、supplier-payables、inventory、unified-task-queue、procurement-confirmation、mall-sync、supplier-orders、supplier-catalog、master-data、purchase-orders、supplier-api-connections、actual-profit-loss、product-publications、workspace-kit 等） |
+| 2026-08-04 | D-03 | 供应商订单状态机以数据模型三轨为准：phase-2 §10.3 重写为履约轨(9值)+取消轨(5值)+退款轨(6值)，互不折算 | erp-phase-2.md §10.3 |
