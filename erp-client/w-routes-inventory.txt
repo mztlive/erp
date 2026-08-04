@@ -6,7 +6,7 @@ W05	/sales/orders	M2+M4+M5	app/(workspace)/sales/orders/page.tsx	OK
 W06	/sales/orders/:salesOrderId?section=acceptance	nested	app/(workspace)/sales/orders/[salesOrderId]/page.tsx	OK
 W07	/procurement/confirm	M3	app/(workspace)/procurement/confirm/page.tsx	OK
 W08	/procurement/orders	M2+M4+M5	app/(workspace)/procurement/orders/page.tsx	OK
-W09	/fulfillment?lane=warehouse|procurement	M3+M5	app/(workspace)/fulfillment/page.tsx	OK
+W09	/fulfillment	M3+M5	app/(workspace)/fulfillment/page.tsx	OK
 W10	/inventory	M2+M6	app/(workspace)/inventory/page.tsx	OK
 W11	/finance/customer-accounts	M2+M5	app/(workspace)/finance/customer-accounts/page.tsx	OK
 W12	/finance/supplier-accounts	M2+M5	app/(workspace)/finance/supplier-accounts/page.tsx	OK

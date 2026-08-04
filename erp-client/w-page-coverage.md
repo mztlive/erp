@@ -10,7 +10,7 @@
 | W06 | `/sales/orders/:salesOrderId?section=acceptance` | nested | yes | yes | yes | yes | yes |
 | W07 | `/procurement/confirm` | M3 | yes | yes | yes | yes | yes |
 | W08 | `/procurement/orders` | M2+M4+M5 | yes | yes | yes | yes | yes |
-| W09 | `/fulfillment?lane=warehouse` + `?lane=procurement` | M3+M5 | yes | yes | yes | yes | yes |
+| W09 | `/fulfillment` | M3+M5 | yes | yes | yes | yes | yes |
 | W10 | `/inventory` | M2+M6 | yes | yes | yes | yes | yes |
 | W11 | `/finance/customer-accounts` | M2+M5 | yes | yes | yes | yes | yes |
 | W12 | `/finance/supplier-accounts` | M2+M5 | yes | yes | yes | yes | yes |
