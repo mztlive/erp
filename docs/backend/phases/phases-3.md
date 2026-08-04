@@ -104,8 +104,10 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
    本 phase 保留 `source_type=API` 的未来兼容语义但运行时拒绝 API intake，W20 属第二期。
 3. W21 修订命令出现 `input_tax_rate`，而统一模型不允许供应商目录保存进项税率；该字段必须
    移到供给修订，不得进入目录修订。
-4. 提升入池命令若只携带 supplier product/SPU，在多 SKU 下无法确定映射和供给；契约必须
-   改为 `supplierCatalogSkuId` 或逐 SKU 输入。
+4. **[已确认，2026-08-04] 提升入池的唯一正式粒度是 supplier catalog SKU**：单项命令
+   必须显式携带 `supplierCatalogSkuId + targetCompanySkuId`；批量操作只接受由这些单项组成的
+   `items[]`。supplier product/SPU 只作为页面容器和批量选择范围，不得形成 SPU 级映射，
+   也不得隐式映射未选择的兄弟 SKU。
 5. `procurement_confirmation_line` 缺少精确 `supplier_offering_revision_id`；本 phase 先提供
    `OfferingRevisionRef`，Phase 10 补真实 FK、同供应商/SKU和业务日有效性约束。
 6. 供给不设置 `supply_mode`；入池命令必须同时提交一件代发供给价、集采供给价和集采
@@ -119,7 +121,8 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
 4. 商品池启用时无有效供给、无价格、SKU 停用均拒绝。
 5. 销售 DTO、搜索索引和导出结构无成本/供应商敏感字段。
 6. 采购端在权限不足时只返回可销售事实，不通过错误文案泄露成本。
-7. SPU 多 SKU 提升入池、缺任一供给价/集采起订量、错误 offering revision 全部 fail-closed。
+7. 同一 SPU 的多个供应商 SKU 可分别映射不同公司 SKU；部分选择不得影响未选 SKU，
+   任一单项缺供给价/集采起订量或引用错误 offering revision 时，该单项 fail-closed。
 8. API 来源在一期能力 gate 下拒绝，MANUAL/EXCEL 正常进入同一模型。
 
 ## 8. 完成标准

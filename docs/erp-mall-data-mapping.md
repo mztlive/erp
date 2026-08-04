@@ -90,7 +90,7 @@
 | `product_pool_entry` / `product_pool_entry_revision` | 公司商品池销售可见价、可售条件和有效期；不含供应商或成本 |
 | `supplier_catalog_product` / `supplier_catalog_product_revision` | 供应商 SPU 稳定身份及 Excel/API/手工来源修订 |
 | `supplier_catalog_sku` / `supplier_catalog_sku_revision` | 供应商 SKU 稳定身份、来源报价及目录版本；API 连接可空 |
-| `supplier_product_mapping` | 供应商商品到 ERP SKU 的确认映射 |
+| `supplier_product_mapping` | 供应商 SKU 到公司 SKU 的逐 SKU 确认映射；SPU 不形成映射 |
 | `supplier_offering` / `supplier_offering_revision` | 公司 SKU 与供应商 SKU 的供给稳定身份，以及采购确认的一件代发/集采两项供给价、集采起订量、区域、可供状态和有效期版本；不设置供给方式字段 |
 | `product_publication` / `product_publication_revision` | 商城发布稳定身份，以及展示、销售价、区域、上下架和固定供给版本 |
 | `product_revision_media` / `product_publication_revision_media` | 经审核的商品版本媒体和商城发布媒体，统一关联 `file_asset` |
@@ -457,7 +457,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | `pic_url`、`slider_pic_urls` | `file_asset`、`product_revision_media` 或 `product_publication_revision_media` 候选 | 下载和内容安全校验通过后，经商品或发布审核进入对应版本关系，并保存用途、排序和替代文本；不继续保存逗号字符串 |
 | `status`、`delisting_type`、`sort` | 商城发布状态和排序 | 不直接等同 ERP 商品启用状态 |
 | `delivery_types`、`delivery_template_id`、`use_delivery_template`、`express_area_ids`、`city_template_id` | 发布能力和 `product_publication_revision.sales_region` 候选 | 运营确认后，区域进入发布版本，能够准确对应的配送能力进入 `product_capabilities`；旧模板 ID 和无法映射的代码只留白名单暂存，不新增旧模板影子表 |
-| `supplier_spu_id`、`supplier_type`、`third_channel_id` | 外部供给关系候选 | 进入供应商商品暂存；确认供应商连接和供应商商品身份后才能建立供应关系 |
+| `supplier_spu_id`、`supplier_type`、`third_channel_id` | 外部供给关系候选 | 进入供应商商品暂存；旧 SPU 只作为来源容器。确认供应商连接后还必须定位或创建精确 `supplier_catalog_sku_id`，才能建立 SKU 映射与供给关系 |
 | `category_tax_rate_id` | 来源税收分类引用候选 | 五张表没有被引用对象，必须补充旧税收分类字典并经财务确认；不得把旧 ID 直接认作 ERP 税务分类 |
 | `supplier_tax_rate` | 供应关系税率候选 | 不放商品基础资料，写入供应关系或采购条款版本 |
 | `create_time`、`update_time`、`creator`、`updater` | 来源审计 | 与 ERP 审核和发布审计分开 |
@@ -842,7 +842,7 @@ API 供应商原始目录、订单、动作结果、退款和账单必须逐项�
 | 数据集 | 必需内容 | 规范目标 |
 | --- | --- | --- |
 | 供应商商品身份与版本 | 供应商、来源类型、可选连接、供应商 SPU/SKU 编码、来源版本或摘要、名称、描述、品牌、规格属性、单位、条码、主图（SKU 1:1）/轮播/详情图、一件代发底价（含税运）、集采底价（含税）、集采起订量、可供数量/状态 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_product_revision_media`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`；批次结果另记 `supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
-| ERP 商品映射 | 供应商商品、ERP SKU、确认人、依据和有效状态 | `supplier_product_mapping` |
+| 公司 SKU 映射 | 供应商目录 SKU、公司 SKU、确认人、依据和有效状态；供应商 SPU 只作上下文 | `supplier_product_mapping` |
 | 固定供给版本 | 公司 SKU、供应商 SKU、一件代发供给价（含税/不含税）、集采供给价（含税/不含税）、进项税率、运费、服务费、区域、可供状态、商品能力、集采起订量和有效期；不设置 `supply_mode` | `supplier_offering`、`supplier_offering_revision` |
 | 供应商子订单 | ERP 永久订单号、商城订单及明细、固定供应商和连接、固定供给版本、数量、地址快照、下单成本和进项税率 | `supplier_fulfillment_order`、`supplier_fulfillment_item` |
 | 下单、查询、取消、退款动作 | 原供应商订单、动作类型、商城售后请求、稳定幂等键、供应商请求号、脱敏请求/响应摘要和结果 | `supplier_order_action`；结果未知先按原请求查询，重试沿用原幂等键 |
@@ -862,9 +862,9 @@ API 供应商原始目录、订单、动作结果、退款和账单必须逐项�
 人工确认价和已确认结算价记 `ACTUAL`；消费发生时点的供给版本回退值记 `STANDARD`；
 没有可用成本时记 `NONE` 且不保存零成本金额。
 
-多个供应商目录商品可以多对一映射同一 ERP SKU；这些来源记录不是公司商品副本。增加第二供应商只新增该来源映射和供给，默认复用既有公司商品池修订。来源媒体必须先归档为受控文件资产，才能作为公司商品新修订的候选；不得用供应商临时 URL 覆盖现有公司图文。
+多个供应商目录 SKU 可以多对一映射同一公司 SKU；这些来源记录不是公司商品副本。增加第二供应商只新增该来源 SKU 的映射和供给，默认复用既有公司商品池修订。来源媒体必须先归档为受控文件资产，才能作为公司商品新修订的候选；不得用供应商临时 URL 覆盖现有公司图文。
 
-供应商商品库与公司商品在内容字段上同构（名称、描述、规格维度、分类/品牌/单位字典、条码、主图/轮播/详情等），但所有权与修订独立；UI 上 W21 中心页与 W14 商品详情分区及编辑控件对齐，便于对照目录。SKU 主图为 1:1；目录价格为代发底价（含税运）、集采底价（含税）与集采起订量。入池只映射已有公司 SKU，不从来源一键建公司品。
+供应商商品库与公司商品在内容字段上同构（名称、描述、规格维度、分类/品牌/单位字典、条码、主图/轮播/详情等），但所有权与修订独立；UI 上 W21 中心页与 W14 商品详情分区及编辑控件对齐，便于对照目录。SKU 主图为 1:1；目录价格为代发底价（含税运）、集采底价（含税）与集采起订量。入池必须逐个供应商 SKU 映射已有公司 SKU；SPU 只提供页面和批量选择上下文，不从来源一键建公司品，也不隐式映射未选择的兄弟 SKU。
 
 - 旧 `product_spu`、`product_sku` 身份映射继续保留，用于存量商城商品关联和对账，不反向成为 ERP 商品身份。
 
