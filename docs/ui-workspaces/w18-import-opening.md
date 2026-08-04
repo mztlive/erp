@@ -27,7 +27,7 @@
 - 不用“重新上传一份 Excel”覆盖已经形成的正式事实；冲突进入映射、基础资料修订、库存调整或财务纠错流程。
 - 不在 W18 逐单补录卡券期初已收、已开票金额；这些值初始化为 0，逐单复核进入 W13。
 - 不迁移历史实物与服务销售单、采购单、履约明细、期初应收应付或实体卡库存。
-- 不替代 W17 的商城持续同步、主责迁移（一次性运营行为）和 W30 的历史消费回填。
+- 不替代 W17 的商城持续同步、T 切换（商城停单、ERP 全面服务）和 W30 的历史消费回填。
 - 正常导入业务确认/退回使用唯一固定 `work_item_type=IMPORT_BUSINESS_CONFIRMATION`，
   `business_object_type=LEGACY_IMPORT_BATCH`、`handlerKey=import_business_confirmation`、
   `destinationWorkspaceId=W18`、`completion_action=COMPLETE_IMPORT_BUSINESS_CONFIRMATION`。

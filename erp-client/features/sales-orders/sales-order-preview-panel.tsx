@@ -27,7 +27,6 @@ import {
 import {
   NATURE_LABEL,
   ORIGIN_LABEL,
-  OWNER_LABEL,
 } from "@/mock/sales-orders"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import { cn } from "@/lib/utils"
@@ -88,14 +87,6 @@ export function SalesOrderPreviewPanel({ order }: SalesOrderPreviewPanelProps) {
             <div className="mb-2 flex flex-wrap gap-1.5">
               <Badge variant="secondary">{NATURE_LABEL[order.nature]}</Badge>
               <Badge variant="outline">{ORIGIN_LABEL[order.originSystem]}</Badge>
-              <Badge
-                variant={order.ownerSystem === "erp" ? "info" : "secondary"}
-              >
-                {OWNER_LABEL[order.ownerSystem]}
-              </Badge>
-              {order.originSystem !== order.ownerSystem ? (
-                <Badge variant="warning">主责已迁移</Badge>
-              ) : null}
             </div>
             <DescriptionList columns="one" className="gap-y-2.5">
               <CompactField

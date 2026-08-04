@@ -171,8 +171,8 @@ function computeAllowedActions(
       patch?.supplierRefundStatus ?? as.supplierRefund.status
     if (
       as.allowedActions.includes("CANCEL") &&
-      cancel !== "CANCELLED" &&
-      cancel !== "PROCESSING"
+      cancel !== "CANCELED" &&
+      cancel !== "CANCEL_PENDING"
     ) {
       if (role === "cs" || role === "procurement" || role === "admin") {
         allowed.push("CANCEL")
@@ -180,8 +180,8 @@ function computeAllowedActions(
     }
     if (
       as.allowedActions.includes("REFUND") &&
-      refund !== "FULL" &&
-      refund !== "PROCESSING"
+      refund !== "REFUNDED" &&
+      refund !== "REFUND_PENDING"
     ) {
       if (role === "cs" || role === "procurement" || role === "admin") {
         allowed.push("REFUND")
@@ -272,14 +272,14 @@ function matchesQuery(
     const aftersalePending =
       row.cancelStatus === "FAILED" ||
       row.cancelStatus === "MANUAL" ||
-      row.cancelStatus === "PROCESSING" ||
-      row.refundStatus === "FAILED" ||
+      row.cancelStatus === "CANCEL_PENDING" ||
+      row.refundStatus === "REFUND_FAILED" ||
       row.refundStatus === "MANUAL" ||
-      row.refundStatus === "PROCESSING" ||
+      row.refundStatus === "REFUND_PENDING" ||
       seed.afterSales.some(
         (a) =>
           a.mallRefund.status === "PENDING" ||
-          a.supplierRefund.status === "FAILED" ||
+          a.supplierRefund.status === "REFUND_FAILED" ||
           a.supplierRefund.status === "NONE" &&
             a.allowedActions.length > 0
       )
@@ -359,10 +359,10 @@ function buildMetrics(rows: SupplierOrderListRow[]): SupplierOrderMetric[] {
         (r) =>
           r.cancelStatus === "FAILED" ||
           r.cancelStatus === "MANUAL" ||
-          r.cancelStatus === "PROCESSING" ||
-          r.refundStatus === "FAILED" ||
+          r.cancelStatus === "CANCEL_PENDING" ||
+          r.refundStatus === "REFUND_FAILED" ||
           r.refundStatus === "MANUAL" ||
-          r.refundStatus === "PROCESSING" ||
+          r.refundStatus === "REFUND_PENDING" ||
           r.refundStatus === "PARTIAL"
       ).length,
       aftersalePending: true,
@@ -926,14 +926,14 @@ export async function submitAfterSalesAction(
   let note: string
 
   if (input.action === "CANCEL") {
-    cancelStatus = "PROCESSING"
-    session.cancelStatus = "PROCESSING"
-    patch.cancelStatus = "PROCESSING"
+    cancelStatus = "CANCEL_PENDING"
+    session.cancelStatus = "CANCEL_PENDING"
+    patch.cancelStatus = "CANCEL_PENDING"
     note = `已提交取消，引用售后 ${asReq.mallRequestRef}。领域动作不读写任务。`
   } else {
-    refundStatus = "PROCESSING"
-    session.refundStatus = "PROCESSING"
-    patch.supplierRefundStatus = "PROCESSING"
+    refundStatus = "REFUND_PENDING"
+    session.refundStatus = "REFUND_PENDING"
+    patch.supplierRefundStatus = "REFUND_PENDING"
     note = `已提交退款，引用售后 ${asReq.mallRequestRef}。领域动作不读写任务。`
   }
   session.afterSalesPatches[input.afterSalesRequestId] = patch

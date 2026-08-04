@@ -61,7 +61,6 @@ import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import {
   NATURE_LABEL,
   ORIGIN_LABEL,
-  OWNER_LABEL,
 } from "@/mock/sales-orders"
 import { sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
@@ -497,9 +496,6 @@ export function SalesOrderDetailPage({
           <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 text-left text-sm text-muted-foreground hover:text-foreground">
             <span>
               金额和明细不能直接改
-              {order.originSystem !== order.ownerSystem
-                ? ` · 当前由${order.ownerSystem === "mall" ? "商城" : "本系统"}维护`
-                : null}
             </span>
             <ChevronDownIcon
               aria-hidden="true"
@@ -513,8 +509,6 @@ export function SalesOrderDetailPage({
             </p>
             <p className="mt-1 text-xs">
               {ORIGIN_LABEL[order.originSystem]}
-              {" · "}
-              {OWNER_LABEL[order.ownerSystem]}
               {" · "}
               订单类型建单后不能改
             </p>

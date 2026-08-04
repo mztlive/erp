@@ -677,7 +677,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
     externalOrderNo: "JD-EXT-44010",
     fulfillmentStatus: "SHIPPED",
     cancelStatus: "FAILED",
-    refundStatus: "FAILED",
+    refundStatus: "REFUND_FAILED",
     paidAt: "2026-07-29T11:20:00+08:00",
     updatedAt: "2026-07-31T09:15:00+08:00",
     lastBusinessAt: "2026-07-31T09:15:00+08:00",
@@ -755,7 +755,7 @@ export const SUPPLIER_ORDER_SEEDS: SeedOrder[] = [
           gapNote: "卡券侧无恢复记录",
         },
         supplierRefund: {
-          status: "FAILED",
+          status: "REFUND_FAILED",
           statusLabel: "失败",
           gapNote: "供应商退款接口返回业务拒绝",
         },

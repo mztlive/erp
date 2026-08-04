@@ -82,7 +82,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0312@v3",
     nature: "physical_service",
     originSystem: "erp",
-    ownerSystem: "erp",
     primaryStatus: { label: "待销售处理", tone: "warning" },
     fulfillment: { label: "未开始", tone: "neutral" },
     collection: { label: "未收", tone: "neutral" },
@@ -143,7 +142,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0288@v2",
     nature: "physical_service",
     originSystem: "erp",
-    ownerSystem: "erp",
     primaryStatus: { label: "履约中", tone: "info" },
     fulfillment: { label: "部分履约", tone: "warning" },
     collection: { label: "部分回款", tone: "warning" },
@@ -201,7 +199,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0199@v4",
     nature: "card_voucher",
     originSystem: "mall",
-    ownerSystem: "mall",
     primaryStatus: { label: "履约中", tone: "info" },
     fulfillment: { label: "部分履约", tone: "info" },
     collection: { label: "待复核", tone: "warning" },
@@ -214,7 +211,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     ownerName: "李哲",
     submittedAt: "2026-03-26 11:20",
     welfareScene: "消费金",
-    remark: "商城主责 · 票款复核未完成，应收指标仅供参考",
+    remark: "商城开单 · 票款复核未完成，应收指标仅供参考",
     version: 4,
     settlementEntity: "南湾银行股份有限公司",
     sellerEntity: SELLER,
@@ -250,7 +247,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0175@v1",
     nature: "physical_service",
     originSystem: "erp",
-    ownerSystem: "erp",
     primaryStatus: { label: "已生效", tone: "success" },
     fulfillment: { label: "未开始", tone: "neutral" },
     collection: { label: "已结清", tone: "success" },
@@ -296,7 +292,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0150@v1",
     nature: "physical_service",
     originSystem: "erp",
-    ownerSystem: "erp",
     primaryStatus: { label: "已关闭", tone: "void" },
     fulfillment: { label: "已完成", tone: "success" },
     collection: { label: "已结清", tone: "success" },
@@ -342,7 +337,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2025-1208@v2",
     nature: "card_voucher",
     originSystem: "mall",
-    ownerSystem: "mall",
     primaryStatus: { label: "已生效", tone: "success" },
     fulfillment: { label: "部分履约", tone: "info" },
     collection: { label: "部分回款", tone: "warning" },
@@ -389,7 +383,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0142@v1",
     nature: "physical_service",
     originSystem: "erp",
-    ownerSystem: "erp",
     primaryStatus: { label: "草稿", tone: "neutral" },
     fulfillment: { label: "未开始", tone: "neutral" },
     collection: { label: "未收", tone: "neutral" },
@@ -436,7 +429,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0312@v2",
     nature: "physical_service",
     originSystem: "erp",
-    ownerSystem: "erp",
     primaryStatus: { label: "履约中", tone: "info" },
     fulfillment: { label: "部分履约", tone: "warning" },
     collection: { label: "已结清", tone: "success" },
@@ -482,7 +474,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0288@v1",
     nature: "card_voucher",
     originSystem: "mall",
-    ownerSystem: "mall",
     primaryStatus: { label: "已作废", tone: "void" },
     fulfillment: { label: "不适用", tone: "neutral" },
     collection: { label: "未收", tone: "neutral" },
@@ -530,7 +521,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0199@v2",
     nature: "physical_service",
     originSystem: "erp",
-    ownerSystem: "erp",
     primaryStatus: { label: "已关闭", tone: "void" },
     fulfillment: { label: "已完成", tone: "success" },
     collection: { label: "已结清", tone: "success" },
@@ -587,7 +577,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0175@v1",
     nature: "physical_service",
     originSystem: "erp",
-    ownerSystem: "erp",
     primaryStatus: { label: "履约中", tone: "info" },
     fulfillment: { label: "未开始", tone: "neutral" },
     collection: { label: "部分回款", tone: "warning" },
@@ -633,7 +622,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2025-1208@v3",
     nature: "card_voucher",
     originSystem: "mall",
-    ownerSystem: "mall",
     primaryStatus: { label: "履约中", tone: "info" },
     fulfillment: { label: "部分履约", tone: "info" },
     collection: { label: "已结清", tone: "success" },
@@ -672,7 +660,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
       invoices: 2,
     },
   }),
-  /** 二期 ERP 主责卡券：待销售领导审批；每版本恰好一条卡券明细 */
+  /** T 后 ERP 开单卡券：待销售领导审批；每版本恰好一条卡券明细 */
   buildSalesOrder({
     id: "so_1013",
     documentNumber: "XS20260329001",
@@ -681,7 +669,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0142@v1",
     nature: "card_voucher",
     originSystem: "erp",
-    ownerSystem: "erp",
     primaryStatus: { label: "待销售领导审批", tone: "warning" },
     fulfillment: { label: "未开始", tone: "neutral" },
     collection: { label: "未收", tone: "neutral" },
@@ -694,7 +681,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     ownerName: "王敏",
     submittedAt: "2026-03-29 10:15",
     welfareScene: "消费金",
-    remark: "ERP 主责卡券提交 · 领导/运营双审批，详情页嵌入同一任务处理页",
+    remark: "ERP 开单卡券提交 · 领导/运营双审批，详情页嵌入同一任务处理页",
     version: 1,
     lockVersion: 1,
     settlementEntity: "启明教育科技",
@@ -724,7 +711,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     },
     activeCardSalesApproval: cardApprovalSo1013,
   }),
-  /** 二期主责迁移示例：创建来源商城，当前主责 ERP；身份/单号/版本不变 */
+  /** T 前商城开单卡券：T 起由 ERP 统一服务；身份/单号/版本不变 */
   buildSalesOrder({
     id: "so_1014",
     documentNumber: "XS20260215020",
@@ -733,7 +720,6 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     contractRevisionLabel: "HT-2026-0088@v2",
     nature: "card_voucher",
     originSystem: "mall",
-    ownerSystem: "erp",
     primaryStatus: { label: "履约中", tone: "info" },
     fulfillment: { label: "部分履约", tone: "info" },
     collection: { label: "已结清", tone: "success" },
@@ -746,7 +732,7 @@ export const MOCK_SALES_ORDERS: readonly SalesOrderListItem[] = [
     ownerName: "赵晴",
     submittedAt: "2026-02-15 16:40",
     welfareScene: "消费金",
-    remark: "二期主责迁移完成：仅改主责，不换身份、单号或销售版本",
+    remark: "T 前商城开单，T 起由 ERP 统一服务：不换身份、单号或销售版本",
     version: 2,
     settlementEntity: "北辰地产集团",
     sellerEntity: SELLER,
@@ -810,12 +796,7 @@ export const NATURE_LABEL: Record<SalesOrderListItem["nature"], string> = {
   card_voucher: "卡券",
 }
 
-export const OWNER_LABEL: Record<SalesOrderListItem["ownerSystem"], string> = {
-  erp: "主责 ERP",
-  mall: "主责商城",
-}
-
-/** 创建来源文案（与当前主责分列） */
+/** 创建来源文案（MALL = 商城入口开单；ERP = 本系统入口开单） */
 export const ORIGIN_LABEL: Record<SalesOrderListItem["originSystem"], string> = {
   erp: "创建于 ERP",
   mall: "创建于商城",

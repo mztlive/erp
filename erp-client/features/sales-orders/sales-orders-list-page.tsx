@@ -42,7 +42,6 @@ import {
 import {
   NATURE_LABEL,
   ORIGIN_LABEL,
-  OWNER_LABEL,
 } from "@/mock/sales-orders"
 import { downloadOriginalContractPdf } from "@/features/contracts/pdf"
 import { SalesOrderPaperDialog } from "@/features/sales-orders/sales-order-paper-dialog"
@@ -52,7 +51,6 @@ import {
   salesOrderSummaryLabels,
   type SalesOrderNatureFilter,
   type SalesOrderOriginFilter,
-  type SalesOrderOwnerFilter,
   type SalesOrderStatusFilter,
   type SalesOrderSummaryFilter,
 } from "@/features/sales-orders/filter-orders"
@@ -65,7 +63,6 @@ import { PERMISSION_VERSION } from "@/features/sales-orders/api"
 
 type NatureFilter = SalesOrderNatureFilter
 type SummaryFilter = SalesOrderSummaryFilter
-type OwnerFilter = SalesOrderOwnerFilter
 type OriginFilter = SalesOrderOriginFilter
 type StatusFilter = SalesOrderStatusFilter
 
@@ -86,7 +83,6 @@ export function SalesOrdersListPage({
     React.useState<NatureFilter>(initialNature)
   const [summaryFilter, setSummaryFilter] =
     React.useState<SummaryFilter>("all")
-  const [ownerFilter, setOwnerFilter] = React.useState<OwnerFilter>("all")
   const [originFilter, setOriginFilter] = React.useState<OriginFilter>("all")
   const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all")
   const [pagination, setPagination] = React.useState<PaginationState>({
@@ -113,14 +109,12 @@ export function SalesOrdersListPage({
         search,
         natureFilter,
         summaryFilter,
-        ownerFilter,
         originFilter,
         statusFilter,
       }),
     [
       allOrders,
       natureFilter,
-      ownerFilter,
       originFilter,
       search,
       statusFilter,
@@ -168,7 +162,6 @@ export function SalesOrdersListPage({
         NATURE_LABEL[order.nature],
         order.primaryStatus.label,
         ORIGIN_LABEL[order.originSystem],
-        OWNER_LABEL[order.ownerSystem],
         order.amountGross,
         order.ownerName,
         order.submittedAt,
@@ -178,7 +171,7 @@ export function SalesOrdersListPage({
     )
     const csv = [
       `# permissionVersion=${job.permissionVersion}; source=client-filtered; audit=${job.jobId}`,
-      "销售单号,客户,合同,业务性质,状态,创建来源,当前主责,成交金额（含税）,负责人,提交时间",
+      "销售单号,客户,合同,业务性质,状态,创建来源,成交金额（含税）,负责人,提交时间",
       ...rows,
     ].join("\n")
     const url = URL.createObjectURL(
@@ -336,7 +329,6 @@ export function SalesOrdersListPage({
   )
 
   const advancedActive =
-    ownerFilter !== "all" ||
     originFilter !== "all" ||
     statusFilter !== "all"
 
@@ -469,7 +461,7 @@ export function SalesOrdersListPage({
         <MetricFilterItem
           label="商城协同"
           value={metrics.mallCollab}
-          detail="主责或票款复核"
+          detail="商城开单或票款复核"
           active={summaryFilter === "mallCollab"}
           onClick={() => {
             setSummaryFilter("mallCollab")
@@ -482,10 +474,10 @@ export function SalesOrdersListPage({
         title="销售单列表"
         description={
           summaryFilter === "all" && !advancedActive
-            ? "按提交时间查看当前业务范围内的销售单；业务性质与主责分列。"
+            ? "按提交时间查看当前业务范围内的销售单；业务性质与创建来源展示。"
             : `当前筛选：${salesOrderSummaryLabels(summaryFilter)}${
                 advancedActive
-                  ? ` · ${originFilter === "all" ? "全部来源" : ORIGIN_LABEL[originFilter]} · ${ownerFilter === "all" ? "全部主责" : OWNER_LABEL[ownerFilter]} · ${statusFilter === "all" ? "全部状态" : statusFilter}`
+                  ? ` · ${originFilter === "all" ? "全部来源" : ORIGIN_LABEL[originFilter]} · ${statusFilter === "all" ? "全部状态" : statusFilter}`
                   : ""
               }`
         }
@@ -542,7 +534,7 @@ export function SalesOrdersListPage({
                     <div>
                       <div className="font-medium">高级筛选</div>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        创建来源与当前主责分列筛选；主状态按系统状态清单展示。
+                        创建来源与主状态筛选。
                       </p>
                     </div>
                     <label className="grid gap-1.5 text-sm">
@@ -561,24 +553,6 @@ export function SalesOrdersListPage({
                         allowClear={false}
                         aria-label="创建来源"
                         placeholder="创建来源"
-                      />
-                    </label>
-                    <label className="grid gap-1.5 text-sm">
-                      <span>当前主责</span>
-                      <OptionCombobox
-                        value={ownerFilter}
-                        onValueChange={(v) => {
-                          setOwnerFilter((v ?? "all") as OwnerFilter)
-                          resetPagination()
-                        }}
-                        options={[
-                          { value: "all", label: "全部主责" },
-                          { value: "erp", label: "主责 ERP" },
-                          { value: "mall", label: "主责商城" },
-                        ]}
-                        allowClear={false}
-                        aria-label="当前主责"
-                        placeholder="当前主责"
                       />
                     </label>
                     <label className="grid gap-1.5 text-sm">
@@ -612,7 +586,6 @@ export function SalesOrdersListPage({
                       size="sm"
                       disabled={!advancedActive}
                       onClick={() => {
-                        setOwnerFilter("all")
                         setOriginFilter("all")
                         setStatusFilter("all")
                         resetPagination()

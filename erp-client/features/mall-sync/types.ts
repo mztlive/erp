@@ -46,7 +46,8 @@ export type MallSyncMetric = {
 export type MallSyncOwnership = {
   businessType: "VOUCHER"
   stage: OwnershipStage
-  ownerSystemSummary: "MALL" | "MIXED" | "ERP"
+  /** 同步范围内销售单的创建来源汇总（MALL/MIXED/ERP） */
+  originSystemSummary: "MALL" | "MIXED" | "ERP"
   mallOwnedOrderCount?: number
   erpOwnedOrderCount?: number
   syncDirection: SyncDirection
@@ -388,8 +389,8 @@ export const DEMO_ROLE_LABEL: Record<DemoRole, string> = {
 }
 
 export const STAGE_LABEL: Record<OwnershipStage, string> = {
-  FIRST_PHASE_MALL_OWNED: "商城主责",
-  SECOND_PHASE_ERP_OWNED: "ERP 主责（已封存）",
+  FIRST_PHASE_MALL_OWNED: "T 前 · 商城开单",
+  SECOND_PHASE_ERP_OWNED: "T 后 · ERP 全面服务",
 }
 
 export const DIRECTION_LABEL: Record<SyncDirection, string> = {

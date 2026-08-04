@@ -1,7 +1,7 @@
 import type { StatusTone } from "@/components/ui/status-badge"
 
 export type SalesOrderNature = "physical_service" | "card_voucher"
-export type SalesOrderOwner = "erp" | "mall"
+export type SalesOrderOrigin = "erp" | "mall"
 
 export type SalesOrderCreateIntent = "SAVE_DRAFT" | "SUBMIT"
 
@@ -222,10 +222,8 @@ export type SalesOrderListItem = {
   /** 合同精确修订（快照），创建后随版本固定 */
   contractRevisionLabel: string
   nature: SalesOrderNature
-  /** 创建来源：与当前主责分列 */
-  originSystem: SalesOrderOwner
-  /** 当前写入主责：任一时点唯一 */
-  ownerSystem: SalesOrderOwner
+  /** 创建来源：商城（MALL）或本系统（ERP），创建后恒不变 */
+  originSystem: SalesOrderOrigin
   primaryStatus: { label: string; tone: StatusTone }
   fulfillment: ProgressTrack
   collection: ProgressTrack
@@ -257,7 +255,7 @@ export type SalesOrderListItem = {
   closeEligibility: CloseEligibility
   /** 业务性质创建后不可修改 */
   natureLocked: true
-  /** 商城主责时商业字段只读 */
+  /** 商城开单（origin=mall）同步期间商业字段只读 */
   commercialReadOnly: boolean
   commercialReadOnlyReason?: string
   revisions: readonly SalesOrderRevisionSnapshot[]

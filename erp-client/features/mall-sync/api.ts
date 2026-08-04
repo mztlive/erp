@@ -343,26 +343,26 @@ function buildOwnership(stage: OwnershipStage) {
     return {
       businessType: "VOUCHER" as const,
       stage,
-      ownerSystemSummary: "ERP" as const,
+      originSystemSummary: "ERP" as const,
       mallOwnedOrderCount: 0,
       erpOwnedOrderCount: 2_048,
       syncDirection: "SEALED_HISTORY" as const,
       firstPhasePollingEnabled: false,
       sealedAt: "2026-07-15T18:00:00+08:00",
       finalWatermark: "wm_final_phase1_20260715",
-      mallWriteBoundary: "第一期同步已封存；商城执行信息见执行信息页",
-      erpWriteBoundary: "ERP 主责；商城同步仅历史只读，当前治理见执行信息 / 接口错误中心",
+      mallWriteBoundary: "T 前商城开单记录已封存；商城执行信息见执行信息页",
+      erpWriteBoundary: "T 后 ERP 全面服务；商城同步仅历史只读，当前治理见执行信息 / 接口错误中心",
     }
   }
   return {
     businessType: "VOUCHER" as const,
     stage,
-    ownerSystemSummary: "MALL" as const,
+    originSystemSummary: "MALL" as const,
     mallOwnedOrderCount: 1_206,
     erpOwnedOrderCount: 842,
     syncDirection: "MALL_TO_ERP_COMMERCIAL_FACT" as const,
     firstPhasePollingEnabled: true,
-    mallWriteBoundary: "商城主责商业记录（可继续销售/制卡/绑定/激活/消费）",
+    mallWriteBoundary: "T 前商城开单商业记录（可继续销售/制卡/绑定/激活/消费）",
     erpWriteBoundary: "ERP 只读接收商业数据；不向商城回写商业修改",
   }
 }

@@ -6,7 +6,7 @@ import type {
   ProcurementRejectionResolution,
   SalesOrderListItem,
   SalesOrderNature,
-  SalesOrderOwner,
+  SalesOrderOrigin,
   SalesOrderRelatedSummary,
   SalesOrderRevisionSnapshot,
   ProgressTrack,
@@ -21,8 +21,7 @@ type BuildInput = {
   contractNumber: string
   contractRevisionLabel?: string
   nature: SalesOrderNature
-  originSystem: SalesOrderOwner
-  ownerSystem: SalesOrderOwner
+  originSystem: SalesOrderOrigin
   primaryStatus: { label: string; tone: SalesOrderListItem["primaryStatus"]["tone"] }
   fulfillment: ProgressTrack
   collection: ProgressTrack
@@ -52,11 +51,11 @@ type BuildInput = {
 }
 
 /**
- * 统一装配列表/对象记录：创建来源与主责分列、关闭资格、只读边界与允许动作。
+ * 统一装配列表/对象记录：创建来源、关闭资格、只读边界与允许动作。
  */
 export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
   const commercialReadOnly =
-    input.ownerSystem === "mall" ||
+    input.originSystem === "mall" ||
     input.primaryStatus.label === "已关闭" ||
     input.primaryStatus.label === "已作废" ||
     Boolean(input.activeCardSalesApproval) ||
@@ -66,8 +65,8 @@ export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
       input.primaryStatus.label === "待销售处理")
 
   const commercialReadOnlyReason =
-    input.ownerSystem === "mall"
-      ? "这单目前由商城维护，本系统只能查看；改内容请在商城处理。"
+    input.originSystem === "mall"
+      ? "这单由商城开单，商业数据同步中，本系统只读；改内容请在商城处理。"
       : input.activeCardSalesApproval
         ? "卡券审批进行中，内容暂不能改；请先完成审批。"
         : input.primaryStatus.label === "已关闭" ||
@@ -114,7 +113,7 @@ export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
     input.nature === "physical_service" &&
     (input.primaryStatus.label === "履约中" ||
       input.primaryStatus.label === "已生效") &&
-    input.ownerSystem === "erp"
+    input.originSystem === "erp"
   ) {
     allowedActions.push("REGISTER_ACCEPTANCE")
   } else if (input.nature === "card_voucher") {
@@ -125,7 +124,7 @@ export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
   }
 
   if (
-    input.ownerSystem === "erp" &&
+    input.originSystem === "erp" &&
     formal &&
     input.primaryStatus.label !== "已关闭" &&
     !input.activeChangeOrder &&
@@ -133,10 +132,10 @@ export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
     !input.activeCardSalesApproval
   ) {
     allowedActions.push("START_SALES_CHANGE")
-  } else if (input.ownerSystem === "mall") {
+  } else if (input.originSystem === "mall") {
     actionBlockers.push({
       action: "START_SALES_CHANGE",
-      reason: "商城主责期间不可在 ERP 发起销售变更。",
+      reason: "商城开单同步期间不可在 ERP 发起销售变更。",
     })
   } else if (input.activeChangeOrder) {
     actionBlockers.push({
@@ -167,7 +166,6 @@ export function buildSalesOrder(input: BuildInput): SalesOrderListItem {
       input.contractRevisionLabel ?? `${input.contractNumber}@v1`,
     nature: input.nature,
     originSystem: input.originSystem,
-    ownerSystem: input.ownerSystem,
     primaryStatus: input.primaryStatus,
     fulfillment: input.fulfillment,
     collection: input.collection,

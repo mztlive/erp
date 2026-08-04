@@ -11,7 +11,7 @@ import {
 } from "@/components/ui/dialog"
 import {
   NATURE_LABEL,
-  OWNER_LABEL,
+  ORIGIN_LABEL,
 } from "@/mock/sales-orders"
 import type {
   SalesOrderLineItem,
@@ -138,9 +138,9 @@ function SalesOrderPaperDocument({ order }: { order: SalesOrderListItem }) {
           value: order.welfareScene,
         },
         {
-          id: "owner-system",
-          label: "主责系统",
-          value: OWNER_LABEL[order.ownerSystem],
+          id: "origin-system",
+          label: "来源",
+          value: ORIGIN_LABEL[order.originSystem],
         },
       ]}
       lineItemLabel={isCard ? "卡券明细（唯一）" : "销售明细"}

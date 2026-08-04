@@ -8,7 +8,6 @@ export type SalesOrderSummaryFilter =
   | "pendingCollection"
   | "fulfillmentException"
   | "mallCollab"
-export type SalesOrderOwnerFilter = "all" | SalesOrderListItem["ownerSystem"]
 export type SalesOrderOriginFilter = "all" | SalesOrderListItem["originSystem"]
 export type SalesOrderStatusFilter =
   | "all"
@@ -42,7 +41,6 @@ export function filterSalesOrders(
     search?: string
     natureFilter?: SalesOrderNatureFilter
     summaryFilter?: SalesOrderSummaryFilter
-    ownerFilter?: SalesOrderOwnerFilter
     originFilter?: SalesOrderOriginFilter
     statusFilter?: SalesOrderStatusFilter
   }
@@ -51,14 +49,12 @@ export function filterSalesOrders(
     search = "",
     natureFilter = "all",
     summaryFilter = "all",
-    ownerFilter = "all",
     originFilter = "all",
     statusFilter = "all",
   } = options
 
   return orders.filter((order) => {
     if (natureFilter !== "all" && order.nature !== natureFilter) return false
-    if (ownerFilter !== "all" && order.ownerSystem !== ownerFilter) return false
     if (originFilter !== "all" && order.originSystem !== originFilter) {
       return false
     }
@@ -110,16 +106,13 @@ export function filterSalesOrders(
       }
     }
     if (summaryFilter === "mallCollab") {
-      if (order.ownerSystem !== "mall" && order.originSystem !== "mall") {
-        return false
-      }
+      if (order.originSystem !== "mall") return false
       if (
         order.collection.label !== "待复核" &&
         order.invoicing.label !== "待复核" &&
         order.primaryStatus.label !== "已作废"
       ) {
-        // mall-owned in progress or mapping-sensitive
-        if (order.ownerSystem !== "mall") return false
+        return false
       }
     }
     return matchesSalesOrderSearch(order, search)
@@ -174,7 +167,7 @@ export function computeSalesOrderMetrics(orders: readonly SalesOrderListItem[]) 
     ).length,
     mallCollab: orders.filter(
       (o) =>
-        o.ownerSystem === "mall" ||
+        o.originSystem === "mall" ||
         o.collection.label === "待复核" ||
         o.invoicing.label === "待复核"
     ).length,

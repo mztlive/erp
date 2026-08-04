@@ -104,16 +104,16 @@ function amountAtLeast(receivedAmount: string, amountGross: string): boolean {
   }
 }
 
-/** 已生效单不可直接编辑；ERP 主责已生效单可发起销售变更。 */
+/** 已生效单不可直接编辑；ERP 开单已生效单可发起销售变更。 */
 export function canStartSalesChange(input: {
-  ownerSystem: "erp" | "mall"
+  originSystem: "erp" | "mall"
   primaryStatusLabel: string
   hasActiveChangeOrder: boolean
 }): { allowed: boolean; reason?: string } {
-  if (input.ownerSystem !== "erp") {
+  if (input.originSystem !== "erp") {
     return {
       allowed: false,
-      reason: "这单目前由商城侧维护，请在商城改内容；本系统只能查看。",
+      reason: "这单由商城开单，商业数据同步中，本系统只能查看；改内容请在商城处理。",
     }
   }
   if (

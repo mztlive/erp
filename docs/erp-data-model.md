@@ -13,10 +13,10 @@
    第一期稳定身份和正式事实之上增加 API 来源、商城执行投影、商城消费、供应商订单
    和结算，不复制客户、商品、销售单、应收或应付。
 2. 卡券销售单与实物及服务销售单共用 `sales_order` 聚合。`business_type`
-   表示卖什么，`owner_system` 表示谁有商业字段写权，两个维度不得合并。
-3. `sales_order.owner_system` 保存当前值。第一期商城主责卡券单取 `MALL`，
-   第二期迁移后改为 `ERP`；迁移是一次性运营行为，只改 `owner_system` 值并记录
-   通用变更审计（操作人、时间），不建立任何迁移专用表。
+   表示卖什么，`origin_system` 表示最初创建入口（商城或 ERP），两个维度不得合并。
+3. `sales_order.origin_system` 保存最初创建入口，创建后永久不变。第一期商城开单的
+   卡券单取 `MALL`；T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
+   （创建、审批、销售变更）。数据仅通过商城同步进入 ERP。
 4. 业务基础资料采用“稳定身份 + 不可变修订”；正式单据采用“稳定单号 +
    不可变生效版本 + 结构化业务快照”。
 5. 已发生的收付款、发票、出入库、消费、退款、余额恢复、成本和结算事实只追加，
@@ -132,8 +132,8 @@ erDiagram
     SUPPLIER_SETTLEMENT_STATEMENT ||--o| PAYABLE_ACCOUNT : "确认后形成应付"
 ```
 
-图中第二期对象均引用第一期稳定身份。主责迁移不复制 `SALES_ORDER`，
-历史消费回填也不复制 `MALL_ORDER` 或关键事实。
+图中第二期对象均引用第一期稳定身份。数据仅通过商城同步进入 ERP，不复制
+`SALES_ORDER`；历史消费回填也不复制 `MALL_ORDER` 或关键事实。
 
 ---
 
@@ -320,7 +320,7 @@ erDiagram
 | 商品发布 | `product_publication`、`product_publication_revision`、`product_publication_revision_media`、`product_publication_delivery` |
 | 执行投影 | `sales_order_projection`、`sales_order_projection_revision`、`sales_order_projection_delivery` |
 | 卡实例与余额 | `mall_consumption_cutover`、`mall_consumption_cutover_check`、`mall_card_instance`、`mall_card_instance_correction`、`mall_balance_snapshot` |
-| 商城关键事实 | `mall_consumption_cutover`、`mall_order_fact`、`mall_order_cancel_fact`、`mall_order_completion_fact`、`mall_order`、`mall_order_item`、`mall_payment_source`、`mall_item_funding_allocation`、`mall_consumption_entry`、`mall_consumption_cost_assessment` |
+| 商城关键事实 | `mall_order_fact`、`mall_order_cancel_fact`、`mall_order_completion_fact`、`mall_order`、`mall_order_item`、`mall_payment_source`、`mall_item_funding_allocation`、`mall_consumption_entry`、`mall_consumption_cost_assessment` |
 | 商城售后 | `mall_after_sales_request`、`mall_after_sales_request_line`、`mall_refund`、`mall_refund_line`、`mall_refund_allocation`、`mall_balance_restoration`、`mall_balance_restoration_allocation` |
 | 历史回填 | `mall_consumption_backfill_job`、`mall_consumption_backfill_item` |
 | 供应商履约 | `supplier_fulfillment_order`、`supplier_fulfillment_item`、`supplier_order_action`、`supplier_order_action_line`、`supplier_order_status_history`、`supplier_refund_fact`、`supplier_refund_allocation` |
@@ -991,8 +991,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | --- | --- |
 | `order_no` | 两期统一销售单号；一期商城来源单不另立一张业务副本 |
 | `business_type` | `VOUCHER` 或 `GOODS_SERVICE`，创建后永久不变 |
-| `origin_system` | 最初创建入口：商城或 ERP |
-| `owner_system` | 当前商业字段主责：`MALL` 或 `ERP` |
+| `origin_system` | 最初创建入口：商城或 ERP，创建后永久不变 |
 | `source_identity_id` | 一期商城来源键映射；ERP 新建单可空 |
 | `customer_id` | 客户稳定身份 |
 | `contract_id` | 合同稳定身份 |
@@ -1014,8 +1013,6 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 - 一期来源单的 `(source_system_id, external_order_no)` 通过
   `external_identity_map` 唯一且不得复用；
 - `business_type` 不允许更新；
-- `owner_system` 只允许商城主责存量卡券单在第二期迁移时从 `MALL` 变为 `ERP`
-  一次，其他方向和第二次变化均拒绝；
 - `customer_id + commercial_status + created_at`、负责人参与人 + 状态、
   履约期限、应收进度分别建立业务查询索引；
 - 卡券销售单和实物及服务销售单必须使用本表，不得增加平行销售单主表。
@@ -2283,7 +2280,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 - 商城缺失、ERP 缺失或指纹差异都持久化明细，并按原来源身份发起单号补拉或转
   `work_item`；系统管理员不得手工补建另一张销售单；
 - 核对只生成差异和任务，不直接覆盖来源快照、ERP 销售版本、应收或经营事实；
-- 主责迁移后停止新核对任务，历史批次和处理证据永久可查。
+- 切换后停止新核对任务，历史批次和处理证据永久可查。
 
 #### `master_mapping_task`
 
@@ -2590,19 +2587,19 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 - 供应商不可供或数据过期时形成暂停发布版本或明确暂停动作；
 - 已支付订单永久引用下单时 `product_publication_revision_id`。
 
-### 6.16 第二期销售单主责迁移和执行投影
+### 6.16 第二期销售单切换与执行投影
 
-**主责迁移**
+**销售单服务切换**
 
-主责迁移是第二期上线时的一次性运营行为，不是数据实体，不建立任何专用表。
-上线时停止从商城开设新销售单，将存量商城主责卡券单的 `sales_order.owner_system`
-从 `MALL` 改为 `ERP`：
+T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务（创建、审批、销售
+变更），数据仅通过商城同步进入 ERP。切换不是数据实体，不建立任何专用表，不存在
+存量单迁移动作、批次或回退：
 
-- 只改 `owner_system` 值并记录通用变更审计（操作人、时间）；不换单号、不复制
-  销售单、不生成新销售版本，应收、回款和发票不变；
-- 创建来源仍由 `sales_order.origin_system` 表达，不随迁移变化；
-- 迁移范围只含已生效及之后状态、未作废的正式存量卡券销售单，商城草稿不迁移；
-- 迁移完成后不恢复一期轮询，商城 B2B 建单入口不重开，不把任何已迁移单改回商城主责。
+- 已生效及之后状态、且未作废的正式存量卡券销售单继续沿用，应收、回款和发票不变；
+- 创建来源仍由 `sales_order.origin_system` 表达，不随切换变化；
+- 商城草稿统一作废，不在 ERP 补建；
+- T 前商城开单的卡券商业字段在 ERP 只读，T 后全部单由 ERP 服务，正式销售单商业
+  变更一律走销售变更单。
 
 #### `sales_order_projection`、修订与投递
 
@@ -2619,8 +2616,8 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 | 字段 | 说明 |
 | --- | --- |
 | `projection_id` / `revision_no` | 投影稳定身份和版本 |
-| `projection_source` | 存量单迁移时的当前 ERP 销售版本或后续 ERP 销售版本 |
-| `sales_order_revision_id` | ERP 销售版本；首版投影也指向迁移时的当前版本 |
+| `projection_source` | 存量单切换时的当前 ERP 销售版本或后续 ERP 销售版本 |
+| `sales_order_revision_id` | ERP 销售版本；首版投影也指向切换时的当前版本 |
 | `customer_external_identity` | 商城客户标识 |
 | `voucher_category_external_identity` | 商城卡券类目标识 |
 | `voucher_expiry_at` | 表头履约期限 |
@@ -2659,7 +2656,6 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 | 字段 | 说明 |
 | --- | --- |
 | `mall_id` | 目标商城 |
-| `migration_scope_digest` | 全部目标销售单及主责迁移完成状态的摘要 |
 | `enabled_at` | 消费回流和自动履约启用时间 `T` |
 | `enabled_by` | 上线负责人 |
 | `status` | 准备、已启用 |
@@ -2700,12 +2696,6 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 - `BACKFILL_CAPABILITY` 只证明回填程序、幂等键和报告能力在 `T` 前已就绪，
   正式历史回填任务必须在登记 `T` 后执行；
 - `enabled_at` 一经启用不可修改或删除；
-- 必须在目标范围内每张存量卡券销售单已完成主责迁移（`owner_system = ERP`）、
-  一期轮询停止且 P0/P1 闭环确认后写入；
-- `migration_scope_digest` 必须由目标销售单的主责迁移完成状态和目标销售单重算一致；
-- 登记 `T` 必须以商城为粒度串行化：上线负责人在同一事务锁定切换记录，重新校验
-  目标销售单主责迁移完成状态、一期轮询封存和全部检查链尾，再一次性写
-  `enabled_at + enabled_by + confirmation_digest`；任一校验失败不得留下部分启用；
 - `mall_order.fulfillment_chain` 以支付成功事实的 `occurred_at` 与本表 `enabled_at`
   比较，不能以 ERP 接收时间或回填时间判断。
 
@@ -3442,7 +3432,7 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 | 字段 | 说明 |
 | --- | --- |
 | `job_no` / `rerun_no` | 对账批次和同边界重跑序号 |
-| `reconciliation_type` | 发布、销售投影、主责、商城事实、分摊、余额、供应商订单、结算、退款等 |
+| `reconciliation_type` | 发布、销售投影、商城事实、分摊、余额、供应商订单、结算、退款等 |
 | `boundary_start` / `boundary_end` | 对账数据边界 |
 | `status` | 运行中、完成、有差异、失败 |
 | `expected_count` / `actual_count` / `difference_count` | 统计 |
@@ -3483,7 +3473,7 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 
 1. ERP 商品发布版本与商城生效版本；
 2. ERP 销售单当前版本与商城已接收执行投影；
-3. 已迁移主责标记与商城商业字段只读状态；
+3. 商城商业字段只读状态；
 4. 商城五类关键事实与 ERP 正式事实；
 5. 支付来源总额、商品实付及明细分摊矩阵；
 6. 商城余额快照与“初始余额 − 成功消费 + 成功恢复 − 到期失效”的推导余额；
@@ -3529,9 +3519,8 @@ VOIDED` 4 值；待采购确认（`PENDING_PROCUREMENT_CONFIRMATION`）等中间
 - 只有全部明细验收完成且应收结清才能进入 `CLOSED`；
 - 开票完成不是关闭条件。
 
-### 7.2 第一期商城主责卡券销售单
+### 7.2 第一期商城开单卡券销售单（T 前）
 
-- `sales_order.owner_system = MALL`；
 - `source_status_code` 保存商城状态映射，ERP 不自行推进商城商业状态；
 - ERP 侧商业字段只读，商城新快照形成新销售版本；
 - `fulfillment_progress` 在到期前为部分履约，到期为已完成；
@@ -3539,7 +3528,7 @@ VOIDED` 4 值；待采购确认（`PENDING_PROCUREMENT_CONFIRMATION`）等中间
 - 到期且应收结清后 ERP `close_status = CLOSED`；
 - 商城关闭不能绕过 ERP 应收结清条件。
 
-### 7.3 第二期 ERP 主责卡券销售单
+### 7.3 第二期 ERP 服务卡券销售单（T 后）
 
 ```text
 DRAFT
@@ -3619,9 +3608,9 @@ SUBMITTING → RESULT_UNKNOWN → ACCEPTED | REJECTED | EXCEPTION
 取消和退款使用独立进度：
 
 ```text
-cancel_status: NONE → PENDING → CANCELED | FAILED | MANUAL
-refund_status: NONE → PENDING → PARTIAL → FULL
-                            ↘ FAILED | MANUAL
+cancel_status: NONE → CANCEL_PENDING → CANCELED | FAILED | MANUAL
+refund_status: NONE → REFUND_PENDING → PARTIAL → REFUNDED
+                                   ↘ REFUND_FAILED | MANUAL
 ```
 
 - 乱序和重复回调不得使履约状态倒退；
@@ -3641,21 +3630,20 @@ PENDING → SENDING → DELIVERED
 - 结果未知动作先查原结果；
 - 自动和人工重试均使用原幂等键。
 
-### 7.8 主责迁移
+### 7.8 销售单服务切换
 
-主责迁移是第二期上线时的一次性运营行为，不是单据，没有批次状态机：
-停止从商城开设新销售单后，将存量商城主责卡券单的 `sales_order.owner_system`
-从 `MALL` 改为 `ERP`，并记录通用变更审计（操作人、时间）。
+T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务（创建、审批、销售
+变更），数据仅通过商城同步进入 ERP。切换不是单据，没有批次状态机，也不建表：
 
-- 只允许 `MALL` → `ERP` 一次，其他方向和第二次变化均拒绝；
-- 迁移只改 `owner_system` 值，不换单号、不复制销售单、不生成新销售版本；
-- 创建来源仍由 `origin_system` 表达；
-- 成功迁移不回退，不恢复一期轮询；
-- 目标范围全部存量单迁移完成后进入商城级切换验证；停止一期轮询只形成
-  `PHASE1_POLLING_STOPPED` 证据，不能单独登记 `T`；
+- 已生效及之后状态、且未作废的正式存量卡券销售单继续由 ERP 服务，应收、回款和
+  发票不变，不换单号、不复制销售单、不生成新销售版本；
+- 创建来源仍由 `origin_system` 表达，T 前商城开单的卡券单取 `MALL`，创建后不变；
+- 商城草稿统一作废，不在 ERP 补建；
+- T 前商城开单的卡券商业字段在 ERP 只读，T 后正式销售单商业变更一律走销售变更单；
+- T 前支付只回填台账，T 及以后支付进入自动供应商履约；
+- 停止一期轮询只形成 `PHASE1_POLLING_STOPPED` 证据，不能单独登记 `T`；
 - 仅当第 6.17 节全部固定检查代码的当前链尾均为 `PASSED` 时，才由上线负责人按
-  第 8.4 节原子登记唯一 `T`；
-- `T` 前支付只回填台账，`T` 及以后支付进入自动供应商履约。
+  第 8.4 节原子登记唯一 `T`。
 
 ---
 
@@ -3803,7 +3791,7 @@ PENDING → SENDING → DELIVERED
    - 不修改旧评估、支付矩阵或原消费。
 8. 切换启用：
    - 以上线负责人为操作者锁定商城切换记录；
-   - 重算目标销售单主责迁移完成状态、一期轮询封存、P0/P1 检查链尾和范围摘要；
+   - 校验一期轮询封存、P0/P1 检查链尾和范围摘要；
    - 全部通过后原子写唯一 `T`、`enabled_by` 与确认摘要，失败不留下部分启用。
 
 所有正式分配、抵销和纠错在过账后不可更新或删除。退款、成本、应收/应付、付款和
@@ -3816,8 +3804,8 @@ PENDING → SENDING → DELIVERED
 
 ### 9.1 销售与履约
 
-- 同一销售单只有一个当前主责系统；同一时刻不能在 ERP 和商城双写。
-- `business_type` 与 `origin_system`、`owner_system` 相互独立。
+- 同一销售单只由一个系统服务；同一时刻不能在 ERP 和商城双写。
+- `business_type` 与 `origin_system` 相互独立。
 - 卡券和非卡券不得混单。
 - 每个卡券销售版本恰好一条卡券明细。
 - 卡券类目和履约期限在版本表头；面额、张数、成交、配赠和卡形态在唯一明细。
@@ -3872,29 +3860,28 @@ PENDING → SENDING → DELIVERED
 | 伙伴、客户、供应商、合同 | 启用 | 复用 | 不复制基础资料，保留历史修订 |
 | 客户负责人、协作销售、历史参与人 | 启用 | 复用 | 新角色通过权限配置增加 |
 | 商品、SKU、卡券类目、公司商品销售查询 | 启用 | 复用 | 复用 SKU 稳定身份和 SKU 修订；不建立商品池稳定身份 |
-| 统一销售单及版本 | 启用 | 复用 | 卡券存量单只改 `owner_system` |
+| 统一销售单及版本 | 启用 | 复用 | T 起全部 B2B 销售单统一由 ERP 服务 |
 | 实物及服务采购/库存/履约 | 启用 | 复用 | 二期 API 商城消费链不替代一期公司业务链 |
 | 应收、回款、销项票 | 启用 | 复用 | 卡券票款连续保留 |
 | 应付、付款、进项票 | 采购单来源 | 增加供应商结算单来源 | 同一核销内核 |
 | 退货、拒收、退款、冲正、红票、库存调整 | 启用 | 复用 | 二期商城/供应商退款事实另行追加 |
-| 一期商城销售拉取 | 基线、增量、每日全量清单核对（含已关闭、作废及来源缺失） | 迁移完成后停止 | 快照、每日差异和历史版本永久可查，水位封存 |
-| `sales_order.owner_system` | 商城存量卡券单为 `MALL` | 迁移一次为 `ERP` | 迁移为一次性运营行为，仅改字段并记录通用审计 |
+| 一期商城销售拉取 | 基线、增量、每日全量清单核对（含已关闭、作废及来源缺失） | 切换完成后停止 | 快照、每日差异和历史版本永久可查，水位封存 |
 | 供应商商品库、映射、供给 | Excel/手工来源启用 | 增加 API 来源和自动变化处理 | 复用同一供应商 SPU/SKU 与供给身份，不迁移成第二套表 |
 | 供应商 API 连接 | 仅登记供应商 API 能力 | 启用连接、同步与履约接口 | API 连接只作为来源元数据，不成为非 API 商品父对象 |
 | 商品发布与商城确认 | 不启用 | 启用 | 引用一期 SKU |
-| 销售执行投影 | 不启用 | 启用 | 以存量单迁移时的当前 ERP 销售单版本作为第一份执行投影版本，不生成销售版本 |
+| 销售执行投影 | 不启用 | 启用 | 以存量单切换时的当前 ERP 销售单版本作为第一份执行投影版本，不生成销售版本 |
 | 卡实例稳定引用和余额快照 | 不启用 | 启用 | 不导入卡号、卡密、手机号 |
 | 商城关键事实和历史回填 | 不启用 | `T` 后实时并回填 `T` 前历史 | 同一业务事实键去重 |
 | 组合支付分摊 | 不启用 | 启用 | 仅卡券和微信 |
 | 自动供应商订单 | 不启用 | 仅 `T` 后支付启用 | `T` 前订单保持原人工履约链 |
-| 供应商取消、退款、余额恢复闭环 | 不启用 | 与自动下单同批启用 | 未就绪不得切换主责 |
+| 供应商取消、退款、余额恢复闭环 | 不启用 | 与自动下单同批启用 | 未就绪不得开放 `T` 后自动履约 |
 | 供应商周期结算 | 不启用 | 启用 | 确认后进入一期应付 |
 | outbox、inbox、错误和对账 | 启用唯一 `outbox_message`，仅内部事实事件/投影消费；商城主动拉取与每日核对使用专用表；无 inbox、外部 dispatcher 或通用接口治理 | 复用一期 outbox 开启外部目的地；新增 inbox、协议尝试、错误中心和通用对账 | 不建立第二张 outbox 或 `integration_message` 同义表；正式事实与 outbox 同事务 |
 | 经营分析 | 非卡券实际盈亏；卡券标记成本未覆盖 | 增加卡券消费、成本、余额和覆盖率 | 查询投影可重建 |
 
 第二期 P0 与 P1 必须同批具备生产能力。商品发布、销售投影、支付回流、
 供应商下单、拒单、取消、退款、余额恢复、人工异常和对账未形成闭环前，
-不得执行主责迁移或开放 `T` 后自动履约。
+不得开放 `T` 后自动履约。
 
 ---
 

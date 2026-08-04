@@ -116,8 +116,8 @@
 | 供应商 | `supplierName` | 供应商 | 供应商快照 | 使用下单时快照 | 采购/客服可见 |
 | 外部结果 | `externalOrderNo` | 供应商单号 | 供应商接单结果 | 未取得时明确“尚未返回” | 不展示外部鉴权信息 |
 | 履约轨 | `fulfillmentStatus` | 已接收 / 提交中 / 已接单 / 明确拒绝 / 结果未知 / 履约中 / 已发货 / 已完成 / 异常 | `supplier_fulfillment_order.fulfillment_status` 与状态历史 | 严格映射 `RECEIVED`、`SUBMITTING`、`ACCEPTED`、`REJECTED`、`RESULT_UNKNOWN`、`FULFILLING`、`SHIPPED`、`COMPLETED`、`EXCEPTION`；不得把取消退款折入本字段 | 按对象权限 |
-| 取消轨 | `cancelStatus` | 未发起 / 处理中 / 已取消 / 失败 / 待人工 | 取消动作及结果 | 与履约轨正交 | 售后权限 |
-| 退款轨 | `refundStatus` | 未发起 / 处理中 / 部分 / 全部 / 失败 / 待人工 | 供应商退款事实 | 部分退款不回退履约状态 | 成本金额按字段权限 |
+| 取消轨 | `cancelStatus` | 无 / 取消中 / 已取消 / 取消失败 / 待人工 | 取消动作及结果 | 与履约轨正交 | 售后权限 |
+| 退款轨 | `refundStatus` | 无 / 退款中 / 部分退款 / 全部退款 / 退款失败 / 待人工 | 供应商退款事实 | 部分退款不回退履约状态 | 成本金额按字段权限 |
 | 异常 | `errorClass` / `actionBlocker` | 异常原因 / 下一步 | 错误任务与服务端动作判断 | 业务语言，不展示堆栈 | 技术摘要仅管理员可见 |
 | 时间 | `lastBusinessAt` | 最近业务变化 | 状态历史 / 正式动作 | 发生时间 + 数据水位 | 全员有权对象可见 |
 
@@ -337,7 +337,7 @@ type SupplierOrderTaskCompletionCommand =
       | "ORDER_ACCEPTED"
       | "ORDER_REJECTED"
       | "ORDER_COMPLETED"
-      | "CANCELLED"
+      | "CANCELED"
       | "REFUNDED"
   }> & { expectedSubjectVersion: string }
 

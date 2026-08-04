@@ -483,7 +483,6 @@ export async function createSalesOrder(
       contractRevisionLabel: `${contract.contractNo}@v${requestedRevision.revisionNo}`,
       nature: input.nature,
       originSystem: "erp",
-      ownerSystem: "erp",
       primaryStatus: submitted
         ? input.nature === "card_voucher"
           ? { label: "待销售领导审批", tone: "warning" }

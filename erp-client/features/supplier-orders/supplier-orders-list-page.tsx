@@ -577,7 +577,7 @@ export function SupplierOrdersListPage() {
               } else if (m.aftersalePending) {
                 pushUrl({
                   view: "all",
-                  refundStatus: "FAILED",
+                  refundStatus: "REFUND_FAILED",
                   page: 1,
                 })
               }

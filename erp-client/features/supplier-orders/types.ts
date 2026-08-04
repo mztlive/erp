@@ -19,17 +19,17 @@ export type SupplierFulfillmentStatus =
 
 export type CancelStatus =
   | "NONE"
-  | "PROCESSING"
-  | "CANCELLED"
+  | "CANCEL_PENDING"
+  | "CANCELED"
   | "FAILED"
   | "MANUAL"
 
 export type RefundStatus =
   | "NONE"
-  | "PROCESSING"
+  | "REFUND_PENDING"
   | "PARTIAL"
-  | "FULL"
-  | "FAILED"
+  | "REFUNDED"
+  | "REFUND_FAILED"
   | "MANUAL"
 
 export type ListView = "actionable" | "all" | "recent_completed"
@@ -88,35 +88,35 @@ export const FULFILLMENT_STATUS_TONE: Record<
 
 export const CANCEL_STATUS_LABEL: Record<CancelStatus, string> = {
   NONE: "未发起",
-  PROCESSING: "处理中",
-  CANCELLED: "已取消",
+  CANCEL_PENDING: "处理中",
+  CANCELED: "已取消",
   FAILED: "失败",
   MANUAL: "待人工",
 }
 
 export const CANCEL_STATUS_TONE: Record<CancelStatus, StatusTone> = {
   NONE: "neutral",
-  PROCESSING: "info",
-  CANCELLED: "success",
+  CANCEL_PENDING: "info",
+  CANCELED: "success",
   FAILED: "destructive",
   MANUAL: "warning",
 }
 
 export const REFUND_STATUS_LABEL: Record<RefundStatus, string> = {
   NONE: "未发起",
-  PROCESSING: "处理中",
+  REFUND_PENDING: "处理中",
   PARTIAL: "部分",
-  FULL: "全部",
-  FAILED: "失败",
+  REFUNDED: "全部",
+  REFUND_FAILED: "失败",
   MANUAL: "待人工",
 }
 
 export const REFUND_STATUS_TONE: Record<RefundStatus, StatusTone> = {
   NONE: "neutral",
-  PROCESSING: "info",
+  REFUND_PENDING: "info",
   PARTIAL: "info",
-  FULL: "success",
-  FAILED: "destructive",
+  REFUNDED: "success",
+  REFUND_FAILED: "destructive",
   MANUAL: "warning",
 }
 
@@ -166,18 +166,18 @@ export const FULFILLMENT_STATUSES: SupplierFulfillmentStatus[] = [
 
 export const CANCEL_STATUSES: CancelStatus[] = [
   "NONE",
-  "PROCESSING",
-  "CANCELLED",
+  "CANCEL_PENDING",
+  "CANCELED",
   "FAILED",
   "MANUAL",
 ]
 
 export const REFUND_STATUSES: RefundStatus[] = [
   "NONE",
-  "PROCESSING",
+  "REFUND_PENDING",
   "PARTIAL",
-  "FULL",
-  "FAILED",
+  "REFUNDED",
+  "REFUND_FAILED",
   "MANUAL",
 ]
 
