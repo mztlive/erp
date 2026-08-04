@@ -181,7 +181,8 @@
 - **性质**：数据模型冲突（指纹由商城按同一规则计算，字段集不一致会造成每日核对系统性偏差）
 - **涉及文档**：erp-phase-1.md §8.2（L863-870，自述为指纹权威）vs erp-data-model.md §6.13（L2248）、§6.4（L1073-1075）、erp-mall-data-mapping.md §3.3（L203-206）、§11.4（L3993-3994）、phases-8.md §5.1（L87-88）
 - **建议方向**：phase-1 §8.2 指纹快照字段集补入"项目名称、业务备注"
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）
+- **决议**：以 phase-1 §8.2 为权威，从指纹/快照字段集移除项目名称、业务备注（`project_name`/`business_remark` 仍随销售版本保存同步，但不参与 content_hash，变化不产生版本差异）。已同步数据模型 §6.13/L1071/L3948、mall-mapping §3.3/L266、phases-8 §5.1。
 
 ### B-06 【低】phases-3 §6.1 关于"供应商商品库列为二期扩展"的陈述已过时
 
@@ -210,3 +211,5 @@
 | 2026-08-04 | B-01 | 主责迁移=一次性运营行为：删全部专用表（ownership/batch/item），仅 origin_system+owner_system 字段+通用审计；W24 页面取消（前端 feature/路由/registry/mock 全删，verify 29 工作面通过）；W17 删冻结逻辑保留封存态；执行投影三表保留 | erp-data-model.md §6.16/§7.8/§10、erp-phase-2.md §14.2/§15/§17/§20、w17 全文、w24 改为取消说明、README 索引、mall-mapping §10、w05/w18/w23/w25/w29/w30、ui-design/ui-flows/glossary、phase-1 L856、erp-client 10 文件 |
 | 2026-08-04 | C-01~C-16、C-20 | 全部文案一批修复：P0 枚举/字段名/内部ID上屏清零（C-01~C-10，其中 C-04/C-05 随 W24 删除关闭），过账/暂挂/架构词/核销会话/终态/散词按 glossary 映射替换（C-11~C-16、C-20），tsc/eslint 通过 | erp-client/features 约 48 个文件（card-funds-review、supplier-settlements、integration-errors、history-backfill、access-audit、sales-orders、customer-receivables、supplier-payables、inventory、unified-task-queue、procurement-confirmation、mall-sync、supplier-orders、supplier-catalog、master-data、purchase-orders、supplier-api-connections、actual-profit-loss、product-publications、workspace-kit 等） |
 | 2026-08-04 | D-03 | 供应商订单状态机以数据模型三轨为准：phase-2 §10.3 重写为履约轨(9值)+取消轨(5值)+退款轨(6值)，互不折算 | erp-phase-2.md §10.3 |
+| 2026-08-04 | C-17 | W09→W06 跳转参数 tab 改 section，与 W06 路由契约对齐（tsc 通过） | erp-client/features/fulfillment-operations/fulfillment-operations-page.tsx:1009 |
+| 2026-08-04 | B-05 | 指纹字段集移除项目名称/业务备注（仍随版本保存但不参与 content_hash），以 phase-1 §8.2 为权威 | erp-data-model.md §6.13/L1071/L3948、erp-mall-data-mapping.md §3.3/L266、phases-8.md §5.1 |

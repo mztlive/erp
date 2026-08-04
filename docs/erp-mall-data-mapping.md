@@ -200,7 +200,8 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 `sales_order_revision`。可选原始报文只能以加密受控引用保存。
 
 `content_hash` 覆盖销售状态、客户、合同、结算主体、卡券类目、唯一明细、金额、
-税率、开票要求、履约期限，以及正式进入版本的项目名称和业务备注。玩法、卡号、
+税率、开票要求、履约期限。项目名称和业务备注随版本同步但不进入指纹，其变化不产生
+版本差异。玩法、卡号、
 卡密、绑定、激活、支付状态和展示设置不进入快照或指纹。只有与**当前**销售版本
 指纹一致时才记为无变化；A → B → A 的第三次 A 仍保留新观察快照和新版本。
 
@@ -262,7 +263,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 | `company_id`、`parent_company_id` | 客户、结算主体候选外部身份 | 两者的实际业务关系必须用数据字典和样本确认，禁止直接把母公司当结算主体 |
 | `company_name`、`company_address`、`company_person`、`company_mobile` | 销售单客户快照 | 与已确认客户映射同时保存，不反向覆盖客户基础资料 |
 | `sales_id`、`sales_name` | 来源销售主管及 `document_participant` 候选 | DDL 注释为“销售主管”；确认人员身份和历史职责后记录相应参与角色，不自动改成客户负责人或负责销售 |
-| `entry_name`、`sell_msg`、`project_remark` | `sales_order_revision.project_name` / `business_remark` | 按明确的长度和合并规则进入正式商业版本，并纳入 `content_hash`；附件只保存另有文件证据的内容 |
+| `entry_name`、`sell_msg`、`project_remark` | `sales_order_revision.project_name` / `business_remark` | 按明确的长度和合并规则进入正式商业版本，但不纳入 `content_hash`；附件只保存另有文件证据的内容 |
 | `card_type_id`、`category_id`、`card_name` | 卡券类目候选 | 三者语义可能重叠，确认实际主键、枚举和历史变化方式后才能建立卡券类目映射 |
 | `card_type` | 储值卡/次卡来源分类候选 | DDL 已给出 `1=储值卡、2=次卡`，但它不是电子卡/实体卡形态；只有确认 ERP 是否需要该分类及其与卡券类目的关系后才映射 |
 | `sell_card_type`、`order_type` | `sales_order_voucher_line_revision.card_form` 候选 | 必须用代码字典和真实样本确认哪个字段表达电子卡/实体卡，二者冲突时拒绝应用 |
