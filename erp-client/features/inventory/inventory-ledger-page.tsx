@@ -33,6 +33,9 @@ import {
   WarehouseCombobox,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
+import { formatDateTime } from "@/lib/datetime"
+import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
+import { type ResultState } from "@/components/business/feedback"
 import {
   Alert,
   AlertDescription,
@@ -171,21 +174,6 @@ function formatQty(value: string, unit: string) {
   )
 }
 
-function formatDateTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString("zh-CN", {
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  } catch {
-    return iso
-  }
-}
-
 const adjustSchema = z.object({
   reasonType: z.enum(["COUNT_GAIN", "COUNT_LOSS", "DAMAGE", "OTHER"]),
   quantity: z
@@ -203,16 +191,6 @@ const adjustSchema = z.object({
   note: z.string().trim().min(2, "请填写至少 2 个字的原因说明"),
   occurredAt: z.string().min(1, "请填写业务发生时间"),
 })
-
-type ResultState =
-  | {
-      status: "succeeded" | "unknown" | "blocked"
-      title: string
-      description: string
-      reference?: string
-      pendingIdempotencyKey?: string
-    }
-  | null
 
 export function InventoryLedgerPage() {
   const router = useRouter()
@@ -392,20 +370,11 @@ export function InventoryLedgerPage() {
     patch: Record<string, string | null | undefined>,
     options?: { replace?: boolean }
   ) {
-    const next = new URLSearchParams(searchParams.toString())
-    for (const [key, value] of Object.entries(patch)) {
-      if (value == null || value === "") next.delete(key)
-      else next.set(key, value)
-    }
-    if (!("cursor" in patch) && !("pageSize" in patch)) {
-      next.delete("cursor")
-    }
-    // Always keep view
-    if (!next.get("view")) next.set("view", view)
-    const qs = next.toString()
-    const href = qs ? `${pathname}?${qs}` : pathname
-    if (options?.replace) router.replace(href)
-    else router.push(href)
+    patchSearchParams(
+      { router, pathname, searchParams, view, clearCursor: true },
+      patch,
+      options
+    )
   }
 
   const resetPagination = React.useCallback(() => {
@@ -700,7 +669,7 @@ export function InventoryLedgerPage() {
           <div className="text-sm">
             <div>{row.original.lastMovementTypeLabel}</div>
             <div className="num text-xs text-muted-foreground">
-              {formatDateTime(row.original.lastMovementAt)}
+              {formatDateTime(row.original.lastMovementAt, "full", "passthrough")}
             </div>
           </div>
         ),
@@ -803,8 +772,8 @@ export function InventoryLedgerPage() {
         meta: { label: "时间", width: "default", numeric: true },
         cell: ({ row }) => (
           <div className="num text-xs text-muted-foreground">
-            <div>发生 {formatDateTime(row.original.occurredAt)}</div>
-            <div>记录 {formatDateTime(row.original.recordedAt)}</div>
+            <div>发生 {formatDateTime(row.original.occurredAt, "full", "passthrough")}</div>
+            <div>记录 {formatDateTime(row.original.recordedAt, "full", "passthrough")}</div>
           </div>
         ),
       },
@@ -1012,11 +981,11 @@ export function InventoryLedgerPage() {
         meta: { label: "时间", width: "default", numeric: true },
         cell: ({ row }) => (
           <div className="num text-xs text-muted-foreground">
-            <div>创建 {formatDateTime(row.original.createdAt)}</div>
+            <div>创建 {formatDateTime(row.original.createdAt, "full", "passthrough")}</div>
             <div>
               确认入账{" "}
               {row.original.postedAt
-                ? formatDateTime(row.original.postedAt)
+                ? formatDateTime(row.original.postedAt, "full", "passthrough")
                 : "—"}
             </div>
           </div>
@@ -1134,7 +1103,7 @@ export function InventoryLedgerPage() {
         ]}
         metadata={
           <DataFreshness
-            updatedAt={formatDateTime(data.queriedAt)}
+            updatedAt={formatDateTime(data.queriedAt, "full", "passthrough")}
             dateTime={data.queriedAt}
             state="fresh"
             label="库存记录更新时间"
@@ -1818,7 +1787,7 @@ export function InventoryLedgerPage() {
                             </span>
                           </div>
                           <div className="num text-xs text-muted-foreground">
-                            {formatDateTime(m.occurredAt)} · {m.recordedByLabel}
+                            {formatDateTime(m.occurredAt, "full", "passthrough")} · {m.recordedByLabel}
                           </div>
                         </div>
                         <div className="num shrink-0 font-medium">
@@ -1957,7 +1926,7 @@ export function InventoryLedgerPage() {
 
             <p className="text-[11px] leading-relaxed text-muted-foreground">
               查询于{" "}
-              {formatDateTime(detail.queriedAt)}
+              {formatDateTime(detail.queriedAt, "full", "passthrough")}
               。页面不提供编辑库存数量或直接释放预占；纠错须走调整单。
             </p>
           </div>

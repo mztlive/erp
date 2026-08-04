@@ -51,6 +51,9 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatObjectSet } from "@/features/import-opening/api"
+import { formatDateTime } from "@/lib/datetime"
+import { RoleDemoBar } from "@/components/business/role-demo-bar"
+import type { ComboboxOption } from "@/components/business/option-combobox"
 import {
   useAcknowledgeUploadMutation,
   useImportBatchDetailQuery,
@@ -145,17 +148,6 @@ function formatBytes(n: number) {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`
 }
 
-function formatTime(iso: string) {
-  try {
-    return new Intl.DateTimeFormat("zh-CN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(iso))
-  } catch {
-    return iso
-  }
-}
-
 function roleLabel(role: ViewerRoleDemo) {
   if (role === "WAREHOUSE_CONFIRMER") return "仓储确认人"
   if (role === "FINANCE_CONFIRMER") return "财务确认人"
@@ -210,40 +202,20 @@ export function ImportOpeningPage() {
   )
 }
 
-function RoleDemoBar({
-  role,
-  onChange,
-}: {
-  role: ViewerRoleDemo
-  onChange: (role: ViewerRoleDemo) => void
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-sm">
-      <span className="text-muted-foreground">角色演示</span>
-      <OptionCombobox
-        value={role}
-        onValueChange={(v) => {
-          if (v == null) return
-          onChange(v as ViewerRoleDemo)
-        }}
-        options={[
-          { value: "SYSTEM_ADMIN", label: "系统管理员" },
-          { value: "WAREHOUSE_CONFIRMER", label: "仓储确认人" },
-          { value: "FINANCE_CONFIRMER", label: "财务确认人" },
-        ]}
-        className="w-[11rem]"
-        size="sm"
-        allowClear={false}
-      />
-      <span className="text-xs text-muted-foreground">
-        当前：{roleLabel(role)}
-        {role === "SYSTEM_ADMIN"
-          ? " · 不可代替业务确认"
-          : " · 仅本人责任范围可写（任务类型登记后）"}
-      </span>
-    </div>
-  )
-}
+const IMPORT_ROLE_OPTIONS: ComboboxOption[] = [
+  { value: "SYSTEM_ADMIN", label: "系统管理员" },
+  { value: "WAREHOUSE_CONFIRMER", label: "仓储确认人" },
+  { value: "FINANCE_CONFIRMER", label: "财务确认人" },
+]
+
+const importRoleHint = (role: ViewerRoleDemo) => (
+  <>
+    当前：{roleLabel(role)}
+    {role === "SYSTEM_ADMIN"
+      ? " · 不可代替业务确认"
+      : " · 仅本人责任范围可写（任务类型登记后）"}
+  </>
+)
 
 function BatchListView({
   urlState,
@@ -365,7 +337,7 @@ function BatchListView({
         header: "更新时间",
         cell: ({ row }) => (
           <span className="num text-xs text-muted-foreground">
-            {formatTime(row.original.updatedAt)}
+            {formatDateTime(row.original.updatedAt, "dateStyle", "passthrough")}
           </span>
         ),
       },
@@ -397,7 +369,7 @@ function BatchListView({
         metadata={
           <DataFreshness
             updatedAt={
-              data?.queriedAt ? formatTime(data.queriedAt) : "刚刚"
+              data?.queriedAt ? formatDateTime(data.queriedAt, "dateStyle", "passthrough") : "刚刚"
             }
             dateTime={data?.queriedAt}
             state={listQuery.isFetching ? "stale" : "fresh"}
@@ -408,9 +380,12 @@ function BatchListView({
 
       <RoleDemoBar
         role={role}
-        onChange={(r) =>
+        onRole={(r) =>
           patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
         }
+        roleOptions={IMPORT_ROLE_OPTIONS}
+        roleClassName="w-[11rem]"
+        hintFor={importRoleHint}
       />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -697,9 +672,12 @@ function BatchDetailView({
 
       <RoleDemoBar
         role={role}
-        onChange={(r) =>
+        onRole={(r) =>
           patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
         }
+        roleOptions={IMPORT_ROLE_OPTIONS}
+        roleClassName="w-[11rem]"
+        hintFor={importRoleHint}
       />
 
       <DocumentHeader
@@ -809,7 +787,7 @@ function BatchDetailView({
           <Fact label="试算版本" value={batch.trialVersion} mono />
           <Fact label="来源系统" value={batch.sourceSystem.name} />
           <Fact label="发起人" value={batch.initiatorLabel} />
-          <Fact label="更新时间" value={formatTime(batch.updatedAt)} />
+          <Fact label="更新时间" value={formatDateTime(batch.updatedAt, "dateStyle", "passthrough")} />
         </CardContent>
       </Card>
 
@@ -1059,7 +1037,7 @@ function OverviewSection({
           <AlertTitle>旧确认已失效</AlertTitle>
           <AlertDescription>
             {batch.invalidation.reason}（
-            {formatTime(batch.invalidation.invalidatedAt)}
+            {formatDateTime(batch.invalidation.invalidatedAt, "dateStyle", "passthrough")}
             ）。禁止按旧版本 trial=
             <span className="num font-mono">
               {batch.invalidation.previousTrialVersion}
@@ -1146,7 +1124,7 @@ function FilesSection({ batch }: { batch: ImportBatchView }) {
                 <div className="mt-1 text-xs text-muted-foreground">
                   {RETENTION_LABEL[a.retentionClass]}
                   {a.expiresAt
-                    ? ` · 到期 ${formatTime(a.expiresAt)}`
+                    ? ` · 到期 ${formatDateTime(a.expiresAt, "dateStyle", "passthrough")}`
                     : " · 无到期"}
                   {" · "}
                   {formatBytes(a.byteSize)}
@@ -1392,7 +1370,7 @@ function ConfirmSection({
                 {c.confirmedByLabel ? (
                   <p>
                     确认人 {c.confirmedByLabel}
-                    {c.confirmedAt ? ` · ${formatTime(c.confirmedAt)}` : ""}
+                    {c.confirmedAt ? ` · ${formatDateTime(c.confirmedAt, "dateStyle", "passthrough")}` : ""}
                   </p>
                 ) : null}
                 {c.comment ? (
@@ -1469,7 +1447,7 @@ function ProgressSection({ batch }: { batch: ImportBatchView }) {
         label={`后台任务 ${job.jobId}`}
         description={
           <span>
-            最近进度 {formatTime(job.updatedAt)} · 允许部分成功；已形成的处理结果不会因同批其它失败而回退。
+            最近进度 {formatDateTime(job.updatedAt, "dateStyle", "passthrough")} · 允许部分成功；已形成的处理结果不会因同批其它失败而回退。
           </span>
         }
       />

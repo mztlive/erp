@@ -31,6 +31,9 @@ import {
   QuickPreviewSheet,
   SettlementPartyCombobox,
 } from "@/components/business"
+import { formatDateTime } from "@/lib/datetime"
+import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
+import { type ResultState } from "@/components/business/feedback"
 import {
   Alert,
   AlertDescription,
@@ -100,33 +103,8 @@ function parseDue(raw: string | null): DueFilter | undefined {
   return undefined
 }
 
-function formatDateTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString("zh-CN", {
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  } catch {
-    return iso
-  }
-}
-
 type PreviewKind = "receivable" | "receipt" | "invoice"
 type PreviewState = { kind: PreviewKind; id: string } | null
-
-type ResultState =
-  | {
-      status: "succeeded" | "unknown" | "rejected" | "blocked"
-      title: string
-      description: string
-      reference?: string
-      facts?: Array<{ label: string; value: string }>
-    }
-  | null
 
 export function CustomerReceivablesPage() {
   const router = useRouter()
@@ -223,16 +201,7 @@ export function CustomerReceivablesPage() {
     patch: Record<string, string | null | undefined>,
     options?: { replace?: boolean }
   ) {
-    const next = new URLSearchParams(searchParams.toString())
-    for (const [key, value] of Object.entries(patch)) {
-      if (value == null || value === "") next.delete(key)
-      else next.set(key, value)
-    }
-    if (!next.get("view")) next.set("view", view)
-    const qs = next.toString()
-    const href = qs ? `${pathname}?${qs}` : pathname
-    if (options?.replace) router.replace(href)
-    else router.push(href)
+    patchSearchParams({ router, pathname, searchParams, view }, patch, options)
   }
 
   React.useEffect(() => {
@@ -554,7 +523,7 @@ export function CustomerReceivablesPage() {
         header: "到账时间",
         cell: ({ row }) => (
           <span className="num text-sm">
-            {formatDateTime(row.original.receivedAt)}
+            {formatDateTime(row.original.receivedAt, "full", "passthrough")}
           </span>
         ),
       },
@@ -907,7 +876,7 @@ export function CustomerReceivablesPage() {
 
       {lastResult ? (
         <FormalActionResult
-          status={lastResult.status}
+          status={lastResult.status === "failed" ? "blocked" : lastResult.status}
           title={lastResult.title}
           description={lastResult.description}
           reference={lastResult.reference}
@@ -1615,7 +1584,7 @@ function ReceiptDetailBody({ row }: { row: ReceiptRow }) {
       <div className="grid grid-cols-2 gap-3">
         <Fact label="回款单号" value={row.receiptNo} mono />
         <Fact label="往来主体" value={row.counterpartyPartyName} />
-        <Fact label="到账时间" value={formatDateTime(row.receivedAt)} mono />
+        <Fact label="到账时间" value={formatDateTime(row.receivedAt, "full", "passthrough")} mono />
         <Fact
           label="到账金额"
           value={<MoneyValue value={row.amount} taxBasis="gross" />}
@@ -1657,7 +1626,7 @@ function ReceiptDetailBody({ row }: { row: ReceiptRow }) {
                   <MoneyValue value={a.amountGross} />
                 </div>
                 <div className="text-xs text-muted-foreground">
-                  {formatDateTime(a.occurredAt)}
+                  {formatDateTime(a.occurredAt, "full", "passthrough")}
                   {a.reverseOfAllocationId
                     ? " · 冲减原分配"
                     : null}

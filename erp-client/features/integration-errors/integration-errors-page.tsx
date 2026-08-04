@@ -30,6 +30,7 @@ import {
   type InterfaceErrorStatus,
 } from "@/components/business"
 import { TRANSFER_ROLE_OPTIONS } from "@/lib/business-options"
+import { formatDateTime } from "@/lib/datetime"
 import {
   Alert,
   AlertDescription,
@@ -87,15 +88,6 @@ type SessionLease = {
   claimToken: string
   leaseVersion: number
   expiresAt: string
-}
-
-function formatTime(iso?: string) {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("zh-CN", { hour12: false })
-  } catch {
-    return iso
-  }
 }
 
 function newKey(prefix: string) {
@@ -927,7 +919,7 @@ export function IntegrationErrorsPage({
           <DataFreshness
             state="fresh"
             label="集成更新时间"
-            updatedAt={formatTime(view?.context.updatedAt)}
+            updatedAt={formatDateTime(view?.context.updatedAt, "default")}
             dateTime={view?.context.updatedAt}
           />
         }
@@ -1237,7 +1229,7 @@ export function IntegrationErrorsPage({
                         taskType={row.classification.label}
                         businessObject={row.businessObject.title}
                         counterparty={row.identity.number}
-                        enteredAt={formatTime(row.createdAt)}
+                        enteredAt={formatDateTime(row.createdAt, "default")}
                         enteredDateTime={row.createdAt}
                         dueAt={row.ageLabel}
                         responsibleParty={row.ownerUser ?? row.ownerRole}
@@ -1283,7 +1275,7 @@ export function IntegrationErrorsPage({
                     !item.hasWorkItem
                       ? "直接对账（无处理任务）"
                       : leaseActive
-                        ? `已领取 · 至 ${formatTime(activeLease?.expiresAt)}`
+                        ? `已领取 · 至 ${formatDateTime(activeLease?.expiresAt, "default")}`
                         : "未领取"
                   }
                   processLabel="处理当前"
@@ -1471,8 +1463,8 @@ export function IntegrationErrorsPage({
                           {
                             id: "watermark",
                             field: "更新时间",
-                            before: formatTime(item.difference.watermark),
-                            after: formatTime(item.difference.watermark),
+                            before: formatDateTime(item.difference.watermark, "default"),
+                            after: formatDateTime(item.difference.watermark, "default"),
                             note: item.difference.differenceType,
                           },
                           {
@@ -1538,7 +1530,7 @@ export function IntegrationErrorsPage({
                                 第 {a.attemptNumber} 次 · {a.result}
                               </div>
                               <div className="text-xs text-muted-foreground">
-                                {formatTime(a.attemptedAt)}
+                                {formatDateTime(a.attemptedAt, "default")}
                                 {a.requestSummary
                                   ? ` · 请求 ${a.requestSummary}`
                                   : ""}
@@ -1560,7 +1552,7 @@ export function IntegrationErrorsPage({
                           action: e.action,
                           operator: e.actor,
                           occurredAt: e.at,
-                          occurredAtLabel: formatTime(e.at),
+                          occurredAtLabel: formatDateTime(e.at, "default"),
                           source: "证据",
                           note: e.detail,
                         }))}
@@ -1576,7 +1568,7 @@ export function IntegrationErrorsPage({
                           action: ACTION_LABEL[e.action] ?? e.action,
                           operator: e.actor,
                           occurredAt: e.at,
-                          occurredAtLabel: formatTime(e.at),
+                          occurredAtLabel: formatDateTime(e.at, "default"),
                           source: "处理",
                           note: e.detail,
                         }))}
@@ -1639,8 +1631,9 @@ export function IntegrationErrorsPage({
                       attemptNumber: item.attempts[0]?.attemptNumber ?? 0,
                       attemptedAt: {
                         dateTime: item.attempts[0]?.attemptedAt ?? item.createdAt,
-                        label: formatTime(
-                          item.attempts[0]?.attemptedAt ?? item.createdAt
+                        label: formatDateTime(
+                          item.attempts[0]?.attemptedAt ?? item.createdAt,
+                          "default"
                         ),
                       },
                       result: item.attempts[0]?.result ?? "尚无尝试",
@@ -1649,7 +1642,7 @@ export function IntegrationErrorsPage({
                       nextRetryAt: item.attempts[0]?.nextRetryAt
                         ? {
                             dateTime: item.attempts[0].nextRetryAt,
-                            label: formatTime(item.attempts[0].nextRetryAt),
+                            label: formatDateTime(item.attempts[0].nextRetryAt, "default"),
                           }
                         : undefined,
                     }}

@@ -76,20 +76,7 @@ import {
   FULFILLMENT_CHAIN_TONE,
   SUPPLIER_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
-
-function formatTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString("zh-CN", {
-      hour12: false,
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  } catch {
-    return iso
-  }
-}
+import { formatDateTime } from "@/lib/datetime"
 
 function parseMetric(
   raw: string | null
@@ -419,7 +406,7 @@ export function ConsumptionOrdersListPage() {
         meta: { label: "支付时间", width: "default", numeric: true },
         cell: ({ row }) => (
           <span className="num text-sm text-muted-foreground">
-            {formatTime(row.original.paidAt)}
+            {formatDateTime(row.original.paidAt, "monthDay", "passthrough")}
           </span>
         ),
       },
@@ -574,7 +561,7 @@ export function ConsumptionOrdersListPage() {
         ]}
         metadata={
           <DataFreshness
-            updatedAt={data ? formatTime(data.factWatermark) : "—"}
+            updatedAt={data ? formatDateTime(data.factWatermark, "monthDay", "passthrough") : "—"}
             dateTime={data?.factWatermark}
             state={listQuery.isFetching ? "stale" : "fresh"}
             label={`记录更新 · ${data?.permissionVersion ?? "—"}`}
@@ -664,7 +651,7 @@ export function ConsumptionOrdersListPage() {
               },
               {
                 label: "到期",
-                value: formatTime(exportResult.expiresAt),
+                value: formatDateTime(exportResult.expiresAt, "monthDay", "passthrough"),
               },
             ]}
           />

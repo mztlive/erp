@@ -30,6 +30,8 @@ import {
   QuickPreviewSheet,
   SupplierCombobox,
 } from "@/components/business"
+import { formatDateTime } from "@/lib/datetime"
+import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import {
   Alert,
   AlertDescription,
@@ -90,21 +92,6 @@ function parseView(raw: string | null): SupplierAccountsView {
     return raw
   }
   return "payable"
-}
-
-function formatDateTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString("zh-CN", {
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  } catch {
-    return iso
-  }
 }
 
 type SessionState = {
@@ -219,16 +206,7 @@ export function SupplierAccountsPage() {
     patch: Record<string, string | null | undefined>,
     options?: { replace?: boolean }
   ) {
-    const next = new URLSearchParams(searchParams.toString())
-    for (const [key, value] of Object.entries(patch)) {
-      if (value == null || value === "") next.delete(key)
-      else next.set(key, value)
-    }
-    if (!next.get("view")) next.set("view", view)
-    const qs = next.toString()
-    const href = qs ? `${pathname}?${qs}` : pathname
-    if (options?.replace) router.replace(href)
-    else router.push(href)
+    patchSearchParams({ router, pathname, searchParams, view }, patch, options)
   }
 
   React.useEffect(() => {
@@ -510,7 +488,7 @@ export function SupplierAccountsPage() {
         meta: { label: "时间", width: "default", numeric: true },
         cell: ({ row }) => (
           <span className="num text-xs text-muted-foreground">
-            {formatDateTime(row.original.paidAt)}
+            {formatDateTime(row.original.paidAt, "full", "passthrough")}
           </span>
         ),
       },

@@ -61,15 +61,7 @@ import {
 } from "@/features/mall-consumption-orders/types"
 import { cn } from "@/lib/utils"
 import { openWorkspaceLabel } from "@/lib/ui-text"
-
-function formatTime(iso?: string) {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("zh-CN", { hour12: false })
-  } catch {
-    return iso
-  }
-}
+import { formatDateTime } from "@/lib/datetime"
 
 function parseSection(raw: string | null): ObjectCenterSectionId {
   const found = OBJECT_CENTER_SECTIONS.find((s) => s.id === raw)
@@ -273,11 +265,11 @@ function FactCard({
       <dl className="mt-2 grid gap-1 text-xs sm:grid-cols-2">
         <div>
           <dt className="text-muted-foreground">发生时间</dt>
-          <dd className="num">{formatTime(fact.occurredAt)}</dd>
+          <dd className="num">{formatDateTime(fact.occurredAt, "default")}</dd>
         </div>
         <div>
           <dt className="text-muted-foreground">接收时间</dt>
-          <dd className="num">{formatTime(fact.receivedAt)}</dd>
+          <dd className="num">{formatDateTime(fact.receivedAt, "default")}</dd>
         </div>
         <div>
           <dt className="text-muted-foreground">商城版本</dt>
@@ -462,7 +454,7 @@ export function ConsumptionOrderCenterPage({
         }}
         meta={
           <span className="text-muted-foreground">
-            记录更新 {formatTime(view.freshness.factWatermark)}
+            记录更新 {formatDateTime(view.freshness.factWatermark, "default")}
           </span>
         }
         statuses={[
@@ -619,13 +611,13 @@ export function ConsumptionOrderCenterPage({
                   id: "f-28981",
                   label: "下单时间",
                   value: (
-                    <span className="num">{formatTime(view.orderedAt)}</span>
+                    <span className="num">{formatDateTime(view.orderedAt, "default")}</span>
                   ),
                 },
                 {
                   id: "f-38567",
                   label: "支付时间（决定履约链）",
-                  value: <span className="num">{formatTime(view.paidAt)}</span>,
+                  value: <span className="num">{formatDateTime(view.paidAt, "default")}</span>,
                 },
                 {
                   id: "f-15545",
@@ -665,7 +657,7 @@ export function ConsumptionOrderCenterPage({
                       {FULFILLMENT_CHAIN_LABEL[view.fulfillment.chain]}
                       <span className="mx-1 text-muted-foreground">·</span>
                       支付成功时间{" "}
-                      {formatTime(view.fulfillment.decidedByOccurredAt)}
+                      {formatDateTime(view.fulfillment.decidedByOccurredAt, "default")}
                       {view.fulfillment.chain === "LEGACY_MANUAL"
                         ? "，早于切换时点"
                         : "，不早于切换时点"}
@@ -746,9 +738,9 @@ export function ConsumptionOrderCenterPage({
                 occurredAt: f.occurredAt,
                 occurredAtLabel: (
                   <span>
-                    发生 {formatTime(f.occurredAt)}
+                    发生 {formatDateTime(f.occurredAt, "default")}
                     <span className="mx-1 text-muted-foreground">/</span>
-                    接收 {formatTime(f.receivedAt)}
+                    接收 {formatDateTime(f.receivedAt, "default")}
                   </span>
                 ),
                 source:
@@ -1260,7 +1252,7 @@ export function ConsumptionOrderCenterPage({
                             label: "评估时间",
                             value: (
                               <span className="num">
-                                {formatTime(ca.assessedAt)}
+                                {formatDateTime(ca.assessedAt, "default")}
                               </span>
                             ),
                           },
@@ -1344,7 +1336,7 @@ export function ConsumptionOrderCenterPage({
                     tone={FACT_TYPE_TONE[f.factType]}
                   />
                   <span className="num ml-2 text-xs text-muted-foreground">
-                    {formatTime(f.occurredAt)}
+                    {formatDateTime(f.occurredAt, "default")}
                   </span>
                   <div className="mt-1 text-muted-foreground">
                     {Object.entries(f.resultDetails)
@@ -1367,7 +1359,7 @@ export function ConsumptionOrderCenterPage({
                 label: "记录更新时间",
                 value: (
                   <span className="num">
-                    {formatTime(view.freshness.factWatermark)}
+                    {formatDateTime(view.freshness.factWatermark, "default")}
                   </span>
                 ),
               },
@@ -1376,7 +1368,7 @@ export function ConsumptionOrderCenterPage({
                 label: "归集更新",
                 value: (
                   <span className="num">
-                    {formatTime(view.freshness.attributionUpdatedAt)}
+                    {formatDateTime(view.freshness.attributionUpdatedAt, "default")}
                   </span>
                 ),
               },
@@ -1385,7 +1377,7 @@ export function ConsumptionOrderCenterPage({
                 label: "供应商更新",
                 value: (
                   <span className="num">
-                    {formatTime(view.freshness.supplierUpdatedAt)}
+                    {formatDateTime(view.freshness.supplierUpdatedAt, "default")}
                   </span>
                 ),
               },
@@ -1394,7 +1386,7 @@ export function ConsumptionOrderCenterPage({
                 label: "成本评估",
                 value: (
                   <span className="num">
-                    {formatTime(view.freshness.costAssessedAt)}
+                    {formatDateTime(view.freshness.costAssessedAt, "default")}
                   </span>
                 ),
               },

@@ -42,6 +42,8 @@ import {
   QuickPreviewSheet,
   SalesOrderCombobox,
 } from "@/components/business"
+import { formatDateTime } from "@/lib/datetime"
+import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
 import { useSalesOrdersQuery } from "@/features/sales-orders/queries"
 import type { DataFreshnessState } from "@/components/business/page"
@@ -134,22 +136,6 @@ function formatMoneyDisplay(value: string | undefined | null): string {
     currency: "CNY",
     minimumFractionDigits: 2,
   }).format(n)
-}
-
-function formatDateTime(iso: string | undefined): string {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("zh-CN", {
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  } catch {
-    return iso
-  }
 }
 
 function taxBadge(basis: TaxBasis): string {
@@ -451,15 +437,7 @@ export function CardBusinessAnalyticsPage() {
     patch: Record<string, string | null | undefined>,
     options?: { replace?: boolean }
   ) {
-    const next = new URLSearchParams(searchParams.toString())
-    for (const [key, value] of Object.entries(patch)) {
-      if (value == null || value === "") next.delete(key)
-      else next.set(key, value)
-    }
-    const qs = next.toString()
-    const href = qs ? `${pathname}?${qs}` : pathname
-    if (options?.replace) router.replace(href)
-    else router.push(href)
+    patchSearchParams({ router, pathname, searchParams }, patch, options)
   }
 
   function applyExplicitPeriod() {
@@ -887,7 +865,7 @@ export function CardBusinessAnalyticsPage() {
           data ? (
             <div className="flex flex-col gap-1">
               <DataFreshness
-                updatedAt={formatDateTime(data.freshness.projectionUpdatedAt)}
+                updatedAt={formatDateTime(data.freshness.projectionUpdatedAt, "full")}
                 dateTime={data.freshness.projectionUpdatedAt}
                 state={freshnessUi.uiState}
                 statusLabel={freshnessUi.statusLabel}
@@ -900,7 +878,7 @@ export function CardBusinessAnalyticsPage() {
                     className="num"
                     dateTime={data.freshness.consumedOutboxWatermark}
                   >
-                    {formatDateTime(data.freshness.consumedOutboxWatermark)}
+                    {formatDateTime(data.freshness.consumedOutboxWatermark, "full")}
                   </time>
                 </span>
                 <span aria-hidden>·</span>
@@ -910,7 +888,7 @@ export function CardBusinessAnalyticsPage() {
                     className="num"
                     dateTime={data.freshness.sourceFactWatermark}
                   >
-                    {formatDateTime(data.freshness.sourceFactWatermark)}
+                    {formatDateTime(data.freshness.sourceFactWatermark, "full")}
                   </time>
                 </span>
                 {data.freshness.balanceSnapshotAt ? (
@@ -922,7 +900,7 @@ export function CardBusinessAnalyticsPage() {
                         className="num"
                         dateTime={data.freshness.balanceSnapshotAt}
                       >
-                        {formatDateTime(data.freshness.balanceSnapshotAt)}
+                        {formatDateTime(data.freshness.balanceSnapshotAt, "full")}
                       </time>
                       <span className="ml-1 text-muted-foreground">
                         （独立，不参与更新时效）
@@ -1165,7 +1143,7 @@ export function CardBusinessAnalyticsPage() {
               <AlertDescription>
                 {refreshFailed
                   ? "保留上次成功数据供只读查阅。不覆盖金额。"
-                  : `更新延迟 ${data.freshness.lagSeconds}s 超过固定上限 ${data.freshness.maxLagSeconds}s（${data.freshness.slaState}）。数据 ${formatDateTime(data.freshness.projectionUpdatedAt)}，同步 ${formatDateTime(data.freshness.consumedOutboxWatermark)}。余额记录独立显示，不合并为「实时」。`}
+                  : `更新延迟 ${data.freshness.lagSeconds}s 超过固定上限 ${data.freshness.maxLagSeconds}s（${data.freshness.slaState}）。数据 ${formatDateTime(data.freshness.projectionUpdatedAt, "full")}，同步 ${formatDateTime(data.freshness.consumedOutboxWatermark, "full")}。余额记录独立显示，不合并为「实时」。`}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -1226,11 +1204,13 @@ export function CardBusinessAnalyticsPage() {
                   覆盖率 {exportJobQuery.data.watermark.coverageRate ?? "—"} ·
                   数据{" "}
                   {formatDateTime(
-                    exportJobQuery.data.watermark.projectionUpdatedAt
+                    exportJobQuery.data.watermark.projectionUpdatedAt,
+                    "full"
                   )}{" "}
                   · 同步{" "}
                   {formatDateTime(
-                    exportJobQuery.data.watermark.consumedOutboxWatermark
+                    exportJobQuery.data.watermark.consumedOutboxWatermark,
+                    "full"
                   )}{" "}
                   · 延迟 {exportJobQuery.data.watermark.lagSeconds}s
                   </span>
@@ -1838,11 +1818,11 @@ export function CardBusinessAnalyticsPage() {
                 </p>
                 <p>
                   <strong>数据时间：</strong>
-                  数据 {formatDateTime(data.freshness.projectionUpdatedAt)} ·
+                  数据 {formatDateTime(data.freshness.projectionUpdatedAt, "full")} ·
                   同步{" "}
-                  {formatDateTime(data.freshness.consumedOutboxWatermark)} ·
+                  {formatDateTime(data.freshness.consumedOutboxWatermark, "full")} ·
                   余额记录{" "}
-                  {formatDateTime(data.freshness.balanceSnapshotAt)} · 延迟{" "}
+                  {formatDateTime(data.freshness.balanceSnapshotAt, "full")} · 延迟{" "}
                   {data.freshness.lagSeconds}s / 上限{" "}
                   {data.freshness.maxLagSeconds}s
                 </p>

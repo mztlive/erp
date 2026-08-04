@@ -22,6 +22,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
+import { formatDateTime } from "@/lib/datetime"
 
 type Props = {
   order: SupplierOrderDetailView
@@ -117,7 +118,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                 label="支付时间"
                 value={
                   <span className="num text-xs">
-                    {formatTime(o.paidAt)}
+                    {formatDateTime(o.paidAt, "monthDayIntl", "passthrough")}
                   </span>
                 }
               />
@@ -209,7 +210,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                 <p className="text-xs">
                   {lastAction.actionLabel} · {lastAction.outcomeLabel} ·{" "}
                   <span className="text-muted-foreground">
-                    {lastAction.actor} · {formatTime(lastAction.at)}
+                    {lastAction.actor} · {formatDateTime(lastAction.at, "monthDayIntl", "passthrough")}
                   </span>
                 </p>
                 <p className="text-[11px] text-muted-foreground">
@@ -261,17 +262,4 @@ function SectionTitle({ children }: { children: ReactNode }) {
       {children}
     </h3>
   )
-}
-
-function formatTime(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat("zh-CN", {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(iso))
-  } catch {
-    return iso
-  }
 }

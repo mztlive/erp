@@ -45,20 +45,7 @@ import type {
   ProductPublicationRow,
 } from "@/features/product-publications/types"
 import { PUBLICATION_STATUS_LABEL } from "@/features/product-publications/types"
-
-function formatTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString("zh-CN", {
-      hour12: false,
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  } catch {
-    return iso
-  }
-}
+import { formatDateTime } from "@/lib/datetime"
 
 function parseMetric(raw: string | null): string {
   if (
@@ -297,7 +284,7 @@ export function ProductPublicationsListPage() {
         cell: ({ row }) => (
           <span className="num text-xs text-muted-foreground">
             {row.original.latestDelivery?.mallAckAt
-              ? formatTime(row.original.latestDelivery.mallAckAt)
+              ? formatDateTime(row.original.latestDelivery.mallAckAt, "monthDay", "passthrough")
               : "—"}
           </span>
         ),

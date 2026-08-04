@@ -47,9 +47,7 @@ export { TextareaField } from "@/components/form/textarea-field";
 export { SubmitButton } from "@/components/form/submit-button";
 export {
   SelectField,
-  ComboboxField,
   type SelectFieldOption,
-  type ComboboxFieldOption,
 } from "@/components/form/select-field";
 export { PdfUploadField } from "@/components/form/pdf-upload-field";
 export {

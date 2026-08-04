@@ -593,6 +593,39 @@ function ValidationSummary({
   )
 }
 
+/**
+ * 页面通用「表单动作结果」状态，用 optional 吸收各页面历史变体：
+ * - facts：部分页面 value 为 string，部分为 ReactNode
+ * - outcome：随各业务域类型参数化（默认 unknown）
+ * - 扩展字段（pendingIdempotencyKey / jobId / w12Href / returnTo 等）均为可选
+ */
+type ResultState<TOutcome = unknown> = {
+  status:
+    | "succeeded"
+    | "failed"
+    | "rejected"
+    | "blocked"
+    | "unknown"
+    | "processing"
+  title: string
+  description: string
+  reference?: string
+  facts?: Array<{ label: string; value: string | React.ReactNode }>
+  pendingIdempotencyKey?: string
+  pendingRequestId?: string
+  pendingKey?: string
+  outcome?: TOutcome
+  stayOnItem?: boolean
+  terminal?: boolean
+  jobId?: string
+  jobNo?: string
+  payableNo?: string
+  w12Href?: string
+  returnTo?: string
+  w29Href?: string
+  stayUnknown?: boolean
+} | null
+
 type FormalActionResultStatus =
   | "succeeded"
   | "rejected"
@@ -1005,6 +1038,7 @@ export {
   type FormalActionResultProps,
   type FormalActionResultStatus,
   type GuardedBusinessActionProps,
+  type ResultState,
   type SensitiveValueProps,
   type ValidationIssue,
   type ValidationSummaryProps,

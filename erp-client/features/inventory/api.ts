@@ -3,7 +3,7 @@
  * available_quantity / 指标组合数一律来自服务端投影，禁止前端重算覆盖。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import {
   decodeInventoryCursor,
   encodeInventoryCursor,

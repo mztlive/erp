@@ -3,7 +3,7 @@
  * claimToken 仅出现在领取响应；任务内动作 / 终结复用 W02 会话信封语义。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   CostFieldVisibility,
   CreateCompanyProductFromSupplierSkuInput,

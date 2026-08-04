@@ -12,15 +12,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { SystemSafetyPauseOperationView } from "@/features/product-publications/types"
 import { SAFETY_PAUSE_CAUSE_LABEL } from "@/features/product-publications/types"
-
-function formatTime(iso?: string) {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("zh-CN", { hour12: false })
-  } catch {
-    return iso
-  }
-}
+import { formatDateTime } from "@/lib/datetime"
 
 /**
  * SystemSafetyPauseOperationView 唯一结构渲染：
@@ -112,7 +104,7 @@ export function SafetyPausePanel({
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">提交时间</dt>
-              <dd className="num">{formatTime(pause.committedAt)}</dd>
+              <dd className="num">{formatDateTime(pause.committedAt, "default")}</dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">来源对象</dt>

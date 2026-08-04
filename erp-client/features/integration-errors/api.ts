@@ -7,7 +7,7 @@
  * - 直接对账不伪造 CLOSED
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   ActionOutcome,
   ClaimResult,

@@ -13,6 +13,7 @@ import {
   ValidationSummary,
   type ValidationIssue,
 } from "@/components/business"
+import { type ResultState } from "@/components/business/feedback"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -51,18 +52,6 @@ const factFormSchema = z.object({
   netAmount: z.string(),
   taxAmount: z.string(),
 })
-
-type ResultState =
-  | {
-      status: "succeeded" | "unknown" | "failed"
-      title: string
-      description: string
-      reference?: string
-      facts?: Array<{ label: string; value: string }>
-      pendingKey?: string
-      returnTo?: string
-    }
-  | null
 
 function parseAmt(v: string): number {
   const n = Number(v)

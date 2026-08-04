@@ -4,7 +4,7 @@
  * 租约 / 完成 / 暂挂复用 W02 session-state 统一信封语义。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   ConfirmationLineDraft,
   CoverageByLine,

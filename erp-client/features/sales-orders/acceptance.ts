@@ -3,7 +3,7 @@
  * 兼容 re-export 旧 detail/acceptance 入口；新 UI 使用 workspace 系列。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   AcceptanceEligibleFact,
   AcceptanceSalesLineGroup,

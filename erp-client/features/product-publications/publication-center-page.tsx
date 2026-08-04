@@ -26,6 +26,8 @@ import {
   RevisionTimeline,
   StatusTrackSummary,
 } from "@/components/business"
+import { formatDateTime } from "@/lib/datetime"
+import { type ResultState } from "@/components/business/feedback"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -80,15 +82,6 @@ function parseSection(raw: string | null): SectionId {
   return found?.id ?? "overview"
 }
 
-function formatTime(iso?: string) {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("zh-CN", { hour12: false })
-  } catch {
-    return iso
-  }
-}
-
 type SessionEdit = {
   baselineRevisionId: string
   name: string
@@ -108,17 +101,6 @@ type SessionEdit = {
   validTo?: string
   media: ProductPublicationRevisionView["media"]
 }
-
-type ResultState =
-  | {
-      status: "succeeded" | "blocked" | "unknown"
-      title: string
-      description: string
-      reference?: string
-      facts?: Array<{ label: string; value: React.ReactNode }>
-      pendingRequestId?: string
-    }
-  | null
 
 const publishDecimal = (label: string, maxScale: number, positive = false) =>
   z
@@ -267,8 +249,8 @@ function RevisionContent({
             label: "生效区间",
             value: (
               <span className="num text-xs">
-                {formatTime(rev.validFrom)}
-                {rev.validTo ? ` ~ ${formatTime(rev.validTo)}` : " 起"}
+                {formatDateTime(rev.validFrom, "default")}
+                {rev.validTo ? ` ~ ${formatDateTime(rev.validTo, "default")}` : " 起"}
               </span>
             ),
           },
@@ -779,7 +761,7 @@ export function PublicationCenterPage({
 
       {lastResult ? (
         <FormalActionResult
-          status={lastResult.status}
+          status={lastResult.status === "failed" ? "blocked" : lastResult.status}
           title={lastResult.title}
           description={lastResult.description}
           reference={lastResult.reference}
@@ -1337,7 +1319,7 @@ export function PublicationCenterPage({
                   actor: r.createdBy,
                   effectiveAt: {
                     dateTime: r.createdAt,
-                    label: formatTime(r.createdAt),
+                    label: formatDateTime(r.createdAt, "default"),
                   },
                   reason: r.deliverySummary,
                   status: {
@@ -1456,10 +1438,10 @@ export function PublicationCenterPage({
                         <div className="mt-1 text-xs text-muted-foreground">
                           尝试 {d.attemptCount}
                           {d.lastAttemptAt
-                            ? ` · 最近 ${formatTime(d.lastAttemptAt)}`
+                            ? ` · 最近 ${formatDateTime(d.lastAttemptAt, "default")}`
                             : ""}
                           {d.mallAckAt
-                            ? ` · 商城确认 ${formatTime(d.mallAckAt)}`
+                            ? ` · 商城确认 ${formatDateTime(d.mallAckAt, "default")}`
                             : ""}
                           {d.mallVersion ? (
                             <>
@@ -1501,7 +1483,7 @@ export function PublicationCenterPage({
                       r{r.revisionNo} · {r.createdBy} · {r.saleStatusLabel}
                     </span>
                     <span className="num text-xs text-muted-foreground">
-                      {formatTime(r.createdAt)}
+                      {formatDateTime(r.createdAt, "default")}
                     </span>
                   </li>
                 ))}
@@ -1520,7 +1502,7 @@ export function PublicationCenterPage({
               </div>
               <div className="text-xs text-muted-foreground">
                 {data.selectedRevision.createdBy} ·{" "}
-                {formatTime(data.selectedRevision.createdAt)}
+                {formatDateTime(data.selectedRevision.createdAt, "default")}
               </div>
               <BusinessStatusBadge
                 context="preview"

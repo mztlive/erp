@@ -1,4 +1,4 @@
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import { MOCK_SENSITIVE_REVEALS } from "@/features/master-data/data"
 import {
   buildW14ListResult,

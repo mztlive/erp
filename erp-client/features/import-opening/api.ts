@@ -3,7 +3,7 @@
  * 会话覆盖保存在本模块，避免与其它 wave 的 session-state 冲突。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   FormalActionResponse,
   ImportBatchListQuery,

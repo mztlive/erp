@@ -89,6 +89,9 @@ import {
   useTriggerSingleOrderMutation,
 } from "@/features/mall-sync/queries"
 import { cn } from "@/lib/utils"
+import { formatDateTime } from "@/lib/datetime"
+import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
+import { type ResultState } from "@/components/business/feedback"
 import { freshnessText, versionText } from "@/lib/ui-text"
 
 const VIEWS: MallSyncViewName[] = [
@@ -134,17 +137,6 @@ type SessionLease = {
   expiresAt: string
 }
 
-type ResultState =
-  | {
-      status: "succeeded" | "failed" | "unknown" | "blocked"
-      title: string
-      description: string
-      reference?: string
-      stayOnItem?: boolean
-      pendingIdempotencyKey?: string
-    }
-  | null
-
 const confirmSchema = z.object({
   evidenceNote: z.string().trim().min(4, "请填写至少 4 个字的确认依据"),
 })
@@ -167,15 +159,6 @@ const pullSchema = z.object({
 const incrementalSchema = z.object({
   reason: z.string().trim().min(4, "请填写至少 4 个字的理由"),
 })
-
-function formatTime(iso?: string) {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("zh-CN", { hour12: false })
-  } catch {
-    return iso
-  }
-}
 
 export function MallSyncPage() {
   const router = useRouter()
@@ -330,16 +313,7 @@ export function MallSyncPage() {
     patch: Record<string, string | null | undefined>,
     options?: { replace?: boolean }
   ) {
-    const next = new URLSearchParams(searchParams.toString())
-    for (const [key, value] of Object.entries(patch)) {
-      if (value == null || value === "") next.delete(key)
-      else next.set(key, value)
-    }
-    if (!next.get("view")) next.set("view", view)
-    const qs = next.toString()
-    const href = qs ? `${pathname}?${qs}` : pathname
-    if (options?.replace) router.replace(href)
-    else router.push(href)
+    patchSearchParams({ router, pathname, searchParams, view }, patch, options)
   }
 
   const confirmForm = useAppForm({
@@ -670,7 +644,7 @@ export function MallSyncPage() {
         header: "开始",
         cell: ({ row }) => (
           <span className="text-sm tabular-nums">
-            {formatTime(row.original.startedAt)}
+            {formatDateTime(row.original.startedAt, "default")}
           </span>
         ),
       },
@@ -1034,7 +1008,7 @@ export function MallSyncPage() {
               </p>
               {ownership.sealedAt ? (
                 <p>
-                  封存时间 {formatTime(ownership.sealedAt)}
+                  封存时间 {formatDateTime(ownership.sealedAt, "default")}
                   {ownership.finalWatermark
                     ? ` · 最终同步点 ${ownership.finalWatermark}`
                     : ""}
@@ -1320,11 +1294,11 @@ export function MallSyncPage() {
               </div>
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">最近成功</span>
-                <span>{formatTime(context?.freshness.latestSuccessfulJobAt)}</span>
+                <span>{formatDateTime(context?.freshness.latestSuccessfulJobAt, "default")}</span>
               </div>
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">来源安全时间</span>
-                <span>{formatTime(context?.freshness.sourceSafeTime)}</span>
+                <span>{formatDateTime(context?.freshness.sourceSafeTime, "default")}</span>
               </div>
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">主责数量</span>
@@ -1764,7 +1738,7 @@ export function MallSyncPage() {
                         <ul className="space-y-1 text-xs text-muted-foreground">
                           {mappingTask.resolutionHistory.map((h, i) => (
                             <li key={`${h.handledAt}-${i}`}>
-                              {formatTime(h.handledAt)} · {h.action} ·{" "}
+                              {formatDateTime(h.handledAt, "default")} · {h.action} ·{" "}
                               {h.result} · {h.handledBy}
                             </li>
                           ))}
@@ -2068,7 +2042,7 @@ export function MallSyncPage() {
               <CardHeader>
                 <CardTitle className="text-base">{h.title}</CardTitle>
                 <CardDescription>
-                  {formatTime(h.recordedAt)}
+                  {formatDateTime(h.recordedAt, "default")}
                   {h.watermark ? ` · ${h.watermark}` : ""}
                   {h.reference ? ` · ${h.reference}` : ""}
                 </CardDescription>

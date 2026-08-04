@@ -3,7 +3,7 @@
  * 正式金额/覆盖/利润率均来自服务端投影；前端不得浮点重算覆盖 totals。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   CostEntryDetail,
   ProfitLossExportJob,

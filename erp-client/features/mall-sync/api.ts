@@ -6,7 +6,7 @@
  * - mock 永不返回玩法/卡号/卡密/绑定手机/连接/密钥
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   ConfirmMappingResult,
   DeferMappingResult,

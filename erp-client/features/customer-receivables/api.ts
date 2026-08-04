@@ -3,7 +3,7 @@
  * 开放余额与净分配一律来自服务端投影，禁止前端拟合计冒充结果。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import {
   W11_COUNTERPARTIES,
   W11_DEMO_HAS_DATA_SCOPE,

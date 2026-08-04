@@ -4,7 +4,7 @@
  * 确认成功后才更新队列完成集合与业务结果；结果未知时不改库存/预占/队列。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   DeferReasonCode,
   FormalActionResponse,

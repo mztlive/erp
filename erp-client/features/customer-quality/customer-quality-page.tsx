@@ -37,6 +37,8 @@ import {
   PageActions,
   PageHeader,
 } from "@/components/business"
+import { formatDateTime } from "@/lib/datetime"
+import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import {
   Alert,
   AlertDescription,
@@ -118,21 +120,6 @@ function parseScenario(raw: string | null): CustomerQualityScenario | undefined 
 
 function parseFundsReview(raw: string | null): FundsReviewFilter {
   return raw === "reviewed_only" ? "reviewed_only" : "all"
-}
-
-function formatDateTime(iso: string) {
-  try {
-    return new Date(iso).toLocaleString("zh-CN", {
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  } catch {
-    return iso
-  }
 }
 
 function formatClock(iso: string) {
@@ -422,15 +409,7 @@ export function CustomerQualityPage() {
     patch: Record<string, string | null | undefined>,
     options?: { replace?: boolean }
   ) {
-    const next = new URLSearchParams(searchParams.toString())
-    for (const [key, value] of Object.entries(patch)) {
-      if (value == null || value === "") next.delete(key)
-      else next.set(key, value)
-    }
-    const qs = next.toString()
-    const href = qs ? `${pathname}?${qs}` : pathname
-    if (options?.replace) router.replace(href)
-    else router.push(href)
+    patchSearchParams({ router, pathname, searchParams }, patch, options)
   }
 
   const returnTo = React.useMemo(
@@ -728,7 +707,7 @@ export function CustomerQualityPage() {
         cell: ({ row }) => (
           <span className="num text-xs text-muted-foreground">
             {row.original.latestBusinessAt
-              ? formatDateTime(row.original.latestBusinessAt)
+              ? formatDateTime(row.original.latestBusinessAt, "full", "passthrough")
               : "—"}
           </span>
         ),
@@ -1029,7 +1008,7 @@ export function CustomerQualityPage() {
         <Alert variant="warning">
           <AlertTitle>数据可能不是最新</AlertTitle>
           <AlertDescription>
-            最近成功更新 {formatDateTime(data.freshness.projectedAt)}；来源更新时间{" "}
+            最近成功更新 {formatDateTime(data.freshness.projectedAt, "full", "passthrough")}；来源更新时间{" "}
             <span className="num">{data.freshness.sourceWatermark}</span>
             。数据可能不是最新，可点击刷新。
           </AlertDescription>
@@ -1848,7 +1827,7 @@ export function CustomerQualityPage() {
                 <span className="mt-1 block font-medium">
                   可下载（演示保留 7 天）：{exportJob.downloadLabel}
                   {exportJob.expiresAt
-                    ? ` · 失效 ${formatDateTime(exportJob.expiresAt)}`
+                    ? ` · 失效 ${formatDateTime(exportJob.expiresAt, "full", "passthrough")}`
                     : ""}
                 </span>
               ) : null}

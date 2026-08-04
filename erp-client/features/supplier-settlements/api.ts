@@ -5,7 +5,7 @@
  * - 策略缺失 fail-closed；UNKNOWN 可按幂等键查询
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   AppendEvidenceInput,
   CreateDraftInput,

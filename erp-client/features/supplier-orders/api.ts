@@ -6,7 +6,7 @@
  * - 快照字段不可变；敏感地址短时揭示；成本按字段权限掩码
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   ActionBlocker,
   AfterSalesActionInput,

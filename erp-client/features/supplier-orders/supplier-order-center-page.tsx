@@ -57,6 +57,7 @@ import {
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { clearAddressReveal } from "@/features/supplier-orders/api"
+import { formatDateTime } from "@/lib/datetime"
 import {
   useAddNoteMutation,
   useAfterSalesActionMutation,
@@ -79,20 +80,6 @@ import {
 function resolveSection(raw?: string | null): OrderSection {
   if (raw && (SECTIONS as string[]).includes(raw)) return raw as OrderSection
   return "overview"
-}
-
-function formatTime(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat("zh-CN", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(iso))
-  } catch {
-    return iso
-  }
 }
 
 const noteSchema = z.object({
@@ -641,7 +628,7 @@ export function SupplierOrderCenterPage({
         <AlertDescription className="text-xs leading-relaxed">
           {o.paymentOccurredNotice} 支付凭证{" "}
           <span className="num">{o.paymentFactKey}</span> · 支付时间{" "}
-          <span className="num">{formatTime(o.paidAt)}</span>
+          <span className="num">{formatDateTime(o.paidAt, "fullIntl", "passthrough")}</span>
         </AlertDescription>
       </Alert>
 
@@ -863,7 +850,7 @@ export function SupplierOrderCenterPage({
               label="接单时间"
               value={
                 detail.logistics.acceptedAt
-                  ? formatTime(detail.logistics.acceptedAt)
+                  ? formatDateTime(detail.logistics.acceptedAt, "fullIntl", "passthrough")
                   : "—"
               }
             />
@@ -871,7 +858,7 @@ export function SupplierOrderCenterPage({
               label="发货时间"
               value={
                 detail.logistics.shippedAt
-                  ? formatTime(detail.logistics.shippedAt)
+                  ? formatDateTime(detail.logistics.shippedAt, "fullIntl", "passthrough")
                   : "—"
               }
             />
@@ -879,7 +866,7 @@ export function SupplierOrderCenterPage({
               label="完成时间"
               value={
                 detail.logistics.completedAt
-                  ? formatTime(detail.logistics.completedAt)
+                  ? formatDateTime(detail.logistics.completedAt, "fullIntl", "passthrough")
                   : "—"
               }
             />
@@ -968,7 +955,7 @@ export function SupplierOrderCenterPage({
                     {h.fromLabel} → {h.toLabel}
                   </span>
                   <span className="text-muted-foreground">
-                    {formatTime(h.at)} · {h.source}
+                    {formatDateTime(h.at, "fullIntl", "passthrough")} · {h.source}
                   </span>
                 </div>
                 {h.note ? (
@@ -1001,7 +988,7 @@ export function SupplierOrderCenterPage({
                       </span>
                     </CardTitle>
                     <CardDescription className="text-xs">
-                      {as.scope} · 申请于 {formatTime(as.requestedAt)}
+                      {as.scope} · 申请于 {formatDateTime(as.requestedAt, "fullIntl", "passthrough")}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
@@ -1188,7 +1175,7 @@ export function SupplierOrderCenterPage({
                   </TableCell>
                   <TableCell className="text-xs">{a.actor}</TableCell>
                   <TableCell className="num text-xs">
-                    {formatTime(a.at)}
+                    {formatDateTime(a.at, "fullIntl", "passthrough")}
                   </TableCell>
                   <TableCell className="num text-xs">
                     {a.idempotencyKeyTail}

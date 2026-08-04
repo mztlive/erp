@@ -103,7 +103,10 @@ import {
   parseHistoryBackfillSearchParams,
   type HistoryBackfillUrlState,
 } from "@/features/history-backfill/url-state"
+import { formatDateTime } from "@/lib/datetime"
 import { resultText } from "@/lib/ui-text"
+import { RoleDemoBar } from "@/components/business/role-demo-bar"
+import type { ComboboxOption } from "@/components/business/option-combobox"
 
 const SECTION_TABS: { id: JobSection; label: string }[] = [
   { id: "overview", label: "概览" },
@@ -114,18 +117,6 @@ const SECTION_TABS: { id: JobSection; label: string }[] = [
   { id: "failures", label: "失败诊断" },
   { id: "report", label: "审计报告" },
 ]
-
-function formatTime(iso?: string) {
-  if (!iso) return "—"
-  try {
-    return new Intl.DateTimeFormat("zh-CN", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }).format(new Date(iso))
-  } catch {
-    return iso
-  }
-}
 
 function formatDay(iso: string) {
   return iso.slice(0, 10)
@@ -227,33 +218,12 @@ function FormalResultBanner({
   )
 }
 
-function RoleDemoBar({
-  role,
-  onChange,
-}: {
-  role: ViewerRoleDemo
-  onChange: (r: ViewerRoleDemo) => void
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-sm">
-      <span className="text-muted-foreground">演示角色</span>
-      <OptionCombobox
-        value={role}
-        onValueChange={(v) => {
-          if (v == null) return
-          onChange(v as ViewerRoleDemo)
-        }}
-        options={(Object.keys(ROLE_LABEL) as ViewerRoleDemo[]).map((r) => ({
-          value: r,
-          label: ROLE_LABEL[r],
-        }))}
-        className="w-[12rem]"
-        size="sm"
-        allowClear={false}
-      />
-    </div>
-  )
-}
+const HISTORY_ROLE_OPTIONS: ComboboxOption[] = (
+  Object.keys(ROLE_LABEL) as ViewerRoleDemo[]
+).map((r) => ({
+  value: r,
+  label: ROLE_LABEL[r],
+}))
 
 function Fact({
   label,
@@ -544,7 +514,7 @@ function JobListView({
         metadata={
           <DataFreshness
             updatedAt={
-              data?.queriedAt ? formatTime(data.queriedAt) : "刚刚"
+              data?.queriedAt ? formatDateTime(data.queriedAt, "dateStyle") : "刚刚"
             }
             dateTime={data?.queriedAt}
             state={listQuery.isFetching ? "stale" : "fresh"}
@@ -564,10 +534,13 @@ function JobListView({
 
       <div className="flex flex-wrap items-center gap-2">
         <RoleDemoBar
+          title="演示角色"
           role={role}
-          onChange={(r) =>
+          onRole={(r) =>
             patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
           }
+          roleOptions={HISTORY_ROLE_OPTIONS}
+          roleClassName="w-[12rem]"
         />
         <Button
           type="button"
@@ -1173,10 +1146,13 @@ function JobDetailView({
 
       <div className="flex flex-wrap items-center gap-2">
         <RoleDemoBar
+          title="演示角色"
           role={role}
-          onChange={(r) =>
+          onRole={(r) =>
             patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
           }
+          roleOptions={HISTORY_ROLE_OPTIONS}
+          roleClassName="w-[12rem]"
         />
         <Button
           type="button"
@@ -1366,7 +1342,7 @@ function JobDetailView({
             {currentJob.progress.unattributedCount.toLocaleString("zh-CN")} · 失败{" "}
             {currentJob.progress.failedCount.toLocaleString("zh-CN")}
             {currentJob.progress.heartbeatAt
-              ? ` · 最近心跳 ${formatTime(currentJob.progress.heartbeatAt)}`
+              ? ` · 最近心跳 ${formatDateTime(currentJob.progress.heartbeatAt, "dateStyle")}`
               : ""}
           </>
         }
@@ -1400,8 +1376,8 @@ function JobDetailView({
 
       <div className="grid gap-3 rounded-2xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="发起人" value={currentJob.requestedBy} />
-        <Fact label="发起时间" value={formatTime(currentJob.requestedAt)} />
-        <Fact label="来来源更新时间" value={formatTime(currentJob.sourceAsOf)} />
+        <Fact label="发起时间" value={formatDateTime(currentJob.requestedAt, "dateStyle")} />
+        <Fact label="来来源更新时间" value={formatDateTime(currentJob.sourceAsOf, "dateStyle")} />
         <Fact
           label={resultText.originalTaskId}
           value={currentJob.idempotencyNamespace}
@@ -1750,7 +1726,7 @@ function ItemsTable({
         header: "发生时间",
         cell: ({ row }) => (
           <span className="num text-xs">
-            {formatTime(row.original.occurredAt)}
+            {formatDateTime(row.original.occurredAt, "dateStyle")}
           </span>
         ),
       },
@@ -1982,7 +1958,7 @@ function ReportSection({
               <CardTitle>审计报告</CardTitle>
               <CardDescription>
                 {report.reportId} · v{report.reportVersion} ·{" "}
-                {formatTime(report.generatedAt)}
+                {formatDateTime(report.generatedAt, "dateStyle")}
               </CardDescription>
             </div>
             <div className="flex flex-wrap gap-2">

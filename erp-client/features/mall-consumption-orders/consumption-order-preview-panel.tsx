@@ -30,6 +30,7 @@ import {
   FULFILLMENT_CHAIN_TONE,
   SUPPLIER_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
+import { formatDateTime } from "@/lib/datetime"
 
 type Props = {
   view: MallConsumptionOrderView
@@ -124,13 +125,13 @@ export function ConsumptionOrderPreviewPanel({ view }: Props) {
                   id: "co-pv-ordered",
                   label: "下单时间",
                   value: (
-                    <span className="num">{formatTime(view.orderedAt)}</span>
+                    <span className="num">{formatDateTime(view.orderedAt, "monthDayIntl")}</span>
                   ),
                 },
                 {
                   id: "co-pv-paid",
                   label: "支付时间（决定履约链）",
-                  value: <span className="num">{formatTime(view.paidAt)}</span>,
+                  value: <span className="num">{formatDateTime(view.paidAt, "monthDayIntl")}</span>,
                 },
                 {
                   id: "co-pv-gross",
@@ -172,7 +173,7 @@ export function ConsumptionOrderPreviewPanel({ view }: Props) {
                       {FULFILLMENT_CHAIN_LABEL[view.fulfillment.chain]}
                       <span className="mx-1 text-muted-foreground">·</span>
                       支付成功时间{" "}
-                      {formatTime(view.fulfillment.decidedByOccurredAt)}
+                      {formatDateTime(view.fulfillment.decidedByOccurredAt, "monthDayIntl")}
                       {view.fulfillment.chain === "LEGACY_MANUAL"
                         ? "，早于切换时点"
                         : "，不早于切换时点"}
@@ -247,7 +248,7 @@ export function ConsumptionOrderPreviewPanel({ view }: Props) {
                 tone={FULFILLMENT_CHAIN_TONE[view.fulfillment.chain]}
               />
               <Badge variant="secondary">
-                支付成功时间 {formatTime(view.fulfillment.decidedByOccurredAt)}
+                支付成功时间 {formatDateTime(view.fulfillment.decidedByOccurredAt, "monthDayIntl")}
                 {view.fulfillment.chain === "LEGACY_MANUAL"
                   ? " · 早于切换时点"
                   : " · 不早于切换时点"}
@@ -427,8 +428,8 @@ function FactRow({ fact }: { fact: MallOrderFactView }) {
         </span>
       </div>
       <div className="mt-1 text-muted-foreground">
-        发生 <span className="num">{formatTime(fact.occurredAt)}</span> · 接收{" "}
-        <span className="num">{formatTime(fact.receivedAt)}</span>
+        发生 <span className="num">{formatDateTime(fact.occurredAt, "monthDayIntl")}</span> · 接收{" "}
+        <span className="num">{formatDateTime(fact.receivedAt, "monthDayIntl")}</span>
       </div>
     </li>
   )
@@ -440,18 +441,4 @@ function SectionTitle({ children }: { children: ReactNode }) {
       {children}
     </h3>
   )
-}
-
-function formatTime(iso?: string): string {
-  if (!iso) return "—"
-  try {
-    return new Intl.DateTimeFormat("zh-CN", {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(iso))
-  } catch {
-    return iso
-  }
 }

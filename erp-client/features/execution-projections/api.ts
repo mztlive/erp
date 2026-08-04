@@ -7,7 +7,7 @@
  * - 前端不从销售单重组装投影字段
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   BulkItemOutcome,
   BulkProjectionJob,

@@ -104,26 +104,10 @@ import {
   type ConnectionsUrlState,
 } from "@/features/supplier-api-connections/url-state"
 import { freshnessText } from "@/lib/ui-text"
-
-type ResultState = {
-  status: "succeeded" | "failed" | "blocked" | "rejected" | "unknown" | "processing"
-  title: string
-  description: string
-  reference?: string
-  facts?: Array<{ label: string; value: React.ReactNode }>
-  pendingIdempotencyKey?: string
-  jobId?: string
-  jobNo?: string
-} | null
-
-function formatTime(iso?: string) {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("zh-CN", { hour12: false })
-  } catch {
-    return iso
-  }
-}
+import { formatDateTime } from "@/lib/datetime"
+import { type ResultState } from "@/components/business/feedback"
+import { RoleDemoBar } from "@/components/business/role-demo-bar"
+import type { ComboboxOption } from "@/components/business/option-combobox"
 
 function outcomeToResult(outcome: FormalOutcome): ResultState {
   if (outcome.status === "succeeded") {
@@ -232,61 +216,28 @@ export function SupplierApiConnectionsPage() {
   )
 }
 
-function RoleDemoBar({
-  role,
-  demoFlag,
-  onRole,
-  onFlag,
-}: {
-  role: DemoRole
-  demoFlag?: "no-permission" | "no-scope"
-  onRole: (r: DemoRole) => void
-  onFlag: (f?: "no-permission" | "no-scope") => void
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-sm">
-      <span className="text-muted-foreground">角色演示</span>
-      <OptionCombobox
-        value={role}
-        onValueChange={(v) => {
-          if (v == null) return
-          onRole(v as DemoRole)
-        }}
-        options={[
-          { value: "procurement", label: "采购" },
-          { value: "ops", label: "研发运维" },
-          { value: "admin", label: "系统管理员" },
-        ]}
-        className="w-[9rem]"
-        size="sm"
-        allowClear={false}
-      />
-      <OptionCombobox
-        value={demoFlag ?? "normal"}
-        onValueChange={(v) => {
-          if (v == null || v === "normal") onFlag(undefined)
-          else onFlag(v as "no-permission" | "no-scope")
-        }}
-        options={[
-          { value: "normal", label: "正常权限" },
-          { value: "no-permission", label: "无模块权限" },
-          { value: "no-scope", label: "无数据范围" },
-        ]}
-        className="w-[11rem]"
-        size="sm"
-        allowClear={false}
-      />
-      <span className="text-xs text-muted-foreground">
-        当前：{DEMO_ROLE_LABEL[role]}
-        {role === "procurement"
-          ? " · 业务确认，不可写能力状态/密钥"
-          : role === "ops"
-            ? " · 技术引用与健康检查"
-            : " · 启停与能力治理；不可代采购确认"}
-      </span>
-    </div>
-  )
-}
+const CONNECTION_ROLE_OPTIONS: ComboboxOption[] = [
+  { value: "procurement", label: "采购" },
+  { value: "ops", label: "研发运维" },
+  { value: "admin", label: "系统管理员" },
+]
+
+const CONNECTION_FLAG_OPTIONS: ComboboxOption[] = [
+  { value: "normal", label: "正常权限" },
+  { value: "no-permission", label: "无模块权限" },
+  { value: "no-scope", label: "无数据范围" },
+]
+
+const connectionRoleHint = (role: DemoRole) => (
+  <>
+    当前：{DEMO_ROLE_LABEL[role]}
+    {role === "procurement"
+      ? " · 业务确认，不可写能力状态/密钥"
+      : role === "ops"
+        ? " · 技术引用与健康检查"
+        : " · 启停与能力治理；不可代采购确认"}
+  </>
+)
 
 function ConnectionList({
   urlState,
@@ -423,7 +374,7 @@ function ConnectionList({
               tone={row.original.healthTone}
             />
             <div className="text-[11px] text-muted-foreground">
-              {formatTime(row.original.lastHealthAt)}
+              {formatDateTime(row.original.lastHealthAt, "default")}
             </div>
           </div>
         ),
@@ -586,6 +537,11 @@ function ConnectionList({
         demoFlag={urlState.demoFlag}
         onRole={(r) => patchUrl({ role: r, page: 1 })}
         onFlag={(f) => patchUrl({ demoFlag: f, page: 1 })}
+        roleOptions={CONNECTION_ROLE_OPTIONS}
+        roleClassName="w-[9rem]"
+        flagOptions={CONNECTION_FLAG_OPTIONS}
+        flagClassName="w-[11rem]"
+        hintFor={connectionRoleHint}
       />
 
       {result ? (
@@ -1063,6 +1019,11 @@ function ConnectionCenter({
         demoFlag={urlState.demoFlag}
         onRole={(r) => patchUrl({ role: r })}
         onFlag={(f) => patchUrl({ demoFlag: f })}
+        roleOptions={CONNECTION_ROLE_OPTIONS}
+        roleClassName="w-[9rem]"
+        flagOptions={CONNECTION_FLAG_OPTIONS}
+        flagClassName="w-[11rem]"
+        hintFor={connectionRoleHint}
       />
 
       <DocumentHeader
@@ -1092,7 +1053,7 @@ function ConnectionCenter({
               ·
             </span>
             <span className="text-muted-foreground">
-              配置 {formatTime(conn.updatedAt)}
+              配置 {formatDateTime(conn.updatedAt, "default")}
             </span>
           </span>
         }
@@ -1622,7 +1583,7 @@ function OverviewSection({
             label={freshnessText.catalogSyncAt}
             value={`${conn.catalog.stateLabel}${
               conn.catalog.lastSuccessfulAt
-                ? ` · ${formatTime(conn.catalog.lastSuccessfulAt)}`
+                ? ` · ${formatDateTime(conn.catalog.lastSuccessfulAt, "default")}`
                 : ""
             }`}
           />
@@ -1921,7 +1882,7 @@ function HealthSection({
         header: "时间",
         meta: { label: "时间" },
         cell: ({ row }) => (
-          <span className="text-sm">{formatTime(row.original.at)}</span>
+          <span className="text-sm">{formatDateTime(row.original.at, "default")}</span>
         ),
       },
       {
@@ -2004,7 +1965,7 @@ function HealthSection({
     <div className="space-y-3">
       {last ? (
         <p className="text-sm text-muted-foreground">
-          最近：{formatTime(last.at)} · {last.resultLabel}
+          最近：{formatDateTime(last.at, "default")} · {last.resultLabel}
           {last.autoRetryStopped ? " · 自动重试已停止" : ""}
         </p>
       ) : null}
@@ -2069,7 +2030,7 @@ function CatalogSection({
           <Row label="同步状态" value={conn.catalog.stateLabel} />
           <Row
             label="最近成功"
-            value={formatTime(conn.catalog.lastSuccessfulAt)}
+            value={formatDateTime(conn.catalog.lastSuccessfulAt, "default")}
           />
           <Row
             label="当前任务"
@@ -2176,7 +2137,7 @@ function AuditSection({ conn }: { conn: ConnectionCenterView }) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">{e.action}</span>
               <span className="text-xs text-muted-foreground">
-                {formatTime(e.at)}
+                {formatDateTime(e.at, "default")}
               </span>
             </div>
             <p className="text-muted-foreground">{e.summary}</p>

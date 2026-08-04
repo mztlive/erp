@@ -9,7 +9,6 @@ import {
 } from "@/components/business/selectors"
 import {
   OptionCombobox,
-  type ComboboxOption,
   type OptionComboboxProps,
 } from "@/components/business/option-combobox"
 import type { StatusTone } from "@/components/ui/status-badge"
@@ -627,15 +626,3 @@ export function CategoryCombobox({
   )
 }
 
-// ---------------------------------------------------------------------------
-// 枚举 / 筛选便捷封装（固定 options 的命名别名场景）
-// ---------------------------------------------------------------------------
-
-export type EnumComboboxProps = Omit<OptionComboboxProps, "options"> & {
-  options: readonly ComboboxOption[]
-}
-
-/** 状态、环境、角色等枚举筛选的可搜索 Combobox。 */
-export function EnumCombobox(props: EnumComboboxProps) {
-  return <OptionCombobox {...props} />
-}

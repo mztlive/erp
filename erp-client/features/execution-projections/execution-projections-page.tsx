@@ -73,16 +73,7 @@ import {
 } from "@/features/execution-projections/types"
 import { cn } from "@/lib/utils"
 import { openWorkspaceLabel, resultText, versionText } from "@/lib/ui-text"
-
-type ResultState = {
-  status: "succeeded" | "blocked" | "unknown" | "processing"
-  title: string
-  description: string
-  reference: string
-  facts: Array<{ label: string; value: string }>
-  w29Href?: string
-  stayUnknown?: boolean
-} | null
+import { type ResultState } from "@/components/business/feedback"
 
 type PendingAction =
   | {
@@ -762,7 +753,7 @@ export function ExecutionProjectionsPage() {
       <div ref={resultRef} tabIndex={-1} className="outline-none">
         {result ? (
           <FormalActionResult
-            status={result.status}
+            status={result.status === "failed" ? "blocked" : result.status}
             title={result.title}
             description={result.description}
             reference={result.reference}

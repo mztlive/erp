@@ -41,6 +41,7 @@ import {
   QuickPreviewSheet,
   SupplierCombobox,
 } from "@/components/business"
+import { formatDateTime } from "@/lib/datetime"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -107,32 +108,9 @@ import {
   type SettlementsUrlState,
 } from "@/features/supplier-settlements/url-state"
 import { openWorkspaceLabel } from "@/lib/ui-text"
-
-type ResultState = {
-  status:
-    | "succeeded"
-    | "failed"
-    | "blocked"
-    | "rejected"
-    | "unknown"
-    | "processing"
-  title: string
-  description: string
-  reference?: string
-  facts?: Array<{ label: string; value: React.ReactNode }>
-  pendingIdempotencyKey?: string
-  payableNo?: string
-  w12Href?: string
-} | null
-
-function formatTime(iso?: string) {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("zh-CN", { hour12: false })
-  } catch {
-    return iso
-  }
-}
+import { type ResultState } from "@/components/business/feedback"
+import { RoleDemoBar } from "@/components/business/role-demo-bar"
+import type { ComboboxOption } from "@/components/business/option-combobox"
 
 function outcomeToResult(outcome: FormalOutcome): ResultState {
   const w12Href = outcome.payableNo
@@ -257,65 +235,32 @@ export function SupplierSettlementsPage() {
   )
 }
 
-function RoleDemoBar({
-  role,
-  demoFlag,
-  onRole,
-  onFlag,
-}: {
-  role: DemoRole
-  demoFlag?: SettlementsUrlState["demoFlag"]
-  onRole: (r: DemoRole) => void
-  onFlag: (f?: SettlementsUrlState["demoFlag"]) => void
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 rounded-xl border bg-muted/40 px-3 py-2 text-sm">
-      <span className="text-muted-foreground">角色演示</span>
-      <OptionCombobox
-        value={role}
-        onValueChange={(v) => {
-          if (v == null) return
-          onRole(v as DemoRole)
-        }}
-        options={[
-          { value: "finance_prep", label: "财务经办" },
-          { value: "finance_review", label: "财务复核" },
-          { value: "procurement", label: "采购" },
-          { value: "manager", label: "管理层只读" },
-        ]}
-        className="w-[10rem]"
-        size="sm"
-        allowClear={false}
-      />
-      <OptionCombobox
-        value={demoFlag ?? "normal"}
-        onValueChange={(v) => {
-          if (v == null || v === "normal") onFlag(undefined)
-          else onFlag(v as SettlementsUrlState["demoFlag"])
-        }}
-        options={[
-          { value: "normal", label: "正常权限" },
-          { value: "no-permission", label: "无模块权限" },
-          { value: "no-scope", label: "无数据范围" },
-          { value: "policy-missing", label: "期间策略缺失" },
-        ]}
-        className="w-[12rem]"
-        size="sm"
-        allowClear={false}
-      />
-      <span className="text-xs text-muted-foreground">
-        当前：{DEMO_ROLE_LABEL[role]}
-        {role === "procurement"
-          ? " · 仅证据，不可结论/确认"
-          : role === "finance_prep"
-            ? " · 经办结论与提交复核，不可自审"
-            : role === "finance_review"
-              ? " · 另一人确认/驳回"
-              : " · 只读进度"}
-      </span>
-    </div>
-  )
-}
+const SETTLEMENT_ROLE_OPTIONS: ComboboxOption[] = [
+  { value: "finance_prep", label: "财务经办" },
+  { value: "finance_review", label: "财务复核" },
+  { value: "procurement", label: "采购" },
+  { value: "manager", label: "管理层只读" },
+]
+
+const SETTLEMENT_FLAG_OPTIONS: ComboboxOption[] = [
+  { value: "normal", label: "正常权限" },
+  { value: "no-permission", label: "无模块权限" },
+  { value: "no-scope", label: "无数据范围" },
+  { value: "policy-missing", label: "期间策略缺失" },
+]
+
+const settlementRoleHint = (role: DemoRole) => (
+  <>
+    当前：{DEMO_ROLE_LABEL[role]}
+    {role === "procurement"
+      ? " · 仅证据，不可结论/确认"
+      : role === "finance_prep"
+        ? " · 经办结论与提交复核，不可自审"
+        : role === "finance_review"
+          ? " · 另一人确认/驳回"
+          : " · 只读进度"}
+  </>
+)
 
 function SettlementList({
   urlState,
@@ -648,7 +593,7 @@ function SettlementList({
         title="API 供应商结算"
         metadata={
           <DataFreshness
-            updatedAt={data?.sourceAsOf ? formatTime(data.sourceAsOf) : "—"}
+            updatedAt={data?.sourceAsOf ? formatDateTime(data.sourceAsOf, "default") : "—"}
             dateTime={data?.sourceAsOf}
             label="结算数据更新时间"
             state={listQuery.isFetching ? "stale" : "fresh"}
@@ -682,6 +627,11 @@ function SettlementList({
         demoFlag={urlState.demoFlag}
         onRole={(r) => patchUrl({ role: r })}
         onFlag={(f) => patchUrl({ demoFlag: f })}
+        roleOptions={SETTLEMENT_ROLE_OPTIONS}
+        roleClassName="w-[10rem]"
+        flagOptions={SETTLEMENT_FLAG_OPTIONS}
+        flagClassName="w-[12rem]"
+        hintFor={settlementRoleHint}
       />
 
       {policy?.state === "UNCONFIGURED" ? (
@@ -1448,6 +1398,11 @@ function SettlementCenter({
         demoFlag={urlState.demoFlag}
         onRole={(r) => patchUrl({ role: r })}
         onFlag={(f) => patchUrl({ demoFlag: f })}
+        roleOptions={SETTLEMENT_ROLE_OPTIONS}
+        roleClassName="w-[10rem]"
+        flagOptions={SETTLEMENT_FLAG_OPTIONS}
+        flagClassName="w-[12rem]"
+        hintFor={settlementRoleHint}
       />
 
       <DocumentHeader
@@ -1477,7 +1432,7 @@ function SettlementCenter({
               ·
             </span>
             <span className="text-muted-foreground">
-              记录 {formatTime(detail.freshness.immutableFactsAsOf)}
+              记录 {formatDateTime(detail.freshness.immutableFactsAsOf, "default")}
             </span>
           </span>
         }
@@ -1740,7 +1695,7 @@ function SettlementCenter({
 
       <div className="rounded-xl border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
         <span className="font-medium text-foreground">来源数据 </span>
-        更新时间 {formatTime(st.sourceAsOf)}
+        更新时间 {formatDateTime(st.sourceAsOf, "default")}
         {st.externalBillNo ? (
           <>
             {" "}
@@ -1959,7 +1914,7 @@ function SettlementCenter({
                     {r.actionLabel} · {r.by.displayName}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {formatTime(r.at)}
+                    {formatDateTime(r.at, "default")}
                     {r.reasonCode ? ` · ${r.reasonCode}` : ""}
                     {r.comment ? ` · ${r.comment}` : ""}
                   </div>
@@ -2033,7 +1988,7 @@ function SettlementCenter({
                 </div>
                 <p className="text-muted-foreground">{e.summary}</p>
                 <p className="text-xs text-muted-foreground">
-                  {formatTime(e.at)}
+                          {formatDateTime(e.at, "default")}
                 </p>
               </div>
             ))}
@@ -2388,7 +2343,7 @@ function DifferencesWorkspace({
                           {e.comment}
                         </div>
                         <div className="text-xs text-muted-foreground">
-                          {formatTime(e.at)}
+                  {formatDateTime(e.at, "default")}
                         </div>
                       </li>
                     ))}
@@ -2403,7 +2358,7 @@ function DifferencesWorkspace({
                   </AlertTitle>
                   <AlertDescription>
                     {activeDiff.resolution.by.displayName} ·{" "}
-                    {formatTime(activeDiff.resolution.at)} · 成本预览{" "}
+                    {formatDateTime(activeDiff.resolution.at, "default")} · 成本预览{" "}
                     {activeDiff.resolution.costImpactPreview ?? "0.00"}（含税）
                   </AlertDescription>
                 </Alert>

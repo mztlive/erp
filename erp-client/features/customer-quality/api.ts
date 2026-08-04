@@ -3,7 +3,7 @@
  * 投影字段由服务端返回；前端不重算盈亏/覆盖率/标签。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   CustomerQualityExportJob,
   CustomerQualityMetric,

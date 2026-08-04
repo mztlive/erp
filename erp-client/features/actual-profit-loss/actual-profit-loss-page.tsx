@@ -37,6 +37,8 @@ import {
   PageHeader,
   QuickPreviewSheet,
 } from "@/components/business"
+import { formatDateTime } from "@/lib/datetime"
+import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import {
   Alert,
   AlertDescription,
@@ -121,22 +123,6 @@ function formatMoneyDisplay(value: string | undefined | null): string {
     minimumFractionDigits: 2,
   }).format(n)
   return formatted
-}
-
-function formatDateTime(iso: string | undefined): string {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("zh-CN", {
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  } catch {
-    return iso
-  }
 }
 
 function parseCoverage(raw: string | null): ProfitLossCoverage {
@@ -419,15 +405,7 @@ export function ActualProfitLossPage() {
     patch: Record<string, string | null | undefined>,
     options?: { replace?: boolean }
   ) {
-    const next = new URLSearchParams(searchParams.toString())
-    for (const [key, value] of Object.entries(patch)) {
-      if (value == null || value === "") next.delete(key)
-      else next.set(key, value)
-    }
-    const qs = next.toString()
-    const href = qs ? `${pathname}?${qs}` : pathname
-    if (options?.replace) router.replace(href)
-    else router.push(href)
+    patchSearchParams({ router, pathname, searchParams }, patch, options)
   }
 
   // 关闭 detail 后恢复焦点
@@ -662,7 +640,7 @@ export function ActualProfitLossPage() {
         header: "最近成本发生",
         cell: ({ row }) => (
           <span className="num text-xs text-muted-foreground">
-            {formatDateTime(row.original.latestCostOccurredAt)}
+            {formatDateTime(row.original.latestCostOccurredAt, "full")}
           </span>
         ),
       },
@@ -848,7 +826,7 @@ export function ActualProfitLossPage() {
           data ? (
             <div className="flex flex-col gap-1">
               <DataFreshness
-                updatedAt={formatDateTime(data.freshness.projectedAt)}
+                updatedAt={formatDateTime(data.freshness.projectedAt, "full")}
                 dateTime={data.freshness.projectedAt}
                 state={freshnessUi.uiState}
                 statusLabel={freshnessUi.statusLabel}
@@ -1072,7 +1050,7 @@ export function ActualProfitLossPage() {
                   <AlertDescription>
                     {refreshFailed
                           ? "保留上次成功数据供只读查阅；可再次刷新。不会用本页估算覆盖金额。"
-                      : `数据更新于 ${formatDateTime(data.freshness.projectedAt)}，来源已于 ${formatDateTime(data.freshness.sourceWatermark)} 更新。`}
+                      : `数据更新于 ${formatDateTime(data.freshness.projectedAt, "full")}，来源已于 ${formatDateTime(data.freshness.sourceWatermark, "full")} 更新。`}
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -1786,7 +1764,7 @@ function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
         <DescriptionItem>
           <DescriptionTerm>发生时间</DescriptionTerm>
           <DescriptionDetails>
-            <span className="num">{formatDateTime(entry.occurredAt)}</span>
+            <span className="num">{formatDateTime(entry.occurredAt, "full")}</span>
           </DescriptionDetails>
         </DescriptionItem>
         <DescriptionItem>

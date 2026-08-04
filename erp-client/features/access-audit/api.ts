@@ -3,7 +3,7 @@
  * 有效权限解释与影响数量一律来自服务端投影，禁止前端合并权限集合。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   AccessChangeCommand,
   AccessChangeOutcome,

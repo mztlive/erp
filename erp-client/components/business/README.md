@@ -106,7 +106,7 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 | 状态/环境/角色/付款条件/单位等枚举与筛选 | `OptionCombobox` | `{ value, label }[]`，内置搜索；`allowClear={false}` 用于必选筛选；共享码表见 `lib/business-options.ts` |
 | 有效合同 / 销售单 / 客户 / 采购单 / 供应商 / 商品 / 品牌 / 商品分类 / 结算主体 / 仓库 / 负责人 | `ContractCombobox`、`CustomerCombobox`、`SupplierCombobox`、`BrandCombobox`、`CategoryCombobox`、`SettlementPartyCombobox`、`WarehouseCombobox`、`OwnerCombobox` 等 | 展示编号、状态与摘要；分类支持路径与层级缩进；数据由 feature Query 注入，组件本身不请求 |
 | 通用带状态业务对象 | `BusinessObjectCombobox` | 上述实体 Combobox 的底层 |
-| TanStack Form 枚举字段 | `field.SelectField` / `ComboboxField` | 已绑定 `OptionCombobox` |
+| TanStack Form 枚举字段 | `field.SelectField` | 已绑定 `OptionCombobox` |
 | 列表全文搜索（单号关键词混搜） | `Input` / `InputGroupInput` | 非实体单选场景，可继续自由输入 |
 
 **禁止**用自由文本 `Input`/`TextField` 录入应引用主数据或单据的字段（客户、供应商、合同、商品 SKU、结算主体、负责人等）。筛选条清空即「全部」时，实体 Combobox 用 `value={id || undefined}` + `onValueChange` 写 `null`/`undefined` 即可，不必再塞「全部」伪选项。

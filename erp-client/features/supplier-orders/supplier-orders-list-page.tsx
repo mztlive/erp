@@ -69,19 +69,7 @@ import {
   buildSupplierOrdersSearchParams,
   parseSupplierOrdersSearchParams,
 } from "@/features/supplier-orders/url-state"
-
-function formatTime(iso: string): string {
-  try {
-    return new Intl.DateTimeFormat("zh-CN", {
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    }).format(new Date(iso))
-  } catch {
-    return iso
-  }
-}
+import { formatDateTime } from "@/lib/datetime"
 
 export function SupplierOrdersListPage() {
   const router = useRouter()
@@ -422,7 +410,7 @@ export function SupplierOrdersListPage() {
         meta: { label: "最近业务变化", width: "default" },
         cell: ({ row }) => (
           <span className="num text-xs text-muted-foreground">
-            {formatTime(row.original.lastBusinessAt)}
+            {formatDateTime(row.original.lastBusinessAt, "monthDayIntl", "passthrough")}
           </span>
         ),
       },
@@ -646,7 +634,7 @@ export function SupplierOrdersListPage() {
               },
               {
                 label: "到期",
-                value: formatTime(exportResult.expiresAt),
+                value: formatDateTime(exportResult.expiresAt, "monthDayIntl", "passthrough"),
               },
             ]}
           />

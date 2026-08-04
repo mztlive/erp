@@ -46,6 +46,7 @@ import type {
   FulfillmentFormalOutcome,
   FulfillmentOperationType,
 } from "@/features/fulfillment-operations/types"
+import { type ResultState as SharedResultState } from "@/components/business/feedback"
 import {
   CORRECTION_NOTICE,
   DEFER_REASON_LABEL,
@@ -109,17 +110,7 @@ type SessionLease = {
   expiresAt: string
 }
 
-type ResultState =
-  | {
-      status: "succeeded" | "blocked" | "unknown"
-      title: string
-      description: string
-      reference?: string
-      outcome?: FulfillmentFormalOutcome | DeferOutcome
-      pendingIdempotencyKey?: string
-      stayOnItem?: boolean
-    }
-  | null
+type ResultState = SharedResultState<FulfillmentFormalOutcome | DeferOutcome>
 
 /**
  * 演示专用控件（人为制造「结果未确定」、跳过查询直接结算）只在开发环境出现。
@@ -939,7 +930,7 @@ export function FulfillmentOperationsPage() {
       {lastResult ? (
         <div ref={resultRef} tabIndex={-1} className="outline-none">
           <FormalActionResult
-            status={lastResult.status}
+            status={lastResult.status === "failed" ? "blocked" : lastResult.status}
             title={lastResult.title}
             description={
               lastResult.outcome?.kind === "POSTED" &&

@@ -2,7 +2,7 @@
  * W22 商品发布 · session-mock API（queryFn / mutationFn）
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   ManualPauseCommand,
   ManualPauseResult,

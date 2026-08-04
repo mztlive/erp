@@ -3,7 +3,7 @@
  * claimToken 仅出现在领取/续租响应；正式完成使用 CompleteWorkItemEnvelope 语义。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   AllocationDraftLine,
   CardFundsReviewDecision,

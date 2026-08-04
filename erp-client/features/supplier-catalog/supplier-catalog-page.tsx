@@ -27,6 +27,8 @@ import {
   RevisionTimeline,
   SequentialProcessBar,
 } from "@/components/business"
+import { formatDateTime } from "@/lib/datetime"
+import { type ResultState as SharedResultState } from "@/components/business/feedback"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -94,18 +96,7 @@ type SessionLease = {
   expiresAt: string
 }
 
-type ResultState =
-  | {
-      status: "succeeded" | "blocked" | "rejected" | "unknown"
-      title: string
-      description: string
-      reference?: string
-      outcome?: FormalOutcome
-      stayOnItem?: boolean
-      pendingIdempotencyKey?: string
-      terminal?: boolean
-    }
-  | null
+type ResultState = SharedResultState<FormalOutcome>
 
 type ConfirmMode =
   | { kind: "hold" }
@@ -176,15 +167,6 @@ const offeringDraftSchema = z.object({
   validTo: z.string(),
   note: z.string(),
 })
-
-function formatTime(iso?: string) {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("zh-CN", { hour12: false })
-  } catch {
-    return iso
-  }
-}
 
 function decisionLabel(kind: string) {
   if (kind === "CONFIRM_ERROR_RESOLVED") return "供应商数据已恢复"
@@ -1013,8 +995,8 @@ export function SupplierCatalogPage() {
             label="目录观察更新时间"
             updatedAt={
               context?.filterSummary
-                ? `${context.filterSummary} · ${formatTime(context.queueContextUpdatedAt)}`
-                : formatTime(context?.queueContextUpdatedAt)
+                ? `${context.filterSummary} · ${formatDateTime(context.queueContextUpdatedAt, "default")}`
+                : formatDateTime(context?.queueContextUpdatedAt, "default")
             }
             dateTime={context?.queueContextUpdatedAt}
           />
@@ -1129,7 +1111,7 @@ export function SupplierCatalogPage() {
       {lastResult ? (
         <div ref={resultRef} tabIndex={-1} className="outline-none">
           <FormalActionResult
-            status={lastResult.status}
+            status={lastResult.status === "failed" ? "blocked" : lastResult.status}
             title={lastResult.title}
             description={lastResult.description}
             reference={lastResult.reference}
@@ -1148,7 +1130,7 @@ export function SupplierCatalogPage() {
                     },
                     {
                       label: "完成时间",
-                      value: formatTime(lastResult.outcome.business.completedAt),
+                      value: formatDateTime(lastResult.outcome.business.completedAt, "default"),
                     },
                   ]
                 : lastResult.outcome?.kind === "ACTION"
@@ -1386,7 +1368,7 @@ export function SupplierCatalogPage() {
                     ? ` / ${item.supplierProduct.supplierSkuCode}`
                     : ""}{" "}
                   · 供应商 {item.supplierProduct.supplier.name} · 最近更新{" "}
-                  {formatTime(item.sourceContext.receivedAt)}
+                  {formatDateTime(item.sourceContext.receivedAt, "default")}
                 </p>
               </div>
               <Button
@@ -1705,7 +1687,7 @@ export function SupplierCatalogPage() {
                         {item.mapping.specification} ·{" "}
                         {item.mapping.baseUnit}
                         {item.mapping.approvedAt
-                          ? ` · ${formatTime(item.mapping.approvedAt)} 确认`
+                          ? ` · ${formatDateTime(item.mapping.approvedAt, "default")} 确认`
                           : ""}
                       </p>
                     </div>

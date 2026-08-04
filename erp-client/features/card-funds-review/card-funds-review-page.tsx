@@ -27,6 +27,7 @@ import {
   PageHeader,
   SequentialProcessBar,
 } from "@/components/business"
+import { type ResultState as SharedResultState } from "@/components/business/feedback"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -99,17 +100,7 @@ type SessionLease = {
   expiresAt: string
 }
 
-type ResultState =
-  | {
-      status: "succeeded" | "rejected" | "blocked" | "unknown"
-      title: string
-      description: string
-      reference?: string
-      outcome?: FormalOutcome
-      stayOnItem?: boolean
-      pendingIdempotencyKey?: string
-    }
-  | null
+type ResultState = SharedResultState<FormalOutcome>
 
 type ConfirmMode =
   | { kind: "approve"; conclusion: ApproveConclusion; advance: boolean }
@@ -950,7 +941,7 @@ export function CardFundsReviewPage() {
       {lastResult ? (
         <div ref={resultRef} tabIndex={-1} className="outline-none">
           <FormalActionResult
-            status={lastResult.status}
+            status={lastResult.status === "failed" ? "blocked" : lastResult.status}
             title={lastResult.title}
             description={lastResult.description}
             reference={lastResult.reference}

@@ -3,7 +3,7 @@
  * draftEditToken / claimToken 仅存会话内存，不进入列表查询 View。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   CreatePurchaseOrderFromBasisInput,
   FormalActionResponse,

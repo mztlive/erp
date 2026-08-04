@@ -1,4 +1,4 @@
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   CreateCustomerInput,
   CustomerCenterView,

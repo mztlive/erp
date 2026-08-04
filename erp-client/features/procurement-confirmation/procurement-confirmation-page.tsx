@@ -64,6 +64,7 @@ import type {
   FulfillmentMode,
   RejectReasonCode,
 } from "@/features/procurement-confirmation/types"
+import { type ResultState as SharedResultState } from "@/components/business/feedback"
 import {
   FULFILLMENT_MODE_LABEL,
   NEXT_SALES_RESOLUTION_COPY,
@@ -103,17 +104,7 @@ type SessionLease = {
   expiresAt: string
 }
 
-type ResultState =
-  | {
-      status: "succeeded" | "rejected" | "blocked" | "unknown"
-      title: string
-      description: string
-      reference?: string
-      outcome?: FormalOutcome
-      stayOnItem?: boolean
-      pendingIdempotencyKey?: string
-    }
-  | null
+type ResultState = SharedResultState<FormalOutcome>
 
 function shortHash(hash: string) {
   if (hash.length <= 16) return hash
@@ -952,7 +943,7 @@ export function ProcurementConfirmationPage() {
       {lastResult ? (
         <div ref={resultRef} tabIndex={-1} className="outline-none">
           <FormalActionResult
-            status={lastResult.status}
+            status={lastResult.status === "failed" ? "blocked" : lastResult.status}
             title={lastResult.title}
             description={lastResult.description}
             reference={lastResult.reference}

@@ -3,7 +3,7 @@
  * 正式余额、净分配与门禁结论均来自 mock 投影，前端不重算覆盖。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   AllocationSessionView,
   AllocationTrack,

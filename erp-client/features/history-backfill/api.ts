@@ -7,7 +7,7 @@
  * - mock 永不返回卡号/卡密/手机/完整地址/原始报文
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   CreateBackfillContext,
   FormalCommandAction,

@@ -3,7 +3,7 @@
  * 只读记录追溯 + 导出任务；无修改商城订单写操作。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   EmptyReason,
   ExportCommand,

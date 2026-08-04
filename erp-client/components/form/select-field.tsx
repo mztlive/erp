@@ -18,9 +18,6 @@ export type SelectFieldOption = Readonly<{
   keywords?: string
 }>
 
-/** @deprecated 使用 SelectFieldOption；保留别名兼容既有 import。 */
-export type ComboboxFieldOption = SelectFieldOption
-
 type SelectFieldProps = {
   label: string
   options: readonly SelectFieldOption[]
@@ -84,6 +81,3 @@ export function SelectField({
     </Field>
   )
 }
-
-/** 与 SelectField 相同；推荐新代码使用此命名。 */
-export const ComboboxField = SelectField

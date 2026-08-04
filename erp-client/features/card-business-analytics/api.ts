@@ -3,7 +3,7 @@
  * 指标、覆盖率、三分法与利润均来自服务端投影；前端不重算 totals。
  */
 
-import { mockDelay } from "@/features/workspace-kit/delay"
+import { mockDelay } from "@/lib/mock-delay"
 import type {
   AuthorizedCardMetric,
   CardBusinessAnalyticsQuery,

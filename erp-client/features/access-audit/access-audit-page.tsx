@@ -30,6 +30,9 @@ import {
   PageHeader,
   QuickPreviewSheet,
 } from "@/components/business"
+import { formatDateTime } from "@/lib/datetime"
+import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
+import { type ResultState } from "@/components/business/feedback"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -96,22 +99,6 @@ function parseView(raw: string | null): AccessView {
   return "roles"
 }
 
-function formatDateTime(iso?: string) {
-  if (!iso) return "—"
-  try {
-    return new Date(iso).toLocaleString("zh-CN", {
-      hour12: false,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    })
-  } catch {
-    return iso
-  }
-}
-
 function riskLabel(flag: string) {
   const map: Record<string, string> = {
     HIGH_PRIVILEGE: "高权限",
@@ -123,15 +110,6 @@ function riskLabel(flag: string) {
   }
   return map[flag] ?? flag
 }
-
-type ResultState = {
-  status: "succeeded" | "rejected" | "blocked" | "unknown"
-  title: string
-  description: string
-  reference?: string
-  facts?: { label: string; value: React.ReactNode }[]
-  pendingIdempotencyKey?: string
-} | null
 
 const changeReasonSchema = z.object({
   reasonCode: z.string().min(1, "请选择变更原因"),
@@ -206,8 +184,8 @@ function PolicyBanner({
             {audit.state === "MISSING" ? (
               <>
                 <span className="font-mono">{audit.blockerCode}</span> ·
-                保守短窗口 {formatDateTime(audit.fallbackFrom)} ~{" "}
-                {formatDateTime(audit.fallbackTo)}，导出禁用
+                保守短窗口 {formatDateTime(audit.fallbackFrom, "full")} ~{" "}
+                {formatDateTime(audit.fallbackTo, "full")}，导出禁用
               </>
             ) : (
               <>
@@ -399,16 +377,7 @@ export function AccessAuditPage() {
     patch: Record<string, string | null | undefined>,
     options?: { replace?: boolean }
   ) {
-    const next = new URLSearchParams(searchParams.toString())
-    for (const [key, value] of Object.entries(patch)) {
-      if (value == null || value === "") next.delete(key)
-      else next.set(key, value)
-    }
-    if (!next.get("view")) next.set("view", view)
-    const qs = next.toString()
-    const href = qs ? `${pathname}?${qs}` : pathname
-    if (options?.replace) router.replace(href)
-    else router.push(href)
+    patchSearchParams({ router, pathname, searchParams, view }, patch, options)
   }
 
   React.useEffect(() => {
@@ -558,7 +527,7 @@ export function AccessAuditPage() {
             value: String(outcome.affectedSubjectCount),
           },
           { label: "审计事件号", value: outcome.auditEventId },
-          { label: "生效时间", value: formatDateTime(outcome.effectiveAt) },
+          { label: "生效时间", value: formatDateTime(outcome.effectiveAt, "full") },
           {
             label: "下一步",
             value: outcome.nextSteps.join("；"),
@@ -885,9 +854,9 @@ export function AccessAuditPage() {
         header: "已记录有效期间",
         cell: ({ row }) => (
           <span className="text-xs text-muted-foreground">
-            {formatDateTime(row.original.effectiveFrom)}
+            {formatDateTime(row.original.effectiveFrom, "full")}
             {row.original.effectiveTo
-              ? ` ~ ${formatDateTime(row.original.effectiveTo)}`
+              ? ` ~ ${formatDateTime(row.original.effectiveTo, "full")}`
               : " ~ 长期"}
             <span className="mt-0.5 block text-[11px]">
               （只读记录；策略未配置时不可编辑预约/到期）
@@ -1107,7 +1076,7 @@ export function AccessAuditPage() {
         header: "时间",
         cell: ({ row }) => (
           <span className="num text-xs">
-            {formatDateTime(row.original.recordedAt)}
+            {formatDateTime(row.original.recordedAt, "full")}
           </span>
         ),
       },
@@ -1249,7 +1218,7 @@ export function AccessAuditPage() {
           <DataFreshness
             label={isAudit ? "审计更新时间" : "权限配置更新时间"}
             state="fresh"
-            updatedAt={formatDateTime(data.calculatedAt)}
+            updatedAt={formatDateTime(data.calculatedAt, "full")}
             dateTime={data.calculatedAt}
           />
         }
@@ -1337,7 +1306,7 @@ export function AccessAuditPage() {
 
       {lastResult ? (
         <FormalActionResult
-          status={lastResult.status}
+          status={lastResult.status === "failed" ? "blocked" : lastResult.status}
           title={lastResult.title}
           description={lastResult.description}
           reference={lastResult.reference}
@@ -1631,7 +1600,7 @@ export function AccessAuditPage() {
           title={ACCESS_VIEW_LABEL[view]}
           description={
             isAudit && data.auditCoverageFrom && data.auditCoverageTo
-              ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(data.auditCoverageFrom)} ~ ${formatDateTime(data.auditCoverageTo)} · 无记录不等于动作未发生 · 更新于 ${data.watermark}`
+              ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(data.auditCoverageFrom, "full")} ~ ${formatDateTime(data.auditCoverageTo, "full")} · 无记录不等于动作未发生 · 更新于 ${data.watermark}`
               : `共 ${rows.length} 条 · 首屏固定身份与操作列`
           }
           table={
@@ -1769,7 +1738,7 @@ export function AccessAuditPage() {
                 版本 {effectiveQuery.data.permissionVersion}
               </Badge>
               <span className="text-xs text-muted-foreground">
-                计算于 {formatDateTime(effectiveQuery.data.calculatedAt)}
+                计算于 {formatDateTime(effectiveQuery.data.calculatedAt, "full")}
               </span>
             </div>
 
@@ -1906,7 +1875,7 @@ export function AccessAuditPage() {
               <div>
                 <dt className="text-xs text-muted-foreground">发生时间</dt>
                 <dd className="num">
-                  {formatDateTime(eventQuery.data.recordedAt)}
+                  {formatDateTime(eventQuery.data.recordedAt, "full")}
                 </dd>
               </div>
               <div>
