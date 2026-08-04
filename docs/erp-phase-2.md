@@ -1280,14 +1280,15 @@ ERP 不建设权益方案实体。卡券类目、面额和数量由第一期销�
 | `mall_order_fact` | 商城不可变关键事实 | 业务事实键、事实类型、原订单、适用时的商城售后请求 ID、事实发生时间、数据来源（实时或回填） |
 | `mall_payment_source` | 组合支付来源 | 订单、来源类型（卡券或微信）、金额；卡券来源必须关联 `mall_card_instance`，微信来源记录微信支付标识且不得挂接卡实例引用 |
 | `mall_item_funding_allocation` | 支付来源到商品的分摊 | 商品明细、支付来源、实际支付金额、成本分摊金额、尾差归属 |
-| `mall_consumption_fact` | 支付成功形成的有效消费事实 | 业务事实键、商品明细、支付来源、分摊成本、客户、原销售单、唯一卡券明细、归集状态、成本口径、数据来源（实时或回填） |
+| `mall_consumption_entry` | 支付成功形成的有效消费事实 | 业务事实键、商品明细、支付来源、分摊成本、客户、原销售单、唯一卡券明细、归集状态、数据来源（实时或回填） |
+| `mall_consumption_cost_assessment` | 消费成本评估 | 消费来源明细、递增评估号、成本口径、金额 |
 | `mall_consumption_backfill_job` | 历史消费回填批次 | 商城、截止时间 `T`、数据区间、总笔数、金额、重叠去重数量、各成本口径占比、未归集清单 |
 | `mall_refund` | 商城退款成功事实 | 业务事实键、商城售后请求 ID、原订单、退款单号、退款版本、成功金额；负责消费和支付来源冲正 |
 | `mall_refund_allocation` | 退款来源分配 | 原消费、原支付来源、退款金额 |
 | `mall_balance_restoration` | 卡券余额恢复成功事实 | 业务事实键、商城售后请求 ID、关联退款事实、卡实例、恢复金额；只记录余额变动 |
 | `mall_balance_snapshot` | 卡券余额快照 | `mall_card_instance`、快照时间、余额 |
 
-商城订单同步数据不得反向替代商城员工订单基础资料。
+商城订单同步数据不得反向替代商城员工订单基础资料。成本口径不直接落在消费表上，另行追加 `mall_consumption_cost_assessment`（每次取得更可靠成本来源时追加一个评估，不修改原消费）。
 
 ### 14.4 供应商订单与结算
 
@@ -1309,8 +1310,9 @@ ERP 不建设权益方案实体。卡券类目、面额和数量由第一期销�
 | `inbox_message` | 已接收商城关键事实或供应商回调的消息信封 | 来源系统、来源事件 ID、业务事实键、签名、载荷摘要、状态 |
 | `integration_attempt` | 每次接口尝试 | 消息、次数、响应分类、时间 |
 | `integration_error_task` | 人工异常任务 | 消息、错误分类、责任人、处理结果 |
-| `integration_reconciliation_job` | 对账任务 | 对账类型、数据边界、结果 |
-| `integration_reconciliation_difference` | 对账差异 | 对账任务、业务对象、差异内容、状态 |
+| `reconciliation_job` | 对账任务 | 对账类型、数据边界、结果 |
+| `reconciliation_difference` | 对账差异 | 对账任务、业务对象、差异内容、状态 |
+| `reconciliation_difference_resolution` | 差异解决动作 | 对账差异、递增处理序号、动作类型（领取、补偿、确认或关闭）、处理结果 |
 
 `integration_message` 仅是上述出站/入站消息的概念总称，不创建第三张同义物理表，也不替代各自的幂等、签名和状态约束。
 

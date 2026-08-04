@@ -24,7 +24,7 @@ SPU/SKU、供应商 SKU 到公司 SKU 的映射、多供应商供给修订，以
   只作为页面容器和批量选择范围。
 - 一个公司 SKU 可以关联多个供应商 SKU；每个关联分别维护一件代发供给价、集采供给价、集采起订量、税率、费用、区域和有效期。系统不设置供给方式字段，每条供给默认同时支持一件代发与集采。
 - 第二家供应商的同款供应商 SKU 继续保留独立身份和来源版本，但可映射到同一公司 SKU；不得重复创建公司商品。
-- `sales_visible_price` 与 `market_price` 都属于公司 `sku_revision`；前者供销售选品/报价使用，二者都不是供应商成本，也不能从最低成本自动推导。
+- `sales_visible_price_gross` 与 `market_price` 都属于公司 `sku_revision`；前者供销售选品/报价使用，二者都不是供应商成本，也不能从最低成本自动推导。
 - 销售查询、导出和下单只使用符合资格的公司 SKU（业务称为公司商品池），不读取供应商商品库和采购成本。
 
 原先“商品主档与供给关系分离”的方向保留；错误在于把供给关系的创建入口绑定到了 API，同样也没有给手工商品提供逐供应商成本维护入口。
@@ -111,7 +111,7 @@ Excel 导入仍用批次对话框；API 同步由 W20 触发。三种来源入�
 
 - `dropship_floor_price_gross` / `bulk_floor_price_gross` / `bulk_minimum_order_quantity` 是供应商目录 SKU 上的代发底价（含税运）、集采底价（含税）与集采起订量。
 - `dropship_supply_price_gross` / `bulk_supply_price_gross` 是关联公司 SKU 时采购确认后生效的两项供给价（可参考对应目录底价，不自动覆盖，也不得合并成单一确认成本）。
-- `sales_visible_price` 与 `market_price` 都是公司 `sku_revision` 字段；前者供销售选品/报价使用。
+- `sales_visible_price_gross` 与 `market_price` 都是公司 `sku_revision` 字段；前者供销售选品/报价使用。
 
 上述价格事实不能互相覆盖，也不能自动保持相等。
 

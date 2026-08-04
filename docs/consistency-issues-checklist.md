@@ -161,21 +161,23 @@
 - **涉及文档**：erp-phase-2.md §14.3（L1261）vs erp-data-model.md §6.17（L2978、2998）
 - **冲突点**：phase-2 用 `mall_consumption_fact` 且把成本口径直接放表上；数据模型用 `mall_consumption_entry` + 成本口径拆入 `mall_consumption_cost_assessment`（追加不修改原消费）
 - **建议方向**：phase-2 §14.3 同步数据模型命名与拆表决策
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）；相关前端字段名问题另见 B-04 决议
+- **决议**：以数据模型为准：`mall_consumption_entry` + `mall_consumption_cost_assessment`（追加评估不改原消费），phase-2 §14.3 已改（含 §14.5 对账表 `reconciliation_job/_difference/_difference_resolution`，见 B-03）。
 
 ### B-03 【中】二期对账表命名冲突：`integration_reconciliation_*` vs `reconciliation_*`
 
 - **性质**：数据模型冲突（W29 与数据模型一致，phase-2 §14.5 单独偏离）
 - **涉及文档**：erp-phase-2.md §14.5（L1290-1291）vs erp-data-model.md §6.21（L3482、3494、3504）、W29（L20、170）
 - **建议方向**：phase-2 §14.5 改为 `reconciliation_job / reconciliation_difference / reconciliation_difference_resolution`
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）
 
 ### B-04 【中】`sales_visible_price` vs `sales_visible_price_gross` 字段名混用
 
 - **性质**：数据模型冲突（前端契约两种拼写；W21 文件内部自相矛盾）
 - **涉及文档**：erp-data-model.md §6.3（L823，权威 `sales_visible_price_gross`）vs erp-mall-data-mapping.md §2.2（L101-102）、W14（L154、187）、W21（L27、114 vs L258）
 - **建议方向**：统一为 `sales_visible_price_gross`（mall-mapping、W14、W21 同步修正）
-- **状态**：待讨论
+- **状态**：✅ 文档侧已修复（2026-08-04）；前端 55 处 `salesVisiblePrice` 字段名待定（见讨论记录）
+- **决议**：文档全部统一 `sales_visible_price_gross`。遗留前端字段名：erp-client features/supplier-catalog、master-data 共 55 处 `salesVisiblePrice`（mock/types/api/页面），与数据模型命名不一致，是否同步改名待用户决定。
 
 ### B-05 【中】一期卡券快照/指纹字段集不一致（phase-1 缺"项目名称/业务备注"）
 
@@ -217,3 +219,4 @@
 | 2026-08-04 | B-05 | 指纹字段集移除项目名称/业务备注（仍随版本保存但不参与 content_hash），以 phase-1 §8.2 为权威 | erp-data-model.md §6.13/L1071/L3948、erp-mall-data-mapping.md §3.3/L266、phases-8.md §5.1 |
 | 2026-08-04 | D-04+C-24 | W09 文档按 glossary G1/G5 全面替换（过账→确认入库/仓发/交付、暂挂→先跳过约40处），保留枚举/字段名与 Q1 待确认标注；文件状态与 README 索引同步"已实现" | w09-fulfillment-operations.md、ui-workspaces/README.md |
 | 2026-08-04 | B-07 | 迟到快照直接丢弃（以 phase-1 为权威）：不持久化、不保留证据、不回退当前版本；mapping_status 移除"迟到丢弃"枚举 | erp-data-model.md §6.13/L2228/L2237、erp-mall-data-mapping.md §3.4/L224/L908、phases-8.md §5.2/L96、w17 L166 |
+| 2026-08-04 | B-02+B-03+B-04 | 命名统一以数据模型为准：phase-2 §14.3 消费表改 mall_consumption_entry+成本拆 mall_consumption_cost_assessment、§14.5 对账表改 reconciliation_*；mall-mapping/W14/W21 字段统一 sales_visible_price_gross。遗留：前端 55 处 salesVisiblePrice 字段名待定 | erp-phase-2.md §14.3/§14.5、erp-mall-data-mapping.md L101/471/521、w14-basic-data.md L154/187/209、w21-supplier-catalog.md L27/114 |

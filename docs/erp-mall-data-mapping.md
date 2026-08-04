@@ -98,7 +98,7 @@
 
 SPU 可以作为商品族，但所有正式销售、采购和库存动作最终落到 SKU。每个 SKU 必须有一个基础计量单位。
 “公司商品池”只是公司 `product` / `sku` 的业务称呼和销售查询视图，不建立
-`product_pool_entry` 或其修订。`sales_visible_price`、`market_price` 均属于公司
+`product_pool_entry` 或其修订。`sales_visible_price_gross`、`market_price` 均属于公司
 `sku_revision`；销售资格由启用 SKU、已维护销售可见价和至少一条业务时点有效的
 `supplier_offering_revision` 派生。供应商供给仍是独立关系和独立修订，不能复制进公司 SKU。
 旧商城价格只能在逐 SKU 确认后成为公司 `sku_revision` 的销售可见价/市场价、商城发布价或
@@ -468,7 +468,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 
 ### 7.2 拒绝照搬
 
-- `price`、`market_price`、`cost_price`、`company_cost_price`、`suggested_retail_price` 不继续放在 SPU 主表。经采购确认的 `price` 与 `market_price` 分别进入公司 `sku_revision.sales_visible_price` 与 `sku_revision.market_price`；`suggested_retail_price` 仅可作为商城发布价候选，供货价候选进入 `supplier_offering_revision`，实际成本来自正式业务事实。
+- `price`、`market_price`、`cost_price`、`company_cost_price`、`suggested_retail_price` 不继续放在 SPU 主表。经采购确认的 `price` 与 `market_price` 分别进入公司 `sku_revision.sales_visible_price_gross` 与 `sku_revision.market_price`；`suggested_retail_price` 仅可作为商城发布价候选，供货价候选进入 `supplier_offering_revision`，实际成本来自正式业务事实。
 - `stock`、`total_stock` 不形成 ERP 正式库存。期初库存以基准日实盘为准，按 SKU 和仓库导入。
 - `give_integral`、`sub_commission_type` 属于商城营销或分销规则。
 - `sales_count`、`virtual_sales_count`、`browse_count`、`is_profit` 是派生指标，不进入正式业务事实。
@@ -518,7 +518,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 
 | 旧字段 | 规范去向 |
 | --- | --- |
-| `price` | 经采购确认后写 `sku_revision.sales_visible_price`；不是商城发布价的自动来源 |
+| `price` | 经采购确认后写 `sku_revision.sales_visible_price_gross`；不是商城发布价的自动来源 |
 | `market_price` | 经采购确认后写 `sku_revision.market_price`；不得由销售价或成本推导 |
 | `suggested_retail_price` | 商城 `product_publication_revision` 销售价候选；仍须运营确认 |
 | `cost_price`、`company_cost_price`、`third_channel_cost_price` | `supplier_offering_revision` 供货价或旧成本参考候选，不形成实际成本 |
