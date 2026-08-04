@@ -69,11 +69,11 @@
 | 角色默认落地 | 采购→公司商品与 SKU；运营→卡券类目；仓储→仓库；财务→供应商 | `/master-data` 按 `demoRole` 重定向，缺失或未知回落采购默认 | 重定向后进入对应资源列表 |
 | 切换资源 | 工作面资源导航 | 替换 `:resource`，保留各资源自己的 Saved View | 浏览器后退恢复上一资源和筛选 |
 | 打开对象 | 列表行、业务页“查看资料” | `/master-data/:resource/:stableId?section=overview`；**商品与 SKU 不使用侧边 sheet，直接进详情页**；同对象只聚焦已有页签 | 关闭后恢复原行、筛选和滚动位置 |
-| 新建商品 | 列表「新建」 | `/master-data/products/new` 详情页（与查看同一套可编辑表单） | 成功后进入 `/products/:id` 继续在同页维护 |
+| 新建商品 | 列表「新建」 | `/master-data/products/new` 详情页（与查看同一套可编辑表单） | 成功后 `replace` 为 `/master-data/products/:id`，继续在同页维护 |
 | 查看 / 更新商品 | 列表行、查看、更新资料 | `/master-data/products/:stableId` **详情即编辑**，保存形成新版本；无 `?mode=edit`、无侧边 sheet | 返回列表 |
 | 查看历史版本 | 对象中心“变更历史” | URL 写入 `revision={revisionNo}`，当前版本与历史版本共用对象页签 | 后退恢复之前查看的版本 |
 | 从业务页进入主数据 | W05 / W07 / W08 / W10 | 携带 `returnContext` 的稳定引用，不携带候选字段快照作为事实 | 返回时由业务页重新查询可选主数据 |
-| 新建对象 | 列表主动作「新建」 | 在当前资源任务页签打开新建对话框；商品与 SKU 使用宽对话框；未保存关闭时确认 | 成功后可打开稳定对象页签 |
+| 新建其他对象 | 非商品资源列表主动作「新建」 | 在当前资源任务页签打开资源专属对话框；未保存关闭时确认；商品与 SKU 不走此入口 | 成功后可打开稳定对象页签 |
 
 TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{resource}:{stableId}`。历史修订号不是页签身份，避免同一对象打开多个版本副本。
 
@@ -102,7 +102,7 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 
 | 资源 | 入口 | 布局 |
 | --- | --- | --- |
-| 商品与 SKU | **详情页即查看也是编辑**（`/products/new` 与 `/products/:id`） | SPU 信息（含独立商品类型）\| 规格维度（组合 SKU）\| SPU 轮播/详情图 \| SKU 表（产品编码/主图/条码/销售可见价/市场价、W21 供给入口、W10 库存入口）；页底变更历史/引用/审计 |
+| 商品与 SKU | **详情页即查看也是编辑**（`/master-data/products/new` 与 `/master-data/products/:id`） | SPU 信息（含独立商品类型）\| 规格维度（组合 SKU）\| SPU 轮播/详情图 \| SKU 表（产品编码/主图/条码/销售可见价/市场价、W21 供给入口、W10 库存入口）；页底变更历史/引用/审计；不使用 Dialog、Sheet 或 `?mode=edit` |
 | 商品分类 | **树形维护**（`/master-data/categories`） | 左侧可展开树 + 右侧节点详情；「新建根分类」/ 选中后「新建子分类」/「更新资料」/「停用」；**无生效期间、无打开完整资料**；上级不可选自身与子树（防环） |
 | 品牌 | 列表 + 标准对话框（`/master-data/brands`） | **无侧栏 sheet**；行点击/更新直接开对话框；字段：名称、品牌代码、**Logo（1:1 正方形）**；**无生效期间** |
 | 其他资源 | 标准对话框（约 `max-w-lg`） | 单列资源专属字段 |
@@ -162,9 +162,11 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 
 以 **SPU 为列表/详情主对象**，规格维度取值**组合生成 SKU**。界面**不展示、不手填「规格标识」**（`specification_signature` 由属性组合系统内部派生）。
 
-规格编辑必须先按规范化属性代码/值代码计算组合并展示“保留 / 新增 / 将停用”摘要。只有
-签名未变的组合沿用原 `skuId`；新组合不携带旧 `skuId`，由服务端分配新身份；被移除的组合
-不从历史中删除，而在同一保存事务中停用原 SKU。`skuNo` 允许为新组合生成或由业务覆盖，
+规格编辑必须先按规范化属性代码/值代码计算组合并展示“保留 / 新增 / 将重新启用 / 将停用”摘要。当前启用且
+签名未变的组合沿用原 `skuId`；从未存在的新组合不携带旧 `skuId`，由服务端分配新身份；历史上
+存在但已停用的签名再次出现时，必须显示原 `skuNo`、原 `skuId` 和阻塞摘要，由用户明确确认
+“重新启用”并填写变更原因，提交原 `expectedSkuRevisionId`，不能静默当作新 SKU；被移除的组合
+不从历史中删除，而在同一保存事务中停用原 SKU。`skuNo` 允许为全新组合生成或由业务覆盖，
 但只是全局唯一业务编码，不能按编号、行序号或“当前仅一行”恢复旧 `skuId`，也不能重用已
 停用 SKU 的编号绑定新组合。
 
@@ -251,7 +253,7 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 - 默认展示“当前时点生效版本”；未来版本明确标“待生效”，历史版本明确标“已结束”。启用/停用始终作为独立生命周期字段展示，不把 `FUTURE` 或 `HISTORICAL` 填入启停状态。
 - 同一对象同类修订的生效区间不得重叠；创建新版本时服务端返回冲突位置。
 - 停用不是删除。已被历史单据引用的身份和版本永久保留。
-- 规格取值组合决定 SKU 身份；系统内部计算 `specification_signature`，UI 不展示手填「规格标识」。同一 SKU 不得通过修订改掉已落库的规格身份组合。编辑时按签名原子完成：未变组合保留身份、新组合创建新 SKU、移除组合停用旧 SKU；`skuNo` 不能参与身份匹配。
+- 规格取值组合决定 SKU 身份；系统内部计算 `specification_signature`，UI 不展示手填「规格标识」。同一 SKU 不得通过修订改掉已落库的规格身份组合。编辑时按签名原子完成：未变组合保留身份、从未存在的新组合创建新 SKU、历史签名再次出现则复用原 `skuId` 并显式重新启用、移除组合停用旧 SKU；`skuNo` 不能参与身份匹配。
 - 已被正式单据使用的 SKU 不得修改基础单位；界面提供“停用并新建 SKU”，不提供强行修改。
 - 仓库仍有库存或有效预占时不得停用；阻塞原因必须展示数量摘要和 W10 钻取入口。
 
@@ -284,8 +286,9 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
-| 新建稳定对象 | 列表主动作「新建」 | 对应资源 `CREATE`；公司商品须显式商品类型，SKU 须主图与基础单位/分类/品牌 | 商品与 SKU 用宽对话框；其他标准对话框；提交前展示身份与初始版本摘要 | 创建资料编号和 v1，固定结果区给出对象号 | 保留表单；重复提交按幂等键返回同一对象 |
-| 更新资料（形成新版本） | 行级动作 / 对象中心「更新资料」 | `CREATE_REVISION`；基准版本仍为当前 | 商品与 SKU 用宽对话框回填；`BusinessDiffPanel` 展示前后值、生效时间及对业务引用的说明 | 追加不可变修订；即时生效时原子更新 `currentRevisionId`，未来修订只按有效区间保持待生效，当前指针不得提前切换 | 版本冲突不覆盖，提供刷新比较 |
+| 新建稳定对象 | 列表主动作「新建」 | 对应资源 `CREATE`；公司商品须显式商品类型，SKU 须主图与基础单位/分类/品牌 | 商品与 SKU 进入 `/master-data/products/new` 全页表单；其他资源使用专属页面或标准对话框；提交前展示身份与初始版本摘要 | 创建资料编号和 v1；商品成功后 `replace` 为 `/master-data/products/:id`，其他资源显示固定结果 | 保留表单；重复提交按幂等键返回同一对象 |
+| 更新资料（形成新版本） | 行级动作 / 对象中心「更新资料」 | `CREATE_REVISION`；基准版本仍为当前 | 商品与 SKU 在 `/master-data/products/:id` 原页编辑，`BusinessDiffPanel` 展示前后值、生效时间及对业务引用的说明；其他资源使用专属页面或标准对话框 | 追加不可变修订；即时生效时原子更新 `currentRevisionId`，未来修订只按有效区间保持待生效，当前指针不得提前切换 | 版本冲突不覆盖，提供刷新比较 |
+| 重新启用历史规格 SKU | 商品详情规格编辑产生“将重新启用”组合 | `REENABLE` + `CREATE_REVISION`；固定原 `skuId`、`expectedSkuRevisionId`，服务端 `actionBlockers` 为空 | 展示原产品编码、停用时间、历史引用、库存/预占与其他业务阻塞；用户明确确认并填写变更原因 | 原 SKU 追加修订并重新启用；不创建新身份；与本次其他保留/新增/停用变化原子提交 | 任一权限、资料完整性、库存/预占策略、合规或并发阻塞使整次规格编辑回滚，保留草稿 |
 | 维护商品分类 | 资源导航「商品分类」树形页 | 字典 `CREATE` / `CREATE_REVISION` | 树节点 + 对话框；`parent_category_id` 可空（根）；代码稳定不可复用；禁止挂到自身/下级；**不填生效期间（立即生效）** | 形成字典版本；商品表单 `CategoryCombobox` 只展示当前启用项并显示路径 | 已被引用的字典停用不删除历史 SKU 上的引用快照 |
 | 维护品牌 | 资源导航「品牌」列表 | 字典 `CREATE` / `CREATE_REVISION` | 标准对话框（无侧栏 sheet）；`brand_code` + 可选 Logo；**不填生效期间（立即生效）** | 形成字典版本；商品表单 `BrandCombobox` 只展示当前启用项 | 同上 |
 | 停用 | 行级 / 对象中心 | `DISABLE`；无不允许的当前业务占用 | 确认停用时点及受影响场景 | 形成停用版本；历史引用不变 | 阻塞时显示具体业务条件和钻取入口 |
@@ -398,7 +401,7 @@ type MasterDataRevisionResult = {
 }
 ```
 
-正式 API 必须按资源使用强类型字段，不得直接采用示例中的通用 `Record` 作为长期契约。商品与 SKU 的 `fields` 至少包含：`spu`、必填 `productKind`、可选 `description`、`baseUnit`（单位字典 ID/代码）、`categoryId`、`brandId`、规格维度、`skus[]`；`productKind` 写入 `product.product_kind`，创建后不可变，不得从 `categoryId` 推导。每个 SKU 含 `skuNo`（产品编码，系统生成可覆盖）、属性值、`mainImage`、可选 `barcode`、`salesVisiblePrice` 与 `marketPrice`；编辑既有且签名未变的行还须携带稳定 `skuId` 与 `expectedSkuRevisionId`，新增签名不得由客户端指定或猜测旧 `skuId`。服务端规范化属性代码/值代码后核对签名，以商品期望修订和所有受影响 SKU 期望修订原子提交“保留 / 新建 / 停用”集合；不得按 `skuNo`、数组位置或单行回退匹配身份。两项价格属于 `sku_revision`，不是独立商品池条目或修订。SPU 可含 `carouselImages` / `detailImages`。销售侧的「公司商品池」查询只投影 SKU 启用状态、当前 `salesVisiblePrice` 和有效 offering 所得资格，不产生独立 ID 或写入命令。商品与 SKU 契约**不得**包含默认 `supplierId`、`fulfillmentResponsibility`、`inputTaxRate`、`dropship*` 或 `bulk*` 供给字段；这些字段只进入 W21 的强类型 `supplier_offering` 契约。分类字段含 `code`、可选 `parent` / `productKind`；分类的适用类型只用于校验与筛选，不能成为公司商品类型的事实来源。品牌字段含 `code`。供应商 `fields` 至少包含：`company`（企业主体）、`contactName` / `contactPhone` / `address`、`settlement` / `capability` / `businessCategory` / `signingEntity` / `paymentEntity`、`qualification` / `contractFile` / `authorizationFile` / `foodLicense` / `legalPersonIdCard` 及对应合同与授权有效期、`taxNo` / `bankName` / `bankAccount` / `invoiceType` / `invoiceTaxRate`、`initialScore` / `supplierRating` / `currentScore`。所有表单使用 TanStack Form；生效区间、规格身份、基础单位、商品类型与分类兼容性、分类/品牌启用状态、主图完整性、供应商能力/资质及仓库占用由服务端最终校验。
+正式 API 必须按资源使用强类型字段，不得直接采用示例中的通用 `Record` 作为长期契约。商品与 SKU 的 `fields` 至少包含：`spu`、必填 `productKind`、可选 `description`、`baseUnit`（单位字典 ID/代码）、`categoryId`、`brandId`、规格维度、`skus[]`；`productKind` 写入 `product.product_kind`，创建后不可变，不得从 `categoryId` 推导。每个 SKU 含 `skuNo`（产品编码，系统生成可覆盖）、属性值、`mainImage`、可选 `barcode`、`salesVisiblePrice` 与 `marketPrice`；编辑既有且签名未变的行还须携带稳定 `skuId` 与 `expectedSkuRevisionId`，新增签名不得由客户端指定或猜测旧 `skuId`。历史停用签名再次出现时，服务端返回原 `skuId`、`skuNo`、`expectedSkuRevisionId`、`actionBlockers` 和 `requiresExplicitReenable=true`；提交必须包含明确重新启用意图与 `changeReason`。服务端规范化属性代码/值代码后核对签名，以商品期望修订和所有受影响 SKU 期望修订原子提交“保留 / 新建 / 重新启用 / 停用”集合；不得按 `skuNo`、数组位置或单行回退匹配身份。两项价格属于 `sku_revision`，不是独立商品池条目或修订。SPU 可含 `carouselImages` / `detailImages`。销售侧的「公司商品池」查询只投影 SKU 启用状态、当前 `salesVisiblePrice` 和有效 offering 所得资格，不产生独立 ID 或写入命令。商品与 SKU 契约**不得**包含默认 `supplierId`、`fulfillmentResponsibility`、`inputTaxRate`、`dropship*` 或 `bulk*` 供给字段；这些字段只进入 W21 的强类型 `supplier_offering` 契约。分类字段含 `code`、可选 `parent` / `productKind`；分类的适用类型只用于校验与筛选，不能成为公司商品类型的事实来源。品牌字段含 `code`。供应商 `fields` 至少包含：`company`（企业主体）、`contactName` / `contactPhone` / `address`、`settlement` / `capability` / `businessCategory` / `signingEntity` / `paymentEntity`、`qualification` / `contractFile` / `authorizationFile` / `foodLicense` / `legalPersonIdCard` 及对应合同与授权有效期、`taxNo` / `bankName` / `bankAccount` / `invoiceType` / `invoiceTaxRate`、`initialScore` / `supplierRating` / `currentScore`。所有表单使用 TanStack Form；生效区间、规格身份、基础单位、商品类型与分类兼容性、分类/品牌启用状态、主图完整性、供应商能力/资质及仓库占用由服务端最终校验。
 
 当 `objectType/resource="warehouses"` 时，Q1 未确认期间查询契约不变，但 `allowedActions` 不得包含创建、形成版本、停用或策略维护；所有仓库写命令由服务端以 `WAREHOUSE_WRITE_OWNER_UNCONFIRMED` fail-closed。客户端不能通过通用 `CreateMasterDataRevisionCommand`、管理员身份或隐藏入口绕过该门禁。
 
@@ -477,7 +480,7 @@ type MasterDataRevisionResult = {
 - [ ] 商品与 SKU 使用详情页维护；`product_kind` 必须作为独立必填下拉并在创建后只读，不能由分类派生；基础单位 / 分类 / 品牌为下拉且分类须兼容商品类型；主图必填且以 1:1 小方块上传/预览，轮播图与详情图允许空；销售可见价与市场价写 SKU 修订；每个已保存 SKU 的供给列只显示供应商数量，悬停面板展示供应商列表并可「添加供应商」或「查看全部供给」；库存列只有「查看库存」链接，不再展示独立台账徽标。当前前端尚缺公司商品 `product_kind` 字段；若仍保留独立 `product_pool_entry` / `sellable-items` mock，也须迁为公司 SKU 的销售资格查询视图，因此本项不能标记已完成。
 - [x] 商品分类、品牌可在 W14 独立维护，并作为 SKU 下拉数据源。
 - [x] 商品分类采用树形维护（父子关系、路径、防环）；业务组件提供 `CategoryCombobox`、`BrandCombobox`。
-- [ ] 有效期重叠、SKU 规格身份变化、基础单位变更和有库存仓库停用均被阻断并解释；规格编辑可证明签名未变保留 `skuId`、新签名分配新 `skuId`、移除签名停用旧 SKU 且保留历史，并拒绝按 `skuNo` 或单行回退重绑身份。当前前端 `session.ts::withStableSkuIds` 仍按 `skuNo` 恢复 `skuId`，`product-model.ts::rebuildSkusFromSpecs` 仍在新旧都只有一行时无条件复用旧行，属于一期代码缺口，本项不能标记完成。
+- [ ] 有效期重叠、SKU 规格身份变化、基础单位变更和有库存仓库停用均被阻断并解释；规格编辑可证明签名未变保留 `skuId`、新签名分配新 `skuId`、移除签名停用旧 SKU 且保留历史、历史签名再次出现时明确展示并重新启用原 SKU，且拒绝按 `skuNo` 或单行回退重绑身份。重新启用缺确认、原因或期望修订，或存在任一 `actionBlocker` 时整次编辑回滚。当前前端 `session.ts::withStableSkuIds` 仍按 `skuNo` 恢复 `skuId`，`product-model.ts::rebuildSkusFromSpecs` 仍在新旧都只有一行时无条件复用旧行，且会话快照没有停用/重新启用状态与历史查询，属于一期代码缺口，本项不能标记完成。
 
 ### 12.2 业务页选用与 W14 边界
 
