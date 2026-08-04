@@ -61,7 +61,7 @@ W 文件不得重定义业务状态机，也不得为了版面方便改变金额
 | W06 | 客户验收 | 挂 W05 + 作业 | `/sales/orders/:salesOrderId?section=acceptance` | [w06-customer-acceptance.md](w06-customer-acceptance.md) | 草稿 |
 | W07 | 二次确认队列 | M3 | `/procurement/confirm` | [w07-procurement-confirmation-queue.md](w07-procurement-confirmation-queue.md) | 草稿 |
 | W08 | 采购单 | M2 + M4 + M5 | `/procurement/orders` | [w08-purchase-orders.md](w08-purchase-orders.md) | 草稿 |
-| W09 | 收货与发货 / 交付与代发 | M3 + M5 | `/fulfillment?lane=warehouse\|procurement` | [w09-fulfillment-operations.md](w09-fulfillment-operations.md) | 草稿 |
+| W09 | 收货与发货 / 交付与代发 | M3 + M5 | `/fulfillment?lane=warehouse\|procurement` | [w09-fulfillment-operations.md](w09-fulfillment-operations.md) | 已实现 |
 | W10 | 库存台账 | M2 + M6 | `/inventory` | [w10-inventory-ledger.md](w10-inventory-ledger.md) | 草稿 |
 | W11 | 客户往来 | M2 + M5 | `/finance/customer-accounts` | [w11-customer-receivables.md](w11-customer-receivables.md) | 草稿 |
 | W12 | 供应商往来 | M2 + M5 | `/finance/supplier-accounts` | [w12-supplier-payables.md](w12-supplier-payables.md) | 草稿 |

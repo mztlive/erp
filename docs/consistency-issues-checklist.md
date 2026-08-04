@@ -62,7 +62,8 @@
 - **涉及文档**：ui-glossary.md §6 G1/G5（L354、L358）、§7（L365-381）；w09-fulfillment-operations.md（L3、L32、L53、L61-64、L104、L106、L175、L212、L307）；ui-workspaces/README.md（L64）
 - **冲突点**：glossary 声明"过账→确认入库/发货/交付、暂挂→先跳过，W09 已落地"；W09 文档仍大量使用旧词"已过账/暂挂"，且文件自述"部分已实现（Q1 未定）"与 README 标"草稿"不一致
 - **建议方向**：W09 文档按 glossary §7 全面替换过账/暂挂，同步 README 索引状态
-- **状态**：待讨论
+- **状态**：✅ 已修复（2026-08-04）
+- **决议**：W09 文档按 glossary G1/G5 全面替换（过账→确认入库/仓发/交付、暂挂→先跳过，约 40 处），保留枚举/字段名/实现术语与 Q1 待确认标注；文件状态改为"已实现（Q1 未定）"，README 索引同步。
 
 ### D-05 【低】资金/库存单据终态词不一致："已生效/已作废" vs "已过账/已冲正"
 
@@ -135,7 +136,7 @@
 | C-21 | maskCost/noSensitive 被查询消费但无 UI 控件 | supplier-order-center-page.tsx:117-136 | 违反 README 规则 9（隐形状态） | 补控件或从查询摘除 |
 | C-22 | 侧栏导航结构漂移 | lib/workspace-registry.ts:329-609 vs erp-ui-design.md §3.3 | IA 演进未回写文档 | 更新 erp-ui-design §3.3 |
 | C-23 | 检查产物 W21 模式过时 | w-routes-inventory.txt:21（M3+M4）vs README/registry（M2+M3+M4） | 检查产物未更新 | 重新生成检查产物 |
-| C-24 | W09 文档自述状态与 README 矛盾 + 正文仍写"暂挂" | w09-fulfillment-operations.md:3、61-63、104 vs README:64；代码已按 G1 落地 | 文档未更新 | 同步 W09 文档与 README |
+| C-24 | W09 文档自述状态与 README 矛盾 + 正文仍写"暂挂" | w09-fulfillment-operations.md:3、61-63、104 vs README:64；代码已按 G1 落地 | 文档未更新 | ✅ 已修复（随 D-04）：全文替换为先跳过/确认，状态同步"已实现" |
 
 - **状态**：待讨论
 
@@ -213,3 +214,4 @@
 | 2026-08-04 | D-03 | 供应商订单状态机以数据模型三轨为准：phase-2 §10.3 重写为履约轨(9值)+取消轨(5值)+退款轨(6值)，互不折算 | erp-phase-2.md §10.3 |
 | 2026-08-04 | C-17 | W09→W06 跳转参数 tab 改 section，与 W06 路由契约对齐（tsc 通过） | erp-client/features/fulfillment-operations/fulfillment-operations-page.tsx:1009 |
 | 2026-08-04 | B-05 | 指纹字段集移除项目名称/业务备注（仍随版本保存但不参与 content_hash），以 phase-1 §8.2 为权威 | erp-data-model.md §6.13/L1071/L3948、erp-mall-data-mapping.md §3.3/L266、phases-8.md §5.1 |
+| 2026-08-04 | D-04+C-24 | W09 文档按 glossary G1/G5 全面替换（过账→确认入库/仓发/交付、暂挂→先跳过约40处），保留枚举/字段名与 Q1 待确认标注；文件状态与 README 索引同步"已实现" | w09-fulfillment-operations.md、ui-workspaces/README.md |
