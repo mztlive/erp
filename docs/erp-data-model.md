@@ -743,7 +743,7 @@ erDiagram
 | `category_code` | 稳定分类代码 |
 | `parent_category_id` | 父分类，可空（空表示根分类） |
 | `name` | 分类名称 |
-| `product_kind` | 允许的实物、虚拟、服务或卡券类型 |
+| `product_kind` | 分类允许的实物、虚拟、服务或卡券类型；只用于兼容性校验和筛选，不是公司商品类型的事实来源 |
 | `status` | 启用/停用 |
 
 W14 以**树形维护页**管理分类：父子关系不得成环；停用后仍可被历史 SKU 修订引用，新建/选品 Combobox 仅返回当前启用节点并展示根到叶路径。
@@ -794,7 +794,7 @@ W14 以**树形维护页**管理分类：父子关系不得成环；停用后仍
 | 字段 | 所属表 | 说明 |
 | --- | --- | --- |
 | `product_no` | `product` | 商品编号 |
-| `product_kind` | `product` | 实物、虚拟、线下服务、卡券 |
+| `product_kind` | `product` | 必填的独立稳定业务属性：`PHYSICAL`、`VIRTUAL`、`OFFLINE_SERVICE`、`VOUCHER`；决定商品业务作用，创建后不可变 |
 | `current_revision_id` | 两者 | 当前版本 |
 | `sku_no` | `sku` | SKU 编号 |
 | `product_id` | `sku` | 所属 SPU |
@@ -817,6 +817,8 @@ W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中
 必需约束与索引：
 
 - `product_no`、`sku_no` 分别唯一；
+- `product.product_kind` 必须由创建命令显式提交并永久保持不变，不得根据 `category_id`
+  自动派生或随分类修订变化；分类的 `product_kind` 仅校验所选分类是否允许该商品类型；
 - `(product_id, specification_signature)` 唯一；
 - `(product_id, revision_no)`、`(sku_id, revision_no)` 唯一；
 - 已被正式单据使用的 SKU 不得修改基础单位；停用旧 SKU 后新建；
@@ -829,6 +831,10 @@ W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中
   不把来源条码当内部稳定身份；
 - `weight_kg`、`volume_m3` 必须使用定点小数且非负，禁止把旧 `double` 原样复制；
 - 公司商品池价格、正式商城销售价、供应商供给字段、库存、销量、利润标记不写入 `product` 或 `sku` 当前主表；`market_price` 仅为展示参考，不替代 W21 供给成本、商品池销售可见价或 W22 渠道发布价。
+- 普通 W14 建品可按其场景规则决定市场价是否暂缺；但
+  `CreateCompanySkuAndPromoteSupplierCatalogSku` 表示立即创建并入池，因此
+  `market_price` 与商品池 `sales_visible_price_gross` 均必填、均为非负定点金额，且不得
+  从来源底价、正式供给价或彼此自动计算。
 - W14 商品与 SKU 表单的基础单位、分类、品牌必须分别引用 `unit_of_measure`、`product_category`、`product_brand` 的启用字典项（下拉），不得自由文本冒充字典身份。
 
 `product_revision_media`（SPU 级媒体）与 SKU 主图：
@@ -2290,11 +2296,15 @@ Excel、API 和手工录入共同使用本节的供应商 SPU/SKU、映射和供
 | `status` | 正常、停止供应、异常 |
 | `current_revision_id` | 当前来源修订 |
 
-`supplier_catalog_product_revision` 保存来源 SPU 内容快照：`name`、`description`、
-来源分类、来源品牌、结构化描述属性、`source_revision_token`、`source_updated_at`、
+`supplier_catalog_product_revision` 保存来源 SPU 内容快照：`name`、`description`、可选
+`source_product_kind`、来源分类、来源品牌、结构化描述属性、`source_revision_token`、`source_updated_at`、
 规范化白名单字段的 keyed HMAC、密钥版本和有效期。字段语义可与公司
 `product_revision` 高度重合，但必须保持独立修订和所有权；供应商变化不得直接覆盖公司
 商品。
+
+`source_product_kind` 只是供应商来源对商品业务作用的声明或采购手工归类：手工来源必填，
+Excel/API 来源允许为空。反向创建公司商品时可以作为 `product_kind` 预填建议，但采购必须
+最终确认；不得根据来源分类或公司分类自动推导公司 `product_kind`。
 
 **UI 同构约定（W21 供应商商品中心 ↔ W14 商品详情）**：两侧均按「基础信息 / 图文 /
 SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、规格维度**使用与公司商品相同的
@@ -2305,10 +2315,11 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 `supplier_catalog_sku_revision`，不得作为 SPU 级字段编辑。供应商商品目录**不**保存
 统一含税报价、进项税率、运费、其他费用、可供区域、预计发货、售后说明、商品能力。
 映射与商品池摘要在独立分区。中心页**不**作为供给版本时间线、发布影响或来源 diff
-的主展示面。当前 W21 只可前往 W14 普通新建页，不从供应商来源预填或直接创建公司商品；
-W14 可从固定公司 SKU 反向发起 W21 创建供应商商品/SKU。写路径与表必须分离：供应商内容
-保存只形成 `supplier_catalog_*_revision`（`ReviseSupplierCatalogProduct` 携带 `skus[]`），
-公司内容仍由 W14 的公司商品/SKU 创建命令独立写入；取得两侧稳定 SKU ID 后才建立精确
+的主展示面。W21 从供应商 SKU 入池时可选择已有公司 SKU；没有同款时进入显式“新建公司
+商品/SKU”分支，将两侧语义相同的来源字段预填为公司草稿，采购可二次修改，且必须补齐
+独立 `product_kind`、销售可见价与市场价。W14 也可从固定公司 SKU 发起 W21 创建供应商商品/SKU。写路径与表
+仍须分离：普通来源内容保存只形成 `supplier_catalog_*_revision`；只有显式入池复合命令可在
+同一事务中调用 W14 公司商品/SKU 创建能力，取得稳定 SKU ID 后建立精确
 `supplier_catalog_sku_id → sku_id` 映射并写供给/商品池修订。
 
 `supplier_catalog_product_revision_media` 保存来源 SPU 图文：
@@ -2365,9 +2376,11 @@ W14 可从固定公司 SKU 反向发起 W21 创建供应商商品/SKU。写路�
 - 来源修订先进入供应商商品库，不直接修改公司 SKU、公司商品池或商城商品。
 - 供应商商品中心「详情即编辑」保存只追加来源修订，必须带期望来源修订号；不得顺带
   写公司主档或已确认供给成本。
-- 入池只允许选择已有公司 SKU；当前不支持从供应商来源预填创建公司商品。缺少公司 SKU 时
-  由用户前往 W14 普通新建页独立创建，取得稳定 `sku_id` 后再回 W21 建立精确 SKU 映射、
-  供给与必要的商品池修订；
+- 入池可选择已有公司 SKU，或从当前供应商 SKU 显式创建新的公司商品/SKU。创建分支必须
+  固定精确 `supplier_catalog_sku_id` 与来源修订，自动预填所有语义相同字段，允许采购修改，
+  并要求独立 `product_kind`、销售可见价与市场价均非空；`product_kind` 不得由分类派生，
+  最终所选分类必须允许该类型；公司商品/SKU、映射、双价供给修订、首个商品池修订、
+  审计、幂等结果和 outbox 必须同一事务提交，任一步失败全部回滚；
 - 若业务需要采用供应商图文，须在 W14 手工创建公司商品修订并引用已归档 `file_asset`；
   未归档 URL 不得作为公司长期媒体。启用公司 SKU 缺主图仍由 W14 阻断。
 - 供应商目录独有字段（代发/集采底价、集采起订量、可供数量/状态等）不得写入公司 `product`/`sku` 修订。
@@ -2419,6 +2432,7 @@ W14 可从固定公司 SKU 反向发起 W21 创建供应商商品/SKU。写路�
 | `availability_status` / `available_quantity` | 可供状态 |
 | `product_capabilities` | 商品级取消、退款、物流等能力 |
 | `valid_from` / `valid_to` | 有效期 |
+| `prefill_source_refs` | 按字段保存的可选结构化预填依据：`input_tax_rate` 引用 `supplier_commercial_profile_revision` 或税务策略修订，`supply_region` 引用 `supplier_capability_revision` 或供给区域策略修订，`valid_from` 保存服务端业务日期、时区和可选日历版本；只记录预填依据，不替代采购最终确认值 |
 
 必需约束与索引：
 
@@ -2429,6 +2443,13 @@ W14 可从固定公司 SKU 反向发起 W21 创建供应商商品/SKU。写路�
 - 供货价变化形成新修订，不覆盖旧价；
 - 增加第二家供应商时只新增该供应商 SKU 的映射与供给，不覆盖第一家的供给，也不要求形成新的公司商品或商品池条目；
 - 不设置 `supply_mode`；每条有效供给修订必须同时具备一件代发供给价和集采供给价，两项价格不得互相覆盖或择一折叠；
+- `input_tax_rate`、`supply_region`、`valid_from` 必须显式进入命令和修订。存在可靠供应商
+  开票资料、税务/供给策略或服务端业务日期时可以预填，但必须携带对应策略修订或业务日期
+  快照并允许采购修改；无可靠来源时保持空白且必填，缺失即 fail-closed；
+- `prefill_source_refs` 必须与实际预填逐字段对应：税率来源只能是供应商商业资料修订或税务
+  策略修订，区域来源只能是供应商能力修订或供给区域策略修订，生效日期来源只能是服务端
+  业务日期快照；某字段发生自动预填时对应引用必填，未发生预填时不得伪造引用；
+- 禁止以 `0.13`、“全国”、浏览器本地日期或由来源底价推导的单一确认成本作为后端默认；
 - 供应商、两项供给价、税费、集采起订量、区域、能力和有效期只写 `supplier_offering_revision`，不得复制回 `product_revision` / `sku_revision`；W14 仅消费按 `sku_id` 查询的关联投影；
 - `bulk_minimum_order_quantity > 0`；旧商城 `min_nums` 只有在采购确认了供应商、SKU、
   单位和起订语义后才可迁入本字段，未确认数据进入基础资料暂存审核；
@@ -3707,12 +3728,16 @@ PREPARING
 1. 供应商商品入库与入池：
    - Excel、API、手工来源先按批次和来源身份幂等写供应商 SPU/SKU 修订；
    - 单纯入库不得创建公司 SKU、商品池条目或供给；
-   - 选择入池时锁定供应商 SKU 来源修订和公司 SKU；
-   - 同一事务写映射、`supplier_offering_revision`、必要的
-     `product_pool_entry_revision`、审计和 outbox；
+   - 选择入池时先锁定精确供应商 SKU 来源修订并按版本化策略重验同款候选；已有目标分支
+     锁定公司 SKU，无同款分支在同一事务创建公司 product/SKU 及修订；
+   - 已有目标分支同一事务写映射、双价 `supplier_offering_revision`、必要的
+     `product_pool_entry_revision`、审计、幂等结果和 outbox；
+   - 无同款分支要求同字段自动预填且允许采购修改，独立 `product_kind`、销售可见价与市场价必填；同一事务创建
+     公司 product/SKU 及修订、精确映射、双价 `supplier_offering_revision`、首个
+     `product_pool_entry_revision`、审计、幂等结果和 outbox；
    - 目标公司 SKU 已有商品池且命令为 `KEEP_EXISTING` 时，返回并复用当前商品池修订；
      不得因为增加第二家供应商而伪造新商品池修订；
-   - 任一校验失败整体回滚，不允许有映射无成本或有商品池无供给；
+   - 任一校验失败整体回滚，不允许留下孤立公司 SKU、有映射无成本或有商品池无供给；
    - 增加第二家供应商不得覆盖第一家的供给修订。
 2. 一期快照应用：
    - 保存不可变原始快照；

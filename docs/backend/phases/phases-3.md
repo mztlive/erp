@@ -68,13 +68,21 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
 - `CreateSupplierOffering`、`AppendSupplierOfferingRevision`、`EndSupplierOffering`；
 - `PromoteMappedSupplierSkuToPool`：按供应商 SKU 粒度，不接受仅 SPU 身份。
 
-前端当前存在三种创建能力，本 phase 按实际边界实现：
+前端当前存在三种创建能力；本次确认新增供应商 SKU 反向建公司 SKU 的入池分支。本 phase
+按以下边界实现：
 
-- W14 `/master-data/products/new` 独立创建公司商品及一个或多个公司 SKU，不读取供应商来源
-  预填；W21“加入公司商品池”只查询和选择这些已存在且启用的公司 SKU；
+- W14 `/master-data/products/new` 继续独立创建公司商品及一个或多个公司 SKU；
 - W21 手工录入独立创建供应商商品及一个或多个供应商 SKU，不建立公司映射；
-- W14 可固定公司 `sku_id` 反向发起 W21 创建供应商商品/SKU，并在同一业务动作中建立精确
+- W14 可固定公司 `sku_id` 正向发起 W21 创建供应商商品/SKU，并在同一业务动作中建立精确
   映射、供给与必要的商品池修订；
+- W21 入池可选择已有公司 SKU；没有同款时调用
+  `CreateCompanySkuAndPromoteSupplierCatalogSku`。命令固定一个 `supplierCatalogSkuId`，以
+  来源同字段预填公司草稿并允许采购修改；独立 `productKind`、销售可见价和市场价必填。公司商品/SKU、映射、
+  双价供给修订、商品池修订、审计、幂等结果和 outbox 必须在单一数据库事务提交；
+- W14 正向创建与 W21 反向创建都必须显式提交独立必填 `productKind`。它写入
+  `product.product_kind` 后永久不可变，决定商品业务作用；`categoryId` 只参与兼容性校验，
+  不得用于派生或覆盖 `productKind`。反向创建可由可靠 `sourceProductKind` 预填，但采购必须
+  最终确认；来源缺失时空白必填；
 - 页面导航中的 `supplierProductId`、SPU 或其他上下文不得替代正式
   `supplier_catalog_sku_id → sku_id` 映射，也不得因来源变化自动覆盖另一侧修订。
 
@@ -122,6 +130,10 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
    `OfferingRevisionRef`，Phase 10 补真实 FK、同供应商/SKU和业务日有效性约束。
 6. 供给不设置 `supply_mode`；入池命令必须同时提交一件代发供给价、集采供给价和集采
    起订量，缺任一项均 fail-closed，不能把两项价格折叠成单一 `confirmed_cost_gross`。
+7. **[已确认，2026-08-04] 供给条件预填**：进项税率、供给区域和生效日期必须显式展示并
+   允许采购修改；仅当存在供应商开票资料/税务策略、供应商能力/供给策略或服务端业务日期
+   时自动预填，并携带策略修订或业务日期快照。无可靠来源时空白必填；禁止 `0.13`、“全国”、
+   浏览器当天或单一确认成本成为静默默认。
 
 ## 7. 测试要求
 
@@ -134,6 +146,11 @@ Phase 10 负责把该跨对象 guard 绑定到真实事务。
 7. 同一 SPU 的多个供应商 SKU 可分别映射不同公司 SKU；部分选择不得影响未选 SKU，
    任一单项缺供给价/集采起订量或引用错误 offering revision 时，该单项 fail-closed。
 8. API 来源在一期能力 gate 下拒绝，MANUAL/EXCEL 正常进入同一模型。
+9. 税率、区域、生效日期无可靠来源时缺失全部 fail-closed；有来源时断言策略版本/服务端
+   业务日期快照被审计，采购修改后的最终值而非建议值进入供给修订。
+10. W14 正向创建和 W21 反向创建缺少 `productKind` 都必须拒绝；可靠
+    `sourceProductKind` 只能预填，采购最终确认值写入稳定 `product.product_kind`；分类与
+    类型不兼容时拒绝，创建后任何修改 `productKind` 的命令都拒绝。
 
 ## 8. 完成标准
 
