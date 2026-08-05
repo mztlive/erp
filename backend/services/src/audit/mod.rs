@@ -1,4 +1,4 @@
-use database::{repository::AuditLogFilter, DatabaseExt, NoTransaction};
+use database::{repository::AuditLogFilter, AccessControlExt, NoTransaction};
 use entities::{AuditLog, AuditLogData};
 use id_generator::next_id;
 use mongodb::Database;

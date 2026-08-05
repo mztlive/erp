@@ -1,0 +1,1 @@
+//! 域 D32 `supplier_fulfillment`：supplier_fulfillment_order、supplier_fulfillment_item、supplier_order_action(+_line)、supplier_order_status_history、supplier_refund_fact、supplier_refund_allocation（页面：W26）。P0 预声明空模块；P2 填充仓储（Executor 传参、投影、乐观锁）。

@@ -11,4 +11,9 @@ entity-macros = { path = "../crates/entity-macros" }
 argon2 = { workspace = true }
 md5 = { workspace = true }
 regex = "1.12.3"
+rust_decimal = { workspace = true }
 validator = { workspace = true }
+
+[dev-dependencies]
+mongodb = { workspace = true }
+serde_json = { workspace = true }

@@ -1,0 +1,1 @@
+//! 域 D10 `catalog`：product_category、product_brand、unit_of_measure、sku_attribute、product(+_revision)、sku(+_revision)、voucher_category_profile_revision 等（页面：W14）。P0 骨架占位；P1 填充实体与值对象（实体层无跨域依赖，仅引用 entities::ids 与 common 基元）。

@@ -1,6 +1,6 @@
 //! 账号生命周期的共享校验与更新解析。
 
-use database::{DatabaseExt, Executor};
+use database::{AccessControlExt, Executor};
 use entities::{AccountCore, AccountCoreUpdate, AccountKind, LoginAccount};
 use mongodb::Database;
 

@@ -1,4 +1,4 @@
-use database::{DatabaseExt, NoTransaction};
+use database::{AccessControlExt, NoTransaction};
 use entities::{
     AccountCore, AccountCoreData, AccountCoreUpdate, AccountKind, AccountStatus, AuditLog, LoginAccount,
     RoleIdSet,

@@ -1,13 +1,14 @@
-//! MongoDB Database扩展trait
+//! 域 D06 `access_control`：`role`、`permission`、`user_role`、`data_scope`、`audit_event`。
 //!
-//! 提供便捷的方式访问各个实体的Repository
+//! P0 从 `repository/extensions.rs` 整体迁入既有访问器（accounts/audit_logs/roles），
+//! **调用点签名保持不变**；后续增补（data_scope 等）写入本文件。
 
 use mongodb::Database;
 
 use crate::Repository;
 
-/// Database扩展trait，为Database提供便捷的Repository访问方法
-pub trait DatabaseExt {
+/// 访问控制域仓储访问器。
+pub trait AccessControlExt {
     /// 获取统一账号Repository
     ///
     /// # 返回
@@ -27,7 +28,7 @@ pub trait DatabaseExt {
     fn roles(&self) -> Repository<'_, entities::Role>;
 }
 
-impl DatabaseExt for Database {
+impl AccessControlExt for Database {
     /// 获取统一账号Repository。
     ///
     /// # 返回

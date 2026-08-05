@@ -1,0 +1,1 @@
+//! 域 D15 `purchase_order`：purchase_order、purchase_order_submission、purchase_order_revision、purchase_line_sales_allocation、purchase_change_order 等（页面：W08）。P0 骨架占位；P1 填充实体与值对象（实体层无跨域依赖，仅引用 entities::ids 与 common 基元）。

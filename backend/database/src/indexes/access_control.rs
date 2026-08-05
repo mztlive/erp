@@ -1,3 +1,7 @@
+//! 域 D06 `access_control` 的索引声明：账号、角色、审计日志、Casbin 规则。
+//!
+//! P0 从 `indexes.rs` 整体迁入，职责不变。
+
 use mongodb::{
     bson::{doc, Document},
     options::IndexOptions,
@@ -10,7 +14,7 @@ const ACCOUNTS: &str = "accounts";
 const ROLES: &str = "roles";
 const AUDIT_LOGS: &str = "audit_logs";
 
-/// 创建当前持久化模型依赖的唯一约束和查询索引。
+/// 创建本域集合的幂等命名索引。
 ///
 /// 账号在软删除后仍保留原身份，因此 `account` 使用全局唯一索引，避免账号复用
 /// 破坏后续恢复语义。
@@ -20,7 +24,7 @@ const AUDIT_LOGS: &str = "audit_logs";
 ///
 /// # 错误
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
-pub async fn ensure_indexes(db: &Database) -> Result<()> {
+pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, ACCOUNTS, account_indexes()).await?;
     create_indexes(db, ROLES, role_indexes()).await?;
     create_indexes(db, AUDIT_LOGS, audit_log_indexes()).await?;

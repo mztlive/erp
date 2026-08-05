@@ -10,6 +10,14 @@ use crate::{
     core::{
         handler::admin,
         middleware::{authenticate, with_permission},
+        routes::{
+            access_control, bulk_job, card_instance, catalog, contract, cost, customer,
+            document_registry, file_asset, fulfillment, integration_ops, inventory, legacy_import,
+            mall_after_sales, mall_backfill, mall_order, mall_sync, party, payable, projection,
+            publication, purchase_order, receivable, returns, sales_order, sales_review,
+            source_registry, supplier, supplier_api, supplier_catalog, supplier_fulfillment,
+            supplier_settlement, warehouse, work_item,
+        },
     },
 };
 
@@ -24,6 +32,40 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .merge(account_routes(&rbac_service))
         .merge(role_routes(&rbac_service))
         .merge(audit_log_routes(&rbac_service))
+        .merge(access_control::routes(&rbac_service))
+        .merge(bulk_job::routes(&rbac_service))
+        .merge(card_instance::routes(&rbac_service))
+        .merge(catalog::routes(&rbac_service))
+        .merge(contract::routes(&rbac_service))
+        .merge(cost::routes(&rbac_service))
+        .merge(customer::routes(&rbac_service))
+        .merge(document_registry::routes(&rbac_service))
+        .merge(file_asset::routes(&rbac_service))
+        .merge(fulfillment::routes(&rbac_service))
+        .merge(integration_ops::routes(&rbac_service))
+        .merge(inventory::routes(&rbac_service))
+        .merge(legacy_import::routes(&rbac_service))
+        .merge(mall_after_sales::routes(&rbac_service))
+        .merge(mall_backfill::routes(&rbac_service))
+        .merge(mall_order::routes(&rbac_service))
+        .merge(mall_sync::routes(&rbac_service))
+        .merge(party::routes(&rbac_service))
+        .merge(payable::routes(&rbac_service))
+        .merge(projection::routes(&rbac_service))
+        .merge(publication::routes(&rbac_service))
+        .merge(purchase_order::routes(&rbac_service))
+        .merge(receivable::routes(&rbac_service))
+        .merge(returns::routes(&rbac_service))
+        .merge(sales_order::routes(&rbac_service))
+        .merge(sales_review::routes(&rbac_service))
+        .merge(source_registry::routes(&rbac_service))
+        .merge(supplier::routes(&rbac_service))
+        .merge(supplier_api::routes(&rbac_service))
+        .merge(supplier_catalog::routes(&rbac_service))
+        .merge(supplier_fulfillment::routes(&rbac_service))
+        .merge(supplier_settlement::routes(&rbac_service))
+        .merge(warehouse::routes(&rbac_service))
+        .merge(work_item::routes(&rbac_service))
         .route_layer(middleware::from_fn_with_state(state.clone(), authenticate))
         .with_state(state)
 }

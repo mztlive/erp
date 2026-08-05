@@ -1,0 +1,1 @@
+//! 域 D09 `supplier`：supplier_account、supplier_commercial_profile_revision、supplier_capability、supplier_qualification、supplier_rating_revision 等（页面：W14）。P0 骨架占位；P3 填充 handler（协议适配：DTO 复用 + ApiResponse，不得直连数据库）。

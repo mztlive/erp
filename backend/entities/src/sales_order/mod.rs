@@ -1,0 +1,1 @@
+//! 域 D13 `sales_order`：sales_order(+_line)、sales_order_working_copy、sales_order_submission、sales_order_revision、goods_service_line_revision、voucher_line_revision（页面：W05）。P0 骨架占位；P1 填充实体与值对象（实体层无跨域依赖，仅引用 entities::ids 与 common 基元）。

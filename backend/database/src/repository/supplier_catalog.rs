@@ -1,0 +1,1 @@
+//! 域 D24 `supplier_catalog`：supplier_catalog_product(+_revision、_revision_media)、supplier_catalog_sku、supplier_product_mapping、supplier_catalog_intake_batch、supplier_offering（页面：W21）。P0 预声明空模块；P2 填充仓储（Executor 传参、投影、乐观锁）。

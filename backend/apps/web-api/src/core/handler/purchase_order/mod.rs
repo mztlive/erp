@@ -1,0 +1,1 @@
+//! 域 D15 `purchase_order`：purchase_order、purchase_order_submission、purchase_order_revision、purchase_line_sales_allocation、purchase_change_order 等（页面：W08）。P0 骨架占位；P3 填充 handler（协议适配：DTO 复用 + ApiResponse，不得直连数据库）。

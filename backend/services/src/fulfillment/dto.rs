@@ -1,0 +1,1 @@
+//! 域 D16 `fulfillment`：purchase_receipt(+_line)、delivery(+_line)、electronic_delivery、service_fulfillment、customer_acceptance(+_line)、acceptance_fulfillment_allocation（页面：W06、W09）。P3 定义该域 DTO（Handler 直接复用）。

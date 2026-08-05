@@ -11,7 +11,7 @@ use std::{
 };
 
 use casbin::{CoreApi, DefaultModel, Enforcer, RbacApi};
-use database::{DatabaseExt, Executor, MongoCasbinAdapter, NoTransaction, Transactional};
+use database::{AccessControlExt, Executor, MongoCasbinAdapter, NoTransaction, Transactional};
 use entities::{AccountKind, AuditLog, Permission, PermissionSet, Role, RoleData, RoleIdSet, RoleUpdate};
 use mongodb::{ClientSession, Database};
 use tokio::sync::{Mutex, OnceCell, RwLock};

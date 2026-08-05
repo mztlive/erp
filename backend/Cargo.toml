@@ -6,6 +6,7 @@ members = [
     "crates/permission-macros",
     "crates/storage",
     "crates/id-generator",
+    "crates/test-support",
     "database",
     "entities",
     "services",
@@ -29,6 +30,9 @@ thiserror = "2.0.18"
 
 # 数据库
 mongodb = "3.6.0"
+
+# 定点小数（P0-1.3 固化：金额/单价/数量/税率一律使用 entities::money，禁止浮点）
+rust_decimal = "1.36"
 
 # 工具库
 async-trait = "0.1.89"

@@ -1,0 +1,1 @@
+//! 域 D21 `returns`：sales_return_case、sales_return_line、purchase_return_order、purchase_return_line、customer_refund、supplier_refund、receipt_reversal、payment_reversal（页面：W05、W09、W11、W12）。P0 骨架占位；P3 填充 handler（协议适配：DTO 复用 + ApiResponse，不得直连数据库）。

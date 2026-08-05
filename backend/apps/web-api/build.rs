@@ -17,6 +17,44 @@ struct PermissionMeta {
     action: Option<String>,
 }
 
+/// P0 预声明的 34 个业务域模块（与 docs/dev-plan/domains.md 对齐，P0 后冻结）。
+const DOMAIN_MODULES: &[&str] = &[
+    "source_registry",
+    "document_registry",
+    "work_item",
+    "bulk_job",
+    "file_asset",
+    "access_control",
+    "party",
+    "customer",
+    "supplier",
+    "catalog",
+    "warehouse",
+    "contract",
+    "sales_order",
+    "sales_review",
+    "purchase_order",
+    "fulfillment",
+    "inventory",
+    "receivable",
+    "payable",
+    "cost",
+    "returns",
+    "legacy_import",
+    "mall_sync",
+    "supplier_catalog",
+    "supplier_api",
+    "publication",
+    "projection",
+    "card_instance",
+    "mall_order",
+    "mall_after_sales",
+    "mall_backfill",
+    "supplier_fulfillment",
+    "supplier_settlement",
+    "integration_ops",
+];
+
 #[derive(Debug, Clone)]
 struct RouteHandler {
     method: String,
@@ -62,12 +100,12 @@ fn main() {
 
     let routes_mod_path = manifest_dir.join("src/core/routes/mod.rs");
     let routes_admin_path = manifest_dir.join("src/core/routes/admin.rs");
-    let handlers_dir = manifest_dir.join("src/core/handler/admin");
+    let handlers_root = manifest_dir.join("src/core/handler");
 
     rerun_if_changed(&routes_mod_path);
     rerun_if_changed(&routes_admin_path);
 
-    let handler_files = match collect_rs_files(&handlers_dir) {
+    let handler_files = match collect_handler_files(&handlers_root) {
         Ok(files) => files,
         Err(err) => {
             println!("cargo:warning=failed to collect handler files: {}", err);
@@ -91,7 +129,7 @@ fn main() {
         }
     };
 
-    let handler_meta = match parse_handler_permissions(&handlers_dir, &handler_files) {
+    let handler_meta = match parse_handler_permissions(&handlers_root, &handler_files) {
         Ok(meta) => meta,
         Err(err) => {
             println!("cargo:warning=failed to parse handler permissions: {}", err);
@@ -118,8 +156,23 @@ fn main() {
         }
     }
 
-    let output_path = repo_root.join("fronts/admin/src/constants/permissions.generated.ts");
-    if let Err(err) = write_generated_file(&output_path, &groups) {
+    let admin_output_path = repo_root.join("fronts/admin/src/constants/permissions.generated.ts");
+    if let Err(err) = write_generated_file(
+        &admin_output_path,
+        &groups,
+        "import type { PermissionItem } from \"@/types/admin\";\n",
+    ) {
+        println!("cargo:warning=failed to write generated permissions: {}", err);
+    }
+
+    // P0-4.1：权限生成物落点修正，同时输出到 erp-client（实际前端）。
+    // erp-client 侧自包含 PermissionItem 类型（其 tsconfig 无 @/types/admin 映射）。
+    let client_output_path = repo_root.join("erp-client/lib/permissions.generated.ts");
+    if let Err(err) = write_generated_file(
+        &client_output_path,
+        &groups,
+        client_permission_item_source(),
+    ) {
         println!("cargo:warning=failed to write generated permissions: {}", err);
     }
 }
@@ -379,15 +432,19 @@ fn parse_permission_args(attr: &Attribute) -> syn::Result<PermissionMeta> {
 
 /// 获取 handler 文件对应的模块路径。
 ///
+/// 以 `handler/` 为根：`handler/admin/account.rs` → `admin::account`，
+/// `handler/source_registry/foo.rs` → `source_registry::foo`，
+/// 与 routes 文件中 `get(...)` 内的引用写法保持一致。
+///
 /// # 参数
-/// * `handler_root` - 处理器根目录
+/// * `handler_root` - 处理器根目录（`src/core/handler`）
 /// * `file_path` - 文件路径
 ///
 /// # 返回
 /// 返回可选结果，`Some` 表示存在，`None` 表示不存在。
 fn module_path_for_file(handler_root: &Path, file_path: &Path) -> Option<String> {
     let relative = file_path.strip_prefix(handler_root).ok()?;
-    let mut segments = vec!["admin".to_string()];
+    let mut segments = Vec::new();
 
     for component in relative.components() {
         let name = component.as_os_str().to_string_lossy();
@@ -405,23 +462,25 @@ fn module_path_for_file(handler_root: &Path, file_path: &Path) -> Option<String>
     Some(segments.join("::"))
 }
 
-/// 递归收集目录下所有 Rust 文件。
+/// 递归收集 `handler/admin` 与全部 34 个域 handler 目录下的 Rust 文件。
+///
+/// `auth`、`upload` 等非域 handler 不在扫描范围（权限产物只覆盖管理端路由）。
 ///
 /// # 参数
-/// * `root` - 根目录
+/// * `root` - 处理器根目录（`src/core/handler`）
 ///
 /// # 返回
 /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-///
-/// # 错误
-/// 当验证失败或底层操作失败时返回错误。
-fn collect_rs_files(root: &Path) -> io::Result<Vec<PathBuf>> {
+fn collect_handler_files(root: &Path) -> io::Result<Vec<PathBuf>> {
     let mut files = Vec::new();
-    collect_rs_files_inner(root, &mut files)?;
+    collect_rs_files_inner(&root.join("admin"), &mut files)?;
+    for module in DOMAIN_MODULES {
+        collect_rs_files_inner(&root.join(module), &mut files)?;
+    }
     Ok(files)
 }
 
-/// 递归收集 Rust 文件的内部实现。
+/// 递归收集 Rust 文件，目录不存在时视为空目录。
 ///
 /// # 参数
 /// * `root` - 根目录
@@ -429,10 +488,10 @@ fn collect_rs_files(root: &Path) -> io::Result<Vec<PathBuf>> {
 ///
 /// # 返回
 /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-///
-/// # 错误
-/// 当验证失败或底层操作失败时返回错误。
 fn collect_rs_files_inner(root: &Path, files: &mut Vec<PathBuf>) -> io::Result<()> {
+    if !root.is_dir() {
+        return Ok(());
+    }
     for entry in fs::read_dir(root)? {
         let entry = entry?;
         let path = entry.path();
@@ -696,17 +755,22 @@ fn join_paths(prefix: &str, path: &str) -> String {
 /// # 参数
 /// * `output_path` - 输出路径
 /// * `groups` - 权限分组
+/// * `permission_item_source` - `PermissionItem` 类型来源（import 行或内联类型定义）
 ///
 /// # 返回
 /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
 ///
 /// # 错误
 /// 当验证失败或底层操作失败时返回错误。
-fn write_generated_file(output_path: &Path, groups: &[(String, PermissionGroup)]) -> io::Result<()> {
+fn write_generated_file(
+    output_path: &Path,
+    groups: &[(String, PermissionGroup)],
+    permission_item_source: &str,
+) -> io::Result<()> {
     let mut content = String::new();
     content.push_str("// @generated by apps/web-api/build.rs. Do not edit.\n");
-    content.push_str("import type { PermissionItem } from \"@/types/admin\";\n\n");
-    content.push_str("export interface PermissionGroup {\n");
+    content.push_str(permission_item_source);
+    content.push_str("\nexport interface PermissionGroup {\n");
     content.push_str("    name: string;\n");
     content.push_str("    description: string;\n");
     content.push_str("    permissions: PermissionItem[];\n");
@@ -776,4 +840,21 @@ fn write_generated_file(output_path: &Path, groups: &[(String, PermissionGroup)]
 /// 返回字符串结果。
 fn escape_ts(value: &str) -> String {
     value.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+/// 返回 erp-client 侧 `PermissionItem` 的内联类型定义。
+///
+/// `erp-client` 的 tsconfig 没有 `@/types/admin` 映射，且代码风格为 2 空格缩进、
+/// 无分号；生成文件按该风格输出，避免 lint/tsc 漂移。
+fn client_permission_item_source() -> &'static str {
+    "export interface PermissionItem {\n\
+     \x20   module: string\n\
+     \x20   method: string\n\
+     \x20   path: string\n\
+     \x20   description: string\n\
+     \x20   permission: {\n\
+     \x20     resource: string\n\
+     \x20     action: string\n\
+     \x20   }\n\
+     }\n"
 }

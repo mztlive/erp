@@ -12,5 +12,6 @@ pub use connection::{connect, ensure_transaction_support};
 pub use errors::{Error, Result};
 pub use executor::{Executor, NoTransaction};
 pub use indexes::ensure_indexes;
-pub use repository::{DatabaseExt, Repository};
+pub use repository::Repository;
+pub use repository::extensions::*;
 pub use transaction::Transactional;

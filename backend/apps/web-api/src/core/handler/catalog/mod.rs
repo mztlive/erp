@@ -1,0 +1,1 @@
+//! 域 D10 `catalog`：product_category、product_brand、unit_of_measure、sku_attribute、product(+_revision)、sku(+_revision)、voucher_category_profile_revision 等（页面：W14）。P0 骨架占位；P3 填充 handler（协议适配：DTO 复用 + ApiResponse，不得直连数据库）。

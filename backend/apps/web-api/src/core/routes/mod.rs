@@ -30,6 +30,41 @@ mod account;
 mod admin;
 mod public;
 
+mod source_registry;
+mod document_registry;
+mod work_item;
+mod bulk_job;
+mod file_asset;
+mod access_control;
+mod party;
+mod customer;
+mod supplier;
+mod catalog;
+mod warehouse;
+mod contract;
+mod sales_order;
+mod sales_review;
+mod purchase_order;
+mod fulfillment;
+mod inventory;
+mod receivable;
+mod payable;
+mod cost;
+mod returns;
+mod legacy_import;
+mod mall_sync;
+mod supplier_catalog;
+mod supplier_api;
+mod publication;
+mod projection;
+mod card_instance;
+mod mall_order;
+mod mall_after_sales;
+mod mall_backfill;
+mod supplier_fulfillment;
+mod supplier_settlement;
+mod integration_ops;
+
 /// 覆盖 MongoDB 最长 120 秒提交确认窗口，避免服务端先返回 408 而事务随后提交。
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(180);
 

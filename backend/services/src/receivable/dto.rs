@@ -1,0 +1,1 @@
+//! 域 D18 `receivable`：receivable_account、receivable_entry、receivable_funds_review、receivable_entry_offset、customer_receipt、receipt_allocation、invoice、sales_invoice_allocation（页面：W11、W13）。P3 定义该域 DTO（Handler 直接复用）。
