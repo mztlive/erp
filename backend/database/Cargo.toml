@@ -15,3 +15,7 @@ entity-core = { path = "../crates/entity-core" }
 entities = { path = "../entities" }
 regex = "1.12.3"
 tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+test-support = { path = "../crates/test-support" }

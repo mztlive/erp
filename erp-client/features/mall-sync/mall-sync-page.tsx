@@ -87,6 +87,8 @@ import {
   useTriggerIncrementalMutation,
   useTriggerSingleOrderMutation,
 } from "@/features/mall-sync/queries"
+import { SourceSystemsCard } from "@/features/mall-sync/source-systems-card"
+import { isFeatureReal } from "@/lib/api"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/datetime"
 import { parseDemoRole } from "@/lib/demo-roles"
@@ -1106,6 +1108,9 @@ export function MallSyncPage() {
           </AlertDescription>
         </Alert>
       ) : null}
+
+      {/* P0-5 垂直样板：真实模式渲染来源系统列表（mock 模式不渲染） */}
+      {isFeatureReal("mall-sync") ? <SourceSystemsCard /> : null}
 
       {/* 演示控制：角色 / 阶段 / 策略 / 来源（mock） */}
       <Collapsible className="rounded-2xl border bg-card">

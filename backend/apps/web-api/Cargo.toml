@@ -39,3 +39,6 @@ permission-macros = { path = "../../crates/permission-macros" }
 
 [build-dependencies]
 syn = { version = "2.0.117", features = ["full"] }
+
+[dev-dependencies]
+test-support = { path = "../../crates/test-support" }

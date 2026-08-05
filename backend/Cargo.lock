@@ -707,7 +707,9 @@ dependencies = [
  "mongodb",
  "regex",
  "serde",
+ "test-support",
  "thiserror 2.0.18",
+ "tokio",
  "tracing",
 ]
 
@@ -3679,6 +3681,7 @@ dependencies = [
  "sha2",
  "storage",
  "syn 2.0.117",
+ "test-support",
  "thiserror 2.0.18",
  "tokio",
  "tower",

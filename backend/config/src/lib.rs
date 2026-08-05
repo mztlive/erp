@@ -235,7 +235,12 @@ impl SafeConfig {
     ///
     /// # 返回
     /// 返回创建的实例。
-    fn new(config: Config) -> Self {
+    ///
+    /// # 说明
+    /// 原为私有构造（仅 `from_args` 可用）；P0-5 垂直样板的 web-api HTTP
+    /// 集成测试需要在无 CLI 参数的环境构造最小 `AppState`，故放宽为 `pub`。
+    /// 本改动为纯可见性放宽，不改变任何行为；建议随「地基修订 PR」正式合入。
+    pub fn new(config: Config) -> Self {
         let (sender, _) = watch::channel(config);
         Self { sender }
     }

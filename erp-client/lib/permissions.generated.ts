@@ -145,4 +145,60 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "来源注册",
+        description: "来源系统与外部身份映射管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/source-systems",
+                description: "查询来源系统列表",
+                permission: {
+                    resource: "source_system",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/source-systems",
+                description: "创建来源系统",
+                permission: {
+                    resource: "source_system",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/source-systems/{id}",
+                description: "更新来源系统",
+                permission: {
+                    resource: "source_system",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/external-identity-maps",
+                description: "查询外部身份映射列表",
+                permission: {
+                    resource: "external_identity_map",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/external-identity-maps",
+                description: "建立外部身份映射",
+                permission: {
+                    resource: "external_identity_map",
+                    action: "create",
+                },
+            },
+        ],
+    },
 ];

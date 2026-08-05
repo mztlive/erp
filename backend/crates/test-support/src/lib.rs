@@ -42,8 +42,13 @@ pub fn mongo_env_present() -> bool {
 /// 异步测试函数里）：
 ///
 /// ```ignore
+/// # use test_support::require_mongo;
+/// # async fn run(_db: ()) {}
+/// # async fn example() {
+/// #   let db = ();
 /// require_mongo!(async move { run(db).await }.await);
 /// require_mongo!(async { run(db).await });
+/// # }
 /// ```
 ///
 /// 第一种形态由调用方自行 `await`；第二种形态由宏内部 `await`。同步表达式

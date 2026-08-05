@@ -8,6 +8,7 @@ import {
   confirmMapping,
   deferMapping,
   fetchMallSyncPage,
+  fetchSourceSystems,
   reapplyMallSnapshot,
   resolveUnknownReapply,
   retryFailedJob,
@@ -18,12 +19,18 @@ import {
   triggerSingleOrderPull,
   type MallSyncQueryInput,
 } from "@/features/mall-sync/api"
-import type { OwnershipStage } from "@/features/mall-sync/types"
+import type {
+  OwnershipStage,
+  SourceSystemListParams,
+} from "@/features/mall-sync/types"
+import { isAuthenticated, isFeatureReal } from "@/lib/api"
 
 export const mallSyncKeys = {
   all: ["mall-sync"] as const,
   page: (input: MallSyncQueryInput) =>
     [...mallSyncKeys.all, "page", input] as const,
+  sourceSystems: (params: SourceSystemListParams) =>
+    [...mallSyncKeys.all, "source-systems", params] as const,
 }
 
 export function useMallSyncPageQuery(input: MallSyncQueryInput) {
@@ -37,6 +44,30 @@ export function useMallSyncPageQuery(input: MallSyncQueryInput) {
       )
       return hasRunning ? 4_000 : false
     },
+  })
+}
+
+/** 来源系统分页默认参数：第一页 20 条（真实接口，页面为汇总卡片无分页控件）。 */
+const SOURCE_SYSTEMS_DEFAULT_PARAMS: SourceSystemListParams = {
+  page: 1,
+  page_size: 20,
+}
+
+/**
+ * 来源系统列表查询（P0-5 垂直样板：真实 useQuery 取数）。
+ *
+ * 数据源开关：仅当 lib/api feature-source 的 isFeatureReal("mall-sync") 为真
+ * 且 session 已有 token 时启用真实请求（enabled 控制，开关关闭时本查询不发请求，
+ * 页面继续走 mock 数据路径，无回归）。
+ * 无 token 时不发请求，由页面给出「未能获取来源数据」的错误提示。
+ */
+export function useSourceSystemsQuery(
+  params: SourceSystemListParams = SOURCE_SYSTEMS_DEFAULT_PARAMS
+) {
+  return useQuery({
+    queryKey: mallSyncKeys.sourceSystems(params),
+    queryFn: () => fetchSourceSystems(params),
+    enabled: isFeatureReal("mall-sync") && isAuthenticated(),
   })
 }
 

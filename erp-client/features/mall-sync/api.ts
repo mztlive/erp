@@ -7,6 +7,7 @@
  */
 
 import { mockDelay } from "@/lib/mock-delay"
+import { apiGet } from "@/lib/api"
 import type {
   ConfirmMappingResult,
   DeferMappingResult,
@@ -18,6 +19,8 @@ import type {
   MappingTaskView,
   OwnershipStage,
   ReapplyResult,
+  SourceSystemListParams,
+  SourceSystemPage,
   TriggerMallSyncResult,
 } from "@/features/mall-sync/types"
 import {
@@ -1175,3 +1178,28 @@ export async function assignMappingTask(input: {
 export function getMallSyncStageLabels() {
   return { STAGE_LABEL, DIRECTION_LABEL }
 }
+
+// ─── P0-5 垂直样板：来源系统真实取数（D01 source_registry） ───────────────────
+// 本函数是 mall-sync 内唯一真实 HTTP 取数入口；其余 mock 函数保持原样不动。
+
+/**
+ * 真实接口：来源系统分页列表。
+ *
+ * 契约（docs/dev-plan/api-contract.md §3/§4 + P0-5 锁定）：
+ * GET /admin/source-systems?page=1&page_size=20
+ * - Bearer token 由 lib/api client 从 session 自动读取并附加
+ * - 统一信封 { status, errorMessage, data, success }，
+ *   data = { items: [{ id, code, name, system_type, status, created_at }], total, page, page_size }
+ * - 失败统一抛 ApiError（Network / Auth / Http / Validation / Parse，见 lib/api/errors.ts）
+ *
+ * 开关：lib/api/feature-source.ts 的 REAL_FEATURES 当前为空集（全量 mock），
+ * 本函数仅在 isFeatureReal("mall-sync") 为真时被 useSourceSystemsQuery 调用；
+ * P4 集成完成后把 "mall-sync" 加入 REAL_FEATURES 即切换，无需改动本文件。
+ */
+export const fetchSourceSystems = async (
+  params: SourceSystemListParams
+): Promise<SourceSystemPage> =>
+  apiGet<SourceSystemPage>("/admin/source-systems", {
+    page: params.page,
+    page_size: params.page_size,
+  })

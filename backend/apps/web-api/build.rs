@@ -90,7 +90,15 @@ fn main() {
             return;
         }
     };
-    let repo_root = match manifest_dir.parent().and_then(|path| path.parent()) {
+    let backend_root = match manifest_dir.parent().and_then(|path| path.parent()) {
+        Some(path) => path.to_path_buf(),
+        None => {
+            println!("cargo:warning=missing backend root");
+            return;
+        }
+    };
+    // `fronts/admin` 位于 backend 下；`erp-client` 位于仓库根（backend 的兄弟目录）。
+    let repo_root = match backend_root.parent() {
         Some(path) => path.to_path_buf(),
         None => {
             println!("cargo:warning=missing repo root");
@@ -116,6 +124,9 @@ fn main() {
     for file in &handler_files {
         rerun_if_changed(file);
     }
+    for module in DOMAIN_MODULES {
+        rerun_if_changed(&manifest_dir.join(format!("src/core/routes/{module}.rs")));
+    }
 
     let prefix = match fs::read_to_string(&routes_mod_path) {
         Ok(content) => parse_admin_prefix(&content).unwrap_or_else(|| "/admin".to_string()),
@@ -137,14 +148,10 @@ fn main() {
         }
     };
 
-    let route_handlers = match fs::read_to_string(&routes_admin_path) {
-        Ok(content) => parse_routes(&content),
+    let route_handlers = match collect_route_handlers(&manifest_dir) {
+        Ok(handlers) => handlers,
         Err(err) => {
-            println!(
-                "cargo:warning=failed to read admin routes file {}: {}",
-                routes_admin_path.display(),
-                err
-            );
+            println!("cargo:warning=failed to read route files: {}", err);
             return;
         }
     };
@@ -275,10 +282,6 @@ fn parse_handler_permissions(
     let mut out = HashMap::new();
 
     for file_path in handler_files {
-        if file_path.file_name().and_then(|name| name.to_str()) == Some("mod.rs") {
-            continue;
-        }
-
         let module_path = match module_path_for_file(handler_root, file_path) {
             Some(path) => path,
             None => continue,
@@ -474,6 +477,32 @@ fn collect_handler_files(root: &Path) -> io::Result<Vec<PathBuf>> {
         collect_rs_files_inner(&root.join(module), &mut files)?;
     }
     Ok(files)
+}
+
+/// 收集管理端路由文件中的全部 `.route()` 处理器引用。
+///
+/// 覆盖 `admin.rs`（既有聚合路由）与全部 34 个域路由文件
+/// （`routes/<domain>.rs`，P0 起每域一个文件）。
+///
+/// # 参数
+/// * `manifest_dir` - web-api crate 目录
+///
+/// # 返回
+/// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
+fn collect_route_handlers(manifest_dir: &Path) -> io::Result<Vec<RouteHandler>> {
+    let mut handlers = Vec::new();
+    let admin_path = manifest_dir.join("src/core/routes/admin.rs");
+    if let Ok(content) = fs::read_to_string(&admin_path) {
+        handlers.extend(parse_routes(&content));
+    }
+    for module in DOMAIN_MODULES {
+        let path = manifest_dir.join(format!("src/core/routes/{module}.rs"));
+        let Ok(content) = fs::read_to_string(&path) else {
+            continue;
+        };
+        handlers.extend(parse_routes(&content));
+    }
+    Ok(handlers)
 }
 
 /// 递归收集 Rust 文件，目录不存在时视为空目录。
