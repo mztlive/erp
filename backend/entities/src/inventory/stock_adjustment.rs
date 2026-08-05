@@ -1,0 +1,644 @@
+//! `stock_adjustment` / `stock_adjustment_line`：库存调整单及明细（数据模型 §6.7）。
+//!
+//! 状态机按 §6.7/§7.5：草稿 → 待仓储复核 → 待财务确认 → 已过账 → 已冲正，
+//! 仓储复核/财务确认可驳回（`REJECTED` 修改后重新提交复核）；`POSTED` 后
+//! 不可编辑。经办人与仓储复核人不得相同（§6.7）；盘盈、盘亏和损坏一律经过
+//! 财务成本影响确认后才能过账（§6.7，路径由状态机保证）。过账在同一事务写
+//! 库存流水、余额和必要预占释放，原出入库流水不改写——由 P3 完成（§8.2
+//! 第 3 条）。
+
+use entity_core::BaseModel;
+use entity_macros::Entity;
+use serde::{Deserialize, Serialize};
+
+use crate::common::state::{ensure_transition, DocumentState};
+use crate::errors::{Error, Result};
+use crate::ids::{SkuId, StockAdjustmentId, StockAdjustmentLineId, WarehouseId};
+use crate::money::Quantity;
+use crate::validation::normalize_required_text;
+
+use super::stock_movement::MovementDirection;
+
+/// 调整单号最大长度。
+const ADJUSTMENT_NO_MAX_LEN: usize = 64;
+/// 经办人/复核人标识最大长度。
+const ACTOR_MAX_LEN: usize = 128;
+
+/// 库存调整单状态（数据模型 §6.7：草稿、待仓储复核、待财务确认、已过账、驳回）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum StockAdjustmentState {
+    /// 草稿。
+    Draft,
+    /// 待仓储复核。
+    PendingWarehouseReview,
+    /// 待财务确认（成本影响确认）。
+    PendingFinanceReview,
+    /// 已过账（不可编辑）。
+    Posted,
+    /// 驳回（修改后重新提交复核）。
+    Rejected,
+    /// 已冲正（不可逆终态）。
+    Reversed,
+}
+
+impl StockAdjustmentState {
+    /// 返回状态的中文展示名。
+    ///
+    /// # 返回
+    /// 返回面向用户的中文标签。
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Draft => "草稿",
+            Self::PendingWarehouseReview => "待仓储复核",
+            Self::PendingFinanceReview => "待财务确认",
+            Self::Posted => "已过账",
+            Self::Rejected => "驳回",
+            Self::Reversed => "已冲正",
+        }
+    }
+
+    /// 返回状态的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Draft => "DRAFT",
+            Self::PendingWarehouseReview => "PENDING_WAREHOUSE_REVIEW",
+            Self::PendingFinanceReview => "PENDING_FINANCE_REVIEW",
+            Self::Posted => "POSTED",
+            Self::Rejected => "REJECTED",
+            Self::Reversed => "REVERSED",
+        }
+    }
+
+    /// 判断是否可编辑（草稿与驳回）。
+    ///
+    /// # 返回
+    /// 草稿或驳回状态返回 `true`。
+    pub fn is_editable(&self) -> bool {
+        matches!(self, Self::Draft | Self::Rejected)
+    }
+}
+
+impl DocumentState for StockAdjustmentState {
+    /// 固定邻接矩阵（§6.7/§7.5 定向链；`REVERSED` 为不可逆终态）。
+    ///
+    /// `REJECTED` 可在修改后重新提交仓储复核（§6.5.5 再次提交审核）。
+    fn allowed_next(self) -> &'static [Self] {
+        match self {
+            Self::Draft => &[Self::PendingWarehouseReview],
+            Self::PendingWarehouseReview => &[Self::PendingFinanceReview, Self::Rejected],
+            Self::PendingFinanceReview => &[Self::Posted, Self::Rejected],
+            Self::Rejected => &[Self::PendingWarehouseReview],
+            Self::Posted => &[Self::Reversed],
+            Self::Reversed => &[],
+        }
+    }
+}
+
+/// 调整原因类型（数据模型 §6.7：盘盈、盘亏、损坏）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum AdjustmentReasonType {
+    /// 盘盈。
+    StockGain,
+    /// 盘亏。
+    StockLoss,
+    /// 损坏。
+    Damage,
+}
+
+impl AdjustmentReasonType {
+    /// 返回类型的中文展示名。
+    ///
+    /// # 返回
+    /// 返回面向用户的中文标签。
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::StockGain => "盘盈",
+            Self::StockLoss => "盘亏",
+            Self::Damage => "损坏",
+        }
+    }
+
+    /// 返回类型的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::StockGain => "STOCK_GAIN",
+            Self::StockLoss => "STOCK_LOSS",
+            Self::Damage => "DAMAGE",
+        }
+    }
+}
+
+/// 库存调整单创建数据。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StockAdjustmentData {
+    /// 调整单号（全局唯一）。
+    pub adjustment_no: String,
+    /// 仓库。
+    pub warehouse_id: WarehouseId,
+    /// 调整原因类型。
+    pub reason_type: AdjustmentReasonType,
+    /// 仓储经办人。
+    pub prepared_by: String,
+}
+
+/// 库存调整单更新数据（仅草稿/驳回可更新）。
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StockAdjustmentUpdate {
+    /// 调整原因类型；`None` 表示不修改。
+    pub reason_type: Option<AdjustmentReasonType>,
+    /// 仓储复核人；`None` 表示不修改。
+    pub reviewed_by: Option<String>,
+    /// 成本影响确认人；`None` 表示不修改。
+    pub finance_reviewed_by: Option<String>,
+}
+
+/// 库存调整单实体（数据模型 §6.7）。
+///
+/// 经办人与仓储复核人不得相同（§6.7）；财务成本影响确认在
+/// [`StockAdjustment::submit_for_finance_review`] 时登记，只有经过确认的
+/// 调整单才能过账（§6.7）。已过账/已冲正不设业务软删除（§4.5.1）。
+#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
+pub struct StockAdjustment {
+    #[serde(flatten)]
+    pub base: BaseModel,
+    /// 调整单号。
+    pub adjustment_no: String,
+    /// 仓库。
+    pub warehouse_id: WarehouseId,
+    /// 调整原因类型。
+    pub reason_type: AdjustmentReasonType,
+    /// 当前状态。
+    pub status: StockAdjustmentState,
+    /// 仓储经办人。
+    pub prepared_by: String,
+    /// 仓储复核人。
+    pub reviewed_by: Option<String>,
+    /// 成本影响确认人。
+    pub finance_reviewed_by: Option<String>,
+}
+
+impl StockAdjustment {
+    /// 创建库存调整单（初始状态为草稿）。
+    ///
+    /// 完成调整单号与经办人规范化。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键（`entities::ids::StockAdjustmentId`）
+    /// * `data` - 创建数据
+    ///
+    /// # 返回
+    /// 返回新建的调整单实体。
+    ///
+    /// # 错误
+    /// 调整单号或经办人为空/超长时返回错误。
+    pub fn new(id: StockAdjustmentId, data: StockAdjustmentData) -> Result<Self> {
+        let adjustment_no = normalize_required_text(
+            data.adjustment_no,
+            "调整单号不能为空",
+            ADJUSTMENT_NO_MAX_LEN,
+            "调整单号过长",
+        )?;
+        let prepared_by = normalize_required_text(
+            data.prepared_by,
+            "仓储经办人不能为空",
+            ACTOR_MAX_LEN,
+            "仓储经办人过长",
+        )?;
+        Ok(Self {
+            base: BaseModel::new(id.to_string()),
+            adjustment_no,
+            warehouse_id: data.warehouse_id,
+            reason_type: data.reason_type,
+            status: StockAdjustmentState::Draft,
+            prepared_by,
+            reviewed_by: None,
+            finance_reviewed_by: None,
+        })
+    }
+
+    /// 更新库存调整单（仅草稿/驳回）。
+    ///
+    /// 复用 `new` 的文本规范化；经办人与仓储复核人不得相同（§6.7）。
+    ///
+    /// # 参数
+    /// * `update` - 更新数据
+    ///
+    /// # 返回
+    /// 更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 状态不可编辑，复核人与经办人相同，或文本规范化失败时返回错误。
+    pub fn update(&mut self, update: StockAdjustmentUpdate) -> Result<()> {
+        self.ensure_editable()?;
+        if let Some(reason_type) = update.reason_type {
+            self.reason_type = reason_type;
+        }
+        if let Some(reviewed_by) = update.reviewed_by {
+            let reviewed_by =
+                normalize_required_text(reviewed_by, "仓储复核人不能为空", ACTOR_MAX_LEN, "仓储复核人过长")?;
+            ensure_reviewer_separation(&self.prepared_by, &reviewed_by)?;
+            self.reviewed_by = Some(reviewed_by);
+        }
+        if let Some(finance_reviewed_by) = update.finance_reviewed_by {
+            self.finance_reviewed_by = Some(normalize_required_text(
+                finance_reviewed_by,
+                "成本影响确认人不能为空",
+                ACTOR_MAX_LEN,
+                "成本影响确认人过长",
+            )?);
+        }
+        Ok(())
+    }
+
+    /// 提交仓储复核（草稿/驳回 → 待仓储复核）。
+    ///
+    /// 驳回的调整单在修改后重新提交复核（§6.5.5）；提交时登记仓储复核人，
+    /// 并校验与经办人不同（§6.7 岗位分离）。
+    ///
+    /// # 参数
+    /// * `reviewed_by` - 仓储复核人（账号或系统身份）
+    ///
+    /// # 返回
+    /// 迁移成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前状态不允许提交，复核人与经办人相同或为空/超长时返回错误。
+    pub fn submit_for_warehouse_review(&mut self, reviewed_by: impl Into<String>) -> Result<()> {
+        ensure_transition(self.status, StockAdjustmentState::PendingWarehouseReview)?;
+        let reviewed_by = normalize_required_text(
+            reviewed_by.into(),
+            "仓储复核人不能为空",
+            ACTOR_MAX_LEN,
+            "仓储复核人过长",
+        )?;
+        ensure_reviewer_separation(&self.prepared_by, &reviewed_by)?;
+        self.reviewed_by = Some(reviewed_by);
+        self.status = StockAdjustmentState::PendingWarehouseReview;
+        Ok(())
+    }
+
+    /// 仓储复核通过，提交财务确认（待仓储复核 → 待财务确认）。
+    ///
+    /// # 参数
+    /// * `finance_reviewed_by` - 成本影响确认人（账号或系统身份）
+    ///
+    /// # 返回
+    /// 迁移成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前状态不允许迁移，或确认人为空/超长时返回错误。
+    pub fn submit_for_finance_review(&mut self, finance_reviewed_by: impl Into<String>) -> Result<()> {
+        ensure_transition(self.status, StockAdjustmentState::PendingFinanceReview)?;
+        let finance_reviewed_by = normalize_required_text(
+            finance_reviewed_by.into(),
+            "成本影响确认人不能为空",
+            ACTOR_MAX_LEN,
+            "成本影响确认人过长",
+        )?;
+        self.finance_reviewed_by = Some(finance_reviewed_by);
+        self.status = StockAdjustmentState::PendingFinanceReview;
+        Ok(())
+    }
+
+    /// 过账库存调整（待财务确认 → 已过账）。
+    ///
+    /// 盘盈、盘亏和损坏一律经过财务成本影响确认后才能过账（§6.7，允许结论
+    /// 为零成本影响但不得跳过财务确认）；过账时写库存流水、余额和必要预占
+    /// 释放由 P3 在同一事务完成（§8.2 第 3 条），原出入库流水不改写。
+    ///
+    /// # 返回
+    /// 迁移成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前状态不允许迁移（未经财务确认）时返回错误。
+    pub fn mark_posted(&mut self) -> Result<()> {
+        ensure_transition(self.status, StockAdjustmentState::Posted)?;
+        self.status = StockAdjustmentState::Posted;
+        Ok(())
+    }
+
+    /// 驳回调整单（待仓储复核/待财务确认 → 驳回）。
+    ///
+    /// 驳回后修改调整单并重新提交仓储复核（§6.5.5 流程）。
+    ///
+    /// # 返回
+    /// 迁移成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前状态不允许驳回时返回错误。
+    pub fn reject(&mut self) -> Result<()> {
+        ensure_transition(self.status, StockAdjustmentState::Rejected)?;
+        self.status = StockAdjustmentState::Rejected;
+        Ok(())
+    }
+
+    /// 冲正库存调整（已过账 → 已冲正，终态）。
+    ///
+    /// `REVERSED` 表示存在正式反向事实（冲正流水），不删除原调整单
+    /// （§4.5.1、§7.5）；反向事实由 P3 形成。
+    ///
+    /// # 返回
+    /// 迁移成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当前状态不允许迁移（非已过账）时返回错误。
+    pub fn reverse(&mut self) -> Result<()> {
+        ensure_transition(self.status, StockAdjustmentState::Reversed)?;
+        self.status = StockAdjustmentState::Reversed;
+        Ok(())
+    }
+
+    /// 判断当前状态是否可编辑。
+    ///
+    /// # 返回
+    /// 草稿或驳回状态返回 `true`。
+    pub fn is_editable(&self) -> bool {
+        self.status.is_editable()
+    }
+
+    /// 校验当前状态可编辑。
+    ///
+    /// # 返回
+    /// 可编辑返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 待复核/待确认/已过账/已冲正不可编辑时返回错误。
+    fn ensure_editable(&self) -> Result<()> {
+        if !self.is_editable() {
+            return Err(Error::from(
+                "待复核、待财务确认、已过账或已冲正的库存调整单不可编辑",
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// 校验仓储复核人与经办人不同（岗位分离，§6.7）。
+///
+/// # 参数
+/// * `prepared_by` - 仓储经办人
+/// * `reviewed_by` - 仓储复核人
+///
+/// # 返回
+/// 通过返回 `Ok(())`。
+///
+/// # 错误
+/// 两者相同时返回错误。
+fn ensure_reviewer_separation(prepared_by: &str, reviewed_by: &str) -> Result<()> {
+    if prepared_by == reviewed_by {
+        return Err(Error::from("仓储经办人与仓储复核人不得相同"));
+    }
+    Ok(())
+}
+
+/// 库存调整明细创建数据。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct StockAdjustmentLineData {
+    /// 调整单。
+    pub stock_adjustment_id: StockAdjustmentId,
+    /// 调整 SKU。
+    pub sku_id: SkuId,
+    /// 调整数量（正数）。
+    pub quantity: Quantity,
+    /// 调整方向。
+    pub direction: MovementDirection,
+}
+
+/// 库存调整明细实体（数据模型 §6.7 明细）。
+///
+/// 数量必须为正数；方向单独表达。明细调整与原因类型的方向一致性
+/// （盘盈必增、盘亏/损坏必减）由 P3 按调整单类型校验；调整单已过账后明细
+/// 不可再变更由 P3 按表头状态把关。
+#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
+pub struct StockAdjustmentLine {
+    #[serde(flatten)]
+    pub base: BaseModel,
+    /// 调整单。
+    pub stock_adjustment_id: StockAdjustmentId,
+    /// 调整 SKU。
+    pub sku_id: SkuId,
+    /// 调整数量。
+    pub quantity: Quantity,
+    /// 调整方向。
+    pub direction: MovementDirection,
+}
+
+impl StockAdjustmentLine {
+    /// 创建库存调整明细。
+    ///
+    /// 完成调整数量正数校验。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键（`entities::ids::StockAdjustmentLineId`）
+    /// * `data` - 创建数据
+    ///
+    /// # 返回
+    /// 返回新建的调整明细实体。
+    ///
+    /// # 错误
+    /// 调整数量非正时返回错误。
+    pub fn new(id: StockAdjustmentLineId, data: StockAdjustmentLineData) -> Result<Self> {
+        if data.quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
+            return Err(Error::from("调整数量必须为正数"));
+        }
+        Ok(Self {
+            base: BaseModel::new(id.to_string()),
+            stock_adjustment_id: data.stock_adjustment_id,
+            sku_id: data.sku_id,
+            quantity: data.quantity,
+            direction: data.direction,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ids::StockAdjustmentId;
+    use std::str::FromStr;
+
+    fn data() -> StockAdjustmentData {
+        StockAdjustmentData {
+            adjustment_no: " ADJ-2026-001 ".to_string(),
+            warehouse_id: WarehouseId::new("wh-1"),
+            reason_type: AdjustmentReasonType::StockLoss,
+            prepared_by: " operator-1 ".to_string(),
+        }
+    }
+
+    fn line_data() -> StockAdjustmentLineData {
+        StockAdjustmentLineData {
+            stock_adjustment_id: StockAdjustmentId::new("adj-1"),
+            sku_id: SkuId::new("sku-1"),
+            quantity: Quantity::from_str("2").unwrap(),
+            direction: MovementDirection::Decrease,
+        }
+    }
+
+    /// happy path：单号规范化、岗位分离、双审核与过账/冲正全链路。
+    #[test]
+    fn new_normalizes_and_drives_full_state_machine() {
+        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("adj-1"), data()).unwrap();
+        assert_eq!(adjustment.adjustment_no, "ADJ-2026-001");
+        assert_eq!(adjustment.prepared_by, "operator-1");
+        assert_eq!(adjustment.status, StockAdjustmentState::Draft);
+
+        adjustment.submit_for_warehouse_review("reviewer-1").unwrap();
+        assert_eq!(adjustment.reviewed_by.as_deref(), Some("reviewer-1"));
+        assert_eq!(adjustment.status, StockAdjustmentState::PendingWarehouseReview);
+
+        adjustment.submit_for_finance_review("finance-1").unwrap();
+        assert_eq!(adjustment.finance_reviewed_by.as_deref(), Some("finance-1"));
+        assert_eq!(adjustment.status, StockAdjustmentState::PendingFinanceReview);
+
+        adjustment.mark_posted().unwrap();
+        assert_eq!(adjustment.status, StockAdjustmentState::Posted);
+        adjustment.reverse().unwrap();
+        assert_eq!(adjustment.status, StockAdjustmentState::Reversed);
+    }
+
+    /// 失败路径：必填空、复核人=经办人、状态不允许的迁移。
+    #[test]
+    fn new_rejects_invalid_inputs() {
+        let blank_no = StockAdjustmentData {
+            adjustment_no: "   ".to_string(),
+            ..data()
+        };
+        assert!(StockAdjustment::new(StockAdjustmentId::new("a2"), blank_no).is_err());
+
+        let blank_prepared = StockAdjustmentData {
+            prepared_by: "  ".to_string(),
+            ..data()
+        };
+        assert!(StockAdjustment::new(StockAdjustmentId::new("a3"), blank_prepared).is_err());
+
+        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a4"), data()).unwrap();
+        assert!(
+            adjustment.submit_for_warehouse_review("operator-1").is_err(),
+            "复核人不得与经办人相同"
+        );
+        assert!(adjustment
+            .update(StockAdjustmentUpdate {
+                reviewed_by: Some("operator-1".to_string()),
+                ..StockAdjustmentUpdate::default()
+            })
+            .is_err());
+        assert!(adjustment.mark_posted().is_err(), "未经审核不能过账");
+        assert!(adjustment.reverse().is_err(), "草稿不能冲正");
+    }
+
+    /// 驳回路径：复核/财务确认可驳回，驳回后修改并重新提交复核。
+    #[test]
+    fn reject_path_resubmits_after_rejection() {
+        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a5"), data()).unwrap();
+        adjustment.submit_for_warehouse_review("reviewer-1").unwrap();
+        adjustment.reject().unwrap();
+        assert_eq!(adjustment.status, StockAdjustmentState::Rejected);
+        assert!(adjustment.is_editable(), "驳回后允许修改");
+
+        adjustment.submit_for_warehouse_review("reviewer-2").unwrap();
+        adjustment.submit_for_finance_review("finance-1").unwrap();
+        adjustment.reject().unwrap();
+        assert_eq!(adjustment.status, StockAdjustmentState::Rejected);
+        assert!(adjustment.mark_posted().is_err(), "驳回后不能过账");
+    }
+
+    /// 状态机：固定邻接矩阵的合法/非法迁移（含终态与幂等）。
+    #[test]
+    fn state_machine_transition_matrix() {
+        assert!(ensure_transition(
+            StockAdjustmentState::Draft,
+            StockAdjustmentState::PendingWarehouseReview
+        )
+        .is_ok());
+        assert!(ensure_transition(
+            StockAdjustmentState::PendingWarehouseReview,
+            StockAdjustmentState::PendingFinanceReview
+        )
+        .is_ok());
+        assert!(ensure_transition(
+            StockAdjustmentState::PendingWarehouseReview,
+            StockAdjustmentState::Rejected
+        )
+        .is_ok());
+        assert!(ensure_transition(
+            StockAdjustmentState::PendingFinanceReview,
+            StockAdjustmentState::Posted
+        )
+        .is_ok());
+        assert!(ensure_transition(
+            StockAdjustmentState::PendingFinanceReview,
+            StockAdjustmentState::Rejected
+        )
+        .is_ok());
+        assert!(
+            ensure_transition(
+                StockAdjustmentState::Rejected,
+                StockAdjustmentState::PendingWarehouseReview
+            )
+            .is_ok(),
+            "驳回后可修改并重新提交复核"
+        );
+        assert!(ensure_transition(StockAdjustmentState::Posted, StockAdjustmentState::Reversed).is_ok());
+        assert!(ensure_transition(StockAdjustmentState::Draft, StockAdjustmentState::Posted).is_err());
+        assert!(ensure_transition(StockAdjustmentState::Draft, StockAdjustmentState::Reversed).is_err());
+        assert!(ensure_transition(StockAdjustmentState::Rejected, StockAdjustmentState::Posted).is_err());
+        assert!(ensure_transition(StockAdjustmentState::Rejected, StockAdjustmentState::Draft).is_err());
+        assert!(ensure_transition(StockAdjustmentState::Reversed, StockAdjustmentState::Posted).is_err());
+        assert!(ensure_transition(StockAdjustmentState::Reversed, StockAdjustmentState::Reversed).is_ok());
+        assert!(ensure_transition(StockAdjustmentState::Draft, StockAdjustmentState::Draft).is_ok());
+    }
+
+    /// happy path：调整明细创建成功。
+    #[test]
+    fn line_new_succeeds() {
+        let line = StockAdjustmentLine::new(StockAdjustmentLineId::new("al-1"), line_data()).unwrap();
+        assert_eq!(line.quantity, Quantity::from_str("2").unwrap());
+        assert_eq!(line.direction, MovementDirection::Decrease);
+    }
+
+    /// 失败路径：数量越界（非正）。
+    #[test]
+    fn line_rejects_quantity_violations() {
+        let zero_quantity = StockAdjustmentLineData {
+            quantity: Quantity::from_str("0").unwrap(),
+            ..line_data()
+        };
+        assert!(StockAdjustmentLine::new(StockAdjustmentLineId::new("al-2"), zero_quantity).is_err());
+
+        let negative = StockAdjustmentLineData {
+            quantity: Quantity::from_str("-1").unwrap(),
+            ..line_data()
+        };
+        assert!(StockAdjustmentLine::new(StockAdjustmentLineId::new("al-3"), negative).is_err());
+    }
+
+    /// 序列化：枚举稳定代码；实体 BSON 往返。
+    #[test]
+    fn serde_shapes_and_bson_roundtrip() {
+        assert_eq!(
+            serde_json::to_string(&StockAdjustmentState::PendingFinanceReview).unwrap(),
+            "\"PENDING_FINANCE_REVIEW\""
+        );
+        assert_eq!(
+            serde_json::to_string(&AdjustmentReasonType::StockGain).unwrap(),
+            "\"STOCK_GAIN\""
+        );
+        assert_eq!(AdjustmentReasonType::Damage.label(), "损坏");
+        assert_eq!(StockAdjustmentState::Rejected.label(), "驳回");
+
+        let mut adjustment = StockAdjustment::new(StockAdjustmentId::new("a6"), data()).unwrap();
+        adjustment.submit_for_warehouse_review("reviewer-1").unwrap();
+        let roundtrip: StockAdjustment =
+            bson::from_document(bson::to_document(&adjustment).unwrap()).unwrap();
+        assert_eq!(roundtrip, adjustment);
+    }
+}
