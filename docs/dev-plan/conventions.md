@@ -86,6 +86,11 @@ erp-client/lib/query-client.ts
 1. 每个 Repository 方法签名以 `executor: &mut dyn Executor` 结尾，Repository 不开启事务。
 2. 多步骤方法（先删后写、读后写）必须在文档注释中声明"必须收到事务执行器"。
 3. 集合名常量定义在本域 `indexes/<domain>.rs`，Repository 与索引共用同一常量，禁止字面量重复。
+   **冻结结构约束（P0-5 实证）**：`indexes/` 与 `repository/` 是冻结文件内部的私有子树，
+   模块路径无法互相引用。P0-5 采用的既定模式：集合名常量作为
+   `repository/extensions/<domain>.rs` 的 **`SourceRegistryExt` 关联常量**
+   （单一权威来源，indexes 与 Repository 两侧共用）；筛选/投影行类型用
+   `<Database as <Domain>Ext>::...` 关联类型对外暴露。后续 33 个域照抄该模式。
 4. 索引在本域 `indexes/<domain>.rs` 的 `pub(crate) async fn ensure(db: &Database) -> Result<()>`
    内声明。数据模型第 6 章列出的"必需索引"必须逐条落地，唯一约束一律用唯一索引表达。
 5. `DatabaseExt` 访问器写在本域 `repository/extensions/<domain>.rs` 的

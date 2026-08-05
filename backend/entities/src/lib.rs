@@ -1,3 +1,4 @@
+pub mod access_control;
 pub mod account_core;
 pub mod audit_log;
 pub mod auth;
