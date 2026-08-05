@@ -1,0 +1,77 @@
+# Production-only Compose definition. It intentionally contains no `build:`
+# keys: the target host runs only digest-pinned release images.
+x-logging: &bounded-json-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  web-api:
+    image: ${RS_PROJECT_TEMPLATE_BACKEND_IMAGE:?set RS_PROJECT_TEMPLATE_BACKEND_IMAGE to a pinned image digest}
+    restart: unless-stopped
+    group_add:
+      - "0"
+    entrypoint: ["web-api"]
+    command: ["--config-path", "/app/config.toml"]
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_TO_FILE: "false"
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ${RS_PROJECT_TEMPLATE_CONFIG_FILE:-./config.toml}:/app/config.toml:ro
+      - ./uploads:/app/uploads
+    ports:
+      - "${RS_PROJECT_TEMPLATE_API_HOST_PORT:-10001}:10001"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--show-error",
+          "--max-time",
+          "3",
+          "http://127.0.0.1:10001/health",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging: *bounded-json-logging
+
+  admin:
+    image: ${RS_PROJECT_TEMPLATE_ADMIN_IMAGE:?set RS_PROJECT_TEMPLATE_ADMIN_IMAGE to a pinned image digest}
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT:-3000}:3000"
+    depends_on:
+      web-api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *bounded-json-logging

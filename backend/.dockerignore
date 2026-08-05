@@ -1,0 +1,43 @@
+# Rust编译产物
+target/
+**/target/
+
+# 前端依赖与构建产物
+**/node_modules/
+**/.next/
+**/.turbo/
+**/coverage/
+
+# Git相关
+.git/
+.gitignore
+
+# IDE配置
+.vscode/
+.idea/
+*.iml
+
+# 上传文件目录
+uploads/
+assets/
+
+# 日志文件
+*.log
+logs/
+
+# 临时文件
+*.tmp
+*.bak
+*.swp
+
+# 其他不需要的文件
+.env
+.DS_Store
+Dockerfile
+.dockerignore
+
+# 发布与 Jenkins 临时文件
+.docker-deps/
+.release-state/
+release-artifacts/
+releases/

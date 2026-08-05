@@ -1,0 +1,57 @@
+[workspace]
+members = [
+    "apps/web-api",
+    "crates/entity-macros",     # 过程宏项目
+    "crates/entity-core",
+    "crates/permission-macros",
+    "crates/storage",
+    "crates/id-generator",
+    "database",
+    "entities",
+    "services",
+    "config",
+]
+resolver = "2"
+
+
+[workspace.dependencies]
+# 异步运行时
+tokio = { version = "1.52.3" }
+futures-util = "0.3.32"
+
+# 序列化
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.149"
+toml = "1.1.2"
+
+# 错误处理
+thiserror = "2.0.18"
+
+# 数据库
+mongodb = "3.6.0"
+
+# 工具库
+async-trait = "0.1.89"
+chrono = "0.4.44"
+validator = { version = "0.20.0", features = ["derive"] }
+
+# 日志和追踪
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+tracing-appender = "0.2.5"
+uuid = { version = "1.23.1", features = ["v4"] }
+
+# HTTP相关
+axum = { version = "0.8.9", features = ["multipart"] }
+tower = "0.5.3"
+tower-http = { version = "0.6.10", features = ["cors", "fs", "timeout"] }
+
+
+# 加密和编码
+argon2 = { version = "0.5.3", features = ["std"] }
+md5 = "0.8.0"
+
+# 其他工具
+clap = { version = "4.6.1", features = ["derive"] }
+calamine = "0.35.0"
+casbin = "2.20.0"

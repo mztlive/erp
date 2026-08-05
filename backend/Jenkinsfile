@@ -1,0 +1,142 @@
+pipeline {
+    agent {
+        label 'selfhost'
+    }
+
+    options {
+        disableConcurrentBuilds()
+        buildDiscarder(logRotator(numToKeepStr: '20'))
+        skipDefaultCheckout(true)
+    }
+
+    parameters {
+        gitParameter(
+            name: 'GIT_REF',
+            type: 'PT_BRANCH_TAG',
+            defaultValue: 'origin/main',
+            tagFilter: '*',
+            sortMode: 'DESCENDING_SMART',
+            selectedValue: 'DEFAULT',
+            quickFilterEnabled: true,
+            description: '选择要构建和部署的 rs-project-template branch 或 tag'
+        )
+        string(
+            name: 'REGISTRY_HOST',
+            defaultValue: '172.16.16.10:6578',
+            description: 'Jenkins Agent 和部署机都能访问的私有镜像仓库地址'
+        )
+        string(
+            name: 'DEPLOY_TARGET',
+            defaultValue: 'root@172.16.16.15',
+            description: 'SSH 部署目标；私钥由 deploy-ssh 凭据提供'
+        )
+        string(
+            name: 'DEPLOY_DIR',
+            defaultValue: '/opt/rs-project-template',
+            description: '目标设备上的部署目录'
+        )
+        string(
+            name: 'RS_PROJECT_TEMPLATE_API_HOST_PORT',
+            defaultValue: '10001',
+            description: 'Web API 对宿主机发布的端口'
+        )
+        string(
+            name: 'RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT',
+            defaultValue: '3000',
+            description: '管理端对宿主机发布的端口'
+        )
+        string(
+            name: 'RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL',
+            defaultValue: 'http://172.16.16.15:10001',
+            description: '构建进管理端、供浏览器访问的 Web API 地址'
+        )
+    }
+
+    stages {
+        stage('Checkout selected refs') {
+            steps {
+                deleteDir()
+                script {
+                    def remote = scm.userRemoteConfigs[0]
+                    checkout scmGit(
+                        branches: [[name: params.GIT_REF]],
+                        userRemoteConfigs: [[
+                            credentialsId: remote.credentialsId,
+                            url: remote.url
+                        ]]
+                    )
+                    def commit = sh(
+                        script: 'git rev-parse --verify HEAD',
+                        returnStdout: true
+                    ).trim()
+                    currentBuild.displayName = "#${env.BUILD_NUMBER} ${params.GIT_REF}"
+                    currentBuild.description = "app=${commit.take(12)}"
+                }
+            }
+        }
+
+        stage('Validate release definitions') {
+            steps {
+                sh '''
+                    set -eu
+                    git diff --check
+                    bash -n \
+                        scripts/release-image.sh \
+                        scripts/release-deploy.sh \
+                        scripts/jenkins/build-release.sh \
+                        scripts/jenkins/deploy-release.sh
+                    docker compose -f docker-compose.yml config --quiet
+                    RS_PROJECT_TEMPLATE_BACKEND_IMAGE=example.invalid/backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+                    RS_PROJECT_TEMPLATE_ADMIN_IMAGE=example.invalid/admin@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+                        docker compose -f docker-compose.production.yml config --quiet
+                '''
+            }
+        }
+
+        stage('Build and push images') {
+            steps {
+                sh 'scripts/jenkins/build-release.sh'
+            }
+        }
+
+        stage('Prepare SSH host key') {
+            steps {
+                sh '''
+                    set -eu
+
+                    deploy_host="${DEPLOY_TARGET#*@}"
+                    install -d -m 700 "${HOME}/.ssh"
+                    touch "${HOME}/.ssh/known_hosts"
+                    chmod 600 "${HOME}/.ssh/known_hosts"
+
+                    if ! ssh-keygen \
+                        -F "${deploy_host}" \
+                        -f "${HOME}/.ssh/known_hosts" \
+                        >/dev/null
+                    then
+                        ssh-keyscan -H "${deploy_host}" \
+                            >> "${HOME}/.ssh/known_hosts"
+                    fi
+                '''
+            }
+        }
+
+        stage('Deploy') {
+            steps {
+                sshagent(credentials: ['deploy-ssh']) {
+                    sh 'scripts/jenkins/deploy-release.sh'
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            archiveArtifacts(
+                artifacts: 'release-artifacts/*.env',
+                allowEmptyArchive: true,
+                fingerprint: true
+            )
+        }
+    }
+}

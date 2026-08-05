@@ -1,0 +1,17 @@
+[package]
+name = "database"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+mongodb = { workspace = true }
+casbin = { workspace = true }
+async-trait = { workspace = true }
+futures-util = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }
+entity-core = { path = "../crates/entity-core" }
+entities = { path = "../entities" }
+regex = "1.12.3"
+tracing = { workspace = true }

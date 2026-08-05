@@ -1,0 +1,13 @@
+[package]
+name = "config"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { workspace = true }
+serde = { workspace = true }
+toml = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["fs", "sync", "rt", "time", "macros", "rt-multi-thread"] }
+nacos-sdk = { version = "0.8.0", default-features = false, features = ["config", "auth-by-http"] }
+tracing = { workspace = true }

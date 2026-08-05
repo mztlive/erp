@@ -1,0 +1,22 @@
+[package]
+name = "services"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+entities = { path = "../entities" }
+id-generator = { path = "../crates/id-generator" }
+database = { path = "../database" }
+casbin = { workspace = true }
+thiserror = { workspace = true }
+serde = { workspace = true }
+validator = { workspace = true }
+mongodb = { workspace = true }
+calamine = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+tokio = { workspace = true, features = ["macros"] }

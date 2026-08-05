@@ -1,0 +1,88 @@
+# Local/container integration stack. Production deployment uses
+# docker-compose.production.yml and digest-pinned images.
+x-logging: &bounded-json-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  web-api:
+    image: rs-project-template-backend:${RS_PROJECT_TEMPLATE_LOCAL_TAG:-dev}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    restart: unless-stopped
+    user: "${RS_PROJECT_TEMPLATE_LOCAL_UID:-10001}:${RS_PROJECT_TEMPLATE_LOCAL_GID:-0}"
+    group_add:
+      - "0"
+    entrypoint: ["web-api"]
+    command: ["--config-path", "/app/config.toml"]
+    environment:
+      RUST_LOG: ${RUST_LOG:-info}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+      LOG_TO_FILE: "false"
+      TZ: ${TZ:-Asia/Shanghai}
+    volumes:
+      - ${RS_PROJECT_TEMPLATE_CONFIG_FILE:-./config.toml}:/app/config.toml:ro
+      - ./uploads:/app/uploads
+    ports:
+      - "${RS_PROJECT_TEMPLATE_API_HOST_PORT:-10001}:10001"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "curl",
+          "--fail",
+          "--silent",
+          "--show-error",
+          "--max-time",
+          "3",
+          "http://127.0.0.1:10001/health",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    logging: *bounded-json-logging
+
+  admin:
+    image: rs-project-template-admin:${RS_PROJECT_TEMPLATE_LOCAL_TAG:-dev}
+    build:
+      context: .
+      dockerfile: fronts/admin/Dockerfile
+      target: runtime
+      args:
+        NEXT_PUBLIC_API_URL: ${RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL:-http://localhost:10001}
+    restart: unless-stopped
+    init: true
+    environment:
+      NODE_ENV: production
+      TZ: ${TZ:-Asia/Shanghai}
+    ports:
+      - "${RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT:-3000}:3000"
+    depends_on:
+      web-api:
+        condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging: *bounded-json-logging
