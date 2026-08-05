@@ -28,6 +28,29 @@ const DEFAULT_SCOPE = {
   permissionVersion: PERMISSION_VERSION,
 }
 
+const TIER_LABELS: Record<"scale" | "profit" | "risk", Record<string, string>> = {
+  scale: TAG_RULE_CATALOG.scale.labels,
+  profit: TAG_RULE_CATALOG.profit.labels,
+  risk: TAG_RULE_CATALOG.risk.labels,
+}
+
+const CHART_DIMENSION_TITLE: Record<string, string> = {
+  scale: "客户规模分层",
+  profit: "利润贡献分布",
+  risk: "回款风险分层",
+}
+
+function tierLabel(type: "scale" | "profit" | "risk", code?: string): string {
+  if (!code) return ""
+  return TIER_LABELS[type][code] ?? code
+}
+
+function customerNameById(customerId?: string): string | undefined {
+  if (!customerId) return undefined
+  return CUSTOMER_QUALITY_ROWS.find((r) => r.customerId === customerId)
+    ?.customerName
+}
+
 export async function fetchCustomerQualityPeriodPolicy(input?: {
   scenario?: CustomerQualityScenario
 }): Promise<CustomerQualityPeriodPolicy> {
@@ -153,26 +176,33 @@ function filterRows(
   const [sortKey, sortDir] = sort.split(":")
   const dir = sortDir === "asc" ? 1 : -1
   next.sort((a, b) => {
+    if (sortKey === "customerName") {
+      return a.customerName.localeCompare(b.customerName, "zh-CN") * dir
+    }
     const av =
       sortKey === "actualProfitLossNet"
         ? Number(a.actualProfitLossNet ?? Number.NEGATIVE_INFINITY)
         : sortKey === "overdueGross"
           ? Number(a.overdueGross ?? 0)
-          : sortKey === "costCoverageRate"
-            ? Number(String(a.costCoverageRate ?? "0").replace("%", ""))
-            : sortKey === "latestBusinessAt"
-              ? Date.parse(a.latestBusinessAt ?? "") || 0
-              : Number(a.salesGrossAmount)
+          : sortKey === "receivableOpenGross"
+            ? Number(a.receivableOpenGross ?? 0)
+            : sortKey === "costCoverageRate"
+              ? Number(String(a.costCoverageRate ?? "0").replace("%", ""))
+              : sortKey === "latestBusinessAt"
+                ? Date.parse(a.latestBusinessAt ?? "") || 0
+                : Number(a.salesGrossAmount)
     const bv =
       sortKey === "actualProfitLossNet"
         ? Number(b.actualProfitLossNet ?? Number.NEGATIVE_INFINITY)
         : sortKey === "overdueGross"
           ? Number(b.overdueGross ?? 0)
-          : sortKey === "costCoverageRate"
-            ? Number(String(b.costCoverageRate ?? "0").replace("%", ""))
-            : sortKey === "latestBusinessAt"
-              ? Date.parse(b.latestBusinessAt ?? "") || 0
-              : Number(b.salesGrossAmount)
+          : sortKey === "receivableOpenGross"
+            ? Number(b.receivableOpenGross ?? 0)
+            : sortKey === "costCoverageRate"
+              ? Number(String(b.costCoverageRate ?? "0").replace("%", ""))
+              : sortKey === "latestBusinessAt"
+                ? Date.parse(b.latestBusinessAt ?? "") || 0
+                : Number(b.salesGrossAmount)
     return (av - bv) * dir
   })
 
@@ -189,14 +219,19 @@ function buildFilterSummary(query: CustomerQualityQuery): string {
       : query.businessType === "GOODS_SERVICE"
         ? "业务性质=非卡券"
         : null,
-    query.scaleTag ? `规模=${query.scaleTag}` : null,
-    query.profitTag ? `利润=${query.profitTag}` : null,
-    query.riskTag ? `风险=${query.riskTag}` : null,
+    query.scaleTag ? `规模=${tierLabel("scale", query.scaleTag)}` : null,
+    query.profitTag ? `利润=${tierLabel("profit", query.profitTag)}` : null,
+    query.riskTag ? `风险=${tierLabel("risk", query.riskTag)}` : null,
     query.chartDimension && query.chartCode
-      ? `图表=${query.chartDimension}:${query.chartCode}`
+      ? `${CHART_DIMENSION_TITLE[query.chartDimension] ?? query.chartDimension}=${tierLabel(
+          query.chartDimension as "scale" | "profit" | "risk",
+          query.chartCode
+        )}`
       : null,
     query.q ? `搜索=${query.q}` : null,
-    query.customerId ? `聚焦客户=${query.customerId}` : null,
+    query.customerId
+      ? `聚焦客户=${customerNameById(query.customerId) ?? query.customerId}`
+      : null,
   ].filter(Boolean)
   return parts.join(" · ")
 }
@@ -321,6 +356,13 @@ export async function fetchCustomerQuality(
   const allRows = CUSTOMER_QUALITY_ROWS
   const filtered = filterRows(allRows, query)
 
+  // 服务端分页：当前页按 page/pageSize 截断，rowCount 用真实过滤总数
+  const pageIndex = Math.max(0, query.page - 1)
+  const pageItems = filtered.slice(
+    pageIndex * query.pageSize,
+    (pageIndex + 1) * query.pageSize
+  )
+
   let freshness = base.freshness
   if (scenario === "stale") {
     freshness = {
@@ -359,7 +401,7 @@ export async function fetchCustomerQuality(
     },
     metrics,
     customers: {
-      items: filtered,
+      items: pageItems,
       total: allRows.length,
       filteredTotal: filtered.length,
     },
@@ -389,7 +431,7 @@ export async function startCustomerQualityExport(input: {
     permissionVersion: input.permissionVersion,
     projectionWatermark: input.projectionWatermark,
     amountBasisNote:
-      "成交金额=含税(GROSS)；实际盈亏=不含税(NET)；卡券收入不进入实际盈亏列；缺失成本不写作 0。",
+      "成交金额为含税，实际盈亏为不含税；卡券收入不进入实际盈亏列；缺失成本不写作 0。",
     downloadLabel: `客户经营质量_${input.query.from}_${input.query.to}.csv`,
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
   }

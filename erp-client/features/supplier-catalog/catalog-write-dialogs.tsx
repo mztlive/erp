@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
 import { z } from "zod"
 
 import { OptionCombobox } from "@/components/business"
@@ -184,7 +185,9 @@ export function SupplierCatalogIntakeDialog({
     revisionTiming: "current",
   })
   const createMutation = useCreateSupplierCatalogItemMutation()
-  const [result, setResult] = React.useState<string | null>(null)
+  const [result, setResult] = React.useState<SupplierCatalogWriteResult | null>(
+    null
+  )
   const form = useAppForm({
     defaultValues: {
       supplierId: "",
@@ -283,7 +286,7 @@ export function SupplierCatalogIntakeDialog({
         validFrom: todayIso(),
         idempotencyKey: idempotencyKey("supplier-catalog-intake"),
       })
-      setResult(response.reference)
+      setResult(response)
     },
   })
 
@@ -301,17 +304,32 @@ export function SupplierCatalogIntakeDialog({
       <DialogContent className="max-h-[88vh] overflow-y-auto sm:max-w-3xl">
         <DialogHeader>
           <DialogTitle>
-            {sourceType === "EXCEL" ? "导入供应商商品 Excel" : "手工录入供应商商品"}
+            {sourceType === "EXCEL"
+              ? "按 Excel 模板录入供应商商品"
+              : "手工录入供应商商品"}
           </DialogTitle>
           <DialogDescription>
-            三种来源使用同一套供应商 SPU/SKU 结构。采购成本只对采购授权角色返回；销售只看到公司商品池价格。
+            三种来源共用同一套供应商商品资料；采购成本只对采购授权角色可见，销售只看到公司商品池价格。
           </DialogDescription>
         </DialogHeader>
 
         {result ? (
           <Alert>
             <AlertTitle>供应商商品已保存</AlertTitle>
-            <AlertDescription>业务记录 {result} 已形成。</AlertDescription>
+            <AlertDescription>业务记录 {result.reference} 已形成。</AlertDescription>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              render={
+                <Link
+                  href={`/procurement/supplier-catalog/${result.supplierProductId}`}
+                />
+              }
+            >
+              查看详情
+            </Button>
           </Alert>
         ) : null}
 
@@ -328,8 +346,11 @@ export function SupplierCatalogIntakeDialog({
                 <FileUpload
                   accept=".xlsx,.xls,.csv"
                   multiple={false}
-                  label="供应商商品表"
-                  description={field.state.value || "支持 xlsx、xls、csv；按供应商模板校验 SPU/SKU、报价和规格"}
+                  label="供应商商品表（模板）"
+                  description={
+                    field.state.value ||
+                    "支持 xlsx、xls、csv；当前为模板登记：系统不解析文件内容，选择后仍需按下方字段手工填写并核对"
+                  }
                   onFilesSelected={(files) => {
                     if (files[0]) field.handleChange(files[0].name)
                   }}
@@ -427,7 +448,7 @@ export function SupplierCatalogIntakeDialog({
               {(field) => (
                 <field.TextField
                   label="进项税率"
-                  description="无可靠来源时留空；缺失时无法保存，需先补充来源"
+                  description="无可靠来源时可留空；提交时会要求补充来源，建议先向供应商确认"
                 />
               )}
             </form.AppField>
@@ -551,7 +572,9 @@ export function RegisterSupplyForSkuDialog({
     revisionTiming: "current",
   })
   const createMutation = useCreateSupplierCatalogItemMutation()
-  const [result, setResult] = React.useState<string | null>(null)
+  const [result, setResult] = React.useState<SupplierCatalogWriteResult | null>(
+    null
+  )
   const form = useAppForm({
     defaultValues: {
       supplierId: "",
@@ -641,7 +664,7 @@ export function RegisterSupplyForSkuDialog({
         validFrom: todayIso(),
         idempotencyKey: idempotencyKey("register-supply-for-sku"),
       })
-      setResult(response.reference)
+      setResult(response)
     },
   })
 
@@ -668,8 +691,21 @@ export function RegisterSupplyForSkuDialog({
           <Alert>
             <AlertTitle>供应商供给已登记</AlertTitle>
             <AlertDescription>
-              业务记录 {result} 已形成；供应商商品、映射和供给已在同一事务中保存。
+              业务记录 {result.reference} 已形成；供应商商品、映射和供给已在同一次保存中完成。
             </AlertDescription>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              render={
+                <Link
+                  href={`/procurement/supplier-catalog/${result.supplierProductId}`}
+                />
+              }
+            >
+              查看详情
+            </Button>
           </Alert>
         ) : null}
 
@@ -745,13 +781,18 @@ export function RegisterSupplyForSkuDialog({
               )}
             </form.AppField>
             <form.AppField name="minimumOrderQuantity">
-              {(field) => <field.TextField label="供给起订量 *" />}
+              {(field) => (
+                <field.TextField
+                  label="集采起订量 *"
+                  description="登记供给时同时作为该供应商的供给起订量"
+                />
+              )}
             </form.AppField>
             <form.AppField name="inputTaxRate">
               {(field) => (
                 <field.TextField
                   label="进项税率"
-                  description="无可靠来源时留空；缺失时无法保存，需先补充来源"
+                  description="无可靠来源时可留空；提交时会要求补充来源，建议先向供应商确认"
                 />
               )}
             </form.AppField>
@@ -841,7 +882,7 @@ export function PromoteSupplierProductDialog({
         sourceRevision?.bulkMinimumOrderQuantity ??
         "1",
       supplyRegionText: "全国",
-      validFrom: "2026-08-02",
+      validFrom: todayIso(),
     },
     validators: { onSubmit: promoteSchema },
     onSubmit: async ({ value }) => {
@@ -914,7 +955,7 @@ export function PromoteSupplierProductDialog({
         "1",
       supplyRegionText:
         item.offering?.proposedDefaults?.supplyRegion.join("、") || "全国",
-      validFrom: "2026-08-02",
+      validFrom: todayIso(),
     })
   }, [form, item, open, preferredProductId, skuQuery.data, categoryListQuery.data])
 
@@ -958,6 +999,19 @@ export function PromoteSupplierProductDialog({
                 ? `已沿用原商品池价格和版本，当前有效供应商 ${result.activeSupplierCount ?? "—"} 家。`
                 : `业务记录 ${result.reference} 已形成。`}
             </AlertDescription>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="mt-2"
+              render={
+                <Link
+                  href={`/procurement/supplier-catalog/${result.supplierProductId}`}
+                />
+              }
+            >
+              查看详情
+            </Button>
           </Alert>
         ) : null}
         <form
@@ -1105,7 +1159,7 @@ export function PromoteSupplierProductDialog({
               {(field) => (
                 <field.TextField
                   label="进项税率"
-                  description="无可靠来源时留空；缺失时无法提交，需先补充来源"
+                  description="无可靠来源时可留空；提交时会要求补充来源，建议先向供应商确认"
                 />
               )}
             </form.AppField>

@@ -57,8 +57,8 @@ export const SOURCE_LABEL: Record<ProjectionSource, string> = {
 
 export const LATENCY_LABEL: Record<LatencyBand, string> = {
   normal: "正常",
-  near_sla: "接近 SLA",
-  over_sla: "超过 SLA",
+  near_sla: "接近超时",
+  over_sla: "已超时",
 }
 
 export const RECONCILIATION_LABEL: Record<ReconciliationStatus, string> = {

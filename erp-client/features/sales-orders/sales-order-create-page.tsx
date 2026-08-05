@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import { useRouter } from "next/navigation"
-import { CircleAlertIcon, PlusIcon } from "lucide-react"
+import { CircleAlertIcon, CircleCheckIcon, PlusIcon } from "lucide-react"
 import { z } from "zod"
 
 import {
@@ -14,10 +14,12 @@ import {
   PageHeader,
   ProductCombobox,
   StickyTotalBar,
+  ValidationSummary,
   type EditableLineItemColumn,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
+import type { StandardSchemaV1Issue } from "@tanstack/react-form"
 import {
   DEMO_OWNER_OPTIONS,
   PAYMENT_TERM_OPTIONS,
@@ -95,6 +97,21 @@ const draftLineSchema = z.object({
   cardForm: z.string(),
 })
 
+/** 草稿只要求「已选合同 + 至少一行明细」，明细内容允许不完整。 */
+const draftRowSchema = z.object({
+  rowKey: z.string().min(1),
+  name: z.string(),
+  sku: z.string(),
+  quantity: z.string(),
+  unit: z.string(),
+  unitPriceGross: z.string(),
+  fulfillmentMode: z.string(),
+  dueDate: z.string(),
+  faceValue: z.string(),
+  giftRate: z.string(),
+  cardForm: z.string(),
+})
+
 const createSalesOrderSchema = z
   .object({
     contractId: z.string(),
@@ -129,21 +146,21 @@ const createSalesOrderSchema = z
       context.addIssue({
         code: "custom",
         path: ["contractId"],
-        message: "合同版本尚未加载完成",
+        message: "正在同步合同信息，请稍后再提交",
       })
     }
     if (!value.customerName.trim()) {
       context.addIssue({
         code: "custom",
         path: ["customerName"],
-        message: "客户尚未加载完成",
+        message: "正在同步客户信息，请稍后再提交",
       })
     }
     if (!value.settlementEntity.trim()) {
       context.addIssue({
         code: "custom",
         path: ["settlementEntity"],
-        message: "结算主体尚未加载完成",
+        message: "正在同步结算主体信息，请稍后再提交",
       })
     }
     if (value.nature === "card_voucher" && value.lineItems.length !== 1) {
@@ -190,6 +207,47 @@ const createSalesOrderSchema = z
 
 type CreateSalesOrderFormValues = z.input<typeof createSalesOrderSchema>
 
+/** 保存草稿：宽松校验（合同已选 + 至少一行明细），提交才走全量 schema。 */
+const draftSalesOrderSchema = z
+  .object({
+    contractId: z.string(),
+    requestedContractRevisionId: z.string(),
+    contractRevisionLabel: z.string(),
+    customerId: z.string(),
+    customerName: z.string(),
+    settlementPartyId: z.string(),
+    settlementEntity: z.string(),
+    nature: z.enum(["physical_service", "card_voucher"]),
+    ownerUserId: z.string(),
+    ownerName: z.string(),
+    welfareScene: z.string(),
+    paymentTerms: z.string(),
+    fulfillmentDeadline: z.string(),
+    taxRatePercent: z.string(),
+    remark: z.string(),
+    lineItems: z.array(draftRowSchema).min(1, "至少需要一条销售明细"),
+  })
+  .superRefine((value, context) => {
+    if (!value.contractId) {
+      context.addIssue({
+        code: "custom",
+        path: ["contractId"],
+        message: "请选择已有有效合同",
+      })
+    }
+  })
+
+function validateSalesOrderForm(
+  value: CreateSalesOrderFormValues,
+  intent: SalesOrderCreateIntent
+): StandardSchemaV1Issue[] | undefined {
+  const schema =
+    intent === "SAVE_DRAFT" ? draftSalesOrderSchema : createSalesOrderSchema
+  const result = schema.safeParse(value)
+  if (result.success) return undefined
+  return result.error.issues as unknown as StandardSchemaV1Issue[]
+}
+
 const NATURE_OPTIONS = [
   { value: "physical_service", label: "实物与服务" },
   { value: "card_voucher", label: "卡券" },
@@ -222,6 +280,22 @@ function createEmptyLine(nature: SalesOrderNature): SalesOrderDraftLineInput {
     giftRate: "0.00",
     cardForm: nature === "card_voucher" ? "电子卡" : "",
   }
+}
+
+/** 明细行是否已有实质内容（用于切换业务性质前的防丢失确认）。 */
+function hasMeaningfulLines(
+  lineItems: readonly SalesOrderDraftLineInput[]
+): boolean {
+  return lineItems.some(
+    (line) =>
+      line.name.trim() !== "" ||
+      line.sku.trim() !== "" ||
+      line.quantity !== "1" ||
+      line.unitPriceGross !== "0.00" ||
+      line.faceValue !== "" ||
+      line.giftRate !== "0.00" ||
+      line.dueDate !== ""
+  )
 }
 
 function calculateTotals(
@@ -323,7 +397,8 @@ export function SalesOrderCreatePage({
       lineItems: [createEmptyLine(initialNature)],
     } satisfies CreateSalesOrderFormValues,
     validators: {
-      onSubmit: createSalesOrderSchema,
+      onSubmit: ({ value }) =>
+        validateSalesOrderForm(value, submitIntentRef.current),
     },
     onSubmit: async ({ value }) => {
       const command: CreateSalesOrderInput = {
@@ -346,6 +421,13 @@ export function SalesOrderCreatePage({
             : `so-create-${Date.now()}`,
       }
       const result = await createMutation.mutateAsync(command)
+      if (submitIntentRef.current === "SAVE_DRAFT") {
+        setDraftSaved({
+          documentNumber: result.documentNumber,
+          savedAt: new Date(),
+        })
+        return
+      }
       form.reset()
       router.push(`/sales/orders/${result.salesOrderId}`)
     },
@@ -353,6 +435,12 @@ export function SalesOrderCreatePage({
 
   const dirty = useSelector(form.store, (state) => state.isDirty)
   const [discardOpen, setDiscardOpen] = React.useState(false)
+  const [draftSaved, setDraftSaved] = React.useState<{
+    documentNumber: string
+    savedAt: Date
+  } | null>(null)
+  const [pendingNature, setPendingNature] =
+    React.useState<SalesOrderNature | null>(null)
 
   React.useEffect(() => {
     if (!dirty) return
@@ -454,6 +542,30 @@ export function SalesOrderCreatePage({
     [contractsQuery, form]
   )
 
+  const applyNature = React.useCallback(
+    (nature: SalesOrderNature) => {
+      form.setFieldValue(
+        "taxRatePercent",
+        nature === "card_voucher" ? "6.00" : "13.00"
+      )
+      form.setFieldValue("lineItems", [createEmptyLine(nature)])
+      setDraftSaved(null)
+    },
+    [form]
+  )
+
+  /** 明细表根路径校验错误（如卡券仅一条）在明细区汇总展示。 */
+  const lineItemIssues = useSelector(form.store, (state) => {
+    return toFieldErrors(state.fieldMeta.lineItems?.errors ?? [])
+      .filter((error) => Boolean(error?.message))
+      .map((error, index) => ({
+        id: `line-items-${index}`,
+        label: "销售明细",
+        message: error!.message!,
+        targetId: "sales-line-items-section",
+      }))
+  })
+
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 pb-8 md:gap-5 md:p-5">
       <PageHeader
@@ -483,6 +595,17 @@ export function SalesOrderCreatePage({
           <CircleAlertIcon aria-hidden="true" />
           <AlertTitle>销售单未创建</AlertTitle>
           <AlertDescription>{errorMessage(createMutation.error)}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {draftSaved ? (
+        <Alert variant="success">
+          <CircleCheckIcon aria-hidden="true" />
+          <AlertTitle>草稿已保存</AlertTitle>
+          <AlertDescription>
+            销售单 {draftSaved.documentNumber} 已保存为草稿（
+            {draftSaved.savedAt.toLocaleTimeString("zh-CN")}）。当前内容仍保留在本页，可继续完善后提交；草稿也会出现在销售单列表中。
+          </AlertDescription>
         </Alert>
       ) : null}
 
@@ -623,18 +746,23 @@ export function SalesOrderCreatePage({
                         options={NATURE_OPTIONS}
                         onValueChange={(value) => {
                           const nature = value as SalesOrderNature
-                          form.setFieldValue(
-                            "taxRatePercent",
-                            nature === "card_voucher" ? "6.00" : "13.00"
-                          )
-                          form.setFieldValue("lineItems", [
-                            createEmptyLine(nature),
-                          ])
+                          if (nature === field.state.value) return
+                          const lines = form.state.values.lineItems
+                          if (hasMeaningfulLines(lines)) {
+                            setPendingNature(nature)
+                            return
+                          }
+                          applyNature(nature)
                         }}
                       />
                     )}
                   </form.AppField>
-                  <form.AppField name="ownerUserId">
+                  <form.AppField
+                    name="ownerUserId"
+                    validators={{
+                      onBlur: z.string().min(1, "请选择负责销售"),
+                    }}
+                  >
                     {(field) => {
                       const isInvalid =
                         field.state.meta.isTouched && !field.state.meta.isValid
@@ -663,7 +791,12 @@ export function SalesOrderCreatePage({
                       )
                     }}
                   </form.AppField>
-                  <form.AppField name="welfareScene">
+                  <form.AppField
+                    name="welfareScene"
+                    validators={{
+                      onBlur: z.string().trim().min(1, "请输入福利场景"),
+                    }}
+                  >
                     {(field) => (
                       <field.TextField
                         label="福利场景"
@@ -671,7 +804,12 @@ export function SalesOrderCreatePage({
                       />
                     )}
                   </form.AppField>
-                  <form.AppField name="paymentTerms">
+                  <form.AppField
+                    name="paymentTerms"
+                    validators={{
+                      onBlur: z.string().min(1, "请选择付款条件"),
+                    }}
+                  >
                     {(field) => (
                       <field.SelectField
                         label="付款条件"
@@ -679,12 +817,25 @@ export function SalesOrderCreatePage({
                       />
                     )}
                   </form.AppField>
-                  <form.AppField name="fulfillmentDeadline">
+                  <form.AppField
+                    name="fulfillmentDeadline"
+                    validators={{
+                      onBlur: z.string().min(1, "请选择履约期限"),
+                    }}
+                  >
                     {(field) => (
                       <field.DateField label="履约期限" />
                     )}
                   </form.AppField>
-                  <form.AppField name="taxRatePercent">
+                  <form.AppField
+                    name="taxRatePercent"
+                    validators={{
+                      onBlur: decimalInput("税率", 6).refine(
+                        (value) => decimalAtMost(value, "100", 6),
+                        "税率不能超过 100%"
+                      ),
+                    }}
+                  >
                     {(field) => (
                       <field.TextField
                         label="税率（%）"
@@ -697,7 +848,10 @@ export function SalesOrderCreatePage({
               </div>
             </section>
 
-            <section className="border-b border-border p-4 md:p-5 lg:p-6">
+            <section
+              id="sales-line-items-section"
+              className="border-b border-border p-4 md:p-5 lg:p-6"
+            >
               <div className="mb-4 flex items-center justify-between gap-2">
                 <h2 className="font-heading text-sm font-semibold">销售明细</h2>
                 <form.Subscribe selector={(state) => state.values.nature}>
@@ -989,6 +1143,14 @@ export function SalesOrderCreatePage({
                         }
                       />
 
+                      {lineItemIssues.length > 0 ? (
+                        <ValidationSummary
+                          className="mt-4"
+                          issues={lineItemIssues}
+                          title={`明细共 ${lineItemIssues.length} 项待处理`}
+                        />
+                      ) : null}
+
                       <div className="mt-5">
                         <form.AppField name="remark">
                           {(field) => (
@@ -1066,7 +1228,7 @@ export function SalesOrderCreatePage({
                         <form.SubmitButton
                           variant="outline"
                           label="保存草稿"
-                          pendingLabel="正在创建…"
+                          pendingLabel="正在保存草稿…"
                           onClick={() => {
                             submitIntentRef.current = "SAVE_DRAFT"
                           }}
@@ -1188,6 +1350,21 @@ export function SalesOrderCreatePage({
         onConfirm={() => {
           setDiscardOpen(false)
           router.push("/sales/orders")
+        }}
+      />
+
+      <DiscardConfirmDialog
+        open={pendingNature != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingNature(null)
+        }}
+        title="切换业务性质？"
+        description="业务性质切换后，已填写的销售明细会被清空并重新开始，无法撤销。"
+        confirmLabel="清空明细并切换"
+        cancelLabel="取消"
+        onConfirm={() => {
+          if (pendingNature) applyNature(pendingNature)
+          setPendingNature(null)
         }}
       />
     </div>

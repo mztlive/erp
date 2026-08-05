@@ -4,10 +4,15 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { PlusIcon, SearchIcon } from "lucide-react"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import type {
+  ColumnDef,
+  PaginationState,
+  SortingState,
+} from "@tanstack/react-table"
 
 import {
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
@@ -42,20 +47,40 @@ import type {
   CustomerScope,
 } from "@/features/customers/types"
 
+type DirectoryStatus = "active" | "disabled" | "all"
+
 function writeDirectoryUrl(
   pathname: string,
   params: {
     scope: CustomerScope
-    status: "active" | "disabled" | "all"
+    status: DirectoryStatus
     q: string
+    sort: string
+    dir: "asc" | "desc"
+    page: number
   }
 ): string {
   const sp = new URLSearchParams()
   if (params.scope !== "mine") sp.set("scope", params.scope)
   if (params.status !== "active") sp.set("status", params.status)
   if (params.q.trim()) sp.set("q", params.q.trim())
+  if (params.sort && params.sort !== "business") sp.set("sort", params.sort)
+  if (params.dir === "asc") sp.set("dir", "asc")
+  if (params.page > 1) sp.set("page", String(params.page))
   const qs = sp.toString()
   return qs ? `${pathname}?${qs}` : pathname
+}
+
+/** 表头排序列 → 目录查询排序键（filter-customers 已实现的排序能力）。 */
+const SORT_COLUMN_TO_FIELD: Record<string, string> = {
+  customer: "name",
+  overdue: "overdue_desc",
+  business: "recent_business",
+}
+
+function parsePage(value: string | null): number {
+  const page = Number.parseInt(value ?? "", 10)
+  return Number.isFinite(page) && page > 0 ? page : 1
 }
 
 export function CustomerCenterPage() {
@@ -65,16 +90,23 @@ export function CustomerCenterPage() {
 
   const scope = parseCustomerScope(searchParams.get("scope"))
   const statusParam = searchParams.get("status")
-  const status: "active" | "disabled" | "all" =
+  const status: DirectoryStatus =
     statusParam === "disabled" || statusParam === "all"
       ? statusParam
       : "active"
   const q = searchParams.get("q") ?? ""
+  const sortParam = searchParams.get("sort")
+  const sort: string =
+    sortParam === "customer" || sortParam === "overdue"
+      ? sortParam
+      : "business"
+  const dir: "asc" | "desc" = searchParams.get("dir") === "asc" ? "asc" : "desc"
+  const page = parsePage(searchParams.get("page"))
 
   const [searchDraft, setSearchDraft] = React.useState(q)
   const [createOpen, setCreateOpen] = React.useState(false)
   const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
+    pageIndex: page - 1,
     pageSize: 20,
   })
 
@@ -82,17 +114,16 @@ export function CustomerCenterPage() {
     setSearchDraft(q)
   }, [q])
 
-  const resetPagination = React.useCallback(() => {
-    setPagination((previous) =>
-      previous.pageIndex === 0 ? previous : { ...previous, pageIndex: 0 }
-    )
-  }, [])
-
   const directoryQuery = useCustomerDirectoryQuery({
     scope,
     status,
     query: q,
-    sort: "recent_business",
+    sort:
+      (SORT_COLUMN_TO_FIELD[sort] as
+        | "recent_business"
+        | "name"
+        | "overdue_desc") ?? "recent_business",
+    sortDir: dir,
   })
 
   const data = directoryQuery.data
@@ -105,6 +136,69 @@ export function CustomerCenterPage() {
     const start = pagination.pageIndex * pagination.pageSize
     return items.slice(start, start + pagination.pageSize)
   }, [items, pagination.pageIndex, pagination.pageSize])
+
+  const pushState = React.useCallback(
+    (next: {
+      scope?: CustomerScope
+      status?: DirectoryStatus
+      q?: string
+      sort?: string
+      dir?: "asc" | "desc"
+      page?: number
+    }) => {
+      router.replace(
+        writeDirectoryUrl(pathname, {
+          scope: next.scope ?? scope,
+          status: next.status ?? status,
+          q: next.q ?? q,
+          sort: next.sort ?? sort,
+          dir: next.dir ?? dir,
+          page: next.page ?? pagination.pageIndex + 1,
+        })
+      )
+    },
+    [dir, pagination.pageIndex, pathname, q, router, scope, sort, status]
+  )
+
+  const handlePaginationChange = React.useCallback(
+    (next: PaginationState) => {
+      setPagination(next)
+      pushState({ page: next.pageIndex + 1 })
+    },
+    [pushState]
+  )
+
+  const sorting = React.useMemo<SortingState>(
+    () => [{ id: sort, desc: dir === "desc" }],
+    [dir, sort]
+  )
+
+  const handleSortingChange = React.useCallback(
+    (next: SortingState) => {
+      const head = next[0]
+      if (!head || !SORT_COLUMN_TO_FIELD[head.id]) return
+      setPagination((previous) =>
+        previous.pageIndex === 0 ? previous : { ...previous, pageIndex: 0 }
+      )
+      pushState({
+        sort: head.id,
+        dir: head.desc ? "desc" : "asc",
+        page: 1,
+      })
+    },
+    [pushState]
+  )
+
+  const clearFilters = () => {
+    setSearchDraft("")
+    setPagination((previous) =>
+      previous.pageIndex === 0 ? previous : { ...previous, pageIndex: 0 }
+    )
+    router.replace(pathname)
+  }
+
+  const hasActiveFilters =
+    scope !== "mine" || status !== "active" || q.trim().length > 0
 
   const columns = React.useMemo<ColumnDef<CustomerDirectoryItem>[]>(
     () => [
@@ -139,6 +233,7 @@ export function CustomerCenterPage() {
         accessorKey: "ownerName",
         header: "负责销售",
         meta: { label: "负责销售", width: "default" },
+        enableSorting: false,
         cell: ({ row }) => (
           <div className="text-sm">
             <div>{row.original.ownerName}</div>
@@ -155,6 +250,7 @@ export function CustomerCenterPage() {
         accessorFn: (row) => row.statusLabel.label,
         header: "状态",
         meta: { label: "状态", width: "status" },
+        enableSorting: false,
         cell: ({ row }) => (
           <BusinessStatusBadge context="list" {...row.original.statusLabel} />
         ),
@@ -164,6 +260,7 @@ export function CustomerCenterPage() {
         accessorFn: (row) => row.metrics.activeContractCount,
         header: "有效合同",
         meta: { label: "有效合同", width: "status", numeric: true },
+        enableSorting: false,
         cell: ({ row }) => (
           <span className="num text-sm">
             {row.original.metrics.activeContractCount}
@@ -175,6 +272,7 @@ export function CustomerCenterPage() {
         accessorFn: (row) => row.metrics.inProgressSalesOrderCount,
         header: "进行中销售单",
         meta: { label: "进行中销售单", width: "status", numeric: true },
+        enableSorting: false,
         cell: ({ row }) => (
           <span className="num text-sm">
             {row.original.metrics.inProgressSalesOrderCount}
@@ -186,6 +284,7 @@ export function CustomerCenterPage() {
         accessorFn: (row) => row.metrics.receivableBalance,
         header: "未结清",
         meta: { label: "未结清", width: "amount", numeric: true },
+        enableSorting: false,
         cell: ({ row }) => (
           <MoneyValue value={row.original.metrics.receivableBalance} />
         ),
@@ -225,31 +324,6 @@ export function CustomerCenterPage() {
     []
   )
 
-  const pushState = React.useCallback(
-    (next: {
-      scope?: CustomerScope
-      status?: "active" | "disabled" | "all"
-      q?: string
-    }) => {
-      router.replace(
-        writeDirectoryUrl(pathname, {
-          scope: next.scope ?? scope,
-          status: next.status ?? status,
-          q: next.q ?? q,
-        })
-      )
-    },
-    [pathname, q, router, scope, status]
-  )
-
-  const clearFilters = () => {
-    setSearchDraft("")
-    router.replace(pathname)
-  }
-
-  const hasActiveFilters =
-    scope !== "mine" || status !== "active" || q.trim().length > 0
-
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
@@ -260,9 +334,9 @@ export function CustomerCenterPage() {
         ]}
         metadata={
           <DataFreshness
-            updatedAt="刚刚"
+            updatedAt={data?.queriedAt?.slice(11, 16) ?? "—"}
             dateTime={data?.queriedAt}
-            state="fresh"
+            state={directoryQuery.isError ? "failed" : "fresh"}
             label="客户目录"
           />
         }
@@ -273,7 +347,6 @@ export function CustomerCenterPage() {
                 actionKey: "create",
                 label: "新建客户",
                 icon: PlusIcon,
-                mobileVisibility: "hide",
                 onClick: () => setCreateOpen(true),
               },
             ]}
@@ -281,7 +354,16 @@ export function CustomerCenterPage() {
         }
       />
 
-      {directoryQuery.isPending ? (
+      {directoryQuery.isError ? (
+        <BusinessFailureState
+          kind="system"
+          title="客户目录加载失败"
+          description="暂时拿不到客户数据，请重试；不会影响已保存的客户资料。"
+          onRetry={() => {
+            void directoryQuery.refetch()
+          }}
+        />
+      ) : directoryQuery.isPending && !data ? (
         <Card size="sm">
           <CardContent className="p-8 text-sm text-muted-foreground">
             正在加载客户目录…
@@ -341,11 +423,10 @@ export function CustomerCenterPage() {
                     onChange={(e) => setSearchDraft(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        pushState({ q: searchDraft })
-                        resetPagination()
+                        pushState({ q: searchDraft, page: 1 })
                       }
                     }}
-                    placeholder="名称、编码、统一社会信用代码"
+                    placeholder="名称、编码、统一社会信用代码、负责销售"
                     aria-label="搜索客户"
                   />
                 </InputGroup>
@@ -357,8 +438,7 @@ export function CustomerCenterPage() {
                     onValueChange={(values) => {
                       const next = values[0] as CustomerScope | undefined
                       if (next) {
-                        pushState({ scope: next })
-                        resetPagination()
+                        pushState({ scope: next, page: 1 })
                       }
                     }}
                     variant="outline"
@@ -377,12 +457,9 @@ export function CustomerCenterPage() {
                     value={status}
                     onValueChange={(v) => {
                       pushState({
-                        status: (v ?? "active") as
-                          | "active"
-                          | "disabled"
-                          | "all",
+                        status: (v ?? "active") as DirectoryStatus,
+                        page: 1,
                       })
-                      resetPagination()
                     }}
                     options={[
                       { value: "active", label: "启用" },
@@ -394,26 +471,7 @@ export function CustomerCenterPage() {
                     allowClear={false}
                     placeholder="客户状态"
                   />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="secondary"
-                    onClick={() => {
-                      pushState({ q: searchDraft })
-                      resetPagination()
-                    }}
-                  >
-                    搜索
-                  </Button>
                 </div>
-              }
-              actions={
-                <span
-                  className="text-xs text-muted-foreground"
-                  aria-live="polite"
-                >
-                  共 {items.length.toLocaleString("zh-CN")} 家
-                </span>
               }
             />
           }
@@ -423,10 +481,13 @@ export function CustomerCenterPage() {
               columns={columns}
               getRowId={(row) => row.id}
               rowCount={items.length}
+              sorting={sorting}
+              onSortingChange={handleSortingChange}
               pagination={pagination}
-              onPaginationChange={setPagination}
+              onPaginationChange={handlePaginationChange}
               layout="flush"
               density="compact"
+              rowLabel={(row) => row.shortName || row.legalName}
               defaultColumnPinning={{
                 left: ["customer"],
               }}

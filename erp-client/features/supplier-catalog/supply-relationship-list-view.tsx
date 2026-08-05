@@ -35,6 +35,12 @@ type SupplyRelationshipListViewProps = {
   returnHref: string
   updatedAt?: string
   costMasked: boolean
+  emptyReason?: "NO_TASKS" | "FILTER_NO_RESULT" | "NO_DATA_SCOPE"
+  demoRole?: string
+  maskCost?: boolean
+  sort?: string
+  onSortChange?: (sort: string | undefined) => void
+  onOpenItem?: (item: SupplierCatalogItemView) => void
   searchInput: string
   onSearchInputChange: (value: string) => void
   onSearch: () => void
@@ -135,6 +141,12 @@ function SupplyRelationshipListView({
   returnHref,
   updatedAt,
   costMasked,
+  emptyReason,
+  demoRole,
+  maskCost,
+  sort,
+  onSortChange,
+  onOpenItem,
   searchInput,
   onSearchInputChange,
   onSearch,
@@ -158,6 +170,25 @@ function SupplyRelationshipListView({
       item.poolEntry?.status === "ACTIVE" ? [item.poolEntry.poolEntryId] : []
     )
   ).size
+
+  const detailHrefFor = React.useCallback(
+    (item: SupplierCatalogItemView) =>
+      `/procurement/supplier-catalog/${item.supplierProduct.id}?section=overview&demoRole=${demoRole ?? "procurement"}&maskCost=${maskCost ? 1 : 0}&returnTo=${encodeURIComponent(returnHref)}`,
+    [maskCost, returnHref, demoRole]
+  )
+
+  const [sortBy, sortDir] = React.useMemo(() => {
+    const [id, dir] = (sort ?? "").split(":")
+    if (!id || (dir !== "asc" && dir !== "desc")) {
+      return [undefined, undefined] as const
+    }
+    return [id, dir] as const
+  }, [sort])
+
+  const sorting = React.useMemo(
+    () => (sortBy && sortDir ? [{ id: sortBy, desc: sortDir === "desc" }] : []),
+    [sortBy, sortDir]
+  )
 
   const columns = React.useMemo<ColumnDef<SupplierCatalogItemView, unknown>[]>(
     () => [
@@ -263,9 +294,13 @@ function SupplyRelationshipListView({
           return (
             <div>
               <div>
-                {offering.dropshipSupplyPriceGross ?? "—"}
+                {offering.dropshipSupplyPriceGross
+                  ? `¥${offering.dropshipSupplyPriceGross}`
+                  : "—"}
                 {" / "}
-                {offering.bulkSupplyPriceGross ?? "—"}
+                {offering.bulkSupplyPriceGross
+                  ? `¥${offering.bulkSupplyPriceGross}`
+                  : "—"}
               </div>
               <div className="text-xs text-muted-foreground">
                 {offering.minimumOrderQuantity} {unit}起订
@@ -336,6 +371,7 @@ function SupplyRelationshipListView({
         accessorFn: (row) => relationshipStatus(row, skuId).label,
         header: "状态",
         meta: { label: "状态", width: "status" },
+        enableSorting: true,
         cell: ({ row }) => {
           const status = relationshipStatus(row.original, skuId)
           return (
@@ -367,11 +403,7 @@ function SupplyRelationshipListView({
             <Button
               variant="ghost"
               size="sm"
-              render={
-                <Link
-                  href={`/procurement/supplier-catalog/${row.original.supplierProduct.id}?section=overview&returnTo=${encodeURIComponent(returnHref)}`}
-                />
-              }
+              render={<Link href={detailHrefFor(row.original)} />}
             >
               详情
               <ArrowRightIcon className="size-3.5" aria-hidden="true" />
@@ -380,7 +412,7 @@ function SupplyRelationshipListView({
         ),
       },
     ],
-    [costMasked, currentSku?.baseUnit, onPromote, returnHref, skuId]
+    [costMasked, currentSku?.baseUnit, detailHrefFor, onPromote, skuId]
   )
 
   const queueHref = `/procurement/supplier-catalog?mode=queue${skuId ? `&skuId=${encodeURIComponent(skuId)}` : ""}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`
@@ -390,8 +422,8 @@ function SupplyRelationshipListView({
   const pageDescription = currentSku
     ? `${currentSku.skuCode} · ${currentSku.specification ?? "默认规格"}${currentSku.baseUnit ? ` · 基本单位：${currentSku.baseUnit}` : ""}`
     : skuId
-      ? `当前 SKU：${skuId}`
-      : "统一管理 Excel、API 和手工录入的供应商 SPU/SKU，选择后加入公司商品池"
+      ? "当前商品规格筛选：商品规格待补充"
+      : "统一管理 Excel、API 和手工录入的供应商商品，确认后加入公司商品池"
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
@@ -414,7 +446,7 @@ function SupplyRelationshipListView({
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" size="sm" onClick={onOpenExcelImport}>
               <UploadIcon className="size-3.5" />
-              导入 Excel
+              按 Excel 模板录入
             </Button>
             {skuId && onOpenManualEntry ? (
               <Button type="button" size="sm" onClick={onOpenManualEntry}>
@@ -483,7 +515,7 @@ function SupplyRelationshipListView({
       )}
 
       <MetricStrip columns={4} density="compact" aria-label="供给关系概览">
-        <MetricItem label="供应商 SKU" value={items.length} density="compact" />
+        <MetricItem label="供给关系" value={items.length} density="compact" />
         <MetricItem label="已入公司商品池" value={inPoolCount} density="compact" />
         <MetricItem label="正常供货" value={activeCount} density="compact" />
         <MetricItem label="暂停或停供" value={unavailableCount} density="compact" />
@@ -554,36 +586,69 @@ function SupplyRelationshipListView({
             layout="flush"
             showPagination={false}
             enableColumnPinning
+            sorting={sorting}
+            onSortingChange={(next) => {
+              const nextSort = next[0]
+              onSortChange?.(
+                nextSort
+                  ? `${nextSort.id}:${nextSort.desc ? "desc" : "asc"}`
+                  : undefined
+              )
+            }}
             defaultColumnPinning={{ left: ["supplierProduct"], right: ["actions"] }}
+            onRowPreview={onOpenItem ? (row) => onOpenItem(row) : undefined}
+            onRowOpen={onOpenItem ? (row) => onOpenItem(row) : undefined}
             emptyState={
-              <BusinessEmptyState
-                kind="no-data"
-                title={skuId ? "当前 SKU 暂无供应商供给" : "暂无供应商商品"}
-                description="可以导入供应商 Excel、运行 API 同步或手工录入。三种来源使用相同数据结构；手工录入使用与公司商品同构的全页表单。"
-                action={
-                  skuId && onOpenManualEntry ? (
-                    <Button
-                      variant="outline"
-                      type="button"
-                      onClick={onOpenManualEntry}
-                    >
-                      添加供应商并登记成本
-                    </Button>
-                  ) : (
-                    <Button
-                      variant="outline"
-                      type="button"
-                      render={
-                        <Link
-                          href={`/procurement/supplier-catalog/new?returnTo=${encodeURIComponent(returnHref)}`}
-                        />
-                      }
-                    >
-                      手工录入商品
-                    </Button>
-                  )
-                }
-              />
+              emptyReason === "FILTER_NO_RESULT" ? (
+                <BusinessEmptyState
+                  kind="filter"
+                  title="没有符合条件的供应商商品"
+                  description="可调整搜索、来源或清除筛选后重试。"
+                  action={
+                    onSortChange ? (
+                      <Button
+                        variant="outline"
+                        type="button"
+                        onClick={() => {
+                          onSearchInputChange("")
+                          onSearch()
+                        }}
+                      >
+                        清除筛选
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ) : (
+                <BusinessEmptyState
+                  kind="no-data"
+                  title={skuId ? "当前 SKU 暂无供应商供给" : "暂无供应商商品"}
+                  description="可以导入供应商 Excel、运行 API 同步或手工录入。三种来源均可录入；手工录入使用与公司商品相同的表单。"
+                  action={
+                    skuId && onOpenManualEntry ? (
+                      <Button
+                        variant="outline"
+                        type="button"
+                        onClick={onOpenManualEntry}
+                      >
+                        添加供应商并登记成本
+                      </Button>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        type="button"
+                        render={
+                          <Link
+                            href={`/procurement/supplier-catalog/new?returnTo=${encodeURIComponent(returnHref)}`}
+                          />
+                        }
+                      >
+                        手工录入商品
+                      </Button>
+                    )
+                  }
+                />
+              )
             }
           />
         }

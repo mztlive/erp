@@ -54,6 +54,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -69,6 +70,7 @@ import {
 import type {
   AllocationMode,
   CounterpartyOption,
+  CustomerAccountsListView,
   CustomerAccountsQuery,
   CustomerAccountsView,
   DueFilter,
@@ -152,8 +154,10 @@ export function CustomerReceivablesPage() {
     kind: "receipt_reverse" | "refund" | "red_invoice"
     sourceFactId: string
     label: string
+    amount?: string
   } | null>(null)
   const [reverseReason, setReverseReason] = React.useState("")
+  const [reverseAmount, setReverseAmount] = React.useState("")
 
   const query: CustomerAccountsQuery = React.useMemo(
     () => ({
@@ -295,7 +299,8 @@ export function CustomerReceivablesPage() {
   async function startSession(
     mode: AllocationMode,
     partyId: string,
-    existingFactId?: string
+    existingFactId?: string,
+    target?: { salesOrderId?: string; receivableAccountId?: string }
   ) {
     setActionError(null)
     setLastResult(null)
@@ -304,8 +309,9 @@ export function CustomerReceivablesPage() {
         mode,
         counterpartyPartyId: partyId,
         existingFactId,
-        salesOrderId,
-        receivableAccountId,
+        salesOrderId: target?.salesOrderId ?? salesOrderId,
+        receivableAccountId:
+          target?.receivableAccountId ?? receivableAccountId,
         returnTo,
         from,
       })
@@ -321,7 +327,7 @@ export function CustomerReceivablesPage() {
 
   function openRegister(mode: AllocationMode) {
     setPartyPickerMode(mode)
-    setSelectedPartyId(counterpartyPartyId ?? data?.counterparties[0]?.counterpartyPartyId ?? "")
+    setSelectedPartyId(counterpartyPartyId ?? "")
     setPartyPickerOpen(true)
   }
 
@@ -331,6 +337,8 @@ export function CustomerReceivablesPage() {
     const res = await reverseMutation.mutateAsync({
       kind: reverseConfirm.kind,
       sourceFactId: reverseConfirm.sourceFactId,
+      amount:
+        reverseConfirm.kind === "red_invoice" ? reverseAmount : undefined,
       reason: reverseReason || "纠错",
       idempotencyKey: key,
     })
@@ -347,6 +355,7 @@ export function CustomerReceivablesPage() {
       })
       setReverseConfirm(null)
       setReverseReason("")
+      setReverseAmount("")
       closePreview()
       return
     }
@@ -413,7 +422,7 @@ export function CustomerReceivablesPage() {
       },
       {
         id: "invoice",
-        header: "净已开票 / 可开票",
+        header: "净已开票 / 可开票（含税）",
         meta: { label: "开票", width: "amount", align: "end", numeric: true },
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-1.5 text-right">
@@ -484,10 +493,20 @@ export function CustomerReceivablesPage() {
               size="xs"
               variant="outline"
               disabled={!row.original.allowedActions.includes("REGISTER_RECEIPT")}
+              title={
+                row.original.allowedActions.includes("REGISTER_RECEIPT")
+                  ? undefined
+                  : "当前无回款登记/核销权限"
+              }
               onClick={() =>
                 void startSession(
                   "receipt",
-                  row.original.counterpartyPartyId
+                  row.original.counterpartyPartyId,
+                  undefined,
+                  {
+                    salesOrderId: row.original.salesOrderId,
+                    receivableAccountId: row.original.accountId,
+                  }
                 )
               }
             >
@@ -763,7 +782,8 @@ export function CustomerReceivablesPage() {
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <BusinessFailureState
           kind="system"
-          description="客户往来查询失败，未展示 0 元结清结论。"
+          title="客户往来加载失败"
+          description="请重试；失败时不展示任何结清或金额结论。"
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重试
@@ -807,11 +827,13 @@ export function CustomerReceivablesPage() {
                 mobileVisibility: "hide",
                 disabled: !data?.canExport || data.total === 0,
                 onClick: () => {
+                  if (!data) return
+                  const fileName = `客户往来-${VIEW_LABEL[data.view]}-${new Date().toISOString().slice(0, 10)}.csv`
+                  downloadCsv(fileName, buildAccountsCsv(data))
                   setLastResult({
                     status: "succeeded",
-                    title: "导出任务已创建",
-                    description: `系统筛选结果：${data?.filterSummary ?? ""}。7 天内可下载（演示）。`,
-                    reference: `EXP-W11-${Date.now().toString(36)}`,
+                    title: "导出已完成",
+                    description: `已按当前筛选生成 CSV 文件 ${fileName}，并开始下载。`,
                   })
                 },
               },
@@ -822,6 +844,9 @@ export function CustomerReceivablesPage() {
                 variant: "outline",
                 mobileVisibility: "hide",
                 disabled: !data?.canRegister,
+                title: data?.canRegister
+                  ? undefined
+                  : "当前无销项发票登记权限",
                 onClick: () => openRegister("invoice"),
               },
               {
@@ -830,6 +855,7 @@ export function CustomerReceivablesPage() {
                 icon: WalletIcon,
                 mobileVisibility: "hide",
                 disabled: !data?.canRegister,
+                title: data?.canRegister ? undefined : "当前无回款登记权限",
                 onClick: () => openRegister("receipt"),
               },
             ]}
@@ -842,7 +868,15 @@ export function CustomerReceivablesPage() {
           <AlertTitle>销售单票款入口</AlertTitle>
           <AlertDescription className="flex flex-wrap items-center gap-2">
             已携带来源页签返回上下文
-            {salesOrderId ? ` · 销售单 ${salesOrderId}` : ""}
+            {salesOrderId ? (
+              ` · 销售单 ${
+                data?.receivables.find(
+                  (r) => r.salesOrderId === salesOrderId
+                )?.salesOrderNo ?? ""
+              }`
+            ) : (
+              ""
+            )}
             。核销完成后可回到销售单。
             <Button
               type="button"
@@ -909,7 +943,11 @@ export function CustomerReceivablesPage() {
               <MetricFilterItem
                 label="开放应收"
                 value={<MoneyValue value={metrics.openReceivableTotal} />}
-                detail="系统更新时间"
+                detail={
+                  data
+                    ? `更新 ${formatDateTime(data.queriedAt, "monthDayIntl")}`
+                    : undefined
+                }
                 active={view === "receivable"}
                 onClick={() => {
                   patchUrl({ view: "receivable" })
@@ -1043,30 +1081,81 @@ export function CustomerReceivablesPage() {
                       />
                     </label>
                     {view === "receivable" ? (
-                      <label className="flex items-center gap-1.5 text-sm">
-                        <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
-                          到期
-                        </span>
-                        <OptionCombobox
-                          value={due ?? "all"}
-                          onValueChange={(v) => {
-                            const next = v ?? "all"
-                            patchUrl({ due: next === "all" ? null : next })
-                            setPagination((p) => ({ ...p, pageIndex: 0 }))
-                          }}
-                          options={(Object.keys(DUE_LABEL) as DueFilter[]).map(
-                            (k) => ({
-                              value: k,
-                              label: DUE_LABEL[k],
-                            })
-                          )}
-                          className="w-32"
-                          size="sm"
-                          allowClear={false}
-                          aria-label="筛选到期"
-                          placeholder="到期"
-                        />
-                      </label>
+                      <>
+                        <label className="flex items-center gap-1.5 text-sm">
+                          <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
+                            到期
+                          </span>
+                          <OptionCombobox
+                            value={due ?? "all"}
+                            onValueChange={(v) => {
+                              const next = v ?? "all"
+                              patchUrl({ due: next === "all" ? null : next })
+                              setPagination((p) => ({ ...p, pageIndex: 0 }))
+                            }}
+                            options={(Object.keys(DUE_LABEL) as DueFilter[]).map(
+                              (k) => ({
+                                value: k,
+                                label: DUE_LABEL[k],
+                              })
+                            )}
+                            className="w-32"
+                            size="sm"
+                            allowClear={false}
+                            aria-label="筛选到期"
+                            placeholder="到期"
+                          />
+                        </label>
+                        <label className="flex items-center gap-1.5 text-sm">
+                          <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
+                            状态
+                          </span>
+                          <OptionCombobox
+                            value={status ?? ""}
+                            onValueChange={(v) => {
+                              patchUrl({ status: v || null })
+                              setPagination((p) => ({ ...p, pageIndex: 0 }))
+                            }}
+                            options={[
+                              { value: "", label: "全部状态" },
+                              { value: "open", label: "未结" },
+                              { value: "partial", label: "部分结清" },
+                              { value: "settled", label: "已结清" },
+                            ]}
+                            className="w-32"
+                            size="sm"
+                            allowClear={false}
+                            aria-label="筛选状态"
+                            placeholder="状态"
+                          />
+                        </label>
+                        <label className="flex items-center gap-1.5 text-sm">
+                          <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
+                            复核状态
+                          </span>
+                          <OptionCombobox
+                            value={reviewStatus ?? ""}
+                            onValueChange={(v) => {
+                              patchUrl({ reviewStatus: v || null })
+                              setPagination((p) => ({ ...p, pageIndex: 0 }))
+                            }}
+                            options={[
+                              { value: "", label: "全部复核状态" },
+                              { value: "pending_opening", label: "期初待复核" },
+                              { value: "reviewed", label: "已复核" },
+                              {
+                                value: "pending_sync_diff",
+                                label: "同步差额待复核",
+                              },
+                            ]}
+                            className="w-40"
+                            size="sm"
+                            allowClear={false}
+                            aria-label="筛选复核状态"
+                            placeholder="复核状态"
+                          />
+                        </label>
+                      </>
                     ) : null}
                   </>
                 }
@@ -1096,7 +1185,11 @@ export function CustomerReceivablesPage() {
                     <h3 className="text-sm font-semibold">
                       待分配回款
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        未分配 {metrics?.unallocatedReceiptTotal}
+                        未分配{" "}
+                        <MoneyValue
+                          value={metrics?.unallocatedReceiptTotal ?? "0"}
+                          className="inline"
+                        />
                       </span>
                     </h3>
                     {data.unallocated.receipts.length === 0 ? (
@@ -1125,7 +1218,12 @@ export function CustomerReceivablesPage() {
                     <h3 className="text-sm font-semibold">
                       待分配销项发票
                       <span className="ml-2 text-xs font-normal text-muted-foreground">
-                        未分配 {metrics?.unallocatedInvoiceTotal}（独立统计）
+                        未分配{" "}
+                        <MoneyValue
+                          value={metrics?.unallocatedInvoiceTotal ?? "0"}
+                          className="inline"
+                        />
+                        （独立统计）
                       </span>
                     </h3>
                     {data.unallocated.invoices.length === 0 ? (
@@ -1168,6 +1266,8 @@ export function CustomerReceivablesPage() {
                             due: null,
                             status: null,
                             reviewStatus: null,
+                            salesOrderId: null,
+                            receivableAccountId: null,
                           })
                         }}
                       >
@@ -1296,7 +1396,14 @@ export function CustomerReceivablesPage() {
                   onClick={() =>
                     void startSession(
                       "receipt",
-                      detailQuery.data!.receivable!.counterpartyPartyId
+                      detailQuery.data!.receivable!.counterpartyPartyId,
+                      undefined,
+                      {
+                        salesOrderId:
+                          detailQuery.data!.receivable!.salesOrderId,
+                        receivableAccountId:
+                          detailQuery.data!.receivable!.accountId,
+                      }
                     )
                   }
                 >
@@ -1330,6 +1437,7 @@ export function CustomerReceivablesPage() {
                       kind: "receipt_reverse",
                       sourceFactId: detailQuery.data!.receipt!.receiptId,
                       label: detailQuery.data!.receipt!.receiptNo,
+                      amount: detailQuery.data!.receipt!.amount,
                     })
                   }
                 >
@@ -1345,6 +1453,7 @@ export function CustomerReceivablesPage() {
                       kind: "refund",
                       sourceFactId: detailQuery.data!.receipt!.receiptId,
                       label: detailQuery.data!.receipt!.receiptNo,
+                      amount: detailQuery.data!.receipt!.amount,
                     })
                   }
                 >
@@ -1373,13 +1482,17 @@ export function CustomerReceivablesPage() {
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() =>
+                  onClick={() => {
+                    setReverseAmount(
+                      detailQuery.data!.invoice!.allocatedTotal
+                    )
                     setReverseConfirm({
                       kind: "red_invoice",
                       sourceFactId: detailQuery.data!.invoice!.invoiceId,
                       label: detailQuery.data!.invoice!.invoiceNo,
+                      amount: detailQuery.data!.invoice!.allocatedTotal,
                     })
-                  }
+                  }}
                 >
                   红票
                 </Button>
@@ -1393,6 +1506,20 @@ export function CustomerReceivablesPage() {
             <div className="h-24 animate-pulse rounded-xl bg-muted" />
             <div className="h-40 animate-pulse rounded-xl bg-muted" />
           </div>
+        ) : detailQuery.isError ? (
+          <div className="space-y-3 p-6">
+            <p className="text-sm text-muted-foreground">
+              详情加载失败，请重试。
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void detailQuery.refetch()}
+            >
+              重试
+            </Button>
+          </div>
         ) : detailQuery.data?.receivable ? (
           <ReceivableDetailBody row={detailQuery.data.receivable} />
         ) : detailQuery.data?.receipt ? (
@@ -1400,7 +1527,9 @@ export function CustomerReceivablesPage() {
         ) : detailQuery.data?.invoice ? (
           <InvoiceDetailBody row={detailQuery.data.invoice} />
         ) : (
-          <div className="p-6 text-sm text-muted-foreground">未找到对象</div>
+          <div className="p-6 text-sm text-muted-foreground">
+            未找到该笔记录，可能已超出当前数据范围。
+          </div>
         )}
       </QuickPreviewSheet>
 
@@ -1480,16 +1609,51 @@ export function CustomerReceivablesPage() {
             <DialogDescription>
               不编辑、不删除已确认记录与分配；仅追加反向记录。原单{" "}
               {reverseConfirm?.label}。
+              {reverseConfirm?.kind === "receipt_reverse"
+                ? "冲正表示撤销本次回款记录。"
+                : reverseConfirm?.kind === "refund"
+                  ? "退款表示向客户退回资金。"
+                  : "红票表示冲减原票的分配。"}
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="rev-reason">原因说明</Label>
-            <Textarea
-              id="rev-reason"
-              value={reverseReason}
-              onChange={(e) => setReverseReason(e.target.value)}
-              placeholder="业务依据与说明"
-            />
+          <div className="space-y-3">
+            {reverseConfirm?.kind === "red_invoice" ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="rev-amount">红票金额</Label>
+                <Input
+                  id="rev-amount"
+                  className="num"
+                  inputMode="decimal"
+                  value={reverseAmount}
+                  onChange={(e) => setReverseAmount(e.target.value)}
+                  placeholder={`不超过 ${reverseConfirm.amount ?? ""}`}
+                />
+                <p className="text-xs text-muted-foreground">
+                  默认按原票有效净已分配全额；可输入部分金额。
+                </p>
+              </div>
+            ) : (
+              <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                将按原单全额追加反向记录
+                {reverseConfirm?.amount ? (
+                  <>
+                    （<MoneyValue value={reverseConfirm.amount} />）
+                  </>
+                ) : (
+                  ""
+                )}
+                ，原记录保留。
+              </p>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="rev-reason">原因说明</Label>
+              <Textarea
+                id="rev-reason"
+                value={reverseReason}
+                onChange={(e) => setReverseReason(e.target.value)}
+                placeholder="业务依据与说明"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button
@@ -1498,13 +1662,24 @@ export function CustomerReceivablesPage() {
               onClick={() => {
                 setReverseConfirm(null)
                 setReverseReason("")
+                setReverseAmount("")
               }}
             >
               取消
             </Button>
             <Button
               type="button"
-              disabled={reverseMutation.isPending || !reverseReason.trim()}
+              disabled={
+                reverseMutation.isPending ||
+                !reverseReason.trim() ||
+                (reverseConfirm?.kind === "red_invoice"
+                  ? !(
+                      Number(reverseAmount) > 0 &&
+                      Number(reverseAmount) <=
+                        Number(reverseConfirm?.amount ?? 0) + 1e-9
+                    )
+                  : false)
+              }
               onClick={() => void confirmReverse()}
             >
               确认追加反向记录
@@ -1602,7 +1777,7 @@ function ReceiptDetailBody({ row }: { row: ReceiptRow }) {
         />
       </div>
       <section>
-        <h4 className="mb-2 text-sm font-semibold">分配明细（追加式）</h4>
+        <h4 className="mb-2 text-sm font-semibold">分配明细（新增不覆盖原金额）</h4>
         {row.allocations.length === 0 ? (
           <p className="text-sm text-muted-foreground">尚无分配行</p>
         ) : (
@@ -1728,4 +1903,101 @@ function Fact({
       </div>
     </div>
   )
+}
+
+function csvEscape(value: string | number | null | undefined): string {
+  const s = value == null ? "" : String(value)
+  return `"${s.replaceAll('"', '""')}"`
+}
+
+function buildAccountsCsv(data: CustomerAccountsListView): string {
+  let header: string[] = []
+  let rows: (string | number | null | undefined)[][] = []
+  if (data.view === "receivable") {
+    header = [
+      "销售单",
+      "往来主体",
+      "经营客户",
+      "到期日",
+      "应收总额",
+      "净已收",
+      "开放应收",
+      "净已开票",
+      "可开票",
+      "状态",
+    ]
+    rows = data.receivables.map((r) => [
+      r.salesOrderNo,
+      r.counterpartyPartyName,
+      r.customerName,
+      r.dueDate,
+      r.grossTotal,
+      r.settledTotal,
+      r.openTotal,
+      r.invoicedTotal,
+      r.openInvoiceableTotal,
+      r.statusLabel,
+    ])
+  } else if (data.view === "receipt") {
+    header = ["回款单号", "往来主体", "到账时间", "到账金额", "净已分配", "未分配", "状态"]
+    rows = data.receipts.map((r) => [
+      r.receiptNo,
+      r.counterpartyPartyName,
+      r.receivedAt,
+      r.amount,
+      r.allocatedTotal,
+      r.unallocatedAmount,
+      r.statusLabel,
+    ])
+  } else if (data.view === "sales_invoice") {
+    header = ["发票号码", "代码", "种类", "开票日期", "含税", "不含税", "税额", "净已分配", "未分配", "状态"]
+    rows = data.invoices.map((r) => [
+      r.invoiceNo,
+      r.invoiceCode ?? "",
+      r.invoiceKindLabel,
+      r.invoiceDate,
+      r.grossAmount,
+      r.netAmount,
+      r.taxAmount,
+      r.allocatedTotal,
+      r.unallocatedAmount,
+      r.statusLabel,
+    ])
+  } else {
+    header = ["轨道", "单号", "供应商", "记录金额", "未分配余额"]
+    rows = [
+      ...data.unallocated.receipts.map((r) => [
+        "回款",
+        r.receiptNo,
+        r.counterpartyPartyName,
+        r.amount,
+        r.unallocatedAmount,
+      ]),
+      ...data.unallocated.invoices.map((r) => [
+        "销项发票",
+        r.invoiceNo,
+        r.counterpartyPartyName,
+        r.grossAmount,
+        r.unallocatedAmount,
+      ]),
+    ]
+  }
+  return [
+    header.map(csvEscape).join(","),
+    ...rows.map((r) => r.map(csvEscape).join(",")),
+  ].join("\r\n")
+}
+
+function downloadCsv(fileName: string, content: string): void {
+  const blob = new Blob(["\uFEFF" + content], {
+    type: "text/csv;charset=utf-8",
+  })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement("a")
+  link.href = url
+  link.download = fileName
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  URL.revokeObjectURL(url)
 }

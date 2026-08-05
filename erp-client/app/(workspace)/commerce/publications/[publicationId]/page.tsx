@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { PublicationCenterPage } from "@/features/product-publications/publication-center-page"
 
 export const metadata: Metadata = {
-  title: "发布对象",
+  title: "商品发布",
 }
 
 function CenterFallback() {

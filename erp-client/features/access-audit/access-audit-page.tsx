@@ -54,6 +54,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
+import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -141,7 +142,7 @@ function PolicyBanner({
     >
       <ShieldAlertIcon aria-hidden="true" />
       <AlertTitle className="flex flex-wrap items-center gap-2">
-        治理策略门闩
+        治理策略
         <Badge variant="outline">本期不支持任务流</Badge>
       </AlertTitle>
       <AlertDescription className="grid gap-x-4 gap-y-1 text-xs lg:grid-cols-2 [&_p:not(:last-child)]:mb-0">
@@ -149,14 +150,10 @@ function PolicyBanner({
           <p>
             <strong className="text-foreground">用户角色时间：</strong>
             {time.state === "MISSING" ? (
-              <>
-                <span className="font-mono">{time.blockerCode}</span> ·
-                按保守策略：仅允许立即紧急撤权
-              </>
+              <>用户角色时间策略未配置 · 按保守策略：仅允许立即紧急撤权</>
             ) : (
               <>
-                <span className="font-mono">{time.policyVersion}</span> · 预约
-                {time.schedulingAllowed ? "允许" : "禁用"} · 到期
+                预约 {time.schedulingAllowed ? "允许" : "禁用"} · 到期
                 {time.expirationAllowed ? "允许" : "禁用"}
               </>
             )}
@@ -166,15 +163,9 @@ function PolicyBanner({
           <p>
             <strong className="text-foreground">字段粒度：</strong>
             {field.state === "MISSING" ? (
-              <>
-                <span className="font-mono">{field.blockerCode}</span> ·
-                只读，不自由输入字段名
-              </>
+              <>字段粒度策略未配置 · 只读，不自由输入字段名</>
             ) : (
-              <>
-                <span className="font-mono">{field.policyVersion}</span> ·
-                {field.editableTargets.map((target) => target.label).join("、")}
-              </>
+              <>{field.editableTargets.map((target) => target.label).join("、")}</>
             )}
           </p>
         )}
@@ -183,22 +174,18 @@ function PolicyBanner({
             <strong className="text-foreground">审计 / 导出：</strong>
             {audit.state === "MISSING" ? (
               <>
-                <span className="font-mono">{audit.blockerCode}</span> ·
-                保守短窗口 {formatDateTime(audit.fallbackFrom, "full")} ~{" "}
+                审计策略未配置 · 保守短窗口{" "}
+                {formatDateTime(audit.fallbackFrom, "full")} ~{" "}
                 {formatDateTime(audit.fallbackTo, "full")}，导出禁用
               </>
             ) : (
-              <>
-                <span className="font-mono">{audit.policyVersion}</span> ·
-                最大在线 {Math.round(audit.maxOnlineWindowSeconds / 3600)} 小时
-              </>
+              <>最长可查窗口 {Math.round(audit.maxOnlineWindowSeconds / 3600)} 小时</>
             )}
           </p>
         )}
         <p className="lg:col-span-2">
           <TriangleAlertIcon className="mr-1 inline size-3" aria-hidden="true" />
-          {ACCESS_LAYER_HELP.map((item) => item.title).join(" · ")}；命中复核要求时以{" "}
-          <span className="font-mono">REVIEW_POLICY_UNCONFIGURED</span> 阻断。
+          {ACCESS_LAYER_HELP.map((item) => item.title).join(" · ")}；命中复核要求的动作，在复核策略确定前将被阻断。
         </p>
       </AlertDescription>
     </Alert>
@@ -234,7 +221,7 @@ function EmptyByReason({
         <BusinessEmptyState
           kind="no-data"
           title="范围内无记录"
-          description="管理范围有效，但当前视图下尚未配置角色/范围或没有审计事件。可创建配置（有权时）或调整视图。"
+          description="管理范围有效，但当前视图下没有可展示的记录。可调整时间范围、清除筛选，或（有权时）创建配置。"
         />
       )
     case "FIELD_MASKED":
@@ -380,6 +367,14 @@ export function AccessAuditPage() {
     patchSearchParams({ router, pathname, searchParams, view }, patch, options)
   }
 
+  /** 筛选变更统一回到第一页：避免第二页起筛选变窄后「共 N 条」与空态并存。 */
+  const patchFilterUrl = (
+    patch: Record<string, string | null | undefined>
+  ) => {
+    patchUrl(patch)
+    setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
+  }
+
   React.useEffect(() => {
     const handle = globalThis.setTimeout(() => {
       if (searchInput === qParam) return
@@ -390,6 +385,31 @@ export function AccessAuditPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput])
 
+  // 高级筛选输入防抖：不逐键发请求
+  const [debouncedFilters, setDebouncedFilters] = React.useState<{
+    actorId?: string
+    traceId?: string
+    objectType?: string
+    objectId?: string
+  }>({})
+  const lastPatchedFilters = React.useRef("")
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      const next = debouncedFilters
+      const key = JSON.stringify(next)
+      if (key === lastPatchedFilters.current) return
+      lastPatchedFilters.current = key
+      patchFilterUrl({
+        actorId: next.actorId?.trim() || null,
+        traceId: next.traceId?.trim() || null,
+        objectType: next.objectType?.trim() || null,
+        objectId: next.objectId?.trim() || null,
+      })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedFilters])
+
   const listQuery: AccessListQuery = React.useMemo(
     () => ({
       view,
@@ -397,8 +417,10 @@ export function AccessAuditPage() {
       status,
       org,
       risk,
-      subjectType: subjectTypeParam,
-      subjectId: subjectIdParam,
+      // 详情参数只驱动详情请求：subjectId/subjectType 仅数据范围视图参与列表筛选，
+      // eventId 不进列表查询（避免打开详情背后列表闪变）。
+      subjectType: view === "scopes" ? subjectTypeParam : undefined,
+      subjectId: view === "scopes" ? subjectIdParam : undefined,
       from: fromParam,
       to: toParam,
       actorId,
@@ -407,7 +429,7 @@ export function AccessAuditPage() {
       objectId,
       result: resultFilter,
       traceId,
-      eventId: eventIdParam,
+      eventId: undefined,
     }),
     [
       view,
@@ -425,7 +447,6 @@ export function AccessAuditPage() {
       objectId,
       resultFilter,
       traceId,
-      eventIdParam,
     ]
   )
 
@@ -521,7 +542,10 @@ export function AccessAuditPage() {
         description: outcome.message,
         reference: outcome.reference,
         facts: [
-          { label: "配置版本", value: outcome.permissionVersion },
+          {
+            label: "配置版本",
+            value: `v${outcome.permissionVersion.split("-").at(-1)}`,
+          },
           {
             label: "影响主体数",
             value: String(outcome.affectedSubjectCount),
@@ -703,8 +727,8 @@ export function AccessAuditPage() {
         id: "version",
         header: "版本",
         cell: ({ row }) => (
-          <span className="font-mono text-xs">
-            {row.original.permissionVersion}
+          <span className="num text-xs">
+            v{row.original.permissionVersion.split("-").at(-1)}
           </span>
         ),
       },
@@ -1028,7 +1052,7 @@ export function AccessAuditPage() {
         header: "可编辑",
         cell: ({ row }) =>
           row.original.editable ? (
-            <Badge variant="success">可提交 policyTargetId</Badge>
+            <Badge variant="success">可调整</Badge>
           ) : (
             <Badge variant="default">只读</Badge>
           ),
@@ -1105,14 +1129,7 @@ export function AccessAuditPage() {
       {
         id: "object",
         header: "对象",
-        cell: ({ row }) => (
-          <div className="flex items-center gap-1.5">
-            <span>{row.original.objectLabel}</span>
-            <span className="font-mono text-xs text-muted-foreground">
-              {row.original.objectType}/{row.original.objectId}
-            </span>
-          </div>
-        ),
+        cell: ({ row }) => <span>{row.original.objectLabel}</span>,
       },
       {
         id: "result",
@@ -1129,10 +1146,8 @@ export function AccessAuditPage() {
         header: "变更字段",
         cell: ({ row }) => (
           <span className="text-sm">
-            {row.original.changedFieldNames.length
-              ? row.original.changedFieldNames
-                  .map((n) => `${n} · 已变更`)
-                  .join("；")
+            {row.original.changedFieldDisplay !== "—"
+              ? row.original.changedFieldDisplay
               : "—"}
           </span>
         ),
@@ -1243,8 +1258,9 @@ export function AccessAuditPage() {
                   }
                   setLastResult({
                     status: "blocked",
-                    title: "导出暂不可用",
-                    description: "当前账号尚未配置导出权限，无法生成导出文件。",
+                    title: "导出功能待接入",
+                    description:
+                      "演示环境暂未接入真实导出；正式环境将按权限策略生成导出文件。",
                   })
                 },
               },
@@ -1350,7 +1366,7 @@ export function AccessAuditPage() {
                 <OptionCombobox
                   value={status ?? "all"}
                   onValueChange={(v) =>
-                    patchUrl({
+                    patchFilterUrl({
                       status: (v ?? "all") === "all" ? null : (v ?? "all"),
                     })
                   }
@@ -1368,7 +1384,7 @@ export function AccessAuditPage() {
                 <OptionCombobox
                   value={risk ?? "all"}
                   onValueChange={(v) =>
-                    patchUrl({
+                    patchFilterUrl({
                       risk: (v ?? "all") === "all" ? null : (v ?? "all"),
                     })
                   }
@@ -1390,20 +1406,21 @@ export function AccessAuditPage() {
               <>
                 <InputGroup className="w-auto max-w-[10rem]">
                   <InputGroupInput
-                    value={actorId ?? ""}
+                    value={debouncedFilters.actorId ?? actorId ?? ""}
                     onChange={(e) =>
-                      patchUrl({
-                        actorId: e.target.value.trim() || null,
-                      })
+                      setDebouncedFilters((prev) => ({
+                        ...prev,
+                        actorId: e.target.value,
+                      }))
                     }
-                    placeholder="操作者 ID"
+                    placeholder="操作者姓名"
                     aria-label="操作者"
                   />
                 </InputGroup>
                 <OptionCombobox
                   value={action ?? "all"}
                   onValueChange={(v) =>
-                    patchUrl({
+                    patchFilterUrl({
                       action: (v ?? "all") === "all" ? null : (v ?? "all"),
                     })
                   }
@@ -1426,6 +1443,14 @@ export function AccessAuditPage() {
                       label: "修改数据范围",
                     },
                     { value: "QUERY_AUDIT", label: "查询审计" },
+                    { value: "OPEN_SUPPLIER", label: "打开供应商" },
+                    { value: "EXPORT_RECEIVABLE", label: "导出应收明细" },
+                    { value: "CREATE_ADJUSTMENT", label: "创建库存调整" },
+                    {
+                      value: "VIEW_CUSTOMER_SENSITIVE",
+                      label: "短时揭示敏感字段",
+                    },
+                    { value: "PERMISSION_VERSION_BUMP", label: "权限版本推进" },
                   ]}
                   className="w-[10rem]"
                   size="sm"
@@ -1436,7 +1461,7 @@ export function AccessAuditPage() {
                 <OptionCombobox
                   value={resultFilter ?? "all"}
                   onValueChange={(v) =>
-                    patchUrl({
+                    patchFilterUrl({
                       result: (v ?? "all") === "all" ? null : (v ?? "all"),
                     })
                   }
@@ -1453,6 +1478,35 @@ export function AccessAuditPage() {
                   aria-label="结果"
                   placeholder="全部结果"
                 />
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  起始
+                  <Input
+                    type="date"
+                    className="h-8 w-36"
+                    value={fromParam ?? ""}
+                    onChange={(e) =>
+                      patchFilterUrl({
+                        from: e.target.value || null,
+                      })
+                    }
+                    aria-label="审计起始日期"
+                  />
+                </label>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  截止
+                  <Input
+                    type="date"
+                    className="h-8 w-36"
+                    value={toParam ?? ""}
+                    min={fromParam}
+                    onChange={(e) =>
+                      patchFilterUrl({
+                        to: e.target.value || null,
+                      })
+                    }
+                    aria-label="审计截止日期"
+                  />
+                </label>
                 <details className="group relative">
                   <summary className="flex h-8 cursor-pointer list-none items-center rounded-lg border px-3 text-sm [&::-webkit-details-marker]:hidden">
                     高级筛选
@@ -1460,11 +1514,12 @@ export function AccessAuditPage() {
                   <div className="absolute right-0 z-30 mt-2 grid w-80 gap-2 rounded-xl border bg-popover p-3 shadow-lg">
                     <InputGroup>
                       <InputGroupInput
-                        value={traceId ?? ""}
+                        value={debouncedFilters.traceId ?? traceId ?? ""}
                         onChange={(e) =>
-                          patchUrl({
-                            traceId: e.target.value.trim() || null,
-                          })
+                          setDebouncedFilters((prev) => ({
+                            ...prev,
+                            traceId: e.target.value,
+                          }))
                         }
                         placeholder="请求追踪号"
                         aria-label="请求追踪号"
@@ -1472,11 +1527,12 @@ export function AccessAuditPage() {
                     </InputGroup>
                     <InputGroup>
                       <InputGroupInput
-                        value={objectType ?? ""}
+                        value={debouncedFilters.objectType ?? objectType ?? ""}
                         onChange={(e) =>
-                          patchUrl({
-                            objectType: e.target.value.trim() || null,
-                          })
+                          setDebouncedFilters((prev) => ({
+                            ...prev,
+                            objectType: e.target.value,
+                          }))
                         }
                         placeholder="对象类型"
                         aria-label="对象类型"
@@ -1484,14 +1540,15 @@ export function AccessAuditPage() {
                     </InputGroup>
                     <InputGroup>
                       <InputGroupInput
-                        value={objectId ?? ""}
+                        value={debouncedFilters.objectId ?? objectId ?? ""}
                         onChange={(e) =>
-                          patchUrl({
-                            objectId: e.target.value.trim() || null,
-                          })
+                          setDebouncedFilters((prev) => ({
+                            ...prev,
+                            objectId: e.target.value,
+                          }))
                         }
-                        placeholder="对象编号"
-                        aria-label="对象编号"
+                        placeholder="对象名称或编号"
+                        aria-label="对象名称或编号"
                       />
                     </InputGroup>
                   </div>
@@ -1500,78 +1557,82 @@ export function AccessAuditPage() {
             )}
           </>
         }
-        actions={
-          <details className="group relative text-xs text-muted-foreground">
-            <summary className="cursor-pointer">演示状态</summary>
-            <div className="absolute right-0 z-30 mt-2 flex w-72 flex-col gap-2 rounded-xl border bg-popover p-3 shadow-lg">
-              <OptionCombobox
-                value="none"
-                onValueChange={(v) => {
-                  const next = v ?? "none"
-                  void demoMutation.mutateAsync({
-                    emptyReason:
-                      next === "none" ? null : (next as AccessEmptyReason),
-                  })
-                }}
-                options={[
-                  { value: "none", label: "正常" },
-                  { value: "NO_MODULE_PERMISSION", label: "无模块权限" },
-                  { value: "NO_DATA_SCOPE", label: "无数据范围" },
-                  { value: "NO_RECORDS_IN_SCOPE", label: "范围内无记录" },
-                  { value: "FIELD_MASKED", label: "字段打码" },
-                ]}
-                className="w-full"
-                size="sm"
-                allowClear={false}
-                aria-label="演示空态"
-                placeholder="演示空态"
-              />
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  void demoMutation.mutateAsync({
-                    userRoleTimePolicyConfigured: true,
-                  })
-                }
-              >
-                启用时间策略
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  void demoMutation.mutateAsync({
-                    fieldGranularityConfigured: true,
-                  })
-                }
-              >
-                启用字段粒度
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  void demoMutation.mutateAsync({
-                    auditAccessPolicyConfigured: true,
-                  })
-                }
-              >
-                启用审计策略
-              </Button>
-            </div>
-          </details>
-        }
+        actions={<span />}
       />
+
+      <details className="group rounded-xl border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          演示模式（仅演示）
+        </summary>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <OptionCombobox
+            value="none"
+            onValueChange={(v) => {
+              const next = v ?? "none"
+              void demoMutation.mutateAsync({
+                emptyReason:
+                  next === "none" ? null : (next as AccessEmptyReason),
+              })
+            }}
+            options={[
+              { value: "none", label: "正常" },
+              { value: "NO_MODULE_PERMISSION", label: "无模块权限" },
+              { value: "NO_DATA_SCOPE", label: "无数据范围" },
+              { value: "NO_RECORDS_IN_SCOPE", label: "范围内无记录" },
+              { value: "FIELD_MASKED", label: "字段打码" },
+            ]}
+            className="w-40"
+            size="sm"
+            allowClear={false}
+            aria-label="演示空态"
+            placeholder="演示空态"
+          />
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              void demoMutation.mutateAsync({
+                userRoleTimePolicyConfigured: true,
+              })
+            }
+          >
+            启用时间策略
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              void demoMutation.mutateAsync({
+                fieldGranularityConfigured: true,
+              })
+            }
+          >
+            启用字段粒度
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              void demoMutation.mutateAsync({
+                auditAccessPolicyConfigured: true,
+              })
+            }
+          >
+            启用审计策略
+          </Button>
+        </div>
+      </details>
 
       {!isAudit ? (
         <p className="text-xs text-muted-foreground" aria-live="polite">
-          权限版本{" "}
-          <span className="font-mono">{data.permissionVersion}</span> ·
-          任务流：
+          配置版本{" "}
+          <span className="num">
+            v{data.permissionVersion.split("-").at(-1)}
+          </span>{" "}
+          · 任务流：
           {data.workItemSupport === "DISABLED_Q1"
             ? "策略确定前关闭"
             : "已开启"}
@@ -1600,8 +1661,8 @@ export function AccessAuditPage() {
           title={ACCESS_VIEW_LABEL[view]}
           description={
             isAudit && data.auditCoverageFrom && data.auditCoverageTo
-              ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(data.auditCoverageFrom, "full")} ~ ${formatDateTime(data.auditCoverageTo, "full")} · 无记录不等于动作未发生 · 更新于 ${data.watermark}`
-              : `共 ${rows.length} 条 · 首屏固定身份与操作列`
+              ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(data.auditCoverageFrom, "full")} ~ ${formatDateTime(data.auditCoverageTo, "full")} · 无记录不等于动作未发生 · 数据更新于 ${formatDateTime(data.calculatedAt, "full")}`
+              : `共 ${rows.length} 条`
           }
           table={
             view === "roles" ? (
@@ -1614,6 +1675,8 @@ export function AccessAuditPage() {
                 onPaginationChange={setPagination}
                 layout="flush"
                 density="compact"
+                loading={pageQuery.isFetching && !pageQuery.isPending}
+                showRefreshingBanner={pageQuery.isFetching}
                 defaultColumnPinning={{
                   left: ["identity"],
                   right: ["actions"],
@@ -1629,6 +1692,8 @@ export function AccessAuditPage() {
                 onPaginationChange={setPagination}
                 layout="flush"
                 density="compact"
+                loading={pageQuery.isFetching && !pageQuery.isPending}
+                showRefreshingBanner={pageQuery.isFetching}
                 defaultColumnPinning={{
                   left: ["identity"],
                   right: ["actions"],
@@ -1644,6 +1709,8 @@ export function AccessAuditPage() {
                 onPaginationChange={setPagination}
                 layout="flush"
                 density="compact"
+                loading={pageQuery.isFetching && !pageQuery.isPending}
+                showRefreshingBanner={pageQuery.isFetching}
                 defaultColumnPinning={{
                   left: ["subject"],
                   right: ["actions"],
@@ -1659,6 +1726,8 @@ export function AccessAuditPage() {
                 onPaginationChange={setPagination}
                 layout="flush"
                 density="compact"
+                loading={pageQuery.isFetching && !pageQuery.isPending}
+                showRefreshingBanner={pageQuery.isFetching}
                 defaultColumnPinning={{
                   left: ["target"],
                   right: ["actions"],
@@ -1674,6 +1743,8 @@ export function AccessAuditPage() {
                 onPaginationChange={setPagination}
                 layout="flush"
                 density="compact"
+                loading={pageQuery.isFetching && !pageQuery.isPending}
+                showRefreshingBanner={pageQuery.isFetching}
                 defaultColumnPinning={{
                   left: ["time"],
                   right: ["actions"],
@@ -1731,11 +1802,8 @@ export function AccessAuditPage() {
               <span className="font-medium">
                 {effectiveQuery.data.subject.label}
               </span>
-              <span className="font-mono text-xs text-muted-foreground">
-                {effectiveQuery.data.subject.id}
-              </span>
               <Badge variant="outline">
-                版本 {effectiveQuery.data.permissionVersion}
+                版本 v{effectiveQuery.data.permissionVersion.split("-").at(-1)}
               </Badge>
               <span className="text-xs text-muted-foreground">
                 计算于 {formatDateTime(effectiveQuery.data.calculatedAt, "full")}
@@ -1827,12 +1895,10 @@ export function AccessAuditPage() {
 
             {effectiveQuery.data.actionBlockers.length > 0 ? (
               <section className="space-y-2">
-                <h3 className="text-sm font-semibold">当前动作 blocker</h3>
+                <h3 className="text-sm font-semibold">当前被阻断的操作</h3>
                 {effectiveQuery.data.actionBlockers.map((b) => (
                   <Alert key={`${b.action}-${b.code}`} variant="warning">
-                    <AlertTitle>
-                      {b.action} · {b.code}
-                    </AlertTitle>
+                    <AlertTitle>{b.message}</AlertTitle>
                     <AlertDescription>{b.message}</AlertDescription>
                   </Alert>
                 ))}
@@ -1890,12 +1956,7 @@ export function AccessAuditPage() {
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">动作</dt>
-                <dd>
-                  {eventQuery.data.actionLabel}
-                  <span className="ml-1 font-mono text-xs text-muted-foreground">
-                    {eventQuery.data.actionType}
-                  </span>
-                </dd>
+                <dd>{eventQuery.data.actionLabel}</dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">结果</dt>
@@ -1908,12 +1969,7 @@ export function AccessAuditPage() {
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">对象</dt>
-                <dd>
-                  {eventQuery.data.objectLabel}
-                  <div className="font-mono text-xs text-muted-foreground">
-                    {eventQuery.data.objectType}/{eventQuery.data.objectId}
-                  </div>
-                </dd>
+                <dd>{eventQuery.data.objectLabel}</dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">请求追踪号</dt>
@@ -1929,10 +1985,8 @@ export function AccessAuditPage() {
             <div>
               <h3 className="text-sm font-semibold">变更字段</h3>
               <p className="mt-1 text-muted-foreground">
-                {eventQuery.data.changedFieldNames.length
-                  ? eventQuery.data.changedFieldNames
-                      .map((n) => `${n} · 已变更`)
-                      .join("；")
+                {eventQuery.data.changedFieldDisplay !== "—"
+                  ? eventQuery.data.changedFieldDisplay
                   : "无字段变更记录"}
               </p>
               <p className="mt-2 text-xs text-muted-foreground">
@@ -2005,9 +2059,14 @@ export function AccessAuditPage() {
               >
                 <ShieldAlertIcon aria-hidden="true" />
                 <AlertTitle>
-                  风险 {impact.riskLevel.toUpperCase()}
+                  风险{" "}
+                  {impact.riskLevel === "high"
+                    ? "高"
+                    : impact.riskLevel === "medium"
+                      ? "中"
+                      : "低"}
                   {impact.riskFlags.length
-                    ? ` · ${impact.riskFlags.join(", ")}`
+                    ? ` · ${impact.riskFlags.map(riskLabel).join("、")}`
                     : ""}
                 </AlertTitle>
                 <AlertDescription>{impact.riskSummary}</AlertDescription>
@@ -2038,10 +2097,13 @@ export function AccessAuditPage() {
               {!impact.reviewPolicyBlocker ? (
                 <form
                   className="space-y-3"
-                  onSubmit={(e) => {
+                  onSubmit={async (e) => {
                     e.preventDefault()
-                    void form.handleSubmit()
-                    void confirmChange()
+                    // 校验通过后才执行提交：说明超长等校验失败时不再绕过
+                    await form.handleSubmit()
+                    if (form.state.isFieldsValid) {
+                      await confirmChange()
+                    }
                   }}
                 >
                   <div className="space-y-1.5">
@@ -2089,11 +2151,7 @@ export function AccessAuditPage() {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    期望权限版本{" "}
-                    <span className="font-mono">
-                      {pendingCommand?.expectedPermissionVersion}
-                    </span>
-                    ；复核策略确定前本命令不携带任务标识。
+                    提交前系统会按最新配置核对版本；若配置已被他人更新，将提示你重新确认。
                   </p>
                   <DialogFooter>
                     <Button

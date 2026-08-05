@@ -26,10 +26,12 @@ import {
   ACTORS,
   DEMO_ROLE_LABEL,
   DIFF_TYPE_LABEL,
+  REASON_CODE_LABEL,
   RESOLUTION_LABEL,
   RESOLUTION_TO_STATUS,
   STATUS_LABEL,
   STATUS_TONE,
+  VIEW_LABEL,
   roleToActor,
   roleToUserId,
 } from "@/features/supplier-settlements/types"
@@ -510,7 +512,11 @@ export async function fetchSettlementList(
   }
   const totals = {
     pendingReconcile: metricsBase.filter(
-      (s) => s.status === "PENDING_RECONCILE" || s.status === "DRAFT"
+      (s) =>
+        s.status === "DRAFT" ||
+        s.status === "PENDING_RECONCILE" ||
+        s.status === "HAS_DIFFERENCE" ||
+        s.status === "PENDING_REVIEW"
     ).length,
     hasDifference: metrics.hasDifference,
     pendingReview: metrics.pendingReview,
@@ -603,11 +609,19 @@ export async function fetchSettlementList(
   }
 
   const filterParts = [
-    input.view !== "pending" ? `视图=${input.view}` : null,
+    input.view !== "pending" ? `视图=${VIEW_LABEL[input.view]}` : null,
     input.supplierId
       ? `供应商=${SUPPLIERS.find((s) => s.supplierId === input.supplierId)?.supplierName ?? input.supplierId}`
       : null,
-    input.status ? `状态=${input.status}` : null,
+    input.periodFrom || input.periodTo
+      ? `期间=${input.periodFrom ?? "…"} ~ ${input.periodTo ?? "…"}`
+      : null,
+    input.status
+      ? `状态=${input.status
+          .split(",")
+          .map((s) => STATUS_LABEL[s.trim() as SettlementStatus] ?? s.trim())
+          .join("/")}`
+      : null,
     input.differenceType
       ? `差异=${DIFF_TYPE_LABEL[input.differenceType]}`
       : null,
@@ -723,6 +737,7 @@ export async function createSettlementDraft(
   const statementId = `st_new_${Date.now().toString(36)}`
   const statementNo = `ST-${input.periodStart.slice(0, 7).replace("-", "")}-${supplier.supplierId.replace("sup_", "").toUpperCase()}`
   const snapshotHash = `ssh_new_${Date.now().toString(36)}`
+  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
   const seed: SeedStatement = {
     statementId,
     statementNo,
@@ -752,8 +767,8 @@ export async function createSettlementDraft(
         at: now,
         actor: ACTORS.prep.displayName,
         action: "CREATE_DRAFT",
-        summary: `按策略 ${policy.policyId}@${policy.policyVersion} 创建草稿 · ${snapshotHash}`,
-        auditNo: `AUD-W27-${Date.now().toString().slice(-4)}`,
+        summary: "按当前结算期间策略创建草稿并冻结来源数据",
+        auditNo,
       },
     ],
   }
@@ -774,9 +789,8 @@ export async function createSettlementDraft(
         label: "期间",
         value: `${input.periodStart} ~ ${input.periodEnd}`,
       },
-      { label: "策略版本", value: `${policy.policyId}@${policy.policyVersion}` },
-      { label: "sourceSnapshotHash", value: snapshotHash },
-      { label: "requestId", value: input.requestId },
+      { label: "期间策略", value: "当前自然月策略（已配置）" },
+      { label: "数据版本", value: "v1" },
     ],
   }
 }
@@ -833,6 +847,7 @@ export async function refreshSettlementTrial(
   }
 
   const now = new Date().toISOString()
+  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
   const o = ensureOverlay(input.statementId, seed)
   o.lockVersion = seed.lockVersion + 1
   o.sourceAsOf = now
@@ -853,8 +868,8 @@ export async function refreshSettlementTrial(
       at: now,
       actor: ACTORS.prep.displayName,
       action: "REFRESH_TRIAL",
-      summary: `刷新试算 · 来源时间 ${now} · 数据版本 ${o.sourceSnapshotHash}`,
-      auditNo: `AUD-W27-${Date.now().toString().slice(-4)}`,
+      summary: `刷新试算 · 来源时间 ${now} · 数据版本 v${o.lockVersion}`,
+      auditNo,
     },
     ...seed.auditEvents,
   ]
@@ -864,16 +879,16 @@ export async function refreshSettlementTrial(
     title: "明细试算已刷新",
     message:
       "已更新草稿试算版本，不修改原订单或供应商账单原值。",
-    reference: seed.statementNo,
+    reference: auditNo,
     statementId: seed.statementId,
     sourceSnapshotHash: o.sourceSnapshotHash,
     subjectHash: o.subjectHash,
     lockVersion: o.lockVersion,
     facts: [
       { label: "来源时间", value: now },
-      { label: "数据版本", value: o.sourceSnapshotHash! },
+      { label: "数据版本", value: `v${o.lockVersion}` },
       { label: "版本号", value: String(o.lockVersion) },
-      { label: "请求编号", value: input.requestId },
+      { label: "审计号", value: auditNo },
     ],
   }
   return result
@@ -953,7 +968,7 @@ export async function appendDifferenceEvidence(
       actor: ACTORS.procurement.displayName,
       action: "APPEND_EVIDENCE",
       summary: `追加采购证据 · ${DIFF_TYPE_LABEL[diff.type]}（结论未变）`,
-      auditNo: `AUD-W27-${Date.now().toString().slice(-4)}`,
+      auditNo: `AUD-${Date.now().toString().slice(-6)}`,
     },
     ...seed.auditEvents,
   ]
@@ -962,7 +977,7 @@ export async function appendDifferenceEvidence(
     status: "succeeded",
     title: "采购证据已追加",
     message: "仅追加证据与审计，差异结论、金额与成本基线未改变。",
-    reference: input.requestId,
+    reference: `证据记录 EV-${Date.now().toString().slice(-6)}`,
     statementId: seed.statementId,
     facts: [
       { label: "差异", value: DIFF_TYPE_LABEL[diff.type] },
@@ -1040,6 +1055,7 @@ export async function resolveDifference(
   }
 
   const now = new Date().toISOString()
+  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
   const costImpact =
     input.resolution === "SUPPLIER_ACCEPTED" ||
     input.resolution === "COMPENSATED"
@@ -1060,7 +1076,7 @@ export async function resolveDifference(
         resolution: input.resolution,
         resolutionLabel: RESOLUTION_LABEL[input.resolution],
         reasonCode: input.reasonCode,
-        reasonLabel: input.reasonCode,
+        reasonLabel: REASON_CODE_LABEL[input.reasonCode] ?? input.reasonCode,
         by: roleToActor(input.role),
         at: now,
         costImpactPreview: costImpact,
@@ -1088,7 +1104,7 @@ export async function resolveDifference(
       actor: ACTORS.prep.displayName,
       action: "RESOLVE_DIFFERENCE",
       summary: `${DIFF_TYPE_LABEL[diff.type]} → ${RESOLUTION_LABEL[input.resolution]} · 成本预览 ${costImpact}`,
-      auditNo: `AUD-W27-${Date.now().toString().slice(-4)}`,
+      auditNo,
     },
     ...seed.auditEvents,
   ]
@@ -1098,13 +1114,14 @@ export async function resolveDifference(
     title: "差异处理结论已登记",
     message:
       "已追加财务处理记录并刷新待确认成本差额；未改写账单原值或历史订单成本。",
-    reference: input.operationId,
+    reference: auditNo,
     statementId: seed.statementId,
     costDeltaGross: costImpact,
     subjectHash: o.subjectHash,
     lockVersion: o.lockVersion,
     facts: [
       { label: "结论", value: RESOLUTION_LABEL[input.resolution] },
+      { label: "原因", value: REASON_CODE_LABEL[input.reasonCode] ?? input.reasonCode },
       { label: "成本影响预览（含税）", value: costImpact },
       { label: "差异版本", value: String(diff.version + 1) },
     ],
@@ -1161,6 +1178,7 @@ export async function submitSettlementReview(
   }
 
   const now = new Date().toISOString()
+  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
   const o = ensureOverlay(input.statementId, seed)
   o.lockVersion = seed.lockVersion + 1
   o.status = "PENDING_REVIEW"
@@ -1188,8 +1206,8 @@ export async function submitSettlementReview(
       at: now,
       actor: ACTORS.prep.displayName,
       action: "SUBMIT_REVIEW",
-      summary: "提交复核 · 冻结来源快照与账单版本",
-      auditNo: `AUD-W27-${Date.now().toString().slice(-4)}`,
+      summary: "提交复核 · 冻结来源数据与账单版本",
+      auditNo,
     },
     ...seed.auditEvents,
   ]
@@ -1197,17 +1215,76 @@ export async function submitSettlementReview(
   const result: FormalOutcome = {
     status: "succeeded",
     title: "已提交复核",
-    message: "已冻结提交版本并创建 SUPPLIER_SETTLEMENT_REVIEW 待办。",
-    reference: o.workItem.workItemId,
+    message: "已冻结提交数据并创建复核待办。",
+    reference: auditNo,
     statementId: seed.statementId,
     subjectHash: o.subjectHash,
     lockVersion: o.lockVersion,
     facts: [
-      { label: "workItemId", value: o.workItem.workItemId },
-      { label: "subjectHash", value: o.subjectHash! },
+      { label: "复核待办", value: "已创建" },
+      { label: "数据版本", value: `v${o.lockVersion}` },
     ],
   }
   return result
+}
+
+export async function claimSettlementReview(input: {
+  statementId: string
+  workItemId: string
+  expectedSubjectVersion: string
+  role: DemoRole
+  idempotencyKey: string
+}): Promise<FormalOutcome> {
+  await mockDelay(100)
+  if (input.role !== "finance_review") {
+    return {
+      status: "blocked",
+      code: "FORBIDDEN",
+      title: "无权领取任务",
+      message: "结算复核任务由财务复核领取",
+    }
+  }
+  const seed = findSeed(input.statementId)
+  if (!seed) {
+    return {
+      status: "failed",
+      code: "NOT_FOUND",
+      title: "结算单不存在",
+      message: "未找到结算单",
+    }
+  }
+  if (!seed.workItem || seed.workItem.workItemId !== input.workItemId) {
+    return {
+      status: "blocked",
+      code: "WORK_ITEM_MISMATCH",
+      title: "任务不匹配",
+      message: "该结算单没有可领取的复核任务",
+    }
+  }
+  if (seed.workItem.subjectVersion !== input.expectedSubjectVersion) {
+    return {
+      status: "failed",
+      code: "SUBJECT_VERSION_MISMATCH",
+      title: "数据已变更",
+      message: "任务数据已变化，请刷新后重试",
+    }
+  }
+  const o = ensureOverlay(input.statementId, seed)
+  o.workItem = {
+    ...seed.workItem,
+    claimedBy: roleToActor(input.role),
+  }
+  return {
+    status: "succeeded",
+    title: "复核任务已领取",
+    message: "已领取该结算单的复核任务，可确认或驳回。",
+    reference: seed.statementNo,
+    statementId: seed.statementId,
+    facts: [
+      { label: "结算单号", value: seed.statementNo },
+      { label: "领取人", value: ACTORS.review.displayName },
+    ],
+  }
 }
 
 export async function decideSettlementReview(
@@ -1326,7 +1403,7 @@ export async function decideSettlementReview(
               ? "金额仍不一致"
               : "其他"
         }`,
-        auditNo: `AUD-W27-${Date.now().toString().slice(-4)}`,
+        auditNo: `AUD-${Date.now().toString().slice(-6)}`,
       },
       ...seed.auditEvents,
     ]
@@ -1390,7 +1467,7 @@ export async function decideSettlementReview(
       actor: ACTORS.review.displayName,
       action: "CONFIRM",
       summary: `确认结算 · 应付 ${payableNo} · 成本差额 ${costDelta}`,
-      auditNo: `AUD-W27-${Date.now().toString().slice(-4)}`,
+      auditNo: `AUD-${Date.now().toString().slice(-6)}`,
     },
     ...seed.auditEvents,
   ]
@@ -1411,7 +1488,6 @@ export async function decideSettlementReview(
       { label: "应付含税金额", value: payableGross },
       { label: "成本差额（含税）", value: costDelta },
       { label: "确认时间", value: now },
-      { label: "operationId", value: input.operationId },
     ],
   }
   return result

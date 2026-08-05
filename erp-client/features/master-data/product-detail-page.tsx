@@ -29,6 +29,7 @@ import {
   BrandCombobox,
   BusinessFailureState,
   CategoryCombobox,
+  DiscardConfirmDialog,
   DocumentSection,
   FormalActionResult,
   OptionCombobox,
@@ -48,6 +49,7 @@ import {
 } from "@/components/ui/card"
 import { FileUpload } from "@/components/ui/file-upload"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress, ProgressLabel } from "@/components/ui/progress"
@@ -68,6 +70,7 @@ import {
 } from "@/features/master-data/category-tree-model"
 import {
   BASE_UNIT_DICTIONARY,
+  defaultImmediateEffectiveFrom,
 } from "@/features/master-data/resource-fields"
 import {
   emptyProductFields,
@@ -94,6 +97,7 @@ import {
   PRODUCT_KIND_VALUES,
 } from "@/features/master-data/types"
 import { cn } from "@/lib/utils"
+import { formatDateTime } from "@/lib/datetime"
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -149,7 +153,9 @@ function MoneyInput({
       <Input
         className={cn("h-8", showPrefix && "pl-6")}
         value={value}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) =>
+          onChange(event.target.value.replaceAll("¥", ""))
+        }
         aria-label={ariaLabel}
       />
     </div>
@@ -442,7 +448,7 @@ function hydrateFromCenter(
 function createProductDefaults(isCreate: boolean): ProductEditorFormValues {
   return {
     name: "",
-    effectiveFrom: "2026-08-01",
+    effectiveFrom: defaultImmediateEffectiveFrom(),
     effectiveTo: "",
     changeReason: isCreate ? "新建商品" : "",
     fields: emptyProductFields(),
@@ -502,10 +508,14 @@ export function ProductDetailPage({
     newIdempotencyKey(isCreate ? "create-product" : "revise-product"),
   )
   const [disableOpen, setDisableOpen] = React.useState(false)
+  const [discardOpen, setDiscardOpen] = React.useState(false)
+  const [pendingNav, setPendingNav] = React.useState<string | null>(null)
   const [supplierDialogSku, setSupplierDialogSku] =
     React.useState<FixedSku>()
   const [activeSection, setActiveSection] =
     React.useState<ProductEditorSectionId>("basic")
+  const errorRef = React.useRef<HTMLDivElement | null>(null)
+  const checkedSnapshotRef = React.useRef<string | null>(null)
   const stickyHeaderRef = React.useRef<HTMLElement>(null)
   const [stickyHeaderHeight, setStickyHeaderHeight] = React.useState(64)
   const hydratedKeyRef = React.useRef<string | null>(null)
@@ -592,6 +602,59 @@ export function ProductDetailPage({
     return () => observer.disconnect()
   }, [isCreate, data?.stableId, data?.lockVersion])
 
+  // 未保存离开保护：刷新 / 关闭标签页 / 返回列表
+  React.useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (form.state.isDirty) {
+        event.preventDefault()
+      }
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时注册一次
+  }, [])
+
+  // 校验错误出现时滚动到错误条（P2-15）
+  React.useEffect(() => {
+    if (formError) {
+      errorRef.current?.scrollIntoView({ block: "center", behavior: "smooth" })
+    }
+  }, [formError])
+
+  // 分区 Tab 随滚动高亮（P2-19 scroll spy）
+  React.useEffect(() => {
+    if (isCreate) return
+    const sections = PRODUCT_EDITOR_SECTIONS.map((s) =>
+      document.getElementById(`product-section-${s.id}`)
+    ).filter((el): el is HTMLElement => el !== null)
+    if (sections.length === 0) return
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting) {
+            const id = entry.target.id.replace("product-section-", "")
+            setActiveSection(id as ProductEditorSectionId)
+          }
+        }
+      },
+      { rootMargin: "-20% 0px -65% 0px", threshold: 0 }
+    )
+    for (const section of sections) observer.observe(section)
+    return () => observer.disconnect()
+  }, [isCreate, data?.stableId])
+
+  const navigateAway = React.useCallback(
+    (href: string) => {
+      if (form.state.isDirty) {
+        setPendingNav(href)
+        setDiscardOpen(true)
+        return
+      }
+      router.push(href)
+    },
+    [form.state.isDirty, router]
+  )
+
   const listHref = "/master-data/products"
   const stickyOffsetPx = stickyHeaderHeight
   const sectionScrollMarginPx = stickyHeaderHeight + 56
@@ -617,6 +680,11 @@ export function ProductDetailPage({
       setFormError(validation)
       return
     }
+    // 记录检查通过时的内容快照；后续任何字段变更都会让「通过」态失效
+    checkedSnapshotRef.current = JSON.stringify({
+      ...values,
+      fields: nextFields,
+    })
     setCheckPassed(true)
   }
 
@@ -770,6 +838,13 @@ export function ProductDetailPage({
             values.batchSalePrice.trim() ||
             values.batchMarketPrice.trim()
           if (!hasAny) return
+          const hasFilled = values.fields.skus.some(
+            (sku) => sku.salePrice?.trim() || sku.marketPrice?.trim()
+          )
+          const message = hasFilled
+            ? `将把批量价格应用到全部 ${values.fields.skus.length} 个 SKU，并覆盖已填写的销售价/市场价。确定继续？`
+            : `将把批量价格应用到全部 ${values.fields.skus.length} 个 SKU。确定继续？`
+          if (!window.confirm(message)) return
           setFields((previous) => ({
             ...previous,
             skus: previous.skus.map((sku) => ({
@@ -868,7 +943,7 @@ export function ProductDetailPage({
                       type="button"
                       size="sm"
                       variant="outline"
-                      render={<Link href={listHref} />}
+                      onClick={() => navigateAway(listHref)}
                     >
                       返回列表
                     </Button>
@@ -900,10 +975,17 @@ export function ProductDetailPage({
               </header>
 
               <div className="flex flex-col gap-4 p-4 md:p-5">
-                {!isCreate && !canRevise && reviseBlocker ? (
-                  <p className="text-xs text-muted-foreground">
-                    {masterDataCopy.centerUpdateBlocked(reviseBlocker.message)}
-                  </p>
+                {!isCreate && !canRevise ? (
+                  <Alert variant="info">
+                    <AlertTitle>你只能查看</AlertTitle>
+                    <AlertDescription>
+                      {reviseBlocker
+                        ? masterDataCopy.centerUpdateBlocked(
+                            reviseBlocker.message
+                          )
+                        : "当前账号没有维护商品资料的权限；需要修改请联系有权限的同事。"}
+                    </AlertDescription>
+                  </Alert>
                 ) : null}
 
                 {!isCreate && data?.productConstraints ? (
@@ -929,7 +1011,7 @@ export function ProductDetailPage({
                   </div>
                 ) : null}
 
-                {result?.outcome === "succeeded" ? (
+                {result?.outcome === "succeeded" && !form.state.isDirty ? (
                   <FormalActionResult
                     status="succeeded"
                     title={
@@ -1064,10 +1146,6 @@ export function ProductDetailPage({
                     </CardHeader>
                     <CardContent className="space-y-3 text-sm">
                       <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">商品层级</span>
-                        <span>SPU</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
                         <span className="text-muted-foreground">商品类型</span>
                         <span>
                           {fields.productKind
@@ -1084,7 +1162,7 @@ export function ProductDetailPage({
                         <span>{fields.baseUnit || "待选择"}</span>
                       </div>
                       <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-                        规格身份由系统派生；图片、价格和条码仍沿用当前商品数据结构。
+                        规格由规格项自动组合；图片、价格和条码随商品版本一起保存。
                       </p>
                     </CardContent>
                   </Card>
@@ -1126,14 +1204,21 @@ export function ProductDetailPage({
                   </nav>
 
                   {formError ? (
-                    <Alert variant="destructive">
-                      <CircleAlertIcon aria-hidden />
-                      <AlertTitle>填写检查未通过</AlertTitle>
-                      <AlertDescription>{formError}</AlertDescription>
-                    </Alert>
+                    <div ref={errorRef}>
+                      <Alert variant="destructive">
+                        <CircleAlertIcon aria-hidden />
+                        <AlertTitle>填写检查未通过</AlertTitle>
+                        <AlertDescription>{formError}</AlertDescription>
+                      </Alert>
+                    </div>
                   ) : null}
 
-                  {checkPassed ? (
+                  {checkPassed &&
+                  checkedSnapshotRef.current ===
+                    JSON.stringify({
+                      ...values,
+                      fields,
+                    }) ? (
                     <Alert variant="success">
                       <CheckCircle2Icon aria-hidden />
                       <AlertTitle>填写检查通过</AlertTitle>
@@ -1307,7 +1392,7 @@ export function ProductDetailPage({
                     <section className="space-y-3">
                       <MediaListEditor
                         label={masterDataCopy.fDetailImages}
-                        hint="支持批量上传与顺序调整，保存时仍写入原详情图数组"
+                        hint="支持批量上传与顺序调整，保存后详情图随商品版本一起保留"
                         value={fields.detailImages}
                         mode="detail"
                         onChange={(next) =>
@@ -1407,11 +1492,18 @@ export function ProductDetailPage({
                                 variant="ghost"
                                 size="icon-xs"
                                 aria-label={`删除规格项 ${index + 1}`}
-                                onClick={() =>
+                                onClick={() => {
+                                  if (
+                                    !window.confirm(
+                                      "删除规格项会移除对应组合生成的 SKU 行（含价格、主图、条码）。确定删除？"
+                                    )
+                                  ) {
+                                    return
+                                  }
                                   syncSpecDrafts(
                                     specDrafts.filter((_, i) => i !== index),
                                   )
-                                }
+                                }}
                               >
                                 <XIcon />
                               </Button>
@@ -1450,6 +1542,13 @@ export function ProductDetailPage({
                                     size="icon-xs"
                                     aria-label={`删除规格值 ${specValue || valueIndex + 1}`}
                                     onClick={() => {
+                                      if (
+                                        !window.confirm(
+                                          "删除规格取值会移除对应组合生成的 SKU 行（含价格、主图、条码）。确定删除？"
+                                        )
+                                      ) {
+                                        return
+                                      }
                                       const next = [...specDrafts]
                                       next[index] = {
                                         ...draft,
@@ -1515,7 +1614,7 @@ export function ProductDetailPage({
                         </p>
                       </div>
                       <Badge variant="success">
-                        {fields.skus.length} / {fields.skus.length} 行已生成
+                        共 {fields.skus.length} 个 SKU
                       </Badge>
                     </div>
                     <div className="grid gap-2 rounded-xl border border-border bg-surface-sunken p-3 sm:grid-cols-2 lg:grid-cols-[repeat(2,minmax(0,1fr))_auto_auto]">
@@ -1582,7 +1681,7 @@ export function ProductDetailPage({
                       </p>
                     ) : (
                       <div className="w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-border">
-                        <table className="w-full min-w-[88rem] border-collapse text-sm">
+                        <table className="w-full min-w-[64rem] border-collapse text-sm">
                           <thead className="bg-surface-sunken">
                             <tr className="border-b border-border text-left text-xs text-muted-foreground">
                               {activeSpecs.length > 0 ? (
@@ -1629,13 +1728,13 @@ export function ProductDetailPage({
                                   —
                                 </th>
                               )}
-                              <th className="min-w-36 border-l border-border px-3 py-2 font-medium">
+                              <th className="min-w-32 border-l border-border px-3 py-2 font-medium">
                                 {masterDataCopy.fProductCode}
                               </th>
                               <th className="min-w-32 px-3 py-2 font-medium">
                                 {masterDataCopy.fBarcode}
                               </th>
-                              <th className="min-w-44 px-3 py-2 font-medium">
+                              <th className="min-w-36 px-3 py-2 font-medium">
                                 {masterDataCopy.fMainImage}
                               </th>
                               <th className="min-w-28 border-l border-border px-3 py-2 font-medium">
@@ -1760,7 +1859,11 @@ export function ProductDetailPage({
                                             />
                                           }
                                         >
-                                          {supplierItems.length} 家供应商
+                                          {supplierCatalogQuery.isPending
+                                            ? "…"
+                                            : supplierCatalogQuery.isError
+                                              ? "供给暂不可查"
+                                              : `${supplierItems.length} 家供应商`}
                                         </HoverCardTrigger>
                                         <HoverCardContent
                                           align="start"
@@ -1836,7 +1939,11 @@ export function ProductDetailPage({
                                       </HoverCard>
                                     ) : (
                                       <Badge variant="outline">
-                                        {supplierItems.length} 家供应商
+                                        {supplierCatalogQuery.isPending
+                                          ? "…"
+                                          : supplierCatalogQuery.isError
+                                            ? "供给暂不可查"
+                                            : `${supplierItems.length} 家供应商`}
                                       </Badge>
                                     )}
                                     {!sku.skuId || isCreate ? (
@@ -1867,13 +1974,21 @@ export function ProductDetailPage({
                                       checked={
                                         sku.lifecycleStatus === "ENABLED"
                                       }
-                                      onCheckedChange={(checked) =>
+                                      onCheckedChange={(checked) => {
+                                        if (
+                                          !checked &&
+                                          !window.confirm(
+                                            "停用该 SKU 后，新的业务单据将选不到它；历史单据不受影响。确定停用？"
+                                          )
+                                        ) {
+                                          return
+                                        }
                                         updateSku(index, {
                                           lifecycleStatus: checked
                                             ? "ENABLED"
                                             : "DISABLED",
                                         })
-                                      }
+                                      }}
                                       aria-label={`${sku.specLabel} SKU 状态`}
                                     />
                                     <span className="text-xs text-muted-foreground">
@@ -1905,20 +2020,20 @@ export function ProductDetailPage({
                         <Label htmlFor="ef-from">
                           {masterDataCopy.fieldEffectiveFrom}
                         </Label>
-                        <Input
-                          id="ef-from"
-                          value={effectiveFrom}
-                          onChange={(e) => setEffectiveFrom(e.target.value)}
+                        <DatePicker
+                          value={effectiveFrom || undefined}
+                          onValueChange={(next) => setEffectiveFrom(next ?? "")}
+                          className="w-full"
                         />
                       </div>
                       <div className="space-y-1.5">
                         <Label htmlFor="ef-to">
                           {masterDataCopy.fieldEffectiveTo}
                         </Label>
-                        <Input
-                          id="ef-to"
-                          value={effectiveTo}
-                          onChange={(e) => setEffectiveTo(e.target.value)}
+                        <DatePicker
+                          value={effectiveTo || undefined}
+                          onValueChange={(next) => setEffectiveTo(next ?? "")}
+                          className="w-full"
                         />
                       </div>
                       <div className="space-y-1.5 sm:col-span-2">
@@ -2027,7 +2142,7 @@ export function ProductDetailPage({
                                         </div>
                                       ))}
                                       <p className="text-muted-foreground">
-                                        供应商、供给方式、成本、税费和起订量由 W21 的供给版本独立留痕，不写入 SKU 版本。
+                                        供应商、供给方式、成本、税费和起订量按供应商商品资料独立维护，不写入商品版本。
                                       </p>
                                     </div>
                                   </details>
@@ -2090,7 +2205,7 @@ export function ProductDetailPage({
                               >
                                 <div className="flex flex-wrap gap-2">
                                   <span className="num text-xs text-muted-foreground">
-                                    {ev.at.slice(0, 19).replace("T", " ")}
+                                    {formatDateTime(ev.at, "full", "passthrough")}
                                   </span>
                                   <span>{ev.actor}</span>
                                   <Badge variant="outline">{ev.action}</Badge>
@@ -2125,6 +2240,21 @@ export function ProductDetailPage({
                 if (!open) setSupplierDialogSku(undefined)
               }}
               fixedSku={supplierDialogSku}
+            />
+            <DiscardConfirmDialog
+              open={discardOpen}
+              onOpenChange={setDiscardOpen}
+              title="放弃未保存的更改？"
+              description="本次修改尚未保存，离开后将丢失。"
+              confirmLabel="放弃更改"
+              cancelLabel="继续编辑"
+              onConfirm={() => {
+                setDiscardOpen(false)
+                if (pendingNav) {
+                  setPendingNav(null)
+                  router.push(pendingNav)
+                }
+              }}
             />
           </div>
         )

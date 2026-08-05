@@ -42,6 +42,13 @@ import {
   transferWorkItemSession,
   WorkItemMockError,
 } from "@/mock/session-state"
+import {
+  ENV_LABEL,
+  ERROR_CLASS_LABEL,
+  EVIDENCE_KIND_LABEL,
+  MODE_LABEL,
+  VIEW_LABEL,
+} from "@/features/integration-errors/types"
 import { resultText } from "@/lib/ui-text"
 
 const WS = "W29"
@@ -300,12 +307,6 @@ function matchesQuery(
   if (q.mode === "errors" && item.identity.itemType !== "ERROR_TASK") {
     return false
   }
-  if (
-    q.mode === "reconciliation" &&
-    item.identity.itemType !== "RECONCILIATION_DIFFERENCE"
-  ) {
-    return false
-  }
   if (q.environment !== "all" && item.environment !== q.environment) {
     return false
   }
@@ -410,11 +411,12 @@ export async function fetchIntegrationQueue(
   })
 
   const filterParts = [
-    `视图=${query.view}`,
-    `模式=${query.mode}`,
-    `环境=${query.environment}`,
+    `视图=${VIEW_LABEL[query.view] ?? query.view}`,
+    `模式=${MODE_LABEL[query.mode] ?? query.mode}`,
+    `环境=${ENV_LABEL[query.environment] ?? query.environment}`,
   ]
-  if (query.errorClass) filterParts.push(`类别=${query.errorClass}`)
+  if (query.errorClass)
+    filterParts.push(`类别=${ERROR_CLASS_LABEL[query.errorClass] ?? query.errorClass}`)
   if (query.q) filterParts.push(`搜索=${query.q}`)
 
   return {
@@ -688,7 +690,9 @@ export async function applyIntegrationTaskAction(
         at: new Date().toISOString(),
         actor: "当前用户",
         action: input.kind === "LINK_COMPENSATION" ? "关联补偿" : "补充证据",
-        detail: refs.map((r) => `${r.kind}:${r.recordId}`).join(", "),
+        detail: refs
+          .map((r) => `${EVIDENCE_KIND_LABEL[r.kind] ?? r.kind}：${r.label}`)
+          .join("、"),
       })
       applyWorkItemActionSession({
         workItemId: input.workItemId,
@@ -715,8 +719,8 @@ export async function applyIntegrationTaskAction(
         terminal: false,
         nextAllowedActions: next?.allowedActions,
         facts: refs.map((r) => ({
-          label: r.kind,
-          value: r.recordId,
+          label: EVIDENCE_KIND_LABEL[r.kind] ?? r.kind,
+          value: r.label,
         })),
       }
     }
@@ -764,7 +768,7 @@ export async function applyIntegrationTaskAction(
       // SKIP: stay in queue, may advance focus (caller decides)
       return {
         status: "succeeded",
-        title: input.kind === "DEFER" ? "已跳过" : "已跳过当前项",
+        title: input.kind === "DEFER" ? "已跳过 · 保留在队列" : "已跳过当前项",
         description:
           input.kind === "DEFER"
             ? "任务仍在待处理队列，未完成。本次处理已结束；可稍后继续。"
@@ -1012,8 +1016,13 @@ export async function applyDirectReconciliation(
       id: newOpRef("DNE"),
       at: new Date().toISOString(),
       actor: "当前用户",
-      action: input.decision.action,
-      detail: input.decision.comment ?? "非终结补证",
+      action:
+        input.decision.action === "ADD_EVIDENCE"
+          ? "补充证据"
+          : input.decision.action === "QUERY_ORIGINAL_RESULT"
+            ? "查询原结果"
+            : "关联补偿",
+      detail: input.decision.comment ?? "补充差异处理记录",
     })
     return {
       status: "succeeded",
@@ -1086,8 +1095,11 @@ export async function applyDirectReconciliation(
     id: newOpRef("DRT"),
     at: new Date().toISOString(),
     actor: "当前用户",
-    action: terminalDecision.conclusion,
-    detail: "按注册原因确认 · 任务未关闭",
+    action:
+      terminalDecision.conclusion === "CONFIRM_NO_ERROR"
+        ? "确认无误"
+        : "确认有效差异",
+    detail: "按注册原因确认 · 不涉及任务关闭",
   })
 
   return {
@@ -1111,7 +1123,7 @@ export async function applyDirectReconciliation(
             ? "确认无误"
             : "确认有效差异",
       },
-      { label: "任务已关闭", value: "否（直接对账）" },
+      { label: "本次处理", value: "已确认（不涉及任务关闭）" },
     ],
   }
 }

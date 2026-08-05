@@ -2,13 +2,14 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import {
-  ArrowLeftIcon,
   HistoryIcon,
   PrinterIcon,
 } from "lucide-react"
 
 import {
+  BusinessFailureState,
   BusinessStatusBadge,
   DocumentAttachmentList,
   DocumentHeader,
@@ -37,6 +38,11 @@ import {
 import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
 import { buildDemoContractPdfBlob } from "@/features/contracts/pdf"
 import { useContractCenterQuery } from "@/features/contracts/queries"
+import {
+  CONTRACT_AUDIT_ACTION_LABEL,
+  contractOwnerLabel,
+} from "@/features/contracts/types"
+import type { ContractCenterView } from "@/features/contracts/types"
 
 type SectionId =
   | "overview"
@@ -57,6 +63,31 @@ function resolveSection(section?: string): SectionId {
   return "overview"
 }
 
+function formatAsOf(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Asia/Shanghai",
+    }).format(new Date(iso))
+  } catch {
+    return iso
+  }
+}
+
+/** 30 日内将到期：与列表页同口径（仍生效 + 有效期止在 30 天内）。 */
+function isExpiringWithin30Days(contract: ContractCenterView): boolean {
+  if (contract.status !== "EFFECTIVE") return false
+  const validTo = new Date(contract.currentRevision.validTo + "T00:00:00")
+  if (Number.isNaN(validTo.getTime())) return false
+  const now = new Date()
+  const dayMs = 24 * 60 * 60 * 1000
+  const diff = Math.ceil((validTo.getTime() - now.getTime()) / dayMs)
+  return diff >= 0 && diff <= 30
+}
+
 export function ContractDetailPage({
   contractId,
   section,
@@ -64,6 +95,7 @@ export function ContractDetailPage({
   contractId: string
   section?: string
 }) {
+  const router = useRouter()
   const query = useContractCenterQuery(contractId)
 
   const activeSection = resolveSection(section)
@@ -75,6 +107,27 @@ export function ContractDetailPage({
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader title="合同" description="正在加载详情…" />
+        <div className="space-y-3" aria-busy="true" aria-label="加载中">
+          <div className="h-16 animate-pulse rounded-lg bg-muted" />
+          <div className="h-24 animate-pulse rounded-2xl bg-muted" />
+          <div className="h-40 animate-pulse rounded-2xl bg-muted" />
+        </div>
+      </div>
+    )
+  }
+
+  if (query.isError) {
+    return (
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <PageHeader title="合同" />
+        <BusinessFailureState
+          kind="system"
+          title="合同加载失败"
+          description="暂时拿不到这份合同的数据，请重试；合同记录不受影响。"
+          onRetry={() => {
+            void query.refetch()
+          }}
+        />
       </div>
     )
   }
@@ -84,7 +137,7 @@ export function ContractDetailPage({
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
           title="合同不存在"
-          description={`未找到编号为 ${contractId} 的合同。`}
+          description="未找到这份合同。可能编号有误，或当前角色无权查看。"
           actions={
             <Button render={<Link href="/sales/contracts" />}>返回列表</Button>
           }
@@ -99,6 +152,11 @@ export function ContractDetailPage({
   const soBlocker = contract.actionBlockers.find(
     (b) => b.action === "CREATE_SALES_ORDER"
   )
+  const expiring = isExpiringWithin30Days(contract)
+  const archived = contract.attachments.length > 0
+  const allAttachmentsSafe =
+    archived &&
+    contract.attachments.every((file) => file.securityState === "done")
 
   const navItems: {
     id: SectionId
@@ -149,17 +207,8 @@ export function ContractDetailPage({
               {
                 actionKey: "back",
                 label: "返回列表",
-                icon: ArrowLeftIcon,
                 variant: "outline",
                 render: <Link href="/sales/contracts" />,
-              },
-              {
-                actionKey: "print",
-                label: "打印预览",
-                icon: PrinterIcon,
-                variant: "outline",
-                disabled: !canPrint,
-                onClick: () => setPaperOpen(true),
               },
             ]}
           />
@@ -168,13 +217,30 @@ export function ContractDetailPage({
 
       <DocumentHeader
         density="compact"
-        title={contract.customer.displayName}
+        title={contract.contractNo}
         documentNumber={contract.contractNo}
-        version={rev.revisionNo}
+        version={`v${rev.revisionNo}`}
         primaryStatus={{
           label: contract.statusLabel,
           tone: contract.statusTone,
         }}
+        meta={
+          <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span>
+              客户{" "}
+              <span className="font-medium text-foreground">
+                {contract.customer.displayName}
+              </span>
+            </span>
+            <span aria-hidden="true">·</span>
+            <span>
+              负责人{" "}
+              <span className="font-medium text-foreground">
+                {contractOwnerLabel(contract.ownerLabel)}
+              </span>
+            </span>
+          </span>
+        }
         primaryAction={
           canCreateSo ? (
             <Button
@@ -184,19 +250,21 @@ export function ContractDetailPage({
                 <Link
                   href={`/sales/orders?mode=create&customerId=${encodeURIComponent(
                     contract.customer.id
-                  )}&contractId=${encodeURIComponent(
-                    contract.contractId
-                  )}&contractRevisionId=${encodeURIComponent(
-                    contract.currentRevision.revisionId
-                  )}`}
+                  )}&contractId=${encodeURIComponent(contract.contractId)}`}
                 />
               }
             >
               新建销售单
             </Button>
           ) : (
-            <Button type="button" size="sm" variant="outline" disabled>
-              {soBlocker?.message ?? "当前无主动作"}
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled
+              title={soBlocker?.message}
+            >
+              新建销售单
             </Button>
           )
         }
@@ -222,8 +290,9 @@ export function ContractDetailPage({
           </span>
         </span>
         <span>·</span>
-        <span>{contract.ownerLabel}</span>
-        <Badge variant="info">PDF 电子档归档</Badge>
+        <span>{contractOwnerLabel(contract.ownerLabel)}</span>
+        {expiring ? <Badge variant="warning">30 日内将到期</Badge> : null}
+        {allAttachmentsSafe ? <Badge variant="info">PDF 电子档已归档</Badge> : null}
       </div>
 
       {!canCreateSo && soBlocker ? (
@@ -231,7 +300,6 @@ export function ContractDetailPage({
           新建销售单不可用：{soBlocker.message}
         </p>
       ) : null}
-
 
       <nav
         aria-label="对象分区"
@@ -246,7 +314,10 @@ export function ContractDetailPage({
               size="sm"
               variant={active ? "secondary" : "ghost"}
               aria-current={active ? "page" : undefined}
-              render={<Link href={item.href} />}
+              onClick={(event) => {
+                event.preventDefault()
+                router.replace(item.href, { scroll: false })
+              }}
             >
               {item.id === "versions" ? (
                 <HistoryIcon data-icon="inline-start" aria-hidden="true" />
@@ -306,7 +377,7 @@ export function ContractDetailPage({
                   {
                     id: "valid",
                     label: "有效期",
-                    value: `${rev.validFrom} ~ ${rev.validTo}`,
+                    value: `${rev.validFrom} 至 ${rev.validTo}`,
                     numeric: true,
                   },
                   {
@@ -318,7 +389,7 @@ export function ContractDetailPage({
                   {
                     id: "owner",
                     label: "负责人",
-                    value: contract.ownerLabel,
+                    value: contractOwnerLabel(contract.ownerLabel),
                   },
                 ]}
               />
@@ -333,14 +404,14 @@ export function ContractDetailPage({
               <CardTitle>关联销售摘要</CardTitle>
               <CardDescription>
                 金额仅为各销售单摘要，不汇总为合同金额。更新于{" "}
-                <span className="num">{contract.relatedSalesOrdersAsOf}</span>
+                <span className="num">{formatAsOf(contract.relatedSalesOrdersAsOf)}</span>
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2">
               <p className="text-sm">
                 关联 {contract.relatedSalesOrders.length} 张
                 {contract.relatedSalesOrders.length > 0
-                  ? "（下列为关联明细）"
+                  ? "（见下方关联销售单分区）"
                   : "。"}
               </p>
               <Button
@@ -406,41 +477,47 @@ export function ContractDetailPage({
       ) : null}
 
       {activeSection === "attachments" ? (
-        <DocumentAttachmentList
-          title="合同 PDF 电子档"
-          attachments={contract.attachments.map((file) => ({
-            id: file.id,
-            name: file.name,
-            description: `${file.uploadedBy} · ${file.uploadedAt}${
-              file.revisionNo != null ? ` · v${file.revisionNo}` : ""
-            }`,
-            state:
-              file.securityState === "done"
-                ? ("done" as const)
-                : file.securityState === "quarantined"
-                  ? ("error" as const)
-                  : ("processing" as const),
-            errorMessage:
-              file.securityState === "quarantined"
-                ? "安全检查未通过，已隔离，不可下载或作为生效依据。"
+        <div className="space-y-3">
+          <DocumentAttachmentList
+            title="合同 PDF 电子档"
+            openLabel="下载"
+            attachments={contract.attachments.map((file) => ({
+              id: file.id,
+              name: file.name,
+              description: `${file.uploadedBy} · ${file.uploadedAt}${
+                file.revisionNo != null ? ` · v${file.revisionNo}` : ""
+              }`,
+              state:
+                file.securityState === "done"
+                  ? ("done" as const)
+                  : file.securityState === "quarantined"
+                    ? ("error" as const)
+                    : ("processing" as const),
+              errorMessage:
+                file.securityState === "quarantined"
+                  ? "安全检查未通过，已隔离，不可下载或作为生效依据。"
+                  : undefined,
+              onOpen: file.canDownload
+                ? () => {
+                    // 演示环境：下载为演示占位文件；生产环境应为鉴权短时签名 URL。
+                    const blob = buildDemoContractPdfBlob(contract.contractNo)
+                    const url = URL.createObjectURL(blob)
+                    const anchor = document.createElement("a")
+                    anchor.href = url
+                    anchor.download = file.name
+                    anchor.rel = "noopener"
+                    document.body.appendChild(anchor)
+                    anchor.click()
+                    anchor.remove()
+                    URL.revokeObjectURL(url)
+                  }
                 : undefined,
-            onOpen: file.canDownload
-              ? () => {
-                  // 演示：本地下载演示 PDF；生产环境应为鉴权短时签名 URL。
-                  const blob = buildDemoContractPdfBlob(contract.contractNo)
-                  const url = URL.createObjectURL(blob)
-                  const anchor = document.createElement("a")
-                  anchor.href = url
-                  anchor.download = file.name
-                  anchor.rel = "noopener"
-                  document.body.appendChild(anchor)
-                  anchor.click()
-                  anchor.remove()
-                  URL.revokeObjectURL(url)
-                }
-              : undefined,
-          }))}
-        />
+            }))}
+          />
+          <p className="text-xs text-muted-foreground">
+            演示环境：下载得到的是占位演示文件，不代表正式合同扫描件。
+          </p>
+        </div>
       ) : null}
 
       {activeSection === "sales-orders" ? (
@@ -450,7 +527,7 @@ export function ContractDetailPage({
             <CardDescription>
               追溯每张销售单使用的合同版本；金额仅作单据摘要。
               统计截至{" "}
-              <span className="num">{contract.relatedSalesOrdersAsOf}</span>
+              <span className="num">{formatAsOf(contract.relatedSalesOrdersAsOf)}</span>
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -465,7 +542,7 @@ export function ContractDetailPage({
                       <TableHead>业务性质</TableHead>
                       <TableHead>合同版本</TableHead>
                       <TableHead>主状态</TableHead>
-                      <TableHead>三轨进度</TableHead>
+                      <TableHead>履约 / 回款 / 开票</TableHead>
                       <TableHead data-align="end">含税金额</TableHead>
                       <TableHead data-align="end">操作</TableHead>
                     </TableRow>
@@ -561,7 +638,7 @@ export function ContractDetailPage({
                         </span>
                       </div>
                       <p className="mt-1 text-xs text-muted-foreground">
-                        {item.validFrom} ~ {item.validTo}
+                        {item.validFrom} 至 {item.validTo}
                         {item.changeReason
                           ? ` · ${item.changeReason}`
                           : null}
@@ -599,7 +676,8 @@ export function ContractDetailPage({
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-sm font-medium">
-                        {event.action}
+                        {CONTRACT_AUDIT_ACTION_LABEL[event.action] ??
+                          event.action}
                       </span>
                       <span className="num text-xs text-muted-foreground">
                         {event.at}

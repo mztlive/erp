@@ -1,11 +1,14 @@
 "use client"
 
 import * as React from "react"
+import Link from "next/link"
+import { useQueryClient } from "@tanstack/react-query"
 import { ImageIcon, XIcon } from "lucide-react"
 import { z } from "zod"
 
 import {
   CategoryCombobox,
+  DiscardConfirmDialog,
   FormalActionResult,
   OptionCombobox,
 } from "@/components/business"
@@ -17,6 +20,7 @@ import {
 } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
+import { DatePicker } from "@/components/ui/date-picker"
 import {
   Dialog,
   DialogClose,
@@ -53,6 +57,7 @@ import {
   toCategoryComboboxItems,
 } from "@/features/master-data/category-tree-model"
 import {
+  masterDataKeys,
   useCreateMasterDataMutation,
   useCreateRevisionMutation,
   useDisableMasterDataMutation,
@@ -79,7 +84,10 @@ type FieldApi = {
     allowClear?: boolean
     placeholder?: string
   }>
-  state: { value: string }
+  state: {
+    value: string
+    meta: { errors: readonly unknown[]; isTouched: boolean }
+  }
   handleChange: (value: string) => void
   handleBlur: () => void
 }
@@ -89,6 +97,35 @@ type ResourceFormApp = {
     name: string
     children: (field: FieldApi) => React.ReactNode
   }>
+}
+
+/** 生效开始 / 结束统一用 DatePicker：格式由控件保证，避免裸文本框静默接受错误格式。 */
+function DateField({
+  label,
+  field,
+  id,
+}: {
+  label: string
+  field: FieldApi
+  id: string
+}) {
+  const error = field.state.meta.errors[0]
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <DatePicker
+        value={field.state.value || undefined}
+        onValueChange={(next) => field.handleChange(next ?? "")}
+        className="w-full"
+        aria-invalid={Boolean(error)}
+      />
+      {error ? (
+        <p className="text-xs text-destructive" role="alert">
+          {String(error)}
+        </p>
+      ) : null}
+    </div>
+  )
 }
 
 function MediaSingleField({
@@ -483,7 +520,13 @@ function resultFacts(
 
 const disableSchema = z.object({
   changeReason: z.string().trim().min(2, "请填写停用原因"),
-  effectiveFrom: z.string().min(1, "请填写停用时间"),
+  effectiveFrom: z
+    .string()
+    .min(1, "请填写停用时间")
+    .refine(
+      (value) => /^\d{4}-\d{2}-\d{2}$/.test(value),
+      "停用时间格式不正确，请使用 YYYY-MM-DD"
+    ),
 })
 
 function dialogContentClass(resource: MasterDataResource) {
@@ -492,7 +535,10 @@ function dialogContentClass(resource: MasterDataResource) {
       "flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-5xl"
     )
   }
-  return "max-w-lg"
+  // 非 wide 对话框同样加最大高度 + 内部滚动，保证小屏与长表单下底部按钮可用。
+  return cn(
+    "flex max-h-[92vh] w-full flex-col gap-4 overflow-hidden sm:max-w-lg"
+  )
 }
 
 function DialogScrollBody({
@@ -502,7 +548,7 @@ function DialogScrollBody({
   children: React.ReactNode
   wide?: boolean
 }) {
-  if (!wide) return <>{children}</>
+  void wide
   return (
     <div className="min-h-0 flex-1 overflow-y-auto pr-1">{children}</div>
   )
@@ -528,15 +574,21 @@ export function MasterDataCreateDialog({
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null
   )
+  const [discardOpen, setDiscardOpen] = React.useState(false)
 
   const isWarehouse = resource === "warehouses"
   const wide = usesWideDialog(resource)
   const showEffectivePeriod = usesEffectivePeriod(resource)
 
+  // 演示控件不跨打开会话残留：每次打开回到「正常保存」。
+  React.useEffect(() => {
+    if (open) setSimulate("ok")
+  }, [open])
+
   const defaults: ResourceFormValues = {
     name: "",
     effectiveFrom: showEffectivePeriod
-      ? "2026-08-01"
+      ? defaultImmediateEffectiveFrom()
       : defaultImmediateEffectiveFrom(),
     effectiveTo: "",
     changeReason: "",
@@ -574,14 +626,25 @@ export function MasterDataCreateDialog({
     form.reset()
   }
 
+  const requestClose = (next: boolean) => {
+    if (next) {
+      onOpenChange(true)
+      return
+    }
+    if (result?.outcome === "succeeded") {
+      reset()
+      onOpenChange(false)
+      return
+    }
+    if (form.state.isDirty || result) {
+      setDiscardOpen(true)
+      return
+    }
+    onOpenChange(false)
+  }
+
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next && result?.outcome === "succeeded") reset()
-        onOpenChange(next)
-      }}
-    >
+    <Dialog open={open} onOpenChange={requestClose}>
       <DialogContent className={dialogContentClass(resource)}>
         <DialogHeader>
           <DialogTitle>
@@ -643,16 +706,20 @@ export function MasterDataCreateDialog({
                   <form.AppField
                     name="effectiveFrom"
                     children={(field) => (
-                      <field.TextField
+                      <DateField
+                        id="create-ef-from"
                         label={masterDataCopy.fieldEffectiveFrom}
+                        field={field}
                       />
                     )}
                   />
                   <form.AppField
                     name="effectiveTo"
                     children={(field) => (
-                      <field.TextField
+                      <DateField
+                        id="create-ef-to"
                         label={masterDataCopy.fieldEffectiveTo}
+                        field={field}
                       />
                     )}
                   />
@@ -699,7 +766,7 @@ export function MasterDataCreateDialog({
                 </DialogClose>
                 <Button
                   type="submit"
-                  disabled={mutation.isPending}
+                  disabled={mutation.isPending || isWarehouse}
                   title={isWarehouse ? WAREHOUSE_WRITE_MESSAGE : undefined}
                 >
                   {isWarehouse
@@ -723,6 +790,20 @@ export function MasterDataCreateDialog({
           )}
         </DialogScrollBody>
       </DialogContent>
+
+      <DiscardConfirmDialog
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+        title="放弃本次填写？"
+        description="关闭后本次填写的内容将丢失。"
+        confirmLabel="放弃填写"
+        cancelLabel="继续编辑"
+        onConfirm={() => {
+          setDiscardOpen(false)
+          reset()
+          onOpenChange(false)
+        }}
+      />
     </Dialog>
   )
 }
@@ -739,6 +820,7 @@ export function MasterDataReviseDialog({
   target: MasterDataListItem | MasterDataCenterView | null
 }) {
   const mutation = useCreateRevisionMutation()
+  const queryClient = useQueryClient()
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey("revise")
   )
@@ -748,6 +830,7 @@ export function MasterDataReviseDialog({
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null
   )
+  const [discardOpen, setDiscardOpen] = React.useState(false)
 
   const isWarehouse = resource === "warehouses"
   const wide = usesWideDialog(resource)
@@ -761,6 +844,13 @@ export function MasterDataReviseDialog({
         : ""
   const lockVersion = target?.lockVersion ?? 0
   const nameDefault = target?.name ?? ""
+  // 更新默认「当前生效日」，避免不改直接保存把修改排期到未来。
+  const effectiveFromDefault =
+    target && "currentRevision" in target
+      ? target.currentRevision.effectiveFrom
+      : target && "effectiveFrom" in target && target.effectiveFrom
+        ? target.effectiveFrom
+        : defaultImmediateEffectiveFrom()
 
   const categoryListQuery = useMasterDataListQuery({
     resource: "categories",
@@ -776,7 +866,7 @@ export function MasterDataReviseDialog({
   const defaults: ResourceFormValues = {
     name: nameDefault,
     effectiveFrom: showEffectivePeriod
-      ? "2026-08-15"
+      ? effectiveFromDefault
       : defaultImmediateEffectiveFrom(),
     effectiveTo: "",
     changeReason: "",
@@ -814,6 +904,18 @@ export function MasterDataReviseDialog({
   React.useEffect(() => {
     if (open && target) {
       form.setFieldValue("name", target.name)
+      form.setFieldValue(
+        "effectiveFrom",
+        target && "currentRevision" in target
+          ? target.currentRevision.effectiveFrom
+          : target?.effectiveFrom ?? defaultImmediateEffectiveFrom()
+      )
+      form.setFieldValue(
+        "effectiveTo",
+        target && "currentRevision" in target
+          ? target.currentRevision.effectiveTo ?? ""
+          : ""
+      )
       for (const [key, value] of Object.entries(
         currentResourceFieldValues(target)
       )) {
@@ -821,12 +923,36 @@ export function MasterDataReviseDialog({
       }
       setResult(null)
       setIdempotencyKey(newIdempotencyKey("revise"))
+      setSimulate("ok")
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when target opens
-  }, [open, stableId])
+  }, [open, stableId, baseRevisionId])
+
+  const reloadLatest = React.useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: masterDataKeys.all })
+    setResult(null)
+    setDiscardOpen(false)
+    setIdempotencyKey(newIdempotencyKey("revise"))
+  }, [queryClient])
+
+  const requestClose = (next: boolean) => {
+    if (next) {
+      onOpenChange(true)
+      return
+    }
+    if (result?.outcome === "succeeded") {
+      onOpenChange(false)
+      return
+    }
+    if (form.state.isDirty || result) {
+      setDiscardOpen(true)
+      return
+    }
+    onOpenChange(false)
+  }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={requestClose}>
       <DialogContent className={dialogContentClass(resource)}>
         <DialogHeader>
           <DialogTitle>{masterDataCopy.reviseTitle}</DialogTitle>
@@ -883,6 +1009,16 @@ export function MasterDataReviseDialog({
                   value: `v${result.serverRevisionNo}`,
                 },
               ]}
+              actions={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={reloadLatest}
+                >
+                  {masterDataCopy.reloadAction}
+                </Button>
+              }
             />
           ) : null}
 
@@ -911,16 +1047,20 @@ export function MasterDataReviseDialog({
                   <form.AppField
                     name="effectiveFrom"
                     children={(field) => (
-                      <field.TextField
+                      <DateField
+                        id="rev-ef-from"
                         label={masterDataCopy.fieldEffectiveFrom}
+                        field={field}
                       />
                     )}
                   />
                   <form.AppField
                     name="effectiveTo"
                     children={(field) => (
-                      <field.TextField
+                      <DateField
+                        id="rev-ef-to"
                         label={masterDataCopy.fieldEffectiveTo}
+                        field={field}
                       />
                     )}
                   />
@@ -991,6 +1131,19 @@ export function MasterDataReviseDialog({
           )}
         </DialogScrollBody>
       </DialogContent>
+
+      <DiscardConfirmDialog
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+        title="放弃本次填写？"
+        description="关闭后本次填写的内容将丢失。"
+        confirmLabel="放弃填写"
+        cancelLabel="继续编辑"
+        onConfirm={() => {
+          setDiscardOpen(false)
+          onOpenChange(false)
+        }}
+      />
     </Dialog>
   )
 }
@@ -1007,6 +1160,7 @@ export function MasterDataDisableDialog({
   target: MasterDataListItem | MasterDataCenterView | null
 }) {
   const mutation = useDisableMasterDataMutation()
+  const queryClient = useQueryClient()
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey("disable")
   )
@@ -1016,6 +1170,7 @@ export function MasterDataDisableDialog({
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null
   )
+  const [discardOpen, setDiscardOpen] = React.useState(false)
 
   const isWarehouse = resource === "warehouses"
   const stableId = target?.stableId ?? ""
@@ -1030,7 +1185,7 @@ export function MasterDataDisableDialog({
   const form = useAppForm({
     defaultValues: {
       changeReason: "",
-      effectiveFrom: "2026-08-01",
+      effectiveFrom: defaultImmediateEffectiveFrom(),
     },
     validators: { onChange: disableSchema },
     onSubmit: async ({ value }) => {
@@ -1053,14 +1208,37 @@ export function MasterDataDisableDialog({
     if (open) {
       setResult(null)
       setIdempotencyKey(newIdempotencyKey("disable"))
+      setSimulate("ok")
       form.reset()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, stableId])
 
+  const reloadLatest = React.useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: masterDataKeys.all })
+    setResult(null)
+    setIdempotencyKey(newIdempotencyKey("disable"))
+  }, [queryClient])
+
+  const requestClose = (next: boolean) => {
+    if (next) {
+      onOpenChange(true)
+      return
+    }
+    if (result?.outcome === "succeeded") {
+      onOpenChange(false)
+      return
+    }
+    if (form.state.isDirty || result) {
+      setDiscardOpen(true)
+      return
+    }
+    onOpenChange(false)
+  }
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
+    <Dialog open={open} onOpenChange={requestClose}>
+      <DialogContent className={dialogContentClass(resource)}>
         <DialogHeader>
           <DialogTitle>{masterDataCopy.disableTitle}</DialogTitle>
           <DialogDescription>
@@ -1074,6 +1252,7 @@ export function MasterDataDisableDialog({
           </DialogDescription>
         </DialogHeader>
 
+        <DialogScrollBody wide={false}>
         {isWarehouse ? (
           <Alert variant="destructive">
             <AlertTitle>{masterDataCopy.warehouseWriteTitle}</AlertTitle>
@@ -1108,9 +1287,45 @@ export function MasterDataDisableDialog({
                 ? [{ label: "说明", value: result.detail }]
                 : []),
               ...(result.drillHref
-                ? [{ label: "库存台账", value: result.drillHref }]
+                ? [
+                    {
+                      label: "库存台账",
+                      value: (
+                        <Link
+                          className="text-primary underline-offset-4 hover:underline"
+                          href={result.drillHref}
+                        >
+                          打开库存台账
+                        </Link>
+                      ),
+                    },
+                  ]
                 : []),
             ]}
+          />
+        ) : null}
+
+        {result?.outcome === "conflict" ? (
+          <FormalActionResult
+            status="blocked"
+            title={masterDataCopy.reviseConflictTitle}
+            description={result.message || masterDataCopy.reviseConflictHint}
+            facts={[
+              {
+                label: "当前版本",
+                value: `v${result.serverRevisionNo}`,
+              },
+            ]}
+            actions={
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={reloadLatest}
+              >
+                {masterDataCopy.reloadAction}
+              </Button>
+            }
           />
         ) : null}
 
@@ -1125,7 +1340,11 @@ export function MasterDataDisableDialog({
             <form.AppField
               name="effectiveFrom"
               children={(field) => (
-                <field.TextField label={masterDataCopy.fieldDisableAt} />
+                <DateField
+                  id="dis-ef-from"
+                  label={masterDataCopy.fieldDisableAt}
+                  field={field}
+                />
               )}
             />
             <form.AppField
@@ -1178,7 +1397,21 @@ export function MasterDataDisableDialog({
             </Button>
           </DialogFooter>
         )}
+        </DialogScrollBody>
       </DialogContent>
+
+      <DiscardConfirmDialog
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+        title="放弃本次填写？"
+        description="关闭后本次填写的内容将丢失。"
+        confirmLabel="放弃填写"
+        cancelLabel="继续编辑"
+        onConfirm={() => {
+          setDiscardOpen(false)
+          onOpenChange(false)
+        }}
+      />
     </Dialog>
   )
 }

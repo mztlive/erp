@@ -19,8 +19,9 @@ export type SupplierOrdersUrlState = {
   q?: string
   supplierId?: string
   fulfillmentStatuses?: SupplierFulfillmentStatus[]
-  cancelStatus?: CancelStatus
-  refundStatus?: RefundStatus
+  cancelStatuses?: CancelStatus[]
+  refundStatuses?: RefundStatus[]
+  aftersalePending?: boolean
   paidFrom?: string
   paidTo?: string
   page: number
@@ -48,8 +49,19 @@ const codec = createUrlStateCodec<SupplierOrdersUrlState>([
     type: "array",
     values: FULFILLMENT_STATUSES,
   },
-  { key: "cancelStatus", type: "enum", values: CANCEL_STATUSES },
-  { key: "refundStatus", type: "enum", values: REFUND_STATUSES },
+  {
+    key: "cancelStatus",
+    name: "cancelStatuses",
+    type: "array",
+    values: CANCEL_STATUSES,
+  },
+  {
+    key: "refundStatus",
+    name: "refundStatuses",
+    type: "array",
+    values: REFUND_STATUSES,
+  },
+  { key: "aftersalePending", type: "boolean", defaultValue: false },
   { key: "paidFrom", type: "string" },
   { key: "paidTo", type: "string" },
   { key: "page", type: "number", defaultValue: 1 },

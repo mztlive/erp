@@ -40,6 +40,7 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table"
 
+import { BusinessFailureState } from "@/components/business/feedback"
 import { OptionCombobox } from "@/components/business/option-combobox"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -218,6 +219,26 @@ type DataTableProps<TData> = {
   density?: "compact" | "comfortable"
   striped?: boolean
   loading?: boolean
+  /**
+   * 查询失败时的整表错误内容（优先级最高）。页面把 isError 时构造的
+   * BusinessFailureState 传进来，避免「系统故障」被误报成「当前筛选没有结果」。
+   */
+  errorState?: React.ReactNode
+  /** 内置错误块的标题；默认「数据加载失败」。 */
+  errorTitle?: React.ReactNode
+  /** 内置错误块的说明；错误说下一步不说原理。 */
+  errorSummary?: React.ReactNode
+  /** 内置错误块的重试回调；渲染「重试」按钮。 */
+  onRetry?: () => void
+  /** 空态标题；默认「当前筛选没有结果」。 */
+  emptyTitle?: React.ReactNode
+  /** 空态说明；默认空。 */
+  emptyDescription?: React.ReactNode
+  /** 空态引导动作（如「清除筛选」「新建销售单」）。 */
+  emptyAction?: React.ReactNode
+  /** 正在刷新时显示「正在刷新，当前内容会保留」提示条；轮询页可关闭避免噪声。 */
+  showRefreshingBanner?: boolean
+  refreshingLabel?: React.ReactNode
   emptyState?: React.ReactNode
   renderToolbar?: (table: TanStackTable<TData>) => React.ReactNode
   showColumnVisibility?: boolean
@@ -276,6 +297,15 @@ function DataTable<TData>({
   density = "compact",
   striped = false,
   loading = false,
+  errorState,
+  errorTitle,
+  errorSummary,
+  onRetry,
+  emptyTitle,
+  emptyDescription,
+  emptyAction,
+  showRefreshingBanner = true,
+  refreshingLabel = "正在刷新，当前内容会保留",
   emptyState,
   renderToolbar,
   showColumnVisibility = true,
@@ -340,6 +370,29 @@ function DataTable<TData>({
     onChange: onGlobalFilterChange,
   })
 
+  // 筛选变化后总行数变少时，把越界页码钳回最后一个有效页，
+  // 避免「共 N 条」与空表格并存（页码由页面写回 URL 或本地状态）。
+  React.useEffect(() => {
+    if (!manualPagination || rowCount <= 0) return
+    const pageCount = Math.ceil(rowCount / pagination.pageSize)
+    if (pagination.pageIndex >= pageCount) {
+      setPagination({
+        pageIndex: Math.max(0, pageCount - 1),
+        pageSize: pagination.pageSize,
+      })
+    }
+  }, [
+    manualPagination,
+    pagination.pageIndex,
+    pagination.pageSize,
+    rowCount,
+    setPagination,
+  ])
+
+  // 服务端排序（manualSorting）只有页面接了 onSortingChange 才是真实交互；
+  // 否则列头排序按钮只会翻转箭头、数据不动，属于误导性伪交互，隐藏排序入口。
+  const sortingInteractive = !manualSorting || onSortingChange !== undefined
+
   const selectionColumn = React.useMemo<ColumnDef<TData, unknown>>(
     () => ({
       id: "__selection",
@@ -368,7 +421,7 @@ function DataTable<TData>({
             indeterminate={row.getIsSomeSelected()}
             disabled={!row.getCanSelect()}
             onCheckedChange={(checked) => row.toggleSelected(checked === true)}
-            aria-label={`选择 ${rowLabel?.(row.original) ?? row.id}`}
+            aria-label={`选择 ${rowLabel?.(row.original) ?? `第 ${row.index + 1} 行`}`}
           />
         </div>
       ),
@@ -614,6 +667,11 @@ function DataTable<TData>({
   const rows = table.getRowModel().rows
   const visibleColumnCount = table.getVisibleLeafColumns().length
   const interactive = Boolean(onRowPreview || onRowOpen || enableRowSelection)
+  const showErrorState =
+    errorState !== undefined ||
+    errorTitle !== undefined ||
+    errorSummary !== undefined ||
+    onRetry !== undefined
 
   const focusRelativeRow = (rowIndex: number, offset: number) => {
     const target = rows[rowIndex + offset]
@@ -652,13 +710,13 @@ function DataTable<TData>({
           layout === "inset" ? "rounded-lg border" : "border-y"
         )}
       >
-        {loading && data.length > 0 ? (
+        {loading && data.length > 0 && showRefreshingBanner ? (
           <div
             role="status"
             className="flex items-center gap-2 border-b bg-surface-sunken px-3 py-2 text-xs text-muted-foreground"
           >
             <Spinner />
-            正在刷新，当前内容会保留
+            {refreshingLabel}
           </div>
         ) : null}
 
@@ -711,12 +769,13 @@ function DataTable<TData>({
                           ? "ascending"
                           : sort === "desc"
                             ? "descending"
-                            : header.column.getCanSort()
+                            : sortingInteractive && header.column.getCanSort()
                               ? "none"
                               : undefined
                       }
                     >
-                      {header.isPlaceholder ? null : header.column.getCanSort() ? (
+                      {header.isPlaceholder ? null : sortingInteractive &&
+                        header.column.getCanSort() ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -772,7 +831,23 @@ function DataTable<TData>({
           </TableHeader>
 
           <TableBody>
-            {loading && data.length === 0
+            {showErrorState ? (
+              <TableRow>
+                <TableCell
+                  colSpan={Math.max(visibleColumnCount, 1)}
+                  className="h-auto p-4 sm:p-6"
+                >
+                  {errorState ?? (
+                    <BusinessFailureState
+                      kind="system"
+                      title={errorTitle ?? "数据加载失败"}
+                      description={errorSummary}
+                      onRetry={onRetry}
+                    />
+                  )}
+                </TableCell>
+              </TableRow>
+            ) : loading && data.length === 0
               ? Array.from({ length: 5 }, (_, rowIndex) => (
                   <TableRow key={`loading-${rowIndex}`}>
                     {table.getVisibleLeafColumns().map((column) => (
@@ -794,7 +869,9 @@ function DataTable<TData>({
                     className={interactive ? "cursor-default" : undefined}
                     onClick={(event) => {
                       if (isInteractiveRowTarget(event.target)) return
-                      onRowPreview?.(row.original)
+                      // 单击行：优先快速预览；未接预览时回落到详情入口，
+                      // 避免触屏用户（无键盘 Enter）对只有 onRowOpen 的页面无从打开。
+                      ;(onRowPreview ?? onRowOpen)?.(row.original)
                     }}
                     onKeyDown={(event) => {
                       if (isInteractiveRowTarget(event.target)) return
@@ -817,7 +894,9 @@ function DataTable<TData>({
                         row.toggleSelected()
                       }
                     }}
-                    aria-label={rowLabel?.(row.original) ?? row.id}
+                    aria-label={
+                      rowLabel?.(row.original) ?? `第 ${rowIndex + 1} 行`
+                    }
                   >
                     {row.getVisibleCells().map((cell) => {
                       const meta = cell.column.columnDef.meta
@@ -855,16 +934,28 @@ function DataTable<TData>({
                   </TableRow>
                 ))}
 
-            {!loading && rows.length === 0 ? (
+            {!showErrorState && !loading && rows.length === 0 ? (
               <TableRow>
                 <TableCell
                   colSpan={Math.max(visibleColumnCount, 1)}
                   className="h-auto p-6"
                 >
                   {emptyState ?? (
-                    <p className="text-center text-sm text-muted-foreground">
-                      当前筛选没有结果
-                    </p>
+                    <div className="flex flex-col items-center gap-2 py-2 text-center">
+                      <p className="text-sm text-muted-foreground">
+                        {emptyTitle ?? "当前筛选没有结果"}
+                      </p>
+                      {emptyDescription != null ? (
+                        <p className="text-xs text-muted-foreground">
+                          {emptyDescription}
+                        </p>
+                      ) : null}
+                      {emptyAction != null ? (
+                        <div className="flex flex-wrap justify-center gap-2 pt-1">
+                          {emptyAction}
+                        </div>
+                      ) : null}
+                    </div>
                   )}
                 </TableCell>
               </TableRow>

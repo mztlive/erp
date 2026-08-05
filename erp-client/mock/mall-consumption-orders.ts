@@ -351,7 +351,7 @@ const seeds: ConsumptionOrderSeed[] = [
         customer: "full",
       },
       boundaryNotice:
-        "W25 是不可变关键记录形成的追溯视图，不是商城可变员工订单的实时副本。仅展示五类结果记录，不同步商城处理中间态。",
+        "本页是商城消费记录的只读快照，仅展示支付成功、取消、退款、完成、余额恢复五类结果记录，不同步商城处理中间态。",
       workItemIds: [],
     },
   },
@@ -584,7 +584,7 @@ const seeds: ConsumptionOrderSeed[] = [
         customer: "full",
       },
       boundaryNotice:
-        "W25 是不可变关键记录形成的追溯视图，不是商城可变员工订单的实时副本。仅展示五类结果记录，不同步商城处理中间态。",
+        "本页是商城消费记录的只读快照，仅展示支付成功、取消、退款、完成、余额恢复五类结果记录，不同步商城处理中间态。",
       workItemIds: [],
     },
   },

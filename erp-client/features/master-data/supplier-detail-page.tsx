@@ -14,6 +14,7 @@ import { BanIcon, CircleAlertIcon, SaveIcon } from "lucide-react"
 
 import {
   BusinessFailureState,
+  DiscardConfirmDialog,
   DocumentSection,
   FormalActionResult,
   OptionCombobox,
@@ -43,8 +44,10 @@ import {
   SUPPLIER_RATING_OPTIONS,
   buildResourceFields,
   currentResourceFieldValues,
+  defaultImmediateEffectiveFrom,
 } from "@/features/master-data/resource-fields"
 import {
+  revealMasterDataSensitive,
   useCreateMasterDataMutation,
   useCreateRevisionMutation,
   useMasterDataCenterQuery,
@@ -53,12 +56,115 @@ import type {
   MasterDataCenterView,
   MasterDataMutationResult,
 } from "@/features/master-data/types"
+import { formatDateTime } from "@/lib/datetime"
+import { cn } from "@/lib/utils"
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
 const CAPABILITY_SEPARATOR = "、"
+
+/**
+ * 敏感字段：默认打码展示，短时查看（15 秒自动隐藏）后才进入可编辑输入框。
+ * 与对象中心 / 预览面板的 SensitiveValue 打码门禁保持一致，编辑页不再默认明文。
+ */
+function SensitiveEditableField({
+  label,
+  id,
+  value,
+  maskedValue,
+  revealToken,
+  onChange,
+  disabled,
+}: {
+  label: string
+  id: string
+  value: string
+  maskedValue?: string
+  revealToken?: string
+  onChange: (next: string) => void
+  disabled?: boolean
+}) {
+  const [revealed, setRevealed] = React.useState(false)
+  const [revealError, setRevealError] = React.useState<string | null>(null)
+
+  React.useEffect(() => {
+    if (!revealed) return
+    const timer = window.setTimeout(() => setRevealed(false), 15000)
+    return () => window.clearTimeout(timer)
+  }, [revealed])
+
+  const reveal = async () => {
+    if (!revealToken) return
+    try {
+      await revealMasterDataSensitive(revealToken)
+      setRevealError(null)
+      setRevealed(true)
+    } catch (error) {
+      setRevealError(error instanceof Error ? error.message : "无权查看")
+    }
+  }
+
+  if (!revealed) {
+    return (
+      <div className="space-y-1.5">
+        <Label htmlFor={id}>{label}</Label>
+        <div className="flex flex-wrap items-center gap-2">
+          <code className="num rounded-md bg-muted px-2 py-1 text-sm">
+            {maskedValue || "****"}
+          </code>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={disabled || !revealToken}
+            onClick={() => void reveal()}
+          >
+            短时查看
+          </Button>
+        </div>
+        {revealError ? (
+          <p className="text-xs text-destructive" role="alert">
+            {revealError}
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            敏感信息已打码；查看后 15 秒自动隐藏。
+          </p>
+        )}
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        value={value}
+        autoFocus
+        onChange={(e) => onChange(e.target.value)}
+        onBlur={() => setRevealed(false)}
+        disabled={disabled}
+      />
+      <p className="text-xs text-muted-foreground">
+        已显示明文；离开输入框后自动打码。
+      </p>
+    </div>
+  )
+}
+
+/** 供应商详情页分区导航：与商品详情页的吸顶 Tab 体验对齐。 */
+const SUPPLIER_SECTIONS: ReadonlyArray<{ id: string; label: string }> = [
+  { id: "basic", label: "基本信息" },
+  { id: "commercial", label: "商务与资质" },
+  { id: "qualification", label: "资质附件" },
+  { id: "contract", label: "合同与授权" },
+  { id: "invoice", label: "开票信息" },
+  { id: "evaluation", label: "合作评估" },
+  { id: "effective", label: "生效与原因" },
+  { id: "history", label: "历史与引用" },
+]
 
 function parseCapabilities(value: string): string[] {
   return value
@@ -210,7 +316,7 @@ function createDefaults(isCreate: boolean): SupplierEditorFormValues {
     initialScore: "",
     supplierRating: "",
     currentScore: "",
-    effectiveFrom: "2026-08-01",
+    effectiveFrom: defaultImmediateEffectiveFrom(),
     effectiveTo: "",
     changeReason: isCreate ? "新建供应商" : "",
   }
@@ -240,7 +346,12 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
     newIdempotencyKey(isCreate ? "create-supplier" : "revise-supplier")
   )
   const [disableOpen, setDisableOpen] = React.useState(false)
+  const [discardOpen, setDiscardOpen] = React.useState(false)
+  const [pendingNav, setPendingNav] = React.useState<string | null>(null)
+  const [activeSection, setActiveSection] = React.useState("basic")
+  const errorRef = React.useRef<HTMLDivElement | null>(null)
   const hydratedKeyRef = React.useRef<string | null>(null)
+
   const initialFormValues = React.useMemo(
     () =>
       !isCreate && data
@@ -312,6 +423,49 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
     hydratedKeyRef.current = key
   }, [data, form, isCreate])
 
+  // 离开确认：返回列表 / 侧栏 / 刷新都受未保存保护
+  React.useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (form.state.isDirty) {
+        event.preventDefault()
+      }
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅挂载时注册一次
+  }, [])
+
+  // 校验错误出现时滚动到顶部错误条
+  React.useEffect(() => {
+    if (formError) {
+      errorRef.current?.scrollIntoView({ block: "center", behavior: "smooth" })
+    }
+  }, [formError])
+
+  const navigateAway = React.useCallback(
+    (href: string) => {
+      if (form.state.isDirty) {
+        setPendingNav(href)
+        setDiscardOpen(true)
+        return
+      }
+      router.push(href)
+    },
+    [form.state.isDirty, router]
+  )
+
+  /** 敏感字段映射：label → 打码展示 + 揭示令牌 */
+  const sensitiveByLabel = React.useMemo(() => {
+    const map = new Map<string, { maskedValue: string; revealToken?: string }>()
+    for (const field of data?.sensitiveFields ?? []) {
+      map.set(field.label, {
+        maskedValue: field.maskedValue,
+        revealToken: field.revealToken,
+      })
+    }
+    return map
+  }, [data?.sensitiveFields])
+
   const listHref = "/master-data/suppliers"
   const pending = createMutation.isPending || reviseMutation.isPending
   const canRevise =
@@ -367,7 +521,17 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
   const canEdit = isCreate || canRevise
 
   return (
-    <form.Subscribe selector={(state) => state.values}>
+    <>
+      <form.Subscribe selector={(state) => state.isDirty}>
+        {(isDirty) => {
+          // 成功面板不滞留：修改任何字段后旧的「已保存」结果不再展示
+          if (isDirty && result) {
+            setResult(null)
+          }
+          return null
+        }}
+      </form.Subscribe>
+      <form.Subscribe selector={(state) => state.values}>
       {(values) => {
         const title = isCreate
           ? masterDataCopy.supplierCreateTitle
@@ -482,7 +646,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                       type="button"
                       size="sm"
                       variant="outline"
-                      render={<Link href={listHref} />}
+                      onClick={() => navigateAway(listHref)}
                     >
                       返回列表
                     </Button>
@@ -501,10 +665,17 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
               </header>
 
               <div className="space-y-4 p-4 md:p-5">
-                {!isCreate && !canRevise && reviseBlocker ? (
-                  <p className="text-xs text-muted-foreground">
-                    {masterDataCopy.centerUpdateBlocked(reviseBlocker.message)}
-                  </p>
+                {!isCreate && !canRevise ? (
+                  <Alert variant="info">
+                    <AlertTitle>你只能查看</AlertTitle>
+                    <AlertDescription>
+                      {reviseBlocker
+                        ? masterDataCopy.centerUpdateBlocked(
+                            reviseBlocker.message
+                          )
+                        : "当前账号没有维护供应商资料的权限；需要修改请联系有权限的同事。"}
+                    </AlertDescription>
+                  </Alert>
                 ) : null}
 
                 {result?.outcome === "succeeded" ? (
@@ -562,14 +733,54 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                 ) : null}
 
                 {formError ? (
-                  <Alert variant="destructive">
-                    <CircleAlertIcon aria-hidden />
-                    <AlertTitle>填写不完整</AlertTitle>
-                    <AlertDescription>{formError}</AlertDescription>
-                  </Alert>
+                  <div ref={errorRef}>
+                    <Alert variant="destructive">
+                      <CircleAlertIcon aria-hidden />
+                      <AlertTitle>填写不完整</AlertTitle>
+                      <AlertDescription>{formError}</AlertDescription>
+                    </Alert>
+                  </div>
                 ) : null}
 
-                <section className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <nav
+                  aria-label="供应商编辑分区"
+                  className="sticky top-16 z-10 flex flex-wrap gap-1 rounded-2xl border border-border bg-background/95 p-1 shadow-sm backdrop-blur"
+                >
+                  {SUPPLIER_SECTIONS.filter(
+                    (section) => !isCreate || section.id !== "history"
+                  ).map((section) => (
+                    <Button
+                      key={section.id}
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className={cn(
+                        "rounded-xl",
+                        activeSection === section.id &&
+                          "bg-accent text-accent-foreground"
+                      )}
+                      aria-current={
+                        activeSection === section.id ? "location" : undefined
+                      }
+                      onClick={() => {
+                        setActiveSection(section.id)
+                        document
+                          .getElementById(`supplier-section-${section.id}`)
+                          ?.scrollIntoView({
+                            block: "start",
+                            behavior: "smooth",
+                          })
+                      }}
+                    >
+                      {section.label}
+                    </Button>
+                  ))}
+                </nav>
+
+                <section
+                  id="supplier-section-basic"
+                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                >
                   <h2 className="px-1 text-base font-semibold">基本信息</h2>
                   <p className="px-1 text-xs text-muted-foreground">
                     名称与企业主体是必填项；保存即生成新版本。
@@ -614,16 +825,13 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="supplier-contact-phone">
-                        {masterDataCopy.fContactPhone}
-                      </Label>
-                      <Input
+                      <SensitiveEditableField
+                        label={masterDataCopy.fContactPhone}
                         id="supplier-contact-phone"
                         value={values.contactPhone}
-                        onChange={(e) =>
-                          setFieldValue("contactPhone", e.target.value)
-                        }
-                        placeholder="联系电话"
+                        maskedValue={sensitiveByLabel.get("联系电话")?.maskedValue}
+                        revealToken={sensitiveByLabel.get("联系电话")?.revealToken}
+                        onChange={(next) => setFieldValue("contactPhone", next)}
                         disabled={!canEdit}
                       />
                     </div>
@@ -644,7 +852,10 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                   </div>
                 </section>
 
-                <section className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <section
+                  id="supplier-section-commercial"
+                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                >
                   <h2 className="px-1 text-base font-semibold">商务与资质</h2>
                   <p className="px-1 text-xs text-muted-foreground">
                     能力为多选；结算方式用于采购选供应商时的校验与提示。
@@ -720,7 +931,10 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                   </div>
                 </section>
 
-                <section className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <section
+                  id="supplier-section-qualification"
+                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                >
                   <h2 className="px-1 text-base font-semibold">资质附件</h2>
                   <p className="px-1 text-xs text-muted-foreground">
                     一家供应商可维护多份资质；失效后对应能力不得用于新的采购单。
@@ -738,7 +952,10 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                   </div>
                 </section>
 
-                <section className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <section
+                  id="supplier-section-contract"
+                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                >
                   <h2 className="px-1 text-base font-semibold">合同与授权</h2>
                   <p className="px-1 text-xs text-muted-foreground">
                     合同与授权书文件支持图片 / PDF；有效期到期后需重新维护。
@@ -758,7 +975,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                         disabled={!canEdit}
                       />
                     </div>
-                    <div className="space-y-1.5 sm:col-span-2">
+                    <div className="space-y-1.5">
                       <Label htmlFor="supplier-contract-valid-from">
                         {masterDataCopy.fContractValidFrom}
                       </Label>
@@ -771,7 +988,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                         className="w-full"
                       />
                     </div>
-                    <div className="space-y-1.5 sm:col-span-2">
+                    <div className="space-y-1.5">
                       <Label htmlFor="supplier-contract-valid-to">
                         {masterDataCopy.fContractValidTo}
                       </Label>
@@ -857,21 +1074,23 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                   </div>
                 </section>
 
-                <section className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <section
+                  id="supplier-section-invoice"
+                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                >
                   <h2 className="px-1 text-base font-semibold">开票信息</h2>
                   <p className="px-1 text-xs text-muted-foreground">
                     税号与银行信息用于采购开票与付款；可随每次保存的版本修改。
                   </p>
                   <div className="grid gap-3 px-1 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <Label htmlFor="supplier-tax-no">
-                        {masterDataCopy.fTaxNo}
-                      </Label>
-                      <Input
+                      <SensitiveEditableField
+                        label={masterDataCopy.fTaxNo}
                         id="supplier-tax-no"
                         value={values.taxNo}
-                        onChange={(e) => setFieldValue("taxNo", e.target.value)}
-                        placeholder="纳税人识别号"
+                        maskedValue={sensitiveByLabel.get("税号")?.maskedValue}
+                        revealToken={sensitiveByLabel.get("税号")?.revealToken}
+                        onChange={(next) => setFieldValue("taxNo", next)}
                         disabled={!canEdit}
                       />
                     </div>
@@ -890,16 +1109,13 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                       />
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
-                      <Label htmlFor="supplier-bank-account">
-                        {masterDataCopy.fBankAccount}
-                      </Label>
-                      <Input
+                      <SensitiveEditableField
+                        label={masterDataCopy.fBankAccount}
                         id="supplier-bank-account"
                         value={values.bankAccount}
-                        onChange={(e) =>
-                          setFieldValue("bankAccount", e.target.value)
-                        }
-                        placeholder="银行账号"
+                        maskedValue={sensitiveByLabel.get("银行账号")?.maskedValue}
+                        revealToken={sensitiveByLabel.get("银行账号")?.revealToken}
+                        onChange={(next) => setFieldValue("bankAccount", next)}
                         disabled={!canEdit}
                       />
                     </div>
@@ -937,7 +1153,10 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                   </div>
                 </section>
 
-                <section className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <section
+                  id="supplier-section-evaluation"
+                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                >
                   <h2 className="px-1 text-base font-semibold">合作评估</h2>
                   <p className="px-1 text-xs text-muted-foreground">
                     期初评分在合作开始时记录；合作中评分随合作过程定期更新。
@@ -991,12 +1210,15 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                   </div>
                 </section>
 
-                <section className="space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm">
+                <section
+                  id="supplier-section-effective"
+                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                >
                   <h2 className="px-1 text-base font-semibold">生效与原因</h2>
                   <div className="grid gap-3 px-1 sm:grid-cols-2">
                     <div className="space-y-1.5">
                       <Label htmlFor="ef-from">
-                        {masterDataCopy.fieldEffectiveFrom}
+                        {masterDataCopy.fieldEffectiveFrom} *
                       </Label>
                       <DatePicker
                         value={values.effectiveFrom || undefined}
@@ -1022,7 +1244,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                     </div>
                     <div className="space-y-1.5 sm:col-span-2">
                       <Label htmlFor="reason">
-                        {masterDataCopy.fieldChangeReason}
+                        {masterDataCopy.fieldChangeReason} *
                       </Label>
                       <Textarea
                         id="reason"
@@ -1070,8 +1292,9 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
                 {!isCreate && data ? (
                   <section
+                    id="supplier-section-history"
                     aria-label="历史与引用"
-                    className="overflow-hidden rounded-2xl border border-border bg-card px-5 shadow-sm"
+                    className="scroll-mt-40 overflow-hidden rounded-2xl border border-border bg-card px-5 shadow-sm"
                   >
                     <DocumentSection
                       title={masterDataCopy.centerVersions}
@@ -1167,7 +1390,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                             >
                               <div className="flex flex-wrap gap-2">
                                 <span className="num text-xs text-muted-foreground">
-                                  {ev.at.slice(0, 19).replace("T", " ")}
+                                  {formatDateTime(ev.at, "full", "passthrough")}
                                 </span>
                                 <span>{ev.actor}</span>
                                 <Badge variant="outline">{ev.action}</Badge>
@@ -1193,9 +1416,26 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                 target={data}
               />
             ) : null}
+
+            <DiscardConfirmDialog
+              open={discardOpen}
+              onOpenChange={setDiscardOpen}
+              title="放弃未保存的更改？"
+              description="本次修改尚未保存，离开后将丢失。"
+              confirmLabel="放弃更改"
+              cancelLabel="继续编辑"
+              onConfirm={() => {
+                setDiscardOpen(false)
+                if (pendingNav) {
+                  setPendingNav(null)
+                  router.push(pendingNav)
+                }
+              }}
+            />
           </div>
         )
       }}
-    </form.Subscribe>
+      </form.Subscribe>
+    </>
   )
 }

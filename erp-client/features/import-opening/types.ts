@@ -187,13 +187,12 @@ export const RETENTION_LABEL: Record<RetentionClass, string> = {
 
 /** 权威模型尚未登记时的固定实施 blocker 文案 */
 export const WORK_ITEM_TYPE_BLOCKER = {
-  code: "IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED" as const,
   message:
-    "导入业务确认/退回任务类型尚未登记；登记前不得启用业务确认入口，也不得借用异常入口伪装正常必经确认。",
+    "导入业务确认/退回任务尚未配置；配置前不得启用业务确认入口，也不得借用异常入口伪装正常必经确认。",
   requiredRegistration: [
-    "WORK_ITEM_TYPE",
-    "OWNER_POOL",
-    "W01_W02_DISPLAY_MAP",
+    "确认与退回任务配置",
+    "责任归属配置",
+    "队列展示配置",
   ] as const,
 }
 

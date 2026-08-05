@@ -79,6 +79,8 @@ export type AcceptanceDraftLine = {
   shortQuantity: string
   rejectedQuantity: string
   reason: string
+  /** 服务不通过：写入草稿与提交 payload，草稿恢复时原样还原。 */
+  serviceFail?: boolean
   allocations: Array<{
     fulfillmentLineId: string
     allocatedQuantity: string

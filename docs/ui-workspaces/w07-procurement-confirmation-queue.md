@@ -119,7 +119,7 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 | 确认明细编辑器 | 按销售提交明细维护一个或多个供应商确认分行 | `EditableLineItemTable` + 供应商选择器 | 主滚动区 |
 | 决策摘要 | 汇总覆盖、能力资质、金额差异、交期与阻塞 | `ValidationSummary` `CostCoverageNotice` | 桌面右栏 sticky |
 | 正式动作栏 | 暂挂、驳回、确认通过 | `FormalActionConfirmDialog` | 底部 sticky |
-| 固定结果区 | 显示本项正式结果和下一项去向；驳回时展示销售固定三路及 W05 入口 | `FormalActionResult` + `ProcurementRejectionNextSteps` | 动作后替换决策区顶部 |
+| 固定结果区 | 显示本项正式结果和下一项去向；驳回时展示销售三条固定出路及 W05 入口 | `FormalActionResult` + `ProcurementRejectionNextSteps` | 动作后替换决策区顶部 |
 
 ### 4.3 销售提交只读上下文
 
@@ -552,7 +552,7 @@ type CompleteProcurementConfirmationResult =
 ### 12.1 体验与布局
 
 - [x] 采购默认着陆后无需返回列表，可连续处理通过、驳回和暂挂。
-- [x] 二次确认页面和文案始终表达为“行为/任务”，不生成确认单号或纸质单据。
+- [x] 二次确认页面和文案表达为“二次提交 · 无确认单号”，不生成确认单号或纸质单据。
 - [x] 1440×900 下队列位置、不可变销售提交、至少两条确认分行、覆盖摘要和主动作同屏可见。
 - [x] 多供应商拆分能逐明细说明确认数量，不能用总量掩盖单行缺口。
 - [x] 打开 W05 深挖后返回仍恢复队列位置、筛选、当前项和显式 URL / 当前会话的自动下一项临时值；`preferenceScope` 未配置时不产生本地或服务端持久偏好。

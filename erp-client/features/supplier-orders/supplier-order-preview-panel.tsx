@@ -22,6 +22,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import type { SupplierOrderDetailView } from "@/features/supplier-orders/types"
+import { codeVersion } from "@/features/supplier-orders/types"
 import { formatDateTime } from "@/lib/datetime"
 
 type Props = {
@@ -123,8 +124,10 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                 }
               />
               <Field
-                label="固定供给 / 发布"
-                value={`${o.supplyVersion} / ${o.publicationVersion}`}
+                label="供给 / 发布数据版本"
+                value={`${codeVersion(o.supplyVersion)} / ${codeVersion(
+                  o.publicationVersion
+                )}`}
               />
             </DescriptionList>
           </section>
@@ -183,7 +186,9 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                     <span>
                       {item.quantity} {item.unit}
                     </span>
-                    <span>供给 {item.supplyVersion}</span>
+                    <span>
+                      供给版本 {codeVersion(item.supplyVersion)}
+                    </span>
                     {item.unitCostGross != null ? (
                       <MoneyValue
                         value={item.unitCostGross}
@@ -214,7 +219,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                   </span>
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  任务号尾部 {lastAction.idempotencyKeyTail} · 尝试{" "}
+                  任务号尾号 {lastAction.idempotencyKeyTail} · 尝试{" "}
                   {lastAction.attemptCount}
                 </p>
               </section>

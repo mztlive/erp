@@ -153,14 +153,14 @@ TaskTabs 身份固定为 `analytics:customer-quality:{scopeId}`；筛选和选�
 | 能力 | 默认值 | URL 状态 | 行为 |
 | --- | --- | --- | --- |
 | 统计期间 | 服务端默认期间配置；缺失时无默认值 | `from/to`；用户选快捷项时可附 `periodPreset` | 所有指标、图表、表格使用同一明确期间；缺配置且 URL 无 `from/to` 时首次分析必须先选择起止日期 |
-| 数据范围 | 当前角色默认范围 | `scope` | 销售=本人，经理=团队，管理/财务=授权公司范围 |
+| 数据范围 | 当前角色默认范围 | 固定为角色默认范围，不接受 URL 覆盖 | 销售=本人，经理=团队，管理/财务=授权公司范围 |
 | 票款口径 | 全部授权事实 | `fundsReview=all` | 卡券复核不足时警示；可切“仅统计已复核数据” |
 | 业务性质 | 全部 | `businessType` | 卡券 / 非卡券；选择卡券时隐藏实际盈亏并解释 |
 | 福利场景 | 全部 | `benefitScenario` | 影响规模和构成，不改变正式事实 |
 | 标签 | 全部 | `scaleTag`、`profitTag`、`riskTag` | 标签来自固定规则版本 |
 | 搜索 | 空 | `q` | 客户编号、名称精确/前缀搜索 |
-| 排序 | 成交金额降序 | `sort` | 可按实际盈亏、逾期、覆盖率、最近业务排序 |
-| 明细页 | 50 行 | `cursor/pageSize` | 服务端分页；图表汇总不由当前页求和 |
+| 排序 | 成交金额降序 | `sort` | 顶部「排序」下拉与表头排序同源（同一 `sort` 参数）；表头点击回写 URL，服务端排序作用于全量结果，不只当前页；可按实际盈亏、逾期、覆盖率、最近业务排序 |
+| 明细页 | 20 行 | `page`/`pageSize` | 服务端分页（服务端返回当前页行集与过滤总数）；图表汇总不由当前页求和 |
 
 筛选改变时保留旧图表并显示轻量刷新，结果标题通过 `aria-live=polite` 播报。业务性质为卡券时，利润指标区改为“卡券实际经营结果请前往 W28”，不得显示 ¥0 或无穷大利润率。
 
@@ -216,8 +216,13 @@ type CustomerQualityQuery = CustomerQualityPeriodInput & {
   riskTag?: string
   q?: string
   sort: string
-  cursor?: string
+  page: number
   pageSize: number
+  /** 图表选中维度（规模分层 / 利润贡献等） */
+  chartDimension?: string
+  chartCode?: string
+  customerId?: string
+  scenario?: string
 }
 
 type CustomerQualityView = {

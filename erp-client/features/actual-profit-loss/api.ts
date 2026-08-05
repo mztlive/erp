@@ -32,6 +32,11 @@ import {
   setW16CorrectionPending,
   w16CorrectionPending,
 } from "@/mock/actual-profit-loss"
+import {
+  COVERAGE_FILTER_LABEL,
+  DIMENSION_LABEL,
+  type ProfitLossDimension,
+} from "@/features/actual-profit-loss/types"
 
 export type PeriodBasisConfigQuery = {
   /** QA：basisConfig=missing 模拟未配置 */
@@ -86,23 +91,211 @@ function filterRows(
     r.objectId,
   ])
 
+  return list
+}
+
+const COVERAGE_RANK: Record<ProfitLossRow["coverageState"], number> = {
+  COVERED: 0,
+  PARTIAL: 1,
+  UNCOVERED: 2,
+}
+
+function sortValue(row: ProfitLossRow, key: string): string | number | null {
+  switch (key) {
+    case "identityLabel":
+      return row.identityLabel
+    case "benefitScenarios":
+      return row.benefitScenarios?.join("、") ?? ""
+    case "fulfillmentModes":
+      return row.fulfillmentModes?.join("、") ?? ""
+    case "netSalesRevenue":
+      return Number(row.netSalesRevenue)
+    case "actualProcurementCostNet":
+      return row.actualProcurementCostNet == null
+        ? null
+        : Number(row.actualProcurementCostNet)
+    case "actualFulfillmentCostNet":
+      return row.actualFulfillmentCostNet == null
+        ? null
+        : Number(row.actualFulfillmentCostNet)
+    case "reductionsNet":
+      return row.reductionsNet == null ? null : Number(row.reductionsNet)
+    case "actualProfitLossNet":
+      return row.actualProfitLossNet == null
+        ? null
+        : Number(row.actualProfitLossNet)
+    case "marginRate":
+      return row.marginRate == null
+        ? null
+        : Number(String(row.marginRate).replace("%", ""))
+    case "coverageState":
+      return COVERAGE_RANK[row.coverageState]
+    case "latestCostOccurredAt":
+      return row.latestCostOccurredAt == null
+        ? null
+        : Date.parse(row.latestCostOccurredAt)
+    default:
+      return Number(row.actualProfitLossNet ?? Number.NEGATIVE_INFINITY)
+  }
+}
+
+function sortRows(
+  rows: readonly ProfitLossRow[],
+  sort: string
+): ProfitLossRow[] {
   // 默认：实际盈亏升序（亏损优先）；未覆盖无利润排最后
-  const sort = query.sort || "actualProfitLossNet:asc"
-  if (sort.startsWith("actualProfitLossNet")) {
-    const desc = sort.endsWith(":desc")
-    list.sort((a, b) => {
-      const av = a.actualProfitLossNet
-      const bv = b.actualProfitLossNet
-      if (av == null && bv == null) return 0
-      if (av == null) return 1
-      if (bv == null) return -1
-      const an = Number(av)
-      const bn = Number(bv)
-      return desc ? bn - an : an - bn
-    })
+  const [sortKey, sortDir] = sort.split(":")
+  const desc = sortDir === "desc"
+  const list = [...rows]
+  list.sort((a, b) => {
+    const av = sortValue(a, sortKey)
+    const bv = sortValue(b, sortKey)
+    if (av == null && bv == null) return 0
+    if (av == null) return 1
+    if (bv == null) return -1
+    if (typeof av === "string" || typeof bv === "string") {
+      const cmp = String(av).localeCompare(String(bv), "zh-CN")
+      return desc ? -cmp : cmp
+    }
+    return desc ? (bv as number) - (av as number) : (av as number) - (bv as number)
+  })
+  return list
+}
+
+const toCents = (s?: string | null): number => {
+  const n = Number(s)
+  return Number.isFinite(n) ? Math.round(n * 100) : 0
+}
+const fromCents = (c: number): string => (c / 100).toFixed(2)
+
+/**
+ * 下钻维度服务端分组投影：客户/福利场景/履约方式按行聚合金额；
+ * 成本类型按成本记录聚合；销售单保持逐单。聚合行不提供单对象下钻。
+ */
+function groupByDimension(
+  rows: readonly ProfitLossRow[],
+  dimension: ProfitLossDimension
+): ProfitLossRow[] {
+  if (dimension === "sales_order") return [...rows]
+
+  if (dimension === "cost_type") {
+    const byType = new Map<string, CostEntryDetail[]>()
+    for (const e of W16_COST_ENTRIES) {
+      const bucket = byType.get(e.costTypeLabel) ?? []
+      bucket.push(e)
+      byType.set(e.costTypeLabel, bucket)
+    }
+    return Array.from(byType.entries()).map(([label, bucket]) => ({
+      rowId: `group:cost_type:${label}`,
+      objectType: "cost_type",
+      identityLabel: label,
+      customerLabel: `${bucket.length} 条成本记录`,
+      netSalesRevenue: "—",
+      actualProcurementCostNet: fromCents(
+        bucket.reduce((acc, e) => acc + toCents(e.amountNet), 0)
+      ),
+      actualFulfillmentCostNet: "—",
+      reductionsNet: "—",
+      actualProfitLossNet: "—",
+      marginUnavailableReason: "成本类型维度不计算利润率",
+      coverageState: "COVERED",
+      coverageBlockers: [],
+      latestCostOccurredAt: bucket.reduce(
+        (max, e) => (e.occurredAt > max ? e.occurredAt : max),
+        ""
+      ),
+      allowedDrilldowns: [],
+      costEntryIds: [],
+    }))
   }
 
-  return list
+  const keyOf = (r: ProfitLossRow): string => {
+    if (dimension === "customer") return r.customerId ?? r.customerLabel ?? ""
+    if (dimension === "scenario") return r.benefitScenarios?.[0] ?? ""
+    return r.fulfillmentModes?.[0] ?? ""
+  }
+
+  const groups = new Map<string, ProfitLossRow[]>()
+  for (const r of rows) {
+    const key = keyOf(r)
+    if (!key) continue
+    const bucket = groups.get(key) ?? []
+    bucket.push(r)
+    groups.set(key, bucket)
+  }
+
+  return Array.from(groups.entries()).map(([key, bucket]) => {
+    const revenue = bucket.reduce((acc, r) => acc + toCents(r.netSalesRevenue), 0)
+    const procurement = bucket.reduce(
+      (acc, r) => acc + toCents(r.actualProcurementCostNet),
+      0
+    )
+    const fulfillment = bucket.reduce(
+      (acc, r) => acc + toCents(r.actualFulfillmentCostNet),
+      0
+    )
+    const reductions = bucket.reduce(
+      (acc, r) => acc + toCents(r.reductionsNet),
+      0
+    )
+    const profitList = bucket
+      .map((r) => r.actualProfitLossNet)
+      .filter((v): v is string => v != null)
+    const profit =
+      profitList.length > 0
+        ? profitList.reduce((acc, v) => acc + toCents(v), 0)
+        : undefined
+
+    const stateSet = new Set(bucket.map((r) => r.coverageState))
+    const coverageState = stateSet.has("UNCOVERED")
+      ? ("UNCOVERED" as const)
+      : stateSet.size === 1
+        ? ("COVERED" as const)
+        : ("PARTIAL" as const)
+
+    const marginRate =
+      profit != null && revenue > 0
+        ? `${((profit / revenue) * 100).toFixed(2)}%`
+        : undefined
+
+    const blockers = Array.from(
+      new Set(bucket.flatMap((r) => r.coverageBlockers.map((b) => b.message)))
+    ).map((message) => ({ code: "AGGREGATED", message }))
+
+    const latest = bucket.reduce(
+      (max, r) =>
+        r.latestCostOccurredAt && r.latestCostOccurredAt > max
+          ? r.latestCostOccurredAt
+          : max,
+      ""
+    )
+
+    return {
+      rowId: `group:${dimension}:${key}`,
+      objectType: "aggregate",
+      identityLabel:
+        dimension === "customer"
+          ? (bucket[0].customerLabel ?? key)
+          : key,
+      customerLabel:
+        dimension === "customer"
+          ? `${bucket.length} 单`
+          : `${bucket.length} 单 · 多客户`,
+      netSalesRevenue: fromCents(revenue),
+      actualProcurementCostNet: fromCents(procurement),
+      actualFulfillmentCostNet: fromCents(fulfillment),
+      reductionsNet: fromCents(reductions),
+      actualProfitLossNet: profit != null ? fromCents(profit) : undefined,
+      marginRate,
+      marginUnavailableReason:
+        profit == null ? "成本完全未覆盖，不生成零成本利润" : undefined,
+      coverageState,
+      coverageBlockers: blockers,
+      latestCostOccurredAt: latest || undefined,
+      allowedDrilldowns: [],
+      costEntryIds: [],
+    }
+  })
 }
 
 function projectTotalsFromSeed(rows: readonly ProfitLossRow[]): {
@@ -261,7 +454,11 @@ export async function fetchProfitLossView(
   const canViewProfit = fieldHide !== "profit"
   const canViewRevenue = true
 
-  const filtered = filterRows(W16_SALES_ORDER_ROWS, query).map((r) =>
+  const filtered = filterRows(W16_SALES_ORDER_ROWS, query)
+  const grouped = groupByDimension(filtered, query.dimension)
+  const sorted = sortRows(grouped, query.sort || "actualProfitLossNet:asc")
+
+  const permissionApplied = sorted.map((r) =>
     applyFieldPermissions(r, fieldHide, {
       cost: (row) => ({
         ...row,
@@ -327,11 +524,21 @@ export async function fetchProfitLossView(
   const filterParts = [
     `${query.from} ~ ${query.to}`,
     `归属口径=${basisLabel(query.periodBasis, config)}`,
-    `覆盖=${query.coverage}`,
-    `维度=${query.dimension}`,
+    `覆盖=${COVERAGE_FILTER_LABEL[query.coverage]}`,
+    `维度=${DIMENSION_LABEL[query.dimension]}`,
   ]
-  if (query.customerId) filterParts.push(`客户=${query.customerId}`)
-  if (query.salesOrderId) filterParts.push(`销售单=${query.salesOrderId}`)
+  if (query.customerId) {
+    const label = W16_SALES_ORDER_ROWS.find(
+      (r) => r.customerId === query.customerId
+    )?.customerLabel
+    filterParts.push(`客户=${label ?? query.customerId}`)
+  }
+  if (query.salesOrderId) {
+    const label = W16_SALES_ORDER_ROWS.find(
+      (r) => r.objectId === query.salesOrderId
+    )?.identityLabel
+    filterParts.push(`销售单=${label ?? query.salesOrderId}`)
+  }
   if (query.q) filterParts.push(`搜索=${query.q}`)
 
   return {
@@ -389,8 +596,8 @@ export async function fetchProfitLossView(
     stageReference: W16_STAGE_REFERENCE,
     rows: {
       dimension: query.dimension,
-      items: filtered,
-      total: filtered.length,
+      items: permissionApplied,
+      total: permissionApplied.length,
     },
     filterSummary: filterParts.join(" · "),
     excludedNote: W16_EXCLUDED_NOTE,

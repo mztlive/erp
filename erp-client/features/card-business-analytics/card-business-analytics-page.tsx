@@ -3,7 +3,11 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import type {
+  ColumnDef,
+  PaginationState,
+  SortingState,
+} from "@tanstack/react-table"
 import {
   Bar,
   BarChart,
@@ -53,7 +57,6 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -84,6 +87,7 @@ import {
 } from "@/features/card-business-analytics/queries"
 import type {
   CardBusinessAnalyticsQuery,
+  CardBusinessAnalyticsView,
   CardBusinessDimension,
   CardBusinessExportJob,
   CardBusinessRow,
@@ -108,12 +112,13 @@ const consumptionChartConfig = {
   sales: { label: "销售(含税)", color: "var(--chart-1)" },
   consumption: { label: "消费(含税)", color: "var(--chart-2)" },
   refund: { label: "退款(含税)", color: "var(--chart-3)" },
+  balance: { label: "余额(含税)", color: "var(--chart-4)" },
 } satisfies ChartConfig
 
 const basisChartConfig = {
-  ACTUAL: { label: "ACTUAL", color: "var(--chart-1)" },
-  STANDARD: { label: "STANDARD", color: "var(--chart-2)" },
-  NONE: { label: "NONE", color: "var(--chart-3)" },
+  ACTUAL: { label: "实际成本", color: "var(--chart-1)" },
+  STANDARD: { label: "标准成本", color: "var(--chart-2)" },
+  NONE: { label: "无可用成本", color: "var(--chart-3)" },
 } satisfies ChartConfig
 
 const contributionChartConfig = {
@@ -141,6 +146,62 @@ function formatMoneyDisplay(value: string | undefined | null): string {
 
 function taxBadge(basis: TaxBasis): string {
   return basis === "GROSS" ? "含税" : "不含税"
+}
+
+/** 导出成功条的真实下载入口：按当前视图行生成 CSV（含口径/筛选/时间水印）。 */
+function downloadCardBusinessCsv(
+  data: CardBusinessAnalyticsView,
+  job: CardBusinessExportJob
+) {
+  const wm = job.watermark
+  const quote = (v: string) => `"${v.replaceAll('"', '""')}"`
+  const metaLines = [
+    "# 业务口径=卡券经营（销售/面值/消费/余额为含税；成本/毛差/经营贡献为不含税）",
+    `# 期间=${wm.periodFrom} ~ ${wm.periodTo}`,
+    `# 日期口径=${DATE_BASIS_LABEL[wm.dateBasis]}`,
+    `# 筛选=${wm.filterSummary}`,
+    `# 覆盖率=${wm.coverageRate ?? "—"}`,
+    `# 数据更新时间=${wm.projectionUpdatedAt}`,
+    `# 同步时间=${wm.consumedOutboxWatermark}`,
+    `# 余额快照时间=${wm.balanceSnapshotAt ?? "—"}`,
+    `# 延迟=${wm.lagSeconds} 秒`,
+    `# 行数=${wm.rowCount}`,
+    `# 微信排除=${wm.wechatExcludedNote}`,
+  ]
+  const header =
+    "客户,销售单,卡券类目,卡实例引用,消费(含税),退款(含税),成本口径,成本(不含税),覆盖,未履约余额(含税)"
+  const body = data.rows.items.map((r) =>
+    [
+      r.customerLabel,
+      r.salesOrderNo ?? "",
+      r.voucherCategoryLabel,
+      r.cardInstanceRef ?? "",
+      r.consumptionGross,
+      r.refundGross,
+      COST_BASIS_LABEL[r.costBasis],
+      r.costNet ?? "",
+      r.coverageStatus === "covered"
+        ? "已覆盖"
+        : r.coverageStatus === "partial"
+          ? "部分"
+          : "未覆盖",
+      r.unfulfilledBalanceGross,
+    ]
+      .map((c) => quote(String(c)))
+      .join(",")
+  )
+  const csv = [...metaLines, header, ...body].join("\n")
+  const url = URL.createObjectURL(
+    new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" })
+  )
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download =
+    wm.periodFrom && wm.periodTo
+      ? `卡券经营分析_${wm.periodFrom}_${wm.periodTo}.csv`
+      : "卡券经营分析.csv"
+  anchor.click()
+  URL.revokeObjectURL(url)
 }
 
 function parseDateBasis(raw: string | null): DateBasis | "" {
@@ -236,39 +297,20 @@ function metricValue(
   valueState: string,
   reasonCode?: string
 ): React.ReactNode {
+  // 指标 label 已附加（含税）/（不含税），MoneyValue 不再重复渲染口径徽章
   if (valueState === "masked") {
-    return (
-      <MoneyValue
-        value={null}
-        taxBasis={taxBasis === "GROSS" ? "gross" : "net"}
-        unavailableReason="无字段权限"
-      />
-    )
+    return <MoneyValue value={null} unavailableReason="无字段权限" />
   }
   if (valueState === "unavailable" || value == null) {
     return (
-      <MoneyValue
-        value={null}
-        taxBasis={taxBasis === "GROSS" ? "gross" : "net"}
-        unavailableReason={reasonCode ?? "不可计算"}
-      />
+      <MoneyValue value={null} unavailableReason={reasonCode ?? "不可计算"} />
     )
   }
-  // 比率类直接展示
+  // 比率类直接展示（label 已带口径说明）
   if (value.includes("%")) {
-    return (
-      <span className="inline-flex flex-wrap items-baseline gap-2">
-        <span className="num">{value}</span>
-        <Badge variant="neutral">{taxBadge(taxBasis)}</Badge>
-      </span>
-    )
+    return <span className="num">{value}</span>
   }
-  return (
-    <MoneyValue
-      value={value}
-      taxBasis={taxBasis === "GROSS" ? "gross" : "net"}
-    />
-  )
+  return <MoneyValue value={value} />
 }
 
 export function CardBusinessAnalyticsPage() {
@@ -290,7 +332,7 @@ export function CardBusinessAnalyticsPage() {
   const costBasis = parseCostBasis(searchParams.get("costBasis"))
   const expiryState = parseExpiry(searchParams.get("expiryState"))
   const coverage = parseCoverage(searchParams.get("coverage"))
-  const sort = searchParams.get("sort") ?? "consumptionGross:desc"
+  const sort = searchParams.get("sort") ?? "consumption:desc"
   const basisConfigScenario =
     searchParams.get("basisConfig") === "missing" ? "missing" : "default"
   const freshnessDemo = (searchParams.get("freshness") as
@@ -444,8 +486,29 @@ export function CardBusinessAnalyticsPage() {
     patchSearchParams({ router, pathname, searchParams }, patch, options)
   }
 
+  // 表头排序 ↔ URL sort 双向接线：排序作用于服务端全量分组行，不只当前页
+  const tableSorting = React.useMemo<SortingState>(() => {
+    const [id, dir] = sort.split(":")
+    return [{ id, desc: dir === "desc" }]
+  }, [sort])
+
+  const handleTableSortingChange = React.useCallback(
+    (next: SortingState) => {
+      const nextSort = next[0]
+      patchUrl({
+        sort: nextSort
+          ? `${nextSort.id}:${nextSort.desc ? "desc" : "asc"}`
+          : "consumption:desc",
+      })
+      setPagination((p) => ({ ...p, pageIndex: 0 }))
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sort]
+  )
+
   function applyExplicitPeriod() {
     if (!explicitFrom || !explicitTo || !explicitDateBasis) return
+    if (explicitFrom > explicitTo) return
     patchUrl({
       from: explicitFrom,
       to: explicitTo,
@@ -509,28 +572,34 @@ export function CardBusinessAnalyticsPage() {
         accessorFn: (r) => r.customerLabel,
         header: "客户",
         meta: { label: "客户" },
-        cell: ({ row }) => (
-          <Link
-            href={`/sales/customers/${row.original.customerId}`}
-            className="text-sm underline-offset-2 hover:underline"
-          >
-            {row.original.customerLabel}
-          </Link>
-        ),
+        cell: ({ row }) =>
+          row.original.customerId ? (
+            <Link
+              href={`/sales/customers/${row.original.customerId}`}
+              className="text-sm underline-offset-2 hover:underline"
+            >
+              {row.original.customerLabel}
+            </Link>
+          ) : (
+            <span className="text-sm">{row.original.customerLabel}</span>
+          ),
       },
       {
         id: "salesOrder",
-        accessorFn: (r) => r.salesOrderNo,
+        accessorFn: (r) => r.salesOrderNo ?? "",
         header: "销售单",
         meta: { label: "销售单" },
-        cell: ({ row }) => (
-          <Link
-            href={`/sales/orders/${row.original.salesOrderId}`}
-            className="text-sm underline-offset-2 hover:underline"
-          >
-            {row.original.salesOrderNo}
-          </Link>
-        ),
+        cell: ({ row }) =>
+          row.original.salesOrderId ? (
+            <Link
+              href={`/sales/orders/${row.original.salesOrderId}`}
+              className="text-sm underline-offset-2 hover:underline"
+            >
+              {row.original.salesOrderNo}
+            </Link>
+          ) : (
+            <span className="text-sm">{row.original.salesOrderNo ?? "—"}</span>
+          ),
       },
       {
         id: "category",
@@ -543,17 +612,20 @@ export function CardBusinessAnalyticsPage() {
       },
       {
         id: "cardRef",
-        accessorFn: (r) => r.cardInstanceRef,
+        accessorFn: (r) => r.cardInstanceRef ?? "",
         header: "卡实例引用",
         meta: { label: "稳定卡实例引用摘要" },
-        cell: ({ row }) => (
-          <span
-            className="num text-sm"
-            title="不可逆稳定引用，不可反推卡号/卡密"
-          >
-            {row.original.cardInstanceRef}
-          </span>
-        ),
+        cell: ({ row }) =>
+          row.original.cardInstanceRef ? (
+            <span
+              className="num text-sm"
+              title="不可逆稳定引用，不可反推卡号/卡密"
+            >
+              {row.original.cardInstanceRef}
+            </span>
+          ) : (
+            <span className="text-sm text-muted-foreground">—</span>
+          ),
       },
       {
         id: "consumption",
@@ -561,7 +633,7 @@ export function CardBusinessAnalyticsPage() {
         header: "消费(含税)",
         meta: { label: "消费金额含税", width: "amount", align: "end", numeric: true },
         cell: ({ row }) => (
-          <MoneyValue value={row.original.consumptionGross} taxBasis="gross" />
+          <MoneyValue value={row.original.consumptionGross} />
         ),
       },
       {
@@ -570,7 +642,7 @@ export function CardBusinessAnalyticsPage() {
         header: "退款(含税)",
         meta: { label: "退款含税", width: "amount", align: "end", numeric: true },
         cell: ({ row }) => (
-          <MoneyValue value={row.original.refundGross} taxBasis="gross" />
+          <MoneyValue value={row.original.refundGross} />
         ),
       },
       {
@@ -599,14 +671,11 @@ export function CardBusinessAnalyticsPage() {
             return (
               <MoneyValue
                 value={null}
-                taxBasis="net"
-                unavailableReason="NONE · 非零成本"
+                unavailableReason="无可用成本 · 不显示金额"
               />
             )
           }
-          return (
-            <MoneyValue value={row.original.costNet} taxBasis="net" />
-          )
+          return <MoneyValue value={row.original.costNet} />
         },
       },
       {
@@ -644,10 +713,7 @@ export function CardBusinessAnalyticsPage() {
           numeric: true,
         },
         cell: ({ row }) => (
-          <MoneyValue
-            value={row.original.unfulfilledBalanceGross}
-            taxBasis="gross"
-          />
+          <MoneyValue value={row.original.unfulfilledBalanceGross} />
         ),
       },
       {
@@ -663,7 +729,7 @@ export function CardBusinessAnalyticsPage() {
                 variant="ghost"
                 render={<Link href={row.original.consumptionOrderHref} />}
               >
-                W25 消费单
+                {openWorkspaceLabel("W25")}
                 <ExternalLinkIcon className="size-3" aria-hidden />
               </Button>
             ) : null}
@@ -674,7 +740,7 @@ export function CardBusinessAnalyticsPage() {
                 variant="ghost"
                 render={<Link href={row.original.supplierOrderHref} />}
               >
-                W26 供应单
+                {openWorkspaceLabel("W26")}
                 <ExternalLinkIcon className="size-3" aria-hidden />
               </Button>
             ) : null}
@@ -685,7 +751,7 @@ export function CardBusinessAnalyticsPage() {
                 variant="ghost"
                 render={<Link href={data.governanceLinks.noneCoverageHref} />}
               >
-                W29 未归集
+                {openWorkspaceLabel("W29")}
                 <ExternalLinkIcon className="size-3" aria-hidden />
               </Button>
             ) : null}
@@ -703,6 +769,7 @@ export function CardBusinessAnalyticsPage() {
       sales: Number(p.salesGross) / 10000,
       consumption: Number(p.consumptionGross) / 10000,
       refund: Number(p.refundGross) / 10000,
+      balance: Number(p.balanceGross) / 10000,
       salesLabel: formatMoneyDisplay(p.salesGross),
       consumptionLabel: formatMoneyDisplay(p.consumptionGross),
       refundLabel: formatMoneyDisplay(p.refundGross),
@@ -836,13 +903,25 @@ export function CardBusinessAnalyticsPage() {
                 />
               </div>
             </div>
-            <Button
-              type="button"
-              disabled={!explicitFrom || !explicitTo || !explicitDateBasis}
-              onClick={applyExplicitPeriod}
-            >
-              开始分析
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                disabled={
+                  !explicitFrom ||
+                  !explicitTo ||
+                  !explicitDateBasis ||
+                  (explicitFrom > explicitTo && explicitFrom !== explicitTo)
+                }
+                onClick={applyExplicitPeriod}
+              >
+                开始分析
+              </Button>
+              {explicitFrom && explicitTo && explicitFrom > explicitTo ? (
+                <p className="text-xs text-destructive">
+                  开始日期不能晚于结束日期，请调整后提交。
+                </p>
+              ) : null}
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -877,7 +956,7 @@ export function CardBusinessAnalyticsPage() {
               />
               <div className="flex flex-wrap gap-2 text-xs text-muted-foreground">
                 <span>
-                  数据同步时间{" "}
+                  同步{" "}
                   <time
                     className="num"
                     dateTime={data.freshness.consumedOutboxWatermark}
@@ -899,16 +978,14 @@ export function CardBusinessAnalyticsPage() {
                   <>
                     <span aria-hidden>·</span>
                     <span>
-                      余额记录{" "}
+                      余额快照{" "}
                       <time
                         className="num"
                         dateTime={data.freshness.balanceSnapshotAt}
                       >
                         {formatDateTime(data.freshness.balanceSnapshotAt, "full")}
                       </time>
-                      <span className="ml-1 text-muted-foreground">
-                        （独立，不参与更新时效）
-                      </span>
+                      <span className="ml-1">（独立）</span>
                     </span>
                   </>
                 ) : null}
@@ -951,7 +1028,6 @@ export function CardBusinessAnalyticsPage() {
                 actionKey: "export",
                 label: "导出",
                 icon: DownloadIcon,
-                mobileVisibility: "hide",
                 disabled: !data?.fieldPermissions.canExport,
                 onClick: () => setExportPreviewOpen(true),
               },
@@ -967,11 +1043,13 @@ export function CardBusinessAnalyticsPage() {
             <Label htmlFor="w28-preset">期间快捷</Label>
             <OptionCombobox
               id="w28-preset"
-              value={periodFromUrl ? periodPreset : periodPreset}
-              onValueChange={(v) =>
-                applyPreset((v ?? periodPreset) as PeriodPreset)
-              }
+              value={searchParams.get("periodPreset") ?? ""}
+              onValueChange={(v) => {
+                if (!v) return
+                applyPreset(v as PeriodPreset)
+              }}
               options={[
+                { value: "", label: "自定义" },
                 { value: "month-to-date", label: "本月至今" },
                 { value: "last-month", label: "上月" },
                 { value: "quarter-to-date", label: "本季至今" },
@@ -1056,10 +1134,10 @@ export function CardBusinessAnalyticsPage() {
               onValueChange={(v) => patchUrl({ costBasis: v || null })}
               options={[
                 { value: "", label: "全部" },
-                { value: "ACTUAL", label: "ACTUAL" },
-                { value: "STANDARD", label: "STANDARD" },
-                { value: "NONE", label: "NONE" },
-                { value: "ACTUAL,STANDARD", label: "ACTUAL+STANDARD" },
+                { value: "ACTUAL", label: "实际成本" },
+                { value: "STANDARD", label: "标准成本" },
+                { value: "NONE", label: "无可用成本" },
+                { value: "ACTUAL,STANDARD", label: "实际 + 标准成本" },
               ]}
               className="w-[11rem]"
               size="sm"
@@ -1109,6 +1187,28 @@ export function CardBusinessAnalyticsPage() {
               placeholder="分析视角"
             />
           </div>
+          {(customerId ||
+            salesOrderId ||
+            (costBasis && costBasis.length > 0) ||
+            expiryState !== "all" ||
+            coverage !== "all") && (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() =>
+                patchUrl({
+                  customerId: null,
+                  salesOrderId: null,
+                  costBasis: null,
+                  expiryState: null,
+                  coverage: null,
+                })
+              }
+            >
+              清除筛选
+            </Button>
+          )}
         </CardContent>
       </Card>
 
@@ -1147,7 +1247,13 @@ export function CardBusinessAnalyticsPage() {
               <AlertDescription>
                 {refreshFailed
                   ? "保留上次成功数据供只读查阅。不覆盖金额。"
-                  : `更新延迟 ${data.freshness.lagSeconds}s 超过固定上限 ${data.freshness.maxLagSeconds}s（${data.freshness.slaState}）。数据 ${formatDateTime(data.freshness.projectionUpdatedAt, "full")}，同步 ${formatDateTime(data.freshness.consumedOutboxWatermark, "full")}。余额记录独立显示，不合并为「实时」。`}
+                  : `更新延迟 ${data.freshness.lagSeconds}s 超过固定上限 ${data.freshness.maxLagSeconds}s（${
+                      data.freshness.slaState === "BREACHED"
+                        ? "已超时"
+                        : data.freshness.slaState === "REBUILDING"
+                          ? "重建中"
+                          : "异常"
+                    }）。数据 ${formatDateTime(data.freshness.projectionUpdatedAt, "full")}，同步 ${formatDateTime(data.freshness.consumedOutboxWatermark, "full")}。余额记录独立显示，不合并为「实时」。`}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -1181,6 +1287,15 @@ export function CardBusinessAnalyticsPage() {
             </Alert>
           ) : null}
 
+          {viewQuery.isError ? (
+            <Alert variant="destructive">
+              <AlertTitle>数据更新失败</AlertTitle>
+              <AlertDescription>
+                已保留上次成功结果供只读查阅，未覆盖任何金额。请重试或调整筛选。
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
           {exportJob ? (
             <BackgroundJobProgress
               mode="all-or-nothing"
@@ -1198,7 +1313,7 @@ export function CardBusinessAnalyticsPage() {
               succeeded={
                 exportJob.status === "succeeded" ? exportJob.total : undefined
               }
-              label={`导出任务 ${exportJob.jobId}`}
+              label="卡券经营分析导出"
               description={
                 <>
                   口径/筛选：{exportJob.watermark.filterSummary}
@@ -1221,7 +1336,16 @@ export function CardBusinessAnalyticsPage() {
                   </span>
                   {exportJob.downloadLabel ? (
                     <span className="mt-1 block font-medium">
-                      可下载：{exportJob.downloadLabel}
+                      导出文件：{exportJob.downloadLabel}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="ml-2"
+                        onClick={() => downloadCardBusinessCsv(data, exportJob)}
+                      >
+                        下载 CSV
+                      </Button>
                     </span>
                   ) : null}
                 </>
@@ -1245,8 +1369,7 @@ export function CardBusinessAnalyticsPage() {
             <AlertDescription className="text-xs leading-relaxed">
               {data.filterSummary}
               <span className="mt-1 block">
-                权限版本 {data.scope.permissionVersion} · 时区{" "}
-                {data.scope.timezone} · 筛选摘要（部分省略）
+                指标条与图表为全量口径（不随客户/销售单/成本口径/履约/覆盖筛选变化）；下钻明细表已按筛选过滤并按分析视角聚合。
               </span>
               <span className="mt-1 block text-muted-foreground">
                 {data.wechatExcludedNote}
@@ -1378,9 +1501,24 @@ export function CardBusinessAnalyticsPage() {
           {!data.scopeFullyExpired ? (
             <Alert>
               <AlertTitle>最终利润未展示</AlertTitle>
-              <AlertDescription>
-                {data.finalProfitUnavailableReason}
-                当前同屏展示「当前经营贡献」与「未履约余额」。若需最终盈亏视角，请将日期口径切换为履约到期日并筛选已到期范围。
+              <AlertDescription className="flex flex-wrap items-center gap-2">
+                <span>
+                  {data.finalProfitUnavailableReason}
+                  当前同屏展示「当前经营贡献」与「未履约余额」。若需最终盈亏视角，可将日期口径切换为履约到期日并筛选已到期范围。
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    patchUrl({
+                      dateBasis: "expiry",
+                      expiryState: "expired",
+                    })
+                  }
+                >
+                  切换为履约到期日 + 已到期
+                </Button>
               </AlertDescription>
             </Alert>
           ) : null}
@@ -1391,7 +1529,7 @@ export function CardBusinessAnalyticsPage() {
               <CardHeader className="border-b">
                 <CardTitle>消费与余额趋势</CardTitle>
                 <CardDescription>
-                  销售 / 消费 / 退款（含税，万元展示）。筛选：{data.filterSummary}
+                  销售 / 消费 / 退款 / 余额（含税，万元展示）。全量口径，不随明细筛选变化。
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pt-4">
@@ -1422,6 +1560,15 @@ export function CardBusinessAnalyticsPage() {
                       fill="var(--color-refund)"
                       radius={4}
                       name="退款(含税)"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="balance"
+                      stroke="var(--color-balance)"
+                      strokeWidth={2}
+                      strokeDasharray="4 4"
+                      dot={false}
+                      name="余额(含税)"
                     />
                   </BarChart>
                 </ChartContainer>
@@ -1472,8 +1619,8 @@ export function CardBusinessAnalyticsPage() {
               <CardHeader className="border-b">
                 <CardTitle>成本口径构成</CardTitle>
                 <CardDescription>
-                  ACTUAL / STANDARD / NONE 消费金额占比。三者合计须等于累计卡券消费{" "}
-                  {formatMoneyDisplay(data.coverage.totalConsumptionGross)}。
+                  实际成本 / 标准成本 / 无可用成本消费金额占比。三者合计须等于累计卡券消费{" "}
+                  {formatMoneyDisplay(data.coverage.totalConsumptionGross)}。全量口径，不随明细筛选变化。
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pt-4">
@@ -1521,7 +1668,7 @@ export function CardBusinessAnalyticsPage() {
                       {basisChartData.map((r) => (
                         <tr key={r.basis} className="border-b border-border/60">
                           <th scope="row" className="py-1 pr-2 font-medium">
-                            {r.basis} · {r.label}
+                            {r.label}
                           </th>
                           <td className="num py-1 pr-2">{r.amountLabel}</td>
                           <td className="num py-1 pr-2">{r.share}</td>
@@ -1549,7 +1696,7 @@ export function CardBusinessAnalyticsPage() {
               <CardHeader className="border-b">
                 <CardTitle>经营贡献与覆盖率</CardTitle>
                 <CardDescription>
-                  利润金额不含税；覆盖率同屏辅助。筛选与指标一致。
+                  利润金额不含税；覆盖率同屏辅助。全量口径，与指标一致，不随明细筛选变化。
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4 pt-4">
@@ -1670,7 +1817,7 @@ export function CardBusinessAnalyticsPage() {
               <CardHeader className="border-b">
                 <CardTitle>类目 / 客户构成</CardTitle>
                 <CardDescription>
-                  排名不越过数据范围。筛选：{data.filterSummary}
+                  排名不越过数据范围。全量口径，不随明细筛选变化。
                 </CardDescription>
               </CardHeader>
               <CardContent className="grid gap-4 pt-4 sm:grid-cols-2">
@@ -1722,12 +1869,30 @@ export function CardBusinessAnalyticsPage() {
             <BusinessEmptyState
               kind="filter"
               title="当前筛选无卡券经营记录"
-              description="请调整期间、客户或成本口径。"
+              description="请调整期间、客户、销售单、成本口径或覆盖筛选。"
+              action={
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() =>
+                    patchUrl({
+                      customerId: null,
+                      salesOrderId: null,
+                      costBasis: null,
+                      expiryState: null,
+                      coverage: null,
+                    })
+                  }
+                >
+                  清除筛选
+                </Button>
+              }
             />
           ) : (
             <BusinessTableFrame
               title="下钻明细"
-              description={`客户 / 销售单 / 卡实例引用 / 消费 / 成本口径 / 覆盖。不包含卡号、卡密与绑定手机号。共 ${data.rows.total} 行 · ${data.filterSummary}`}
+              description={`客户 / 销售单 / 卡券类目 / 卡实例引用 / 消费(含税) / 退款(含税) / 成本口径 / 成本(不含税) / 覆盖 / 未履约余额(含税) / 下钻。不包含卡号、卡密与绑定手机号。共 ${data.rows.total} 行 · ${data.filterSummary}`}
               table={
                 <DataTable
                   columns={columns}
@@ -1736,6 +1901,8 @@ export function CardBusinessAnalyticsPage() {
                   rowCount={data.rows.total}
                   pagination={pagination}
                   onPaginationChange={setPagination}
+                  sorting={tableSorting}
+                  onSortingChange={handleTableSortingChange}
                   manualPagination
                   layout="flush"
                   density="compact"
@@ -1758,13 +1925,13 @@ export function CardBusinessAnalyticsPage() {
             <DescriptionItem>
               <DescriptionTerm>含税指标</DescriptionTerm>
               <DescriptionDetails>
-                卡券销售金额、可消费总额度、累计消费、未消费余额、未履约余额均为含税（GROSS）。
+                卡券销售金额、可消费总额度、累计消费、未消费余额、未履约余额均为含税。
               </DescriptionDetails>
             </DescriptionItem>
             <DescriptionItem>
               <DescriptionTerm>不含税指标</DescriptionTerm>
               <DescriptionDetails>
-                实际消费成本、消费毛差、当前经营贡献、最终经营盈亏均为不含税（NET）。进项税率不被销项税率替代。
+                实际消费成本、消费毛差、当前经营贡献、最终经营盈亏均为不含税。进项税率不被销项税率替代。
               </DescriptionDetails>
             </DescriptionItem>
             <DescriptionItem>
@@ -1788,9 +1955,7 @@ export function CardBusinessAnalyticsPage() {
             <DescriptionItem>
               <DescriptionTerm>日期口径</DescriptionTerm>
               <DescriptionDetails>
-                {Object.entries(DATE_BASIS_LABEL)
-                  .map(([k, v]) => `${v}（${k}）`)
-                  .join("；")}
+                {Object.values(DATE_BASIS_LABEL).join("；")}
                 。未配置默认口径时须显式选择，不会自动采用本月或消费发生日。
               </DescriptionDetails>
             </DescriptionItem>
@@ -1812,7 +1977,7 @@ export function CardBusinessAnalyticsPage() {
               <AlertDescription className="space-y-2 text-xs">
                 <p>
                   <strong>口径：</strong>
-                  销售/面值/消费/余额为含税（GROSS）；成本/毛差/经营贡献为不含税（NET）。无成本数据不计入利润。
+                  销售/面值/消费/余额为含税；成本/毛差/经营贡献为不含税。无成本数据不计入利润。
                 </p>
                 <p>
                   <strong>筛选：</strong>
@@ -1842,8 +2007,8 @@ export function CardBusinessAnalyticsPage() {
                   {data.wechatExcludedNote}
                 </p>
                 <p>
-                  <strong>权限版本：</strong>
-                  {data.scope.permissionVersion} · 行数 {data.rows.total}
+                  <strong>数据范围：</strong>
+                  行数 {data.rows.total}；明细表已按当前筛选过滤并按分析视角聚合，指标与图表为全量口径。
                 </p>
               </AlertDescription>
             </Alert>

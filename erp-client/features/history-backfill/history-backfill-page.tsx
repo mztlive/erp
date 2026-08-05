@@ -11,6 +11,7 @@ import {
   RefreshCwIcon,
   ShieldAlertIcon,
   TriangleAlertIcon,
+  XIcon,
 } from "lucide-react"
 
 import {
@@ -85,6 +86,7 @@ import {
   COST_BASIS_LABEL,
   ENVIRONMENT_LABEL,
   FACT_TYPE_LABEL,
+  FAILURE_CODE_LABEL,
   ITEM_RESULT_LABEL,
   ITEM_RESULT_TONE,
   PIPELINE_ORDER,
@@ -103,7 +105,6 @@ import {
   type HistoryBackfillUrlState,
 } from "@/features/history-backfill/url-state"
 import { formatDateTime } from "@/lib/datetime"
-import { resultText } from "@/lib/ui-text"
 import { createRoleOptions } from "@/lib/demo-roles"
 import { RoleDemoBar } from "@/components/business/role-demo-bar"
 import type { ComboboxOption } from "@/components/business/option-combobox"
@@ -188,8 +189,6 @@ function FormalResultBanner({
       title={result.title}
       description={result.description}
       facts={[
-        { label: "操作 ID", value: result.operationId },
-        { label: resultText.originalTaskNo, value: result.idempotencyKey },
         ...(result.jobNo
           ? [{ label: "任务号", value: result.jobNo }]
           : []),
@@ -281,7 +280,17 @@ export function HistoryBackfillPage({
         onBack={() => {
           replaceListUrl({ ...urlState, jobId: undefined, section: "overview" })
         }}
-        onOpenJob={(id) => replaceDetailUrl(id, { ...urlState, section: "overview" })}
+        onOpenJob={(id) =>
+          replaceDetailUrl(id, {
+            ...urlState,
+            section: "overview",
+            page: 1,
+            result: undefined,
+            factType: undefined,
+            costBasis: undefined,
+            q: undefined,
+          })
+        }
       />
     )
   }
@@ -291,7 +300,17 @@ export function HistoryBackfillPage({
       urlState={urlState}
       role={role}
       patchUrl={patchUrl}
-      onOpenJob={(id) => replaceDetailUrl(id, { ...urlState, section: "overview" })}
+      onOpenJob={(id) =>
+        replaceDetailUrl(id, {
+          ...urlState,
+          section: "overview",
+          page: 1,
+          result: undefined,
+          factType: undefined,
+          costBasis: undefined,
+          q: undefined,
+        })
+      }
       pathname={pathname}
     />
   )
@@ -311,6 +330,7 @@ function JobListView({
 }) {
   const [qDraft, setQDraft] = React.useState(urlState.q ?? "")
   const [createOpen, setCreateOpen] = React.useState(false)
+  const [scopeAlertDismissed, setScopeAlertDismissed] = React.useState(false)
   const [actionResult, setActionResult] =
     React.useState<HistoryBackfillCommandResult | null>(null)
   const demo = useHistoryBackfillDemoControls()
@@ -535,6 +555,16 @@ function JobListView({
         >
           演示·覆盖缺口
         </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          disabled={listQuery.isFetching}
+          onClick={() => void listQuery.refetch()}
+        >
+          <RefreshCwIcon className="size-4" aria-hidden />
+          刷新
+        </Button>
       </div>
 
       <FormalResultBanner result={actionResult} />
@@ -563,7 +593,7 @@ function JobListView({
           value={data?.metrics.deduplicated ?? "—"}
         />
         <MetricItem
-          label="NONE 消费"
+          label="未覆盖消费"
           value={data?.metrics.noneConsumption ?? "—"}
         />
         <MetricItem label="失败项" value={data?.metrics.failed ?? "—"} />
@@ -693,9 +723,12 @@ function JobListView({
                 }}
                 options={[
                   { value: "all", label: "全部口径" },
-                  { value: "ACTUAL", label: "ACTUAL" },
-                  { value: "STANDARD", label: "STANDARD" },
-                  { value: "NONE", label: "NONE" },
+                  ...(Object.keys(COST_BASIS_LABEL) as CostBasis[]).map(
+                    (b) => ({
+                      value: b,
+                      label: COST_BASIS_LABEL[b],
+                    })
+                  ),
                 ]}
                 className="w-[10rem]"
                 size="sm"
@@ -727,14 +760,26 @@ function JobListView({
         }
       />
 
-      <Alert>
-        <ShieldAlertIcon />
-        <AlertTitle>范围与敏感边界</AlertTitle>
-        <AlertDescription>
-          从范围起点至截止时点（截止时点当天除外），截止时点当天发生的记录不进历史回填。技术处理完成 ≠
-          报告已确认 ≠ 全历史业务完成。页面与导出不含卡号、卡密、绑定手机、完整地址或原始消息内容。
-        </AlertDescription>
-      </Alert>
+      {!scopeAlertDismissed ? (
+        <Alert>
+          <ShieldAlertIcon />
+          <AlertTitle className="flex items-center justify-between gap-2">
+            范围与敏感边界
+            <button
+              type="button"
+              aria-label="关闭提示"
+              className="text-muted-foreground hover:text-foreground"
+              onClick={() => setScopeAlertDismissed(true)}
+            >
+              <XIcon className="size-4" aria-hidden />
+            </button>
+          </AlertTitle>
+          <AlertDescription>
+            从范围起点至截止时点（截止时点当天除外），截止时点当天发生的记录不进历史回填。技术处理完成 ≠
+            报告已确认 ≠ 全历史业务完成。页面与导出不含卡号、卡密、绑定手机、完整地址或原始消息内容。
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {listQuery.isError ? (
         <BusinessEmptyState
@@ -776,6 +821,7 @@ function JobListView({
         context={data?.createContext}
         pending={commandMutation.isPending}
         role={role}
+        result={actionResult}
         onSubmit={async () => {
           const ctx = data?.createContext
           if (!ctx) return
@@ -807,6 +853,7 @@ function CreateBackfillSheet({
   context,
   pending,
   role,
+  result,
   onSubmit,
 }: {
   open: boolean
@@ -814,6 +861,7 @@ function CreateBackfillSheet({
   context?: CreateBackfillContext
   pending: boolean
   role: ViewerRoleDemo
+  result: HistoryBackfillCommandResult | null
   onSubmit: () => Promise<void>
 }) {
   const blocked = !context?.canCreateDraft || role !== "SYSTEM_ADMIN"
@@ -843,11 +891,6 @@ function CreateBackfillSheet({
                 mono
               />
               <Fact
-                label="回填起点（固定）"
-                value={formatDay(context.requiredHistoryStart)}
-                mono
-              />
-              <Fact
                 label="消费回流启用日 / 回填终点"
                 value={formatDay(context.rangeEnd)}
                 mono
@@ -866,6 +909,23 @@ function CreateBackfillSheet({
                 value={context.coverageComplete ? "完整" : "不足 · 阻断"}
               />
             </div>
+
+            {blocked ? (
+              <Alert variant="destructive">
+                <TriangleAlertIcon />
+                <AlertTitle>
+                  {role !== "SYSTEM_ADMIN"
+                    ? "仅系统管理员可创建回填任务"
+                    : "当前无法创建回填任务"}
+                </AlertTitle>
+                <AlertDescription>
+                  {role !== "SYSTEM_ADMIN"
+                    ? "当前演示角色只能查看。创建草稿并启动回填需由系统管理员操作。"
+                    : (context.blockReasons.join("；") ||
+                        "前置条件尚未满足")}
+                </AlertDescription>
+              </Alert>
+            ) : null}
 
             <Alert>
               <TriangleAlertIcon />
@@ -917,20 +977,27 @@ function CreateBackfillSheet({
         )}
 
         <SheetFooter className="mt-6">
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => onOpenChange(false)}
-          >
-            取消
-          </Button>
-          <Button
-            type="button"
-            disabled={blocked || pending || !context}
-            onClick={() => void onSubmit()}
-          >
-            {pending ? "提交中…" : "创建任务草稿"}
-          </Button>
+          {result && result.status !== "COMMITTED" ? (
+            <div className="w-full">
+              <FormalResultBanner result={result} />
+            </div>
+          ) : null}
+          <div className="flex w-full justify-end gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => onOpenChange(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={blocked || pending || !context}
+              onClick={() => void onSubmit()}
+            >
+              {pending ? "提交中…" : "创建任务草稿"}
+            </Button>
+          </div>
         </SheetFooter>
       </SheetContent>
     </Sheet>
@@ -955,11 +1022,24 @@ function JobDetailView({
     React.useState<HistoryBackfillCommandResult | null>(null)
   const [startOpen, setStartOpen] = React.useState(false)
   const [resumeOpen, setResumeOpen] = React.useState(false)
+  const [reattributeOpen, setReattributeOpen] = React.useState(false)
+  const [reattributeItemId, setReattributeItemId] = React.useState<string | null>(null)
+  const [confirmReportOpen, setConfirmReportOpen] = React.useState(false)
   const [downloadNote, setDownloadNote] = React.useState<string | null>(null)
   const demo = useHistoryBackfillDemoControls()
   const commandMutation = useHistoryBackfillCommandMutation()
 
-  const results = urlState.result ? [urlState.result] : undefined
+  const section = urlState.section
+  const results: ItemResult[] | undefined =
+    section === "dedupe"
+      ? ["DEDUPLICATED"]
+      : section === "unattributed"
+        ? ["UNATTRIBUTED"]
+        : section === "failures"
+          ? ["FAILED"]
+          : urlState.result
+            ? [urlState.result]
+            : undefined
   const factTypes = urlState.factType ? [urlState.factType] : undefined
   const costBases = urlState.costBasis ? [urlState.costBasis] : undefined
 
@@ -969,15 +1049,14 @@ function JobDetailView({
     factTypes,
     costBases,
     q: urlState.q,
-    page: 1,
-    pageSize: 100,
+    page: Math.max(1, urlState.page),
+    pageSize: 20,
     role,
-    section: urlState.section,
+    section,
   })
 
   const view = detailQuery.data
   const job = view?.job
-  const section = urlState.section
 
   if (detailQuery.isPending) {
     return (
@@ -994,12 +1073,29 @@ function JobDetailView({
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <BusinessEmptyState
           kind="no-data"
-          title="任务不存在或无权查看"
-          description="请返回列表或检查任务身份。"
+          title={
+            role === "NO_MODULE"
+              ? "无模块权限"
+              : "无法打开该任务"
+          }
+          description={
+            role === "NO_MODULE"
+              ? "当前演示角色看不到历史消费回填数据。"
+              : "任务可能已结束或链接失效；也可返回任务列表重新选择。"
+          }
           action={
-            <Button type="button" variant="secondary" onClick={onBack}>
-              返回列表
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void detailQuery.refetch()}
+              >
+                重试
+              </Button>
+              <Button type="button" variant="outline" onClick={onBack}>
+                返回列表
+              </Button>
+            </div>
           }
         />
       </div>
@@ -1010,11 +1106,20 @@ function JobDetailView({
   const currentJob = job
 
   const stageStates = buildStageStates(currentJob.pipelineStage)
+  const stageLabels = {
+    upload: PIPELINE_STAGE_LABEL.SCOPE,
+    mapping: PIPELINE_STAGE_LABEL.VALIDATE_SOURCE,
+    validation: PIPELINE_STAGE_LABEL.INGEST,
+    preview: PIPELINE_STAGE_LABEL.ATTRIBUTE,
+    submission: PIPELINE_STAGE_LABEL.REPORT,
+    result: PIPELINE_STAGE_LABEL.DONE,
+  }
   const progressStatus = mapJobProgressStatus(currentJob.processingStatus)
   const noneRow = currentJob.costBasis.find((c) => c.basis === "NONE")
   const canStart = currentJob.allowedActions.includes("START")
   const canResume = currentJob.allowedActions.includes("RESUME")
   const canValidate = currentJob.allowedActions.includes("VALIDATE_SOURCE")
+  const canConfirmReport = currentJob.allowedActions.includes("CONFIRM_REPORT")
   const startBlockers = currentJob.actionBlockers.filter((b) => b.action === "START")
   const report = view?.report
 
@@ -1024,16 +1129,7 @@ function JobDetailView({
   }
 
   const filteredItems = view?.items ?? []
-  const sectionItems = (() => {
-    if (section === "dedupe")
-      return filteredItems.filter((i) => i.result === "DEDUPLICATED")
-    if (section === "unattributed")
-      return filteredItems.filter((i) => i.result === "UNATTRIBUTED")
-    if (section === "failures")
-      return filteredItems.filter((i) => i.result === "FAILED")
-    if (section === "facts") return filteredItems
-    return filteredItems
-  })()
+  const sectionItems = filteredItems
 
   const dominantBasis: CostBasis =
     ([...currentJob.costBasis].sort((a, b) => b.count - a.count)[0]?.basis as CostBasis) ??
@@ -1047,7 +1143,13 @@ function JobDetailView({
         : "partial"
 
   async function runCommand(
-    action: "VALIDATE_SOURCE" | "START" | "RESUME" | "REATTRIBUTE"
+    action:
+      | "VALIDATE_SOURCE"
+      | "START"
+      | "RESUME"
+      | "REATTRIBUTE"
+      | "CONFIRM_REPORT",
+    itemIds?: string[]
   ) {
     const operationId = newRequestId("op")
     const idempotencyKey =
@@ -1062,11 +1164,15 @@ function JobDetailView({
       rangeEnd: currentJob.rangeEnd,
       operationId,
       idempotencyKey,
+      itemIds,
+      reportVersion: report?.reportVersion,
       role,
     })
     setActionResult(result)
     if (action === "START") setStartOpen(false)
     if (action === "RESUME") setResumeOpen(false)
+    if (action === "REATTRIBUTE") setReattributeOpen(false)
+    if (action === "CONFIRM_REPORT") setConfirmReportOpen(false)
   }
 
   return (
@@ -1100,9 +1206,13 @@ function JobDetailView({
               type="button"
               size="sm"
               variant="outline"
+              disabled={detailQuery.isFetching}
               onClick={() => void detailQuery.refetch()}
             >
-              <RefreshCwIcon className="size-4" />
+              <RefreshCwIcon
+                className={detailQuery.isFetching ? "animate-spin" : ""}
+                aria-hidden
+              />
               刷新
             </Button>
           </div>
@@ -1125,16 +1235,26 @@ function JobDetailView({
           variant="outline"
           onClick={() => demo.setForceUnknown(true)}
         >
-          下次动作·结果未知
+          演示：模拟结果未知
         </Button>
       </div>
+
+      {role !== "SYSTEM_ADMIN" ? (
+        <Alert>
+          <ShieldAlertIcon />
+          <AlertTitle>当前角色只能查看</AlertTitle>
+          <AlertDescription>
+            校验来源、开始回填、续跑与报告确认需由系统管理员（或报告确认角色）操作。
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <DocumentHeader
         density="compact"
         title={currentJob.mallName}
         documentNumber={currentJob.jobNo}
         primaryStatus={primaryProcessing}
-        version={`lv-${currentJob.lockVersion}`}
+        version={`版本 ${currentJob.lockVersion}`}
         meta={
           <span className="text-muted-foreground">
             {ENVIRONMENT_LABEL[currentJob.environment]} · 范围起点{" "}
@@ -1161,18 +1281,10 @@ function JobDetailView({
             },
           },
           {
-            id: "range",
-            label: "范围",
-            status: {
-              label: `${formatDay(currentJob.rangeStart)} 至 ${formatDay(currentJob.rangeEnd)}`,
-              tone: "neutral",
-            },
-          },
-          {
             id: "downstream",
-            label: "下游功能",
+            label: "后续流程",
             status: {
-              label: currentJob.formalDownstreamUnlocked ? "已解锁" : "关闭",
+              label: currentJob.formalDownstreamUnlocked ? "已可用" : "保持关闭",
               tone: currentJob.formalDownstreamUnlocked ? "success" : "warning",
             },
           },
@@ -1208,6 +1320,15 @@ function JobDetailView({
                 续跑原任务
               </Button>
             ) : null}
+            {canConfirmReport ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setConfirmReportOpen(true)}
+              >
+                确认报告
+              </Button>
+            ) : null}
             {report ? (
               <Button
                 type="button"
@@ -1215,12 +1336,12 @@ function JobDetailView({
                 variant="outline"
                 onClick={() => {
                   setDownloadNote(
-                    `${report.downloadLabel} · ${report.reportId} v${report.reportVersion} · 已记录审计`
+                    `示例：报告文件生成中 · ${report.downloadLabel} · v${report.reportVersion}`
                   )
                 }}
               >
                 <DownloadIcon className="size-4" />
-                下载报告
+                下载报告（示例）
               </Button>
             ) : null}
           </>
@@ -1237,8 +1358,8 @@ function JobDetailView({
           <AlertDescription>
             技术处理完成仅表示处理完成。当前报告确认状态为「
             {REPORT_REVIEW_STATUS_LABEL[currentJob.reportReviewStatus]}
-            」。下游功能门禁：
-            {currentJob.formalDownstreamUnlocked ? "已解锁" : "保持关闭"}。
+            」。后续流程门禁：
+            {currentJob.formalDownstreamUnlocked ? "已可用" : "保持关闭"}。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1276,6 +1397,7 @@ function JobDetailView({
 
       <ImportStageIndicator
         stages={stageStates}
+        stageLabels={stageLabels}
         aria-label="回填处理阶段"
       />
 
@@ -1286,7 +1408,7 @@ function JobDetailView({
         completed={currentJob.progress.processedCount}
         succeeded={currentJob.progress.insertedCount}
         skipped={currentJob.progress.deduplicatedCount}
-        failed={currentJob.progress.failedCount + currentJob.progress.unattributedCount}
+        failed={currentJob.progress.failedCount}
         label={`后台回填进度 · ${currentJob.jobNo}`}
         description={
           <>
@@ -1296,7 +1418,7 @@ function JobDetailView({
             {currentJob.progress.unattributedCount.toLocaleString("zh-CN")} · 失败{" "}
             {currentJob.progress.failedCount.toLocaleString("zh-CN")}
             {currentJob.progress.heartbeatAt
-              ? ` · 最近心跳 ${formatDateTime(currentJob.progress.heartbeatAt, "dateStyle")}`
+              ? ` · 最近更新于 ${formatDateTime(currentJob.progress.heartbeatAt, "dateStyle")}`
               : ""}
           </>
         }
@@ -1319,10 +1441,10 @@ function JobDetailView({
               ? `${noneRow.consumptionAmountGross} · 成本空（非 0）`
               : "—",
         }}
-        profitBasis="回填成本按逐笔记录：商城成本记录 → 消费时点供给版本 → NONE；禁止当前供给价"
+        profitBasis="回填成本按逐笔记录：商城成本记录 → 消费时点供给版本 → 未覆盖；禁止使用当前供给价"
         notice={
           <span>
-            NONE 成本字段为空而非 0，仅进入消费金额与覆盖率分母。STANDARD
+            未覆盖时成本字段为空而非 0，仅进入消费金额与覆盖率分母。时点标准成本
             必须命中消费发生时点版本。
           </span>
         }
@@ -1331,12 +1453,7 @@ function JobDetailView({
       <div className="grid gap-3 rounded-2xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
         <Fact label="发起人" value={currentJob.requestedBy} />
         <Fact label="发起时间" value={formatDateTime(currentJob.requestedAt, "dateStyle")} />
-        <Fact label="来来源更新时间" value={formatDateTime(currentJob.sourceAsOf, "dateStyle")} />
-        <Fact
-          label={resultText.originalTaskId}
-          value={currentJob.idempotencyNamespace}
-          mono
-        />
+        <Fact label="来源更新时间" value={formatDateTime(currentJob.sourceAsOf, "dateStyle")} />
         <Fact label="范围说明" value={currentJob.scopeNote} />
         <Fact label="履约说明" value={currentJob.legacyManualNote} />
       </div>
@@ -1347,9 +1464,7 @@ function JobDetailView({
           <AlertDescription>
             <ul className="list-disc pl-4">
               {startBlockers.map((b) => (
-                <li key={b.code}>
-                  {b.code}：{b.message}
-                </li>
+                <li key={b.code}>{b.message}</li>
               ))}
             </ul>
           </AlertDescription>
@@ -1360,7 +1475,7 @@ function JobDetailView({
         value={section}
         onValueChange={(v) => {
           if (v == null) return
-          patchUrl({ section: v as JobSection })
+          patchUrl({ section: v as JobSection, page: 1 })
         }}
       >
         <TabsList className="flex h-auto flex-wrap">
@@ -1384,7 +1499,7 @@ function JobDetailView({
       )}
 
       {section === "overview" ? (
-        <OverviewSection job={currentJob} items={filteredItems} />
+        <OverviewSection job={currentJob} />
       ) : null}
 
       {section === "facts" ||
@@ -1395,6 +1510,13 @@ function JobDetailView({
           items={sectionItems}
           section={section}
           loading={detailQuery.isFetching}
+          totalCount={view?.totalItems ?? sectionItems.length}
+          page={Math.max(1, urlState.page)}
+          onPageChange={(nextPage) => patchUrl({ page: nextPage })}
+          onReattribute={(itemId) => {
+            setReattributeItemId(itemId)
+            setReattributeOpen(true)
+          }}
         />
       ) : null}
 
@@ -1434,7 +1556,7 @@ function JobDetailView({
         effects={[
           "后台执行五类关键记录回填",
           "与实时记录按业务记录键去重",
-          "成本按 ACTUAL / 时点 STANDARD / NONE 评估",
+          "成本按实际、时点标准、未覆盖三种口径评估",
         ]}
         irreversibleEffects={[
           "已成功写入的业务记录不因失败或续跑回滚",
@@ -1458,13 +1580,53 @@ function JobDetailView({
         lockedFields={[
           `任务 ${currentJob.jobNo}`,
           `范围起点 ${formatDay(currentJob.rangeStart)} 至 截止时点 ${formatDay(currentJob.rangeEnd)}`,
-          "提交身份已沿用",
+          "沿用原任务提交记录",
           `已成功 ${currentJob.progress.insertedCount} · 待处理剩余项`,
         ]}
         effects={["逐项仍使用相同业务记录键", "已成功记录保持不变"]}
         irreversibleEffects={["不删除已入库记录"]}
         pending={commandMutation.isPending}
         onConfirm={() => runCommand("RESUME")}
+      />
+
+      <FormalActionConfirmDialog
+        open={confirmReportOpen}
+        onOpenChange={setConfirmReportOpen}
+        actionLabel="确认报告"
+        title="确认技术报告并解锁后续流程"
+        description="仅更新报告确认状态；不改写已入库记录或处理状态。"
+        fromStatus={{
+          label: REPORT_REVIEW_STATUS_LABEL[currentJob.reportReviewStatus],
+          tone: REPORT_REVIEW_STATUS_TONE[currentJob.reportReviewStatus],
+        }}
+        toStatus={{ label: "已确认", tone: "success" }}
+        effects={[
+          "技术报告标记为已确认",
+          "覆盖完整时解锁后续流程",
+          "不改写已入库记录",
+        ]}
+        irreversibleEffects={["报告确认状态进入处理审计"]}
+        pending={commandMutation.isPending}
+        onConfirm={() => runCommand("CONFIRM_REPORT")}
+      />
+
+      <FormalActionConfirmDialog
+        open={reattributeOpen}
+        onOpenChange={setReattributeOpen}
+        actionLabel="重新归集"
+        title="确认逐项重新归集"
+        description="引用原业务记录重新归集并追加成本评估；不复制业务记录、不改写原消费。"
+        fromStatus={{ label: "待归集", tone: "warning" }}
+        toStatus={{ label: "已提交重新归集", tone: "success" }}
+        effects={["按原业务记录键重新归集", "追加成本评估"]}
+        irreversibleEffects={["归集结果进入处理审计"]}
+        pending={commandMutation.isPending}
+        onConfirm={() =>
+          runCommand(
+            "REATTRIBUTE",
+            reattributeItemId ? [reattributeItemId] : undefined
+          )
+        }
       />
     </div>
   )
@@ -1479,6 +1641,7 @@ function ItemFilters({
   patchUrl: (patch: Partial<HistoryBackfillUrlState>) => void
   section: JobSection
 }) {
+  const [qDraft, setQDraft] = React.useState(urlState.q ?? "")
   return (
     <div className="flex flex-wrap items-end gap-2 rounded-xl border bg-muted/30 p-3">
       {section === "facts" ? (
@@ -1491,6 +1654,7 @@ function ItemFilters({
                 if (v == null) return
                 patchUrl({
                   result: v === "all" ? undefined : (v as ItemResult),
+                  page: 1,
                 })
               }}
               options={[
@@ -1516,6 +1680,7 @@ function ItemFilters({
                 patchUrl({
                   factType:
                     v === "all" ? undefined : (v as MallOrderFactType),
+                  page: 1,
                 })
               }}
               options={[
@@ -1540,13 +1705,17 @@ function ItemFilters({
                 if (v == null) return
                 patchUrl({
                   costBasis: v === "all" ? undefined : (v as CostBasis),
+                  page: 1,
                 })
               }}
               options={[
                 { value: "all", label: "全部" },
-                { value: "ACTUAL", label: "ACTUAL" },
-                { value: "STANDARD", label: "STANDARD" },
-                { value: "NONE", label: "NONE" },
+                ...(Object.keys(COST_BASIS_LABEL) as CostBasis[]).map(
+                  (b) => ({
+                    value: b,
+                    label: COST_BASIS_LABEL[b],
+                  })
+                ),
               ]}
               className="w-[9rem]"
               size="sm"
@@ -1555,8 +1724,41 @@ function ItemFilters({
           </div>
         </>
       ) : null}
-      <p className="text-xs text-muted-foreground">
-        URL：result / factType / costBasis · 五类记录与多次退款/恢复不合并
+      <div className="space-y-1">
+        <Label className="text-xs">搜索</Label>
+        <form
+          className="flex gap-1"
+          onSubmit={(e) => {
+            e.preventDefault()
+            patchUrl({ q: qDraft.trim() || undefined, page: 1 })
+          }}
+        >
+          <Input
+            className="h-8 w-[12rem]"
+            value={qDraft}
+            onChange={(e) => setQDraft(e.target.value)}
+            placeholder="商城订单号 / 子单号"
+          />
+          {urlState.q ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => {
+                setQDraft("")
+                patchUrl({ q: undefined, page: 1 })
+              }}
+            >
+              清除
+            </Button>
+          ) : null}
+          <Button type="submit" size="sm" variant="secondary">
+            搜索
+          </Button>
+        </form>
+      </div>
+      <p className="w-full text-xs text-muted-foreground">
+        同一商城订单的多笔关键记录分别保留，多次退款/恢复不合并
       </p>
     </div>
   )
@@ -1564,12 +1766,10 @@ function ItemFilters({
 
 function OverviewSection({
   job,
-  items,
 }: {
   job: NonNullable<
     Awaited<ReturnType<typeof useHistoryBackfillDetailQuery>>["data"]
   >["job"]
-  items: HistoryBackfillItemView[]
 }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -1600,7 +1800,7 @@ function OverviewSection({
       <Card>
         <CardHeader>
           <CardTitle>结果记录</CardTitle>
-          <CardDescription>统计由系统统一计算，与明细列表可能因分页存在差异。</CardDescription>
+          <CardDescription>统计由系统统一计算；明细可按页浏览。</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2">
           <Fact
@@ -1627,7 +1827,6 @@ function OverviewSection({
             label="失败"
             value={job.progress.failedCount.toLocaleString("zh-CN")}
           />
-          <Fact label="当前页明细" value={`${items.length} 条`} />
         </CardContent>
       </Card>
     </div>
@@ -1638,11 +1837,22 @@ function ItemsTable({
   items,
   section,
   loading,
+  totalCount,
+  page,
+  onPageChange,
+  onReattribute,
+  title,
 }: {
   items: HistoryBackfillItemView[]
   section: JobSection
   loading?: boolean
+  totalCount: number
+  page: number
+  onPageChange: (page: number) => void
+  onReattribute?: (itemId: string) => void
+  title?: string
 }) {
+  const pageSize = 20
   const columns = React.useMemo<ColumnDef<HistoryBackfillItemView>[]>(
     () => [
       {
@@ -1654,7 +1864,7 @@ function ItemsTable({
       },
       {
         id: "key",
-        header: "业务记录键摘要",
+        header: "记录摘要",
         cell: ({ row }) => (
           <span className="font-mono text-xs">
             {row.original.businessFactKeySummary}
@@ -1701,19 +1911,14 @@ function ItemsTable({
         cell: ({ row }) => {
           const b = row.original.costBasis
           if (!b || b === "N_A") return <span className="text-xs">不适用</span>
-          if (b === "NONE") {
-            return (
-              <span className="text-xs text-warning-foreground">
-                NONE · 成本空
-              </span>
-            )
-          }
           return (
             <span className="text-xs">
-              {b}
-              {row.original.costAmountNet
-                ? ` · ${row.original.costAmountNet}`
-                : ""}
+              {COST_BASIS_LABEL[b]}
+              {b === "NONE"
+                ? " · 成本空"
+                : row.original.costAmountNet
+                  ? ` · ${row.original.costAmountNet}`
+                  : ""}
             </span>
           )
         },
@@ -1734,10 +1939,6 @@ function ItemsTable({
                 <div className="text-muted-foreground">
                   {item.dedupeProof.formalFactSummary}
                 </div>
-                <div className="font-mono text-[10px] text-muted-foreground">
-                  {item.dedupeProof.formalFactId} · msg{" "}
-                  {item.dedupeProof.originalMessageId}
-                </div>
               </div>
             )
           }
@@ -1745,34 +1946,43 @@ function ItemsTable({
             return (
               <div className="space-y-1">
                 <div className="text-xs">{item.unattributedReason}</div>
-                <Button
-                  render={
-                    <Link
-                      href={
-                        item.workItemId
-                          ? `/governance/integration-errors?resolveWorkItemId=${item.workItemId}&queueContextId=queue:W29:mine:all`
-                          : "/governance/integration-errors?view=mine"
-                      }
-                    />
-                  }
-                  size="sm"
-                  variant="outline"
-                  className="h-7 text-xs"
-                >
-                  去接口错误中心处理
-                  <ExternalLinkIcon className="size-3" />
-                </Button>
+                <div className="flex flex-wrap gap-1">
+                  <Button
+                    render={
+                      <Link href="/governance/integration-errors?view=mine" />
+                    }
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                  >
+                    去接口错误中心处理
+                    <ExternalLinkIcon className="size-3" />
+                  </Button>
+                  {onReattribute ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => onReattribute(item.itemId)}
+                    >
+                      重新归集
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             )
           }
           if (item.failure) {
             return (
               <div className="max-w-[14rem] text-xs">
-                <div className="font-mono">{item.failure.errorCode}</div>
+                <div>{FAILURE_CODE_LABEL[item.failure.errorCode] ?? item.failure.summary}</div>
                 <div>{item.failure.summary}</div>
                 <div className="text-muted-foreground">
-                  {item.failure.stage} ·{" "}
-                  {item.failure.retryable ? "可续跑" : "需业务修复"}
+                  {PIPELINE_STAGE_LABEL[
+                    item.failure.stage as BackfillPipelineStage
+                  ] ?? item.failure.stage}{" "}
+                  · {item.failure.retryable ? "可续跑" : "需业务修复"}
                 </div>
               </div>
             )
@@ -1780,14 +1990,14 @@ function ItemsTable({
           return (
             <span className="text-xs text-muted-foreground">
               {item.fulfillmentChain === "LEGACY_MANUAL"
-                ? "LEGACY_MANUAL"
+                ? "历史手工口径"
                 : "—"}
             </span>
           )
         },
       },
     ],
-    [section]
+    [section, onReattribute]
   )
 
   if (items.length === 0) {
@@ -1795,7 +2005,7 @@ function ItemsTable({
       <BusinessEmptyState
         kind="no-data"
         title="当前筛选无明细"
-        description="五类关键记录分别保留；同一订单的支付/取消/完成/多次退款/多次余额恢复不会被合并。"
+        description="同一商城订单的多笔关键记录分别保留；支付/取消/完成/多次退款/多次余额恢复不会被合并。"
       />
     )
   }
@@ -1803,24 +2013,28 @@ function ItemsTable({
   return (
     <BusinessTableFrame
       title={
-        section === "dedupe"
+        title ??
+        (section === "dedupe"
           ? "去重证明"
           : section === "unattributed"
             ? "待归集（原记录已保存）"
             : section === "failures"
               ? "失败诊断"
-              : "记录结果"
+              : "记录结果")
       }
-      description="不含卡号/卡密/手机/完整地址/原始消息内容 · 商城订单号不是唯一任务号"
+      description="不含卡号/卡密/手机/完整地址/原始消息内容"
       table={
         <DataTable
           data={[...items]}
           columns={columns}
           getRowId={(row) => row.itemId}
-          rowCount={items.length}
+          rowCount={totalCount}
+          pagination={{ pageIndex: Math.max(0, page - 1), pageSize }}
+          onPaginationChange={(next) => onPageChange(next.pageIndex + 1)}
           layout="flush"
           density="compact"
           loading={loading}
+          showRefreshingBanner={false}
         />
       }
     />
@@ -1862,9 +2076,9 @@ function CostSection({
       <Alert>
         <AlertTitle>禁止当前供给价</AlertTitle>
         <AlertDescription>
-          STANDARD 必须命中消费发生时点有效供给版本；NONE
+          时点标准成本必须命中消费发生时点有效供给版本；未覆盖
           不得用当前价、猜测税率或销项税率替代进项。覆盖率{" "}
-          {job.coverageRate ?? "—"}（NONE 进分母）。
+          {job.coverageRate ?? "—"}（未覆盖进分母）。
         </AlertDescription>
       </Alert>
       <Separator />
@@ -1873,6 +2087,17 @@ function CostSection({
           (i) => i.costBasis === "ACTUAL" || i.costBasis === "STANDARD" || i.costBasis === "NONE"
         )}
         section="facts"
+        title="成本口径明细"
+        totalCount={
+          items.filter(
+            (i) =>
+              i.costBasis === "ACTUAL" ||
+              i.costBasis === "STANDARD" ||
+              i.costBasis === "NONE"
+          ).length
+        }
+        page={1}
+        onPageChange={() => undefined}
       />
     </div>
   )
@@ -1911,7 +2136,7 @@ function ReportSection({
             <div>
               <CardTitle>审计报告</CardTitle>
               <CardDescription>
-                {report.reportId} · v{report.reportVersion} ·{" "}
+                v{report.reportVersion} ·{" "}
                 {formatDateTime(report.generatedAt, "dateStyle")}
               </CardDescription>
             </div>
@@ -1955,8 +2180,8 @@ function ReportSection({
             <Alert>
               <AlertTitle>尚未全历史最终完成</AlertTitle>
               <AlertDescription>
-                当前不可宣称「全历史回填最终完成」。下游功能：
-                {job.formalDownstreamUnlocked ? "已解锁" : "关闭"}。
+                当前不可宣称「全历史回填最终完成」。后续流程：
+                {job.formalDownstreamUnlocked ? "已可用" : "保持关闭"}。
               </AlertDescription>
             </Alert>
           )}
@@ -1964,10 +2189,10 @@ function ReportSection({
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             <Fact
               label="范围"
-              value={`[${formatDay(report.rangeStart)}, ${formatDay(report.rangeEnd)})`}
+              value={`${formatDay(report.rangeStart)} 至 ${formatDay(report.rangeEnd)}（截止时点当天除外）`}
               mono
             />
-            <Fact label="T" value={formatDay(report.cutoverAt)} mono />
+            <Fact label="启用日" value={formatDay(report.cutoverAt)} mono />
             <Fact
               label="总笔数"
               value={report.totalCount.toLocaleString("zh-CN")}
@@ -1978,7 +2203,7 @@ function ReportSection({
               value={report.deduplicatedCount.toLocaleString("zh-CN")}
             />
             <Fact label="覆盖率" value={report.coverageRate ?? "—"} />
-            <Fact label="Schema" value={report.schemaVersion} mono />
+            <Fact label="报告格式" value={report.schemaVersion} mono />
             <Fact label="规则版本" value={report.ruleVersion} mono />
             <Fact label="操作者" value={report.operatorLabel} />
           </div>
@@ -2029,9 +2254,13 @@ function ReportSection({
             <Button type="button" onClick={onDownload}>
               <DownloadIcon className="size-4" />
               下载{unconfirmed ? "技术报告 · 未确认" : "已确认报告"}
+              （示例）
             </Button>
             {job.reportReviewStatus === "POLICY_NOT_CONFIGURED" ? (
-              <Badge variant="outline">确认动作不可用 · 策略未配置</Badge>
+              <Badge variant="outline">确认动作不可用 · 复核策略未配置</Badge>
+            ) : null}
+            {job.allowedActions.includes("CONFIRM_REPORT") ? (
+              <Badge variant="outline">报告确认后解锁后续流程</Badge>
             ) : null}
           </div>
         </CardContent>

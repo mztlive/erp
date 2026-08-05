@@ -64,6 +64,7 @@ import {
 } from "@/features/import-opening/queries"
 import type {
   BatchSection,
+  FormalActionResponse,
   ImportBatchListItem,
   ImportBatchStatus,
   ImportBatchView,
@@ -577,14 +578,17 @@ function BatchDetailView({
       issueCode: urlState.issueCode ?? "all",
       objectType: urlState.issueObjectType ?? "all",
       rowStatus: urlState.rowStatus ?? "all",
-      page: 1,
-      pageSize: 50,
+      page: Math.max(1, urlState.page),
+      pageSize: 20,
     },
     Boolean(batchId)
   )
   const invalidateMutation = useInvalidateTrialMutation()
   const repairMutation = useOpenRepairBatchMutation()
   const uploadAckMutation = useAcknowledgeUploadMutation()
+
+  const [demoResult, setDemoResult] =
+    React.useState<FormalActionResponse | null>(null)
 
   const batch = detailQuery.data
   const section = urlState.section
@@ -627,6 +631,14 @@ function BatchDetailView({
   }
 
   const stageStates = buildStageStates(batch.stage)
+  const importStageLabels = {
+    upload: PIPELINE_STAGE_LABEL.RECEIVE,
+    mapping: PIPELINE_STAGE_LABEL.VALIDATE,
+    validation: PIPELINE_STAGE_LABEL.TRIAL,
+    preview: PIPELINE_STAGE_LABEL.CONFIRM,
+    submission: PIPELINE_STAGE_LABEL.APPLY,
+    result: PIPELINE_STAGE_LABEL.RESULT,
+  }
   const confirmBlocked = batch.actionBlockers.filter(
     (b) => b.action === "CONFIRM_SCOPE"
   )
@@ -737,7 +749,9 @@ function BatchDetailView({
               variant="outline"
               disabled={uploadAckMutation.isPending}
               onClick={() =>
-                void uploadAckMutation.mutateAsync({ batchId: batch.batchId })
+                void uploadAckMutation
+                  .mutateAsync({ batchId: batch.batchId })
+                  .then(setDemoResult)
               }
             >
               模拟：标记已上传（仅演示）
@@ -748,10 +762,12 @@ function BatchDetailView({
               variant="outline"
               disabled={invalidateMutation.isPending}
               onClick={() =>
-                void invalidateMutation.mutateAsync({
-                  batchId: batch.batchId,
-                  idempotencyKey: `inv-${batch.batchId}-${Date.now()}`,
-                })
+                void invalidateMutation
+                  .mutateAsync({
+                    batchId: batch.batchId,
+                    idempotencyKey: `inv-${batch.batchId}-${Date.now()}`,
+                  })
+                  .then(setDemoResult)
               }
             >
               <RefreshCwIcon className="size-4" />
@@ -761,29 +777,13 @@ function BatchDetailView({
         }
       />
 
-      {/* 批次身份摘要：环境、基准日、对象集、规则版本 */}
+      {/* 批次身份摘要：对象集、试算版本、来源系统等（环境/基准日/规则版本见页头） */}
       <Card size="sm">
         <CardContent className="grid gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-4">
-          <Fact
-            label="环境"
-            value={
-              <Badge
-                variant={
-                  batch.environment === "PRODUCTION"
-                    ? "destructive"
-                    : "secondary"
-                }
-              >
-                {ENVIRONMENT_LABEL[batch.environment]}
-              </Badge>
-            }
-          />
-          <Fact label="期初基准日" value={batch.baselineDate} mono />
           <Fact
             label="对象集合"
             value={formatObjectSet(batch.sourceObjectSet)}
           />
-          <Fact label="导入规则版本" value={batch.importRuleVersion} mono />
           <Fact label="试算版本" value={batch.trialVersion} mono />
           <Fact label="来源系统" value={batch.sourceSystem.name} />
           <Fact label="发起人" value={batch.initiatorLabel} />
@@ -806,8 +806,27 @@ function BatchDetailView({
 
       <ImportStageIndicator
         stages={stageStates}
+        stageLabels={importStageLabels}
         aria-label="导入六段流水线"
       />
+
+      {demoResult ? (
+        <FormalActionResult
+          status={
+            demoResult.status === "succeeded"
+              ? "succeeded"
+              : demoResult.status === "blocked"
+                ? "blocked"
+                : "rejected"
+          }
+          title={
+            demoResult.status === "succeeded"
+              ? "演示操作已完成"
+              : "演示操作未完成"
+          }
+          description={demoResult.message}
+        />
+      ) : null}
 
       <Tabs
         value={section}
@@ -863,8 +882,9 @@ function BatchDetailView({
 
       {section === "audit" ? <AuditSection batch={batch} /> : null}
 
-      {/* 生产应用门禁 */}
-      <Card size="sm">
+      {/* 生产应用门禁：仅提交应用前阶段展示 */}
+      {batch.stage !== "RESULT" && batch.stage !== "APPLY" ? (
+        <Card size="sm">
         <CardHeader className="border-b">
           <CardTitle>提交前检查</CardTitle>
           <CardDescription>
@@ -909,12 +929,17 @@ function BatchDetailView({
           ) : (
             <FormalActionResult
               status="succeeded"
-              title="检查已完成，可提交"
+              title={
+                batch.stage === "CONFIRM"
+                  ? "检查已完成，可提交应用"
+                  : "检查已完成"
+              }
               description="提交时系统会再次核验权限与数据，确认无误后开始导入。"
             />
           )}
         </CardContent>
       </Card>
+      ) : null}
     </div>
   )
 }
@@ -962,7 +987,7 @@ function OverviewSection({
         <CardHeader className="border-b">
           <CardTitle>试算摘要</CardTitle>
           <CardDescription>
-            成功率为系统统计结果，可能与当前页展示的问题明细不一致。
+            试算统计由系统统一计算，与问题明细可能因筛选存在差异。
           </CardDescription>
         </CardHeader>
         <CardContent className="pt-4">
@@ -1038,7 +1063,7 @@ function OverviewSection({
           <AlertDescription>
             {batch.invalidation.reason}（
             {formatDateTime(batch.invalidation.invalidatedAt, "dateStyle", "passthrough")}
-            ）。禁止按旧版本 trial=
+            ）。禁止按旧试算版本{" "}
             <span className="num font-mono">
               {batch.invalidation.previousTrialVersion}
             </span>{" "}
@@ -1051,6 +1076,7 @@ function OverviewSection({
 }
 
 function FilesSection({ batch }: { batch: ImportBatchView }) {
+  const [previewAsset, setPreviewAsset] = React.useState<string | null>(null)
   return (
     <div className="grid gap-4 lg:grid-cols-2">
       <Card size="sm">
@@ -1098,8 +1124,7 @@ function FilesSection({ batch }: { batch: ImportBatchView }) {
           )}
           <Separator />
           <p className="text-xs text-muted-foreground">
-            禁止内容：原始 SQL、数据库连接头、商城禁止字段导出。此类文件不得进入长期
-            file_asset，也不能在本页展示。
+            禁止内容：原始 SQL、数据库连接头、商城禁止字段导出。此类文件不得长期留存，也不能在本页展示。
           </p>
         </CardContent>
       </Card>
@@ -1129,6 +1154,20 @@ function FilesSection({ batch }: { batch: ImportBatchView }) {
                   {" · "}
                   {formatBytes(a.byteSize)}
                 </div>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-2 h-7 text-xs"
+                  onClick={() => setPreviewAsset(a.fileName)}
+                >
+                  查看（示例）
+                </Button>
+                {previewAsset === a.fileName ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    示例：演示环境不展示文件正文，仅保留元数据与保留策略。
+                  </p>
+                ) : null}
               </div>
             ))
           )}
@@ -1177,7 +1216,7 @@ function TrialSection({
               ...(Object.keys(ISSUE_CODE_LABEL) as ImportIssueCode[]).map(
                 (code) => ({
                   value: code,
-                  label: `${code} · ${ISSUE_CODE_LABEL[code]}`,
+                  label: ISSUE_CODE_LABEL[code],
                 })
               ),
             ]}
@@ -1254,7 +1293,13 @@ function TrialSection({
 
       <ImportIssueTable
         caption="导入问题明细（不含成功行）"
-        emptyMessage="当前筛选下没有问题行"
+        emptyMessage={
+          issueQuery.isPending
+            ? "问题明细加载中…"
+            : "当前筛选下没有问题行"
+        }
+        repairableLabel="可在修复后重试"
+        externalLabel="需外部处理后再试"
         issues={issues.map((issue) => ({
           id: issue.issueId,
           rowNumber: issue.sourceRowNo,
@@ -1272,11 +1317,39 @@ function TrialSection({
         }))}
       />
       <p className="text-xs text-muted-foreground">
-        共 {issueQuery.data?.totalCount ?? 0} 条问题 · 版本{" "}
-        <span className="num font-mono">
-          {issueQuery.data?.issueVersion ?? "—"}
-        </span>
+        共 {issueQuery.data?.totalCount ?? 0} 条问题
       </p>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={urlState.page <= 1 || issueQuery.isFetching}
+          onClick={() => patchUrl({ page: urlState.page - 1, section: "trial" })}
+        >
+          上一页
+        </Button>
+        <span>
+          第 {urlState.page} /{" "}
+          {Math.max(
+            1,
+            Math.ceil((issueQuery.data?.totalCount ?? 0) / 20)
+          )}{" "}
+          页
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={
+            issueQuery.isFetching ||
+            urlState.page * 20 >= (issueQuery.data?.totalCount ?? 0)
+          }
+          onClick={() => patchUrl({ page: urlState.page + 1, section: "trial" })}
+        >
+          下一页
+        </Button>
+      </div>
     </div>
   )
 }
@@ -1297,18 +1370,16 @@ function ConfirmSection({
       {workItemTypeMissing ? (
         <FormalActionResult
           status="blocked"
-          title="业务确认入口 · 实施 blocker"
+          title="业务确认入口暂不可用"
           description={WORK_ITEM_TYPE_BLOCKER.message}
-          reference={WORK_ITEM_TYPE_BLOCKER.code}
           facts={[
             {
-              label: "待登记项",
+              label: "待配置项",
               value: WORK_ITEM_TYPE_BLOCKER.requiredRegistration.join("、"),
             },
             {
               label: "禁止项",
-              value:
-                "不得借用 BUSINESS_EXCEPTION；不得上线页面私有任务类型",
+              value: "不得借用异常通道充当必经确认；不得上线页面私有任务类型",
             },
           ]}
         />
@@ -1377,22 +1448,36 @@ function ConfirmSection({
                   <p className="text-muted-foreground">{c.comment}</p>
                 ) : null}
                 <div className="flex flex-wrap gap-2">
-                  <Button type="button" size="sm" disabled={!canAttempt}>
-                    确认本范围
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!canAttempt}
-                  >
-                    退回修复
-                  </Button>
+                  {workItemTypeMissing ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      render={<Link href="/workspace/tasks" />}
+                    >
+                      去待办队列处理
+                      <ExternalLinkIcon className="size-4" />
+                    </Button>
+                  ) : (
+                    <>
+                      <Button type="button" size="sm" disabled={!canAttempt}>
+                        确认本范围
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={!canAttempt}
+                      >
+                        退回修复
+                      </Button>
+                    </>
+                  )}
                 </div>
                 {!canAttempt ? (
                   <p className="text-xs text-muted-foreground">
                     {workItemTypeMissing
-                      ? "任务类型未登记，入口禁用"
+                      ? "确认与退回任务尚未配置，入口暂不可用"
                       : !c.inViewerResponsibility
                         ? role === "SYSTEM_ADMIN"
                           ? "管理员不可代替确认"
@@ -1411,10 +1496,7 @@ function ConfirmSection({
       {confirmBlocked.length > 0 ? (
         <ul className="space-y-1 text-sm text-muted-foreground">
           {confirmBlocked.map((b) => (
-            <li key={`${b.action}-${b.code}`}>
-              <span className="num font-mono text-xs">{b.code}</span>：
-              {b.message}
-            </li>
+            <li key={`${b.action}-${b.code}`}>{b.message}</li>
           ))}
         </ul>
       ) : null}
@@ -1444,7 +1526,7 @@ function ProgressSection({ batch }: { batch: ImportBatchView }) {
         succeeded={job.succeeded}
         skipped={job.skipped}
         failed={job.failed}
-        label={`后台任务 ${job.jobId}`}
+        label={`导入执行进度 · ${batch.batchNo}`}
         description={
           <span>
             最近进度 {formatDateTime(job.updatedAt, "dateStyle", "passthrough")} · 允许部分成功；已形成的处理结果不会因同批其它失败而回退。
@@ -1573,7 +1655,6 @@ function AuditSection({ batch }: { batch: ImportBatchView }) {
         </CardDescription>
       </CardHeader>
       <CardContent className="grid gap-3 pt-4 sm:grid-cols-2">
-        <Fact label="批次身份" value={batch.batchId} mono />
         <Fact label="批次号" value={batch.batchNo} mono />
         <Fact label="规则版本" value={batch.importRuleVersion} mono />
         <Fact label="试算版本" value={batch.trialVersion} mono />

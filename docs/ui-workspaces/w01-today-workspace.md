@@ -144,7 +144,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 | `businessObject` | 对象类型 + 稳定单号 / 名称 | `business_object_type/id` 查询投影 | 点击“查看”进入对象中心，不直接用对象名作为身份 |
 | `counterpartyName` | 客户 / 供应商 | 对象查询投影 | 无权限时掩码或不返回 |
 | `statusLabel` | 待领取、待处理、处理中等 | `work_item.status` | 文字 + tone，不用纯色点 |
-| `enteredAt` | 进入队列 | `work_item.created_at` | 展示相对时间，提示中提供绝对时间 |
+| `enteredAt` | 进入时间 | `work_item.created_at` | 展示相对时间，提示中提供绝对时间 |
 | `dueAt` | 截止 / 已超期时长 | `work_item.due_at` | 服务端返回时间，前端按工作时区格式化 |
 | `responsibleParty` | 责任角色 · 当前责任人 | `owner_role/user_id` | 角色池任务无个人责任人时明确写“待领取” |
 | `reason` | 产生原因 | `reason_code` 的固定文案 + 安全参数 | 不直接展示内部错误堆栈 |
@@ -198,7 +198,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 | --- | --- | --- | --- | --- | --- |
 | 刷新 | 页头 | W01 可访问 | 无 | 更新统计与任务查询；分别展示两类更新时间 | 保留旧数据并提供重试 |
 | 指标过滤 | 指标卡 | 对应指标可见 | 无 | 主区在原页过滤 | 请求失败恢复原列表和原筛选 |
-| 处理任务 | 任务条目主按钮 | `PROCESS` 在 `allowedActions` 中，且无 blocker | W01 不确认正式动作 | 打开对应 M3 / M4 / M5，并以 `currentWorkItemId=workItemId` 携带 `queueContextId` | 导航失败留在 W01；不提前领取或完成任务 |
+| 处理任务 | 任务条目主按钮 | `PROCESS` 在 `allowedActions` 中，且无 blocker | W01 不确认正式动作 | 打开对应 M3 / M4 / M5；W02 类目标的任务焦点经 `sessionStorage` 传递（内部 ID 不进地址栏） | 导航失败留在 W01；不提前领取或完成任务 |
 | 查看对象 | 任务条目次入口 | 有对象查看权限 | 无 | 聚焦或创建对象中心页签 | 无权限时转为明确无权限态 |
 | 查看全部待办 | 主区标题 / 组尾 | 有 W02 权限 | 无 | 打开 W02 并携带当前筛选 | 无 W02 权限时不展示入口 |
 | 打开预警 | 预警条目 | 有目标模块权限 | 无 | 打开负责处理该预警的工作面 | 目标权限已变化时显示无权限态 |
@@ -208,7 +208,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 
 - W01 点击“处理”只负责导航，不在后台静默执行正式动作。
 - 是否领取任务由目标 M3 队列在进入时按 W02 统一领取契约完成。
-- 跨工作面队列上下文只使用 `queueContextId`，任务条目身份使用 `workItemId`；目标队列定位当前项时使用 `currentWorkItemId=workItemId`，不接受平行别名。
+- 任务身份使用 `workItemId`（内部 ID）。W02 类目标队列的任务焦点不写入 URL，经 `sessionStorage` 传递，避免内部 ID 出现在地址栏；外部链接仍可携带 `currentWorkItemId` 深链参数，W02 优先采纳。W18 按其受控 handler 契约原样传递 `workItemId`、`confirmationScope` 与 `queueContextId`。
 - 前端根据服务端返回的 `destinationWorkspaceId` 和稳定对象身份查本地路由注册表；不接受服务端任意 URL，避免开放跳转。
 - 已被他人有效领取的任务仍可按权限查看，但处理按钮禁用并显示领取人。
 - `IMPORT_BUSINESS_CONFIRMATION` 固定路由到 W18：以 `LEGACY_IMPORT_BATCH` 的稳定批次身份生成
@@ -310,7 +310,7 @@ type WorkspaceWarning = {
 }
 ```
 
-`WorkspaceWorkItem.status` 直接复用 W02 `WorkItemStatus`；每条正式待办都返回 `workItemId` 和 `queueContextId`。W01 对 W02 类目标队列只把 `workItemId` 映射为 `currentWorkItemId`，不创建新的任务身份或队列上下文别名；W18 不是 W02 队列位置，按其受控 handler 契约原样传递 `workItemId`、`confirmationScope` 与 `queueContextId`。
+`WorkspaceWorkItem.status` 直接复用 W02 `WorkItemStatus`；每条正式待办都返回 `workItemId` 和 `queueContextId`（数据字段，非 URL 参数）。W01 对 W02 类目标队列把 `workItemId` 写入 `sessionStorage` 作为当前项焦点，不创建新的任务身份或队列上下文别名；W18 不是 W02 队列位置，按其受控 handler 契约原样传递 `workItemId`、`confirmationScope` 与 `queueContextId`。
 
 ### 8.3 数据新鲜度与计算边界
 
@@ -372,7 +372,7 @@ W01 没有业务写提交接口。
 
 | 来源 / 去向 | Wxx | 携带上下文 | 返回规则 |
 | --- | --- | --- | --- |
-| 统一待办队列 | W02 | `scope`、`family`、`due`；定位任务时传 `currentWorkItemId=workItemId` 与 `queueContextId` | 返回保留 W01 筛选与任务焦点 |
+| 统一待办队列 | W02 | `scope`、`family`、`due`；任务焦点经 `sessionStorage`（内部 ID 不进 URL） | 返回保留 W01 筛选与任务焦点 |
 | 销售单 | W05 | 稳定销售单 ID、来源 `workItemId` | 关闭/返回聚焦原任务 |
 | 二次确认队列 | W07 | `currentWorkItemId=workItemId`、`queueContextId` | 队列页签保留；处理完成可回 W01 |
 | 采购与履约 | W08 / W09 | 采购/履约对象 ID、来源 `workItemId` | 返回原任务或 W01 |

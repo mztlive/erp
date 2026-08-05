@@ -62,6 +62,7 @@ export type CustomerBankAccountView = Readonly<{
   bankName: string
   accountMasked: string
   accountRevealToken?: string
+  isDefault: boolean
   effectiveFrom: string
   effectiveTo?: string
   fieldVisibility: {
@@ -175,6 +176,7 @@ export type CustomerDirectoryQuery = Readonly<{
   status: "active" | "disabled" | "all"
   query?: string
   sort?: "recent_business" | "name" | "overdue_desc"
+  sortDir?: "asc" | "desc"
 }>
 
 export type CustomerDirectoryResult = Readonly<{

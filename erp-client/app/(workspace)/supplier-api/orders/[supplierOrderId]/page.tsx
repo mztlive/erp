@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 /**
  * 对象中心 TaskTab 身份：supplier-fulfillment-order:{supplierOrderId}
  * 业务数据与动作在客户端 TanStack Query 完成。
+ * key 不含 section：Tab 切换仅更新 URL，不重挂载组件（保留结果横幅与滚动）。
  */
 export default async function Page({
   params,
@@ -30,7 +31,7 @@ export default async function Page({
       }
     >
       <SupplierOrderCenterPage
-        key={`${supplierOrderId}-${section ?? "overview"}`}
+        key={supplierOrderId}
         supplierOrderId={supplierOrderId}
         section={section}
       />

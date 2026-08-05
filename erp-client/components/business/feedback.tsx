@@ -325,12 +325,15 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
 
 type BusinessFailureStateProps = {
   kind: BusinessFailureKind
-  title?: string
+  title?: React.ReactNode
   description?: React.ReactNode
   errorCode?: string
   nextResponsible?: string
   details?: React.ReactNode
   action?: React.ReactNode
+  /** 快捷重试回调；渲染「重试」按钮（与 action 二选一，action 优先）。 */
+  onRetry?: () => void
+  retryLabel?: string
   className?: string
 }
 
@@ -342,10 +345,20 @@ function BusinessFailureState({
   nextResponsible,
   details,
   action,
+  onRetry,
+  retryLabel = "重试",
   className,
 }: BusinessFailureStateProps) {
   const preset = failureStatePresets[kind]
   const Icon = preset.icon
+
+  const resolvedAction =
+    action ??
+    (onRetry ? (
+      <Button type="button" variant="outline" size="sm" onClick={onRetry}>
+        {retryLabel}
+      </Button>
+    ) : null)
 
   return (
     <Alert
@@ -379,7 +392,9 @@ function BusinessFailureState({
             </dl>
           ) : null}
           {details}
-          {action ? <div className="flex flex-wrap gap-2">{action}</div> : null}
+          {resolvedAction ? (
+            <div className="flex flex-wrap gap-2">{resolvedAction}</div>
+          ) : null}
         </div>
       </AlertDescription>
     </Alert>
@@ -653,6 +668,8 @@ type FormalActionResultProps = {
   title?: string
   description?: React.ReactNode
   reference?: string
+  /** 结果编号的标签；内部任务号/证据 ID 场景可改为「原任务号」等业务说法。 */
+  referenceLabel?: string
   facts?: readonly FormalActionFact[]
   actions?: React.ReactNode
   className?: string
@@ -718,6 +735,7 @@ function FormalActionResult({
   title,
   description,
   reference,
+  referenceLabel = "结果编号",
   facts,
   actions,
   className,
@@ -746,7 +764,8 @@ function FormalActionResult({
           <p>{description ?? preset.description}</p>
           {reference ? (
             <p className="text-xs">
-              结果编号：<span className="num font-mono">{reference}</span>
+              {referenceLabel}：
+              <span className="num font-mono">{reference}</span>
             </p>
           ) : null}
           {facts?.length ? (
@@ -1015,8 +1034,20 @@ function SensitiveValue({
         </span>
       ) : null}
       {revealFailed ? (
-        <span role="alert" className="text-xs text-destructive">
-          暂时无法显示敏感信息
+        <span
+          role="alert"
+          className="flex flex-wrap items-center gap-1.5 text-xs text-destructive"
+        >
+          <span>暂时无法显示敏感信息</span>
+          <Button
+            type="button"
+            variant="link"
+            size="xs"
+            className="h-auto p-0"
+            onClick={() => void reveal()}
+          >
+            重试
+          </Button>
         </span>
       ) : null}
     </div>

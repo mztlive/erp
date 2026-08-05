@@ -2,16 +2,22 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   DownloadIcon,
   FileUpIcon,
   PrinterIcon,
   SearchIcon,
+  XIcon,
 } from "lucide-react"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import type {
+  ColumnDef,
+  PaginationState,
+  SortingState,
+} from "@tanstack/react-table"
 
 import {
-  BackgroundJobProgress,
+  BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
@@ -20,7 +26,6 @@ import {
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
-  OptionCombobox,
   PageActions,
   PageHeader,
   QuickPreviewSheet,
@@ -32,7 +37,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
 import { ContractPreviewPanel } from "@/features/contracts/contract-preview-panel"
 import { ContractUploadDialog } from "@/features/contracts/contract-upload-dialog"
@@ -41,7 +45,6 @@ import {
   contractMetricLabel,
   filterContracts,
   type ContractMetricFilter,
-  type ContractStatusFilter,
 } from "@/features/contracts/filter-contracts"
 import {
   useContractCenterQuery,
@@ -53,14 +56,72 @@ import type {
   ContractListRow,
   UploadContractPdfResult,
 } from "@/features/contracts/types"
+import { contractOwnerLabel } from "@/features/contracts/types"
+
+/** 表头排序列 → 全量排序键（对整表排序后再分页，杜绝「当前页伪排序」）。 */
+function sortRows(
+  rows: readonly ContractListRow[],
+  sorting: SortingState
+): ContractListRow[] {
+  const sorted = [...rows]
+  if (sorting.length === 0) {
+    // 默认：将到期优先，再按有效期止升序（与列表描述文案一致）。
+    return sorted.sort((a, b) => {
+      if (a.expiringWithin30Days !== b.expiringWithin30Days) {
+        return a.expiringWithin30Days ? -1 : 1
+      }
+      return a.validTo.localeCompare(b.validTo)
+    })
+  }
+  const { id, desc } = sorting[0]
+  const dir = desc ? -1 : 1
+  return sorted.sort((a, b) => {
+    let cmp = 0
+    switch (id) {
+      case "contractNo":
+        cmp = a.contractNo.localeCompare(b.contractNo)
+        break
+      case "customer":
+        cmp = a.customer.displayName.localeCompare(b.customer.displayName)
+        break
+      case "settlement":
+        cmp = a.settlementParty.displayName.localeCompare(
+          b.settlementParty.displayName
+        )
+        break
+      case "validity":
+        cmp = a.validTo.localeCompare(b.validTo)
+        break
+      case "revision":
+        cmp = a.revisionNo - b.revisionNo
+        break
+      case "sales":
+        cmp = a.salesOrderCount - b.salesOrderCount
+        break
+      case "owner":
+        cmp = a.ownerLabel.localeCompare(b.ownerLabel)
+        break
+    }
+    return cmp * dir
+  })
+}
 
 export function ContractsListPage({
   initialSearch = "",
   initialCustomerId = "",
+  initialMetric = "all",
+  initialPage = 1,
+  initialPageSize = 20,
 }: {
   initialSearch?: string
   initialCustomerId?: string
+  initialMetric?: ContractMetricFilter
+  initialPage?: number
+  initialPageSize?: number
 }) {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const contractsQuery = useContractsQuery()
   const allRows = React.useMemo(
     () => contractsQuery.data ?? [],
@@ -69,13 +130,12 @@ export function ContractsListPage({
 
   const [search, setSearch] = React.useState(initialSearch)
   const [metricKey, setMetricKey] =
-    React.useState<ContractMetricFilter>("all")
-  const [statusFilter, setStatusFilter] =
-    React.useState<ContractStatusFilter>("all")
+    React.useState<ContractMetricFilter>(initialMetric)
   const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 20,
+    pageIndex: initialPage - 1,
+    pageSize: initialPageSize,
   })
+  const [sorting, setSorting] = React.useState<SortingState>([])
   const [previewId, setPreviewId] = React.useState<string | null>(null)
   const [paperId, setPaperId] = React.useState<string | null>(null)
   const [uploadOpen, setUploadOpen] = React.useState(Boolean(initialCustomerId))
@@ -86,12 +146,45 @@ export function ContractsListPage({
     status: "succeeded" | "blocked"
     title: string
     description: string
-    reference: string
     facts?: Array<{ label: string; value: string }>
     nextHref?: string
   } | null>(null)
 
   const exportMutation = useCreateContractExportJobMutation()
+
+  /** 筛选状态回写 URL（q/metric/page/pageSize），刷新与分享不丢视图。 */
+  const writeUrl = React.useCallback(
+    (patch: {
+      q?: string
+      metric?: ContractMetricFilter
+      page?: number
+      pageSize?: number
+    }) => {
+      const params = new URLSearchParams(searchParams.toString())
+      const q = patch.q ?? search
+      if (q.trim()) params.set("q", q.trim())
+      else params.delete("q")
+      const metric = patch.metric ?? metricKey
+      if (metric !== "all") params.set("metric", metric)
+      else params.delete("metric")
+      const page = patch.page ?? pagination.pageIndex + 1
+      if (page > 1) params.set("page", String(page))
+      else params.delete("page")
+      const pageSize = patch.pageSize ?? pagination.pageSize
+      if (pageSize !== 20) params.set("pageSize", String(pageSize))
+      else params.delete("pageSize")
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+    },
+    [
+      metricKey,
+      pagination.pageIndex,
+      pagination.pageSize,
+      pathname,
+      router,
+      search,
+      searchParams,
+    ]
+  )
 
   const resetPagination = React.useCallback(() => {
     setPagination((previous) =>
@@ -103,23 +196,37 @@ export function ContractsListPage({
     let rows = filterContracts(allRows, {
       search,
       metricKey,
-      statusFilter,
+      statusFilter: "all",
     })
     if (initialCustomerId) {
       rows = rows.filter((r) => r.customer.customerId === initialCustomerId)
     }
     return rows
-  }, [allRows, initialCustomerId, metricKey, search, statusFilter])
+  }, [allRows, initialCustomerId, metricKey, search])
+
+  const sorted = React.useMemo(
+    () => sortRows(filtered, sorting),
+    [filtered, sorting]
+  )
 
   const pageRows = React.useMemo(() => {
     const start = pagination.pageIndex * pagination.pageSize
-    return filtered.slice(start, start + pagination.pageSize)
-  }, [filtered, pagination.pageIndex, pagination.pageSize])
+    return sorted.slice(start, start + pagination.pageSize)
+  }, [pagination.pageIndex, pagination.pageSize, sorted])
 
   const metrics = React.useMemo(
     () => computeContractMetrics(allRows),
     [allRows]
   )
+
+  /** 客户锁定来自 URL customerId：界面给出「当前客户」chip 与清除入口。 */
+  const lockedCustomer = React.useMemo(() => {
+    if (!initialCustomerId) return null
+    return (
+      allRows.find((r) => r.customer.customerId === initialCustomerId)
+        ?.customer ?? null
+    )
+  }, [allRows, initialCustomerId])
 
   const previewRow = React.useMemo(
     () => allRows.find((item) => item.contractId === previewId) ?? null,
@@ -135,7 +242,6 @@ export function ContractsListPage({
         status: "succeeded",
         title: "合同 PDF 已归档",
         description: "已形成可追溯的合同版本，可直接选择用于新建销售单。",
-        reference: result.reference,
         facts: [
           { label: "合同号", value: result.contractNo },
           { label: "修订", value: `v${result.revisionNo}` },
@@ -155,12 +261,11 @@ export function ContractsListPage({
   const filterSnapshotLabel = React.useMemo(() => {
     const parts = [
       `指标=${contractMetricLabel(metricKey)}`,
-      statusFilter === "all" ? "状态=全部" : `状态=${statusFilter}`,
       search.trim() ? `搜索=${search.trim()}` : "搜索=空",
-      initialCustomerId ? `客户=${initialCustomerId}` : null,
+      lockedCustomer ? `客户=${lockedCustomer.displayName}` : null,
     ].filter(Boolean)
     return parts.join(" · ")
-  }, [initialCustomerId, metricKey, search, statusFilter])
+  }, [lockedCustomer, metricKey, search])
 
   const handleExport = React.useCallback(async () => {
     if (filtered.length === 0) return
@@ -171,15 +276,12 @@ export function ContractsListPage({
     setExportJob(job)
     setActionResult({
       status: "succeeded",
-      title: "导出任务已创建",
-      description:
-        "导出内容按当前筛选生成；下载时将重新校验权限。",
-      reference: job.jobId,
+      title: "导出完成",
+      description: "已生成 CSV 文件，内容按当前筛选生成；下载时将重新校验权限。",
       facts: [
         { label: "筛选结果", value: job.filterSnapshotLabel },
         { label: "行数", value: String(job.rowCount) },
-        { label: "权限版本", value: job.permissionVersion },
-        { label: "下载标签", value: job.downloadLabel },
+        { label: "文件", value: job.downloadLabel },
       ],
     })
   }, [exportMutation, filterSnapshotLabel, filtered.length])
@@ -198,32 +300,17 @@ export function ContractsListPage({
               variant="link"
               size="xs"
               className="num px-0"
-              aria-label={`预览 ${row.original.contractNo}`}
-              onClick={(event) => {
-                event.stopPropagation()
-                setPreviewId(row.original.contractId)
-              }}
+              aria-label={`打开合同 ${row.original.contractNo}`}
+              render={
+                <Link href={`/sales/contracts/${row.original.contractId}`} />
+              }
             >
               {row.original.contractNo}
             </Button>
             <div className="truncate text-xs text-muted-foreground">
               {row.original.customer.displayName}
-            </div>
-          </div>
-        ),
-      },
-      {
-        id: "customer",
-        accessorFn: (row) => row.customer.displayName,
-        header: "客户",
-        meta: { label: "客户", width: "default" },
-        cell: ({ row }) => (
-          <div className="min-w-0">
-            <div className="truncate text-sm">
-              {row.original.customer.displayName}
-            </div>
-            <div className="num text-xs text-muted-foreground">
-              {row.original.customer.customerNo}
+              {" · "}
+              <span className="num">{row.original.customer.customerNo}</span>
             </div>
           </div>
         ),
@@ -258,6 +345,7 @@ export function ContractsListPage({
         id: "status",
         header: "状态",
         meta: { label: "状态", width: "status" },
+        enableSorting: false,
         cell: ({ row }) => (
           <BusinessStatusBadge
             context="list"
@@ -297,7 +385,7 @@ export function ContractsListPage({
         meta: { label: "负责人", width: "default" },
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
-            {row.original.ownerLabel}
+            {contractOwnerLabel(row.original.ownerLabel)}
           </span>
         ),
       },
@@ -305,6 +393,7 @@ export function ContractsListPage({
         id: "actions",
         header: "操作",
         meta: { label: "操作", width: "default", align: "end" },
+        enableSorting: false,
         cell: ({ row }) => {
           const canPrint = row.original.allowedActions.includes("PRINT")
           const printBlocker = row.original.actionBlockers.find(
@@ -358,24 +447,43 @@ export function ContractsListPage({
     []
   )
 
-  if (contractsQuery.isPending) {
-    return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
-        <PageHeader title="合同" description="正在加载列表数据…" />
-      </div>
-    )
-  }
+  const handlePaginationChange = React.useCallback(
+    (next: PaginationState) => {
+      setPagination(next)
+      writeUrl({ page: next.pageIndex + 1, pageSize: next.pageSize })
+    },
+    [writeUrl]
+  )
 
-  if (contractsQuery.isError) {
-    return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
-        <PageHeader title="合同" description="列表数据加载失败。" />
-        <Button type="button" onClick={() => void contractsQuery.refetch()}>
-          重试
-        </Button>
-      </div>
-    )
-  }
+  const handleSearchCommit = React.useCallback(
+    (value: string) => {
+      setSearch(value)
+      writeUrl({ q: value, page: 1 })
+    },
+    [writeUrl]
+  )
+
+  const handleMetricChange = React.useCallback(
+    (next: ContractMetricFilter) => {
+      setMetricKey(next)
+      writeUrl({ metric: next, page: 1 })
+    },
+    [writeUrl]
+  )
+
+  const handleClearCustomerLock = React.useCallback(() => {
+    const params = new URLSearchParams(searchParams.toString())
+    params.delete("customerId")
+    router.replace(`${pathname}?${params.toString()}`)
+  }, [pathname, router, searchParams])
+
+  const clearAllFilters = React.useCallback(() => {
+    setSearch("")
+    setMetricKey("all")
+    writeUrl({ q: "", metric: "all", page: 1 })
+  }, [writeUrl])
+
+  const isFiltered = search.trim() !== "" || metricKey !== "all"
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:gap-3.5 md:p-4">
@@ -387,9 +495,28 @@ export function ContractsListPage({
         ]}
         metadata={
           <DataFreshness
-            updatedAt="刚刚"
-            state="fresh"
-            label="列表数据"
+            updatedAt={
+              contractsQuery.isError
+                ? "查询失败"
+                : contractsQuery.data
+                  ? new Date(contractsQuery.dataUpdatedAt).toLocaleTimeString(
+                      "zh-CN",
+                      { hour: "2-digit", minute: "2-digit" }
+                    )
+                  : "正在查询"
+            }
+            dateTime={
+              contractsQuery.data
+                ? new Date(contractsQuery.dataUpdatedAt).toISOString()
+                : undefined
+            }
+            state={
+              contractsQuery.isError
+                ? "failed"
+                : contractsQuery.isFetching
+                  ? "syncing"
+                  : "fresh"
+            }
           />
         }
         actions={
@@ -400,7 +527,6 @@ export function ContractsListPage({
                 label: "导出",
                 icon: DownloadIcon,
                 variant: "outline",
-                mobileVisibility: "hide",
                 disabled: filtered.length === 0 || exportMutation.isPending,
                 onClick: () => {
                   void handleExport()
@@ -410,7 +536,6 @@ export function ContractsListPage({
                 actionKey: "upload",
                 label: "上传合同 PDF",
                 icon: FileUpIcon,
-                mobileVisibility: "hide",
                 onClick: () => setUploadOpen(true),
               },
             ]}
@@ -423,7 +548,6 @@ export function ContractsListPage({
           status={actionResult.status}
           title={actionResult.title}
           description={actionResult.description}
-          reference={actionResult.reference}
           facts={actionResult.facts}
           actions={
             actionResult.nextHref ? (
@@ -440,79 +564,63 @@ export function ContractsListPage({
       ) : null}
 
       {exportJob ? (
-        <BackgroundJobProgress
-          mode="all-or-nothing"
-          status={exportJob.status}
-          total={exportJob.rowCount}
-          completed={exportJob.rowCount}
-          succeeded={exportJob.rowCount}
-          label="合同导出任务"
-          description={
-            <>
-              筛选结果：{exportJob.filterSnapshotLabel}
-              。任务号 <span className="num">{exportJob.jobId}</span>
-              ，结果保留 7 天；下载时将重新校验权限。
-            </>
-          }
-          action={
-            <Button type="button" size="sm" variant="outline" disabled>
-              下载（演示·已就绪）
-            </Button>
-          }
+        <FormalActionResult
+          status="succeeded"
+          title="合同导出完成"
+          description={`共 ${exportJob.rowCount} 条，内容按当前筛选生成；下载时将重新校验权限。`}
+          facts={[
+            { label: "文件", value: exportJob.downloadLabel },
+            { label: "行数", value: String(exportJob.rowCount) },
+          ]}
         />
       ) : null}
 
-      <MetricStrip columns={4} aria-label="合同快速筛选">
+      <MetricStrip columns={5} aria-label="合同快速筛选">
         <MetricFilterItem
           label="全部合同"
           value={metrics.all}
           detail="当前业务范围"
           active={metricKey === "all"}
-          onClick={() => {
-            setMetricKey("all")
-            resetPagination()
-          }}
+          onClick={() => handleMetricChange("all")}
         />
         <MetricFilterItem
           label="有效"
           value={metrics.effective}
           detail="可关联建单"
           active={metricKey === "effective"}
-          onClick={() => {
-            setMetricKey("effective")
-            resetPagination()
-          }}
+          onClick={() => handleMetricChange("effective")}
         />
         <MetricFilterItem
           label="30 天内到期"
           value={metrics.expiring_30d}
           detail="将到期提醒"
           active={metricKey === "expiring_30d"}
-          onClick={() => {
-            setMetricKey("expiring_30d")
-            resetPagination()
-          }}
+          onClick={() => handleMetricChange("expiring_30d")}
         />
         <MetricFilterItem
           label="已到期"
           value={metrics.expired}
           detail="历史可追溯"
           active={metricKey === "expired"}
-          onClick={() => {
-            setMetricKey("expired")
-            resetPagination()
-          }}
+          onClick={() => handleMetricChange("expired")}
+        />
+        <MetricFilterItem
+          label="已终止"
+          value={metrics.terminated}
+          detail="不再履行"
+          active={metricKey === "terminated"}
+          onClick={() => handleMetricChange("terminated")}
         />
       </MetricStrip>
 
       <BusinessTableFrame
         title="合同列表"
         description={
-          metricKey === "all" && statusFilter === "all" && !search
+          metricKey === "all" && !search
             ? "按将到期优先排序展示当前业务范围内的合同。"
             : `当前筛选：${contractMetricLabel(metricKey)}${
-                statusFilter !== "all" ? ` · ${statusFilter}` : ""
-              }${search ? ` · “${search}”` : ""}`
+                search ? ` · “${search}”` : ""
+              }`
         }
         toolbar={
           <ListToolbar
@@ -527,73 +635,96 @@ export function ContractsListPage({
                     setSearch(event.target.value)
                     resetPagination()
                   }}
-                  placeholder="合同号、客户、结算主体"
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      handleSearchCommit(search)
+                    }
+                  }}
+                  placeholder="合同号、客户、结算主体、负责人"
                   aria-label="搜索合同"
                 />
               </InputGroup>
             }
             filters={
-              <>
-                <ToggleGroup
-                  value={[statusFilter]}
-                  onValueChange={(values) => {
-                    const next = (values[0] as ContractStatusFilter | undefined) ?? "all"
-                    setStatusFilter(next)
-                    resetPagination()
-                  }}
-                  variant="outline"
-                  size="sm"
-                  spacing={0}
-                >
-                  <ToggleGroupItem value="all">全部状态</ToggleGroupItem>
-                  <ToggleGroupItem value="EFFECTIVE">生效</ToggleGroupItem>
-                  <ToggleGroupItem value="EXPIRED">到期</ToggleGroupItem>
-                  <ToggleGroupItem value="TERMINATED">终止</ToggleGroupItem>
-                </ToggleGroup>
-                <OptionCombobox
-                  className="w-[9.5rem]"
-                  value={metricKey}
-                  aria-label="有效期视图"
-                  onValueChange={(v) => {
-                    setMetricKey((v ?? "all") as ContractMetricFilter)
-                    resetPagination()
-                  }}
-                  options={[
-                    { value: "all", label: "有效期：全部" },
-                    { value: "expiring_30d", label: "30 天内到期" },
-                    { value: "expired", label: "已到期" },
-                    { value: "terminated", label: "已终止" },
-                  ]}
-                  size="sm"
-                  allowClear={false}
-                  placeholder="有效期视图"
-                />
-              </>
-            }
-            actions={
-              <span className="text-xs text-muted-foreground" aria-live="polite">
-                共 {filtered.length.toLocaleString("zh-CN")} 条
-              </span>
+              lockedCustomer ? (
+                <span className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs text-muted-foreground">
+                  当前客户：{lockedCustomer.displayName}
+                  <button
+                    type="button"
+                    aria-label="清除客户锁定"
+                    className="inline-flex items-center rounded p-0.5 hover:bg-muted"
+                    onClick={handleClearCustomerLock}
+                  >
+                    <XIcon aria-hidden="true" className="size-3.5" />
+                  </button>
+                </span>
+              ) : null
             }
           />
         }
         table={
-          <DataTable
-            data={pageRows}
-            columns={columns}
-            getRowId={(row) => row.contractId}
-            rowCount={filtered.length}
-            pagination={pagination}
-            onPaginationChange={setPagination}
-            layout="flush"
-            density="compact"
-            defaultColumnPinning={{
-              left: ["contractNo"],
-              right: ["actions"],
-            }}
-            onRowPreview={(row) => setPreviewId(row.contractId)}
-            onRowOpen={(row) => setPreviewId(row.contractId)}
-          />
+          contractsQuery.isError ? (
+            <BusinessFailureState
+              kind="system"
+              title="合同列表加载失败"
+              description="暂时拿不到合同数据，请重试；失败不影响已保存的合同。"
+              onRetry={() => {
+                void contractsQuery.refetch()
+              }}
+            />
+          ) : pageRows.length === 0 && !contractsQuery.isPending ? (
+            <div className="flex flex-col items-center gap-2 border-y bg-card px-4 py-10 text-center">
+              <p className="text-sm text-muted-foreground">
+                {isFiltered ? "当前筛选没有结果" : "还没有合同"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {isFiltered
+                  ? "换一个关键词或清除筛选后再试。"
+                  : "上传第一份合同 PDF，即可用于新建销售单。"}
+              </p>
+              <div className="flex flex-wrap justify-center gap-2 pt-1">
+                {isFiltered ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={clearAllFilters}
+                  >
+                    清除筛选
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setUploadOpen(true)}
+                  >
+                    <FileUpIcon data-icon="inline-start" aria-hidden="true" />
+                    上传合同 PDF
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <DataTable
+              data={pageRows}
+              columns={columns}
+              getRowId={(row) => row.contractId}
+              rowCount={sorted.length}
+              sorting={sorting}
+              onSortingChange={setSorting}
+              pagination={pagination}
+              onPaginationChange={handlePaginationChange}
+              loading={contractsQuery.isPending}
+              layout="flush"
+              density="compact"
+              defaultColumnPinning={{
+                left: ["contractNo"],
+                right: ["actions"],
+              }}
+              onRowPreview={(row) => setPreviewId(row.contractId)}
+              onRowOpen={(row) => setPreviewId(row.contractId)}
+            />
+          )
         }
       />
 

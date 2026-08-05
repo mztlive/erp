@@ -368,19 +368,22 @@ function filterSummary(q: SupplierCatalogQueueQuery): string {
     q.changeType === "all"
       ? "全部变化"
       : q.changeType === "NEW"
-        ? "新商品"
+        ? "新供应商商品"
         : q.changeType === "CHANGED"
           ? "关键变化"
           : q.changeType === "STOPPED"
             ? "停止供应"
             : q.changeType === "ERROR"
-              ? "异常"
+              ? "异常数据"
               : "需处理",
     q.status === "held" ? "稍后处理" : "待处理",
     DEMO_ROLE_LABEL[resolveRole(q.demoRole)],
   ]
   if (q.q) parts.push(`搜索 ${q.q}`)
-  if (q.skuId) parts.push(`SKU ${q.skuId}`)
+  if (q.skuId) {
+    const context = resolveSkuContext(q.skuId)
+    parts.push(context ? `商品规格 ${context.skuCode}` : "商品规格筛选")
+  }
   if (q.sourceType && q.sourceType !== "all") {
     parts.push(
       q.sourceType === "API"
@@ -419,8 +422,50 @@ function sortItems(items: SupplierCatalogItemView[]): SupplierCatalogItemView[] 
 }
 
 function sortRelationshipItems(
-  items: SupplierCatalogItemView[]
+  items: SupplierCatalogItemView[],
+  query: SupplierCatalogQueueQuery
 ): SupplierCatalogItemView[] {
+  const [sortId, sortDir] = (query.sort ?? "").split(":")
+  const sorted = [...items]
+  if (sortId && (sortDir === "asc" || sortDir === "desc")) {
+    const direction = sortDir === "desc" ? -1 : 1
+    const compareValue = (a: string, b: string) => {
+      const result = a.localeCompare(b)
+      return result * direction
+    }
+    switch (sortId) {
+      case "supplierProduct":
+        sorted.sort((a, b) =>
+          compareValue(
+            a.supplierProduct.supplier.name,
+            b.supplierProduct.supplier.name
+          )
+        )
+        break
+      case "price": {
+        const price = (item: SupplierCatalogItemView) =>
+          item.offering?.currentRevision?.supplyPriceGross ??
+          item.supplierProduct.currentRevision.bulkFloorPriceGross ??
+          item.supplierProduct.currentRevision.dropshipFloorPriceGross ??
+          ""
+        sorted.sort((a, b) => {
+          const pa = Number(price(a)) || 0
+          const pb = Number(price(b)) || 0
+          return (pa - pb) * direction
+        })
+        break
+      }
+      case "status":
+        sorted.sort((a, b) => {
+          const labelA = statusLabelForItem(a)
+          const labelB = statusLabelForItem(b)
+          if (labelA === labelB) return 0
+          return compareValue(labelA, labelB)
+        })
+        break
+    }
+    return sorted
+  }
   const rank = (item: SupplierCatalogItemView) => {
     const offering = item.offering?.currentRevision
     if (
@@ -434,7 +479,26 @@ function sortRelationshipItems(
     return 2
   }
 
-  return [...items].sort((a, b) => rank(a) - rank(b))
+  return sorted.sort((a, b) => rank(a) - rank(b))
+}
+
+function statusLabelForItem(item: SupplierCatalogItemView): string {
+  const offering = item.offering?.currentRevision
+  const mapped =
+    item.mapping?.mappingStatus === "ACTIVE"
+  if (!mapped) return "待确认关联"
+  if (!offering) return "待设置供货条件"
+  if (
+    offering.status === "STOPPED" ||
+    offering.availabilityStatus === "STOPPED"
+  ) {
+    return "已停供"
+  }
+  if (offering.status === "PAUSED") return "已暂停"
+  if (offering.availabilityStatus === "STALE") return "供货信息待更新"
+  if (offering.availabilityStatus === "UNAVAILABLE") return "暂不可供"
+  if (offering.status === "PENDING_CONFIRM") return "供货条件待确认"
+  return "正常供货"
 }
 
 export async function fetchSupplierCatalogQueue(
@@ -493,7 +557,7 @@ export async function fetchSupplierCatalogQueue(
   }
 
   items =
-    query.mode === "list" ? sortRelationshipItems(items) : sortItems(items)
+    query.mode === "list" ? sortRelationshipItems(items, query) : sortItems(items)
 
   const queueContextId =
     query.queueContextId ??
@@ -739,7 +803,7 @@ export async function applySupplierCatalogWorkItemAction(input: {
           : input.action.kind === "RETURN_FOR_DATA_FIX"
             ? "已退回供应商数据修正，修正完成后可以继续处理。"
             : "处理已记录，当前事项仍在待处理列表中。",
-      reference: `W21-${input.action.kind}-${input.workItemId.toUpperCase()}`,
+      reference: `${input.action.kind}-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, "")}`,
     }
     return { status: "succeeded", outcome }
   } catch (error) {
@@ -818,7 +882,7 @@ export async function completeSupplierCatalogWorkItem(input: {
       supplierCatalogSkuId: primarySupplierSkuId(seed),
       auditEventId: result.completionRecordId,
       publicationImpact: seed.publicationImpact,
-      reference: `W21-DONE-${input.workItemId.toUpperCase()}`,
+      reference: `DONE-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, "")}`,
       completedAt: new Date().toISOString(),
       subjectHash: seed.workItem.subjectHash,
     }
@@ -1289,7 +1353,7 @@ export async function reviseSupplierCatalogProduct(
     supplierProductId: input.supplierProductId,
     supplierCatalogSkuId: primarySupplierSkuId(next),
     poolEntryChange: "NONE",
-    reference: `SC-REV-${input.supplierProductId}-${nextRevisionNo}`,
+    reference: `SC-REV-V${nextRevisionNo}`,
     recordedAt: now,
   }
   writeResults.set(input.idempotencyKey, result)

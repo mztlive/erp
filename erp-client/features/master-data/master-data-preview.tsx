@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { ChevronDownIcon } from "lucide-react"
 
 import {
   BusinessStatusBadge,
@@ -207,44 +208,52 @@ export function MasterDataPreviewPanel({
         <>
           <Separator />
           <section className="space-y-2">
-            <h3 className="text-xs font-medium text-muted-foreground">
-              {masterDataCopy.previewHistory}
-            </h3>
-            <RevisionTimeline
-              revisions={detail.revisionTimeline.map((rev) => ({
-                id: rev.id,
-                version: rev.revisionNo,
-                source: "erp-change" as const,
-                actor: rev.actor,
-                effectiveAt: {
-                  dateTime: rev.effectiveFrom,
-                  label: formatEffectiveRange(
-                    rev.effectiveFrom,
-                    rev.effectiveTo
-                  ),
-                },
-                reason: (
-                  <div className="space-y-1">
-                    <div>
-                      {masterDataCopy.centerHistoryName}：
-                      <strong>{rev.nameSnapshot}</strong>
-                    </div>
-                    <div className="text-muted-foreground">
-                      {rev.changeReason}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Badge variant="outline">{rev.timingLabel}</Badge>
-                      <Badge variant="secondary">
-                        {rev.lifecycleAtRevision === "ENABLED"
-                          ? "启用"
-                          : "停用"}
-                      </Badge>
-                    </div>
-                  </div>
-                ),
-                isCurrent: rev.isCurrent,
-              }))}
-            />
+            <details className="group" open={false}>
+              <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+                {masterDataCopy.previewHistory}
+                <ChevronDownIcon
+                  className="size-3.5 transition-transform group-open:rotate-180"
+                  aria-hidden
+                />
+              </summary>
+              <div className="mt-2">
+                <RevisionTimeline
+                  revisions={detail.revisionTimeline.map((rev) => ({
+                    id: rev.id,
+                    version: rev.revisionNo,
+                    source: "erp-change" as const,
+                    actor: rev.actor,
+                    effectiveAt: {
+                      dateTime: rev.effectiveFrom,
+                      label: formatEffectiveRange(
+                        rev.effectiveFrom,
+                        rev.effectiveTo
+                      ),
+                    },
+                    reason: (
+                      <div className="space-y-1">
+                        <div>
+                          {masterDataCopy.centerHistoryName}：
+                          <strong>{rev.nameSnapshot}</strong>
+                        </div>
+                        <div className="text-muted-foreground">
+                          {rev.changeReason}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Badge variant="outline">{rev.timingLabel}</Badge>
+                          <Badge variant="secondary">
+                            {rev.lifecycleAtRevision === "ENABLED"
+                              ? "启用"
+                              : "停用"}
+                          </Badge>
+                        </div>
+                      </div>
+                    ),
+                    isCurrent: rev.isCurrent,
+                  }))}
+                />
+              </div>
+            </details>
           </section>
         </>
       ) : null}
@@ -253,19 +262,25 @@ export function MasterDataPreviewPanel({
         <>
           <Separator />
           <section className="space-y-2">
-            <h3 className="text-xs font-medium text-muted-foreground">
-              {masterDataCopy.previewActionBlocked}
-            </h3>
-            <ul className="space-y-1 text-xs">
-              {row.actionBlockers.map((b) => (
-                <li key={`${b.action}-${b.code}`}>
-                  <span className="font-medium">
-                    {masterDataActionLabel(b.action)}
-                  </span>
-                  <div className="text-muted-foreground">{b.message}</div>
-                </li>
-              ))}
-            </ul>
+            <details className="group">
+              <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+                {masterDataCopy.previewActionBlocked}
+                <ChevronDownIcon
+                  className="size-3.5 transition-transform group-open:rotate-180"
+                  aria-hidden
+                />
+              </summary>
+              <ul className="mt-2 space-y-1 text-xs">
+                {row.actionBlockers.map((b) => (
+                  <li key={`${b.action}-${b.code}`}>
+                    <span className="font-medium">
+                      {masterDataActionLabel(b.action)}
+                    </span>
+                    <div className="text-muted-foreground">{b.message}</div>
+                  </li>
+                ))}
+              </ul>
+            </details>
           </section>
         </>
       ) : null}

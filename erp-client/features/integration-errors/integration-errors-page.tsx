@@ -7,7 +7,6 @@ import {
   ExternalLinkIcon,
   PauseIcon,
   RefreshCwIcon,
-  SearchIcon,
   ShieldAlertIcon,
   SkipForwardIcon,
 } from "lucide-react"
@@ -17,6 +16,7 @@ import {
   BusinessEmptyState,
   BusinessStatusBadge,
   DataFreshness,
+  FormalActionConfirmDialog,
   FormalActionResult,
   InterfaceErrorResolutionPanel,
   MetricItem,
@@ -26,11 +26,11 @@ import {
   SequentialProcessBar,
   WorkTaskItem,
   type InterfaceErrorClass,
-  type InterfaceErrorResolutionActions,
   type InterfaceErrorStatus,
 } from "@/components/business"
 import { TRANSFER_ROLE_OPTIONS } from "@/lib/business-options"
 import { formatDateTime } from "@/lib/datetime"
+import { leaseText, freshnessText } from "@/lib/ui-text"
 import {
   Alert,
   AlertDescription,
@@ -68,12 +68,14 @@ import type {
   IntegrationView,
 } from "./types"
 import {
+  DIFFERENCE_TYPE_LABEL,
   ENV_LABEL,
   EVIDENCE_KIND_LABEL,
   ERROR_CLASS_LABEL,
   FUNDS_LABEL,
   MODE_LABEL,
   OWNER_LABEL,
+  REVIEWER_SEPARATION_LABEL,
   VIEW_LABEL,
 } from "./types"
 import {
@@ -114,6 +116,42 @@ function severityTone(
   if (s === "medium") return "info"
   return "neutral"
 }
+
+/** 状态徽章 tone 取自状态语义而非严重度 */
+function statusTone(
+  item: IntegrationResolutionItemView
+): "destructive" | "warning" | "info" | "neutral" | "success" {
+  const code = item.status.code
+  if (
+    code === "COMPLETED" ||
+    code === "RESOLVED" ||
+    code === "CONFIRMED_NO_ERROR" ||
+    code === "CONFIRMED_VALID_DIFFERENCE"
+  )
+    return "success"
+  if (
+    code === "CLOSED" ||
+    code === "HELD" ||
+    code === "SKIPPED" ||
+    item.status.label.includes("已跳过")
+  )
+    return "neutral"
+  if (
+    code === "MANUAL_REQUIRED" ||
+    code === "SECURITY_FAULT" ||
+    item.status.label.includes("人工")
+  )
+    return "destructive"
+  if (code === "AUTO_RETRYING") return "info"
+  return "warning"
+}
+
+type TerminalConfirm =
+  | { kind: "TRANSFER" }
+  | { kind: "CLOSE_DUPLICATE" }
+  | { kind: "RESOLVE" }
+  | { kind: "CONFIRM_NO_ERROR" }
+  | { kind: "CONFIRM_VALID_DIFFERENCE" }
 
 function mapPanelStatus(
   item: IntegrationResolutionItemView
@@ -230,21 +268,55 @@ export function IntegrationErrorsPage({
       )
     : 0
 
+  const queueIndex = item
+    ? queueItems.findIndex((i) => i.identity.id === item.identity.id)
+    : -1
+  const positionIndex = focusMode
+    ? queueIndex >= 0
+      ? queueIndex + 1
+      : 1
+    : currentIndex + 1
+  const positionTotal = focusMode
+    ? queueIndex >= 0
+      ? queueItems.length
+      : 1
+    : items.length
+
   const [lastResult, setLastResult] =
     React.useState<IntegrationFormalResult | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
-  const [replacementWi, setReplacementWi] = React.useState("wi_iet_orig_55102")
+  const [replacementTaskId, setReplacementTaskId] = React.useState("")
   const [transferRole, setTransferRole] = React.useState("研发运维")
   const [reconReasonId, setReconReasonId] = React.useState("")
-  const [sessionAutoNext, setSessionAutoNext] = React.useState(urlState.autoNext)
   const [comment, setComment] = React.useState("")
+  const [terminalConfirm, setTerminalConfirm] =
+    React.useState<TerminalConfirm | null>(null)
 
   const leaseRef = React.useRef<SessionLease | null>(null)
   const [activeLease, setActiveLease] = React.useState<SessionLease | null>(null)
   const resultRef = React.useRef<HTMLDivElement>(null)
   const headingRef = React.useRef<HTMLHeadingElement>(null)
+  const actionZoneRef = React.useRef<HTMLDivElement>(null)
+
+  const focusFirstAction = React.useCallback(() => {
+    actionZoneRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    })
+    window.setTimeout(() => {
+      const zone = actionZoneRef.current
+      const btn = zone?.querySelector<HTMLButtonElement>(
+        "button:not([disabled])"
+      )
+      if (btn) {
+        btn.focus()
+      } else {
+        headingRef.current?.focus()
+      }
+    }, 250)
+  }, [])
 
   const autoNext = urlState.autoNext
 
@@ -367,14 +439,23 @@ export function IntegrationErrorsPage({
   ])
 
   // Reset UI on item switch
+  const firstReasonId =
+    item?.reconciliationReasonRegistry?.registeredReasons[0]?.registeredReasonId
   React.useEffect(() => {
     setActionError(null)
-    if (item?.reconciliationReasonRegistry?.registeredReasons[0]) {
-      setReconReasonId(
-        item.reconciliationReasonRegistry.registeredReasons[0].registeredReasonId
-      )
+    setComment("")
+    setReplacementTaskId("")
+    setForceUnknownOnce(false)
+    if (firstReasonId) {
+      setReconReasonId(firstReasonId)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset on item switch
   }, [item?.identity.id])
+
+  // URL 搜索变化时回写输入框（浏览器前进/后退同步）
+  React.useEffect(() => {
+    setSearchDraft(urlState.q ?? "")
+  }, [urlState.q])
 
   // Auto-claim when work_item present
   React.useEffect(() => {
@@ -396,7 +477,7 @@ export function IntegrationErrorsPage({
         setActiveLease(session)
       })
       .catch(() => {
-        /* keep unclaimed */
+        setActionError("任务领取失败，请重试")
       })
     return () => {
       cancelled = true
@@ -462,7 +543,10 @@ export function IntegrationErrorsPage({
   const afterResult = React.useCallback(
     (result: IntegrationFormalResult) => {
       setLastResult(result)
+      // 详情模式（focusMode）无队列导航控件，autoNext 不得静默自动跳转；
+      // 自动下一项仅在带队列的列表模式生效，避免 URL 隐形状态驱动用户预期外的跳转。
       if (
+        !focusMode &&
         result.terminal &&
         !result.stayOnItem &&
         autoNext &&
@@ -474,7 +558,7 @@ export function IntegrationErrorsPage({
         }
       }
     },
-    [autoNext, goToItem, neighbor]
+    [autoNext, focusMode, goToItem, neighbor]
   )
 
   const runTaskAction = async (
@@ -554,12 +638,38 @@ export function IntegrationErrorsPage({
   const can = (action: string) =>
     Boolean(item?.allowedActions.includes(action as never))
 
+  const replacementOptions = queueItems
+    .filter(
+      (i) =>
+        i.identity.itemType === "ERROR_TASK" &&
+        i.workItem &&
+        i.identity.id !== item?.identity.id
+    )
+    .map((i) => ({
+      value: i.workItem!.workItemId,
+      label: `${i.identity.number} · ${i.businessObject.title}`,
+    }))
+
+  const reconReason = item?.reconciliationReasonRegistry?.registeredReasons.find(
+    (r) => r.registeredReasonId === reconReasonId
+  )
+  const reasonMismatches = (conclusion: "CONFIRM_NO_ERROR" | "CONFIRM_VALID_DIFFERENCE") =>
+    Boolean(reconReason && reconReason.conclusion !== conclusion)
+
   const returnRefresh = () => {
     void queueQuery.refetch()
+    if (focusMode) void detailItemQuery.refetch()
     setLastResult(null)
   }
 
-  if (queueQuery.isPending) {
+  const focusLoading =
+    focusMode && detailItemQuery.isPending && !detailItemQuery.data
+  const focusError =
+    focusMode &&
+    (detailItemQuery.isError ||
+      (!detailItemQuery.isPending && detailItemQuery.data === null))
+
+  if (queueQuery.isPending && !focusMode) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
@@ -572,7 +682,17 @@ export function IntegrationErrorsPage({
     )
   }
 
-  if (queueQuery.isError) {
+  if (focusLoading) {
+    return (
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
+        <div className="h-16 animate-pulse rounded-2xl bg-muted" />
+        <div className="h-80 animate-pulse rounded-2xl bg-muted" />
+      </div>
+    )
+  }
+
+  if (queueQuery.isError && !focusMode) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader title="接口错误与对账中心" description="加载失败" />
@@ -583,125 +703,48 @@ export function IntegrationErrorsPage({
     )
   }
 
+  if (focusError) {
+    return (
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <PageHeader
+          title="接口错误与对账中心"
+          description="未找到该任务"
+        />
+        <BusinessEmptyState
+          kind="no-data"
+          title="未找到该任务或差异"
+          description="任务可能已结束或链接失效；可返回队列重新选择。"
+          action={
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void detailItemQuery.refetch()}
+              >
+                重试
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                render={
+                  <Link
+                    href={`/governance/integration-errors?view=${urlState.view}&queueContextId=${encodeURIComponent(urlState.queueContextId)}`}
+                  />
+                }
+              >
+                返回队列
+              </Button>
+            </div>
+          }
+        />
+      </div>
+    )
+  }
+
   const panelErrorClass =
     item && isPanelErrorClass(item.classification.errorClass)
       ? item.classification.errorClass
       : null
-
-  const buildResolutionActions = (): InterfaceErrorResolutionActions => {
-    if (!item || !panelErrorClass) return { stage: "none" }
-
-    if (panelErrorClass === "result-unknown" || panelErrorClass === "network-timeout") {
-      if (can("REPLAY_ORIGINAL")) {
-        return {
-          stage: "safe-retry" as const,
-          queryResult: "confirmed-no-result" as const,
-          retrySameKey: (
-            <Button
-              type="button"
-              size="sm"
-              disabled={!leaseActive || formalPending}
-              onClick={() => void runTaskAction("REPLAY_ORIGINAL")}
-            >
-              重新提交（保持原请求编号）
-            </Button>
-          ),
-        }
-      }
-      return {
-        stage: "query-original" as const,
-        queryOriginal: (
-          <Button
-            type="button"
-            size="sm"
-            disabled={!leaseActive || formalPending || !can("QUERY_ORIGINAL_RESULT")}
-            onClick={() => void runTaskAction("QUERY_ORIGINAL_RESULT")}
-          >
-            <SearchIcon data-icon="inline-start" aria-hidden />
-            查询原结果
-          </Button>
-        ),
-      }
-    }
-
-    if (
-      panelErrorClass === "parameter-or-mapping" ||
-      panelErrorClass === "business-rejected" ||
-      panelErrorClass === "authentication-or-signature" ||
-      panelErrorClass === "capability-unsupported" ||
-      panelErrorClass === "out-of-order-callback"
-    ) {
-      return {
-        stage: "manual" as const,
-        manual: (
-          <div className="flex flex-wrap gap-2">
-            {can("TRANSFER") ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                disabled={!leaseActive || formalPending}
-                onClick={() => void handleTransfer()}
-              >
-                转交
-              </Button>
-            ) : null}
-            {can("LINK_COMPENSATION") ? (
-              <Button
-                type="button"
-                size="sm"
-                disabled={!leaseActive || formalPending}
-                onClick={() => void runTaskAction("LINK_COMPENSATION")}
-              >
-                关联补偿
-              </Button>
-            ) : null}
-            {item.repairLinks[0] ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                render={<Link href={item.repairLinks[0].href} />}
-              >
-                去修复
-              </Button>
-            ) : null}
-          </div>
-        ),
-      }
-    }
-
-    if (panelErrorClass === "duplicate-callback" && can("CLOSE_DUPLICATE")) {
-      return {
-        stage: "closable" as const,
-        terminalBasis: "verified-terminal" as const,
-        terminalEvidence: "已关联原消费记录核验",
-        close: (
-          <Button
-            type="button"
-            size="sm"
-            disabled={!leaseActive || formalPending}
-            onClick={() => void handleClose("CLOSE_DUPLICATE")}
-          >
-            关闭重复
-          </Button>
-        ),
-      }
-    }
-
-    if (panelErrorClass === "rate-limited") {
-      return {
-        stage: "manual" as const,
-        manual: (
-          <Button type="button" size="sm" variant="secondary" disabled>
-            等待退避（禁止高频重试）
-          </Button>
-        ),
-      }
-    }
-
-    return { stage: "none" as const }
-  }
 
   async function handleTransfer() {
     if (!item?.workItem) return
@@ -721,11 +764,16 @@ export function IntegrationErrorsPage({
       afterResult(result)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "转交失败")
+      throw e
     }
   }
 
   async function handleClose(kind: "CLOSE_DUPLICATE" | "CLOSE_MISROUTED") {
     if (!item?.workItem) return
+    if (kind === "CLOSE_DUPLICATE" && !replacementTaskId) {
+      setActionError("请先选择替代任务")
+      throw new Error("请先选择替代任务")
+    }
     try {
       await ensureLease()
       const result = await closeMutation.mutateAsync({
@@ -738,12 +786,13 @@ export function IntegrationErrorsPage({
         kind,
         reasonCode: kind === "CLOSE_DUPLICATE" ? "DUPLICATE" : "MISROUTED",
         replacementWorkItemId:
-          kind === "CLOSE_DUPLICATE" ? replacementWi : undefined,
+          kind === "CLOSE_DUPLICATE" ? replacementTaskId : undefined,
         comment: comment || undefined,
       })
       afterResult(result)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "关闭失败")
+      throw e
     }
   }
 
@@ -804,6 +853,7 @@ export function IntegrationErrorsPage({
       afterResult(result)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "解决失败")
+      throw e
     }
   }
 
@@ -847,13 +897,18 @@ export function IntegrationErrorsPage({
       afterResult(result)
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "对账确认失败")
+      throw e
     }
   }
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
-        title="接口错误与对账中心"
+        title={
+          focusMode
+            ? (item?.identity.number ?? "接口错误与对账中心")
+            : "接口错误与对账中心"
+        }
         breadcrumbs={[
           {
             id: "gov",
@@ -871,7 +926,7 @@ export function IntegrationErrorsPage({
         metadata={
           <DataFreshness
             state="fresh"
-            label="集成更新时间"
+            label={freshnessText.dataUpdatedAt}
             updatedAt={formatDateTime(view?.context.updatedAt, "default")}
             dateTime={view?.context.updatedAt}
           />
@@ -883,36 +938,44 @@ export function IntegrationErrorsPage({
           <MetricItem
             label="结果未知"
             value={metrics.resultUnknown}
-            onClick={() =>
-              replaceUrl({
-                view: "result_unknown",
-                taskId: null,
-                differenceId: null,
-              })
+            onClick={
+              focusMode
+                ? undefined
+                : () =>
+                    replaceUrl({
+                      view: "result_unknown",
+                      taskId: null,
+                      differenceId: null,
+                    })
             }
           />
           <MetricItem label="待人工" value={metrics.manualRequired} />
           <MetricItem
             label="安全故障"
             value={metrics.securityFaults}
-            onClick={() =>
-              replaceUrl({
-                view: "security",
-                taskId: null,
-                differenceId: null,
-              })
+            onClick={
+              focusMode
+                ? undefined
+                : () =>
+                    replaceUrl({
+                      view: "security",
+                      taskId: null,
+                      differenceId: null,
+                    })
             }
           />
           <MetricItem
             label="未解决差异"
             value={metrics.openDifferences}
-            onClick={() =>
-              replaceUrl({
-                view: "reconciliation",
-                mode: "reconciliation",
-                taskId: null,
-                differenceId: null,
-              })
+            onClick={
+              focusMode
+                ? undefined
+                : () =>
+                    replaceUrl({
+                      view: "reconciliation",
+                      taskId: null,
+                      differenceId: null,
+                    })
             }
           />
           <MetricItem label="最长滞留" value={metrics.longestAgeLabel} />
@@ -936,11 +999,13 @@ export function IntegrationErrorsPage({
             spacing={0}
             aria-label="保存的视图"
           >
-            {(Object.keys(VIEW_LABEL) as IntegrationView[]).map((v) => (
-              <ToggleGroupItem key={v} value={v}>
-                {VIEW_LABEL[v]}
-              </ToggleGroupItem>
-            ))}
+            {(Object.keys(VIEW_LABEL) as IntegrationView[])
+              .filter((v) => v !== "resolved" && v !== "auto_retry")
+              .map((v) => (
+                <ToggleGroupItem key={v} value={v}>
+                  {VIEW_LABEL[v]}
+                </ToggleGroupItem>
+              ))}
           </ToggleGroup>
 
           <OptionCombobox
@@ -1028,7 +1093,6 @@ export function IntegrationErrorsPage({
               id="w29-auto-next"
               checked={autoNext}
               onCheckedChange={(on) => {
-                setSessionAutoNext(on)
                 replaceUrl({ autoNext: on ? "1" : "0" })
               }}
             />
@@ -1074,19 +1138,20 @@ export function IntegrationErrorsPage({
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground">
-        筛选：{view?.context.filterSummary}
-        {sessionAutoNext !== autoNext ? null : null}
-      </p>
+      {!focusMode ? (
+        <p className="text-xs text-muted-foreground">
+          筛选：{view?.context.filterSummary}
+        </p>
+      ) : null}
 
-      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+      <label className="flex items-center gap-2 rounded-xl border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         <input
           type="checkbox"
           className="size-3.5"
           checked={forceUnknownOnce}
           onChange={(e) => setForceUnknownOnce(e.target.checked)}
         />
-        下次「查询原结果」模拟仍未知（结果仍未知 · 不自动下一项）
+        演示控制：下次「查询原结果」模拟仍未知（结果仍未知 · 不自动下一项）
       </label>
 
       {lastResult ? (
@@ -1096,6 +1161,7 @@ export function IntegrationErrorsPage({
             title={lastResult.title}
             description={lastResult.description}
             reference={lastResult.reference}
+            referenceLabel="本次处理编号"
             facts={lastResult.facts}
             actions={
               lastResult.terminal && !autoNext ? (
@@ -1153,16 +1219,23 @@ export function IntegrationErrorsPage({
                       ? `/governance/integration-errors/errors/${row.identity.id}`
                       : `/governance/integration-errors/differences/${row.identity.id}`
                   return (
-                    <button
+                    <div
                       key={row.identity.id}
-                      type="button"
+                      role="button"
+                      tabIndex={0}
                       className={cn(
-                        "w-full rounded-xl text-left transition-colors",
+                        "w-full cursor-pointer rounded-xl text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-primary",
                         selected
                           ? "ring-2 ring-primary"
                           : "hover:bg-muted/40"
                       )}
                       onClick={() => goToItem(row)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          goToItem(row)
+                        }
+                      }}
                     >
                       <WorkTaskItem
                         density="compact"
@@ -1171,13 +1244,18 @@ export function IntegrationErrorsPage({
                         counterparty={row.identity.number}
                         enteredAt={formatDateTime(row.createdAt, "default")}
                         enteredDateTime={row.createdAt}
-                        dueAt={row.ageLabel}
+                        dueAt={
+                          row.dueAt
+                            ? formatDateTime(row.dueAt, "default")
+                            : "—"
+                        }
+                        dueDateTime={row.dueAt}
                         responsibleParty={row.ownerUser ?? row.ownerRole}
-                        reason={row.classification.code}
+                        reason={row.classification.label}
                         impact={row.fundsImpactLabel}
                         status={{
                           label: row.status.label,
-                          tone: severityTone(row.classification.severity),
+                          tone: statusTone(row),
                         }}
                         nextAction={
                           <span className="flex flex-wrap items-center gap-1">
@@ -1190,14 +1268,13 @@ export function IntegrationErrorsPage({
                             <Link
                               href={detailHref}
                               className="text-xs text-primary underline-offset-2 hover:underline"
-                              onClick={(e) => e.stopPropagation()}
                             >
                               详情
                             </Link>
                           </span>
                         }
                       />
-                    </button>
+                    </div>
                   )
                 })}
               </CardContent>
@@ -1208,31 +1285,33 @@ export function IntegrationErrorsPage({
             {item ? (
               <>
                 <SequentialProcessBar
-                  current={currentIndex + 1}
-                  total={items.length}
+                  current={positionIndex}
+                  total={positionTotal}
                   leaseStatus={leaseStatus}
                   leaseStatusLabel={
                     !item.hasWorkItem
                       ? "直接对账（无处理任务）"
                       : leaseActive
-                        ? "已领取"
-                        : "未领取"
+                        ? leaseText.active
+                        : leaseText.unclaimed
                   }
                   processLabel="处理当前"
                   processNextLabel="下一项"
                   pending={formalPending}
                   processDisabled={leaseStatus !== "active"}
+                  processNextDisabled={false}
+                  showProcessNext={!focusMode}
                   onBack={() => {
                     if (focusMode) {
                       router.push(
-                        `/governance/integration-errors?view=${urlState.view}`
+                        `/governance/integration-errors?view=${urlState.view}&queueContextId=${encodeURIComponent(urlState.queueContextId)}`
                       )
                     } else {
                       replaceUrl({ taskId: null, differenceId: null })
                     }
                   }}
                   onProcess={() => {
-                    headingRef.current?.focus()
+                    focusFirstAction()
                   }}
                   onProcessNext={() => {
                     const next = neighbor(1)
@@ -1315,7 +1394,7 @@ export function IntegrationErrorsPage({
                         <AlertTitle>结果未知</AlertTitle>
                         <AlertDescription>
                           主动作仅为「查询原结果」。禁止直接重新提交下单/取消/退款。
-                          系统不得传入重复请求标识。
+                          系统按原任务号重发，不手动指定。
                         </AlertDescription>
                       </Alert>
                     ) : null}
@@ -1363,7 +1442,6 @@ export function IntegrationErrorsPage({
                             }
                             mono
                           />
-                          <Fact label="请求编号" value="已保留" />
                         </>
                       ) : null}
                       {item.message ? (
@@ -1374,7 +1452,7 @@ export function IntegrationErrorsPage({
                             mono
                           />
                           <Fact
-                            label="载荷摘要"
+                            label="消息摘要"
                             value={item.message.maskedPayloadSummary}
                           />
                         </>
@@ -1382,40 +1460,40 @@ export function IntegrationErrorsPage({
                     </div>
 
                     {item.difference ? (
-                      <BusinessDiffPanel
-                        title="对账左右证据"
-                        caption={item.difference.differenceSummary}
-                        changes={[
-                          {
-                            id: "side",
-                            field: "侧别摘要",
-                            before: item.difference.leftSummary,
-                            after: item.difference.rightSummary,
-                            note: `${item.difference.leftLabel} vs ${item.difference.rightLabel}`,
-                          },
-                          {
-                            id: "boundary",
-                            field: "边界",
-                            before: item.difference.boundary,
-                            after: item.difference.boundary,
-                            note: "数据边界",
-                          },
-                          {
-                            id: "watermark",
-                            field: "更新时间",
-                            before: formatDateTime(item.difference.watermark, "default"),
-                            after: formatDateTime(item.difference.watermark, "default"),
-                            note: item.difference.differenceType,
-                          },
-                          {
-                            id: "summary",
-                            field: "差异摘要",
-                            before: "—",
-                            after: item.difference.differenceSummary,
-                            note: "只读证据，不可改数",
-                          },
-                        ]}
-                      />
+                      <>
+                        <BusinessDiffPanel
+                          title="对账左右证据"
+                          caption="左右侧金额与行数对照"
+                          fieldColumnLabel="对照项"
+                          beforeColumnLabel={item.difference.leftLabel}
+                          afterColumnLabel={item.difference.rightLabel}
+                          noteColumnLabel="差异说明"
+                          count={2}
+                          changes={[
+                            {
+                              id: "side",
+                              field: "对照摘要",
+                              before: item.difference.leftSummary,
+                              after: item.difference.rightSummary,
+                              note: "两侧对照，只读证据",
+                            },
+                            {
+                              id: "summary",
+                              field: "差异摘要",
+                              before: "—",
+                              after: item.difference.differenceSummary,
+                              note:
+                                DIFFERENCE_TYPE_LABEL[
+                                  item.difference.differenceType
+                                ] ?? item.difference.differenceType,
+                            },
+                          ]}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          数据范围 {item.difference.boundary} · 更新时间{" "}
+                          {formatDateTime(item.difference.watermark, "default")}
+                        </p>
+                      </>
                     ) : null}
 
                     {item.repairLinks.length > 0 ? (
@@ -1441,7 +1519,11 @@ export function IntegrationErrorsPage({
                           variant="ghost"
                           onClick={returnRefresh}
                         >
-                          返回后刷新当前任务
+                          <RefreshCwIcon
+                            data-icon="inline-start"
+                            aria-hidden
+                          />
+                          刷新当前任务
                         </Button>
                       </div>
                     ) : null}
@@ -1451,9 +1533,9 @@ export function IntegrationErrorsPage({
                 {/* Evidence — append-only timelines */}
                 <Card size="sm">
                   <CardHeader className="border-b">
-                    <CardTitle>证据与尝试（追加式）</CardTitle>
+                    <CardTitle>证据与尝试（历史保留）</CardTitle>
                     <CardDescription>
-                      消息、尝试与处理记录只追加，不提供覆盖控件
+                      消息、尝试与处理记录只保留，不提供覆盖控件
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-4 pt-4">
@@ -1518,14 +1600,11 @@ export function IntegrationErrorsPage({
 
                     {item.linkedEvidence.length > 0 ? (
                       <div className="space-y-1">
-                        <h4 className="text-sm font-medium">已关联强类型证据</h4>
+                        <h4 className="text-sm font-medium">已关联核验记录</h4>
                         <ul className="text-sm">
                           {item.linkedEvidence.map((e) => (
                             <li key={e.recordId}>
-                              {EVIDENCE_KIND_LABEL[e.kind]} ·{" "}
-                              <span className="num font-mono">{e.recordId}</span>
-                              {" · "}
-                              {e.label}
+                              {EVIDENCE_KIND_LABEL[e.kind]} · {e.label}
                             </li>
                           ))}
                         </ul>
@@ -1536,14 +1615,14 @@ export function IntegrationErrorsPage({
                       <Alert variant="info">
                         <AlertTitle>解决证据策略</AlertTitle>
                         <AlertDescription>
-                          {item.resolutionEvidencePolicy.evidencePolicyId}@v
-                          {item.resolutionEvidencePolicy.evidencePolicyVersion}
-                          {" · 需要 "}
+                          需要{" "}
                           {item.resolutionEvidencePolicy.requiredEvidenceKinds
                             .map((k) => EVIDENCE_KIND_LABEL[k])
                             .join("、")}
                           {" · 岗位分离 "}
-                          {item.resolutionEvidencePolicy.reviewerSeparation}
+                          {REVIEWER_SEPARATION_LABEL[
+                            item.resolutionEvidencePolicy.reviewerSeparation
+                          ] ?? item.resolutionEvidencePolicy.reviewerSeparation}
                         </AlertDescription>
                       </Alert>
                     ) : item.hasWorkItem ? (
@@ -1586,13 +1665,12 @@ export function IntegrationErrorsPage({
                           }
                         : undefined,
                     }}
-                    errorCode={item.classification.code}
-                    actions={buildResolutionActions() as never}
+                    errorCode={item.classification.label}
                   />
                 ) : null}
 
                 {/* Action zone */}
-                <Card size="sm">
+                <Card size="sm" ref={actionZoneRef}>
                   <CardHeader className="border-b">
                     <CardTitle>处理动作</CardTitle>
                     <CardDescription>
@@ -1692,7 +1770,7 @@ export function IntegrationErrorsPage({
                             type="button"
                             variant="secondary"
                             disabled={!leaseActive || formalPending}
-                            onClick={() => void handleTransfer()}
+                            onClick={() => setTerminalConfirm({ kind: "TRANSFER" })}
                           >
                             转交
                           </Button>
@@ -1702,7 +1780,7 @@ export function IntegrationErrorsPage({
                         <Button
                           type="button"
                           disabled={!leaseActive || formalPending}
-                          onClick={() => void handleResolve()}
+                          onClick={() => setTerminalConfirm({ kind: "RESOLVE" })}
                         >
                           标记已解决
                         </Button>
@@ -1711,19 +1789,28 @@ export function IntegrationErrorsPage({
                         <div className="flex w-full flex-wrap items-end gap-2 rounded-lg border p-2">
                           <div className="space-y-1">
                             <Label className="text-xs">替代任务</Label>
-                            <Input
-                              className="h-8 w-40"
-                              value={replacementWi}
-                              onChange={(e) =>
-                                setReplacementWi(e.target.value)
+                            <OptionCombobox
+                              value={replacementTaskId || null}
+                              onValueChange={(v) =>
+                                setReplacementTaskId(v ?? "")
                               }
+                              options={replacementOptions}
+                              className="w-72"
+                              size="sm"
+                              aria-label="选择替代任务"
+                              placeholder="选择替代任务（任务号 · 业务单）"
+                              allowClear={false}
                             />
                           </div>
                           <Button
                             type="button"
                             size="sm"
-                            disabled={!leaseActive || formalPending}
-                            onClick={() => void handleClose("CLOSE_DUPLICATE")}
+                            disabled={
+                              !leaseActive || formalPending || !replacementTaskId
+                            }
+                            onClick={() =>
+                              setTerminalConfirm({ kind: "CLOSE_DUPLICATE" })
+                            }
                           >
                             关闭重复
                           </Button>
@@ -1738,7 +1825,7 @@ export function IntegrationErrorsPage({
                           直接对账（无关联任务）
                         </p>
                         <p className="text-xs text-muted-foreground">
-                          终结只能「确认无误 / 确认有效差异」，引用原因注册表与受控证据；不得伪造任务已关闭。
+                          处理完成只能「确认无误 / 确认有效差异」，引用原因注册表与受控证据；不得虚构任务关闭。
                         </p>
                         {item.reconciliationReasonRegistry ? (
                           <>
@@ -1762,10 +1849,14 @@ export function IntegrationErrorsPage({
                                 type="button"
                                 size="sm"
                                 disabled={
-                                  !can("CONFIRM_NO_ERROR") || formalPending
+                                  !can("CONFIRM_NO_ERROR") ||
+                                  formalPending ||
+                                  reasonMismatches("CONFIRM_NO_ERROR")
                                 }
                                 onClick={() =>
-                                  void handleDirectTerminal("CONFIRM_NO_ERROR")
+                                  setTerminalConfirm({
+                                    kind: "CONFIRM_NO_ERROR",
+                                  })
                                 }
                               >
                                 确认无误
@@ -1776,12 +1867,13 @@ export function IntegrationErrorsPage({
                                 variant="secondary"
                                 disabled={
                                   !can("CONFIRM_VALID_DIFFERENCE") ||
-                                  formalPending
+                                  formalPending ||
+                                  reasonMismatches("CONFIRM_VALID_DIFFERENCE")
                                 }
                                 onClick={() =>
-                                  void handleDirectTerminal(
-                                    "CONFIRM_VALID_DIFFERENCE"
-                                  )
+                                  setTerminalConfirm({
+                                    kind: "CONFIRM_VALID_DIFFERENCE",
+                                  })
                                 }
                               >
                                 确认有效差异
@@ -1818,7 +1910,7 @@ export function IntegrationErrorsPage({
                                     .then(afterResult)
                                 }}
                               >
-                                补充证据（非终结）
+                                补充证据（暂不完成对账）
                               </Button>
                             </div>
                           </>
@@ -1832,15 +1924,31 @@ export function IntegrationErrorsPage({
                         )}
                       </div>
                     ) : null}
-
-                    <p className="text-xs text-muted-foreground">
-                      当前可操作范围：
-                      {item.allowedActions
-                        .map((a) => ACTION_LABEL[a] ?? a)
-                        .join("、") || "（无）"}
-                    </p>
                   </CardContent>
                 </Card>
+
+                {terminalConfirm ? (
+                  <TerminalActionDialog
+                    confirm={terminalConfirm}
+                    item={item}
+                    transferRole={transferRole}
+                    pending={formalPending}
+                    onConfirm={async () => {
+                      const kind = terminalConfirm.kind
+                      if (kind === "TRANSFER") {
+                        await handleTransfer()
+                      } else if (kind === "CLOSE_DUPLICATE") {
+                        await handleClose("CLOSE_DUPLICATE")
+                      } else if (kind === "RESOLVE") {
+                        await handleResolve()
+                      } else {
+                        await handleDirectTerminal(kind)
+                      }
+                      setTerminalConfirm(null)
+                    }}
+                    onCancel={() => setTerminalConfirm(null)}
+                  />
+                ) : null}
               </>
             ) : (
               <BusinessEmptyState
@@ -1870,5 +1978,108 @@ function Fact({
       <div className="text-xs text-muted-foreground">{label}</div>
       <div className={mono ? "num font-mono text-sm" : "text-sm"}>{value}</div>
     </div>
+  )
+}
+
+/** 终态动作的二次确认层：转交 / 关闭重复 / 标记已解决 / 直接对账终结 */
+function TerminalActionDialog({
+  confirm,
+  item,
+  transferRole,
+  pending,
+  onConfirm,
+  onCancel,
+}: {
+  confirm: TerminalConfirm
+  item: IntegrationResolutionItemView
+  transferRole: string
+  pending: boolean
+  onConfirm: () => void | Promise<void>
+  onCancel: () => void
+}) {
+  const policy = item.resolutionEvidencePolicy
+  const evidenceKinds = policy?.requiredEvidenceKinds ?? []
+
+  if (confirm.kind === "TRANSFER") {
+    return (
+      <FormalActionConfirmDialog
+        open
+        onOpenChange={(open) => {
+          if (!open) onCancel()
+        }}
+        actionLabel="转交"
+        title="确认转交任务"
+        description="任务将转交给所选角色；转交只变更处理人，不改变任务结论。"
+        fromStatus={{ label: item.status.label, tone: "warning" }}
+        toStatus={{ label: "已转交", tone: "info" }}
+        effects={["转交不是解决，任务仍待处理", `目标角色：${transferRole}`]}
+        irreversibleEffects={["转交记录进入处理审计"]}
+        pending={pending}
+        onConfirm={onConfirm}
+      />
+    )
+  }
+  if (confirm.kind === "CLOSE_DUPLICATE") {
+    return (
+      <FormalActionConfirmDialog
+        open
+        onOpenChange={(open) => {
+          if (!open) onCancel()
+        }}
+        actionLabel="关闭重复"
+        title="确认关闭重复任务"
+        description="仅关闭重复任务本身；不写业务解决结论，不影响业务记录。"
+        fromStatus={{ label: item.status.label, tone: "warning" }}
+        toStatus={{ label: "已关闭", tone: "neutral" }}
+        effects={["任务退出待处理队列", "不改变业务记录"]}
+        irreversibleEffects={["关闭后不再出现在待处理列表"]}
+        pending={pending}
+        onConfirm={onConfirm}
+      />
+    )
+  }
+  if (confirm.kind === "RESOLVE") {
+    return (
+      <FormalActionConfirmDialog
+        open
+        onOpenChange={(open) => {
+          if (!open) onCancel()
+        }}
+        actionLabel="标记已解决"
+        title="确认标记已解决"
+        description="处理完成要求证据齐备；系统将按证据策略登记处理凭证。"
+        fromStatus={{ label: item.status.label, tone: "warning" }}
+        toStatus={{ label: "已完成", tone: "success" }}
+        effects={[
+          evidenceKinds.length > 0
+            ? `系统将自动登记 ${evidenceKinds.length} 类处理凭证：${evidenceKinds
+                .map((k) => EVIDENCE_KIND_LABEL[k])
+                .join("、")}`
+            : "系统将登记本次处理凭证",
+          "任务完成并退出待处理队列",
+        ]}
+        irreversibleEffects={["处理结论写入审计，不可自动撤回"]}
+        pending={pending}
+        onConfirm={onConfirm}
+      />
+    )
+  }
+  const isNoError = confirm.kind === "CONFIRM_NO_ERROR"
+  return (
+    <FormalActionConfirmDialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onCancel()
+      }}
+      actionLabel={isNoError ? "确认无误" : "确认有效差异"}
+      title={isNoError ? "确认差异无误" : "确认差异为有效差异"}
+      description="按已选注册原因追加对账处理记录；本操作不涉及任务关闭。"
+      fromStatus={{ label: item.status.label, tone: "warning" }}
+      toStatus={{ label: "已确认", tone: "success" }}
+      effects={["按注册原因追加对账处理记录", "不改变两侧业务数据"]}
+      irreversibleEffects={["对账结论写入审计，不可自动撤回"]}
+      pending={pending}
+      onConfirm={onConfirm}
+    />
   )
 }

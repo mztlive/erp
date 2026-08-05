@@ -12,10 +12,10 @@ import type {
 } from "@/features/history-backfill/types"
 
 const SCOPE_NOTE =
-  "生效范围半开区间 [rangeStart, T)。occurredAt = T 的记录不进入历史回填，按实时/补投契约处理。"
+  "生效范围为范围起点至截止时点（截止时点当天除外）；当天发生的记录不进入历史回填，按实时/补录规则处理。"
 
 const LEGACY_NOTE =
-  "T 前支付只补台账，履约链固定 LEGACY_MANUAL，不创建供应商订单、取消或退款动作。"
+  "截止时点前支付只补台账，履约链固定为历史手工口径，不创建供应商订单、取消或退款动作。"
 
 const SENSITIVE_NOTE =
   "报告与明细已脱敏：不含卡号、卡密、绑定手机号、完整履约地址或原始商城消息内容。"
@@ -413,7 +413,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_pay_1001",
     jobId: "hb_job_running_01",
     factType: "PAYMENT_SUCCEEDED",
-    businessFactKeySummary: "pay·MO-E-100861·2025-03-12",
+    businessFactKeySummary: "支付·MO-E-100861·2025-03-12",
     mallOrderNo: "MO-E-100861",
     occurredAt: "2025-03-12T14:22:00+08:00",
     result: "INSERTED",
@@ -430,7 +430,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_cancel_1001",
     jobId: "hb_job_running_01",
     factType: "ORDER_CANCELED",
-    businessFactKeySummary: "cancel·MO-E-100861·2025-03-12",
+    businessFactKeySummary: "取消·MO-E-100861·2025-03-12",
     mallOrderNo: "MO-E-100861",
     occurredAt: "2025-03-12T15:01:00+08:00",
     result: "INSERTED",
@@ -444,7 +444,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_refund_1001a",
     jobId: "hb_job_running_01",
     factType: "REFUND_SUCCEEDED",
-    businessFactKeySummary: "refund·MO-E-100861·RF-01",
+    businessFactKeySummary: "退款·MO-E-100861·RF-01",
     mallOrderNo: "MO-E-100861",
     sourceDocNo: "RF-E-100861-01",
     occurredAt: "2025-03-13T09:10:00+08:00",
@@ -461,7 +461,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_refund_1001b",
     jobId: "hb_job_running_01",
     factType: "REFUND_SUCCEEDED",
-    businessFactKeySummary: "refund·MO-E-100861·RF-02",
+    businessFactKeySummary: "退款·MO-E-100861·RF-02",
     mallOrderNo: "MO-E-100861",
     sourceDocNo: "RF-E-100861-02",
     occurredAt: "2025-03-14T11:20:00+08:00",
@@ -478,7 +478,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_complete_1001",
     jobId: "hb_job_running_01",
     factType: "ORDER_COMPLETED",
-    businessFactKeySummary: "complete·MO-E-100861·2025-03-15",
+    businessFactKeySummary: "完成·MO-E-100861·2025-03-15",
     mallOrderNo: "MO-E-100861",
     occurredAt: "2025-03-15T16:00:00+08:00",
     result: "INSERTED",
@@ -492,7 +492,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_restore_1001a",
     jobId: "hb_job_running_01",
     factType: "CARD_BALANCE_RESTORED",
-    businessFactKeySummary: "restore·MO-E-100861·RS-01",
+    businessFactKeySummary: "恢复·MO-E-100861·RS-01",
     mallOrderNo: "MO-E-100861",
     sourceDocNo: "RS-E-100861-01",
     occurredAt: "2025-03-13T09:11:00+08:00",
@@ -508,7 +508,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_restore_1001b",
     jobId: "hb_job_running_01",
     factType: "CARD_BALANCE_RESTORED",
-    businessFactKeySummary: "restore·MO-E-100861·RS-02",
+    businessFactKeySummary: "恢复·MO-E-100861·RS-02",
     mallOrderNo: "MO-E-100861",
     sourceDocNo: "RS-E-100861-02",
     occurredAt: "2025-03-14T11:21:00+08:00",
@@ -525,7 +525,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_dedupe_2002",
     jobId: "hb_job_running_01",
     factType: "PAYMENT_SUCCEEDED",
-    businessFactKeySummary: "pay·MO-E-200902·2026-07-30",
+    businessFactKeySummary: "支付·MO-E-200902·2026-07-30",
     mallOrderNo: "MO-E-200902",
     occurredAt: "2026-07-30T10:00:00+08:00",
     result: "DEDUPLICATED",
@@ -547,7 +547,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_dedupe_prior",
     jobId: "hb_job_partial_02",
     factType: "ORDER_COMPLETED",
-    businessFactKeySummary: "complete·MO-N-55110·2024-11-02",
+    businessFactKeySummary: "完成·MO-N-55110·2024-11-02",
     mallOrderNo: "MO-N-55110",
     occurredAt: "2024-11-02T18:30:00+08:00",
     result: "DEDUPLICATED",
@@ -568,7 +568,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_unattr_3001",
     jobId: "hb_job_running_01",
     factType: "PAYMENT_SUCCEEDED",
-    businessFactKeySummary: "pay·MO-E-300771·2025-08-01",
+    businessFactKeySummary: "支付·MO-E-300771·2025-08-01",
     mallOrderNo: "MO-E-300771",
     occurredAt: "2025-08-01T12:00:00+08:00",
     result: "UNATTRIBUTED",
@@ -580,14 +580,14 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     workItemId: "wi_iet_map_002",
     whitelistFields: [
       { field: "productRef", label: "商城商品", value: "SKU-EXT-****771" },
-      { field: "mapGap", label: "归集缺口", value: "W21 映射 / 税口径" },
+      { field: "mapGap", label: "归集缺口", value: "映射 / 税口径" },
     ],
   },
   {
     itemId: "hbi_unattr_3002",
     jobId: "hb_job_partial_02",
     factType: "PAYMENT_SUCCEEDED",
-    businessFactKeySummary: "pay·MO-N-88012·2024-05-18",
+    businessFactKeySummary: "支付·MO-N-88012·2024-05-18",
     mallOrderNo: "MO-N-88012",
     occurredAt: "2024-05-18T09:40:00+08:00",
     result: "UNATTRIBUTED",
@@ -607,7 +607,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_fail_4001",
     jobId: "hb_job_failed_05",
     factType: "PAYMENT_SUCCEEDED",
-    businessFactKeySummary: "pay·MO-W-41001·2025-01-09",
+    businessFactKeySummary: "支付·MO-W-41001·2025-01-09",
     mallOrderNo: "MO-W-41001",
     occurredAt: "2025-01-09T08:15:00+08:00",
     result: "FAILED",
@@ -627,7 +627,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_fail_4002",
     jobId: "hb_job_partial_02",
     factType: "REFUND_SUCCEEDED",
-    businessFactKeySummary: "refund·MO-N-66001·RF-09",
+    businessFactKeySummary: "退款·MO-N-66001·RF-09",
     mallOrderNo: "MO-N-66001",
     sourceDocNo: "RF-N-66001-09",
     occurredAt: "2025-12-01T20:00:00+08:00",
@@ -649,7 +649,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_std_5001",
     jobId: "hb_job_completed_03",
     factType: "PAYMENT_SUCCEEDED",
-    businessFactKeySummary: "pay·MO-E-V-501·2025-06-01",
+    businessFactKeySummary: "支付·MO-E-V-501·2025-06-01",
     mallOrderNo: "MO-E-V-501",
     occurredAt: "2025-06-01T13:00:00+08:00",
     result: "INSERTED",
@@ -669,7 +669,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     itemId: "hbi_none_5002",
     jobId: "hb_job_completed_03",
     factType: "PAYMENT_SUCCEEDED",
-    businessFactKeySummary: "pay·MO-E-V-502·2025-06-02",
+    businessFactKeySummary: "支付·MO-E-V-502·2025-06-02",
     mallOrderNo: "MO-E-V-502",
     occurredAt: "2025-06-02T13:00:00+08:00",
     result: "INSERTED",
@@ -678,7 +678,7 @@ export const ITEM_SEEDS: HistoryBackfillItemView[] = [
     consumptionAmountGross: "¥40.00",
     fulfillmentChain: "LEGACY_MANUAL",
     whitelistFields: [
-      { field: "noneReason", label: "NONE 原因", value: "无商城成本记录且无时点供给版本" },
+      { field: "noneReason", label: "未覆盖原因", value: "无商城成本记录且无时点供给版本" },
       { field: "costDisplay", label: "成本字段", value: "空（非 0）" },
     ],
   },
@@ -720,7 +720,7 @@ export function buildReportForJob(
     (i) => i.jobId === job.id && i.result === "FAILED"
   ).map(
     (i) =>
-      `${i.mallOrderNo} · ${i.failure?.errorCode ?? "FAIL"} · ${i.failure?.summary ?? ""}`
+      `${i.mallOrderNo} · ${i.businessFactKeySummary} · ${i.failure?.summary ?? ""}`
   )
 
   const totalAmount = job.costBasis
@@ -733,8 +733,8 @@ export function buildReportForJob(
     generatedAt: job.progress.lastProgressAt ?? job.requestedAt,
     reviewLabel,
     downloadLabel,
-    schemaVersion: "mall-backfill-report@2026.07",
-    ruleVersion: "hist-cost-v3",
+    schemaVersion: "历史回填报告 · 2026.07",
+    ruleVersion: "历史成本口径 v3",
     rangeStart: job.rangeStart,
     rangeEnd: job.rangeEnd,
     cutoverAt: job.cutoverAt,
@@ -775,6 +775,7 @@ export function seedDetail(jobId: string): HistoryBackfillDetailView | null {
   return {
     job,
     items: ITEM_SEEDS.filter((i) => i.jobId === jobId),
+    totalItems: ITEM_SEEDS.filter((i) => i.jobId === jobId).length,
     report: buildReportForJob(job),
     queriedAt: new Date().toISOString(),
     permissionVersion: "pv-w30-1",

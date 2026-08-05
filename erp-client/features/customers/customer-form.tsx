@@ -26,6 +26,11 @@ import {
   FieldError,
   FieldLabel,
 } from "@/components/ui/field"
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
 import { getW03SensitiveReveal } from "@/features/customers/session"
 import {
@@ -172,7 +177,7 @@ function buildDefaults(
       accountName: b.accountName,
       bankName: b.bankName,
       accountNumber: editableValue(b.accountRevealToken, b.accountMasked),
-      isDefault: false,
+      isDefault: b.isDefault,
     })),
   }
 }
@@ -231,7 +236,8 @@ export function CustomerForm({
   /** mode="edit" 必传。 */
   customer?: CustomerCenterView
   onCancel: () => void
-  onSucceeded: (customerId: string) => void
+  /** 成功回调；revisionNo 供页面展示「已保存 · 新版本 vN」反馈。 */
+  onSucceeded: (customerId: string, revisionNo?: number) => void
   /** 表单是否含未保存输入（对话框容器用于拦截 X / Esc / 遮罩关闭）。 */
   onDirtyChange?: (isDirty: boolean) => void
 }) {
@@ -248,6 +254,7 @@ export function CustomerForm({
     null
   )
   const [conflictOpen, setConflictOpen] = React.useState(false)
+  const [maskedBlocked, setMaskedBlocked] = React.useState(false)
 
   const defaults = React.useMemo<FormValues>(
     () => buildDefaults(mode, customer),
@@ -258,6 +265,25 @@ export function CustomerForm({
     defaultValues: defaults,
     validators: { onChange: mode === "create" ? createSchema : editSchema },
     onSubmit: async ({ value }) => {
+      // 防脱敏值写回：无揭示令牌时预填的是打码文本，保存前必须已揭示。
+      const maskedContacts = value.contacts.filter((row) =>
+        row.phone.includes("*")
+      )
+      const maskedAddresses = value.addresses.filter((row) =>
+        row.address.includes("*")
+      )
+      const maskedAccounts = value.bankAccounts.filter((row) =>
+        row.accountNumber.includes("*")
+      )
+      if (
+        maskedContacts.length > 0 ||
+        maskedAddresses.length > 0 ||
+        maskedAccounts.length > 0
+      ) {
+        setMaskedBlocked(true)
+        return
+      }
+      setMaskedBlocked(false)
       const contacts = value.contacts.map((row) => ({
         name: row.name.trim(),
         title: row.title.trim() || undefined,
@@ -318,7 +344,7 @@ export function CustomerForm({
       }
       if (response.outcome === "succeeded") {
         form.reset()
-        onSucceeded(response.customerId)
+        onSucceeded(response.customerId, response.revisionNo)
       }
     },
   })
@@ -643,7 +669,7 @@ export function CustomerForm({
       <FormSection
         grouped={grouped}
         title="银行账户"
-        description="账号默认只显示末四位；完整显示需授权并记审计"
+        description="账号默认只显示末四位；完整显示需授权，操作会留记录"
         action={
           <form.AppField name="bankAccounts">
             {(field) => (
@@ -722,30 +748,46 @@ export function CustomerForm({
         </form.AppField>
       </FormSection>
 
-      <div className="space-y-2">
-        <Label htmlFor="customer-form-simulate">演示结果</Label>
-        <OptionCombobox
-          id="customer-form-simulate"
-          value={simulate}
-          onValueChange={(v) =>
-            setSimulate((v ?? "ok") as "ok" | "conflict" | "unknown")
-          }
-          options={[
-            { value: "ok", label: "正常成功" },
-            {
-              value: "conflict",
-              label:
-                mode === "create"
-                  ? "重复候选冲突（保留输入）"
-                  : "数据已更新（保留输入）",
-            },
-            { value: "unknown", label: "结果不确定（保留输入）" },
-          ]}
-          allowClear={false}
-          aria-label="演示结果"
-          placeholder="请选择演示结果"
-        />
-      </div>
+      {maskedBlocked ? (
+        <div className="space-y-2">
+          <Alert variant="warning" role="alert">
+            <AlertTitle>有敏感信息尚未揭示，暂不能保存</AlertTitle>
+            <AlertDescription>
+              手机号、地址或银行账号仍以打码文本显示。请先点击「显示」揭示并确认为真实内容后再保存，避免把打码文本写入资料。
+            </AlertDescription>
+          </Alert>
+        </div>
+      ) : null}
+
+      <details className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
+        <summary className="cursor-pointer select-none">
+          演示模式（模拟提交结果）
+        </summary>
+        <div className="mt-2 space-y-2">
+          <Label htmlFor="customer-form-simulate">演示结果</Label>
+          <OptionCombobox
+            id="customer-form-simulate"
+            value={simulate}
+            onValueChange={(v) =>
+              setSimulate((v ?? "ok") as "ok" | "conflict" | "unknown")
+            }
+            options={[
+              { value: "ok", label: "正常成功" },
+              {
+                value: "conflict",
+                label:
+                  mode === "create"
+                    ? "重复候选冲突（保留输入）"
+                    : "数据已更新（保留输入）",
+              },
+              { value: "unknown", label: "结果不确定（保留输入）" },
+            ]}
+            allowClear={false}
+            aria-label="演示结果"
+            placeholder="请选择演示结果"
+          />
+        </div>
+      </details>
 
       {result?.outcome === "succeeded" ? (
         <FormalActionResult
@@ -766,8 +808,10 @@ export function CustomerForm({
                 ]
               : [
                   { label: "客户号", value: result.customerNo },
-                  { label: "新版本", value: `v${result.revisionNo}` },
-                  { label: "版本号", value: String(result.lockVersion) },
+                  {
+                    label: "新版本",
+                    value: `v${result.revisionNo} · 数据版本 ${result.lockVersion}`,
+                  },
                   { label: "时间", value: result.occurredAt },
                 ]
           }
@@ -780,6 +824,7 @@ export function CustomerForm({
           title={mode === "create" ? "创建结果不确定" : "保存结果不确定"}
           description={result.message}
           reference={result.idempotencyKey}
+          referenceLabel="原任务号"
           actions={
             <Button
               type="button"

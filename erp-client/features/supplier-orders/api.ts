@@ -254,6 +254,8 @@ function projectListRow(
   })
   return {
     ...base,
+    costGross: costVisible(role) ? seed.costs.cumulativeCostGross : null,
+    itemCount: seed.items.length,
     allowedActions: allowed,
     actionBlockers: blockers,
   }
@@ -300,6 +302,25 @@ function matchesQuery(
     if (!q.refundStatuses.includes(row.refundStatus)) return false
   }
 
+  if (q.aftersalePending) {
+    const pending =
+      row.cancelStatus === "CANCEL_PENDING" ||
+      row.cancelStatus === "FAILED" ||
+      row.cancelStatus === "MANUAL" ||
+      row.refundStatus === "REFUND_PENDING" ||
+      row.refundStatus === "REFUND_FAILED" ||
+      row.refundStatus === "MANUAL" ||
+      row.refundStatus === "PARTIAL" ||
+      seed.afterSales.some(
+        (a) =>
+          a.mallRefund.status === "PENDING" ||
+          a.supplierRefund.status === "REFUND_FAILED" ||
+          a.supplierRefund.status === "NONE" &&
+            a.allowedActions.length > 0
+      )
+    if (!pending) return false
+  }
+
   if (q.paidFrom && row.paidAt.slice(0, 10) < q.paidFrom) return false
   if (q.paidTo && row.paidAt.slice(0, 10) > q.paidTo) return false
 
@@ -331,14 +352,13 @@ function buildMetrics(rows: SupplierOrderListRow[]): SupplierOrderMetric[] {
           r.fulfillmentStatus === "RECEIVED" ||
           r.fulfillmentStatus === "SUBMITTING"
       ).length,
-      fulfillmentStatus: "SUBMITTING",
+      fulfillmentStatuses: ["RECEIVED", "SUBMITTING"],
     },
     {
       key: "result_unknown",
       label: "结果未知",
       value: rows.filter((r) => r.fulfillmentStatus === "RESULT_UNKNOWN")
         .length,
-      detail: "fulfillmentStatus=RESULT_UNKNOWN",
       fulfillmentStatus: "RESULT_UNKNOWN",
     },
     {
@@ -349,7 +369,7 @@ function buildMetrics(rows: SupplierOrderListRow[]): SupplierOrderMetric[] {
           r.fulfillmentStatus === "EXCEPTION" ||
           r.fulfillmentStatus === "REJECTED"
       ).length,
-      fulfillmentStatus: "EXCEPTION",
+      fulfillmentStatuses: ["EXCEPTION", "REJECTED"],
     },
     {
       key: "aftersale",
@@ -449,9 +469,11 @@ export async function fetchSupplierOrders(
     return { seed, row: projectListRow(seed, session, role) }
   })
 
-  // Metrics from full scope (before view filter) for stable strip
-  const allRows = projected.map((p) => p.row)
-  const metrics = buildMetrics(allRows)
+  // Metrics follow non-view filters (供应商/日期/搜索)，与点击后筛选结果保持一致
+  const metricRows = projected
+    .filter((p) => matchesQuery(p.row, p.seed, { ...query, view: "all" }))
+    .map((p) => p.row)
+  const metrics = buildMetrics(metricRows)
 
   const filtered = projected
     .filter((p) => matchesQuery(p.row, p.seed, query))
@@ -627,7 +649,7 @@ function projectDetail(
         ? new Date(reveal!.expiresAt).toISOString()
         : undefined,
       auditNote: revealActive
-        ? `已记录揭示审计 ${reveal!.auditEventId}（原因：${reveal!.reason}）`
+        ? `已记录揭示审计（原因：${reveal!.reason}）`
         : undefined,
     },
     workItem,
@@ -783,7 +805,9 @@ export async function querySupplierResult(
   const res: FormalActionResponse<QueryResultData> = {
     status: "succeeded",
     message: `查询完成：${outcomeLabel}。任务仍待处理，不会自动下一项。`,
-    reference: evidence.evidenceId,
+    reference: `查询记录 QR-${seed.orderNo.slice(-4)}-${Date.now()
+      .toString()
+      .slice(-4)}`,
     operationId: input.operationId,
     data,
   }
@@ -879,7 +903,9 @@ export async function replaySupplierOrder(
     status: "succeeded",
     message:
       "重发已受理并取得接单结果。任务仍在处理中，需确认处理结果。",
-    reference: evidence.evidenceId,
+    reference: `重发记录 RR-${seed.orderNo.slice(-4)}-${Date.now()
+      .toString()
+      .slice(-4)}`,
     operationId: input.operationId,
     data,
   }
@@ -919,7 +945,9 @@ export async function deferSupplierOrderTask(
   return {
     status: "succeeded",
     message: "已记录跳过原因。任务未完成、未转交，仍为待处理。",
-    reference: input.workItemId,
+    reference: `跳过记录 DF-${seed.orderNo.slice(-4)}-${Date.now()
+      .toString()
+      .slice(-4)}`,
     data: {
       reasonCode: input.reasonCode,
       queueContextId: input.queueContextId,
@@ -1015,7 +1043,9 @@ export async function submitAfterSalesAction(
   return {
     status: "succeeded",
     message: note,
-    reference: actionRecordId,
+    reference: `售后处理记录 AS-${seed.orderNo.slice(-4)}-${Date.now()
+      .toString()
+      .slice(-4)}`,
     operationId: input.operationId,
     data,
   }
@@ -1040,7 +1070,6 @@ export async function revealSupplierOrderAddress(
   return {
     status: "succeeded",
     message: "已短时揭示收货信息，并写入审计。离开页面或超时后自动清除。",
-    reference: auditEventId,
     data: {
       address: detail.address,
       auditEventId,
@@ -1113,7 +1142,7 @@ export async function createSupplierOrderExportJob(
     maskDisclaimer:
       "导出使用系统筛选快照与字段权限打码：收货地址、手机号不会以明文写入文件，导出默认列不含敏感地址；下载时重新鉴权，结果 7 天内可下载。",
     expiresAt,
-    downloadLabel: `供应商订单_${jobId}.csv`,
+    downloadLabel: `供应商订单_${new Date().toISOString().slice(0, 10)}.csv`,
     status: "succeeded",
   }
 }

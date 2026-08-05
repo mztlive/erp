@@ -100,8 +100,7 @@ export function buildMasterDataExportCsv(
     effectiveTo?: string
     primaryBlocker?: string
   }[],
-  filterSnapshotLabel: string,
-  permissionVersion: string
+  filterSnapshotLabel: string
 ): string {
   const quote = (value: string) => `"${value.replaceAll('"', '""')}"`
   const header = [
@@ -134,7 +133,6 @@ export function buildMasterDataExportCsv(
     .join("\n")
   const meta = [
     `# 筛选条件=${filterSnapshotLabel}`,
-    `# 权限核对=${permissionVersion}`,
     `# 说明=导出时按权限重新核对；不含无权查看的敏感信息`,
   ].join("\n")
   return `${meta}\n${header}\n${body}`
@@ -199,7 +197,8 @@ export function useCreateRevisionMutation() {
   return useMutation({
     mutationFn: (input: CreateRevisionInput) => createMasterDataRevision(input),
     onSuccess: async (result) => {
-      if (result.outcome === "succeeded") {
+      // 冲突时也刷新详情与列表，让 lockVersion 回到最新，避免「关闭-重填-再冲突」死循环。
+      if (result.outcome === "succeeded" || result.outcome === "conflict") {
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: masterDataKeys.all }),
           queryClient.invalidateQueries({
@@ -217,7 +216,7 @@ export function useDisableMasterDataMutation() {
     mutationFn: (input: DisableMasterDataInput) =>
       disableMasterDataObject(input),
     onSuccess: async (result) => {
-      if (result.outcome === "succeeded") {
+      if (result.outcome === "succeeded" || result.outcome === "conflict") {
         await queryClient.invalidateQueries({ queryKey: masterDataKeys.all })
       }
     },

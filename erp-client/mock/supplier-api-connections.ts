@@ -89,6 +89,29 @@ export type SeedConnection = {
   alerts?: ConnectionCenterView["alerts"]
 }
 
+export const ENDPOINT_OPAQUE_OPTIONS = [
+  {
+    referenceId: "cfg_ref_jd_prod_ep_v2",
+    alias: "cfg://jd-prod-endpoint",
+    version: "ep-v2",
+  },
+  {
+    referenceId: "cfg_ref_jd_prod_ep_v3",
+    alias: "cfg://jd-prod-endpoint-candidate",
+    version: "ep-v3",
+  },
+  {
+    referenceId: "cfg_ref_sf_stg_ep_v1",
+    alias: "cfg://sf-stg-endpoint",
+    version: "ep-v1",
+  },
+  {
+    referenceId: "cfg_ref_meituan_prod_ep_v1",
+    alias: "cfg://meituan-prod-endpoint",
+    version: "ep-v1",
+  },
+] as const
+
 export const CREDENTIAL_OPAQUE_OPTIONS = [
   {
     referenceId: "kms_ref_jd_prod_v3",
@@ -211,7 +234,7 @@ export const SEED_CONNECTIONS: SeedConnection[] = [
         actor: "运维组",
         action: "BIND_CREDENTIAL_REFERENCE",
         summary: "密钥引用轮换至 v3（仅别名）",
-        auditNo: "AUD-W20-7821",
+        auditNo: "AUD-7821",
       },
       {
         eventId: "ae_jd_2",
@@ -219,7 +242,7 @@ export const SEED_CONNECTIONS: SeedConnection[] = [
         actor: "赵强",
         action: "CONFIRM_CAPABILITY_REQUIREMENT",
         summary: "确认 CATALOG/PRICE/STOCK/ORDER 业务需要",
-        auditNo: "AUD-W20-7602",
+        auditNo: "AUD-7602",
       },
     ],
     nextStep: "运行正常 · 可进入供应商商品库查看目录",
@@ -304,7 +327,7 @@ export const SEED_CONNECTIONS: SeedConnection[] = [
         actor: "系统",
         action: "HEALTH_AUTH_FAILED",
         summary: "鉴权失败，自动重试停止",
-        auditNo: "AUD-W20-8001",
+        auditNo: "AUD-8001",
       },
     ],
     nextStep: "轮换密钥引用并重新健康检查",
@@ -358,7 +381,7 @@ export const SEED_CONNECTIONS: SeedConnection[] = [
         actor: "系统管理员",
         action: "CREATE_CONNECTION",
         summary: "创建连接身份 CONN-MT-PROD",
-        auditNo: "AUD-W20-7550",
+        auditNo: "AUD-7550",
       },
     ],
     nextStep: "绑定地址/密钥引用 → 配置能力 → 健康检查",
@@ -565,7 +588,7 @@ export const SEED_CONNECTIONS: SeedConnection[] = [
         actor: "系统管理员",
         action: "DISABLE",
         summary: "停用连接；历史版本与业务记录保留",
-        auditNo: "AUD-W20-7100",
+        auditNo: "AUD-7100",
       },
     ],
     nextStep: "已停用 · 历史保留 · 可重新启用（需验证）",

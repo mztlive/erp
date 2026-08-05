@@ -3,7 +3,11 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import type {
+  ColumnDef,
+  PaginationState,
+  SortingState,
+} from "@tanstack/react-table"
 import {
   Bar,
   BarChart,
@@ -29,12 +33,12 @@ import {
   CostCoverageNotice,
   DataFreshness,
   DataTable,
+  GuardedBusinessAction,
   MetricFilterItem,
   MetricItem,
   MetricStrip,
   MoneyValue,
   OptionCombobox,
-  PageActions,
   PageHeader,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
@@ -132,6 +136,12 @@ function formatClock(iso: string) {
   } catch {
     return iso
   }
+}
+
+/** 来源更新位置形如 outbox:cq:2026-08-01T09:35:48+08:00，提取可读时间部分。 */
+function formatSourceWatermark(w: string): string {
+  const m = w.match(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/)
+  return m ? m[0] : w
 }
 
 function freshnessPresentation(
@@ -264,7 +274,8 @@ export function CustomerQualityPage() {
   const focusCustomerId = searchParams.get("focusCustomerId") ?? undefined
   const focusMetric = searchParams.get("focusMetric") ?? undefined
   const periodPreset = searchParams.get("periodPreset") ?? undefined
-  const scopeId = searchParams.get("scope") ?? "scope:team:sales-east"
+  // 数据范围固定为当前角色默认范围；不接受 URL 隐形覆盖（URL 参数与控件一一对应）
+  const scopeId = "scope:team:sales-east"
 
   const [searchInput, setSearchInput] = React.useState(qParam)
   const [explicitFrom, setExplicitFrom] = React.useState(fromParam ?? "")
@@ -277,6 +288,7 @@ export function CustomerQualityPage() {
   const [exportJob, setExportJob] = React.useState<CustomerQualityExportJob | null>(
     null
   )
+  const [refreshError, setRefreshError] = React.useState(false)
   const [periodWriteDone, setPeriodWriteDone] = React.useState(false)
   const rowFocusRef = React.useRef<string | null>(focusCustomerId ?? null)
 
@@ -373,7 +385,8 @@ export function CustomerQualityPage() {
       riskTag,
       q: qParam || undefined,
       sort,
-      pageSize: 50,
+      page: pagination.pageIndex + 1,
+      pageSize: pagination.pageSize,
       chartDimension,
       chartCode,
       customerId,
@@ -393,6 +406,8 @@ export function CustomerQualityPage() {
     riskTag,
     qParam,
     sort,
+    pagination.pageIndex,
+    pagination.pageSize,
     chartDimension,
     chartCode,
     customerId,
@@ -403,6 +418,16 @@ export function CustomerQualityPage() {
   const exportMutation = useStartCustomerQualityExportMutation()
   const refreshMutation = useRefreshCustomerQualityMutation()
 
+  async function handleRefresh() {
+    setRefreshError(false)
+    try {
+      await refreshMutation.mutateAsync()
+      await viewQuery.refetch()
+    } catch {
+      setRefreshError(true)
+    }
+  }
+
   const data = viewQuery.data
 
   function patchUrl(
@@ -412,10 +437,48 @@ export function CustomerQualityPage() {
     patchSearchParams({ router, pathname, searchParams }, patch, options)
   }
 
+  const resetPage = React.useCallback(() => {
+    setPagination((p) => ({ ...p, pageIndex: 0 }))
+  }, [])
+
   const returnTo = React.useMemo(
     () => buildReturnTo(pathname, new URLSearchParams(searchParams.toString())),
     [pathname, searchParams]
   )
+
+  // 排序状态与顶部「排序」下拉同源（URL sort）；表头点击回写同一参数。
+  const tableSorting = React.useMemo<SortingState>(() => {
+    const [id, dir] = sort.split(":")
+    return [{ id, desc: dir === "desc" }]
+  }, [sort])
+
+  const handleTableSortingChange = React.useCallback(
+    (next: SortingState) => {
+      const nextSort = next[0]
+      patchUrl({
+        sort: nextSort
+          ? `${nextSort.id}:${nextSort.desc ? "desc" : "asc"}`
+          : "salesGrossAmount:desc",
+      })
+      resetPage()
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sort]
+  )
+
+  const periodInvalid = Boolean(
+    resolvedFrom && resolvedTo && resolvedFrom > resolvedTo
+  )
+
+  // 定位失败降级：目标客户不在当前页/排序结果时滚动到明细表顶部
+  const tableSectionRef = React.useRef<HTMLDivElement>(null)
+  const scrollToTableTop = React.useCallback(() => {
+    tableSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    })
+    tableSectionRef.current?.focus({ preventScroll: true })
+  }, [])
 
   // Restore row focus after returning from drill
   React.useEffect(() => {
@@ -430,23 +493,21 @@ export function CustomerQualityPage() {
               `[data-customer-id="${CSS.escape(focusCustomerId)}"][data-focus-metric="${CSS.escape(focusMetric)}"]`
             )
           : null
-        ;(metricTarget ?? row)?.focus()
-        rowFocusRef.current = focusCustomerId
+        if (metricTarget ?? row) {
+          ;(metricTarget ?? row)?.focus()
+          rowFocusRef.current = focusCustomerId
+        } else {
+          scrollToTableTop()
+        }
       })
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [focusCustomerId, focusMetric, data])
-
-  const pageRows = React.useMemo(() => {
-    const items = data?.customers.items ?? []
-    const start = pagination.pageIndex * pagination.pageSize
-    return items.slice(start, start + pagination.pageSize)
-  }, [data?.customers.items, pagination.pageIndex, pagination.pageSize])
+  }, [focusCustomerId, focusMetric, data, scrollToTableTop])
 
   const columns = React.useMemo<ColumnDef<CustomerQualityRow>[]>(
     () => [
       {
-        id: "customer",
+        id: "customerName",
         accessorKey: "customerName",
         header: "客户",
         meta: { label: "客户", width: "reference" },
@@ -504,7 +565,7 @@ export function CustomerQualityPage() {
                 type="button"
                 className="inline-flex"
                 onClick={() => setTagDialog(t)}
-                aria-label={`${t.label}：查看规则 ${t.ruleVersion}`}
+                aria-label={`${t.label}：查看规则说明`}
               >
                 <BusinessStatusBadge
                   context="list"
@@ -517,7 +578,8 @@ export function CustomerQualityPage() {
         ),
       },
       {
-        id: "sales",
+        id: "salesGrossAmount",
+        accessorFn: (r) => r.salesGrossAmount,
         header: "成交金额（含税）",
         meta: { label: "成交金额（含税）", align: "end", numeric: true },
         cell: ({ row }) => {
@@ -549,7 +611,8 @@ export function CustomerQualityPage() {
         },
       },
       {
-        id: "coverage",
+        id: "costCoverageRate",
+        accessorFn: (r) => r.costCoverageRate ?? "",
         header: "成本覆盖",
         meta: { label: "成本覆盖", align: "end" },
         cell: ({ row }) => {
@@ -581,7 +644,8 @@ export function CustomerQualityPage() {
         },
       },
       {
-        id: "profit",
+        id: "actualProfitLossNet",
+        accessorFn: (r) => r.actualProfitLossNet ?? "",
         header: "实际盈亏（不含税）",
         meta: { label: "实际盈亏（不含税）", align: "end", numeric: true },
         cell: ({ row }) => {
@@ -622,7 +686,8 @@ export function CustomerQualityPage() {
         },
       },
       {
-        id: "receivable",
+        id: "receivableOpenGross",
+        accessorFn: (r) => r.receivableOpenGross ?? "",
         header: "应收 / 逾期（含税）",
         meta: { label: "应收 / 逾期（含税）", align: "end" },
         cell: ({ row }) => {
@@ -688,10 +753,10 @@ export function CustomerQualityPage() {
         cell: ({ row }) => {
           const e = row.original.exceptionCounts
           const parts = [
-            e.return ? `退${e.return}` : null,
-            e.refund ? `款${e.refund}` : null,
-            e.reject ? `拒${e.reject}` : null,
-            e.other ? `它${e.other}` : null,
+            e.return ? `退货 ${e.return}` : null,
+            e.refund ? `退款 ${e.refund}` : null,
+            e.reject ? `拒收 ${e.reject}` : null,
+            e.other ? `其他 ${e.other}` : null,
           ].filter(Boolean)
           return (
             <span className="text-sm text-muted-foreground">
@@ -701,7 +766,8 @@ export function CustomerQualityPage() {
         },
       },
       {
-        id: "latest",
+        id: "latestBusinessAt",
+        accessorFn: (r) => r.latestBusinessAt ?? "",
         header: "最近业务",
         meta: { label: "最近业务" },
         cell: ({ row }) => (
@@ -748,6 +814,7 @@ export function CustomerQualityPage() {
 
   function applyExplicitPeriod() {
     if (!explicitFrom || !explicitTo) return
+    if (explicitFrom > explicitTo) return
     patchUrl({
       from: explicitFrom,
       to: explicitTo,
@@ -852,13 +919,24 @@ export function CustomerQualityPage() {
                 />
               </div>
             </div>
-            <Button
-              type="button"
-              disabled={!explicitFrom || !explicitTo}
-              onClick={applyExplicitPeriod}
-            >
-              开始分析
-            </Button>
+            <div className="flex flex-col gap-2">
+              <Button
+                type="button"
+                disabled={
+                  !explicitFrom ||
+                  !explicitTo ||
+                  (explicitFrom > explicitTo && explicitFrom !== explicitTo)
+                }
+                onClick={applyExplicitPeriod}
+              >
+                开始分析
+              </Button>
+              {explicitFrom && explicitTo && explicitFrom > explicitTo ? (
+                <p className="text-xs text-destructive">
+                  开始日期不能晚于结束日期，请调整后提交。
+                </p>
+              ) : null}
+            </div>
           </CardContent>
           {periodPolicy?.presets && periodPolicy.presets.length > 0 ? (
             <CardContent className="border-t pt-4">
@@ -973,43 +1051,63 @@ export function CustomerQualityPage() {
           </div>
         }
         actions={
-          <PageActions
-            actions={[
-              {
-                actionKey: "refresh",
-                label: viewQuery.isFetching ? "刷新中" : "刷新",
-                icon: RefreshCwIcon,
-                variant: "outline",
-                disabled: viewQuery.isFetching,
-                onClick: () => {
-                  void refreshMutation.mutateAsync()
-                  void viewQuery.refetch()
-                },
-              },
-              {
-                actionKey: "export",
-                label: "导出",
-                icon: DownloadIcon,
-                variant: "outline",
-                mobileVisibility: "hide",
-                disabled:
-                  !data.canExport ||
-                  data.customers.filteredTotal === 0 ||
-                  exportMutation.isPending,
-                onClick: () => void handleExport(),
-              },
-            ]}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={viewQuery.isFetching}
+              onClick={() => {
+                void handleRefresh()
+              }}
+            >
+              <RefreshCwIcon className="size-4" aria-hidden />
+              {viewQuery.isFetching ? "刷新中" : "刷新"}
+            </Button>
+            <GuardedBusinessAction
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={
+                !data.canExport ||
+                data.customers.filteredTotal === 0 ||
+                exportMutation.isPending
+              }
+              reason={
+                !data.canExport
+                  ? "当前角色无导出权限"
+                  : data.customers.filteredTotal === 0
+                    ? "当前没有客户结果可导出"
+                    : exportMutation.isPending
+                      ? "导出任务进行中"
+                      : undefined
+              }
+              onClick={() => void handleExport()}
+            >
+              <DownloadIcon className="size-4" aria-hidden />
+              导出
+            </GuardedBusinessAction>
+          </div>
         }
       />
 
       {/* Distinct freshness / coverage alerts — not mutually substitutable */}
+      {refreshError ? (
+        <Alert variant="destructive">
+          <AlertTitle>刷新失败</AlertTitle>
+          <AlertDescription>
+            本次刷新未成功，已保留上次成功结果。请重试；业务记录未被修改。
+          </AlertDescription>
+        </Alert>
+      ) : null}
       {data.freshness.state === "stale" && !data.freshness.refreshFailed ? (
         <Alert variant="warning">
           <AlertTitle>数据可能不是最新</AlertTitle>
           <AlertDescription>
             最近成功更新 {formatDateTime(data.freshness.projectedAt, "full", "passthrough")}；来源更新时间{" "}
-            <span className="num">{data.freshness.sourceWatermark}</span>
+            <span className="num">
+              {formatSourceWatermark(data.freshness.sourceWatermark)}
+            </span>
             。数据可能不是最新，可点击刷新。
           </AlertDescription>
         </Alert>
@@ -1038,6 +1136,14 @@ export function CustomerQualityPage() {
           </AlertDescription>
         </Alert>
       ) : null}
+      {viewQuery.isError ? (
+        <Alert variant="destructive">
+          <AlertTitle>数据更新失败</AlertTitle>
+          <AlertDescription>
+            已保留上次成功结果，未覆盖业务数据。请重试或调整筛选。
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       {/* Filters */}
       <Card size="sm">
@@ -1048,13 +1154,14 @@ export function CustomerQualityPage() {
               <DatePicker
                 className="w-[10.5rem]"
                 value={resolvedFrom || undefined}
-                onValueChange={(next) =>
+                onValueChange={(next) => {
                   patchUrl({
                     from: next || null,
                     periodSelectionSource: "EXPLICIT",
                     periodPreset: null,
                   })
-                }
+                  resetPage()
+                }}
               />
             </div>
             <div className="space-y-1.5">
@@ -1062,15 +1169,25 @@ export function CustomerQualityPage() {
               <DatePicker
                 className="w-[10.5rem]"
                 value={resolvedTo || undefined}
-                onValueChange={(next) =>
+                onValueChange={(next) => {
                   patchUrl({
                     to: next || null,
                     periodSelectionSource: "EXPLICIT",
                     periodPreset: null,
                   })
-                }
+                  resetPage()
+                }}
               />
             </div>
+            {periodInvalid ? (
+              <p
+                id="cq-period-invalid"
+                className="w-full text-xs text-destructive"
+                role="alert"
+              >
+                开始日期晚于结束日期，将查询不到结果，请调整。
+              </p>
+            ) : null}
             {periodPolicy?.presets?.length ? (
               <div className="space-y-1.5">
                 <Label htmlFor="cq-preset">快捷期间</Label>
@@ -1080,8 +1197,10 @@ export function CustomerQualityPage() {
                   onValueChange={(v) => {
                     const id = v ?? ""
                     const preset = periodPolicy.presets?.find((p) => p.id === id)
-                    if (preset) applyPreset(preset.id, preset.from, preset.to)
-                    else patchUrl({ periodPreset: null })
+                    if (preset) {
+                      applyPreset(preset.id, preset.from, preset.to)
+                      resetPage()
+                    } else patchUrl({ periodPreset: null })
                   }}
                   options={[
                     { value: "", label: "自定义" },
@@ -1103,14 +1222,15 @@ export function CustomerQualityPage() {
               <OptionCombobox
                 id="cq-funds"
                 value={fundsReview}
-                onValueChange={(v) =>
+                onValueChange={(v) => {
                   patchUrl({
                     fundsReview:
                       (v ?? "all") === "reviewed_only"
                         ? "reviewed_only"
                         : null,
                   })
-                }
+                  resetPage()
+                }}
                 options={[
                   { value: "all", label: "全部授权记录" },
                   { value: "reviewed_only", label: "仅已复核卡券票款" },
@@ -1127,11 +1247,12 @@ export function CustomerQualityPage() {
               <OptionCombobox
                 id="cq-nature"
                 value={businessType ?? ""}
-                onValueChange={(v) =>
+                onValueChange={(v) => {
                   patchUrl({
                     businessType: v || null,
                   })
-                }
+                  resetPage()
+                }}
                 options={[
                   { value: "", label: "全部" },
                   { value: "VOUCHER", label: "卡券" },
@@ -1149,7 +1270,10 @@ export function CustomerQualityPage() {
               <OptionCombobox
                 id="cq-sort"
                 value={sort}
-                onValueChange={(v) => patchUrl({ sort: v ?? sort })}
+                onValueChange={(v) => {
+                  patchUrl({ sort: v ?? sort })
+                  resetPage()
+                }}
                 options={[
                   { value: "salesGrossAmount:desc", label: "成交金额降序" },
                   {
@@ -1221,8 +1345,10 @@ export function CustomerQualityPage() {
                     businessType: null,
                     fundsReview: null,
                     customerId: null,
+                    sort: null,
+                    focusMetric: null,
                   })
-                  setPagination((p) => ({ ...p, pageIndex: 0 }))
+                  resetPage()
                 }}
               >
                 清除筛选
@@ -1281,8 +1407,7 @@ export function CustomerQualityPage() {
                   <Alert variant="warning">
                     <AlertTitle>票款复核不足</AlertTitle>
                     <AlertDescription className="flex flex-wrap items-center gap-2">
-                      应收余额、逾期金额等指标标记为部分可靠。可切换「仅已复核」或前往
-                      W13 复核。
+                      应收余额、逾期金额等指标标记为部分可靠。可切换「仅已复核」或前往卡券票款复核。
                       <Button
                         type="button"
                         size="sm"
@@ -1362,57 +1487,60 @@ export function CustomerQualityPage() {
 
           {/* Metrics */}
           <MetricStrip columns={4} aria-label="客户经营质量核心指标">
-            {data.metrics.map((m) => {
-              const active = focusMetric === m.key
-              const detail = metricReliabilityDetail(
-                m.reliability,
-                m.explanation,
-                m.fieldDenied
-              )
-              const valueNode =
-                m.fieldDenied || m.reliability === "unavailable" ? (
-                  <span className="text-muted-foreground">
-                    {m.fieldDenied ? "当前角色不可查看" : "暂无可靠口径"}
-                  </span>
-                ) : (
-                  m.value
+            {data.metrics
+              .filter((m) => m.visible)
+              .map((m) => {
+                const active = focusMetric === m.key
+                const detail = metricReliabilityDetail(
+                  m.reliability,
+                  m.explanation,
+                  m.fieldDenied
                 )
-              if (
-                m.key === "overdueGross" ||
-                m.key === "actualProfitLossNet" ||
-                m.key === "salesGrossAmount"
-              ) {
+                const valueNode =
+                  m.fieldDenied || m.reliability === "unavailable" ? (
+                    <span className="text-muted-foreground">
+                      {m.fieldDenied ? "当前角色不可查看" : "暂无可靠口径"}
+                    </span>
+                  ) : (
+                    m.value
+                  )
+                if (
+                  m.key === "overdueGross" ||
+                  m.key === "actualProfitLossNet" ||
+                  m.key === "salesGrossAmount"
+                ) {
+                  return (
+                    <MetricFilterItem
+                      key={m.key}
+                      label={m.label}
+                      value={valueNode}
+                      detail={detail}
+                      active={active}
+                      onClick={() => {
+                        patchUrl({
+                          focusMetric: active ? null : m.key,
+                        })
+                        if (!active) scrollToTableTop()
+                      }}
+                    />
+                  )
+                }
                 return (
-                  <MetricFilterItem
+                  <MetricItem
                     key={m.key}
                     label={m.label}
                     value={valueNode}
                     detail={detail}
-                    active={active}
-                    onClick={() =>
-                      patchUrl({
-                        focusMetric: active ? null : m.key,
-                      })
+                    status={
+                      m.reliability === "partial"
+                        ? { label: "部分可靠", tone: "warning" }
+                        : m.reliability === "unavailable"
+                          ? { label: "不可用", tone: "neutral" }
+                          : undefined
                     }
                   />
                 )
-              }
-              return (
-                <MetricItem
-                  key={m.key}
-                  label={m.label}
-                  value={valueNode}
-                  detail={detail}
-                  status={
-                    m.reliability === "partial"
-                      ? { label: "部分可靠", tone: "warning" }
-                      : m.reliability === "unavailable"
-                        ? { label: "不可用", tone: "neutral" }
-                        : undefined
-                  }
-                />
-              )
-            })}
+              })}
           </MetricStrip>
 
           {/* Charts + equivalent tables */}
@@ -1729,6 +1857,7 @@ export function CustomerQualityPage() {
                       scaleTag: null,
                       profitTag: null,
                     })
+                    resetPage()
                   }}
                 >
                   清除图表筛选
@@ -1759,7 +1888,7 @@ export function CustomerQualityPage() {
                   type="button"
                   size="sm"
                   variant="outline"
-                  onClick={() =>
+                  onClick={() => {
                     patchUrl({
                       q: null,
                       scaleTag: null,
@@ -1770,30 +1899,42 @@ export function CustomerQualityPage() {
                       businessType: null,
                       fundsReview: null,
                       customerId: null,
+                      sort: null,
+                      focusMetric: null,
                     })
-                  }
+                    resetPage()
+                  }}
                 >
                   清除筛选
                 </Button>
               }
             />
           ) : (
-            <BusinessTableFrame
-              title="客户明细"
-              description="点击客户进入客户中心；逾期与实际盈亏可分别下钻。金额口径与指标、图表、导出一致。"
-              table={
-                <DataTable
-                  data={pageRows}
-                  columns={columns}
-                  getRowId={(row) => row.customerId}
-                  rowCount={data.customers.filteredTotal}
-                  pagination={pagination}
-                  onPaginationChange={setPagination}
-                  layout="flush"
-                  density="compact"
-                />
-              }
-            />
+            <div
+              ref={tableSectionRef}
+              tabIndex={-1}
+              data-slot="customer-detail-table"
+              className="focus:outline-none"
+            >
+              <BusinessTableFrame
+                title="客户明细"
+                description="点击客户进入客户中心；逾期与实际盈亏可分别下钻。金额口径与指标、图表、导出一致。"
+                table={
+                  <DataTable
+                    data={[...data.customers.items]}
+                    columns={columns}
+                    getRowId={(row) => row.customerId}
+                    rowCount={data.customers.filteredTotal}
+                    pagination={pagination}
+                    onPaginationChange={setPagination}
+                    sorting={tableSorting}
+                    onSortingChange={handleTableSortingChange}
+                    layout="flush"
+                    density="compact"
+                  />
+                }
+              />
+            </div>
           )}
         </>
       )}
@@ -1815,14 +1956,15 @@ export function CustomerQualityPage() {
           succeeded={
             exportJob.status === "succeeded" ? exportJob.total : undefined
           }
-          label={`导出任务 ${exportJob.jobId}`}
+          label="客户经营质量导出"
           description={
             <>
               期间 {exportJob.period.from} ~ {exportJob.period.to}。
-              {exportJob.filterSummary}。权限版本{" "}
-              <span className="num">{exportJob.permissionVersion}</span>；数据更新时间{" "}
-              <span className="num">{exportJob.projectionWatermark}</span>。
-              {exportJob.amountBasisNote}
+              {exportJob.filterSummary}。数据更新时间{" "}
+              <span className="num">
+                {formatSourceWatermark(exportJob.projectionWatermark)}
+              </span>
+              。{exportJob.amountBasisNote}
               {exportJob.downloadLabel ? (
                 <span className="mt-1 block font-medium">
                   可下载（演示保留 7 天）：{exportJob.downloadLabel}

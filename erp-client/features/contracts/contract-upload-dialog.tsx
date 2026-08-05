@@ -74,7 +74,7 @@ const uploadSchema = z
 function uploadErrorMessage(error: unknown): string {
   if (!(error instanceof Error)) return "上传失败，请使用原任务号重试。"
   if (error.message === "CONTRACT_NO_EXISTS") {
-    return "该合同编号已存在，请打开已有合同；如为新签署版本，应归档到原合同。"
+    return "该合同编号已存在，请打开已有合同核对；重复编号不能新建合同。"
   }
   if (error.message === "CONTRACT_VALIDITY_INVALID") {
     return "有效期止不能早于有效期起。"
@@ -129,9 +129,9 @@ export function ContractUploadDialog({
       settlementPartyId: "",
       settlementPartyName: "",
       paymentTerms: "CONTRACT",
-      signedAt: "2026-08-02",
-      validFrom: "2026-08-02",
-      validTo: "2027-08-01",
+      signedAt: "",
+      validFrom: "",
+      validTo: "",
     },
     validators: { onChange: uploadSchema },
     onSubmit: async ({ value }) => {
@@ -176,6 +176,16 @@ export function ContractUploadDialog({
       return
     }
     form.reset()
+    // 日期默认今天 / 明年同日，避免硬编码日期随时间失真。
+    const today = new Date()
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const todayText = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
+    const nextYear = new Date(today)
+    nextYear.setFullYear(today.getFullYear() + 1)
+    const nextYearText = `${nextYear.getFullYear()}-${pad(nextYear.getMonth() + 1)}-${pad(nextYear.getDate())}`
+    form.setFieldValue("signedAt", todayText)
+    form.setFieldValue("validFrom", todayText)
+    form.setFieldValue("validTo", nextYearText)
     if (initialCustomerId) {
       form.setFieldValue("customerId", initialCustomerId)
     }

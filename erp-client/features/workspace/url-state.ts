@@ -21,7 +21,6 @@ export type WorkspaceUrlState = {
   scope: "mine" | "role_pool"
   due?: WorkspaceDueFilter
   family?: WorkspaceFamilyFilter
-  focusWorkItemId?: string
   /** Mock-only QA override; not part of shareable filter UX. */
   scenario?: "forbidden" | "no_scope" | "empty"
 }
@@ -31,7 +30,6 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
   { key: "scope", type: "enum", values: ["mine", "role_pool"], defaultValue: "mine" },
   { key: "due", type: "enum", values: DUE_VALUES },
   { key: "family", type: "enum", values: FAMILY_VALUES },
-  { key: "focusWorkItemId", type: "string" },
   { key: "scenario", type: "enum", values: SCENARIO_VALUES },
 ])
 
@@ -57,21 +55,18 @@ export function urlStateFromMetricKey(
         ...current,
         due: "today",
         family: undefined,
-        focusWorkItemId: undefined,
       }
     case "overdue":
       return {
         ...current,
         due: "overdue",
         family: undefined,
-        focusWorkItemId: undefined,
       }
     case "exception":
       return {
         ...current,
         due: undefined,
         family: "exception",
-        focusWorkItemId: undefined,
       }
     case "mine":
     default:
@@ -79,7 +74,6 @@ export function urlStateFromMetricKey(
         ...current,
         due: undefined,
         family: undefined,
-        focusWorkItemId: undefined,
       }
   }
 }
@@ -114,9 +108,23 @@ export function buildGroupAllHref(
   return buildTaskQueueHref({ ...state, family })
 }
 
-export const FILTER_SUMMARY: Record<WorkspaceMetricKey, string> = {
-  mine: sequentialText.minePending,
-  due_today: "今日到期",
-  overdue: "已超期",
-  exception: "同步异常",
+/**
+ * 主区标题按指标与责任范围出词，杜绝「团队待认领」指标配「待我处理」标题。
+ */
+export function filterSummaryFor(
+  key: WorkspaceMetricKey,
+  scope: WorkspaceUrlState["scope"]
+): string {
+  switch (key) {
+    case "mine":
+      return scope === "mine"
+        ? sequentialText.minePending
+        : sequentialText.teamUnclaimed
+    case "due_today":
+      return "今日到期"
+    case "overdue":
+      return "已超期"
+    case "exception":
+      return "同步异常"
+  }
 }

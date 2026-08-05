@@ -84,6 +84,7 @@ function ContractPaperDocument({
   contract: ContractCenterView
 }) {
   const rev = contract.currentRevision
+  const sellerName = rev.settlementParty.displayName
   const rows: PaperClauseRow[] = [
     {
       id: "payment",
@@ -109,7 +110,7 @@ function ContractPaperDocument({
 
   return (
     <PaperDocument<PaperClauseRow>
-      issuer="某某福利科技有限公司"
+      issuer={sellerName}
       title="销售合同"
       subtitle={contract.customer.displayName}
       documentNumber={contract.contractNo}
@@ -119,8 +120,8 @@ function ContractPaperDocument({
         {
           id: "seller",
           label: "甲方（销售方）",
-          name: "某某福利科技有限公司",
-          reference: "内部主体",
+          name: sellerName,
+          reference: "结算主体",
           fields: [
             {
               id: "owner",
@@ -153,7 +154,7 @@ function ContractPaperDocument({
         {
           id: "valid",
           label: "有效期",
-          value: `${rev.validFrom} ~ ${rev.validTo}`,
+          value: `${rev.validFrom} 至 ${rev.validTo}`,
           numeric: true,
         },
         {
@@ -204,7 +205,7 @@ function ContractPaperDocument({
       }
       signature="（签章位以系统打印版式为准）"
       seal="公章"
-      footer={`${contract.contractNo} · 修订 v${rev.revisionNo} · 状态 ${contract.statusLabel}`}
+      footer={`${contract.contractNo} · v${rev.revisionNo} · 状态 ${contract.statusLabel}`}
     />
   )
 }

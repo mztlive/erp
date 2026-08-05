@@ -16,6 +16,7 @@ export type ConnectionsUrlState = {
   supplierId?: string
   q?: string
   page: number
+  pageSize: number
   connectionId?: string
   section: ConnectionSection
   role: DemoRole
@@ -42,6 +43,7 @@ const codec = createUrlStateCodec<ConnectionsUrlState>([
   { key: "supplierId", type: "string" },
   { key: "q", type: "string", trim: true },
   { key: "page", type: "number", defaultValue: 1 },
+  { key: "pageSize", type: "number", defaultValue: 20, min: 20, max: 100 },
   { key: "connectionId", type: "string", aliases: ["id"] },
   {
     key: "section",

@@ -347,9 +347,9 @@ function buildOwnership(stage: OwnershipStage) {
       syncDirection: "SEALED_HISTORY" as const,
       firstPhasePollingEnabled: false,
       sealedAt: "2026-07-15T18:00:00+08:00",
-      finalWatermark: "wm_final_phase1_20260715",
-      mallWriteBoundary: "T 前商城开单记录已封存；商城执行信息见执行信息页",
-      erpWriteBoundary: "T 后 ERP 全面服务；商城同步仅历史只读，当前治理见执行信息 / 接口错误中心",
+      finalWatermark: "2026-07-15T18:00:00+08:00",
+      mallWriteBoundary: "商城开单已封存；商城执行信息见执行信息页",
+      erpWriteBoundary: "ERP 全面服务；商城同步仅历史只读，当前治理见执行信息 / 接口错误中心",
     }
   }
   return {
@@ -360,7 +360,7 @@ function buildOwnership(stage: OwnershipStage) {
     erpOwnedOrderCount: 842,
     syncDirection: "MALL_TO_ERP_COMMERCIAL_FACT" as const,
     firstPhasePollingEnabled: true,
-    mallWriteBoundary: "T 前商城开单商业记录（可继续销售/制卡/绑定/激活/消费）",
+    mallWriteBoundary: "商城开单商业记录（可继续销售/制卡/绑定/激活/消费）",
     erpWriteBoundary: "ERP 只读接收商业数据；不向商城回写商业修改",
   }
 }
@@ -471,7 +471,7 @@ export async function fetchMallSyncPage(
       : input.view
 
   const allJobs = [...sessionManualJobs, ...MALL_SYNC_JOBS]
-  const jobs = allJobs.map((job) => {
+  let jobs = allJobs.map((job) => {
     const blockers = [...job.actionBlockers]
     let actions = [...job.allowedActions]
     if (stage !== "FIRST_PHASE_MALL_OWNED") {
@@ -487,6 +487,10 @@ export async function fetchMallSyncPage(
     }
     return { ...job, allowedActions: actions, actionBlockers: blockers }
   })
+  if (input.q) {
+    const q = input.q.trim().toUpperCase()
+    jobs = jobs.filter((j) => j.jobNo.toUpperCase().includes(q))
+  }
 
   // 快照：业务按映射任务范围过滤；管理员全量（演示）
   let snapshots = [...MALL_SNAPSHOTS]
@@ -543,8 +547,8 @@ export async function fetchMallSyncPage(
     ownership,
     freshness: {
       currentWatermark: sessionSourceUnavailable
-        ? "wm_20260801_080000"
-        : "wm_20260801_090000",
+        ? "2026-08-01T08:00:00+08:00"
+        : "2026-08-01T09:00:00+08:00",
       latestSuccessfulJobAt: "2026-08-01T08:02:41+08:00",
       sourceSafeTime: sessionSourceUnavailable
         ? "2026-08-01T08:00:00+08:00"
@@ -555,7 +559,7 @@ export async function fetchMallSyncPage(
     metrics: metricsForRole(role, stage, mappingTasks),
     sourceUnavailable: sessionSourceUnavailable,
     sourceUnavailableMessage: sessionSourceUnavailable
-      ? "商城继续运行，ERP 同步进度未推进。最近成功同步点 wm_20260801_080000；恢复后按原同步点补齐。"
+      ? "商城继续运行，ERP 同步进度未推进。最近成功同步时间 08-01 08:00；恢复后按原同步进度补齐。"
       : undefined,
     viewerRole: role,
     viewerRoleLabel: DEMO_ROLE_LABEL[role],
@@ -690,7 +694,7 @@ export async function triggerManualIncremental(input: {
       jobNo,
       jobType: "INCREMENTAL",
       jobTypeLabel: JOB_TYPE_LABEL.INCREMENTAL,
-      rangeStart: "（系统按安全同步点计算）",
+      rangeStart: "（由系统按同步进度计算）",
       rangeEnd: "（系统当前时间）",
       status: "RUNNING",
       statusLabel: "运行中",
@@ -737,7 +741,7 @@ export async function triggerSingleOrderPull(input: {
     return {
       status: "failed",
       code: "STAGE_NOT_FIRST_PHASE",
-      message: "按单补拉仅在 FIRST_PHASE_MALL_OWNED 可用；已封存后无第一期写动作",
+      message: "按单补拉仅在第一阶段（商城开单）可用；已封存后无第一期写动作",
     }
   }
   const missing = assertManualGovernance(policy)
@@ -825,7 +829,7 @@ export async function retryFailedJob(input: {
     status: "succeeded",
     jobId: `retry_${job.jobId}`,
     jobNo: `${job.jobNo}-R1`,
-    message: `已关联原任务发起重试。原范围与同步规则不变；不回退已安全捕获的同步进度。`,
+    message: `已关联原任务发起重试。原范围与同步规则不变；不回退已捕获的同步进度。`,
   }
 }
 
@@ -854,6 +858,7 @@ export async function confirmMapping(input: {
   targetLabel: string
   evidenceNote: string
   demoRole: DemoRole
+  stage?: OwnershipStage
 }): Promise<ConfirmMappingResult> {
   await mockDelay(140)
 
@@ -862,6 +867,14 @@ export async function confirmMapping(input: {
       status: "failed",
       code: "ADMIN_CANNOT_CONFIRM_MAPPING",
       message: "系统管理员不能替业务角色确认映射",
+    }
+  }
+
+  if (input.stage === "SECOND_PHASE_ERP_OWNED") {
+    return {
+      status: "failed",
+      code: "STAGE_SEALED",
+      message: "第一期已封存，映射确认不可用；请进入历史只读查看。",
     }
   }
 
@@ -1004,6 +1017,7 @@ export async function reapplyMallSnapshot(input: {
   mappingTaskId: string
   sourceSnapshotId: string
   demoRole: DemoRole
+  stage?: OwnershipStage
 }): Promise<ReapplyResult> {
   await mockDelay(150)
   if (input.demoRole === "admin") {
@@ -1011,6 +1025,13 @@ export async function reapplyMallSnapshot(input: {
       status: "failed",
       code: "FORBIDDEN",
       message: "重新归集由业务责任人在映射解决后发起",
+    }
+  }
+  if (input.stage === "SECOND_PHASE_ERP_OWNED") {
+    return {
+      status: "failed",
+      code: "STAGE_SEALED",
+      message: "第一期已封存，重新归集不可用；请进入历史只读查看。",
     }
   }
 

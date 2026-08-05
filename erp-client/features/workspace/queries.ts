@@ -38,5 +38,7 @@ export function useWorkspaceDashboardQuery(query: TodayWorkspaceQuery) {
     queryFn: () => fetchWorkspaceDashboard(query),
     // Keep previous filter results visible while the next filter loads (§6.2).
     placeholderData: (previous) => previous,
+    // 60s 自动轮询，数据过期无需等用户手动刷新（P2-11）。
+    refetchInterval: 60_000,
   })
 }

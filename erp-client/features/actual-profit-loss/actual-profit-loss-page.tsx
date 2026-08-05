@@ -9,7 +9,11 @@ import {
   RefreshCwIcon,
   SearchIcon,
 } from "lucide-react"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import type {
+  ColumnDef,
+  PaginationState,
+  SortingState,
+} from "@tanstack/react-table"
 import {
   Bar,
   BarChart,
@@ -71,6 +75,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
@@ -102,6 +107,17 @@ import type { DataFreshnessState } from "@/components/business/page"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 
 const SCOPE_LABEL = "非卡券 · 不含税"
+
+const PERIOD_BASIS_LABEL: Record<string, string> = {
+  sales_revenue_recognition_date: "销售收入确认日",
+  sales_order_effective_date: "销售单生效日",
+  fulfillment_complete_date: "履约完成日",
+  cost_occurred_date: "成本发生日",
+}
+
+function basisLabel(code: string): string {
+  return PERIOD_BASIS_LABEL[code] ?? code
+}
 
 const trendChartConfig = {
   revenue: { label: "不含税收入", color: "var(--chart-1)" },
@@ -151,15 +167,33 @@ function parsePreset(raw: string | null): PeriodPreset {
   return "month-to-date"
 }
 
-/** periodPreset → 明确 from/to（演示固定锚定 2026-08-01） */
+function toISODate(date: Date): string {
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, "0")
+  const d = String(date.getDate()).padStart(2, "0")
+  return `${y}-${m}-${d}`
+}
+
+/** periodPreset → 明确 from/to（运行时锚定当前月，避免「本月迄今」解析为单日） */
 function resolvePeriod(preset: PeriodPreset): { from: string; to: string } {
+  const now = new Date()
+  const today = toISODate(now)
   if (preset === "last-month") {
-    return { from: "2026-07-01", to: "2026-07-31" }
+    const firstOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+    const lastOfLastMonth = new Date(firstOfThisMonth.getTime() - 1)
+    return {
+      from: toISODate(new Date(now.getFullYear(), now.getMonth() - 1, 1)),
+      to: toISODate(lastOfLastMonth),
+    }
   }
   if (preset === "quarter-to-date") {
-    return { from: "2026-07-01", to: "2026-08-01" }
+    const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3
+    return {
+      from: toISODate(new Date(now.getFullYear(), quarterStartMonth, 1)),
+      to: today,
+    }
   }
-  return { from: "2026-08-01", to: "2026-08-01" }
+  return { from: toISODate(new Date(now.getFullYear(), now.getMonth(), 1)), to: today }
 }
 
 function mapFreshnessState(
@@ -266,12 +300,20 @@ export function ActualProfitLossPage() {
   const salesOrderId = searchParams.get("salesOrderId") ?? undefined
   const qParam = searchParams.get("q") ?? ""
   const sort = searchParams.get("sort") ?? "actualProfitLossNet:asc"
+  // 演示/QA 参数仅开发构建生效，生产构建一律回落默认值，避免 URL 残留隐形状态。
+  const demoControlsEnabled = process.env.NODE_ENV === "development"
   const basisConfigScenario =
-    searchParams.get("basisConfig") === "missing" ? "missing" : "default"
-  const freshnessDemo = (searchParams.get("freshness") as
-    | FreshnessDemoState
-    | null) ?? undefined
-  const fieldHideRaw = searchParams.get("fieldHide")
+    demoControlsEnabled && searchParams.get("basisConfig") === "missing"
+      ? "missing"
+      : "default"
+  const freshnessDemo = (
+    demoControlsEnabled
+      ? (searchParams.get("freshness") as FreshnessDemoState | null)
+      : null
+  ) ?? undefined
+  const fieldHideRaw = demoControlsEnabled
+    ? searchParams.get("fieldHide")
+    : null
   const fieldHide =
     fieldHideRaw === "cost" || fieldHideRaw === "profit"
       ? fieldHideRaw
@@ -409,6 +451,28 @@ export function ActualProfitLossPage() {
     patchSearchParams({ router, pathname, searchParams }, patch, options)
   }
 
+  // 表头排序 ↔ URL sort 双向接线：排序作用于服务端全量行（按维度分组后），不只当前页
+  const tableSorting = React.useMemo<SortingState>(() => {
+    const [id, dir] = sort.split(":")
+    return [{ id, desc: dir === "desc" }]
+  }, [sort])
+
+  const handleTableSortingChange = React.useCallback(
+    (next: SortingState) => {
+      const nextSort = next[0]
+      patchUrl({
+        sort: nextSort
+          ? `${nextSort.id}:${nextSort.desc ? "desc" : "asc"}`
+          : "actualProfitLossNet:asc",
+      })
+      setPagination((p) => ({ ...p, pageIndex: 0 }))
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sort]
+  )
+
+  const [exportFailed, setExportFailed] = React.useState(false)
+
   // 关闭 detail 后恢复焦点
   React.useEffect(() => {
     if (costDetailRow) return
@@ -440,7 +504,8 @@ export function ActualProfitLossPage() {
   const columns = React.useMemo<ColumnDef<ProfitLossRow>[]>(
     () => [
       {
-        id: "identity",
+        id: "identityLabel",
+        accessorFn: (r) => r.identityLabel,
         header: "销售单号",
         meta: { label: "销售单号", width: "default" as const },
         cell: ({ row }) => {
@@ -471,8 +536,10 @@ export function ActualProfitLossPage() {
         },
       },
       {
-        id: "scenario",
+        id: "benefitScenarios",
+        accessorFn: (r) => r.benefitScenarios?.join("、") ?? "",
         header: "福利场景",
+        meta: { label: "福利场景" },
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
             {row.original.benefitScenarios?.join("、") || "—"}
@@ -480,8 +547,10 @@ export function ActualProfitLossPage() {
         ),
       },
       {
-        id: "fulfillment",
+        id: "fulfillmentModes",
+        accessorFn: (r) => r.fulfillmentModes?.join("、") ?? "",
         header: "履约方式",
+        meta: { label: "履约方式" },
         cell: ({ row }) => (
           <span className="text-sm">
             {row.original.fulfillmentModes?.join("、") || "—"}
@@ -489,7 +558,8 @@ export function ActualProfitLossPage() {
         ),
       },
       {
-        id: "revenue",
+        id: "netSalesRevenue",
+        accessorFn: (r) => r.netSalesRevenue,
         header: "不含税收入",
         meta: { label: "不含税收入", numeric: true, align: "end" as const },
         cell: ({ row }) => (
@@ -497,7 +567,8 @@ export function ActualProfitLossPage() {
         ),
       },
       {
-        id: "procurement",
+        id: "actualProcurementCostNet",
+        accessorFn: (r) => r.actualProcurementCostNet ?? "",
         header: "实际采购成本",
         meta: {
           label: "实际采购成本（不含税）",
@@ -519,8 +590,10 @@ export function ActualProfitLossPage() {
           return (
             <MoneyCell
               value={r.actualProcurementCostNet}
+              negativeAsText={false}
               onClick={
-                r.allowedDrilldowns.includes("cost_entry")
+                r.allowedDrilldowns.includes("cost_entry") &&
+                r.costEntryIds.length > 0
                   ? () => openCostDetail(r)
                   : undefined
               }
@@ -529,7 +602,8 @@ export function ActualProfitLossPage() {
         },
       },
       {
-        id: "fulfillmentCost",
+        id: "actualFulfillmentCostNet",
+        accessorFn: (r) => r.actualFulfillmentCostNet ?? "",
         header: "实际履约费用",
         meta: {
           label: "实际履约费用（不含税）",
@@ -551,8 +625,10 @@ export function ActualProfitLossPage() {
           return (
             <MoneyCell
               value={r.actualFulfillmentCostNet}
+              negativeAsText={false}
               onClick={
-                r.allowedDrilldowns.includes("cost_entry")
+                r.allowedDrilldowns.includes("cost_entry") &&
+                r.costEntryIds.length > 0
                   ? () => openCostDetail(r)
                   : undefined
               }
@@ -561,19 +637,21 @@ export function ActualProfitLossPage() {
         },
       },
       {
-        id: "reductions",
-        header: "成本冲减",
+        id: "reductionsNet",
+        accessorFn: (r) => r.reductionsNet ?? "",
+        header: "成本冲减（负值＝冲减）",
         meta: { label: "成本冲减", numeric: true, align: "end" as const },
         cell: ({ row }) => {
           const r = row.original
           if (r.reductionsNet == null) {
             return <span className="text-sm text-muted-foreground">—</span>
           }
-          return <MoneyCell value={r.reductionsNet} />
+          return <MoneyCell value={r.reductionsNet} negativeAsText={false} />
         },
       },
       {
-        id: "profit",
+        id: "actualProfitLossNet",
+        accessorFn: (r) => r.actualProfitLossNet ?? "",
         header: "实际盈亏",
         meta: {
           label: "实际盈亏（不含税）",
@@ -601,7 +679,8 @@ export function ActualProfitLossPage() {
         },
       },
       {
-        id: "margin",
+        id: "marginRate",
+        accessorFn: (r) => r.marginRate ?? "",
         header: "实际利润率",
         meta: { label: "实际利润率", numeric: true, align: "end" as const },
         cell: ({ row }) => {
@@ -620,8 +699,10 @@ export function ActualProfitLossPage() {
         },
       },
       {
-        id: "coverage",
+        id: "coverageState",
+        accessorFn: (r) => r.coverageState,
         header: "覆盖状态",
+        meta: { label: "覆盖状态" },
         cell: ({ row }) => {
           const r = row.original
           const ui = COVERAGE_STATE_UI[r.coverageState]
@@ -637,8 +718,10 @@ export function ActualProfitLossPage() {
         },
       },
       {
-        id: "latestCost",
+        id: "latestCostOccurredAt",
+        accessorFn: (r) => r.latestCostOccurredAt ?? "",
         header: "最近成本发生",
+        meta: { label: "最近成本发生" },
         cell: ({ row }) => (
           <span className="num text-xs text-muted-foreground">
             {formatDateTime(row.original.latestCostOccurredAt, "full")}
@@ -712,60 +795,60 @@ export function ActualProfitLossPage() {
   async function handleExport() {
     if (!data || !plQuery || !analysisReady) return
     if (!data.fieldPermissions.canExport) return
-    const job = await exportMutation.mutateAsync({
-      query: plQuery,
-      view: data,
-      coverage,
-    })
-    setExportJob(job)
+    setExportFailed(false)
+    try {
+      const job = await exportMutation.mutateAsync({
+        query: plQuery,
+        view: data,
+        coverage,
+      })
+      setExportJob(job)
 
-    // 客户端落盘附带水印元数据（与后台任务一致）
-    const wm = job.watermark
-    const quote = (v: string) => `"${v.replaceAll('"', '""')}"`
-    const metaLines = [
-      `# 业务口径=非卡券·不含税`,
-      `# periodFrom=${wm.periodFrom}`,
-      `# periodTo=${wm.periodTo}`,
-      `# periodBasis=${wm.periodBasis}`,
-      `# formulaVersion=${wm.formulaVersion}`,
-      `# coverage=${wm.coverage}`,
-      `# scopeId=${wm.scopeId}`,
-      `# scopeLabel=${wm.scopeLabel}`,
-      `# permissionVersion=${wm.permissionVersion}`,
-      `# projectedAt=${wm.projectedAt}`,
-      `# sourceWatermark=${wm.sourceWatermark}`,
-      `# amountBasis=${wm.amountBasis}`,
-      `# businessType=${wm.businessType}`,
-      `# rowCount=${wm.rowCount}`,
-      `# jobId=${job.jobId}`,
-    ]
-    const header =
-      "销售单号,客户,不含税收入,实际采购成本,实际履约费用,成本冲减,实际盈亏,利润率,覆盖状态,缺口原因"
-    const body = data.rows.items.map((r) =>
-      [
-        r.identityLabel,
-        r.customerLabel ?? "",
-        r.netSalesRevenue,
-        r.actualProcurementCostNet ?? "",
-        r.actualFulfillmentCostNet ?? "",
-        r.reductionsNet ?? "",
-        r.actualProfitLossNet ?? "",
-        r.marginRate ?? r.marginUnavailableReason ?? "",
-        r.coverageState,
-        r.coverageBlockers.map((b) => b.message).join("|"),
+      // 客户端落盘附带水印元数据（与后台任务一致；用户产物使用中文口径）
+      const wm = job.watermark
+      const quote = (v: string) => `"${v.replaceAll('"', '""')}"`
+      const metaLines = [
+        "# 业务口径=非卡券·不含税",
+        `# 期间=${wm.periodFrom} ~ ${wm.periodTo}`,
+        `# 归属口径=${basisLabel(wm.periodBasis)}`,
+        `# 覆盖口径=${COVERAGE_FILTER_LABEL[wm.coverage]}`,
+        `# 范围=${wm.scopeLabel}`,
+        `# 数据更新时间=${wm.projectedAt}`,
+        `# 来源更新=${wm.sourceWatermark}`,
+        `# 金额口径=不含税`,
+        `# 业务类型=非卡券`,
+        `# 行数=${wm.rowCount}`,
       ]
-        .map((c) => quote(String(c)))
-        .join(",")
-    )
-    const csv = [...metaLines, header, ...body].join("\n")
-    const url = URL.createObjectURL(
-      new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" })
-    )
-    const anchor = document.createElement("a")
-    anchor.href = url
-    anchor.download = `实际盈亏-非卡券不含税-${job.jobId}.csv`
-    anchor.click()
-    URL.revokeObjectURL(url)
+      const header =
+        "销售单号,客户,不含税收入,实际采购成本,实际履约费用,成本冲减,实际盈亏,利润率,覆盖状态,缺口原因"
+      const body = data.rows.items.map((r) =>
+        [
+          r.identityLabel,
+          r.customerLabel ?? "",
+          r.netSalesRevenue,
+          r.actualProcurementCostNet ?? "",
+          r.actualFulfillmentCostNet ?? "",
+          r.reductionsNet ?? "",
+          r.actualProfitLossNet ?? "",
+          r.marginRate ?? r.marginUnavailableReason ?? "",
+          COVERAGE_STATE_UI[r.coverageState].label,
+          r.coverageBlockers.map((b) => b.message).join("|"),
+        ]
+          .map((c) => quote(String(c)))
+          .join(",")
+      )
+      const csv = [...metaLines, header, ...body].join("\n")
+      const url = URL.createObjectURL(
+        new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" })
+      )
+      const anchor = document.createElement("a")
+      anchor.href = url
+      anchor.download = `实际盈亏-非卡券不含税-${wm.periodFrom}_${wm.periodTo}.csv`
+      anchor.click()
+      URL.revokeObjectURL(url)
+    } catch {
+      setExportFailed(true)
+    }
   }
 
   // —— 初载 / 配置加载 ——
@@ -833,9 +916,6 @@ export function ActualProfitLossPage() {
                 statusLabel={freshnessUi.statusLabel}
                 label="经营汇总"
               />
-              <span className="text-xs text-muted-foreground">
-                公式版本 {data.formulaVersion}
-              </span>
             </div>
           ) : (
             <DataFreshness
@@ -893,9 +973,10 @@ export function ActualProfitLossPage() {
             <Label htmlFor="period-preset">期间快捷</Label>
             <OptionCombobox
               id="period-preset"
-              value={periodPreset}
+              value={searchParams.get("periodPreset") ?? ""}
               onValueChange={(v) => {
-                const preset = parsePreset(v ?? "month-to-date")
+                if (!v) return
+                const preset = parsePreset(v)
                 const range = resolvePeriod(preset)
                 patchUrl({
                   periodPreset: preset,
@@ -905,6 +986,7 @@ export function ActualProfitLossPage() {
                 setPagination((p) => ({ ...p, pageIndex: 0 }))
               }}
               options={[
+                { value: "", label: "自定义" },
                 { value: "month-to-date", label: "本月迄今" },
                 { value: "last-month", label: "上月" },
                 { value: "quarter-to-date", label: "本季迄今" },
@@ -914,6 +996,34 @@ export function ActualProfitLossPage() {
               allowClear={false}
               aria-label="期间快捷"
               placeholder="期间快捷"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="period-from">从</Label>
+            <DatePicker
+              className="w-[10.5rem]"
+              value={from || undefined}
+              onValueChange={(next) => {
+                patchUrl({
+                  from: next || null,
+                  periodPreset: null,
+                })
+                setPagination((p) => ({ ...p, pageIndex: 0 }))
+              }}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="period-to">至</Label>
+            <DatePicker
+              className="w-[10.5rem]"
+              value={to || undefined}
+              onValueChange={(next) => {
+                patchUrl({
+                  to: next || null,
+                  periodPreset: null,
+                })
+                setPagination((p) => ({ ...p, pageIndex: 0 }))
+              }}
             />
           </div>
           <div className="space-y-1.5">
@@ -1074,6 +1184,24 @@ export function ActualProfitLossPage() {
                 </Alert>
               ) : null}
 
+              {viewQuery.isError ? (
+                <Alert variant="destructive">
+                  <AlertTitle>数据更新失败</AlertTitle>
+                  <AlertDescription>
+                    已保留上次成功结果，未覆盖业务数据。请重试或调整筛选。
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
+              {exportFailed ? (
+                <Alert variant="destructive">
+                  <AlertTitle>导出失败</AlertTitle>
+                  <AlertDescription>
+                    未能生成导出文件，请稍后重试；业务数据未受影响。
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+
               {data.correctionPendingNotice ? (
                 <Alert>
                   <AlertTitle>来源纠错已登记</AlertTitle>
@@ -1102,12 +1230,12 @@ export function ActualProfitLossPage() {
                       ? exportJob.total
                       : undefined
                   }
-                  label={`导出任务 ${exportJob.jobId}`}
+                  label="实际经营盈亏导出"
                   description={
                     <>
                       期间 {exportJob.watermark.periodFrom}~
                       {exportJob.watermark.periodTo} · 归属口径{" "}
-                      {exportJob.watermark.periodBasis} · 数据更新于{" "}
+                      {basisLabel(exportJob.watermark.periodBasis)} · 数据更新于{" "}
                       {exportJob.watermark.projectedAt}
                       {exportJob.downloadLabel ? (
                         <span className="mt-1 block font-medium">
@@ -1248,8 +1376,7 @@ export function ActualProfitLossPage() {
                   {data.formulaText}
                   <span className="mt-1 block">{data.excludedNote}</span>
                   <span className="mt-1 block">
-                    当前范围：{data.filterSummary} · 权限版本{" "}
-                    {data.scope.permissionVersion}
+                    当前范围：{data.filterSummary}
                   </span>
                 </AlertDescription>
               </Alert>
@@ -1257,10 +1384,10 @@ export function ActualProfitLossPage() {
               <div className="grid min-w-0 gap-4 xl:grid-cols-[3fr_2fr]">
                 <Card size="sm">
                   <CardHeader className="border-b">
-                    <CardTitle>盈亏趋势（{SCOPE_LABEL} · 万元）</CardTitle>
-                    <CardDescription>
-                      收入 / 实际成本 / 实际盈亏，与汇总同范围。
-                    </CardDescription>
+                <CardTitle>盈亏趋势（{SCOPE_LABEL} · 万元）</CardTitle>
+                <CardDescription>
+                  收入 / 实际成本 / 实际盈亏。趋势为固定口径序列，不随期间与覆盖筛选变化；指标与明细已按当前筛选汇总。
+                </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-4">
                     {data.fieldPermissions.canViewProfit ? (
@@ -1309,7 +1436,7 @@ export function ActualProfitLossPage() {
                         <div className="mt-3 overflow-x-auto">
                           <table className="w-full text-left text-xs">
                             <caption className="sr-only">
-                              盈亏趋势数据表，金额单位万元，非卡券不含税
+                              盈亏趋势数据表（单位：元，非卡券不含税；图内以万元展示）
                             </caption>
                             <thead>
                               <tr className="border-b text-muted-foreground">
@@ -1336,7 +1463,11 @@ export function ActualProfitLossPage() {
                                       : "不可用"}
                                   </td>
                                   <td className="py-1 text-muted-foreground">
-                                    {t.reliability}
+                                    {t.reliability === "reliable"
+                                      ? "可靠"
+                                      : t.reliability === "partial"
+                                        ? "部分可靠"
+                                        : "不可用"}
                                   </td>
                                 </tr>
                               ))}
@@ -1356,7 +1487,7 @@ export function ActualProfitLossPage() {
                   <CardHeader className="border-b">
                     <CardTitle>成本构成（{SCOPE_LABEL}）</CardTitle>
                     <CardDescription>
-                      仅统计实际成本与冲减；返点等冲减显示为负值贡献。
+                      仅统计实际成本与冲减；返点等冲减显示为负值贡献。构成与图表为固定口径序列，不随覆盖筛选变化。
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="pt-4">
@@ -1392,7 +1523,13 @@ export function ActualProfitLossPage() {
                           </BarChart>
                         </ChartContainer>
                         <ul className="mt-3 space-y-1 text-xs">
-                          {data.costComposition.map((c) => (
+                          {data.costComposition
+                            .filter(
+                              (c) =>
+                                c.netAmount !== "—" &&
+                                Number(c.netAmount) !== 0
+                            )
+                            .map((c) => (
                             <li
                               key={c.costType}
                               className="flex justify-between gap-2 border-b border-border/50 py-1"
@@ -1438,7 +1575,9 @@ export function ActualProfitLossPage() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-sm font-medium">{line.label}</span>
-                          <Badge variant="outline">{line.stage}</Badge>
+                          <Badge variant="outline">
+                            {line.stage === "EXPECTED" ? "预计" : "已确认"}
+                          </Badge>
                         </div>
                         <DescriptionList columns="two" className="mt-2">
                           <DescriptionItem>
@@ -1566,7 +1705,7 @@ export function ActualProfitLossPage() {
               ) : (
                 <BusinessTableFrame
                   title={`明细 · ${DIMENSION_LABEL[dimension]}（${SCOPE_LABEL}）`}
-                  description={`共 ${data.rows.total} 行 · 与指标/图表同一数据范围 · 点击盈亏下钻销售单· 点击成本金额打开成本记录 detail`}
+                  description={`共 ${data.rows.total} 行 · 明细与指标/汇总同一数据范围（趋势与构成图为固定口径序列）· 点击盈亏下钻销售单 · 点击成本金额打开成本记录详情`}
                   table={
                     <DataTable
                       data={pageRows}
@@ -1575,6 +1714,11 @@ export function ActualProfitLossPage() {
                       rowCount={data.rows.total}
                       pagination={pagination}
                       onPaginationChange={setPagination}
+                      sorting={tableSorting}
+                      onSortingChange={handleTableSortingChange}
+                      loading={
+                        viewQuery.isFetching && !viewQuery.isPending
+                      }
                       layout="flush"
                       density="compact"
                     />
@@ -1582,7 +1726,13 @@ export function ActualProfitLossPage() {
                 />
               )}
 
-              <div className="flex flex-wrap gap-2">
+              <div
+                className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed bg-muted/30 px-3 py-2"
+                data-slot="demo-qa-controls"
+              >
+                <span className="text-xs font-medium text-muted-foreground">
+                  演示控件
+                </span>
                 <Button
                   type="button"
                   size="sm"
@@ -1594,7 +1744,7 @@ export function ActualProfitLossPage() {
                 >
                   演示：来源纠错后等待刷新
                 </Button>
-                <span className="text-xs text-muted-foreground self-center">
+                <span className="text-xs text-muted-foreground">
                   纠错后不改本页金额；固定提示等待数据追平。
                 </span>
               </div>
@@ -1612,7 +1762,7 @@ export function ActualProfitLossPage() {
           }
         }}
         size="detail"
-        title="成本记录 detail"
+        title="成本记录"
         description="只读 · 不含税；含税仅作税额展示。"
         identity={
           costDetailRow ? (
@@ -1670,6 +1820,22 @@ export function ActualProfitLossPage() {
 
           {costEntriesQuery.isPending ? (
             <Skeleton className="h-40 w-full" />
+          ) : costEntriesQuery.isError ? (
+            <Alert variant="destructive">
+              <AlertTitle>成本记录加载失败</AlertTitle>
+              <AlertDescription>
+                未能读取本条销售单的成本记录。请重试；不影响已展示金额。
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="ml-2"
+                  onClick={() => void costEntriesQuery.refetch()}
+                >
+                  重试
+                </Button>
+              </AlertDescription>
+            </Alert>
           ) : costEntriesQuery.data && costEntriesQuery.data.length > 0 ? (
             <>
               <div className="flex flex-wrap gap-2">
@@ -1714,23 +1880,17 @@ function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
       <DescriptionList columns="two">
         <DescriptionItem>
           <DescriptionTerm>费用类型</DescriptionTerm>
-          <DescriptionDetails>
-            {entry.costTypeLabel}（{entry.costType}）
-          </DescriptionDetails>
+          <DescriptionDetails>{entry.costTypeLabel}</DescriptionDetails>
         </DescriptionItem>
         <DescriptionItem>
           <DescriptionTerm>阶段</DescriptionTerm>
           <DescriptionDetails>
-            <Badge variant="secondary">
-              {entry.stage} · {entry.stageLabel}
-            </Badge>
+            <Badge variant="secondary">{entry.stageLabel}</Badge>
           </DescriptionDetails>
         </DescriptionItem>
         <DescriptionItem>
           <DescriptionTerm>范围</DescriptionTerm>
-          <DescriptionDetails>
-            {entry.costScopeLabel}（{entry.costScope}）
-          </DescriptionDetails>
+          <DescriptionDetails>{entry.costScopeLabel}</DescriptionDetails>
         </DescriptionItem>
         <DescriptionItem>
           <DescriptionTerm>供应商</DescriptionTerm>
@@ -1770,18 +1930,11 @@ function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
         </DescriptionItem>
         <DescriptionItem>
           <DescriptionTerm>来源类型</DescriptionTerm>
-          <DescriptionDetails>
-            {entry.sourceTypeLabel}（{entry.sourceType}）
-          </DescriptionDetails>
+          <DescriptionDetails>{entry.sourceTypeLabel}</DescriptionDetails>
         </DescriptionItem>
         <DescriptionItem>
           <DescriptionTerm>来源单据</DescriptionTerm>
-          <DescriptionDetails>
-            {entry.sourceDocumentNo}
-            <span className="ml-1 text-xs text-muted-foreground">
-              {entry.sourceDocumentId}
-            </span>
-          </DescriptionDetails>
+          <DescriptionDetails>{entry.sourceDocumentNo}</DescriptionDetails>
         </DescriptionItem>
         <DescriptionItem>
           <DescriptionTerm>来源明细</DescriptionTerm>
@@ -1790,7 +1943,7 @@ function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
           </DescriptionDetails>
         </DescriptionItem>
         <DescriptionItem>
-          <DescriptionTerm>来源版本</DescriptionTerm>
+          <DescriptionTerm>来源单据版本</DescriptionTerm>
           <DescriptionDetails>{entry.sourceVersion}</DescriptionDetails>
         </DescriptionItem>
         <DescriptionItem>
@@ -1819,7 +1972,7 @@ function CostEntryDetailBody({ entry }: { entry: CostEntryDetail }) {
           <AlertTitle>前往纠错来源</AlertTitle>
           <AlertDescription className="flex flex-col gap-2">
             <span>
-              W16 不执行变更确认。打开原业务对象使用变更/冲减流程后，返回本页等待数据刷新。
+              本页不执行变更确认。打开原业务对象使用变更/冲减流程后，返回本页等待数据刷新。
             </span>
             <Button type="button" size="sm" variant="outline"
               render={<Link href={entry.correctionHref} target="_blank" />}

@@ -102,7 +102,7 @@ function projectItem(
             : "SETTLED_OR_INVOICED_NOT_ZERO",
         message:
           seed.reviewType !== "OPENING"
-            ? "「从 0 起」仅适用于 OPENING 期初任务"
+            ? "「从 0 起」仅适用于期初复核任务"
             : "净已收或净已开不为 0，不能使用「从 0 起」结论",
       })
     }
@@ -189,9 +189,9 @@ function filterSummary(q: CardFundsReviewQueueQuery): string {
   const parts = [
     q.scope === "mine" ? "仅我的" : "团队",
     q.type === "opening"
-      ? "期初 OPENING"
+      ? "期初"
       : q.type === "delta"
-        ? "差额 SYNC_DELTA"
+        ? "同步差额"
         : "全部类型",
     q.status === "held" ? "已跳过" : "待处理有效队列",
     q.due === "overdue" ? "已超期" : q.due === "today" ? "今日到期" : "全部时限",

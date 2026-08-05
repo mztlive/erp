@@ -7,6 +7,7 @@ import { PlusIcon, SaveIcon, XIcon } from "lucide-react"
 
 import {
   AllocationWorkspace,
+  DiscardConfirmDialog,
   FormalActionConfirmDialog,
   FormalActionResult,
   MoneyValue,
@@ -20,14 +21,19 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
-  Field,
-  FieldDescription,
-  FieldLabel,
-} from "@/components/ui/field"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { formatDateTime } from "@/lib/datetime"
 import {
   usePostAllocationMutation,
   useResolvePostUnknownMutation,
@@ -85,13 +91,46 @@ export function AllocationSessionPanel({
   const [forceUnknown, setForceUnknown] = React.useState(false)
   const [forceCrossParty, setForceCrossParty] = React.useState(false)
   const [draftSavedAt, setDraftSavedAt] = React.useState(session.savedAt)
+  const [postedLocally, setPostedLocally] = React.useState(false)
+  const [leaveConfirmOpen, setLeaveConfirmOpen] = React.useState(false)
+  const [pendingRemove, setPendingRemove] = React.useState<string | null>(null)
   const idempotencyRef = React.useRef<string | null>(null)
+  const baselineRef = React.useRef("")
+
+  const snapshot = () =>
+    JSON.stringify({ values: form.state.values, allocations })
 
   React.useEffect(() => {
     setAllocations(session.allocations.map((a) => ({ ...a })))
     setEditVersion(session.editVersion)
     setDraftSavedAt(session.savedAt)
+    setPostedLocally(false)
+    baselineRef.current = snapshot()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session.draftSessionId, session.editVersion, session.savedAt])
+
+  React.useEffect(() => {
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (session.status === "posted" || postedLocally) return
+      if (snapshot() === baselineRef.current) return
+      event.preventDefault()
+      event.returnValue = ""
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+  })
+
+  function requestClose() {
+    if (session.status === "posted" || postedLocally) {
+      onClose()
+      return
+    }
+    if (snapshot() !== baselineRef.current) {
+      setLeaveConfirmOpen(true)
+      return
+    }
+    onClose()
+  }
 
   const isReceipt = session.mode === "receipt"
   const existing = Boolean(session.existingFactId)
@@ -127,6 +166,20 @@ export function AllocationSessionPanel({
       setConfirmOpen(true)
     },
   })
+
+  // 发票 gross 变化时按 13% 预填不含税/税额（可手动覆盖）
+  const invoiceGross = isReceipt ? "" : String(form.state.values.grossAmount ?? "")
+  React.useEffect(() => {
+    if (isReceipt || !invoiceGross) return
+    const net = String(form.state.values.netAmount ?? "").trim()
+    const tax = String(form.state.values.taxAmount ?? "").trim()
+    if (net || tax) return
+    const gross = Number(invoiceGross)
+    if (!Number.isFinite(gross) || gross <= 0) return
+    form.setFieldValue("netAmount", (gross / 1.13).toFixed(2))
+    form.setFieldValue("taxAmount", (gross - gross / 1.13).toFixed(2))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoiceGross, isReceipt])
 
   const factAmountStr = isReceipt
     ? String(form.state.values.amount ?? "")
@@ -209,6 +262,19 @@ export function AllocationSessionPanel({
     setAllocations((prev) => prev.filter((a) => a.lineKey !== lineKey))
   }
 
+  function fillLineAmount(target: AllocationDraftLine) {
+    const others = allocations
+      .filter((a) => a.lineKey !== target.lineKey)
+      .reduce((s, a) => s + parseAmt(a.amount), 0)
+    const remaining = Math.max(0, parseAmt(factAmountStr) - others)
+    const fill = Math.min(parseAmt(target.openAmount), remaining)
+    setAllocations((prev) =>
+      prev.map((a) =>
+        a.lineKey === target.lineKey ? { ...a, amount: money(fill) } : a
+      )
+    )
+  }
+
   async function doSaveDraft() {
     setActionError(null)
     try {
@@ -236,6 +302,7 @@ export function AllocationSessionPanel({
       })
       setEditVersion(next.editVersion)
       setDraftSavedAt(next.savedAt)
+      baselineRef.current = snapshot()
     } catch (err) {
       setActionError(err instanceof Error ? err.message : "保存草稿失败")
     }
@@ -290,6 +357,7 @@ export function AllocationSessionPanel({
     setForceUnknown(false)
     setForceCrossParty(false)
     if (res.status === "succeeded") {
+      setPostedLocally(true)
       setResult({
         status: "succeeded",
         title: isReceipt ? "回款已登记并核销" : "销项发票已登记并分配",
@@ -358,7 +426,7 @@ export function AllocationSessionPanel({
     if (res) applyPostResult(res)
   }
 
-  const locked = existing || session.status === "posted"
+  const locked = existing || session.status === "posted" || postedLocally
 
   return (
     <div className="flex flex-col gap-4">
@@ -370,11 +438,18 @@ export function AllocationSessionPanel({
           <p className="text-sm text-muted-foreground">
             模式：{isReceipt ? "回款核销" : "发票核销"}
             {existing ? ` · 继续单号 ${session.existingFactNo}` : null}
-            {draftSavedAt ? ` · 草稿已保存` : " · 未保存草稿"}
+            {draftSavedAt
+              ? ` · 草稿已保存 ${formatDateTime(draftSavedAt, "monthDayIntl")}`
+              : " · 未保存草稿"}
           </p>
           <p className="mt-1 text-xs text-muted-foreground">{session.note}</p>
         </div>
-        <Button type="button" variant="outline" size="sm" onClick={onClose}>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={requestClose}
+        >
           <XIcon data-icon="inline-start" aria-hidden="true" />
           {session.returnContext?.returnTo ? "取消并返回" : "返回列表"}
         </Button>
@@ -565,16 +640,20 @@ export function AllocationSessionPanel({
                         {t.dueDate ? ` · 到期 ${t.dueDate}` : null}
                       </div>
                     </div>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled={selected || session.status === "posted"}
-                      onClick={() => addFromPool(t)}
-                    >
-                      <PlusIcon data-icon="inline-start" aria-hidden="true" />
-                      加入
-                    </Button>
+                    {selected ? (
+                      <Badge variant="success">已加入</Badge>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={session.status === "posted" || postedLocally}
+                        onClick={() => addFromPool(t)}
+                      >
+                        <PlusIcon data-icon="inline-start" aria-hidden="true" />
+                        加入
+                      </Button>
+                    )}
                   </li>
                 )
               })
@@ -613,10 +692,10 @@ export function AllocationSessionPanel({
         }}
         allocations={allocations}
         getRowId={(a) => a.lineKey}
-        disabled={session.status === "posted"}
+        disabled={session.status === "posted" || postedLocally}
         addLabel="从池中选择"
         addDisabledReason="请从左侧同主体池加入目标"
-        onRemoveAllocation={(a) => removeLine(a.lineKey)}
+        onRemoveAllocation={(a) => setPendingRemove(a.lineKey)}
         columns={[
           {
             id: "target",
@@ -648,13 +727,23 @@ export function AllocationSessionPanel({
               <MoneyValue value={item.amount || "0"} />
             ),
             renderEditor: ({ item }) => (
-              <Input
-                className="num text-right"
-                value={item.amount}
-                inputMode="decimal"
-                aria-label={`${item.label} 分配金额`}
-                onChange={(e) => updateAmount(item.lineKey, e.target.value)}
-              />
+              <div className="flex items-center justify-end gap-1">
+                <Input
+                  className="num text-right"
+                  value={item.amount}
+                  inputMode="decimal"
+                  aria-label={`${item.label} 分配金额`}
+                  onChange={(e) => updateAmount(item.lineKey, e.target.value)}
+                />
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  onClick={() => fillLineAmount(item)}
+                >
+                  填满
+                </Button>
+              </div>
             ),
           },
         ]}
@@ -673,7 +762,9 @@ export function AllocationSessionPanel({
               type="button"
               variant="outline"
               disabled={
-                saveMutation.isPending || session.status === "posted"
+                saveMutation.isPending ||
+                session.status === "posted" ||
+                postedLocally
               }
               onClick={() => void doSaveDraft()}
             >
@@ -682,7 +773,11 @@ export function AllocationSessionPanel({
             </Button>
             <Button
               type="button"
-              disabled={!canSubmit || postMutation.isPending}
+              disabled={
+                !canSubmit ||
+                postMutation.isPending ||
+                postedLocally
+              }
               onClick={() => {
                 void form.handleSubmit()
               }}
@@ -693,29 +788,77 @@ export function AllocationSessionPanel({
         }
       />
 
-      <div className="flex flex-wrap items-center gap-4 rounded-xl border border-dashed p-3 text-xs text-muted-foreground">
-        <span>演示选项：</span>
-        <label className="flex items-center gap-2">
-          <Checkbox
-            checked={forceUnknown}
-            onCheckedChange={(v) => setForceUnknown(v === true)}
-          />
-          模拟结果不确定
-        </label>
-        <label className="flex items-center gap-2">
-          <Checkbox
-            checked={forceCrossParty}
-            onCheckedChange={(v) => setForceCrossParty(v === true)}
-          />
-          模拟跨主体提交拒绝
-        </label>
-        <Field className="max-w-xs">
-          <FieldLabel className="text-xs">主体锁定</FieldLabel>
-          <FieldDescription>
-            本次核销创建后不可更换往来主体
-          </FieldDescription>
-        </Field>
-      </div>
+      <details className="rounded-xl border border-dashed p-3 text-xs text-muted-foreground">
+        <summary className="cursor-pointer">
+          演示选项（仅演示环境）
+        </summary>
+        <div className="mt-2 flex flex-wrap items-center gap-4">
+          <label className="flex items-center gap-2">
+            <Checkbox
+              checked={forceUnknown}
+              onCheckedChange={(v) => setForceUnknown(v === true)}
+            />
+            模拟结果不确定
+          </label>
+          <label className="flex items-center gap-2">
+            <Checkbox
+              checked={forceCrossParty}
+              onCheckedChange={(v) => setForceCrossParty(v === true)}
+            />
+            模拟跨主体提交拒绝
+          </label>
+        </div>
+      </details>
+
+      {/* 离开前未保存草稿确认 */}
+      <DiscardConfirmDialog
+        open={leaveConfirmOpen}
+        onOpenChange={setLeaveConfirmOpen}
+        title="本次核销尚未保存草稿，确定离开？"
+        description="记录表单与分配金额尚未保存，离开后将丢失；可先「保存草稿」再离开。"
+        confirmLabel="放弃并离开"
+        cancelLabel="继续编辑"
+        onConfirm={() => {
+          setLeaveConfirmOpen(false)
+          onClose()
+        }}
+      />
+
+      {/* 移除分配行确认 */}
+      <Dialog
+        open={pendingRemove != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingRemove(null)
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>移除该分配行？</DialogTitle>
+            <DialogDescription>
+              该行金额将不再分配，需重新输入或从池中再次加入。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPendingRemove(null)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (pendingRemove) removeLine(pendingRemove)
+                setPendingRemove(null)
+              }}
+            >
+              确认移除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <FormalActionConfirmDialog
         open={confirmOpen}

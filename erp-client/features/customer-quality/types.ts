@@ -66,6 +66,8 @@ export type CustomerQualityQuery = Readonly<{
   riskTag?: string
   q?: string
   sort: string
+  /** 服务端分页：page 从 1 开始 */
+  page: number
   pageSize: number
   /** 图表选中维度（规模分层 / 利润贡献等） */
   chartDimension?: string

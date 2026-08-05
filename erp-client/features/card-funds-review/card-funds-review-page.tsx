@@ -7,6 +7,7 @@ import {
   CircleCheckIcon,
   PauseIcon,
   ReceiptIcon,
+  SearchIcon,
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react"
@@ -18,6 +19,7 @@ import {
   BusinessEmptyState,
   BusinessStatusBadge,
   DataFreshness,
+  DiscardConfirmDialog,
   DocumentSummary,
   FormalActionConfirmDialog,
   FormalActionResult,
@@ -53,6 +55,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { DatePicker } from "@/components/ui/date-picker"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
@@ -85,6 +92,7 @@ import {
   useSaveCardFundsEvidenceMutation,
 } from "@/features/card-funds-review/queries"
 import { freshnessText, openWorkspaceLabel, versionText } from "@/lib/ui-text"
+import { formatDateTime } from "@/lib/datetime"
 
 const money = new Intl.NumberFormat("zh-CN", {
   style: "currency",
@@ -217,6 +225,15 @@ export function CardFundsReviewPage() {
     taxAmount: "",
   })
   const [allocLines, setAllocLines] = React.useState<AllocationDraftLine[]>([])
+  const [searchInput, setSearchInput] = React.useState(q ?? "")
+  const [evidenceSavedAt, setEvidenceSavedAt] = React.useState<string | null>(
+    null
+  )
+  const [evidenceDirty, setEvidenceDirty] = React.useState(false)
+  const [pendingNav, setPendingNav] = React.useState<number | null>(null)
+  const [keyHint, setKeyHint] = React.useState<string | null>(null)
+
+  const evidenceOk = Boolean(evidenceDocId.trim() || evidenceRef.trim())
 
   const headingRef = React.useRef<HTMLHeadingElement>(null)
   const resultRef = React.useRef<HTMLDivElement>(null)
@@ -230,7 +247,36 @@ export function CardFundsReviewPage() {
     setComment(task.currentEvidence.comment ?? "")
     setActionError(null)
     setAllocationMode(null)
+    setReceiptForm({
+      receiptNo: "",
+      receivedAt: "2026-07-01",
+      grossAmount: "",
+    })
+    setInvoiceForm({
+      invoiceNo: "",
+      issuedAt: "2026-07-01",
+      grossAmount: "",
+      netAmount: "",
+      taxAmount: "",
+    })
+    setAllocLines([])
+    setEvidenceSavedAt(null)
+    setEvidenceDirty(false)
   }, [task?.workItem.workItemId, task?.fundsFactVersion])
+
+  // 搜索输入（q）与 URL 对齐
+  React.useEffect(() => {
+    setSearchInput(q ?? "")
+  }, [q])
+
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchInput.trim() === (q ?? "")) return
+      replaceUrl({ q: searchInput.trim() || null, currentWorkItemId: null })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchInput])
 
   // URL 默认：保留 queueContextId / type / scope / currentWorkItemId
   React.useEffect(() => {
@@ -262,10 +308,16 @@ export function CardFundsReviewPage() {
     router,
   ])
 
-  // 自动领取
+  // 自动领取（含登记票款后版本刷新：任务 subjectVersion 变化时重新领取）
   React.useEffect(() => {
     if (!task) return
-    if (leaseRef.current?.workItemId === task.workItem.workItemId) return
+    const held = leaseRef.current
+    if (
+      held?.workItemId === task.workItem.workItemId &&
+      held.subjectVersion === task.workItem.subjectVersion
+    ) {
+      return
+    }
     if (claimMutation.isPending) return
     let cancelled = false
     void claimMutation
@@ -284,8 +336,8 @@ export function CardFundsReviewPage() {
     return () => {
       cancelled = true
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅任务切换时领取
-  }, [task?.workItem.workItemId])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅任务或版本变化时领取
+  }, [task?.workItem.workItemId, task?.workItem.subjectVersion])
 
   // 焦点：结果区 / 对象标题；位置播报由 SequentialProcessBar aria-live
   React.useEffect(() => {
@@ -346,8 +398,20 @@ export function CardFundsReviewPage() {
 
   const ensureLease = React.useCallback(async () => {
     if (!task) throw new Error("无当前任务")
-    if (leaseRef.current?.workItemId === task.workItem.workItemId) {
-      return leaseRef.current
+    const held = leaseRef.current
+    if (held?.workItemId === task.workItem.workItemId) {
+      // 登记回款/发票后任务版本已刷新：继续用旧版本提交会被阻断，须重新领取
+      if (held.subjectVersion === task.workItem.subjectVersion) {
+        return held
+      }
+      const lease = await claimMutation.mutateAsync(task.workItem.workItemId)
+      const session: SessionLease = {
+        workItemId: lease.workItemId,
+        subjectVersion: lease.subjectVersion,
+      }
+      leaseRef.current = session
+      setLeaseEpoch((n) => n + 1)
+      return session
     }
     const lease = await claimMutation.mutateAsync(task.workItem.workItemId)
     const session: SessionLease = {
@@ -434,6 +498,7 @@ export function CardFundsReviewPage() {
       if (response.status !== "succeeded") {
         if (response.status === "failed") {
           setActionError(response.message)
+          throw new Error(response.message)
         }
         return
       }
@@ -444,14 +509,14 @@ export function CardFundsReviewPage() {
         setLastResult({
           status: "succeeded",
           title: `复核通过 · 复核号 ${biz.reviewNo}`,
-          description: `${APPROVE_CONCLUSION_LABEL[biz.conclusion as ApproveConclusion]} · 操作编号 ${biz.workflowActionId} · ${advance && autoNext ? "自动下一项" : "手动继续"}`,
+          description: `${APPROVE_CONCLUSION_LABEL[biz.conclusion as ApproveConclusion]} · ${advance && autoNext ? "自动下一项" : "手动继续"}`,
           reference: biz.reference,
           outcome: response.outcome,
           stayOnItem: !(advance && autoNext),
         })
         // 成功先展示固定复核号；若 autoNext 则短暂停留后前进
         if (advance && autoNext) {
-          window.setTimeout(() => advanceIfNeeded(true), 600)
+          window.setTimeout(() => advanceIfNeeded(true), 2200)
         }
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "完成失败")
@@ -520,7 +585,7 @@ export function CardFundsReviewPage() {
           stayOnItem: !autoNext,
         })
         if (autoNext) {
-          window.setTimeout(() => advanceIfNeeded(true), 800)
+          window.setTimeout(() => advanceIfNeeded(true), 2200)
         }
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "驳回失败")
@@ -533,13 +598,12 @@ export function CardFundsReviewPage() {
     setActionError(null)
     try {
       const lease = await ensureLease()
-      const nextId = neighborId(1)
       const response = await holdMutation.mutateAsync({
         workItemId: task.workItem.workItemId,
         expectedSubjectVersion: lease.subjectVersion,
         reasonCode: "NEED_MORE_EVIDENCE",
         note: comment.trim() || "跳过：待补充票款证据",
-        nextWorkItemId: nextId,
+        nextWorkItemId: neighborId(1),
       })
       setConfirmMode(null)
       if (response.status !== "succeeded" || response.outcome.kind !== "HELD") {
@@ -555,12 +619,11 @@ export function CardFundsReviewPage() {
         reference: response.outcome.reference,
         outcome: response.outcome,
       })
-      // 暂挂：手动浏览下一项，不冒充任务完成；不自动「完成成功」语义
-      if (nextId) goToWorkItem(nextId)
+      // 暂挂不自动移动；结果面板给出可见反馈，用户按「下一项」或 j/k 继续
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "跳过失败")
     }
-  }, [comment, ensureLease, goToWorkItem, holdMutation, neighborId, task])
+  }, [comment, ensureLease, holdMutation, neighborId, task])
 
   const openAllocation = React.useCallback(
     (mode: "receipt" | "invoice") => {
@@ -586,7 +649,7 @@ export function CardFundsReviewPage() {
       const result = await registerReceiptMutation.mutateAsync({
         workItemId: task.workItem.workItemId,
         expectedSubjectVersion: lease.subjectVersion,
-        receiptNo: receiptForm.receiptNo.trim() || `SK-W13-${Date.now().toString(36)}`,
+        receiptNo: receiptForm.receiptNo.trim() || `SK-${Date.now().toString(36).toUpperCase()}`,
         receivedAt: receiptForm.receivedAt,
         grossAmount: receiptForm.grossAmount,
         allocations: allocLines,
@@ -632,7 +695,7 @@ export function CardFundsReviewPage() {
       const result = await registerInvoiceMutation.mutateAsync({
         workItemId: task.workItem.workItemId,
         expectedSubjectVersion: lease.subjectVersion,
-        invoiceNo: invoiceForm.invoiceNo.trim() || `FP-W13-${Date.now().toString(36)}`,
+        invoiceNo: invoiceForm.invoiceNo.trim() || `FP-${Date.now().toString(36).toUpperCase()}`,
         issuedAt: invoiceForm.issuedAt,
         grossAmount: gross,
         netAmount: net,
@@ -671,6 +734,10 @@ export function CardFundsReviewPage() {
         evidenceReferences: evidenceRef.trim() ? [evidenceRef.trim()] : [],
         comment: comment.trim() || undefined,
       })
+      setEvidenceSavedAt(
+        new Date().toLocaleString("zh-CN", { hour: "2-digit", minute: "2-digit" })
+      )
+      setEvidenceDirty(false)
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "保存证据失败")
     }
@@ -683,7 +750,7 @@ export function CardFundsReviewPage() {
     task,
   ])
 
-  // 键盘：j/k 导航；⌘↵ 打开正式确认
+  // 键盘：j/k 导航；⌘↵ 打开正式确认（未领取时给出提示）
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
@@ -701,6 +768,11 @@ export function CardFundsReviewPage() {
       ) {
         event.preventDefault()
         if (activeLease && task) {
+          if (!evidenceOk) {
+            setKeyHint("请先填写凭证编号或证据说明并保存证据，再通过复核。")
+            window.setTimeout(() => setKeyHint(null), 3000)
+            return
+          }
           const zeroOk =
             task.reviewType === "OPENING" &&
             Number(task.account.settledTotal) === 0 &&
@@ -714,6 +786,9 @@ export function CardFundsReviewPage() {
                   advance: autoNext,
                 }
           )
+        } else if (task) {
+          setKeyHint("任务尚未领取，无法提交；请先点击「领取任务」。")
+          window.setTimeout(() => setKeyHint(null), 3000)
         }
         return
       }
@@ -721,17 +796,27 @@ export function CardFundsReviewPage() {
       if (event.key === "j" || event.key === "ArrowDown") {
         event.preventDefault()
         const next = neighborId(1)
-        if (next) goToWorkItem(next)
+        if (!next) return
+        if (evidenceDirty) {
+          setPendingNav(1)
+          return
+        }
+        goToWorkItem(next)
       }
       if (event.key === "k" || event.key === "ArrowUp") {
         event.preventDefault()
         const prev = neighborId(-1)
-        if (prev) goToWorkItem(prev)
+        if (!prev) return
+        if (evidenceDirty) {
+          setPendingNav(-1)
+          return
+        }
+        goToWorkItem(prev)
       }
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [activeLease, autoNext, goToWorkItem, neighborId, task])
+  }, [activeLease, autoNext, evidenceDirty, evidenceOk, goToWorkItem, neighborId, task])
 
   const formalPending =
     completeMutation.isPending ||
@@ -795,7 +880,11 @@ export function CardFundsReviewPage() {
         metadata={
           <div className="flex flex-wrap items-center gap-3">
             <DataFreshness
-              updatedAt="刚刚"
+              updatedAt={
+                context?.queueContextUpdatedAt
+                  ? formatDateTime(context.queueContextUpdatedAt, "full")
+                  : "刚刚"
+              }
               dateTime={context?.queueContextUpdatedAt}
               state="fresh"
               label={freshnessText.queueUpdatedAt}
@@ -810,6 +899,24 @@ export function CardFundsReviewPage() {
 
       <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2 text-sm">
         <ToggleGroup
+          value={[scope]}
+          onValueChange={(v) => {
+            const next = (v[0] as typeof scope | undefined) ?? "mine"
+            replaceUrl({
+              scope: next === "mine" ? null : next,
+              queueContextId: null,
+              currentWorkItemId: null,
+            })
+          }}
+          variant="outline"
+          size="sm"
+          spacing={0}
+          aria-label="责任范围"
+        >
+          <ToggleGroupItem value="mine">仅我的</ToggleGroupItem>
+          <ToggleGroupItem value="role_pool">团队</ToggleGroupItem>
+        </ToggleGroup>
+        <ToggleGroup
           value={[type]}
           onValueChange={(v) => {
             const next = (v[0] as typeof type | undefined) ?? "all"
@@ -823,6 +930,21 @@ export function CardFundsReviewPage() {
           <ToggleGroupItem value="all">全部类型</ToggleGroupItem>
           <ToggleGroupItem value="opening">期初</ToggleGroupItem>
           <ToggleGroupItem value="delta">同步差额</ToggleGroupItem>
+        </ToggleGroup>
+        <ToggleGroup
+          value={[due]}
+          onValueChange={(v) => {
+            const next = (v[0] as typeof due | undefined) ?? "all"
+            replaceUrl({ due: next === "all" ? null : next, currentWorkItemId: null })
+          }}
+          variant="outline"
+          size="sm"
+          spacing={0}
+          aria-label="到期时限"
+        >
+          <ToggleGroupItem value="all">全部时限</ToggleGroupItem>
+          <ToggleGroupItem value="today">今日到期</ToggleGroupItem>
+          <ToggleGroupItem value="overdue">已超期</ToggleGroupItem>
         </ToggleGroup>
         <ToggleGroup
           value={[status]}
@@ -851,15 +973,17 @@ export function CardFundsReviewPage() {
             }}
           />
         </div>
-        <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            className="size-3.5"
-            checked={simulateHashDrift}
-            onChange={(e) => setSimulateHashDrift(e.target.checked)}
+        <InputGroup className="max-w-56">
+          <InputGroupAddon>
+            <SearchIcon className="size-4" aria-hidden="true" />
+          </InputGroupAddon>
+          <InputGroupInput
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="搜索单号 / 客户 / 往来主体"
+            aria-label="搜索复核队列"
           />
-          演示：完成前模拟数据变更阻断
-        </label>
+        </InputGroup>
       </div>
 
       {lastResult ? (
@@ -900,12 +1024,7 @@ export function CardFundsReviewPage() {
           lastResult.outcome.business.followUpConfiguration ? (
             <Alert className="mt-3" variant="destructive">
               <TriangleAlertIcon aria-hidden="true" />
-              <AlertTitle>
-                {
-                  lastResult.outcome.business.followUpConfiguration
-                    .blockerCode
-                }
-              </AlertTitle>
+              <AlertTitle>驳回后继流程未配置</AlertTitle>
               <AlertDescription>
                 {
                   lastResult.outcome.business.followUpConfiguration
@@ -947,8 +1066,15 @@ export function CardFundsReviewPage() {
               formalPending || Boolean(lastResult?.status === "unknown")
             }
             pending={formalPending}
+            backLabel="返回工作台"
             onBack={() => router.push("/workspace")}
             onProcess={() => {
+              if (!evidenceOk) {
+                setActionError(
+                  "请先填写凭证编号或证据说明并保存证据，再通过复核。"
+                )
+                return
+              }
               setConfirmMode({
                 kind: "approve",
                 conclusion: "RECORDED_FACTS_RECONCILED",
@@ -956,6 +1082,12 @@ export function CardFundsReviewPage() {
               })
             }}
             onProcessNext={() => {
+              if (!evidenceOk) {
+                setActionError(
+                  "请先填写凭证编号或证据说明并保存证据，再通过复核。"
+                )
+                return
+              }
               setConfirmMode({
                 kind: "approve",
                 conclusion: "RECORDED_FACTS_RECONCILED",
@@ -1058,7 +1190,7 @@ export function CardFundsReviewPage() {
                     <MetricItem
                       label="净已收"
                       value={formatMoney(task.account.settledTotal)}
-                      detail="APPLY−REVERSE"
+                      detail="净额（已收减冲正）"
                     />
                     <MetricItem
                       label="净已开票"
@@ -1099,19 +1231,49 @@ export function CardFundsReviewPage() {
                   </Alert>
 
                   {task.reviewType === "SYNC_DELTA" && task.difference ? (
-                    <BusinessDiffPanel
-                      title={task.difference.title}
-                      caption="上一有效复核与当前记录对比（系统最新数据）"
-                      changes={task.difference.changes.map((c) => ({
-                        id: c.id,
-                        field: c.field,
-                        before: c.before,
-                        after: c.after,
-                        note: [c.note, c.sourceObject, c.occurredAt]
-                          .filter(Boolean)
-                          .join(" · "),
-                      }))}
-                    />
+                    <div className="space-y-2">
+                      {(() => {
+                        const moneyChanges = task.difference!.changes.filter(
+                          (c) =>
+                            /成交额|应收|已收|已开票/.test(c.field) &&
+                            Number.isFinite(Number(c.before)) &&
+                            Number.isFinite(Number(c.after))
+                        )
+                        if (moneyChanges.length === 0) return null
+                        const totalDelta = moneyChanges.reduce(
+                          (s, c) => s + (Number(c.after) - Number(c.before)),
+                          0
+                        )
+                        return (
+                          <p className="text-sm text-muted-foreground">
+                            金额类字段合计差额：{" "}
+                            <span
+                              className={
+                                totalDelta >= 0
+                                  ? "num text-foreground"
+                                  : "num text-destructive"
+                              }
+                            >
+                              {formatMoney(Math.abs(totalDelta).toFixed(2))}
+                            </span>
+                            {totalDelta >= 0 ? "（增加）" : "（减少）"}
+                          </p>
+                        )
+                      })()}
+                      <BusinessDiffPanel
+                        title={task.difference.title}
+                        caption="上一有效复核与当前记录对比（系统最新数据）"
+                        changes={task.difference.changes.map((c) => ({
+                          id: c.id,
+                          field: c.field,
+                          before: c.before,
+                          after: c.after,
+                          note: [c.note, c.sourceObject, c.occurredAt]
+                            .filter(Boolean)
+                            .join(" · "),
+                        }))}
+                      />
+                    </div>
                   ) : null}
 
                   <Card size="sm">
@@ -1120,7 +1282,7 @@ export function CardFundsReviewPage() {
                         回款与发票明细
                       </CardTitle>
                       <CardDescription>
-                        仅展示客户往来业务记录；登记为追加式分配，不覆盖已有金额
+                        仅展示客户往来业务记录；登记为新增分配，不覆盖已有金额
                       </CardDescription>
                     </CardHeader>
                     <CardContent className="space-y-3 pt-4">
@@ -1212,8 +1374,7 @@ export function CardFundsReviewPage() {
                               : "登记历史发票"}
                           </CardTitle>
                           <CardDescription>
-                            登记为追加式分配，不覆盖已有金额；禁止 0
-                            元单据
+                            登记为新增分配，不覆盖已有金额；禁止 0 元单据
                           </CardDescription>
                         </CardHeader>
                         <CardContent className="grid gap-3 pt-4 sm:grid-cols-2">
@@ -1326,7 +1487,7 @@ export function CardFundsReviewPage() {
 
                       <AllocationWorkspace
                         title="多对多分配"
-                        description="分配对象与金额由本页受控；差额由调用方展示，组件不重算业务。"
+                        description="分配合计须等于本次单据含税金额；登记不覆盖已有金额，差额以提交后系统结果为准。"
                         summary={{
                           totalToAllocate: formatMoney(
                             moneyStrSafe(allocTarget)
@@ -1429,52 +1590,89 @@ export function CardFundsReviewPage() {
                 <CardHeader className="border-b py-3">
                   <CardTitle className="text-base">结论区</CardTitle>
                   <CardDescription>
-                    提交时将核对账户、复核链与数据版本。
+                    提交时将核对账户、历史复核记录与数据版本。快捷键：j/k 切换任务 ·
+                    ⌘↵ 复核通过
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div className="space-y-1.5">
-                      <Label htmlFor="ev-doc">证据文档 ID</Label>
+                      <Label htmlFor="ev-doc">凭证编号</Label>
                       <Input
                         id="ev-doc"
                         value={evidenceDocId}
-                        onChange={(e) => setEvidenceDocId(e.target.value)}
-                        placeholder="doc_bank_slip_…"
+                        onChange={(e) => {
+                          setEvidenceDocId(e.target.value)
+                          setEvidenceDirty(true)
+                        }}
+                        placeholder="银行回单号 / 发票号"
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <Label htmlFor="ev-ref">证据引用</Label>
+                      <Label htmlFor="ev-ref">证据说明</Label>
                       <Input
                         id="ev-ref"
                         value={evidenceRef}
-                        onChange={(e) => setEvidenceRef(e.target.value)}
-                        placeholder="银行回单号 / 受控引用"
+                        onChange={(e) => {
+                          setEvidenceRef(e.target.value)
+                          setEvidenceDirty(true)
+                        }}
+                        placeholder="如记账凭证、商城对账记录"
                       />
                     </div>
                   </div>
+                  {!evidenceOk ? (
+                    <p className="text-xs text-destructive" role="alert">
+                      完成复核前须至少填写一项凭证编号或证据说明（保存证据后生效）。
+                    </p>
+                  ) : null}
                   <div className="space-y-1.5">
                     <Label htmlFor="ev-comment">备注</Label>
                     <Textarea
                       id="ev-comment"
                       value={comment}
-                      onChange={(e) => setComment(e.target.value)}
+                      onChange={(e) => {
+                        setComment(e.target.value)
+                        setEvidenceDirty(true)
+                      }}
                       rows={2}
                     />
                   </div>
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <Button
                       type="button"
                       variant="outline"
                       size="sm"
+                      disabled={
+                        saveEvidenceMutation.isPending || formalPending
+                      }
                       onClick={() => void saveEvidence()}
                     >
-                      保存证据
+                      {saveEvidenceMutation.isPending ? "正在保存…" : "保存证据"}
                     </Button>
+                    {evidenceSavedAt ? (
+                      <span
+                        className="text-xs text-muted-foreground"
+                        aria-live="polite"
+                      >
+                        证据已保存（{evidenceSavedAt}）
+                      </span>
+                    ) : null}
+                    {keyHint ? (
+                      <span className="text-xs text-destructive" role="alert">
+                        {keyHint}
+                      </span>
+                    ) : null}
                     {canConfirmZero ? (
                       <Button
                         type="button"
                         variant="secondary"
+                        disabled={formalPending || !evidenceOk}
+                        title={
+                          evidenceOk
+                            ? undefined
+                            : "须先填写并保存凭证编号或证据说明"
+                        }
                         onClick={() =>
                           setConfirmMode({ kind: "zero", advance: autoNext })
                         }
@@ -1485,6 +1683,12 @@ export function CardFundsReviewPage() {
                     ) : null}
                     <Button
                       type="button"
+                      disabled={formalPending || !evidenceOk}
+                      title={
+                        evidenceOk
+                          ? undefined
+                          : "须先填写并保存凭证编号或证据说明"
+                      }
                       onClick={() =>
                         setConfirmMode({
                           kind: "approve",
@@ -1498,6 +1702,7 @@ export function CardFundsReviewPage() {
                     <Button
                       type="button"
                       variant="destructive"
+                      disabled={formalPending}
                       onClick={() => setConfirmMode({ kind: "reject" })}
                     >
                       <XIcon data-icon="inline-start" />
@@ -1506,22 +1711,11 @@ export function CardFundsReviewPage() {
                     <Button
                       type="button"
                       variant="outline"
+                      disabled={formalPending}
                       onClick={() => setConfirmMode({ kind: "hold" })}
                     >
                       <PauseIcon data-icon="inline-start" />
                       先跳过
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="text-xs text-muted-foreground"
-                      onClick={() => {
-                        if (!task) return
-                        void driftMutation.mutateAsync(task.workItem.workItemId)
-                      }}
-                    >
-                      演示：外部数据版本变更（仅演示）
                     </Button>
                   </div>
                 </CardContent>
@@ -1531,16 +1725,16 @@ export function CardFundsReviewPage() {
             <aside className="min-w-0 space-y-4 xl:sticky xl:top-4 xl:self-start">
               <Card size="sm">
                 <CardHeader className="border-b py-3">
-                  <CardTitle className="text-base">复核链（只读）</CardTitle>
+                  <CardTitle className="text-base">复核记录（只读）</CardTitle>
                   <CardDescription>
-                    追加式链 · 旧记录不可编辑删除 · 下一号{" "}
+                    历史复核记录只读，不可修改或删除；本次将形成复核号{" "}
                     {task.reviewChain.nextReviewNo}
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
                   {task.reviewChain.items.length === 0 ? (
                     <p className="text-sm text-muted-foreground">
-                      尚无历史复核。本次通过/驳回将写入链首。
+                      尚无历史复核。本次通过/驳回将形成首条复核记录。
                     </p>
                   ) : (
                     task.reviewChain.items.map((item) => (
@@ -1573,12 +1767,6 @@ export function CardFundsReviewPage() {
                         <p className="mt-1 text-muted-foreground">
                           {item.reviewerLabel} · {item.completedAt}
                         </p>
-                        <p className="mt-0.5 font-mono text-xs text-muted-foreground">
-                          版本 {shortHash(item.subjectHashAtReview)}
-                          {item.predecessorReviewId
-                            ? ` · 前驱 ${item.predecessorReviewId}`
-                            : " · 链首"}
-                        </p>
                       </div>
                     ))
                   )}
@@ -1610,13 +1798,37 @@ export function CardFundsReviewPage() {
                       {openWorkspaceLabel("W11")}
                     </Button>
                   </div>
-                  <p className="text-xs text-muted-foreground">
-                    快捷键：j/k 切换任务 · ⌘↵ 确认
-                  </p>
                 </CardContent>
               </Card>
             </aside>
           </div>
+
+          <details className="rounded-2xl border border-dashed px-3 py-2 text-xs text-muted-foreground">
+            <summary className="cursor-pointer">演示选项（仅演示环境）</summary>
+            <div className="mt-2 flex flex-wrap items-center gap-4">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  className="size-3.5"
+                  checked={simulateHashDrift}
+                  onChange={(e) => setSimulateHashDrift(e.target.checked)}
+                />
+                演示：完成前模拟数据变更阻断
+              </label>
+              <Button
+                type="button"
+                variant="ghost"
+                size="xs"
+                disabled={formalPending || !task}
+                onClick={() => {
+                  if (!task) return
+                  void driftMutation.mutateAsync(task.workItem.workItemId)
+                }}
+              >
+                演示：模拟外部数据版本变更
+              </Button>
+            </div>
+          </details>
         </>
       ) : (
         <BusinessEmptyState
@@ -1630,6 +1842,7 @@ export function CardFundsReviewPage() {
                 replaceUrl({
                   type: "all",
                   status: null,
+                  due: null,
                   q: null,
                   currentWorkItemId: null,
                 })
@@ -1654,7 +1867,7 @@ export function CardFundsReviewPage() {
         }
         description={
           confirmMode?.kind === "zero"
-            ? `将提交「期初净额为零、无历史票款」结论：销售单 ${task?.salesOrder.orderNo ?? ""}、应收 ${task?.account.id ?? ""}。不创建 0 元回款/发票。须证据完整；提交时将核对数据版本。`
+            ? `将提交「期初净额为零、无历史票款」结论：销售单 ${task?.salesOrder.orderNo ?? ""}、应收子账 #${task?.account.accountSeq ?? ""}（${task?.account.customerName ?? ""}）。不创建 0 元回款/发票。须证据完整；提交时将核对数据版本。`
             : `将提交「复核通过并核对票款记录」。复核类型 ${task ? REVIEW_TYPE_LABEL[task.reviewType] : ""}，当前数据版本 ${task ? shortHash(task.workItem.subjectHash) : ""}。`
         }
         actionLabel={
@@ -1673,7 +1886,7 @@ export function CardFundsReviewPage() {
           task
             ? [
                 `销售单 ${task.salesOrder.orderNo}`,
-                `应收账户 ${task.account.id}`,
+                `应收子账 #${task.account.accountSeq}（${task.account.customerName}）`,
                 "数据版本（短校验码）",
                 `复核类型 ${REVIEW_TYPE_LABEL[task.reviewType]}`,
                 "票款版本（仅显示，不可改）",
@@ -1685,20 +1898,20 @@ export function CardFundsReviewPage() {
             ? [
                 "记录期初通过结论：无历史票款",
                 "不创建 0 元回款单或 0 元发票",
-                "追加复核记录并完成任务",
+                "记录复核结论并完成任务",
               ]
             : [
-                "追加复核链尾并完成任务",
+                "记录本次复核并完成任务",
                 "提交时核对数据版本，不一致将阻断",
                 "同本次提交完成当前任务",
               ]
         }
         pending={completeMutation.isPending}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (confirmMode?.kind === "zero") {
-            void runApprove("NO_HISTORY_FROM_ZERO", confirmMode.advance)
+            await runApprove("NO_HISTORY_FROM_ZERO", confirmMode.advance)
           } else if (confirmMode?.kind === "approve") {
-            void runApprove(confirmMode.conclusion, confirmMode.advance)
+            await runApprove(confirmMode.conclusion, confirmMode.advance)
           }
         }}
       />
@@ -1717,7 +1930,7 @@ export function CardFundsReviewPage() {
         effects={[
           "任务保留在待处理列表",
           "不生成复核记录",
-          "不自动下一项成功语义",
+          "不自动切换下一项，结果面板提示后手动继续",
         ]}
         pending={holdMutation.isPending}
         onConfirm={() => void handleHold()}
@@ -1796,6 +2009,26 @@ export function CardFundsReviewPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* 证据/备注未保存时切换任务确认 */}
+      <DiscardConfirmDialog
+        open={pendingNav != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingNav(null)
+        }}
+        title="放弃未保存的证据或备注？"
+        description="当前凭证编号、证据说明或备注尚未保存，切换任务后将丢失。"
+        confirmLabel="放弃并切换"
+        cancelLabel="继续编辑"
+        onConfirm={() => {
+          const delta = pendingNav
+          setPendingNav(null)
+          if (delta != null) {
+            const target = neighborId(delta)
+            if (target) goToWorkItem(target)
+          }
+        }}
+      />
     </div>
   )
 }
@@ -1811,7 +2044,15 @@ function buildResultFacts(
   if (!outcome) return []
   if (outcome.kind === "HELD") {
     return [
-      { label: "任务状态", value: outcome.workItemStatus === "IN_PROGRESS" ? "处理中" : outcome.workItemStatus },
+      {
+        label: "任务状态",
+        value:
+          outcome.workItemStatus === "IN_PROGRESS"
+            ? "处理中"
+            : outcome.workItemStatus === "PENDING"
+              ? "待处理"
+              : "已处理",
+      },
       { label: "跳过时间", value: outcome.heldAt },
       { label: "恢复提示", value: outcome.resumeHint },
     ]
@@ -1826,8 +2067,12 @@ function buildResultFacts(
           ? "驳回"
           : APPROVE_CONCLUSION_LABEL[biz.conclusion as ApproveConclusion],
     },
-    { label: "操作编号", value: biz.workflowActionId },
-    { label: "操作号", value: biz.operationId },
+    {
+      label: "完成时间",
+      value: new Date(biz.completedAt).toLocaleString("zh-CN", {
+        hour12: false,
+      }),
+    },
     {
       label: versionText.dataVersion,
       value: (
@@ -1835,11 +2080,5 @@ function buildResultFacts(
       ),
     },
   ]
-  if (biz.followUpConfiguration) {
-    facts.push({
-      label: "后继配置",
-      value: biz.followUpConfiguration.blockerCode,
-    })
-  }
   return facts
 }

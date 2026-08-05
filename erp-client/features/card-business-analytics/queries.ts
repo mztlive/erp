@@ -37,7 +37,7 @@ export function useCardBusinessAnalyticsQuery(
         to: "",
         dateBasis: "consumption",
         dimension: "customer",
-        sort: "consumptionGross:desc",
+        sort: "consumption:desc",
         page: 1,
         pageSize: 50,
       }

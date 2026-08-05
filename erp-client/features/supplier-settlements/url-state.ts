@@ -22,6 +22,8 @@ export type SettlementsUrlState = {
   role: DemoRole
   demoFlag?: "no-permission" | "no-scope" | "policy-missing"
   returnTo?: string
+  /** 差异工作台选中项锚定（刷新/分享不丢上下文） */
+  diff?: string
 }
 
 const VIEW_VALUES = [
@@ -73,6 +75,7 @@ const codec = createUrlStateCodec<SettlementsUrlState>([
   },
   { key: "demoFlag", type: "enum", values: FLAG_VALUES },
   { key: "returnTo", type: "string" },
+  { key: "diff", type: "string" },
 ])
 
 export const parseSettlementsSearchParams = codec.parse

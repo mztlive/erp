@@ -28,6 +28,8 @@ import {
   FACT_TYPE_TONE,
   FULFILLMENT_CHAIN_LABEL,
   FULFILLMENT_CHAIN_TONE,
+  SUPPLIER_CANCEL_LABEL,
+  SUPPLIER_REFUND_LABEL,
   SUPPLIER_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
 import { formatDateTime } from "@/lib/datetime"
@@ -103,7 +105,7 @@ export function ConsumptionOrderPreviewPanel({ view }: Props) {
                 },
                 {
                   id: "co-pv-erp-id",
-                  label: "ERP 稳定 ID",
+                  label: "ERP 订单编号",
                   value: (
                     <span className="num">{view.identity.mallOrderId}</span>
                   ),
@@ -125,13 +127,13 @@ export function ConsumptionOrderPreviewPanel({ view }: Props) {
                   id: "co-pv-ordered",
                   label: "下单时间",
                   value: (
-                    <span className="num">{formatDateTime(view.orderedAt, "monthDayIntl")}</span>
+                    <span className="num">{formatDateTime(view.orderedAt, "default")}</span>
                   ),
                 },
                 {
                   id: "co-pv-paid",
                   label: "支付时间（决定履约链）",
-                  value: <span className="num">{formatDateTime(view.paidAt, "monthDayIntl")}</span>,
+                  value: <span className="num">{formatDateTime(view.paidAt, "default")}</span>,
                 },
                 {
                   id: "co-pv-gross",
@@ -173,7 +175,7 @@ export function ConsumptionOrderPreviewPanel({ view }: Props) {
                       {FULFILLMENT_CHAIN_LABEL[view.fulfillment.chain]}
                       <span className="mx-1 text-muted-foreground">·</span>
                       支付成功时间{" "}
-                      {formatDateTime(view.fulfillment.decidedByOccurredAt, "monthDayIntl")}
+                      {formatDateTime(view.fulfillment.decidedByOccurredAt, "default")}
                       {view.fulfillment.chain === "LEGACY_MANUAL"
                         ? "，早于切换时点"
                         : "，不早于切换时点"}
@@ -182,16 +184,26 @@ export function ConsumptionOrderPreviewPanel({ view }: Props) {
                 },
               ]}
             />
-            <p className="text-xs text-muted-foreground">
-              收货地址 {view.address.maskedSummary} · 手机号 {view.phoneMasked} ·
-              支付引用 {view.paymentRefMasked}
-            </p>
+            <dl className="grid gap-1 text-xs text-muted-foreground sm:grid-cols-3">
+              <div className="flex flex-wrap gap-1">
+                <dt>收货地址</dt>
+                <dd>{view.address.maskedSummary}</dd>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                <dt>手机号</dt>
+                <dd>{view.phoneMasked}</dd>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                <dt>支付引用</dt>
+                <dd>{view.paymentRefMasked}</dd>
+              </div>
+            </dl>
           </section>
 
           <Separator />
 
-          <section className="space-y-2" aria-label="关键事实">
-            <SectionTitle>关键事实</SectionTitle>
+          <section className="space-y-2" aria-label="关键记录">
+            <SectionTitle>关键记录</SectionTitle>
             {sortedFacts.length === 0 ? (
               <p className="text-xs text-muted-foreground">暂无关键记录</p>
             ) : (
@@ -231,7 +243,7 @@ export function ConsumptionOrderPreviewPanel({ view }: Props) {
               </ul>
             )}
             <p className="text-[11px] text-muted-foreground">
-              行列守恒：{" "}
+              金额核对：{" "}
               {view.conservation.orderTotal.valid ? "有效" : "差异"} · 含税实付{" "}
               <span className="num">{view.conservation.orderTotal.actual}</span>
             </p>
@@ -248,7 +260,7 @@ export function ConsumptionOrderPreviewPanel({ view }: Props) {
                 tone={FULFILLMENT_CHAIN_TONE[view.fulfillment.chain]}
               />
               <Badge variant="secondary">
-                支付成功时间 {formatDateTime(view.fulfillment.decidedByOccurredAt, "monthDayIntl")}
+                支付成功时间 {formatDateTime(view.fulfillment.decidedByOccurredAt, "default")}
                 {view.fulfillment.chain === "LEGACY_MANUAL"
                   ? " · 早于切换时点"
                   : " · 不早于切换时点"}
@@ -305,8 +317,12 @@ export function ConsumptionOrderPreviewPanel({ view }: Props) {
                     </div>
                     <div className="mt-0.5 flex flex-wrap gap-x-3 text-muted-foreground">
                       <span>履约 {SUPPLIER_STATUS_LABEL[so.fulfillmentStatus]}</span>
-                      <span>取消 {so.cancelStatus}</span>
-                      <span>退款 {so.refundStatus}</span>
+                      <span>
+                        取消 {SUPPLIER_CANCEL_LABEL[so.cancelStatus] ?? so.cancelStatus}
+                      </span>
+                      <span>
+                        退款 {SUPPLIER_REFUND_LABEL[so.refundStatus] ?? so.refundStatus}
+                      </span>
                     </div>
                     {so.supplierRefundSummary ? (
                       <div className="mt-1 flex flex-wrap gap-x-3 text-muted-foreground">
@@ -428,8 +444,8 @@ function FactRow({ fact }: { fact: MallOrderFactView }) {
         </span>
       </div>
       <div className="mt-1 text-muted-foreground">
-        发生 <span className="num">{formatDateTime(fact.occurredAt, "monthDayIntl")}</span> · 接收{" "}
-        <span className="num">{formatDateTime(fact.receivedAt, "monthDayIntl")}</span>
+        发生 <span className="num">{formatDateTime(fact.occurredAt, "default")}</span> · 接收{" "}
+        <span className="num">{formatDateTime(fact.receivedAt, "default")}</span>
       </div>
     </li>
   )

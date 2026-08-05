@@ -2,20 +2,20 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { z } from "zod"
 import {
-  CheckIcon,
   HistoryIcon,
   PackageIcon,
   RotateCcwIcon,
-  SaveIcon,
 } from "lucide-react"
 
 import {
   BusinessEmptyState,
   BusinessStatusBadge,
   DataFreshness,
+  DiscardConfirmDialog,
   FormalActionConfirmDialog,
   FormalActionResult,
   MetricItem,
@@ -34,7 +34,6 @@ import {
   Card,
   CardContent,
   CardDescription,
-  CardFooter,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
@@ -46,7 +45,6 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import {
   demoRestoreAcceptancePermission,
@@ -64,9 +62,9 @@ import {
   type AcceptanceEligibleFact,
   type AcceptanceHistoryItem,
   type AcceptanceOverallResult,
-  type CustomerAcceptanceWorkspaceView,
 } from "@/features/sales-orders/acceptance-types"
 import { salesOrderKeys } from "@/features/sales-orders/queries"
+import { useSelector } from "@tanstack/react-form"
 import { cn } from "@/lib/utils"
 import { freshnessText, resultText } from "@/lib/ui-text"
 
@@ -82,6 +80,8 @@ type LineResultState = {
   reason: string
   /** 服务不通过：将结果写入 rejected 并标注 */
   serviceFail: boolean
+  /** 用户手工改过「通过数量」后不再被分配数自动覆盖 */
+  acceptedManual: boolean
 }
 
 type FormalResultState =
@@ -167,6 +167,7 @@ function buildDraftLines(
       rejectedQuantity: "0",
       reason: "",
       serviceFail: false,
+      acceptedManual: false,
     }
     lines.push({
       salesOrderLineId,
@@ -174,6 +175,7 @@ function buildDraftLines(
       shortQuantity: result.shortQuantity || "0",
       rejectedQuantity: result.rejectedQuantity || "0",
       reason: result.reason,
+      serviceFail: result.serviceFail,
       allocations,
     })
   }
@@ -267,12 +269,15 @@ function autoFillLineResult(
   if (prev && (parseQty(prev.shortQuantity) > 0 || parseQty(prev.rejectedQuantity) > 0 || prev.serviceFail)) {
     return prev
   }
+  // 用户手工改过「通过数量」后，调整分配数不再静默覆盖（P1-5）。
+  if (prev?.acceptedManual) return prev
   return {
     acceptedQuantity: String(allocSum),
     shortQuantity: prev?.shortQuantity ?? "0",
     rejectedQuantity: prev?.rejectedQuantity ?? "0",
     reason: prev?.reason ?? "",
     serviceFail: prev?.serviceFail ?? false,
+    acceptedManual: false,
   }
 }
 
@@ -282,12 +287,15 @@ export function AcceptanceWorkspace({
   salesOrderId: string
 }) {
   const queryClient = useQueryClient()
-  const workItemId =
-    typeof window !== "undefined"
-      ? new URLSearchParams(window.location.search).get("workItemId")
-      : null
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const workItemId = searchParams.get("workItemId")
 
-  const [remainingOnly, setRemainingOnly] = React.useState(true)
+  /** 交付记录筛选随 URL 持久化，刷新/分享不丢失（契约：参数与控件一一对应）。 */
+  const [remainingOnly, setRemainingOnlyState] = React.useState(
+    searchParams.get("remainingOnly") !== "false"
+  )
   const [selected, setSelected] = React.useState<
     Map<string, { fact: AcceptanceEligibleFact; qty: string }>
   >(() => new Map())
@@ -305,8 +313,22 @@ export function AcceptanceWorkspace({
   )
   const [draftSavedAt, setDraftSavedAt] = React.useState<string | null>(null)
   const [clientIssues, setClientIssues] = React.useState<ValidationIssue[]>([])
+  const [exitDiscardOpen, setExitDiscardOpen] = React.useState(false)
   const resultRef = React.useRef<HTMLDivElement>(null)
   const restoredDraftRef = React.useRef(false)
+  /** 提交瞬间的总体结果快照（含服务不通过），用于结果反馈不被服务端降级。 */
+  const submittedOverallRef = React.useRef<AcceptanceOverallResult>("PASS")
+
+  const setRemainingOnly = React.useCallback(
+    (next: boolean) => {
+      setRemainingOnlyState(next)
+      const params = new URLSearchParams(searchParams.toString())
+      params.set("section", "acceptance")
+      params.set("remainingOnly", next ? "1" : "0")
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+    },
+    [pathname, router, searchParams]
+  )
 
   const workspaceQuery = useQuery({
     queryKey: salesOrderKeys.acceptance(salesOrderId, {
@@ -337,6 +359,8 @@ export function AcceptanceWorkspace({
     },
   })
 
+  const formDirty = useSelector(form.store, (state) => state.isDirty)
+
   // 恢复草稿（刷新后 session-state 仍在）
   React.useEffect(() => {
     if (!view?.draft || restoredDraftRef.current) return
@@ -363,7 +387,8 @@ export function AcceptanceWorkspace({
         shortQuantity: line.shortQuantity,
         rejectedQuantity: line.rejectedQuantity,
         reason: line.reason,
-        serviceFail: false,
+        serviceFail: line.serviceFail ?? false,
+        acceptedManual: true,
       })
       for (const alloc of line.allocations) {
         const fact = factIndex.get(alloc.fulfillmentLineId)
@@ -385,25 +410,6 @@ export function AcceptanceWorkspace({
     }
   }, [formalResult])
 
-  // 快捷键 ⌘S 保存草稿、⌘↵ 打开确认
-  React.useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      const meta = event.metaKey || event.ctrlKey
-      if (!meta) return
-      if (event.key === "s") {
-        event.preventDefault()
-        void handleSaveDraft()
-      }
-      if (event.key === "Enter") {
-        event.preventDefault()
-        void form.handleSubmit()
-      }
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-     
-  })
-
   const saveDraftMutation = useMutation({
     mutationFn: saveCustomerAcceptanceDraft,
     onSuccess: async (draft) => {
@@ -418,6 +424,7 @@ export function AcceptanceWorkspace({
     mutationFn: postCustomerAcceptanceWorkspace,
     onSuccess: async (result) => {
       if (result.status === "succeeded") {
+        const overall = submittedOverallRef.current
         setFormalResult({
           kind: "post",
           status: "succeeded",
@@ -427,7 +434,7 @@ export function AcceptanceWorkspace({
           facts: [
             {
               label: "总体结果",
-              value: OVERALL_RESULT_LABEL[result.overallResult],
+              value: OVERALL_RESULT_LABEL[overall],
             },
             {
               label: "剩余待验收",
@@ -440,6 +447,7 @@ export function AcceptanceWorkspace({
         form.reset()
         setIdempotencyKey(`acc-${salesOrderId}-${crypto.randomUUID()}`)
         restoredDraftRef.current = false
+        submittedOverallRef.current = "PASS"
       } else if (result.status === "unknown") {
         setFormalResult({
           kind: "post",
@@ -511,7 +519,7 @@ export function AcceptanceWorkspace({
     },
   })
 
-  async function handleSaveDraft() {
+  const handleSaveDraft = React.useCallback(async () => {
     if (!view) return
     if (!view.permissions.allowedActions.includes("SAVE_DRAFT")) return
     const values = form.state.values
@@ -526,7 +534,25 @@ export function AcceptanceWorkspace({
       comment: values.comment,
       lines,
     })
-  }
+  }, [form, lineResults, salesOrderId, saveDraftMutation, selected, view])
+
+  // 快捷键 ⌘S 保存草稿、⌘↵ 打开确认（界面在底栏给出提示）
+  React.useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      const meta = event.metaKey || event.ctrlKey
+      if (!meta) return
+      if (event.key === "s") {
+        event.preventDefault()
+        void handleSaveDraft()
+      }
+      if (event.key === "Enter") {
+        event.preventDefault()
+        void form.handleSubmit()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [form, handleSaveDraft])
 
   function toggleFact(fact: AcceptanceEligibleFact, checked: boolean) {
     setSelected((prev) => {
@@ -593,8 +619,16 @@ export function AcceptanceWorkspace({
         rejectedQuantity: "0",
         reason: "",
         serviceFail: false,
+        acceptedManual: false,
       }
-      next.set(salesOrderLineId, { ...current, ...patch })
+      next.set(salesOrderLineId, {
+        ...current,
+        ...patch,
+        acceptedManual:
+          patch.acceptedQuantity !== undefined
+            ? true
+            : current.acceptedManual,
+      })
       return next
     })
   }
@@ -651,6 +685,8 @@ export function AcceptanceWorkspace({
   }, new Map())
 
   const overallPreview = deriveOverall([...lineResults.values()])
+  const hasUnsavedInput =
+    formDirty || selected.size > 0 || lineResults.size > 0
   const hasExceptionResult =
     overallPreview === "SHORT" ||
     overallPreview === "REJECT" ||
@@ -728,7 +764,7 @@ export function AcceptanceWorkspace({
             label={freshnessText.dataUpdatedAt}
             value={
               <DataFreshness
-                updatedAt="刚刚"
+                updatedAt={formatOccurredAt(view.freshness.factsUpdatedAt)}
                 dateTime={view.freshness.factsUpdatedAt}
                 state={view.freshness.state}
                 label="交付/验收记录"
@@ -756,35 +792,42 @@ export function AcceptanceWorkspace({
         >
           全部历史记录
         </Button>
-        <span className="ms-auto flex flex-wrap gap-2">
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground"
-            onClick={() => {
-              demoRevokeAcceptancePermission()
-              void queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.acceptanceRoot(salesOrderId),
-              })
-            }}
-          >
-            演示：收回权限
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            className="text-muted-foreground"
-            onClick={() => {
-              demoRestoreAcceptancePermission()
-              void queryClient.invalidateQueries({
-                queryKey: salesOrderKeys.acceptanceRoot(salesOrderId),
-              })
-            }}
-          >
-            演示：恢复权限
-          </Button>
+        <span className="ms-auto inline-flex flex-wrap gap-2">
+          <details className="rounded-lg border border-dashed border-border px-2 py-1 text-xs text-muted-foreground">
+            <summary className="cursor-pointer select-none">
+              演示模式（测试权限变化）
+            </summary>
+            <div className="mt-2 flex gap-2 pb-1">
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground"
+                onClick={() => {
+                  demoRevokeAcceptancePermission()
+                  void queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.acceptanceRoot(salesOrderId),
+                  })
+                }}
+              >
+                收回权限
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                className="text-muted-foreground"
+                onClick={() => {
+                  demoRestoreAcceptancePermission()
+                  void queryClient.invalidateQueries({
+                    queryKey: salesOrderKeys.acceptanceRoot(salesOrderId),
+                  })
+                }}
+              >
+                恢复权限
+              </Button>
+            </div>
+          </details>
         </span>
       </div>
 
@@ -861,7 +904,7 @@ export function AcceptanceWorkspace({
                         销售要求 {line.requiredQuantity} {line.unitCode} ·
                         净已验收 {line.netAcceptedQuantity} {line.unitCode}
                         <span className="ms-2 text-[0.65rem] uppercase tracking-wide opacity-70">
-                          来源 sales_order_line / 业务数据
+                          来源：销售单明细 / 交付记录
                         </span>
                       </p>
                       <ul className="space-y-2" role="list">
@@ -920,7 +963,7 @@ export function AcceptanceWorkspace({
                                     </div>
                                   ) : null}
                                   <div className="mt-0.5 text-[0.65rem] uppercase tracking-wide opacity-70">
-                                    来源履约记录 · 可验收量以系统净记录为准
+                                    来源：履约记录 · 可验收量以系统记录为准
                                   </div>
                                 </div>
                                 {checked ? (
@@ -972,7 +1015,7 @@ export function AcceptanceWorkspace({
                     销售单 {view.salesOrder.salesOrderNo} ·{" "}
                     {view.salesOrder.customerLabel}
                     <span className="ms-2 text-[0.65rem] uppercase tracking-wide opacity-70">
-                      销售版本数据
+                      当前销售数据
                     </span>
                   </CardDescription>
                 </CardHeader>
@@ -1013,6 +1056,7 @@ export function AcceptanceWorkspace({
                         rejectedQuantity: "0",
                         reason: "",
                         serviceFail: false,
+                        acceptedManual: false,
                       }
                       const unit = facts[0]?.unitCode ?? ""
                       const hasService = facts.some(
@@ -1169,27 +1213,6 @@ export function AcceptanceWorkspace({
                     </p>
                   ) : null}
                 </CardContent>
-                <CardFooter className="flex flex-wrap justify-end gap-2 border-t">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!canSave || saveDraftMutation.isPending}
-                    onClick={() => void handleSaveDraft()}
-                  >
-                    <SaveIcon data-icon="inline-start" aria-hidden="true" />
-                    {saveDraftMutation.isPending ? "保存中…" : "保存草稿"}
-                  </Button>
-                  <Button
-                    type="submit"
-                    form="acceptance-form"
-                    size="sm"
-                    disabled={!canPost || postMutation.isPending}
-                  >
-                    <CheckIcon data-icon="inline-start" aria-hidden="true" />
-                    确认并完成验收
-                  </Button>
-                </CardFooter>
               </Card>
 
               <Card size="sm">
@@ -1295,15 +1318,22 @@ export function AcceptanceWorkspace({
               {view.salesOrder.salesOrderNo} · 已选 {selected.size} 个来源 ·
               结果 {OVERALL_RESULT_LABEL[overallPreview]}
               {hasExceptionResult ? " · 仅记录结果" : ""}
+              <span className="ms-2 hidden text-xs md:inline">
+                ⌘S 保存草稿 · ⌘Enter 提交
+              </span>
             </p>
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                render={
-                  <Link href={`/sales/orders/${salesOrderId}`} />
-                }
+                onClick={() => {
+                  if (hasUnsavedInput) {
+                    setExitDiscardOpen(true)
+                    return
+                  }
+                  router.push(`/sales/orders/${salesOrderId}`)
+                }}
               >
                 退出登记
               </Button>
@@ -1348,11 +1378,11 @@ export function AcceptanceWorkspace({
         lockedFields={[
           "履约记录版本",
           "净可验收量（系统）",
-          "销售单 lockVersion",
+          "销售单数据版本",
         ]}
         effects={[
-          "形成 customer_acceptance / 验收行",
-          "写入 acceptance_fulfillment_allocation（APPLY）",
+          "生成客户验收记录",
+          "按本次结果分配履约数量",
           "更新销售履约数据",
           ...(hasExceptionResult
             ? ["不扣库存、不改应收、不自动退货（仅验收记录）"]
@@ -1364,6 +1394,7 @@ export function AcceptanceWorkspace({
         onConfirm={async () => {
           if (!view) return
           // 先确保草稿版本
+          submittedOverallRef.current = overallPreview
           const values = form.state.values
           const lines = buildDraftLines(selected, lineResults)
           const draft = await saveDraftMutation.mutateAsync({
@@ -1409,17 +1440,22 @@ export function AcceptanceWorkspace({
           "恢复对应履约批次净可验收量",
         ]}
         nextDepartment="销售"
+        description={
+          <div className="space-y-2">
+            <span>冲正将新增反向记录，不会删除或改写原验收行。请填写冲正理由：</span>
+            <Textarea
+              aria-label="冲正理由"
+              rows={3}
+              value={reverseReason}
+              onChange={(e) => setReverseReason(e.target.value)}
+              placeholder="说明误录原因，供后续追溯"
+            />
+          </div>
+        }
         onConfirm={async () => {
           if (!reverseTarget) return
           if (!reverseReason.trim()) {
-            setFormalResult({
-              kind: "reverse",
-              status: "failed",
-              title: "冲正失败",
-              description: "请填写冲正理由",
-              facts: [],
-            })
-            return
+            throw new Error("请填写冲正理由")
           }
           await reverseMutation.mutateAsync({
             salesOrderId,
@@ -1431,28 +1467,18 @@ export function AcceptanceWorkspace({
         }}
       />
 
-      {reverseTarget ? (
-        <Card size="sm" className="border-warning-border">
-          <CardHeader className="border-b">
-            <CardTitle>冲正理由 · {reverseTarget.acceptanceNo}</CardTitle>
-            <CardDescription>
-              冲正将新增反向记录，不会删除或改写原验收行。
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="pt-4">
-            <Field>
-              <FieldLabel htmlFor="reverse-reason">冲正理由</FieldLabel>
-              <Textarea
-                id="reverse-reason"
-                rows={3}
-                value={reverseReason}
-                onChange={(e) => setReverseReason(e.target.value)}
-                placeholder="说明误录原因，供审计追溯"
-              />
-            </Field>
-          </CardContent>
-        </Card>
-      ) : null}
+      <DiscardConfirmDialog
+        open={exitDiscardOpen}
+        onOpenChange={setExitDiscardOpen}
+        title="放弃本次验收登记？"
+        description="已录入的分配数量与结果尚未保存为草稿，退出后将丢失。"
+        confirmLabel="放弃并退出"
+        cancelLabel="继续登记"
+        onConfirm={() => {
+          setExitDiscardOpen(false)
+          router.push(`/sales/orders/${salesOrderId}`)
+        }}
+      />
     </div>
   )
 }

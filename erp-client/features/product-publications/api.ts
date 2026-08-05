@@ -87,7 +87,8 @@ function computeMetrics(rows: readonly ProductPublicationRow[]) {
 
 function filterSummary(
   query: ProductPublicationListQuery,
-  total: number
+  total: number,
+  resolved: ProductPublicationListResult["resolvedFilters"]
 ): string {
   const parts: string[] = []
   if (query.metric && query.metric !== "all") {
@@ -118,6 +119,10 @@ function filterSummary(
   }
   if (query.mallId) {
     parts.push(MALLS.find((m) => m.id === query.mallId)?.name ?? query.mallId)
+  }
+  if (query.skuId && resolved.skuCode) parts.push(`SKU ${resolved.skuCode}`)
+  if (query.supplierOfferingRevisionId && resolved.supplierName) {
+    parts.push(`固定供给 ${resolved.supplierName}`)
   }
   if (query.q?.trim()) parts.push(`搜索「${query.q.trim()}」`)
   parts.push(`${total} 条`)
@@ -181,12 +186,9 @@ export async function fetchPublicationList(
       rows = rows.filter((r) => r.publicationStatus === "PENDING_PUBLISH")
   }
 
-  // 默认排除失效
-  if (!query.publicationStatus || query.publicationStatus === "all") {
-    // keep invalid only when explicitly filtered; default shows non-invalid
-    if (!query.metric || query.metric === "all") {
-      rows = rows.filter((r) => r.publicationStatus !== "INVALID")
-    }
+  // 默认排除失效：仅在用户显式选择「已失效」时展示（口径与指标筛选一致）
+  if (query.publicationStatus !== "INVALID") {
+    rows = rows.filter((r) => r.publicationStatus !== "INVALID")
   }
 
   rows = [...rows].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
@@ -200,6 +202,8 @@ export async function fetchPublicationList(
   const hasFilters = Boolean(
     query.q?.trim() ||
       query.mallId ||
+      query.skuId ||
+      query.supplierOfferingRevisionId ||
       (query.publicationStatus && query.publicationStatus !== "all") ||
       (query.deliveryStatus && query.deliveryStatus !== "all") ||
       (query.metric && query.metric !== "all")
@@ -209,6 +213,17 @@ export async function fetchPublicationList(
   if (total === 0) {
     emptyReason = hasFilters ? "FILTER_NO_RESULT" : "NO_DATA"
   }
+
+  const skuRow = query.skuId
+    ? seeds.find((s) => s.row.skuId === query.skuId)
+    : undefined
+  const supplierRow = query.supplierOfferingRevisionId
+    ? seeds.find(
+        (s) =>
+          s.row.fixedOffering.offeringRevisionId ===
+          query.supplierOfferingRevisionId
+      )
+    : undefined
 
   return {
     items,
@@ -220,8 +235,15 @@ export async function fetchPublicationList(
     dataScopeVersion: DATA_SCOPE_VERSION,
     queriedAt: new Date().toISOString(),
     creationBlocker: CREATION_BLOCKER,
-    filterSummary: filterSummary(query, total),
+    filterSummary: filterSummary(query, total, {
+      skuCode: skuRow?.row.skuCode,
+      supplierName: supplierRow?.row.fixedOffering.supplierName,
+    }),
     emptyReason,
+    resolvedFilters: {
+      skuCode: skuRow?.row.skuCode,
+      supplierName: supplierRow?.row.fixedOffering.supplierName,
+    },
   }
 }
 

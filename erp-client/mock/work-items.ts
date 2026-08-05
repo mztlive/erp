@@ -215,7 +215,6 @@ function buildProcurementFamilyFixture(
     summaryFields: [
       { label: "任务类型", value: "采购二次确认" },
       { label: "版本", value: task.subjectVersion },
-      { label: "优先级", value: priorityMeta.priorityLabel },
       { label: "截止", value: due.label, numeric: true },
     ],
     checkItems,
@@ -261,7 +260,6 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
       { label: "任务类型", value: "卡券票款复核" },
       { label: "应收余额", value: money(86000) },
       { label: "待复核回款", value: money(42000) },
-      { label: "优先级", value: "紧急" },
     ],
     actionLabel: "领取并处理",
   },
@@ -295,7 +293,6 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     summaryFields: [
       { label: "任务类型", value: "回款核对" },
       { label: "版本", value: "v1" },
-      { label: "优先级", value: "普通" },
       { label: "截止", value: "今天 16:00", numeric: true },
     ],
     actionLabel: "复核通过",
@@ -363,7 +360,6 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     summaryFields: [
       { label: "任务类型", value: "商城同步异常" },
       { label: "版本", value: "v1" },
-      { label: "优先级", value: "高" },
       { label: "截止", value: "今天 10:21", numeric: true },
     ],
     actionLabel: "去处理同步异常",
@@ -398,7 +394,6 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     summaryFields: [
       { label: "任务类型", value: "履约异常" },
       { label: "版本", value: "v1" },
-      { label: "优先级", value: "紧急" },
       { label: "截止", value: "已超期", numeric: true },
     ],
     actionLabel: "记录处理结论",
@@ -432,7 +427,6 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     summaryFields: [
       { label: "任务类型", value: "合同信息补全" },
       { label: "版本", value: "v1" },
-      { label: "优先级", value: "普通" },
       { label: "截止", value: "今天 17:00", numeric: true },
     ],
     actionLabel: "确认已补全",
@@ -466,7 +460,6 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     summaryFields: [
       { label: "任务类型", value: "低毛利经理确认" },
       { label: "版本", value: "v1" },
-      { label: "优先级", value: "高" },
       { label: "截止", value: "今天 17:00", numeric: true },
     ],
     actionLabel: "确认",
@@ -498,9 +491,8 @@ export const WORK_ITEM_FIXTURES: readonly WorkItemFixture[] = [
     processorGroup: "duplicate_cleanup",
     summaryFields: [
       { label: "任务类型", value: "重复任务清理" },
-      { label: "替代任务", value: "wi_pc_01" },
-      { label: "关闭原因", value: "CLOSE_DUPLICATE" },
-      { label: "优先级", value: "普通" },
+      { label: "保留任务", value: "采购确认任务 · 销售单 XS20260328001" },
+      { label: "处理方式", value: "关闭重复任务，保留已有任务" },
     ],
     actionLabel: "关闭重复任务",
   },

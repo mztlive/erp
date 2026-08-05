@@ -36,7 +36,13 @@ export type UnifiedTaskQueueView = {
   freshness: { updatedAt: string; state: "fresh" | "stale" }
   filterSummary: string
   total: number
-  counts: { mine: number; rolePool: number; overdue: number }
+  counts: {
+    mine: number
+    rolePool: number
+    team: number
+    hold: number
+    overdue: number
+  }
   items: QueueWorkItemView[]
 }
 

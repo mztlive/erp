@@ -80,6 +80,7 @@ export function FulfillmentElectronicForm({
             <Input
               id={`el-qty-${i}`}
               className="num"
+              inputMode="decimal"
               value={line.quantity}
               disabled={disabled}
               onChange={(e) => {

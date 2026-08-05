@@ -2,6 +2,7 @@ import {
   getWorkspaceById,
   type WorkspaceId,
 } from "@/lib/workspace-registry"
+import { writeW02FocusId } from "@/features/unified-task-queue/queue-url"
 import type { WorkspaceWorkItem } from "@/mock/workspace"
 
 /**
@@ -34,31 +35,22 @@ export function resolveWorkspaceHref(
 }
 
 /**
- * Primary "处理" navigation: open W02 with the work item focused.
+ * Primary action navigation: open W02 with the work item focused.
  * One click from W01 task row into the W02 current processor (W02 §12.1 / W01).
+ * 任务身份不落地址栏（内部 ID 禁止进 URL）；焦点经 sessionStorage 传给 W02。
  * Specialized W07/W13 handlers are opened from W02, not bypassed from W01.
  */
 export function buildProcessHref(item: WorkspaceWorkItem): string {
-  const queueContextId = item.queueContextId.includes("W02")
-    ? item.queueContextId
-    : `queue:W02:mine:${item.family}`
+  writeW02FocusId(item.workItemId)
   return resolveWorkspaceHref("W02", {
     scope: "mine",
     family: item.family,
-    currentWorkItemId: item.workItemId,
-    queueContextId,
   })
 }
 
 /** Secondary "查看" navigation when PROCESS is blocked but VIEW is allowed. */
 export function buildViewHref(item: WorkspaceWorkItem): string {
-  if (item.businessObjectType === "SALES_ORDER" && item.businessObjectId) {
-    return `/sales/orders/${item.businessObjectId}`
-  }
-  return resolveWorkspaceHref(item.destinationWorkspaceId, {
-    currentWorkItemId: item.workItemId,
-    queueContextId: item.queueContextId,
-  })
+  return resolveWorkspaceHref(item.destinationWorkspaceId)
 }
 
 export function buildWarningHref(warning: {

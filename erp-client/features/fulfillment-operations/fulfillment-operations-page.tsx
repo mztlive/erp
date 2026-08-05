@@ -14,6 +14,7 @@ import {
 
 import {
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   DataFreshness,
   FormalActionConfirmDialog,
@@ -59,6 +60,7 @@ import {
   OPERATION_TYPE_SHORT,
   SLUG_TO_TYPE,
   TYPE_SLUG,
+  WORK_ITEM_STATUS_LABEL,
 } from "@/features/fulfillment-operations/types"
 import {
   useClaimFulfillmentMutation,
@@ -337,8 +339,8 @@ export function FulfillmentOperationsPage() {
   )
 
   const goToWorkItem = React.useCallback(
-    (workItemId: string | undefined | null) => {
-      setLastResult(null)
+    (workItemId: string | undefined | null, keepResult?: boolean) => {
+      if (!keepResult) setLastResult(null)
       setActionError(null)
       replaceUrl({
         currentWorkItemId: workItemId ?? null,
@@ -403,8 +405,8 @@ export function FulfillmentOperationsPage() {
     setSaveMessage(null)
   }, [task])
 
-  const handleSave = React.useCallback(async () => {
-    if (!task || !draft) return
+  const handleSave = React.useCallback(async (): Promise<boolean> => {
+    if (!task || !draft) return false
     try {
       await ensureLease()
       await saveMutation.mutateAsync({
@@ -415,13 +417,15 @@ export function FulfillmentOperationsPage() {
       setDirty(false)
       setSaveMessage("草稿已保存")
       setActionError(null)
+      return true
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "保存失败")
+      return false
     }
   }, [draft, ensureLease, saveMutation, task])
 
   const advanceIfNeeded = React.useCallback(
-    (shouldAdvance: boolean, preferredNext?: string) => {
+    (shouldAdvance: boolean, preferredNext?: string, keepResult?: boolean) => {
       if (!shouldAdvance) return
       const nextId =
         preferredNext ??
@@ -429,7 +433,7 @@ export function FulfillmentOperationsPage() {
         tasks.find((t) => t.workItemId !== task?.workItemId)?.workItemId
       leaseRef.current = null
       setLeaseEpoch((n) => n + 1)
-      if (nextId) goToWorkItem(nextId)
+      if (nextId) goToWorkItem(nextId, keepResult)
       else replaceUrl({ currentWorkItemId: null })
     },
     [goToWorkItem, neighborId, replaceUrl, task?.workItemId, tasks]
@@ -481,7 +485,7 @@ export function FulfillmentOperationsPage() {
         stayOnItem: !autoNext,
       })
       if (autoNext) {
-        advanceIfNeeded(true, response.outcome.nextWorkItemId)
+        advanceIfNeeded(true, response.outcome.nextWorkItemId, true)
       }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "没能提交成功")
@@ -502,7 +506,14 @@ export function FulfillmentOperationsPage() {
       if (!task) return
       setActionError(null)
       try {
-        if (dirty) await handleSave()
+        // 兜底保存失败就中止跳过，避免刚填的内容静默丢失
+        if (dirty) {
+          const saved = await handleSave()
+          if (!saved) {
+            setActionError("草稿还没保存成功，先保存再跳过。")
+            return
+          }
+        }
         await ensureLease()
         const nextId = neighborId(1)
         const response = await deferMutation.mutateAsync({
@@ -533,7 +544,7 @@ export function FulfillmentOperationsPage() {
           reference: response.outcome.reference,
           outcome: response.outcome,
         })
-        if (nextId) goToWorkItem(nextId)
+        if (nextId) goToWorkItem(nextId, true)
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "没能跳过")
       }
@@ -637,6 +648,13 @@ export function FulfillmentOperationsPage() {
         setShortcutsOpen((v) => !v)
         return
       }
+      if (
+        (event.key === "ArrowDown" || event.key === "ArrowUp") &&
+        target instanceof HTMLButtonElement
+      ) {
+        // 焦点在队列列表按钮上时保留原生滚动，不劫持方向键
+        return
+      }
       if (event.key === "j" || event.key === "ArrowDown") {
         event.preventDefault()
         if (dirty) {
@@ -723,6 +741,10 @@ export function FulfillmentOperationsPage() {
             : null
         next.lane = nextLane
         next.currentWorkItemId = null
+        // 只读角色没有「我的」概念，scope 选择器会隐藏：参数一并清掉，避免隐形状态
+        if (nextRole !== "warehouse" && nextRole !== "procurement") {
+          next.scope = null
+        }
         next.queueContextId = `queue:W09:${nextLane ?? "any"}:${nextRole}:${scope}:all`
       }
       replaceUrl(next)
@@ -773,6 +795,27 @@ export function FulfillmentOperationsPage() {
           <div className="h-80 animate-pulse rounded-2xl bg-muted" />
           <div className="h-96 animate-pulse rounded-2xl bg-muted" />
         </div>
+      </div>
+    )
+  }
+
+  // 查询失败必须与「没有符合条件的任务」区分：系统故障 ≠ 没活干
+  if (queueQuery.isError) {
+    return (
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <PageHeader title={header.label} description="队列加载失败" />
+        <BusinessFailureState
+          kind="system"
+          description="队列加载失败。数据可能不是最新，可重新加载后重试。"
+          action={
+            <Button
+              type="button"
+              onClick={() => void queueQuery.refetch()}
+            >
+              重新加载
+            </Button>
+          }
+        />
       </div>
     )
   }
@@ -872,6 +915,8 @@ export function FulfillmentOperationsPage() {
         gate={gate}
         salesOrderId={salesOrderId}
         purchaseOrderId={purchaseOrderId}
+        salesOrderNo={tasks.find((t) => t.source.salesOrderId === salesOrderId)?.source.salesOrderNo}
+        purchaseNo={tasks.find((t) => t.source.purchaseOrderId === purchaseOrderId)?.source.purchaseNo}
         autoNext={autoNext}
         total={context?.total ?? tasks.length}
         scope={scope}
@@ -929,7 +974,10 @@ export function FulfillmentOperationsPage() {
                       },
                       {
                         label: "任务状态",
-                        value: lastResult.outcome.workItemStatus,
+                        value:
+                          WORK_ITEM_STATUS_LABEL[
+                            lastResult.outcome.workItemStatus
+                          ] ?? lastResult.outcome.workItemStatus,
                       },
                       {
                         label: "处理状态",
@@ -1059,23 +1107,43 @@ export function FulfillmentOperationsPage() {
                   <PrepaymentGate
                     id="prepayment-gate"
                     presentation="badge"
-                    copy={{
-                      title: "先款条件",
-                      description:
-                        "只认已经到账并核销过的货款，付款申请和附件不算。",
-                      allowedBadge: "可以收货",
-                      blockedBadge: "暂时不能收货",
-                      amountTerm: "至少要付",
-                      ratioTerm: "至少要付比例",
-                      allocatedTerm: "已经付了",
-                      gapTerm: "还差",
-                      updatedTerm: "算到什么时候",
-                      allowedTitle: "货款已到，可以收货",
-                      blockedTitle: "先款未到，暂时不能收货",
-                      allowedBody: "货款已经够了，这一单可以继续。",
-                      blockedBody:
-                        "差额补齐之前，入库、直发、电子交付和服务都确认不了。",
-                    }}
+                    copy={
+                      task.operationType === "WAREHOUSE_SHIP"
+                        ? {
+                            title: "发货条件",
+                            description:
+                              "只认已经到账并核销过的货款，付款申请和附件不算。",
+                            allowedBadge: "可以发货",
+                            blockedBadge: "暂时不能发货",
+                            amountTerm: "至少要付",
+                            ratioTerm: "至少要付比例",
+                            allocatedTerm: "已经付了",
+                            gapTerm: "还差",
+                            updatedTerm: "算到什么时候",
+                            allowedTitle: "货款已到，可以发货",
+                            blockedTitle: "先款未到，暂时不能发货",
+                            allowedBody: "货款已经够了，这一单可以继续。",
+                            blockedBody:
+                              "差额补齐之前，仓发任务暂时不能确认发货。",
+                          }
+                        : {
+                            title: "先款条件",
+                            description:
+                              "只认已经到账并核销过的货款，付款申请和附件不算。",
+                            allowedBadge: "可以收货",
+                            blockedBadge: "暂时不能收货",
+                            amountTerm: "至少要付",
+                            ratioTerm: "至少要付比例",
+                            allocatedTerm: "已经付了",
+                            gapTerm: "还差",
+                            updatedTerm: "算到什么时候",
+                            allowedTitle: "货款已到，可以收货",
+                            blockedTitle: "先款未到，暂时不能收货",
+                            allowedBody: "货款已经够了，这一单可以继续。",
+                            blockedBody:
+                              "差额补齐之前，入库、直发、电子交付和服务都确认不了。",
+                          }
+                    }
                     condition={{
                       kind: "amount",
                       required: task.gate.requiredAmount ?? "—",
@@ -1137,6 +1205,7 @@ export function FulfillmentOperationsPage() {
                 if (sourceReturnHref) router.push(sourceReturnHref)
                 else router.push("/workspace")
               }}
+              backLabel="返回"
               onProcess={() => setConfirmOpen(true)}
               onProcessNext={() => setConfirmOpen(true)}
               onReclaim={() => {
@@ -1386,7 +1455,7 @@ export function FulfillmentOperationsPage() {
           label: task ? OPERATION_DONE_LABEL[task.operationType] : "已完成",
           tone: "success",
         }}
-        lockedFields={["来源单据版本", "任务类型", "对应的销售单和留货"]}
+        lockedFields={["来源单据、版本和留货", "任务类型"]}
         effects={task && draft ? impactPreview(task, draft) : []}
         irreversibleEffects={[CORRECTION_NOTICE]}
         nextDepartment="做完之后由销售登记客户验收"

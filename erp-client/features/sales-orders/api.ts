@@ -44,7 +44,6 @@ import {
   canonicalDecimal,
   compareDecimal,
   multiplyFixed,
-  normalizeFixed,
   splitGrossByPercentRate,
   sumFixed,
 } from "@/lib/fixed-decimal"
@@ -407,6 +406,7 @@ function localDateParts(date: Date) {
 
 /**
  * M5 建单 mock：选择已有合同，或在同一幂等操作中上传 PDF、归档合同并建单。
+ * 保存草稿只做宽松校验（至少一行明细）；提交才要求明细完整可计算。
  */
 export async function createSalesOrder(
   input: CreateSalesOrderInput
@@ -417,39 +417,54 @@ export async function createSalesOrder(
   if (input.nature === "card_voucher" && input.lineItems.length !== 1) {
     throw new Error("VOUCHER_REQUIRES_EXACTLY_ONE_LINE")
   }
-  let decimalInputsValid = true
-  try {
-    for (const line of input.lineItems) {
-      decimalInputsValid &&= compareDecimal(line.quantity, "0", 6) > 0
-      decimalInputsValid &&= compareDecimal(line.unitPriceGross, "0", 4) > 0
-      if (input.nature === "card_voucher") {
-        decimalInputsValid &&= compareDecimal(line.faceValue, "0", 2) > 0
-        canonicalDecimal(line.giftRate || "0", { maxScale: 6 })
-      }
+
+  const isDraft = input.intent === "SAVE_DRAFT"
+
+  const safeDecimal = (value: string, maxScale: number): string => {
+    try {
+      return canonicalDecimal(value, { maxScale })
+    } catch {
+      return "0"
     }
-    const taxRate = canonicalDecimal(input.taxRatePercent, { maxScale: 6 })
-    decimalInputsValid &&= compareDecimal(taxRate, "0", 6) >= 0
-    decimalInputsValid &&= compareDecimal(taxRate, "100", 6) <= 0
-  } catch {
-    decimalInputsValid = false
   }
 
-  if (
-    !decimalInputsValid ||
-    input.lineItems.some(
-      (line) =>
-        !line.name.trim() ||
-        !line.unit.trim() ||
-        (input.nature === "card_voucher" && !line.cardForm.trim()) ||
-        (input.nature === "physical_service" &&
-          (!line.fulfillmentMode.trim() || !line.dueDate))
-    )
-  ) {
-    throw new Error("LINE_ITEM_INVALID")
+  if (!isDraft) {
+    let decimalInputsValid = true
+    try {
+      for (const line of input.lineItems) {
+        decimalInputsValid &&= compareDecimal(line.quantity, "0", 6) > 0
+        decimalInputsValid &&= compareDecimal(line.unitPriceGross, "0", 4) > 0
+        if (input.nature === "card_voucher") {
+          decimalInputsValid &&= compareDecimal(line.faceValue, "0", 2) > 0
+          canonicalDecimal(line.giftRate || "0", { maxScale: 6 })
+        }
+      }
+      const taxRate = canonicalDecimal(input.taxRatePercent, { maxScale: 6 })
+      decimalInputsValid &&= compareDecimal(taxRate, "0", 6) >= 0
+      decimalInputsValid &&= compareDecimal(taxRate, "100", 6) <= 0
+    } catch {
+      decimalInputsValid = false
+    }
+
+    if (
+      !decimalInputsValid ||
+      input.lineItems.some(
+        (line) =>
+          !line.name.trim() ||
+          !line.unit.trim() ||
+          (input.nature === "card_voucher" && !line.cardForm.trim()) ||
+          (input.nature === "physical_service" &&
+            (!line.fulfillmentMode.trim() || !line.dueDate))
+      )
+    ) {
+      throw new Error("LINE_ITEM_INVALID")
+    }
   }
 
   const contractId = input.contract.contractId
   const requestedRevisionId = input.contract.requestedContractRevisionId
+
+  const taxRate = safeDecimal(input.taxRatePercent, 6)
 
   const contract = getW04ContractCenter(contractId)
   if (!contract?.selectableForNewSalesOrder) {
@@ -465,14 +480,14 @@ export async function createSalesOrder(
   if (!requestedRevision.isCurrent) throw new Error("CONTRACT_REVISION_NOT_CURRENT")
 
   const computedLines = input.lineItems.map((line, index) => {
-    const quantity = canonicalDecimal(line.quantity, { maxScale: 6 })
-    const unitPriceGross = canonicalDecimal(line.unitPriceGross, { maxScale: 4 })
+    const quantity = safeDecimal(line.quantity, 6)
+    const unitPriceGross = safeDecimal(line.unitPriceGross, 4)
     const amountGross = multiplyFixed(quantity, unitPriceGross, {
       leftMaxScale: 6,
       rightMaxScale: 4,
       outputScale: 2,
     })
-    const amounts = splitGrossByPercentRate(amountGross, input.taxRatePercent)
+    const amounts = splitGrossByPercentRate(amountGross, taxRate)
     const item: SalesOrderLineItem = {
       id: `li_${index + 1}`,
       name: line.name.trim(),
@@ -483,11 +498,8 @@ export async function createSalesOrder(
       amountGross,
       ...(input.nature === "card_voucher"
         ? {
-            faceValue: normalizeFixed(line.faceValue, {
-              maxScale: 2,
-              outputScale: 2,
-            }),
-            giftRate: canonicalDecimal(line.giftRate || "0", { maxScale: 6 }),
+            faceValue: safeDecimal(line.faceValue, 2),
+            giftRate: safeDecimal(line.giftRate || "0", 6),
             cardForm: line.cardForm.trim(),
           }
         : {
@@ -695,6 +707,8 @@ export async function completeCardSalesApproval(input: {
   workItemType: "CARD_SALES_MANAGER_APPROVAL" | "CARD_SALES_OPERATION_APPROVAL"
   decision: "APPROVE" | "REJECT"
   reasonCode?: string
+  /** 驳回说明：随驳回送达销售（演示 mock 未持久化，接口已透传）。 */
+  comment?: string
 }): Promise<ReturnType<typeof completeW05CardApproval>> {
   await mockDelay(180)
   return completeW05CardApproval(input)

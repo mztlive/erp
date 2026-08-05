@@ -56,6 +56,23 @@ export function SalesOrderCollaborationCard({
     )
   }
 
+  if (query.isError || query.data == null) {
+    return (
+      <DocumentSection
+        title="与商城对接"
+        description="读取对接情况失败"
+      >
+        <Alert variant="destructive" role="alert">
+          <RadarIcon aria-hidden="true" />
+          <AlertTitle>数据加载失败</AlertTitle>
+          <AlertDescription>
+            无法读取执行信息与商城接收状态，请刷新后重试。
+          </AlertDescription>
+        </Alert>
+      </DocumentSection>
+    )
+  }
+
   const data = query.data
   if (!data?.hasProjection) {
     return (
@@ -273,6 +290,13 @@ export function SalesOrderCollaborationCard({
           <CardContent className="space-y-3">
             {consumptionQuery.isPending ? (
               <div className="h-12 animate-pulse rounded-lg bg-muted" />
+            ) : consumptionQuery.isError ? (
+              <Alert variant="destructive" role="alert" className="py-2">
+                <AlertTitle className="text-sm">消费情况加载失败</AlertTitle>
+                <AlertDescription className="text-xs">
+                  无法读取商城消费订单汇总，请刷新后重试。
+                </AlertDescription>
+              </Alert>
             ) : (
               <dl className="grid gap-3 text-sm sm:grid-cols-4">
                 <div>

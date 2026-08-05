@@ -124,7 +124,7 @@ function paymentCompositionLabel(row: MallConsumptionOrderRow) {
   const card = Number(cardAmount) > 0
   const wx = Number(wechatAmount) > 0
   if (card && wx) {
-    return `组合 · 卡 ${cardAmount} / 微信 ${wechatAmount}`
+    return `组合 · 卡券 ¥${cardAmount} / 微信 ¥${wechatAmount}`
   }
   if (card) return `卡券 ¥${cardAmount}`
   if (wx) return `微信 ¥${wechatAmount}`
@@ -143,10 +143,8 @@ function factSummaryLabel(row: MallConsumptionOrderRow) {
 function costBasisLabel(row: MallConsumptionOrderRow) {
   return row.costBasisBreakdown
     .map((b) => {
-      if (b.basis === "NONE") {
-        return `NONE×${b.lineCount}（空）`
-      }
-      return `${b.basis}×${b.lineCount}`
+      const basisLabel = COST_BASIS_LABEL[b.basis] ?? b.basis
+      return `${basisLabel}${b.lineCount > 1 ? `×${b.lineCount}` : ""}`
     })
     .join(" / ")
 }
@@ -155,7 +153,7 @@ function supplierSummaryLabel(row: MallConsumptionOrderRow) {
   const s = row.supplierOrderSummary
   if (s.total === 0) {
     if (row.fulfillmentChain === "LEGACY_MANUAL") return "原人工 · 无子订单"
-    return "无子订单"
+    return "尚未生成子订单"
   }
   const statusText = s.statuses
     .map((st) => SUPPLIER_STATUS_LABEL[st as SupplierFulfillmentStatus] ?? st)
@@ -197,9 +195,13 @@ export function ConsumptionOrdersListPage() {
 
   const [searchInput, setSearchInput] = React.useState(qParam)
   const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+  const sizeFromUrl = Math.max(
+    1,
+    Math.min(50, Number(searchParams.get("size") ?? "8") || 8)
+  )
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: pageFromUrl - 1,
-    pageSize: 8,
+    pageSize: sizeFromUrl,
   })
   const [columnPinning] = React.useState<ColumnPinningState>({
     left: ["mallOrder"],
@@ -335,6 +337,8 @@ export function ConsumptionOrdersListPage() {
       const sp = new URLSearchParams(searchParams.toString())
       if (next.pageIndex <= 0) sp.delete("page")
       else sp.set("page", String(next.pageIndex + 1))
+      if (next.pageSize === 8) sp.delete("size")
+      else sp.set("size", String(next.pageSize))
       const qs = sp.toString()
       router.replace(qs ? `${pathname}?${qs}` : pathname)
     },
@@ -539,7 +543,7 @@ export function ConsumptionOrdersListPage() {
               size="xs"
               render={
                 <Link
-                  href={`/commerce/consumption-orders/${row.original.mallOrderId}?section=overview`}
+                  href={`/commerce/consumption-orders/${row.original.mallOrderId}?section=overview&returnTo=${encodeURIComponent(listReturnHref)}`}
                 />
               }
             >
@@ -585,8 +589,8 @@ export function ConsumptionOrdersListPage() {
           <DataFreshness
             updatedAt={data ? formatDateTime(data.factWatermark, "monthDay", "passthrough") : "—"}
             dateTime={data?.factWatermark}
-            state={listQuery.isFetching ? "stale" : "fresh"}
-            label={`记录更新 · ${data?.permissionVersion ?? "—"}`}
+            state={listQuery.isFetching ? "syncing" : "fresh"}
+            label="记录更新"
           />
         }
         actions={
@@ -663,10 +667,6 @@ export function ConsumptionOrdersListPage() {
             reference={exportResult.jobId}
             facts={[
               { label: "行数", value: String(exportResult.rowCount) },
-              {
-                label: "权限版本",
-                value: exportResult.permissionVersion,
-              },
               {
                 label: "文件",
                 value: exportResult.downloadLabel,
@@ -751,6 +751,8 @@ export function ConsumptionOrdersListPage() {
               label="支付成功"
               value={metricValue("paid")}
               active={metric === "paid"}
+              disabled={!periodSelected}
+              title={periodSelected ? undefined : "选择期间后可筛选"}
               onClick={() =>
                 replaceParams({
                   metric: metric === "paid" ? undefined : "paid",
@@ -761,6 +763,8 @@ export function ConsumptionOrdersListPage() {
               label="待归集"
               value={metricValue("pending_attr")}
               active={metric === "pending_attr"}
+              disabled={!periodSelected}
+              title={periodSelected ? undefined : "选择期间后可筛选"}
               onClick={() =>
                 replaceParams({
                   metric:
@@ -772,6 +776,8 @@ export function ConsumptionOrdersListPage() {
               label="记录差异"
               value={metricValue("fact_diff")}
               active={metric === "fact_diff"}
+              disabled={!periodSelected}
+              title={periodSelected ? undefined : "选择期间后可筛选"}
               onClick={() =>
                 replaceParams({
                   metric: metric === "fact_diff" ? undefined : "fact_diff",
@@ -782,6 +788,8 @@ export function ConsumptionOrdersListPage() {
               label="自动履约异常"
               value={metricValue("auto_exception")}
               active={metric === "auto_exception"}
+              disabled={!periodSelected}
+              title={periodSelected ? undefined : "选择期间后可筛选"}
               onClick={() =>
                 replaceParams({
                   metric:
@@ -795,6 +803,8 @@ export function ConsumptionOrdersListPage() {
               label="成本未覆盖"
               value={metricValue("cost_none")}
               active={metric === "cost_none"}
+              disabled={!periodSelected}
+              title={periodSelected ? undefined : "选择期间后可筛选"}
               onClick={() =>
                 replaceParams({
                   metric: metric === "cost_none" ? undefined : "cost_none",
@@ -802,6 +812,11 @@ export function ConsumptionOrdersListPage() {
               }
             />
           </MetricStrip>
+          {!periodSelected ? (
+            <p className="text-xs text-muted-foreground">
+              选择记录发生起止时间后，可点击指标快捷筛选。
+            </p>
+          ) : null}
 
           <ListToolbar
             search={
@@ -972,9 +987,9 @@ export function ConsumptionOrdersListPage() {
                   }
                   options={[
                     { value: "all", label: "成本口径" },
-                    { value: "ACTUAL", label: "ACTUAL" },
-                    { value: "STANDARD", label: "STANDARD" },
-                    { value: "NONE", label: "NONE" },
+                    { value: "ACTUAL", label: COST_BASIS_LABEL.ACTUAL },
+                    { value: "STANDARD", label: COST_BASIS_LABEL.STANDARD },
+                    { value: "NONE", label: COST_BASIS_LABEL.NONE },
                   ]}
                   className="w-32"
                   size="sm"
@@ -991,6 +1006,12 @@ export function ConsumptionOrdersListPage() {
             }
           />
 
+          {searchInput.trim() !== qParam ? (
+            <p className="text-xs text-muted-foreground" aria-live="polite">
+              搜索框内容尚未应用，回车或点「搜索」后生效。
+            </p>
+          ) : null}
+
           {data?.filterSummary ? (
             <p className="text-sm text-muted-foreground" aria-live="polite">
               筛选摘要：{data.filterSummary}
@@ -999,7 +1020,7 @@ export function ConsumptionOrdersListPage() {
 
           <BusinessTableFrame
             title="消费订单列表"
-            description="商城订单与操作列固定；金额为人民币含税实付。Enter 查看详情。"
+            description="商城订单与操作列固定；金额为人民币含税实付。Enter 打开预览抽屉。"
             table={
               !periodSelected ? (
                 <BusinessEmptyState
@@ -1032,7 +1053,7 @@ export function ConsumptionOrdersListPage() {
                 <BusinessEmptyState
                   kind="filter"
                   title="当前筛选无结果"
-                  description="调整商城、履约链或归集状态后重试。"
+                  description="可调整期间、商城、履约链、归集、支付方式、成本口径、记录类型、供应商状态、数据来源或搜索条件后重试。"
                   action={
                     <Button
                       type="button"
@@ -1092,7 +1113,7 @@ export function ConsumptionOrdersListPage() {
             <Badge variant="secondary">仅支持卡券与微信两种支付来源</Badge>
             <Badge variant="outline">无福利账户支付</Badge>
             <Badge variant="outline">
-              列表 {data?.pageInfo.total ?? 0} 条 · 页长 {pagination.pageSize}
+              列表 {data?.pageInfo.total ?? 0} 条 · 每页 {pagination.pageSize} 条
             </Badge>
           </div>
         </>
@@ -1156,7 +1177,7 @@ export function ConsumptionOrdersListPage() {
                 variant="outline"
                 render={
                   <Link
-                    href={`/commerce/consumption-orders/${previewQuery.data.identity.mallOrderId}?section=overview`}
+                    href={`/commerce/consumption-orders/${previewQuery.data.identity.mallOrderId}?section=overview&returnTo=${encodeURIComponent(listReturnHref)}`}
                   />
                 }
               >

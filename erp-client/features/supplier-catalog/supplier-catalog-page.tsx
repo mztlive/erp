@@ -11,12 +11,14 @@ import {
   PauseIcon,
   ShieldAlertIcon,
   TriangleAlertIcon,
+  XIcon,
 } from "lucide-react"
 import { z } from "zod"
 
 import {
   BusinessDiffPanel,
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   DataFreshness,
   DocumentSummary,
@@ -197,9 +199,23 @@ function safetyReasonLabel(value: string) {
   if (value === "STOPPED") return "供应商停止供货"
   if (value === "UNAVAILABLE") return "当前不可供"
   if (value === "ZERO_STOCK") return "可供数量为零"
-  if (value === "STALE") return "供货信息过期"
+  if (value === "ZERO_INVENTORY") return "可供数量为零"
+  if (value === "STALE") return "供货信息待更新"
   if (value === "PRICE_CHANGED") return "供货价待确认"
+  if (value === "COST_CHANGE_UNCONFIRMED") return "供货价待确认"
   return value
+}
+
+function publicationPauseStatusLabel(status: string) {
+  if (status === "PAUSED") return "已暂停"
+  if (status === "ACTIVE") return "已恢复"
+  return "处理中"
+}
+
+function mappingHistoryStatusLabel(status: string) {
+  if (status === "ACTIVE") return "已生效"
+  if (status === "REVOKED" || status === "DISABLED") return "已失效"
+  return status
 }
 
 function isExceptionItem(
@@ -353,6 +369,11 @@ export function SupplierCatalogPage() {
   const [selectedSkuId, setSelectedSkuId] = React.useState<string>("")
   const [substituteIds, setSubstituteIds] = React.useState<string[]>([])
   const [searchInput, setSearchInput] = React.useState(q ?? "")
+
+  // 浏览器后退/URL 变化时回填搜索输入框
+  React.useEffect(() => {
+    setSearchInput(q ?? "")
+  }, [q])
 
   const headingRef = React.useRef<HTMLHeadingElement>(null)
   const resultRef = React.useRef<HTMLDivElement>(null)
@@ -775,7 +796,7 @@ export function SupplierCatalogPage() {
           terminal: true,
         })
         if (autoNext) {
-          // 终结后先展示结果；用户点「下一项」再跳，符合 stay FormalActionResult 优先
+          // 「完成后显示下一项」开启：结果面板提供「下一项」按钮，用户点击后再跳
         }
       } catch (e) {
         setActionError(e instanceof Error ? e.message : "终结失败")
@@ -796,7 +817,7 @@ export function SupplierCatalogPage() {
     ? `/governance/integration-errors?from=W21&supplierCatalogSkuId=${encodeURIComponent(item.supplierProduct.catalogSkus?.[0]?.id ?? `${item.supplierProduct.id}_sku`)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
     : "/governance/integration-errors"
   const centerHref = item
-    ? `/procurement/supplier-catalog/${item.supplierProduct.id}?section=overview&queueContextId=${encodeURIComponent(queueContextId)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
+    ? `/procurement/supplier-catalog/${item.supplierProduct.id}?section=overview&demoRole=${demoRole}&maskCost=${maskCost ? 1 : 0}&queueContextId=${encodeURIComponent(queueContextId)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
     : "#"
 
   const costMasked = view?.costFieldVisibility === "masked" || maskCost
@@ -825,9 +846,21 @@ export function SupplierCatalogPage() {
           title={mode === "list" ? "供应商商品库" : "供应商商品待处理"}
           description="加载失败"
         />
-        <Button type="button" onClick={() => void queueQuery.refetch()}>
-          重试
-        </Button>
+        <BusinessFailureState
+          kind="system"
+          title="数据加载失败"
+          description="未能加载供应商商品数据。请重试；若持续失败，可稍后再来。"
+          onRetry={() => void queueQuery.refetch()}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href="/workspace" />}
+            >
+              返回今日工作台
+            </Button>
+          }
+        />
       </div>
     )
   }
@@ -843,6 +876,21 @@ export function SupplierCatalogPage() {
           returnHref={buildQueueReturnHref(searchParams)}
           updatedAt={context?.queueContextUpdatedAt}
           costMasked={costMasked}
+          emptyReason={view?.emptyReason}
+          demoRole={demoRole}
+          maskCost={maskCost}
+          sort={searchParams.get("sort") ?? undefined}
+          onSortChange={(next) =>
+            replaceUrl({
+              sort: next || null,
+              currentSupplierProductId: null,
+            })
+          }
+          onOpenItem={(target) =>
+            router.push(
+              `/procurement/supplier-catalog/${target.supplierProduct.id}?section=overview&demoRole=${demoRole}&maskCost=${maskCost ? 1 : 0}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
+            )
+          }
           searchInput={searchInput}
           onSearchInputChange={setSearchInput}
           onSearch={() =>
@@ -921,7 +969,7 @@ export function SupplierCatalogPage() {
         metadata={
           <DataFreshness
             state="fresh"
-            label="目录观察更新时间"
+            label="供给信息更新时间"
             updatedAt={
               context?.filterSummary
                 ? `${context.filterSummary} · ${formatDateTime(context.queueContextUpdatedAt, "default")}`
@@ -942,7 +990,11 @@ export function SupplierCatalogPage() {
       <div className="flex flex-wrap items-center gap-2">
         {skuId ? (
           <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1">
-            <Badge variant="outline">SKU {skuId}</Badge>
+            <Badge variant="outline">
+              {view?.skuContext
+                ? `${view.skuContext.productName}（${view.skuContext.skuCode}）`
+                : "商品规格筛选"}
+            </Badge>
             <Button
               type="button"
               variant="ghost"
@@ -976,10 +1028,18 @@ export function SupplierCatalogPage() {
           aria-label="变化类型"
         >
           <ToggleGroupItem value="actionable">需处理</ToggleGroupItem>
-          <ToggleGroupItem value="STOPPED">停止供应</ToggleGroupItem>
-          <ToggleGroupItem value="ERROR">异常</ToggleGroupItem>
-          <ToggleGroupItem value="NEW">新商品</ToggleGroupItem>
-          <ToggleGroupItem value="CHANGED">关键变化</ToggleGroupItem>
+          <ToggleGroupItem value="STOPPED">
+            {CHANGE_TYPE_LABEL.STOPPED}
+          </ToggleGroupItem>
+          <ToggleGroupItem value="ERROR">
+            {CHANGE_TYPE_LABEL.ERROR}
+          </ToggleGroupItem>
+          <ToggleGroupItem value="NEW">
+            {CHANGE_TYPE_LABEL.NEW}
+          </ToggleGroupItem>
+          <ToggleGroupItem value="CHANGED">
+            {CHANGE_TYPE_LABEL.CHANGED}
+          </ToggleGroupItem>
           <ToggleGroupItem value="all">全部</ToggleGroupItem>
         </ToggleGroup>
         <ToggleGroup
@@ -1002,7 +1062,7 @@ export function SupplierCatalogPage() {
         </ToggleGroup>
         <div className="flex items-center gap-2">
           <Label htmlFor="w21-auto-next" className="text-muted-foreground">
-            自动下一项
+            完成后显示下一项
           </Label>
           <Switch
             id="w21-auto-next"
@@ -1011,7 +1071,11 @@ export function SupplierCatalogPage() {
               setSessionAutoNext(on)
               replaceUrl({ autoNext: on ? "1" : "0" })
             }}
+            aria-describedby="w21-auto-next-hint"
           />
+          <span id="w21-auto-next-hint" className="sr-only">
+            开启后，处理完成的结果面板会提供「下一项」按钮
+          </span>
         </div>
         <form
           className="ml-auto flex items-center gap-2"
@@ -1024,13 +1088,32 @@ export function SupplierCatalogPage() {
             })
           }}
         >
-          <Input
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="供应商商品编码 / SKU / 名称"
-            className="h-8 w-48"
-            aria-label="搜索"
-          />
+          <div className="relative">
+            <Input
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder="供应商商品编码 / SKU / 名称"
+              className="h-8 w-48 pr-8"
+              aria-label="搜索"
+            />
+            {searchInput ? (
+              <button
+                type="button"
+                aria-label="清除搜索"
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                onClick={() => {
+                  setSearchInput("")
+                  replaceUrl({
+                    q: null,
+                    currentSupplierProductId: null,
+                    currentWorkItemId: null,
+                  })
+                }}
+              >
+                <XIcon className="size-3.5" />
+              </button>
+            ) : null}
+          </div>
           <Button type="submit" size="sm" variant="secondary">
             搜索
           </Button>
@@ -1055,7 +1138,7 @@ export function SupplierCatalogPage() {
                     },
                     {
                       label: "记录编号",
-                      value: lastResult.outcome.business.auditEventId,
+                      value: lastResult.outcome.business.reference,
                     },
                     {
                       label: "完成时间",
@@ -1123,14 +1206,52 @@ export function SupplierCatalogPage() {
       ) : null}
 
       {completed ? (
-        <BusinessEmptyState
-          kind="no-tasks"
-          title="当前筛选项已处理完"
-          description="可切换变化类型或稍后处理范围，也可以返回工作台。"
-          action={
-            <Button render={<Link href="/workspace" />}>返回今日工作台</Button>
-          }
-        />
+        view?.emptyReason === "FILTER_NO_RESULT" ? (
+          <BusinessEmptyState
+            kind="filter"
+            title="当前筛选没有结果"
+            description="没有符合变化类型、待处理范围或搜索条件的供应商商品，可调整筛选后重试。"
+            action={
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    replaceUrl({
+                      changeType: "actionable",
+                      status: null,
+                      q: null,
+                      currentSupplierProductId: null,
+                      currentWorkItemId: null,
+                    })
+                  }
+                >
+                  清除筛选
+                </Button>
+                <Button render={<Link href="/workspace" />}>
+                  返回今日工作台
+                </Button>
+              </div>
+            }
+          />
+        ) : view?.emptyReason === "NO_DATA_SCOPE" ? (
+          <BusinessEmptyState
+            kind="no-scope"
+            title="当前角色无数据范围"
+            description="你可以进入此页面，但当前角色范围内没有可查看的供应商商品。"
+            action={
+              <Button render={<Link href="/workspace" />}>返回今日工作台</Button>
+            }
+          />
+        ) : (
+          <BusinessEmptyState
+            kind="no-tasks"
+            title="当前队列已处理完"
+            description="可切换变化类型或稍后处理范围，也可以返回工作台。"
+            action={
+              <Button render={<Link href="/workspace" />}>返回今日工作台</Button>
+            }
+          />
+        )
       ) : item ? (
         <>
           <SequentialProcessBar
@@ -1142,17 +1263,18 @@ export function SupplierCatalogPage() {
                 ? leaseActive
                   ? "异常任务处理中"
                   : "异常任务待领取"
-                : "正常类型未登记 · 无处理任务"
+                : "无需领取 · 可查看资料并准备草稿"
             }
             processLabel={
               isRegistered
                 ? item.changeType === "ERROR"
                   ? "确认异常已解决"
                   : "确认停供记录"
-                : "确认（不可用）"
+                : "确认处理（暂未开放）"
             }
             // 没有独立的「并准备下一项」路径：两个 handler 同义
             showProcessNext={false}
+            backLabel="返回工作台"
             processDisabled={
               formalPending ||
               !isRegistered ||
@@ -1229,11 +1351,6 @@ export function SupplierCatalogPage() {
                     label={CHANGE_TYPE_LABEL[item.changeType]}
                     tone={changeTone(item.changeType)}
                   />
-                  {isExceptionItem(item) ? (
-                    <Badge variant="secondary">
-                      供应商数据异常 · 待处理
-                    </Badge>
-                  ) : null}
                   {isExceptionItem(item) && item.workItem.held ? (
                     <BusinessStatusBadge
                       context="list"
@@ -1516,7 +1633,8 @@ export function SupplierCatalogPage() {
                       key={p.id}
                       className="rounded-lg border px-3 py-2 text-xs"
                     >
-                      {p.publicationId} · {p.reason} · {p.status}
+                      {safetyReasonLabel(p.reason)} ·{" "}
+                      {publicationPauseStatusLabel(p.status)}
                     </div>
                   ))}
                   {demoRole === "operations" ? (
@@ -1535,17 +1653,20 @@ export function SupplierCatalogPage() {
                       <ArrowRightIcon className="size-3.5" />
                     </Button>
                   ) : null}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="mt-2"
-                    disabled
-                    aria-disabled="true"
-                    title="尚未确定恢复负责人，当前暂不能恢复销售"
-                  >
-                    恢复商城销售（暂不可用）
-                  </Button>
+                  <div className="space-y-1">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="mt-2"
+                      disabled
+                    >
+                      恢复商城销售
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      恢复销售的负责人尚未确定，当前只能准备候选方案。
+                    </p>
+                  </div>
                 </CardContent>
               </Card>
             </div>
@@ -1620,7 +1741,8 @@ export function SupplierCatalogPage() {
                       <p className="font-medium text-foreground">映射历史</p>
                       {item.mapping.history.map((h) => (
                         <p key={h.id}>
-                          {h.at} · {h.skuCode} · {h.status} · {h.note}
+                          {h.at} · {h.skuCode} ·{" "}
+                          {mappingHistoryStatusLabel(h.status)} · {h.note}
                         </p>
                       ))}
                     </div>
@@ -1636,16 +1758,20 @@ export function SupplierCatalogPage() {
                       前往商品资料
                     </Button>
                     {/* 正式确认映射：未登记时禁用且不可聚焦为可用 */}
-                    <Button
-                      type="button"
-                      size="sm"
-                      disabled
-                      tabIndex={-1}
-                      aria-disabled="true"
-                      title="商品关联确认功能暂未开放"
-                    >
-                      确认关联（暂不可用）
-                    </Button>
+                    <div className="space-y-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled
+                        tabIndex={-1}
+                        aria-disabled="true"
+                      >
+                        确认关联
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        商品关联确认功能暂未开放，可先查看资料并保存草稿。
+                      </p>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1720,7 +1846,7 @@ export function SupplierCatalogPage() {
                           {(field) => (
                             <field.TextField
                               label="进项税率"
-                              description="无可靠来源时留空；缺失时需补充来源"
+                              description="无可靠来源时可留空；提交时会要求补充来源，建议先向供应商确认"
                             />
                           )}
                         </offeringForm.AppField>
@@ -1759,16 +1885,20 @@ export function SupplierCatalogPage() {
                             disabled={demoRole !== "procurement"}
                           />
                         </offeringForm.AppForm>
-                        <Button
-                          type="button"
-                          size="sm"
-                          disabled
-                          tabIndex={-1}
-                          aria-disabled="true"
-                          title="供货条件确认功能暂未开放"
-                        >
-                          确认供货条件（暂不可用）
-                        </Button>
+                        <div className="space-y-1">
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled
+                            tabIndex={-1}
+                            aria-disabled="true"
+                          >
+                            确认供货条件
+                          </Button>
+                          <p className="text-xs text-muted-foreground">
+                            供货条件确认功能暂未开放，可先保存草稿。
+                          </p>
+                        </div>
                       </div>
                     </form>
                   ) : null}
@@ -1807,17 +1937,21 @@ export function SupplierCatalogPage() {
                           {c.skuCode} · {c.skuName}
                         </label>
                       ))}
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      disabled
-                      tabIndex={-1}
-                      aria-disabled="true"
-                      title="尚未确定由谁选择替代供应商，当前只能准备候选方案"
-                    >
-                      选择替代供应商（暂不可用）
-                    </Button>
+                    <div className="space-y-1">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled
+                        tabIndex={-1}
+                        aria-disabled="true"
+                      >
+                        选择替代供应商
+                      </Button>
+                      <p className="text-xs text-muted-foreground">
+                        尚未确定由谁选择替代供应商，当前只能准备候选方案。
+                      </p>
+                    </div>
                   </CardContent>
                 </Card>
               ) : null}

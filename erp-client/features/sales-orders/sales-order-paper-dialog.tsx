@@ -90,7 +90,7 @@ function SalesOrderPaperDocument({ order }: { order: SalesOrderListItem }) {
           id: "seller",
           label: "销售方",
           name: order.sellerEntity,
-          reference: "内部主体",
+          reference: "结算主体",
           fields: [
             { id: "owner", label: "业务负责人", value: order.ownerName },
             {

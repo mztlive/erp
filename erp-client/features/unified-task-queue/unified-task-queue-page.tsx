@@ -9,12 +9,12 @@ import {
   PauseIcon,
   RefreshCwIcon,
   SearchIcon,
-  XIcon,
 } from "lucide-react"
 import { z } from "zod"
 
 import {
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   ConflictResolutionDialog,
   DataFreshness,
@@ -44,7 +44,13 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { FAMILY_LABELS, type WorkItemFamily } from "@/mock/work-items"
 import type { SessionLease } from "@/mock/session-state"
 
-import { freshnessText, leaseText, sequentialText, versionText } from "@/lib/ui-text"
+import {
+  actionLabelForWorkItemType,
+  freshnessText,
+  leaseText,
+  sequentialText,
+  versionText,
+} from "@/lib/ui-text"
 import {
   buildFilterSummary,
   filterAndSortWorkItems,
@@ -54,9 +60,12 @@ import {
   parseDue,
   parseFamily,
   parseScopeSlug,
+  readW02FocusId,
   scopeLabel,
+  writeW02FocusId,
 } from "./queue-url"
 import {
+  useBatchClaimWorkItemMutation,
   useClaimWorkItemMutation,
   useCloseWorkItemMutation,
   useCompleteWorkItemMutation,
@@ -80,7 +89,12 @@ type LastResult = {
   title: string
   description: string
   reference: string
+  /** 结果编号的标签；批量动作等场景改用业务说法。 */
+  referenceLabel?: string
 }
+
+/** 转交目标候选（mock 团队名单；确认弹窗展示「任务将转交 ×××」）。 */
+const TRANSFER_CANDIDATES = ["陈琳", "李倩", "刘青", "周航"] as const
 
 export function UnifiedTaskQueuePage() {
   const router = useRouter()
@@ -92,11 +106,15 @@ export function UnifiedTaskQueuePage() {
   const workItemType = searchParams.get("type") ?? undefined
   const due = parseDue(searchParams.get("due"))
   const q = searchParams.get("q") ?? ""
+  // 兼容外部来源页携带的深链参数（W07/W18 等）；本页自身不再写入该参数。
   const workItemFromUrl = searchParams.get("currentWorkItemId")
   const converge =
     searchParams.get("converge") === "1" || Boolean(workItemType)
-  const queueContextId =
-    searchParams.get("queueContextId") ?? `queue:W02:${scope}`
+
+  // 当前任务焦点走 sessionStorage，内部 ID 不落地址栏。
+  const [sessionFocusId, setSessionFocusId] = React.useState<string | null>(
+    () => readW02FocusId()
+  )
 
   const filters: UnifiedQueueFilters = React.useMemo(
     () => ({
@@ -112,6 +130,7 @@ export function UnifiedTaskQueuePage() {
 
   const queueQuery = useUnifiedTaskQueueQuery(filters)
   const claimMutation = useClaimWorkItemMutation()
+  const batchClaimMutation = useBatchClaimWorkItemMutation()
   const actionMutation = useWorkItemActionMutation()
   const completeMutation = useCompleteWorkItemMutation()
   const closeMutation = useCloseWorkItemMutation()
@@ -121,6 +140,11 @@ export function UnifiedTaskQueuePage() {
     ReadonlyMap<string, SessionLease>
   >(new Map())
   const [confirmOpen, setConfirmOpen] = React.useState(false)
+  const [closeConfirmOpen, setCloseConfirmOpen] = React.useState(false)
+  const [transferConfirmOpen, setTransferConfirmOpen] = React.useState(false)
+  const [transferTarget, setTransferTarget] = React.useState<string>(
+    TRANSFER_CANDIDATES[0]
+  )
   const [conflictOpen, setConflictOpen] = React.useState(false)
   const [conflictInfo, setConflictInfo] = React.useState<{
     localVersion: string
@@ -132,7 +156,9 @@ export function UnifiedTaskQueuePage() {
   const titleRef = React.useRef<HTMLHeadingElement>(null)
   const liveRef = React.useRef<HTMLDivElement>(null)
 
-  const sourceItems = queueQuery.data?.items ?? []
+  // 本会话内确曾领取过的任务集合：区分「从未领取」与「领取后失效」（P1-5）。
+  const claimedThisSessionRef = React.useRef<Set<string>>(new Set())
+
   const permissionRevoked = queueQuery.data?.permissionRevoked ?? false
 
   const dropActiveLease = React.useCallback((workItemId: string) => {
@@ -148,10 +174,16 @@ export function UnifiedTaskQueuePage() {
     setActiveLeases(new Map())
   }, [])
 
+  const sourceItems = React.useMemo(
+    () => queueQuery.data?.items ?? [],
+    [queueQuery.data?.items]
+  )
+
   const focusCandidate = React.useMemo(() => {
-    if (!workItemFromUrl) return null
-    return sourceItems.find((item) => item.id === workItemFromUrl) ?? null
-  }, [sourceItems, workItemFromUrl])
+    const target = workItemFromUrl ?? sessionFocusId
+    if (!target) return null
+    return sourceItems.find((item) => item.id === target) ?? null
+  }, [sessionFocusId, sourceItems, workItemFromUrl])
 
   const tasks = React.useMemo(() => {
     const filtered = filterAndSortWorkItems(sourceItems, filters, {
@@ -167,8 +199,9 @@ export function UnifiedTaskQueuePage() {
     return filtered
   }, [filters, focusCandidate, sourceItems])
 
-  const urlIndex = workItemFromUrl
-    ? tasks.findIndex((item) => item.id === workItemFromUrl)
+  const currentFocusId = workItemFromUrl ?? sessionFocusId
+  const urlIndex = currentFocusId
+    ? tasks.findIndex((item) => item.id === currentFocusId)
     : -1
   const currentIndex = urlIndex >= 0 ? urlIndex : 0
   const task = tasks[currentIndex]
@@ -206,9 +239,15 @@ export function UnifiedTaskQueuePage() {
       due?: "today" | "overdue" | null
       q?: string | null
       currentWorkItemId?: string | null
-      queueContextId?: string
       converge?: boolean
     }) => {
+      if (next.currentWorkItemId === null) {
+        writeW02FocusId(null)
+        setSessionFocusId(null)
+      } else if (next.currentWorkItemId) {
+        writeW02FocusId(next.currentWorkItemId)
+        setSessionFocusId(next.currentWorkItemId)
+      }
       const qs = buildW02SearchParams({
         scope: next.scope ?? scope,
         family: next.family === null ? null : (next.family ?? family),
@@ -218,8 +257,6 @@ export function UnifiedTaskQueuePage() {
             : (next.workItemType ?? workItemType),
         due: next.due === null ? null : (next.due ?? due),
         q: next.q === null ? null : (next.q ?? q),
-        currentWorkItemId: next.currentWorkItemId,
-        queueContextId: next.queueContextId ?? queueContextId,
         converge: next.converge ?? converge,
       })
       router.replace(`${pathname}${qs}`, { scroll: false })
@@ -230,31 +267,24 @@ export function UnifiedTaskQueuePage() {
       family,
       pathname,
       q,
-      queueContextId,
       router,
       scope,
       workItemType,
     ]
   )
 
-  // Shareable defaults: write scope + current item when missing
+  // 搜索框与 URL q 双向同步：浏览器后退后输入框与结果保持一致（P2-6）。
+  React.useEffect(() => {
+    setSearchDraft(q)
+  }, [q])
+
+  // Shareable defaults: write scope when missing; focus stays in sessionStorage.
   React.useEffect(() => {
     if (queueQuery.isPending) return
-    const hasScope = searchParams.has("scope")
-    const hasItem = searchParams.has("currentWorkItemId")
-    if (hasScope && (hasItem || tasks.length === 0)) return
-    const nextItem =
-      workItemFromUrl && tasks.some((t) => t.id === workItemFromUrl)
-        ? workItemFromUrl
-        : (tasks[0]?.id ?? null)
+    if (searchParams.has("scope")) return
+    const nextItem = workItemFromUrl ?? tasks[0]?.id ?? null
     replaceQueueUrl({ currentWorkItemId: nextItem })
-  }, [
-    queueQuery.isPending,
-    replaceQueueUrl,
-    searchParams,
-    tasks,
-    workItemFromUrl,
-  ])
+  }, [queueQuery.isPending, replaceQueueUrl, searchParams, tasks, workItemFromUrl])
 
   const selectTaskAt = React.useCallback(
     (index: number) => {
@@ -294,6 +324,7 @@ export function UnifiedTaskQueuePage() {
         subjectVersion: item.subjectVersion,
       })
       setActiveLeases((prev) => new Map(prev).set(item.id, lease))
+      claimedThisSessionRef.current.add(item.id)
       return lease
     },
     [activeLeases, claimMutation]
@@ -369,8 +400,8 @@ export function UnifiedTaskQueuePage() {
       // Task stays PENDING/IN_PROGRESS — do NOT auto-advance
       setLastResult({
         status: "succeeded",
-        title: "任务内动作已记录",
-        description: `动作 ${record.actionKind} 成功；任务仍为 ${record.workItemStatus}，未完成、未自动下一项。`,
+        title: "操作结果已记录",
+        description: "已记录本次操作结果，任务仍待处理，未自动打开下一条。",
         reference: record.actionRecordId,
       })
     } catch (error) {
@@ -484,8 +515,9 @@ export function UnifiedTaskQueuePage() {
       dropActiveLease(task.id)
       setLastResult({
         status: "succeeded",
-        title: "任务已关闭（不改业务记录）",
-        description: `关闭原因 ${result.reasonCode}；替代任务 ${result.replacementWorkItemId ?? "—"}`,
+        title: "已关闭重复任务",
+        description:
+          "已关闭当前重复任务，保留已有确认任务，不改动业务记录。",
         reference: result.closureRecordId,
       })
       advanceToNext(task.id, tasks)
@@ -504,40 +536,89 @@ export function UnifiedTaskQueuePage() {
     tasks,
   ])
 
-  const onTransfer = React.useCallback(async () => {
+  const onTransfer = React.useCallback(
+    async (targetUserId: string) => {
+      if (!task || permissionRevoked) return
+      if (!task.allowedActions.includes("TRANSFER")) return
+      try {
+        const lease = await ensureClaimed(task)
+        const result = await transferMutation.mutateAsync({
+          workItemId: task.id,
+          expectedSubjectVersion: lease.subjectVersion,
+          transfer: {
+            targetUserId,
+            reason: decisionForm.state.values.note || `转交${targetUserId}处理`,
+          },
+        })
+        dropActiveLease(task.id)
+        setLastResult({
+          status: "succeeded",
+          title: "已转交",
+          description: `任务已转交 ${result.targetUserId}，仍在待处理列表，已自动打开下一条。`,
+          reference: result.transferRecordId,
+        })
+        advanceToNext(task.id, tasks)
+      } catch (error) {
+        handleMockError(error, task)
+      }
+    },
+    [
+      advanceToNext,
+      decisionForm.state.values.note,
+      dropActiveLease,
+      ensureClaimed,
+      handleMockError,
+      permissionRevoked,
+      task,
+      tasks,
+      transferMutation,
+    ]
+  )
+
+  const onBatchClaim = React.useCallback(async () => {
     if (!task || permissionRevoked) return
-    if (!task.allowedActions.includes("TRANSFER")) return
+    const unclaimed = tasks.filter(
+      (item) =>
+        item.effectiveStatusCode === "UNCLAIMED" &&
+        !activeLeases.has(item.id)
+    )
+    if (unclaimed.length === 0) return
+    const subjectVersions = Object.fromEntries(
+      unclaimed.map((item) => [item.id, item.subjectVersion])
+    )
     try {
-      const lease = await ensureClaimed(task)
-      const result = await transferMutation.mutateAsync({
-        workItemId: task.id,
-        expectedSubjectVersion: lease.subjectVersion,
-        transfer: {
-          targetUserId: "陈琳",
-          reason: decisionForm.state.values.note || "转交业务责任人",
-        },
+      const leases = await batchClaimMutation.mutateAsync({
+        workItemIds: unclaimed.map((item) => item.id),
+        subjectVersions,
       })
-      dropActiveLease(task.id)
+      setActiveLeases((prev) => {
+        const next = new Map(prev)
+        for (const lease of leases) next.set(lease.workItemId, lease)
+        return next
+      })
+      for (const lease of leases) {
+        claimedThisSessionRef.current.add(lease.workItemId)
+      }
       setLastResult({
         status: "succeeded",
-        title: "已转交",
-        description: `任务已转交 ${result.targetUserId}，仍在处理中，未创建后继任务。`,
-        reference: result.transferRecordId,
+        title: `已领取 ${leases.length} 个任务`,
+        description:
+          leases.length === unclaimed.length
+            ? "当前筛选内的待认领任务已全部领取，可逐个处理。"
+            : "部分任务领取失败，其余任务已可处理。",
+        reference: `${leases.length} 个`,
+        referenceLabel: "领取任务数",
       })
-      advanceToNext(task.id, tasks)
     } catch (error) {
       handleMockError(error, task)
     }
   }, [
-    advanceToNext,
-    decisionForm.state.values.note,
-    dropActiveLease,
-    ensureClaimed,
+    activeLeases,
+    batchClaimMutation,
     handleMockError,
     permissionRevoked,
     task,
     tasks,
-    transferMutation,
   ])
 
   // Keyboard: j/k next/prev when not in input
@@ -564,23 +645,16 @@ export function UnifiedTaskQueuePage() {
     return () => window.removeEventListener("keydown", onKey)
   }, [currentIndex, selectTaskAt, tasks.length])
 
+  // 区分「从未领取」与「领取后失效」（P1-5）：从未领取的任务显示「任务待认领」，
+  // 只有本会话确曾领取过且处理权失效时才显示「操作已失效 / 重新领取」。
   const leaseStatus = React.useMemo(() => {
     if (permissionRevoked) return "lost" as const
     if (!task) return "unclaimed" as const
-    if (task.effectiveStatusCode === "UNCLAIMED" && !activeClaim) {
-      return "unclaimed" as const
-    }
     if (activeClaim) return "active" as const
-    if (
-      task.effectiveStatusCode === "IN_PROGRESS" ||
-      task.effectiveStatusCode === "PENDING"
-    ) {
-      // Mine-scope tasks are auto-claimable on formal action; treat as active
-      if (scope === "mine") {
-        return "active" as const
-      }
-      return "lost" as const
-    }
+    if (task.effectiveStatusCode === "UNCLAIMED") return "unclaimed" as const
+    // Mine-scope tasks are auto-claimable on formal action; treat as active
+    if (scope === "mine") return "active" as const
+    if (claimedThisSessionRef.current.has(task.id)) return "lost" as const
     return "unclaimed" as const
   }, [activeClaim, permissionRevoked, scope, task])
 
@@ -612,9 +686,28 @@ export function UnifiedTaskQueuePage() {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader title="统一待办队列" description="队列加载失败" />
-        <Button type="button" onClick={() => void queueQuery.refetch()}>
-          重试
-        </Button>
+        <BusinessFailureState
+          kind="system"
+          description="待办队列暂时无法加载，业务记录未被修改。请重试，或返回工作台稍后再来。"
+          action={
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void queueQuery.refetch()}
+              >
+                重试
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                render={<Link href="/workspace" />}
+              >
+                返回工作台
+              </Button>
+            </div>
+          }
+        />
       </div>
     )
   }
@@ -662,7 +755,6 @@ export function UnifiedTaskQueuePage() {
             setLastResult(null)
             replaceQueueUrl({
               scope: next,
-              queueContextId: `queue:W02:${next}`,
               currentWorkItemId: null,
               workItemType: null,
               converge: false,
@@ -677,8 +769,8 @@ export function UnifiedTaskQueuePage() {
             [
               ["mine", "我的待办", queueQuery.data?.counts.mine],
               ["role_pool", "待领取", queueQuery.data?.counts.rolePool],
-              ["team", "团队", undefined],
-              ["hold", "已跳过", undefined],
+              ["team", "团队", queueQuery.data?.counts.team],
+              ["hold", "已跳过", queueQuery.data?.counts.hold],
             ] as const
           ).map(([value, label, count]) => (
             <ToggleGroupItem key={value} value={value}>
@@ -737,12 +829,65 @@ export function UnifiedTaskQueuePage() {
           <ToggleGroupItem value="today">今日到期</ToggleGroupItem>
         </ToggleGroup>
 
-        {converge || workItemType ? (
-          <BusinessStatusBadge
-            context="list"
-            label="已筛选为单一类型"
-            tone="info"
-          />
+        {task ? (
+          converge || workItemType ? (
+            <div className="flex items-center gap-2">
+              <BusinessStatusBadge
+                context="list"
+                label="已筛选为单一类型"
+                tone="info"
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() =>
+                  replaceQueueUrl({
+                    workItemType: null,
+                    converge: false,
+                  })
+                }
+              >
+                回到全部类型
+              </Button>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              title="仅保留与当前任务同类的任务，连续处理无需来回切换"
+              onClick={() =>
+                replaceQueueUrl({
+                  workItemType: task.workItemType,
+                  converge: true,
+                  currentWorkItemId: task.id,
+                })
+              }
+            >
+              收敛到同类连续处理
+            </Button>
+          )
+        ) : null}
+
+        {scope === "role_pool" &&
+        task &&
+        tasks.some(
+          (item) =>
+            item.effectiveStatusCode === "UNCLAIMED" &&
+            !activeLeases.has(item.id)
+        ) ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={
+              batchClaimMutation.isPending || permissionRevoked
+            }
+            onClick={() => void onBatchClaim()}
+          >
+            批量领取
+          </Button>
         ) : null}
 
         <form
@@ -760,7 +905,7 @@ export function UnifiedTaskQueuePage() {
             <Input
               value={searchDraft}
               onChange={(event) => setSearchDraft(event.target.value)}
-              placeholder="搜单号、对象或任务编号"
+              placeholder="搜单号、对象或往来方"
               className="pl-8"
               aria-label="搜索任务"
             />
@@ -801,6 +946,7 @@ export function UnifiedTaskQueuePage() {
           title={lastResult.title}
           description={lastResult.description}
           reference={lastResult.reference}
+          referenceLabel={lastResult.referenceLabel}
           facts={[
             {
               label: "队列位置",
@@ -817,16 +963,50 @@ export function UnifiedTaskQueuePage() {
       ) : null}
 
       {completed ? (
-        <BusinessEmptyState
-          kind="no-tasks"
-          title="本筛选项已处理完"
-          description="当前队列已经清空，可以返回工作台或切换其它责任范围。"
-          action={
-            <Button render={<Link href="/workspace" />}>
-              返回今日工作台
-            </Button>
-          }
-        />
+        sourceItems.length === 0 ? (
+          <BusinessEmptyState
+            kind="no-tasks"
+            title="当前没有待办任务"
+            description="当前责任范围下没有任务。可切换其它责任范围，或返回工作台。"
+            action={
+              <Button render={<Link href="/workspace" />}>
+                返回今日工作台
+              </Button>
+            }
+          />
+        ) : (
+          <BusinessEmptyState
+            kind="no-tasks"
+            title="本筛选项已处理完"
+            description="当前队列已经清空，可以清除筛选、切换责任范围或返回工作台。"
+            action={
+              <div className="flex flex-wrap gap-2">
+                {q || family || due || workItemType ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      setSearchDraft("")
+                      replaceQueueUrl({
+                        family: null,
+                        due: null,
+                        q: null,
+                        workItemType: null,
+                        converge: false,
+                        currentWorkItemId: null,
+                      })
+                    }}
+                  >
+                    清除筛选
+                  </Button>
+                ) : null}
+                <Button render={<Link href="/workspace" />}>
+                  返回今日工作台
+                </Button>
+              </div>
+            }
+          />
+        )
       ) : task ? (
         <div
           className={
@@ -889,6 +1069,19 @@ export function UnifiedTaskQueuePage() {
                     reason={item.reason}
                     impact={item.impact}
                     status={item.status}
+                    nextAction={
+                      item.priorityLabel !== "普通" ? (
+                        <BusinessStatusBadge
+                          context="list"
+                          label={item.priorityLabel}
+                          tone={
+                            item.priorityLabel === "紧急"
+                              ? "destructive"
+                              : "warning"
+                          }
+                        />
+                      ) : undefined
+                    }
                   />
                 </button>
               ))}
@@ -943,24 +1136,25 @@ export function UnifiedTaskQueuePage() {
                     ? leaseText.permissionRevokedCleared
                     : activeClaim
                       ? leaseText.activeDoNotReopen
-                      : leaseStatus === "unclaimed"
-                        ? leaseText.unclaimed
-                        : leaseStatus === "lost"
-                          ? leaseText.lostRefresh
-                          : leaseText.reclaimAfterLost
+                      : leaseStatus === "lost"
+                        ? leaseText.lostRefresh
+                        : leaseText.unclaimed
                 }
                 processLabel={
-                  task.handlerHref
-                    ? sequentialText.goProcess
-                    : sequentialText.completeCurrent
+                  task.showClose
+                    ? (task.actionLabel ?? "关闭重复任务")
+                    : task.handlerHref
+                      ? (task.actionLabel ??
+                        actionLabelForWorkItemType(task.workItemTypeLabel))
+                      : sequentialText.completeAndOpenNext
                 }
-                processNextLabel={sequentialText.completeAndOpenNext}
-                // 跳专用处理器会离开本页，没有「并打开下一条」语义
-                showProcessNext={!task.handlerHref}
+                // 非 handler 任务只保留一个「完成并打开下一条」主按钮（P1-6）
+                showProcessNext={false}
                 processDisabled={processDisabled}
                 pending={
                   completeMutation.isPending || actionMutation.isPending
                 }
+                backLabel="返回工作台"
                 onBack={() => {
                   router.push("/workspace")
                 }}
@@ -970,7 +1164,7 @@ export function UnifiedTaskQueuePage() {
                     return
                   }
                   if (task.showClose) {
-                    void onCloseDuplicate()
+                    setCloseConfirmOpen(true)
                     return
                   }
                   setConfirmOpen(true)
@@ -980,18 +1174,26 @@ export function UnifiedTaskQueuePage() {
                     router.push(task.handlerHref)
                     return
                   }
+                  if (task.showClose) {
+                    setCloseConfirmOpen(true)
+                    return
+                  }
                   setConfirmOpen(true)
                 }}
                 onReclaim={() => {
-                  void ensureClaimed(task).then(() => {
-                    setLastResult({
-                      status: "succeeded",
-                      title: "已重新领取",
-                      description:
-                        "处理进度仅保存在当前页面，未写入 URL 或查询视图。",
-                      reference: task.id,
+                  const wasFirstClaim =
+                    !claimedThisSessionRef.current.has(task.id)
+                  void ensureClaimed(task)
+                    .then(() => {
+                      setLastResult({
+                        status: "succeeded",
+                        title: wasFirstClaim ? "已领取任务" : "已重新领取",
+                        description:
+                          "已恢复对该任务的处理，可继续提交。",
+                        reference: task.id,
+                      })
                     })
-                  }).catch((error) => handleMockError(error, task))
+                    .catch((error) => handleMockError(error, task))
                 }}
               />
             </div>
@@ -1020,14 +1222,13 @@ export function UnifiedTaskQueuePage() {
                   ) : null}
                 </div>
                 <CardDescription>
-                  {task.workItemTypeLabel} · {task.responsibleParty} · 编号{" "}
-                  {task.id}
+                  {task.workItemTypeLabel} · {task.responsibleParty}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-5">
                 {task.effectiveStatusCode === "UNCLAIMED" && !activeClaim ? (
                   <Alert>
-                    <AlertTitle>团队任务待认领</AlertTitle>
+                    <AlertTitle>任务待认领</AlertTitle>
                     <AlertDescription className="flex flex-wrap items-center gap-2">
                       {leaseText.reclaimHint}。
                       <Button
@@ -1036,18 +1237,16 @@ export function UnifiedTaskQueuePage() {
                         onClick={() =>
                           void ensureClaimed(task)
                             .then(() => {
-                              // Enter continuous process for this type
+                              // 领取只认领当前任务，不自动收敛队列（P2-9）
                               replaceQueueUrl({
                                 currentWorkItemId: task.id,
-                                workItemType: task.workItemType,
-                                converge: true,
                               })
                             })
                             .catch((error) => handleMockError(error, task))
                         }
                         disabled={claimMutation.isPending || permissionRevoked}
                       >
-                        领取
+                        领取任务
                       </Button>
                     </AlertDescription>
                   </Alert>
@@ -1091,11 +1290,7 @@ export function UnifiedTaskQueuePage() {
                     </p>
                   ) : null}
                   <p className="text-xs text-muted-foreground">
-                    版本 {task.subjectVersion} · 完成动作{" "}
-                    {task.completionAction}
-                    {task.closeAllowed
-                      ? " · 允许关闭（重复/误派）"
-                      : " · 无人工关闭入口"}
+                    版本 {task.subjectVersion}
                   </p>
                 </div>
 
@@ -1161,18 +1356,45 @@ export function UnifiedTaskQueuePage() {
                     先跳过并看下一条
                   </Button>
                   {task.allowedActions.includes("TRANSFER") ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      disabled={
-                        transferMutation.isPending ||
-                        permissionRevoked ||
-                        leaseStatus === "lost"
-                      }
-                      onClick={() => void onTransfer()}
-                    >
-                      转交
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <label
+                        htmlFor="transfer-target"
+                        className="text-xs text-muted-foreground"
+                      >
+                        转交至
+                      </label>
+                      <select
+                        id="transfer-target"
+                        value={transferTarget}
+                        onChange={(event) =>
+                          setTransferTarget(event.target.value)
+                        }
+                        disabled={
+                          transferMutation.isPending ||
+                          permissionRevoked ||
+                          leaseStatus === "lost"
+                        }
+                        className="h-9 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {TRANSFER_CANDIDATES.map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={
+                          transferMutation.isPending ||
+                          permissionRevoked ||
+                          leaseStatus === "lost"
+                        }
+                        onClick={() => setTransferConfirmOpen(true)}
+                      >
+                        转交
+                      </Button>
+                    </div>
                   ) : null}
                   {task.showClose ? (
                     <Button
@@ -1183,44 +1405,11 @@ export function UnifiedTaskQueuePage() {
                         permissionRevoked ||
                         leaseStatus === "lost"
                       }
-                      onClick={() => void onCloseDuplicate()}
+                      onClick={() => setCloseConfirmOpen(true)}
                     >
                       关闭重复任务
                     </Button>
                   ) : null}
-                  {task.handlerHref ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      render={<Link href={task.handlerHref} />}
-                    >
-                      前往任务页面
-                      <ArrowRightIcon
-                        data-icon="inline-end"
-                        aria-hidden="true"
-                      />
-                    </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    disabled={permissionRevoked}
-                    onClick={() => {
-                      // generic reject path for non-handler items: domain reject via complete envelope is wrong;
-                      // use transfer/return as action — for demo, mark rejected via complete not allowed.
-                      // Instead: DEFER-style leave with note is the safe path; show blocked.
-                      setLastResult({
-                        status: "rejected",
-                        title: "退回需在任务对应页面处理",
-                        description:
-                          "统一队列不提供独立“标记退回完成”伪动作；请前往任务对应页面提交业务退回，或先跳过后再转交。",
-                        reference: task.id,
-                      })
-                    }}
-                  >
-                    <XIcon data-icon="inline-start" aria-hidden="true" />
-                    退回说明
-                  </Button>
                   <Button
                     type="button"
                     disabled={processDisabled && !task.handlerHref}
@@ -1229,59 +1418,32 @@ export function UnifiedTaskQueuePage() {
                         router.push(task.handlerHref)
                         return
                       }
+                      if (task.showClose) {
+                        setCloseConfirmOpen(true)
+                        return
+                      }
                       setConfirmOpen(true)
                     }}
                   >
                     {task.actionLabel ??
                       (task.handlerHref
-                        ? sequentialText.goProcess
-                        : sequentialText.process)}
+                        ? actionLabelForWorkItemType(task.workItemTypeLabel)
+                        : sequentialText.completeAndOpenNext)}
                     <ArrowRightIcon
                       data-icon="inline-end"
                       aria-hidden="true"
                     />
                   </Button>
                 </div>
-
-                {!converge && !workItemType ? (
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="secondary"
-                    onClick={() =>
-                      replaceQueueUrl({
-                        workItemType: task.workItemType,
-                        converge: true,
-                        currentWorkItemId: task.id,
-                      })
-                    }
-                  >
-                    收敛到同类连续处理
-                  </Button>
-                ) : (
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    onClick={() =>
-                      replaceQueueUrl({
-                        workItemType: null,
-                        converge: false,
-                      })
-                    }
-                  >
-                    回到全部类型
-                  </Button>
-                )}
               </CardContent>
             </Card>
           </div>
         </div>
-      ) : workItemFromUrl ? (
+      ) : currentFocusId ? (
         <BusinessEmptyState
           kind="filter"
           title="当前任务不在筛选结果中"
-          description={`任务 ${workItemFromUrl} 可能已完成、已转交或不匹配当前筛选。`}
+          description="该任务可能已完成、已转交或不匹配当前筛选。"
           action={
             <Button
               type="button"
@@ -1316,13 +1478,63 @@ export function UnifiedTaskQueuePage() {
           versionText.dataVersion,
         ]}
         effects={[
-          `执行 ${task?.completionAction ?? "领域完成动作"}`,
-          "业务记录与任务完成状态在同一提交中返回",
-          "无独立「标记完成」伪动作",
+          `将提交「${task?.workItemTypeLabel ?? "本任务"}」的处理结论`,
+          "处理结论与任务完成在同一次提交中生效",
+          "确认后自动打开下一条任务",
         ]}
         nextDepartment="相关责任组"
         onConfirm={async () => {
           await onComplete()
+        }}
+      />
+
+      <FormalActionConfirmDialog
+        open={closeConfirmOpen}
+        onOpenChange={setCloseConfirmOpen}
+        title={`关闭任务：${task?.workItemTypeLabel ?? ""}`}
+        description="将关闭当前重复任务，保留已有确认任务。"
+        actionLabel="关闭重复任务"
+        confirmLabel="确认关闭重复任务"
+        fromStatus={{ label: task?.status.label ?? "待处理", tone: "warning" }}
+        toStatus={{ label: "已关闭", tone: "neutral" }}
+        lockedFields={[
+          versionText.version,
+          leaseText.currentProcessState,
+          versionText.dataVersion,
+        ]}
+        effects={[
+          "关闭当前重复任务，不改动业务记录",
+          "确认后自动打开下一条任务",
+        ]}
+        irreversibleEffects={[
+          "已关闭的任务无法恢复，如需再次处理需重新建任务",
+        ]}
+        onConfirm={async () => {
+          await onCloseDuplicate()
+        }}
+      />
+
+      <FormalActionConfirmDialog
+        open={transferConfirmOpen}
+        onOpenChange={setTransferConfirmOpen}
+        title={`转交任务：${task?.workItemTypeLabel ?? ""}`}
+        description={`任务将转交 ${transferTarget}，由对方继续处理。`}
+        actionLabel="转交"
+        confirmLabel={`转交${transferTarget}`}
+        fromStatus={{ label: task?.status.label ?? "待处理", tone: "warning" }}
+        toStatus={{ label: "已转交", tone: "info" }}
+        lockedFields={[
+          versionText.version,
+          leaseText.currentProcessState,
+          versionText.dataVersion,
+        ]}
+        effects={[
+          `任务处理权将移交 ${transferTarget}`,
+          "转交后任务仍在待处理列表，不改动业务记录",
+          "确认后自动打开下一条任务",
+        ]}
+        onConfirm={async () => {
+          await onTransfer(transferTarget)
         }}
       />
 

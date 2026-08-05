@@ -4,18 +4,17 @@ import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import {
-  ArrowLeftIcon,
   FilePlus2Icon,
   PencilIcon,
   ShoppingCartIcon,
 } from "lucide-react"
-
 import {
   AsyncSectionState,
   BusinessEmptyState,
   BusinessFailureState,
   BusinessStatusBadge,
   DataFreshness,
+  DiscardConfirmDialog,
   DocumentHeader,
   DocumentSection,
   DocumentSummary,
@@ -23,7 +22,6 @@ import {
   MetricItem,
   MetricStrip,
   MoneyValue,
-  PageActions,
   PageHeader,
   SensitiveValue,
 } from "@/components/business"
@@ -54,20 +52,16 @@ import { openWorkspaceLabel } from "@/lib/ui-text"
 const SECTION_NAV: readonly {
   id: CustomerSectionId
   label: string
-  hash: string
 }[] = [
-  { id: "overview", label: "概览", hash: "overview" },
-  { id: "related", label: "合同与销售", hash: "related" },
-  { id: "settlement", label: "票款摘要", hash: "settlement" },
-  { id: "quality", label: "经营摘要", hash: "quality" },
-  { id: "audit", label: "归属与审计", hash: "audit" },
+  { id: "overview", label: "概览" },
+  { id: "related", label: "合同与销售" },
+  { id: "settlement", label: "票款摘要" },
+  { id: "quality", label: "经营摘要" },
+  { id: "audit", label: "归属与审计" },
 ]
 
 function resolveSection(section?: string | null): CustomerSectionId {
-  if (section === "contacts") return "overview"
-  const found = SECTION_NAV.find(
-    (item) => item.id === section || item.hash === section
-  )
+  const found = SECTION_NAV.find((item) => item.id === section)
   return found?.id ?? "overview"
 }
 
@@ -126,6 +120,12 @@ export function CustomerDetailPage({
   const router = useRouter()
   const activeSection = resolveSection(section)
   const [editing, setEditing] = React.useState(false)
+  const [formDirty, setFormDirty] = React.useState(false)
+  const [pendingSection, setPendingSection] =
+    React.useState<CustomerSectionId | null>(null)
+  const [savedNotice, setSavedNotice] = React.useState<{
+    revisionNo: number
+  } | null>(null)
 
   const customer = query.data
 
@@ -139,6 +139,19 @@ export function CustomerDetailPage({
       )
     },
     [customerId, router]
+  )
+
+  /** 编辑中且未保存时，切 Tab 先弹确认，避免静默丢输入。 */
+  const handleSectionChange = React.useCallback(
+    (next: CustomerSectionId) => {
+      if (next === activeSection) return
+      if (editing && formDirty) {
+        setPendingSection(next)
+        return
+      }
+      selectSection(next)
+    },
+    [activeSection, editing, formDirty, selectSection]
   )
 
   if (query.isPending) {
@@ -176,7 +189,7 @@ export function CustomerDetailPage({
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
           title="客户不存在或无权访问"
-          description={`未找到客户 ${customerId}。可能编号有误，或当前角色无权访问该客户。`}
+          description="未找到该客户。可能编号有误，或当前角色无权访问该客户。"
           actions={
             <Button render={<Link href="/sales/customers" />}>
               返回客户选择
@@ -235,19 +248,6 @@ export function CustomerDetailPage({
             current: true,
           },
         ]}
-        actions={
-          <PageActions
-            actions={[
-              {
-                actionKey: "back",
-                label: "返回选择",
-                icon: ArrowLeftIcon,
-                variant: "outline",
-                render: <Link href="/sales/customers" />,
-              },
-            ]}
-          />
-        }
       />
 
       {/* First screen: identity + owner + metrics + primary actions */}
@@ -299,7 +299,17 @@ export function CustomerDetailPage({
         <Alert variant="warning">
           <AlertTitle>客户已停用</AlertTitle>
           <AlertDescription>
-            稳定身份、历史修订与已引用单据保留。上传合同和新建销售单已禁用；可继续查看历史与票款摘要。
+            稳定身份、历史修订与已引用单据保留。上传合同和新建销售单已禁用
+            {blocker(customer, "UPLOAD_CONTRACT_PDF") ||
+            blocker(customer, "CREATE_SALES_ORDER")
+              ? `（${[
+                  blocker(customer, "UPLOAD_CONTRACT_PDF"),
+                  blocker(customer, "CREATE_SALES_ORDER"),
+                ]
+                  .filter(Boolean)
+                  .join("；")}）`
+              : ""}
+            ；可继续查看历史与票款摘要。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -346,8 +356,7 @@ export function CustomerDetailPage({
       <Tabs
         value={activeSection}
         onValueChange={(next) => {
-          const target = (next as CustomerSectionId) ?? "overview"
-          if (target !== activeSection) selectSection(target)
+          handleSectionChange((next as CustomerSectionId) ?? "overview")
         }}
       >
         <TabsList
@@ -364,15 +373,43 @@ export function CustomerDetailPage({
         <TabsContent value="overview">
           <div className="space-y-4 pt-4">
             {editing ? (
-              <CustomerForm
-                mode="edit"
-                grouped
-                customer={customer}
-                onCancel={() => setEditing(false)}
-                onSucceeded={() => setEditing(false)}
-              />
+              <>
+                <CustomerForm
+                  mode="edit"
+                  grouped
+                  customer={customer}
+                  onDirtyChange={setFormDirty}
+                  onCancel={() => {
+                    setEditing(false)
+                    setFormDirty(false)
+                  }}
+                  onSucceeded={(_customerId, revisionNo) => {
+                    setEditing(false)
+                    setFormDirty(false)
+                    setSavedNotice({ revisionNo: revisionNo ?? customer.currentRevision.revisionNo })
+                  }}
+                />
+              </>
             ) : (
               <>
+                {savedNotice ? (
+                  <Alert variant="success">
+                    <AlertTitle>客户资料已保存</AlertTitle>
+                    <AlertDescription className="flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        新版本 v{savedNotice.revisionNo} 已生效，历史单据记录不变。
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setSavedNotice(null)}
+                      >
+                        知道了
+                      </Button>
+                    </AlertDescription>
+                  </Alert>
+                ) : null}
                 <DocumentSection
                   title="主体身份与客户角色"
                   description="当前基础资料版本，不覆盖历史单据记录"
@@ -436,7 +473,7 @@ export function CustomerDetailPage({
                         },
                         {
                           id: "owner",
-                          label: "负责销售（OWNER）",
+                          label: "负责销售",
                           value: ownerLabel(customer),
                         },
                       ]}
@@ -463,7 +500,7 @@ export function CustomerDetailPage({
                       <Card size="sm">
                         <CardHeader>
                           <CardTitle className="text-sm">有效联系人</CardTitle>
-                          <CardDescription>默认打码手机；揭示短时可审计</CardDescription>
+                          <CardDescription>默认打码手机；揭示操作会留记录</CardDescription>
                         </CardHeader>
                         <CardContent className="space-y-3">
                           {customer.contacts.length === 0 ? (
@@ -566,7 +603,7 @@ export function CustomerDetailPage({
 
                 <DocumentSection
                   title="银行账户"
-                  description="账号默认只显示末四位；完整显示需授权并记审计"
+                  description="账号默认只显示末四位；完整显示需授权，操作会留记录"
                 >
                   {customer.bankAccounts.length === 0 ? (
                     <p className="text-sm text-muted-foreground">暂无银行账户</p>
@@ -578,10 +615,10 @@ export function CustomerDetailPage({
                             key={b.id}
                             className="flex flex-wrap items-center gap-2 text-sm"
                           >
-                            <span className="num text-muted-foreground">
-                              {b.internalNo}
-                            </span>
                             <span>{b.accountName}</span>
+                            {b.isDefault ? (
+                              <Badge variant="secondary">默认</Badge>
+                            ) : null}
                             <span className="text-muted-foreground">
                               {b.bankName}
                             </span>
@@ -612,7 +649,7 @@ export function CustomerDetailPage({
           <div className="space-y-4 pt-4">
             <DocumentSection
               title="合同与销售"
-              description="以下列出有效合同与进行中销售单。"
+              description="以下列出最近合同与进行中销售单。"
               action={
                 <div className="flex flex-wrap gap-2">
                   <Button
@@ -690,6 +727,11 @@ export function CustomerDetailPage({
                 <BusinessFailureState
                   kind="system"
                   description="票款分区失败；主体身份仍保留。"
+                  action={
+                    <Button type="button" size="sm" onClick={() => void query.refetch()}>
+                      重试
+                    </Button>
+                  }
                 />
               ) : customer.receivableSummary ? (
                 <div className="space-y-3">
@@ -737,6 +779,9 @@ export function CustomerDetailPage({
                       },
                     ]}
                   />
+                  <p className="text-xs text-muted-foreground">
+                    应收余额与逾期金额与顶部指标一致，并非增量数据。
+                  </p>
                   {customer.receivableSummary.reliabilityNote ? (
                     <p className="text-xs text-muted-foreground">
                       {customer.receivableSummary.reliabilityNote}
@@ -811,11 +856,11 @@ export function CustomerDetailPage({
                     />
                     <DataFreshness
                       updatedAt={
-                        customer.qualitySummary.isStale ? "数据可能不是最新" : "数据"
+                        customer.qualitySummary.projectionAt.slice(0, 16).replace("T", " ")
                       }
                       dateTime={customer.qualitySummary.projectionAt}
                       state={customer.qualitySummary.isStale ? "stale" : "fresh"}
-                      label="经营质量"
+                      label="经营质量汇总于"
                     />
                   </div>
                 ) : customer.partitions.quality === "ok" ? (
@@ -837,6 +882,11 @@ export function CustomerDetailPage({
                 <BusinessFailureState
                   kind="system"
                   description="归属审计分区失败。"
+                  action={
+                    <Button type="button" size="sm" onClick={() => void query.refetch()}>
+                      重试
+                    </Button>
+                  }
                 />
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
@@ -904,6 +954,26 @@ export function CustomerDetailPage({
           </div>
         </TabsContent>
       </Tabs>
+
+      <DiscardConfirmDialog
+        open={pendingSection != null}
+        onOpenChange={(open) => {
+          if (!open) setPendingSection(null)
+        }}
+        title="放弃未保存的修改？"
+        description="编辑内容尚未保存，切换分区后将丢失。可先保存修订再切换。"
+        confirmLabel="放弃并切换"
+        cancelLabel="继续编辑"
+        onConfirm={() => {
+          const next = pendingSection
+          setPendingSection(null)
+          if (next) {
+            setEditing(false)
+            setFormDirty(false)
+            selectSection(next)
+          }
+        }}
+      />
     </div>
   )
 }

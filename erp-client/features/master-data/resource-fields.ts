@@ -419,6 +419,27 @@ export function usesEffectivePeriod(resource: MasterDataResource): boolean {
   return resource !== "brands" && resource !== "categories"
 }
 
+const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/
+
+function isValidDate(value: string): boolean {
+  if (!DATE_FORMAT.test(value)) return false
+  const [year, month, day] = value.split("-").map(Number)
+  const date = new Date(Date.UTC(year, month - 1, day))
+  return (
+    date.getUTCFullYear() === year &&
+    date.getUTCMonth() === month - 1 &&
+    date.getUTCDate() === day
+  )
+}
+
+/** 生效开始 / 结束字段共用：格式 + 非空。 */
+function effectiveDateField(label: string): z.ZodString {
+  return z
+    .string()
+    .min(1, `请填写${label}`)
+    .refine(isValidDate, `${label}格式不正确，请使用 YYYY-MM-DD`)
+}
+
 /** 通用基础字段 + 当前资源专属字段（必填规则），供新建 / 更新表单共用。 */
 export function buildResourceSchema(
   resource: MasterDataResource,
@@ -434,15 +455,29 @@ export function buildResourceSchema(
       dynamic[def.key] = z.string()
     }
   }
-  return z.object({
-    name: z.string().trim().min(2, "请填写名称"),
-    effectiveFrom: usesEffectivePeriod(resource)
-      ? z.string().min(1, "请填写生效开始日期")
-      : z.string(),
-    effectiveTo: z.string(),
-    changeReason: z.string().trim().min(2, "请填写变更原因"),
-    ...dynamic,
-  })
+  return z
+    .object({
+      name: z.string().trim().min(2, "请填写名称"),
+      effectiveFrom: usesEffectivePeriod(resource)
+        ? effectiveDateField("生效开始")
+        : z.string(),
+      effectiveTo: z.string().refine(
+        (value) => value === "" || isValidDate(value),
+        "生效结束格式不正确，请使用 YYYY-MM-DD"
+      ),
+      changeReason: z.string().trim().min(2, "请填写变更原因"),
+      ...dynamic,
+    })
+    .refine(
+      (value) =>
+        !usesEffectivePeriod(resource) ||
+        value.effectiveTo === "" ||
+        value.effectiveTo >= value.effectiveFrom,
+      {
+        message: "生效结束不能早于生效开始",
+        path: ["effectiveTo"],
+      }
+    )
 }
 
 /** 字典类资源默认立即生效的业务日。 */

@@ -85,6 +85,12 @@ export const DEFER_REASON_LABEL: Record<DeferReasonCode, string> = {
   OTHER: "其他",
 }
 
+/** 跳过后的任务状态 → 中文（禁止 PENDING 等枚举原值上屏）。 */
+export const WORK_ITEM_STATUS_LABEL: Record<string, string> = {
+  PENDING: "待处理",
+  IN_PROGRESS: "处理中",
+}
+
 export const RESULT_LABEL: Record<FulfillmentResultCode, string> = {
   SUCCESS: "成功",
   PARTIAL: "部分成功",

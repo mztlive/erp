@@ -134,6 +134,7 @@ function buildBankAccountViews(
       bankName: bank.bankName.trim(),
       accountMasked: maskAccountNumber(bank.accountNumber.trim()),
       accountRevealToken: `reveal:${id}`,
+      isDefault: bank.isDefault,
       effectiveFrom: today,
       fieldVisibility: { accountNumber: "masked" as const },
     }

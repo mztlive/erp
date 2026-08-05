@@ -111,6 +111,18 @@ function counterpartyOf(id: string) {
   return W11_COUNTERPARTIES.find((c) => c.counterpartyPartyId === id)
 }
 
+/** 分录级净开放金额：按主增分录 + 有效分配（APPLY − REVERSE）计算 */
+function entryOpenAmount(entryId: string, amountGross: string): string {
+  let open = parseMoney(amountGross)
+  for (const rc of liveReceipts) {
+    for (const a of rc.allocations) {
+      if (a.targetId !== entryId) continue
+      open -= a.action === "APPLY" ? parseMoney(a.amountGross) : -parseMoney(a.amountGross)
+    }
+  }
+  return money(Math.max(0, open))
+}
+
 function buildPool(
   mode: AllocationMode,
   counterpartyPartyId: string
@@ -119,7 +131,7 @@ function buildPool(
     (r) => r.counterpartyPartyId === counterpartyPartyId
   )
   if (mode === "receipt") {
-    // 回款分配目标：receivable_entry
+    // 回款分配目标：receivable_entry（展示与提交校验口径一致的分录级开放余额）
     return rows.flatMap((r) =>
       r.entries
         .filter((e) => e.direction === "increase")
@@ -128,8 +140,7 @@ function buildPool(
           targetKind: "receivable_entry" as const,
           label: `${r.salesOrderNo} · ${e.entryType}`,
           salesOrderNo: r.salesOrderNo,
-          // 简化：按账户开放余额均摊展示在主增分录上
-          openAmount: r.openTotal,
+          openAmount: entryOpenAmount(e.entryId, e.amountGross),
           dueDate: e.dueDate,
           counterpartyPartyId: r.counterpartyPartyId,
           baselineVersion: r.baselineVersion,
@@ -333,7 +344,7 @@ export function createW11AllocationSession(
     leaseValid: true,
     editVersion: 1,
     note:
-      "核销严格按 counterparty_party_id 锁定；池中仅同主体开放对象。拟分配合计仅作输入提示，不冒充核销。",
+      "本次核销已锁定往来主体，池中仅同主体的开放应收；拟分配合计仅作输入提示，以提交后系统结果为准。",
   }
   sessions.set(draftSessionId, view)
   return view
@@ -431,8 +442,7 @@ export function postW11Allocation(
     const failed: PostAllocationResult = {
       status: "failed",
       code: "CROSS_PARTY",
-      message:
-        "跨 counterparty_party_id 分配被拒绝。核销池不会返回跨主体目标，提交时再次校验。",
+      message: "仅可分配当前往来主体的开放应收，已拒绝提交。",
     }
     postIdempotency.set(input.idempotencyKey, failed)
     return failed

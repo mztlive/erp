@@ -145,7 +145,7 @@
 | SKU/商品搜索 | 空 | `q` | 匹配稳定 SKU 编码、名称和规格投影；防抖请求服务端 |
 | 余额状态 | 全部 | `availability=all|positive|zero|reserved` | 由服务端按正式余额筛选 |
 | 流水类型 | 全部 | `movementType` | 仅在流水视图生效 |
-| 业务日期 | 最近 30 天（流水） | `occurredFrom/To` | 余额视图不受日期限制 |
+| 业务日期 | 可筛选，默认不限（`occurredFrom/To` 为空即全部时间） | `occurredFrom/To` | 余额视图不受日期限制 |
 | 排序 | 仓库编码、SKU 编码 | `sort` | 数量排序必须限定同一 SKU/基础单位语境 |
 
 - 余额表服务端分页；流水以 `occurred_at + id` 稳定排序，翻页期间新增流水不得造成重复或遗漏。

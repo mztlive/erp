@@ -8,10 +8,11 @@ export type ContractStatus =
 
 export type ContractAction =
   | "UPLOAD_CONTRACT_PDF"
-  | "TERMINATE"
   | "PRINT"
   | "CREATE_SALES_ORDER"
   | "EXPORT"
+  /** 预留能力：演示数据不下发该动作（见 mock/contracts.ts），避免「可做却无入口」。 */
+  | "TERMINATE"
 
 export type ActionBlocker = {
   action: string
@@ -188,4 +189,18 @@ export const CONTRACT_STATUS_TONE: Record<ContractStatus, StatusTone> = {
   EFFECTIVE: "success",
   TERMINATED: "neutral",
   EXPIRED: "warning",
+}
+
+/** 负责人只显示姓名；归属语义（当前/历史参与人）不进入用户可见文案。 */
+export function contractOwnerLabel(label: string): string {
+  return label.split(" · ")[0] || label
+}
+
+/** 审计时间线动作 → 中文业务描述（枚举原值禁止上屏）。 */
+export const CONTRACT_AUDIT_ACTION_LABEL: Record<string, string> = {
+  UPLOAD_CONTRACT_PDF: "上传合同 PDF",
+  DOWNLOAD_ATTACHMENT: "下载附件",
+  CREATE_SALES_ORDER: "新建销售单",
+  TERMINATE: "终止合同",
+  EXPIRE: "到期结束",
 }

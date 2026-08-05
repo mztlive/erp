@@ -21,6 +21,7 @@ const STATUS_VALUES: readonly PurchaseOrderStatusFilter[] = [
   "EFFECTIVE",
   "PARTIAL",
   "COMPLETED",
+  "VOID",
 ]
 
 const METRIC_VALUES: readonly PurchaseOrderMetricFilter[] = [

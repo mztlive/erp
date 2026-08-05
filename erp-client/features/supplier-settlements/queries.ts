@@ -1,9 +1,15 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query"
 
 import {
   appendDifferenceEvidence,
+  claimSettlementReview,
   createSettlementDraft,
   decideSettlementReview,
   fetchSettlementDetail,
@@ -27,6 +33,8 @@ export function useSettlementListQuery(input: ListQueryInput) {
   return useQuery({
     queryKey: settlementKeys.list(input),
     queryFn: () => fetchSettlementList(input),
+    // 切换演示角色/筛选时保留旧列表，避免整页退回骨架
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -39,6 +47,7 @@ export function useSettlementDetailQuery(
     queryFn: () =>
       fetchSettlementDetail({ statementId: statementId!, role }),
     enabled: Boolean(statementId),
+    placeholderData: keepPreviousData,
   })
 }
 
@@ -111,6 +120,16 @@ export function useReviewDecisionMutation() {
       ) {
         await invalidate()
       }
+    },
+  })
+}
+
+export function useClaimReviewMutation() {
+  const invalidate = useInvalidateAll()
+  return useMutation({
+    mutationFn: claimSettlementReview,
+    onSuccess: async (result) => {
+      if (result.status === "succeeded") await invalidate()
     },
   })
 }

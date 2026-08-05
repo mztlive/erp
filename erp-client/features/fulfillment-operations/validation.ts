@@ -75,6 +75,14 @@ export function clientValidation(
           targetId: `receipt-qual-${i}`,
         })
       }
+      if (!line.qualityResult) {
+        issues.push({
+          id: `recv-qr-${i}`,
+          label: "质量结果",
+          message: "请选择质量结果",
+          targetId: `receipt-qr-${i}`,
+        })
+      }
     })
   }
   if (draft.type === "WAREHOUSE_SHIP") {
@@ -142,7 +150,70 @@ export function clientValidation(
       })
     }
   }
+  if (draft.type === "ELECTRONIC") {
+    if (!draft.result) {
+      issues.push({
+        id: "el-result",
+        label: "履约结果",
+        message: "请选择履约结果",
+        targetId: "el-result",
+      })
+    }
+    if (!draft.recipientMasked.trim()) {
+      issues.push({
+        id: "el-recipient",
+        label: "交付对象",
+        message: "交付对象不能为空",
+      })
+    }
+    draft.lines.forEach((line, i) => {
+      const qty = Number(line.quantity)
+      const src = task.lines.find(
+        (l) => l.salesOrderLineId === line.salesOrderLineId
+      )
+      const cap = Number(src?.remainingQuantity ?? 0)
+      if (!(qty > 0)) {
+        issues.push({
+          id: `el-qty-${i}`,
+          label: "交付数量",
+          message: "必须大于 0",
+          targetId: `el-qty-${i}`,
+        })
+      } else if (cap > 0 && qty > cap + 1e-9) {
+        issues.push({
+          id: `el-cap-${i}`,
+          label: "交付数量",
+          message: `不能超过剩余可交付 ${cap}`,
+          targetId: `el-qty-${i}`,
+        })
+      }
+    })
+  }
   if (draft.type === "SERVICE") {
+    if (!draft.result) {
+      issues.push({
+        id: "svc-result",
+        label: "履约结果",
+        message: "请选择履约结果",
+        targetId: "svc-result",
+      })
+    }
+    if (!draft.serviceLocation.trim()) {
+      issues.push({
+        id: "svc-loc",
+        label: "服务地点",
+        message: "必填",
+        targetId: "service-loc",
+      })
+    }
+    if (!draft.startedAt || !draft.endedAt) {
+      issues.push({
+        id: "svc-time-req",
+        label: "服务时间",
+        message: "开始与结束时间都要填",
+        targetId: "service-start",
+      })
+    }
     if (draft.endedAt && draft.startedAt && draft.endedAt < draft.startedAt) {
       issues.push({
         id: "svc-time",
@@ -159,6 +230,17 @@ export function clientValidation(
         targetId: "service-note",
       })
     }
+    draft.lines.forEach((line, i) => {
+      const qty = Number(line.quantity)
+      if (!(qty > 0)) {
+        issues.push({
+          id: `svc-qty-${i}`,
+          label: "服务数量",
+          message: "必须大于 0",
+          targetId: `svc-qty-${i}`,
+        })
+      }
+    })
   }
   return issues
 }

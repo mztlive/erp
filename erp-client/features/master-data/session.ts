@@ -317,6 +317,17 @@ function listKey(resource: MasterDataResource, stableId: string) {
   return `${resource}:${stableId}`
 }
 
+/** 解析 YYYY-MM-DD 为当天 00:00 的毫秒时间戳；格式异常返回 0。 */
+function parseDateOnly(value: string): number {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return 0
+  return new Date(
+    Number(match[1]),
+    Number(match[2]) - 1,
+    Number(match[3])
+  ).getTime()
+}
+
 function cloneListSeeds(resource: MasterDataResource): MasterDataListItem[] {
   const base = MASTER_DATA_LIST_SEEDS[resource].map((row) => {
     const overlay = listOverlays.get(listKey(resource, row.stableId))
@@ -668,7 +679,9 @@ export function reviseW14Object(
   const newRevNo = center.currentRevision.revisionNo + 1
   const revisionId = `${input.stableId}_r${newRevNo}`
   const recordedAt = new Date().toISOString()
-  const isFuture = input.effectiveFrom > new Date().toISOString().slice(0, 10)
+  // 用日期对象比较，避免「2026/08/05」这类非标准格式被字符串大小误判为未来。
+  const isFuture =
+    parseDateOnly(input.effectiveFrom) > new Date().getTime()
 
   const nameSnapshot = input.name.trim()
   const changeReason = input.changeReason.trim()

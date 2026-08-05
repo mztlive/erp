@@ -9,6 +9,7 @@ import {
   RefreshCwIcon,
   SearchIcon,
   SlashIcon,
+  XIcon,
 } from "lucide-react"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 import { z } from "zod"
@@ -57,6 +58,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Input } from "@/components/ui/input"
+import { DateTimeLocalPicker } from "@/components/ui/date-picker"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -89,7 +91,8 @@ import {
 } from "@/features/inventory/cursor"
 import { bumpInventoryBalanceLock, type W10ExportJob } from "@/mock/session-state"
 import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
-import { resultText } from "@/lib/ui-text"
+import { resultText, workspaceLabel } from "@/lib/ui-text"
+import type { WorkspaceId } from "@/lib/workspace-registry"
 
 function parseView(raw: string | null): InventoryView {
   if (
@@ -101,6 +104,13 @@ function parseView(raw: string | null): InventoryView {
     return raw
   }
   return "balance"
+}
+
+/** 本地时区 YYYY-MM-DDTHH:mm（datetime-local 控件值）。 */
+function localNowInput(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 function parseAvailability(raw: string | null): InventoryAvailability {
@@ -115,8 +125,8 @@ function parseAvailability(raw: string | null): InventoryAvailability {
   return "all"
 }
 
-const MOVEMENT_FROM_DEFAULT = "2026-07-03"
-const MOVEMENT_TO_DEFAULT = "2026-08-02"
+/** 演示控件（强制结果不确定 / 直接结算）只在非生产环境出现。 */
+const DEV_SIMULATION_ENABLED = process.env.NODE_ENV !== "production"
 
 const MOVEMENT_TYPE_OPTIONS = [
   { value: "PURCHASE_RECEIPT", label: "采购入库" },
@@ -160,6 +170,29 @@ function sortOptions(view: InventoryView) {
     { value: "createdAt:desc,adjustmentId:desc", label: "创建时间" },
     { value: "adjustmentNo:asc,adjustmentId:asc", label: "调整单号" },
   ]
+}
+
+/** 深链/隐形筛选参数的可移除标记：URL 参数与界面控件一一对应。 */
+function ChipFilter({
+  label,
+  onClear,
+}: {
+  label: string
+  onClear: () => void
+}) {
+  return (
+    <Badge variant="secondary" className="gap-1 font-normal">
+      {label}
+      <button
+        type="button"
+        onClick={onClear}
+        aria-label={`移除${label}筛选`}
+        className="rounded-sm opacity-70 hover:opacity-100"
+      >
+        <XIcon className="size-3" aria-hidden="true" />
+      </button>
+    </Badge>
+  )
 }
 
 function formatQty(value: string, unit: string) {
@@ -219,12 +252,8 @@ export function InventoryLedgerPage() {
     () => movementTypeParam.split(",").filter(Boolean),
     [movementTypeParam]
   )
-  const occurredFrom =
-    searchParams.get("occurredFrom") ??
-    (view === "movement" ? MOVEMENT_FROM_DEFAULT : undefined)
-  const occurredTo =
-    searchParams.get("occurredTo") ??
-    (view === "movement" ? MOVEMENT_TO_DEFAULT : undefined)
+  const occurredFrom = searchParams.get("occurredFrom") ?? undefined
+  const occurredTo = searchParams.get("occurredTo") ?? undefined
   const sortValue = searchParams.get("sort") ?? defaultSortValue(view)
   const pageSizeParam = Number(searchParams.get("pageSize") ?? "20")
   const pageSize =
@@ -356,6 +385,17 @@ export function InventoryLedgerPage() {
   )
 
   const listQuery = useInventoryListQuery(query)
+
+  /** 深链筛选 chip 的业务名称（skuId/salesOrderLineId/adjustmentId 不直接上屏内部 ID）。 */
+  const allViewRows = React.useMemo(
+    () => [
+      ...(listQuery.data?.balances ?? []),
+      ...(listQuery.data?.movements ?? []),
+      ...(listQuery.data?.reservations ?? []),
+      ...(listQuery.data?.adjustments ?? []),
+    ],
+    [listQuery.data]
+  )
   const detailQuery = useBalanceDetailQuery(previewBalanceId)
   const createDraftMutation = useCreateAdjustmentDraftMutation()
   const submitMutation = useSubmitAdjustmentMutation()
@@ -422,7 +462,7 @@ export function InventoryLedgerPage() {
       reasonType: "COUNT_LOSS" as AdjustmentReasonType,
       quantity: "",
       note: "",
-      occurredAt: new Date().toISOString().slice(0, 16),
+      occurredAt: localNowInput(),
     },
     validators: {
       onChange: adjustSchema,
@@ -490,8 +530,7 @@ export function InventoryLedgerPage() {
         form.setFieldValue("note", draft.note)
         form.setFieldValue(
           "occurredAt",
-          draft.occurredAt.slice(0, 16) ||
-            new Date().toISOString().slice(0, 16)
+          draft.occurredAt.slice(0, 16) || localNowInput()
         )
         setPreviewBalanceId(null)
       } catch (err) {
@@ -1074,6 +1113,14 @@ export function InventoryLedgerPage() {
     return data.adjustments
   })()
 
+  const chipSkuName = allViewRows.find((r) => r.skuId === skuId)?.skuName
+  const chipSalesLineLabel = data.reservations.find(
+    (r) => r.salesOrderLineId === salesOrderLineId
+  )?.salesOrderLineLabel
+  const chipAdjustmentNo = data.adjustments.find(
+    (a) => a.adjustmentId === adjustmentIdParam
+  )?.adjustmentNo
+
   const metricActive =
     availability === "zero"
       ? "zero"
@@ -1152,6 +1199,9 @@ export function InventoryLedgerPage() {
           title={lastResult.title}
           description={lastResult.description}
           reference={lastResult.reference}
+          referenceLabel={
+            lastResult.status === "unknown" ? "原任务号" : undefined
+          }
           actions={
             lastResult.pendingIdempotencyKey ? (
               <div className="flex flex-wrap gap-2">
@@ -1190,32 +1240,34 @@ export function InventoryLedgerPage() {
                 >
                   查询最终结果
                 </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => {
-                    if (!pendingPayload) return
-                    void resolveUnknownMutation
-                      .mutateAsync({
-                        idempotencyKey: lastResult.pendingIdempotencyKey!,
-                        settle: true,
-                        settlePayload: pendingPayload,
-                      })
-                      .then((r) => {
-                        if (r.status === "succeeded") {
-                          setLastResult({
-                            status: "succeeded",
-                            title: "调整已提交待复核",
-                            description: `单号 ${r.outcome.adjustmentNo}。下一责任方：${r.outcome.nextResponsible}。`,
-                            reference: r.outcome.reference,
-                          })
-                          closeAdjustment()
-                        }
-                      })
-                  }}
-                >
-                  完成并确认结果（仅演示）
-                </Button>
+                {DEV_SIMULATION_ENABLED ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      if (!pendingPayload) return
+                      void resolveUnknownMutation
+                        .mutateAsync({
+                          idempotencyKey: lastResult.pendingIdempotencyKey!,
+                          settle: true,
+                          settlePayload: pendingPayload,
+                        })
+                        .then((r) => {
+                          if (r.status === "succeeded") {
+                            setLastResult({
+                              status: "succeeded",
+                              title: "调整已提交待复核",
+                              description: `单号 ${r.outcome.adjustmentNo}。下一责任方：${r.outcome.nextResponsible}。`,
+                              reference: r.outcome.reference,
+                            })
+                            closeAdjustment()
+                          }
+                        })
+                    }}
+                  >
+                    完成并确认结果（仅演示）
+                  </Button>
+                ) : null}
               </div>
             ) : undefined
           }
@@ -1239,7 +1291,7 @@ export function InventoryLedgerPage() {
           succeeded={
             exportJob.status === "succeeded" ? exportJob.total : undefined
           }
-          label={`导出任务 ${exportJob.jobId}`}
+          label="库存台账导出"
           description={
             <>
               范围：{exportJob.filterSummary}。导出文件由系统生成，完成后可在此下载。
@@ -1270,13 +1322,15 @@ export function InventoryLedgerPage() {
         </Alert>
       ) : null}
 
-      <Alert>
-        <AlertTitle>自有实物库存边界</AlertTitle>
-        <AlertDescription className="text-xs leading-relaxed">
+      <details className="rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
+        <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+          自有实物库存边界说明
+        </summary>
+        <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
           {data.excludedKindsNote}
           <span className="mt-1 block">{data.openingStockNote}</span>
-        </AlertDescription>
-      </Alert>
+        </p>
+      </details>
 
       <MetricStrip columns={4} aria-label="库存台账指标筛选">
         <MetricFilterItem
@@ -1308,7 +1362,7 @@ export function InventoryLedgerPage() {
         <MetricFilterItem
           label="零可用组合"
           value={data.metrics.zeroAvailableDimensionCount}
-          detail="available = 0"
+          detail="可用数量为 0"
           active={metricActive === "zero"}
           onClick={() => {
             patchUrl({
@@ -1336,7 +1390,16 @@ export function InventoryLedgerPage() {
       <Tabs
         value={view}
         onValueChange={(v) => {
-          patchUrl({ view: v })
+          const nextView = v as InventoryView
+          // 排序参数跨视图残留会让下拉显示占位而旧排序仍生效：不属于目标视图则一并清掉。
+          const validSorts = sortOptions(nextView).map((o) => o.value)
+          const patch: Record<string, string | null | undefined> = {
+            view: nextView,
+          }
+          if (sortValue && !validSorts.includes(sortValue)) {
+            patch.sort = null
+          }
+          patchUrl(patch)
           resetPagination()
         }}
       >
@@ -1406,7 +1469,7 @@ export function InventoryLedgerPage() {
                     warehouses={data.warehouses.map((w) => ({
                       warehouseId: w.id,
                       warehouseName: w.name,
-                      warehouseCode: w.id,
+                      warehouseCode: w.code,
                       statusLabel: "可选",
                       statusTone: "neutral",
                     }))}
@@ -1510,10 +1573,39 @@ export function InventoryLedgerPage() {
                     placeholder="排序"
                   />
                 </label>
+                {skuId ? (
+                  <ChipFilter
+                    label={`当前 SKU：${chipSkuName ?? "已定位单品"}`}
+                    onClear={() => {
+                      patchUrl({ skuId: null })
+                      resetPagination()
+                    }}
+                  />
+                ) : null}
+                {salesOrderLineId ? (
+                  <ChipFilter
+                    label={`销售单明细：${chipSalesLineLabel ?? "已定位"}`}
+                    onClear={() => {
+                      patchUrl({ salesOrderLineId: null })
+                      resetPagination()
+                    }}
+                  />
+                ) : null}
+                {adjustmentIdParam ? (
+                  <ChipFilter
+                    label={`调整单：${chipAdjustmentNo ?? "已定位"}`}
+                    onClear={() => {
+                      patchUrl({ adjustmentId: null })
+                      resetPagination()
+                    }}
+                  />
+                ) : null}
                 {(qParam ||
                   warehouseId ||
                   (availability !== "all" && view === "balance") ||
                   skuId ||
+                  salesOrderLineId ||
+                  adjustmentIdParam ||
                   movementType.length > 0 ||
                   searchParams.has("occurredFrom") ||
                   searchParams.has("occurredTo") ||
@@ -1529,6 +1621,8 @@ export function InventoryLedgerPage() {
                         warehouseId: null,
                         availability: "all",
                         skuId: null,
+                        salesOrderLineId: null,
+                        adjustmentId: null,
                         balanceId: null,
                         movementType: null,
                         occurredFrom: null,
@@ -1569,6 +1663,8 @@ export function InventoryLedgerPage() {
                         warehouseId: null,
                         availability: "all",
                         skuId: null,
+                        salesOrderLineId: null,
+                        adjustmentId: null,
                         view: "balance",
                       })
                     }}
@@ -1597,6 +1693,8 @@ export function InventoryLedgerPage() {
           ) : view === "balance" ? (
             <DataTable
               data={pageRows as StockBalanceRow[]}
+              loading={listQuery.isFetching && !listQuery.isPending}
+              showRefreshingBanner={listQuery.isFetching}
               columns={balanceColumns}
               getRowId={(row) => row.balanceId}
               rowCount={data.total}
@@ -1614,6 +1712,8 @@ export function InventoryLedgerPage() {
           ) : view === "movement" ? (
             <DataTable
               data={pageRows as StockMovementRow[]}
+              loading={listQuery.isFetching && !listQuery.isPending}
+              showRefreshingBanner={listQuery.isFetching}
               columns={movementColumns}
               getRowId={(row) => row.movementId}
               rowCount={data.total}
@@ -1626,6 +1726,8 @@ export function InventoryLedgerPage() {
           ) : view === "reservation" ? (
             <DataTable
               data={pageRows as StockReservationRow[]}
+              loading={listQuery.isFetching && !listQuery.isPending}
+              showRefreshingBanner={listQuery.isFetching}
               columns={reservationColumns}
               getRowId={(row) => row.reservationId}
               rowCount={data.total}
@@ -1641,6 +1743,8 @@ export function InventoryLedgerPage() {
           ) : (
             <DataTable
               data={pageRows as StockAdjustmentRow[]}
+              loading={listQuery.isFetching && !listQuery.isPending}
+              showRefreshingBanner={listQuery.isFetching}
               columns={adjustmentColumns}
               getRowId={(row) => row.adjustmentId}
               rowCount={data.total}
@@ -1695,13 +1799,14 @@ export function InventoryLedgerPage() {
                 type="button"
                 variant="outline"
                 onClick={() => {
+                  setPreviewBalanceId(null)
                   patchUrl({
                     view: "movement",
-                    balanceId: detail.balance.balanceId,
+                    balanceId: null,
                     warehouseId: detail.balance.warehouseId,
                     skuId: detail.balance.skuId,
                   })
-                  closeDetail()
+                  resetPagination()
                 }}
               >
                 查看全部流水
@@ -1838,7 +1943,9 @@ export function InventoryLedgerPage() {
                           size="xs"
                           render={<Link href={doc.href} />}
                         >
-                          {doc.workspaceId ?? "打开"}
+                          {doc.workspaceId
+                            ? workspaceLabel(doc.workspaceId as WorkspaceId)
+                            : "打开"}
                         </Button>
                       ) : null}
                     </li>
@@ -1981,9 +2088,9 @@ export function InventoryLedgerPage() {
                     </span>
                   </div>
                   <div>
-                    余额版本{" "}
+                    数据版本{" "}
                     <span className="num text-foreground">
-                      {adjustLockVersion}
+                      已按最新核对
                     </span>
                   </div>
                 </div>
@@ -2044,7 +2151,21 @@ export function InventoryLedgerPage() {
                 <form.AppField
                   name="occurredAt"
                   children={(field) => (
-                    <field.TextField label="业务发生时间" />
+                    <div className="space-y-1.5">
+                      <Label htmlFor="adjust-occured-at">业务发生时间</Label>
+                      <DateTimeLocalPicker
+                        value={field.state.value || undefined}
+                        onValueChange={(next) =>
+                          field.handleChange(next ?? "")
+                        }
+                        className="w-full"
+                      />
+                      {field.state.meta.errors[0] ? (
+                        <p className="text-xs text-destructive" role="alert">
+                          {String(field.state.meta.errors[0])}
+                        </p>
+                      ) : null}
+                    </div>
                   )}
                 />
 
@@ -2061,38 +2182,43 @@ export function InventoryLedgerPage() {
                     <li>不会直接修改账面或可用数量</li>
                     <li>经办与复核岗位分离，提交后待仓储复核</li>
                     <li>
-                      按当前余额版本提交；若已被他人修改，将提示冲突并保留你的输入。
+                      按当前数据版本提交；若已被他人修改，将提示冲突并保留你的输入。
                     </li>
                   </ul>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={forceUnknownOnce}
-                      onChange={(e) => setForceUnknownOnce(e.target.checked)}
-                    />
-                    演示：强制结果不确定（仅演示）
-                  </label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => {
-                      if (!adjustBalanceId) return
-                      bumpInventoryBalanceLock(
-                        adjustBalanceId,
-                        adjustSeedLock
-                      )
-                      setActionError(
-                        `已模拟他人同时修改库存，本次提交将发生冲突（仅演示）。`
-                      )
-                    }}
-                  >
-                    演示：模拟余额并发变更（仅演示）
-                  </Button>
-                </div>
+                <details className="rounded-lg border border-dashed border-border p-2">
+                  <summary className="cursor-pointer list-none text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+                    演示模式（仅演示）
+                  </summary>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <input
+                        type="checkbox"
+                        checked={forceUnknownOnce}
+                        onChange={(e) => setForceUnknownOnce(e.target.checked)}
+                      />
+                      演示：强制结果不确定（仅演示）
+                    </label>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => {
+                        if (!adjustBalanceId) return
+                        bumpInventoryBalanceLock(
+                          adjustBalanceId,
+                          adjustSeedLock
+                        )
+                        setActionError(
+                          `已模拟他人同时修改库存，本次提交将发生冲突（仅演示）。`
+                        )
+                      }}
+                    >
+                      演示：模拟余额并发变更（仅演示）
+                    </Button>
+                  </div>
+                </details>
 
                 <DialogFooter className="gap-2 sm:justify-between">
                   <Button
@@ -2124,11 +2250,11 @@ export function InventoryLedgerPage() {
           adjustMeta
             ? `${adjustMeta.warehouseName} / ${adjustMeta.skuCode}`
             : "当前余额",
-          `余额版本 ${adjustLockVersion}`,
+          "已按当前数据版本核对",
         ]}
         effects={[
           "创建待仓储复核的库存调整单",
-          "不立即修改 on_hand / reserved / available",
+          "不立即修改账面、预占和可用数量",
           "经办人不得自行复核或确认入账",
         ]}
         nextDepartment="仓储复核"

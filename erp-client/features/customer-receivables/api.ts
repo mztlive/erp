@@ -41,6 +41,7 @@ import type {
   SalesInvoiceRow,
   SaveAllocationDraftInput,
 } from "@/features/customer-receivables/types"
+import { DUE_LABEL } from "@/features/customer-receivables/types"
 
 const PERMISSION_VERSION = "pv-w11-demo-1"
 
@@ -252,7 +253,7 @@ function projectInvoice(
   }
 }
 
-function filterSummary(query: CustomerAccountsQuery, total: number): string {
+function filterSummary(query: CustomerAccountsQuery): string {
   const parts = [
     query.view === "receivable"
       ? "应收台账"
@@ -268,10 +269,11 @@ function filterSummary(query: CustomerAccountsQuery, total: number): string {
     )
     parts.push(cp?.counterpartyPartyName ?? query.counterpartyPartyId)
   }
-  if (query.customerId) parts.push(`客户 ${query.customerId}`)
+  if (query.customerId) parts.push("已按经营客户过滤")
   if (query.q?.trim()) parts.push(`「${query.q.trim()}」`)
-  if (query.due && query.due !== "all") parts.push(query.due)
-  parts.push(`${total} 条`)
+  if (query.due && query.due !== "all") {
+    parts.push(DUE_LABEL[query.due])
+  }
   return parts.join(" · ")
 }
 
@@ -452,7 +454,7 @@ export async function fetchCustomerAccountsList(
     },
     counterparties: [...W11_COUNTERPARTIES],
     total,
-    filterSummary: filterSummary(query, total),
+    filterSummary: filterSummary(query),
     permissionVersion: PERMISSION_VERSION,
     dataWatermark: `wm-w11-${Date.now()}`,
     queriedAt: new Date().toISOString(),

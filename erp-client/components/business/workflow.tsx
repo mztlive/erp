@@ -65,7 +65,7 @@ import {
   StatusBadge,
   type StatusTone,
 } from "@/components/ui/status-badge"
-import { leaseText } from "@/lib/ui-text"
+import { leaseText, sequentialText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
 
 type ControllableDialogProps = {
@@ -121,6 +121,17 @@ function normalizeStatus(
     tone: status.tone ?? fallbackTone,
     icon: status.icon ?? fallbackIcon,
   }
+}
+
+/** 把提交异常转成可读消息；未知异常给通用下一步指引。 */
+function messageFromError(error: unknown): string {
+  if (error instanceof Error && error.message.trim().length > 0) {
+    return error.message
+  }
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error
+  }
+  return "操作未完成，请稍后重试。"
 }
 
 type WorkflowDetailListProps = {
@@ -234,6 +245,7 @@ function FormalActionConfirmDialog({
     onOpenChange,
   })
   const [internalPending, setInternalPending] = React.useState(false)
+  const [confirmError, setConfirmError] = React.useState<string | null>(null)
   const isPending = pending || internalPending
   const sourceStatus = normalizeStatus(
     fromStatus,
@@ -244,10 +256,12 @@ function FormalActionConfirmDialog({
 
   const handleConfirm = React.useCallback(async () => {
     setInternalPending(true)
+    setConfirmError(null)
     try {
       await onConfirm()
       setOpen(false)
     } catch (error) {
+      setConfirmError(messageFromError(error))
       onConfirmError?.(error)
     } finally {
       setInternalPending(false)
@@ -306,6 +320,14 @@ function FormalActionConfirmDialog({
             tone="destructive"
           />
         </div>
+
+        {confirmError != null && onConfirmError == null ? (
+          <Alert variant="destructive">
+            <TriangleAlertIcon aria-hidden="true" />
+            <AlertTitle>操作未完成</AlertTitle>
+            <AlertDescription>{confirmError}</AlertDescription>
+          </Alert>
+        ) : null}
 
         <AlertDialogFooter>
           <AlertDialogCancel
@@ -389,6 +411,20 @@ export type SequentialProcessBarProps = Omit<
   processNextLabel?: string
   pending?: boolean
   processDisabled?: boolean
+  /**
+   * 与 `processDisabled` 独立：只读翻页场景（未领取也能看下一条）传 `false`。
+   * 默认跟随 `processDisabled`，保持既有「需要领取才能处理」行为。
+   */
+  processNextDisabled?: boolean
+  /**
+   * 返回按钮文案。行为由 `onBack` 决定；跳转目标不是队列页时（如回工作台），
+   * 必须传与行为一致的文案（按钮说动作，不说机制）。
+   */
+  backLabel?: string
+  /** 首次领取按钮文案（从未领取过）；默认「领取任务」。 */
+  claimLabel?: string
+  /** 处理权丢失后的重新领取按钮文案；默认「重新领取」。 */
+  reclaimLabel?: string
   /** 主动作会离开当前页面（如跳转专用处理器）时置 false，避免两个同义按钮。 */
   showProcessNext?: boolean
   /**
@@ -417,6 +453,10 @@ function SequentialProcessBar({
   processNextLabel = "处理并打开下一条",
   pending = false,
   processDisabled = false,
+  processNextDisabled,
+  backLabel = "返回队列",
+  claimLabel = sequentialText.claim,
+  reclaimLabel = sequentialText.reclaim,
   showProcessNext = true,
   showProcess = true,
   statusExtras,
@@ -430,8 +470,17 @@ function SequentialProcessBar({
   const lease = sequentialLeaseStatus[leaseStatus]
   const canProcess =
     leaseStatus === "active" && !pending && !processDisabled
+  const canProcessNext =
+    processNextDisabled !== undefined
+      ? !pending && !processNextDisabled
+      : canProcess
   const canReclaim =
     showProcess && (leaseStatus === "unclaimed" || leaseStatus === "lost")
+  const isFirstClaim = leaseStatus === "unclaimed"
+  const claimButtonLabel = isFirstClaim ? claimLabel : reclaimLabel
+  const claimPendingLabel = isFirstClaim
+    ? sequentialText.claiming
+    : sequentialText.reclaiming
 
   return (
     <section
@@ -470,7 +519,7 @@ function SequentialProcessBar({
           onClick={onBack}
         >
           <ArrowLeftIcon data-icon="inline-start" aria-hidden="true" />
-          返回队列
+          {backLabel}
         </Button>
 
         {canReclaim ? (
@@ -492,7 +541,7 @@ function SequentialProcessBar({
                 aria-hidden="true"
               />
             )}
-            {pending ? "正在重新领取" : "重新领取"}
+            {pending ? claimPendingLabel : claimButtonLabel}
           </Button>
         ) : null}
 
@@ -519,7 +568,7 @@ function SequentialProcessBar({
         {showProcess && showProcessNext ? (
           <Button
             type="button"
-            disabled={!canProcess}
+            disabled={!canProcessNext}
             onClick={onProcessNext}
           >
             {pending ? (
@@ -553,6 +602,10 @@ export type BatchImpactPreviewProps = Omit<
   background: boolean
   sensitiveFields?: readonly string[]
   skippedReason?: React.ReactNode
+  /** 三个数字的列头文案；默认「预计处理 / 可处理 / 将跳过」。 */
+  estimatedLabel?: React.ReactNode
+  processableLabel?: React.ReactNode
+  skippedLabel?: React.ReactNode
 }
 
 /** 批量动作执行前的范围、数量、后台任务和敏感字段预览。 */
@@ -567,6 +620,9 @@ function BatchImpactPreview({
   background,
   sensitiveFields = [],
   skippedReason,
+  estimatedLabel = "预计处理",
+  processableLabel = "可处理",
+  skippedLabel = "将跳过",
   className,
   ...props
 }: BatchImpactPreviewProps) {
@@ -619,7 +675,7 @@ function BatchImpactPreview({
           <div className="bg-card p-4">
             <dt className="flex items-center gap-2 text-sm text-muted-foreground">
               <ListChecksIcon aria-hidden="true" className="size-4" />
-              预计处理
+              {estimatedLabel}
             </dt>
             <dd className="num mt-2 text-2xl font-semibold text-foreground">
               {estimated.toLocaleString("zh-CN")}
@@ -628,7 +684,7 @@ function BatchImpactPreview({
           <div className="bg-card p-4">
             <dt className="flex items-center gap-2 text-sm text-muted-foreground">
               <CircleCheckIcon aria-hidden="true" className="size-4" />
-              可处理
+              {processableLabel}
             </dt>
             <dd className="num mt-2 text-2xl font-semibold text-foreground">
               {processable.toLocaleString("zh-CN")}
@@ -637,7 +693,7 @@ function BatchImpactPreview({
           <div className="bg-card p-4">
             <dt className="flex items-center gap-2 text-sm text-muted-foreground">
               <TriangleAlertIcon aria-hidden="true" className="size-4" />
-              将跳过
+              {skippedLabel}
             </dt>
             <dd className="num mt-2 text-2xl font-semibold text-foreground">
               {skipped.toLocaleString("zh-CN")}

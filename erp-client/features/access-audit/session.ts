@@ -19,6 +19,13 @@ import type {
   UserRow,
 } from "@/features/access-audit/types"
 
+/** 变更项目标引用 → 业务中文（差异面板不显示 W22.publish 等内部引用）。 */
+const TARGET_REFERENCE_LABEL: Record<string, string> = {
+  "W22.publish": "商品发布 · 发布动作",
+  "sensitive.field.expand": "敏感字段 · 查看权限",
+  status: "角色状态",
+}
+
 // ── 治理策略（演示：时间/字段粒度默认缺失 fail-closed；审计策略有短窗口 fallback） ──
 
 let userRoleTimePolicyConfigured = false
@@ -156,7 +163,7 @@ const ROLE_SEED: RoleRow[] = [
     status: "enabled",
     statusLabel: "启用",
     statusTone: "success",
-    permissionSummary: "W19 权限配置 · 有效权限解释",
+    permissionSummary: "权限与审计 · 有效权限解释",
     dataScopeSummary: "被授权组织",
     fieldPolicySummary: "业务敏感值按字段策略裁剪（不可因配置权自动可见）",
     riskFlags: ["HIGH_PRIVILEGE", "ACCESS_ADMIN"],
@@ -184,7 +191,7 @@ const ROLE_SEED: RoleRow[] = [
     status: "enabled",
     statusLabel: "启用",
     statusTone: "success",
-    permissionSummary: "W19 审计查询（只读）",
+    permissionSummary: "权限与审计 · 审计查询（只读）",
     dataScopeSummary: "经授权的审计事件范围",
     fieldPolicySummary: "仅字段名与「已变更」",
     riskFlags: [],
@@ -535,7 +542,7 @@ function buildAuditSeed(): AuditEventRow[] {
         resultLabel: "成功",
         resultTone: "success",
         changedFieldNames: ["modulePermissions"],
-        changedFieldDisplay: "modulePermissions · 已变更",
+        changedFieldDisplay: "模块权限 · 已变更",
       },
       {
         actorId: "user_chenlei",
@@ -550,7 +557,7 @@ function buildAuditSeed(): AuditEventRow[] {
         resultLabel: "成功",
         resultTone: "success",
         changedFieldNames: ["activeRoles"],
-        changedFieldDisplay: "activeRoles · 已变更",
+        changedFieldDisplay: "当前角色 · 已变更",
       },
       {
         actorId: "user_wangmin",
@@ -565,7 +572,7 @@ function buildAuditSeed(): AuditEventRow[] {
         resultLabel: "成功",
         resultTone: "success",
         changedFieldNames: ["contactPhone"],
-        changedFieldDisplay: "contactPhone · 已变更",
+        changedFieldDisplay: "联系电话 · 已变更",
         safeDigest: "sd:a9f3…c21",
       },
       {
@@ -596,7 +603,7 @@ function buildAuditSeed(): AuditEventRow[] {
         resultLabel: "失败",
         resultTone: "warning",
         changedFieldNames: ["accessCapabilities"],
-        changedFieldDisplay: "accessCapabilities · 已变更",
+        changedFieldDisplay: "访问能力 · 已变更",
       },
       {
         actorId: "user_sunyue",
@@ -626,7 +633,7 @@ function buildAuditSeed(): AuditEventRow[] {
         resultLabel: "成功",
         resultTone: "success",
         changedFieldNames: ["onHandQuantity"],
-        changedFieldDisplay: "onHandQuantity · 已变更",
+        changedFieldDisplay: "账面现存 · 已变更",
       },
       {
         actorId: "user_chenlei",
@@ -641,7 +648,7 @@ function buildAuditSeed(): AuditEventRow[] {
         resultLabel: "成功",
         resultTone: "success",
         changedFieldNames: ["scopeTargets"],
-        changedFieldDisplay: "scopeTargets · 已变更",
+        changedFieldDisplay: "数据范围对象 · 已变更",
       },
       {
         actorId: "system",
@@ -656,7 +663,7 @@ function buildAuditSeed(): AuditEventRow[] {
         resultLabel: "成功",
         resultTone: "success",
         changedFieldNames: ["permissionVersion"],
-        changedFieldDisplay: "permissionVersion · 已变更",
+        changedFieldDisplay: "权限版本 · 已变更",
       },
       {
         actorId: "user_zhoujie",
@@ -795,7 +802,13 @@ function projectAudit(query: AccessListQuery): {
   const all = [...appendedAudit, ...AUDIT_SEED]
   const rows = all.filter((e) => {
     if (e.recordedAt < from || e.recordedAt > to) return false
-    if (query.actorId && e.actorId !== query.actorId) return false
+    if (
+      query.actorId &&
+      e.actorId !== query.actorId &&
+      !e.actorLabel.includes(query.actorId)
+    ) {
+      return false
+    }
     if (query.action && e.actionType !== query.action) return false
     if (query.objectType && e.objectType !== query.objectType) return false
     if (query.objectId && e.objectId !== query.objectId) return false
@@ -1405,7 +1418,7 @@ export function previewW19AccessChange(
         "changeSet" in command
           ? command.changeSet.map((c, i) => ({
               id: `c${i}`,
-              field: c.targetReference,
+              field: TARGET_REFERENCE_LABEL[c.targetReference] ?? c.targetReference,
               before: c.operation === "ADD" ? "未授予" : "已授予",
               after: c.operation === "REMOVE" ? "移除" : c.valueReference ?? c.operation,
             }))

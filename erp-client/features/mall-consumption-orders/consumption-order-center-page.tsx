@@ -10,7 +10,6 @@ import {
 } from "lucide-react"
 
 import {
-  AuditTimeline,
   BusinessEmptyState,
   BusinessFailureState,
   BusinessStatusBadge,
@@ -38,7 +37,12 @@ import {
   CardTitle,
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "@/components/ui/tabs"
 import { useConsumptionOrderDetailQuery } from "@/features/mall-consumption-orders/queries"
 import type {
   MallConsumptionOrderView,
@@ -57,11 +61,20 @@ import {
   FULFILLMENT_CHAIN_TONE,
   OBJECT_CENTER_SECTIONS,
   PROCESSING_STATUS_LABEL,
+  SUPPLIER_CANCEL_LABEL,
+  SUPPLIER_REFUND_LABEL,
   SUPPLIER_STATUS_LABEL,
 } from "@/features/mall-consumption-orders/types"
+import { customerLabelFor } from "@/features/mall-consumption-orders/customer-title"
 import { cn } from "@/lib/utils"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 import { formatDateTime } from "@/lib/datetime"
+
+/** 动作阻断的中文动作名（审计 tab；命令码不允许上屏） */
+const BLOCKED_ACTION_LABEL: Record<string, string> = {
+  EDIT_MALL_ORDER: "修改商城订单",
+  RETRY_SUPPLIER: "重试供应商下单",
+}
 
 function parseSection(raw: string | null): ObjectCenterSectionId {
   const found = OBJECT_CENTER_SECTIONS.find((s) => s.id === raw)
@@ -72,7 +85,7 @@ function sourceColumnTitle(source: PaymentSourceView) {
   if (source.sourceType === "CARD") {
     return (
       <span>
-        卡实例 {source.sourceReference}
+        卡券 {source.sourceReference}
         <Badge variant="outline" className="ml-1">
           非卡号
         </Badge>
@@ -125,7 +138,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
 
       <table className="w-full min-w-[40rem] border-collapse text-sm">
         <caption className="sr-only">
-          商品 × 支付来源分摊矩阵（仅 CARD / WECHAT）
+          商品 × 支付来源分摊矩阵（仅卡券 / 微信）
         </caption>
         <thead>
           <tr className="border-b border-border text-left">
@@ -224,7 +237,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
         </tfoot>
       </table>
       <p className="text-xs text-muted-foreground">
-        支付来源仅 CARD / WECHAT；不存在福利账户分支。成本不进入本矩阵。
+        支付来源仅卡券与微信；不存在福利账户分支。成本不进入本矩阵。
       </p>
     </div>
   )
@@ -309,6 +322,9 @@ export function ConsumptionOrderCenterPage({
   const searchParams = useSearchParams()
   const section = parseSection(searchParams.get("section"))
   const factId = searchParams.get("fact") ?? undefined
+  /** 从列表页进入时携带的返回地址（保留筛选/分页上下文） */
+  const backToListHref =
+    searchParams.get("returnTo") ?? "/commerce/consumption-orders"
 
   const detailQuery = useConsumptionOrderDetailQuery(mallOrderId)
   const view = detailQuery.data
@@ -348,13 +364,22 @@ export function ConsumptionOrderCenterPage({
           title="加载失败"
           description="无法读取消费订单详情。"
           action={
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void detailQuery.refetch()}
-            >
-              重试
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void detailQuery.refetch()}
+              >
+                重试
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                render={<Link href={backToListHref} />}
+              >
+                返回列表
+              </Button>
+            </div>
           }
         />
       </div>
@@ -367,7 +392,7 @@ export function ConsumptionOrderCenterPage({
         <BusinessEmptyState
           kind="no-data"
           title="未找到消费订单"
-          description={`稳定身份 ${mallOrderId} 不存在或无权访问。`}
+          description="该消费订单不存在或当前账号无权访问。"
           action={
             <Button
               type="button"
@@ -399,6 +424,30 @@ export function ConsumptionOrderCenterPage({
           ? "STANDARD"
           : "NONE"
 
+  /** 成本覆盖率按消费条目逐条统计，不做占位伪造 */
+  const costEntries = view.consumptionEntries
+  const costCoverage = (() => {
+    const total = costEntries.length
+    const actualCount = costEntries.filter(
+      (e) => e.currentCostAssessment.costBasis === "ACTUAL"
+    ).length
+    const standardCount = costEntries.filter(
+      (e) => e.currentCostAssessment.costBasis === "STANDARD"
+    ).length
+    const coveredCount = actualCount + standardCount
+    return {
+      total,
+      coveredCount,
+      percent: total === 0 ? 0 : Math.round((coveredCount / total) * 100),
+      state:
+        total === 0 || coveredCount === 0
+          ? ("none" as const)
+          : coveredCount === total
+            ? ("complete" as const)
+            : ("partial" as const),
+    }
+  })()
+
   const sortedFacts = [...view.facts].sort(
     (a, b) =>
       new Date(a.occurredAt).getTime() - new Date(b.occurredAt).getTime()
@@ -426,7 +475,7 @@ export function ConsumptionOrderCenterPage({
               type="button"
               variant="outline"
               size="sm"
-              render={<Link href="/commerce/consumption-orders" />}
+              render={<Link href={backToListHref} />}
             >
               <ArrowLeftIcon data-icon="inline-start" />
               返回列表
@@ -435,9 +484,24 @@ export function ConsumptionOrderCenterPage({
               type="button"
               variant="outline"
               size="sm"
+              onClick={() => {
+                void navigator.clipboard.writeText(view.identity.externalOrderNo)
+              }}
+              title="复制商城订单号到剪贴板"
+            >
+              复制单号
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={detailQuery.isFetching}
               onClick={() => void detailQuery.refetch()}
             >
-              <RefreshCwIcon data-icon="inline-start" />
+              <RefreshCwIcon
+                data-icon="inline-start"
+                className={detailQuery.isFetching ? "animate-spin" : undefined}
+              />
               刷新
             </Button>
           </div>
@@ -446,7 +510,7 @@ export function ConsumptionOrderCenterPage({
 
       <DocumentHeader
         density="compact"
-        title={`${view.identity.mallName} · ${view.customer.customerLabel}`}
+        title={`${view.identity.mallName} · ${customerLabelFor(view)}`}
         documentNumber={view.identity.externalOrderNo}
         primaryStatus={{
           label: FULFILLMENT_CHAIN_LABEL[view.fulfillment.chain],
@@ -457,24 +521,6 @@ export function ConsumptionOrderCenterPage({
             记录更新 {formatDateTime(view.freshness.factWatermark, "default")}
           </span>
         }
-        statuses={[
-          {
-            id: "fact",
-            label: "关键记录",
-            status: {
-                            label: `${view.facts.length} 条`,
-              tone: "info",
-            },
-          },
-          {
-            id: "attr",
-            label: "归集",
-            status: {
-              label: ATTRIBUTION_STATUS_LABEL[view.customer.attributionStatus],
-              tone: ATTRIBUTION_STATUS_TONE[view.customer.attributionStatus],
-            },
-          },
-        ]}
       />
       <StatusTrackSummary
         tracks={[
@@ -574,9 +620,8 @@ export function ConsumptionOrderCenterPage({
             </TabsTrigger>
           ))}
         </TabsList>
-      </Tabs>
 
-      {section === "overview" ? (
+      <TabsContent value="overview">
         <div className="space-y-4">
           <DocumentSection title="金额与身份">
             <DocumentSummary
@@ -591,7 +636,7 @@ export function ConsumptionOrderCenterPage({
                 },
                 {
                   id: "f-17653",
-                  label: "ERP 稳定 ID",
+                  label: "ERP 订单编号",
                   value: <span className="num">{view.identity.mallOrderId}</span>,
                 },
                 {
@@ -638,16 +683,20 @@ export function ConsumptionOrderCenterPage({
                   id: "f-21324",
                   label: "实付",
                   value: (
-                    <MoneyValue value={view.amounts.paid} taxBasis="gross" />
+                    <span className="text-lg font-semibold">
+                      <MoneyValue value={view.amounts.paid} taxBasis="gross" />
+                    </span>
                   ),
                 },
                 {
                   id: "f-95351",
                   label: "守恒",
                   value:
-                    view.amounts.conservationStatus === "VALID"
-                      ? "有效"
-                      : "差异",
+                    view.amounts.conservationStatus === "VALID" ? (
+                      "有效"
+                    ) : (
+                      <span className="text-destructive">差异</span>
+                    ),
                 },
                 {
                   id: "f-8625",
@@ -706,13 +755,13 @@ export function ConsumptionOrderCenterPage({
               ]}
             />
             <p className="mt-2 text-xs text-muted-foreground">
-              地址仅短暂显示，需授权并记录审计；离开页面后立即清除。卡号与卡密永不展示。
+              地址、手机号与支付引用按权限打码展示，完整值不在此页显示；卡号与卡密永不展示。
             </p>
           </DocumentSection>
         </div>
-      ) : null}
+      </TabsContent>
 
-      {section === "facts" ? (
+      <TabsContent value="facts">
         <DocumentSection
           title="五类关键记录时间线"
           description="以业务发生时间排序，并展示接收时间。多次部分退款与余额恢复逐笔展示，不按订单号合并。"
@@ -727,37 +776,10 @@ export function ConsumptionOrderCenterPage({
               />
             ))}
           </div>
-          <div className="mt-4">
-            <AuditTimeline
-              aria-label="关键记录时间线"
-              emptyMessage="暂无关键记录"
-              entries={sortedFacts.map((f) => ({
-                id: f.factId,
-                action: FACT_TYPE_LABEL[f.factType],
-                operator: "商城结果记录",
-                occurredAt: f.occurredAt,
-                occurredAtLabel: (
-                  <span>
-                    发生 {formatDateTime(f.occurredAt, "default")}
-                    <span className="mx-1 text-muted-foreground">/</span>
-                    接收 {formatDateTime(f.receivedAt, "default")}
-                  </span>
-                ),
-                source:
-                  f.dataSource === "BACKFILL" ? "历史回填" : "实时接收",
-                note: (
-                  <span className="num text-xs">
-                    {f.businessFactKeySummary}
-                    {f.factId === selectedFactId ? " · 当前选中" : ""}
-                  </span>
-                ),
-              }))}
-            />
-          </div>
         </DocumentSection>
-      ) : null}
+      </TabsContent>
 
-      {section === "items" ? (
+      <TabsContent value="items">
         <DocumentSection title="商品明细（下单时）">
           <div className="space-y-3">
             {view.items.map((item) => (
@@ -860,9 +882,9 @@ export function ConsumptionOrderCenterPage({
             ))}
           </div>
         </DocumentSection>
-      ) : null}
+      </TabsContent>
 
-      {section === "payment" ? (
+      <TabsContent value="payment">
         <DocumentSection
           title="支付与分摊"
           description="商品与支付来源的守恒校验；合计与状态以系统结果为准。"
@@ -877,12 +899,12 @@ export function ConsumptionOrderCenterPage({
           </div>
           <PaymentMatrix view={view} />
         </DocumentSection>
-      ) : null}
+      </TabsContent>
 
-      {section === "origin" ? (
+      <TabsContent value="origin">
         <DocumentSection
           title="来源追溯"
-          description="从卡实例引用可追溯到客户、原销售单与对应卡券明细；不展示卡号与卡密。"
+          description="从卡券引用可追溯到客户、原销售单与对应卡券明细；不展示卡号与卡密。"
         >
           <div className="space-y-3">
             {view.paymentSources.map((s) => (
@@ -909,7 +931,7 @@ export function ConsumptionOrderCenterPage({
                     <Alert variant="info">
                       <AlertTitle>微信支付不挂企业卡券收入归属</AlertTitle>
                       <AlertDescription>
-                        微信支付仅显示支付摘要，不关联卡实例或卡券明细。
+                        微信支付仅显示支付摘要，不关联卡券明细。
                       </AlertDescription>
                     </Alert>
                   ) : null}
@@ -1002,7 +1024,7 @@ export function ConsumptionOrderCenterPage({
                     />
                   ) : s.sourceType === "CARD" ? (
                     <p className="text-sm text-muted-foreground">
-                      卡实例或客户尚未归集，保留原始引用，不补充猜测值。
+                      卡券或客户尚未归集，保留原始引用，不补充猜测值。
                     </p>
                   ) : null}
                 </CardContent>
@@ -1010,9 +1032,9 @@ export function ConsumptionOrderCenterPage({
             ))}
           </div>
         </DocumentSection>
-      ) : null}
+      </TabsContent>
 
-      {section === "supplier" ? (
+      <TabsContent value="supplier">
         <DocumentSection title="供应商履约">
           {view.fulfillment.chain === "LEGACY_MANUAL" ? (
             <Alert variant="default">
@@ -1058,7 +1080,9 @@ export function ConsumptionOrderCenterPage({
                     </CardTitle>
                     <CardDescription>
                       履约 {SUPPLIER_STATUS_LABEL[so.fulfillmentStatus]} · 取消{" "}
-                      {so.cancelStatus} · 退款 {so.refundStatus}
+                      {SUPPLIER_CANCEL_LABEL[so.cancelStatus] ?? so.cancelStatus}{" "}
+                      · 退款{" "}
+                      {SUPPLIER_REFUND_LABEL[so.refundStatus] ?? so.refundStatus}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2">
@@ -1140,55 +1164,41 @@ export function ConsumptionOrderCenterPage({
                       打开供应商订单
                       <ExternalLinkIcon data-icon="inline-end" />
                     </Button>
-                  </CardContent>
+                   </CardContent>
                 </Card>
               ))}
             </div>
           )}
         </DocumentSection>
-      ) : null}
+      </TabsContent>
 
-      {section === "cost" ? (
+      <TabsContent value="cost">
         <DocumentSection
           title="成本口径"
           description="无成本时仅显示原因，不按零成本计入利润。"
         >
           <CostCoverageNotice
             basis={costBasisPrimary}
-            coveragePercent={
-              costBasisPrimary === "NONE"
-                ? 0
-                : costBasisPrimary === "ACTUAL"
-                  ? 100
-                  : 70
-            }
+            coveragePercent={costCoverage.percent}
             coverageLabel={
-              costBasisPrimary === "NONE"
-                ? "无可用成本"
-                : costBasisPrimary === "ACTUAL"
-                  ? "已覆盖"
-                  : "标准成本覆盖"
+              costCoverage.total === 0
+                ? "无消费条目"
+                : `${costCoverage.coveredCount}/${costCoverage.total} 条已覆盖`
             }
-            coverageState={
-              costBasisPrimary === "NONE"
-                ? "none"
-                : costBasisPrimary === "ACTUAL"
-                  ? "complete"
-                  : "partial"
-            }
+            coverageState={costCoverage.state}
             breakdown={{
-              ACTUAL: costBasisPrimary === "ACTUAL" ? "100%" : "0%",
-              STANDARD: costBasisPrimary === "STANDARD" ? "100%" : "0%",
-              NONE: costBasisPrimary === "NONE" ? "未覆盖" : "—",
+              ACTUAL: `${costEntries.filter((e) => e.currentCostAssessment.costBasis === "ACTUAL").length} 条`,
+              STANDARD: `${costEntries.filter((e) => e.currentCostAssessment.costBasis === "STANDARD").length} 条`,
+              NONE: `${costEntries.filter((e) => e.currentCostAssessment.costBasis === "NONE").length} 条`,
             }}
             profitBasis={
-              costBasisPrimary === "NONE"
+              costCoverage.coveredCount === 0
                 ? "无成本数据时不计入利润；经营分析见「卡券经营分析」"
                 : "利润解读须同时阅读成本覆盖"
             }
             notice={
-              costBasisPrimary === "NONE"
-                ? "金额为空并显示无可用成本，不暗示零成本。"
+              costCoverage.state === "none"
+                ? "无可用成本条目金额为空并显示无成本，不按零成本计入利润。"
                 : undefined
             }
           />
@@ -1271,9 +1281,9 @@ export function ConsumptionOrderCenterPage({
             )}
           </div>
         </DocumentSection>
-      ) : null}
+      </TabsContent>
 
-      {section === "aftersales" ? (
+      <TabsContent value="aftersales">
         <DocumentSection
           title="售后结果分轨"
           description="商城退款仅冲减消费，卡券余额恢复仅记回补，供应商退款另行分列，不替代商城退款。"
@@ -1313,9 +1323,18 @@ export function ConsumptionOrderCenterPage({
               </CardHeader>
               <CardContent className="text-sm">
                 {view.supplierOrders.filter((s) => s.supplierRefundSummary)
-                  .length > 0
-                  ? "见履约区供应商退款摘要"
-                  : "无"}
+                  .length > 0 ? (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="outline"
+                    onClick={() => setSection("supplier")}
+                  >
+                    查看履约区供应商退款摘要
+                  </Button>
+                ) : (
+                  "无"
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1347,9 +1366,9 @@ export function ConsumptionOrderCenterPage({
               ))}
           </ul>
         </DocumentSection>
-      ) : null}
+      </TabsContent>
 
-      {section === "audit" ? (
+      <TabsContent value="audit">
         <DocumentSection title="审计与禁止动作">
           <DocumentSummary
             columns="two"
@@ -1403,11 +1422,12 @@ export function ConsumptionOrderCenterPage({
                     key={`${b.action}-${b.code}`}
                     className="rounded-lg border p-3 text-sm"
                   >
-                    <span className="font-mono text-xs">{b.code}</span>
-                    <span className="mx-2 text-muted-foreground">
-                      {b.action}
-                    </span>
-                    <div>{b.message}</div>
+                    {BLOCKED_ACTION_LABEL[b.action] ? (
+                      <span className="font-medium">
+                        {BLOCKED_ACTION_LABEL[b.action]}
+                      </span>
+                    ) : null}
+                    <div className="text-muted-foreground">{b.message}</div>
                   </li>
                 ))}
               </ul>
@@ -1436,7 +1456,8 @@ export function ConsumptionOrderCenterPage({
             </AlertDescription>
           </Alert>
         </DocumentSection>
-      ) : null}
+      </TabsContent>
+      </Tabs>
     </div>
   )
 }

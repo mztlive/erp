@@ -48,7 +48,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     dueAt: "2026-08-01T09:00:00+08:00",
     message: {
       eventIdSummary: "evt_8f3a…c2",
-      idempotencyKeySummary: "idem_ord_***77120",
+      idempotencyKeySummary: "原任务号 ***77120",
       businessFactKeySummary: "bfk_so_sf_77120",
       schemaVersion: "supplier.order.v3",
       directionLabel: "ERP → 供应商",
@@ -56,7 +56,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     },
     originalAction: {
       originalActionId: "oa_place_order_77120",
-      originalActionIdempotencyKeySummary: "idem_ord_***77120",
+      originalActionIdempotencyKeySummary: "原任务号 ***77120",
       originalActionIdempotencyKeyLocked: true,
       actionLabel: "供应商下单",
     },
@@ -76,7 +76,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         attemptNumber: 2,
         attemptedAt: "2026-08-01T07:45:00+08:00",
         result: "超时 · 无处理结果",
-        requestSummary: "下单 · 原任务号摘要 idem_ord_***77120",
+        requestSummary: "下单 · 原任务号 ***77120",
         responseSummary: "HTTP 504 · 无 body（已脱敏）",
         nextRetryAt: undefined,
       },
@@ -122,7 +122,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     repairLinks: [
       {
         workspaceId: "W26",
-        label: "W26 供应商订单",
+        label: "供应商订单",
         href: "/supplier-api/orders?q=SO-SF-77120",
       },
     ],
@@ -141,7 +141,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         at: "2026-08-01T07:20:00+08:00",
         actor: "系统",
         action: "消息入队",
-        detail: "event evt_8f3a…c2 · schema supplier.order.v3",
+        detail: "事件 evt_8f3a…c2 · 消息格式 供应商订单 v3",
       },
       {
         id: "ev2",
@@ -194,7 +194,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     createdAt: "2026-07-31T16:10:00+08:00",
     message: {
       eventIdSummary: "evt_map_…91",
-      idempotencyKeySummary: "idem_sync_***8821",
+      idempotencyKeySummary: "原任务号 ***8821",
       businessFactKeySummary: "bfk_ep_jd_8821",
       schemaVersion: "catalog.offer.v2",
       directionLabel: "供应商 → ERP",
@@ -207,7 +207,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         attemptedAt: "2026-07-31T16:10:00+08:00",
         result: "映射校验失败 · 无有效 SKU",
         requestSummary: "归集外部修订 · 脱敏",
-        responseSummary: "MAPPING_REQUIRED",
+        responseSummary: "需要映射修复",
       },
     ],
     objectVersion: "ov1",
@@ -244,7 +244,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
       },
       {
         workspaceId: "W17",
-        label: "W17 商城同步映射",
+        label: "商城同步映射",
         href: "/governance/mall-sync?q=EP-JD-8821",
       },
     ],
@@ -310,7 +310,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     createdAt: "2026-08-01T09:45:00+08:00",
     message: {
       eventIdSummary: "evt_sig_…44",
-      idempotencyKeySummary: "idem_health_***jd",
+      idempotencyKeySummary: "原任务号 ***jd",
       businessFactKeySummary: "bfk_conn_jd_prod",
       schemaVersion: "conn.health.v1",
       directionLabel: "ERP → 供应商",
@@ -323,7 +323,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         attemptedAt: "2026-08-01T09:45:00+08:00",
         result: "签名校验失败 · 已停止自动重试",
         requestSummary: "健康检查 · 连接别名 JD-PROD",
-        responseSummary: "HTTP 401 · SIGNATURE_INVALID（无密钥）",
+        responseSummary: "HTTP 401 · 签名无效（不展示密钥）",
       },
     ],
     objectVersion: "ov1",
@@ -348,7 +348,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     repairLinks: [
       {
         workspaceId: "W20",
-        label: "W20 API 连接",
+        label: "API 供应商连接",
         href: "/supplier-api/connections?connectionId=conn_jd_prod",
       },
     ],
@@ -423,7 +423,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     createdAt: "2026-08-01T04:10:00+08:00",
     message: {
       eventIdSummary: "evt_rej_…77",
-      idempotencyKeySummary: "idem_cancel_***99012",
+      idempotencyKeySummary: "原任务号 ***99012",
       businessFactKeySummary: "bfk_spo_99012",
       schemaVersion: "supplier.order.v3",
       directionLabel: "ERP → 供应商",
@@ -431,7 +431,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     },
     originalAction: {
       originalActionId: "oa_cancel_99012",
-      originalActionIdempotencyKeySummary: "idem_cancel_***99012",
+      originalActionIdempotencyKeySummary: "原任务号 ***99012",
       originalActionIdempotencyKeyLocked: true,
       actionLabel: "取消供应商订单",
     },
@@ -484,7 +484,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     repairLinks: [
       {
         workspaceId: "W26",
-        label: "W26 售后/补偿",
+        label: "供应商订单 · 售后/补偿",
         href: "/supplier-api/orders?q=SPO-99012",
       },
     ],
@@ -549,7 +549,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     createdAt: "2026-08-01T09:20:00+08:00",
     message: {
       eventIdSummary: "evt_dup_…11",
-      idempotencyKeySummary: "idem_cb_***55102",
+      idempotencyKeySummary: "原任务号 ***55102",
       businessFactKeySummary: "bfk_mof_55102",
       schemaVersion: "mall.callback.v1",
       directionLabel: "商城 → ERP",
@@ -562,7 +562,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         attemptedAt: "2026-08-01T09:20:00+08:00",
         result: "重复提交已忽略 · 已有业务记录",
         requestSummary: "通知摘要",
-        responseSummary: "DUPLICATE_IGNORED",
+        responseSummary: "重复通知已忽略",
       },
     ],
     objectVersion: "ov1",
@@ -582,7 +582,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         at: "2026-08-01T09:20:00+08:00",
         actor: "系统",
         action: "识别重复",
-        detail: "替代任务 wi_iet_orig_55102",
+        detail: "已关联原消费记录任务",
       },
     ],
     evidenceTimeline: [
@@ -591,7 +591,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         at: "2026-08-01T09:20:00+08:00",
         actor: "系统",
         action: "关联原结果",
-        detail: "businessFact bfk_mof_55102",
+        detail: "已关联原消费记录",
       },
     ],
     queryStage: null,
@@ -684,7 +684,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     repairLinks: [
       {
         workspaceId: "W27",
-        label: "W27 API 结算",
+        label: "API 结算",
         href: "/supplier-api/settlements?jobId=st_2026_07_jd",
       },
     ],
@@ -703,7 +703,7 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
         at: "2026-07-30T11:00:00+08:00",
         actor: "系统",
         action: "左右证据对照",
-        detail: "更新于 2026-07-31T23:59 · 不可变引用",
+        detail: "更新于 2026-07-31T23:59 · 只读证据",
       },
     ],
     queryStage: null,
@@ -778,12 +778,12 @@ export const INTEGRATION_ERROR_SEEDS: IntegrationResolutionItemView[] = [
     repairLinks: [
       {
         workspaceId: "W17",
-        label: "W17 商城同步",
+        label: "商城同步",
         href: "/governance/mall-sync?q=MOF-77801",
       },
       {
         workspaceId: "W21",
-        label: "W21 映射修复",
+        label: "商品供给修复",
         href: "/procurement/supplier-catalog?q=MOF-77801",
       },
     ],

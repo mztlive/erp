@@ -43,6 +43,15 @@ export const WAREHOUSE_WRITE_MESSAGE =
 export const MOCK_SENSITIVE_REVEALS: Record<string, string> = {
   "reveal:wh_1:contact": "周航 · 138****6621 · 上海市浦东新区临港大道 88 号",
   "reveal:wh_2:contact": "陈璐 · 139****3102 · 广州市黄埔区保税物流园 B3",
+  "reveal:sup_1:tax": "91310000MA1FL0001A",
+  "reveal:sup_1:bank": "6222000011110188",
+  "reveal:sup_1:contact": "138****6621",
+  "reveal:sup_2:tax": "91310000MA1FL0002B",
+  "reveal:sup_2:bank": "6217000011115521",
+  "reveal:sup_2:contact": "139****3102",
+  "reveal:sup_3:tax": "91310000MA1FL0003C",
+  "reveal:sup_3:bank": "6222000011110033",
+  "reveal:sup_3:contact": "137****5509",
 }
 
 function commonActions(
@@ -2294,7 +2303,26 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       historicalReferenceCount: 33,
       note: "采购选择时校验能力、资质与业务日期。",
     },
-    sensitiveFields: [],
+    sensitiveFields: [
+      {
+        label: "联系电话",
+        maskedValue: "138****6621",
+        revealToken: "reveal:sup_1:contact",
+        visibility: "masked",
+      },
+      {
+        label: "税号",
+        maskedValue: "91310000MA1FL****A",
+        revealToken: "reveal:sup_1:tax",
+        visibility: "masked",
+      },
+      {
+        label: "银行账号",
+        maskedValue: "6222 **** 0188",
+        revealToken: "reveal:sup_1:bank",
+        visibility: "masked",
+      },
+    ],
     resourceFacts: [
       { label: "负责人", value: "赵强" },
       { label: "资质预警", value: "正常" },
@@ -2377,7 +2405,26 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       historicalReferenceCount: 12,
       note: "是否可选按业务日期计算。",
     },
-    sensitiveFields: [],
+    sensitiveFields: [
+      {
+        label: "联系电话",
+        maskedValue: "139****3102",
+        revealToken: "reveal:sup_2:contact",
+        visibility: "masked",
+      },
+      {
+        label: "税号",
+        maskedValue: "91310000MA1FL****B",
+        revealToken: "reveal:sup_2:tax",
+        visibility: "masked",
+      },
+      {
+        label: "银行账号",
+        maskedValue: "6217 **** 5521",
+        revealToken: "reveal:sup_2:bank",
+        visibility: "masked",
+      },
+    ],
     resourceFacts: [
       { label: "负责人", value: "李倩" },
       { label: "资质预警", value: "将到期" },
@@ -2453,7 +2500,26 @@ export const MASTER_DATA_CENTER_SEEDS: Record<string, MasterDataCenterView> = {
       historicalReferenceCount: 9,
       note: "历史采购单引用保留。",
     },
-    sensitiveFields: [],
+    sensitiveFields: [
+      {
+        label: "联系电话",
+        maskedValue: "137****5509",
+        revealToken: "reveal:sup_3:contact",
+        visibility: "masked",
+      },
+      {
+        label: "税号",
+        maskedValue: "91310000MA1FL****C",
+        revealToken: "reveal:sup_3:tax",
+        visibility: "masked",
+      },
+      {
+        label: "银行账号",
+        maskedValue: "6222 **** 0033",
+        revealToken: "reveal:sup_3:bank",
+        visibility: "masked",
+      },
+    ],
     resourceFacts: [],
     allowedActions: ["VIEW", "CREATE_REVISION"],
     actionBlockers: [

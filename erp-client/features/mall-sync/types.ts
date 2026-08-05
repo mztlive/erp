@@ -386,13 +386,19 @@ export const DEMO_ROLE_LABEL: Record<DemoRole, string> = {
 }
 
 export const STAGE_LABEL: Record<OwnershipStage, string> = {
-  FIRST_PHASE_MALL_OWNED: "T 前 · 商城开单",
-  SECOND_PHASE_ERP_OWNED: "T 后 · ERP 全面服务",
+  FIRST_PHASE_MALL_OWNED: "第一阶段 · 商城开单",
+  SECOND_PHASE_ERP_OWNED: "已封存 · ERP 主责",
 }
 
 export const DIRECTION_LABEL: Record<SyncDirection, string> = {
   MALL_TO_ERP_COMMERCIAL_FACT: "商城 → ERP 商业记录",
-  SEALED_HISTORY: "已封存 · 历史只读",
+  SEALED_HISTORY: "历史只读",
+}
+
+/** 同步任务失败分类中文映射（errorClass） */
+export const JOB_ERROR_CLASS_LABEL: Record<string, string> = {
+  SOURCE_PAGE_TIMEOUT: "来源分页读取超时",
+  SOURCE_ORDER_NOT_FOUND: "来源单号未命中",
 }
 
 export const MAPPING_TYPE_LABEL: Record<MappingTaskBase["mappingType"], string> = {

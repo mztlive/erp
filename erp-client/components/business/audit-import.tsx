@@ -60,6 +60,8 @@ export interface WorkTaskItemProps extends Omit<
   counterparty?: React.ReactNode;
   enteredAt: React.ReactNode;
   enteredDateTime?: string;
+  /** 默认密度下「进入时间」字段的标签；默认「进入队列」（沿用既有语境）。 */
+  enteredAtLabel?: string;
   dueAt: React.ReactNode;
   dueDateTime?: string;
   responsibleParty: React.ReactNode;
@@ -83,6 +85,7 @@ export function WorkTaskItem({
   counterparty,
   enteredAt,
   enteredDateTime,
+  enteredAtLabel = "进入队列",
   dueAt,
   dueDateTime,
   responsibleParty,
@@ -139,7 +142,7 @@ export function WorkTaskItem({
           <>
             <dl className="mt-1 flex flex-wrap gap-x-4 gap-y-1 text-xs">
               <div className="flex items-baseline gap-1">
-                <dt className="text-muted-foreground">进入队列</dt>
+                <dt className="text-muted-foreground">{enteredAtLabel}</dt>
                 <dd className="font-medium text-foreground">
                   {enteredDateTime ? (
                     <time dateTime={enteredDateTime}>{enteredAt}</time>
@@ -194,6 +197,16 @@ export interface BusinessDiffPanelProps extends Omit<
   caption?: string;
   emptyValue?: React.ReactNode;
   emptyMessage?: React.ReactNode;
+  /**
+   * 头部计数；默认按 `changes.length`。左右证据对照等场景可传真实差异数，
+   * 避免把共同属性行计入「N 项」。
+   */
+  count?: number;
+  /** 列头文案；左右证据对照场景可传「左证据 / 右证据」。 */
+  fieldColumnLabel?: React.ReactNode;
+  beforeColumnLabel?: React.ReactNode;
+  afterColumnLabel?: React.ReactNode;
+  noteColumnLabel?: React.ReactNode;
 }
 
 /**
@@ -205,9 +218,15 @@ export function BusinessDiffPanel({
   caption = "字段变更前后值对比",
   emptyValue = "—",
   emptyMessage = "没有字段变更",
+  count,
+  fieldColumnLabel = "字段",
+  beforeColumnLabel = "变更前",
+  afterColumnLabel = "变更后",
+  noteColumnLabel = "变更说明",
   className,
   ...props
 }: BusinessDiffPanelProps) {
+  const badgeCount = count ?? changes.length;
   return (
     <section
       data-slot="business-diff-panel"
@@ -216,16 +235,16 @@ export function BusinessDiffPanel({
     >
       <header className="flex items-center justify-between gap-3 border-b px-4 py-3">
         <h3 className="text-sm font-semibold text-card-foreground">{title}</h3>
-        <Badge variant="neutral">{changes.length} 项</Badge>
+        <Badge variant="neutral">{badgeCount} 项</Badge>
       </header>
       <Table>
         <TableCaption className="sr-only">{caption}</TableCaption>
         <TableHeader>
           <TableRow>
-            <TableHead>字段</TableHead>
-            <TableHead>变更前</TableHead>
-            <TableHead>变更后</TableHead>
-            <TableHead>变更说明</TableHead>
+            <TableHead>{fieldColumnLabel}</TableHead>
+            <TableHead>{beforeColumnLabel}</TableHead>
+            <TableHead>{afterColumnLabel}</TableHead>
+            <TableHead>{noteColumnLabel}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -358,6 +377,11 @@ export interface ImportStageIndicatorProps extends Omit<
   "children"
 > {
   stages: ImportStageStates;
+  /**
+   * 按阶段覆盖固定步骤标签（如回填流水线「范围确认/来源校验/…」）。
+   * 未覆盖的阶段沿用默认导入步骤名。
+   */
+  stageLabels?: Partial<Record<ImportStageKey, string>>;
 }
 
 const importStages: ReadonlyArray<{
@@ -407,6 +431,7 @@ const importStatusPresentation: Readonly<
 /** 固定顺序展示导入流程；每一步的记录状态由调用方显式传入。 */
 export function ImportStageIndicator({
   stages,
+  stageLabels,
   className,
   "aria-label": ariaLabel = "导入进度",
   ...props
@@ -434,7 +459,7 @@ export function ImportStageIndicator({
             className="flex min-w-0 flex-col items-start gap-2 p-3"
           >
             <span className="text-sm font-medium text-card-foreground">
-              {stage.label}
+              {stageLabels?.[stage.key] ?? stage.label}
             </span>
             <StatusBadge
               label={presentation.label}
@@ -462,6 +487,33 @@ export type ImportIssue = Readonly<{
   repairable: boolean;
 }>;
 
+/**
+ * 导入/批量结果的错误码中文映射。命中才翻译，未命中的原样展示（不猜测），
+ * 避免把枚举原值直接上屏。
+ */
+const IMPORT_CODE_LABEL: Readonly<Record<string, string>> = {
+  CUSTOMER_NOT_FOUND: "客户不存在",
+  AMOUNT_PRECISION: "金额精度不符",
+  STOCK_QTY_INVALID: "库存数量无效",
+  MAPPING_CONFLICT: "映射冲突",
+  HISTORY_FLOW_FORBIDDEN: "历史流程禁止修改",
+  BASELINE_DATE_MISMATCH: "基准日不一致",
+  CARD_DRAFT_EXCLUDED: "卡券草稿已排除",
+  IDEMPOTENT_SKIP: "已处理跳过",
+  OUT_OF_SCOPE: "超出导入范围",
+  STAGE_NOT_READY: "阶段未就绪",
+  CONFIRMATIONS_INCOMPLETE: "责任确认未完成",
+  STALE_CONFIRMATION: "确认已过期",
+  JOB_RUNNING: "任务执行中",
+  VALIDATION_ENV_REQUIRED: "需在验证环境校验",
+  ADMIN_CANNOT_CONFIRM: "管理员不能确认",
+  IMPORT_CONFIRM_WORK_ITEM_TYPE_NOT_REGISTERED: "确认任务尚未配置",
+};
+
+export function importCodeLabel(code: string): string {
+  return IMPORT_CODE_LABEL[code] ?? code;
+}
+
 export interface ImportIssueTableProps extends Omit<
   React.ComponentProps<"div">,
   "children"
@@ -469,6 +521,11 @@ export interface ImportIssueTableProps extends Omit<
   issues: readonly ImportIssue[];
   caption?: string;
   emptyMessage?: React.ReactNode;
+  /** 错误码列文案；默认走内置中文映射，未命中回退原码。 */
+  errorCodeLabel?: (code: string) => React.ReactNode;
+  /** 「修复方式」列的两种标签；默认「可在导入中修复 / 需外部处理」。 */
+  repairableLabel?: string;
+  externalLabel?: string;
 }
 
 /** 导入问题明细。可修复标识直接展示调用方记录，不内置修复动作。 */
@@ -476,6 +533,9 @@ export function ImportIssueTable({
   issues,
   caption = "导入问题明细",
   emptyMessage = "没有导入问题",
+  errorCodeLabel = importCodeLabel,
+  repairableLabel = "可在导入中修复",
+  externalLabel = "需外部处理",
   className,
   ...props
 }: ImportIssueTableProps) {
@@ -505,14 +565,16 @@ export function ImportIssueTable({
                   {issue.field}
                 </TableCell>
                 <TableCell className="num text-muted-foreground">
-                  {issue.errorCode}
+                  {errorCodeLabel(issue.errorCode)}
                 </TableCell>
                 <TableCell className="whitespace-normal">
                   {issue.message}
                 </TableCell>
                 <TableCell>
                   <StatusBadge
-                    label={issue.repairable ? "可在导入中修复" : "需外部处理"}
+                    label={
+                      issue.repairable ? repairableLabel : externalLabel
+                    }
                     tone={issue.repairable ? "info" : "destructive"}
                   />
                 </TableCell>
@@ -553,6 +615,8 @@ export interface BatchOperationResultProps extends Omit<
   successEmptyMessage?: React.ReactNode;
   skippedEmptyMessage?: React.ReactNode;
   failureEmptyMessage?: React.ReactNode;
+  /** 条目 code 徽章文案；默认走内置中文映射，未命中回退原码。 */
+  codeLabel?: (code: string) => React.ReactNode;
 }
 
 /** 批处理分项结果。重试行为由调用方注入，组件不重新提交请求。 */
@@ -565,6 +629,7 @@ export function BatchOperationResult({
   successEmptyMessage = "没有成功项",
   skippedEmptyMessage = "没有跳过项",
   failureEmptyMessage = "没有失败项",
+  codeLabel = importCodeLabel,
   className,
   ...props
 }: BatchOperationResultProps) {
@@ -599,7 +664,7 @@ export function BatchOperationResult({
                     <span className="font-medium">{item.label}</span>
                     {item.code ? (
                       <Badge variant="success" className="ml-2">
-                        {item.code}
+                        {codeLabel(item.code)}
                       </Badge>
                     ) : null}
                     {item.detail ? (
@@ -624,7 +689,7 @@ export function BatchOperationResult({
                     <span className="font-medium">{item.label}</span>
                     {item.code ? (
                       <Badge variant="neutral" className="ml-2">
-                        {item.code}
+                        {codeLabel(item.code)}
                       </Badge>
                     ) : null}
                     {item.detail ? (
@@ -649,7 +714,7 @@ export function BatchOperationResult({
                     <span className="font-medium">{item.label}</span>
                     {item.code ? (
                       <Badge variant="destructive" className="ml-2">
-                        {item.code}
+                        {codeLabel(item.code)}
                       </Badge>
                     ) : null}
                     {item.detail ? (

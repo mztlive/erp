@@ -11,21 +11,34 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import type { SystemSafetyPauseOperationView } from "@/features/product-publications/types"
-import { SAFETY_PAUSE_CAUSE_LABEL } from "@/features/product-publications/types"
+import {
+  SAFETY_PAUSE_CAUSE_LABEL,
+  WORK_ITEM_TYPE_LABEL,
+} from "@/features/product-publications/types"
 import { formatDateTime } from "@/lib/datetime"
+import { goToWorkspaceLabel } from "@/lib/ui-text"
 
 /**
  * SystemSafetyPauseOperationView 唯一结构渲染：
  * - SUPPLIER_STOPPED + COMMITTED/ALREADY_SAFE → 唯一 followUpWorkItem
  * - 其它已落库原因 → 唯一 followUpBlocker
- * - UNKNOWN → 二者均禁止，fail-closed
+ * - UNKNOWN → 二者均禁止，结果未确认前保持不可下单
+ *
+ * 内部 ID（操作号 / 来源对象 / 发送与信封号）一律不展示，业务对象名由
+ * sourceObjectLabel / affectedPublicationLabels 提供；没有业务名就不展示。
  */
 export function SafetyPausePanel({
   pause,
   compact = false,
+  sourceObjectLabel,
+  affectedPublicationLabels,
 }: {
   pause: SystemSafetyPauseOperationView
   compact?: boolean
+  /** 来源对象的业务名（供应商名 + 商品/ SKU），由调用方按上下文解析 */
+  sourceObjectLabel?: string
+  /** publicationId → 业务展示名（发布编号/品名），用于受影响发布列表 */
+  affectedPublicationLabels?: Record<string, string>
 }) {
   if (pause.resultStatus === "UNKNOWN") {
     return (
@@ -37,23 +50,18 @@ export function SafetyPausePanel({
             <p>
               保持{" "}
               <Badge variant="destructive">不可下单</Badge>
-              （结果未确认），不得推断暂停未发生，也不得创建第二暂停版本。
+              （结果未确认）：不视为已解除，也不会创建第二份暂停记录。
             </p>
             <dl className="grid gap-1 sm:grid-cols-2">
-              <div>
-                <dt className="text-xs text-muted-foreground">操作号</dt>
-                <dd className="num">{pause.operationId}</dd>
-              </div>
+              {sourceObjectLabel ? (
+                <div>
+                  <dt className="text-xs text-muted-foreground">来源对象</dt>
+                  <dd>{sourceObjectLabel}</dd>
+                </div>
+              ) : null}
               <div>
                 <dt className="text-xs text-muted-foreground">原因</dt>
                 <dd>{SAFETY_PAUSE_CAUSE_LABEL[pause.cause]}</dd>
-              </div>
-              <div>
-                <dt className="text-xs text-muted-foreground">来源</dt>
-                <dd className="num">
-                  {pause.sourceObjectType} · {pause.sourceObjectId} ·{" "}
-                  {pause.sourceVersion}
-                </dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">原任务号</dt>
@@ -73,7 +81,7 @@ export function SafetyPausePanel({
                 />
               }
             >
-              打开接口错误处理
+              {goToWorkspaceLabel("W29")}
             </Button>
           </div>
         </AlertDescription>
@@ -82,6 +90,9 @@ export function SafetyPausePanel({
   }
 
   const causeLabel = SAFETY_PAUSE_CAUSE_LABEL[pause.cause]
+  const affected = pause.affectedPublications.filter(
+    (ap) => affectedPublicationLabels?.[ap.publicationId]
+  )
 
   return (
     <Alert variant="destructive" role="status">
@@ -99,45 +110,32 @@ export function SafetyPausePanel({
           </p>
           <dl className="grid gap-2 sm:grid-cols-2">
             <div>
-              <dt className="text-xs text-muted-foreground">暂停操作号</dt>
-              <dd className="num">{pause.operationId}</dd>
-            </div>
-            <div>
               <dt className="text-xs text-muted-foreground">提交时间</dt>
               <dd className="num">{formatDateTime(pause.committedAt, "default")}</dd>
             </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">来源对象</dt>
-              <dd className="num">
-                {pause.sourceObjectType} · {pause.sourceObjectId}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-xs text-muted-foreground">来源版本</dt>
-              <dd className="num">{pause.sourceVersion}</dd>
-            </div>
+            {sourceObjectLabel ? (
+              <div>
+                <dt className="text-xs text-muted-foreground">来源对象</dt>
+                <dd>{sourceObjectLabel}</dd>
+              </div>
+            ) : null}
           </dl>
 
-          {!compact ? (
+          {!compact && affected.length > 0 ? (
             <div>
               <div className="mb-1 text-xs font-medium text-muted-foreground">
                 受影响发布
               </div>
               <ul className="space-y-1">
-                {pause.affectedPublications.map((ap) => (
+                {affected.map((ap) => (
                   <li
-                    key={`${ap.publicationId}-${ap.deliveryId}`}
+                    key={ap.publicationId}
                     className="rounded-md border border-border/60 bg-background/40 px-2 py-1.5 text-xs"
                   >
-                    <span className="num">{ap.publicationId}</span>
-                    {" · "}
-                    {ap.pauseArtifactKind === "REVISION"
-                      ? `暂停修订 ${ap.pauseRevisionId}`
-                      : `暂停动作 ${ap.pauseActionId}`}
-                    {" · 发送 "}
-                    <span className="num">{ap.deliveryId}</span>
-                    {" · outbox "}
-                    <span className="num">{ap.outboxMessageId}</span>
+                    {affectedPublicationLabels![ap.publicationId]}
+                    <span className="ml-1 text-muted-foreground">
+                      （暂停发送已提交）
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -149,23 +147,11 @@ export function SafetyPausePanel({
               <div className="text-xs font-medium">后续任务（供应商停供唯一）</div>
               <dl className="mt-1 grid gap-1 text-xs sm:grid-cols-2">
                 <div>
-                  <dt className="text-muted-foreground">任务编号</dt>
-                  <dd className="num">{pause.followUpWorkItem.workItemId}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">类型</dt>
-                  <dd>{pause.followUpWorkItem.workItemType}</dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">业务对象</dt>
-                  <dd className="num">
-                    {pause.followUpWorkItem.businessObjectType} ·{" "}
-                    {pause.followUpWorkItem.businessObjectId}
+                  <dt className="text-muted-foreground">任务类型</dt>
+                  <dd>
+                    {WORK_ITEM_TYPE_LABEL[pause.followUpWorkItem.workItemType] ??
+                      "业务异常"}
                   </dd>
-                </div>
-                <div>
-                  <dt className="text-muted-foreground">处理路由</dt>
-                  <dd className="num">{pause.followUpWorkItem.handlerKey}</dd>
                 </div>
               </dl>
               <p className="mt-1 text-xs text-muted-foreground">
@@ -182,31 +168,20 @@ export function SafetyPausePanel({
                   />
                 }
               >
-                打开供应商商品核对
+                前往供应商商品核对
               </Button>
             </div>
           ) : null}
 
           {"followUpBlocker" in pause && pause.followUpBlocker ? (
             <div className="rounded-md border border-border bg-muted/40 p-2">
-              <div className="text-xs font-medium">后续阻断</div>
-              <p className="mt-1 text-xs">
-                <Badge variant="outline" className="mr-1 font-mono text-[10px]">
-                  {pause.followUpBlocker.code}
-                </Badge>
-                {pause.followUpBlocker.message}
-              </p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                证据引用{" "}
-                <span className="num">
-                  {pause.followUpBlocker.evidenceReference}
-                </span>
-              </p>
+              <div className="text-xs font-medium">后续说明</div>
+              <p className="mt-1 text-xs">{pause.followUpBlocker.message}</p>
             </div>
           ) : null}
 
           <p className="text-xs text-muted-foreground">
-            来源恢复后也不会自动上架；恢复未确认前，上架操作会被系统阻断。
+            来源恢复后也不会自动上架；恢复上架入口将在恢复责任确认后开放，确认前上架会被系统阻断。
           </p>
         </div>
       </AlertDescription>

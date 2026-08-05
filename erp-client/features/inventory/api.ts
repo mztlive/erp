@@ -21,7 +21,7 @@ import type {
   StockMovementRow,
   StockReservationRow,
 } from "@/features/inventory/types"
-import { AVAILABILITY_LABEL, VIEW_LABEL } from "@/features/inventory/types"
+import { AVAILABILITY_LABEL, MOVEMENT_TYPE_LABEL, VIEW_LABEL } from "@/features/inventory/types"
 import {
   INVENTORY_ADJUSTMENT_SEED,
   INVENTORY_BALANCE_SEED,
@@ -48,7 +48,7 @@ import {
 const PERMISSION_VERSION = "pv-w10-demo-1"
 
 const OPENING_STOCK_NOTE =
-  "期初库存只能通过导入与期初的基准日实盘导入形成流水；旧商城 stock / total_stock 不作为 ERP 库存记录，本台账不会写入或展示旧商城库存字段。"
+  "期初库存只能通过导入与期初的基准日实盘导入形成流水；旧商城的库存数量不作为 ERP 库存记录，本台账不会写入或展示旧商城库存数据。"
 
 const EXCLUDED_NOTE = INVENTORY_EXCLUDED_FULFILLMENT_KINDS.map(
   (k) => `${k.label}：${k.reason}`
@@ -149,7 +149,11 @@ function filterSummary(query: InventoryQuery, total: number): string {
   if (query.q?.trim()) parts.push(`搜索「${query.q.trim()}」`)
   if (query.skuId) parts.push(`SKU ${query.skuId}`)
   if (query.movementType?.length) {
-    parts.push(`流水类型 ${query.movementType.join("、")}`)
+    parts.push(
+      `流水类型 ${query.movementType
+        .map((t) => MOVEMENT_TYPE_LABEL[t] ?? t)
+        .join("、")}`
+    )
   }
   if (query.view === "movement" && query.occurredFrom && query.occurredTo) {
     parts.push(`${query.occurredFrom} 至 ${query.occurredTo}`)

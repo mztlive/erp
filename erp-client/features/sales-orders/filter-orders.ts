@@ -9,17 +9,36 @@ export type SalesOrderSummaryFilter =
   | "fulfillmentException"
   | "mallCollab"
 export type SalesOrderOriginFilter = "all" | SalesOrderListItem["originSystem"]
-export type SalesOrderStatusFilter =
-  | "all"
-  | "待二次确认"
-  | "待销售处理"
-  | "待销售领导审批"
-  | "待运营审批"
-  | "履约中"
-  | "已生效"
-  | "已关闭"
-  | "草稿"
-  | "已作废"
+
+/** 主状态筛选：URL 使用稳定枚举码，中文映射集中在本文件，禁止三处重复维护。 */
+export const SALES_ORDER_STATUS_OPTIONS = [
+  { value: "awaiting_confirm", label: "待二次确认" },
+  { value: "awaiting_sales", label: "待销售处理" },
+  { value: "awaiting_sales_lead", label: "待销售领导审批" },
+  { value: "awaiting_ops", label: "待运营审批" },
+  { value: "fulfilling", label: "履约中" },
+  { value: "effective", label: "已生效" },
+  { value: "closed", label: "已关闭" },
+  { value: "draft", label: "草稿" },
+  { value: "voided", label: "已作废" },
+] as const
+
+export type SalesOrderStatusValue =
+  (typeof SALES_ORDER_STATUS_OPTIONS)[number]["value"]
+
+export type SalesOrderStatusFilter = "all" | SalesOrderStatusValue
+
+const STATUS_LABEL_BY_VALUE = new Map<string, string>(
+  SALES_ORDER_STATUS_OPTIONS.map((option) => [option.value, option.label])
+)
+
+/** 主状态中文名（列表渲染 / 高级筛选文案共用）。 */
+export function salesOrderStatusLabel(
+  status: SalesOrderStatusFilter
+): string {
+  if (status === "all") return "全部状态"
+  return STATUS_LABEL_BY_VALUE.get(status) ?? status
+}
 
 export function matchesSalesOrderSearch(
   order: SalesOrderListItem,
@@ -33,6 +52,19 @@ export function matchesSalesOrderSearch(
     order.contractNumber.toLowerCase().includes(q) ||
     order.ownerName.toLowerCase().includes(q)
   )
+}
+
+/** 主状态中文名 → 稳定枚举码（筛选比较用）。 */
+const STATUS_VALUE_BY_LABEL = new Map<string, SalesOrderStatusValue>(
+  SALES_ORDER_STATUS_OPTIONS.map((option) => [option.label, option.value])
+)
+
+function statusMatches(
+  label: string,
+  filter: SalesOrderStatusFilter
+): boolean {
+  if (filter === "all") return true
+  return STATUS_VALUE_BY_LABEL.get(label) === filter
 }
 
 export function filterSalesOrders(
@@ -58,7 +90,7 @@ export function filterSalesOrders(
     if (originFilter !== "all" && order.originSystem !== originFilter) {
       return false
     }
-    if (statusFilter !== "all" && order.primaryStatus.label !== statusFilter) {
+    if (!statusMatches(order.primaryStatus.label, statusFilter)) {
       return false
     }
     if (summaryFilter === "pending") {
@@ -68,7 +100,6 @@ export function filterSalesOrders(
           "待销售处理",
           "待销售领导审批",
           "待运营审批",
-          "草稿",
         ].includes(order.primaryStatus.label)
       ) {
         return false
@@ -147,7 +178,6 @@ export function computeSalesOrderMetrics(orders: readonly SalesOrderListItem[]) 
         "待销售处理",
         "待销售领导审批",
         "待运营审批",
-        "草稿",
       ].includes(o.primaryStatus.label)
     ).length,
     inProgress: orders.filter((o) =>

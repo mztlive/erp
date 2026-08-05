@@ -15,7 +15,8 @@ import {
 // ─── 处理权限（内部称租约，禁止对用户说「租约」） ─────────────────────────────
 
 export const leaseText = {
-  unclaimed: "任务待领取",
+  /** 对齐术语表 §3.2「任务待领取 → 任务待认领」 */
+  unclaimed: "任务待认领",
   active: "正在处理中",
   activeDoNotReopen: "正在处理中 · 请勿重复打开",
   renewing: "处理权限已延期",
@@ -51,6 +52,11 @@ export const sequentialText = {
   teamUnclaimed: "团队待认领",
   minePending: "待我处理",
   decisionSubmitting: "决定正在提交",
+  /** 首次领取（从未领取过）与失效后重新领取要区分，避免「重新领取」误导。 */
+  claim: "领取任务",
+  claiming: "正在领取",
+  reclaim: "重新领取",
+  reclaiming: "正在重新领取",
 } as const
 
 // ─── 结果反馈（禁止「正式结果 / 幂等键」） ───────────────────────────────────

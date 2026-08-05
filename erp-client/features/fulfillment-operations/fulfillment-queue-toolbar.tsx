@@ -41,6 +41,8 @@ export function FulfillmentQueueToolbar({
   gate,
   salesOrderId,
   purchaseOrderId,
+  salesOrderNo,
+  purchaseNo,
   autoNext,
   total,
   scope,
@@ -59,6 +61,9 @@ export function FulfillmentQueueToolbar({
   gate: GateFilter | undefined
   salesOrderId: string | undefined
   purchaseOrderId: string | undefined
+  /** 内部 ID 只进 URL：chip 与摘要展示业务单号 */
+  salesOrderNo: string | undefined
+  purchaseNo: string | undefined
   autoNext: boolean
   total: number
   scope: "mine" | "role_pool"
@@ -156,7 +161,7 @@ export function FulfillmentQueueToolbar({
           />
           {salesOrderId ? (
             <ObjectFilterChip
-              label={`销售单 ${salesOrderId}`}
+              label={`销售单 ${salesOrderNo ?? "已定位"}`}
               onClear={() =>
                 onPatch({ salesOrderId: null, currentWorkItemId: null })
               }
@@ -164,7 +169,7 @@ export function FulfillmentQueueToolbar({
           ) : null}
           {purchaseOrderId ? (
             <ObjectFilterChip
-              label={`采购单 ${purchaseOrderId}`}
+              label={`采购单 ${purchaseNo ?? "已定位"}`}
               onClear={() =>
                 onPatch({ purchaseOrderId: null, currentWorkItemId: null })
               }
@@ -177,6 +182,7 @@ export function FulfillmentQueueToolbar({
               size="sm"
               onClick={() =>
                 onPatch({
+                  type: null,
                   q: null,
                   warehouseId: null,
                   due: null,

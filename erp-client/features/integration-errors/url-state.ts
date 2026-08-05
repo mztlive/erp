@@ -35,7 +35,7 @@ const VIEW_VALUES = [
   "resolved",
 ] as const
 
-const MODE_VALUES = ["all", "errors", "reconciliation"] as const
+const MODE_VALUES = ["all", "errors"] as const
 const ENV_VALUES = ["all", "production", "verification"] as const
 const OWNER_VALUES = ["me", "role_pool", "claimed", "all"] as const
 
@@ -73,7 +73,7 @@ const codec = createUrlStateCodec<IntegrationUrlState>([
     type: "string",
     aliases: ["currentDifferenceId"],
   },
-  { key: "autoNext", type: "boolean", defaultValue: true },
+  { key: "autoNext", type: "boolean", defaultValue: false },
 ])
 
 export const parseIntegrationSearchParams = codec.parse

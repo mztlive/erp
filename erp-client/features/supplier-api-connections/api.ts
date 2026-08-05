@@ -29,6 +29,7 @@ import {
 } from "@/features/supplier-api-connections/types"
 import {
   CREDENTIAL_OPAQUE_OPTIONS,
+  ENDPOINT_OPAQUE_OPTIONS,
   SEED_CONNECTIONS,
   seedToListItem,
   type SeedConnection,
@@ -116,7 +117,7 @@ function roleActions(
   const hasEnabledCap = seed.capabilities.some((c) => c.status === "ENABLED")
 
   if (role === "procurement") {
-    allowed.push("CONFIRM_CAPABILITY_REQUIREMENT", "EDIT_BUSINESS_PROFILE")
+    allowed.push("CONFIRM_CAPABILITY_REQUIREMENT")
     if (seed.catalog.state !== "NEVER") {
       allowed.push("OPEN_W21")
     }
@@ -304,6 +305,7 @@ function toCenter(
             ...h,
             latencyMs: undefined,
             errorClass: undefined,
+            traceId: undefined,
           }))
         : seed.healthRecords,
     catalog: seed.catalog,
@@ -355,6 +357,7 @@ export async function fetchConnectionList(
       hasDataScope: false,
       projectedAt: new Date().toISOString(),
       credentialOpaqueOptions: [],
+      endpointOpaqueOptions: [],
     }
   }
 
@@ -378,6 +381,7 @@ export async function fetchConnectionList(
       hasDataScope: false,
       projectedAt: new Date().toISOString(),
       credentialOpaqueOptions: [],
+      endpointOpaqueOptions: [],
     }
   }
 
@@ -506,6 +510,7 @@ export async function fetchConnectionList(
     hasDataScope: true,
     projectedAt: new Date().toISOString(),
     credentialOpaqueOptions: CREDENTIAL_OPAQUE_OPTIONS.map((o) => ({ ...o })),
+    endpointOpaqueOptions: ENDPOINT_OPAQUE_OPTIONS.map((o) => ({ ...o })),
   }
 }
 
@@ -551,7 +556,7 @@ export async function createConnection(input: {
       status: "failed",
       code: "CODE_REQUIRED",
       title: "连接代码必填",
-      message: "请填写全局唯一的连接代码（环境不是唯一键组成部分）",
+      message: "请填写全局唯一的连接代码，不可与环境组合复用",
     }
   }
   if (allSeeds().some((s) => s.connectionCode === code)) {
@@ -565,6 +570,7 @@ export async function createConnection(input: {
 
   const connectionId = `conn_new_${Date.now().toString(36)}`
   const now = new Date().toISOString()
+  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
   const seed: SeedConnection = {
     connectionId,
     connectionCode: code,
@@ -596,7 +602,7 @@ export async function createConnection(input: {
         actor: "系统管理员",
         action: "CREATE_CONNECTION",
         summary: `创建连接身份 ${code}`,
-        auditNo: `AUD-W20-${Date.now().toString().slice(-4)}`,
+        auditNo,
       },
     ],
     nextStep: "绑定地址/密钥引用 → 配置能力 → 健康检查",
@@ -607,7 +613,8 @@ export async function createConnection(input: {
     status: "succeeded",
     title: "连接身份已创建",
     message: `已创建 ${code}，状态为待配置。下一步完成技术引用与能力配置。`,
-    reference: connectionId,
+    reference: code,
+    connectionId,
     connectionVersion: "1",
     facts: [
       { label: "连接代码", value: code },
@@ -683,6 +690,7 @@ export async function bindCredentialReference(input: {
     version: opt.version,
   }
   const now = new Date().toISOString()
+  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
   o.auditEvents = [
     {
       eventId: `ae_cred_${Date.now()}`,
@@ -690,7 +698,7 @@ export async function bindCredentialReference(input: {
       actor: DEMO_ROLE_LABEL[input.role],
       action: "BIND_CREDENTIAL_REFERENCE",
       summary: `密钥引用已绑定 ${opt.alias}（${opt.version}）· 无正文`,
-      auditNo: `AUD-W20-${Date.now().toString().slice(-4)}`,
+      auditNo,
     },
     ...(seed.auditEvents ?? []),
   ]
@@ -700,9 +708,9 @@ export async function bindCredentialReference(input: {
     status: "succeeded",
     title: "密钥引用已绑定",
     message: `已绑定安全别名 ${opt.alias}（版本 ${opt.version}）。接口永不返回密钥正文。`,
-    reference: opt.referenceId,
+    reference: auditNo,
     connectionVersion: o.version,
-    auditEventId: o.auditEvents[0]?.auditNo,
+    auditEventId: auditNo,
     facts: [
       { label: "引用状态", value: REFERENCE_STATE_LABEL.BOUND },
       { label: "安全别名", value: opt.alias },
@@ -711,6 +719,89 @@ export async function bindCredentialReference(input: {
     ],
   }
   return result
+}
+
+export async function bindEndpointReference(input: {
+  connectionId: string
+  opaqueReferenceId: string
+  expectedVersion: string
+  role: DemoRole
+  idempotencyKey: string
+}): Promise<FormalOutcome> {
+  await mockDelay(140)
+  if (input.role !== "ops" && input.role !== "admin") {
+    return {
+      status: "blocked",
+      code: "FORBIDDEN",
+      title: "无权绑定地址引用",
+      message: "地址配置引用由研发运维或系统管理员绑定",
+    }
+  }
+  const seed = findSeed(input.connectionId)
+  if (!seed) {
+    return {
+      status: "failed",
+      code: "NOT_FOUND",
+      title: "连接不存在",
+      message: "未找到连接",
+    }
+  }
+  if (seed.version !== input.expectedVersion) {
+    return {
+      status: "failed",
+      code: "VERSION_CONFLICT",
+      title: "配置已更新",
+      message: "连接配置已被他人更新，请重新加载后基于最新版本提交",
+    }
+  }
+  const opt = ENDPOINT_OPAQUE_OPTIONS.find(
+    (o) => o.referenceId === input.opaqueReferenceId
+  )
+  if (!opt) {
+    return {
+      status: "failed",
+      code: "INVALID_REFERENCE",
+      title: "无效引用",
+      message: "只能选择系统提供的地址引用，不能自由输入",
+    }
+  }
+
+  const o = ensureOverlay(input.connectionId, seed)
+  o.version = bumpVersion(seed.version)
+  o.endpoint = {
+    state: "BOUND",
+    alias: opt.alias,
+    version: opt.version,
+  }
+  const now = new Date().toISOString()
+  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
+  o.auditEvents = [
+    {
+      eventId: `ae_ep_${Date.now()}`,
+      at: now,
+      actor: DEMO_ROLE_LABEL[input.role],
+      action: "BIND_ENDPOINT_REFERENCE",
+      summary: `地址引用已绑定 ${opt.alias}（${opt.version}）`,
+      auditNo,
+    },
+    ...(seed.auditEvents ?? []),
+  ]
+  o.nextStep = "引用已更新 · 建议执行健康检查验证"
+
+  return {
+    status: "succeeded",
+    title: "地址引用已绑定",
+    message: `已绑定地址配置 ${opt.alias}（版本 ${opt.version}）。`,
+    reference: auditNo,
+    connectionVersion: o.version,
+    auditEventId: auditNo,
+    facts: [
+      { label: "引用状态", value: REFERENCE_STATE_LABEL.BOUND },
+      { label: "安全别名", value: opt.alias },
+      { label: "引用版本", value: opt.version },
+      { label: "配置版本", value: o.version },
+    ],
+  }
 }
 
 export async function confirmCapabilityRequirement(input: {
@@ -787,7 +878,7 @@ export async function confirmCapabilityRequirement(input: {
       : c
   )
   const now = new Date().toISOString()
-  const confirmationId = `ccr_${input.operationId}`
+  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
   o.auditEvents = [
     {
       eventId: `ae_ccr_${Date.now()}`,
@@ -797,7 +888,7 @@ export async function confirmCapabilityRequirement(input: {
       summary: `${CAPABILITY_LABEL[input.capabilityCode]} → ${
         input.requirement === "REQUIRED" ? "需要" : "不需要"
       }（能力状态未变）`,
-      auditNo: `AUD-W20-${Date.now().toString().slice(-4)}`,
+      auditNo,
     },
     ...(seed.auditEvents ?? []),
   ]
@@ -807,9 +898,9 @@ export async function confirmCapabilityRequirement(input: {
     title: "业务能力需求已确认",
     message:
       "已追加采购业务确认与审计记录；能力启停状态未变更，未创建或完成任务。",
-    reference: confirmationId,
+    reference: auditNo,
     connectionVersion: o.version,
-    auditEventId: o.auditEvents[0]?.auditNo,
+    auditEventId: auditNo,
     facts: [
       { label: "能力", value: CAPABILITY_LABEL[input.capabilityCode] },
       {
@@ -817,7 +908,7 @@ export async function confirmCapabilityRequirement(input: {
         value: input.requirement === "REQUIRED" ? "需要" : "不需要",
       },
       { label: "能力状态", value: cap.statusLabel },
-      { label: "operationId", value: input.operationId },
+      { label: "审计号", value: auditNo },
     ],
   }
   return result
@@ -881,6 +972,7 @@ export async function updateCapabilities(input: {
     }
   })
   const now = new Date().toISOString()
+  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
   o.auditEvents = [
     {
       eventId: `ae_cap_${Date.now()}`,
@@ -888,7 +980,7 @@ export async function updateCapabilities(input: {
       actor: "系统管理员",
       action: "UPDATE_CAPABILITIES",
       summary: `能力配置变更 ${input.changes.length} 项 · 需重新验证`,
-      auditNo: `AUD-W20-${Date.now().toString().slice(-4)}`,
+      auditNo,
     },
     ...(seed.auditEvents ?? []),
   ]
@@ -898,7 +990,7 @@ export async function updateCapabilities(input: {
     status: "succeeded",
     title: "能力配置已更新",
     message: "能力版本已更新并标记为未验证。不直接修改商品/订单/发布数据。",
-    reference: input.operationId,
+    reference: auditNo,
     connectionVersion: o.version,
     facts: input.changes.map((c) => ({
       label: CAPABILITY_LABEL[c.code],
@@ -1190,6 +1282,7 @@ export async function disableConnection(input: {
   o.status = "DISABLED"
   o.version = bumpVersion(seed.version)
   const now = new Date().toISOString()
+  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
   o.auditEvents = [
     {
       eventId: `ae_dis_${Date.now()}`,
@@ -1197,7 +1290,7 @@ export async function disableConnection(input: {
       actor: "系统管理员",
       action: "DISABLE",
       summary: "连接已停用；不删除历史版本与业务记录",
-      auditNo: `AUD-W20-${Date.now().toString().slice(-4)}`,
+      auditNo,
     },
     ...(seed.auditEvents ?? []),
   ]
@@ -1208,7 +1301,7 @@ export async function disableConnection(input: {
     title: "连接已停用",
     message:
       "连接状态变为停用。不删除连接、版本和历史业务；发布/订单/同步数据保留。",
-    reference: input.connectionId,
+    reference: seed.connectionCode,
     connectionVersion: o.version,
     facts: [
       {
@@ -1275,7 +1368,7 @@ export async function enableConnection(input: {
     status: "succeeded",
     title: "连接已启用",
     message: "状态变为启用。不直接修改供应商商品、供给或历史订单。",
-    reference: input.connectionId,
+    reference: seed.connectionCode,
     connectionVersion: o.version,
   }
 }

@@ -2,6 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { ArrowLeftIcon, BanIcon, HistoryIcon } from "lucide-react"
 
 import {
@@ -31,6 +32,7 @@ import {
   type MasterDataResource,
   type MasterDataSectionId,
 } from "@/features/master-data/types"
+import { formatDateTime } from "@/lib/datetime"
 
 const SECTION_NAV: readonly {
   id: MasterDataSectionId
@@ -65,7 +67,7 @@ export function MasterDataCenterPage({
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
           title={masterDataCopy.unknownResourceTitle}
-          description={masterDataCopy.unknownResourceDesc(resource)}
+          description={masterDataCopy.unknownResourceDesc()}
           actions={
             <Button render={<Link href="/master-data" />}>
               返回基础资料
@@ -102,6 +104,7 @@ function MasterDataCenterBody({
   stableId: string
   section?: string
 }) {
+  const router = useRouter()
   const query = useMasterDataCenterQuery(resource, stableId)
   const activeSection = resolveSection(section)
   const [reviseOpen, setReviseOpen] = React.useState(false)
@@ -191,7 +194,8 @@ function MasterDataCenterBody({
                 icon: ArrowLeftIcon,
                 variant: "outline",
                 onClick: () => {
-                  window.location.href = listHref
+                  // SPA 内导航：保留列表滚动与筛选状态
+                  router.push(listHref)
                 },
               },
             ]}
@@ -239,27 +243,37 @@ function MasterDataCenterBody({
             : []),
         ]}
         primaryAction={
-          <Button
-            type="button"
-            size="sm"
-            disabled={!canRevise}
-            onClick={() => setReviseOpen(true)}
+          <span
+            title={!canRevise ? reviseBlocker?.message : undefined}
+            className="inline-flex"
           >
-            <HistoryIcon data-icon="inline-start" aria-hidden="true" />
-            {masterDataCopy.actionUpdate}
-          </Button>
+            <Button
+              type="button"
+              size="sm"
+              disabled={!canRevise}
+              onClick={() => setReviseOpen(true)}
+            >
+              <HistoryIcon data-icon="inline-start" aria-hidden="true" />
+              {masterDataCopy.actionUpdate}
+            </Button>
+          </span>
         }
         secondaryActions={
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            disabled={!canDisable}
-            onClick={() => setDisableOpen(true)}
+          <span
+            title={!canDisable ? disableBlocker?.message : undefined}
+            className="inline-flex"
           >
-            <BanIcon data-icon="inline-start" aria-hidden="true" />
-            {masterDataCopy.actionDisable}
-          </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={!canDisable}
+              onClick={() => setDisableOpen(true)}
+            >
+              <BanIcon data-icon="inline-start" aria-hidden="true" />
+              {masterDataCopy.actionDisable}
+            </Button>
+          </span>
         }
       />
 
@@ -326,12 +340,17 @@ function MasterDataCenterBody({
               </dt>
               <dd>{data.currentRevision.actor}</dd>
             </div>
-            {data.currentRevision.fields.map((f) => (
-              <div key={f.label}>
-                <dt className="text-xs text-muted-foreground">{f.label}</dt>
-                <dd>{f.value}</dd>
-              </div>
-            ))}
+            {data.currentRevision.fields
+              .filter(
+                (f) =>
+                  !data.sensitiveFields.some((s) => s.label === f.label)
+              )
+              .map((f) => (
+                <div key={f.label}>
+                  <dt className="text-xs text-muted-foreground">{f.label}</dt>
+                  <dd>{f.value}</dd>
+                </div>
+              ))}
             {data.resourceFacts.map((f) => (
               <div key={f.label}>
                 <dt className="text-xs text-muted-foreground">{f.label}</dt>
@@ -485,7 +504,7 @@ function MasterDataCenterBody({
                 >
                   <div className="flex flex-wrap gap-2">
                     <span className="num text-xs text-muted-foreground">
-                      {ev.at.slice(0, 19).replace("T", " ")}
+                      {formatDateTime(ev.at, "full", "passthrough")}
                     </span>
                     <span>{ev.actor}</span>
                     <Badge variant="outline">{ev.action}</Badge>

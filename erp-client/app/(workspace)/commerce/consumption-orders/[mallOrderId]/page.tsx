@@ -4,7 +4,7 @@ import { Suspense } from "react"
 import { ConsumptionOrderCenterPage } from "@/features/mall-consumption-orders/consumption-order-center-page"
 
 export const metadata: Metadata = {
-  title: "消费订单",
+  title: "商城消费订单",
 }
 
 function CenterFallback() {

@@ -19,6 +19,7 @@ import {
   BusinessTableFrame,
   DataFreshness,
   DataTable,
+  BusinessFailureState,
   FormalActionResult,
   ListToolbar,
   MetricFilterItem,
@@ -64,6 +65,8 @@ import type {
 } from "@/features/purchase-orders/types"
 import {
   FULFILLMENT_RESPONSIBILITY_LABEL,
+  PO_METRIC_LABEL,
+  PO_STATUS_FILTER_LABEL,
   PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
 import {
@@ -73,7 +76,7 @@ import {
 } from "@/features/purchase-orders/url-state"
 
 function displayNo(row: PurchaseOrderListItem) {
-  return row.purchaseNo ?? row.draftLabel ?? row.purchaseOrderId
+  return row.purchaseNo ?? row.draftLabel ?? "采购单（未编号）"
 }
 
 export function PurchaseOrdersListPage() {
@@ -117,18 +120,21 @@ export function PurchaseOrdersListPage() {
     return [id, dir] as const
   }, [url.sort])
 
+  // 「可建单依据」是动作卡不是筛选卡：URL 带该值时按全部列表处理
+  const effectiveMetric = url.metric === "pending_create" ? "all" : url.metric
+
   const listQueryInput = React.useMemo<PurchaseOrderListQuery>(
     () => ({
       role: viewerRole,
       q: url.q,
       status: url.status,
-      metric: url.metric,
+      metric: effectiveMetric,
       page: url.page,
       pageSize: url.pageSize,
       sortBy,
       sortDir,
     }),
-    [sortBy, sortDir, url, viewerRole]
+    [effectiveMetric, sortBy, sortDir, url, viewerRole]
   )
   const listQuery = usePurchaseOrdersQuery(listQueryInput)
   const exportQuery = usePurchaseOrderExportDataQuery(listQueryInput)
@@ -202,6 +208,15 @@ export function PurchaseOrdersListPage() {
     pushUrl({ page: data.page })
   }, [listQuery.data, pushUrl, url.page])
 
+  // 键盘导航：仅列表可见且预览/建单弹层未打开时生效；焦点行滚动到可视区。
+  React.useEffect(() => {
+    const focusedRow = pageRows[focusedIndex]
+    if (!focusedRow) return
+    rowRefs.current.get(focusedRow.purchaseOrderId)?.scrollIntoView({
+      block: "nearest",
+    })
+  }, [focusedIndex, pageRows])
+
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
@@ -227,6 +242,20 @@ export function PurchaseOrdersListPage() {
         return
       }
 
+      // 预览抽屉或建单弹框打开时，后台列表不响应 j/k/Enter，避免状态污染
+      if (previewId) {
+        if (event.key === "Escape") {
+          event.preventDefault()
+          const id = previewId
+          setPreviewId(null)
+          requestAnimationFrame(() => {
+            rowRefs.current.get(id)?.focus()
+          })
+        }
+        return
+      }
+      if (createOpen) return
+
       if (pageRows.length === 0) return
 
       if (event.key === "j" || event.key === "ArrowDown") {
@@ -239,18 +268,11 @@ export function PurchaseOrdersListPage() {
         event.preventDefault()
         const row = pageRows[focusedIndex]
         if (row) setPreviewId(row.purchaseOrderId)
-      } else if (event.key === "Escape" && previewId) {
-        event.preventDefault()
-        const id = previewId
-        setPreviewId(null)
-        requestAnimationFrame(() => {
-          rowRefs.current.get(id)?.focus()
-        })
       }
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [focusedIndex, pageRows, previewId])
+  }, [createOpen, focusedIndex, pageRows, previewId])
 
   const exportCsv = React.useCallback(async () => {
     const result = await exportQuery.refetch()
@@ -287,8 +309,8 @@ export function PurchaseOrdersListPage() {
     setActionResult({
       status: "succeeded",
       title: "导出已生成",
-      description: `已下载当前筛选 ${rows.length} 条（已按角色遮罩成本字段）。`,
-      reference: `EXP-W08-${rows.length}`,
+      description: `已下载当前筛选 ${rows.length} 条（已按角色打码成本字段）。`,
+      reference: `EXPORT-${rows.length}`,
     })
   }, [exportQuery])
 
@@ -303,6 +325,7 @@ export function PurchaseOrdersListPage() {
 
   const handleCreate = async () => {
     if (!selectedBasisId) return
+    const basis = openBases.find((b) => b.basisId === selectedBasisId)
     const result = await createMutation.mutateAsync({
       basisId: selectedBasisId,
       idempotencyKey: `create-basis-${selectedBasisId}-${Date.now()}`,
@@ -312,7 +335,7 @@ export function PurchaseOrdersListPage() {
       setActionResult({
         status: "succeeded",
         title: "已创建采购草稿",
-        description: `${result.data.draftLabel} · 已使用创建依据 ${selectedBasisId}`,
+        description: `${result.data.draftLabel} · 已使用采购二次确认创建依据（销售单 ${basis?.salesOrderNo ?? "—"} · ${basis?.supplierName ?? "—"}）。`,
         reference: result.reference,
       })
       router.push(
@@ -354,6 +377,12 @@ export function PurchaseOrdersListPage() {
               pageRows[focusedIndex]?.purchaseOrderId ===
               row.original.purchaseOrderId
                 ? "true"
+                : undefined
+            }
+            style={
+              pageRows[focusedIndex]?.purchaseOrderId ===
+              row.original.purchaseOrderId
+                ? { backgroundColor: "var(--accent)", borderRadius: "0.375rem" }
                 : undefined
             }
           >
@@ -466,6 +495,8 @@ export function PurchaseOrdersListPage() {
           align: "end",
           numeric: true,
         },
+        enableSorting:
+          viewerRole === "sales" || viewerRole === "warehouse" ? false : true,
         cell: ({ row }) =>
           row.original.costMasked ? (
             <span className="text-sm text-muted-foreground">•••</span>
@@ -516,11 +547,11 @@ export function PurchaseOrdersListPage() {
                 size="xs"
                 render={
                   <Link
-                    href={`/procurement/orders/${row.original.purchaseOrderId}`}
+                    href={`/procurement/orders/${row.original.purchaseOrderId}?demoRole=${viewerRole}`}
                   />
                 }
               >
-                中心
+                详情
               </Button>
               {canEdit ? (
                 <Button
@@ -529,7 +560,7 @@ export function PurchaseOrdersListPage() {
                   size="xs"
                   render={
                     <Link
-                      href={`/procurement/orders/${row.original.purchaseOrderId}?mode=edit`}
+                      href={`/procurement/orders/${row.original.purchaseOrderId}?mode=edit&demoRole=${viewerRole}`}
                     />
                   }
                 >
@@ -543,7 +574,7 @@ export function PurchaseOrdersListPage() {
                   size="xs"
                   render={
                     <Link
-                      href={`/procurement/orders/${row.original.purchaseOrderId}?mode=review`}
+                      href={`/procurement/orders/${row.original.purchaseOrderId}?mode=review&demoRole=${viewerRole}`}
                     />
                   }
                 >
@@ -571,7 +602,7 @@ export function PurchaseOrdersListPage() {
                   disabled
                   title={fulfillBlocker.message}
                 >
-                  履约
+                  交付已阻断
                 </Button>
               ) : null}
             </div>
@@ -579,7 +610,7 @@ export function PurchaseOrdersListPage() {
         },
       },
     ],
-    [focusedIndex, listReturnHref, pageRows]
+    [focusedIndex, listReturnHref, pageRows, viewerRole]
   )
 
   if (listQuery.isPending) {
@@ -618,7 +649,14 @@ export function PurchaseOrdersListPage() {
         ]}
         metadata={
           <DataFreshness
-            updatedAt="刚刚"
+            updatedAt={
+              listQuery.data?.freshness.updatedAt
+                ? new Date(listQuery.data.freshness.updatedAt).toLocaleString(
+                    "zh-CN",
+                    { hour12: false }
+                  )
+                : "刚刚"
+            }
             dateTime={listQuery.data?.freshness.updatedAt}
             state="fresh"
             label="列表数据"
@@ -710,7 +748,10 @@ export function PurchaseOrdersListPage() {
             label={metric.label}
             value={metric.count}
             detail={metric.detail}
-            active={metricKey === metric.key}
+            active={
+              metric.key !== "pending_create" &&
+              metricKey === metric.key
+            }
             onClick={() => {
               if (metric.key === "pending_create") {
                 setSelectedBasisId(openBases[0]?.basisId ?? "")
@@ -730,8 +771,8 @@ export function PurchaseOrdersListPage() {
         title="采购单列表"
         description={
           metricKey === "all" && statusFilter === "all"
-            ? "紧凑布局；采购单号与行级操作列固定。键盘 j/k 移动，Enter 预览，/ 搜索。"
-            : `当前筛选：${metricKey} · ${statusFilter}`
+            ? "搜索采购单号、供应商或来源销售单；键盘 j/k 移动行，Enter 打开预览，/ 聚焦搜索。"
+            : `当前筛选：${PO_METRIC_LABEL[effectiveMetric]} · ${PO_STATUS_FILTER_LABEL[statusFilter]}`
         }
         toolbar={
           <ListToolbar
@@ -770,6 +811,7 @@ export function PurchaseOrdersListPage() {
                 <ToggleGroupItem value="EFFECTIVE">已生效</ToggleGroupItem>
                 <ToggleGroupItem value="PARTIAL">部分执行</ToggleGroupItem>
                 <ToggleGroupItem value="COMPLETED">已完成</ToggleGroupItem>
+                <ToggleGroupItem value="VOID">已作废</ToggleGroupItem>
               </ToggleGroup>
             }
             actions={
@@ -805,6 +847,54 @@ export function PurchaseOrdersListPage() {
             defaultColumnPinning={{ left: ["document"], right: ["actions"] }}
             onRowPreview={(row) => setPreviewId(row.purchaseOrderId)}
             onRowOpen={(row) => setPreviewId(row.purchaseOrderId)}
+            errorState={
+              <BusinessFailureState
+                kind="system"
+                title="列表加载失败"
+                description="未能加载采购单列表，请重试；若持续失败可稍后再来。"
+                onRetry={() => void listQuery.refetch()}
+              />
+            }
+            emptyTitle={
+              statusFilter !== "all" ||
+              effectiveMetric !== "all" ||
+              Boolean(url.q)
+                ? "没有符合条件的采购单"
+                : undefined
+            }
+            emptyDescription="当前筛选没有匹配的采购单，可调整或清除筛选后重试。"
+            emptyAction={
+              <div className="flex flex-wrap gap-2">
+                {statusFilter !== "all" ||
+                effectiveMetric !== "all" ||
+                Boolean(url.q) ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() =>
+                      pushUrl({
+                        q: undefined,
+                        status: "all",
+                        metric: "all",
+                        page: 1,
+                      })
+                    }
+                  >
+                    清除筛选
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    render={<Link href="/procurement/confirm" />}
+                  >
+                    去采购二次确认
+                  </Button>
+                )}
+              </div>
+            }
           />
         }
       />
@@ -971,13 +1061,13 @@ export function PurchaseOrdersListPage() {
                       ? [
                           {
                             value: basisFromUrl,
-                            label: `${basisFromUrl} · 来自采购二次确认的固定结果`,
+                            label: "来自采购二次确认的固定结果",
                           },
                         ]
                       : []),
                     ...openBases.map((basis) => ({
                       value: basis.basisId,
-                      label: `${basis.basisId} · ${basis.salesOrderNo} · ${basis.supplierName} · ${PURCHASE_TYPE_LABEL[basis.purchaseType]} · 估 ${basis.estimatedGross}`,
+                      label: `${basis.salesOrderNo} · ${basis.supplierName} · ${PURCHASE_TYPE_LABEL[basis.purchaseType]} · 估 ${basis.estimatedGross}`,
                     })),
                   ]}
                   allowClear={false}

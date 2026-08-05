@@ -30,8 +30,10 @@ import {
 import {
   BrandCombobox,
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   CategoryCombobox,
+  DocumentSummary,
   FormalActionResult,
   OptionCombobox,
 } from "@/components/business"
@@ -49,6 +51,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { FileUpload } from "@/components/ui/file-upload"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -78,11 +89,15 @@ import {
 } from "@/features/supplier-catalog/queries"
 import type {
   SupplierCatalogWriteResult,
+  SupplierOfferingRevisionView,
 } from "@/features/supplier-catalog/types"
 import {
   CHANGE_TYPE_LABEL,
   DEMO_ROLE_LABEL,
 } from "@/features/supplier-catalog/types"
+import {
+  offeringStatusLabel,
+} from "@/features/supplier-catalog/supply-relationship-list-view"
 import {
   toBrandComboboxItems,
   toCategoryComboboxItems,
@@ -100,6 +115,99 @@ const SUPPLIER_CATALOG_DEMO_ROLES = [
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10)
+}
+
+function mappingHistoryStatusLabel(status: string) {
+  if (status === "ACTIVE") return "已生效"
+  if (status === "REVOKED" || status === "DISABLED") return "已失效"
+  return status
+}
+
+function OfferingConditionCard({
+  offering,
+  costMasked,
+}: {
+  offering: SupplierOfferingRevisionView
+  costMasked: boolean
+}) {
+  return (
+    <Card size="sm">
+      <CardHeader className="border-b py-3">
+        <CardTitle className="text-base">供给条件</CardTitle>
+        <CardDescription>
+          供应商当前对商品池的供给；销售只读取公司商品池价格，不读取这里的采购成本。
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="pt-4">
+        <DocumentSummary
+          columns="two"
+          items={[
+            {
+              id: "status",
+              label: "供给状态",
+              value: offeringStatusLabel(offering.status),
+              emphasized: true,
+            },
+            {
+              id: "cost",
+              label: "采购确认成本（含税）",
+              value: costMasked
+                ? "***"
+                : offering.supplyPriceGross
+                  ? `¥${offering.supplyPriceGross}`
+                  : "—",
+              numeric: true,
+            },
+            {
+              id: "prices",
+              label: "件代发价 / 集采价（含税）",
+              value: `${offering.dropshipSupplyPriceGross ? `¥${offering.dropshipSupplyPriceGross}` : "—"} / ${offering.bulkSupplyPriceGross ? `¥${offering.bulkSupplyPriceGross}` : "—"}`,
+            },
+            {
+              id: "tax",
+              label: "进项税率",
+              value:
+                offering.inputTaxRate == null || offering.inputTaxRate === ""
+                  ? "—"
+                  : `${(Number(offering.inputTaxRate) * 100).toFixed(0)}%`,
+            },
+            {
+              id: "moq",
+              label: "供给起订量",
+              value: offering.minimumOrderQuantity,
+              numeric: true,
+            },
+            {
+              id: "region",
+              label: "可供区域",
+              value: offering.supplyRegion.join("、") || "—",
+            },
+            {
+              id: "valid",
+              label: "生效期",
+              value: `${offering.validFrom} 至 ${offering.validTo ?? "长期"}`,
+            },
+            {
+              id: "availability",
+              label: "可供状态",
+              value:
+                offering.availabilityStatus === "AVAILABLE"
+                  ? "可供"
+                  : offering.availabilityStatus === "UNAVAILABLE"
+                    ? "暂不可供"
+                    : offering.availabilityStatus === "STOPPED"
+                      ? "已停供"
+                      : "信息待更新",
+            },
+          ]}
+        />
+      </CardContent>
+    </Card>
+  )
 }
 
 function moveListItem<T>(
@@ -251,7 +359,6 @@ export function SupplierProductCenterPage({
   const maskCost = searchParams.get("maskCost") === "1"
   const returnTo =
     searchParams.get("returnTo") ?? "/procurement/supplier-catalog?mode=list"
-  const queueContextId = searchParams.get("queueContextId") ?? undefined
 
   const centerQuery = useSupplierCatalogCenterQuery({
     supplierProductId: isCreate ? "" : supplierProductId,
@@ -305,6 +412,15 @@ export function SupplierProductCenterPage({
   const stickyHeaderRef = React.useRef<HTMLElement>(null)
   const [stickyHeaderHeight, setStickyHeaderHeight] = React.useState(64)
   const hydratedKeyRef = React.useRef<string | null>(null)
+  const [baselinePayload, setBaselinePayload] = React.useState<string>("")
+  const [leaveGuardOpen, setLeaveGuardOpen] = React.useState(false)
+  const [pendingLeaveHref, setPendingLeaveHref] = React.useState<string | null>(
+    null
+  )
+  const [deleteSpecIndex, setDeleteSpecIndex] = React.useState<number | null>(
+    null
+  )
+  const created = searchParams.get("created") === "1"
 
   React.useEffect(() => {
     if (isCreate || !centerQuery.data) return
@@ -335,6 +451,8 @@ export function SupplierProductCenterPage({
     })
     setFields(next)
     hydratedKeyRef.current = key
+    setBaselinePayload(JSON.stringify(contentPayload(next)))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- contentPayload 为纯派生函数
   }, [
     brandListQuery.isPending,
     brandOptions,
@@ -372,7 +490,8 @@ export function SupplierProductCenterPage({
   const costFieldVisibility =
     centerQuery.data?.costFieldVisibility ?? (maskCost ? "masked" : "visible")
 
-  const contentPayload = (nextFields: SupplierProductFormFields) => {
+  const contentPayload = React.useCallback(
+    (nextFields: SupplierProductFormFields) => {
     const attributes = skusToAttributes(
       nextFields.skus,
       nextFields.specDrafts,
@@ -429,7 +548,9 @@ export function SupplierProductCenterPage({
       media: spuMedia,
       skus,
     }
-  }
+    },
+    []
+  )
 
   const runLocalCheck = () => {
     setFormError(null)
@@ -441,13 +562,15 @@ export function SupplierProductCenterPage({
     })
     if (validation) {
       setFormError(validation)
+      scrollToSection("basic")
       return
     }
     setCheckPassed(true)
   }
 
-  const handleSubmit = async (event?: React.FormEvent) => {
+  const handleSubmit = async (event?: React.FormEvent): Promise<boolean> => {
     event?.preventDefault()
+    if (pending) return false
     setFormError(null)
     setCheckPassed(false)
     setResult(null)
@@ -457,7 +580,8 @@ export function SupplierProductCenterPage({
     })
     if (validation) {
       setFormError(validation)
-      return
+      scrollToSection("basic")
+      return false
     }
 
     try {
@@ -468,7 +592,7 @@ export function SupplierProductCenterPage({
         )
         if (!supplier) {
           setFormError("请选择已启用供应商")
-          return
+          return false
         }
         const response = await createMutation.mutateAsync({
           sourceType: "MANUAL",
@@ -478,18 +602,23 @@ export function SupplierProductCenterPage({
           ...payload,
           sourceReference: fields.sourceReference.trim() || undefined,
           minimumOrderQuantity: "1",
-          validFrom: "2026-08-02",
+          validFrom: todayIso(),
           idempotencyKey,
         })
         setResult(response)
         setIdempotencyKey(newIdempotencyKey("create-supplier-product"))
         router.replace(
-          `/procurement/supplier-catalog/${response.supplierProductId}?returnTo=${encodeURIComponent(returnTo)}`,
+          `/procurement/supplier-catalog/${response.supplierProductId}?created=1&returnTo=${encodeURIComponent(returnTo)}`,
         )
-        return
+        return true
       }
 
-      if (!item) return
+      if (!item) return false
+      // 无内容差异时不形成空修订
+      if (JSON.stringify(payload) === baselinePayload) {
+        setFormError("未检测到内容变化，无需保存")
+        return false
+      }
       const expected =
         item.supplierProduct.incomingRevision?.revisionNo ??
         item.supplierProduct.currentRevision.revisionNo
@@ -505,10 +634,51 @@ export function SupplierProductCenterPage({
       setIdempotencyKey(newIdempotencyKey("revise-supplier-product"))
       hydratedKeyRef.current = null
       await centerQuery.refetch()
+      return true
     } catch (error) {
       setFormError(error instanceof Error ? error.message : "保存失败")
+      return false
     }
   }
+
+  const openPromote = () => {
+    if (!editDirty) {
+      setPromoteOpen(true)
+      return
+    }
+    void handleSubmit().then((ok) => {
+      if (ok) setPromoteOpen(true)
+    })
+  }
+
+  // 详情即编辑：对比水合基线判断是否有未保存修改
+  const editDirty = React.useMemo(() => {
+    if (isCreate || baselinePayload === "") return false
+    return JSON.stringify(contentPayload(fields)) !== baselinePayload
+  }, [baselinePayload, contentPayload, fields, isCreate])
+
+  // 未保存修改离开守卫：刷新/关页
+  React.useEffect(() => {
+    if (!editDirty) return
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ""
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+  }, [editDirty])
+
+  const navigateWithGuard = React.useCallback(
+    (href: string) => {
+      if (editDirty) {
+        setPendingLeaveHref(href)
+        setLeaveGuardOpen(true)
+        return
+      }
+      router.push(href)
+    },
+    [editDirty, router]
+  )
 
   const syncSpecDrafts = (next: readonly SupplierSpecDraft[]) => {
     patchFields((previous) => {
@@ -543,16 +713,36 @@ export function SupplierProductCenterPage({
     )
   }
 
-  if (!isCreate && (centerQuery.isError || !item)) {
+  if (!isCreate && centerQuery.isError) {
+    return (
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <BusinessFailureState
+          kind="system"
+          title="详情加载失败"
+          description="未能加载供应商商品资料。请重试；若持续失败，可返回列表稍后再来。"
+          onRetry={() => void centerQuery.refetch()}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href={returnTo} />}
+            >
+              返回列表
+            </Button>
+          }
+        />
+      </div>
+    )
+  }
+
+  if (!isCreate && !item) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <BusinessEmptyState
           kind="no-data"
-          title="未找到供应商商品"
-          description={`供应商商品 ${supplierProductId} 不在当前目录范围内。`}
-          action={
-            <Button render={<Link href={returnTo} />}>返回列表</Button>
-          }
+          title="未找到该供应商商品"
+          description="该供应商商品可能已移出当前目录范围。"
+          action={<Button render={<Link href={returnTo} />}>返回列表</Button>}
         />
       </div>
     )
@@ -634,15 +824,12 @@ export function SupplierProductCenterPage({
                     </span>
                   </span>
                   <span className="num rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-foreground">
-                    来源 r{rev.revisionNo}
+                    来源版本 {rev.revisionNo}
                   </span>
                   <span>
                     {ep.supplierSpuCode ?? "—"} / {ep.supplierSkuCode}
                   </span>
-                  <span>
-                    角色 {DEMO_ROLE_LABEL[demoRole]}
-                    {queueContextId ? ` · 队列 ${queueContextId}` : ""}
-                  </span>
+                  <span>角色 {DEMO_ROLE_LABEL[demoRole]}</span>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
@@ -658,7 +845,7 @@ export function SupplierProductCenterPage({
                   size="sm"
                   variant="secondary"
                   disabled={!canEdit}
-                  onClick={() => setPromoteOpen(true)}
+                  onClick={openPromote}
                 >
                   <ShoppingBasketIcon data-icon="inline-start" aria-hidden />
                   加入公司商品池
@@ -668,7 +855,10 @@ export function SupplierProductCenterPage({
                 type="button"
                 size="sm"
                 variant="outline"
-                render={<Link href={returnTo} />}
+                onClick={(event) => {
+                  event.preventDefault()
+                  navigateWithGuard(returnTo)
+                }}
               >
                 <ArrowLeftIcon data-icon="inline-start" aria-hidden />
                 返回
@@ -685,7 +875,11 @@ export function SupplierProductCenterPage({
               </Button>
               <Button type="submit" size="sm" disabled={!canEdit || pending}>
                 <SaveIcon data-icon="inline-start" aria-hidden />
-                {isCreate ? "保存到供应商商品库" : "保存来源版本"}
+                {pending
+                  ? "正在保存…"
+                  : isCreate
+                    ? "保存到供应商商品库"
+                    : "保存供应商商品资料"}
               </Button>
             </div>
           </div>
@@ -708,6 +902,14 @@ export function SupplierProductCenterPage({
             <Badge variant="outline">价格/税率/费用字段已按权限隐藏</Badge>
           ) : null}
 
+          {created && !result ? (
+            <FormalActionResult
+              status="succeeded"
+              title="供应商商品已保存"
+              description="内容保存在供应商商品库；不会自动改写公司商品或商品池价格。"
+            />
+          ) : null}
+
           {!canEdit ? (
             <Alert>
               <AlertTitle>当前角色只读</AlertTitle>
@@ -720,7 +922,7 @@ export function SupplierProductCenterPage({
           {result ? (
             <FormalActionResult
               status="succeeded"
-              title={isCreate ? "供应商商品已保存" : "来源版本已更新"}
+              title={isCreate ? "供应商商品已保存" : "供应商商品资料已保存"}
               description="内容保存在供应商商品库；不会自动改写公司商品或商品池价格。"
               reference={result.reference}
             />
@@ -831,7 +1033,7 @@ export function SupplierProductCenterPage({
                     </span>
                   </div>
                   <p className="border-t border-border pt-3 text-xs text-muted-foreground">
-                    保存只更新供应商来源修订；公司商品图文与销售价独立维护。
+                    保存只更新供应商商品资料；公司商品图文与销售价独立维护。
                   </p>
                 </CardContent>
               </Card>
@@ -883,7 +1085,7 @@ export function SupplierProductCenterPage({
                   <CheckCircle2Icon aria-hidden />
                   <AlertTitle>填写检查通过</AlertTitle>
                   <AlertDescription>
-                    必填项完整，保存时仍以系统校验结果为准。
+                    必填项完整，可保存；保存时系统会再次复核。
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -1088,6 +1290,24 @@ export function SupplierProductCenterPage({
                   </Badge>
                 </div>
 
+                {!isCreate ? (
+                  <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
+                    <Label htmlFor="sp-reason">变更原因 *</Label>
+                    <Textarea
+                      id="sp-reason"
+                      value={fields.changeReason}
+                      onChange={(event) =>
+                        patchFields((previous) => ({
+                          ...previous,
+                          changeReason: event.target.value,
+                        }))
+                      }
+                      rows={2}
+                      placeholder="说明本次修改内容，保存后形成新的来源资料版本"
+                    />
+                  </div>
+                ) : null}
+
                 <div className="space-y-3">
                   {fields.specDrafts.map((draft, index) => (
                     <div
@@ -1166,11 +1386,7 @@ export function SupplierProductCenterPage({
                             variant="ghost"
                             size="icon-xs"
                             aria-label={`删除规格项 ${index + 1}`}
-                            onClick={() =>
-                              syncSpecDrafts(
-                                fields.specDrafts.filter((_, i) => i !== index),
-                              )
-                            }
+                            onClick={() => setDeleteSpecIndex(index)}
                           >
                             <XIcon />
                           </Button>
@@ -1261,9 +1477,6 @@ export function SupplierProductCenterPage({
                     <p className="text-xs text-muted-foreground">
                       规格组合生成 SKU 表；每行维护编码、条码、1:1 主图、代发/集采底价与起订量、可供状态。
                     </p>
-                    <Badge variant="success">
-                      {fields.skus.length} / {fields.skus.length} 行
-                    </Badge>
                   </div>
                   <div className="overflow-x-auto rounded-xl border border-border">
                     <table className="w-full min-w-[72rem] text-sm">
@@ -1457,7 +1670,7 @@ export function SupplierProductCenterPage({
                                     { value: "AVAILABLE", label: "可供" },
                                     { value: "UNAVAILABLE", label: "不可供" },
                                     { value: "STOPPED", label: "停供" },
-                                    { value: "STALE", label: "过期" },
+                                    { value: "STALE", label: "信息待更新" },
                                   ]}
                                   allowClear={false}
                                   className="w-28"
@@ -1470,24 +1683,6 @@ export function SupplierProductCenterPage({
                     </table>
                   </div>
                 </div>
-
-                {!isCreate ? (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="sp-reason">变更原因 *</Label>
-                    <Textarea
-                      id="sp-reason"
-                      value={fields.changeReason}
-                      onChange={(event) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          changeReason: event.target.value,
-                        }))
-                      }
-                      rows={2}
-                      placeholder="说明本次修改内容，保存后形成新来源修订"
-                    />
-                  </div>
-                ) : null}
               </fieldset>
 
               {!isCreate && item ? (
@@ -1495,6 +1690,12 @@ export function SupplierProductCenterPage({
                   id="supplier-product-section-mapping"
                   className="scroll-mt-[var(--product-section-scroll-margin)] space-y-4"
                 >
+                  {item.offering?.currentRevision ? (
+                    <OfferingConditionCard
+                      offering={item.offering.currentRevision}
+                      costMasked={costFieldVisibility === "masked"}
+                    />
+                  ) : null}
                   <Card size="sm">
                     <CardHeader className="border-b py-3">
                       <CardTitle className="text-base">映射与商品池</CardTitle>
@@ -1531,8 +1732,9 @@ export function SupplierProductCenterPage({
                             key={history.id}
                             className="rounded-lg border px-3 py-2"
                           >
-                            {history.at} · {history.skuCode} · {history.status}{" "}
-                            · {history.note}
+                            {history.at} · {history.skuCode} ·{" "}
+                            {mappingHistoryStatusLabel(history.status)} ·{" "}
+                            {history.note}
                           </div>
                         ))
                       ) : (
@@ -1543,11 +1745,12 @@ export function SupplierProductCenterPage({
                           type="button"
                           size="sm"
                           variant="outline"
-                          render={
-                            <Link
-                              href={`/master-data/products?q=${encodeURIComponent(item.mapping.skuCode)}`}
-                            />
-                          }
+                          onClick={(event) => {
+                            event.preventDefault()
+                            navigateWithGuard(
+                              `/master-data/products?q=${encodeURIComponent(item.mapping?.skuCode ?? "")}`
+                            )
+                          }}
                         >
                           在商品与 SKU 中查找 {item.mapping.skuCode}
                         </Button>
@@ -1557,11 +1760,12 @@ export function SupplierProductCenterPage({
                           type="button"
                           size="sm"
                           variant="outline"
-                          render={
-                            <Link
-                              href={`/master-data/products/${item.skuCandidates[0].productId}`}
-                            />
-                          }
+                          onClick={(event) => {
+                            event.preventDefault()
+                            navigateWithGuard(
+                              `/master-data/products/${item.skuCandidates[0]?.productId}`
+                            )
+                          }}
                         >
                           打开公司商品
                         </Button>
@@ -1583,6 +1787,82 @@ export function SupplierProductCenterPage({
           onOpenChange={setPromoteOpen}
         />
       ) : null}
+
+      <Dialog open={leaveGuardOpen} onOpenChange={setLeaveGuardOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>有未保存的修改</DialogTitle>
+            <DialogDescription>
+              当前编辑内容尚未保存，离开后修改将丢失。建议先保存。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              继续编辑
+            </DialogClose>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={pending}
+              onClick={async () => {
+                const ok = await handleSubmit()
+                if (!ok) return
+                setLeaveGuardOpen(false)
+                if (pendingLeaveHref) router.push(pendingLeaveHref)
+              }}
+            >
+              保存并离开
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                setLeaveGuardOpen(false)
+                if (pendingLeaveHref) router.push(pendingLeaveHref)
+              }}
+            >
+              放弃修改并离开
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={deleteSpecIndex != null}
+        onOpenChange={(open) => {
+          if (!open) setDeleteSpecIndex(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>删除规格项？</DialogTitle>
+            <DialogDescription>
+              删除规格维度后，SKU 表将按剩余规格重新生成；已填行的编码、价格等数据若无法与新组合匹配，会按规则自动重建，无法撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              取消
+            </DialogClose>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                if (deleteSpecIndex != null) {
+                  syncSpecDrafts(
+                    fields.specDrafts.filter(
+                      (_, i) => i !== deleteSpecIndex
+                    ),
+                  )
+                }
+                setDeleteSpecIndex(null)
+              }}
+            >
+              删除规格项
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

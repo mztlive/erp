@@ -77,6 +77,7 @@ export function FulfillmentDirectForm({
               <Input
                 id={`direct-qty-${i}`}
                 className="num"
+              inputMode="decimal"
                 value={line.quantity}
                 disabled={disabled}
                 onChange={(e) => {

@@ -64,6 +64,31 @@ function nowIso() {
   return new Date().toISOString()
 }
 
+/** 演示：启动/续跑后模拟进度推进，避免运行中任务长期停在 0% 被误判为卡死 */
+function simulateRunningProgress(
+  job: HistoryBackfillJobCore
+): HistoryBackfillJobCore["progress"] {
+  const total = Math.max(job.progress.totalCount, 1)
+  const base = Math.min(Math.floor(total * 0.32), 60_000)
+  const inserted = Math.floor(base * 0.86)
+  return {
+    ...job.progress,
+    processedCount: Math.max(base, job.progress.processedCount),
+    insertedCount: Math.max(inserted, job.progress.insertedCount),
+    deduplicatedCount: Math.max(
+      Math.floor(base * 0.06),
+      job.progress.deduplicatedCount
+    ),
+    unattributedCount: Math.max(
+      Math.floor(base * 0.02),
+      job.progress.unattributedCount
+    ),
+    failedCount: Math.max(Math.floor(base * 0.01), job.progress.failedCount),
+    lastProgressAt: nowIso(),
+    heartbeatAt: nowIso(),
+  }
+}
+
 function allJobs(): HistoryBackfillJobCore[] {
   const byId = new Map<string, HistoryBackfillJobCore>()
   for (const seed of JOB_SEEDS) {
@@ -116,7 +141,7 @@ function toListItem(job: HistoryBackfillJobCore): HistoryBackfillListItem {
   const costCoverageLabel =
     job.coverageRate == null
       ? "—"
-      : `${job.coverageRate}${none && none.count > 0 ? ` · NONE ${none.count}` : ""}`
+      : `${job.coverageRate}${none && none.count > 0 ? ` · 未覆盖 ${none.count}` : ""}`
 
   return {
     id: job.id,
@@ -338,6 +363,7 @@ export async function fetchHistoryBackfillDetail(
 
   const start = (query.page - 1) * query.pageSize
   const pageItems = items.slice(start, start + query.pageSize)
+  const totalItems = items.length
 
   // 按角色裁剪确认动作
   const allowedActions = [...job.allowedActions]
@@ -386,6 +412,7 @@ export async function fetchHistoryBackfillDetail(
       actionBlockers,
     },
     items: pageItems,
+    totalItems,
     report: buildReportForJob(job),
     queriedAt: nowIso(),
     permissionVersion: "pv-w30-1",
@@ -403,13 +430,13 @@ export async function submitHistoryBackfillCommand(
     forceUnknownNext = false
     return {
       status: "RESULT_UNKNOWN",
-      title: "结果未知 · 请查询原操作",
+      title: "结果未知 · 请查询原任务",
       description:
-        "提交超时或响应丢失。请按 operationId 查询，禁止新建第二任务。",
+        "提交超时或响应丢失。请查询原任务的处理结果，禁止新建第二任务。",
       operationId,
       idempotencyKey,
       jobId: input.jobId,
-      nextStep: "使用相同 idempotencyKey 查询最终结果",
+      nextStep: "按原任务号查询处理结果",
     }
   }
 
@@ -548,16 +575,10 @@ export async function submitHistoryBackfillCommand(
       }
     }
     if (!job.coverageComplete) {
-      jobOverlays.set(job.id, {
-        ...jobOverlays.get(job.id),
-        processingStatus: "VALIDATING",
-        pipelineStage: "VALIDATE_SOURCE",
-        lockVersion: job.lockVersion + 1,
-      })
       return {
         status: "BLOCKED",
         title: "来源校验未通过 · 覆盖不足",
-        description: `requiredHistoryStart=${job.requiredHistoryStart.slice(0, 10)}，sourceCoverageStart=${(job.sourceCoverageStart ?? "—").slice(0, 10)}。禁止缩晚起点。`,
+        description: `必须覆盖起点=${job.requiredHistoryStart.slice(0, 10)}，来源覆盖起点=${(job.sourceCoverageStart ?? "—").slice(0, 10)}。请先补齐来源缺口后重新校验，禁止缩晚起点。`,
         jobId: job.id,
         jobNo: job.jobNo,
         operationId,
@@ -660,11 +681,7 @@ export async function submitHistoryBackfillCommand(
       processingStatus: "RUNNING",
       pipelineStage: "INGEST",
       lockVersion: job.lockVersion + 1,
-      progress: {
-        ...job.progress,
-        lastProgressAt: nowIso(),
-        heartbeatAt: nowIso(),
-      },
+      progress: simulateRunningProgress(job),
       allowedActions: [],
       actionBlockers: [
         {
@@ -678,7 +695,7 @@ export async function submitHistoryBackfillCommand(
     const result: HistoryBackfillCommandResult = {
       status: "COMMITTED",
       title: "回填已提交后台",
-      description: `任务 ${job.jobNo} 已冻结范围 ${formatRange(job.rangeStart, job.rangeEnd)} 并启动异步作业；进度以心跳与任务记录为准，不伪装同步完成。`,
+      description: `任务 ${job.jobNo} 已冻结范围 ${formatRange(job.rangeStart, job.rangeEnd)} 并启动后台执行；进度以任务记录为准，不伪装同步完成。`,
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,
@@ -735,11 +752,7 @@ export async function submitHistoryBackfillCommand(
       processingStatus: "RUNNING",
       pipelineStage: "INGEST",
       lockVersion: job.lockVersion + 1,
-      progress: {
-        ...job.progress,
-        lastProgressAt: nowIso(),
-        heartbeatAt: nowIso(),
-      },
+      progress: simulateRunningProgress(job),
       allowedActions: [],
       actionBlockers: [
         {
@@ -786,7 +799,7 @@ export async function submitHistoryBackfillCommand(
       status: "COMMITTED",
       title: "已提交重新归集",
       description:
-        "引用原 mall_order_fact 重新归集并追加成本评估；不复制业务记录、不改写原消费。",
+        "引用原业务记录重新归集并追加成本评估；不复制业务记录、不改写原消费。",
       jobId: job.id,
       jobNo: job.jobNo,
       operationId,

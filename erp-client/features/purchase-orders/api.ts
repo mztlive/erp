@@ -56,7 +56,7 @@ const PURCHASE_ORDER_DEFAULT_PAGE_SIZE = 20
 const PURCHASE_ORDER_MAX_PAGE_SIZE = 100
 
 function listDisplayNo(row: PurchaseOrderListItem): string {
-  return row.purchaseNo ?? row.draftLabel ?? row.purchaseOrderId
+  return row.purchaseNo ?? row.draftLabel ?? "采购单（未编号）"
 }
 
 function matchesListFilter(
@@ -153,7 +153,7 @@ function buildPurchaseOrderMetrics(rows: PurchaseOrderListItem[]) {
       key: "pending_create",
       label: "可建单依据",
       count: listW08CreationBases().filter((b) => !b.consumed).length,
-      detail: "W07 固定结果",
+      detail: "采购二次确认固定结果",
     },
     {
       key: "draft",
@@ -282,7 +282,7 @@ export async function savePurchaseOrderDraft(
         draftContentHash: data.draftContentHash,
         totals: data.totals,
       },
-      reference: `SAVE-${input.purchaseOrderId}-${data.lockVersion}`,
+      reference: `SAVED-V${data.lockVersion}`,
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
@@ -314,7 +314,7 @@ export async function submitPurchaseOrderForReview(
     return {
       status: "succeeded",
       data,
-      reference: data.submissionId,
+      reference: `SUB-${data.submissionNo}`,
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
@@ -355,7 +355,7 @@ export async function reviewPurchaseOrder(
     return {
       status: "succeeded",
       data,
-      reference: data.reference,
+      reference: `REVIEW-V${data.lockVersion}`,
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
@@ -382,7 +382,7 @@ export async function startPurchaseChange(input: {
     return {
       status: "succeeded",
       data,
-      reference: data.changeId,
+      reference: `CHANGE-V${data.baseRevisionNo}`,
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
@@ -411,7 +411,7 @@ export async function createPurchaseOrderFromBasis(
     return {
       status: "succeeded",
       data,
-      reference: data.purchaseOrderId,
+      reference: data.draftLabel,
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) {

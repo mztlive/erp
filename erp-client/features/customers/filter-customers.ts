@@ -65,6 +65,8 @@ export function filterCustomerDirectory(
       (b.recentBusinessAt ?? "").localeCompare(a.recentBusinessAt ?? "")
     )
   }
+  // 表头排序支持升序（默认键均为降序口径：逾期高优先、最近业务优先）。
+  if (query.sortDir === "asc") sorted.reverse()
 
   return sorted
 }

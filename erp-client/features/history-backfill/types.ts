@@ -188,9 +188,15 @@ export const ITEM_RESULT_TONE: Record<
 }
 
 export const COST_BASIS_LABEL: Record<CostBasis, string> = {
-  ACTUAL: "ACTUAL · 实际成本",
-  STANDARD: "STANDARD · 时点标准成本",
-  NONE: "NONE · 未覆盖",
+  ACTUAL: "实际成本",
+  STANDARD: "时点标准成本",
+  NONE: "未覆盖",
+}
+
+/** 失败明细错误码中文映射；未命中不展示原码。 */
+export const FAILURE_CODE_LABEL: Record<string, string> = {
+  SOURCE_SCHEMA_FIELD_MISSING: "来源字段缺失",
+  TAX_BASIS_UNRESOLVED: "税口径无法解析",
 }
 
 export const ENVIRONMENT_LABEL: Record<HistoryBackfillEnvironment, string> = {
@@ -418,6 +424,8 @@ export type HistoryBackfillReportView = {
 export type HistoryBackfillDetailView = {
   job: HistoryBackfillJobCore
   items: HistoryBackfillItemView[]
+  /** 筛选后明细总数（分页用） */
+  totalItems: number
   report?: HistoryBackfillReportView
   queriedAt: string
   permissionVersion: string

@@ -431,6 +431,8 @@ export type MetricFilterItemProps = Omit<
   label: React.ReactNode
   value: React.ReactNode
   detail?: React.ReactNode
+  /** 指标状态徽章（含严重度色值）；如「已超期」传 tone="destructive"。 */
+  status?: SemanticStatus
   active?: boolean
   detailMode?: MetricDetailMode
   density?: MetricDensity
@@ -441,6 +443,7 @@ function MetricFilterItem({
   label,
   value,
   detail,
+  status,
   active = false,
   detailMode = "inline",
   density = "default",
@@ -482,6 +485,11 @@ function MetricFilterItem({
         {showInlineDetail ? (
           <span className="mt-1 block text-xs text-muted-foreground xl:ml-auto xl:mt-0 xl:truncate">
             {detail}
+          </span>
+        ) : null}
+        {status ? (
+          <span className="mt-1 block shrink-0 xl:mt-0">
+            <StatusBadge {...status} />
           </span>
         ) : null}
       </button>

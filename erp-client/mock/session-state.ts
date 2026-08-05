@@ -1606,7 +1606,7 @@ export function submitW10Adjustment(input: {
     return {
       status: "failed",
       code: "VERSION_CONFLICT",
-      message: `余额已变化（服务端 lockVersion=${currentLock}），未静默覆盖。请刷新基线后重新校验再提交。`,
+      message: "余额数据已更新，本次提交未生效。请刷新最新余额后重新调整再提交。",
       latestLockVersion: currentLock,
     }
   }
@@ -1716,20 +1716,23 @@ export type W10ExportJob = {
 }
 
 let w10ExportSeq = 0
+let w04ExportSeq = 0
 
 export function createW10ExportJob(input: {
   total: number
   filterSummary: string
 }): W10ExportJob {
-  const jobId = `exp-w10-${++w10ExportSeq}`
+  const now = new Date()
+  const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
+  const jobId = `台账导出-${datePart}-${++w10ExportSeq}`
   return {
     jobId,
     status: "succeeded",
     total: input.total,
     completed: input.total,
     filterSummary: input.filterSummary,
-    createdAt: new Date().toISOString(),
-    downloadLabel: `库存台账导出-${jobId}.csv`,
+    createdAt: now.toISOString(),
+    downloadLabel: `库存台账导出-${datePart}-${w10ExportSeq}.csv`,
   }
 }
 
@@ -1982,15 +1985,17 @@ export function createW04ExportJob(input: {
   permissionVersion: string
   filterSnapshotLabel: string
 }): ContractExportJob {
-  const jobId = `EXP-CT-${Date.now().toString(36).toUpperCase()}`
+  const now = new Date()
+  const datePart = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, "0")}${String(now.getDate()).padStart(2, "0")}`
+  const jobId = `合同导出-${datePart}-${++w04ExportSeq}`
   return {
     jobId,
     status: "succeeded",
     rowCount: input.rowCount,
     permissionVersion: input.permissionVersion,
     filterSnapshotLabel: input.filterSnapshotLabel,
-    createdAt: new Date().toISOString(),
-    downloadLabel: `合同导出_${jobId}.csv（服务端筛选结果·重新鉴权）`,
+    createdAt: now.toISOString(),
+    downloadLabel: `合同导出_${datePart}_${w04ExportSeq}.csv（系统筛选结果 · 重新鉴权）`,
   }
 }
 
@@ -4550,7 +4555,7 @@ export function postW12Payment(input: PostPaymentInput): FormalSubmitResult {
     const result: FormalSubmitResult = {
       status: "succeeded",
       title: "付款已登记并核销",
-      description: `付款单 ${row.paymentNo} 已过账；未分配余额以服务端净有效分配为准。未核销付款不满足先款门禁。`,
+      description: `付款单 ${row.paymentNo} 已入账；未分配余额以系统净有效分配为准。未核销付款不满足先款条件。`,
       reference: row.paymentId,
       documentNo: row.paymentNo,
       operationId: `op_w12_pay_${row.paymentId}`,

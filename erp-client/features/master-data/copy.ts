@@ -3,6 +3,8 @@
  * 代码字段名（revision / lockVersion）仅限内部使用。
  */
 
+import type { MasterDataResource } from "@/features/master-data/types"
+
 export function masterDataActionLabel(action: string): string {
   switch (action) {
     case "CREATE":
@@ -22,17 +24,77 @@ export function masterDataActionLabel(action: string): string {
   }
 }
 
+export function masterDataSearchPlaceholder(
+  resource: MasterDataResource
+): string {
+  switch (resource) {
+    case "categories":
+      return "分类代码、名称"
+    case "brands":
+      return "品牌代码、名称"
+    case "suppliers":
+      return "编号、名称、供应商代码"
+    case "warehouses":
+      return "仓库代码、名称"
+    case "products":
+      return "编号、名称、SKU"
+    case "voucher-categories":
+      return "编号、名称、SKU"
+    case "sellable-items":
+      return "编号、名称、SKU"
+  }
+}
+
+/** 导出元信息：枚举原值不上文件。 */
+export function lifecycleFilterLabel(value: string): string {
+  switch (value) {
+    case "enabled":
+      return "当前启用"
+    case "disabled":
+      return "当前停用"
+    default:
+      return "全部"
+  }
+}
+
+export function revisionTimingFilterLabel(value: string): string {
+  switch (value) {
+    case "current":
+      return "当前生效"
+    case "future":
+      return "待生效"
+    default:
+      return "全部"
+  }
+}
+
+export function metricFilterLabel(value: string): string {
+  switch (value) {
+    case "enabled":
+      return "当前启用"
+    case "disabled":
+      return "当前停用"
+    case "pending":
+      return "待生效更新"
+    case "expiring":
+      return "即将到期"
+    default:
+      return "全部"
+  }
+}
+
 /** 权限条、表头等短标签 */
 export const masterDataCopy = {
   resourceNavAria: "基础资料分类",
   unknownResourceTitle: "找不到该分类",
-  unknownResourceDesc: (resource: string) =>
-    `没有「${resource}」这一类基础资料，请从上方分类重新进入。`,
+  unknownResourceDesc: () =>
+    "该分类不存在或链接已失效，请从上方分类重新进入。",
   pageTitle: (resourceLabel: string) => `基础资料 · ${resourceLabel}`,
   listDescription: (count: number) =>
     `共 ${count} 条 · 可按启用状态、版本状态筛选 · 按 / 搜索 · 回车打开详情`,
-  searchPlaceholder: "编号、名称、SKU / 供应商 / 仓库代码",
   searchAria: "搜索基础资料",
+  sellableItemsHint:
+    "公司商品池 = 采购发布给销售的可售项（价格对销售可见）；商品与 SKU = SPU / SKU 主档。两者相互关联，商品池价格来自商品主档的销售可见价。",
   filterLifecycleAria: "启用状态",
   filterVersionAria: "版本状态",
   versionAll: "版本：全部",
@@ -91,7 +153,8 @@ export const masterDataCopy = {
     "若立即生效，列表会显示新内容；若指定了未来日期，到期后自动切换。",
   reviseBlockedTitle: "无法更新",
   reviseConflictTitle: "资料已被他人更新",
-  reviseConflictHint: "请关闭后刷新页面，再重新填写。",
+  reviseConflictHint: "请重新加载最新内容后，再重新填写。",
+  reloadAction: "重新加载",
   reviseNameLabel: "名称",
   reviseSubmit: "保存更新",
   disableTitle: "停用资料",
@@ -142,7 +205,7 @@ export const masterDataCopy = {
   productSpecsHint:
     "添加规格维度（如颜色、规格），填写取值后自动组合出 SKU。无规格时保留一个默认 SKU。",
   productSkuHint:
-    "销售可见价属于公司商品池；每个 SKU 可关联多家供应商，采购成本、供给方式、税费和起订量按供应商供给版本在 W21 独立维护。",
+    "销售可见价属于公司商品池；每个 SKU 可关联多家供应商，采购成本、供给方式、税费和起订量按供应商商品资料独立维护，不写入商品版本。",
   productAddSpec: "添加规格",
   productRemoveSpec: "移除规格",
   productRebuildSkus: "按规格重新生成 SKU",
@@ -163,6 +226,9 @@ export const masterDataCopy = {
   categoryTreeDesc: (count: number) =>
     `共 ${count} 个分类 · 按树形维护上下级 · 停用后业务页默认不可选`,
   categoryTreeEmpty: "暂无分类，请先新建根分类",
+  categoryTreeNoMatch: "没有匹配的分类",
+  categoryTreeNoMatchDesc:
+    "当前搜索或启用状态筛选下没有分类。可调整关键词或清除筛选后重试。",
   categoryTreeSearch: "搜索分类代码或名称",
   categoryAddRoot: "新建根分类",
   categoryAddChild: "新建子分类",
@@ -245,7 +311,7 @@ export const masterDataCopy = {
   centerUpdateBlocked: (msg: string) => `暂时不能更新资料：${msg}`,
   centerDisableBlocked: (msg: string) => `暂时不能停用：${msg}`,
   centerSpecNote:
-    "SKU 由规格组合生成；已被业务使用的商品不可改基础单位。规格标识由系统内部派生，不在界面展示。",
+    "SKU 由规格组合生成；已被业务使用的商品不可改基础单位。规格由规格项自动组合生成，不在界面单独维护。",
   centerHistoryName: "当时名称",
   centerUsageCount: (n: number) => `约被业务引用 ${n} 次。`,
   demoSimulateLabel: "演示结果（仅演示）",

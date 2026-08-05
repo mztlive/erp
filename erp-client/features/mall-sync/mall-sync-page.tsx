@@ -58,7 +58,6 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
 import type {
   DemoRole,
   MallSnapshotRow,
@@ -93,7 +92,19 @@ import { formatDateTime } from "@/lib/datetime"
 import { parseDemoRole } from "@/lib/demo-roles"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { type ResultState } from "@/components/business/feedback"
-import { freshnessText, versionText } from "@/lib/ui-text"
+import {
+  freshnessText,
+  versionText,
+  workspaceLabel,
+} from "@/lib/ui-text"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import {
+  JOB_ERROR_CLASS_LABEL,
+} from "@/features/mall-sync/types"
 
 const VIEWS: MallSyncViewName[] = [
   "overview",
@@ -197,6 +208,7 @@ export function MallSyncPage() {
   const [deferOpen, setDeferOpen] = React.useState(false)
   const [pullOpen, setPullOpen] = React.useState(false)
   const [incrementalOpen, setIncrementalOpen] = React.useState(false)
+  const [retryConfirmOpen, setRetryConfirmOpen] = React.useState(false)
   const [actionError, setActionError] = React.useState<string | null>(null)
 
   const queryInput = React.useMemo(
@@ -418,6 +430,7 @@ export function MallSyncPage() {
       targetLabel: `${candidate.stableNo} ${candidate.label}`,
       evidenceNote,
       demoRole,
+      stage,
     })
     setConfirmOpen(false)
     if (res.status === "succeeded") {
@@ -425,10 +438,28 @@ export function MallSyncPage() {
         status: "succeeded",
         title: "映射已确认",
         description: res.message,
-        reference: res.externalIdentityMapId,
+        facts: [
+          { label: "已确认目标", value: `${candidate.stableNo} ${candidate.label}` },
+        ],
       })
       setSessionLease(null)
       void pageQuery.refetch()
+      // 与「先跳过」一致：自动定位到下一项
+      const tasks = data?.mappingTasks ?? []
+      const idx = tasks.findIndex(
+        (t) => t.mappingTaskId === mappingTask.mappingTaskId
+      )
+      const next = tasks[idx + 1]
+      if (next) {
+        patchUrl({
+          view: "mapping",
+          mappingTaskId: next.mappingTaskId,
+          workItemId:
+            next.ownerRoutingState === "CONFIGURED"
+              ? next.workItem.workItemId
+              : null,
+        })
+      }
     } else {
       setActionError(res.message)
     }
@@ -483,6 +514,7 @@ export function MallSyncPage() {
       mappingTaskId: mappingTask.mappingTaskId,
       sourceSnapshotId: mappingTask.sourceSnapshotId,
       demoRole,
+      stage,
     })
     if (res.status === "succeeded") {
       setResult({
@@ -507,8 +539,29 @@ export function MallSyncPage() {
     }
   }
 
-  async function handleResolveUnknownReapply() {
-    if (!mappingTask?.reapplyOperation) return
+  async function handleRetryJob() {
+    if (!data?.selectedJob) return
+    const res = await retryJob.mutateAsync({
+      jobId: data.selectedJob.jobId,
+      reason: "重试未成功部分的分页",
+      demoRole,
+      stage,
+    })
+    setRetryConfirmOpen(false)
+    if (res.status === "succeeded") {
+      setResult({
+        status: "succeeded",
+        title: "重试已创建",
+        description: res.message,
+        reference: res.jobNo,
+      })
+      void pageQuery.refetch()
+    } else {
+      setActionError(res.message)
+    }
+  }
+
+  async function handleResolveUnknownReapply() {    if (!mappingTask?.reapplyOperation) return
     const res = await resolveReapply.mutateAsync({
       mappingTaskId: mappingTask.mappingTaskId,
       operationId: mappingTask.reapplyOperation.operationId,
@@ -538,11 +591,11 @@ export function MallSyncPage() {
   const manualSyncDisabledReason = !firstPhase
     ? "已封存：无第一期写动作"
     : policyMissing
-      ? "MANUAL_GOVERNANCE_POLICY_MISSING：人工策略未配置"
+      ? "人工治理策略未配置：立即增量/按单补拉已禁用"
       : demoRole !== "admin"
         ? "仅管理员可触发"
         : context?.sourceUnavailable
-          ? "来源不可用时不新建推进任务（可安全重试既有失败）"
+          ? "来源不可用时不新建推进任务（可重试既有失败）"
           : null
 
   const jobColumns = React.useMemo<ColumnDef<MallSyncJobRow>[]>(
@@ -584,7 +637,7 @@ export function MallSyncPage() {
       },
       {
         id: "counts",
-        header: "页/数据/错",
+        header: "页 / 条 / 错",
         meta: { align: "end", numeric: true },
         cell: ({ row }) => (
           <span className="num text-sm">
@@ -598,7 +651,7 @@ export function MallSyncPage() {
         header: freshnessText.syncProgress,
         cell: ({ row }) => (
           <span className="text-sm text-muted-foreground">
-            {row.original.watermarkAdvanced ? "已安全推进" : "未推进"}
+            {row.original.watermarkAdvanced ? "已推进" : "未推进"}
           </span>
         ),
       },
@@ -652,7 +705,7 @@ export function MallSyncPage() {
       },
       {
         id: "hash",
-        header: "数据标识",
+        header: versionText.dataVersion,
         cell: ({ row }) => (
           <span className="font-mono text-xs text-muted-foreground">
             {row.original.contentHashShort}
@@ -762,9 +815,7 @@ export function MallSyncPage() {
         header: "待办",
         cell: ({ row }) =>
           row.original.ownerRoutingState === "CONFIGURED" ? (
-            <span className="font-mono text-xs">
-              {row.original.workItem.workItemId}
-            </span>
+            <span className="text-sm">{row.original.workItem.statusLabel}</span>
           ) : (
             <span className="text-sm text-muted-foreground">无</span>
           ),
@@ -891,14 +942,21 @@ export function MallSyncPage() {
       <PageHeader
         title="商城同步与映射"
         breadcrumbs={[
-          { id: "gov", label: "治理", href: "/governance/mall-sync", current: false },
+          { id: "gov", label: "治理", href: "/governance", current: false },
           { id: "sync", label: "商城同步与映射", current: true },
         ]}
         metadata={
           <div className="flex flex-wrap items-center gap-3">
             <DataFreshness
-              updatedAt="刚刚"
-              dateTime={context?.freshness.viewProjectedAt}
+              updatedAt={
+                context?.freshness.latestSuccessfulJobAt
+                  ? formatDateTime(
+                      context.freshness.latestSuccessfulJobAt,
+                      "default"
+                    )
+                  : "—"
+              }
+              dateTime={context?.freshness.latestSuccessfulJobAt}
               state={context?.sourceUnavailable ? "stale" : "fresh"}
               label="同步数据"
             />
@@ -973,7 +1031,7 @@ export function MallSyncPage() {
                 <p>
                   封存时间 {formatDateTime(ownership.sealedAt, "default")}
                   {ownership.finalWatermark
-                    ? ` · 最终同步点 ${ownership.finalWatermark}`
+                    ? ` · 最终同步点 ${formatDateTime(ownership.finalWatermark, "default")}`
                     : ""}
                 </p>
               ) : null}
@@ -988,11 +1046,11 @@ export function MallSyncPage() {
       {sealed && (
         <div className="flex flex-wrap gap-2 text-sm">
           <Button variant="link" size="sm" render={<Link href="/commerce/execution-projections" />}>
-            W23 执行信息
+            {workspaceLabel("W23")}
             <ExternalLinkIcon className="size-3.5" />
           </Button>
           <Button variant="link" size="sm" render={<Link href="/governance/integration-errors" />}>
-            W29 接口错误与对账
+            {workspaceLabel("W29")}
             <ExternalLinkIcon className="size-3.5" />
           </Button>
           {sealed && view !== "history" ? (
@@ -1014,8 +1072,7 @@ export function MallSyncPage() {
           <AlertTitle>人工同步治理策略未配置</AlertTitle>
           <AlertDescription className="space-y-1">
             <p>
-              代码 <code className="text-xs">MANUAL_GOVERNANCE_POLICY_MISSING</code>
-              ：「立即增量」「按单补拉」已禁用（界面与系统均拒绝）。
+              「立即增量」「按单补拉」已禁用（界面与系统均拒绝）。
             </p>
             <p className="text-muted-foreground">
               {context?.scheduledIncrementalNote}
@@ -1033,8 +1090,8 @@ export function MallSyncPage() {
             · 模式{" "}
             {policyState?.state === "CONFIGURED"
               ? policyState.executionMode === "SINGLE_OPERATOR_REASON"
-                ? "单人理由"
-                : "双人授权"
+                ? "单人执行"
+                : "双人复核"
               : "—"}
             。定时增量仍按调度独立运行。
           </AlertDescription>
@@ -1051,14 +1108,17 @@ export function MallSyncPage() {
       ) : null}
 
       {/* 演示控制：角色 / 阶段 / 策略 / 来源（mock） */}
-      <Card size="sm">
-        <CardHeader className="border-b py-3">
-          <CardTitle className="text-sm">演示控制（仅本次操作生效）</CardTitle>
-          <CardDescription>
-            切换角色与阶段可查看不同阶段的分工与冻结状态；变更仅本次操作有效。
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap items-end gap-4 pt-3">
+      <Collapsible className="rounded-2xl border bg-card">
+        <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 border-b px-4 py-3 text-left">
+          <span className="text-sm font-semibold">
+            演示控制（仅本次操作生效）
+          </span>
+          <span className="text-xs text-muted-foreground">
+            角色 / 主责阶段 / 策略 / 来源
+          </span>
+        </CollapsibleTrigger>
+        <CollapsibleContent>
+          <CardContent className="flex flex-wrap items-end gap-4 pt-3">
           <div className="space-y-1">
             <Label className="text-xs">演示角色</Label>
             <OptionCombobox
@@ -1134,8 +1194,9 @@ export function MallSyncPage() {
               来源不可用
             </Label>
           </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </CollapsibleContent>
+      </Collapsible>
 
       <MetricStrip
         columns={Math.min(5, Math.max(2, context?.metrics.length ?? 4)) as 2 | 3 | 4 | 5}
@@ -1151,7 +1212,6 @@ export function MallSyncPage() {
             onClick={() => {
               patchUrl({
                 view: m.targetView,
-                ...(m.targetFilter ?? {}),
               })
             }}
           />
@@ -1182,7 +1242,13 @@ export function MallSyncPage() {
       <div className="flex flex-wrap items-center gap-2">
         <Input
           className="max-w-xs"
-          placeholder="商城单号 / ERP 单号 / 任务号"
+          placeholder={
+            view === "snapshots" || view === "mapping"
+              ? "商城单号 / ERP 单号 / 任务号"
+              : view === "jobs"
+                ? "任务号"
+                : "搜索仅对来源数据、同步任务与映射任务生效"
+          }
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           aria-label="搜索"
@@ -1216,6 +1282,7 @@ export function MallSyncPage() {
           title={result.title}
           description={result.description}
           reference={result.reference}
+          facts={result.facts}
           actions={
             result.status === "unknown" &&
             mappingTask?.reapplyOperation?.status === "UNKNOWN" ? (
@@ -1245,14 +1312,19 @@ export function MallSyncPage() {
             <CardHeader>
               <CardTitle>运行摘要</CardTitle>
               <CardDescription>
-                同步进度仅证明来源白名单数据已安全捕获，不证明映射或应收已成功。
+                同步进度仅证明来源数据已捕获，不证明映射或应收已成功。
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
               <div className="flex justify-between gap-2">
                 <span className="text-muted-foreground">当前同步进度</span>
-                <span className="font-mono text-xs">
-                  {context?.freshness.currentWatermark ?? "—"}
+                <span className="num text-xs">
+                  {context?.freshness.currentWatermark
+                    ? formatDateTime(
+                        context.freshness.currentWatermark,
+                        "default"
+                      )
+                    : "—"}
                 </span>
               </div>
               <div className="flex justify-between gap-2">
@@ -1260,7 +1332,7 @@ export function MallSyncPage() {
                 <span>{formatDateTime(context?.freshness.latestSuccessfulJobAt, "default")}</span>
               </div>
               <div className="flex justify-between gap-2">
-                <span className="text-muted-foreground">来源安全时间</span>
+                <span className="text-muted-foreground">来源数据更新时间</span>
                 <span>{formatDateTime(context?.freshness.sourceSafeTime, "default")}</span>
               </div>
               <div className="flex justify-between gap-2">
@@ -1297,6 +1369,9 @@ export function MallSyncPage() {
                   />
                 </button>
               ))}
+              {(data?.jobs ?? []).length === 0 ? (
+                <p className="text-sm text-muted-foreground">暂无同步任务。</p>
+              ) : null}
             </CardContent>
           </Card>
         </div>
@@ -1341,12 +1416,24 @@ export function MallSyncPage() {
                 ) : null}
                 {data.selectedJob.errorClass ? (
                   <p className="text-muted-foreground">
-                    错误分类：{data.selectedJob.errorClass}
+                    错误分类：
+                    {JOB_ERROR_CLASS_LABEL[data.selectedJob.errorClass] ??
+                      data.selectedJob.errorClass}
                   </p>
                 ) : null}
                 <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
-                  <span>游标前 {data.selectedJob.cursorBefore ?? "—"}</span>
-                  <span>游标后 {data.selectedJob.cursorAfter ?? "—"}</span>
+                  <span>
+                    游标前{" "}
+                    {data.selectedJob.cursorBefore
+                      ? formatDateTime(data.selectedJob.cursorBefore, "default")
+                      : "—"}
+                  </span>
+                  <span>
+                    游标后{" "}
+                    {data.selectedJob.cursorAfter
+                      ? formatDateTime(data.selectedJob.cursorAfter, "default")
+                      : "—"}
+                  </span>
                 </div>
                 {demoRole === "admin" &&
                 data.selectedJob.allowedActions.includes("RETRY_FAILED_JOB") ? (
@@ -1355,31 +1442,17 @@ export function MallSyncPage() {
                     size="sm"
                     variant="secondary"
                     disabled={retryJob.isPending}
-                    onClick={async () => {
-                      const res = await retryJob.mutateAsync({
-                        jobId: data.selectedJob!.jobId,
-                        reason: "安全重试部分失败分页",
-                        demoRole,
-                        stage,
-                      })
-                      if (res.status === "succeeded") {
-                        setResult({
-                          status: "succeeded",
-                          title: "重试已创建",
-                          description: res.message,
-                          reference: res.jobNo,
-                        })
-                      } else {
-                        setActionError(res.message)
-                      }
-                    }}
+                    onClick={() => setRetryConfirmOpen(true)}
                   >
                     重试失败任务
                   </Button>
                 ) : null}
                 {data.selectedJob.actionBlockers.map((b) => (
-                  <p key={b.code} className="text-xs text-amber-700 dark:text-amber-400">
-                    {b.code}：{b.message}
+                  <p
+                    key={b.code}
+                    className="text-xs text-amber-700 dark:text-amber-400"
+                  >
+                    {b.message}
                   </p>
                 ))}
               </CardContent>
@@ -1411,7 +1484,8 @@ export function MallSyncPage() {
                   {data.selectedSnapshot.externalOrderNo}
                 </CardTitle>
                 <CardDescription>
-                  版本 {data.selectedSnapshot.contentHashShort} · 任务{" "}
+                  {versionText.version}{" "}
+                  {data.selectedSnapshot.contentHashShort} · 任务{" "}
                   {data.selectedSnapshot.syncJobNo}
                 </CardDescription>
               </CardHeader>
@@ -1444,7 +1518,7 @@ export function MallSyncPage() {
             <BusinessEmptyState
               kind="no-data"
               title="选择结果"
-              description="从列表打开白名单 detail"
+              description="从左侧列表选择一条记录"
             />
           )}
         </div>
@@ -1476,7 +1550,7 @@ export function MallSyncPage() {
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
             <BusinessTableFrame
               title="映射任务"
-              description="映射状态与重新归集状态分列；责任路由 MISSING 时不可执行。"
+              description="映射状态与重新归集状态分列；责任未配置时不可执行。"
               table={
                 <DataTable
                   data={data?.mappingTasks ?? []}
@@ -1528,13 +1602,10 @@ export function MallSyncPage() {
                       {mappingTask.ownerRoutingState === "CONFIGURED" ? (
                         <>
                           {" "}
-                          · 责任 {mappingTask.ownerRoleLabel} · 待办{" "}
-                          <span className="font-mono text-xs">
-                            {mappingTask.workItem.workItemId}
-                          </span>
+                          · 责任 {mappingTask.ownerRoleLabel}
                         </>
                       ) : (
-                        " · 待责任配置（无 workItem）"
+                        " · 待责任配置"
                       )}
                     </CardDescription>
                   </CardHeader>
@@ -1551,9 +1622,9 @@ export function MallSyncPage() {
 
                     {mappingTask.ownerRoutingState === "MISSING" ? (
                       <Alert variant="destructive">
-                        <AlertTitle>OWNER_ROUTING_MISSING</AlertTitle>
+                        <AlertTitle>责任归属未配置</AlertTitle>
                         <AlertDescription>
-                          结算主体责任未配置唯一 ownerRole；领域差异已保存，确认禁用，不向销售与财务同时生成可完成待办。
+                          结算主体责任未配置唯一负责角色；领域差异已保存，确认禁用，不向销售与财务同时生成可完成待办。
                         </AlertDescription>
                       </Alert>
                     ) : null}
@@ -1679,7 +1750,7 @@ export function MallSyncPage() {
                               mappingTask.candidateTargets.find(
                                 (c) => c.objectId === selectedCandidateId
                               )?.label ?? selectedCandidateId,
-                            note: "确认后写 external_identity_map，不改来源单",
+                            note: "确认后建立身份对应关系，不改动来源单",
                           },
                           {
                             id: "impact",
@@ -1745,6 +1816,19 @@ export function MallSyncPage() {
                             先跳过
                           </Button>
                         </div>
+                        {!selectedCandidateId ? (
+                          <p className="text-xs text-muted-foreground">
+                            请先选择左侧 ERP 候选后即可确认。
+                          </p>
+                        ) : mappingTask.hasConflict ? (
+                          <p className="text-xs text-muted-foreground">
+                            冲突未解决前确认禁用。
+                          </p>
+                        ) : leaseStatus !== "active" ? (
+                          <p className="text-xs text-muted-foreground">
+                            请先领取任务后确认。
+                          </p>
+                        ) : null}
                       </form>
                     ) : null}
 
@@ -1844,7 +1928,7 @@ export function MallSyncPage() {
                         key={`${b.action}-${b.code}`}
                         className="text-xs text-amber-700 dark:text-amber-400"
                       >
-                        {b.action} · {b.code}：{b.message}
+                        {b.message}
                       </p>
                     ))}
                   </CardContent>
@@ -1859,6 +1943,7 @@ export function MallSyncPage() {
                     processLabel="确认映射"
                     // 没有独立的「并打开下一条」路径：两个 handler 同义
                     showProcessNext={false}
+                    showProcess={demoRole !== "admin"}
                     processDisabled={!canConfirmMapping}
                     onBack={() =>
                       router.push(
@@ -1985,7 +2070,9 @@ export function MallSyncPage() {
                 <CardTitle className="text-base">{h.title}</CardTitle>
                 <CardDescription>
                   {formatDateTime(h.recordedAt, "default")}
-                  {h.watermark ? ` · ${h.watermark}` : ""}
+                  {h.watermark
+                    ? ` · ${formatDateTime(h.watermark, "default")}`
+                    : ""}
                   {h.reference ? ` · ${h.reference}` : ""}
                 </CardDescription>
               </CardHeader>
@@ -2003,12 +2090,12 @@ export function MallSyncPage() {
           <DialogHeader>
             <DialogTitle>立即执行增量</DialogTitle>
             <DialogDescription>
-              不修改来源；范围由系统按安全同步点计算。禁止页面改写同步进度。
+              不修改来源；范围由系统按当前同步进度计算。禁止页面改写同步进度。
             </DialogDescription>
           </DialogHeader>
           {policyMissing ? (
             <Alert variant="destructive">
-              <AlertTitle>MANUAL_GOVERNANCE_POLICY_MISSING</AlertTitle>
+              <AlertTitle>人工治理策略未配置</AlertTitle>
               <AlertDescription>
                 策略未配置，动作禁用。定时增量说明仍可读：
                 {context?.scheduledIncrementalNote}
@@ -2023,13 +2110,19 @@ export function MallSyncPage() {
               }}
             >
               <p className="text-sm text-muted-foreground">
-                同步至 {context?.freshness.currentWatermark ?? "—"} · 阶段{" "}
-                {STAGE_LABEL[stage]}
+                同步至{" "}
+                {context?.freshness.currentWatermark
+                  ? formatDateTime(
+                      context.freshness.currentWatermark,
+                      "default"
+                    )
+                  : "—"}{" "}
+                · 阶段 {STAGE_LABEL[stage]}
               </p>
               <incrementalForm.AppField
                 name="reason"
                 children={(field) => (
-                  <field.TextField label="触发理由（单人模式）" />
+                  <field.TextField label="触发理由" />
                 )}
               />
               <DialogFooter>
@@ -2051,15 +2144,13 @@ export function MallSyncPage() {
           <DialogHeader>
             <DialogTitle>按单号补拉</DialogTitle>
             <DialogDescription>
-              使用原来源身份；不创建第二张销售单。仅 FIRST_PHASE_MALL_OWNED 且策略已配置。
+              使用原来源身份；不创建第二张销售单。仅第一阶段（商城开单）且策略已配置时可用。
             </DialogDescription>
           </DialogHeader>
           {policyMissing || !firstPhase ? (
             <Alert variant="destructive">
               <AlertTitle>
-                {policyMissing
-                  ? "MANUAL_GOVERNANCE_POLICY_MISSING"
-                  : "阶段不可用"}
+                {policyMissing ? "人工治理策略未配置" : "阶段不可用"}
               </AlertTitle>
               <AlertDescription>
                 {manualSyncDisabledReason}
@@ -2104,7 +2195,7 @@ export function MallSyncPage() {
           <DialogHeader>
             <DialogTitle>先跳过当前映射</DialogTitle>
             <DialogDescription>
-              只记录结构化原因与队列上下文；不会暂停或完成任务。
+              只记录结构化原因与当前处理位置；不会暂停或完成任务。
             </DialogDescription>
           </DialogHeader>
           <form
@@ -2157,6 +2248,20 @@ export function MallSyncPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <FormalActionConfirmDialog
+        open={retryConfirmOpen}
+        onOpenChange={setRetryConfirmOpen}
+        actionLabel="重试失败任务"
+        title="确认重试失败任务"
+        description="沿原任务范围与同步规则重试未成功部分；不回退已捕获的同步进度。"
+        fromStatus={{ label: data?.selectedJob?.statusLabel ?? "失败", tone: "warning" }}
+        toStatus={{ label: "重试中", tone: "info" }}
+        effects={["仅重试未成功的分页", "不修改来源数据"]}
+        irreversibleEffects={["重试记录进入任务审计"]}
+        pending={retryJob.isPending}
+        onConfirm={() => handleRetryJob()}
+      />
 
       <FormalActionConfirmDialog
         open={confirmOpen}

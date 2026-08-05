@@ -16,7 +16,7 @@ import type {
 } from "@tanstack/react-table"
 
 import {
-  BackgroundJobProgress,
+  BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
@@ -50,10 +50,13 @@ import {
 } from "@/mock/sales-orders"
 import { downloadOriginalContractPdf } from "@/features/contracts/pdf"
 import { SalesOrderPaperDialog } from "@/features/sales-orders/sales-order-paper-dialog"
-import { salesOrderSummaryLabels } from "@/features/sales-orders/filter-orders"
+import {
+  salesOrderStatusLabel,
+  salesOrderSummaryLabels,
+  SALES_ORDER_STATUS_OPTIONS,
+} from "@/features/sales-orders/filter-orders"
 import {
   fetchSalesOrders,
-  PERMISSION_VERSION,
   type SalesOrdersListQuery,
 } from "@/features/sales-orders/api"
 import {
@@ -131,8 +134,9 @@ export function SalesOrdersListPage() {
   const [exportJob, setExportJob] = React.useState<{
     jobId: string
     rowCount: number
-    permissionVersion: string
     downloadLabel: string
+    exportedAt: string
+    fileName: string
   } | null>(null)
   const [focusedIndex, setFocusedIndex] = React.useState(0)
   const rowRefs = React.useRef<Map<string, HTMLElement>>(new Map())
@@ -260,11 +264,17 @@ export function SalesOrdersListPage() {
     if (total === 0) return
     const job = await exportMutation.mutateAsync({ rowCount: total })
     const all = await fetchSalesOrders({ ...query, page: 1, pageSize: total })
+    const now = new Date()
+    const pad = (n: number) => String(n).padStart(2, "0")
+    const datePart = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}`
+    const timePart = `${pad(now.getHours())}${pad(now.getMinutes())}`
+    const fileName = `销售单列表_${datePart}_${timePart}.csv`
     setExportJob({
       jobId: job.jobId,
       rowCount: job.rowCount,
-      permissionVersion: job.permissionVersion,
-      downloadLabel: job.downloadLabel,
+      downloadLabel: fileName,
+      exportedAt: now.toISOString(),
+      fileName,
     })
 
     const quote = (value: string) => `"${value.replaceAll('"', '""')}"`
@@ -284,7 +294,7 @@ export function SalesOrdersListPage() {
         .join(",")
     )
     const csv = [
-      `# permissionVersion=${job.permissionVersion}; source=client-filtered; audit=${job.jobId}`,
+      `# 导出时间 ${now.toLocaleString("zh-CN")}；仅包含当前筛选结果，金额以列表页最新数据为准。`,
       "销售单号,客户,合同,业务性质,状态,创建来源,成交金额（含税）,负责人,提交时间",
       ...rows,
     ].join("\n")
@@ -293,7 +303,7 @@ export function SalesOrdersListPage() {
     )
     const anchor = document.createElement("a")
     anchor.href = url
-    anchor.download = `销售单列表_${job.jobId}.csv`
+    anchor.download = fileName
     anchor.click()
     URL.revokeObjectURL(url)
   }, [exportMutation, query, total])
@@ -384,19 +394,23 @@ export function SalesOrdersListPage() {
         header: "合同",
         meta: { label: "合同", width: "default" },
         cell: ({ row }) => (
-          <Button
-            type="button"
-            variant="link"
-            size="xs"
-            className="num h-auto px-0 text-sm"
-            title="下载原始合同 PDF"
-            aria-label={`下载合同 ${row.original.contractNumber} 原始 PDF`}
-            onClick={() => {
-              downloadOriginalContractPdf(row.original.contractNumber)
-            }}
-          >
-            {row.original.contractNumber}
-          </Button>
+          <span className="inline-flex items-center gap-1.5">
+            <span className="num text-sm">{row.original.contractNumber}</span>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-6"
+              title="下载合同 PDF"
+              aria-label={`下载合同 ${row.original.contractNumber} PDF`}
+              onClick={(event) => {
+                event.stopPropagation()
+                downloadOriginalContractPdf(row.original.contractNumber)
+              }}
+            >
+              <DownloadIcon aria-hidden="true" className="size-3.5" />
+            </Button>
+          </span>
         ),
       },
       {
@@ -495,7 +509,7 @@ export function SalesOrdersListPage() {
               ordersQuery.isError
                 ? "查询失败"
                 : ordersQuery.data
-                  ? "刚刚"
+                  ? ordersQuery.data.queriedAt.slice(11, 16)
                   : "正在查询"
             }
             dateTime={ordersQuery.data?.queriedAt}
@@ -508,7 +522,6 @@ export function SalesOrdersListPage() {
                     ? "fresh"
                     : "unknown"
             }
-            label={`列表 · 权限 ${PERMISSION_VERSION}`}
           />
         }
         actions={
@@ -537,33 +550,25 @@ export function SalesOrdersListPage() {
       />
 
       {exportJob ? (
-        <div className="space-y-2">
-          <FormalActionResult
-            status="succeeded"
-            title="导出任务已完成（当前筛选结果）"
-            description={`共 ${exportJob.rowCount} 行，仅包含当前筛选结果；导出后金额与状态以列表页最新数据为准。`}
-            reference={exportJob.jobId}
-            facts={[
-              {
-                label: "权限版本",
-                value: exportJob.permissionVersion,
-              },
-              {
-                label: "文件",
-                value: exportJob.downloadLabel,
-              },
-            ]}
-          />
-          <BackgroundJobProgress
-            mode="all-or-nothing"
-            status="succeeded"
-            label="导出作业"
-            description={`审计标签 ${exportJob.jobId} · 页面筛选结果`}
-            total={exportJob.rowCount}
-            completed={exportJob.rowCount}
-            succeeded={exportJob.rowCount}
-          />
-        </div>
+        <FormalActionResult
+          status="succeeded"
+          title="导出完成"
+          description={`已生成 CSV 文件，共 ${exportJob.rowCount} 行，仅包含当前筛选结果；导出后金额与状态以列表页最新数据为准。`}
+          facts={[
+            {
+              label: "文件",
+              value: exportJob.fileName,
+            },
+            {
+              label: "行数",
+              value: String(exportJob.rowCount),
+            },
+            {
+              label: "导出时间",
+              value: new Date(exportJob.exportedAt).toLocaleString("zh-CN"),
+            },
+          ]}
+        />
       ) : null}
 
       <MetricStrip columns={5} aria-label="销售单快速筛选">
@@ -617,13 +622,25 @@ export function SalesOrdersListPage() {
       <BusinessTableFrame
         title="销售单列表"
         description={
-          url.summary === "all" && !advancedActive
+          url.summary === "all" &&
+          url.origin === "all" &&
+          url.status === "all" &&
+          url.nature === "all" &&
+          !url.search
             ? "按提交时间查看当前业务范围内的销售单；业务性质与创建来源展示。"
             : `当前筛选：${salesOrderSummaryLabels(url.summary)}${
-                advancedActive
-                  ? ` · ${url.origin === "all" ? "全部来源" : ORIGIN_LABEL[url.origin]} · ${url.status === "all" ? "全部状态" : url.status}`
+                url.nature !== "all"
+                  ? ` · ${NATURE_LABEL[url.nature]}`
                   : ""
-              }`
+              }${
+                url.origin !== "all"
+                  ? ` · ${ORIGIN_LABEL[url.origin]}`
+                  : ""
+              }${
+                url.status !== "all"
+                  ? ` · ${salesOrderStatusLabel(url.status)}`
+                  : ""
+              }${url.search ? ` · 关键词「${url.search}」` : ""}`
         }
         toolbar={
           <ListToolbar
@@ -724,15 +741,10 @@ export function SalesOrdersListPage() {
                         }}
                         options={[
                           { value: "all", label: "全部状态" },
-                          { value: "待二次确认", label: "待二次确认" },
-                          { value: "待销售处理", label: "待销售处理" },
-                          { value: "待销售领导审批", label: "待销售领导审批" },
-                          { value: "待运营审批", label: "待运营审批" },
-                          { value: "履约中", label: "履约中" },
-                          { value: "已生效", label: "已生效" },
-                          { value: "已关闭", label: "已关闭" },
-                          { value: "草稿", label: "草稿" },
-                          { value: "已作废", label: "已作废" },
+                          ...SALES_ORDER_STATUS_OPTIONS.map((option) => ({
+                            value: option.value,
+                            label: option.label,
+                          })),
                         ]}
                         allowClear={false}
                         aria-label="主状态"
@@ -759,6 +771,12 @@ export function SalesOrdersListPage() {
                 <span aria-live="polite">
                   共 {total.toLocaleString("zh-CN")} 条
                 </span>
+                <span className="hidden md:inline" aria-hidden="true">
+                  ·
+                </span>
+                <span className="hidden md:inline">
+                  / 聚焦搜索 · ↑↓ 选择行 · Enter 预览
+                </span>
                 {filtersActive ? (
                   <Button
                     type="button"
@@ -774,22 +792,65 @@ export function SalesOrdersListPage() {
           />
         }
         table={
-          <DataTable
-            data={items}
-            columns={columns}
-            getRowId={(row) => row.id}
-            rowCount={total}
-            sorting={sorting}
-            onSortingChange={handleSortingChange}
-            pagination={pagination}
-            onPaginationChange={handlePaginationChange}
-            loading={ordersQuery.isPending}
-            layout="flush"
-            density="compact"
-            defaultColumnPinning={{ left: ["document"], right: ["actions"] }}
-            onRowPreview={(row) => openPaperPreview(row.id)}
-            onRowOpen={(row) => openPaperPreview(row.id)}
-          />
+          ordersQuery.isError ? (
+            <BusinessFailureState
+              kind="system"
+              title="销售单列表加载失败"
+              description="暂时拿不到销售单数据，请重试；失败不影响已保存的单据。"
+              onRetry={() => {
+                void ordersQuery.refetch()
+              }}
+            />
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 border-y bg-card px-4 py-10 text-center">
+              <p className="text-sm text-muted-foreground">
+                {filtersActive ? "当前筛选没有结果" : "还没有销售单"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                {filtersActive
+                  ? "换一个关键词或清除筛选后再试。"
+                  : "当前业务范围内还没有销售单，可新建第一张单。"}
+              </p>
+              <div className="flex flex-wrap justify-center gap-2 pt-1">
+                {filtersActive ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={clearFilters}
+                  >
+                    清除筛选
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="sm"
+                    render={<Link href="/sales/orders?mode=create" />}
+                  >
+                    <PlusIcon data-icon="inline-start" aria-hidden="true" />
+                    新建销售单
+                  </Button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <DataTable
+              data={items}
+              columns={columns}
+              getRowId={(row) => row.id}
+              rowCount={total}
+              sorting={sorting}
+              onSortingChange={handleSortingChange}
+              pagination={pagination}
+              onPaginationChange={handlePaginationChange}
+              loading={ordersQuery.isPending}
+              layout="flush"
+              density="compact"
+              defaultColumnPinning={{ left: ["document"], right: ["actions"] }}
+              onRowPreview={(row) => openPaperPreview(row.id)}
+              onRowOpen={(row) => openPaperPreview(row.id)}
+            />
+          )
         }
       />
 

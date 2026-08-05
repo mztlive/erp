@@ -3,13 +3,14 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import type { ColumnDef, PaginationState, SortingState } from "@tanstack/react-table"
 import {
   ExternalLinkIcon,
   FilePlus2Icon,
   RefreshCwIcon,
   SearchIcon,
   WalletCardsIcon,
+  XIcon,
 } from "lucide-react"
 
 import {
@@ -81,6 +82,8 @@ import type {
   UnallocatedRow,
 } from "@/features/supplier-payables/types"
 import { VIEW_LABEL } from "@/features/supplier-payables/types"
+import { workspaceLabel } from "@/lib/ui-text"
+import type { WorkspaceId } from "@/lib/workspace-registry"
 
 function parseView(raw: string | null): SupplierAccountsView {
   if (
@@ -92,6 +95,11 @@ function parseView(raw: string | null): SupplierAccountsView {
     return raw
   }
   return "payable"
+}
+
+/** 工具条摘要去掉「N 条」计数：分页条已展示「共 N 条」，避免重复 */
+function stripSummaryCount(summary: string): string {
+  return summary.replace(/ · [\d,]+ 条$/, "")
 }
 
 type SessionState = {
@@ -162,6 +170,12 @@ export function SupplierAccountsPage() {
   const [lastResult, setLastResult] = React.useState<FormalSubmitResult | null>(
     null
   )
+  const [sorting, setSorting] = React.useState<SortingState>([])
+  const trackFilter = (searchParams.get("track") as
+    | "payment"
+    | "purchase_invoice"
+    | "all"
+    | null) ?? "all"
   const deepLinkHandled = React.useRef(false)
 
   const query = React.useMemo(
@@ -201,6 +215,28 @@ export function SupplierAccountsPage() {
   const demoPerm = useDemoPermissionMutation()
 
   const data = listQuery.data
+
+  const sortedPayables = React.useMemo(() => {
+    const list = data?.payables ? [...data.payables] : []
+    if (sorting.length === 0) return list
+    const { id, desc } = sorting[0]!
+    const dir = desc ? -1 : 1
+    const key = (p: PayableRow): string | number => {
+      if (id === "due") return p.dueDate
+      if (id === "supplier") return p.supplierName
+      if (id === "amounts") return Number(p.openTotal)
+      if (id === "tracks") return Number(p.settledTotal)
+      return p.payableAccountId
+    }
+    return list.sort((a, b) => {
+      const ka = key(a)
+      const kb = key(b)
+      if (typeof ka === "number" && typeof kb === "number") {
+        return (ka - kb) * dir
+      }
+      return String(ka).localeCompare(String(kb), "zh-CN") * dir
+    })
+  }, [data?.payables, sorting])
 
   function patchUrl(
     patch: Record<string, string | null | undefined>,
@@ -330,7 +366,7 @@ export function SupplierAccountsPage() {
       },
       {
         id: "amounts",
-        header: "应付（含税）/ 开放",
+        header: "应付（含税）/ 开放（含税）",
         meta: { label: "金额", width: "amount", align: "end", numeric: true },
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-1 text-end text-sm">
@@ -342,7 +378,7 @@ export function SupplierAccountsPage() {
       },
       {
         id: "tracks",
-        header: "已付 / 已收票",
+        header: "已付（净）/ 已收票（净）",
         meta: { label: "进度", width: "amount", align: "end", numeric: true },
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-1.5 text-end text-xs text-muted-foreground">
@@ -378,7 +414,7 @@ export function SupplierAccountsPage() {
             {row.original.paymentGateSummary &&
             row.original.paymentGateSummary.state !== "NOT_APPLICABLE" ? (
               <span className="text-[11px] text-muted-foreground">
-                门禁{" "}
+                先款条件{" "}
                 {row.original.paymentGateSummary.state === "SATISFIED"
                   ? "已满足"
                   : "未满足"}
@@ -418,6 +454,11 @@ export function SupplierAccountsPage() {
                 })
               }
               disabled={!data?.canRegisterPayment}
+              title={
+                data?.canRegisterPayment
+                  ? undefined
+                  : "当前无付款登记/核销权限"
+              }
             >
               核销付款
             </Button>
@@ -695,10 +736,18 @@ export function SupplierAccountsPage() {
             (p) =>
               `${p.invoiceCode}-${p.invoiceNo}` === row.original.documentNo
           )
+          const resolved =
+            row.original.track === "payment" ? payment : invoice
           return (
             <Button
               type="button"
               size="xs"
+              disabled={!resolved}
+              title={
+                resolved
+                  ? undefined
+                  : "未找到原付款/发票，请回到对应视图操作"
+              }
               onClick={() =>
                 openSession({
                   track: row.original.track,
@@ -730,6 +779,10 @@ export function SupplierAccountsPage() {
         <AllocationSession
           {...session}
           onClose={closeSession}
+          onGoToInvoiceView={() => {
+            closeSession()
+            patchUrl({ view: "purchase_invoice" })
+          }}
           onCompleted={(result) => {
             setLastResult(result)
           }}
@@ -758,7 +811,7 @@ export function SupplierAccountsPage() {
         <BusinessFailureState
           kind="system"
           title="供应商往来加载失败"
-          description="请重试。失败时不展示 0 元或门禁已满足结论。"
+          description="请重试。失败时不展示 0 元或先款条件已满足结论。"
           action={
             <Button
               type="button"
@@ -810,12 +863,14 @@ export function SupplierAccountsPage() {
 
   const rows =
     view === "payable"
-      ? data.payables
+      ? sortedPayables
       : view === "payment"
         ? data.payments
         : view === "purchase_invoice"
           ? data.invoices
-          : data.unallocated
+          : trackFilter !== "all"
+            ? data.unallocated.filter((u) => u.track === trackFilter)
+            : data.unallocated
 
   const pageRows = rows.slice(
     pagination.pageIndex * pagination.pageSize,
@@ -835,13 +890,14 @@ export function SupplierAccountsPage() {
             <DataFreshness
               updatedAt={new Date(data.queriedAt).toLocaleString("zh-CN")}
               dateTime={data.queriedAt}
-              label={`数据更新时间 ${data.dataWatermark} · 查询于`}
+              label="数据更新于"
             />
             <p className="text-xs text-muted-foreground">
-              策略{" "}
               {data.payablePriorityPolicy.state === "AVAILABLE"
-                ? `${data.payablePriorityPolicy.payablePriorityPolicyId}@v${data.payablePriorityPolicy.payablePriorityPolicyVersion}`
-                : data.payablePriorityPolicy.state}
+                ? "混合来源按系统优先级分配"
+                : data.payablePriorityPolicy.state === "MISSING"
+                  ? "混合来源分配规则未配置"
+                  : "混合来源分配规则已更新"}
             </p>
           </div>
         }
@@ -862,6 +918,9 @@ export function SupplierAccountsPage() {
                 variant: "outline",
                 mobileVisibility: "hide",
                 disabled: !data.canRegisterInvoice,
+                title: data.canRegisterInvoice
+                  ? undefined
+                  : "当前无进项发票登记权限",
                 onClick: () => {
                   setPickSupplierId(
                     supplierId ?? data.suppliers[0]?.supplierId ?? ""
@@ -875,6 +934,9 @@ export function SupplierAccountsPage() {
                 icon: WalletCardsIcon,
                 mobileVisibility: "hide",
                 disabled: !data.canRegisterPayment,
+                title: data.canRegisterPayment
+                  ? undefined
+                  : "当前无付款登记权限",
                 onClick: () => {
                   setPickSupplierId(
                     supplierId ?? data.suppliers[0]?.supplierId ?? ""
@@ -907,9 +969,11 @@ export function SupplierAccountsPage() {
         <Alert>
           <AlertTitle>跨页面进入</AlertTitle>
           <AlertDescription>
-            {fromWorkspace ? `来源 ${fromWorkspace}` : null}
+            {fromWorkspace
+              ? `来源 ${workspaceLabel(fromWorkspace as WorkspaceId)}`
+              : null}
             {purchaseOrderId ? ` · 采购单 ${purchaseOrderId}` : null}
-            。完成付款核销后请返回来源页重新校验付款条件；未核销付款不满足先款要求。
+            。完成付款核销后请返回来源页重新校验先款条件；未核销付款不满足先款要求。
             {returnTo ? (
               <>
                 {" "}
@@ -932,32 +996,44 @@ export function SupplierAccountsPage() {
       ) : null}
 
       {lastResult ? (
-        <FormalActionResult
-          status={
-            lastResult.status === "succeeded"
-              ? "succeeded"
-              : lastResult.status === "unknown"
-                ? "unknown"
-                : lastResult.status === "blocked"
-                  ? "blocked"
-                  : "rejected"
-          }
-          title={lastResult.title}
-          description={lastResult.description}
-          reference={lastResult.reference ?? lastResult.operationId}
-          facts={lastResult.facts}
-          actions={
-            lastResult.returnTo && lastResult.status === "succeeded" ? (
-              <Button
-                type="button"
-                size="sm"
-                render={<Link href={lastResult.returnTo} />}
-              >
-                返回来源并重查门禁
-              </Button>
-            ) : null
-          }
-        />
+        <div className="relative">
+          <FormalActionResult
+            status={
+              lastResult.status === "succeeded"
+                ? "succeeded"
+                : lastResult.status === "unknown"
+                  ? "unknown"
+                  : lastResult.status === "blocked"
+                    ? "blocked"
+                    : "rejected"
+            }
+            title={lastResult.title}
+            description={lastResult.description}
+            reference={lastResult.reference ?? lastResult.operationId}
+            facts={lastResult.facts}
+            actions={
+              lastResult.returnTo && lastResult.status === "succeeded" ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  render={<Link href={lastResult.returnTo} />}
+                >
+                  返回来源并重新校验先款条件
+                </Button>
+              ) : null
+            }
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="absolute top-2 right-2"
+            aria-label="收起结果"
+            onClick={() => setLastResult(null)}
+          >
+            <XIcon aria-hidden="true" />
+          </Button>
+        </div>
       ) : null}
 
       <MetricStrip>
@@ -988,24 +1064,24 @@ export function SupplierAccountsPage() {
           label="待分配付款"
           value={<MoneyValue value={data.metrics.unallocatedPaymentTotal} />}
           detail="付款轨道"
-          active={view === "unallocated"}
+          active={view === "unallocated" && trackFilter === "payment"}
           onClick={() => {
             setPagination((p) => ({ ...p, pageIndex: 0 }))
-            patchUrl({ view: "unallocated" })
+            patchUrl({ view: "unallocated", track: "payment" })
           }}
         />
         <MetricFilterItem
           label="待分配进项票"
           value={<MoneyValue value={data.metrics.unallocatedInvoiceTotal} />}
           detail="与付款独立"
-          active={view === "purchase_invoice"}
+          active={view === "unallocated" && trackFilter === "purchase_invoice"}
           onClick={() => {
             setPagination((p) => ({ ...p, pageIndex: 0 }))
-            patchUrl({ view: "purchase_invoice" })
+            patchUrl({ view: "unallocated", track: "purchase_invoice" })
           }}
         />
         <MetricFilterItem
-          label="先款门禁待满足"
+          label="先款条件待满足"
           value={String(data.metrics.prepayGateBlockedCount)}
           detail="户/单数"
           active={paymentGate === "unsatisfied"}
@@ -1079,6 +1155,30 @@ export function SupplierAccountsPage() {
                 placeholder="全部供应商"
               />
             </div>
+            {view === "unallocated" ? (
+              <div>
+                <Label className="sr-only">轨道</Label>
+                <OptionCombobox
+                  value={trackFilter}
+                  onValueChange={(v) => {
+                    setPagination((p) => ({ ...p, pageIndex: 0 }))
+                    patchUrl({
+                      track: v && v !== "all" ? v : null,
+                    })
+                  }}
+                  options={[
+                    { value: "all", label: "全部轨道" },
+                    { value: "payment", label: "付款" },
+                    { value: "purchase_invoice", label: "进项票" },
+                  ]}
+                  className="w-36"
+                  size="sm"
+                  allowClear={false}
+                  aria-label="轨道"
+                  placeholder="轨道"
+                />
+              </div>
+            ) : null}
             {view === "payable" ? (
               <>
                 <div>
@@ -1131,7 +1231,7 @@ export function SupplierAccountsPage() {
         }
         actions={
           <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer">演示</summary>
+            <summary className="cursor-pointer">演示选项（仅演示环境）</summary>
             <div className="mt-1 flex flex-col gap-1">
               <Button
                 type="button"
@@ -1139,7 +1239,7 @@ export function SupplierAccountsPage() {
                 variant="ghost"
                 onClick={() => void demoPolicy.mutateAsync("MISSING")}
               >
-                策略缺失
+                模拟：分配策略未配置
               </Button>
               <Button
                 type="button"
@@ -1147,7 +1247,7 @@ export function SupplierAccountsPage() {
                 variant="ghost"
                 onClick={() => void demoPolicy.mutateAsync("AVAILABLE")}
               >
-                策略恢复
+                模拟：分配策略恢复
               </Button>
               <Button
                 type="button"
@@ -1166,7 +1266,7 @@ export function SupplierAccountsPage() {
         <BusinessEmptyState
           kind="filter"
           title="当前筛选无结果"
-          description={`没有符合「${data.filterSummary}」的记录。`}
+          description={`没有符合「${stripSummaryCount(data.filterSummary)}」的记录。`}
           action={
             <Button
               type="button"
@@ -1181,6 +1281,8 @@ export function SupplierAccountsPage() {
                   status: null,
                   due: null,
                   paymentGate: null,
+                  purchaseOrderId: null,
+                  track: null,
                 })
               }}
             >
@@ -1197,7 +1299,7 @@ export function SupplierAccountsPage() {
       ) : (
         <BusinessTableFrame
           title={VIEW_LABEL[view]}
-          description={`${data.filterSummary} · 金额与状态均来自系统最新数据；付款与进项票轨道独立。`}
+          description={`${stripSummaryCount(data.filterSummary)} · 金额与状态均来自系统最新数据；付款与进项票轨道独立。`}
           table={
             <>
           {view === "payable" ? (
@@ -1207,6 +1309,8 @@ export function SupplierAccountsPage() {
               getRowId={(r) => r.payableAccountId}
               pagination={pagination}
               onPaginationChange={setPagination}
+              sorting={sorting}
+              onSortingChange={setSorting}
               rowCount={data.payables.length}
               layout="flush"
               density="compact"
@@ -1243,7 +1347,7 @@ export function SupplierAccountsPage() {
               getRowId={(r) => r.id}
               pagination={pagination}
               onPaginationChange={setPagination}
-              rowCount={data.unallocated.length}
+              rowCount={rows.length}
               layout="flush"
               density="compact"
             />
@@ -1443,6 +1547,20 @@ export function SupplierAccountsPage() {
               </Button>
             </div>
           </div>
+        ) : detailQuery.isError ? (
+          <div className="space-y-3 p-6">
+            <p className="text-sm text-muted-foreground">
+              应付详情加载失败，请重试。
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void detailQuery.refetch()}
+            >
+              重试
+            </Button>
+          </div>
         ) : (
           <p className="text-sm text-muted-foreground">未找到应付详情</p>
         )}
@@ -1539,6 +1657,11 @@ export function SupplierAccountsPage() {
                       onChange={(e) => setRedInvoiceNo(e.target.value)}
                     />
                   </InputGroup>
+                  {!redInvoiceNo.trim() ? (
+                    <p className="text-xs text-destructive" role="alert">
+                      红票号码必填；红票将作为独立记录登记。
+                    </p>
+                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -1554,6 +1677,8 @@ export function SupplierAccountsPage() {
                 type="button"
                 disabled={
                   reverseReason.trim().length < 2 ||
+                  (reverseTarget.kind === "invoice" &&
+                    !redInvoiceNo.trim()) ||
                   reversePayment.isPending ||
                   reverseInvoice.isPending
                 }
@@ -1570,13 +1695,14 @@ export function SupplierAccountsPage() {
                     res = await reverseInvoice.mutateAsync({
                       invoiceId: reverseTarget.id,
                       reason: reverseReason,
-                      redInvoiceNo: redInvoiceNo || `R${Date.now()}`,
+                      redInvoiceNo: redInvoiceNo.trim(),
                       idempotencyKey: key,
                     })
                   }
                   setLastResult(res)
                   setReverseTarget(null)
                   setReverseReason("")
+                  setRedInvoiceNo("")
                 }}
               >
                 确认追加反向记录

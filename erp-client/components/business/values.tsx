@@ -29,6 +29,40 @@ interface BusinessStatusBadgeProps
 }
 
 /**
+ * 兜底中文映射：调用方误把枚举原值（PENDING 等）当 label 传入时，替换成业务词，
+ * 禁止原值上屏。仅命中「全大写 + 下划线」形态的原值 token，中文标签不受影响。
+ */
+const statusLabelFallback: Record<string, string> = {
+  PENDING: "待处理",
+  IN_PROGRESS: "处理中",
+  PROCESSING: "处理中",
+  COMPLETED: "已完成",
+  SUCCEEDED: "已完成",
+  FAILED: "处理失败",
+  REJECTED: "未通过",
+  BLOCKED: "已阻断",
+  ACCEPTED: "已受理",
+  TRANSFERRED: "已转交",
+  UNKNOWN: "结果未知",
+  RESULT_UNKNOWN: "结果未知",
+  CANCELLED: "已取消",
+  CANCELED: "已取消",
+  CLOSED: "已关闭",
+  VOID: "已作废",
+  DRAFT: "草稿",
+  EXPIRED: "已过期",
+  EXCEPTION: "异常",
+}
+
+const rawStatusTokenPattern = /^[A-Z][A-Z0-9_]*$/
+
+function resolveStatusLabel(label: string): string {
+  return rawStatusTokenPattern.test(label)
+    ? (statusLabelFallback[label] ?? label)
+    : label
+}
+
+/**
  * 为现有 StatusBadge 补充展示上下文和可选说明。
  *
  * 组件不包含领域状态机；调用方仍需明确传入 label、tone 与可选 icon。
@@ -36,9 +70,12 @@ interface BusinessStatusBadgeProps
 function BusinessStatusBadge({
   description,
   context = "list",
+  label,
   ...props
 }: BusinessStatusBadgeProps) {
-  const badge = <StatusBadge data-context={context} {...props} />
+  const badge = (
+    <StatusBadge data-context={context} label={resolveStatusLabel(label)} {...props} />
+  )
 
   if (description == null) {
     return badge

@@ -9,7 +9,6 @@ import {
   QuantityValue,
   StatusTrackSummary,
 } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
 import {
   DescriptionDetails,
   DescriptionItem,
@@ -161,8 +160,7 @@ export function PurchaseOrderPreviewPanel({
               {header.creationBasisId ? (
                 <CompactField
                   label="创建依据"
-                  value={header.creationBasisId}
-                  numeric
+                  value={`采购二次确认 · 销售单 ${header.salesOrderNo}`}
                 />
               ) : null}
             </DescriptionList>
@@ -193,12 +191,16 @@ export function PurchaseOrderPreviewPanel({
             <SectionTitle>关联对象</SectionTitle>
             <div className="flex flex-wrap items-center gap-1.5">
               <Link
-                href={`/fulfillment?lane=procurement&scope=mine&purchaseOrderId=${encodeURIComponent(identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent(`/procurement/orders?currentId=${identity.purchaseOrderId}`)}`}
+                href={`/fulfillment?lane=procurement&scope=mine&purchaseOrderId=${encodeURIComponent(identity.purchaseOrderId)}&from=W08&returnTo=${encodeURIComponent("/procurement/orders")}`}
                 className="inline-flex h-7 items-center rounded-md border border-border bg-background px-2 text-xs font-medium text-primary hover:bg-accent"
               >
                 去交付与代发
               </Link>
-              <RelatedPill label="销售" count={1} />
+              <RelatedPill
+                label="销售"
+                count={1}
+                href={`/sales/orders/${header.salesOrderId}`}
+              />
               <RelatedPill
                 label="变更"
                 count={order.changes.length}
@@ -208,6 +210,11 @@ export function PurchaseOrderPreviewPanel({
                 label="应付"
                 count={order.payableSummary ? 1 : 0}
                 muted={!order.payableSummary}
+                href={
+                  order.payableSummary
+                    ? `/finance/supplier-accounts?purchaseOrderId=${encodeURIComponent(identity.purchaseOrderId)}&supplierId=${encodeURIComponent(header.supplierId)}`
+                    : undefined
+                }
               />
             </div>
           </section>
@@ -224,7 +231,7 @@ export function PurchaseOrderPreviewPanel({
                 {currentContent.source === "DRAFT"
                   ? "草稿"
                   : currentContent.source === "SUBMISSION"
-                    ? "不可变提交"
+                    ? "已提交内容"
                     : "生效版本"}
               </span>
             </div>
@@ -255,7 +262,8 @@ export function PurchaseOrderPreviewPanel({
                         ) : null}
                         {line.procurementConfirmationLineId ? (
                           <div className="mt-0.5 text-[11px] text-muted-foreground">
-                            确认分行 {line.procurementConfirmationLineId}
+                            {line.salesAllocationLabel ??
+                              `确认分行 · ${line.itemName}`}
                           </div>
                         ) : null}
                         {line.logisticsFeeReason ? (
@@ -376,7 +384,7 @@ export function PurchaseOrderPreviewPanel({
               costMasked
                 ? "销售/仓储角色成本已隐藏"
                 : currentContent.source === "SUBMISSION"
-                  ? "当前展示不可变提交内容，审核不得改字段"
+                  ? "当前为已提交内容，审核不得改字段"
                   : undefined
             }
           />
@@ -419,11 +427,19 @@ function RelatedPill({
   label,
   count,
   muted,
+  href,
 }: {
   label: string
   count: number
   muted?: boolean
+  href?: string
 }) {
+  const content = (
+    <>
+      <span className="text-muted-foreground">{label}</span>
+      <span className="num font-semibold">{count}</span>
+    </>
+  )
   return (
     <span
       className={cn(
@@ -433,8 +449,16 @@ function RelatedPill({
           : "border-border bg-card text-foreground"
       )}
     >
-      <span className="text-muted-foreground">{label}</span>
-      <span className="num font-semibold">{count}</span>
+      {href ? (
+        <Link
+          href={href}
+          className="inline-flex items-center gap-1.5 hover:underline"
+        >
+          {content}
+        </Link>
+      ) : (
+        content
+      )}
     </span>
   )
 }

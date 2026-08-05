@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 
 import {
+  BusinessFailureState,
   DocumentHeader,
   DocumentSection,
   DocumentSummary,
@@ -226,6 +227,27 @@ export function SalesOrderDetailPage({
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader title="销售单" description="正在加载详情…" />
+        <div className="space-y-3" aria-busy="true" aria-label="加载中">
+          <div className="h-16 animate-pulse rounded-lg bg-muted" />
+          <div className="h-24 animate-pulse rounded-lg bg-muted" />
+          <div className="h-40 animate-pulse rounded-2xl bg-muted" />
+        </div>
+      </div>
+    )
+  }
+
+  if (query.isError) {
+    return (
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <PageHeader title="销售单" />
+        <BusinessFailureState
+          kind="system"
+          title="销售单加载失败"
+          description="暂时拿不到这张销售单的数据，请重试；单据本身不受影响。"
+          onRetry={() => {
+            void query.refetch()
+          }}
+        />
       </div>
     )
   }
@@ -235,7 +257,7 @@ export function SalesOrderDetailPage({
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
           title="销售单不存在"
-          description={`未找到编号为 ${salesOrderId} 的销售单。`}
+          description="未找到这张销售单。可能编号有误，或当前角色无权查看。"
           actions={
             <Button render={<Link href="/sales/orders" />}>返回列表</Button>
           }

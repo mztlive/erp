@@ -7,11 +7,12 @@ import { z } from "zod"
 import {
   ArrowLeftIcon,
   FilePenLineIcon,
-  LockIcon,
   ShieldCheckIcon,
 } from "lucide-react"
 
 import {
+  BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   DocumentHeader,
   DocumentSection,
@@ -32,7 +33,6 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Card,
@@ -41,6 +41,15 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   DescriptionDetails,
   DescriptionItem,
@@ -68,10 +77,11 @@ import {
 import type { ViewerRole } from "@/features/purchase-orders/types"
 import {
   FULFILLMENT_RESPONSIBILITY_LABEL,
+  PAYMENT_TERM_OPTIONS,
   PURCHASE_TYPE_LABEL,
   REJECT_REASON_LABEL,
 } from "@/features/purchase-orders/types"
-import { leaseText, versionText, workspaceLabel } from "@/lib/ui-text"
+import { leaseText } from "@/lib/ui-text"
 
 type SectionId =
   | "overview"
@@ -111,17 +121,46 @@ const reviewSchema = z.object({
   comment: z.string().trim().min(2, "请填写说明"),
 })
 
+/** demo 审核经办人固定为财务 · 周敏；岗位分离判定使用真实提交人字段 */
+const W08_REVIEWER_NAME = "周敏"
+
+const VIEWER_ROLES: readonly ViewerRole[] = [
+  "procurement",
+  "finance",
+  "sales",
+  "warehouse",
+]
+
+const positiveDecimal = (value: string | undefined) =>
+  value === undefined ||
+  value === "" ||
+  (/^\d+(?:\.\d+)?$/.test(value) && Number(value) > 0)
+
+const taxRateValid = (value: string) =>
+  value === "" ||
+  (/^\d+(?:\.\d+)?$/.test(value) && Number(value) > 0 && Number(value) < 1)
+
 export function PurchaseOrderDetailPage({
   purchaseOrderId,
   section,
   mode: modeParam,
+  demoRole: demoRoleParam,
+  maskCost: maskCostParam,
 }: {
   purchaseOrderId: string
   section?: string
   mode?: string
+  demoRole?: string
+  maskCost?: string
 }) {
   const router = useRouter()
-  const [viewerRole] = React.useState<ViewerRole>("procurement")
+  const [viewerRole] = React.useState<ViewerRole>(() => {
+    if (maskCostParam === "1") return "sales"
+    if (demoRoleParam && (VIEWER_ROLES as readonly string[]).includes(demoRoleParam)) {
+      return demoRoleParam as ViewerRole
+    }
+    return "procurement"
+  })
   const query = usePurchaseOrderCenterQuery(purchaseOrderId, viewerRole)
   const acquireToken = useAcquireDraftTokenMutation()
   const saveMutation = useSavePurchaseOrderDraftMutation()
@@ -135,13 +174,16 @@ export function PurchaseOrderDetailPage({
   const [draftEditToken, setDraftEditToken] = React.useState<string | null>(
     null
   )
-  const [draftContentHash, setDraftContentHash] = React.useState<string>("")
   const [lineEdits, setLineEdits] = React.useState<
     Record<
       string,
       { quantity?: string; unitCostGross?: string; inputTaxRate: string }
     >
   >({})
+  const [leaveGuardOpen, setLeaveGuardOpen] = React.useState(false)
+  const [pendingLeave, setPendingLeave] = React.useState<(() => void) | null>(
+    null
+  )
   const [result, setResult] = React.useState<{
     status: "succeeded" | "rejected" | "blocked" | "unknown"
     title: string
@@ -182,13 +224,59 @@ export function PurchaseOrderDetailPage({
     titleRef.current?.focus()
   }, [purchaseOrderId, mode])
 
+  // 编辑态脏检测：行级数量/单价/税率或付款条件与当前内容不一致
+  const editDirty = React.useMemo(() => {
+    if (mode !== "edit" || !order) return false
+    if (draftForm.state.values.paymentTermCode !== order.header.paymentTermCode)
+      return true
+    if (draftForm.state.values.note.trim()) return true
+    return order.currentContent.lines.some((line) => {
+      const edit = lineEdits[line.lineId]
+      if (!edit) return false
+      return (
+        (edit.quantity ?? line.quantity) !== line.quantity ||
+        (edit.unitCostGross ?? line.unitCostGross) !== line.unitCostGross ||
+        edit.inputTaxRate !== line.inputTaxRate
+      )
+    })
+  }, [
+    draftForm.state.values.note,
+    draftForm.state.values.paymentTermCode,
+    lineEdits,
+    mode,
+    order,
+  ])
+
+  // 编辑态刷新/关页守卫
+  React.useEffect(() => {
+    if (mode !== "edit" || !editDirty) return
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault()
+      event.returnValue = ""
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+  }, [editDirty, mode])
+
+  /** 编辑态离开前弹「保存并离开 / 放弃修改 / 继续编辑」确认 */
+  const requestLeave = React.useCallback(
+    (go: () => void) => {
+      if (mode === "edit" && editDirty) {
+        setPendingLeave(() => go)
+        setLeaveGuardOpen(true)
+        return
+      }
+      go()
+    },
+    [editDirty, mode]
+  )
+
   React.useEffect(() => {
     if (!order || mode !== "edit") return
     if (draftEditToken) return
     if (!order.allowedActions.includes("EDIT")) return
     void acquireToken.mutateAsync(purchaseOrderId).then((res) => {
       setDraftEditToken(res.draftEditToken)
-      setDraftContentHash(`dch_${purchaseOrderId}_v${res.lockVersion}`)
     }).catch((error: Error) => {
       setResult({
         status: "blocked",
@@ -227,19 +315,30 @@ export function PurchaseOrderDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, draftEditToken, lineEdits, order])
 
-  async function handleSave(simulateConflict: boolean) {
-    if (!order || !draftEditToken) return
+  async function handleSave(simulateConflict: boolean): Promise<boolean> {
+    if (!order || !draftEditToken) return false
+    // 行内即时校验：数量/单价为正数，税率为 0-1 小数
+    const invalidLine = order.currentContent.lines.find((line) => {
+      const edit = lineEdits[line.lineId]
+      if (!edit) return false
+      return (
+        !positiveDecimal(edit.quantity ?? line.quantity) ||
+        !positiveDecimal(edit.unitCostGross ?? line.unitCostGross) ||
+        !taxRateValid(edit.inputTaxRate)
+      )
+    })
+    if (invalidLine) {
+      setResult({
+        status: "rejected",
+        title: "保存失败",
+        description: `「${invalidLine.itemName}」数量与含税单价须为正数，税率须为 0 到 1 的十进制数（如 0.13 表示 13%）。`,
+      })
+      return false
+    }
     const paymentTermCode = draftForm.state.values.paymentTermCode
     const paymentTermLabel =
-      paymentTermCode === "PREPAY_100"
-        ? "先款 100%"
-        : paymentTermCode === "PREPAY_50"
-          ? "先款 50%"
-          : paymentTermCode === "PREPAY_30"
-            ? "先款 30%"
-            : paymentTermCode === "POSTPAY_NET30"
-              ? "货到 30 天"
-              : "货到 15 天"
+      PAYMENT_TERM_OPTIONS.find((option) => option.value === paymentTermCode)
+        ?.label ?? order.header.paymentTermLabel
 
     const response = await saveMutation.mutateAsync({
       purchaseOrderId,
@@ -262,15 +361,13 @@ export function PurchaseOrderDetailPage({
     })
 
     if (response.status === "succeeded") {
-      setDraftContentHash(response.data.draftContentHash)
       setResult({
         status: "succeeded",
         title: "草稿已保存",
         description: `金额已按系统规范计算：含税 ${response.data.totals.gross} / 不含税 ${response.data.totals.net} / 税额 ${response.data.totals.tax}`,
         reference: response.reference,
         facts: [
-          { label: "lockVersion", value: String(response.data.lockVersion) },
-          { label: versionText.dataVersion, value: response.data.draftContentHash },
+          { label: "数据版本", value: `v${response.data.lockVersion}` },
         ],
       })
       await query.refetch()
@@ -288,6 +385,7 @@ export function PurchaseOrderDetailPage({
         description: `${response.message} 输入已保留。`,
       })
     }
+    return response.status === "succeeded"
   }
 
   async function handleSubmit() {
@@ -315,10 +413,7 @@ export function PurchaseOrderDetailPage({
       setResult({
         status: saveRes.status === "unknown" ? "unknown" : "rejected",
         title: "提交前保存未成功",
-        description:
-          saveRes.status === "failed"
-            ? saveRes.message
-            : saveRes.message,
+        description: saveRes.message,
       })
       return
     }
@@ -345,8 +440,8 @@ export function PurchaseOrderDetailPage({
         reference: response.reference,
         facts: [
           { label: "单据编号", value: response.data.purchaseNo },
-          { label: "提交编号", value: response.data.submissionId },
-          { label: "数据版本", value: response.data.subjectHash },
+          { label: "提交记录", value: `第 ${response.data.submissionNo} 次提交` },
+          { label: "数据版本", value: `v${response.data.lockVersion}` },
           { label: "审核任务", value: "已创建" },
         ],
       })
@@ -453,7 +548,7 @@ export function PurchaseOrderDetailPage({
       })
     } else {
       setResult({
-        status: "blocked",
+        status: "rejected",
         title: "驳回失败",
         description: response.message,
       })
@@ -476,7 +571,7 @@ export function PurchaseOrderDetailPage({
           "生效字段锁定；不覆盖已发生付款、发票或履约记录。变更以基准版本创建目标提交。",
         reference: response.reference,
         facts: [
-          { label: "变更单", value: response.data.changeId },
+          { label: "变更记录", value: "已创建" },
           {
             label: "基准版本",
             value: `v${response.data.baseRevisionNo}`,
@@ -502,13 +597,38 @@ export function PurchaseOrderDetailPage({
     )
   }
 
+  if (query.isError) {
+    return (
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <PageHeader title="采购单" description="详情加载失败" />
+        <BusinessFailureState
+          kind="system"
+          title="详情加载失败"
+          description="未能加载采购单详情。请重试；若持续失败，可返回列表稍后再来。"
+          onRetry={() => void query.refetch()}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href="/procurement/orders" />}
+            >
+              返回列表
+            </Button>
+          }
+        />
+      </div>
+    )
+  }
+
   if (!order) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader
-          title="采购单不存在"
-          description={`未找到 ${purchaseOrderId}`}
-          actions={
+        <PageHeader title="采购单不存在" description="单据可能已删除或编号有误" />
+        <BusinessEmptyState
+          kind="no-data"
+          title="未找到该采购单"
+          description="该采购单可能已删除或不在当前数据范围内。"
+          action={
             <Button render={<Link href="/procurement/orders" />}>
               返回列表
             </Button>
@@ -524,7 +644,7 @@ export function PurchaseOrderDetailPage({
   const displayNo =
     order.identity.purchaseNo ??
     order.identity.draftLabel ??
-    order.identity.purchaseOrderId
+    "采购单（未编号）"
   const costMasked = order.currentContent.costMasked
   const gate = order.progress.prepaymentGate
   const canEdit = order.allowedActions.includes("EDIT")
@@ -546,23 +666,31 @@ export function PurchaseOrderDetailPage({
     href: string
   }[] = [
     { id: "overview", label: "概览", href: baseHref },
-    { id: "lines", label: "明细与分配", href: `${baseHref}?section=lines` },
+    {
+      id: "lines",
+      label: "明细与分配",
+      href: `${baseHref}?section=lines${mode !== "view" ? `&mode=${mode}` : ""}`,
+    },
     {
       id: "fulfillment",
       label: "履约",
-      href: `${baseHref}?section=fulfillment`,
+      href: `${baseHref}?section=fulfillment${mode !== "view" ? `&mode=${mode}` : ""}`,
     },
     {
       id: "payable",
       label: "应付与票款",
-      href: `${baseHref}?section=payable`,
+      href: `${baseHref}?section=payable${mode !== "view" ? `&mode=${mode}` : ""}`,
     },
     {
       id: "changes",
       label: "变更与异常",
-      href: `${baseHref}?section=changes`,
+      href: `${baseHref}?section=changes${mode !== "view" ? `&mode=${mode}` : ""}`,
     },
-    { id: "audit", label: "审计", href: `${baseHref}?section=audit` },
+    {
+      id: "audit",
+      label: "审计",
+      href: `${baseHref}?section=audit${mode !== "view" ? `&mode=${mode}` : ""}`,
+    },
   ]
 
   const modeLabel =
@@ -602,13 +730,13 @@ export function PurchaseOrderDetailPage({
                 label: "返回列表",
                 icon: ArrowLeftIcon,
                 variant: "outline",
-                onClick: () => router.push("/procurement/orders"),
+                onClick: () => requestLeave(() => router.push("/procurement/orders")),
               },
               ...(canPay
                 ? [
                     {
                       actionKey: "pay",
-                      label: "去付款/发票",
+                      label: "去供应商往来",
                       variant: "outline" as const,
                       onClick: () =>
                         router.push(w12PayHref),
@@ -641,7 +769,6 @@ export function PurchaseOrderDetailPage({
                       actionKey: "edit",
                       label: "编辑草稿",
                       icon: FilePenLineIcon,
-                      mobileVisibility: "hide" as const,
                       onClick: () =>
                         router.push(`${baseHref}?mode=edit`),
                     },
@@ -653,7 +780,6 @@ export function PurchaseOrderDetailPage({
                       actionKey: "review",
                       label: "打开审核",
                       icon: ShieldCheckIcon,
-                      mobileVisibility: "hide" as const,
                       onClick: () =>
                         router.push(`${baseHref}?mode=review`),
                     },
@@ -665,7 +791,6 @@ export function PurchaseOrderDetailPage({
                       actionKey: "change",
                       label: "发起采购变更",
                       variant: "outline" as const,
-                      mobileVisibility: "hide" as const,
                       onClick: () => setChangeConfirmOpen(true),
                     },
                   ]
@@ -758,7 +883,12 @@ export function PurchaseOrderDetailPage({
             label: "付款",
             status: {
               label: order.progress.payment,
-              tone: "neutral",
+              tone:
+                order.progress.payment === "已付"
+                  ? "success"
+                  : order.progress.payment === "部分"
+                    ? "info"
+                    : "neutral",
             },
           },
           {
@@ -766,7 +896,12 @@ export function PurchaseOrderDetailPage({
             label: "进项票",
             status: {
               label: order.progress.invoice,
-              tone: "neutral",
+              tone:
+                order.progress.invoice === "完成"
+                  ? "success"
+                  : order.progress.invoice === "部分"
+                    ? "info"
+                    : "neutral",
             },
           },
           {
@@ -795,16 +930,6 @@ export function PurchaseOrderDetailPage({
             {item.label}
           </Button>
         ))}
-        {mode === "edit" ? (
-          <Badge variant="info" className="ml-auto">
-            mode=edit
-          </Badge>
-        ) : null}
-        {mode === "review" ? (
-          <Badge variant="warning" className="ml-auto">
-            mode=review
-          </Badge>
-        ) : null}
       </nav>
 
       {mode === "review" && canReview ? (
@@ -829,7 +954,6 @@ export function PurchaseOrderDetailPage({
           canSubmit={canSubmit}
           savePending={saveMutation.isPending}
           onSave={() => void handleSave(false)}
-          onSaveConflictDemo={() => void handleSave(true)}
           onSubmitOpen={() => setSubmitConfirmOpen(true)}
         />
       ) : null}
@@ -865,10 +989,17 @@ export function PurchaseOrderDetailPage({
                 <DescriptionItem>
                   <DescriptionTerm>内容来源</DescriptionTerm>
                   <DescriptionDetails>
-                    {order.currentContent.source}
-                    {order.identity.subjectHash
-                      ? ` · ${order.identity.subjectHash}`
-                      : ""}
+                    {order.currentContent.source === "DRAFT"
+                      ? "草稿"
+                      : order.currentContent.source === "SUBMISSION"
+                        ? "已提交内容"
+                        : "生效版本"}
+                  </DescriptionDetails>
+                </DescriptionItem>
+                <DescriptionItem>
+                  <DescriptionTerm>最近预计交期</DescriptionTerm>
+                  <DescriptionDetails className="num">
+                    {order.header.expectedDate ?? "—"}
                   </DescriptionDetails>
                 </DescriptionItem>
                 <DescriptionItem>
@@ -899,13 +1030,48 @@ export function PurchaseOrderDetailPage({
                             <Link href={w12PayHref} />
                           }
                         >
-                          去供应商往来登记付款
+                          去供应商往来
                         </Button>
                       ) : undefined
                     }
                   />
                 </div>
               ) : null}
+              <DocumentTotals
+                className="mt-4 max-w-md"
+                title="系统合计"
+                items={[
+                  {
+                    id: "g",
+                    label: "含税",
+                    value: costMasked ? (
+                      "•••"
+                    ) : (
+                      <MoneyValue value={order.currentContent.totals.gross} />
+                    ),
+                    basis: "含税",
+                  },
+                  {
+                    id: "n",
+                    label: "不含税",
+                    value: costMasked ? (
+                      "•••"
+                    ) : (
+                      <MoneyValue value={order.currentContent.totals.net} />
+                    ),
+                    basis: "不含税",
+                  },
+                  {
+                    id: "t",
+                    label: "税额",
+                    value: costMasked ? (
+                      "•••"
+                    ) : (
+                      <MoneyValue value={order.currentContent.totals.tax} />
+                    ),
+                  },
+                ]}
+              />
             </DocumentSection>
           ) : null}
 
@@ -1000,10 +1166,15 @@ export function PurchaseOrderDetailPage({
                     去交付与代发
                   </Button>
                 ) : (
-                  <Button type="button" disabled title={fulfillBlocker?.message}>
-                    <LockIcon data-icon="inline-start" aria-hidden="true" />
-                    履约入口已阻断
-                  </Button>
+                  <div className="space-y-1">
+                    <Button type="button" disabled>
+                      履约入口未开放
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      {fulfillBlocker?.message ??
+                        "当前状态下不能进入交付，可先完成前置条件。"}
+                    </p>
+                  </div>
                 )}
                 {fulfillBlocker?.code === "PREPAYMENT_GATE" ? (
                   <Button
@@ -1011,7 +1182,7 @@ export function PurchaseOrderDetailPage({
                     variant="outline"
                     render={<Link href={w12PayHref} />}
                   >
-                    先完成供应商往来付款
+                    去供应商往来
                   </Button>
                 ) : null}
               </div>
@@ -1097,7 +1268,7 @@ export function PurchaseOrderDetailPage({
                   disabled={!canPay}
                   render={<Link href={w12PayHref} />}
                 >
-                  去{workspaceLabel("W12")}
+                  去供应商往来
                 </Button>
               </div>
             </DocumentSection>
@@ -1140,13 +1311,15 @@ export function PurchaseOrderDetailPage({
                     发起采购变更
                   </Button>
                 ) : (
-                  <Button
-                    type="button"
-                    disabled
-                    title={changeBlocker?.message}
-                  >
-                    发起变更不可用
-                  </Button>
+                  <div className="space-y-1">
+                    <Button type="button" disabled>
+                      发起采购变更
+                    </Button>
+                    <p className="text-xs text-muted-foreground">
+                      {changeBlocker?.message ??
+                        "当前状态下不能发起变更，可先完成前置条件。"}
+                    </p>
+                  </div>
                 )}
               </div>
             </DocumentSection>
@@ -1216,8 +1389,7 @@ export function PurchaseOrderDetailPage({
         fromStatus={{ label: "待财务审核", tone: "warning" }}
         toStatus={{ label: "已生效", tone: "success" }}
         lockedFields={[
-          `submissionId ${order.identity.currentSubmissionId ?? "—"}`,
-          `subjectHash ${order.identity.subjectHash ?? "—"}`,
+          `本次审核的提交内容（销售单 ${order.header.salesOrderNo}）`,
           "不可变提交头行与销售分配",
         ]}
         effects={[
@@ -1252,6 +1424,45 @@ export function PurchaseOrderDetailPage({
         pending={changeMutation.isPending}
         onConfirm={() => void handleStartChange()}
       />
+
+      <Dialog open={leaveGuardOpen} onOpenChange={setLeaveGuardOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>有未保存的修改</DialogTitle>
+            <DialogDescription>
+              当前编辑内容尚未保存，离开后修改将丢失。建议先保存草稿。
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              继续编辑
+            </DialogClose>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saveMutation.isPending}
+              onClick={async () => {
+                const ok = await handleSave(false)
+                if (!ok) return
+                setLeaveGuardOpen(false)
+                pendingLeave?.()
+              }}
+            >
+              保存并离开
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                setLeaveGuardOpen(false)
+                pendingLeave?.()
+              }}
+            >
+              放弃修改并离开
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -1275,6 +1486,7 @@ function LinesTable({
             <TableHead data-align="end">数量</TableHead>
             <TableHead data-align="end">含税单价</TableHead>
             <TableHead data-align="end">税率</TableHead>
+            <TableHead data-align="end">交期</TableHead>
             <TableHead data-align="end">行含税</TableHead>
             <TableHead data-align="end">税额</TableHead>
           </TableRow>
@@ -1285,8 +1497,9 @@ function LinesTable({
               <TableCell className="max-w-[16rem] whitespace-normal">
                 <div className="font-medium">{line.itemName}</div>
                 {line.procurementConfirmationLineId ? (
-                  <div className="num text-[11px] text-muted-foreground">
-                    {line.procurementConfirmationLineId}
+                  <div className="text-[11px] text-muted-foreground">
+                    {line.salesAllocationLabel ??
+                      `确认分行 · ${line.itemName}`}
                   </div>
                 ) : null}
               </TableCell>
@@ -1312,6 +1525,9 @@ function LinesTable({
               </TableCell>
               <TableCell data-align="end" className="num text-xs">
                 {(Number(line.inputTaxRate) * 100).toFixed(0)}%
+              </TableCell>
+              <TableCell data-align="end" className="num text-xs">
+                {line.expectedDeliveryDate ?? "—"}
               </TableCell>
               <TableCell data-align="end">
                 {costMasked ? (
@@ -1340,7 +1556,6 @@ function EditSurface({
   canSubmit,
   savePending,
   onSave,
-  onSaveConflictDemo,
   onSubmitOpen,
 }: {
   order: NonNullable<
@@ -1363,7 +1578,6 @@ function EditSurface({
   canSubmit: boolean
   savePending: boolean
   onSave: () => void
-  onSaveConflictDemo: () => void
   onSubmitOpen: () => void
 }) {
   return (
@@ -1377,9 +1591,9 @@ function EditSurface({
         <CardDescription>
           来源销售 {order.header.salesOrderNo}
           {order.header.creationBasisId
-            ? ` · 创建依据 ${order.header.creationBasisId}`
+            ? ` · 来自采购二次确认（销售单 ${order.header.salesOrderNo}）`
             : ""}
-          。⌘S 保存 · ⌘↵ 打开提交确认。拆单维度变更需提示影响。
+          。⌘S 保存 · ⌘↵ 打开提交确认。拆单维度（供应商、类型、付款条件、履约责任）已固定，不能修改。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
@@ -1387,13 +1601,11 @@ function EditSurface({
           <Alert variant="warning">
             <AlertTitle>正在进入编辑…</AlertTitle>
             <AlertDescription>
-              编辑信息仅保存在当前页面，不进入 URL。
+              编辑内容仅保存在当前页面；刷新或关闭将丢失，请及时保存。
             </AlertDescription>
           </Alert>
         ) : (
-          <p className="text-xs text-muted-foreground">
-            正在编辑中 · 版本 {order.identity.lockVersion}
-          </p>
+          <p className="text-xs text-muted-foreground">正在编辑中</p>
         )}
 
         <div className="grid gap-3 sm:grid-cols-2">
@@ -1425,13 +1637,19 @@ function EditSurface({
                   onValueChange={(v) =>
                     field.handleChange(v ?? String(field.state.value ?? ""))
                   }
-                  options={[
-                    { value: "PREPAY_100", label: "先款 100%" },
-                    { value: "PREPAY_50", label: "先款 50%" },
-                    { value: "PREPAY_30", label: "先款 30%" },
-                    { value: "POSTPAY_NET15", label: "货到 15 天" },
-                    { value: "POSTPAY_NET30", label: "货到 30 天" },
-                  ]}
+                  options={
+                    PAYMENT_TERM_OPTIONS.some(
+                      (option) => option.label === order.header.paymentTermLabel
+                    )
+                      ? [...PAYMENT_TERM_OPTIONS]
+                      : [
+                          {
+                            value: order.header.paymentTermCode,
+                            label: order.header.paymentTermLabel,
+                          },
+                          ...PAYMENT_TERM_OPTIONS,
+                        ]
+                  }
                   allowClear={false}
                   aria-label="付款条件"
                   placeholder="付款条件"
@@ -1463,16 +1681,49 @@ function EditSurface({
                       <div className="text-[11px] text-muted-foreground">
                         {line.lineType === "LOGISTICS_FEE"
                           ? "物流费用"
-                          : `确认 ${line.procurementConfirmationLineId ?? "—"}`}
+                          : line.procurementConfirmationLineId
+                            ? (line.salesAllocationLabel ??
+                              `确认分行 · ${line.itemName}`)
+                            : "商品/服务"}
                       </div>
                     </TableCell>
                     <TableCell data-align="end">
                       {line.lineType === "LOGISTICS_FEE" ? (
                         "—"
                       ) : (
+                        <>
+                          <input
+                            className="num w-20 rounded border border-border bg-background px-2 py-1 text-right text-sm"
+                            value={lineEdits[line.lineId]?.quantity ?? ""}
+                            onChange={(event) =>
+                              setLineEdits((prev) => ({
+                                ...prev,
+                                [line.lineId]: {
+                                  ...prev[line.lineId],
+                                  inputTaxRate:
+                                    prev[line.lineId]?.inputTaxRate ??
+                                    line.inputTaxRate,
+                                  quantity: event.target.value,
+                                },
+                              }))
+                            }
+                            aria-label={`${line.itemName} 数量`}
+                          />
+                          {!positiveDecimal(
+                            lineEdits[line.lineId]?.quantity ?? line.quantity
+                          ) ? (
+                            <span className="block text-[11px] text-destructive">
+                              须为正数
+                            </span>
+                          ) : null}
+                        </>
+                      )}
+                    </TableCell>
+                    <TableCell data-align="end">
+                      <>
                         <input
-                          className="num w-20 rounded border border-border bg-background px-2 py-1 text-right text-sm"
-                          value={lineEdits[line.lineId]?.quantity ?? ""}
+                          className="num w-28 rounded border border-border bg-background px-2 py-1 text-right text-sm"
+                          value={lineEdits[line.lineId]?.unitCostGross ?? ""}
                           onChange={(event) =>
                             setLineEdits((prev) => ({
                               ...prev,
@@ -1481,48 +1732,66 @@ function EditSurface({
                                 inputTaxRate:
                                   prev[line.lineId]?.inputTaxRate ??
                                   line.inputTaxRate,
-                                quantity: event.target.value,
+                                unitCostGross: event.target.value,
                               },
                             }))
                           }
-                          aria-label={`${line.itemName} 数量`}
+                          aria-label={`${line.itemName} 含税单价`}
                         />
-                      )}
+                        {!positiveDecimal(
+                          lineEdits[line.lineId]?.unitCostGross ??
+                            line.unitCostGross
+                        ) ? (
+                          <span className="block text-[11px] text-destructive">
+                            须为正数
+                          </span>
+                        ) : null}
+                      </>
                     </TableCell>
                     <TableCell data-align="end">
-                      <input
-                        className="num w-28 rounded border border-border bg-background px-2 py-1 text-right text-sm"
-                        value={lineEdits[line.lineId]?.unitCostGross ?? ""}
-                        onChange={(event) =>
-                          setLineEdits((prev) => ({
-                            ...prev,
-                            [line.lineId]: {
-                              ...prev[line.lineId],
-                              inputTaxRate:
-                                prev[line.lineId]?.inputTaxRate ??
-                                line.inputTaxRate,
-                              unitCostGross: event.target.value,
-                            },
-                          }))
-                        }
-                        aria-label={`${line.itemName} 含税单价`}
-                      />
-                    </TableCell>
-                    <TableCell data-align="end">
-                      <input
-                        className="num w-16 rounded border border-border bg-background px-2 py-1 text-right text-sm"
-                        value={lineEdits[line.lineId]?.inputTaxRate ?? ""}
-                        onChange={(event) =>
-                          setLineEdits((prev) => ({
-                            ...prev,
-                            [line.lineId]: {
-                              ...prev[line.lineId],
-                              inputTaxRate: event.target.value,
-                            },
-                          }))
-                        }
-                        aria-label={`${line.itemName} 税率`}
-                      />
+                      <>
+                        <input
+                          className="num w-20 rounded border border-border bg-background px-2 py-1 text-right text-sm"
+                          value={
+                            (() => {
+                              const raw =
+                                lineEdits[line.lineId]?.inputTaxRate ??
+                                line.inputTaxRate
+                              if (raw === "") return ""
+                              const value = Number(raw)
+                              return Number.isFinite(value)
+                                ? String(value * 100)
+                                : raw
+                            })()
+                          }
+                          onChange={(event) => {
+                            const raw = event.target.value
+                            const parsed = Number(raw)
+                            setLineEdits((prev) => ({
+                              ...prev,
+                              [line.lineId]: {
+                                ...prev[line.lineId],
+                                inputTaxRate:
+                                  raw === "" || !Number.isFinite(parsed)
+                                    ? raw
+                                    : String(parsed / 100),
+                              },
+                            }))
+                          }}
+                          aria-label={`${line.itemName} 税率（%）`}
+                        />
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          %
+                        </span>
+                        {!taxRateValid(
+                          lineEdits[line.lineId]?.inputTaxRate ??
+                            line.inputTaxRate
+                        ) ? (
+                          <span className="block text-[11px] text-destructive">
+                            税率须为 0-1 的小数（如 0.13）
+                          </span>
+                        ) : null}
+                      </>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1539,14 +1808,6 @@ function EditSurface({
             onClick={onSave}
           >
             {savePending ? "保存中…" : "保存草稿"}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            disabled={!draftEditToken || savePending}
-            onClick={onSaveConflictDemo}
-          >
-            模拟版本冲突
           </Button>
           <Button
             type="button"
@@ -1577,8 +1838,8 @@ function ReviewSurface({
   costMasked: boolean
 }) {
   const samePerson =
-    order.header.submittedBy === "财务 · 周敏" ||
-    order.reviewWorkItem?.submittedBy === "财务 · 周敏"
+    order.header.submittedBy === W08_REVIEWER_NAME ||
+    order.reviewWorkItem?.submittedBy === W08_REVIEWER_NAME
 
   return (
     <Card>
@@ -1590,13 +1851,20 @@ function ReviewSurface({
       </CardHeader>
       <CardContent className="space-y-4 pt-4">
         <Alert>
-          <AlertTitle>不可变提交</AlertTitle>
+          <AlertTitle>本次提交内容</AlertTitle>
           <AlertDescription>
-            submissionId {order.identity.currentSubmissionId ?? "—"} · 经办{" "}
-            {order.header.submittedBy ?? "—"} · 提交于{" "}
+            经办 {order.header.submittedBy ?? "—"} · 提交于{" "}
             {order.header.submittedAt ?? "—"}
           </AlertDescription>
         </Alert>
+        {samePerson ? (
+          <Alert variant="destructive">
+            <AlertTitle>岗位分离限制</AlertTitle>
+            <AlertDescription>
+              审核人不得为提交经办人，当前不能通过或驳回本次提交。
+            </AlertDescription>
+          </Alert>
+        ) : null}
 
         <DescriptionList columns="three">
           <DescriptionItem>
@@ -1684,6 +1952,7 @@ function ReviewSurface({
           <reviewForm.AppForm>
             <reviewForm.SubmitButton
               label={pending ? "提交中…" : "确认驳回"}
+              disabled={samePerson || !order.reviewWorkItem}
             />
           </reviewForm.AppForm>
         </form>

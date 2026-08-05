@@ -145,7 +145,11 @@ function referenceDay(all: readonly FulfillmentTask[]): string | undefined {
 
 function filterSummary(
   filters: FulfillmentQueueFilters,
-  warehouseOptions: FulfillmentQueueView["context"]["warehouseOptions"]
+  warehouseOptions: FulfillmentQueueView["context"]["warehouseOptions"],
+  resolveObjectNo?: (
+    kind: "salesOrder" | "purchaseOrder",
+    id: string
+  ) => string | undefined
 ): string {
   const parts = [
     filters.scope === "mine" && resolveRole(filters.role).userLabel
@@ -163,11 +167,19 @@ function filterSummary(
     const label = warehouseOptions.find(
       (w) => w.value === filters.warehouseId
     )?.label
-    parts.push(label ?? `仓 ${filters.warehouseId}`)
+    parts.push(label ?? "指定仓库")
   }
   if (filters.q) parts.push(`单号 ${filters.q}`)
-  if (filters.salesOrderId) parts.push(`销售 ${filters.salesOrderId}`)
-  if (filters.purchaseOrderId) parts.push(`采购 ${filters.purchaseOrderId}`)
+  if (filters.salesOrderId) {
+    parts.push(
+      `销售单 ${resolveObjectNo?.("salesOrder", filters.salesOrderId) ?? "已定位"}`
+    )
+  }
+  if (filters.purchaseOrderId) {
+    parts.push(
+      `采购单 ${resolveObjectNo?.("purchaseOrder", filters.purchaseOrderId) ?? "已定位"}`
+    )
+  }
   return parts.join(" · ")
 }
 
@@ -285,6 +297,21 @@ export async function fetchFulfillmentQueue(
     return a.dueAt.localeCompare(b.dueAt)
   })
 
+  // 摘要里展示业务单号，内部 ID 只进 URL 不进界面
+  const resolveObjectNo = (
+    kind: "salesOrder" | "purchaseOrder",
+    id: string
+  ): string | undefined => {
+    const hit = projected.find((t) =>
+      kind === "salesOrder"
+        ? t.source.salesOrderId === id
+        : t.source.purchaseOrderId === id
+    )
+    return kind === "salesOrder"
+      ? hit?.source.salesOrderNo
+      : hit?.source.purchaseNo
+  }
+
   const queueContextId =
     filters.queueContextId ?? `queue:W09:${filters.scope}`
 
@@ -321,7 +348,7 @@ export async function fetchFulfillmentQueue(
       currentWorkItemId: current?.workItemId,
       previousWorkItemId: tasks[position - 1]?.workItemId,
       nextWorkItemId: tasks[position + 1]?.workItemId,
-      filterSummary: filterSummary(filters, warehouseOptions),
+      filterSummary: filterSummary(filters, warehouseOptions, resolveObjectNo),
       warehouseOptions,
       visibleTypes: role.types,
       roleLabel: role.label,

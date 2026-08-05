@@ -113,6 +113,8 @@ export function useCustomerDirectoryQuery(query: CustomerDirectoryQuery) {
   return useQuery({
     queryKey: customerKeys.directory(query),
     queryFn: () => fetchCustomerDirectory(query),
+    // 切换筛选时保留上一批结果渲染，避免整卡闪烁（数据表骨架只出现于首载）。
+    placeholderData: (previous) => previous,
   })
 }
 

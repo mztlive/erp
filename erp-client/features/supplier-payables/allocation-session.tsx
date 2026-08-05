@@ -49,6 +49,8 @@ import type {
   FormalSubmitResult,
 } from "@/features/supplier-payables/types"
 import { SOURCE_TYPE_LABEL } from "@/features/supplier-payables/types"
+import { workspaceLabel } from "@/lib/ui-text"
+import type { WorkspaceId } from "@/lib/workspace-registry"
 import { cn } from "@/lib/utils"
 
 const paymentSchema = z.object({
@@ -62,18 +64,34 @@ const paymentSchema = z.object({
   note: z.string(),
 })
 
-const invoiceSchema = z.object({
-  invoiceCode: z.string().trim().min(1, "请填写发票代码"),
-  invoiceNo: z.string().trim().min(1, "请填写发票号码"),
-  invoiceDate: z.string().min(1, "请填写开票日期"),
-  grossAmount: z
-    .string()
-    .trim()
-    .min(1, "请填写含税金额")
-    .refine((v) => Number(v) > 0, "含税金额必须为正数"),
-  netAmount: z.string().trim().min(1, "请填写不含税金额"),
-  taxAmount: z.string().trim().min(1, "请填写税额"),
-})
+const invoiceSchema = z
+  .object({
+    invoiceCode: z.string(),
+    invoiceNo: z.string().trim().min(1, "请填写发票号码"),
+    invoiceDate: z.string().min(1, "请填写开票日期"),
+    grossAmount: z
+      .string()
+      .trim()
+      .min(1, "请填写含税金额")
+      .refine((v) => Number(v) > 0, "含税金额必须为正数"),
+    netAmount: z.string().trim().min(1, "请填写不含税金额"),
+    taxAmount: z.string().trim().min(1, "请填写税额"),
+  })
+  .superRefine((v, ctx) => {
+    if (!v.netAmount.trim() || !v.taxAmount.trim() || !v.grossAmount.trim()) {
+      return
+    }
+    const diff = Math.abs(
+      Number(v.netAmount) + Number(v.taxAmount) - Number(v.grossAmount)
+    )
+    if (diff > 0.011) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["netAmount"],
+        message: "不含税金额 + 税额 应等于含税金额（可允许 1 分钱差异）",
+      })
+    }
+  })
 
 function cents(s: string): number {
   const n = Number(s)
@@ -102,6 +120,7 @@ export type AllocationSessionProps = {
   preselectPayableAccountId?: string
   onClose: () => void
   onCompleted?: (result: FormalSubmitResult) => void
+  onGoToInvoiceView?: () => void
 }
 
 export function AllocationSession({
@@ -116,6 +135,7 @@ export function AllocationSession({
   preselectPayableAccountId,
   onClose,
   onCompleted,
+  onGoToInvoiceView,
 }: AllocationSessionProps) {
   const sessionQuery = useAllocationSessionQuery({
     track,
@@ -151,13 +171,26 @@ export function AllocationSession({
     const next = new Set(session.preselectedPayableAccountIds)
     setSelected(next)
     const am: Record<string, string> = {}
+    let prefillSum = 0
     for (const id of next) {
       const item = session.pool.find((p) => p.payableAccountId === id)
       if (!item) continue
-      am[id] =
+      const open =
         track === "payment" ? item.openTotal : item.openInvoiceableTotal
+      am[id] = open
+      prefillSum += cents(open)
     }
     setAmounts((prev) => ({ ...am, ...prev }))
+    // 预选目标时同步预填记录金额，避免重复输入（继续核销场景除外）
+    if (!session.existingPaymentId && !session.existingInvoiceId) {
+      const prefill = fromCents(prefillSum)
+      if (track === "payment") {
+        paymentForm.setFieldValue("amount", prefill)
+      } else {
+        invoiceForm.setFieldValue("grossAmount", prefill)
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 会话与预选变化时同步
   }, [session?.draftSessionId, session?.preselectedPayableAccountIds.join("|")])
 
   const paymentForm = useAppForm({
@@ -175,7 +208,7 @@ export function AllocationSession({
 
   const invoiceForm = useAppForm({
     defaultValues: {
-      invoiceCode: "3100251199",
+      invoiceCode: "",
       invoiceNo: "",
       invoiceDate: new Date().toISOString().slice(0, 10),
       grossAmount: session?.existingUnallocated ?? session?.existingAmount ?? "",
@@ -288,6 +321,36 @@ export function AllocationSession({
 
   const canSubmit = issues.length === 0 && !result
 
+  function toggleSelectAll() {
+    const ids = session?.pool.map((p) => p.payableAccountId) ?? []
+    const allSelected = ids.length > 0 && ids.every((id) => selected.has(id))
+    setSelected(new Set(allSelected ? [] : ids))
+    if (!allSelected && session) {
+      setAmounts((m) => {
+        const next = { ...m }
+        for (const p of session.pool) {
+          next[p.payableAccountId] =
+            track === "payment" ? p.openTotal : p.openInvoiceableTotal
+        }
+        return next
+      })
+    }
+  }
+
+  function fillAllSelected() {
+    if (!session) return
+    setAmounts((m) => {
+      const next = { ...m }
+      for (const p of session.pool) {
+        if (selected.has(p.payableAccountId)) {
+          next[p.payableAccountId] =
+            track === "payment" ? p.openTotal : p.openInvoiceableTotal
+        }
+      }
+      return next
+    })
+  }
+
   async function handleSaveDraft() {
     if (!session) return
     const saved = await saveDraft.mutateAsync({
@@ -393,11 +456,7 @@ export function AllocationSession({
       <BusinessEmptyState
         kind="no-data"
         title="无法开始本次核销"
-        description={
-          sessionQuery.error instanceof Error
-            ? sessionQuery.error.message
-            : "供应商核销池加载失败"
-        }
+        description="供应商核销池加载失败，请返回列表重试。"
         action={
           <Button type="button" variant="outline" onClick={onClose}>
             返回列表
@@ -432,7 +491,7 @@ export function AllocationSession({
           <DataFreshness
             updatedAt={new Date(session.queriedAt).toLocaleString("zh-CN")}
             dateTime={session.queriedAt}
-            label={`更新于 ${session.dataWatermark} · 查询于`}
+            label="更新于"
             className="text-xs"
           />
         </div>
@@ -469,9 +528,11 @@ export function AllocationSession({
         <Alert>
           <AlertTitle>来源上下文</AlertTitle>
           <AlertDescription>
-            {fromWorkspace ? `来自 ${fromWorkspace}` : null}
+            {fromWorkspace
+              ? `来自 ${workspaceLabel(fromWorkspace as WorkspaceId)}`
+              : null}
             {purchaseOrderId ? ` · 采购单 ${purchaseOrderId}` : null}
-            。完成后请返回来源页，将重新校验付款条件；未核销付款不满足先款要求。
+            。完成后请返回来源页，将重新校验先款条件；未核销付款不满足先款要求。
           </AlertDescription>
         </Alert>
       ) : null}
@@ -509,9 +570,20 @@ export function AllocationSession({
             </Button>
           ) : null}
           {result.status === "blocked" && result.existingDocumentId ? (
-            <p className="text-sm text-muted-foreground">
-              已定位既有发票，不创建副本。可切换到进项发票视图继续核销。
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">
+                已定位既有发票，不创建副本。可切换到进项发票视图继续核销。
+              </p>
+              {onGoToInvoiceView ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onGoToInvoiceView}
+                >
+                  前往进项发票视图
+                </Button>
+              ) : null}
+            </div>
           ) : null}
           <div className="flex flex-wrap gap-2">
             <Button type="button" variant="outline" onClick={onClose}>
@@ -524,7 +596,7 @@ export function AllocationSession({
                   <Link href={result.returnTo || returnTo || "/"} />
                 }
               >
-                返回来源并重查门禁
+                返回来源并重新校验先款条件
               </Button>
             ) : null}
           </div>
@@ -543,6 +615,29 @@ export function AllocationSession({
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2 p-3">
+                <div className="flex flex-wrap items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
+                  <span>共 {session.pool.length} 个开放目标</span>
+                  <div className="flex gap-1">
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      disabled={session.pool.length === 0 || Boolean(result)}
+                      onClick={toggleSelectAll}
+                    >
+                      全选
+                    </Button>
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      disabled={selected.size === 0 || Boolean(result)}
+                      onClick={fillAllSelected}
+                    >
+                      按开放余额填满
+                    </Button>
+                  </div>
+                </div>
                 {session.pool.length === 0 ? (
                   <p className="p-3 text-sm text-muted-foreground">
                     当前无开放目标
@@ -610,7 +705,7 @@ export function AllocationSession({
                             <Input
                               id={`amt-${item.payableAccountId}`}
                               className="num h-8"
-                             
+                              inputMode="decimal"
                               value={amounts[item.payableAccountId] ?? ""}
                               onChange={(e) =>
                                 setAmounts((m) => ({
@@ -778,14 +873,16 @@ export function AllocationSession({
                     已选择混合来源（采购单 + 结算单）。
                     {policyBlocksAuto
                       ? "策略不可用，已强制显式选择。"
-                      : `策略 ${policy?.payablePriorityPolicyId}@v${policy?.payablePriorityPolicyVersion}；提交将回传策略版本。`}
+                      : "混合来源已按系统优先级分配；提交时系统将重新校验。"}
                   </p>
                 ) : null}
 
                 <ValidationSummary issues={issues} />
 
                 <details className="text-xs text-muted-foreground">
-                  <summary className="cursor-pointer">演示：异常路径</summary>
+                  <summary className="cursor-pointer">
+                    演示选项（仅演示环境）
+                  </summary>
                   <div className="mt-2 flex flex-col gap-1">
                     <label className="flex items-center gap-2">
                       <Checkbox
@@ -842,7 +939,7 @@ export function AllocationSession({
         onOpenChange={setConfirmOpen}
         actionLabel={track === "payment" ? "登记付款并核销" : "登记进项发票并核销"}
         title={track === "payment" ? "确认登记付款并核销" : "确认登记进项发票并核销"}
-        description="提交后形成不可编辑记录；纠错须追加冲正/红票。提交时系统将校验供应商、余额与策略版本。"
+        description="提交后形成不可编辑记录；纠错须追加冲正/红票。提交时系统将校验供应商、余额与混合来源规则。"
         confirmLabel="确认提交"
         fromStatus={{ label: "本次草稿", tone: "neutral" }}
         toStatus={{ label: "已确认", tone: "success" }}
@@ -853,11 +950,11 @@ export function AllocationSession({
         ]}
         effects={[
           track === "payment"
-            ? "形成供应商付款单与有效 APPLY 分配"
-            : "形成进项发票与有效 APPLY 分配",
+            ? "形成供应商付款单与有效分配"
+            : "形成进项发票与有效分配",
           "同步更新应付开放余额",
           "未分配余额保留在待核销视图",
-          "来源页须重查付款门禁，未核销付款不满足",
+          "来源页须重新校验先款条件，未核销付款不满足",
         ]}
         irreversibleEffects={["已确认记录不可编辑删除，纠错追加反向记录"]}
         pending={submitPayment.isPending || submitInvoice.isPending}

@@ -142,13 +142,13 @@ export type CardBusinessBreakdownItem = Readonly<{
 
 export type CardBusinessRow = Readonly<{
   rowId: string
-  customerId: string
+  customerId?: string
   customerLabel: string
-  salesOrderId: string
-  salesOrderNo: string
+  salesOrderId?: string
+  salesOrderNo?: string
   voucherCategoryLabel: string
   /** 不可逆稳定卡实例引用摘要；禁止卡号/卡密/手机 */
-  cardInstanceRef: string
+  cardInstanceRef?: string
   consumptionGross: string
   refundGross: string
   costBasis: CostBasisCode
@@ -162,6 +162,9 @@ export type CardBusinessRow = Readonly<{
   consumptionOrderHref?: string
   /** 成本来源下钻 */
   supplierOrderHref?: string
+  /** 维度聚合行的分组键（客户/销售单/类目）；单行视角为 undefined */
+  groupKey?: string
+  rowCount?: number
 }>
 
 export type CardBusinessAnalyticsView = Readonly<{
@@ -278,7 +281,20 @@ export const COST_BASIS_ROW_UI: Record<
   CostBasisCode,
   { label: string; tone: StatusTone }
 > = {
-  ACTUAL: { label: "ACTUAL", tone: "success" },
-  STANDARD: { label: "STANDARD", tone: "info" },
-  NONE: { label: "NONE", tone: "warning" },
+  ACTUAL: { label: "实际成本", tone: "success" },
+  STANDARD: { label: "标准成本", tone: "info" },
+  NONE: { label: "无可用成本", tone: "warning" },
+}
+
+export const EXPIRY_STATE_LABEL: Record<Exclude<ExpiryState, "all">, string> = {
+  active: "未到期",
+  expired: "已到期",
+}
+
+export const COVERAGE_FILTER_LABEL: Record<
+  Exclude<CoverageFilter, "all">,
+  string
+> = {
+  below_threshold: "覆盖不足",
+  none: "未覆盖",
 }

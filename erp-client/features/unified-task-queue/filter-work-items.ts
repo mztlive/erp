@@ -1,3 +1,4 @@
+import { FAMILY_LABELS } from "@/mock/work-items"
 import type { QueueWorkItemView, UnifiedQueueFilters } from "./types"
 
 function isOverdue(item: QueueWorkItemView): boolean {
@@ -113,7 +114,7 @@ export function buildFilterSummary(
           ? "团队"
           : "已跳过"
   parts.push(scopeLabel)
-  if (filters.family) parts.push(`族:${filters.family}`)
+  if (filters.family) parts.push(`族：${FAMILY_LABELS[filters.family]}`)
   if (filters.workItemType) parts.push(`类型已收敛`)
   else if (filters.converge && focusLabel) parts.push(`连续处理·${focusLabel}`)
   else parts.push("全部类型")

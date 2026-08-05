@@ -490,6 +490,28 @@ export const SECTIONS: SettlementSection[] = [
   "audit",
 ]
 
+/** 审计动作中文映射（动作码只在代码与审计数据结构中使用） */
+export const AUDIT_ACTION_LABEL: Record<string, string> = {
+  CREATE_DRAFT: "创建结算草稿",
+  REFRESH_TRIAL: "刷新试算",
+  RESOLVE_DIFFERENCE: "登记差异结论",
+  APPEND_EVIDENCE: "追加采购证据",
+  SUBMIT_REVIEW: "提交复核",
+  CONFIRM: "确认结算",
+  REJECT: "驳回复核",
+}
+
+/** 复核/结论原因码中文映射（原因码原值不上屏） */
+export const REASON_CODE_LABEL: Record<string, string> = {
+  NEEDS_MORE_EVIDENCE: "证据不足",
+  AMOUNT_MISMATCH: "金额仍不一致",
+  OTHER: "其他",
+  BILL_ALIGNED: "账单已对齐",
+  ACCEPT_BILL: "接受供应商账单",
+  NO_BUSINESS_IMPACT: "无需业务调整",
+  COMPENSATED_ELSEWHERE: "已另行补偿",
+}
+
 export const ACTORS = {
   prep: { userId: "u_finance_prep", displayName: "李经办" },
   review: { userId: "u_finance_review", displayName: "王复核" },

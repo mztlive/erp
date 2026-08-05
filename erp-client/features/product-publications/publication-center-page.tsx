@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowLeftIcon,
   HistoryIcon,
+  LoaderCircleIcon,
   PauseIcon,
   RefreshCwIcon,
   SendIcon,
@@ -16,6 +17,7 @@ import {
   BusinessEmptyState,
   BusinessFailureState,
   BusinessStatusBadge,
+  DataFreshness,
   DocumentHeader,
   DocumentSection,
   DocumentSummary,
@@ -34,6 +36,16 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -45,6 +57,7 @@ import {
 } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
+import { Textarea } from "@/components/ui/textarea"
 import {
   useManualPauseMutation,
   usePublicationDetailQuery,
@@ -61,10 +74,19 @@ import type {
 } from "@/features/product-publications/types"
 import {
   MEDIA_ROLE_LABEL,
+  MEDIA_SCAN_STATUS_LABEL,
   SALE_STATUS_LABEL,
 } from "@/features/product-publications/types"
 import { cn } from "@/lib/utils"
 import { compareDecimal } from "@/lib/fixed-decimal"
+import { goToWorkspaceLabel } from "@/lib/ui-text"
+
+/** 税率小数 → 百分比展示（0.13 → 13%） */
+function percentLabel(rate: string): string {
+  const value = Number(rate)
+  if (Number.isFinite(value)) return `${Math.round(value * 100)}%`
+  return rate
+}
 
 const SECTIONS = [
   { id: "overview", label: "概览" },
@@ -128,7 +150,7 @@ const publishSchema = z.object({
   salesPriceGross: publishDecimal("含税销售价", 4, true),
   salesTaxRate: publishDecimal("销项税率", 6).refine(
     (value) => decimalAtMost(value, "1", 6),
-    "销项税率必须为 0 到 1 的十进制数"
+    "税率请填 0 到 1 之间的小数，如 0.13 表示 13%"
   ),
   categoryId: z.string().trim().min(1, "请填写商城类目 ID"),
   skuRevisionId: z.string().trim().min(1, "请填写 SKU 修订 ID"),
@@ -157,10 +179,9 @@ function PublishGateAlert({ gate }: { gate: PublicationPublishGate }) {
       <Alert variant="info">
         <AlertTitle>可提交发布</AlertTitle>
         <AlertDescription>
-          闸门版本 <span className="num">{gate.gateVersion}</span>
           {gate.priceOrTaxChanged
-            ? " · 价格/税率有变化且复核已满足"
-            : " · 价格/税率无变化"}
+            ? "价格/税率有变化且复核已满足，可提交发布。"
+            : "价格/税率无变化，可直接提交发布。"}
         </AlertDescription>
       </Alert>
     )
@@ -169,11 +190,7 @@ function PublishGateAlert({ gate }: { gate: PublicationPublishGate }) {
     return (
       <Alert variant="warning" role="alert">
         <AlertTitle>复核政策未配置</AlertTitle>
-        <AlertDescription>
-          <span className="font-mono text-xs">{gate.blocker.code}</span>
-          {" · "}
-          {gate.blocker.message}
-        </AlertDescription>
+        <AlertDescription>{gate.blocker.message}</AlertDescription>
       </Alert>
     )
   }
@@ -181,22 +198,14 @@ function PublishGateAlert({ gate }: { gate: PublicationPublishGate }) {
     return (
       <Alert variant="destructive" role="alert">
         <AlertTitle>恢复责任未确认</AlertTitle>
-        <AlertDescription>
-          <span className="font-mono text-xs">{gate.blocker.code}</span>
-          {" · "}
-          {gate.blocker.message}
-        </AlertDescription>
+        <AlertDescription>{gate.blocker.message}</AlertDescription>
       </Alert>
     )
   }
   return (
     <Alert variant="warning" role="alert">
       <AlertTitle>发布复核阻断</AlertTitle>
-      <AlertDescription>
-        <span className="font-mono text-xs">{gate.blocker.code}</span>
-        {" · "}
-        {gate.blocker.message}
-      </AlertDescription>
+      <AlertDescription>{gate.blocker.message}</AlertDescription>
     </Alert>
   )
 }
@@ -224,7 +233,7 @@ function RevisionContent({
               <span className="num">
                 ¥{rev.salesPriceGross}
                 <span className="ml-1 text-xs text-muted-foreground">
-                  税率 {rev.salesTaxRate}
+                  税率 {percentLabel(rev.salesTaxRate)}
                 </span>
               </span>
             ),
@@ -254,11 +263,6 @@ function RevisionContent({
               </span>
             ),
           },
-          {
-            id: "skuRev",
-            label: "商品修订",
-            value: <span className="num">{rev.skuRevisionId}</span>,
-          },
         ]}
       />
       <div>
@@ -285,12 +289,6 @@ function RevisionContent({
         </div>
         <Card size="sm">
           <CardContent className="space-y-1 pt-3 text-sm">
-            <div>
-              供给修订{" "}
-              <span className="num font-medium">
-                {rev.supplierOfferingRevisionId}
-              </span>
-            </div>
             <div>
               {rev.fixedOffering.supplierName} ·{" "}
               {rev.fixedOffering.availabilityLabel}
@@ -346,7 +344,7 @@ function RevisionContent({
                     }
                     className="text-[10px]"
                   >
-                    {m.securityScanStatus}
+                    {MEDIA_SCAN_STATUS_LABEL[m.securityScanStatus]}
                   </Badge>
                 </div>
               </div>
@@ -355,7 +353,7 @@ function RevisionContent({
         </ul>
       </div>
       <p className="text-xs text-muted-foreground">
-        数据版本 <span className="num">{rev.contentHash}</span> · 历史记录不随后续主档变化覆盖
+        历史记录不随后续主档变化覆盖
       </p>
     </div>
   )
@@ -381,6 +379,7 @@ export function PublicationCenterPage({
   const [sessionEdit, setSessionEdit] = React.useState<SessionEdit | null>(null)
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [pauseOpen, setPauseOpen] = React.useState(false)
+  const [pauseReasonOpen, setPauseReasonOpen] = React.useState(false)
   const [pauseReason, setPauseReason] = React.useState("")
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
   const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
@@ -405,6 +404,24 @@ export function PublicationCenterPage({
     const el = document.getElementById(`pub-section-${section}`)
     if (el) el.scrollIntoView({ block: "start", behavior: "smooth" })
   }, [section, data])
+
+  // revision 参数归一：指向不存在或已是最新的历史修订时清理 URL 残留
+  React.useEffect(() => {
+    if (!data || !revisionParam) return
+    const known = data.revisions.some((r) => r.revisionId === revisionParam)
+    if (!known || revisionParam === data.latestRevisionId) {
+      const sp = new URLSearchParams(searchParams.toString())
+      sp.delete("revision")
+      const qs = sp.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
+    }
+  }, [data, pathname, revisionParam, router, searchParams])
+
+  const isViewingHistoricalRevision =
+    revisionParam != null &&
+    data != null &&
+    revisionParam !== data.latestRevisionId &&
+    data.revisions.some((r) => r.revisionId === revisionParam)
 
   const form = useAppForm({
     defaultValues: {
@@ -498,6 +515,17 @@ export function PublicationCenterPage({
     setConfirmOpen(false)
   }
 
+  /** 返回类导航在 dirty 时先确认，避免站内跳转无声丢弃未提交输入 */
+  const goBackToList = () => {
+    if (
+      dirty &&
+      !window.confirm("当前输入尚未提交，返回列表将丢失本次未提交内容。")
+    ) {
+      return
+    }
+    router.push("/commerce/publications")
+  }
+
   const setSection = (id: SectionId) => {
     const sp = new URLSearchParams(searchParams.toString())
     if (id === "overview") sp.delete("section")
@@ -525,6 +553,14 @@ export function PublicationCenterPage({
 
   const doPublish = async () => {
     if (!data || !sessionEdit) return
+    if (!canPublish || gateBlocks || pausedOnSale) {
+      setLastResult({
+        status: "blocked",
+        title: "提交被阻断",
+        description: publishBlocker?.message ?? "当前状态不允许提交发布。",
+      })
+      return
+    }
     const values = form.state.values
     if (!requestIdRef.current) {
       requestIdRef.current = `w22-pub-${data.identity.publicationId}-${Date.now()}`
@@ -573,7 +609,7 @@ export function PublicationCenterPage({
         status: "succeeded",
         title: "发布修订已提交，等待商城确认",
         description:
-          "已形成不可变发布修订与发送。商城确认前不会显示为「商城已生效」。",
+          "已形成新的发布版本并开始发送。商城确认前不会显示为「商城已生效」。",
         reference: result.operationId,
         facts: [
           { label: "发布版本", value: `r${result.revisionNo}` },
@@ -645,7 +681,7 @@ export function PublicationCenterPage({
   if (detailQuery.isPending) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="商品发布对象" description="正在加载…" />
+        <PageHeader title="商品发布" description="正在加载…" />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
       </div>
     )
@@ -654,7 +690,7 @@ export function PublicationCenterPage({
   if (detailQuery.isError) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title="商品发布对象" />
+        <PageHeader title="商品发布" />
         <BusinessFailureState
           kind="system"
           description="加载发布对象失败。"
@@ -674,7 +710,7 @@ export function PublicationCenterPage({
         <BusinessEmptyState
           kind="no-data"
           title="发布对象不存在"
-          description={`未找到 ${publicationId}，或当前账号无权查看。`}
+          description="该发布对象不存在，或当前账号无权查看。"
           action={
             <Button
               type="button"
@@ -696,6 +732,10 @@ export function PublicationCenterPage({
     data.publishGate.kind === "REVIEW_POLICY_UNCONFIGURED" ||
     data.publishGate.kind === "RECOVERY_RESPONSIBILITY_UNCONFIRMED" ||
     data.publishGate.kind === "REVIEW_BLOCKED"
+  /** 安全暂停 + 选择上架时提交必被阻断（页头按钮与表单提交共用同一组条件） */
+  const pausedOnSale =
+    data.status === "SAFETY_PAUSED" && form.state.values.saleStatus === "ON_SALE"
+  const publishBlocked = !canPublish || gateBlocks || pausedOnSale
 
   const ackedLabel =
     data.currentAckedRevisionNo != null
@@ -705,7 +745,7 @@ export function PublicationCenterPage({
     data.latestRevisionNo != null ? `r${data.latestRevisionNo}` : "—"
 
   const deliveryTrack = data.deliveries.find(
-    (d) => d.revisionId === data.selectedRevision.revisionId
+    (d) => d.revisionId === data.latestRevisionId
   )
 
   return (
@@ -721,13 +761,21 @@ export function PublicationCenterPage({
             current: true,
           },
         ]}
+        metadata={
+          <DataFreshness
+            updatedAt="详情"
+            dateTime={data.freshness.queriedAt}
+            state={detailQuery.isFetching ? "syncing" : "fresh"}
+            label="发布信息更新于"
+          />
+        }
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
               variant="outline"
               size="sm"
-              render={<Link href="/commerce/publications" />}
+              onClick={goBackToList}
             >
               <ArrowLeftIcon />
               返回列表
@@ -736,9 +784,12 @@ export function PublicationCenterPage({
               type="button"
               variant="outline"
               size="sm"
+              disabled={detailQuery.isFetching}
               onClick={() => void detailQuery.refetch()}
             >
-              <RefreshCwIcon />
+              <RefreshCwIcon
+                className={detailQuery.isFetching ? "animate-spin" : undefined}
+              />
               刷新
             </Button>
           </div>
@@ -749,7 +800,7 @@ export function PublicationCenterPage({
         <Alert variant="warning" role="status">
           <AlertTitle>本次编辑 · 未保存</AlertTitle>
           <AlertDescription>
-            当前输入仅存在于本页签内存，无草稿保存、无自动保存。刷新或关闭前将提示丢失。
+            当前输入仅保存在当前页面，无草稿保存、无自动保存。刷新或关闭前将提示丢失。
             <div className="mt-2 flex gap-2">
               <Button type="button" size="sm" variant="outline" onClick={discardSession}>
                 放弃输入
@@ -804,7 +855,7 @@ export function PublicationCenterPage({
                     }
                   }}
                 >
-                  查询原请求
+                  按原任务号查询
                 </Button>
                 <Button
                   type="button"
@@ -894,16 +945,17 @@ export function PublicationCenterPage({
               type="button"
               size="sm"
               disabled={
-                !canPublish ||
-                gateBlocks ||
-                publishMutation.isPending ||
-                (data.status === "SAFETY_PAUSED" &&
-                  form.state.values.saleStatus === "ON_SALE")
+                publishBlocked ||
+                publishMutation.isPending
               }
-              title={publishBlocker?.message}
+              title={publishBlocked ? (publishBlocker?.message ?? "当前状态不允许提交发布") : undefined}
               onClick={() => void form.handleSubmit()}
             >
-              <SendIcon />
+              {publishMutation.isPending ? (
+                <LoaderCircleIcon className="animate-spin" />
+              ) : (
+                <SendIcon />
+              )}
               提交发布
             </Button>
           ) : (
@@ -911,6 +963,7 @@ export function PublicationCenterPage({
               type="button"
               size="sm"
               disabled={!canPrepare}
+              title={canPrepare ? undefined : "当前角色无权准备新版本"}
               onClick={startPrepareRevision}
             >
               <HistoryIcon />
@@ -925,14 +978,8 @@ export function PublicationCenterPage({
               size="sm"
               variant="outline"
               onClick={() => {
-                const reason = window.prompt("请填写暂停原因", pauseReason)
-                if (reason == null) return
-                if (!reason.trim()) {
-                  window.alert("暂停原因不能为空")
-                  return
-                }
-                setPauseReason(reason.trim())
-                setPauseOpen(true)
+                setPauseReason("")
+                setPauseReasonOpen(true)
               }}
             >
               <PauseIcon />
@@ -947,7 +994,7 @@ export function PublicationCenterPage({
         <CardHeader className="pb-2">
           <CardTitle className="text-base">发布身份与版本</CardTitle>
           <CardDescription>
-            稳定发布对象、当前商城生效版与最新待确认版并列，不混成一个值。
+            展示商城实际生效版本与最新提交版本，避免误判。
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -998,7 +1045,7 @@ export function PublicationCenterPage({
           {data.currentAckedRevisionNo != null &&
           data.latestRevisionNo !== data.currentAckedRevisionNo ? (
             <p className="mt-2 text-xs text-muted-foreground">
-              最新 r{data.latestRevisionNo} 尚未被商城确认；界面不得将其显示为商城已生效。
+              最新 r{data.latestRevisionNo} 尚未被商城确认，商城生效前仍按待确认处理。
             </p>
           ) : null}
         </CardContent>
@@ -1023,7 +1070,13 @@ export function PublicationCenterPage({
 
       {data.safetyPause ? (
         <div id="pub-section-overview-safety">
-          <SafetyPausePanel pause={data.safetyPause} />
+          <SafetyPausePanel
+            pause={data.safetyPause}
+            sourceObjectLabel={`${data.selectedRevision.fixedOffering.supplierName} · ${data.identity.skuCode}`}
+            affectedPublicationLabels={{
+              [data.identity.publicationId]: data.identity.publicationCode,
+            }}
+          />
         </div>
       ) : null}
 
@@ -1046,19 +1099,7 @@ export function PublicationCenterPage({
                     <span className="num">{data.identity.publicationCode}</span>
                   ),
                 },
-                {
-                  id: "stableId",
-                  label: "稳定 ID",
-                  value: (
-                    <span className="num">{data.identity.publicationId}</span>
-                  ),
-                },
                 { id: "owner", label: "负责人", value: data.ownerLabel },
-                {
-                  id: "objVer",
-                  label: "版本",
-                  value: <span className="num">{data.objectVersion}</span>,
-                },
                 {
                   id: "selRev",
                   label: "当前选中修订",
@@ -1079,8 +1120,6 @@ export function PublicationCenterPage({
               <Alert variant="warning" className="mt-3">
                 <AlertTitle>动作阻断</AlertTitle>
                 <AlertDescription>
-                  <span className="font-mono text-xs">{publishBlocker.code}</span>
-                  {" · "}
                   {publishBlocker.message}
                 </AlertDescription>
               </Alert>
@@ -1103,9 +1142,7 @@ export function PublicationCenterPage({
                 <Alert variant="info">
                   <AlertTitle>基于历史/当前版本的本次编辑</AlertTitle>
                   <AlertDescription>
-                    基线修订{" "}
-                    <span className="num">{sessionEdit?.baselineRevisionId}</span>
-                    。最小购买量需运营确认填写，不随供应商起订量带入；销售价与供货价分开填写。
+                    基于 r{data.selectedRevision.revisionNo} 版本开始编辑。最小购买量需运营确认填写，不随供应商起订量带入；销售价与供货价分开填写。
                   </AlertDescription>
                 </Alert>
                 <form.AppField name="name">
@@ -1203,7 +1240,7 @@ export function PublicationCenterPage({
                   {sessionEdit?.media.map((media, index) => (
                     <div key={media.fileAssetId} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_2fr]">
                       <div className="text-xs text-muted-foreground">
-                        {media.mediaRole} · {media.fileAssetId} · 顺序 {media.sortNo}
+                        {MEDIA_ROLE_LABEL[media.mediaRole]} · 顺序 {media.sortNo}
                       </div>
                       <form.AppField name={`media[${index}].altText`}>
                         {(field) => <field.TextField label="图片说明" />}
@@ -1217,7 +1254,10 @@ export function PublicationCenterPage({
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <form.AppForm>
-                    <form.SubmitButton label="核对并提交发布" />
+                    <form.SubmitButton
+                      label="核对并提交发布"
+                      disabled={publishBlocked}
+                    />
                   </form.AppForm>
                   <Button
                     type="button"
@@ -1226,14 +1266,19 @@ export function PublicationCenterPage({
                   >
                     放弃
                   </Button>
-                  <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                  {publishBlocked ? (
+                    <span className="text-xs text-destructive">
+                      {publishBlocker?.message ?? "当前状态不允许提交发布。"}
+                    </span>
+                  ) : null}
+                  <span className="flex items-center gap-2 rounded-md border border-dashed border-border px-2 py-1 text-xs text-muted-foreground">
                     <input
                       type="checkbox"
                       checked={forceUnknownOnce}
                       onChange={(e) => setForceUnknownOnce(e.target.checked)}
                     />
-                    演示：强制结果未知一次
-                  </label>
+                    演示：强制结果未知一次（仅演示环境，误勾选会让本次提交无法确认）
+                  </span>
                 </div>
               </form>
             ) : (
@@ -1275,12 +1320,6 @@ export function PublicationCenterPage({
             <Card>
               <CardContent className="space-y-2 pt-4 text-sm">
                 <div>
-                  供给修订{" "}
-                  <span className="num font-medium">
-                    {data.selectedRevision.supplierOfferingRevisionId}
-                  </span>
-                </div>
-                <div>
                   供应商 {data.selectedRevision.fixedOffering.supplierName}
                 </div>
                 <div>
@@ -1306,7 +1345,24 @@ export function PublicationCenterPage({
           <DocumentSection
             id="pub-section-delivery"
             title="发送与版本"
-            description="不可变版本时间线与发送尝试"
+            description="各版本发送与商城确认时间线"
+            action={
+              isViewingHistoricalRevision ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  onClick={() => {
+                    const sp = new URLSearchParams(searchParams.toString())
+                    sp.delete("revision")
+                    const qs = sp.toString()
+                    router.replace(qs ? `${pathname}?${qs}` : pathname)
+                  }}
+                >
+                  回到最新版本
+                </Button>
+              ) : undefined
+            }
           >
             <RevisionTimeline
               revisions={data.revisions
@@ -1417,6 +1473,9 @@ export function PublicationCenterPage({
                                 }
                               }}
                             >
+                              {retryMutation.isPending ? (
+                                <LoaderCircleIcon className="animate-spin" />
+                              ) : null}
                               重试发送
                             </Button>
                           ) : null}
@@ -1431,7 +1490,7 @@ export function PublicationCenterPage({
                                 />
                               }
                             >
-                              打开错误处理
+                              {goToWorkspaceLabel("W29")}
                             </Button>
                           ) : null}
                         </div>
@@ -1452,9 +1511,6 @@ export function PublicationCenterPage({
                         </div>
                         {d.errorSummary ? (
                           <p className="mt-1 text-xs text-destructive">
-                            {d.errorCode ? (
-                              <span className="font-mono">{d.errorCode} · </span>
-                            ) : null}
                             {d.errorSummary}
                           </p>
                         ) : null}
@@ -1510,10 +1566,7 @@ export function PublicationCenterPage({
                 tone="neutral"
               />
               <div className="pt-2 text-xs">
-                供给{" "}
-                <span className="num">
-                  {data.selectedRevision.supplierOfferingRevisionId}
-                </span>
+                供给 {data.selectedRevision.fixedOffering.supplierName}
               </div>
             </CardContent>
           </Card>
@@ -1550,19 +1603,18 @@ export function PublicationCenterPage({
                 `目标商城 ${data.identity.targetMallName}`,
                 `含税销售价 ¥${form.state.values.salesPriceGross}`,
                 `销售状态 ${SALE_STATUS_LABEL[form.state.values.saleStatus]}`,
-                `固定供给 ${form.state.values.supplierOfferingRevisionId}`,
+                `固定供给 ${data.selectedRevision.fixedOffering.supplierName}`,
                 `最小购买量 ${form.state.values.minimumPurchaseQuantity}`,
-                `发布检查：${data.publishGate.kind}`,
               ]
             : []
         }
         effects={[
-          "形成不可变发布修订与发送记录",
+          "形成新的发布版本并发送",
           "商城确认前不显示为商城已生效",
           "不覆盖历史修订",
         ]}
         nextDepartment="商城接收确认"
-        irreversibleEffects={["写入新的发布修订号与发送编号"]}
+        irreversibleEffects={["写入新的发布版本号与发送编号"]}
         pending={publishMutation.isPending}
         onConfirm={() => void doPublish()}
       />
@@ -1585,6 +1637,63 @@ export function PublicationCenterPage({
         pending={pauseMutation.isPending}
         onConfirm={() => void doPause()}
       />
+
+      <AlertDialog
+        open={pauseReasonOpen}
+        onOpenChange={(open) => {
+          if (!open) setPauseReasonOpen(false)
+        }}
+      >
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>填写暂停原因</AlertDialogTitle>
+            <AlertDialogDescription>
+              原因将随暂停修订一起记录；必填，最多 100 字。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-1.5">
+              {["价格调整", "库存不足", "营销调整", "商品下架"].map((quick) => (
+                <Button
+                  key={quick}
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  onClick={() => setPauseReason(quick)}
+                >
+                  {quick}
+                </Button>
+              ))}
+            </div>
+            <Textarea
+              value={pauseReason}
+              onChange={(e) => setPauseReason(e.target.value.slice(0, 100))}
+              placeholder="请填写暂停原因"
+              aria-label="暂停原因"
+              rows={3}
+            />
+            {pauseReason.trim() ? (
+              <p className="text-xs text-muted-foreground">
+                {pauseReason.length}/100
+              </p>
+            ) : null}
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPauseReasonOpen(false)}>
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!pauseReason.trim()}
+              onClick={() => {
+                setPauseReasonOpen(false)
+                setPauseOpen(true)
+              }}
+            >
+              下一步
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
     </div>
   )

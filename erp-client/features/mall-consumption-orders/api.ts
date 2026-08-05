@@ -36,7 +36,7 @@ import {
 } from "@/mock/mall-consumption-orders"
 
 const BOUNDARY_NOTICE =
-  "W25 是由不可变关键记录形成的追溯视图，不是商城可变员工订单的实时副本，也不是第二个商城订单写入口。仅展示支付成功、取消、退款、完成、余额恢复五类结果记录。"
+  "本页是商城消费记录的只读快照，仅展示支付成功、取消、退款、完成、余额恢复五类结果记录；不是商城可变订单的实时副本，也不是第二个商城订单写入口。"
 
 function nowIso() {
   return new Date().toISOString()
@@ -417,10 +417,12 @@ export async function fetchConsumptionOrderList(
   }
 
   const allRows = CONSUMPTION_ORDER_SEEDS.map((s) => s.row)
-  const metrics = computeMetrics(allRows)
   const filtered = applyFilters(allRows, query)
-  const page = Math.max(1, query.page ?? 1)
+  // 指标与当前筛选上下文联动，可作为筛选结果的校验依据
+  const metrics = computeMetrics(filtered)
   const pageSize = Math.max(1, query.pageSize ?? 8)
+  const maxPage = Math.max(1, Math.ceil(filtered.length / pageSize))
+  const page = Math.min(Math.max(1, query.page ?? 1), maxPage)
   const start = (page - 1) * pageSize
   const pageRows = filtered.slice(start, start + pageSize)
 

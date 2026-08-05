@@ -43,7 +43,8 @@ export function useCustomerQualityQuery(
         scopeId: "",
         fundsReview: "all",
         sort: "salesGrossAmount:desc",
-        pageSize: 50,
+        page: 1,
+        pageSize: 20,
       }
     ),
     queryFn: () => fetchCustomerQuality(query!),

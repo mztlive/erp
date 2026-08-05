@@ -38,6 +38,26 @@ export type PurchaseOrderMetricFilter =
   | "fulfill"
   | "gate_blocked"
 
+export const PO_METRIC_LABEL: Record<PurchaseOrderMetricFilter, string> = {
+  all: "全部采购单",
+  pending_create: "可建单依据",
+  draft: "草稿",
+  review: "待财务审核",
+  fulfill: "待履约",
+  gate_blocked: "先款门禁阻塞",
+}
+
+export const PO_STATUS_FILTER_LABEL: Record<PurchaseOrderStatusFilter, string> =
+  {
+    all: "全部状态",
+    DRAFT: "草稿",
+    PENDING_REVIEW: "待财务审核",
+    EFFECTIVE: "已生效",
+    PARTIAL: "部分执行",
+    COMPLETED: "已完成",
+    VOID: "已作废",
+  }
+
 export type ActionBlocker = {
   action: string
   code: string
@@ -327,3 +347,13 @@ export const REJECT_REASON_LABEL: Record<string, string> = {
   ALLOCATION: "销售分配错误",
   OTHER: "其它",
 }
+
+/** 付款条件可选全集（含履约语义后缀）；保存时直接使用所选 label，不做二次映射 */
+export const PAYMENT_TERM_OPTIONS: readonly { value: string; label: string }[] =
+  [
+    { value: "PREPAY_100", label: "先款 100% 后履约" },
+    { value: "PREPAY_50", label: "先款 50% 后直发" },
+    { value: "PREPAY_30", label: "先款 30%" },
+    { value: "POSTPAY_NET15", label: "货到 15 天" },
+    { value: "POSTPAY_NET30", label: "货到 30 天" },
+  ]

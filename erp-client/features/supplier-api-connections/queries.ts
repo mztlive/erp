@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
   bindCredentialReference,
+  bindEndpointReference,
   confirmCapabilityRequirement,
   createConnection,
   disableConnection,
@@ -67,6 +68,16 @@ export function useBindCredentialMutation() {
   const invalidate = useInvalidateAll()
   return useMutation({
     mutationFn: bindCredentialReference,
+    onSuccess: async (result) => {
+      if (result.status === "succeeded") await invalidate()
+    },
+  })
+}
+
+export function useBindEndpointMutation() {
+  const invalidate = useInvalidateAll()
+  return useMutation({
+    mutationFn: bindEndpointReference,
     onSuccess: async (result) => {
       if (result.status === "succeeded") await invalidate()
     },

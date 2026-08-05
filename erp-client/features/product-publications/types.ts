@@ -256,6 +256,11 @@ export type ProductPublicationListResult = {
   creationBlocker: PublicationCreationBlocker
   filterSummary: string
   emptyReason?: "NO_DATA" | "FILTER_NO_RESULT" | "NO_DATA_SCOPE"
+  /** 深链筛选的业务显示名（SKU 编号 / 供给供应商名），界面不得展示原始 ID */
+  resolvedFilters: {
+    skuCode?: string
+    supplierName?: string
+  }
 }
 
 export type PublicationMediaItem = {
@@ -538,4 +543,18 @@ export const MEDIA_ROLE_LABEL: Record<
   MAIN: "主图",
   CAROUSEL: "轮播图",
   DETAIL: "详情图",
+}
+
+export const MEDIA_SCAN_STATUS_LABEL: Record<
+  PublicationMediaItem["securityScanStatus"],
+  string
+> = {
+  PASSED: "已通过",
+  PENDING: "检查中",
+  FAILED: "未通过",
+}
+
+/** 安全暂停后续任务类型中文名（禁止枚举原值上屏）。 */
+export const WORK_ITEM_TYPE_LABEL: Record<string, string> = {
+  BUSINESS_EXCEPTION: "业务异常",
 }

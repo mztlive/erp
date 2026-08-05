@@ -38,7 +38,10 @@ import {
 } from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
 import { MALLS } from "@/features/product-publications/api"
-import { usePublicationListQuery } from "@/features/product-publications/queries"
+import {
+  usePublicationDetailQuery,
+  usePublicationListQuery,
+} from "@/features/product-publications/queries"
 import { SafetyPausePanel } from "@/features/product-publications/safety-pause-panel"
 import type {
   ProductPublicationListQuery,
@@ -76,10 +79,8 @@ export function ProductPublicationsListPage() {
 
   const [searchInput, setSearchInput] = React.useState(qParam)
   const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-  const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 20,
-  })
+  const pageFromUrl = Math.max(1, Number(searchParams.get("page") ?? "1") || 1)
+  const [pageSize, setPageSize] = React.useState(20)
   const [previewId, setPreviewId] = React.useState<string | null>(null)
   const [columnPinning] = React.useState<ColumnPinningState>({
     left: ["sku"],
@@ -87,8 +88,10 @@ export function ProductPublicationsListPage() {
   })
 
   React.useEffect(() => {
-    // URL is source of truth when filters/metrics change outside the search box
-     
+    // URL is source of truth when filters/metrics change outside the search box；
+    // 用户正在输入（焦点在搜索框）时不得用 URL 旧值覆盖草稿
+    const el = searchInputRef.current
+    if (el && document.activeElement === el) return
     setSearchInput(qParam)
   }, [qParam])
 
@@ -122,14 +125,19 @@ export function ProductPublicationsListPage() {
       publicationStatus === "all" ? undefined : publicationStatus,
     deliveryStatus: deliveryStatus === "all" ? undefined : deliveryStatus,
     metric: metric === "all" ? undefined : metric,
-    page: pagination.pageIndex + 1,
-    pageSize: pagination.pageSize,
+    page: pageFromUrl,
+    pageSize,
   }
 
   const listQuery = usePublicationListQuery(query)
   const data = listQuery.data
   const items = data?.items ?? []
-  const previewRow = items.find((r) => r.publicationId === previewId) ?? null
+  const pagination: PaginationState = {
+    pageIndex: pageFromUrl - 1,
+    pageSize,
+  }
+  const previewQuery = usePublicationDetailQuery(previewId)
+  const previewRow = previewQuery.data
 
   const replaceParams = React.useCallback(
     (patch: Record<string, string | undefined>) => {
@@ -138,9 +146,9 @@ export function ProductPublicationsListPage() {
         if (!v || v === "all") sp.delete(k)
         else sp.set(k, v)
       }
+      sp.delete("page")
       const qs = sp.toString()
       router.replace(qs ? `${pathname}?${qs}` : pathname)
-      setPagination((p) => ({ ...p, pageIndex: 0 }))
     },
     [pathname, router, searchParams]
   )
@@ -148,6 +156,18 @@ export function ProductPublicationsListPage() {
   const commitSearch = () => {
     replaceParams({ q: searchInput.trim() || undefined })
   }
+
+  const handlePaginationChange = React.useCallback(
+    (next: PaginationState) => {
+      setPageSize(next.pageSize)
+      const sp = new URLSearchParams(searchParams.toString())
+      if (next.pageIndex <= 0) sp.delete("page")
+      else sp.set("page", String(next.pageIndex + 1))
+      const qs = sp.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
+    },
+    [pathname, router, searchParams]
+  )
 
   const columns = React.useMemo<ColumnDef<ProductPublicationRow>[]>(
     () => [
@@ -217,10 +237,6 @@ export function ProductPublicationsListPage() {
           <div className="min-w-0 text-sm">
             <div className="truncate">{row.original.fixedOffering.supplierName}</div>
             <div className="truncate text-xs text-muted-foreground">
-              <span className="num">
-                {row.original.fixedOffering.offeringRevisionId}
-              </span>
-              {" · "}
               {row.original.fixedOffering.availabilityLabel}
             </div>
           </div>
@@ -279,8 +295,8 @@ export function ProductPublicationsListPage() {
       },
       {
         id: "ackAt",
-        header: "商城确认",
-        meta: { label: "商城确认", width: "default", numeric: true },
+        header: "商城确认时间",
+        meta: { label: "商城确认时间", width: "default", numeric: true },
         cell: ({ row }) => (
           <span className="num text-xs text-muted-foreground">
             {row.original.latestDelivery?.mallAckAt
@@ -344,7 +360,7 @@ export function ProductPublicationsListPage() {
           <DataFreshness
             updatedAt="列表"
             dateTime={data?.queriedAt}
-            state={listQuery.isFetching ? "stale" : "fresh"}
+            state={listQuery.isFetching ? "syncing" : "fresh"}
             label="发布列表"
           />
         }
@@ -377,10 +393,6 @@ export function ProductPublicationsListPage() {
           <PlusIcon />
           <AlertTitle>新建已阻断</AlertTitle>
           <AlertDescription>
-            <span className="font-mono text-xs">
-              {data.creationBlocker.code}
-            </span>
-            {" · "}
             {data.creationBlocker.message}
           </AlertDescription>
         </Alert>
@@ -395,6 +407,8 @@ export function ProductPublicationsListPage() {
             replaceParams({
               metric:
                 metric === "pending_publish" ? undefined : "pending_publish",
+              deliveryStatus: undefined,
+              publicationStatus: undefined,
             })
           }
         />
@@ -407,6 +421,7 @@ export function ProductPublicationsListPage() {
               metric:
                 metric === "pending_confirm" ? undefined : "pending_confirm",
               deliveryStatus: undefined,
+              publicationStatus: undefined,
             })
           }
         />
@@ -418,6 +433,8 @@ export function ProductPublicationsListPage() {
             replaceParams({
               metric:
                 metric === "failed_handoff" ? undefined : "failed_handoff",
+              deliveryStatus: undefined,
+              publicationStatus: undefined,
             })
           }
         />
@@ -428,6 +445,8 @@ export function ProductPublicationsListPage() {
           onClick={() =>
             replaceParams({
               metric: metric === "mall_live" ? undefined : "mall_live",
+              deliveryStatus: undefined,
+              publicationStatus: undefined,
             })
           }
         />
@@ -438,6 +457,8 @@ export function ProductPublicationsListPage() {
           onClick={() =>
             replaceParams({
               metric: metric === "paused" ? undefined : "paused",
+              deliveryStatus: undefined,
+              publicationStatus: undefined,
             })
           }
         />
@@ -486,10 +507,13 @@ export function ProductPublicationsListPage() {
             <OptionCombobox
               value={publicationStatus}
               onValueChange={(v) =>
-                replaceParams({ publicationStatus: v ?? "all" })
+                replaceParams({
+                  publicationStatus: v ?? "all",
+                  metric: undefined,
+                })
               }
               options={[
-                { value: "all", label: "发布状态" },
+                { value: "all", label: "有效发布" },
                 ...(
                   Object.keys(PUBLICATION_STATUS_LABEL) as Array<
                     keyof typeof PUBLICATION_STATUS_LABEL
@@ -528,6 +552,8 @@ export function ProductPublicationsListPage() {
             />
             {(qParam ||
               mallId ||
+              skuId ||
+              supplierOfferingRevisionId ||
               publicationStatus !== "all" ||
               deliveryStatus !== "all" ||
               metric !== "all") && (
@@ -538,7 +564,6 @@ export function ProductPublicationsListPage() {
                 onClick={() => {
                   setSearchInput("")
                   router.replace(pathname)
-                  setPagination((p) => ({ ...p, pageIndex: 0 }))
                 }}
               >
                 清除筛选
@@ -548,13 +573,60 @@ export function ProductPublicationsListPage() {
         }
       />
 
+      {(skuId && data?.resolvedFilters.skuCode) ||
+      (supplierOfferingRevisionId && data?.resolvedFilters.supplierName) ? (
+        <div
+          className="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="来源筛选"
+        >
+          {skuId && data?.resolvedFilters.skuCode ? (
+            <Badge variant="outline" className="gap-1">
+              已按 SKU：{data.resolvedFilters.skuCode}
+              <button
+                type="button"
+                aria-label={`移除按 ${data.resolvedFilters.skuCode} 筛选`}
+                className="ml-1 text-muted-foreground hover:text-foreground"
+                onClick={() =>
+                  replaceParams({
+                    skuId: undefined,
+                    supplierOfferingRevisionId: undefined,
+                  })
+                }
+              >
+                ×
+              </button>
+            </Badge>
+          ) : null}
+          {supplierOfferingRevisionId &&
+          data?.resolvedFilters.supplierName ? (
+            <Badge variant="outline" className="gap-1">
+              已按固定供给：{data.resolvedFilters.supplierName}
+              <button
+                type="button"
+                aria-label={`移除按 ${data.resolvedFilters.supplierName} 筛选`}
+                className="ml-1 text-muted-foreground hover:text-foreground"
+                onClick={() =>
+                  replaceParams({
+                    skuId: undefined,
+                    supplierOfferingRevisionId: undefined,
+                  })
+                }
+              >
+                ×
+              </button>
+            </Badge>
+          ) : null}
+        </div>
+      ) : null}
+
       {data?.filterSummary ? (
         <p className="text-xs text-muted-foreground">{data.filterSummary}</p>
       ) : null}
 
       <BusinessTableFrame
         title="发布列表"
-        description="SKU 与操作列固定；列表采用紧凑行距。"
+        description="管理各 SKU 在目标商城的发布版本与发送确认状态。"
         table={
           listQuery.isPending ? (
             <div className="h-64 animate-pulse rounded-lg bg-muted" aria-busy />
@@ -581,8 +653,23 @@ export function ProductPublicationsListPage() {
               }
               description={
                 data?.emptyReason === "FILTER_NO_RESULT"
-                  ? "可清除筛选或调整条件后重试。"
+                  ? "可清除筛选或调整条件后重试；已失效发布请在「发布状态」选择「已失效」查看。"
                   : data?.creationBlocker.message
+              }
+              action={
+                data?.emptyReason === "FILTER_NO_RESULT" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setSearchInput("")
+                      router.replace(pathname)
+                    }}
+                  >
+                    清除筛选
+                  </Button>
+                ) : undefined
               }
             />
           ) : (
@@ -595,7 +682,7 @@ export function ProductPublicationsListPage() {
               enableColumnPinning
               columnPinning={columnPinning}
               pagination={pagination}
-              onPaginationChange={setPagination}
+              onPaginationChange={handlePaginationChange}
               rowCount={data?.total ?? 0}
               manualPagination
               loading={listQuery.isFetching}
@@ -617,23 +704,25 @@ export function ProductPublicationsListPage() {
         onOpenChange={(open) => {
           if (!open) setPreviewId(null)
         }}
-        title={previewRow?.productName ?? "发布预览"}
+        title={previewRow?.selectedRevision.name ?? "发布预览"}
         description={
           previewRow
-            ? `${previewRow.skuCode} · ${previewRow.targetMallName}`
+            ? `${previewRow.identity.skuCode} · ${previewRow.identity.targetMallName}`
             : undefined
         }
       >
-        {previewRow ? (
+        {previewQuery.isPending ? (
+          <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
+        ) : previewRow ? (
           <div className="space-y-3 text-sm">
             <dl className="grid gap-2 sm:grid-cols-2">
               <div>
                 <dt className="text-xs text-muted-foreground">发布编号</dt>
-                <dd className="num">{previewRow.publicationCode}</dd>
+                <dd className="num">{previewRow.identity.publicationCode}</dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">发布状态</dt>
-                <dd>{previewRow.publicationStatusLabel}</dd>
+                <dd>{previewRow.statusLabel}</dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">商城生效版</dt>
@@ -654,28 +743,36 @@ export function ProductPublicationsListPage() {
               <div>
                 <dt className="text-xs text-muted-foreground">固定供给</dt>
                 <dd>
-                  {previewRow.fixedOffering.supplierName}
-                  <div className="num text-xs text-muted-foreground">
-                    {previewRow.fixedOffering.offeringRevisionId}
+                  {previewRow.selectedRevision.fixedOffering.supplierName}
+                  <div className="text-xs text-muted-foreground">
+                    {previewRow.selectedRevision.fixedOffering.availabilityLabel}
                   </div>
                 </dd>
               </div>
               <div>
                 <dt className="text-xs text-muted-foreground">商城接收</dt>
                 <dd>
-                  {previewRow.latestDelivery?.statusLabel ?? "—"}
-                  {previewRow.latestDelivery?.errorSummary ? (
-                    <div className="text-xs text-destructive">
-                      {previewRow.latestDelivery.errorSummary}
-                    </div>
-                  ) : null}
+                  {(() => {
+                    const latestDelivery = previewRow.deliveries.find(
+                      (d) => d.revisionId === previewRow.latestRevisionId
+                    )
+                    return latestDelivery?.statusLabel ?? "—"
+                  })()}
                 </dd>
               </div>
             </dl>
             {previewRow.safetyPause ? (
               <>
                 <Separator />
-                <SafetyPausePanel pause={previewRow.safetyPause} compact />
+                <SafetyPausePanel
+                  pause={previewRow.safetyPause}
+                  compact
+                  sourceObjectLabel={`${previewRow.selectedRevision.fixedOffering.supplierName} · ${previewRow.identity.skuCode}`}
+                  affectedPublicationLabels={{
+                    [previewRow.identity.publicationId]:
+                      previewRow.identity.publicationCode,
+                  }}
+                />
               </>
             ) : null}
             <Button
@@ -683,7 +780,7 @@ export function ProductPublicationsListPage() {
               className="w-full"
               render={
                 <Link
-                  href={`/commerce/publications/${encodeURIComponent(previewRow.publicationId)}`}
+                  href={`/commerce/publications/${encodeURIComponent(previewRow.identity.publicationId)}`}
                 />
               }
             >

@@ -55,6 +55,11 @@ interface DocumentAttachmentListProps
   uploadDisabled?: boolean
   requiredMissing?: boolean
   title?: React.ReactNode
+  /**
+   * 附件「打开」动作的 aria-label 动词。
+   * 行为是下载/打开文件而不是在线查看时，传「下载」保持文案与实际一致。
+   */
+  openLabel?: string
 }
 
 function DocumentAttachmentList({
@@ -64,6 +69,7 @@ function DocumentAttachmentList({
   uploadDisabled = false,
   requiredMissing = false,
   title = "附件",
+  openLabel = "查看",
   className,
   ...props
 }: DocumentAttachmentListProps) {
@@ -116,7 +122,7 @@ function DocumentAttachmentList({
                   <AttachmentAction
                     type="button"
                     onClick={attachment.onOpen}
-                    aria-label={`查看 ${attachment.name}`}
+                    aria-label={`${openLabel} ${attachment.name}`}
                   >
                     <EyeIcon aria-hidden="true" />
                   </AttachmentAction>

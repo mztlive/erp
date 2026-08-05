@@ -13,11 +13,13 @@ import {
 } from "lucide-react"
 
 import {
+  BusinessFailureState,
   BusinessStatusBadge,
   DocumentHeader,
   DocumentSection,
   FormalActionConfirmDialog,
   FormalActionResult,
+  GuardedBusinessAction,
   MoneyValue,
   OptionCombobox,
   PageHeader,
@@ -29,6 +31,15 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -72,9 +83,16 @@ import type {
   OrderSection,
 } from "@/features/supplier-orders/types"
 import {
+  CANCEL_STATUS_LABEL,
   DEFER_REASON_OPTIONS,
+  FULFILLMENT_STATUS_LABEL,
+  LEASE_DISPOSITION_LABEL,
+  REFUND_STATUS_LABEL,
   SECTION_LABEL,
   SECTIONS,
+  WORK_ITEM_STATUS_LABEL,
+  WORK_ITEM_TYPE_LABEL,
+  codeVersion,
 } from "@/features/supplier-orders/types"
 
 function resolveSection(raw?: string | null): OrderSection {
@@ -129,6 +147,12 @@ export function SupplierOrderCenterPage({
   } | null>(null)
   const [replayOpen, setReplayOpen] = React.useState(false)
   const [deferOpen, setDeferOpen] = React.useState(false)
+  const [afterSalesConfirm, setAfterSalesConfirm] = React.useState<{
+    requestId: string
+    requestNo: string
+    mallRequestRef: string
+    action: "CANCEL" | "REFUND"
+  } | null>(null)
   const titleRef = React.useRef<HTMLSpanElement>(null)
 
   const detail = query.data
@@ -177,8 +201,18 @@ export function SupplierOrderCenterPage({
       })
       setDeferOpen(false)
       setResult({
-        status: res.status === "succeeded" ? "succeeded" : "blocked",
-        title: res.status === "succeeded" ? "已跳过本轮" : "跳过失败",
+        status:
+          res.status === "succeeded"
+            ? "succeeded"
+            : res.status === "blocked"
+              ? "blocked"
+              : "rejected",
+        title:
+          res.status === "succeeded"
+            ? "本轮已跳过"
+            : res.status === "blocked"
+              ? "跳过被阻断"
+              : "跳过未成功",
         description: res.message,
         reference: res.reference,
         facts: res.data
@@ -186,16 +220,14 @@ export function SupplierOrderCenterPage({
               {
                 label: "任务状态",
                 value:
-                  res.data.workItemStatus === "PENDING"
-                    ? "待处理"
-                    : res.data.workItemStatus,
+                  WORK_ITEM_STATUS_LABEL[res.data.workItemStatus] ??
+                  res.data.workItemStatus,
               },
               {
                 label: "处理状态",
                 value:
-                  res.data.leaseDisposition === "RELEASED"
-                    ? "本次处理已结束"
-                    : res.data.leaseDisposition,
+                  LEASE_DISPOSITION_LABEL[res.data.leaseDisposition] ??
+                  res.data.leaseDisposition,
               },
               {
                 label: "原因",
@@ -259,97 +291,121 @@ export function SupplierOrderCenterPage({
       })
       return
     }
-    const res = await queryResultMutation.mutateAsync({
-      orderId: supplierOrderId,
-      expectedLockVersion: detail.order.lockVersion,
-      targetSupplierActionId: detail.placeActionId,
-      operationId: `op-query-${Date.now()}`,
-      idempotencyKey: `query-center-${supplierOrderId}-${Date.now()}`,
-      workItemId: detail.workItem?.workItemId ?? workItemId,
-      expectedSubjectHash: detail.workItem?.subjectHash,
-      expectedSubjectVersion: detail.workItem?.subjectVersion,
-    })
-    setResult({
-      status:
-        res.status === "succeeded"
-          ? "succeeded"
-          : res.status === "unknown"
-            ? "unknown"
-            : res.status === "blocked"
-              ? "blocked"
-              : "rejected",
-      title:
-        res.status === "succeeded"
-          ? "查询原结果已完成"
-          : res.status === "unknown"
-            ? "查询结果仍未知"
-            : "查询未成功",
-      description: res.message,
-      reference: res.reference ?? res.operationId,
-      facts: res.data
-        ? [
-            {
-              label: "证据结论",
-              value: res.data.evidence.outcomeLabel,
-            },
-            {
-              label: "可安全重试",
-              value: res.data.evidence.canSafeRetry ? "是" : "否",
-            },
-            {
-              label: "任务状态",
-              value: res.data.workItemStatus ?? "（非任务入口）",
-            },
-            {
-              label: "说明",
-              value: res.data.evidence.summary,
-            },
-          ]
-        : undefined,
-    })
+    try {
+      const res = await queryResultMutation.mutateAsync({
+        orderId: supplierOrderId,
+        expectedLockVersion: detail.order.lockVersion,
+        targetSupplierActionId: detail.placeActionId,
+        operationId: `op-query-${Date.now()}`,
+        idempotencyKey: `query-center-${supplierOrderId}-${Date.now()}`,
+        workItemId: detail.workItem?.workItemId ?? workItemId,
+        expectedSubjectHash: detail.workItem?.subjectHash,
+        expectedSubjectVersion: detail.workItem?.subjectVersion,
+      })
+      setResult({
+        status:
+          res.status === "succeeded"
+            ? "succeeded"
+            : res.status === "unknown"
+              ? "unknown"
+              : res.status === "blocked"
+                ? "blocked"
+                : "rejected",
+        title:
+          res.status === "succeeded"
+            ? "查询原结果已完成"
+            : res.status === "unknown"
+              ? "查询结果仍未知"
+              : "查询未成功",
+        description: res.message,
+        reference: res.reference,
+        facts: res.data
+          ? [
+              {
+                label: "证据结论",
+                value: res.data.evidence.outcomeLabel,
+              },
+              {
+                label: "可安全重试",
+                value: res.data.evidence.canSafeRetry ? "是" : "否",
+              },
+              {
+                label: "任务状态",
+                value: res.data.workItemStatus
+                  ? (WORK_ITEM_STATUS_LABEL[res.data.workItemStatus] ??
+                    res.data.workItemStatus)
+                  : "（非任务入口）",
+              },
+              {
+                label: "说明",
+                value: res.data.evidence.summary,
+              },
+            ]
+          : undefined,
+      })
+    } catch (error) {
+      setResult({
+        status: "rejected",
+        title: "查询未完成",
+        description:
+          error instanceof Error ? error.message : "查询失败，请稍后重试",
+      })
+    }
   }
 
   async function handleReplay() {
     if (!detail) return
-    const res = await replayMutation.mutateAsync({
-      orderId: supplierOrderId,
-      expectedLockVersion: detail.order.lockVersion,
-      targetSupplierActionId: detail.placeActionId,
-      operationId: `op-replay-${Date.now()}`,
-      idempotencyKey: `replay-center-${supplierOrderId}-${Date.now()}`,
-      workItemId: detail.workItem?.workItemId ?? workItemId,
-      expectedSubjectHash: detail.workItem?.subjectHash,
-      expectedSubjectVersion: detail.workItem?.subjectVersion,
-    })
-    setReplayOpen(false)
-    setResult({
-      status:
-        res.status === "succeeded"
-          ? "succeeded"
-          : res.status === "blocked"
-            ? "blocked"
-            : "rejected",
-      title: res.status === "succeeded" ? "已安全重发" : "未重发",
-      description: res.message,
-      reference: res.reference,
-      facts: res.data
-        ? [
-            { label: "外部单号", value: res.data.externalOrderNo ?? "—" },
-            {
-              label: "履约状态",
-              value: res.data.fulfillmentStatus,
-            },
-            {
-              label: "任务状态",
-              value: res.data.workItemStatus ?? "（非任务入口）",
-            },
-            {
-              label: "证据",
-              value: res.data.evidence.summary,
-            },
-          ]
-        : undefined,
-    })
+    try {
+      const res = await replayMutation.mutateAsync({
+        orderId: supplierOrderId,
+        expectedLockVersion: detail.order.lockVersion,
+        targetSupplierActionId: detail.placeActionId,
+        operationId: `op-replay-${Date.now()}`,
+        idempotencyKey: `replay-center-${supplierOrderId}-${Date.now()}`,
+        workItemId: detail.workItem?.workItemId ?? workItemId,
+        expectedSubjectHash: detail.workItem?.subjectHash,
+        expectedSubjectVersion: detail.workItem?.subjectVersion,
+      })
+      setReplayOpen(false)
+      setResult({
+        status:
+          res.status === "succeeded"
+            ? "succeeded"
+            : res.status === "blocked"
+              ? "blocked"
+              : "rejected",
+        title: res.status === "succeeded" ? "已安全重发" : "未重发",
+        description: res.message,
+        reference: res.reference,
+        facts: res.data
+          ? [
+              { label: "外部单号", value: res.data.externalOrderNo ?? "—" },
+              {
+                label: "履约状态",
+                value: FULFILLMENT_STATUS_LABEL[res.data.fulfillmentStatus],
+              },
+              {
+                label: "任务状态",
+                value: res.data.workItemStatus
+                  ? (WORK_ITEM_STATUS_LABEL[res.data.workItemStatus] ??
+                    res.data.workItemStatus)
+                  : "（非任务入口）",
+              },
+              {
+                label: "证据",
+                value: res.data.evidence.summary,
+              },
+            ]
+          : undefined,
+      })
+    } catch (error) {
+      setResult({
+        status: "rejected",
+        title: "重发未完成",
+        description:
+          error instanceof Error ? error.message : "重发失败，请稍后重试",
+      })
+    }
   }
 
   async function handleAfterSales(
@@ -357,51 +413,75 @@ export function SupplierOrderCenterPage({
     requestId: string
   ) {
     if (!detail) return
-    const res = await afterSalesMutation.mutateAsync({
-      orderId: supplierOrderId,
-      expectedLockVersion: detail.order.lockVersion,
-      action,
-      operationId: `op-as-${action}-${Date.now()}`,
-      idempotencyKey: `as-${action}-${requestId}`,
-      afterSalesRequestId: requestId,
-    })
-    setResult({
-      status:
-        res.status === "succeeded"
-          ? "succeeded"
-          : res.status === "blocked"
-            ? "blocked"
-            : "rejected",
-      title:
-        res.status === "succeeded"
-          ? action === "CANCEL"
-            ? "取消已提交"
-            : "退款已提交"
-          : "售后动作未提交",
-      description: res.message,
-      reference: res.reference,
-      facts: res.data
-        ? [
-            { label: "取消轨", value: res.data.cancelStatus },
-            { label: "退款轨", value: res.data.refundStatus },
-            { label: "说明", value: res.data.note },
-          ]
-        : undefined,
-    })
+    try {
+      const res = await afterSalesMutation.mutateAsync({
+        orderId: supplierOrderId,
+        expectedLockVersion: detail.order.lockVersion,
+        action,
+        operationId: `op-as-${action}-${Date.now()}`,
+        idempotencyKey: `as-${action}-${requestId}`,
+        afterSalesRequestId: requestId,
+      })
+      setAfterSalesConfirm(null)
+      setResult({
+        status:
+          res.status === "succeeded"
+            ? "succeeded"
+            : res.status === "blocked"
+              ? "blocked"
+              : "rejected",
+        title:
+          res.status === "succeeded"
+            ? action === "CANCEL"
+              ? "取消已提交"
+              : "退款已提交"
+            : "售后动作未提交",
+        description: res.message,
+        reference: res.reference,
+        facts: res.data
+          ? [
+              {
+                label: "取消轨",
+                value: CANCEL_STATUS_LABEL[res.data.cancelStatus],
+              },
+              {
+                label: "退款轨",
+                value: REFUND_STATUS_LABEL[res.data.refundStatus],
+              },
+              { label: "说明", value: res.data.note },
+            ]
+          : undefined,
+      })
+    } catch (error) {
+      setResult({
+        status: "rejected",
+        title: "售后动作未提交",
+        description:
+          error instanceof Error ? error.message : "提交失败，请稍后重试",
+      })
+    }
   }
 
   async function handleReveal() {
     if (!detail) return
-    const res = await revealMutation.mutateAsync({
-      orderId: supplierOrderId,
-      reason: "履约处理需要核对收货信息",
-    })
-    setResult({
-      status: res.status === "succeeded" ? "succeeded" : "blocked",
-      title: res.status === "succeeded" ? "已短时揭示地址" : "无法揭示",
-      description: res.message,
-      reference: res.reference,
-    })
+    try {
+      const res = await revealMutation.mutateAsync({
+        orderId: supplierOrderId,
+        reason: "履约处理需要核对收货信息",
+      })
+      setResult({
+        status: res.status === "succeeded" ? "succeeded" : "blocked",
+        title: res.status === "succeeded" ? "已短时揭示地址" : "无法揭示",
+        description: res.message,
+      })
+    } catch (error) {
+      setResult({
+        status: "rejected",
+        title: "地址揭示失败",
+        description:
+          error instanceof Error ? error.message : "操作失败，请稍后重试",
+      })
+    }
   }
 
   if (query.isPending) {
@@ -414,13 +494,30 @@ export function SupplierOrderCenterPage({
     )
   }
 
+  if (query.isError) {
+    return (
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <BusinessFailureState
+          kind="system"
+          title="供应商订单加载失败"
+          description="系统暂时无法取得订单数据，请重试。"
+          action={
+            <Button type="button" onClick={() => void query.refetch()}>
+              重试
+            </Button>
+          }
+        />
+      </div>
+    )
+  }
+
   if (!detail) {
     return (
       <div className="mx-auto max-w-shell p-5">
         <Alert variant="warning">
           <AlertTitle>未找到供应商订单</AlertTitle>
           <AlertDescription>
-            订单 {supplierOrderId} 不存在或无权访问。
+            该订单不存在或当前角色无权访问。
             <Button
               type="button"
               variant="link"
@@ -440,6 +537,24 @@ export function SupplierOrderCenterPage({
   const canReplay = detail.allowedActions.includes("REPLAY")
   const canReveal = detail.allowedActions.includes("REVEAL_ADDRESS")
   const isResultUnknown = o.fulfillmentStatus === "RESULT_UNKNOWN"
+  const noQueryCapability = detail.actionBlockers.some(
+    (b) => b.action === "QUERY_RESULT" && b.code === "NO_QUERY_CAPABILITY"
+  )
+  const totalQuantity = detail.items.reduce(
+    (acc, item) => acc + Number(item.quantity || 0),
+    0
+  )
+  const totalCostGross =
+    detail.costs.costMasked ||
+    detail.items.every((item) => item.unitCostGross == null)
+      ? null
+      : detail.items
+          .reduce(
+            (acc, item) =>
+              acc + Number(item.quantity || 0) * Number(item.unitCostGross ?? 0),
+            0
+          )
+          .toFixed(2)
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
@@ -477,7 +592,7 @@ export function SupplierOrderCenterPage({
               type="button"
               size="sm"
               variant="outline"
-              render={<Link href="/supplier-api/orders?view=actionable" />}
+              render={<Link href="/supplier-api/orders" />}
             >
               <ArrowLeftIcon className="size-3.5" />
               返回列表
@@ -494,28 +609,12 @@ export function SupplierOrderCenterPage({
           label: o.fulfillmentLabel,
           tone: o.fulfillmentTone,
         }}
-        version={o.lockVersion}
         meta={
           <span className="text-muted-foreground">
             商城单 {o.mallOrderNo}
           </span>
         }
         statuses={[
-          {
-            id: "ff",
-            label: "履约",
-            status: { label: o.fulfillmentLabel, tone: o.fulfillmentTone },
-          },
-          {
-            id: "cancel",
-            label: "取消",
-            status: { label: o.cancelLabel, tone: o.cancelTone },
-          },
-          {
-            id: "refund",
-            label: "退款",
-            status: { label: o.refundLabel, tone: o.refundTone },
-          },
           {
             id: "supplier",
             label: "供应商",
@@ -532,44 +631,69 @@ export function SupplierOrderCenterPage({
         ]}
         primaryAction={
           isResultUnknown ? (
-            <Button
+            <GuardedBusinessAction
               type="button"
               size="sm"
               disabled={!canQuery || queryResultMutation.isPending}
+              reason={
+                !canQuery
+                  ? (detail.actionBlockers.find(
+                      (b) => b.action === "QUERY_RESULT"
+                    )?.message ?? "当前不可查询")
+                  : undefined
+              }
               onClick={() => void handleQueryResult()}
             >
               查询原结果
-            </Button>
+            </GuardedBusinessAction>
           ) : undefined
         }
         secondaryActions={
           <div className="flex flex-wrap gap-2">
             {isResultUnknown ? (
-              <Button
+              <GuardedBusinessAction
                 type="button"
                 size="sm"
                 variant="outline"
                 disabled={!canReplay || replayMutation.isPending}
+                reason={
+                  canReplay
+                    ? "已确认无结果，可安全重发"
+                    : (detail.actionBlockers.find((b) => b.action === "REPLAY")
+                        ?.message ?? "需先查询确认无结果后，方可重发")
+                }
                 onClick={() => {
                   if (canReplay) setReplayOpen(true)
                 }}
-                title={
-                  canReplay
-                    ? "已确认无结果，可安全重试"
-                    : "需先查询确认无结果后，方可重试"
-                }
               >
-                安全重放
-              </Button>
+                安全重发
+              </GuardedBusinessAction>
             ) : null}
             {detail.workItem && detail.allowedActions.includes("DEFER") ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() => setDeferOpen(true)}
-              >
-                先跳过              </Button>
+              detail.workItem.held ? (
+                <>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled
+                  >
+                    本轮已跳过
+                  </Button>
+                  <span className="self-center text-xs text-muted-foreground">
+                    任务仍待处理，可稍后继续
+                  </span>
+                </>
+              ) : (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setDeferOpen(true)}
+                >
+                  先跳过
+                </Button>
+              )
             ) : null}
             {detail.allowedActions.includes("ESCALATE_W29") ? (
               <Button
@@ -644,9 +768,13 @@ export function SupplierOrderCenterPage({
                   ? " · 已开放安全重发"
                   : " · 重发未开放"}
               </span>
+            ) : noQueryCapability ? (
+              <span className="mt-1 block">
+                尚未查询。该供应商无查询能力，请前往接口错误与对账中心人工处理。
+              </span>
             ) : (
               <span className="mt-1 block">
-                尚未查询。主按钮仅「查询原结果」；重试按钮在确认无结果前保持禁用。
+                尚未查询。先执行「查询原结果」，确认无结果且系统允许后再重发。
               </span>
             )}
           </AlertDescription>
@@ -666,10 +794,12 @@ export function SupplierOrderCenterPage({
       {detail.workItem ? (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm">关联任务</CardTitle>
+            <CardTitle className="text-sm">
+              {WORK_ITEM_TYPE_LABEL[detail.workItem.workItemType]}
+            </CardTitle>
             <CardDescription className="text-xs">
-              {detail.workItem.workItemType} · {detail.workItem.workItemId}
-              {detail.workItem.held ? " · 已跳过（任务仍在待处理列表）" : ""}
+              关联订单 {o.orderNo}
+              {detail.workItem.held ? " · 本轮已跳过，任务仍待处理" : ""}
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-wrap gap-3 text-xs text-muted-foreground">
@@ -677,7 +807,10 @@ export function SupplierOrderCenterPage({
               状态{" "}
               <BusinessStatusBadge
                 context="detail"
-                label={detail.workItem.workItemStatus}
+                label={
+                  WORK_ITEM_STATUS_LABEL[detail.workItem.workItemStatus] ??
+                  detail.workItem.workItemStatus
+                }
                 tone={
                   detail.workItem.workItemStatus === "COMPLETED"
                     ? "success"
@@ -763,24 +896,25 @@ export function SupplierOrderCenterPage({
             <Item label="供应商" value={o.supplierName} />
             <Item
               label="连接"
-              value={`${o.connectionCode} / ${o.connectionEnvironment}`}
+              value={`${o.connectionCode} · ${o.connectionEnvironment}`}
             />
             <Item
-              label="固定供给版本"
-              value={<span className="num">{o.supplyVersion}</span>}
+              label="供给数据版本"
+              value={<span className="num">{codeVersion(o.supplyVersion)}</span>}
             />
             <Item
-              label="发布版本"
-              value={<span className="num">{o.publicationVersion}</span>}
+              label="发布数据版本"
+              value={
+                <span className="num">{codeVersion(o.publicationVersion)}</span>
+              }
             />
             <Item
-              label="支付记录键"
+              label="支付凭证号"
               value={<span className="num">{o.paymentFactKey}</span>}
             />
-            <Item label="版本" value={String(o.lockVersion)} />
           </DescriptionList>
           <p className="mt-3 text-xs text-muted-foreground">
-            发布版本、固定供给、商品与成本在下单时固定，不受后续基础资料变化影响。
+            发布版本、供给、商品与成本在下单时固定，不受后续基础资料变化影响。
           </p>
         </DocumentSection>
       ) : null}
@@ -796,7 +930,7 @@ export function SupplierOrderCenterPage({
                 <TableHead>商品</TableHead>
                 <TableHead>数量</TableHead>
                 <TableHead>供应商商品</TableHead>
-                <TableHead>发布/供给</TableHead>
+                <TableHead>发布/供给版本</TableHead>
                 <TableHead className="text-right">下单成本（含税）</TableHead>
               </TableRow>
             </TableHeader>
@@ -822,7 +956,8 @@ export function SupplierOrderCenterPage({
                     </div>
                   </TableCell>
                   <TableCell className="num text-xs">
-                    {item.publicationVersion} / {item.supplyVersion}
+                    {codeVersion(item.publicationVersion)} /{" "}
+                    {codeVersion(item.supplyVersion)}
                   </TableCell>
                   <TableCell className="text-right">
                     {item.unitCostGross != null ? (
@@ -836,6 +971,23 @@ export function SupplierOrderCenterPage({
                   </TableCell>
                 </TableRow>
               ))}
+              {detail.items.length > 0 ? (
+                <TableRow className="border-t-2 border-border font-medium">
+                  <TableCell>合计</TableCell>
+                  <TableCell className="num">
+                    {totalQuantity} {detail.items[0].unit}
+                  </TableCell>
+                  <TableCell />
+                  <TableCell />
+                  <TableCell className="text-right">
+                    {totalCostGross != null ? (
+                      <MoneyValue value={totalCostGross} taxBasis="gross" />
+                    ) : (
+                      <span className="text-muted-foreground">•••</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ) : null}
             </TableBody>
           </Table>
         </DocumentSection>
@@ -941,27 +1093,31 @@ export function SupplierOrderCenterPage({
 
           <Separator className="my-4" />
           <h4 className="mb-2 text-xs font-semibold">状态历史</h4>
-          <ul className="space-y-2">
-            {detail.statusHistory.map((h) => (
-              <li
-                key={h.id}
-                className="rounded-lg border border-border px-3 py-2 text-xs"
-              >
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="secondary">{h.track}</Badge>
-                  <span>
-                    {h.fromLabel} → {h.toLabel}
-                  </span>
-                  <span className="text-muted-foreground">
-                    {formatDateTime(h.at, "fullIntl", "passthrough")} · {h.source}
-                  </span>
-                </div>
-                {h.note ? (
-                  <p className="mt-1 text-muted-foreground">{h.note}</p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
+          {detail.statusHistory.length === 0 ? (
+            <p className="text-sm text-muted-foreground">暂无状态历史</p>
+          ) : (
+            <ul className="space-y-2">
+              {detail.statusHistory.map((h) => (
+                <li
+                  key={h.id}
+                  className="rounded-lg border border-border px-3 py-2 text-xs"
+                >
+                  <div className="flex flex-wrap gap-2">
+                    <Badge variant="secondary">{h.track}</Badge>
+                    <span>
+                      {h.fromLabel} → {h.toLabel}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {formatDateTime(h.at, "fullIntl", "passthrough")} · {h.source}
+                    </span>
+                  </div>
+                  {h.note ? (
+                    <p className="mt-1 text-muted-foreground">{h.note}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
         </DocumentSection>
       ) : null}
 
@@ -1012,7 +1168,7 @@ export function SupplierOrderCenterPage({
                       />
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button
+                      <GuardedBusinessAction
                         type="button"
                         size="sm"
                         variant="outline"
@@ -1020,13 +1176,23 @@ export function SupplierOrderCenterPage({
                           !as.allowedActions.includes("CANCEL") ||
                           afterSalesMutation.isPending
                         }
+                        reason={
+                          as.actionBlockers.find(
+                            (b) => b.action === "CANCEL"
+                          )?.message
+                        }
                         onClick={() =>
-                          void handleAfterSales("CANCEL", as.requestId)
+                          setAfterSalesConfirm({
+                            requestId: as.requestId,
+                            requestNo: as.requestNo,
+                            mallRequestRef: as.mallRequestRef,
+                            action: "CANCEL",
+                          })
                         }
                       >
                         提交取消
-                      </Button>
-                      <Button
+                      </GuardedBusinessAction>
+                      <GuardedBusinessAction
                         type="button"
                         size="sm"
                         variant="outline"
@@ -1034,12 +1200,22 @@ export function SupplierOrderCenterPage({
                           !as.allowedActions.includes("REFUND") ||
                           afterSalesMutation.isPending
                         }
+                        reason={
+                          as.actionBlockers.find(
+                            (b) => b.action === "REFUND"
+                          )?.message
+                        }
                         onClick={() =>
-                          void handleAfterSales("REFUND", as.requestId)
+                          setAfterSalesConfirm({
+                            requestId: as.requestId,
+                            requestNo: as.requestNo,
+                            mallRequestRef: as.mallRequestRef,
+                            action: "REFUND",
+                          })
                         }
                       >
                         提交退款
-                      </Button>
+                      </GuardedBusinessAction>
                     </div>
                     <p className="text-[11px] text-muted-foreground">
                       领域动作引用售后请求 {as.mallRequestRef}
@@ -1091,9 +1267,20 @@ export function SupplierOrderCenterPage({
             <Item
               label="成本差额"
               value={
-                detail.costs.costMasked || detail.costs.costVariance == null
+                detail.costs.costMasked || detail.costs.costVariance == null ? (
+                  "•••"
+                ) : (
+                  <MoneyValue value={detail.costs.costVariance} />
+                )
+              }
+            />
+            <Item
+              label="差额参照"
+              value={
+                detail.costs.costMasked ||
+                detail.costs.cumulativeCostGross == null
                   ? "•••"
-                  : detail.costs.costVariance
+                  : `对比累计成本（含税）${detail.costs.cumulativeCostGross}`
               }
             />
             <Item
@@ -1181,6 +1368,16 @@ export function SupplierOrderCenterPage({
                   <TableCell className="num">{a.attemptCount}</TableCell>
                 </TableRow>
               ))}
+              {detail.actions.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="py-6 text-center text-sm text-muted-foreground"
+                  >
+                    暂无动作记录
+                  </TableCell>
+                </TableRow>
+              ) : null}
             </TableBody>
           </Table>
 
@@ -1232,75 +1429,121 @@ export function SupplierOrderCenterPage({
         onConfirm={() => handleReplay()}
       />
 
-      {deferOpen ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <Card className="w-full max-w-md">
-            <CardHeader>
-              <CardTitle className="text-base">本轮跳过</CardTitle>
-              <CardDescription className="text-xs">
-                非终结动作：任务不完成、不转交、不会暂停。
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <form
-                className="space-y-3"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  void deferForm.handleSubmit()
-                }}
+      <AlertDialog open={deferOpen} onOpenChange={setDeferOpen}>
+        <AlertDialogContent className="sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>先跳过本轮</AlertDialogTitle>
+            <AlertDialogDescription>
+              非终结动作：任务不完成、不转交、不会暂停，可稍后继续处理。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void deferForm.handleSubmit()
+            }}
+          >
+            <div className="space-y-1">
+              <Label>原因</Label>
+              <deferForm.AppField
+                name="reasonCode"
+                children={(field) => (
+                  <OptionCombobox
+                    value={field.state.value}
+                    onValueChange={(v) =>
+                      field.handleChange(v ?? field.state.value)
+                    }
+                    options={DEFER_REASON_OPTIONS.map((opt) => ({
+                      value: opt.value,
+                      label: opt.label,
+                    }))}
+                    className="w-full"
+                    allowClear={false}
+                    aria-label="原因"
+                    placeholder="选择原因"
+                  />
+                )}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>说明（可选）</Label>
+              <deferForm.AppField
+                name="comment"
+                children={(field) => (
+                  <Textarea
+                    value={field.state.value}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                    rows={2}
+                  />
+                )}
+              />
+            </div>
+            <AlertDialogFooter>
+              <AlertDialogCancel
+                type="button"
+                onClick={() => setDeferOpen(false)}
               >
-                <div className="space-y-1">
-                  <Label>原因</Label>
-                  <deferForm.AppField
-                    name="reasonCode"
-                    children={(field) => (
-                      <OptionCombobox
-                        value={field.state.value}
-                        onValueChange={(v) =>
-                          field.handleChange(v ?? field.state.value)
-                        }
-                        options={DEFER_REASON_OPTIONS.map((opt) => ({
-                          value: opt.value,
-                          label: opt.label,
-                        }))}
-                        className="w-full"
-                        allowClear={false}
-                        aria-label="原因"
-                        placeholder="选择原因"
-                      />
-                    )}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label>说明（可选）</Label>
-                  <deferForm.AppField
-                    name="comment"
-                    children={(field) => (
-                      <Textarea
-                        value={field.state.value}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                        rows={2}
-                      />
-                    )}
-                  />
-                </div>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setDeferOpen(false)}
-                  >
-                    取消
-                  </Button>
-                  <deferForm.AppForm>
-                    <deferForm.SubmitButton label="确认跳过" />
-                  </deferForm.AppForm>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      ) : null}
+                取消
+              </AlertDialogCancel>
+              <deferForm.AppForm>
+                <deferForm.SubmitButton label="确认跳过" />
+              </deferForm.AppForm>
+            </AlertDialogFooter>
+          </form>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <FormalActionConfirmDialog
+        open={Boolean(afterSalesConfirm)}
+        onOpenChange={(open) => {
+          if (!open) setAfterSalesConfirm(null)
+        }}
+        actionLabel={
+          afterSalesConfirm?.action === "CANCEL" ? "提交取消" : "提交退款"
+        }
+        title={
+          afterSalesConfirm?.action === "CANCEL"
+            ? "确认向供应商提交取消"
+            : "确认向供应商提交退款"
+        }
+        description={
+          afterSalesConfirm
+            ? `将向供应商发起${
+                afterSalesConfirm.action === "CANCEL" ? "取消" : "退款"
+              }请求，引用售后请求 ${afterSalesConfirm.mallRequestRef}；重复提交返回原结果。`
+            : undefined
+        }
+        fromStatus={{
+          label: "当前状态",
+          tone: "neutral",
+        }}
+        toStatus={{
+          label:
+            afterSalesConfirm?.action === "CANCEL" ? "取消处理中" : "退款处理中",
+          tone: "info",
+        }}
+        effects={[
+          `引用售后请求 ${
+            afterSalesConfirm?.mallRequestRef ?? "—"
+          }`,
+          "重复提交返回原结果，不会重复发起",
+        ]}
+        irreversibleEffects={[
+          `将向供应商发起${
+            afterSalesConfirm?.action === "CANCEL" ? "取消" : "退款"
+          }请求`,
+        ]}
+        pending={afterSalesMutation.isPending}
+        onConfirm={() => {
+          if (afterSalesConfirm) {
+            return handleAfterSales(
+              afterSalesConfirm.action,
+              afterSalesConfirm.requestId
+            )
+          }
+        }}
+      />
     </div>
   )
 }

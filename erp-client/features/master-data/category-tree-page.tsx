@@ -12,6 +12,7 @@ import {
   BanIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  DownloadIcon,
   FolderTreeIcon,
   HistoryIcon,
   PlusIcon,
@@ -19,6 +20,7 @@ import {
 } from "lucide-react"
 
 import {
+  BusinessFailureState,
   BusinessStatusBadge,
   DataFreshness,
   FormalActionResult,
@@ -44,7 +46,11 @@ import {
   MasterDataDisableDialog,
   MasterDataReviseDialog,
 } from "@/features/master-data/master-data-action-dialog"
-import { useMasterDataListQuery } from "@/features/master-data/queries"
+import {
+  buildMasterDataExportCsv,
+  downloadCsv,
+  useMasterDataListQuery,
+} from "@/features/master-data/queries"
 import {
   MASTER_DATA_RESOURCES,
   type MasterDataListItem,
@@ -61,7 +67,6 @@ function ResourceNav({
     <nav
       ref={navRef}
       aria-label={masterDataCopy.resourceNavAria}
-      role="tablist"
       className="flex flex-wrap gap-2 border-b border-border pb-3"
     >
       {MASTER_DATA_RESOURCES.map((item) => {
@@ -70,8 +75,7 @@ function ResourceNav({
           <Button
             key={item.key}
             size="sm"
-            role="tab"
-            aria-selected={selected}
+            aria-current={selected ? "page" : undefined}
             variant={selected ? "secondary" : "ghost"}
             render={<Link href={`/master-data/${item.key}`} />}
           >
@@ -203,6 +207,30 @@ export function CategoryTreePage({
     React.useState<MasterDataListItem | null>(null)
   const [disableTarget, setDisableTarget] =
     React.useState<MasterDataListItem | null>(null)
+  const [exportMeta, setExportMeta] = React.useState<{
+    jobId: string
+    rowCount: number
+  } | null>(null)
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+
+  // `/` 聚焦分类搜索（弹窗打开时不触发）
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        event.key === "/" &&
+        !(event.target instanceof HTMLInputElement) &&
+        !(event.target instanceof HTMLTextAreaElement)
+      ) {
+        if (document.querySelector('[role="dialog"], [data-slot="sheet"]')) {
+          return
+        }
+        event.preventDefault()
+        searchInputRef.current?.focus()
+      }
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   const listQuery = useMasterDataListQuery({
     resource: "categories",
@@ -228,6 +256,25 @@ export function CategoryTreePage({
 
   const selectedPath =
     flat.find((n) => n.item.stableId === selectedId)?.pathLabel ?? selected?.name
+
+  /** 可见节点数：根节点 + 展开父级下的所有后代（与界面实际渲染一致）。 */
+  const visibleCount = React.useMemo(() => {
+    return forest.reduce((count, node) => {
+      let total = 1
+      const walk = (n: CategoryTreeNode): void => {
+        if (!expanded.has(n.item.stableId)) return
+        for (const child of n.children) {
+          total += 1
+          walk(child)
+        }
+      }
+      walk(node)
+      return count + total
+    }, 0)
+  }, [forest, expanded])
+
+  /** 搜索/启停筛选是否生效：空态与「系统从未建分类」区分。 */
+  const filterActive = search.trim() !== "" || lifecycleStatus !== "all"
 
   const toggle = React.useCallback((id: string) => {
     setExpanded((prev) => {
@@ -271,9 +318,15 @@ export function CategoryTreePage({
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader title={masterDataCopy.pageTitle("商品分类")} />
         <ResourceNav resource="categories" navRef={navRef} />
-        <Button type="button" onClick={() => void listQuery.refetch()}>
-          重试
-        </Button>
+        <BusinessFailureState
+          kind="system"
+          description={masterDataCopy.centerLoadFail}
+          action={
+            <Button type="button" onClick={() => void listQuery.refetch()}>
+              重试
+            </Button>
+          }
+        />
       </div>
     )
   }
@@ -298,6 +351,32 @@ export function CategoryTreePage({
           <PageActions
             actions={[
               {
+                actionKey: "export",
+                label: masterDataCopy.actionExport,
+                icon: DownloadIcon,
+                variant: "outline",
+                mobileVisibility: "hide",
+                disabled: rows.length === 0,
+                onClick: () => {
+                  if (rows.length === 0) return
+                  const csv = buildMasterDataExportCsv(
+                    rows,
+                    `分类=${masterDataCopy.categoryTreeTitle}`
+                  )
+                  downloadCsv(csv, `基础资料-商品分类`)
+                  const datePart = new Date()
+                    .toISOString()
+                    .slice(0, 10)
+                    .replace(/-/g, "")
+                  setExportMeta({
+                    jobId: `导出-${datePart}-${String(
+                      Date.now() % 100000
+                    ).padStart(5, "0")}`,
+                    rowCount: rows.length,
+                  })
+                },
+              },
+              {
                 actionKey: "create-root",
                 label: masterDataCopy.categoryAddRoot,
                 icon: PlusIcon,
@@ -314,12 +393,20 @@ export function CategoryTreePage({
         {masterDataCopy.categoryTreeDesc(rows.length)}
       </p>
 
+      {exportMeta ? (
+        <p className="text-xs text-muted-foreground">
+          导出已完成：{exportMeta.rowCount} 条 · 任务号{" "}
+          <span className="num">{exportMeta.jobId}</span>。文件已开始下载。
+        </p>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-2">
         <InputGroup className="max-w-xs">
           <InputGroupAddon>
             <SearchIcon aria-hidden />
           </InputGroupAddon>
           <InputGroupInput
+            ref={searchInputRef}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={masterDataCopy.categoryTreeSearch}
@@ -365,20 +452,42 @@ export function CategoryTreePage({
               {masterDataCopy.categoryTreeTitle}
             </h2>
             <span className="text-xs text-muted-foreground">
-              {rows.length} 项
+              可见 {visibleCount} 项 · 共 {rows.length} 项
             </span>
           </div>
           <div className="min-h-0 flex-1 overflow-y-auto p-2">
             {forest.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-12 text-center">
-                <p className="text-sm text-muted-foreground">
-                  {masterDataCopy.categoryTreeEmpty}
-                </p>
-                <Button type="button" size="sm" onClick={openCreateRoot}>
-                  <PlusIcon data-icon="inline-start" aria-hidden />
-                  {masterDataCopy.categoryAddRoot}
-                </Button>
-              </div>
+              filterActive ? (
+                <div className="flex flex-col items-center gap-3 py-12 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {masterDataCopy.categoryTreeNoMatch}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {masterDataCopy.categoryTreeNoMatchDesc}
+                  </p>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setSearch("")
+                      setLifecycleStatus("all")
+                    }}
+                  >
+                    清除筛选
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center gap-3 py-12 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {masterDataCopy.categoryTreeEmpty}
+                  </p>
+                  <Button type="button" size="sm" onClick={openCreateRoot}>
+                    <PlusIcon data-icon="inline-start" aria-hidden />
+                    {masterDataCopy.categoryAddRoot}
+                  </Button>
+                </div>
+              )
             ) : (
               <ul role="tree" className="m-0 list-none p-0">
                 {forest.map((node) => (
@@ -404,7 +513,24 @@ export function CategoryTreePage({
             <h2 className="text-sm font-semibold">分类详情</h2>
           </div>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
-            {!selected ? (
+            {!selected && selectedId ? (
+              <div className="flex flex-col gap-2">
+                <p className="text-sm text-muted-foreground">
+                  当前选中的分类不在筛选结果中。
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => {
+                    setSearch("")
+                    setLifecycleStatus("all")
+                  }}
+                >
+                  清除筛选后查看
+                </Button>
+              </div>
+            ) : !selected ? (
               <p className="text-sm text-muted-foreground">
                 在左侧选择一个分类，查看路径、版本并执行维护。
               </p>
@@ -475,36 +601,81 @@ export function CategoryTreePage({
                     type="button"
                     size="sm"
                     variant="outline"
-                    disabled={
-                      !selected.allowedActions.includes("CREATE_REVISION")
+                    render={
+                      <Link
+                        href={`/master-data/categories/${selected.stableId}?section=overview`}
+                      />
                     }
-                    onClick={() => openCreateChild(selected)}
                   >
-                    <PlusIcon data-icon="inline-start" aria-hidden />
-                    {masterDataCopy.categoryAddChild}
+                    打开完整资料
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={
+                  <span
+                    title={
                       !selected.allowedActions.includes("CREATE_REVISION")
+                        ? selected.actionBlockers.find(
+                            (b) => b.action === "CREATE_REVISION"
+                          )?.message
+                        : undefined
                     }
-                    onClick={() => setReviseTarget(selected)}
+                    className="inline-flex"
                   >
-                    <HistoryIcon data-icon="inline-start" aria-hidden />
-                    {masterDataCopy.actionUpdate}
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={!selected.allowedActions.includes("DISABLE")}
-                    onClick={() => setDisableTarget(selected)}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={
+                        !selected.allowedActions.includes("CREATE_REVISION")
+                      }
+                      onClick={() => openCreateChild(selected)}
+                    >
+                      <PlusIcon data-icon="inline-start" aria-hidden />
+                      {masterDataCopy.categoryAddChild}
+                    </Button>
+                  </span>
+                  <span
+                    title={
+                      !selected.allowedActions.includes("CREATE_REVISION")
+                        ? selected.actionBlockers.find(
+                            (b) => b.action === "CREATE_REVISION"
+                          )?.message
+                        : undefined
+                    }
+                    className="inline-flex"
                   >
-                    <BanIcon data-icon="inline-start" aria-hidden />
-                    {masterDataCopy.actionDisable}
-                  </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={
+                        !selected.allowedActions.includes("CREATE_REVISION")
+                      }
+                      onClick={() => setReviseTarget(selected)}
+                    >
+                      <HistoryIcon data-icon="inline-start" aria-hidden />
+                      {masterDataCopy.actionUpdate}
+                    </Button>
+                  </span>
+                  <span
+                    title={
+                      !selected.allowedActions.includes("DISABLE")
+                        ? selected.actionBlockers.find(
+                            (b) => b.action === "DISABLE"
+                          )?.message
+                        : undefined
+                    }
+                    className="inline-flex"
+                  >
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={!selected.allowedActions.includes("DISABLE")}
+                      onClick={() => setDisableTarget(selected)}
+                    >
+                      <BanIcon data-icon="inline-start" aria-hidden />
+                      {masterDataCopy.actionDisable}
+                    </Button>
+                  </span>
                 </div>
                 {selected.primaryBlocker ? (
                   <FormalActionResult

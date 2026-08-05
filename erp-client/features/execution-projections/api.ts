@@ -40,7 +40,9 @@ import {
 } from "@/mock/execution-projections"
 
 const PERMISSION_VERSION = "pv-w23-demo-1"
-const BULK_LIMIT = 20
+
+/** 批量操作上限（前端选择条需同步提示，超限禁用批量按钮） */
+export const BULK_SELECTION_LIMIT = 20
 
 type DeliveryOverlay = {
   status: DeliveryStatus
@@ -342,7 +344,7 @@ function computeMetrics(
       key: "timeout",
       label: "待确认超时",
       value: count("timeout"),
-      detail: "超过 SLA 且未确认",
+      detail: "已超时且未确认",
     },
     {
       key: "fail_manual",
@@ -385,7 +387,7 @@ function filterSummary(query: ExecutionProjectionListQuery): string {
     parts.push(`来源=${SOURCE_LABEL[query.source]}`)
   }
   if (query.latency && query.latency !== "all") {
-    parts.push(`延迟=${LATENCY_LABEL[query.latency]}`)
+    parts.push(`等待时长=${LATENCY_LABEL[query.latency]}`)
   }
   if (query.reconciliation && query.reconciliation !== "all") {
     parts.push(`对账=${RECONCILIATION_LABEL[query.reconciliation]}`)
@@ -813,8 +815,8 @@ export async function submitBulkProjectionCommand(
   if (!input.projectionIds.length) {
     throw new Error("请先逐项显式勾选失败/可处理项")
   }
-  if (input.projectionIds.length > BULK_LIMIT) {
-    throw new Error(`批量上限 ${BULK_LIMIT} 条（系统保守约束）`)
+  if (input.projectionIds.length > BULK_SELECTION_LIMIT) {
+    throw new Error(`批量最多 ${BULK_SELECTION_LIMIT} 条，超出部分请分批`)
   }
 
   const snapshotId = `snap-${input.requestId}`

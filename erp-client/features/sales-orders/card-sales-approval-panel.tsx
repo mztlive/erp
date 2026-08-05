@@ -228,6 +228,7 @@ export function CardSalesApprovalPanel({
                   label="驳回说明"
                   rows={2}
                   placeholder="写清要销售改什么；改完后需重新从领导审批走"
+                  description="说明将随驳回送达销售。"
                 />
               )}
             </rejectForm.AppField>
@@ -322,12 +323,17 @@ export function CardSalesApprovalPanel({
                 workItemType: approval.workItemType,
                 decision: "REJECT",
                 reasonCode: rejectPayload.reasonCode,
+                comment: rejectPayload.comment,
               })
               claimRef.current = null
               setResult({
                 status: "rejected",
                 title: "已驳回，请销售修改后重提",
-                description: outcome.detail,
+                description: `${outcome.detail}${
+                  rejectPayload.comment
+                    ? ` 驳回说明：${rejectPayload.comment}`
+                    : ""
+                }`,
                 reference: outcome.reference,
               })
             } catch {

@@ -18,6 +18,7 @@ import {
   BackgroundJobProgress,
   BatchImpactPreview,
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
@@ -26,6 +27,7 @@ import {
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
+  MoneyValue,
   MultiOptionCombobox,
   OptionCombobox,
   PageHeader,
@@ -101,8 +103,9 @@ export function SupplierOrdersListPage() {
       q: url.q,
       supplierId: url.supplierId,
       fulfillmentStatuses: url.fulfillmentStatuses,
-      cancelStatuses: url.cancelStatus ? [url.cancelStatus] : undefined,
-      refundStatuses: url.refundStatus ? [url.refundStatus] : undefined,
+      cancelStatuses: url.cancelStatuses,
+      refundStatuses: url.refundStatuses,
+      aftersalePending: url.aftersalePending,
       paidFrom: url.paidFrom,
       paidTo: url.paidTo,
       page: url.page,
@@ -181,7 +184,8 @@ export function SupplierOrdersListPage() {
       if (returnTo) {
         qs += `${qs ? "&" : "?"}returnTo=${encodeURIComponent(returnTo)}`
       }
-      router.replace(`${pathname}${qs}`, { scroll: false })
+      // 用 push 保留浏览器后退/前进，可逐步撤销筛选
+      router.push(`${pathname}${qs}`, { scroll: false })
     },
     [pathname, router, url, returnTo]
   )
@@ -450,11 +454,37 @@ export function SupplierOrdersListPage() {
         id: "updated",
         accessorKey: "lastBusinessAt",
         header: "更新时间",
-        meta: { label: "最近业务变化", width: "default" },
+        meta: { label: "更新时间", width: "default" },
         cell: ({ row }) => (
           <span className="num text-xs text-muted-foreground">
             {formatDateTime(row.original.lastBusinessAt, "monthDayIntl", "passthrough")}
           </span>
+        ),
+      },
+      {
+        id: "cost",
+        accessorFn: (row) => row.costGross ?? "",
+        header: "成本（含税）",
+        meta: {
+          label: "成本（含税）",
+          width: "amount",
+          align: "end",
+          numeric: true,
+        },
+        cell: ({ row }) =>
+          row.original.costGross != null ? (
+            <MoneyValue value={row.original.costGross} />
+          ) : (
+            <span className="text-xs text-muted-foreground">•••</span>
+          ),
+      },
+      {
+        id: "itemCount",
+        accessorFn: (row) => row.itemCount,
+        header: "商品数",
+        meta: { label: "商品数", width: "quantity", align: "end", numeric: true },
+        cell: ({ row }) => (
+          <span className="num text-xs">{row.original.itemCount}</span>
         ),
       },
       {
@@ -466,6 +496,9 @@ export function SupplierOrdersListPage() {
           const r = row.original
           const canQuery = r.allowedActions.includes("QUERY_RESULT")
           const canReplay = r.allowedActions.includes("REPLAY")
+          const queryBlocker = r.actionBlockers.find(
+            (b) => b.action === "QUERY_RESULT"
+          )
           return (
             <div className="flex flex-wrap items-center gap-1">
               <Button
@@ -480,25 +513,41 @@ export function SupplierOrdersListPage() {
                 type="button"
                 size="xs"
                 variant="outline"
-                render={
-                  <Link href={`/supplier-api/orders/${r.orderId}`} />
-                }
+                render={<Link href={`/supplier-api/orders/${r.orderId}`} />}
               >
-                中心
+                详情
               </Button>
               {r.fulfillmentStatus === "RESULT_UNKNOWN" ? (
-                <Button
-                  type="button"
-                  size="xs"
-                  disabled={!canQuery || queryResultMutation.isPending}
-                  onClick={() => void handleQueryFromList(r)}
-                >
-                  查询原结果
-                </Button>
+                <>
+                  <Button
+                    type="button"
+                    size="xs"
+                    disabled={!canQuery || queryResultMutation.isPending}
+                    onClick={() => void handleQueryFromList(r)}
+                  >
+                    查询原结果
+                  </Button>
+                  {!canQuery && queryBlocker ? (
+                    <span className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">
+                      {queryBlocker.message}
+                      {queryBlocker.destinationWorkspaceId ? (
+                        <>
+                          ，可
+                          <Link
+                            href="/governance/integration-errors"
+                            className="text-primary underline-offset-2 hover:underline"
+                          >
+                            前往接口错误中心
+                          </Link>
+                        </>
+                      ) : null}
+                    </span>
+                  ) : null}
+                </>
               ) : null}
               {r.fulfillmentStatus === "RESULT_UNKNOWN" && !canReplay ? (
                 <span className="sr-only">
-                  不可重试：需先查询确认无结果且系统允许重试
+                  重发需先查询确认无结果且系统允许重试
                 </span>
               ) : null}
             </div>
@@ -617,33 +666,55 @@ export function SupplierOrdersListPage() {
             label={m.label}
             value={m.value}
             active={
-              m.fulfillmentStatus
-                ? url.fulfillmentStatuses?.includes(m.fulfillmentStatus) ??
-                  false
-                : m.view
-                  ? url.view === m.view && !url.fulfillmentStatuses?.length
-                  : false
+              m.fulfillmentStatuses?.length
+                ? (url.fulfillmentStatuses?.length ?? 0) ===
+                    m.fulfillmentStatuses.length &&
+                  m.fulfillmentStatuses.every((s) =>
+                    url.fulfillmentStatuses?.includes(s)
+                  )
+                : m.fulfillmentStatus
+                  ? url.fulfillmentStatuses?.includes(m.fulfillmentStatus) ??
+                    false
+                  : m.aftersalePending
+                    ? url.aftersalePending === true
+                    : m.view
+                      ? url.view === m.view &&
+                        !url.fulfillmentStatuses?.length &&
+                        !url.aftersalePending
+                      : false
             }
             onClick={() => {
-              if (m.fulfillmentStatus) {
+              if (m.fulfillmentStatuses?.length) {
+                pushUrl({
+                  fulfillmentStatuses: m.fulfillmentStatuses,
+                  aftersalePending: false,
+                  view: m.fulfillmentStatuses.includes("RESULT_UNKNOWN")
+                    ? "all"
+                    : url.view,
+                  page: 1,
+                })
+              } else if (m.fulfillmentStatus) {
                 pushUrl({
                   fulfillmentStatuses: [m.fulfillmentStatus],
+                  aftersalePending: false,
                   view:
                     m.fulfillmentStatus === "RESULT_UNKNOWN"
                       ? "all"
                       : url.view,
                   page: 1,
                 })
+              } else if (m.aftersalePending) {
+                pushUrl({
+                  view: "all",
+                  fulfillmentStatuses: undefined,
+                  aftersalePending: !url.aftersalePending,
+                  page: 1,
+                })
               } else if (m.view) {
                 pushUrl({
                   view: m.view,
                   fulfillmentStatuses: undefined,
-                  page: 1,
-                })
-              } else if (m.aftersalePending) {
-                pushUrl({
-                  view: "all",
-                  refundStatus: "REFUND_FAILED",
+                  aftersalePending: false,
                   page: 1,
                 })
               }
@@ -681,12 +752,11 @@ export function SupplierOrdersListPage() {
             status="succeeded"
             title="导出任务已创建"
             description={exportResult.maskDisclaimer}
-            reference={exportResult.jobId}
             facts={[
               { label: "行数", value: String(exportResult.rowCount) },
               {
-                label: "权限版本",
-                value: exportResult.permissionVersion,
+                label: "权限规则",
+                value: "已固定，下载时重新校验",
               },
               {
                 label: "文件",
@@ -702,7 +772,7 @@ export function SupplierOrdersListPage() {
             mode="all-or-nothing"
             status="succeeded"
             label="导出作业"
-            description={`筛选快照 · 字段打码 · ${exportResult.jobId}`}
+            description="筛选快照 · 字段打码 · 结果 7 天内可下载"
             total={exportResult.rowCount}
             completed={exportResult.rowCount}
             succeeded={exportResult.rowCount}
@@ -850,11 +920,12 @@ export function SupplierOrdersListPage() {
                 />
 
                 <OptionCombobox
-                  value={url.cancelStatus ?? ""}
+                  value={url.cancelStatuses?.[0] ?? ""}
                   onValueChange={(v) =>
                     pushUrl({
-                      cancelStatus: (v ||
-                        undefined) as CancelStatus | undefined,
+                      cancelStatuses: v
+                        ? [v as CancelStatus]
+                        : undefined,
                       page: 1,
                     })
                   }
@@ -873,11 +944,12 @@ export function SupplierOrdersListPage() {
                 />
 
                 <OptionCombobox
-                  value={url.refundStatus ?? ""}
+                  value={url.refundStatuses?.[0] ?? ""}
                   onValueChange={(v) =>
                     pushUrl({
-                      refundStatus: (v ||
-                        undefined) as RefundStatus | undefined,
+                      refundStatuses: v
+                        ? [v as RefundStatus]
+                        : undefined,
                       page: 1,
                     })
                   }
@@ -925,14 +997,14 @@ export function SupplierOrdersListPage() {
             }
             actions={
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span aria-live="polite">
-                  共 {total.toLocaleString("zh-CN")} 条
-                </span>
                 {(url.fulfillmentStatuses?.length ||
-                  url.cancelStatus ||
-                  url.refundStatus ||
+                  url.cancelStatuses?.length ||
+                  url.refundStatuses?.length ||
+                  url.aftersalePending ||
                   url.q ||
-                  url.supplierId) && (
+                  url.supplierId ||
+                  url.paidFrom ||
+                  url.paidTo) && (
                   <Button
                     type="button"
                     size="xs"
@@ -940,14 +1012,14 @@ export function SupplierOrdersListPage() {
                     onClick={() =>
                       pushUrl({
                         fulfillmentStatuses: undefined,
-                        cancelStatus: undefined,
-                        refundStatus: undefined,
+                        cancelStatuses: undefined,
+                        refundStatuses: undefined,
+                        aftersalePending: false,
                         q: undefined,
                         supplierId: undefined,
                         paidFrom: undefined,
                         paidTo: undefined,
                         page: 1,
-                        view: "actionable",
                       })
                     }
                   >
@@ -959,62 +1031,67 @@ export function SupplierOrdersListPage() {
           />
         }
         table={
-          listQuery.isError ? (
-            <BusinessEmptyState
-              kind="no-data"
-              title="加载失败"
-              description="无法取得供应商订单列表，请重试。"
-              action={
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={() => void listQuery.refetch()}
-                >
-                  重试
-                </Button>
-              }
-            />
-          ) : !listQuery.isPending && rows.length === 0 ? (
-            <BusinessEmptyState
-              kind="filter"
-              title="当前范围没有供应商订单"
-              description="调整视图、供应商或支付时间，或从商城消费订单钻取。"
-              action={
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  render={<Link href="/commerce/consumption-orders" />}
-                >
-                  打开商城消费订单
-                </Button>
-              }
-            />
-          ) : (
-            <DataTable
-              data={rows}
-              columns={columns}
-              getRowId={(row) => row.orderId}
-              rowCount={total}
-              sorting={sorting}
-              onSortingChange={handleSortingChange}
-              pagination={pagination}
-              onPaginationChange={(next) => {
-                pushUrl({
-                  page: next.pageIndex + 1,
-                  pageSize: next.pageSize,
-                })
-              }}
-              layout="flush"
-              density="compact"
-              defaultColumnPinning={{
-                left: ["identity"],
-                right: ["actions"],
-              }}
-              onRowPreview={(row) => openPreview(row.orderId)}
-              onRowOpen={(row) => openPreview(row.orderId)}
-            />
-          )
+          <DataTable
+            data={rows}
+            columns={columns}
+            getRowId={(row) => row.orderId}
+            rowCount={total}
+            loading={listQuery.isPending}
+            errorState={
+              listQuery.isError ? (
+                <BusinessFailureState
+                  kind="system"
+                  title="供应商订单列表加载失败"
+                  description="无法取得列表数据，请重试。"
+                  action={
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => void listQuery.refetch()}
+                    >
+                      重试
+                    </Button>
+                  }
+                />
+              ) : undefined
+            }
+            emptyState={
+              !listQuery.isPending && rows.length === 0 ? (
+                <BusinessEmptyState
+                  kind="filter"
+                  title="当前范围没有供应商订单"
+                  description="调整视图、供应商或支付时间，或从商城消费订单钻取。"
+                  action={
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      render={<Link href="/commerce/consumption-orders" />}
+                    >
+                      打开商城消费订单
+                    </Button>
+                  }
+                />
+              ) : undefined
+            }
+            sorting={sorting}
+            onSortingChange={handleSortingChange}
+            pagination={pagination}
+            onPaginationChange={(next) => {
+              pushUrl({
+                page: next.pageIndex + 1,
+                pageSize: next.pageSize,
+              })
+            }}
+            layout="flush"
+            density="compact"
+            defaultColumnPinning={{
+              left: ["identity"],
+              right: ["actions"],
+            }}
+            onRowPreview={(row) => openPreview(row.orderId)}
+            onRowOpen={(row) => openPreview(row.orderId)}
+          />
         }
       />
 

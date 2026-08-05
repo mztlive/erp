@@ -52,8 +52,11 @@ export function CustomerCreateDialog({
             onDirtyChange={setDirty}
             onCancel={() => onOpenChange(false)}
             onSucceeded={(customerId) => {
-              onOpenChange(false)
-              onSucceeded?.(customerId)
+              // 短暂停留让「客户已创建」结果卡可见，再关闭并进入详情（避免成功态一闪而过）。
+              window.setTimeout(() => {
+                onOpenChange(false)
+                onSucceeded?.(customerId)
+              }, 1400)
             }}
           />
         </DialogContent>

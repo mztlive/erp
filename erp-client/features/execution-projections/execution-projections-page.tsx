@@ -47,7 +47,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   useBulkProjectionCommandMutation,
@@ -55,6 +54,7 @@ import {
   useExecutionProjectionListQuery,
   useProjectionDeliveryCommandMutation,
 } from "@/features/execution-projections/queries"
+import { BULK_SELECTION_LIMIT } from "@/features/execution-projections/api"
 import type {
   BulkProjectionJob,
   DeliveryStatus,
@@ -73,6 +73,7 @@ import {
 } from "@/features/execution-projections/types"
 import { cn } from "@/lib/utils"
 import { openWorkspaceLabel, resultText, versionText } from "@/lib/ui-text"
+import { formatDateTime } from "@/lib/datetime"
 import { type ResultState } from "@/components/business/feedback"
 
 type PendingAction =
@@ -140,11 +141,6 @@ function w29Href(workItemId?: string, errorTaskId?: string) {
   return `/governance/integration-errors${qs ? `?${qs}` : ""}`
 }
 
-function shortHash(hash: string) {
-  if (hash.length <= 18) return hash
-  return `${hash.slice(0, 12)}…${hash.slice(-4)}`
-}
-
 function commandToResultState(
   result: ProjectionDeliveryCommandResult
 ): ResultState {
@@ -177,7 +173,7 @@ function commandToResultState(
         { label: "时间", value: result.occurredAt },
         { label: "下一步", value: result.nextAction },
         {
-          label: "W29 任务",
+          label: "错误中心任务",
           value: result.workItemId ?? result.errorTaskId ?? "—",
         },
       ],
@@ -227,7 +223,10 @@ export function ExecutionProjectionsPage() {
   const projectionId = searchParams.get("projectionId") ?? undefined
   const revisionId = searchParams.get("revision") ?? undefined
   const page = Math.max(1, Number(searchParams.get("page") ?? "1") || 1)
-  const pageSize = 8
+  const pageSize = Math.max(
+    1,
+    Math.min(50, Number(searchParams.get("size") ?? "8") || 8)
+  )
 
   const listQueryInput = React.useMemo(
     () => ({
@@ -272,7 +271,6 @@ export function ExecutionProjectionsPage() {
   const [result, setResult] = React.useState<ResultState>(null)
   const [bulkJob, setBulkJob] = React.useState<BulkProjectionJob | null>(null)
   const [pendingAction, setPendingAction] = React.useState<PendingAction>(null)
-  const [previewId, setPreviewId] = React.useState<string | null>(null)
   const [objectTab, setObjectTab] = React.useState("overview")
   const resultRef = React.useRef<HTMLDivElement>(null)
 
@@ -297,21 +295,18 @@ export function ExecutionProjectionsPage() {
     () => Object.keys(rowSelection).filter((id) => rowSelection[id]),
     [rowSelection]
   )
+  const bulkOverLimit = selectedIds.length > BULK_SELECTION_LIMIT
 
-  const previewQuery = useExecutionProjectionDetailQuery(
-    previewId ?? undefined
-  )
+  const pagination: PaginationState = {
+    pageIndex: page - 1,
+    pageSize,
+  }
 
   React.useEffect(() => {
     if (result) {
       resultRef.current?.focus()
     }
   }, [result])
-
-  const pagination: PaginationState = {
-    pageIndex: page - 1,
-    pageSize,
-  }
 
   const columns = React.useMemo<ColumnDef<ExecutionProjectionRow>[]>(
     () => [
@@ -358,26 +353,6 @@ export function ExecutionProjectionsPage() {
         ),
       },
       {
-        id: "erpVersion",
-        header: "ERP版本",
-        meta: { label: "ERP版本", width: "status", numeric: true },
-        cell: ({ row }) => (
-          <span className="num text-sm">
-            v{row.original.salesOrderRevisionNo}
-          </span>
-        ),
-      },
-      {
-        id: "projVersion",
-        header: versionText.dataVersion,
-        meta: { label: versionText.dataVersion, width: "status", numeric: true },
-        cell: ({ row }) => (
-          <span className="num text-sm">
-            v{row.original.projectionRevisionNo}
-          </span>
-        ),
-      },
-      {
         id: "source",
         header: "来源",
         meta: { label: "来源", width: "default" },
@@ -415,11 +390,11 @@ export function ExecutionProjectionsPage() {
             />
             {row.original.latencyBand === "over_sla" ? (
               <span className="text-[11px] text-warning-foreground">
-                超过 SLA
+                {LATENCY_LABEL.over_sla}
               </span>
             ) : row.original.latencyBand === "near_sla" ? (
               <span className="text-[11px] text-muted-foreground">
-                接近 SLA
+                {LATENCY_LABEL.near_sla}
               </span>
             ) : null}
           </div>
@@ -484,14 +459,6 @@ export function ExecutionProjectionsPage() {
               onClick={(e) => e.stopPropagation()}
               onKeyDown={(e) => e.stopPropagation()}
             >
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                onClick={() => setPreviewId(r.projectionId)}
-              >
-                预览
-              </Button>
               <Button
                 type="button"
                 size="xs"
@@ -564,7 +531,7 @@ export function ExecutionProjectionsPage() {
                     />
                   }
                 >
-                  W29
+                  {openWorkspaceLabel("W29")}
                 </Button>
               ) : null}
             </div>
@@ -596,6 +563,12 @@ export function ExecutionProjectionsPage() {
       setResult(commandToResultState(result))
       setPendingAction(null)
     } catch (err) {
+      const actionLabel =
+        kind === "QUERY_RESULT"
+          ? "查询结果"
+          : kind === "RETRY"
+            ? "重试发送"
+            : "升级到接口错误中心"
       setResult({
         status: "blocked",
         title: resultText.operationBlocked,
@@ -603,7 +576,7 @@ export function ExecutionProjectionsPage() {
         reference: row.projectionNo,
         facts: [
           { label: "对象", value: row.salesOrderNo },
-          { label: "动作", value: kind },
+          { label: "动作", value: actionLabel },
         ],
       })
       setPendingAction(null)
@@ -620,30 +593,20 @@ export function ExecutionProjectionsPage() {
       setBulkJob(job)
       setRowSelection({})
       setPendingAction(null)
-      setResult({
-        status:
-          job.stillUnknown > 0
-            ? "unknown"
-            : job.status === "failed"
-              ? "blocked"
-              : "succeeded",
-        title:
-          kind === "BULK_RETRY" ? "批量重试已执行" : "批量查询已执行",
-        description: job.nextAction,
-        reference: job.jobId,
-        facts: [
-          { label: "操作编号", value: job.jobId },
-          {
-            label: "选择结果",
-            value: job.selectionSnapshotId,
-          },
-          {
-            label: "成功/跳过/失败/仍未知",
-            value: `${job.succeeded}/${job.skipped}/${job.failed}/${job.stillUnknown}`,
-          },
-          { label: "下一步", value: job.nextAction },
-        ],
-      })
+      if (job.status === "failed") {
+        setResult({
+          status: "blocked",
+          title: "批量操作被阻断",
+          description: job.nextAction,
+          reference: "bulk",
+          facts: [
+            {
+              label: "成功/跳过/失败/仍未知",
+              value: `${job.succeeded}/${job.skipped}/${job.failed}/${job.stillUnknown}`,
+            },
+          ],
+        })
+      }
     } catch (err) {
       setResult({
         status: "blocked",
@@ -694,10 +657,14 @@ export function ExecutionProjectionsPage() {
         ]}
         metadata={
           <DataFreshness
-            updatedAt="刚刚"
+            updatedAt={
+              view
+                ? formatDateTime(view.queriedAt, "monthDay", "passthrough")
+                : "—"
+            }
             dateTime={view?.queriedAt}
-            state="fresh"
-            label="发送状态"
+            state={listQuery.isFetching ? "syncing" : "fresh"}
+            label="发送状态更新于"
           />
         }
         actions={
@@ -717,7 +684,8 @@ export function ExecutionProjectionsPage() {
                 label: "批量查询",
                 variant: "outline",
                 mobileVisibility: "hide",
-                disabled: selectedIds.length === 0 || bulkMutation.isPending,
+                disabled:
+                  selectedIds.length === 0 || bulkOverLimit || bulkMutation.isPending,
                 onClick: () =>
                   setPendingAction({
                     kind: "BULK_QUERY",
@@ -728,7 +696,8 @@ export function ExecutionProjectionsPage() {
                 actionKey: "bulk-retry",
                 label: "批量重试",
                 mobileVisibility: "hide",
-                disabled: selectedIds.length === 0 || bulkMutation.isPending,
+                disabled:
+                  selectedIds.length === 0 || bulkOverLimit || bulkMutation.isPending,
                 onClick: () =>
                   setPendingAction({
                     kind: "BULK_RETRY",
@@ -742,7 +711,7 @@ export function ExecutionProjectionsPage() {
 
       <Alert>
         <ShieldAlertIcon aria-hidden="true" />
-        <AlertTitle>非写者边界</AlertTitle>
+        <AlertTitle>本页只读</AlertTitle>
         <AlertDescription>
           执行信息由已生效销售版本自动形成；接收失败不影响销售记录与应收，内容变更须走销售变更单。本页支持查询结果、重试与升级到接口错误中心，不展示金额、税率、开票、应收与玩法等销售明细。
         </AlertDescription>
@@ -787,10 +756,9 @@ export function ExecutionProjectionsPage() {
           }
           description={
             <>
-              系统筛选结果{" "}
-              <span className="num">{bulkJob.selectionSnapshotId}</span>
-              。成功 {bulkJob.succeeded} · 跳过 {bulkJob.skipped} · 仍未知{" "}
-              {bulkJob.stillUnknown} · 失败 {bulkJob.failed}。
+              本次选择共 {bulkJob.total} 项。成功 {bulkJob.succeeded} · 跳过{" "}
+              {bulkJob.skipped} · 仍未知 {bulkJob.stillUnknown} · 失败{" "}
+              {bulkJob.failed}。
               {bulkJob.stillUnknown > 0
                 ? " 仍未知项未按成功处理、未计入已确认。"
                 : null}
@@ -833,7 +801,7 @@ export function ExecutionProjectionsPage() {
               <InputGroupInput
                 value={searchDraft}
                 onChange={(e) => setSearchDraft(e.target.value)}
-                placeholder="销售单号、执行编号、客户"
+                placeholder="销售单号、客户"
                 aria-label="搜索执行信息"
               />
             </InputGroup>
@@ -898,13 +866,13 @@ export function ExecutionProjectionsPage() {
               placeholder="全部接收状态"
             />
             <OptionCombobox
-              aria-label="延迟分组"
+              aria-label="等待时长分组"
               value={latency}
               onValueChange={(v) =>
                 replaceParams({ latency: v ?? "all", page: "1" })
               }
               options={[
-                { value: "all", label: "延迟：全部" },
+                { value: "all", label: "等待时长：全部" },
                 ...(Object.keys(LATENCY_LABEL) as LatencyBand[]).map((k) => ({
                   value: k,
                   label: LATENCY_LABEL[k],
@@ -913,7 +881,7 @@ export function ExecutionProjectionsPage() {
               className="w-[9rem]"
               size="sm"
               allowClear={false}
-              placeholder="延迟：全部"
+              placeholder="等待时长：全部"
             />
             <OptionCombobox
               aria-label="版本差异"
@@ -971,6 +939,11 @@ export function ExecutionProjectionsPage() {
             已选择{" "}
             <span className="num font-medium">{selectedIds.length}</span>{" "}
             项（批量操作仅作用于显式选择，不含当前筛选全部）
+            {bulkOverLimit ? (
+              <span className="ml-2 text-destructive">
+                批量最多 {BULK_SELECTION_LIMIT} 条，超出部分请分批
+              </span>
+            ) : null}
           </span>
           <div className="flex flex-wrap gap-2">
             <Button
@@ -985,17 +958,17 @@ export function ExecutionProjectionsPage() {
               type="button"
               size="sm"
               variant="outline"
-              disabled={bulkMutation.isPending}
+              disabled={bulkOverLimit || bulkMutation.isPending}
               onClick={() =>
                 setPendingAction({ kind: "BULK_QUERY", ids: selectedIds })
               }
             >
-              批量查询结果
+              批量查询
             </Button>
             <Button
               type="button"
               size="sm"
-              disabled={bulkMutation.isPending}
+              disabled={bulkOverLimit || bulkMutation.isPending}
               onClick={() =>
                 setPendingAction({ kind: "BULK_RETRY", ids: selectedIds })
               }
@@ -1008,7 +981,7 @@ export function ExecutionProjectionsPage() {
 
       <BusinessTableFrame
         title="执行信息列表"
-        description="销售单身份列与操作列固定；每页 6–8 行。指标与列表数据均受权限范围控制。"
+        description="销售单身份列与操作列固定；每页条数可在分页条切换。指标与列表数据均受权限范围控制。"
         table={
           <DataTable
             columns={columns}
@@ -1018,7 +991,12 @@ export function ExecutionProjectionsPage() {
             enableRowSelection
             rowSelection={rowSelection}
             onRowSelectionChange={setRowSelection}
-            onRowPreview={(row) => setPreviewId(row.projectionId)}
+            onRowPreview={(row) =>
+              replaceParams({
+                projectionId: row.projectionId,
+                revision: null,
+              })
+            }
             onRowOpen={(row) =>
               replaceParams({
                 projectionId: row.projectionId,
@@ -1027,7 +1005,15 @@ export function ExecutionProjectionsPage() {
             }
             pagination={pagination}
             onPaginationChange={(next) => {
-              replaceParams({ page: String(next.pageIndex + 1) })
+              const sp = new URLSearchParams(searchParams.toString())
+              if (next.pageIndex <= 0) sp.delete("page")
+              else sp.set("page", String(next.pageIndex + 1))
+              if (next.pageSize === 8) sp.delete("size")
+              else sp.set("size", String(next.pageSize))
+              const qs = sp.toString()
+              router.replace(qs ? `${pathname}?${qs}` : pathname, {
+                scroll: false,
+              })
             }}
             manualPagination
             layout="flush"
@@ -1213,36 +1199,45 @@ export function ExecutionProjectionsPage() {
                   ) : null}
                   {detail.allowedActions.includes("ESCALATE") ||
                   detail.reconciliationStatus === "VERSION_MISMATCH" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => {
-                        const d = detail.deliveries[0]
-                        if (
-                          detail.allowedActions.includes("ESCALATE") &&
-                          !d?.workItemId
-                        ) {
+                    detail.allowedActions.includes("ESCALATE") &&
+                    !detail.deliveries[0]?.workItemId ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        disabled={commandMutation.isPending}
+                        onClick={() => {
                           const row = rows.find(
                             (r) =>
                               r.projectionId === detail.identity.projectionId
                           )
-                          if (row) {
-                            setPendingAction({
-                              kind: "ESCALATE",
-                              row,
-                              objectVersion: detail.objectVersion,
-                            })
-                            return
-                          }
+                          if (!row) return
+                          setPendingAction({
+                            kind: "ESCALATE",
+                            row,
+                            objectVersion: detail.objectVersion,
+                          })
+                        }}
+                      >
+                        升级到接口错误中心
+                      </Button>
+                    ) : (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        render={
+                          <Link
+                            href={w29Href(
+                              detail.deliveries[0]?.workItemId,
+                              detail.deliveries[0]?.errorTaskId
+                            )}
+                          />
                         }
-                        router.push(
-                          w29Href(d?.workItemId, d?.errorTaskId)
-                        )
-                      }}
-                    >
-                      升级 / 打开接口错误中心
-                    </Button>
+                      >
+                        去接口错误中心处理
+                      </Button>
+                    )
                   ) : null}
                 </>
               }
@@ -1331,7 +1326,7 @@ export function ExecutionProjectionsPage() {
                   },
                   {
                     id: "latency",
-                    label: "等待 / SLA",
+                    label: "等待时长",
                     value: `${detail.pendingDurationLabel} · ${LATENCY_LABEL[detail.latencyBand]}`,
                   },
                   {
@@ -1350,6 +1345,7 @@ export function ExecutionProjectionsPage() {
               >
                 <WhitelistContentGrid
                   content={detail.selectedRevision.content}
+                  revisionNo={detail.selectedRevision.revisionNo}
                 />
               </DocumentSection>
             ) : null}
@@ -1537,66 +1533,6 @@ export function ExecutionProjectionsPage() {
         )}
       </QuickPreviewSheet>
 
-      {/* 行预览 */}
-      <QuickPreviewSheet
-        open={Boolean(previewId)}
-        onOpenChange={(open) => {
-          if (!open) setPreviewId(null)
-        }}
-        title="数据预览"
-        description="白名单字段、来源版本与最新发送（只读）"
-      >
-        {previewQuery.data ? (
-          <div className="space-y-3">
-            <StatusTrackSummary
-              tracks={[
-                {
-                  id: "s",
-                  label: "销售记录",
-                  status: {
-                    label: previewQuery.data.tracks.salesFact.label,
-                    tone: previewQuery.data.tracks.salesFact.tone,
-                  },
-                },
-                {
-                  id: "d",
-                  label: "信息发送",
-                  status: {
-                    label: previewQuery.data.tracks.projectionDelivery.label,
-                    tone: previewQuery.data.tracks.projectionDelivery.tone,
-                  },
-                },
-                {
-                  id: "m",
-                  label: "商城确认",
-                  status: {
-                    label: previewQuery.data.tracks.mallConfirm.label,
-                    tone: previewQuery.data.tracks.mallConfirm.tone,
-                  },
-                },
-              ]}
-            />
-            <Separator />
-            <WhitelistContentGrid
-              content={previewQuery.data.selectedRevision.content}
-            />
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => {
-                const id = previewId
-                setPreviewId(null)
-                if (id) replaceParams({ projectionId: id })
-              }}
-            >
-              查看详情
-            </Button>
-          </div>
-        ) : (
-          <div className="h-32 animate-pulse rounded-xl bg-muted" />
-        )}
-      </QuickPreviewSheet>
-
       <FormalActionConfirmDialog
         open={pendingAction != null}
         onOpenChange={(open) => {
@@ -1610,13 +1546,14 @@ export function ExecutionProjectionsPage() {
               : pendingAction?.kind === "ESCALATE"
                 ? "升级到接口错误中心"
                 : pendingAction?.kind === "BULK_QUERY"
-                  ? "批量查询结果"
+                  ? "批量查询"
                   : pendingAction?.kind === "BULK_RETRY"
                     ? "批量重试"
                     : "确认操作"
         }
         actionLabel="执行"
         confirmLabel="确认执行"
+        cancelLabel="取消"
         fromStatus={
           pendingAction &&
           "row" in pendingAction &&
@@ -1634,14 +1571,14 @@ export function ExecutionProjectionsPage() {
                 pendingAction?.kind === "BULK_RETRY"
               ? { label: "按原记录重试", tone: "info" }
               : pendingAction?.kind === "ESCALATE"
-                ? { label: "W29 待办", tone: "warning" }
+                ? { label: "错误中心待办", tone: "warning" }
                 : { label: "后台逐项处理", tone: "info" }
         }
         lockedFields={
           pendingAction && "row" in pendingAction && pendingAction.row
             ? [
                 `销售版本 v${pendingAction.row.salesOrderRevisionNo}`,
-                `数据修订 v${pendingAction.row.projectionRevisionNo}`,
+                `数据版本 v${pendingAction.row.projectionRevisionNo}`,
                 pendingAction.row.targetMallName,
                 `销售单 ${pendingAction.row.salesOrderNo} · v${pendingAction.row.salesOrderRevisionNo} · ${pendingAction.row.targetMallName}`,
               ]
@@ -1668,7 +1605,7 @@ export function ExecutionProjectionsPage() {
               : pendingAction?.kind === "ESCALATE"
                 ? [
                     "创建或复用接口错误待办（不会重复建单）",
-                    "W23 只返回入口，不领取/完成任务",
+                    "本页只返回入口，不领取/完成任务",
                   ]
                 : pendingAction?.kind === "BULK_RETRY"
                   ? [
@@ -1705,6 +1642,7 @@ export function ExecutionProjectionsPage() {
 
 function WhitelistContentGrid({
   content,
+  revisionNo,
 }: {
   content: {
     customerExternalIdentity: string
@@ -1718,6 +1656,8 @@ function WhitelistContentGrid({
     effectiveAt: string
     contentHash: string
   }
+  /** 数据修订号（用户可见的版本，不展示内容哈希） */
+  revisionNo?: number
 }) {
   return (
     <dl
@@ -1751,7 +1691,7 @@ function WhitelistContentGrid({
         <dd className="num">{content.voucherExpiryAt}</dd>
       </div>
       <div>
-        <dt className="text-xs text-muted-foreground">面额（执行字段）</dt>
+        <dt className="text-xs text-muted-foreground">面额</dt>
         <dd className="num">{content.faceValue}</dd>
       </div>
       <div>
@@ -1768,7 +1708,9 @@ function WhitelistContentGrid({
       </div>
       <div>
         <dt className="text-xs text-muted-foreground">数据版本</dt>
-        <dd className="num text-xs">{shortHash(content.contentHash)}</dd>
+        <dd className="num text-xs">
+          {revisionNo != null ? `v${revisionNo}` : "—"}
+        </dd>
       </div>
     </dl>
   )

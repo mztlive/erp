@@ -143,6 +143,38 @@ export const SECTION_LABEL: Record<OrderSection, string> = {
   audit: "动作与审计",
 }
 
+/** 关联任务类型中文映射（任务类型码不在界面出现） */
+export const WORK_ITEM_TYPE_LABEL: Record<
+  "INTEGRATION_RESULT_UNKNOWN" | "BUSINESS_EXCEPTION",
+  string
+> = {
+  INTEGRATION_RESULT_UNKNOWN: "接口结果待确认",
+  BUSINESS_EXCEPTION: "业务异常",
+}
+
+/** 任务状态中文映射（枚举原值不上屏） */
+export const WORK_ITEM_STATUS_LABEL: Record<
+  "PENDING" | "IN_PROGRESS" | "COMPLETED" | "TRANSFERRED",
+  string
+> = {
+  PENDING: "待处理",
+  IN_PROGRESS: "处理中",
+  COMPLETED: "已完成",
+  TRANSFERRED: "已转交",
+}
+
+/** 处理权状态中文映射（租约/锁语义不进入界面） */
+export const LEASE_DISPOSITION_LABEL: Record<"RENEWED" | "RELEASED", string> = {
+  RENEWED: "处理权限已延期",
+  RELEASED: "本次处理已结束",
+}
+
+/** 版本代号（SV-/PV- 前缀）转业务口径，如 SV-12 → 12 */
+export function codeVersion(value?: string): string {
+  if (!value) return "—"
+  return value.replace(/^[A-Z]+-/, "")
+}
+
 export const SECTIONS: OrderSection[] = [
   "overview",
   "items",
@@ -202,6 +234,8 @@ export type SupplierOrderListQuery = {
   page: number
   pageSize: number
   role: DemoRole
+  /** 售后待处理快捷筛选（与指标口径一致：取消/退款异常态任一命中） */
+  aftersalePending?: boolean
   sortBy?: "orderNo" | "mallOrderNo" | "externalOrderNo" | "lastBusinessAt"
   sortDir?: "asc" | "desc"
 }
@@ -227,6 +261,10 @@ export type SupplierOrderListRow = {
   updatedAt: string
   lastBusinessAt: string
   errorSummary?: string
+  /** 下单成本合计（含税）；无成本字段权限时为 null */
+  costGross?: string | null
+  /** 商品明细行数 */
+  itemCount: number
   allowedActions: string[]
   actionBlockers: ActionBlocker[]
   priority: number
@@ -236,8 +274,8 @@ export type SupplierOrderMetric = {
   key: string
   label: string
   value: number
-  detail?: string
   /** 指标一键筛选：写入 fulfillmentStatuses 或 view */
+  fulfillmentStatuses?: SupplierFulfillmentStatus[]
   fulfillmentStatus?: SupplierFulfillmentStatus
   view?: ListView
   aftersalePending?: boolean

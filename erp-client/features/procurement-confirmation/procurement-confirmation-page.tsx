@@ -17,6 +17,7 @@ import { z } from "zod"
 
 import {
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   DataFreshness,
   DocumentSummary,
@@ -29,6 +30,7 @@ import {
   ValidationSummary,
 } from "@/components/business"
 import { PROCUREMENT_SUPPLIER_OPTIONS } from "@/lib/business-options"
+import { formatDateTime } from "@/lib/datetime"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -77,15 +79,10 @@ import {
   useProcurementConfirmationQuery,
   useSaveProcurementConfirmationMutation,
 } from "@/features/procurement-confirmation/queries"
-import { freshnessText, versionText } from "@/lib/ui-text"
+import { freshnessText } from "@/lib/ui-text"
 
 const rejectSchema = z.object({
-  reasonCode: z.enum([
-    "UNFULFILLABLE",
-    "COST_INCREASE",
-    "DELIVERY_UNMET",
-    "QUALIFICATION_INVALID",
-  ]),
+  reasonCode: z.string().min(1, "请选择驳回原因"),
   comment: z.string().trim().min(5, "请填写至少 5 个字的补充说明"),
 })
 
@@ -102,11 +99,6 @@ type SessionLease = {
 }
 
 type ResultState = SharedResultState<FormalOutcome>
-
-function shortHash(hash: string) {
-  if (hash.length <= 16) return hash
-  return `${hash.slice(0, 10)}…${hash.slice(-4)}`
-}
 
 function buildReturnHref(searchParams: URLSearchParams) {
   const qs = searchParams.toString()
@@ -201,6 +193,8 @@ export function ProcurementConfirmationPage() {
   const [rejectOpen, setRejectOpen] = React.useState(false)
   const [advanceAfterConfirm, setAdvanceAfterConfirm] = React.useState(true)
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
+  /** 自动下一项跳转后保留的上一条结果（轻量条，可关闭） */
+  const [finishedResult, setFinishedResult] = React.useState<ResultState>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [saveMessage, setSaveMessage] = React.useState<string | null>(null)
   const headingRef = React.useRef<HTMLHeadingElement>(null)
@@ -281,7 +275,7 @@ export function ProcurementConfirmationPage() {
         setLeaseEpoch((n) => n + 1)
       })
       .catch(() => {
-        /* 保持未领取态 */
+        setActionError("领取处理权失败，请点击「领取任务」重试")
       })
     return () => {
       cancelled = true
@@ -447,8 +441,8 @@ export function ProcurementConfirmationPage() {
     return session
   }, [claimMutation, task])
 
-  const handleSave = React.useCallback(async () => {
-    if (!task) return
+  const handleSave = React.useCallback(async (): Promise<boolean> => {
+    if (!task) return false
     try {
       await ensureLease()
       const result = await saveMutation.mutateAsync({
@@ -459,12 +453,28 @@ export function ProcurementConfirmationPage() {
         lines: lineDrafts,
       })
       setDirty(false)
-      setSaveMessage(`已保存 · 编辑版本 ${result.editVersion}`)
+      setSaveMessage(`已保存 · 第 ${result.editVersion} 次修改`)
       setActionError(null)
+      return true
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "保存失败")
+      return false
     }
   }, [ensureLease, lineDrafts, saveMutation, task])
+
+  /** 终局操作打开前：dirty 时先保存，保存失败则中止打开（防止按旧草稿提交） */
+  const guardTerminalOpen = React.useCallback(
+    async (): Promise<boolean> => {
+      if (!dirty) return true
+      const saved = await handleSave()
+      if (!saved) {
+        setActionError("有未保存的确认分行修改且保存失败，请先处理后再继续")
+        return false
+      }
+      return true
+    },
+    [dirty, handleSave]
+  )
 
   const advanceIfNeeded = React.useCallback(
     (shouldAdvance: boolean) => {
@@ -488,17 +498,23 @@ export function ProcurementConfirmationPage() {
     setActionError(null)
     try {
       await ensureLease()
+      // guard 自动保存后编辑版本可能已 +1：终局提交前重读任务
+      const latestTask =
+        (await queueQuery.refetch()).data?.tasks.find(
+          (t) => t.workItemId === task.workItemId
+        ) ?? task
       const response = await completeMutation.mutateAsync({
-        workItemId: task.workItemId,
-        expectedSubjectVersion: task.subjectVersion,
+        workItemId: latestTask.workItemId,
+        expectedSubjectVersion: latestTask.subjectVersion,
         decision: {
           reviewResult: "APPROVED",
-          confirmationId: task.confirmation.confirmationId,
-          submissionId: task.salesSubmission.submissionId,
-          expectedConfirmationEditVersion: task.confirmation.editVersion,
-          salesOrderId: task.salesSubmission.salesOrderId,
-          salesOrderNo: task.salesSubmission.salesOrderNo,
-          subjectHash: task.salesSubmission.subjectHash,
+          confirmationId: latestTask.confirmation.confirmationId,
+          submissionId: latestTask.salesSubmission.submissionId,
+          expectedConfirmationEditVersion:
+            latestTask.confirmation.editVersion,
+          salesOrderId: latestTask.salesSubmission.salesOrderId,
+          salesOrderNo: latestTask.salesSubmission.salesOrderNo,
+          subjectHash: latestTask.salesSubmission.subjectHash,
         },
       })
 
@@ -511,7 +527,7 @@ export function ProcurementConfirmationPage() {
       if (outcome.kind !== "APPROVED_AND_SALES_EFFECTIVE") return
       leaseRef.current = null
       setLeaseEpoch((n) => n + 1)
-      setLastResult({
+      const approvedResult: ResultState = {
         status: "succeeded",
         title: "采购确认已通过 · 销售单已生效",
         description: advanceAfterConfirm && autoNext
@@ -520,9 +536,13 @@ export function ProcurementConfirmationPage() {
         reference: outcome.reference,
         outcome,
         stayOnItem: !(advanceAfterConfirm && autoNext),
-      })
+      }
+      setLastResult(approvedResult)
       if (advanceAfterConfirm && autoNext) {
+        setFinishedResult(approvedResult)
         advanceIfNeeded(true)
+      } else {
+        setFinishedResult(null)
       }
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "通过失败")
@@ -533,6 +553,7 @@ export function ProcurementConfirmationPage() {
     autoNext,
     completeMutation,
     ensureLease,
+    queueQuery,
     task,
   ])
 
@@ -542,17 +563,23 @@ export function ProcurementConfirmationPage() {
       setActionError(null)
       try {
         await ensureLease()
+        // guard 自动保存后编辑版本可能已 +1：终局提交前重读任务
+        const latestTask =
+          (await queueQuery.refetch()).data?.tasks.find(
+            (t) => t.workItemId === task.workItemId
+          ) ?? task
         const response = await completeMutation.mutateAsync({
-          workItemId: task.workItemId,
-          expectedSubjectVersion: task.subjectVersion,
+          workItemId: latestTask.workItemId,
+          expectedSubjectVersion: latestTask.subjectVersion,
           decision: {
             reviewResult: "REJECTED",
-            confirmationId: task.confirmation.confirmationId,
-            submissionId: task.salesSubmission.submissionId,
-            expectedConfirmationEditVersion: task.confirmation.editVersion,
-            salesOrderId: task.salesSubmission.salesOrderId,
-            salesOrderNo: task.salesSubmission.salesOrderNo,
-            subjectHash: task.salesSubmission.subjectHash,
+            confirmationId: latestTask.confirmation.confirmationId,
+            submissionId: latestTask.salesSubmission.submissionId,
+            expectedConfirmationEditVersion:
+              latestTask.confirmation.editVersion,
+            salesOrderId: latestTask.salesSubmission.salesOrderId,
+            salesOrderNo: latestTask.salesSubmission.salesOrderNo,
+            subjectHash: latestTask.salesSubmission.subjectHash,
             rejectReasonCode: value.reasonCode,
             comment: value.comment,
           },
@@ -566,31 +593,35 @@ export function ProcurementConfirmationPage() {
         if (outcome.kind !== "REJECTED_TO_SALES") return
         leaseRef.current = null
         setLeaseEpoch((n) => n + 1)
-        setLastResult({
+        const rejectedResult: ResultState = {
           status: "rejected",
-          title: "采购确认已驳回 · 旧任务已完成",
+          title: "采购确认已驳回 · 本次提交已结束",
           description:
-            "已形成本次采购确认的驳回结论；未创建采购单、变更单或后继任务。销售仅能在销售单选择固定三路。",
+            "已形成本次采购确认的驳回结论；未创建采购单、变更单或后继任务。销售可在销售单选择三条固定出路。",
           reference: outcome.reference,
           outcome,
           stayOnItem: !autoNext,
-        })
+        }
+        setLastResult(rejectedResult)
         if (autoNext) {
+          setFinishedResult(rejectedResult)
           advanceIfNeeded(true)
+        } else {
+          setFinishedResult(null)
         }
       } catch (error) {
         setActionError(error instanceof Error ? error.message : "驳回失败")
       }
     },
-    [advanceIfNeeded, autoNext, completeMutation, ensureLease, task]
+    [advanceIfNeeded, autoNext, completeMutation, ensureLease, queueQuery, task]
   )
 
   const rejectForm = useAppForm({
     defaultValues: {
-      reasonCode: "UNFULFILLABLE" as RejectReasonCode,
+      reasonCode: "",
       comment: "",
     },
-    validators: { onChange: rejectSchema },
+    validators: { onChange: rejectSchema, onMount: rejectSchema },
     onSubmit: async ({ value }) => {
       await handleRejectSubmit({
         reasonCode: value.reasonCode as RejectReasonCode,
@@ -604,7 +635,11 @@ export function ProcurementConfirmationPage() {
     setActionError(null)
     try {
       if (dirty) {
-        await handleSave()
+        const saved = await handleSave()
+        if (!saved) {
+          setActionError("有未保存的确认分行修改且保存失败；请重试保存后再跳过")
+          return
+        }
       }
       await ensureLease()
       const nextId = neighborId(1)
@@ -665,8 +700,11 @@ export function ProcurementConfirmationPage() {
       ) {
         event.preventDefault()
         if (allCovered && activeLease) {
-          setAdvanceAfterConfirm(autoNext)
-          setConfirmOpen(true)
+          void (async () => {
+            if (!(await guardTerminalOpen())) return
+            setAdvanceAfterConfirm(autoNext)
+            setConfirmOpen(true)
+          })()
         }
         return
       }
@@ -674,7 +712,7 @@ export function ProcurementConfirmationPage() {
       if (event.key === "j" || event.key === "ArrowDown") {
         event.preventDefault()
         if (dirty) {
-          setActionError("有未保存修改，请先保存或放弃后再切换")
+          setActionError("有未保存修改，请先保存后再切换")
           return
         }
         const next = neighborId(1)
@@ -683,7 +721,7 @@ export function ProcurementConfirmationPage() {
       if (event.key === "k" || event.key === "ArrowUp") {
         event.preventDefault()
         if (dirty) {
-          setActionError("有未保存修改，请先保存或放弃后再切换")
+          setActionError("有未保存修改，请先保存后再切换")
           return
         }
         const prev = neighborId(-1)
@@ -698,6 +736,7 @@ export function ProcurementConfirmationPage() {
     autoNext,
     dirty,
     goToWorkItem,
+    guardTerminalOpen,
     handleSave,
     neighborId,
   ])
@@ -748,6 +787,29 @@ export function ProcurementConfirmationPage() {
     )
   }
 
+  if (queueQuery.isError) {
+    return (
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <PageHeader title="采购二次确认" description="队列加载失败" />
+        <BusinessFailureState
+          kind="system"
+          title="队列加载失败"
+          description="未能加载采购确认队列。请重试；若持续失败，可返回工作台稍后再来。"
+          onRetry={() => void queueQuery.refetch()}
+          action={
+            <Button
+              variant="outline"
+              size="sm"
+              render={<Link href="/workspace" />}
+            >
+              返回今日工作台
+            </Button>
+          }
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
@@ -763,7 +825,11 @@ export function ProcurementConfirmationPage() {
         metadata={
           <div className="flex flex-wrap items-center gap-3">
             <DataFreshness
-              updatedAt="刚刚"
+              updatedAt={
+                context?.queueContextUpdatedAt
+                  ? formatDateTime(context.queueContextUpdatedAt, "default")
+                  : "刚刚"
+              }
               dateTime={context?.queueContextUpdatedAt}
               state="fresh"
               label={freshnessText.queueUpdatedAt}
@@ -794,7 +860,67 @@ export function ProcurementConfirmationPage() {
         <Badge variant="outline" className="font-normal">
           该偏好仅在本次操作内生效
         </Badge>
+        <span className="ml-auto hidden text-xs text-muted-foreground md:inline">
+          快捷键：j / k 切换任务 · ⌘S 保存 · ⌘↵ 打开通过确认
+        </span>
       </div>
+
+      {finishedResult && !lastResult ? (
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-border bg-card px-3 py-2 text-sm"
+        >
+          <CircleCheckIcon
+            className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+            aria-hidden="true"
+          />
+          <span className="font-medium">
+            上一项已{finishedResult.status === "rejected" ? "驳回" : "通过"}
+          </span>
+          {finishedResult.reference ? (
+            <span className="num text-muted-foreground">
+              {finishedResult.reference}
+            </span>
+          ) : null}
+          {finishedResult.status === "rejected" ? (
+            <span className="text-muted-foreground">
+              销售可在销售单选择三条固定出路
+            </span>
+          ) : (
+            <span className="text-muted-foreground">
+              可读取采购创建依据建采购单
+            </span>
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              render={
+                <Link
+                  href={w05Href(
+                    finishedResult.outcome &&
+                      "salesOrderId" in finishedResult.outcome
+                      ? finishedResult.outcome.salesOrderId
+                      : task?.salesSubmission.salesOrderId ?? "#",
+                    returnTo
+                  )}
+                />
+              }
+            >
+              打开销售单
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={() => setFinishedResult(null)}
+            >
+              关闭
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {lastResult ? (
         <div ref={resultRef} tabIndex={-1} className="outline-none">
@@ -803,7 +929,11 @@ export function ProcurementConfirmationPage() {
             title={lastResult.title}
             description={lastResult.description}
             reference={lastResult.reference}
-            facts={buildResultFacts(lastResult.outcome, context)}
+            facts={buildResultFacts(
+              lastResult.outcome,
+              context,
+              task?.salesSubmission.submissionNo
+            )}
             actions={
               <ResultActions
                 lastResult={lastResult}
@@ -828,8 +958,6 @@ export function ProcurementConfirmationPage() {
             <ProcurementRejectionNextSteps
               salesOrderId={lastResult.outcome.salesOrderId}
               returnTo={returnTo}
-              rejectedSubmissionId={lastResult.outcome.rejectedSubmissionId}
-              rejectedSubjectHash={lastResult.outcome.rejectedSubjectHash}
             />
           ) : null}
         </div>
@@ -844,14 +972,44 @@ export function ProcurementConfirmationPage() {
       ) : null}
 
       {completed ? (
-        <BusinessEmptyState
-          kind="no-tasks"
-          title="本筛选项已处理完"
-          description="当前采购二次确认队列已经清空，可以返回工作台处理其它事项。"
-          action={
-            <Button render={<Link href="/workspace" />}>返回今日工作台</Button>
-          }
-        />
+        view?.emptyReason === "FILTER_NO_RESULT" ? (
+          <BusinessEmptyState
+            kind="filter"
+            title="当前筛选无结果"
+            description="没有单号或范围匹配的待确认事项，可清除筛选后重试。"
+            action={
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    replaceUrl({ orderNo: null, due: null })
+                  }
+                >
+                  清除筛选
+                </Button>
+                <Button render={<Link href="/workspace" />}>
+                  返回今日工作台
+                </Button>
+              </div>
+            }
+          />
+        ) : view?.emptyReason === "NO_DATA_SCOPE" ? (
+          <BusinessEmptyState
+            kind="no-scope"
+            title="当前角色无数据范围"
+            description="你可以进入此页面，但当前角色范围内没有可查看的待确认事项。"
+            action={<Button render={<Link href="/workspace" />}>返回今日工作台</Button>}
+          />
+        ) : (
+          <BusinessEmptyState
+            kind="no-tasks"
+            title="本筛选项已处理完"
+            description="当前采购二次确认队列已经清空，可以返回工作台处理其它事项。"
+            action={
+              <Button render={<Link href="/workspace" />}>返回今日工作台</Button>
+            }
+          />
+        )
       ) : task ? (
         <>
           <SequentialProcessBar
@@ -861,16 +1019,23 @@ export function ProcurementConfirmationPage() {
             leaseStatusLabel={leaseLabel}
             processLabel="确认通过"
             processNextLabel="通过并打开下一条"
-            processDisabled={formalPending || !allCovered}
+            processDisabled={formalPending || !allCovered || !activeLease}
             pending={formalPending}
+            backLabel="返回工作台"
             onBack={() => router.push("/workspace")}
             onProcess={() => {
-              setAdvanceAfterConfirm(false)
-              setConfirmOpen(true)
+              void (async () => {
+                if (!(await guardTerminalOpen())) return
+                setAdvanceAfterConfirm(autoNext)
+                setConfirmOpen(true)
+              })()
             }}
             onProcessNext={() => {
-              setAdvanceAfterConfirm(true)
-              setConfirmOpen(true)
+              void (async () => {
+                if (!(await guardTerminalOpen())) return
+                setAdvanceAfterConfirm(true)
+                setConfirmOpen(true)
+              })()
             }}
             onReclaim={() => {
               void ensureLease().catch((error) => {
@@ -894,25 +1059,13 @@ export function ProcurementConfirmationPage() {
                       : "改品/改价后新提交 · 须重新确认"}
                   </AlertTitle>
                   <AlertDescription>
-                    新提交编号{" "}
-                    <span className="num font-mono">
-                      {task.salesSubmission.submissionId}
-                    </span>
-                    ，版本{" "}
-                    <span className="num font-mono">
-                      {task.salesSubmission.subjectHashSummary}
-                    </span>
-                    。上一驳回提交{" "}
-                    <span className="num font-mono">
-                      {
-                        task.salesSubmission.resubmissionContext
-                          .previousRejectedSubmissionId
-                      }
-                    </span>
+                    第 {task.salesSubmission.submissionNo} 次提交 ·{" "}
+                    {task.salesSubmission.submittedAt} ·{" "}
+                    {task.salesSubmission.submittedByLabel}；上一驳回提交已作废
                     。
                     {task.salesSubmission.resubmissionContext
                       .lowMarginManagerConfirmationEvidenceReference
-                      ? ` 上级证据 ${task.salesSubmission.resubmissionContext.lowMarginManagerConfirmationEvidenceReference} 不能自动通过。`
+                      ? " 上级证据不能自动通过，仍需采购确认。"
                       : " 不得复用旧确认分行。"}
                   </AlertDescription>
                 </Alert>
@@ -937,10 +1090,12 @@ export function ProcurementConfirmationPage() {
                       label={task.riskLabel}
                       tone={task.riskTone}
                     />
-                    <Badge variant="secondary">行为/任务 · 无确认单号</Badge>
+                    <Badge variant="secondary">
+                      二次提交 · 无确认单号
+                    </Badge>
                   </div>
                   <CardDescription>
-                    不可变提交 第 {task.salesSubmission.submissionNo} 次 ·{" "}
+                    第 {task.salesSubmission.submissionNo} 次提交 ·{" "}
                     {task.salesSubmission.submittedAt} ·{" "}
                     {task.salesSubmission.submittedByLabel}
                   </CardDescription>
@@ -950,26 +1105,10 @@ export function ProcurementConfirmationPage() {
                     columns="two"
                     items={[
                       {
-                        id: "submissionId",
-                        label: "提交编号",
-                        value: (
-                          <span className="num font-mono text-sm">
-                            {task.salesSubmission.submissionId}
-                          </span>
-                        ),
+                        id: "submission",
+                        label: "提交记录",
+                        value: `第 ${task.salesSubmission.submissionNo} 次 · ${task.salesSubmission.submittedAt} · ${task.salesSubmission.submittedByLabel}`,
                         emphasized: true,
-                      },
-                      {
-                        id: "subjectHash",
-                        label: versionText.dataVersion,
-                        value: (
-                          <span className="num font-mono text-sm">
-                            {task.salesSubmission.subjectHashSummary}
-                          </span>
-                        ),
-                        description: shortHash(
-                          task.salesSubmission.subjectHash
-                        ),
                       },
                       {
                         id: "contract",
@@ -1065,7 +1204,7 @@ export function ProcurementConfirmationPage() {
                                   </span>{" "}
                                   · 客户期望 {subLine.requestedDeliveryDate}
                                   {subLine.referenceSupplier
-                                    ? ` · 参考 ${subLine.referenceSupplier} / ${subLine.referenceCost}`
+                                    ? ` · 参考 ${subLine.referenceSupplier} / ${money.format(Number(subLine.referenceCost))}`
                                     : null}
                                 </p>
                               </div>
@@ -1078,9 +1217,10 @@ export function ProcurementConfirmationPage() {
                                     cov?.complete ? "secondary" : "destructive"
                                   }
                                 >
-                                  覆盖 {cov?.confirmed}/{cov?.required}
+                                  覆盖 {cov?.confirmed}/{cov?.required}{" "}
+                                  {subLine.unit}
                                   {cov && !cov.complete
-                                    ? ` · 缺口 ${cov.gap}`
+                                    ? ` · 缺口 ${cov.gap} ${subLine.unit}`
                                     : " · 完整"}
                                 </Badge>
                               </div>
@@ -1102,16 +1242,16 @@ export function ProcurementConfirmationPage() {
                                     <th className="px-3 py-2 font-medium num">
                                       含税成本
                                     </th>
-                                    <th className="px-3 py-2 font-medium num">
+                                    <th className="hidden px-3 py-2 font-medium num md:table-cell">
                                       进项税率
                                     </th>
-                                    <th className="px-3 py-2 font-medium">
+                                    <th className="hidden px-3 py-2 font-medium sm:table-cell">
                                       预计交期
                                     </th>
                                     <th className="px-3 py-2 font-medium">
                                       履约方式
                                     </th>
-                                    <th className="px-3 py-2 font-medium">
+                                    <th className="hidden px-3 py-2 font-medium lg:table-cell">
                                       资质
                                     </th>
                                     <th className="px-3 py-2 font-medium text-right">
@@ -1179,7 +1319,7 @@ export function ProcurementConfirmationPage() {
                                           aria-label="最新含税成本"
                                         />
                                       </td>
-                                      <td className="px-3 py-2">
+                                      <td className="hidden px-3 py-2 md:table-cell">
                                         <Input
                                           className="num w-16"
                                           inputMode="decimal"
@@ -1193,7 +1333,7 @@ export function ProcurementConfirmationPage() {
                                           aria-label="进项税率"
                                         />
                                       </td>
-                                      <td className="px-3 py-2">
+                                      <td className="hidden px-3 py-2 sm:table-cell">
                                         <DatePicker
                                           className="w-[9.5rem]"
                                           value={
@@ -1234,7 +1374,7 @@ export function ProcurementConfirmationPage() {
                                           className="min-w-[8rem]"
                                         />
                                       </td>
-                                      <td className="px-3 py-2">
+                                      <td className="hidden px-3 py-2 lg:table-cell">
                                         <BusinessStatusBadge
                                           context="list"
                                           label={
@@ -1327,24 +1467,31 @@ export function ProcurementConfirmationPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <ul className="space-y-2" aria-label="逐明细数量覆盖">
-                    {coverage.map((c) => (
-                      <li
-                        key={c.submissionLineId}
-                        className="flex items-start justify-between gap-2 text-sm"
-                      >
-                        <span className="min-w-0 truncate">{c.itemName}</span>
-                        <span
-                          className={
-                            c.complete
+                    {coverage.map((c) => {
+                      const unit = task.salesSubmission.lines.find(
+                        (l) => l.submissionLineId === c.submissionLineId
+                      )?.unit
+                      return (
+                        <li
+                          key={c.submissionLineId}
+                          className="flex items-start justify-between gap-2 text-sm"
+                        >
+                          <span className="min-w-0 truncate">
+                            {c.itemName}
+                          </span>
+                          <span
+                            className={
+                              c.complete
                               ? "num shrink-0 text-emerald-600 dark:text-emerald-400"
                               : "num shrink-0 text-destructive"
                           }
                         >
-                          {c.confirmed}/{c.required}
-                          {!c.complete ? ` 缺${c.gap}` : ""}
+                          {c.confirmed}/{c.required} {unit ?? ""}
+                          {!c.complete ? ` 缺${c.gap} ${unit ?? ""}` : ""}
                         </span>
-                      </li>
-                    ))}
+                        </li>
+                      )
+                    })}
                   </ul>
                   <Separator />
                   <dl className="space-y-2 text-sm">
@@ -1458,7 +1605,12 @@ export function ProcurementConfirmationPage() {
             <Button
               type="button"
               variant="destructive"
-              onClick={() => setRejectOpen(true)}
+              onClick={() => {
+                void (async () => {
+                  if (!(await guardTerminalOpen())) return
+                  setRejectOpen(true)
+                })()
+              }}
               disabled={formalPending}
             >
               <XIcon data-icon="inline-start" aria-hidden="true" />
@@ -1467,10 +1619,13 @@ export function ProcurementConfirmationPage() {
             <Button
               type="button"
               onClick={() => {
-                setAdvanceAfterConfirm(autoNext)
-                setConfirmOpen(true)
+                void (async () => {
+                  if (!(await guardTerminalOpen())) return
+                  setAdvanceAfterConfirm(autoNext)
+                  setConfirmOpen(true)
+                })()
               }}
-              disabled={formalPending || !allCovered}
+              disabled={formalPending || !allCovered || !activeLease}
             >
               <CheckIcon data-icon="inline-start" aria-hidden="true" />
               确认通过并使销售单生效
@@ -1490,14 +1645,13 @@ export function ProcurementConfirmationPage() {
             fromStatus={{ label: "待二次确认", tone: "warning" }}
             toStatus={{ label: "销售已生效", tone: "success" }}
             lockedFields={[
-              `submissionId ${task.salesSubmission.submissionId}`,
-              `subjectHash ${task.salesSubmission.subjectHashSummary}`,
+              `销售单 ${task.salesSubmission.salesOrderNo} · 第 ${task.salesSubmission.submissionNo} 次提交`,
               "确认分行供应商/数量/成本/交期",
             ]}
             effects={[
               "形成采购确认通过记录与确认分行",
               "销售提交原样形成版本并生效、形成应收",
-              "完成当前 PROCUREMENT_CONFIRMATION 任务",
+              "完成本次采购确认任务",
               "生成采购创建依据（无需单独建单）",
             ]}
             nextDepartment="采购建单（读取创建依据）"
@@ -1510,7 +1664,7 @@ export function ProcurementConfirmationPage() {
               <DialogHeader>
                 <DialogTitle>驳回采购二次确认</DialogTitle>
                 <DialogDescription>
-                  将形成本次确认的驳回结论并完成当前任务；不创建采购单、变更单或后继任务。销售只能走固定三路。
+                  将形成本次确认的驳回结论并结束当前任务；不创建采购单、变更单或后继任务。销售可在销售单选择三条固定出路。
                 </DialogDescription>
               </DialogHeader>
               <form
@@ -1555,7 +1709,7 @@ export function ProcurementConfirmationPage() {
                 </rejectForm.AppField>
                 <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
                   <p className="mb-2 font-medium text-foreground">
-                    销售后续固定出路（驳回后只读展示）
+                    销售后续三条固定出路（驳回后只读展示）
                   </p>
                   <ol className="list-decimal space-y-1 pl-4">
                     {NEXT_SALES_RESOLUTION_COPY.map((item) => (
@@ -1593,7 +1747,8 @@ function buildResultFacts(
         position: number
         total: number
       }
-    | undefined
+    | undefined,
+  submissionNo?: number
 ) {
   if (!outcome) {
     return [
@@ -1607,70 +1762,31 @@ function buildResultFacts(
     return [
       { label: "销售单", value: outcome.salesOrderNo },
       {
-        label: "submissionId",
-        value: (
-          <span className="num font-mono text-xs">{outcome.submissionId}</span>
-        ),
+        label: "提交记录",
+        value: submissionNo ? `第 ${submissionNo} 次提交` : "本次提交",
       },
-      {
-        label: "subjectHash",
-        value: (
-          <span className="num font-mono text-xs">
-            {shortHash(outcome.subjectHash)}
-          </span>
-        ),
-      },
-      {
-        label: "采购创建依据",
-        value: (
-          <span className="num font-mono text-xs">
-            {outcome.procurementCreationBasisId}
-          </span>
-        ),
-      },
-      {
-        label: "销售版本",
-        value: (
-          <span className="num font-mono text-xs">
-            {outcome.salesOrderRevisionId}
-          </span>
-        ),
-      },
+      { label: "处理结果", value: "销售单已生效" },
+      { label: "下一环节", value: "采购建单（读取创建依据）" },
     ]
   }
   if (outcome.kind === "REJECTED_TO_SALES") {
     return [
       { label: "销售单", value: outcome.salesOrderNo },
       {
-        label: "驳回提交",
-        value: (
-          <span className="num font-mono text-xs">
-            {outcome.rejectedSubmissionId}
-          </span>
-        ),
-      },
-      {
-        label: versionText.rejectAtVersion,
-        value: (
-          <span className="num font-mono text-xs">
-            {shortHash(outcome.rejectedSubjectHash)}
-          </span>
-        ),
-      },
-      {
-        label: "后继任务",
-        value: "无（本次提交不创建任何任务）",
+        label: "处理结果",
+        value: "本次提交已驳回，未创建采购单或后继任务",
       },
       {
         label: "驳回原因",
         value: `${REJECT_REASON_LABEL[outcome.rejectReasonCode]} · ${outcome.comment}`,
       },
+      { label: "销售下一步", value: "改品/改价后重提、申请低毛利上级确认或作废" },
     ]
   }
   return [
     {
       label: "任务状态",
-      value: outcome.workItemStatus,
+      value: outcome.workItemStatus === "IN_PROGRESS" ? "处理中" : "待处理",
     },
     {
       label: "处理状态",
@@ -1731,24 +1847,16 @@ function ResultActions({
 function ProcurementRejectionNextSteps({
   salesOrderId,
   returnTo,
-  rejectedSubmissionId,
-  rejectedSubjectHash,
 }: {
   salesOrderId: string
   returnTo: string
-  rejectedSubmissionId: string
-  rejectedSubjectHash: string
 }) {
   return (
     <Card size="sm" className="mt-3">
       <CardHeader className="border-b">
-        <CardTitle>销售固定三条出路</CardTitle>
+        <CardTitle>销售三条固定出路</CardTitle>
         <CardDescription>
-          旧任务已 COMPLETED；W07 只读展示出路，不代销售选择。驳回提交{" "}
-          <span className="num font-mono">{rejectedSubmissionId}</span> /{" "}
-          <span className="num font-mono">
-            {shortHash(rejectedSubjectHash)}
-          </span>
+          上一驳回提交已作废；本页只读展示出路，不代销售选择。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

@@ -31,12 +31,12 @@ import {
   DocumentTotals,
   FormalActionConfirmDialog,
   FormalActionResult,
+  GuardedBusinessAction,
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
   MoneyValue,
   OptionCombobox,
-  PageActions,
   PageHeader,
   QuickPreviewSheet,
   SupplierCombobox,
@@ -57,6 +57,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { DatePicker } from "@/components/ui/date-picker"
 import {
   Dialog,
   DialogContent,
@@ -76,6 +77,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import {
   useAppendEvidenceMutation,
+  useClaimReviewMutation,
   useCreateDraftMutation,
   useRefreshTrialMutation,
   useResolveDifferenceMutation,
@@ -93,8 +95,10 @@ import type {
   SettlementSection,
 } from "@/features/supplier-settlements/types"
 import {
+  AUDIT_ACTION_LABEL,
   DEMO_ROLE_LABEL,
   DIFF_TYPE_LABEL,
+  REASON_CODE_LABEL,
   RESOLUTION_LABEL,
   SECTION_LABEL,
   SECTIONS,
@@ -131,7 +135,6 @@ function outcomeToResult(outcome: FormalOutcome): ResultState {
       status: "unknown",
       title: outcome.title,
       description: outcome.message,
-      reference: outcome.operationId,
     }
   }
   if (outcome.status === "rejected") {
@@ -363,13 +366,8 @@ function SettlementList({
         header: "结算单号",
         meta: { label: "结算单号", width: "reference" },
         cell: ({ row }) => (
-          <div className="min-w-[9rem]">
-            <div className="num text-sm font-medium">
-              {row.original.statementNo}
-            </div>
-            <div className="text-[11px] text-muted-foreground">
-              {row.original.periodLabel}
-            </div>
+          <div className="num text-sm font-medium">
+            {row.original.statementNo}
           </div>
         ),
       },
@@ -592,7 +590,7 @@ function SettlementList({
         <BusinessFailureState
           kind="system"
           title="结算列表加载失败"
-          description="请重试。已有数据时保留旧列表。"
+          description="请重试。"
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重试
@@ -614,29 +612,41 @@ function SettlementList({
             updatedAt={data?.sourceAsOf ? formatDateTime(data.sourceAsOf, "default") : "—"}
             dateTime={data?.sourceAsOf}
             label="结算数据更新时间"
-            state={listQuery.isFetching ? "stale" : "fresh"}
+            state={listQuery.isFetching ? "syncing" : "fresh"}
           />
         }
         actions={
-          <PageActions
-            actions={[
-              {
-                actionKey: "refresh",
-                label: "刷新",
-                icon: RefreshCwIcon,
-                variant: "outline",
-                onClick: () => void listQuery.refetch(),
-              },
-              {
-                actionKey: "create",
-                label: "新建结算草稿",
-                icon: PlusIcon,
-                mobileVisibility: "hide",
-                disabled: !canCreate,
-                onClick: () => setCreateOpen(true),
-              },
-            ]}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void listQuery.refetch()}
+            >
+              <RefreshCwIcon className="size-3.5" aria-hidden="true" />
+              刷新
+            </Button>
+            <div className="max-sm:hidden">
+              <GuardedBusinessAction
+                type="button"
+                size="sm"
+                disabled={!canCreate}
+                reason={
+                  !canCreate
+                    ? urlState.role !== "finance_prep"
+                      ? "仅财务经办可新建结算草稿"
+                      : policy?.state === "UNCONFIGURED"
+                        ? "结算期间策略未配置，暂不能新建"
+                        : undefined
+                    : undefined
+                }
+                onClick={() => setCreateOpen(true)}
+              >
+                <PlusIcon className="size-3.5" aria-hidden="true" />
+                新建结算草稿
+              </GuardedBusinessAction>
+            </div>
+          </div>
         }
       />
 
@@ -689,15 +699,16 @@ function SettlementList({
       ) : null}
 
       {data?.hasModulePermission && data.hasDataScope ? (
-        <MetricStrip columns={4} aria-label="结算数据更新">
+        <MetricStrip columns={4} aria-label="结算快捷筛选">
           <MetricFilterItem
-            label="待对账"
+            label="待处理"
             value={data.totals.pendingReconcile}
             active={urlState.view === "pending" && !urlState.status}
             onClick={() =>
               patchUrl({
                 view: "pending",
                 status: undefined,
+                differenceType: undefined,
                 page: 1,
               })
             }
@@ -710,6 +721,7 @@ function SettlementList({
               patchUrl({
                 view: "pending",
                 status: "HAS_DIFFERENCE",
+                differenceType: undefined,
                 page: 1,
               })
             }
@@ -722,12 +734,13 @@ function SettlementList({
               patchUrl({
                 view: "pending",
                 status: "PENDING_REVIEW",
+                differenceType: undefined,
                 page: 1,
               })
             }
           />
           <MetricFilterItem
-            label="本期已确认金额"
+            label="已确认金额"
             value={
               <MoneyValue
                 value={data.metrics.confirmedAmount}
@@ -748,26 +761,41 @@ function SettlementList({
         toolbar={
           <ListToolbar
             search={
-              <InputGroup>
-                <InputGroupAddon>
-                  <SearchIcon aria-hidden="true" />
-                </InputGroupAddon>
-                <InputGroupInput
-                  value={searchDraft}
-                  onChange={(e) => setSearchDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      patchUrl({
-                        q: searchDraft.trim() || undefined,
-                        page: 1,
-                      })
-                    }
-                  }}
-                  placeholder="结算单号、外部账单号、供应商"
-                  aria-label="搜索结算单"
-                  data-slot="settlement-list-search"
-                />
-              </InputGroup>
+              <div className="flex items-center gap-2">
+                <InputGroup>
+                  <InputGroupAddon>
+                    <SearchIcon aria-hidden="true" />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    value={searchDraft}
+                    onChange={(e) => setSearchDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        patchUrl({
+                          q: searchDraft.trim() || undefined,
+                          page: 1,
+                        })
+                      }
+                    }}
+                    placeholder="结算单号、外部账单号、供应商"
+                    aria-label="搜索结算单"
+                    data-slot="settlement-list-search"
+                  />
+                </InputGroup>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="secondary"
+                  onClick={() =>
+                    patchUrl({
+                      q: searchDraft.trim() || undefined,
+                      page: 1,
+                    })
+                  }
+                >
+                  搜索
+                </Button>
+              </div>
             }
             filters={
               <div className="flex flex-wrap items-center gap-2">
@@ -776,6 +804,8 @@ function SettlementList({
                   onValueChange={(v) =>
                     patchUrl({
                       view: v as SettlementsUrlState["view"],
+                      status: undefined,
+                      differenceType: undefined,
                       page: 1,
                     })
                   }
@@ -859,19 +889,32 @@ function SettlementList({
                   aria-label="差异类型"
                   allowClear={false}
                 />
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() =>
-                    patchUrl({
-                      q: searchDraft.trim() || undefined,
-                      page: 1,
-                    })
-                  }
-                >
-                  应用
-                </Button>
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                  期间自
+                  <DatePicker
+                    className="w-[9rem]"
+                    value={urlState.periodFrom || undefined}
+                    onValueChange={(next) =>
+                      patchUrl({
+                        periodFrom: next || undefined,
+                        page: 1,
+                      })
+                    }
+                  />
+                </label>
+                <label className="flex items-center gap-1 text-xs text-muted-foreground">
+                  至
+                  <DatePicker
+                    className="w-[9rem]"
+                    value={urlState.periodTo || undefined}
+                    onValueChange={(next) =>
+                      patchUrl({
+                        periodTo: next || undefined,
+                        page: 1,
+                      })
+                    }
+                  />
+                </label>
               </div>
             }
             actions={
@@ -1060,7 +1103,19 @@ function SettlementList({
             </p>
           </div>
         ) : (
-          <p className="text-sm text-muted-foreground">未找到预览行</p>
+          <div className="flex flex-col items-start gap-3 p-5">
+            <p className="text-sm text-muted-foreground">
+              未找到预览行，可能已被移出当前筛选范围。
+            </p>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => patchUrl({ preview: undefined })}
+            >
+              关闭预览
+            </Button>
+          </div>
         )}
       </QuickPreviewSheet>
 
@@ -1120,10 +1175,6 @@ function SettlementList({
                       placeholder="请选择"
                       allowClear={false}
                     />
-                    <p className="text-xs text-muted-foreground">
-                      策略 {policy.policyId}@{policy.policyVersion} ·{" "}
-                      {policy.timezone}
-                    </p>
                   </div>
                 )}
               />
@@ -1166,9 +1217,9 @@ function SettlementCenter({
   const evidenceMutation = useAppendEvidenceMutation()
   const submitMutation = useSubmitReviewMutation()
   const decisionMutation = useReviewDecisionMutation()
+  const claimMutation = useClaimReviewMutation()
 
   const [result, setResult] = React.useState<ResultState>(null)
-  const [activeDiffId, setActiveDiffId] = React.useState<string | null>(null)
   const [resolveOpen, setResolveOpen] = React.useState(false)
   const [evidenceOpen, setEvidenceOpen] = React.useState(false)
   const [submitOpen, setSubmitOpen] = React.useState(false)
@@ -1176,10 +1227,9 @@ function SettlementCenter({
   const [rejectOpen, setRejectOpen] = React.useState(false)
   const [resolution, setResolution] =
     React.useState<DifferenceResolution>("ERP_ACCEPTED")
-  const [reasonCode, setReasonCode] = React.useState("BILL_ALIGNED")
+  const [reasonCode, setReasonCode] = React.useState("ACCEPT_BILL")
   const [evidenceComment, setEvidenceComment] = React.useState("")
   const [rejectReason, setRejectReason] = React.useState("")
-  const [reviewComment, setReviewComment] = React.useState("")
   const resultRef = React.useRef<HTMLDivElement | null>(null)
 
   const data = detailQuery.data
@@ -1219,11 +1269,14 @@ function SettlementCenter({
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
         <div className="h-24 animate-pulse rounded-xl bg-muted" />
         <div className="h-96 animate-pulse rounded-2xl bg-muted" />
+        <p className="text-sm text-muted-foreground">
+          正在加载结算单，请稍候…
+        </p>
       </div>
     )
   }
 
-  if (detailQuery.isError || !data) {
+  if (detailQuery.isError) {
     return (
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <Button type="button" variant="ghost" size="sm" onClick={onBack}>
@@ -1233,7 +1286,7 @@ function SettlementCenter({
         <BusinessFailureState
           kind="system"
           title="结算单加载失败"
-          description="请返回列表或重试。"
+          description="系统暂时无法取得单据数据，请重试或返回列表。"
           action={
             <Button type="button" onClick={() => void detailQuery.refetch()}>
               重试
@@ -1244,12 +1297,28 @@ function SettlementCenter({
     )
   }
 
+  if (!data) {
+    return (
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <Button type="button" variant="ghost" size="sm" onClick={onBack}>
+          <ArrowLeftIcon className="size-4" />
+          返回列表
+        </Button>
+        <BusinessEmptyState
+          kind="no-data"
+          title="结算单不存在"
+          description="该结算单不存在或已被作废。可返回列表重新选择，或检查分享链接是否正确。"
+        />
+      </div>
+    )
+  }
+
   const detail = data
   const st = detail.statement
   const allowed = new Set(detail.allowedActions)
   const blockers = detail.actionBlockers
   const activeDiff =
-    detail.differences.find((d) => d.differenceId === activeDiffId) ??
+    detail.differences.find((d) => d.differenceId === urlState.diff) ??
     detail.differences[0] ??
     null
 
@@ -1257,50 +1326,77 @@ function SettlementCenter({
   const submitBlocker = blockerOf(blockers, "SUBMIT_REVIEW")
 
   async function onRefresh() {
-    const outcome = await refreshMutation.mutateAsync({
-      statementId: st.id,
-      expectedLockVersion: st.lockVersion,
-      expectedSourceSnapshotHash: st.sourceSnapshotHash,
-      role: urlState.role,
-      requestId: newKey("req"),
-      idempotencyKey: newKey("refresh"),
-    })
-    setResult(outcomeToResult(outcome))
+    try {
+      const outcome = await refreshMutation.mutateAsync({
+        statementId: st.id,
+        expectedLockVersion: st.lockVersion,
+        expectedSourceSnapshotHash: st.sourceSnapshotHash,
+        role: urlState.role,
+        requestId: newKey("req"),
+        idempotencyKey: newKey("refresh"),
+      })
+      setResult(outcomeToResult(outcome))
+    } catch (error) {
+      setResult({
+        status: "rejected",
+        title: "刷新试算未完成",
+        description:
+          error instanceof Error ? error.message : "刷新失败，请稍后重试",
+      })
+    }
   }
 
   async function onResolve() {
     if (!activeDiff) return
-    const outcome = await resolveMutation.mutateAsync({
-      statementId: st.id,
-      differenceId: activeDiff.differenceId,
-      expectedLockVersion: st.lockVersion,
-      expectedDifferenceVersion: activeDiff.version,
-      resolution,
-      reasonCode,
-      role: urlState.role,
-      operationId: newKey("op"),
-      idempotencyKey: newKey("resolve"),
-    })
-    setResult(outcomeToResult(outcome))
-    if (outcome.status === "succeeded") setResolveOpen(false)
+    try {
+      const outcome = await resolveMutation.mutateAsync({
+        statementId: st.id,
+        differenceId: activeDiff.differenceId,
+        expectedLockVersion: st.lockVersion,
+        expectedDifferenceVersion: activeDiff.version,
+        resolution,
+        reasonCode,
+        role: urlState.role,
+        operationId: newKey("op"),
+        idempotencyKey: newKey("resolve"),
+      })
+      setResult(outcomeToResult(outcome))
+      if (outcome.status === "succeeded") setResolveOpen(false)
+    } catch (error) {
+      setResult({
+        status: "rejected",
+        title: "结论登记未完成",
+        description:
+          error instanceof Error ? error.message : "提交失败，请稍后重试",
+      })
+    }
   }
 
   async function onEvidence() {
     if (!activeDiff) return
-    const outcome = await evidenceMutation.mutateAsync({
-      statementId: st.id,
-      differenceId: activeDiff.differenceId,
-      expectedDifferenceVersion: activeDiff.version,
-      opinionCode: "PROCUREMENT_NOTE",
-      comment: evidenceComment,
-      role: urlState.role,
-      requestId: newKey("req"),
-      idempotencyKey: newKey("ev"),
-    })
-    setResult(outcomeToResult(outcome))
-    if (outcome.status === "succeeded") {
-      setEvidenceOpen(false)
-      setEvidenceComment("")
+    try {
+      const outcome = await evidenceMutation.mutateAsync({
+        statementId: st.id,
+        differenceId: activeDiff.differenceId,
+        expectedDifferenceVersion: activeDiff.version,
+        opinionCode: "PROCUREMENT_NOTE",
+        comment: evidenceComment,
+        role: urlState.role,
+        requestId: newKey("req"),
+        idempotencyKey: newKey("ev"),
+      })
+      setResult(outcomeToResult(outcome))
+      if (outcome.status === "succeeded") {
+        setEvidenceOpen(false)
+        setEvidenceComment("")
+      }
+    } catch (error) {
+      setResult({
+        status: "rejected",
+        title: "证据保存未完成",
+        description:
+          error instanceof Error ? error.message : "保存失败，请稍后重试",
+      })
     }
   }
 
@@ -1312,7 +1408,6 @@ function SettlementCenter({
       role: urlState.role,
       operationId: newKey("op"),
       idempotencyKey: newKey("submit"),
-      comment: reviewComment || undefined,
     })
     setResult(outcomeToResult(outcome))
     if (outcome.status === "succeeded") {
@@ -1339,7 +1434,6 @@ function SettlementCenter({
       role: urlState.role,
       operationId: newKey("op"),
       idempotencyKey: newKey("confirm"),
-      comment: reviewComment || undefined,
     })
     setResult(outcomeToResult(outcome))
     if (outcome.status === "succeeded") {
@@ -1360,7 +1454,6 @@ function SettlementCenter({
       operationId: newKey("op"),
       idempotencyKey: newKey("reject"),
       reasonCode: rejectReason || "NEEDS_MORE_EVIDENCE",
-      comment: reviewComment || undefined,
     })
     setResult(outcomeToResult(outcome))
     if (outcome.status === "rejected" || outcome.status === "succeeded") {
@@ -1380,7 +1473,7 @@ function SettlementCenter({
           },
           {
             id: "list",
-            label: "API 结算",
+            label: "API 供应商结算",
             href: "/supplier-api/settlements",
           },
           {
@@ -1401,13 +1494,9 @@ function SettlementCenter({
 
       <RoleDemoBar
         role={urlState.role}
-        demoFlag={urlState.demoFlag}
         onRole={(r) => patchUrl({ role: r })}
-        onFlag={(f) => patchUrl({ demoFlag: f })}
         roleOptions={SETTLEMENT_ROLE_OPTIONS}
         roleClassName="w-[10rem]"
-        flagOptions={SETTLEMENT_FLAG_OPTIONS}
-        flagClassName="w-[12rem]"
         hintFor={settlementRoleHint}
       />
 
@@ -1466,9 +1555,14 @@ function SettlementCenter({
                 提交复核
               </Button>
             ) : submitBlocker ? (
-              <Button type="button" size="sm" disabled title={submitBlocker.message}>
-                提交复核（已阻断）
-              </Button>
+              <GuardedBusinessAction
+                type="button"
+                size="sm"
+                disabled
+                reason={submitBlocker.message}
+              >
+                提交复核
+              </GuardedBusinessAction>
             ) : null}
             {allowed.has("CONFIRM") ? (
               <Button
@@ -1480,14 +1574,14 @@ function SettlementCenter({
                 确认结算
               </Button>
             ) : confirmBlocker ? (
-              <Button
+              <GuardedBusinessAction
                 type="button"
                 size="sm"
                 disabled
-                title={confirmBlocker.message}
+                reason={confirmBlocker.message}
               >
-                确认结算（已阻断）
-              </Button>
+                确认结算
+              </GuardedBusinessAction>
             ) : null}
             {allowed.has("REJECT") ? (
               <Button
@@ -1521,10 +1615,7 @@ function SettlementCenter({
                     b.code === "BLOCKING_DIFFERENCES"
                 )
                 .map((b) => (
-                  <li key={`${b.action}-${b.code}`}>
-                    <span className="font-mono text-xs">{b.code}</span> ·{" "}
-                    {b.message}
-                  </li>
+                  <li key={`${b.action}-${b.code}`}>{b.message}</li>
                 ))}
             </ul>
           </AlertDescription>
@@ -1563,7 +1654,7 @@ function SettlementCenter({
         <CardHeader className="border-b py-3">
           <CardTitle className="text-base">金额摘要</CardTitle>
           <CardDescription>
-            订单 / 运费 / 服务费 / 退款 + ERP vs 供应商 + 差异方向 · 全部
+            订单、运费、服务费、退款与 ERP 计算金额、供应商账单金额、差异方向对比 · 全部
             {detail.totals.taxBasisLabel}
           </CardDescription>
         </CardHeader>
@@ -1635,7 +1726,7 @@ function SettlementCenter({
                     taxBasis="gross"
                   />
                 ) : (
-                  "账单未同步（不可用 ERP 代填）"
+                  "账单未同步 · 刷新试算后以 ERP 金额预填"
                 ),
                 basis: "含税",
               },
@@ -1682,10 +1773,11 @@ function SettlementCenter({
         {st.externalBillNo ? (
           <>
             {" "}
-            · 账单 {st.externalBillNo}@{st.externalBillVersion}
+            · 账单 {st.externalBillNo}（第{" "}
+            {String(st.externalBillVersion ?? "").replace(/^v/i, "")} 版）
           </>
         ) : null}
-        <span className="ml-2">以下数据仅供参考，不参与正式结算</span>
+        <span className="ml-2">以下数据仅供参考，不进入结算结果</span>
       </div>
 
       <Tabs
@@ -1705,6 +1797,9 @@ function SettlementCenter({
           ))}
         </TabsList>
       </Tabs>
+      <p className="text-xs text-muted-foreground">
+        快捷键 d 可直达差异处理
+      </p>
 
       {section === "overview" ? (
         <div className="grid gap-4 lg:grid-cols-2">
@@ -1719,9 +1814,7 @@ function SettlementCenter({
               <p className="num">
                 期间：{st.periodStart} ~ {st.periodEnd}
               </p>
-              <p>
-                状态：{st.statusLabel} · 锁版本 {st.lockVersion}
-              </p>
+              <p>状态：{st.statusLabel}</p>
               <p>
                 未决阻断差异：{detail.differenceSummary.blocking} / 差异合计{" "}
                 {detail.differenceSummary.total}
@@ -1782,6 +1875,7 @@ function SettlementCenter({
                   <th className="px-2 py-2">采购单号</th>
                   <th className="px-2 py-2">外部单号</th>
                   <th className="px-2 py-2">商品</th>
+                  <th className="px-2 py-2 text-right">数量</th>
                   <th className="px-2 py-2">记录</th>
                   <th className="px-2 py-2 text-right">订单</th>
                   <th className="px-2 py-2 text-right">运费</th>
@@ -1822,6 +1916,7 @@ function SettlementCenter({
                       {it.externalOrderNo}
                     </td>
                     <td className="px-2 py-2">{it.productName}</td>
+                    <td className="num px-2 py-2 text-right">{it.quantity}</td>
                     <td className="px-2 py-2 text-xs">{it.factLabel}</td>
                     <td className="px-2 py-2 text-right">
                       <MoneyValue value={it.orderAmountGross} taxBasis="gross" />
@@ -1856,7 +1951,7 @@ function SettlementCenter({
                 {detail.items.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={12}
                       className="px-2 py-6 text-center text-muted-foreground"
                     >
                       暂无明细；可在草稿态刷新试算纳入不可变记录
@@ -1876,7 +1971,7 @@ function SettlementCenter({
         <DifferencesWorkspace
           differences={detail.differences}
           activeDiff={activeDiff}
-          onSelect={setActiveDiffId}
+          onSelect={(id) => patchUrl({ diff: id })}
           role={urlState.role}
           allowed={allowed}
           onResolve={() => setResolveOpen(true)}
@@ -1903,6 +1998,39 @@ function SettlementCenter({
                     ? ` · 领取人 ${detail.workItem.claimedBy.displayName}`
                     : " · 待领取"}
                 </AlertDescription>
+                {detail.workItem.claimedBy == null &&
+                allowed.has("CLAIM_REVIEW") ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={claimMutation.isPending}
+                    onClick={async () => {
+                      try {
+                        const outcome = await claimMutation.mutateAsync({
+                          statementId: st.id,
+                          workItemId: detail.workItem!.workItemId,
+                          expectedSubjectVersion:
+                            detail.workItem!.subjectVersion,
+                          role: urlState.role,
+                          idempotencyKey: newKey("claim"),
+                        })
+                        setResult(outcomeToResult(outcome))
+                      } catch (error) {
+                        setResult({
+                          status: "rejected",
+                          title: "领取任务未完成",
+                          description:
+                            error instanceof Error
+                              ? error.message
+                              : "领取失败，请稍后重试",
+                        })
+                      }
+                    }}
+                  >
+                    领取任务
+                  </Button>
+                ) : null}
               </Alert>
             ) : null}
             {detail.reviewRecords.length === 0 ? (
@@ -1918,7 +2046,9 @@ function SettlementCenter({
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {formatDateTime(r.at, "default")}
-                    {r.reasonCode ? ` · ${r.reasonCode}` : ""}
+                    {r.reasonCode
+                      ? ` · ${REASON_CODE_LABEL[r.reasonCode] ?? r.reasonCode}`
+                      : ""}
                     {r.comment ? ` · ${r.comment}` : ""}
                   </div>
                 </div>
@@ -1983,15 +2113,17 @@ function SettlementCenter({
                 className="rounded-lg border px-3 py-2 text-sm"
               >
                 <div className="flex flex-wrap gap-2">
-                  <span className="font-medium">{e.action}</span>
+                  <span className="font-medium">
+                    {AUDIT_ACTION_LABEL[e.action] ?? e.summary.split("·")[0]}
+                  </span>
                   <span className="text-muted-foreground">{e.actor}</span>
                   {e.auditNo ? (
-                    <span className="num text-xs">{e.auditNo}</span>
+                    <span className="num text-xs">审计号 {e.auditNo}</span>
                   ) : null}
                 </div>
                 <p className="text-muted-foreground">{e.summary}</p>
                 <p className="text-xs text-muted-foreground">
-                          {formatDateTime(e.at, "default")}
+                  {formatDateTime(e.at, "default")}
                 </p>
               </div>
             ))}
@@ -2005,8 +2137,7 @@ function SettlementCenter({
           <DialogHeader>
             <DialogTitle>登记差异处理结论</DialogTitle>
             <DialogDescription>
-              财务经办追加式结论；不修改左右证据原值或历史成本。ERP
-              认可表示接受账单并以成本差额表达。
+              财务经办追加式结论；不修改左右证据原值或历史成本。结论一经登记不可撤回，将写入审计并改变待确认成本差额。
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -2109,8 +2240,7 @@ function SettlementCenter({
         toStatus={{ label: "待复核", tone: "warning" }}
         lockedFields={[
           st.statementNo,
-          "来源数据版本已锁定",
-          "数据版本已锁定",
+          "来源数据、明细与差异结论已锁定",
         ]}
         effects={["冻结来源数据与差异结论", "创建结算复核待办"]}
         pending={submitMutation.isPending}
@@ -2118,17 +2248,6 @@ function SettlementCenter({
           await onSubmitReview()
         }}
       />
-      {submitOpen ? (
-        <div className="sr-only">
-          <Label htmlFor="sub-comment">说明（可选）</Label>
-          <Textarea
-            id="sub-comment"
-            value={reviewComment}
-            onChange={(e) => setReviewComment(e.target.value)}
-            rows={2}
-          />
-        </div>
-      ) : null}
 
       <FormalActionConfirmDialog
         open={confirmOpen}
@@ -2137,7 +2256,7 @@ function SettlementCenter({
         description="同一次提交追加成本差额、形成唯一应付并锁定处理结果。经办人不可确认本单。"
         actionLabel="确认结算"
         confirmLabel="确认结算"
-        fromStatus={{ label: "待复核", tone: "warning" }}
+        fromStatus={{ label: st.statusLabel, tone: st.statusTone }}
         toStatus={{ label: "已确认", tone: "success" }}
         lockedFields={[
           st.statementNo,
@@ -2223,7 +2342,7 @@ function DifferencesWorkspace({
       <BusinessEmptyState
         kind="no-data"
         title="无差异"
-        description="当前结算单没有差异记录，可直接进入复核（在明细守恒满足时）。"
+        description="当前结算单没有差异记录，明细金额核对一致时可直接进入复核。"
       />
     )
   }
@@ -2250,6 +2369,14 @@ function DifferencesWorkspace({
                 {d.requiresProcurementEvidence ? " · 待举证" : ""}
                 {d.blocking ? " · 阻断" : ""}
               </span>
+              {d.amountGross ? (
+                <span className="mt-0.5">
+                  <MoneyValue
+                    value={d.amountGross}
+                    className="num text-xs font-semibold text-amber-700"
+                  />
+                </span>
+              ) : null}
             </button>
           ))}
         </CardContent>
@@ -2266,9 +2393,14 @@ function DifferencesWorkspace({
                   </CardTitle>
                   <CardDescription>
                     {activeDiff.amountDirectionLabel}
-                    {activeDiff.amountGross
-                      ? ` · 差异额 ${activeDiff.amountGross}（含税）`
-                      : ""}
+                    {activeDiff.amountGross ? (
+                      <span className="mt-1 block text-base font-semibold text-amber-700">
+                        <MoneyValue
+                          value={activeDiff.amountGross}
+                          taxBasis="gross"
+                        />
+                      </span>
+                    ) : null}
                   </CardDescription>
                 </div>
                 <BusinessStatusBadge
@@ -2359,7 +2491,10 @@ function DifferencesWorkspace({
                   <AlertDescription>
                     {activeDiff.resolution.by.displayName} ·{" "}
                     {formatDateTime(activeDiff.resolution.at, "default")} · 成本预览{" "}
-                    {activeDiff.resolution.costImpactPreview ?? "0.00"}（含税）
+                    <MoneyValue
+                      value={activeDiff.resolution.costImpactPreview ?? "0.00"}
+                      taxBasis="gross"
+                    />
                   </AlertDescription>
                 </Alert>
               ) : null}

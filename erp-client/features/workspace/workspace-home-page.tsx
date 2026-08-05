@@ -42,10 +42,12 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { Skeleton } from "@/components/ui/skeleton"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   buildProcessHref,
   buildViewHref,
   buildWarningHref,
+  resolveWorkspaceHref,
 } from "@/features/workspace/destination"
 import {
   deriveProjectionFreshness,
@@ -57,13 +59,14 @@ import {
   buildGroupAllHref,
   buildTaskQueueHref,
   buildWorkspaceSearchParams,
-  FILTER_SUMMARY,
+  filterSummaryFor,
   metricKeyFromUrlState,
   parseWorkspaceSearchParams,
   toTodayWorkspaceQuery,
   urlStateFromMetricKey,
   type WorkspaceUrlState,
 } from "@/features/workspace/url-state"
+import { actionLabelForWorkItemType, goToWorkspaceLabel } from "@/lib/ui-text"
 import type {
   WorkspaceMetricKey,
   WorkspaceTaskGroup,
@@ -71,6 +74,9 @@ import type {
 } from "@/mock/workspace"
 
 const VIEWER_TIMEZONE = "Asia/Shanghai"
+
+/** 焦点还原走 sessionStorage，不落地址栏（内部 ID 禁止进 URL）。 */
+const HOME_FOCUS_SESSION_KEY = "workspace-home.focus"
 
 function responsiblePartyLabel(item: WorkspaceWorkItem): string {
   if (item.ownerUserLabel) {
@@ -119,12 +125,12 @@ function WorkspaceHomeSkeleton() {
 
 function TaskGroupSection({
   group,
-  focusWorkItemId,
+  focusStableNumber,
   onOpenTask,
   groupAllHref,
 }: {
   group: WorkspaceTaskGroup
-  focusWorkItemId?: string
+  focusStableNumber?: string
   onOpenTask: (item: WorkspaceWorkItem) => void
   groupAllHref: string
 }) {
@@ -171,13 +177,13 @@ function TaskGroupSection({
               const blocker = processBlocker(item)
               const processHref = buildProcessHref(item)
               const viewHref = buildViewHref(item)
-              const isFocused = focusWorkItemId === item.workItemId
+              const isFocused = focusStableNumber === item.stableNumber
 
               return (
                 <div
                   key={item.workItemId}
-                  id={`work-item-${item.workItemId}`}
-                  data-work-item-id={item.workItemId}
+                  id={`work-item-${item.stableNumber}`}
+                  data-stable-number={item.stableNumber}
                   tabIndex={isFocused ? -1 : undefined}
                   className={
                     isFocused
@@ -191,6 +197,7 @@ function TaskGroupSection({
                     counterparty={item.counterpartyName}
                     enteredAt={item.enteredAtLabel}
                     enteredDateTime={item.createdAt}
+                    enteredAtLabel="进入时间"
                     dueAt={item.dueAtLabel}
                     dueDateTime={item.dueAt}
                     responsibleParty={responsiblePartyLabel(item)}
@@ -217,7 +224,9 @@ function TaskGroupSection({
                               />
                             }
                           >
-                            处理
+                            {actionLabelForWorkItemType(
+                              item.workItemTypeLabel
+                            )}
                             <ArrowRightIcon
                               data-icon="inline-end"
                               aria-hidden="true"
@@ -228,10 +237,11 @@ function TaskGroupSection({
                             size="sm"
                             variant="outline"
                             disabled
-                            title={blocker}
                             aria-disabled="true"
                           >
-                            处理
+                            {actionLabelForWorkItemType(
+                              item.workItemTypeLabel
+                            )}
                           </Button>
                         )}
                         {!processOk && viewOk ? (
@@ -301,6 +311,10 @@ export function WorkspaceHomePage() {
   const refreshing =
     dashboardQuery.isFetching && !dashboardQuery.isPending && !!view
 
+  const [focusedStableNumber, setFocusedStableNumber] = React.useState<
+    string | null
+  >(null)
+
   const activeMetric = metricKeyFromUrlState(urlState)
   const hasActiveFilter = Boolean(urlState.due || urlState.family)
 
@@ -314,12 +328,16 @@ export function WorkspaceHomePage() {
 
   const onMetricClick = React.useCallback(
     (key: WorkspaceMetricKey) => {
+      sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
+      setFocusedStableNumber(null)
       pushUrl(urlStateFromMetricKey(key, urlState))
     },
     [pushUrl, urlState]
   )
 
   const clearFilters = React.useCallback(() => {
+    sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
+    setFocusedStableNumber(null)
     pushUrl({
       scope: urlState.scope,
       scenario: urlState.scenario,
@@ -328,32 +346,42 @@ export function WorkspaceHomePage() {
 
   const onOpenTask = React.useCallback(
     (item: WorkspaceWorkItem) => {
-      // Persist focus in the current history entry so browser back restores it.
-      const qs = buildWorkspaceSearchParams({
-        ...urlState,
-        focusWorkItemId: item.workItemId,
-      })
-      window.history.replaceState(null, "", `${pathname}${qs}`)
+      // Persist focus in sessionStorage so a return from the target page
+      // restores the exact task row without leaking internal ids into the URL.
+      sessionStorage.setItem(HOME_FOCUS_SESSION_KEY, item.stableNumber)
     },
-    [pathname, urlState]
+    []
   )
 
   const refresh = React.useCallback(() => {
     void dashboardQuery.refetch()
   }, [dashboardQuery])
 
-  // Restore task focus after return from a target page (or refresh with focus in URL).
+  const onScopeChange = React.useCallback(
+    (scope: "mine" | "role_pool") => {
+      if (scope === urlState.scope) return
+      sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
+      setFocusedStableNumber(null)
+      pushUrl({ ...urlState, scope })
+    },
+    [pushUrl, urlState]
+  )
+
+  // Restore task focus after return from a target page. One-shot: the stored
+  // focus is consumed here, so a plain refresh never re-scrolls unexpectedly.
   React.useEffect(() => {
-    if (!view || !urlState.focusWorkItemId) return
-    const el = document.getElementById(
-      `work-item-${urlState.focusWorkItemId}`
-    )
+    if (!view) return
+    const stableNumber = sessionStorage.getItem(HOME_FOCUS_SESSION_KEY)
+    if (!stableNumber) return
+    const el = document.getElementById(`work-item-${stableNumber}`)
+    sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
     if (!el) return
+    setFocusedStableNumber(stableNumber)
     el.scrollIntoView({ block: "nearest", behavior: "smooth" })
     if (el instanceof HTMLElement) {
       el.focus({ preventScroll: true })
     }
-  }, [view, urlState.focusWorkItemId, urlState.due, urlState.family])
+  }, [view])
 
   if (dashboardQuery.isPending && !view) {
     return <WorkspaceHomeSkeleton />
@@ -415,7 +443,7 @@ export function WorkspaceHomePage() {
   })
 
   const visibleCount = view.groups.reduce((sum, group) => sum + group.total, 0)
-  const filterLabel = FILTER_SUMMARY[activeMetric]
+  const filterLabel = filterSummaryFor(activeMetric, urlState.scope)
   const taskQueueHref = buildTaskQueueHref(urlState)
   const metrics = view.metrics.filter((metric) => metric.visible)
 
@@ -464,26 +492,26 @@ export function WorkspaceHomePage() {
         }
       />
 
-      {projectionFreshness.state === "stale" ||
-      projectionFreshness.state === "failed" ? (
-        <Alert
-          variant={
-            projectionFreshness.state === "failed" ? "destructive" : "warning"
-          }
+      {/* 数据新鲜度由页头 DataFreshness 徽章统一表达；刷新失败由任务卡内
+          AsyncSectionState 错误卡承载，避免同一故障两处噪音（P2-8/P2-10）。 */}
+
+      <div className="flex justify-end">
+        <ToggleGroup
+          value={[urlState.scope]}
+          onValueChange={(values) => {
+            const next = values[0] as "mine" | "role_pool" | undefined
+            if (!next) return
+            onScopeChange(next)
+          }}
+          variant="outline"
+          size="sm"
+          spacing={0}
+          aria-label="责任范围"
         >
-          <TriangleAlertIcon aria-hidden="true" />
-          <AlertTitle>
-            {projectionFreshness.state === "failed"
-              ? "工作台数据更新失败"
-              : "工作台数据可能不是最新"}
-          </AlertTitle>
-          <AlertDescription>
-            {projectionFreshness.state === "failed"
-              ? "指标与预警不得视为实时；待办任务仍可按下方任务列表处理。"
-              : "数据更新已超过 1 分钟，指标可能不是最新；待办任务仍可按下方列表处理。"}
-          </AlertDescription>
-        </Alert>
-      ) : null}
+          <ToggleGroupItem value="mine">我的待办</ToggleGroupItem>
+          <ToggleGroupItem value="role_pool">团队待认领</ToggleGroupItem>
+        </ToggleGroup>
+      </div>
 
       <MetricStrip columns={4} aria-label="待办筛选">
         {metrics.map((metric) => (
@@ -494,6 +522,11 @@ export function WorkspaceHomePage() {
             detail={metric.detail}
             active={activeMetric === metric.key}
             onClick={() => onMetricClick(metric.key)}
+            status={
+              metric.tone === "destructive" || metric.tone === "warning"
+                ? { label: metric.label, tone: metric.tone }
+                : undefined
+            }
           />
         ))}
       </MetricStrip>
@@ -505,7 +538,7 @@ export function WorkspaceHomePage() {
             <CardDescription aria-live="polite" aria-atomic="true">
               {hasActiveFilter
                 ? `当前筛选「${filterLabel}」共 ${visibleCount} 项`
-                : `当前共 ${visibleCount} 项待办，按超期、优先级与截止时间展示`}
+                : `当前共 ${visibleCount} 项待办，按超期与截止时间展示`}
             </CardDescription>
             <CardAction className="flex flex-wrap gap-1">
               {hasActiveFilter ? (
@@ -549,7 +582,38 @@ export function WorkspaceHomePage() {
                 <BusinessEmptyState
                   kind="no-tasks"
                   title="当前没有待处理事项"
-                  description="当前没有待处理事项。可查看最近打开记录或进入其它业务模块。"
+                  description="当前没有待处理事项。可查看最近打开记录，或进入其它业务模块。"
+                  action={
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        render={
+                          <Link href={resolveWorkspaceHref("W05")} />
+                        }
+                      >
+                        销售单
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        render={
+                          <Link href={resolveWorkspaceHref("W07")} />
+                        }
+                      >
+                        采购确认
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        render={
+                          <Link href={resolveWorkspaceHref("W10")} />
+                        }
+                      >
+                        库存台账
+                      </Button>
+                    </div>
+                  }
                 />
               ) : null}
 
@@ -572,7 +636,7 @@ export function WorkspaceHomePage() {
                     <div key={group.family} role="listitem">
                       <TaskGroupSection
                         group={group}
-                        focusWorkItemId={urlState.focusWorkItemId}
+                        focusStableNumber={focusedStableNumber ?? undefined}
                         onOpenTask={onOpenTask}
                         groupAllHref={buildGroupAllHref(urlState, group.family)}
                       />
@@ -587,7 +651,7 @@ export function WorkspaceHomePage() {
         <div className="space-y-4">
           <Card size="sm">
             <CardHeader className="border-b">
-              <CardTitle>预警与数据新鲜度</CardTitle>
+              <CardTitle>需要关注的预警</CardTitle>
               <CardDescription>
                 只显示需要你关注的异常
               </CardDescription>
@@ -625,7 +689,7 @@ export function WorkspaceHomePage() {
                           <Link href={buildWarningHref(warning)} />
                         }
                       >
-                        打开处理面
+                        {goToWorkspaceLabel(warning.destinationWorkspaceId)}
                         <ArrowRightIcon
                           data-icon="inline-end"
                           aria-hidden="true"

@@ -84,15 +84,34 @@ export const ATTRIBUTION_STATUS_TONE: Record<AttributionStatus, StatusTone> = {
 }
 
 export const COST_BASIS_LABEL: Record<CostBasis, string> = {
-  ACTUAL: "ACTUAL",
-  STANDARD: "STANDARD",
-  NONE: "NONE",
+  ACTUAL: "实际成本",
+  STANDARD: "标准成本",
+  NONE: "无成本",
 }
 
 export const COST_BASIS_TONE: Record<CostBasis, StatusTone> = {
   ACTUAL: "success",
   STANDARD: "info",
   NONE: "warning",
+}
+
+/** 供应商子订单取消状态中文名（枚举原值禁止上屏；与供应商订单口径一致） */
+export const SUPPLIER_CANCEL_LABEL: Record<string, string> = {
+  NONE: "未发起",
+  CANCEL_PENDING: "处理中",
+  CANCELED: "已取消",
+  FAILED: "失败",
+  MANUAL: "待人工",
+}
+
+/** 供应商子订单退款状态中文名（枚举原值禁止上屏；与供应商订单口径一致） */
+export const SUPPLIER_REFUND_LABEL: Record<string, string> = {
+  NONE: "未发起",
+  REFUND_PENDING: "处理中",
+  PARTIAL: "部分",
+  REFUNDED: "全部",
+  REFUND_FAILED: "失败",
+  MANUAL: "待人工",
 }
 
 export const FACT_TYPE_LABEL: Record<FactType, string> = {

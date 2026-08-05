@@ -30,6 +30,13 @@ export function useMallSyncPageQuery(input: MallSyncQueryInput) {
   return useQuery({
     queryKey: mallSyncKeys.page(input),
     queryFn: () => fetchMallSyncPage(input),
+    // 运行中任务自动刷新进度
+    refetchInterval: (q) => {
+      const hasRunning = q.state.data?.jobs.some(
+        (j) => j.status === "RUNNING"
+      )
+      return hasRunning ? 4_000 : false
+    },
   })
 }
 

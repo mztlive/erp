@@ -1,6 +1,7 @@
 "use client"
 
 import { OptionCombobox } from "@/components/business"
+import { Button } from "@/components/ui/button"
 import { DateTimeLocalPicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -11,6 +12,13 @@ import type {
   FulfillmentTask,
 } from "./types"
 import { RESULT_OPTIONS } from "./types"
+
+/** 本地时区 YYYY-MM-DDTHH:mm，用于「填当前时间」快捷填充。 */
+function nowLocal(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
 
 export function FulfillmentServiceForm({
   task,
@@ -39,7 +47,18 @@ export function FulfillmentServiceForm({
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="service-start">开始时间</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="service-start">开始时间</Label>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              disabled={disabled}
+              onClick={() => onChange({ ...draft, startedAt: nowLocal() })}
+            >
+              填当前时间
+            </Button>
+          </div>
           <DateTimeLocalPicker
             value={draft.startedAt || undefined}
             disabled={disabled}
@@ -49,7 +68,18 @@ export function FulfillmentServiceForm({
           />
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="service-ended">结束时间</Label>
+          <div className="flex items-center justify-between gap-2">
+            <Label htmlFor="service-ended">结束时间</Label>
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              disabled={disabled}
+              onClick={() => onChange({ ...draft, endedAt: nowLocal() })}
+            >
+              填当前时间
+            </Button>
+          </div>
           <DateTimeLocalPicker
             value={draft.endedAt || undefined}
             disabled={disabled}
@@ -105,6 +135,7 @@ export function FulfillmentServiceForm({
             <Input
               id={`svc-qty-${i}`}
               className="num"
+              inputMode="decimal"
               value={line.quantity}
               disabled={disabled}
               onChange={(e) => {

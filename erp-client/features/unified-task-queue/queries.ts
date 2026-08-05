@@ -116,6 +116,8 @@ export function projectQueueItems(): QueueWorkItemView[] {
 export function computeQueueCounts(items: readonly QueueWorkItemView[]): {
   mine: number
   rolePool: number
+  team: number
+  hold: number
   overdue: number
 } {
   const mine = items.filter(
@@ -126,10 +128,15 @@ export function computeQueueCounts(items: readonly QueueWorkItemView[]): {
     (i) =>
       i.effectiveStatusCode === "UNCLAIMED" || i.status.label === "待领取"
   ).length
+  const team = items.filter((i) => i.scopeTags.includes("团队")).length
+  const hold = items.filter(
+    (i) =>
+      i.status.label === "已跳过" || i.scopeTags.includes("已跳过")
+  ).length
   const overdue = items.filter(
     (i) => i.status.tone === "destructive" || i.dueAt.includes("超期")
   ).length
-  return { mine, rolePool, overdue }
+  return { mine, rolePool, team, hold, overdue }
 }
 
 export async function fetchUnifiedTaskQueue(
@@ -190,6 +197,36 @@ export function useClaimWorkItemMutation() {
     }): Promise<SessionLease> => {
       await mockDelay(100)
       return claimWorkItemSession(input)
+    },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: unifiedQueueKeys.all })
+    },
+  })
+}
+
+/** 待领取范围整批领取：逐条走同一领取校验，返回成功领取的会话结果。 */
+export function useBatchClaimWorkItemMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (input: {
+      workItemIds: readonly string[]
+      subjectVersions?: Readonly<Record<string, string>>
+    }): Promise<SessionLease[]> => {
+      await mockDelay(150)
+      const claimed: SessionLease[] = []
+      for (const workItemId of input.workItemIds) {
+        try {
+          claimed.push(
+            claimWorkItemSession({
+              workItemId,
+              subjectVersion: input.subjectVersions?.[workItemId],
+            })
+          )
+        } catch {
+          // 单条领取失败（如权限收回）不阻断其余条目
+        }
+      }
+      return claimed
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: unifiedQueueKeys.all })

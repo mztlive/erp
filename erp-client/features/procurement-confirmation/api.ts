@@ -382,7 +382,7 @@ export async function completeProcurementDecision(input: {
       salesOrderRevisionId: `rev_${input.decision.submissionId}`,
       receivableAccountId: `recv_${input.decision.salesOrderId}`,
       procurementCreationBasisId: `pcb_${input.decision.confirmationId}`,
-      reference: `PC-OK-${input.workItemId.toUpperCase()}`,
+      reference: `PC-OK-${input.decision.salesOrderNo}`,
     }
 
     try {
@@ -424,7 +424,7 @@ export async function completeProcurementDecision(input: {
       "REQUEST_LOW_MARGIN_ACCEPTANCE",
       "VOID_AFTER_REJECTION",
     ],
-    reference: `PC-REJ-${input.workItemId.toUpperCase()}`,
+    reference: `PC-REJ-${input.decision.salesOrderNo}`,
     rejectReasonCode: input.decision.rejectReasonCode,
     comment: input.decision.comment,
   }
@@ -474,7 +474,7 @@ export async function deferProcurementConfirmation(input: {
       workItemStatus: "PENDING",
       leaseDisposition: "RELEASED",
       nextWorkItemId: input.nextWorkItemId,
-      reference: `PC-HOLD-${input.workItemId.toUpperCase()}`,
+      reference: `PC-HOLD-${seed.salesSubmission.salesOrderNo}`,
     }
     return { status: "succeeded", outcome }
   } catch (error) {

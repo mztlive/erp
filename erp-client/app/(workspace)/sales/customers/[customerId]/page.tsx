@@ -23,7 +23,7 @@ export default async function Page({
       }
     >
       <CustomerDetailPage
-        key={`${customerId}-${section ?? "overview"}`}
+        key={customerId}
         customerId={customerId}
         section={section}
       />

@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 
 import {
+  DraftSaveIndicator,
   FormalActionConfirmDialog,
   FormalActionResult,
   MoneyValue,
@@ -94,6 +95,7 @@ export function ProcurementRejectionCard({
   const lowMarginDecision = useDecideLowMarginManagerMutation()
 
   const [result, setResult] = React.useState<FormalResult | null>(null)
+  const [priceSavedAt, setPriceSavedAt] = React.useState<Date | null>(null)
   const [confirm, setConfirm] = React.useState<
     | null
     | {
@@ -125,6 +127,7 @@ export function ProcurementRejectionCard({
         unitPriceGross: value.unitPriceGross.trim(),
         note: value.note.trim(),
       })
+      setPriceSavedAt(new Date())
       setResult({
         status: "succeeded",
         title: "改价已保存",
@@ -337,51 +340,56 @@ export function ProcurementRejectionCard({
                 ? `（申请序号 #${rejection.lowMarginSubmission.submissionNo}）`
                 : null}
             </p>
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                disabled={lowMarginDecision.isPending}
-                onClick={async () => {
-                  const outcome = await lowMarginDecision.mutateAsync({
-                    salesOrderId: order.id,
-                    workItemId: rejection.activeLowMarginManagerTask!.workItemId,
-                    decision: "APPROVE",
-                    idempotencyKey: `${idempotencyKey}-lm-approve`,
-                  })
-                  setResult({
-                    status: "succeeded",
-                    title: "领导已同意低毛利",
-                    description: outcome.detail,
-                    reference: outcome.reference,
-                  })
-                }}
-              >
-                领导通过（演示）
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={lowMarginDecision.isPending}
-                onClick={async () => {
-                  const outcome = await lowMarginDecision.mutateAsync({
-                    salesOrderId: order.id,
-                    workItemId: rejection.activeLowMarginManagerTask!.workItemId,
-                    decision: "REJECT",
-                    idempotencyKey: `${idempotencyKey}-lm-reject`,
-                    reason: "毛利仍不可接受",
-                  })
-                  setResult({
-                    status: "rejected",
-                    title: "领导未同意低毛利",
-                    description: outcome.detail,
-                    reference: outcome.reference,
-                  })
-                }}
-              >
-                领导驳回（演示）
-              </Button>
+            <div className="rounded-lg border border-dashed border-border p-3">
+              <p className="mb-2 text-xs font-medium text-muted-foreground">
+                演示模式（模拟领导决策）
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={lowMarginDecision.isPending}
+                  onClick={async () => {
+                    const outcome = await lowMarginDecision.mutateAsync({
+                      salesOrderId: order.id,
+                      workItemId: rejection.activeLowMarginManagerTask!.workItemId,
+                      decision: "APPROVE",
+                      idempotencyKey: `${idempotencyKey}-lm-approve`,
+                    })
+                    setResult({
+                      status: "succeeded",
+                      title: "领导已同意低毛利",
+                      description: outcome.detail,
+                      reference: outcome.reference,
+                    })
+                  }}
+                >
+                  领导通过（演示）
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={lowMarginDecision.isPending}
+                  onClick={async () => {
+                    const outcome = await lowMarginDecision.mutateAsync({
+                      salesOrderId: order.id,
+                      workItemId: rejection.activeLowMarginManagerTask!.workItemId,
+                      decision: "REJECT",
+                      idempotencyKey: `${idempotencyKey}-lm-reject`,
+                      reason: "毛利仍不可接受",
+                    })
+                    setResult({
+                      status: "rejected",
+                      title: "领导未同意低毛利",
+                      description: outcome.detail,
+                      reference: outcome.reference,
+                    })
+                  }}
+                >
+                  领导驳回（演示）
+                </Button>
+              </div>
             </div>
           </section>
         ) : null}
@@ -410,6 +418,7 @@ export function ProcurementRejectionCard({
                       <field.TextField
                         label="调整后含税单价"
                         placeholder="例如 720.00"
+                        description="此单价对全部明细统一生效；多行明细需分别调整时请走「发起改单」。"
                       />
                     )}
                   </priceForm.AppField>
@@ -428,6 +437,9 @@ export function ProcurementRejectionCard({
                       pendingLabel="保存中"
                     />
                   </priceForm.AppForm>
+                  {priceSavedAt ? (
+                    <DraftSaveIndicator state="saved" savedAt={priceSavedAt} />
+                  ) : null}
                 </form>
                 <Button
                   type="button"

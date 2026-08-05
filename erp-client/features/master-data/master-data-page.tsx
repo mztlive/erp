@@ -13,6 +13,8 @@ import {
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 import {
   BackgroundJobProgress,
+  BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
@@ -38,7 +40,13 @@ import {
   buildMasterDataExportCsv,
   downloadCsv,
 } from "@/features/master-data/queries"
-import { masterDataCopy } from "@/features/master-data/copy"
+import {
+  masterDataCopy,
+  masterDataSearchPlaceholder,
+  lifecycleFilterLabel,
+  metricFilterLabel,
+  revisionTimingFilterLabel,
+} from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
 import { formatEffectiveRange } from "@/features/master-data/filter"
 import { CategoryTreePage } from "@/features/master-data/category-tree-page"
@@ -75,7 +83,6 @@ function ResourceNav({
     <nav
       ref={navRef}
       aria-label={masterDataCopy.resourceNavAria}
-      role="tablist"
       className="flex flex-wrap gap-2 border-b border-border pb-3"
     >
       {MASTER_DATA_RESOURCES.map((item) => {
@@ -84,8 +91,7 @@ function ResourceNav({
           <Button
             key={item.key}
             size="sm"
-            role="tab"
-            aria-selected={selected}
+            aria-current={selected ? "page" : undefined}
             variant={selected ? "secondary" : "ghost"}
             render={<Link href={`/master-data/${item.key}`} />}
           >
@@ -94,6 +100,23 @@ function ResourceNav({
         )
       })}
     </nav>
+  )
+}
+
+/** 禁用按钮的阻断原因提示：disabled 状态下浏览器不显示 title，用外层 span 承载。 */
+function DisabledActionHint({
+  message,
+  children,
+}: {
+  message?: string
+  children: React.ReactNode
+}) {
+  return message ? (
+    <span title={message} className="inline-flex">
+      {children}
+    </span>
+  ) : (
+    <>{children}</>
   )
 }
 
@@ -112,6 +135,10 @@ export function MasterDataPage({ resource }: { resource: string }) {
         !(event.target instanceof HTMLInputElement) &&
         !(event.target instanceof HTMLTextAreaElement)
       ) {
+        // 弹窗 / 抽屉打开时不让 / 聚焦背景搜索框
+        if (document.querySelector('[role="dialog"], [data-slot="sheet"]')) {
+          return
+        }
         event.preventDefault()
         searchInputRef.current?.focus()
       }
@@ -134,7 +161,7 @@ export function MasterDataPage({ resource }: { resource: string }) {
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <PageHeader
           title={masterDataCopy.unknownResourceTitle}
-          description={masterDataCopy.unknownResourceDesc(resource)}
+          description={masterDataCopy.unknownResourceDesc()}
         />
         <ResourceNav resource="" navRef={navRef} />
       </div>
@@ -175,10 +202,7 @@ function MasterDataListWorkspace({
   const isProductResource = resource === "products"
   /** 供应商走详情页（查看与编辑同一页面），不用侧边 sheet / 编辑弹窗。 */
   const isSupplierResource = resource === "suppliers"
-  /** 品牌：列表 + 对话框维护，不使用侧栏预览 sheet。 */
-  const isBrandResource = resource === "brands"
-  const skipPreviewSheet =
-    isProductResource || isBrandResource || isSupplierResource
+  const skipPreviewSheet = isProductResource || isSupplierResource
   /** 品牌 / 分类字典不展示生效期间列。 */
   const showEffectiveColumn = resource !== "brands"
   const [search, setSearch] = React.useState("")
@@ -203,8 +227,18 @@ function MasterDataListWorkspace({
     jobId: string
     rowCount: number
     filterSnapshotLabel: string
-    permissionVersion: string
   } | null>(null)
+
+  // 切换资源时重置筛选条件，避免旧分类的搜索/指标残留导致新分类首屏为空且无提示。
+  React.useEffect(() => {
+    setSearch("")
+    setLifecycleStatus("all")
+    setRevisionTiming("all")
+    setMetricKey("all")
+    setPagination((p) => ({ ...p, pageIndex: 0 }))
+    setPreviewId(null)
+    setExportMeta(null)
+  }, [resource])
 
   const listQuery = useMasterDataListQuery({
     resource,
@@ -215,7 +249,6 @@ function MasterDataListWorkspace({
   })
 
   const rows = listQuery.data?.rows ?? []
-  const metrics = listQuery.data?.metrics ?? []
   const permissionDemo = listQuery.data?.permissionDemo
 
   const previewDetailQuery = useMasterDataCenterQuery(
@@ -237,12 +270,33 @@ function MasterDataListWorkspace({
     setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
   }, [])
 
+  /** 指标与当前搜索/启停/版本筛选同步，避免「全部 3」与表格行数矛盾。 */
+  const syncedMetrics = React.useMemo(() => {
+    const base = listQuery.data?.metrics ?? []
+    if (rows.length === 0 || listQuery.data == null) return base
+    const metricCount = (key: string): number => {
+      switch (key) {
+        case "enabled":
+          return rows.filter((r) => r.lifecycleStatus === "ENABLED").length
+        case "disabled":
+          return rows.filter((r) => r.lifecycleStatus === "DISABLED").length
+        case "pending":
+          return rows.filter((r) => r.revisionTiming === "FUTURE").length
+        case "expiring":
+          return rows.filter((r) => r.metricTags.includes("expiring")).length
+        default:
+          return rows.length
+      }
+    }
+    return base.map((metric) => ({ ...metric, value: metricCount(metric.key) }))
+  }, [listQuery.data, rows])
+
   const filterSnapshotLabel = React.useMemo(() => {
     const parts = [
       `分类=${resourceLabel(resource)}`,
-      `启用状态=${lifecycleStatus}`,
-      `版本状态=${revisionTiming}`,
-      `指标=${metricKey}`,
+      `启用状态=${lifecycleFilterLabel(lifecycleStatus)}`,
+      `版本状态=${revisionTimingFilterLabel(revisionTiming)}`,
+      `指标=${metricFilterLabel(metricKey)}`,
       search.trim() ? `搜索=${search.trim()}` : "搜索=空",
     ]
     return parts.join(" · ")
@@ -251,25 +305,15 @@ function MasterDataListWorkspace({
   const handleExport = React.useCallback(() => {
     if (!listQuery.data || rows.length === 0) return
     if (!permissionDemo?.canExport) return
-    const csv = buildMasterDataExportCsv(
-      rows,
-      filterSnapshotLabel,
-      listQuery.data.permissionVersion
-    )
+    const csv = buildMasterDataExportCsv(rows, filterSnapshotLabel)
     downloadCsv(csv, `基础资料-${resourceLabel(resource)}`)
+    const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "")
     setExportMeta({
-      jobId: `EXP-W14-${Date.now().toString(36)}`,
+      jobId: `导出-${datePart}-${String(Date.now() % 100000).padStart(5, "0")}`,
       rowCount: rows.length,
       filterSnapshotLabel,
-      permissionVersion: listQuery.data.permissionVersion,
     })
-  }, [
-    filterSnapshotLabel,
-    listQuery.data,
-    permissionDemo?.canExport,
-    resource,
-    rows,
-  ])
+  }, [filterSnapshotLabel, listQuery.data, permissionDemo?.canExport, resource, rows])
 
   const columns = React.useMemo<ColumnDef<MasterDataListItem>[]>(
     () => [
@@ -361,19 +405,23 @@ function MasterDataListWorkspace({
           } satisfies ColumnDef<MasterDataListItem>,
         ]
       : []),
-      {
-        id: "blocker",
-        header: masterDataCopy.colBlocker,
-        meta: { label: masterDataCopy.colBlocker },
-        cell: ({ row }) =>
-          row.original.primaryBlocker ? (
-            <span className="text-xs text-destructive">
-              {row.original.primaryBlocker}
-            </span>
-          ) : (
-            <span className="text-xs text-muted-foreground">—</span>
-          ),
-      },
+      ...(rows.some((r) => r.primaryBlocker)
+        ? [
+            {
+              id: "blocker",
+              header: masterDataCopy.colBlocker,
+              meta: { label: masterDataCopy.colBlocker },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) =>
+                row.original.primaryBlocker ? (
+                  <span className="text-xs text-destructive">
+                    {row.original.primaryBlocker}
+                  </span>
+                ) : (
+                  <span className="text-xs text-muted-foreground">—</span>
+                ),
+            } satisfies ColumnDef<MasterDataListItem>,
+          ]
+        : []),
       {
         id: "actions",
         header: masterDataCopy.colActions,
@@ -390,71 +438,80 @@ function MasterDataListWorkspace({
           )
           return (
             <div className="flex flex-wrap gap-1">
-              {!isBrandResource ? (
-                <Button
-                  type="button"
-                  size="xs"
-                  variant="ghost"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    lastFocusedRowId.current = item.stableId
-                    if (isProductResource || isSupplierResource) {
-                      router.push(
-                        `/master-data/${resource}/${item.stableId}?section=overview`
-                      )
-                    } else {
-                      setPreviewId(item.stableId)
-                    }
-                  }}
-                >
-                  {masterDataCopy.actionView}
-                </Button>
-              ) : null}
               <Button
                 type="button"
                 size="xs"
                 variant="ghost"
-                disabled={!canRevise}
-                title={reviseBlocker?.message}
                 onClick={(e) => {
                   e.stopPropagation()
+                  lastFocusedRowId.current = item.stableId
                   if (isProductResource || isSupplierResource) {
-                    // 详情页即编辑，与「查看」同一路由
                     router.push(
                       `/master-data/${resource}/${item.stableId}?section=overview`
                     )
                   } else {
-                    setReviseTarget(item)
+                    setPreviewId(item.stableId)
                   }
                 }}
               >
-                <HistoryIcon data-icon="inline-start" aria-hidden />
-                {masterDataCopy.actionUpdate}
+                {masterDataCopy.actionView}
               </Button>
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                disabled={!canDisable}
-                title={disableBlocker?.message}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setDisableTarget(item)
-                }}
-              >
-                <BanIcon data-icon="inline-start" aria-hidden />
-                {masterDataCopy.actionDisable}
-              </Button>
+              <DisabledActionHint message={reviseBlocker?.message}>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  disabled={!canRevise}
+                  title={reviseBlocker?.message}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (isProductResource || isSupplierResource) {
+                      // 详情页即编辑，与「查看」同一路由
+                      router.push(
+                        `/master-data/${resource}/${item.stableId}?section=overview`
+                      )
+                    } else {
+                      setReviseTarget(item)
+                    }
+                  }}
+                >
+                  <HistoryIcon data-icon="inline-start" aria-hidden />
+                  {masterDataCopy.actionUpdate}
+                </Button>
+              </DisabledActionHint>
+              <DisabledActionHint message={disableBlocker?.message}>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  disabled={!canDisable}
+                  title={disableBlocker?.message}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setDisableTarget(item)
+                  }}
+                >
+                  <BanIcon data-icon="inline-start" aria-hidden />
+                  {masterDataCopy.actionDisable}
+                </Button>
+              </DisabledActionHint>
             </div>
           )
         },
       },
     ],
-    [isBrandResource, isProductResource, isSupplierResource, router, showEffectiveColumn]
+    [
+      isProductResource,
+      isSupplierResource,
+      lastFocusedRowId,
+      resource,
+      router,
+      rows,
+      showEffectiveColumn,
+    ]
   )
 
   const isWarehouse = resource === "warehouses"
-  const primaryDisabled = isWarehouse
 
   if (listQuery.isPending) {
     return (
@@ -466,17 +523,14 @@ function MasterDataListWorkspace({
     )
   }
 
-  if (listQuery.isError || !listQuery.data) {
-    return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader title={masterDataCopy.pageTitle(resourceLabel(resource))} />
-        <ResourceNav resource={resource} navRef={navRef} />
-        <Button type="button" onClick={() => void listQuery.refetch()}>
-          重试
-        </Button>
-      </div>
-    )
-  }
+  const listLoadFailed = listQuery.isError || !listQuery.data
+  const hasActiveFilters =
+    search.trim() !== "" ||
+    lifecycleStatus !== "all" ||
+    revisionTiming !== "all" ||
+    metricKey !== "all"
+  const metrics = syncedMetrics
+  const noDataWithCreate = !listLoadFailed && rows.length === 0
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:gap-3.5 md:p-4">
@@ -499,7 +553,7 @@ function MasterDataListWorkspace({
         metadata={
           <DataFreshness
             updatedAt="刚刚"
-            dateTime={listQuery.data.queriedAt}
+            dateTime={listQuery.data?.queriedAt ?? ""}
             state="fresh"
             label="基础资料列表"
           />
@@ -523,7 +577,11 @@ function MasterDataListWorkspace({
                   : masterDataCopy.actionCreate,
                 mobileVisibility: "hide",
                 icon: PlusIcon,
-                disabled: false,
+                // 仓库写门禁未开放：按钮真正禁用，不再进入注定失败的表单。
+                disabled: isWarehouse,
+                title: isWarehouse
+                  ? masterDataCopy.warehouseWriteBody
+                  : undefined,
                 onClick: () => {
                   if (isProductResource || isSupplierResource) {
                     router.push(`/master-data/${resource}/new`)
@@ -543,12 +601,38 @@ function MasterDataListWorkspace({
           status="blocked"
           title={masterDataCopy.warehouseWriteTitle}
           description={masterDataCopy.warehouseWriteBody}
+          actions={
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                render={<Link href="/master-data/sellable-items" />}
+              >
+                去公司商品池
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                render={<Link href="/inventory?view=balance" />}
+              >
+                打开库存台账
+              </Button>
+            </div>
+          }
         />
       ) : null}
 
       {resource === "brands" ? (
         <p className="text-sm text-muted-foreground">
           {masterDataCopy.brandListHint}
+        </p>
+      ) : null}
+
+      {resource === "sellable-items" ? (
+        <p className="text-sm text-muted-foreground">
+          {masterDataCopy.sellableItemsHint}
         </p>
       ) : null}
 
@@ -616,7 +700,7 @@ function MasterDataListWorkspace({
                     setSearch(e.target.value)
                     resetPagination()
                   }}
-                  placeholder={masterDataCopy.searchPlaceholder}
+                  placeholder={masterDataSearchPlaceholder(resource)}
                   aria-label={masterDataCopy.searchAria}
                 />
               </InputGroup>
@@ -693,27 +777,69 @@ function MasterDataListWorkspace({
               left: ["stableNo"],
               right: ["actions"],
             }}
+            errorState={
+              listLoadFailed ? (
+                <BusinessFailureState
+                  kind="system"
+                  description={masterDataCopy.centerLoadFail}
+                  onRetry={() => void listQuery.refetch()}
+                />
+              ) : undefined
+            }
+            emptyState={
+              noDataWithCreate ? (
+                <BusinessEmptyState
+                  kind={hasActiveFilters ? "filter" : "no-data"}
+                  title={
+                    hasActiveFilters
+                      ? "当前筛选无结果"
+                      : `还没有${resourceLabel(resource)}资料`
+                  }
+                  description={
+                    hasActiveFilters
+                      ? "没有记录符合当前筛选条件，可清除筛选后重试。"
+                      : "点击「新建」创建第一份资料；历史记录会随资料保留。"
+                  }
+                  action={
+                    !hasActiveFilters && !isWarehouse ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          if (isProductResource || isSupplierResource) {
+                            router.push(`/master-data/${resource}/new`)
+                          } else {
+                            setCreateOpen(true)
+                          }
+                        }}
+                      >
+                        {masterDataCopy.actionCreate}
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ) : undefined
+            }
             onRowPreview={(row) => {
               lastFocusedRowId.current = row.stableId
               if (isProductResource || isSupplierResource) {
                 router.push(
                   `/master-data/${resource}/${row.stableId}?section=overview`
                 )
-              } else if (isBrandResource) {
-                setReviseTarget(row)
               } else {
                 setPreviewId(row.stableId)
               }
             }}
             onRowOpen={(row) => {
               lastFocusedRowId.current = row.stableId
-              if (isBrandResource) {
-                setReviseTarget(row)
+              if (isProductResource || isSupplierResource) {
+                router.push(
+                  `/master-data/${resource}/${row.stableId}?section=overview`
+                )
                 return
               }
-              router.push(
-                `/master-data/${resource}/${row.stableId}?section=overview`
-              )
+              setPreviewId(row.stableId)
             }}
           />
         }
@@ -772,34 +898,46 @@ function MasterDataListWorkspace({
                 >
                   关闭
                 </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={
-                    !previewRow.allowedActions.includes("CREATE_REVISION")
-                  }
-                  title={
-                    previewRow.actionBlockers.find(
-                      (b) => b.action === "CREATE_REVISION"
-                    )?.message
-                  }
-                  onClick={() => setReviseTarget(previewRow)}
+                <DisabledActionHint
+                  message={previewRow.actionBlockers.find(
+                    (b) => b.action === "CREATE_REVISION"
+                  )?.message}
                 >
-                  {masterDataCopy.actionUpdate}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={!previewRow.allowedActions.includes("DISABLE")}
-                  title={
-                    previewRow.actionBlockers.find(
-                      (b) => b.action === "DISABLE"
-                    )?.message
-                  }
-                  onClick={() => setDisableTarget(previewRow)}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={
+                      !previewRow.allowedActions.includes("CREATE_REVISION")
+                    }
+                    title={
+                      previewRow.actionBlockers.find(
+                        (b) => b.action === "CREATE_REVISION"
+                      )?.message
+                    }
+                    onClick={() => setReviseTarget(previewRow)}
+                  >
+                    {masterDataCopy.actionUpdate}
+                  </Button>
+                </DisabledActionHint>
+                <DisabledActionHint
+                  message={previewRow.actionBlockers.find(
+                    (b) => b.action === "DISABLE"
+                  )?.message}
                 >
-                  {masterDataCopy.actionDisable}
-                </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={!previewRow.allowedActions.includes("DISABLE")}
+                    title={
+                      previewRow.actionBlockers.find(
+                        (b) => b.action === "DISABLE"
+                      )?.message
+                    }
+                    onClick={() => setDisableTarget(previewRow)}
+                  >
+                    {masterDataCopy.actionDisable}
+                  </Button>
+                </DisabledActionHint>
                 <Button
                   type="button"
                   render={
@@ -849,9 +987,6 @@ function MasterDataListWorkspace({
         resource={resource}
         target={disableTarget}
       />
-
-      {/* silence unused for primaryDisabled if tree-shaken — used as semantic flag via isWarehouse */}
-      <span className="sr-only" data-primary-disabled={primaryDisabled} />
     </div>
   )
 }

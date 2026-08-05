@@ -279,3 +279,13 @@ export const VIEW_LABEL: Record<InventoryView, string> = {
   reservation: "销售预占",
   adjustment: "调整记录",
 }
+
+/** 流水类型枚举 → 中文（界面与导出摘要共用，禁止原值上屏）。 */
+export const MOVEMENT_TYPE_LABEL: Record<string, string> = {
+  PURCHASE_RECEIPT: "采购入库",
+  WAREHOUSE_DISPATCH: "仓库发出",
+  RESERVATION_ESTABLISH: "建立预占",
+  RESERVATION_CONSUME: "消耗预占",
+  STOCK_ADJUSTMENT: "库存调整",
+  OPENING_IMPORT: "期初导入",
+}

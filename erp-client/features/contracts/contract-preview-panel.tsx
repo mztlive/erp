@@ -20,12 +20,28 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import type { ContractCenterView, ContractListRow } from "@/features/contracts/types"
+import { contractOwnerLabel } from "@/features/contracts/types"
+import { sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 
 type ContractPreviewPanelProps = {
   row: ContractListRow
   detail: ContractCenterView | null | undefined
   detailLoading?: boolean
+}
+
+function formatAsOf(iso: string): string {
+  try {
+    return new Intl.DateTimeFormat("zh-CN", {
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone: "Asia/Shanghai",
+    }).format(new Date(iso))
+  } catch {
+    return iso
+  }
 }
 
 /**
@@ -88,7 +104,10 @@ export function ContractPreviewPanel({
                 value={row.customer.customerNo}
                 numeric
               />
-              <CompactField label="负责人" value={row.ownerLabel} />
+              <CompactField
+                label="负责人"
+                value={contractOwnerLabel(row.ownerLabel)}
+              />
             </DescriptionList>
           </section>
 
@@ -193,46 +212,61 @@ export function ContractPreviewPanel({
             {detailLoading && !detail ? (
               <p className="text-sm text-muted-foreground">加载关联单据…</p>
             ) : detail && detail.relatedSalesOrders.length > 0 ? (
-              <div className="overflow-hidden rounded-lg border border-border">
-                <Table data-density="compact">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>销售单</TableHead>
-                      <TableHead className="hidden sm:table-cell">性质</TableHead>
-                      <TableHead>状态</TableHead>
-                      <TableHead className="hidden md:table-cell">合同版本</TableHead>
-                      <TableHead data-align="end">含税金额</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {detail.relatedSalesOrders.map((so) => (
-                      <TableRow key={so.salesOrderId}>
-                        <TableCell>
-                          <div className="num font-medium">
-                            {so.documentNumber}
-                          </div>
-                          <div className="text-[11px] text-muted-foreground">
-                            履约 {so.fulfillmentLabel} · 回款{" "}
-                            {so.collectionLabel} · 开票 {so.invoicingLabel}
-                          </div>
-                        </TableCell>
-                        <TableCell className="hidden sm:table-cell">
-                          {so.natureLabel}
-                        </TableCell>
-                        <TableCell>{so.primaryStatus.label}</TableCell>
-                        <TableCell className="num hidden md:table-cell">
-                          v{so.contractRevisionNo}
-                        </TableCell>
-                        <TableCell data-align="end">
-                          <MoneyValue
-                            value={so.amountGross}
-                            taxBasis="gross"
-                          />
-                        </TableCell>
+              <div className="space-y-2">
+                <div className="overflow-hidden rounded-lg border border-border">
+                  <Table data-density="compact">
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>销售单</TableHead>
+                        <TableHead className="hidden sm:table-cell">性质</TableHead>
+                        <TableHead>状态</TableHead>
+                        <TableHead className="hidden md:table-cell">合同版本</TableHead>
+                        <TableHead data-align="end">含税金额</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
+                    </TableHeader>
+                    <TableBody>
+                      {detail.relatedSalesOrders.map((so) => (
+                        <TableRow key={so.salesOrderId}>
+                          <TableCell>
+                            <div className="num font-medium">
+                              {so.documentNumber}
+                            </div>
+                            <div className="text-[11px] text-muted-foreground">
+                              履约 {so.fulfillmentLabel} · 回款{" "}
+                              {so.collectionLabel} · 开票 {so.invoicingLabel}
+                            </div>
+                          </TableCell>
+                          <TableCell className="hidden sm:table-cell">
+                            {so.natureLabel}
+                          </TableCell>
+                          <TableCell>{so.primaryStatus.label}</TableCell>
+                          <TableCell className="num hidden md:table-cell">
+                            v{so.contractRevisionNo}
+                          </TableCell>
+                          <TableCell data-align="end">
+                            <MoneyValue
+                              value={so.amountGross}
+                              taxBasis="gross"
+                            />
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  关联销售单含税金额合计：{" "}
+                  <span className="num font-medium">
+                    <MoneyValue
+                      value={sumFixed(
+                        detail.relatedSalesOrders.map((so) => so.amountGross),
+                        { maxScale: 2, outputScale: 2 }
+                      )}
+                      taxBasis="gross"
+                    />
+                  </span>
+                  （仅为单据摘要，不汇总为合同金额）
+                </p>
               </div>
             ) : (
               <p className="text-sm text-muted-foreground">
@@ -242,7 +276,7 @@ export function ContractPreviewPanel({
             {detail?.relatedSalesOrdersAsOf ? (
               <p className="text-[11px] text-muted-foreground">
                 关联销售统计截至{" "}
-                <span className="num">{detail.relatedSalesOrdersAsOf}</span>
+                <span className="num">{formatAsOf(detail.relatedSalesOrdersAsOf)}</span>
                 。
               </p>
             ) : null}

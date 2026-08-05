@@ -235,6 +235,11 @@ export type ConnectionListView = {
     alias: string
     version: string
   }>
+  endpointOpaqueOptions: Array<{
+    referenceId: string
+    alias: string
+    version: string
+  }>
 }
 
 export type FormalOutcome =
@@ -248,6 +253,8 @@ export type FormalOutcome =
       jobNo?: string
       connectionVersion?: string
       auditEventId?: string
+      /** 新建成功后的连接内部 id，仅用于页面跳转，不展示 */
+      connectionId?: string
     }
   | {
       status: "failed" | "blocked" | "rejected"
@@ -348,10 +355,24 @@ export const SECTION_LABEL: Record<ConnectionSection, string> = {
   overview: "概览",
   capabilities: "能力",
   security: "安全配置引用",
-  health: "健康与尝试",
+  health: "健康检查",
   catalog: "目录同步",
   related: "关联业务",
   audit: "审计",
+}
+
+/** 审计动作中文映射（动作码只在代码与审计数据结构中使用） */
+export const AUDIT_ACTION_LABEL: Record<string, string> = {
+  CREATE_CONNECTION: "创建连接",
+  BIND_ENDPOINT_REFERENCE: "绑定地址引用",
+  BIND_CREDENTIAL_REFERENCE: "绑定/轮换密钥引用",
+  CONFIRM_CAPABILITY_REQUIREMENT: "确认业务能力需求",
+  UPDATE_CAPABILITIES: "配置能力",
+  RUN_HEALTH_CHECK: "执行健康检查",
+  START_CATALOG_SYNC: "触发目录同步",
+  DISABLE: "停用连接",
+  ENABLE: "启用连接",
+  HEALTH_AUTH_FAILED: "鉴权/签名失败",
 }
 
 export const SECTIONS: ConnectionSection[] = [

@@ -526,8 +526,8 @@ const RECENT_WORK: readonly WorkspaceRecentItem[] = [
         id: "recent_1",
         label: "XS20260328001 · 星河制造",
         destinationWorkspaceId: "W05",
-        objectId: "so_1001",
-        href: "/sales/orders/so_1001"
+        objectId: "XS20260328001",
+        href: "/sales/orders?search=XS20260328001"
     },
     {
         id: "recent_2",
@@ -539,8 +539,8 @@ const RECENT_WORK: readonly WorkspaceRecentItem[] = [
         id: "recent_3",
         label: "XS20260312008 · 云帆物流",
         destinationWorkspaceId: "W05",
-        objectId: "so_1006",
-        href: "/sales/orders/so_1006"
+        objectId: "XS20260312008",
+        href: "/sales/orders?search=XS20260312008"
     }
 ];
 function sortWorkItems(items: readonly WorkspaceWorkItem[]): WorkspaceWorkItem[] {
@@ -738,10 +738,9 @@ export function buildTodayWorkspaceView(query: TodayWorkspaceQuery): TodayWorksp
     const metrics = buildMetrics(sourceItems, query.scope);
     const filtered = filterItems(sourceItems, query);
     const groups = buildGroups(filtered);
-    // Projection can lag formal work items by ≤1 min. Mock: projection is 90s
-    // behind work items so the UI must mark it stale and not claim realtime.
+    // 工作台汇总与待办同源同步，避免 mock 恒滞后导致「狼来了」预警刷屏（P2-8）。
     const workItemsUpdatedAt = new Date().toISOString();
-    const projectionUpdatedAt = new Date(Date.now() - 90_000).toISOString();
+    const projectionUpdatedAt = workItemsUpdatedAt;
     return {
         access: "allowed",
         viewer: {
@@ -753,7 +752,7 @@ export function buildTodayWorkspaceView(query: TodayWorkspaceQuery): TodayWorksp
         freshness: {
             workItemsUpdatedAt,
             projectionUpdatedAt,
-            projectionState: "stale"
+            projectionState: "fresh"
         },
         metrics,
         groups,

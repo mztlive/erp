@@ -141,7 +141,7 @@ function toListItem(batch: ImportBatchView) {
       ? `${batch.backgroundJob.processed}/${batch.backgroundJob.total}`
       : BATCH_STATUS_LABEL[batch.status],
     confirmationSummary:
-      total === 0 ? "—" : `${confirmed}/${total} 责任范围`,
+      total === 0 ? "—" : `${confirmed}/${total} 已确认`,
     initiatorLabel: batch.initiatorLabel,
     updatedAt: batch.updatedAt,
   }

@@ -21,10 +21,10 @@ export const W16_SCOPE = {
 } as const
 
 export const W16_EXCLUDED_NOTE =
-  "本页仅汇总非卡券业务（GOODS_SERVICE）不含税口径。卡券销售收入、卡券直接履约费用、商城消费成本（MALL_CONSUMPTION）与微信成本（WECHAT_COST）均不进入本页；卡券消费经营结果见卡券经营分析。"
+  "本页仅汇总非卡券业务的不含税口径。卡券销售收入、卡券直接履约费用、商城消费成本与微信成本均不进入本页；卡券消费经营结果见卡券经营分析。"
 
 export const W16_FORMULA_TEXT =
-  "实际经营盈亏（不含税）= 非卡券不含税销售收入 − 非卡券不含税实际采购成本 − 非卡券不含税实际履约费用（仅 cost_scope=NON_VOUCHER_FULFILLMENT 且 stage∈{ACTUAL,REDUCTION}）"
+  "实际经营盈亏（不含税）= 非卡券不含税销售收入 − 非卡券不含税实际采购成本 − 非卡券不含税实际履约费用（仅非卡券履约范围内的实际发生与冲减成本计入）"
 
 /** 默认：服务端已配置期间归属口径 */
 export const W16_PERIOD_BASIS_CONFIGURED: ProfitLossPeriodBasisConfig = {
@@ -143,7 +143,7 @@ export const W16_COST_ENTRIES: readonly CostEntryDetail[] = [
     salesOrderId: "so-nv-001",
     salesOrderNo: "XS20260715001",
     originalCostEntryId: "ce-act-001",
-    originalCostEntryLabel: "ce-act-001 · 商品实际成本",
+    originalCostEntryLabel: "商品实际成本（返点冲减来源）",
     voucherSummary: "返点冲减不含税 10,000.00（反向贡献）",
   },
   {
@@ -417,7 +417,7 @@ export const W16_COST_COMPOSITION: readonly ProfitLossCostComposition[] = [
 export const W16_STAGE_REFERENCE: readonly StageReferenceLine[] = [
   {
     stage: "EXPECTED",
-    label: "预计成本（EXPECTED）",
+    label: "预计成本",
     procurementCostNet: "590000.00",
     fulfillmentCostNet: "72000.00",
     totalNet: "662000.00",
@@ -425,7 +425,7 @@ export const W16_STAGE_REFERENCE: readonly StageReferenceLine[] = [
   },
   {
     stage: "CONFIRMED",
-    label: "已确认成本（CONFIRMED）",
+    label: "已确认成本",
     procurementCostNet: "575000.00",
     fulfillmentCostNet: "68000.00",
     totalNet: "643000.00",

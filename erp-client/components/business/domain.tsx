@@ -924,17 +924,17 @@ export type CostCoverageNoticeProps = DomainPanelProps & {
 
 const costBasisStatus = {
   ACTUAL: {
-    label: "ACTUAL · 实际成本",
+    label: "实际成本",
     tone: "success",
     description: "当前成本来自实际发生或后续权威差额。",
   },
   STANDARD: {
-    label: "STANDARD · 标准成本",
+    label: "标准成本",
     tone: "info",
     description: "当前成本使用消费发生时有效的标准供给成本。",
   },
   NONE: {
-    label: "NONE · 成本未覆盖",
+    label: "无可用成本",
     tone: "warning",
     description: "当前没有有效成本来源，不得按零成本计算利润。",
   },

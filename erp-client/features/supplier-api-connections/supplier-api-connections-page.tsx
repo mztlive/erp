@@ -27,12 +27,12 @@ import {
   DataTable,
   DocumentHeader,
   FormalActionResult,
+  GuardedBusinessAction,
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
   OptionCombobox,
   SupplierCombobox,
-  PageActions,
   PageHeader,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
@@ -69,6 +69,7 @@ import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   useBindCredentialMutation,
+  useBindEndpointMutation,
   useConfirmCapabilityMutation,
   useConnectionCenterQuery,
   useConnectionListQuery,
@@ -90,6 +91,7 @@ import type {
   HealthRecordView,
 } from "@/features/supplier-api-connections/types"
 import {
+  AUDIT_ACTION_LABEL,
   CAPABILITY_LABEL,
   DEMO_ROLE_LABEL,
   ENVIRONMENT_LABEL,
@@ -133,7 +135,6 @@ function outcomeToResult(outcome: FormalOutcome): ResultState {
       status: "unknown",
       title: outcome.title,
       description: outcome.message,
-      reference: outcome.operationId,
     }
   }
   return {
@@ -248,7 +249,9 @@ function ConnectionList({
 }) {
   const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
   const [createOpen, setCreateOpen] = React.useState(false)
-  const [result, setResult] = React.useState<ResultState>(null)
+  const [result, setResult] = React.useState<
+    (ResultState & { actions?: React.ReactNode }) | null
+  >(null)
   const createMutation = useCreateConnectionMutation()
 
   React.useEffect(() => {
@@ -264,7 +267,7 @@ function ConnectionList({
     supplierId: urlState.supplierId,
     q: urlState.q,
     page: urlState.page,
-    pageSize: 20,
+    pageSize: urlState.pageSize,
     role: urlState.role,
     demoFlag: urlState.demoFlag,
   })
@@ -272,15 +275,16 @@ function ConnectionList({
   const data = listQuery.data
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: Math.max(0, urlState.page - 1),
-    pageSize: 20,
+    pageSize: urlState.pageSize,
   })
 
   React.useEffect(() => {
     setPagination((p) => ({
       ...p,
       pageIndex: Math.max(0, urlState.page - 1),
+      pageSize: urlState.pageSize,
     }))
-  }, [urlState.page])
+  }, [urlState.page, urlState.pageSize])
 
   const columns = React.useMemo<ColumnDef<ConnectionListItem>[]>(
     () => [
@@ -293,9 +297,16 @@ function ConnectionList({
           const r = row.original
           return (
             <div className="min-w-0 py-0.5">
-              <div className="font-mono text-sm font-medium">
+              <Button
+                type="button"
+                variant="link"
+                size="xs"
+                className="num h-auto justify-start px-0 font-medium"
+                aria-label={`打开连接 ${r.connectionCode}`}
+                onClick={() => onOpen(r.connectionId)}
+              >
                 {r.connectionCode}
-              </div>
+              </Button>
               <div className="truncate text-xs text-muted-foreground">
                 {r.supplier.name}
               </div>
@@ -455,11 +466,27 @@ function ConnectionList({
         idempotencyKey: newIdempotencyKey("create"),
       })
       const mapped = outcomeToResult(outcome)
-      setResult(mapped)
-      if (outcome.status === "succeeded" && outcome.reference) {
+      if (outcome.status === "succeeded" && outcome.connectionId) {
         setCreateOpen(false)
         form.reset()
-        onOpen(outcome.reference)
+        setResult(
+          mapped
+            ? {
+                ...mapped,
+                actions: (
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => onOpen(outcome.connectionId!)}
+                  >
+                    打开连接详情
+                  </Button>
+                ),
+              }
+            : mapped
+        )
+      } else {
+        setResult(mapped)
       }
     },
   })
@@ -481,7 +508,7 @@ function ConnectionList({
         <BusinessFailureState
           kind="system"
           title="连接列表加载失败"
-          description="请重试。已有数据时保留旧连接。"
+          description="请重试。"
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重试
@@ -508,25 +535,46 @@ function ConnectionList({
         ]}
         metadata={
           <DataFreshness
-            updatedAt="刚刚"
+            updatedAt={
+              data?.projectedAt
+                ? formatDateTime(data.projectedAt, "default")
+                : "—"
+            }
             dateTime={data?.projectedAt}
-            state="fresh"
+            state={listQuery.isFetching ? "syncing" : "fresh"}
             label="连接列表"
           />
         }
         actions={
-          <PageActions
-            actions={[
-              {
-                actionKey: "create",
-                label: "新建连接",
-                icon: PlusIcon,
-                mobileVisibility: "hide",
-                disabled: urlState.role !== "admin" || !data?.hasModulePermission,
-                onClick: () => setCreateOpen(true),
-              },
-            ]}
-          />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void listQuery.refetch()}
+            >
+              <RefreshCwIcon className="size-3.5" aria-hidden="true" />
+              刷新
+            </Button>
+            <div className="max-sm:hidden">
+              <GuardedBusinessAction
+                type="button"
+                size="sm"
+                disabled={
+                  urlState.role !== "admin" || !data?.hasModulePermission
+                }
+                reason={
+                  urlState.role !== "admin"
+                    ? "仅系统管理员可新建连接"
+                    : undefined
+                }
+                onClick={() => setCreateOpen(true)}
+              >
+                <PlusIcon className="size-3.5" aria-hidden="true" />
+                新建连接
+              </GuardedBusinessAction>
+            </div>
+          </div>
         }
       />
 
@@ -555,6 +603,7 @@ function ConnectionList({
           description={result.description}
           reference={result.reference}
           facts={result.facts}
+          actions={result.actions}
         />
       ) : null}
 
@@ -562,13 +611,13 @@ function ConnectionList({
         <BusinessEmptyState
           kind="no-scope"
           title="无模块权限"
-          description="当前角色无权访问 API 供应商连接。不展示导航内快捷创建。"
+          description="当前角色无权访问 API 供应商连接，请联系系统管理员开通。"
         />
       ) : empty === "NO_SCOPE" ? (
         <BusinessEmptyState
           kind="no-scope"
           title="当前角色无连接数据范围"
-          description="你可进入此页面，但授权供应商/环境范围内没有可查看连接。不显示 0 连接。"
+          description="你可进入此页面，但授权供应商/环境范围内暂无可见连接，可联系管理员扩展数据范围。"
         />
       ) : (
         <>
@@ -707,6 +756,47 @@ function ConnectionList({
                   placeholder="状态"
                   allowClear={false}
                 />
+                <OptionCombobox
+                  value={urlState.capability ?? ""}
+                  onValueChange={(v) =>
+                    patchUrl({
+                      capability: v || undefined,
+                      page: 1,
+                    })
+                  }
+                  options={[
+                    { value: "", label: "全部能力" },
+                    ...(
+                      Object.keys(CAPABILITY_LABEL) as Array<
+                        keyof typeof CAPABILITY_LABEL
+                      >
+                    ).map((k) => ({
+                      value: k,
+                      label: CAPABILITY_LABEL[k],
+                    })),
+                  ]}
+                  className="w-[8rem]"
+                  size="sm"
+                  placeholder="能力"
+                  allowClear={false}
+                />
+                <SupplierCombobox
+                  value={urlState.supplierId || undefined}
+                  onValueChange={(id) =>
+                    patchUrl({
+                      supplierId: id || undefined,
+                      page: 1,
+                    })
+                  }
+                  suppliers={PROCUREMENT_SUPPLIER_OPTIONS.map((s) => ({
+                    supplierId: s.supplierId,
+                    supplierName: s.supplierName,
+                    statusLabel: "可选",
+                    statusTone: "neutral",
+                  }))}
+                  className="w-[12rem]"
+                  placeholder="全部供应商"
+                />
                 <Button
                   type="button"
                   size="sm"
@@ -719,6 +809,7 @@ function ConnectionList({
                       health: undefined,
                       catalogFreshness: undefined,
                       capability: undefined,
+                      supplierId: undefined,
                       page: 1,
                     })
                   }}
@@ -731,7 +822,7 @@ function ConnectionList({
 
           <BusinessTableFrame
             title="连接列表"
-            description="一行展示代码、供应商、环境、状态、能力、健康与下一步；身份与操作列固定"
+            description="一行展示代码、供应商、环境、状态、能力、健康与下一步；身份与操作列固定；默认仅展示生产环境连接，可在工具栏切换。"
             table={
               <DataTable
                 data={data?.items ?? []}
@@ -743,6 +834,7 @@ function ConnectionList({
                 density="compact"
                 layout="flush"
                 enableColumnPinning
+                defaultColumnVisibility={{ owners: false }}
                 defaultColumnPinning={{
                   left: ["identity"],
                   right: ["actions"],
@@ -750,7 +842,10 @@ function ConnectionList({
                 pagination={pagination}
                 onPaginationChange={(next) => {
                   setPagination(next)
-                  patchUrl({ page: next.pageIndex + 1 })
+                  patchUrl({
+                    page: next.pageIndex + 1,
+                    pageSize: next.pageSize,
+                  })
                 }}
                 onRowOpen={(row) => onOpen(row.connectionId)}
                 emptyState={
@@ -758,7 +853,7 @@ function ConnectionList({
                     <BusinessEmptyState
                       kind="filter"
                       title="当前筛选无结果"
-                      description="没有连接符合当前环境/状态/健康条件。可清除筛选。"
+                      description="没有连接符合当前环境/状态/能力/健康条件，可清除筛选。"
                       action={
                         <Button
                           type="button"
@@ -806,7 +901,7 @@ function ConnectionList({
           <DialogHeader>
             <DialogTitle>新建连接身份</DialogTitle>
             <DialogDescription>
-              创建全局唯一连接代码（环境不是唯一键组成部分）。成功后打开连接详情完成配置。
+              连接代码全局唯一，不可与环境组合复用。创建成功后可在结果中打开连接详情完成配置。
             </DialogDescription>
           </DialogHeader>
           <form
@@ -870,7 +965,7 @@ function ConnectionList({
                     allowClear={false}
                   />
                   {field.state.value === "PRODUCTION" ? (
-                    <p className="text-xs text-destructive" role="status">
+                    <p className="text-xs text-muted-foreground" role="status">
                       正在创建生产环境连接身份
                     </p>
                   ) : null}
@@ -911,10 +1006,16 @@ function ConnectionCenter({
   const [result, setResult] = React.useState<ResultState>(null)
   const [disableOpen, setDisableOpen] = React.useState(false)
   const [credOpen, setCredOpen] = React.useState(false)
+  const [endpointOpen, setEndpointOpen] = React.useState(false)
   const [selectedRef, setSelectedRef] = React.useState<string>("")
+  const [selectedEndpointRef, setSelectedEndpointRef] =
+    React.useState<string>("")
+  const [confirmHealthOpen, setConfirmHealthOpen] = React.useState(false)
+  const [confirmEnableOpen, setConfirmEnableOpen] = React.useState(false)
   const [capConfigOpen, setCapConfigOpen] = React.useState(false)
 
   const bindCred = useBindCredentialMutation()
+  const bindEndpoint = useBindEndpointMutation()
   const confirmCap = useConfirmCapabilityMutation()
   const updateCaps = useUpdateCapabilitiesMutation()
   const runHealth = useRunHealthCheckMutation()
@@ -976,7 +1077,7 @@ function ConnectionCenter({
         <BusinessEmptyState
           kind="no-data"
           title="未找到连接"
-          description={`连接 ${connectionId} 不存在或无权查看。`}
+          description="该连接不存在或当前角色无权查看。可返回列表重新选择。"
         />
       </div>
     )
@@ -1026,7 +1127,7 @@ function ConnectionCenter({
       <DocumentHeader
         density="compact"
         title={`${conn.connectionCode} · ${conn.supplier.name}`}
-        documentNumber={conn.connectionId}
+        documentNumber={conn.connectionCode}
         primaryStatus={{ label: conn.statusLabel, tone: conn.statusTone }}
         version={conn.version}
         meta={
@@ -1087,15 +1188,7 @@ function ConnectionCenter({
                 variant="outline"
                 disabled={runHealth.isPending}
                 title={blockerMsg("RUN_HEALTH_CHECK")}
-                onClick={async () => {
-                  const outcome = await runHealth.mutateAsync({
-                    connectionId: conn.connectionId,
-                    expectedVersion: conn.version,
-                    role: urlState.role,
-                    idempotencyKey: newIdempotencyKey("health"),
-                  })
-                  applyOutcome(outcome)
-                }}
+                onClick={() => setConfirmHealthOpen(true)}
               >
                 <RefreshCwIcon className="size-4" aria-hidden="true" />
                 健康检查
@@ -1107,15 +1200,7 @@ function ConnectionCenter({
                 size="sm"
                 disabled={enableMut.isPending}
                 title={blockerMsg("ENABLE")}
-                onClick={async () => {
-                  const outcome = await enableMut.mutateAsync({
-                    connectionId: conn.connectionId,
-                    expectedVersion: conn.version,
-                    role: urlState.role,
-                    idempotencyKey: newIdempotencyKey("enable"),
-                  })
-                  applyOutcome(outcome)
-                }}
+                onClick={() => setConfirmEnableOpen(true)}
               >
                 启用连接
               </Button>
@@ -1130,6 +1215,19 @@ function ConnectionCenter({
                 停用连接
               </Button>
             ) : null}
+            {conn.actionBlockers
+              .filter((b) =>
+                ["RUN_HEALTH_CHECK", "ENABLE", "DISABLE"].includes(b.action)
+              )
+              .slice(0, 2)
+              .map((b) => (
+                <p
+                  key={`${b.action}-${b.code}`}
+                  className="w-full text-xs text-muted-foreground"
+                >
+                  {b.message}
+                </p>
+              ))}
           </div>
         }
       />
@@ -1198,30 +1296,6 @@ function ConnectionCenter({
             reference={result.reference}
             facts={result.facts}
           />
-          {result.jobNo ? (
-            <BackgroundJobProgress
-              mode="partialAllowed"
-              status={
-                result.status === "processing"
-                  ? "running"
-                  : result.status === "succeeded"
-                    ? "succeeded"
-                    : "failed"
-              }
-              total={conn.capabilities.filter((c) => c.status === "ENABLED")
-                .length || 4}
-              completed={
-                result.status === "processing"
-                  ? 1
-                  : conn.capabilities.filter((c) => c.status === "ENABLED")
-                      .length || 4
-              }
-              succeeded={result.status === "succeeded" ? 4 : 0}
-              failed={result.status === "failed" ? 1 : 0}
-              label={`后台任务 ${result.jobNo}`}
-              description="请求成功返回不代表业务处理完成，请以任务号查询最终结果。"
-            />
-          ) : null}
         </div>
       ) : null}
 
@@ -1274,11 +1348,14 @@ function ConnectionCenter({
           conn={conn}
           role={urlState.role}
           canBind={can("BIND_CREDENTIAL_REFERENCE")}
+          canBindEndpoint={can("BIND_ENDPOINT_REFERENCE")}
           onBind={() => {
-            setSelectedRef(
-              listQuery.data?.credentialOpaqueOptions[0]?.referenceId ?? ""
-            )
+            setSelectedRef("")
             setCredOpen(true)
+          }}
+          onBindEndpoint={() => {
+            setSelectedEndpointRef("")
+            setEndpointOpen(true)
           }}
         />
       ) : null}
@@ -1325,7 +1402,9 @@ function ConnectionCenter({
               conn.relatedImpact.openSupplierOrders +
               conn.relatedImpact.activeSyncJobs
             }
+            estimatedLabel="受影响发布/订单/任务"
             processable={1}
+            processableLabel="连接"
             skipped={0}
             background={false}
             sensitiveFields={["密钥配置", "签名材料"]}
@@ -1351,9 +1430,30 @@ function ConnectionCenter({
               </dd>
             </div>
           </dl>
-          <p className="text-xs text-muted-foreground">
-            历史版本与业务记录保留；不暗示删除。替代方案可链到供应商商品库 / 供应商订单 / 接口错误中心。
-          </p>
+          <div className="space-y-1 text-xs text-muted-foreground">
+            <p>历史版本与业务记录保留，不会删除任何数据。</p>
+            <p className="flex flex-wrap items-center gap-x-3">
+              替代方案：
+              <Link
+                href="/procurement/supplier-catalog"
+                className="text-primary underline-offset-2 hover:underline"
+              >
+                供应商商品库
+              </Link>
+              <Link
+                href="/supplier-api/orders"
+                className="text-primary underline-offset-2 hover:underline"
+              >
+                供应商订单
+              </Link>
+              <Link
+                href="/governance/integration-errors"
+                className="text-primary underline-offset-2 hover:underline"
+              >
+                接口错误中心
+              </Link>
+            </p>
+          </div>
           <DialogFooter>
             <Button
               type="button"
@@ -1397,6 +1497,14 @@ function ConnectionCenter({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            {listQuery.isError ? (
+              <Alert variant="destructive" role="alert">
+                <AlertTitle>引用选项加载失败</AlertTitle>
+                <AlertDescription>
+                  无法取得密钥管理引用列表，请重试后再选择。
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <Label htmlFor="opaque-ref">密钥管理引用</Label>
             <OptionCombobox
               id="opaque-ref"
@@ -1446,6 +1554,161 @@ function ConnectionCenter({
             >
               <KeyRoundIcon className="size-4" aria-hidden="true" />
               确认绑定引用
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 地址配置引用选择器 — 仅不透明引用 */}
+      <Dialog open={endpointOpen} onOpenChange={setEndpointOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {isProd ? "轮换生产环境地址引用" : "绑定/轮换地址引用"}
+            </DialogTitle>
+            <DialogDescription>
+              只能从系统提供的地址配置引用中选择，不能自由输入地址。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            {listQuery.isError ? (
+              <Alert variant="destructive" role="alert">
+                <AlertTitle>引用选项加载失败</AlertTitle>
+                <AlertDescription>
+                  无法取得地址配置引用列表，请重试后再选择。
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            <Label htmlFor="endpoint-ref">地址配置引用</Label>
+            <OptionCombobox
+              id="endpoint-ref"
+              value={selectedEndpointRef || null}
+              onValueChange={(v) => {
+                if (v) setSelectedEndpointRef(v)
+              }}
+              options={(listQuery.data?.endpointOpaqueOptions ?? []).map(
+                (o) => ({
+                  value: o.referenceId,
+                  label: `${o.alias} · ${o.version}`,
+                })
+              )}
+              placeholder="选择地址配置引用"
+              allowClear={false}
+            />
+            <p className="text-xs text-muted-foreground">
+              当前状态：
+              {REFERENCE_STATE_LABEL[conn.safeReferences.endpoint.state]}
+              {conn.safeReferences.endpoint.alias
+                ? ` · ${conn.safeReferences.endpoint.alias}`
+                : ""}
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEndpointOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={!selectedEndpointRef || bindEndpoint.isPending}
+              onClick={async () => {
+                const outcome = await bindEndpoint.mutateAsync({
+                  connectionId: conn.connectionId,
+                  opaqueReferenceId: selectedEndpointRef,
+                  expectedVersion: conn.version,
+                  role: urlState.role,
+                  idempotencyKey: newIdempotencyKey("endpoint"),
+                })
+                applyOutcome(outcome)
+                if (outcome.status === "succeeded") setEndpointOpen(false)
+              }}
+            >
+              <KeyRoundIcon className="size-4" aria-hidden="true" />
+              确认绑定地址
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 健康检查确认（生产环境二次确认） */}
+      <Dialog open={confirmHealthOpen} onOpenChange={setConfirmHealthOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>执行健康检查</DialogTitle>
+            <DialogDescription>
+              将对全能力执行健康检查并记录结果。
+              {isProd
+                ? "生产环境检查不会创建真实业务订单。"
+                : "结果可随时在本页健康记录中查看。"}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmHealthOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={runHealth.isPending}
+              onClick={async () => {
+                const outcome = await runHealth.mutateAsync({
+                  connectionId: conn.connectionId,
+                  expectedVersion: conn.version,
+                  role: urlState.role,
+                  idempotencyKey: newIdempotencyKey("health"),
+                })
+                applyOutcome(outcome)
+                setConfirmHealthOpen(false)
+              }}
+            >
+              <RefreshCwIcon className="size-4" aria-hidden="true" />
+              确认执行
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 启用连接确认（生产环境二次确认） */}
+      <Dialog open={confirmEnableOpen} onOpenChange={setConfirmEnableOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {isProd ? "启用生产环境连接" : "启用连接"}
+            </DialogTitle>
+            <DialogDescription>
+              启用后连接将恢复对外接口可用，后续下单、查询等业务请求将按能力声明放行。
+              {isProd ? " 生产环境操作需谨慎核对。" : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmEnableOpen(false)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={enableMut.isPending}
+              onClick={async () => {
+                const outcome = await enableMut.mutateAsync({
+                  connectionId: conn.connectionId,
+                  expectedVersion: conn.version,
+                  role: urlState.role,
+                  idempotencyKey: newIdempotencyKey("enable"),
+                })
+                applyOutcome(outcome)
+                setConfirmEnableOpen(false)
+              }}
+            >
+              确认启用
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1606,6 +1869,9 @@ function OverviewSection({
           {conn.capabilities.length === 0 ? (
             <span className="text-sm text-muted-foreground">尚未配置能力</span>
           ) : null}
+          <p className="w-full text-[11px] text-muted-foreground">
+            图例：✓ 验证成功 · ! 验证失败 · 停 能力停用
+          </p>
         </CardContent>
       </Card>
     </div>
@@ -1640,13 +1906,8 @@ function CapabilitiesSection({
         header: "能力",
         meta: { label: "能力", width: "reference" },
         cell: ({ row }) => (
-          <div>
-            <div className="text-sm font-medium">
-              {row.original.capabilityLabel}
-            </div>
-            <div className="font-mono text-[11px] text-muted-foreground">
-              {row.original.capabilityCode}
-            </div>
+          <div className="text-sm font-medium">
+            {row.original.capabilityLabel}
           </div>
         ),
       },
@@ -1736,7 +1997,7 @@ function CapabilitiesSection({
         <AlertTitle>能力边界</AlertTitle>
         <AlertDescription>
           下表为<strong>连接级</strong>
-          统一能力声明，不表示每个供应商商品都可用。商品/供给/发布级能力由供应商商品库 / 商品发布返回。采购确认只追加业务需求与审计，不写能力启停；系统管理员使用独立配置命令。
+          统一能力声明，不表示每个供应商商品都可用。商品/供给/发布级能力由供应商商品库 / 商品发布返回。采购确认只追加业务需求与审计，不写能力启停；能力启停由系统管理员配置。
         </AlertDescription>
       </Alert>
       {can("UPDATE_CAPABILITIES") ? (
@@ -1785,12 +2046,16 @@ function SecuritySection({
   conn,
   role,
   canBind,
+  canBindEndpoint,
   onBind,
+  onBindEndpoint,
 }: {
   conn: ConnectionCenterView
   role: DemoRole
   canBind: boolean
+  canBindEndpoint: boolean
   onBind: () => void
+  onBindEndpoint: () => void
 }) {
   return (
     <div className="space-y-3">
@@ -1817,6 +2082,15 @@ function SecuritySection({
               version={conn.safeReferences.endpoint.version}
               visible={conn.safeReferences.endpoint.visible}
             />
+            {canBindEndpoint ? (
+              <Button type="button" size="sm" onClick={onBindEndpoint}>
+                绑定/轮换地址
+              </Button>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                当前角色不可绑定/轮换地址引用
+              </p>
+            )}
           </CardContent>
         </Card>
         <Card>
@@ -1960,12 +2234,12 @@ function HealthSection({
             caption="健康检查记录"
             density="compact"
             layout="flush"
-            showPagination={false}
+            manualPagination={false}
             emptyState={
               <BusinessEmptyState
                 kind="no-data"
                 title="暂无健康记录"
-                description="技术角色可在页头执行健康检查；结果以任务号固定。"
+                description="技术角色可在页头执行健康检查，结果会记录在本页。"
               />
             }
           />
@@ -2096,6 +2370,8 @@ function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
 }
 
 function AuditSection({ conn }: { conn: ConnectionCenterView }) {
+  const [expanded, setExpanded] = React.useState(false)
+  const events = expanded ? conn.auditEvents : conn.auditEvents.slice(0, 10)
   return (
     <div className="space-y-3">
       <p className="text-sm text-muted-foreground">
@@ -2108,13 +2384,15 @@ function AuditSection({ conn }: { conn: ConnectionCenterView }) {
         </Link>
       </p>
       <ul className="space-y-2">
-        {conn.auditEvents.map((e) => (
+        {events.map((e) => (
           <li
             key={e.eventId}
             className="rounded-xl border bg-card px-3 py-2 text-sm"
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-medium">{e.action}</span>
+              <span className="font-medium">
+                {AUDIT_ACTION_LABEL[e.action] ?? e.summary.split("·")[0]}
+              </span>
               <span className="text-xs text-muted-foreground">
                 {formatDateTime(e.at, "default")}
               </span>
@@ -2122,7 +2400,7 @@ function AuditSection({ conn }: { conn: ConnectionCenterView }) {
             <p className="text-muted-foreground">{e.summary}</p>
             <p className="text-xs text-muted-foreground">
               {e.actor}
-              {e.auditNo ? ` · ${e.auditNo}` : ""}
+              {e.auditNo ? ` · 审计号 ${e.auditNo}` : ""}
             </p>
           </li>
         ))}
@@ -2130,10 +2408,20 @@ function AuditSection({ conn }: { conn: ConnectionCenterView }) {
           <BusinessEmptyState
             kind="no-data"
             title="暂无审计事件"
-            description="配置与确认动作会追加审计号。"
+            description="配置与确认动作会追加审计记录。"
           />
         ) : null}
       </ul>
+      {conn.auditEvents.length > 10 ? (
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setExpanded((v) => !v)}
+        >
+          {expanded ? "收起" : `查看更多（共 ${conn.auditEvents.length} 条）`}
+        </Button>
+      ) : null}
     </div>
   )
 }
@@ -2171,7 +2459,7 @@ function CapConfigDialog({
         <DialogHeader>
           <DialogTitle>配置连接能力</DialogTitle>
           <DialogDescription>
-            系统管理员独立命令；校验连接与能力版本。变更后能力标记为未验证，不复用采购确认写入口。
+            由系统管理员统一配置，配置后能力需重新验证；不复用采购确认写入口。
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-72 space-y-2 overflow-y-auto">
@@ -2180,12 +2468,7 @@ function CapConfigDialog({
               key={c.capabilityCode}
               className="flex items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
             >
-              <span>
-                {c.capabilityLabel}
-                <span className="ml-2 font-mono text-xs text-muted-foreground">
-                  {c.capabilityCode}
-                </span>
-              </span>
+              <span>{c.capabilityLabel}</span>
               <input
                 type="checkbox"
                 checked={draft[c.capabilityCode] ?? false}
@@ -2195,7 +2478,9 @@ function CapConfigDialog({
                     [c.capabilityCode]: e.target.checked,
                   }))
                 }
-                aria-label={`启用 ${c.capabilityLabel}`}
+                aria-label={`${
+                  draft[c.capabilityCode] ?? false ? "停用" : "启用"
+                } ${c.capabilityLabel}`}
               />
             </label>
           ))}

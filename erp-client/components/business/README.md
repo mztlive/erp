@@ -23,11 +23,11 @@
 | 页面模式 | 组件 | 文件 | 覆盖场景 |
 | --- | --- | --- | --- |
 | 应用壳 | `ErpAppShell`、`GlobalTopbar`、`TaskTabs`、`MaintenanceBanner` | `shell.tsx` | 全局导航、内部任务页签、维护与主责迁移冻结 |
-| 页面公共区 | `PageHeader`（`page` / `object-chrome`）、`PageActions`、`MetricStrip`、`MetricItem`（`detailMode`）、`DataFreshness` | `page.tsx` | 标题、动作、工作台统计、数据水位；一级 `page` 不展示面包屑；M4 用 object-chrome + 面包屑 |
+| 页面公共区 | `PageHeader`（`page` / `object-chrome`）、`PageActions`、`MetricStrip`、`MetricItem`（`detailMode`）、`MetricFilterItem`（`status` 指标徽章）、`DataFreshness` | `page.tsx` | 标题、动作、工作台统计、数据水位；一级 `page` 不展示面包屑；M4 用 object-chrome + 面包屑 |
 | 高密度列表 | `DataTable`、`DataTableViewOptions`、`DataTablePagination` | `data-table.tsx` | 服务端分页、排序、筛选、显隐、固定、调宽、跨页稳定选择和键盘行导航 |
 | 列表编排 | `ListToolbar`、`SelectionScopeBar`、`StatusMatrix`、`BusinessTableFrame`、`QuickPreviewSheet` | `list.tsx` | 常驻筛选、选择范围、多轨状态、加载/空态/失败、右侧快速预览 |
 | 选择与筛选 | `OptionCombobox`、`BusinessObjectCombobox`、业务实体 Combobox（合同/销售单/客户/采购单/供应商/商品/品牌/商品分类/结算主体/仓库/负责人）、`SavedViewPicker`、`AdvancedFilterSheet` | `option-combobox.tsx`、`entity-comboboxes.tsx`、`selectors.tsx` | 可搜索枚举/筛选、有效业务对象选择、个人/团队视图、高级筛选；**禁止**在业务页继续使用 `Select` / `NativeSelect`；**禁止**用自由 `Input` 录入已有业务对象 ID/名称 |
-| 值与状态 | `BusinessStatusBadge`、`StatusTrackSummary`、`BusinessObjectRef`、`MoneyValue`、`QuantityValue`、`RateValue`、`DocumentTotals` | `values.tsx` | 多维状态、稳定对象引用、精确十进制展示；`MoneyValue` 的 `taxBasis` 会叠「含税/不含税」Badge——**列头/标签已写明口径时不要传**（如销售建单「含税小计」） |
+| 值与状态 | `BusinessStatusBadge`、`StatusTrackSummary`、`BusinessObjectRef`、`MoneyValue`、`QuantityValue`、`RateValue`、`DocumentTotals` | `values.tsx` | 多维状态、稳定对象引用、精确十进制展示；`MoneyValue` 的 `taxBasis` 会叠「含税/不含税」Badge——**列头/标签已写明口径时不要传**（如销售建单「含税小计」）；`BusinessStatusBadge` 对 `PENDING` 等枚举原值 label 有兜底中文映射（业务页仍需自己映射领域枚举，兜底只防漏网） |
 | 正式单据/对象详情 | `DocumentHeader`（M4 用 `density="compact"` + `meta`）、`DocumentSummary`、`DocumentSection`、`RevisionTimeline`、`RelatedDocumentList`、`ResponsibilityPanel` | `document.tsx` | 销售、采购、客户、票款、发票、结算等详情与版本追溯；唯一身份头 |
 | 纸质单据预览 | `PaperDocument` | `paper-document.tsx` | 正式单据 A4 风格投影；`frame="framed"` 内嵌灰底，`frame="bare"` 透明浮层 |
 | 单据编辑 | `EditableLineItemTable`、`ApprovalDecisionPanel`、`AllocationWorkspace` | `editor.tsx` | 行项目编辑、审批/确认、回款付款发票等多对多分配 |
@@ -35,7 +35,7 @@
 | 正式动作与协作 | `FormalActionConfirmDialog`、`SequentialProcessBar`、`BatchImpactPreview`、`ConflictResolutionDialog`、`EditorPresence` | `workflow.tsx` | 正式提交、连续处理、批量影响预览、ETag 冲突、编辑占用 |
 | 领域边界 | `CardVoucherLineItem`、`PrepaymentGate`、`InventoryBalanceSummary`、`AfterSalesTrackPanel`、`CostCoverageNotice`、`InterfaceErrorResolutionPanel` | `domain.tsx` | 卡券唯一明细、先款后货、库存四量、售后四段、成本覆盖、结果未知 |
 | 任务、审计和导入 | `WorkTaskItem`、`BusinessDiffPanel`、`AuditTimeline`、`ImportStageIndicator`、`ImportIssueTable`、`BatchOperationResult` | `audit-import.tsx` | 统一任务、字段差异、追加式审计、导入分阶段校验、批处理结果 |
-| 状态反馈与敏感信息 | `GuardedBusinessAction`、`BusinessEmptyState`、`BusinessFailureState`、`AsyncSectionState`、`DraftSaveIndicator`、`ValidationSummary`、`FormalActionResult`、`BackgroundJobProgress`、`SensitiveValue` | `feedback.tsx` | 禁用原因、保留旧数据刷新、草稿、校验、正式结果、后台任务、短时明文 |
+| 状态反馈与敏感信息 | `GuardedBusinessAction`、`BusinessEmptyState`、`BusinessFailureState`（`onRetry`/`retryLabel` 快捷重试）、`AsyncSectionState`、`DraftSaveIndicator`、`ValidationSummary`、`FormalActionResult`（`referenceLabel`）、`BackgroundJobProgress`、`SensitiveValue`（揭示失败带重试） | `feedback.tsx` | 禁用原因、保留旧数据刷新、草稿、校验、正式结果、后台任务、短时明文 |
 
 页面专属的字段组合留在 `features/<domain>`，不因只出现一次就进入本目录。基础按钮、输入框、
 Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加无业务语义的转发包装。
@@ -80,6 +80,13 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 - `getRowId` 必须返回 ERP 不透明稳定 ID，不能使用行号、名称或外部单号；
 - 默认开启服务端分页、排序和筛选，TanStack 的 `pageIndex` 从 `0` 开始，API 的 `page`
   从 `1` 开始，适配只在 feature 查询层完成；
+- **排序契约**：`manualSorting`（默认 true）下只有页面接了 `onSortingChange` 排序入口才
+  是真实交互；未接 `onSortingChange` 的页面列头**不再渲染排序按钮**（避免假箭头伪交互）。
+  需要客户端本地排序时传 `manualSorting={false}`；
+- **错误态契约**：查询失败必须由页面传 `errorState`（或 `errorSummary` + `onRetry`，
+  内置 `BusinessFailureState` 错误块），否则表格会把系统故障误报成「当前筛选没有结果」；
+- **空态契约**：无数据时默认显示「当前筛选没有结果」；首次进入无数据 / 无权限场景应传
+  `emptyState`（自定义整块）或 `emptyTitle` + `emptyDescription` + `emptyAction`（引导 CTA）；
 - 列通过 `meta.label`、`meta.align`、`meta.numeric` 和 `meta.width` 声明语义；
   `meta.width` 只能使用 `reference`、`status`、`amount`、`quantity`、`rate`、`tracks`
   等主题宽度档位，不传颜色、像素宽度或任意样式；
@@ -89,11 +96,15 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
   与卡片头/工具条对齐；禁止分页贴左右边或贴卡片底边；
 - 页面选择只保存稳定 ID。选择“当前筛选全部结果”时必须调用批量预览 API 冻结选择快照，
   不能把客户端当前页推断为正式批量范围；
-- 正在刷新时保留已有行；初次加载、空态和失败态由业务框架明确区分；
+- 正在刷新时保留已有行；轮询/自动刷新页可传 `showRefreshingBanner={false}` 关闭
+  「正在刷新，当前内容会保留」提示条（或传 `refreshingLabel` 定制文案）；
+- 筛选后总行数变少时页码自动钳回最后一个有效页，避免「共 N 条」与空表并存；
+- 行 `aria-label` 优先用 `rowLabel`（业务名），未传时回退为「第 N 行」，不暴露内部 ID；
 - 单击非交互区域 / `Enter` 的语义由**页面**注入（`onRowPreview` / `onRowOpen`）：
   - W05 销售单：二者均打开轻量 `PaperDocument` 浮层，**不用** `QuickPreviewSheet`；
   - 其它单据列表：可打开 `QuickPreviewSheet size="detail"`；
   - 进对象中心用行内「查看详情」等明确按钮，不要与行点读单混成两个预览入口。
+  只接了 `onRowOpen` 的页面，单击行会回落到该入口（触屏用户没有键盘 Enter）。
   上下方向键在当前结果行间移动，行内交互控件不会冒泡触发行级动作。
 
 ## 可搜索 Combobox 约定
