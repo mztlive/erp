@@ -4,17 +4,20 @@ version = "0.1.0"
 edition = "2021"
 
 # P0-3 测试夹具 crate：仅作为 dev-dependency 使用，不进入生产依赖。
-# 注意：本 crate 禁止依赖 web-api（会形成 dev 依赖环）；HTTP 测试客户端以 axum Router 为参数。
+# 注意：本 crate 禁止依赖 database / services / web-api（会形成 dev 依赖环）；
+# 需要数据库连接时直接依赖 mongodb crate，HTTP 测试客户端以 axum Router 为参数。
 
 [dependencies]
 mongodb = { workspace = true }
 tokio = { workspace = true, features = ["rt", "macros", "sync"] }
-serde = { workspace = true }
-serde_json = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
 chrono = { workspace = true }
 uuid = { workspace = true }
-database = { path = "../../database" }
+thiserror = { workspace = true }
+jwt = "0.16.0"
+hmac = "0.12.1"
+sha2 = "0.10.9"
 entities = { path = "../../entities" }
-services = { path = "../../services" }

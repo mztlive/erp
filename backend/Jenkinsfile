@@ -93,6 +93,33 @@ pipeline {
             }
         }
 
+        stage('P0 质量门禁') {
+            steps {
+                sh '''
+                    set -eu
+                    cd backend
+                    cargo fmt --all -- --check
+                    cargo check --workspace
+                    cargo clippy --workspace --all-targets --all-features -- -D warnings
+                    cargo test --workspace
+                '''
+            }
+        }
+
+        stage('P0 集成测试（需 MongoDB 副本集）') {
+            when {
+                environment name: 'ERP_TEST_MONGO_URI', value: '.*'
+            }
+            steps {
+                sh '''
+                    set -eu
+                    cd backend
+                    cargo test --workspace -- --include-ignored
+                    bash scripts/check-permissions-drift.sh
+                '''
+            }
+        }
+
         stage('Build and push images') {
             steps {
                 sh 'scripts/jenkins/build-release.sh'

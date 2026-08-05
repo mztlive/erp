@@ -2,6 +2,10 @@
 pub enum Error {
     #[error("{0}")]
     LogicError(String),
+
+    /// 状态迁移非法（数据模型第 7 章固定状态机，第 13 章禁止运行时扩展邻接矩阵）。
+    #[error("非法状态迁移：{from} → {to}")]
+    InvalidStateTransition { from: String, to: String },
 }
 
 impl From<&str> for Error {

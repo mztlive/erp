@@ -122,6 +122,8 @@ BSON 持久化形态由 P0 固定（`Decimal128`）并提供序列化测试；�
 
 ## 6. 服务与接口层约定
 
+HTTP 传输契约（信封/错误码/分页/时间与数值/权限生成物）见 [api-contract.md](./api-contract.md)。
+
 1. **事务边界只在 Service**，统一走 `database::Transactional::with_transaction`。
    单集合无原子性要求的 CRUD 传 `&mut NoTransaction`；跨集合写入必须事务。
 2. 跨域协作调用对方域的 **Repository**，禁止 `services::a::XService` 依赖 `services::b::YService`

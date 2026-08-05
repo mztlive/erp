@@ -115,4 +115,41 @@ pub trait DatabaseExt:
 {
 }
 
-impl<T: AccessControlExt + BulkJobExt + CardInstanceExt + CatalogExt + ContractExt + CostExt + CustomerExt + DocumentRegistryExt + FileAssetExt + FulfillmentExt + IntegrationOpsExt + InventoryExt + LegacyImportExt + MallAfterSalesExt + MallBackfillExt + MallOrderExt + MallSyncExt + PartyExt + PayableExt + ProjectionExt + PublicationExt + PurchaseOrderExt + ReceivableExt + ReturnsExt + SalesOrderExt + SalesReviewExt + SourceRegistryExt + SupplierExt + SupplierApiExt + SupplierCatalogExt + SupplierFulfillmentExt + SupplierSettlementExt + WarehouseExt + WorkItemExt> DatabaseExt for T {}
+impl<
+        T: AccessControlExt
+            + BulkJobExt
+            + CardInstanceExt
+            + CatalogExt
+            + ContractExt
+            + CostExt
+            + CustomerExt
+            + DocumentRegistryExt
+            + FileAssetExt
+            + FulfillmentExt
+            + IntegrationOpsExt
+            + InventoryExt
+            + LegacyImportExt
+            + MallAfterSalesExt
+            + MallBackfillExt
+            + MallOrderExt
+            + MallSyncExt
+            + PartyExt
+            + PayableExt
+            + ProjectionExt
+            + PublicationExt
+            + PurchaseOrderExt
+            + ReceivableExt
+            + ReturnsExt
+            + SalesOrderExt
+            + SalesReviewExt
+            + SourceRegistryExt
+            + SupplierExt
+            + SupplierApiExt
+            + SupplierCatalogExt
+            + SupplierFulfillmentExt
+            + SupplierSettlementExt
+            + WarehouseExt
+            + WorkItemExt,
+    > DatabaseExt for T
+{
+}

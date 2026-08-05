@@ -1,5 +1,11 @@
 # Local/container integration stack. Production deployment uses
 # docker-compose.production.yml and digest-pinned images.
+#
+# 本地 MongoDB 单节点副本集（集成测试）两种启动方式：
+#   1) docker compose --profile test up -d mongo
+#   2) backend/scripts/dev-mongo.sh（等价能力，无需 docker compose）
+# 启动后 export ERP_TEST_MONGO_URI='mongodb://127.0.0.1:27017/?replicaSet=rs0'
+# 再执行 cargo test --workspace -- --include-ignored（事务需要副本集）。
 x-logging: &bounded-json-logging
   driver: json-file
   options:
@@ -86,3 +92,18 @@ services:
       retries: 5
       start_period: 20s
     logging: *bounded-json-logging
+
+  # 集成测试专用 MongoDB 单节点副本集（事务需要副本集）。
+  # 启动：docker compose --profile test up -d mongo
+  mongo:
+    image: mongo:7
+    profiles: ["test"]
+    command: ["--replSet", "rs0"]
+    restart: unless-stopped
+    ports:
+      - "${ERP_MONGO_HOST_PORT:-27017}:27017"
+    volumes:
+      - erp-mongo-test-data:/data/db
+
+volumes:
+  erp-mongo-test-data:

@@ -11,12 +11,11 @@ use crate::{
         handler::admin,
         middleware::{authenticate, with_permission},
         routes::{
-            access_control, bulk_job, card_instance, catalog, contract, cost, customer,
-            document_registry, file_asset, fulfillment, integration_ops, inventory, legacy_import,
-            mall_after_sales, mall_backfill, mall_order, mall_sync, party, payable, projection,
-            publication, purchase_order, receivable, returns, sales_order, sales_review,
-            source_registry, supplier, supplier_api, supplier_catalog, supplier_fulfillment,
-            supplier_settlement, warehouse, work_item,
+            access_control, bulk_job, card_instance, catalog, contract, cost, customer, document_registry,
+            file_asset, fulfillment, integration_ops, inventory, legacy_import, mall_after_sales,
+            mall_backfill, mall_order, mall_sync, party, payable, projection, publication, purchase_order,
+            receivable, returns, sales_order, sales_review, source_registry, supplier, supplier_api,
+            supplier_catalog, supplier_fulfillment, supplier_settlement, warehouse, work_item,
         },
     },
 };

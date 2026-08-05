@@ -13,6 +13,10 @@ md5 = { workspace = true }
 regex = "1.12.3"
 rust_decimal = { workspace = true }
 validator = { workspace = true }
+chrono = { workspace = true }
+# 与 workspace 的 mongodb 3.6 解析到同一版本（2.15.x），仅用于 money 的
+# Decimal128 序列化委托（bson::Decimal128 的 Serialize/Deserialize 形态）。
+bson = "2.15"
 
 [dev-dependencies]
 mongodb = { workspace = true }

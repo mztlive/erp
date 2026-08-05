@@ -168,11 +168,7 @@ fn main() {
     // P0-4.1：权限生成物落点修正，同时输出到 erp-client（实际前端）。
     // erp-client 侧自包含 PermissionItem 类型（其 tsconfig 无 @/types/admin 映射）。
     let client_output_path = repo_root.join("erp-client/lib/permissions.generated.ts");
-    if let Err(err) = write_generated_file(
-        &client_output_path,
-        &groups,
-        client_permission_item_source(),
-    ) {
+    if let Err(err) = write_generated_file(&client_output_path, &groups, client_permission_item_source()) {
         println!("cargo:warning=failed to write generated permissions: {}", err);
     }
 }

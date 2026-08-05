@@ -1,4 +1,16 @@
 //! 项目共享的无协调 ID 生成能力。
+//!
+//! 提供两类标识生成能力：
+//! - [`next_id`]：UUID v4 内部主键（`id`），主键值不承载业务含义（数据模型 4.1）；
+//! - [`DocumentNumberGenerator`]：可展示业务编号（`*_no`）的原子取号，
+//!   编号一经形成正式事实不得复用（数据模型 4.1）。
+
+mod document_number;
+
+pub use database::{Executor, NoTransaction};
+pub use document_number::{
+    format_number, DocumentNumberGenerator, DocumentNumberKind, Error, NumberPhase, Result,
+};
 
 use uuid::Uuid;
 

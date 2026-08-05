@@ -5,3 +5,12 @@ edition = "2021"
 
 [dependencies]
 uuid = { workspace = true }
+chrono = { workspace = true }
+serde = { workspace = true }
+mongodb = { workspace = true }
+thiserror = { workspace = true }
+tracing = { workspace = true }
+database = { path = "../../database" }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

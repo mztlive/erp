@@ -1043,3 +1043,88 @@ export interface ApiError {
 - 禁止在 API 层直接 `throw new Error("string")`。
 - 禁止在 UI 层随意拼接错误结构。
 - 推荐统一使用 `ApiError`，并由 `useErrorHandler` 负责最终提示。
+
+---
+
+## 分阶段并行开发约束
+
+P0 之后以多 worktree 并行开发，本文节与 `docs/dev-plan/` 是本仓库并行开发的唯一仲裁依据。冲突时以 `AGENTS.md` 为准（conventions.md 声明）。
+
+### 实施合同
+
+- 实施合同全部在 `docs/dev-plan/` 目录：
+  - `README.md`：阶段与批次总体规划；
+  - `conventions.md`：跨阶段统一契约（所有权模型、冻结清单、测试与验收）；
+  - `domains.md`：34 个域（D01–D34）清单与模块命名；
+  - `_meta.json`：机器可读阶段矩阵（分支命名、owns 前缀、验收门禁）。
+
+### 共享注册文件冻结清单
+
+以下文件**只在 P0 修改**，此后对所有子阶段只读（conventions.md 第 2 节）：
+
+```
+backend/entities/src/lib.rs
+backend/entities/src/ids.rs
+backend/entities/src/money.rs
+backend/entities/src/common/**
+backend/database/src/lib.rs
+backend/database/src/repository/mod.rs
+backend/database/src/repository/base.rs
+backend/database/src/repository/extensions/mod.rs
+backend/database/src/indexes/mod.rs
+backend/database/src/executor.rs
+backend/database/src/transaction.rs
+backend/database/src/mongo_ops.rs
+backend/services/src/lib.rs
+backend/services/src/errors.rs
+backend/services/src/page.rs
+backend/services/src/query.rs
+backend/apps/web-api/src/main.rs
+backend/apps/web-api/src/app_state.rs
+backend/apps/web-api/src/core/routes/mod.rs
+backend/apps/web-api/src/core/routes/admin.rs
+backend/apps/web-api/src/core/handler/mod.rs
+backend/apps/web-api/src/core/response.rs
+backend/apps/web-api/src/core/errors.rs
+backend/apps/web-api/build.rs
+erp-client/lib/api/**
+erp-client/lib/query-client.ts
+```
+
+### 各层 owns 模式
+
+一个子阶段只能修改自己 owns 列表内的文件，新增文件也必须落在 owns 前缀内（conventions.md 第 1 节）：
+
+| 层 | owns |
+| --- | --- |
+| P1 实体 | `backend/entities/src/<domain>/**` |
+| P2 仓储 | `backend/database/src/repository/<domain>.rs`、`repository/extensions/<domain>.rs`、`indexes/<domain>.rs`、`database/tests/<domain>_repository.rs` |
+| P3 服务与接口 | `backend/services/src/<domain>/**`、`core/handler/<domain>/**`、`core/routes/<domain>.rs`、`web-api/tests/<domain>_api.rs` |
+| P4 前端 | `erp-client/features/<feature>/**` 与该批次页面路由目录 |
+
+### 两段式测试约定
+
+- 需要真实 MongoDB（事务需要单节点副本集）的测试统一
+  `#[ignore]` + `require_mongo!()`（`ERP_TEST_MONGO_URI` 门控，由
+  `backend/crates/test-support` 提供），无数据库环境 `cargo test --workspace`
+  必须全绿；CI 与验收执行 `cargo test --workspace -- --include-ignored`。
+- 每个测试使用独立随机数据库名并在结束 drop，禁止共享固定库名。
+- 本地启动 MongoDB：`backend/scripts/dev-mongo.sh` 或
+  `docker compose --profile test up -d mongo`。
+
+### worktree 与分支命名
+
+- 分支命名以 `docs/dev-plan/_meta.json` 的 stages 为准：
+  - 阶段 ID 由 `P1/A-G1/B-G1/C-G1/F1/E1` 组成；
+  - P1–P3 分支 `feat/erp-<letter>-<batch>-<slug>`（如 `feat/erp-a-g1-platform`）；
+  - P4 分支 `feat/erp-f<序号>-<slug>`；P5 分支 `feat/erp-e<序号>-<slug>`。
+- 一个子阶段一个分支一个 PR；合并前必须 rebase 到最新 `main` 并重跑全部门禁
+  （conventions.md 第 9 节）。
+
+### 冻结文件修改流程
+
+- 禁止直接修改冻结清单内的任何文件（含在冻结目录内新增文件）。
+- 确需修改时：在 PR 描述中提出，由一次独立的"地基修订 PR"
+  （分支 `chore/erp-p0-amend-<主题>`）单独完成并合并，其他 worktree 随后
+  rebase；一次地基修订只做一件事。
+- 出现共享文件冲突即说明有人越界：**回退越界改动**，不要在 PR 里手工解冲突。
