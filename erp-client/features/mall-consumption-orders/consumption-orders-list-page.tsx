@@ -157,7 +157,10 @@ function supplierSummaryLabel(row: MallConsumptionOrderRow) {
     if (row.fulfillmentChain === "LEGACY_MANUAL") return "原人工 · 无子订单"
     return "无子订单"
   }
-  return `${s.total} 单 · ${s.statuses.join("/")}${s.hasException ? " · 异常" : ""}`
+  const statusText = s.statuses
+    .map((st) => SUPPLIER_STATUS_LABEL[st as SupplierFulfillmentStatus] ?? st)
+    .join("/")
+  return `${s.total} 单 · ${statusText}${s.hasException ? " · 异常" : ""}`
 }
 
 function previewDataSourceLabel(view: MallConsumptionOrderView): string {
@@ -373,6 +376,11 @@ export function ConsumptionOrdersListPage() {
     setExportPreviewOpen(false)
   }
 
+  const listReturnHref = React.useMemo(() => {
+    const qs = searchParams.toString()
+    return qs ? `${pathname}?${qs}` : pathname
+  }, [pathname, searchParams])
+
   const columns = React.useMemo<ColumnDef<MallConsumptionOrderRow>[]>(
     () => [
       {
@@ -459,17 +467,31 @@ export function ConsumptionOrdersListPage() {
         id: "supplier",
         header: "供应商订单摘要",
         meta: { label: "供应商订单摘要", width: "default" },
-        cell: ({ row }) => (
-          <span
-            className={
-              row.original.supplierOrderSummary.hasException
-                ? "text-sm text-destructive"
-                : "text-sm text-muted-foreground"
-            }
-          >
-            {supplierSummaryLabel(row.original)}
-          </span>
-        ),
+        cell: ({ row }) => {
+          const label = supplierSummaryLabel(row.original)
+          if (row.original.supplierOrderSummary.total > 0) {
+            return (
+              <Link
+                href={`/supplier-api/orders?q=${encodeURIComponent(row.original.externalOrderNo)}&view=all&from=W25&mallOrderId=${encodeURIComponent(row.original.mallOrderId)}&returnTo=${encodeURIComponent(listReturnHref)}`}
+                className="text-sm text-primary underline-offset-2 hover:underline"
+                aria-label={`查看供应商子订单 ${label}`}
+              >
+                {label}
+              </Link>
+            )
+          }
+          return (
+            <span
+              className={
+                row.original.supplierOrderSummary.hasException
+                  ? "text-sm text-destructive"
+                  : "text-sm text-muted-foreground"
+              }
+            >
+              {label}
+            </span>
+          )
+        },
       },
       {
         id: "attribution",
@@ -542,7 +564,7 @@ export function ConsumptionOrdersListPage() {
         ),
       },
     ],
-    []
+    [listReturnHref]
   )
 
   const empty = data?.emptyReason

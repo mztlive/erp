@@ -202,6 +202,8 @@ export type SupplierOrderListQuery = {
   page: number
   pageSize: number
   role: DemoRole
+  sortBy?: "orderNo" | "mallOrderNo" | "externalOrderNo" | "lastBusinessAt"
+  sortDir?: "asc" | "desc"
 }
 
 export type SupplierOrderListRow = {

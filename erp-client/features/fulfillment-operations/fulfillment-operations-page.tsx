@@ -101,7 +101,8 @@ import {
   FulfillmentDeferDialog,
   type DeferSubmitValue,
 } from "@/features/fulfillment-operations/fulfillment-defer-dialog"
-import { freshnessText, resultText } from "@/lib/ui-text"
+import { freshnessText, resultText, workspaceLabel } from "@/lib/ui-text"
+import type { WorkspaceId } from "@/lib/workspace-registry"
 
 type SessionLease = {
   workItemId: string
@@ -812,7 +813,11 @@ export function FulfillmentOperationsPage() {
       {sourceReturnHref ? (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 text-sm">
           <span className="text-muted-foreground">
-            从{fromWorkspace ?? "关联页面"}进来的
+            从
+            {fromWorkspace
+              ? workspaceLabel(fromWorkspace as WorkspaceId)
+              : "关联页面"}
+            进来的
             {task
               ? ` · 已经定位到 ${task.source.salesOrderNo}${
                   task.source.purchaseNo ? ` / ${task.source.purchaseNo}` : ""

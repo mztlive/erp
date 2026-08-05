@@ -7,6 +7,14 @@ import type {
   SalesOrderLineItem,
   SalesOrderListItem,
 } from "@/features/sales-orders/types"
+import {
+  computeSalesOrderMetrics,
+  filterSalesOrders,
+  type SalesOrderNatureFilter,
+  type SalesOrderOriginFilter,
+  type SalesOrderStatusFilter,
+  type SalesOrderSummaryFilter,
+} from "@/features/sales-orders/filter-orders"
 import { buildSalesOrder } from "@/features/sales-orders/build-order"
 import {
   getMockSalesOrder,
@@ -53,8 +61,29 @@ export type SalesOrderDetailView = SalesOrderListItem & {
   queriedAt: string
 }
 
+export type SalesOrdersListQuery = {
+  page: number
+  pageSize: number
+  search?: string
+  nature?: SalesOrderNatureFilter
+  summary?: SalesOrderSummaryFilter
+  origin?: SalesOrderOriginFilter
+  status?: SalesOrderStatusFilter
+  sortBy?:
+    | "documentNumber"
+    | "contractNumber"
+    | "amountGross"
+    | "ownerName"
+    | "submittedAt"
+  sortDir?: "asc" | "desc"
+}
+
 export type SalesOrderListView = {
-  rows: SalesOrderListItem[]
+  items: SalesOrderListItem[]
+  total: number
+  page: number
+  pageSize: number
+  metrics: ReturnType<typeof computeSalesOrderMetrics>
   queriedAt: string
 }
 
@@ -302,10 +331,46 @@ function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
   return next
 }
 
-export async function fetchSalesOrders(): Promise<SalesOrderListView> {
+function sortSalesOrders(
+  orders: readonly SalesOrderListItem[],
+  sortBy: SalesOrdersListQuery["sortBy"],
+  sortDir: SalesOrdersListQuery["sortDir"]
+): SalesOrderListItem[] {
+  if (!sortBy) return [...orders]
+  const direction = sortDir === "asc" ? 1 : -1
+  return [...orders].sort((a, b) => {
+    const comparison =
+      sortBy === "amountGross"
+        ? compareDecimal(a.amountGross, b.amountGross, 6)
+        : a[sortBy].localeCompare(b[sortBy])
+    if (comparison !== 0) return comparison * direction
+    return a.submittedAt.localeCompare(b.submittedAt)
+  })
+}
+
+export async function fetchSalesOrders(
+  query: SalesOrdersListQuery
+): Promise<SalesOrderListView> {
   await mockDelay()
+  const all = listMockSalesOrders().map(mergeSessionOverlay)
+  const metrics = computeSalesOrderMetrics(all)
+  const filtered = filterSalesOrders(all, {
+    search: query.search,
+    natureFilter: query.nature,
+    summaryFilter: query.summary,
+    originFilter: query.origin,
+    statusFilter: query.status,
+  })
+  const sorted = sortSalesOrders(filtered, query.sortBy, query.sortDir)
+  const page = Math.max(1, query.page)
+  const pageSize = Math.max(1, query.pageSize)
+  const start = (page - 1) * pageSize
   return {
-    rows: listMockSalesOrders().map(mergeSessionOverlay),
+    items: sorted.slice(start, start + pageSize),
+    total: sorted.length,
+    page,
+    pageSize,
+    metrics,
     queriedAt: new Date().toISOString(),
   }
 }

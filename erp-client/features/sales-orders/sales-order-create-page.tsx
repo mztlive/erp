@@ -1,13 +1,13 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { CircleAlertIcon, PlusIcon } from "lucide-react"
 import { z } from "zod"
 
 import {
   ContractCombobox,
+  DiscardConfirmDialog,
   EditableLineItemTable,
   MoneyValue,
   OwnerCombobox,
@@ -17,6 +17,7 @@ import {
   type EditableLineItemColumn,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
+import { useSelector } from "@tanstack/react-form"
 import {
   DEMO_OWNER_OPTIONS,
   PAYMENT_TERM_OPTIONS,
@@ -345,9 +346,23 @@ export function SalesOrderCreatePage({
             : `so-create-${Date.now()}`,
       }
       const result = await createMutation.mutateAsync(command)
+      form.reset()
       router.push(`/sales/orders/${result.salesOrderId}`)
     },
   })
+
+  const dirty = useSelector(form.store, (state) => state.isDirty)
+  const [discardOpen, setDiscardOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!dirty) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = "当前输入尚未提交，刷新后将丢失。"
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+  }, [dirty])
 
   const contractComboboxItems = React.useMemo(
     () =>
@@ -1038,7 +1053,13 @@ export function SalesOrderCreatePage({
                         <Button
                           type="button"
                           variant="outline"
-                          render={<Link href="/sales/orders" />}
+                          onClick={() => {
+                            if (dirty) {
+                              setDiscardOpen(true)
+                              return
+                            }
+                            router.push("/sales/orders")
+                          }}
                         >
                           取消
                         </Button>
@@ -1158,6 +1179,15 @@ export function SalesOrderCreatePage({
         initialCustomerId={initialCustomerId}
         onSuccess={(result) => {
           void handleUploadSuccess(result)
+        }}
+      />
+
+      <DiscardConfirmDialog
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+        onConfirm={() => {
+          setDiscardOpen(false)
+          router.push("/sales/orders")
         }}
       />
     </div>

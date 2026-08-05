@@ -520,6 +520,7 @@ export function PurchaseOrderDetailPage({
 
   const baseHref = `/procurement/orders/${order.identity.purchaseOrderId}`
   const w12PayHref = `/finance/supplier-accounts?view=payable&session=payment&from=W08&purchaseOrderId=${encodeURIComponent(order.identity.purchaseOrderId)}&supplierId=${encodeURIComponent(order.header.supplierId)}&returnTo=${encodeURIComponent(baseHref)}`
+  const w27SettleHref = `/supplier-api/settlements?supplierId=${encodeURIComponent(order.header.supplierId)}&returnTo=${encodeURIComponent(baseHref)}`
   const displayNo =
     order.identity.purchaseNo ??
     order.identity.draftLabel ??
@@ -611,6 +612,13 @@ export function PurchaseOrderDetailPage({
                       variant: "outline" as const,
                       onClick: () =>
                         router.push(w12PayHref),
+                    },
+                    {
+                      actionKey: "settle",
+                      label: "去对账结算",
+                      variant: "outline" as const,
+                      onClick: () =>
+                        router.push(w27SettleHref),
                     },
                   ]
                 : []),

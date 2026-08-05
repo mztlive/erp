@@ -296,8 +296,8 @@ export const FULFILLMENT_OPERATIONS_SEED: readonly FulfillmentTask[] = [
     subjectHash: "sha_ff_electronic_01_v1",
     editVersion: 1,
     source: {
-      purchaseOrderId: "po_2012",
-      purchaseNo: "CG20260401002",
+      purchaseOrderId: "po_04",
+      purchaseNo: "CG20260325008",
       purchaseRevisionId: "pr_2012_v1",
       salesOrderId: "so_1004",
       salesOrderNo: "XS20260329006",
@@ -558,8 +558,8 @@ export const FULFILLMENT_OPERATIONS_SEED: readonly FulfillmentTask[] = [
     subjectHash: "sha_ff_ship_03_v1",
     editVersion: 1,
     source: {
-      purchaseOrderId: "po_2005",
-      purchaseNo: "CG20260330027",
+      purchaseOrderId: "po_05",
+      purchaseNo: "CG20260324003",
       salesOrderId: "so_1006",
       salesOrderNo: "XS20260329052",
       salesRevisionId: "sr_1006_v1",

@@ -187,6 +187,7 @@ export function SupplierSettlementsPage() {
         if (next.section !== "overview") params.set("section", next.section)
         if (next.role !== "finance_prep") params.set("role", next.role)
         if (next.demoFlag) params.set("demoFlag", next.demoFlag)
+        if (next.returnTo) params.set("returnTo", next.returnTo)
         const qs = params.toString()
         router.replace(qs ? `${base}?${qs}` : base, { scroll: false })
         return
@@ -211,6 +212,7 @@ export function SupplierSettlementsPage() {
         statementId={urlState.statementId}
         urlState={urlState}
         patchUrl={patchUrl}
+        returnTo={urlState.returnTo}
         onBack={() =>
           patchUrl({
             statementId: undefined,
@@ -226,10 +228,26 @@ export function SupplierSettlementsPage() {
     <SettlementList
       urlState={urlState}
       patchUrl={patchUrl}
+      returnTo={urlState.returnTo}
       onOpen={(id) =>
         patchUrl({ statementId: id, section: "overview", preview: undefined })
       }
     />
+  )
+}
+
+function CrossEntryBanner({ returnTo }: { returnTo: string }) {
+  return (
+    <Alert>
+      <AlertTitle>跨页面进入</AlertTitle>
+      <AlertDescription>
+        已按来源单据的供应商预填筛选；完成对账结算后请返回来源页。
+        {" "}
+        <Link className="underline" href={returnTo}>
+          返回来源
+        </Link>
+      </AlertDescription>
+    </Alert>
   )
 }
 
@@ -264,10 +282,12 @@ function SettlementList({
   urlState,
   patchUrl,
   onOpen,
+  returnTo,
 }: {
   urlState: SettlementsUrlState
   patchUrl: (patch: Partial<SettlementsUrlState>) => void
   onOpen: (statementId: string) => void
+  returnTo?: string
 }) {
   const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
   const [createOpen, setCreateOpen] = React.useState(false)
@@ -619,6 +639,8 @@ function SettlementList({
           />
         }
       />
+
+      {returnTo ? <CrossEntryBanner returnTo={returnTo} /> : null}
 
       <RoleDemoBar
         role={urlState.role}
@@ -1129,11 +1151,13 @@ function SettlementCenter({
   statementId,
   urlState,
   patchUrl,
+  returnTo,
   onBack,
 }: {
   statementId: string
   urlState: SettlementsUrlState
   patchUrl: (patch: Partial<SettlementsUrlState>) => void
+  returnTo?: string
   onBack: () => void
 }) {
   const detailQuery = useSettlementDetailQuery(statementId, urlState.role)
@@ -1372,6 +1396,8 @@ function SettlementCenter({
           </Button>
         }
       />
+
+      {returnTo ? <CrossEntryBanner returnTo={returnTo} /> : null}
 
       <RoleDemoBar
         role={urlState.role}
@@ -1753,6 +1779,7 @@ function SettlementCenter({
               <thead className="border-b text-xs text-muted-foreground">
                 <tr>
                   <th className="px-2 py-2">供应商订单</th>
+                  <th className="px-2 py-2">采购单号</th>
                   <th className="px-2 py-2">外部单号</th>
                   <th className="px-2 py-2">商品</th>
                   <th className="px-2 py-2">记录</th>
@@ -1768,9 +1795,28 @@ function SettlementCenter({
                 {detail.items.map((it) => (
                   <tr key={it.itemId} className="border-b border-border/60">
                     <td className="px-2 py-2">
-                      <span className="num font-medium">
+                      <Link
+                        href={`/supplier-api/orders?q=${encodeURIComponent(it.supplierOrderNo)}`}
+                        className="num font-medium text-primary underline-offset-2 hover:underline"
+                      >
                         {it.supplierOrderNo}
-                      </span>
+                      </Link>
+                    </td>
+                    <td className="px-2 py-2">
+                      {it.purchaseNo ? (
+                        <Link
+                          href={
+                            it.purchaseOrderId
+                              ? `/procurement/orders/${it.purchaseOrderId}?returnTo=${encodeURIComponent(`/supplier-api/settlements/${statementId}`)}`
+                              : `/procurement/orders?q=${encodeURIComponent(it.purchaseNo)}`
+                          }
+                          className="num font-medium text-primary underline-offset-2 hover:underline"
+                        >
+                          {it.purchaseNo}
+                        </Link>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
                     </td>
                     <td className="num px-2 py-2 text-muted-foreground">
                       {it.externalOrderNo}
@@ -1810,7 +1856,7 @@ function SettlementCenter({
                 {detail.items.length === 0 ? (
                   <tr>
                     <td
-                      colSpan={10}
+                      colSpan={11}
                       className="px-2 py-6 text-center text-muted-foreground"
                     >
                       暂无明细；可在草稿态刷新试算纳入不可变记录

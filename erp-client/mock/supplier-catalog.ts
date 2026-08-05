@@ -1153,7 +1153,7 @@ function activeSupplySeed(input: ActiveSupplySeedInput): SupplierCatalogItemView
 const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
   activeSupplySeed({
     id: "ep_active_ny_01",
-    supplierId: "sup_fresh",
+    supplierId: "sup_xg",
     supplierName: "鲜果直供供应链",
     connectionId: "conn_fresh_01",
     connectionCode: "FRESH-CATALOG",
@@ -1174,7 +1174,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
   }),
   activeSupplySeed({
     id: "ep_active_ny_02",
-    supplierId: "sup_fresh",
+    supplierId: "sup_xg",
     supplierName: "鲜果直供供应链",
     connectionId: "conn_fresh_01",
     connectionCode: "FRESH-CATALOG",
@@ -1195,7 +1195,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
   }),
   activeSupplySeed({
     id: "ep_active_tea_01",
-    supplierId: "sup_fresh",
+    supplierId: "sup_xg",
     supplierName: "鲜果直供供应链",
     connectionId: "conn_fresh_01",
     connectionCode: "FRESH-CATALOG",
@@ -1216,7 +1216,7 @@ const ACTIVE_PRODUCT_SUPPLY_SEEDS = [
   }),
   activeSupplySeed({
     id: "ep_active_tea_02",
-    supplierId: "sup_fresh",
+    supplierId: "sup_xg",
     supplierName: "鲜果直供供应链",
     connectionId: "conn_fresh_01",
     connectionCode: "FRESH-CATALOG",

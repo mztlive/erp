@@ -38,6 +38,7 @@ export const unifiedQueueKeys = {
   all: ["unified-task-queue"] as const,
   view: (filters: UnifiedQueueFilters) =>
     [...unifiedQueueKeys.all, "view", filters] as const,
+  counts: () => [...unifiedQueueKeys.all, "counts"] as const,
   permission: () => [...unifiedQueueKeys.all, "permission"] as const,
 }
 
@@ -106,14 +107,17 @@ function toViewItem(fixture: WorkItemFixture): QueueWorkItemView | null {
   }
 }
 
-export async function fetchUnifiedTaskQueue(
-  filters: UnifiedQueueFilters
-): Promise<UnifiedTaskQueueView> {
-  await mockDelay()
-  const items = WORK_ITEM_FIXTURES.map(toViewItem).filter(
+export function projectQueueItems(): QueueWorkItemView[] {
+  return WORK_ITEM_FIXTURES.map(toViewItem).filter(
     (item): item is QueueWorkItemView => item != null
   )
+}
 
+export function computeQueueCounts(items: readonly QueueWorkItemView[]): {
+  mine: number
+  rolePool: number
+  overdue: number
+} {
   const mine = items.filter(
     (i) =>
       i.scopeTags.includes("我的待办") || i.responsibleParty.includes("王敏")
@@ -125,6 +129,14 @@ export async function fetchUnifiedTaskQueue(
   const overdue = items.filter(
     (i) => i.status.tone === "destructive" || i.dueAt.includes("超期")
   ).length
+  return { mine, rolePool, overdue }
+}
+
+export async function fetchUnifiedTaskQueue(
+  filters: UnifiedQueueFilters
+): Promise<UnifiedTaskQueueView> {
+  await mockDelay()
+  const items = projectQueueItems()
 
   const familyPart = filters.family
     ? FAMILY_LABELS[filters.family]
@@ -141,15 +153,31 @@ export async function fetchUnifiedTaskQueue(
     },
     filterSummary,
     total: items.length,
-    counts: { mine, rolePool, overdue },
+    counts: computeQueueCounts(items),
     items,
   }
+}
+
+/** 角标计数：与队列页「我的待办」口径一致，只算未终结项。 */
+export async function fetchUnifiedTaskQueueCounts(): Promise<
+  ReturnType<typeof computeQueueCounts> & { total: number }
+> {
+  await mockDelay()
+  const items = projectQueueItems()
+  return { ...computeQueueCounts(items), total: items.length }
 }
 
 export function useUnifiedTaskQueueQuery(filters: UnifiedQueueFilters) {
   return useQuery({
     queryKey: unifiedQueueKeys.view(filters),
     queryFn: () => fetchUnifiedTaskQueue(filters),
+  })
+}
+
+export function useUnifiedTaskCountQuery() {
+  return useQuery({
+    queryKey: unifiedQueueKeys.counts(),
+    queryFn: fetchUnifiedTaskQueueCounts,
   })
 }
 

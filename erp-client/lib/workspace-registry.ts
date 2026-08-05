@@ -80,12 +80,19 @@ export type WorkspaceId =
   | "W29"
   | "W30"
 
+/** 侧栏角标键：由 Shell 映射到对应工作面的实时计数，无数据时隐藏。 */
+export type WorkspaceNavBadgeKey =
+  | "todo-count"
+  | "confirm-count"
+  | "delivery-count"
+  | "warehouse-count"
+
 export type WorkspaceNavItem = Readonly<{
   id: WorkspaceId
   href: string
   label: string
   icon: LucideIcon
-  badge?: string
+  badge?: WorkspaceNavBadgeKey
 }>
 
 export type WorkspaceNavGroup = Readonly<{
@@ -109,7 +116,7 @@ export type WorkspaceRouteEntry = Readonly<{
 type WorkspaceNavItemSpec = Readonly<{
   routeId: WorkspaceId
   icon: LucideIcon
-  badge?: string
+  badge?: WorkspaceNavBadgeKey
   href?: string
   label?: string
 }>
@@ -360,7 +367,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
         routeId: "W02",
         label: "待办队列",
         icon: ListTodoIcon,
-        badge: "18",
+        badge: "todo-count",
       },
     ],
   },
@@ -389,7 +396,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
         routeId: "W07",
         label: "二次确认",
         icon: ClipboardCheckIcon,
-        badge: "3",
+        badge: "confirm-count",
       },
       {
         routeId: "W08",
@@ -400,9 +407,8 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
         href: "/fulfillment?lane=procurement",
         label: "交付与代发",
         icon: TruckIcon,
-        // 采购 · 李采「仅我的」待处理数（mock/fulfillment-operations.ts 固定夹具）。
-        // 接真实队列后改为实时值，见 features/fulfillment-operations/queries.ts。
-        badge: "3",
+        // 采购岗位「仅我的」待处理数：由 Shell 从 W09 队列计数实时计算。
+        badge: "delivery-count",
       },
       {
         routeId: "W21",
@@ -418,9 +424,8 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
         routeId: "W09",
         label: "收货与发货",
         icon: PackageIcon,
-        // 仓储 · 周航「仅我的」待处理数（mock/fulfillment-operations.ts 固定夹具）。
-        // 一线打开侧栏就要看到「我有几件活」；接真实队列后改为实时值。
-        badge: "4",
+        // 仓储岗位「仅我的」待处理数：由 Shell 从 W09 队列计数实时计算。
+        badge: "warehouse-count",
       },
       {
         routeId: "W10",

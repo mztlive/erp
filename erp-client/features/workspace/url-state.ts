@@ -8,7 +8,13 @@ import { sequentialText } from "@/lib/ui-text"
 import { createUrlStateCodec } from "@/lib/url-state"
 
 const DUE_VALUES = ["today", "overdue"] as const
-const FAMILY_VALUES = ["approval", "finance", "fulfillment", "exception"] as const
+const FAMILY_VALUES = [
+  "approval",
+  "finance",
+  "fulfillment",
+  "exception",
+  "procurement",
+] as const
 const SCENARIO_VALUES = ["forbidden", "no_scope", "empty"] as const
 
 export type WorkspaceUrlState = {

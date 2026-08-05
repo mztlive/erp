@@ -11,27 +11,41 @@ import {
   createPurchaseOrderFromBasis,
   fetchCreationBases,
   fetchPurchaseOrderCenter,
+  fetchPurchaseOrderExportData,
   fetchPurchaseOrders,
   reviewPurchaseOrder,
   savePurchaseOrderDraft,
   startPurchaseChange,
   submitPurchaseOrderForReview,
 } from "@/features/purchase-orders/api"
+import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api"
 import type { ViewerRole } from "@/features/purchase-orders/types"
 
 export const purchaseOrderKeys = {
   all: ["purchase-orders"] as const,
-  list: (role: ViewerRole) =>
-    [...purchaseOrderKeys.all, "list", role] as const,
+  list: (query: PurchaseOrderListQuery) =>
+    [...purchaseOrderKeys.all, "list", query] as const,
   detail: (id: string, role: ViewerRole) =>
     [...purchaseOrderKeys.all, "detail", id, role] as const,
   bases: () => [...purchaseOrderKeys.all, "creation-bases"] as const,
+  exportData: (query: PurchaseOrderListQuery) =>
+    [...purchaseOrderKeys.all, "export", query] as const,
 }
 
-export function usePurchaseOrdersQuery(role: ViewerRole = "procurement") {
+export function usePurchaseOrdersQuery(query: PurchaseOrderListQuery) {
   return useQuery({
-    queryKey: purchaseOrderKeys.list(role),
-    queryFn: () => fetchPurchaseOrders(role),
+    queryKey: purchaseOrderKeys.list(query),
+    queryFn: () => fetchPurchaseOrders(query),
+  })
+}
+
+export function usePurchaseOrderExportDataQuery(
+  query: PurchaseOrderListQuery
+) {
+  return useQuery({
+    queryKey: purchaseOrderKeys.exportData(query),
+    queryFn: () => fetchPurchaseOrderExportData(query),
+    enabled: false,
   })
 }
 

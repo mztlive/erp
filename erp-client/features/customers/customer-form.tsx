@@ -6,12 +6,14 @@ import { z } from "zod"
 
 import {
   ConflictResolutionDialog,
+  DiscardConfirmDialog,
   DocumentSection,
   FormalActionResult,
   OptionCombobox,
   OwnerCombobox,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
+import { useSelector } from "@tanstack/react-form"
 import {
   DEMO_OWNER_OPTIONS,
   PAYMENT_TERM_OPTIONS,
@@ -221,6 +223,7 @@ export function CustomerForm({
   customer,
   onCancel,
   onSucceeded,
+  onDirtyChange,
 }: {
   mode: "create" | "edit"
   /** 页面内编辑按分区展示（DocumentSection）；对话框内用紧凑布局。 */
@@ -229,6 +232,8 @@ export function CustomerForm({
   customer?: CustomerCenterView
   onCancel: () => void
   onSucceeded: (customerId: string) => void
+  /** 表单是否含未保存输入（对话框容器用于拦截 X / Esc / 遮罩关闭）。 */
+  onDirtyChange?: (isDirty: boolean) => void
 }) {
   const createMutation = useCreateCustomerMutation()
   const saveMutation = useSaveCustomerDetailsMutation()
@@ -312,10 +317,28 @@ export function CustomerForm({
         setConflictOpen(true)
       }
       if (response.outcome === "succeeded") {
+        form.reset()
         onSucceeded(response.customerId)
       }
     },
   })
+
+  const dirty = useSelector(form.store, (state) => state.isDirty)
+  const [discardOpen, setDiscardOpen] = React.useState(false)
+
+  React.useEffect(() => {
+    onDirtyChange?.(dirty)
+  }, [dirty, onDirtyChange])
+
+  React.useEffect(() => {
+    if (!dirty) return
+    const onBeforeUnload = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = "当前输入尚未提交，刷新后将丢失。"
+    }
+    window.addEventListener("beforeunload", onBeforeUnload)
+    return () => window.removeEventListener("beforeunload", onBeforeUnload)
+  }, [dirty])
 
   const resetSession = () => {
     setResult(null)
@@ -783,6 +806,12 @@ export function CustomerForm({
           onClick={() => {
             if (result?.outcome === "succeeded") {
               resetSession()
+              onCancel()
+              return
+            }
+            if (dirty) {
+              setDiscardOpen(true)
+              return
             }
             onCancel()
           }}
@@ -848,6 +877,16 @@ export function CustomerForm({
           onCompare={() => setConflictOpen(false)}
         />
       ) : null}
+
+      <DiscardConfirmDialog
+        open={discardOpen}
+        onOpenChange={setDiscardOpen}
+        onConfirm={() => {
+          setDiscardOpen(false)
+          resetSession()
+          onCancel()
+        }}
+      />
     </form>
   )
 }

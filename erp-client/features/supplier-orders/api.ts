@@ -415,6 +415,30 @@ function filterSummary(
   return parts.join(" · ")
 }
 
+function applySupplierOrderSort(
+  rows: SupplierOrderListRow[],
+  query: SupplierOrderListQuery
+): SupplierOrderListRow[] {
+  const sortBy = query.sortBy
+  if (sortBy) {
+    const direction = query.sortDir === "asc" ? 1 : -1
+    return [...rows].sort((a, b) => {
+      const left = (a[sortBy] ?? "") as string
+      const right = (b[sortBy] ?? "") as string
+      const comparison = left.localeCompare(right)
+      if (comparison !== 0) return comparison * direction
+      return a.orderId.localeCompare(b.orderId)
+    })
+  }
+  return [...rows].sort((a, b) => {
+    if (b.priority !== a.priority) return b.priority - a.priority
+    if (a.lastBusinessAt !== b.lastBusinessAt) {
+      return a.lastBusinessAt.localeCompare(b.lastBusinessAt)
+    }
+    return a.orderId.localeCompare(b.orderId)
+  })
+}
+
 export async function fetchSupplierOrders(
   query: SupplierOrderListQuery
 ): Promise<SupplierOrderListResult> {
@@ -432,18 +456,13 @@ export async function fetchSupplierOrders(
   const filtered = projected
     .filter((p) => matchesQuery(p.row, p.seed, query))
     .map((p) => p.row)
-    .sort((a, b) => {
-      if (b.priority !== a.priority) return b.priority - a.priority
-      if (a.lastBusinessAt !== b.lastBusinessAt) {
-        return a.lastBusinessAt.localeCompare(b.lastBusinessAt)
-      }
-      return a.orderId.localeCompare(b.orderId)
-    })
+
+  const sorted = applySupplierOrderSort(filtered, query)
 
   const page = query.page
   const pageSize = query.pageSize
   const start = (page - 1) * pageSize
-  const rows = filtered.slice(start, start + pageSize)
+  const rows = sorted.slice(start, start + pageSize)
   const now = new Date().toISOString()
 
   return {

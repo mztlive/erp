@@ -30,6 +30,16 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import {
   Empty,
@@ -1013,11 +1023,54 @@ function SensitiveValue({
   )
 }
 
+type DiscardConfirmDialogProps = {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onConfirm: () => void
+  title?: string
+  description?: string
+  confirmLabel?: string
+  cancelLabel?: string
+}
+
+/**
+ * 离开前放弃未保存输入的确认层。不负责 dirty 判定，由调用方决定何时弹出。
+ */
+function DiscardConfirmDialog({
+  open,
+  onOpenChange,
+  onConfirm,
+  title = "放弃未保存的更改？",
+  description = "本次输入尚未保存，离开后将丢失。",
+  confirmLabel = "放弃更改",
+  cancelLabel = "继续编辑",
+}: DiscardConfirmDialogProps) {
+  return (
+    <AlertDialog open={open} onOpenChange={onOpenChange}>
+      <AlertDialogContent className="sm:max-w-md">
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>
+            {description}
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
+          <AlertDialogAction variant="destructive" onClick={onConfirm}>
+            {confirmLabel}
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
+}
+
 export {
   AsyncSectionState,
   BackgroundJobProgress,
   BusinessEmptyState,
   BusinessFailureState,
+  DiscardConfirmDialog,
   DraftSaveIndicator,
   FormalActionResult,
   GuardedBusinessAction,
@@ -1034,6 +1087,7 @@ export {
   type BusinessFailureStateProps,
   type DraftSaveIndicatorProps,
   type DraftSaveState,
+  type DiscardConfirmDialogProps,
   type FormalActionFact,
   type FormalActionResultProps,
   type FormalActionResultStatus,

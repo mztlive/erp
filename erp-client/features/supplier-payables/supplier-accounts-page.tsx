@@ -882,6 +882,22 @@ export function SupplierAccountsPage() {
                   setPickSupplierOpen("payment")
                 },
               },
+              {
+                actionKey: "settle",
+                label: "去对账结算",
+                variant: "outline",
+                mobileVisibility: "hide",
+                onClick: () => {
+                  const qs = searchParams.toString()
+                  const selfHref = qs ? `${pathname}?${qs}` : pathname
+                  const params = new URLSearchParams()
+                  if (supplierId) params.set("supplierId", supplierId)
+                  params.set("returnTo", selfHref)
+                  router.push(
+                    `/supplier-api/settlements?${params.toString()}`
+                  )
+                },
+              },
             ]}
           />
         }

@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import { unifiedQueueKeys } from "@/features/unified-task-queue/queries"
 import {
   claimProcurementWorkItem,
   completeProcurementDecision,
@@ -15,12 +16,24 @@ export const procurementConfirmKeys = {
   all: ["procurement-confirmation"] as const,
   queue: (filters: QueueFilters) =>
     [...procurementConfirmKeys.all, "queue", filters] as const,
+  counts: () => [...procurementConfirmKeys.all, "counts"] as const,
 }
 
 export function useProcurementConfirmationQuery(filters: QueueFilters) {
   return useQuery({
     queryKey: procurementConfirmKeys.queue(filters),
     queryFn: () => fetchProcurementQueue(filters),
+  })
+}
+
+/** 角标计数：W07「仅我的」有效待确认项。 */
+export function useProcurementConfirmCountQuery() {
+  return useQuery({
+    queryKey: procurementConfirmKeys.counts(),
+    queryFn: async () => {
+      const view = await fetchProcurementQueue({ scope: "mine" })
+      return { mine: view.context.total }
+    },
   })
 }
 
@@ -57,6 +70,10 @@ export function useCompleteProcurementMutation() {
         await queryClient.invalidateQueries({
           queryKey: procurementConfirmKeys.all,
         })
+        // 同一终态存储也作用于 W02 采购确认族：同步角标与队列视图
+        await queryClient.invalidateQueries({
+          queryKey: unifiedQueueKeys.all,
+        })
       }
     },
   })
@@ -70,6 +87,9 @@ export function useDeferProcurementMutation() {
       if (result.status === "succeeded") {
         await queryClient.invalidateQueries({
           queryKey: procurementConfirmKeys.all,
+        })
+        await queryClient.invalidateQueries({
+          queryKey: unifiedQueueKeys.all,
         })
       }
     },

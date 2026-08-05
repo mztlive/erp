@@ -2,13 +2,17 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useRouter, useSearchParams } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   DownloadIcon,
   PlusIcon,
   SearchIcon,
 } from "lucide-react"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import type {
+  ColumnDef,
+  PaginationState,
+  SortingState,
+} from "@tanstack/react-table"
 
 import {
   BusinessStatusBadge,
@@ -48,32 +52,25 @@ import {
   useCreateFromBasisMutation,
   useCreationBasesQuery,
   usePurchaseOrderCenterQuery,
+  usePurchaseOrderExportDataQuery,
   usePurchaseOrdersQuery,
 } from "@/features/purchase-orders/queries"
+import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api"
 import type {
   PurchaseOrderListItem,
+  PurchaseOrderMetricFilter,
+  PurchaseOrderStatusFilter,
   ViewerRole,
 } from "@/features/purchase-orders/types"
 import {
   FULFILLMENT_RESPONSIBILITY_LABEL,
   PURCHASE_TYPE_LABEL,
 } from "@/features/purchase-orders/types"
-
-type StatusFilter =
-  | "all"
-  | "DRAFT"
-  | "PENDING_REVIEW"
-  | "EFFECTIVE"
-  | "PARTIAL"
-  | "COMPLETED"
-
-type MetricKey =
-  | "all"
-  | "pending_create"
-  | "draft"
-  | "review"
-  | "fulfill"
-  | "gate_blocked"
+import {
+  buildPurchaseOrdersSearchParams,
+  parsePurchaseOrdersSearchParams,
+  type PurchaseOrdersUrlState,
+} from "@/features/purchase-orders/url-state"
 
 function displayNo(row: PurchaseOrderListItem) {
   return row.purchaseNo ?? row.draftLabel ?? row.purchaseOrderId
@@ -81,24 +78,74 @@ function displayNo(row: PurchaseOrderListItem) {
 
 export function PurchaseOrdersListPage() {
   const router = useRouter()
+  const pathname = usePathname()
   const searchParams = useSearchParams()
   const basisFromUrl = searchParams.get("basisId")
   const [viewerRole, setViewerRole] =
     React.useState<ViewerRole>("procurement")
-  const listQuery = usePurchaseOrdersQuery(viewerRole)
+
+  const url = React.useMemo(
+    () => parsePurchaseOrdersSearchParams(searchParams),
+    [searchParams]
+  )
+
+  const pushUrl = React.useCallback(
+    (patch: Partial<PurchaseOrdersUrlState>) => {
+      const next = { ...url, ...patch }
+      router.replace(
+        `${pathname}${buildPurchaseOrdersSearchParams(next)}`,
+        { scroll: false }
+      )
+    },
+    [pathname, router, url]
+  )
+
+  // 跨单据跳转的返回目标：当前列表（保留筛选）。basisId 只服务于建单 Dialog，
+  // 带回去会在返回时误弹建单框，故剔除。
+  const listReturnHref = React.useMemo(() => {
+    const sp = new URLSearchParams(searchParams.toString())
+    sp.delete("basisId")
+    const qs = sp.toString()
+    return qs ? `${pathname}?${qs}` : pathname
+  }, [pathname, searchParams])
+
+  const [sortBy, sortDir] = React.useMemo(() => {
+    const [id, dir] = (url.sort ?? "").split(":")
+    if (!id || (dir !== "asc" && dir !== "desc")) {
+      return [undefined, undefined] as const
+    }
+    return [id, dir] as const
+  }, [url.sort])
+
+  const listQueryInput = React.useMemo<PurchaseOrderListQuery>(
+    () => ({
+      role: viewerRole,
+      q: url.q,
+      status: url.status,
+      metric: url.metric,
+      page: url.page,
+      pageSize: url.pageSize,
+      sortBy,
+      sortDir,
+    }),
+    [sortBy, sortDir, url, viewerRole]
+  )
+  const listQuery = usePurchaseOrdersQuery(listQueryInput)
+  const exportQuery = usePurchaseOrderExportDataQuery(listQueryInput)
   const basesQuery = useCreationBasesQuery()
   const createMutation = useCreateFromBasisMutation()
 
-  const allRows = listQuery.data?.rows ?? []
+  const pageRows = React.useMemo(
+    () => listQuery.data?.rows ?? [],
+    [listQuery.data]
+  )
   const metrics = listQuery.data?.metrics ?? []
+  const total = listQuery.data?.total ?? 0
 
-  const [search, setSearch] = React.useState("")
-  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all")
-  const [metricKey, setMetricKey] = React.useState<MetricKey>("all")
-  const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 20,
-  })
+  const search = url.q ?? ""
+  const statusFilter = url.status
+  const metricKey = url.metric
+  const [searchDraft, setSearchDraft] = React.useState(search)
   const [previewId, setPreviewId] = React.useState<string | null>(null)
   const [focusedIndex, setFocusedIndex] = React.useState(0)
   const [createOpen, setCreateOpen] = React.useState(false)
@@ -112,52 +159,33 @@ export function PurchaseOrdersListPage() {
 
   const rowRefs = React.useRef<Map<string, HTMLElement>>(new Map())
 
-  const resetPagination = React.useCallback(() => {
-    setPagination((previous) =>
-      previous.pageIndex === 0 ? previous : { ...previous, pageIndex: 0 }
-    )
-  }, [])
+  const pagination = React.useMemo<PaginationState>(
+    () => ({
+      pageIndex: Math.max(0, url.page - 1),
+      pageSize: url.pageSize,
+    }),
+    [url.page, url.pageSize]
+  )
 
-  const filtered = React.useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return allRows.filter((row) => {
-      if (statusFilter !== "all" && row.status !== statusFilter) return false
-      if (metricKey === "draft" && row.status !== "DRAFT") return false
-      if (metricKey === "review" && row.status !== "PENDING_REVIEW") return false
-      if (
-        metricKey === "fulfill" &&
-        !(
-          (row.status === "EFFECTIVE" || row.status === "PARTIAL") &&
-          row.fulfillmentProgress !== "完成"
-        )
-      ) {
-        return false
-      }
-      if (metricKey === "gate_blocked" && row.paymentGate !== "BLOCKED") {
-        return false
-      }
-      if (metricKey === "pending_create") {
-        // metric opens create dialog, list stays unfiltered by this alone
-      }
-      if (!q) return true
-      const hay = [
-        row.purchaseNo,
-        row.draftLabel,
-        row.supplierName,
-        row.salesOrderNo,
-        row.ownerName,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-      return hay.includes(q)
-    })
-  }, [allRows, metricKey, search, statusFilter])
+  const sorting = React.useMemo<SortingState>(
+    () =>
+      sortBy && sortDir
+        ? [{ id: sortBy, desc: sortDir === "desc" }]
+        : [],
+    [sortBy, sortDir]
+  )
 
-  const pageRows = React.useMemo(() => {
-    const start = pagination.pageIndex * pagination.pageSize
-    return filtered.slice(start, start + pagination.pageSize)
-  }, [filtered, pagination.pageIndex, pagination.pageSize])
+  React.useEffect(() => {
+    setSearchDraft(search)
+  }, [search])
+
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchDraft.trim() === (url.q ?? "")) return
+      pushUrl({ q: searchDraft.trim() || undefined, page: 1 })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+  }, [pushUrl, searchDraft, url.q])
 
   const previewQuery = usePurchaseOrderCenterQuery(
     previewId ?? "",
@@ -166,7 +194,13 @@ export function PurchaseOrdersListPage() {
 
   React.useEffect(() => {
     setFocusedIndex(0)
-  }, [filtered.length, metricKey, search, statusFilter])
+  }, [metricKey, pageRows.length, search, statusFilter])
+
+  React.useEffect(() => {
+    const data = listQuery.data
+    if (!data || data.page === url.page) return
+    pushUrl({ page: data.page })
+  }, [listQuery.data, pushUrl, url.page])
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -218,9 +252,12 @@ export function PurchaseOrdersListPage() {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [focusedIndex, pageRows, previewId])
 
-  const exportCsv = React.useCallback(() => {
+  const exportCsv = React.useCallback(async () => {
+    const result = await exportQuery.refetch()
+    const rows = result.data ?? []
+    if (rows.length === 0) return
     const quote = (value: string) => `"${value.replaceAll('"', '""')}"`
-    const rows = filtered.map((row) =>
+    const body = rows.map((row) =>
       [
         displayNo(row),
         row.statusLabel,
@@ -237,7 +274,7 @@ export function PurchaseOrdersListPage() {
     )
     const csv = [
       "采购单号,状态,供应商,来源销售单,类型,含税金额,付款,履约,负责人",
-      ...rows,
+      ...body,
     ].join("\n")
     const url = URL.createObjectURL(
       new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" })
@@ -250,10 +287,10 @@ export function PurchaseOrdersListPage() {
     setActionResult({
       status: "succeeded",
       title: "导出已生成",
-      description: `已下载当前筛选 ${filtered.length} 条（已按角色遮罩成本字段）。`,
-      reference: `EXP-W08-${filtered.length}`,
+      description: `已下载当前筛选 ${rows.length} 条（已按角色遮罩成本字段）。`,
+      reference: `EXP-W08-${rows.length}`,
     })
-  }, [filtered])
+  }, [exportQuery])
 
   const openBases = basesQuery.data?.filter((b) => !b.consumed) ?? []
 
@@ -354,7 +391,13 @@ export function PurchaseOrdersListPage() {
         header: "来源销售单",
         meta: { label: "来源销售单", width: "reference" },
         cell: ({ row }) => (
-          <span className="num text-sm">{row.original.salesOrderNo}</span>
+          <Link
+            href={`/sales/orders/${row.original.salesOrderId}?from=W08&returnTo=${encodeURIComponent(listReturnHref)}`}
+            className="num text-sm text-primary underline-offset-2 hover:underline"
+            aria-label={`查看来源销售单 ${row.original.salesOrderNo}`}
+          >
+            {row.original.salesOrderNo}
+          </Link>
         ),
       },
       {
@@ -513,7 +556,9 @@ export function PurchaseOrdersListPage() {
                   variant="outline"
                   size="xs"
                   render={
-                    <Link href="/fulfillment?lane=procurement&scope=mine" />
+                    <Link
+                      href={`/fulfillment?lane=procurement&scope=mine&purchaseOrderId=${row.original.purchaseOrderId}&from=W08&returnTo=${encodeURIComponent(listReturnHref)}`}
+                    />
                   }
                 >
                   去交付
@@ -534,7 +579,7 @@ export function PurchaseOrdersListPage() {
         },
       },
     ],
-    [focusedIndex, pageRows]
+    [focusedIndex, listReturnHref, pageRows]
   )
 
   if (listQuery.isPending) {
@@ -588,8 +633,8 @@ export function PurchaseOrdersListPage() {
                 icon: DownloadIcon,
                 variant: "outline",
                 mobileVisibility: "hide",
-                disabled: filtered.length === 0,
-                onClick: exportCsv,
+                disabled: total === 0,
+                onClick: () => void exportCsv(),
               },
               {
                 actionKey: "create",
@@ -672,8 +717,10 @@ export function PurchaseOrdersListPage() {
                 setCreateOpen(true)
                 return
               }
-              setMetricKey(metric.key as MetricKey)
-              resetPagination()
+              pushUrl({
+                metric: metric.key as PurchaseOrderMetricFilter,
+                page: 1,
+              })
             }}
           />
         ))}
@@ -695,10 +742,9 @@ export function PurchaseOrdersListPage() {
                 </InputGroupAddon>
                 <InputGroupInput
                   data-slot="po-list-search"
-                  value={search}
+                  value={searchDraft}
                   onChange={(event) => {
-                    setSearch(event.target.value)
-                    resetPagination()
+                    setSearchDraft(event.target.value)
                   }}
                   placeholder="采购单号、供应商、来源销售单"
                   aria-label="搜索采购单"
@@ -709,9 +755,10 @@ export function PurchaseOrdersListPage() {
               <ToggleGroup
                 value={[statusFilter]}
                 onValueChange={(values) => {
-                  const next = (values[0] as StatusFilter | undefined) ?? "all"
-                  setStatusFilter(next)
-                  resetPagination()
+                  const next =
+                    (values[0] as PurchaseOrderStatusFilter | undefined) ??
+                    "all"
+                  pushUrl({ status: next, page: 1 })
                 }}
                 variant="outline"
                 size="sm"
@@ -727,7 +774,7 @@ export function PurchaseOrdersListPage() {
             }
             actions={
               <span className="text-xs text-muted-foreground" aria-live="polite">
-                共 {filtered.length.toLocaleString("zh-CN")} 条
+                共 {total.toLocaleString("zh-CN")} 条
               </span>
             }
           />
@@ -737,11 +784,24 @@ export function PurchaseOrdersListPage() {
             data={pageRows}
             columns={columns}
             getRowId={(row) => row.purchaseOrderId}
-            rowCount={filtered.length}
+            rowCount={total}
             pagination={pagination}
-            onPaginationChange={setPagination}
+            onPaginationChange={(next) => {
+              pushUrl({ page: next.pageIndex + 1, pageSize: next.pageSize })
+            }}
+            sorting={sorting}
+            onSortingChange={(next) => {
+              const nextSort = next[0]
+              pushUrl({
+                sort: nextSort
+                  ? `${nextSort.id}:${nextSort.desc ? "desc" : "asc"}`
+                  : undefined,
+                page: 1,
+              })
+            }}
             layout="flush"
             density="compact"
+            loading={listQuery.isFetching}
             defaultColumnPinning={{ left: ["document"], right: ["actions"] }}
             onRowPreview={(row) => setPreviewId(row.purchaseOrderId)}
             onRowOpen={(row) => setPreviewId(row.purchaseOrderId)}
@@ -855,7 +915,9 @@ export function PurchaseOrdersListPage() {
                   type="button"
                   variant="outline"
                   render={
-                    <Link href="/fulfillment?lane=procurement&scope=mine" />
+                    <Link
+                      href={`/fulfillment?lane=procurement&scope=mine&purchaseOrderId=${previewQuery.data.identity.purchaseOrderId}&from=W08&returnTo=${encodeURIComponent(listReturnHref)}`}
+                    />
                   }
                 >
                   去交付

@@ -325,7 +325,10 @@ export function CardBusinessAnalyticsPage() {
     scope: "team",
     status: "all",
   })
-  const salesOrdersQuery = useSalesOrdersQuery()
+  const salesOrdersQuery = useSalesOrdersQuery({
+    page: 1,
+    pageSize: 500,
+  })
 
   const customerComboboxItems = React.useMemo(
     () =>
@@ -343,7 +346,7 @@ export function CardBusinessAnalyticsPage() {
 
   const salesOrderComboboxItems = React.useMemo(
     () =>
-      (salesOrdersQuery.data?.rows ?? []).map((o) => ({
+      (salesOrdersQuery.data?.items ?? []).map((o) => ({
         id: o.id,
         documentNumber: o.documentNumber,
         customerName: o.customerName,
@@ -353,7 +356,7 @@ export function CardBusinessAnalyticsPage() {
         natureLabel:
           o.nature === "card_voucher" ? "卡券" : "实物与服务",
       })),
-    [salesOrdersQuery.data?.rows]
+    [salesOrdersQuery.data?.items]
   )
 
   const basisQuery = useDateBasisConfigQuery({

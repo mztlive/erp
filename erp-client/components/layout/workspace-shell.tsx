@@ -32,8 +32,37 @@ import {
   SidebarSeparator,
 } from "@/components/ui/sidebar"
 import { isNavItemActive } from "@/lib/nav-active"
-import { WORKSPACE_NAV_GROUPS } from "@/lib/workspace-registry"
+import {
+  WORKSPACE_NAV_GROUPS,
+  type WorkspaceNavBadgeKey,
+} from "@/lib/workspace-registry"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
+import { useFulfillmentCountQuery } from "@/features/fulfillment-operations/queries"
+import { useProcurementConfirmCountQuery } from "@/features/procurement-confirmation/queries"
+import { useUnifiedTaskCountQuery } from "@/features/unified-task-queue/queries"
+
+type NavBadgeCounts = {
+  todo: number
+  confirm: number
+  delivery: number
+  warehouse: number
+}
+
+function badgeCountFor(
+  key: WorkspaceNavBadgeKey,
+  counts: NavBadgeCounts
+): number | undefined {
+  switch (key) {
+    case "todo-count":
+      return counts.todo
+    case "confirm-count":
+      return counts.confirm
+    case "delivery-count":
+      return counts.delivery
+    case "warehouse-count":
+      return counts.warehouse
+  }
+}
 
 function AppSidebarNav() {
   const pathname = usePathname()
@@ -43,6 +72,16 @@ function AppSidebarNav() {
   const allHrefs = WORKSPACE_NAV_GROUPS.flatMap((group) =>
     group.items.map((item) => item.href)
   )
+  const todoCountQuery = useUnifiedTaskCountQuery()
+  const confirmCountQuery = useProcurementConfirmCountQuery()
+  const deliveryCountQuery = useFulfillmentCountQuery("procurement")
+  const warehouseCountQuery = useFulfillmentCountQuery("warehouse")
+  const counts: NavBadgeCounts = {
+    todo: todoCountQuery.data?.mine ?? 0,
+    confirm: confirmCountQuery.data?.mine ?? 0,
+    delivery: deliveryCountQuery.data?.pending ?? 0,
+    warehouse: warehouseCountQuery.data?.pending ?? 0,
+  }
 
   return (
     <>
@@ -60,6 +99,9 @@ function AppSidebarNav() {
                   allHrefs,
                   search
                 )
+                const badgeCount = item.badge
+                  ? badgeCountFor(item.badge, counts)
+                  : undefined
 
                 return (
                   <SidebarMenuItem key={`${group.label}-${item.href}`}>
@@ -70,12 +112,12 @@ function AppSidebarNav() {
                     >
                       <Icon aria-hidden="true" />
                       <span>{item.label}</span>
-                      {item.badge ? (
+                      {badgeCount && badgeCount > 0 ? (
                         <Badge
                           variant="secondary"
                           className="ml-auto group-data-[collapsible=icon]:hidden"
                         >
-                          {item.badge}
+                          {badgeCount}
                         </Badge>
                       ) : null}
                     </SidebarMenuButton>
@@ -260,6 +302,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     status: "all",
     query: search.trim(),
   })
+  const todoCountQuery = useUnifiedTaskCountQuery()
+  const confirmCountQuery = useProcurementConfirmCountQuery()
+  const todoCount = todoCountQuery.data?.mine
+  const confirmCount = confirmCountQuery.data?.mine
   const customerMatches = React.useMemo(
     () =>
       search.trim().length >= 2
@@ -484,7 +530,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               {
                 actionKey: "todos",
                 label: "待办",
-                badge: { label: "18", variant: "secondary" },
+                badge:
+                  todoCount && todoCount > 0
+                    ? { label: String(todoCount), variant: "secondary" }
+                    : undefined,
                 onClick: () => router.push("/workspace/tasks"),
               },
             ]}
@@ -585,7 +634,9 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               badge:
                 activeTab === "tasks"
                   ? { label: "当前", variant: "secondary" }
-                  : { label: "18", variant: "secondary" },
+                  : todoCount && todoCount > 0
+                    ? { label: String(todoCount), variant: "secondary" }
+                    : undefined,
             },
             {
               value: "sales-orders",
@@ -627,8 +678,10 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               icon: ClipboardCheckIcon,
               badge:
                 activeTab === "procurement-confirm"
-                  ? { label: "3", variant: "secondary" }
-                  : undefined,
+                  ? { label: "当前", variant: "secondary" }
+                  : confirmCount && confirmCount > 0
+                    ? { label: String(confirmCount), variant: "secondary" }
+                    : undefined,
             },
           ]}
         />

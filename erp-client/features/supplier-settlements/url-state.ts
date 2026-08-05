@@ -21,6 +21,7 @@ export type SettlementsUrlState = {
   section: SettlementSection
   role: DemoRole
   demoFlag?: "no-permission" | "no-scope" | "policy-missing"
+  returnTo?: string
 }
 
 const VIEW_VALUES = [
@@ -71,6 +72,7 @@ const codec = createUrlStateCodec<SettlementsUrlState>([
     aliases: ["demoRole"],
   },
   { key: "demoFlag", type: "enum", values: FLAG_VALUES },
+  { key: "returnTo", type: "string" },
 ])
 
 export const parseSettlementsSearchParams = codec.parse

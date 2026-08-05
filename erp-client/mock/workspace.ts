@@ -8,6 +8,7 @@ export type WorkspaceFamilyFilter =
   | "finance"
   | "fulfillment"
   | "exception"
+  | "procurement"
 
 export type WorkspaceMetricKey =
   | "mine"
@@ -134,6 +135,10 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
     exception: {
         label: "数据治理与异常",
         defaultExpanded: false
+    },
+    procurement: {
+        label: "采购确认",
+        defaultExpanded: true
     }
 };
 /**
@@ -169,7 +174,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
         enteredAtLabel: "今天 08:42",
         dueAtLabel: "今天 11:30",
         dueBucket: "today",
-        family: "approval"
+        family: "procurement"
     },
     {
         workItemId: "wi_pc_02",
@@ -200,7 +205,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
         enteredAtLabel: "昨天 16:18",
         dueAtLabel: "已超期 42 分钟",
         dueBucket: "overdue",
-        family: "approval"
+        family: "procurement"
     },
     {
         workItemId: "wi_margin_01",
@@ -262,7 +267,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
         enteredAtLabel: "今天 09:40",
         dueAtLabel: "今天 15:00",
         dueBucket: "today",
-        family: "approval"
+        family: "procurement"
     },
     {
         workItemId: "wi_pc_04",
@@ -293,7 +298,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
         enteredAtLabel: "今天 09:45",
         dueAtLabel: "今天 16:30",
         dueBucket: "today",
-        family: "approval"
+        family: "procurement"
     },
     {
         workItemId: "wi_pc_05",
@@ -324,7 +329,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
         enteredAtLabel: "今天 09:50",
         dueAtLabel: "今天 17:30",
         dueBucket: "today",
-        family: "approval"
+        family: "procurement"
     },
     {
         workItemId: "wi_pc_06",
@@ -355,7 +360,7 @@ const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpande
         enteredAtLabel: "今天 09:55",
         dueAtLabel: "今天 18:00",
         dueBucket: "today",
-        family: "approval"
+        family: "procurement"
     },
     {
         workItemId: "wi_card_01",
@@ -627,6 +632,7 @@ function buildGroups(items: readonly WorkspaceWorkItem[]): WorkspaceTaskGroup[] 
         "finance",
         "fulfillment",
         "exception",
+        "procurement",
     ]
     const limit = TEMPORARY_PREVIEW_LIMIT
     const groups: WorkspaceTaskGroup[] = []
@@ -643,6 +649,7 @@ function buildGroups(items: readonly WorkspaceWorkItem[]): WorkspaceTaskGroup[] 
             previewLimitSource: "TEMPORARY_FALLBACK",
             defaultExpanded:
                 family === "approval" ||
+                (family === "procurement" && hasOverdue) ||
                 (family === "finance" && familyItems.length > 0) ||
                 (family === "fulfillment" && hasOverdue) ||
                 (family === "exception" && hasOverdue),

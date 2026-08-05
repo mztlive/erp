@@ -4,12 +4,15 @@
  */
 
 import { mockDelay } from "@/lib/mock-delay"
+import { compareDecimal } from "@/lib/fixed-decimal"
 import type {
   CreatePurchaseOrderFromBasisInput,
   FormalActionResponse,
   PurchaseCreationBasis,
   PurchaseOrderCenterView,
   PurchaseOrderListItem,
+  PurchaseOrderMetricFilter,
+  PurchaseOrderStatusFilter,
   ReviewPurchaseOrderInput,
   SavePurchaseOrderDraftInput,
   SubmitPurchaseOrderInput,
@@ -29,18 +32,117 @@ import {
   WorkItemMockError,
 } from "@/mock/session-state"
 
+export type PurchaseOrderListQuery = {
+  role?: ViewerRole
+  q?: string
+  status?: PurchaseOrderStatusFilter
+  metric?: PurchaseOrderMetricFilter
+  page?: number
+  pageSize?: number
+  sortBy?: string
+  sortDir?: "asc" | "desc"
+}
+
 export type PurchaseOrderListResult = {
   rows: PurchaseOrderListItem[]
+  total: number
+  page: number
+  pageSize: number
   metrics: Array<{ key: string; label: string; count: number; detail: string }>
   freshness: { updatedAt: string; state: "fresh" }
 }
 
-export async function fetchPurchaseOrders(
-  role: ViewerRole = "procurement"
-): Promise<PurchaseOrderListResult> {
-  await mockDelay()
-  const rows = listW08PurchaseOrders(role)
-  const metrics = [
+const PURCHASE_ORDER_DEFAULT_PAGE_SIZE = 20
+const PURCHASE_ORDER_MAX_PAGE_SIZE = 100
+
+function listDisplayNo(row: PurchaseOrderListItem): string {
+  return row.purchaseNo ?? row.draftLabel ?? row.purchaseOrderId
+}
+
+function matchesListFilter(
+  row: PurchaseOrderListItem,
+  query: PurchaseOrderListQuery
+): boolean {
+  const status = query.status ?? "all"
+  if (status !== "all" && row.status !== status) return false
+  const metric = query.metric ?? "all"
+  if (metric === "draft" && row.status !== "DRAFT") return false
+  if (metric === "review" && row.status !== "PENDING_REVIEW") return false
+  if (
+    metric === "fulfill" &&
+    !(
+      (row.status === "EFFECTIVE" || row.status === "PARTIAL") &&
+      row.fulfillmentProgress !== "完成"
+    )
+  ) {
+    return false
+  }
+  if (metric === "gate_blocked" && row.paymentGate !== "BLOCKED") return false
+  const q = query.q?.trim().toLowerCase()
+  if (!q) return true
+  const hay = [
+    row.purchaseNo,
+    row.draftLabel,
+    row.supplierName,
+    row.salesOrderNo,
+    row.ownerName,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+  return hay.includes(q)
+}
+
+function listSortComparator(
+  sortBy: string | undefined,
+  sortDir: "asc" | "desc" | undefined
+):
+  | ((a: PurchaseOrderListItem, b: PurchaseOrderListItem) => number)
+  | null {
+  if (!sortBy || !sortDir) return null
+  switch (sortBy) {
+    case "document":
+      return (a, b) => listDisplayNo(a).localeCompare(listDisplayNo(b))
+    case "source":
+      return (a, b) => a.salesOrderNo.localeCompare(b.salesOrderNo)
+    case "amount":
+      return (a, b) =>
+        a.costMasked || b.costMasked
+          ? 0
+          : compareDecimal(a.grossAmount, b.grossAmount, 2)
+    case "owner":
+      return (a, b) => a.ownerName.localeCompare(b.ownerName)
+    default:
+      return null
+  }
+}
+
+function sortPurchaseOrders(
+  rows: PurchaseOrderListItem[],
+  query: PurchaseOrderListQuery
+): PurchaseOrderListItem[] {
+  const primary = listSortComparator(query.sortBy, query.sortDir)
+  const byUpdatedAt = (a: PurchaseOrderListItem, b: PurchaseOrderListItem) =>
+    b.updatedAt.localeCompare(a.updatedAt)
+  const comparator: (
+    a: PurchaseOrderListItem,
+    b: PurchaseOrderListItem
+  ) => number = primary
+    ? query.sortDir === "desc"
+      ? (a, b) => -primary(a, b)
+      : primary
+    : byUpdatedAt
+  return [...rows].sort((a, b) => {
+    const primaryResult = comparator(a, b)
+    if (primaryResult !== 0) return primaryResult
+    const updatedAtResult = byUpdatedAt(a, b)
+    if (updatedAtResult !== 0) return updatedAtResult
+    return a.purchaseOrderId.localeCompare(b.purchaseOrderId)
+  })
+}
+
+function buildPurchaseOrderMetrics(rows: PurchaseOrderListItem[]) {
+  return [
     {
       key: "all",
       label: "全部采购单",
@@ -82,11 +184,44 @@ export async function fetchPurchaseOrders(
       detail: "需有效付款",
     },
   ]
+}
+
+export async function fetchPurchaseOrders(
+  query: PurchaseOrderListQuery = {}
+): Promise<PurchaseOrderListResult> {
+  await mockDelay()
+  const all = listW08PurchaseOrders(query.role ?? "procurement")
+  const filtered = sortPurchaseOrders(
+    all.filter((row) => matchesListFilter(row, query)),
+    query
+  )
+  const total = filtered.length
+  const pageSize = Math.min(
+    Math.max(1, query.pageSize ?? PURCHASE_ORDER_DEFAULT_PAGE_SIZE),
+    PURCHASE_ORDER_MAX_PAGE_SIZE
+  )
+  const maxPage = Math.max(1, Math.ceil(total / pageSize))
+  const page = Math.min(Math.max(1, Math.floor(query.page ?? 1)), maxPage)
+  const start = (page - 1) * pageSize
   return {
-    rows,
-    metrics,
+    rows: filtered.slice(start, start + pageSize),
+    total,
+    page,
+    pageSize,
+    metrics: buildPurchaseOrderMetrics(all),
     freshness: { updatedAt: new Date().toISOString(), state: "fresh" },
   }
+}
+
+export async function fetchPurchaseOrderExportData(
+  query: PurchaseOrderListQuery = {}
+): Promise<PurchaseOrderListItem[]> {
+  await mockDelay(60)
+  const all = listW08PurchaseOrders(query.role ?? "procurement")
+  return sortPurchaseOrders(
+    all.filter((row) => matchesListFilter(row, query)),
+    query
+  )
 }
 
 export async function fetchPurchaseOrderCenter(

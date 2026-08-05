@@ -171,6 +171,10 @@ export type SettlementListView = {
 export type SettlementItemView = {
   itemId: string
   supplierOrderNo: string
+  /** 采购单号（W08 业务单号）；结算明细可直达采购单详情 */
+  purchaseNo?: string
+  /** 采购单内部 id，用于详情深链；无 id 时回退采购单列表搜索 */
+  purchaseOrderId?: string
   externalOrderNo: string
   productName: string
   quantity: string

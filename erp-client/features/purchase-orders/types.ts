@@ -28,6 +28,16 @@ export type PaymentGateState = "SATISFIED" | "BLOCKED" | "NOT_APPLICABLE"
 
 export type ViewerRole = "procurement" | "finance" | "sales" | "warehouse"
 
+export type PurchaseOrderStatusFilter = "all" | PurchaseOrderStatus
+
+export type PurchaseOrderMetricFilter =
+  | "all"
+  | "pending_create"
+  | "draft"
+  | "review"
+  | "fulfill"
+  | "gate_blocked"
+
 export type ActionBlocker = {
   action: string
   code: string

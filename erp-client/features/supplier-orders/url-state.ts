@@ -31,6 +31,8 @@ export type SupplierOrdersUrlState = {
   workItemId?: string
   from?: string
   sourceId?: string
+  sort?: string
+  dir?: "asc" | "desc"
 }
 
 const VIEWS = ["actionable", "all", "recent_completed"] as const
@@ -64,6 +66,8 @@ const codec = createUrlStateCodec<SupplierOrdersUrlState>([
   { key: "workItemId", type: "string" },
   { key: "from", type: "string" },
   { key: "sourceId", type: "string", aliases: ["mallOrderId"] },
+  { key: "sort", type: "string" },
+  { key: "dir", type: "enum", values: ["asc", "desc"] },
 ])
 
 export const parseSupplierOrdersSearchParams = codec.parse

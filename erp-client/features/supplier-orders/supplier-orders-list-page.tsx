@@ -3,7 +3,11 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import type {
+  ColumnDef,
+  PaginationState,
+  SortingState,
+} from "@tanstack/react-table"
 import {
   DownloadIcon,
   SearchIcon,
@@ -71,6 +75,16 @@ import {
 } from "@/features/supplier-orders/url-state"
 import { formatDateTime } from "@/lib/datetime"
 
+const SORT_COLUMN_TO_FIELD: Record<
+  string,
+  NonNullable<SupplierOrderListQuery["sortBy"]>
+> = {
+  identity: "orderNo",
+  mall: "mallOrderNo",
+  external: "externalOrderNo",
+  updated: "lastBusinessAt",
+}
+
 export function SupplierOrdersListPage() {
   const router = useRouter()
   const pathname = usePathname()
@@ -79,6 +93,7 @@ export function SupplierOrdersListPage() {
     () => parseSupplierOrdersSearchParams(searchParams),
     [searchParams]
   )
+  const returnTo = searchParams.get("returnTo") ?? undefined
 
   const listQueryInput = React.useMemo<SupplierOrderListQuery>(
     () => ({
@@ -93,6 +108,8 @@ export function SupplierOrdersListPage() {
       page: url.page,
       pageSize: url.pageSize,
       role: url.role,
+      sortBy: url.sort ? SORT_COLUMN_TO_FIELD[url.sort] : undefined,
+      sortDir: url.dir,
     }),
     [url]
   )
@@ -159,10 +176,14 @@ export function SupplierOrdersListPage() {
   const pushUrl = React.useCallback(
     (patch: Partial<typeof url>) => {
       const next = { ...url, ...patch }
-      const qs = buildSupplierOrdersSearchParams(next)
+      let qs = buildSupplierOrdersSearchParams(next)
+      // URL state codec 不声明 returnTo，筛选/分页变化时手动保留返回上下文
+      if (returnTo) {
+        qs += `${qs ? "&" : "?"}returnTo=${encodeURIComponent(returnTo)}`
+      }
       router.replace(`${pathname}${qs}`, { scroll: false })
     },
-    [pathname, router, url]
+    [pathname, router, url, returnTo]
   )
 
   const rows = listQuery.data?.rows ?? []
@@ -175,6 +196,26 @@ export function SupplierOrdersListPage() {
       pageSize: url.pageSize,
     }),
     [url.page, url.pageSize]
+  )
+
+  const sorting = React.useMemo<SortingState>(
+    () =>
+      url.sort && SORT_COLUMN_TO_FIELD[url.sort]
+        ? [{ id: url.sort, desc: url.dir === "desc" }]
+        : [],
+    [url.dir, url.sort]
+  )
+
+  const handleSortingChange = React.useCallback(
+    (next: SortingState) => {
+      const head = next[0]
+      pushUrl({
+        sort: head && SORT_COLUMN_TO_FIELD[head.id] ? head.id : undefined,
+        dir: head ? (head.desc ? "desc" : "asc") : undefined,
+        page: 1,
+      })
+    },
+    [pushUrl]
   )
 
   React.useEffect(() => {
@@ -358,6 +399,7 @@ export function SupplierOrdersListPage() {
         id: "tracks",
         header: "履约 / 取消 / 退款",
         meta: { label: "三轨状态", width: "tracks" },
+        enableSorting: false,
         cell: ({ row }) => (
           <StatusTrackSummary
             variant="inline"
@@ -394,6 +436,7 @@ export function SupplierOrdersListPage() {
       },
       {
         id: "external",
+        accessorKey: "externalOrderNo",
         header: "外部单号",
         meta: { label: "供应商外部单号", width: "reference" },
         cell: ({ row }) =>
@@ -418,6 +461,7 @@ export function SupplierOrdersListPage() {
         id: "actions",
         header: "操作",
         meta: { label: "操作", width: "default" },
+        enableSorting: false,
         cell: ({ row }) => {
           const r = row.original
           const canQuery = r.allowedActions.includes("QUERY_RESULT")
@@ -549,6 +593,22 @@ export function SupplierOrdersListPage() {
           </div>
         }
       />
+
+      {returnTo ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 text-sm">
+          <span className="text-muted-foreground">
+            从关联页面进来的。返回时会回到原来的位置。
+          </span>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            render={<Link href={returnTo} />}
+          >
+            返回来源
+          </Button>
+        </div>
+      ) : null}
 
       <MetricStrip>
         {metrics.map((m) => (
@@ -936,6 +996,8 @@ export function SupplierOrdersListPage() {
               columns={columns}
               getRowId={(row) => row.orderId}
               rowCount={total}
+              sorting={sorting}
+              onSortingChange={handleSortingChange}
               pagination={pagination}
               onPaginationChange={(next) => {
                 pushUrl({

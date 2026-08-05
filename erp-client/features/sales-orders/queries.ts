@@ -18,11 +18,13 @@ import {
   resolveProcurementRejection,
   startSalesChangeOrder,
   submitSalesOrderAcceptance,
+  type SalesOrdersListQuery,
 } from "@/features/sales-orders/api"
 
 export const salesOrderKeys = {
   all: ["sales-orders"] as const,
-  list: () => [...salesOrderKeys.all, "list"] as const,
+  list: (query: SalesOrdersListQuery) =>
+    [...salesOrderKeys.all, "list", query] as const,
   detail: (id: string) => [...salesOrderKeys.all, "detail", id] as const,
   acceptanceRoot: (id: string) =>
     [...salesOrderKeys.all, "acceptance", id] as const,
@@ -32,10 +34,10 @@ export const salesOrderKeys = {
   ) => [...salesOrderKeys.acceptanceRoot(id), filters] as const,
 }
 
-export function useSalesOrdersQuery() {
+export function useSalesOrdersQuery(query: SalesOrdersListQuery) {
   return useQuery({
-    queryKey: salesOrderKeys.list(),
-    queryFn: fetchSalesOrders,
+    queryKey: salesOrderKeys.list(query),
+    queryFn: () => fetchSalesOrders(query),
   })
 }
 
@@ -51,7 +53,7 @@ export function useCreateSalesOrderMutation() {
   return useMutation({
     mutationFn: createSalesOrder,
     onSuccess: async (data) => {
-      await queryClient.invalidateQueries({ queryKey: salesOrderKeys.list() })
+      await queryClient.invalidateQueries({ queryKey: salesOrderKeys.all })
       await queryClient.invalidateQueries({
         queryKey: salesOrderKeys.detail(data.salesOrderId),
       })
@@ -69,7 +71,7 @@ export function useSubmitSalesOrderAcceptanceMutation() {
         queryKey: salesOrderKeys.detail(variables.salesOrderId),
       })
       await queryClient.invalidateQueries({
-        queryKey: salesOrderKeys.list(),
+        queryKey: salesOrderKeys.all,
       })
     },
   })
@@ -96,7 +98,7 @@ export function useResolveProcurementRejectionMutation() {
         queryKey: salesOrderKeys.detail(variables.salesOrderId),
       })
       await queryClient.invalidateQueries({
-        queryKey: salesOrderKeys.list(),
+        queryKey: salesOrderKeys.all,
       })
     },
   })
@@ -111,7 +113,7 @@ export function useDecideLowMarginManagerMutation() {
         queryKey: salesOrderKeys.detail(variables.salesOrderId),
       })
       await queryClient.invalidateQueries({
-        queryKey: salesOrderKeys.list(),
+        queryKey: salesOrderKeys.all,
       })
     },
   })
@@ -126,7 +128,7 @@ export function useStartSalesChangeOrderMutation() {
         queryKey: salesOrderKeys.detail(variables.salesOrderId),
       })
       await queryClient.invalidateQueries({
-        queryKey: salesOrderKeys.list(),
+        queryKey: salesOrderKeys.all,
       })
     },
   })

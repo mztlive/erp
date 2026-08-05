@@ -17,7 +17,8 @@ export function parseFamily(
     raw === "approval" ||
     raw === "finance" ||
     raw === "fulfillment" ||
-    raw === "exception"
+    raw === "exception" ||
+    raw === "procurement"
   ) {
     return raw
   }

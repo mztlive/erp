@@ -251,15 +251,19 @@ export function SalesOrderDetailPage({
   const selfReturn = encodeURIComponent(`${baseHref}${sectionQuery}`)
   const fromQueue =
     Boolean(returnTo) &&
-    (fromWorkspace === "W07" || fromWorkspace === "W09")
+    (fromWorkspace === "W07" ||
+      fromWorkspace === "W08" ||
+      fromWorkspace === "W09")
   const backHref =
     fromQueue && returnTo ? returnTo : "/sales/orders"
   const backLabel =
     fromWorkspace === "W07"
       ? "返回采购确认"
-      : fromWorkspace === "W09"
-        ? "返回履约处理"
-        : "返回列表"
+      : fromWorkspace === "W08"
+        ? "返回采购单列表"
+        : fromWorkspace === "W09"
+          ? "返回履约处理"
+          : "返回列表"
 
   const focusTask = resolveFocusTask(order, Boolean(canAccept))
   const openRejection = isOpenProcurementRejection(order)
@@ -372,7 +376,9 @@ export function SalesOrderDetailPage({
         <p className="text-xs text-muted-foreground">
           {fromWorkspace === "W09"
             ? "从履约处理打开 · 处理完可点上方返回，回到原来的列表位置"
-            : "从采购确认打开 · 处理完可点上方返回，回到原来的列表位置"}
+            : fromWorkspace === "W08"
+              ? "从采购单打开 · 处理完可点上方返回，回到原来的列表位置"
+              : "从采购确认打开 · 处理完可点上方返回，回到原来的列表位置"}
         </p>
       ) : null}
 

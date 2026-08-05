@@ -2,13 +2,18 @@
 
 import * as React from "react"
 import Link from "next/link"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   DownloadIcon,
   FilterIcon,
   PlusIcon,
   SearchIcon,
 } from "lucide-react"
-import type { ColumnDef, PaginationState } from "@tanstack/react-table"
+import type {
+  ColumnDef,
+  PaginationState,
+  SortingState,
+} from "@tanstack/react-table"
 
 import {
   BackgroundJobProgress,
@@ -45,50 +50,83 @@ import {
 } from "@/mock/sales-orders"
 import { downloadOriginalContractPdf } from "@/features/contracts/pdf"
 import { SalesOrderPaperDialog } from "@/features/sales-orders/sales-order-paper-dialog"
+import { salesOrderSummaryLabels } from "@/features/sales-orders/filter-orders"
 import {
-  computeSalesOrderMetrics,
-  filterSalesOrders,
-  salesOrderSummaryLabels,
-  type SalesOrderNatureFilter,
-  type SalesOrderOriginFilter,
-  type SalesOrderStatusFilter,
-  type SalesOrderSummaryFilter,
-} from "@/features/sales-orders/filter-orders"
+  fetchSalesOrders,
+  PERMISSION_VERSION,
+  type SalesOrdersListQuery,
+} from "@/features/sales-orders/api"
 import {
   useCreateSalesOrderExportJobMutation,
   useSalesOrdersQuery,
 } from "@/features/sales-orders/queries"
 import type { SalesOrderListItem } from "@/features/sales-orders/types"
-import { PERMISSION_VERSION } from "@/features/sales-orders/api"
+import {
+  buildSalesOrdersSearchParams,
+  parseSalesOrdersSearchParams,
+  type SalesOrdersUrlState,
+} from "@/features/sales-orders/url-state"
 
-type NatureFilter = SalesOrderNatureFilter
-type SummaryFilter = SalesOrderSummaryFilter
-type OriginFilter = SalesOrderOriginFilter
-type StatusFilter = SalesOrderStatusFilter
+const SORT_COLUMN_TO_FIELD: Record<
+  string,
+  NonNullable<SalesOrdersListQuery["sortBy"]>
+> = {
+  document: "documentNumber",
+  contract: "contractNumber",
+  amount: "amountGross",
+  owner: "ownerName",
+  submittedAt: "submittedAt",
+}
 
-const EMPTY_SALES_ORDERS: readonly SalesOrderListItem[] = []
+const EMPTY_METRICS = {
+  total: 0,
+  pending: 0,
+  inProgress: 0,
+  pendingCollection: 0,
+  fulfillmentException: 0,
+  mallCollab: 0,
+}
 
-export function SalesOrdersListPage({
-  initialSearch = "",
-  initialNature = "all",
-}: {
-  initialSearch?: string
-  initialNature?: NatureFilter
-}) {
-  const ordersQuery = useSalesOrdersQuery()
+export function SalesOrdersListPage() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
+  const url = React.useMemo(
+    () => parseSalesOrdersSearchParams(searchParams),
+    [searchParams]
+  )
+
+  const pushUrl = React.useCallback(
+    (patch: Partial<SalesOrdersUrlState>) => {
+      const next = { ...url, ...patch }
+      const qs = buildSalesOrdersSearchParams(next)
+      router.replace(`${pathname}${qs}`, { scroll: false })
+    },
+    [pathname, router, url]
+  )
+
+  const query = React.useMemo<SalesOrdersListQuery>(
+    () => ({
+      page: url.page,
+      pageSize: url.pageSize,
+      search: url.search,
+      nature: url.nature,
+      summary: url.summary,
+      origin: url.origin,
+      status: url.status,
+      sortBy: url.sort ? SORT_COLUMN_TO_FIELD[url.sort] : undefined,
+      sortDir: url.dir,
+    }),
+    [url]
+  )
+
+  const ordersQuery = useSalesOrdersQuery(query)
   const exportMutation = useCreateSalesOrderExportJobMutation()
-  const allOrders = ordersQuery.data?.rows ?? EMPTY_SALES_ORDERS
-  const [search, setSearch] = React.useState(initialSearch)
-  const [natureFilter, setNatureFilter] =
-    React.useState<NatureFilter>(initialNature)
-  const [summaryFilter, setSummaryFilter] =
-    React.useState<SummaryFilter>("all")
-  const [originFilter, setOriginFilter] = React.useState<OriginFilter>("all")
-  const [statusFilter, setStatusFilter] = React.useState<StatusFilter>("all")
-  const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 20,
-  })
+  const items = ordersQuery.data?.items ?? []
+  const total = ordersQuery.data?.total ?? 0
+  const metrics = ordersQuery.data?.metrics ?? EMPTY_METRICS
+
+  const [searchDraft, setSearchDraft] = React.useState(url.search ?? "")
   const [paperId, setPaperId] = React.useState<string | null>(null)
   const [exportJob, setExportJob] = React.useState<{
     jobId: string
@@ -96,56 +134,132 @@ export function SalesOrdersListPage({
     permissionVersion: string
     downloadLabel: string
   } | null>(null)
-
-  const resetPagination = React.useCallback(() => {
-    setPagination((previous) =>
-      previous.pageIndex === 0 ? previous : { ...previous, pageIndex: 0 }
-    )
-  }, [])
-
-  const filtered = React.useMemo(
-    () =>
-      filterSalesOrders(allOrders, {
-        search,
-        natureFilter,
-        summaryFilter,
-        originFilter,
-        statusFilter,
-      }),
-    [
-      allOrders,
-      natureFilter,
-      originFilter,
-      search,
-      statusFilter,
-      summaryFilter,
-    ]
-  )
-
-  const pageRows = React.useMemo(() => {
-    const start = pagination.pageIndex * pagination.pageSize
-    return filtered.slice(start, start + pagination.pageSize)
-  }, [filtered, pagination.pageIndex, pagination.pageSize])
-
-  const paperOrder = React.useMemo(
-    () => allOrders.find((item) => item.id === paperId) ?? null,
-    [allOrders, paperId]
-  )
-
-  const metrics = React.useMemo(
-    () => computeSalesOrderMetrics(allOrders),
-    [allOrders]
-  )
+  const [focusedIndex, setFocusedIndex] = React.useState(0)
+  const rowRefs = React.useRef<Map<string, HTMLElement>>(new Map())
 
   const openPaperPreview = React.useCallback((id: string) => {
     setPaperId(id)
   }, [])
 
-  /** 诚实客户端导出：当前筛选结果 + 权限版本审计标签，非服务端后台全量。 */
+  React.useEffect(() => {
+    setSearchDraft(url.search ?? "")
+  }, [url.search])
+
+  React.useEffect(() => {
+    setFocusedIndex(0)
+  }, [
+    url.nature,
+    url.origin,
+    url.page,
+    url.search,
+    url.status,
+    url.summary,
+    items.length,
+  ])
+
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchDraft.trim() === (url.search ?? "")) return
+      pushUrl({ search: searchDraft.trim() || undefined, page: 1 })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pushUrl 以当前 URL 快照为准
+  }, [searchDraft])
+
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        if (event.key === "/" && target.tagName !== "INPUT") {
+          // allow
+        } else if (event.key !== "Escape") {
+          return
+        }
+      }
+
+      if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault()
+        document
+          .querySelector<HTMLInputElement>('[data-slot="so-list-search"]')
+          ?.focus()
+        return
+      }
+
+      if (items.length === 0) return
+
+      if (event.key === "j" || event.key === "ArrowDown") {
+        event.preventDefault()
+        setFocusedIndex((i) => Math.min(items.length - 1, i + 1))
+      } else if (event.key === "k" || event.key === "ArrowUp") {
+        event.preventDefault()
+        setFocusedIndex((i) => Math.max(0, i - 1))
+      } else if (event.key === "Enter") {
+        event.preventDefault()
+        const row = items[focusedIndex]
+        if (row) openPaperPreview(row.id)
+      } else if (event.key === "Escape" && paperId) {
+        event.preventDefault()
+        const id = paperId
+        setPaperId(null)
+        requestAnimationFrame(() => {
+          rowRefs.current.get(id)?.focus()
+        })
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [focusedIndex, items, openPaperPreview, paperId])
+
+  const pagination = React.useMemo<PaginationState>(
+    () => ({
+      pageIndex: Math.max(0, url.page - 1),
+      pageSize: url.pageSize,
+    }),
+    [url.page, url.pageSize]
+  )
+
+  const handlePaginationChange = React.useCallback(
+    (next: PaginationState) => {
+      pushUrl({ page: next.pageIndex + 1, pageSize: next.pageSize })
+    },
+    [pushUrl]
+  )
+
+  const sorting = React.useMemo<SortingState>(
+    () =>
+      url.sort && SORT_COLUMN_TO_FIELD[url.sort]
+        ? [{ id: url.sort, desc: url.dir === "desc" }]
+        : [],
+    [url.dir, url.sort]
+  )
+
+  const handleSortingChange = React.useCallback(
+    (next: SortingState) => {
+      const head = next[0]
+      pushUrl({
+        sort: head && SORT_COLUMN_TO_FIELD[head.id] ? head.id : undefined,
+        dir: head ? (head.desc ? "desc" : "asc") : undefined,
+        page: 1,
+      })
+    },
+    [pushUrl]
+  )
+
+  const paperOrder = React.useMemo(
+    () => items.find((item) => item.id === paperId) ?? null,
+    [items, paperId]
+  )
+
   const exportCsv = React.useCallback(async () => {
-    const job = await exportMutation.mutateAsync({
-      rowCount: filtered.length,
-    })
+    if (total === 0) return
+    const job = await exportMutation.mutateAsync({ rowCount: total })
+    const all = await fetchSalesOrders({ ...query, page: 1, pageSize: total })
     setExportJob({
       jobId: job.jobId,
       rowCount: job.rowCount,
@@ -154,7 +268,7 @@ export function SalesOrdersListPage({
     })
 
     const quote = (value: string) => `"${value.replaceAll('"', '""')}"`
-    const rows = filtered.map((order) =>
+    const rows = all.items.map((order) =>
       [
         order.documentNumber,
         order.customerName,
@@ -182,7 +296,29 @@ export function SalesOrdersListPage({
     anchor.download = `销售单列表_${job.jobId}.csv`
     anchor.click()
     URL.revokeObjectURL(url)
-  }, [exportMutation, filtered])
+  }, [exportMutation, query, total])
+
+  const advancedActive =
+    url.origin !== "all" || url.status !== "all"
+
+  const filtersActive =
+    Boolean(url.search) ||
+    url.nature !== "all" ||
+    url.summary !== "all" ||
+    url.origin !== "all" ||
+    url.status !== "all"
+
+  const clearFilters = React.useCallback(() => {
+    setSearchDraft("")
+    pushUrl({
+      search: undefined,
+      nature: "all",
+      summary: "all",
+      origin: "all",
+      status: "all",
+      page: 1,
+    })
+  }, [pushUrl])
 
   const columns = React.useMemo<ColumnDef<SalesOrderListItem>[]>(
     () => [
@@ -192,7 +328,21 @@ export function SalesOrdersListPage({
         header: "销售单",
         meta: { label: "销售单", width: "reference" },
         cell: ({ row }) => (
-          <div className="flex min-w-0 items-center gap-2">
+          <div
+            className="flex min-w-0 items-center gap-2"
+            ref={(el) => {
+              if (el) rowRefs.current.set(row.original.id, el)
+              else rowRefs.current.delete(row.original.id)
+            }}
+            tabIndex={
+              items[focusedIndex]?.id === row.original.id ? 0 : -1
+            }
+            data-focused={
+              items[focusedIndex]?.id === row.original.id
+                ? "true"
+                : undefined
+            }
+          >
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <Button
@@ -221,6 +371,7 @@ export function SalesOrdersListPage({
         id: "nature",
         header: "业务性质",
         meta: { label: "业务性质", width: "status" },
+        enableSorting: false,
         cell: ({ row }) => (
           <Badge variant="secondary">
             {NATURE_LABEL[row.original.nature]}
@@ -252,6 +403,7 @@ export function SalesOrdersListPage({
         id: "tracks",
         header: "进度",
         meta: { label: "多轨进度", width: "tracks" },
+        enableSorting: false,
         cell: ({ row }) => (
           <StatusTrackSummary
             variant="inline"
@@ -311,6 +463,7 @@ export function SalesOrdersListPage({
         id: "actions",
         header: "操作",
         meta: { label: "操作", width: "default", align: "end" },
+        enableSorting: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
             <Button
@@ -325,12 +478,8 @@ export function SalesOrdersListPage({
         ),
       },
     ],
-    [openPaperPreview]
+    [focusedIndex, items, openPaperPreview]
   )
-
-  const advancedActive =
-    originFilter !== "all" ||
-    statusFilter !== "all"
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
@@ -377,7 +526,7 @@ export function SalesOrdersListPage({
                 icon: DownloadIcon,
                 variant: "outline",
                 mobileVisibility: "hide",
-                disabled: filtered.length === 0 || exportMutation.isPending,
+                disabled: total === 0 || exportMutation.isPending,
                 onClick: () => {
                   void exportCsv()
                 },
@@ -422,50 +571,45 @@ export function SalesOrdersListPage({
           label="待处理"
           value={metrics.pending}
           detail="确认 / 审批 / 驳回"
-          active={summaryFilter === "pending"}
+          active={url.summary === "pending"}
           onClick={() => {
-            setSummaryFilter("pending")
-            resetPagination()
+            pushUrl({ summary: "pending", page: 1 })
           }}
         />
         <MetricFilterItem
           label="进行中"
           value={metrics.inProgress}
           detail="履约中 / 已生效"
-          active={summaryFilter === "inProgress"}
+          active={url.summary === "inProgress"}
           onClick={() => {
-            setSummaryFilter("inProgress")
-            resetPagination()
+            pushUrl({ summary: "inProgress", page: 1 })
           }}
         />
         <MetricFilterItem
           label="待收款"
           value={metrics.pendingCollection}
           detail="未收 / 部分 / 待复核"
-          active={summaryFilter === "pendingCollection"}
+          active={url.summary === "pendingCollection"}
           onClick={() => {
-            setSummaryFilter("pendingCollection")
-            resetPagination()
+            pushUrl({ summary: "pendingCollection", page: 1 })
           }}
         />
         <MetricFilterItem
           label="履约异常"
           value={metrics.fulfillmentException}
           detail="部分履约等"
-          active={summaryFilter === "fulfillmentException"}
+          active={url.summary === "fulfillmentException"}
           onClick={() => {
-            setSummaryFilter("fulfillmentException")
-            resetPagination()
+            pushUrl({ summary: "fulfillmentException", page: 1 })
           }}
         />
         <MetricFilterItem
           label="商城协同"
           value={metrics.mallCollab}
           detail="商城开单或票款复核"
-          active={summaryFilter === "mallCollab"}
+          active={url.summary === "mallCollab"}
           onClick={() => {
-            setSummaryFilter("mallCollab")
-            resetPagination()
+            pushUrl({ summary: "mallCollab", page: 1 })
           }}
         />
       </MetricStrip>
@@ -473,11 +617,11 @@ export function SalesOrdersListPage({
       <BusinessTableFrame
         title="销售单列表"
         description={
-          summaryFilter === "all" && !advancedActive
+          url.summary === "all" && !advancedActive
             ? "按提交时间查看当前业务范围内的销售单；业务性质与创建来源展示。"
-            : `当前筛选：${salesOrderSummaryLabels(summaryFilter)}${
+            : `当前筛选：${salesOrderSummaryLabels(url.summary)}${
                 advancedActive
-                  ? ` · ${originFilter === "all" ? "全部来源" : ORIGIN_LABEL[originFilter]} · ${statusFilter === "all" ? "全部状态" : statusFilter}`
+                  ? ` · ${url.origin === "all" ? "全部来源" : ORIGIN_LABEL[url.origin]} · ${url.status === "all" ? "全部状态" : url.status}`
                   : ""
               }`
         }
@@ -489,10 +633,18 @@ export function SalesOrdersListPage({
                   <SearchIcon aria-hidden="true" />
                 </InputGroupAddon>
                 <InputGroupInput
-                  value={search}
+                  data-slot="so-list-search"
+                  value={searchDraft}
                   onChange={(event) => {
-                    setSearch(event.target.value)
-                    resetPagination()
+                    setSearchDraft(event.target.value)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      pushUrl({
+                        search: searchDraft.trim() || undefined,
+                        page: 1,
+                      })
+                    }
                   }}
                   placeholder="单号、客户、合同、负责人"
                   aria-label="搜索销售单"
@@ -502,11 +654,12 @@ export function SalesOrdersListPage({
             filters={
               <>
                 <ToggleGroup
-                  value={[natureFilter]}
+                  value={[url.nature]}
                   onValueChange={(values) => {
-                    const next = values[0] as NatureFilter | undefined
-                    setNatureFilter(next ?? "all")
-                    resetPagination()
+                    const next = values[0] as
+                      | SalesOrdersUrlState["nature"]
+                      | undefined
+                    pushUrl({ nature: next ?? "all", page: 1 })
                   }}
                   variant="outline"
                   size="sm"
@@ -540,10 +693,13 @@ export function SalesOrdersListPage({
                     <label className="grid gap-1.5 text-sm">
                       <span>创建来源</span>
                       <OptionCombobox
-                        value={originFilter}
+                        value={url.origin}
                         onValueChange={(v) => {
-                          setOriginFilter((v ?? "all") as OriginFilter)
-                          resetPagination()
+                          pushUrl({
+                            origin:
+                              (v ?? "all") as SalesOrdersUrlState["origin"],
+                            page: 1,
+                          })
                         }}
                         options={[
                           { value: "all", label: "全部来源" },
@@ -558,10 +714,13 @@ export function SalesOrdersListPage({
                     <label className="grid gap-1.5 text-sm">
                       <span>主状态</span>
                       <OptionCombobox
-                        value={statusFilter}
+                        value={url.status}
                         onValueChange={(v) => {
-                          setStatusFilter((v ?? "all") as StatusFilter)
-                          resetPagination()
+                          pushUrl({
+                            status:
+                              (v ?? "all") as SalesOrdersUrlState["status"],
+                            page: 1,
+                          })
                         }}
                         options={[
                           { value: "all", label: "全部状态" },
@@ -586,9 +745,7 @@ export function SalesOrdersListPage({
                       size="sm"
                       disabled={!advancedActive}
                       onClick={() => {
-                        setOriginFilter("all")
-                        setStatusFilter("all")
-                        resetPagination()
+                        pushUrl({ origin: "all", status: "all", page: 1 })
                       }}
                     >
                       清除高级筛选
@@ -598,20 +755,35 @@ export function SalesOrdersListPage({
               </>
             }
             actions={
-              <span className="text-xs text-muted-foreground" aria-live="polite">
-                共 {filtered.length.toLocaleString("zh-CN")} 条
-              </span>
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span aria-live="polite">
+                  共 {total.toLocaleString("zh-CN")} 条
+                </span>
+                {filtersActive ? (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    onClick={clearFilters}
+                  >
+                    清除筛选
+                  </Button>
+                ) : null}
+              </div>
             }
           />
         }
         table={
           <DataTable
-            data={pageRows}
+            data={items}
             columns={columns}
             getRowId={(row) => row.id}
-            rowCount={filtered.length}
+            rowCount={total}
+            sorting={sorting}
+            onSortingChange={handleSortingChange}
             pagination={pagination}
-            onPaginationChange={setPagination}
+            onPaginationChange={handlePaginationChange}
+            loading={ordersQuery.isPending}
             layout="flush"
             density="compact"
             defaultColumnPinning={{ left: ["document"], right: ["actions"] }}
