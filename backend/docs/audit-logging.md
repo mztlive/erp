@@ -11,7 +11,7 @@
 - `AuditLog` 必须在启动事务前完成领域校验。审计插入失败会使同一事务中的业务写入回滚。
 - Repository 只提供 `create_with_session` 等会话方法，不决定哪些操作需要审计。
 
-当前管理写动作覆盖管理员、角色和消费者的创建、更新、删除，
+当前管理写动作覆盖管理员、角色等 ERP 管理对象的创建、更新、删除，
 以及管理员角色更新。审计列表的 JSON 合同保持
 `items + total`，单项字段保持 `actor_id`、`actor_account`、`actor_type`、`action`、
 `resource_type`、`resource_id`、`success`、`message` 与 `created_at` 不变。

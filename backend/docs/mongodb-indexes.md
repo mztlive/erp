@@ -1,6 +1,6 @@
 # MongoDB 索引迁移
 
-Web API 启动时会调用 `database::ensure_indexes`，创建账号、消费者、角色、
+Web API 启动时会调用 `database::ensure_indexes`，创建账号、角色、
 审计日志和 Casbin policy 所需的命名索引。索引创建失败会阻止应用
 启动，避免在没有唯一约束的情况下继续提供写服务。
 
@@ -14,14 +14,6 @@ db.accounts.aggregate([
     { $match: { count: { $gt: 1 } } },
 ])
 db.accounts.aggregate([
-    { $group: { _id: "$account", count: { $sum: 1 } } },
-    { $match: { count: { $gt: 1 } } },
-])
-db.consumers.aggregate([
-    { $group: { _id: "$id", count: { $sum: 1 } } },
-    { $match: { count: { $gt: 1 } } },
-])
-db.consumers.aggregate([
     { $group: { _id: "$account", count: { $sum: 1 } } },
     { $match: { count: { $gt: 1 } } },
 ])
@@ -58,12 +50,10 @@ Casbin 的 `values.0` 与 `values.1` 查询索引分别支撑角色权限和主�
 ```javascript
 db.accounts.dropIndex("uk_accounts_id")
 db.accounts.dropIndex("uk_accounts_account")
-db.consumers.dropIndex("uk_consumers_id")
-db.consumers.dropIndex("uk_consumers_account")
 db.roles.dropIndex("uk_roles_id")
 db.audit_logs.dropIndex("uk_audit_logs_id")
 ```
 
 查询辅助索引可以保留；它们不改变写入合同。若要一并回滚，索引名称以
-`idx_accounts_`、`idx_consumers_`、`idx_roles_`、
+`idx_accounts_`、`idx_roles_`、
 `idx_audit_logs_` 和 `idx_casbin_` 开头。

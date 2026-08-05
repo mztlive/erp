@@ -44,7 +44,7 @@ mod tests {
     #[test]
     fn password_login_payload_should_accept_valid_credentials() {
         let payload = PasswordLoginPayload {
-            account: "consumer01".to_string(),
+            account: "admin01".to_string(),
             password: "password123".to_string(),
         };
 
@@ -54,7 +54,7 @@ mod tests {
     #[test]
     fn password_login_payload_should_reject_short_password() {
         let payload = PasswordLoginPayload {
-            account: "consumer01".to_string(),
+            account: "admin01".to_string(),
             password: "short".to_string(),
         };
 

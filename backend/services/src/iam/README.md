@@ -14,4 +14,4 @@
 - 角色、权限、绑定和判定统一通过共享 `RbacService`。
 - 业务 Service 只编排账号生命周期，并调用 `RbacService` 更新绑定。
 - 权限规则使用 `entities::Permission`，持久化格式为 `resource:action`。
-- 消费者账号能力放在 `services::consumer`，后台管理员账号能力放在 `services::iam::account`。
+- ERP 操作人员账号能力放在 `services::iam::account`。

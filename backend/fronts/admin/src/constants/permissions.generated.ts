@@ -65,42 +65,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
-        name: "会员管理",
-        description: "消费者账号管理",
-        permissions: [
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/consumers",
-                description: "查询消费者列表",
-                permission: {
-                    resource: "consumer",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/consumers",
-                description: "创建消费者",
-                permission: {
-                    resource: "consumer",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "PUT",
-                path: "/admin/consumers/{id}",
-                description: "更新消费者信息",
-                permission: {
-                    resource: "consumer",
-                    action: "update",
-                },
-            },
-        ],
-    },
-    {
         name: "角色管理",
         description: "系统角色和权限配置",
         permissions: [
@@ -152,22 +116,6 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "role",
                     action: "delete",
-                },
-            },
-        ],
-    },
-    {
-        name: "共享数据",
-        description: "共享基础数据查询",
-        permissions: [
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/shared/area-tree",
-                description: "查询省市区树",
-                permission: {
-                    resource: "shared",
-                    action: "area_tree_list",
                 },
             },
         ],

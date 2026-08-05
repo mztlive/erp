@@ -101,7 +101,7 @@ install -m 0640 /secure/path/config.toml \
 - Docker `json-file` 日志限制为 `10m`、保留 `3` 个文件。
 
 本次后台 JWT 增加账号版本校验；从旧版本升级后，已有后台 token 会失效，管理员需要重新
-登录。消费者 token 不受此迁移影响。
+登录。部署后操作人员需要重新登录。
 
 ## 健康检查与回滚
 

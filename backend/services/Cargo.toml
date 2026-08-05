@@ -13,7 +13,6 @@ thiserror = { workspace = true }
 serde = { workspace = true }
 validator = { workspace = true }
 mongodb = { workspace = true }
-calamine = { workspace = true }
 tokio = { workspace = true, features = ["rt", "sync"] }
 tracing = { workspace = true }
 

@@ -22,8 +22,6 @@ pub fn routes(state: AppState) -> Router<AppState> {
 
     Router::new()
         .merge(account_routes(&rbac_service))
-        .merge(consumer_routes(&rbac_service))
-        .merge(area_routes(&rbac_service))
         .merge(role_routes(&rbac_service))
         .merge(audit_log_routes(&rbac_service))
         .route_layer(middleware::from_fn_with_state(state.clone(), authenticate))
@@ -81,41 +79,6 @@ fn account_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
         )
 }
 
-/// 管理后台消费者相关路由。
-///
-/// # 参数
-/// * `rbac_service` - 授权引擎
-///
-/// # 返回值
-/// 返回消费者相关路由集合
-fn consumer_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
-    Router::new()
-        .route(
-            "/consumers",
-            with_permission(
-                get(admin::consumer::list_consumers),
-                rbac_service,
-                admin::consumer::list_consumers_permission_key(),
-            ),
-        )
-        .route(
-            "/consumers",
-            with_permission(
-                post(admin::consumer::create_consumer),
-                rbac_service,
-                admin::consumer::create_consumer_permission_key(),
-            ),
-        )
-        .route(
-            "/consumers/{id}",
-            with_permission(
-                put(admin::consumer::update_consumer),
-                rbac_service,
-                admin::consumer::update_consumer_permission_key(),
-            ),
-        )
-}
-
 /// 管理后台角色相关路由。
 ///
 /// # 参数
@@ -165,24 +128,6 @@ fn role_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
                 admin::role::delete_role_permission_key(),
             ),
         )
-}
-
-/// 管理后台行政区数据路由。
-///
-/// # 参数
-/// * `rbac_service` - 授权引擎
-///
-/// # 返回值
-/// 返回行政区数据路由集合
-fn area_routes(rbac_service: &SharedRbacService) -> Router<AppState> {
-    Router::new().route(
-        "/shared/area-tree",
-        with_permission(
-            get(admin::area::area_tree),
-            rbac_service,
-            admin::area::area_tree_permission_key(),
-        ),
-    )
 }
 
 /// 管理后台审计日志相关路由。

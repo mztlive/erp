@@ -34,16 +34,16 @@ src/
 
 ## 路由与鉴权
 
-- 公开：`/health`、`/login`、`/consumer/login`。
+- 公开：`/health`、`/login`。
 - 当前账号：`/account/*` 使用 `authenticate`。
 - 管理端：`/admin/*` 先认证，再通过 `with_permission` 调用 Casbin RBAC。
-- 上传：`POST /upload` 保持原路径，但只允许后台 JWT；consumer token 会被既有路径边界拒绝。
+- 上传：`POST /upload` 保持原路径，只允许后台 JWT。
   它在读取 Multipart 前执行每主体、全局窗口和并发限制，并设置独立 body limit。
 - 文件读取：公开只读 `GET/HEAD /uploads/{filename}`；不开放目录入口或写方法。
 
-两个登录入口共享 4 KiB 请求体上限和同一个进程内限制：每个“登录域 + TCP peer IP”
-20 次/60 秒、每个“来源 + 规范化账号”组合 5 次/60 秒、全局应急熔断 600 次/60 秒、
-并发 4。账号部分复用 `LoginAccount` 的 trim 语义，无效超长输入会被截断；超限统一
+登录入口使用 4 KiB 请求体上限和进程内限制：每个 TCP peer IP 20 次/60 秒、每个“来源 +
+规范化账号”组合 5 次/60 秒、全局应急熔断 600 次/60 秒、并发 4。账号部分复用
+`LoginAccount` 的 trim 语义，无效超长输入会被截断；超限统一
 返回 `429` 和 `Retry-After`。默认只使用 TCP 对端地址，不信任客户端可伪造的转发头；
 反向代理部署必须通过可信网络拓扑保留真实来源地址，或在可信代理边界显式完成来源地址
 传递。

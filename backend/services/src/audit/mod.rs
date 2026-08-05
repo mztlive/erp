@@ -1,14 +1,11 @@
-use std::{future::Future, pin::Pin};
-
-use database::{repository::AuditLogFilter, DatabaseExt, Transactional};
+use database::{repository::AuditLogFilter, DatabaseExt};
 use entities::{AuditLog, AuditLogData};
 use id_generator::next_id;
-use mongodb::{ClientSession, Database};
+use mongodb::Database;
 use validator::Validate;
 
 use crate::{
     errors::{Error, Result},
-    owned_task::await_owned,
     Page,
 };
 
@@ -100,43 +97,6 @@ impl AuditActor {
     }
 }
 
-/// 在独立所有权任务中执行业务写入，并在同一事务追加审计日志。
-///
-/// 审计日志必须在调用本函数前完成领域校验。HTTP 请求被取消时，所有权任务仍会
-/// 完成事务收尾；最终只能同时提交业务数据与审计日志，或全部回滚。
-///
-/// # 参数
-/// * `db` - MongoDB 数据库
-/// * `audit` - 已验证的审计日志
-/// * `operation` - 使用同一 MongoDB session 的业务写入
-///
-/// # 返回值
-/// 返回业务写入的结果。
-///
-/// # 错误
-/// 当业务写入、审计写入、事务提交或所有权任务失败时返回错误。
-pub(crate) async fn run_audited_transaction<T, F>(db: Database, audit: AuditLog, operation: F) -> Result<T>
-where
-    T: Send + 'static,
-    F: for<'a> FnOnce(&'a mut ClientSession) -> Pin<Box<dyn Future<Output = Result<T>> + Send + 'a>>
-        + Send
-        + 'static,
-{
-    let client = db.client().clone();
-    await_owned("审计事务", async move {
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    let value = operation(session).await?;
-                    db.audit_logs().create_with_session(&audit, session).await?;
-                    Ok(value)
-                })
-            })
-            .await
-    })
-    .await
-}
-
 /// 审计日志服务
 ///
 /// 提供审计日志的写入与查询能力。
@@ -210,15 +170,15 @@ mod tests {
     #[test]
     fn audit_actor_builds_valid_success_resource_log() {
         let log = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin)
-            .resource_log("consumer.create", "consumer", "consumer-1".to_string())
+            .resource_log("customer.create", "customer", "customer-1".to_string())
             .unwrap();
 
         assert_eq!(log.actor_id, "admin-1");
         assert_eq!(log.actor_account, "root");
         assert_eq!(log.actor_type, AccountKind::Admin);
-        assert_eq!(log.action, "consumer.create");
-        assert_eq!(log.resource_type, "consumer");
-        assert_eq!(log.resource_id.as_deref(), Some("consumer-1"));
+        assert_eq!(log.action, "customer.create");
+        assert_eq!(log.resource_type, "customer");
+        assert_eq!(log.resource_id.as_deref(), Some("customer-1"));
         assert!(log.success);
         assert!(log.message.is_none());
     }
@@ -226,7 +186,7 @@ mod tests {
     #[test]
     fn audit_actor_validates_before_transaction() {
         let result = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin)
-            .resource_log("", "consumer", "consumer-1".to_string());
+            .resource_log("", "customer", "customer-1".to_string());
 
         assert!(result.is_err());
     }
@@ -234,7 +194,7 @@ mod tests {
     #[test]
     fn audit_actor_rejects_empty_resource_id() {
         let result = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin)
-            .resource_log("consumer.create", "consumer", "  ".to_string());
+            .resource_log("customer.create", "customer", "  ".to_string());
 
         assert!(result.is_err());
     }

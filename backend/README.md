@@ -3,15 +3,15 @@
 Rust + Next template that ships an Axum-based Web API, Mongo-backed repositories, and an admin frontend. Authentication, RBAC, account management, and file upload are wired end to end.
 
 ## What’s Included
-- **Axum Web API (`apps/web-api`)**: JWT authentication for admins and consumers, Casbin RBAC backed by MongoDB, admin-side account and consumer management, and authenticated image upload with read-only local file serving.
+- **Axum Web API (`apps/web-api`)**: JWT authentication for ERP operators, Casbin RBAC backed by MongoDB, account management, and authenticated image upload with read-only local file serving.
 - **Mongo repositories (`database/`)**: Generic `Repository<T>` with soft-delete, paging, and transaction helpers, plus typed accessors via `DatabaseExt`.
-- **Domain/services (`entities/`, `services/`)**: Domain entities and application services for back-office accounts, consumers, audit logs, and RBAC.
+- **Domain/services (`entities/`, `services/`)**: Domain entities and application services for ERP operator accounts, audit logs, and RBAC.
 - **Shared crates (`crates/`)**: coordination-free UUID generation (`id-generator`), local file storage (`storage`), and proc macros for entities and permissions.
 - **Admin frontend (`fronts/admin`)**: Next.js 15 management console for accounts, roles, audit logs, and the other active admin domains.
 
 ## Project Layout
 - `apps/web-api/` – Axum entrypoint, routes, authentication/rate-limit middleware, Casbin authorization, and handlers (`core/handler/{admin,auth,upload.rs}`).
-- `services/` – Business orchestration grouped by active domains such as accounts, consumers, auditing, and IAM.
+- `services/` – Business orchestration grouped by active domains such as accounts, auditing, and IAM.
 - `entities/` – Active domain entities, value objects, and validation helpers.
 - `database/` – Generic MongoDB repositories, typed `DatabaseExt` accessors, entity-specific queries, indexes, and transaction support.
 - `config/` – Config loader with CLI args and optional Nacos hot-reload.
@@ -23,16 +23,13 @@ Rust + Next template that ships an Axum-based Web API, Mongo-backed repositories
 - **Public**
   - `GET /health`
   - `POST /login` – Back-office login, returns JWT.
-  - `POST /consumer/login` – Consumer login, returns JWT. Both login endpoints share a 4 KiB request-body limit plus in-process limits of 20 attempts per realm + TCP peer IP/minute, 5 attempts per source-account combination/minute, a 600 attempts/minute emergency global fuse, and 4 concurrent requests.
   - `GET|HEAD /uploads/{filename}` – Read a generated upload filename; directory indexes and write methods are disabled.
 - **Admin (JWT + RBAC)**
   - `/admin/admins` – List, create; `/admin/admins/{id}` – update/delete; `/admin/admins/{id}/role` – update role.
   - `/admin/roles` – List/create; `/admin/roles/{id}` – update/delete.
-  - `/admin/consumers` – List/create; `/admin/consumers/{id}` – update.
-  - `/admin/shared/area-tree` – Embedded administrative-area reference data.
   - `/admin/audit-logs` – Paginated management audit records.
 - **Authenticated account**
-  - `GET /account/profile` – Current back-office or consumer profile.
+  - `GET /account/profile` – Current ERP operator profile.
 - **Authenticated back-office upload**
   - `POST /upload` – Keeps the existing Multipart and `{ url }` response contract, but requires a valid back-office JWT. JPEG/PNG/WebP/GIF files are limited to 5 MiB and checked by extension, declared MIME, and file header. Admission is limited to 10 uploads/subject/minute, 100 uploads/minute globally, and 4 concurrent requests per process. A serialized check rejects writes that would leave less than `upload_min_free_bytes` free (512 MiB by default).
 - **Response shape**: All handlers return `ApiResponse { status, errorMessage, data, success }`.
@@ -98,7 +95,7 @@ Rust + Next template that ships an Axum-based Web API, Mongo-backed repositories
 - Tracing writes to stdout/stderr by default so the container runtime can rotate it. Set
   `LOG_TO_FILE=true` only when file retention and rotation are managed externally.
 - Back-office JWTs include the account persistence version. Deploying this contract invalidates
-  older back-office tokens, so administrators must sign in again; consumer tokens are unchanged.
+  older back-office tokens, so operators must sign in again.
 - MongoDB transactions require a replica set or transaction-capable sharded cluster. Startup probes
   the deployment and rejects standalone MongoDB before reporting the API ready.
 - Login and upload rate limits are process-local safeguards, not cluster-wide quotas. Login keys use Axum's TCP peer address; deployments behind a reverse proxy must preserve the real peer through a trusted network topology instead of blindly trusting forwarded headers. The API fails closed at the configured free-space watermark, but the check-and-save lock is also process-local; multiple instances sharing one volume need external quota coordination. The service does not delete old files, so production deployments still need disk monitoring and an upload retention policy. `file_base_url` may point to an external CDN instead of the built-in read-only file service.

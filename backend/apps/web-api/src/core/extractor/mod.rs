@@ -2,7 +2,7 @@ use serde::Deserialize;
 
 pub use entities::AccountKind;
 
-/// 用户ID包装类型, 消费者和管理后台账户共用
+/// ERP 操作人员 ID 包装类型。
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct UserID(pub String);
 

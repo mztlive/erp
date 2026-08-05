@@ -1367,8 +1367,8 @@ mod tests {
 
     #[test]
     fn actor_can_grant_only_a_covered_permission_subset() {
-        let actor = PermissionSet::new([Permission::parse("consumer:*").unwrap()]);
-        let allowed = PermissionSet::new([Permission::parse("consumer:update").unwrap()]);
+        let actor = PermissionSet::new([Permission::parse("customer:*").unwrap()]);
+        let allowed = PermissionSet::new([Permission::parse("customer:update").unwrap()]);
         let elevated = PermissionSet::new([Permission::parse("*:*").unwrap()]);
 
         assert!(ensure_permission_subset(&actor, &allowed).is_ok());
@@ -1380,9 +1380,9 @@ mod tests {
 
     #[test]
     fn actor_can_manage_only_an_equal_or_lower_permission_target() {
-        let actor = PermissionSet::new([Permission::parse("consumer:*").unwrap()]);
-        let equal = PermissionSet::new([Permission::parse("consumer:*").unwrap()]);
-        let lower = PermissionSet::new([Permission::parse("consumer:update").unwrap()]);
+        let actor = PermissionSet::new([Permission::parse("customer:*").unwrap()]);
+        let equal = PermissionSet::new([Permission::parse("customer:*").unwrap()]);
+        let lower = PermissionSet::new([Permission::parse("customer:update").unwrap()]);
         let higher = PermissionSet::new([Permission::parse("*:*").unwrap()]);
 
         assert!(ensure_management_subset(&actor, &equal).is_ok());
@@ -1419,15 +1419,15 @@ mod tests {
     #[test]
     fn permission_pairs_are_deduplicated_and_sorted() {
         let pairs = permission_pairs(vec![
-            Permission::parse("consumer:read").unwrap(),
+            Permission::parse("customer:read").unwrap(),
             Permission::parse("role:write").unwrap(),
-            Permission::parse("consumer:read").unwrap(),
+            Permission::parse("customer:read").unwrap(),
         ]);
 
         assert_eq!(
             pairs,
             vec![
-                ("consumer".to_string(), "read".to_string()),
+                ("customer".to_string(), "read".to_string()),
                 ("role".to_string(), "write".to_string()),
             ]
         );
@@ -1436,16 +1436,16 @@ mod tests {
     #[test]
     fn loaded_policy_permissions_use_the_same_deduplicated_order() {
         let permissions = parse_policy_permissions(vec![
-            vec!["role:a".to_string(), "consumer".to_string(), "read".to_string()],
+            vec!["role:a".to_string(), "customer".to_string(), "read".to_string()],
             vec!["role:a".to_string(), "role".to_string(), "write".to_string()],
-            vec!["role:a".to_string(), "consumer".to_string(), "read".to_string()],
+            vec!["role:a".to_string(), "customer".to_string(), "read".to_string()],
         ])
         .unwrap();
 
         assert_eq!(
             permissions,
             vec![
-                Permission::parse("consumer:read").unwrap(),
+                Permission::parse("customer:read").unwrap(),
                 Permission::parse("role:write").unwrap(),
             ]
         );
@@ -1522,7 +1522,7 @@ mod tests {
         enforcer
             .add_permission_for_user(
                 &role_key("role-parent"),
-                vec!["consumer".to_string(), "delete".to_string()],
+                vec!["customer".to_string(), "delete".to_string()],
             )
             .await
             .unwrap();
@@ -1531,7 +1531,7 @@ mod tests {
 
         assert_eq!(
             permissions.as_slice(),
-            &[Permission::parse("consumer:delete").unwrap()]
+            &[Permission::parse("customer:delete").unwrap()]
         );
     }
 
@@ -1564,7 +1564,7 @@ mod tests {
         enforcer
             .add_permission_for_user(
                 &role_key("role-a"),
-                vec!["consumer".to_string(), "list".to_string()],
+                vec!["customer".to_string(), "list".to_string()],
             )
             .await
             .unwrap();
@@ -1574,7 +1574,7 @@ mod tests {
 
         assert_eq!(
             permissions.get("role-a"),
-            Some(&vec![Permission::parse("consumer:list").unwrap()])
+            Some(&vec![Permission::parse("customer:list").unwrap()])
         );
         assert!(permissions.get("role-b").is_some_and(Vec::is_empty));
     }

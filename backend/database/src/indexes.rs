@@ -7,7 +7,6 @@ use mongodb::{
 use crate::{casbin_adapter::CASBIN_RULES, Result};
 
 const ACCOUNTS: &str = "accounts";
-const CONSUMERS: &str = "consumers";
 const ROLES: &str = "roles";
 const AUDIT_LOGS: &str = "audit_logs";
 
@@ -23,7 +22,6 @@ const AUDIT_LOGS: &str = "audit_logs";
 /// 当已有数据违反唯一约束或 MongoDB 无法创建索引时返回错误。
 pub async fn ensure_indexes(db: &Database) -> Result<()> {
     create_indexes(db, ACCOUNTS, account_indexes()).await?;
-    create_indexes(db, CONSUMERS, consumer_indexes()).await?;
     create_indexes(db, ROLES, role_indexes()).await?;
     create_indexes(db, AUDIT_LOGS, audit_log_indexes()).await?;
     create_indexes(db, CASBIN_RULES, casbin_indexes()).await?;
@@ -46,18 +44,6 @@ fn account_indexes() -> Vec<IndexModel> {
         named_index(
             "idx_accounts_kind_active_created",
             doc! { "kind": 1, "deleted_at": 1, "created_at": -1 },
-        ),
-    ]
-}
-
-/// 返回消费者集合的身份约束和列表查询索引。
-fn consumer_indexes() -> Vec<IndexModel> {
-    vec![
-        unique_index("uk_consumers_id", doc! { "id": 1 }),
-        unique_index("uk_consumers_account", doc! { "account": 1 }),
-        named_index(
-            "idx_consumers_active_created",
-            doc! { "deleted_at": 1, "created_at": -1 },
         ),
     ]
 }

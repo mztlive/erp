@@ -5,12 +5,10 @@
 mod account_core;
 mod audit_log;
 mod base;
-mod consumer;
 mod extensions;
 mod regex_filter;
 mod role;
 
 pub use audit_log::AuditLogFilter;
 pub use base::{PageResult, Pagination, QueryFilter, Repository};
-pub use consumer::ConsumerFilter;
 pub use extensions::DatabaseExt;

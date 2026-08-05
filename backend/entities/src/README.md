@@ -8,7 +8,6 @@
 | 模块 | 当前职责 |
 | --- | --- |
 | `account_core.rs` | `AccountCore`、后台 `AccountKind`/`AccountStatus`、账号资料规范化 |
-| `consumer.rs` | `Consumer` 创建/更新、消费者账号/密码/昵称规则 |
 | `role.rs` | `Role` 展示信息、启停和系统角色删除规则 |
 | `rbac.rs` | `RoleId`、`RoleIdSet`、`Permission` 值对象 |
 | `auth/` | `LoginAccount`、`Secret`、`PasswordVerification` |

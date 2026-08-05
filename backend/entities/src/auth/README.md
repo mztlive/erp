@@ -6,7 +6,7 @@
 ## `LoginAccount`
 
 `LoginAccount::new` 去除账号首尾空白并校验字符数，不改变大小写。`Secret::new`、
-`change_account` 和消费者创建接口都接收这个已规范化类型，避免各调用方重复处理账号。
+`change_account` 和账号创建接口都接收这个已规范化类型，避免各调用方重复处理账号。
 
 ```rust
 use entities::{LoginAccount, Secret};
@@ -50,6 +50,6 @@ assert_eq!(secret.account(), "example_user");
 1. 全局 `Semaphore` 把并发密码工作限制为 4。
 2. 获取许可后把凭证和密码所有权移入 `tokio::task::spawn_blocking`。
 3. 许可随阻塞任务生命周期持有，即使请求 Future 被取消也不会突破并发上限。
-4. 后台账号和消费者认证都复用这条边界。
+4. ERP 操作人员认证复用这条边界。
 
 新增认证入口时应复用 Service 的有界校验能力，不要在 Handler 中直接调用同步密码哈希。

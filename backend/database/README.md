@@ -27,7 +27,7 @@ let account = db.accounts().find_by_id(account_id).await?;
 # Ok::<(), database::Error>(())
 ```
 
-当前访问器覆盖账号、消费者、审计日志和角色。
+当前访问器覆盖账号、审计日志和角色。
 通用 CRUD、分页、乐观锁以及事务内软删除/恢复位于 `Repository`；只有通用能力无法准确
 表达的查询才放在对应的实体仓储模块中。详细约定见
 [`src/repository/README.md`](src/repository/README.md)。

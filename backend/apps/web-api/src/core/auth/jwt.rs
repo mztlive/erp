@@ -35,12 +35,9 @@ pub struct Engine {
 }
 
 /// JWT 主体类型。
-///
-/// 用于区分后台账号和消费者账号。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SubjectKind {
     Backoffice,
-    Consumer,
 }
 
 impl SubjectKind {
@@ -51,7 +48,6 @@ impl SubjectKind {
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::Backoffice => "backoffice",
-            Self::Consumer => "consumer",
         }
     }
 }
@@ -69,7 +65,6 @@ impl TryFrom<&str> for SubjectKind {
     fn try_from(value: &str) -> std::result::Result<Self, Self::Error> {
         match value {
             "backoffice" => Ok(Self::Backoffice),
-            "consumer" => Ok(Self::Consumer),
             _ => Err(()),
         }
     }
@@ -101,23 +96,6 @@ impl TokenPayload {
             subject_kind: SubjectKind::Backoffice,
             account_kind: Some(account_kind),
             account_version: Some(account_version),
-        }
-    }
-
-    /// 创建消费者 JWT 载荷。
-    ///
-    /// # 参数
-    /// * `id` - 用户ID
-    /// * `account` - 账号
-    /// # 返回值
-    /// 返回消费者载荷。
-    pub fn consumer(id: String, account: String) -> Self {
-        Self {
-            id,
-            account,
-            subject_kind: SubjectKind::Consumer,
-            account_kind: None,
-            account_version: None,
         }
     }
 }
@@ -173,7 +151,6 @@ impl TryFrom<BTreeMap<String, Value>> for TokenPayload {
 
         match (subject_kind, account_kind, account_version) {
             (SubjectKind::Backoffice, Some(_), Some(_)) => {}
-            (SubjectKind::Consumer, None, None) => {}
             _ => return Err(Error::InvalidClaims),
         }
 
@@ -300,22 +277,6 @@ mod tests {
         claims.sign_with_key(&engine.key).expect("token should be signed")
     }
 
-    /// 验证消费者载荷会写入消费者主体类型且不包含后台账号类型。
-    ///
-    /// # 返回值
-    /// 不返回数据，仅表示执行结果。
-    #[test]
-    fn consumer_payload_contains_subject_kind_without_account_kind() {
-        let payload = TokenPayload::consumer("consumer_1".to_string(), "demo_consumer".to_string());
-        let payload_map: BTreeMap<String, Value> = payload.into();
-
-        assert_eq!(
-            payload_map.get("subject_kind"),
-            Some(&Value::String("consumer".to_string()))
-        );
-        assert!(!payload_map.contains_key("account_kind"));
-    }
-
     /// 验证后台载荷会写入后台主体类型和账号类型字段。
     ///
     /// # 返回值
@@ -339,25 +300,6 @@ mod tests {
             Some(&Value::String("admin".to_string()))
         );
         assert_eq!(payload_map.get("account_version"), Some(&Value::from(7)));
-    }
-
-    /// 验证缺少主体类型的 consumer 载荷会被严格拒绝。
-    ///
-    /// # 返回值
-    /// 不返回数据，仅表示执行结果。
-    #[test]
-    fn consumer_payload_without_subject_kind_should_be_rejected() {
-        let mut payload_map = BTreeMap::new();
-        payload_map.insert(
-            "id".to_string(),
-            Value::String("consumer_without_kind".to_string()),
-        );
-        payload_map.insert("account".to_string(), Value::String("consumer_user".to_string()));
-        payload_map.insert("account_kind".to_string(), Value::String("consumer".to_string()));
-
-        let result = TokenPayload::try_from(payload_map);
-
-        assert!(result.is_err());
     }
 
     /// 验证后台载荷包含有效账号类型时可被解析。
@@ -407,16 +349,18 @@ mod tests {
     fn created_token_should_be_verified() {
         let engine = Engine::new(TEST_SECRET.to_string()).expect("engine");
         let token = engine
-            .create_token(TokenPayload::consumer(
-                "consumer_1".to_string(),
-                "demo_consumer".to_string(),
+            .create_token(TokenPayload::backoffice(
+                "admin_1".to_string(),
+                "demo_admin".to_string(),
+                AccountKind::Admin,
+                1,
             ))
             .expect("token");
 
         let payload = engine.verify_token(&token).expect("valid token");
 
-        assert_eq!(payload.id, "consumer_1");
-        assert_eq!(payload.subject_kind, SubjectKind::Consumer);
+        assert_eq!(payload.id, "admin_1");
+        assert_eq!(payload.subject_kind, SubjectKind::Backoffice);
     }
 
     /// 验证到达过期时间的 token 会被拒绝。
@@ -426,11 +370,16 @@ mod tests {
         let token = signed_token(
             &engine,
             RegisteredClaims {
-                subject: Some("consumer_1".to_string()),
+                subject: Some("admin_1".to_string()),
                 expiration: Some(100),
                 ..Default::default()
             },
-            TokenPayload::consumer("consumer_1".to_string(), "demo_consumer".to_string()),
+            TokenPayload::backoffice(
+                "admin_1".to_string(),
+                "demo_admin".to_string(),
+                AccountKind::Admin,
+                1,
+            ),
         );
 
         assert!(matches!(
@@ -446,10 +395,15 @@ mod tests {
         let token = signed_token(
             &engine,
             RegisteredClaims {
-                subject: Some("consumer_1".to_string()),
+                subject: Some("admin_1".to_string()),
                 ..Default::default()
             },
-            TokenPayload::consumer("consumer_1".to_string(), "demo_consumer".to_string()),
+            TokenPayload::backoffice(
+                "admin_1".to_string(),
+                "demo_admin".to_string(),
+                AccountKind::Admin,
+                1,
+            ),
         );
 
         assert!(matches!(
@@ -465,12 +419,17 @@ mod tests {
         let token = signed_token(
             &engine,
             RegisteredClaims {
-                subject: Some("consumer_1".to_string()),
+                subject: Some("admin_1".to_string()),
                 expiration: Some(200),
                 not_before: Some(101),
                 ..Default::default()
             },
-            TokenPayload::consumer("consumer_1".to_string(), "demo_consumer".to_string()),
+            TokenPayload::backoffice(
+                "admin_1".to_string(),
+                "demo_admin".to_string(),
+                AccountKind::Admin,
+                1,
+            ),
         );
 
         assert!(matches!(
@@ -486,11 +445,16 @@ mod tests {
         let token = signed_token(
             &engine,
             RegisteredClaims {
-                subject: Some("consumer_2".to_string()),
+                subject: Some("admin_2".to_string()),
                 expiration: Some(200),
                 ..Default::default()
             },
-            TokenPayload::consumer("consumer_1".to_string(), "demo_consumer".to_string()),
+            TokenPayload::backoffice(
+                "admin_1".to_string(),
+                "demo_admin".to_string(),
+                AccountKind::Admin,
+                1,
+            ),
         );
 
         assert!(matches!(

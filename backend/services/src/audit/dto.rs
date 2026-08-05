@@ -96,7 +96,7 @@ mod tests {
         let params = AuditLogListParams {
             actor_account: Some("  admin01 ".into()),
             action: Some("   ".into()),
-            resource_type: Some(" consumer ".into()),
+            resource_type: Some(" customer ".into()),
             success: Some(true),
             page: None,
             page_size: None,
@@ -106,7 +106,7 @@ mod tests {
 
         assert_eq!(normalized.actor_account.as_deref(), Some("admin01"));
         assert_eq!(normalized.action, None);
-        assert_eq!(normalized.resource_type.as_deref(), Some("consumer"));
+        assert_eq!(normalized.resource_type.as_deref(), Some("customer"));
         assert_eq!(normalized.success, Some(true));
         assert_eq!(normalized.page, 1);
         assert_eq!(normalized.page_size, 20);
@@ -119,9 +119,9 @@ mod tests {
             actor_id: "admin-1".to_string(),
             actor_account: "root".to_string(),
             actor_type: AccountKind::Admin,
-            action: "consumer.update".to_string(),
-            resource_type: "consumer".to_string(),
-            resource_id: Some("consumer-1".to_string()),
+            action: "customer.update".to_string(),
+            resource_type: "customer".to_string(),
+            resource_id: Some("customer-1".to_string()),
             success: true,
             message: None,
             created_at: 42,
@@ -134,9 +134,9 @@ mod tests {
                 "actor_id": "admin-1",
                 "actor_account": "root",
                 "actor_type": "admin",
-                "action": "consumer.update",
-                "resource_type": "consumer",
-                "resource_id": "consumer-1",
+                "action": "customer.update",
+                "resource_type": "customer",
+                "resource_id": "customer-1",
                 "success": true,
                 "message": null,
                 "created_at": 42,

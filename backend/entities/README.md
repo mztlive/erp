@@ -6,7 +6,6 @@ Service 负责编排流程，Repository 负责持久化；两层都不应复制�
 ## 当前模型
 
 - `AccountCore`：后台统一账号，包含 `AccountKind`、`AccountStatus` 和登录凭证。
-- `Consumer`：消费者账号及其启用状态、昵称和凭证。
 - `Role`：角色展示信息、系统角色和启用状态。
 - `RoleId`、`RoleIdSet`、`Permission`：RBAC 输入规范化与校验。
 - `LoginAccount`、`Secret`、`PasswordVerification`：认证值对象。

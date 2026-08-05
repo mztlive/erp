@@ -321,25 +321,25 @@ mod tests {
     #[test]
     fn wildcard_permission_should_cover_matching_scope() {
         let root = Permission::parse("*:*").unwrap();
-        let consumer_all = Permission::parse("consumer:*").unwrap();
-        let consumer_read = Permission::parse("consumer:read").unwrap();
+        let customer_all = Permission::parse("customer:*").unwrap();
+        let customer_read = Permission::parse("customer:read").unwrap();
         let role_read = Permission::parse("role:read").unwrap();
 
-        assert!(root.covers(&consumer_read));
-        assert!(consumer_all.covers(&consumer_read));
-        assert!(!consumer_read.covers(&consumer_all));
-        assert!(!consumer_all.covers(&role_read));
+        assert!(root.covers(&customer_read));
+        assert!(customer_all.covers(&customer_read));
+        assert!(!customer_read.covers(&customer_all));
+        assert!(!customer_all.covers(&role_read));
     }
 
     #[test]
     fn permission_set_should_normalize_and_enforce_subset() {
         let actor = PermissionSet::new([
-            Permission::parse("consumer:*").unwrap(),
+            Permission::parse("customer:*").unwrap(),
             Permission::parse("role:read").unwrap(),
-            Permission::parse("consumer:*").unwrap(),
+            Permission::parse("customer:*").unwrap(),
         ]);
         let allowed = PermissionSet::new([
-            Permission::parse("consumer:update").unwrap(),
+            Permission::parse("customer:update").unwrap(),
             Permission::parse("role:read").unwrap(),
         ]);
         let elevated = PermissionSet::new([Permission::parse("role:delete").unwrap()]);

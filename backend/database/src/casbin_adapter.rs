@@ -604,7 +604,7 @@ mod tests {
     fn role_permission_rules_use_role_resource_action_order() {
         let permissions = vec![
             ("role".to_string(), "read".to_string()),
-            ("consumer".to_string(), "create".to_string()),
+            ("customer".to_string(), "create".to_string()),
         ];
 
         let rules = MongoCasbinAdapter::role_permission_rules("role:manager", &permissions);
@@ -613,7 +613,7 @@ mod tests {
         assert_eq!(rules[0].sec, "p");
         assert_eq!(rules[0].ptype, "p");
         assert_eq!(rules[0].values, ["role:manager", "role", "read"]);
-        assert_eq!(rules[1].values, ["role:manager", "consumer", "create"]);
+        assert_eq!(rules[1].values, ["role:manager", "customer", "create"]);
     }
 
     #[test]

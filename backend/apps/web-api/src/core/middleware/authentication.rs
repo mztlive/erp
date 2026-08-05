@@ -10,7 +10,7 @@ use tracing::{error, info, warn};
 use crate::{
     app_state::AppState,
     core::{
-        auth::jwt::{SubjectKind, TokenPayload},
+        auth::jwt::TokenPayload,
         extractor::{Account, UserID},
         response::ApiResponse,
     },
@@ -52,9 +52,6 @@ pub async fn authenticate(State(state): State<AppState>, mut request: Request, n
 
 /// 校验 token 中的后台身份仍与当前账号记录一致且处于可用状态。
 async fn validate_current_identity(state: &AppState, payload: &TokenPayload) -> Result<(), ApiResponse<()>> {
-    if payload.subject_kind == SubjectKind::Consumer {
-        return Ok(());
-    }
     let Some(account_kind) = payload.account_kind else {
         warn!("Authorization failed: missing account kind for backoffice token");
         return Err(ApiResponse::unauthorized());
@@ -99,40 +96,21 @@ fn attach_identity(request: &mut Request, payload: TokenPayload) -> Result<(), A
         account_kind,
         ..
     } = payload;
-    let path = request.uri().path().to_string();
-    let rbac_subject = match subject_kind {
-        SubjectKind::Backoffice => {
-            let Some(account_kind) = account_kind else {
-                warn!("Authorization failed: missing account kind for backoffice token");
-                return Err(ApiResponse::unauthorized());
-            };
-            request
-                .extensions_mut()
-                .insert(AuditActor::new(user_id.clone(), account.clone(), account_kind));
-            request.extensions_mut().insert(account_kind);
-            Some(RbacSubject(iam::subject(account_kind, &user_id)))
-        }
-        SubjectKind::Consumer => {
-            if !is_consumer_path(&path) {
-                warn!(path, "Authorization failed: consumer token cannot access path");
-                return Err(ApiResponse::permission_denied());
-            }
-            None
-        }
+    let Some(account_kind) = account_kind else {
+        warn!("Authorization failed: missing account kind for backoffice token");
+        return Err(ApiResponse::unauthorized());
     };
+    request
+        .extensions_mut()
+        .insert(AuditActor::new(user_id.clone(), account.clone(), account_kind));
+    request.extensions_mut().insert(account_kind);
+    let rbac_subject = RbacSubject(iam::subject(account_kind, &user_id));
     request.extensions_mut().insert(UserID(user_id));
     request.extensions_mut().insert(Account(account));
     request.extensions_mut().insert(subject_kind);
-    if let Some(subject) = rbac_subject {
-        request.extensions_mut().insert(subject);
-    }
+    request.extensions_mut().insert(rbac_subject);
 
     Ok(())
-}
-
-/// 判断请求路径是否位于 consumer 路由段内。
-fn is_consumer_path(path: &str) -> bool {
-    path == "/consumer" || path.starts_with("/consumer/")
 }
 
 #[cfg(test)]
@@ -143,7 +121,7 @@ mod tests {
     use entities::AccountKind;
     use services::audit::AuditActor;
 
-    use super::{attach_identity, bearer_token, is_consumer_path, RbacSubject};
+    use super::{attach_identity, bearer_token, RbacSubject};
     use crate::core::{
         auth::jwt::{SubjectKind, TokenPayload},
         extractor::{Account, UserID},
@@ -233,14 +211,5 @@ mod tests {
 
         headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer token extra"));
         assert_eq!(bearer_token(&headers), None);
-    }
-
-    #[test]
-    fn consumer_path_requires_complete_segment() {
-        assert!(is_consumer_path("/consumer"));
-        assert!(is_consumer_path("/consumer/profile"));
-        assert!(!is_consumer_path("/upload"));
-        assert!(!is_consumer_path("/consumer-admin"));
-        assert!(!is_consumer_path("/admin"));
     }
 }

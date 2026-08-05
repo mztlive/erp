@@ -1,7 +1,6 @@
 mod account_core;
 mod audit_log;
 mod auth;
-mod consumer;
 mod errors;
 mod field_update;
 mod rbac;
@@ -12,7 +11,6 @@ mod validation;
 pub use account_core::*;
 pub use audit_log::*;
 pub use auth::*;
-pub use consumer::*;
 pub use entity_core::{BaseModel, NOT_DELETED_TIMESTAMP};
 pub use errors::{Error, Result};
 pub use field_update::*;

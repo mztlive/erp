@@ -14,12 +14,6 @@ pub trait DatabaseExt {
     /// 返回 `Repository<'_, entities::AccountCore>` 结果。
     fn accounts(&self) -> Repository<'_, entities::AccountCore>;
 
-    /// 获取消费者Repository
-    ///
-    /// # 返回
-    /// 返回 `Repository<'_, entities::Consumer>` 结果。
-    fn consumers(&self) -> Repository<'_, entities::Consumer>;
-
     /// 获取审计日志Repository
     ///
     /// # 返回
@@ -40,14 +34,6 @@ impl DatabaseExt for Database {
     /// 返回 `Repository<'_, entities::AccountCore>` 结果。
     fn accounts(&self) -> Repository<'_, entities::AccountCore> {
         Repository::new(self, "accounts")
-    }
-
-    /// 获取消费者Repository。
-    ///
-    /// # 返回
-    /// 返回 `Repository<'_, entities::Consumer>` 结果。
-    fn consumers(&self) -> Repository<'_, entities::Consumer> {
-        Repository::new(self, "consumers")
     }
 
     /// 获取审计日志Repository。

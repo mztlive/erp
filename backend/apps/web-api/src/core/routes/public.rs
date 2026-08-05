@@ -22,13 +22,12 @@ const MAX_LOGIN_REQUEST_BYTES: usize = 4 * 1024;
 pub fn routes(app_state: AppState) -> Router<AppState> {
     Router::new()
         .route("/login", post(auth::login::login))
-        .route("/consumer/login", post(auth::consumer::login))
         .layer(Extension(login_limiter()))
         .layer(login_body_limit())
         .with_state(app_state)
 }
 
-/// 创建两个公开登录入口共享的进程内限流器。
+/// 创建公开登录入口使用的进程内限流器。
 ///
 /// # 返回值
 /// 返回每个“登录域 + TCP peer IP”20 次/60 秒、每个来源与账号组合 5 次/60 秒、

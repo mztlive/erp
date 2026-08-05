@@ -1,4 +1,3 @@
-pub mod consumer;
 pub mod login;
 pub mod profile;
 
@@ -7,13 +6,12 @@ use std::net::IpAddr;
 
 const MAX_LOGIN_RATE_KEY_CHARS: usize = 64;
 pub(super) const BACKOFFICE_LOGIN_REALM: &str = "backoffice";
-pub(super) const CONSUMER_LOGIN_REALM: &str = "consumer";
 
 /// 将登录域、TCP 来源地址与原始账号组合为两层有界限流 key。
 ///
 /// 合法账号复用领域值对象的 trim 语义；无效输入仍会 trim 并截断，避免
 /// 攻击者用超长字符串无限扩大进程内 key。第一层限制单来源总量，第二层限制
-/// 来源与账号组合；后台与消费者域分别计数。
+/// 来源与账号组合；后台登录按来源和账号分别计数。
 pub(super) fn login_rate_keys(realm: &str, peer_ip: IpAddr, account: &str) -> (String, String) {
     let source_key = format!("{realm}|{peer_ip}");
     let account = normalized_rate_account(account);
@@ -33,7 +31,7 @@ fn normalized_rate_account(account: &str) -> String {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr};
 
-    use super::{login_rate_keys, BACKOFFICE_LOGIN_REALM, CONSUMER_LOGIN_REALM};
+    use super::{login_rate_keys, BACKOFFICE_LOGIN_REALM};
 
     fn peer(last_octet: u8) -> IpAddr {
         IpAddr::V4(Ipv4Addr::new(192, 0, 2, last_octet))
@@ -75,7 +73,6 @@ mod tests {
             first,
             login_rate_keys(BACKOFFICE_LOGIN_REALM, peer(2), "account01")
         );
-        assert_ne!(first, login_rate_keys(CONSUMER_LOGIN_REALM, peer(1), "account01"));
     }
 
     #[test]
