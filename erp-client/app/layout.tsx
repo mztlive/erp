@@ -28,6 +28,7 @@ export default function RootLayout({
         "font-sans",
         notoSans.variable
       )}
+      suppressHydrationWarning
     >
       <body className="min-h-full flex flex-col">
         <QueryProvider>{children}</QueryProvider>
