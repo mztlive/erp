@@ -1,0 +1,600 @@
+//! `supplier_order_action` 与 `supplier_order_action_line`（数据模型 §6.19 供应商动作与动作行）。
+//!
+//! 动作类型与履约状态按字典建模（下单/查询/取消/退款）；动作到履约状态的推进是 P3
+//! 编排，实体只固化动作枚举与动作行恒等。动作行冻结一次取消或退款实际提交给供应商的
+//! 范围，创建后不可修改。
+
+use entity_core::BaseModel;
+use entity_macros::Entity;
+use rust_decimal::Decimal;
+use serde::{Deserialize, Serialize};
+
+use crate::common::time::Instant;
+use crate::errors::{Error, Result};
+use crate::ids::{
+    MallAfterSalesRequestId, MallAfterSalesRequestLineId, SupplierFulfillmentItemId,
+    SupplierFulfillmentOrderId, SupplierOrderActionId, SupplierOrderActionLineId,
+};
+use crate::money::{Amount, Quantity};
+use crate::validation::{normalize_optional_text, normalize_required_text};
+
+/// 幂等键最大长度。
+const IDEMPOTENCY_KEY_MAX_LEN: usize = 128;
+/// 供应商请求号最大长度。
+const EXTERNAL_REQUEST_ID_MAX_LEN: usize = 64;
+/// 脱敏请求/响应摘要最大长度。
+const SUMMARY_MAX_LEN: usize = 2048;
+
+/// 供应商动作类型（数据模型 §6.19：下单、查询、取消、退款）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupplierOrderActionType {
+    /// 下单。
+    Place,
+    /// 查询。
+    Query,
+    /// 取消。
+    Cancel,
+    /// 退款。
+    Refund,
+}
+
+impl SupplierOrderActionType {
+    /// 返回动作类型的中文展示名。
+    ///
+    /// # 返回
+    /// 返回面向用户的中文标签。
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Place => "下单",
+            Self::Query => "查询",
+            Self::Cancel => "取消",
+            Self::Refund => "退款",
+        }
+    }
+
+    /// 返回动作类型的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Place => "PLACE",
+            Self::Query => "QUERY",
+            Self::Cancel => "CANCEL",
+            Self::Refund => "REFUND",
+        }
+    }
+
+    /// 判断动作是否需要关联商城售后申请。
+    ///
+    /// # 返回
+    /// 取消/退款动作返回 `true`，下单/查询返回 `false`。
+    pub fn requires_after_sales_request(self) -> bool {
+        matches!(self, Self::Cancel | Self::Refund)
+    }
+}
+
+/// 供应商动作状态（数据模型 §6.19：待发送、发送中、结果未知、成功、明确失败、待人工）。
+///
+/// 固定枚举（§4.6），不属于数据模型第 7 章的固定状态机；投递重试编排（§7.7）由 P3 承担。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum SupplierOrderActionStatus {
+    /// 待发送。
+    Pending,
+    /// 发送中。
+    Sending,
+    /// 结果未知：网络超时先查询原请求，不直接重复创建。
+    ResultUnknown,
+    /// 成功。
+    Succeeded,
+    /// 明确失败：业务明确拒绝不自动重试。
+    Failed,
+    /// 待人工。
+    Manual,
+}
+
+impl SupplierOrderActionStatus {
+    /// 返回状态的中文展示名。
+    ///
+    /// # 返回
+    /// 返回面向用户的中文标签。
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Pending => "待发送",
+            Self::Sending => "发送中",
+            Self::ResultUnknown => "结果未知",
+            Self::Succeeded => "成功",
+            Self::Failed => "明确失败",
+            Self::Manual => "待人工",
+        }
+    }
+
+    /// 返回状态的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Pending => "PENDING",
+            Self::Sending => "SENDING",
+            Self::ResultUnknown => "RESULT_UNKNOWN",
+            Self::Succeeded => "SUCCEEDED",
+            Self::Failed => "FAILED",
+            Self::Manual => "MANUAL",
+        }
+    }
+}
+
+/// 供应商动作创建数据（不含系统字段）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SupplierOrderActionData {
+    /// 供应商子订单。
+    pub supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
+    /// 动作类型。
+    pub action_type: SupplierOrderActionType,
+    /// 商城售后申请；取消/退款动作必填。
+    pub after_sales_request_id: Option<MallAfterSalesRequestId>,
+    /// 对供应商动作幂等键（唯一；下单键为 ERP 供应商订单号，
+    /// 取消/退款键为"订单号 + 动作类型 + 售后申请 ID"，由 P3 拼装）。
+    pub idempotency_key: String,
+    /// 动作状态。
+    pub status: SupplierOrderActionStatus,
+    /// 供应商请求号。
+    pub external_request_id: Option<String>,
+    /// 脱敏请求摘要。
+    pub request_summary: Option<String>,
+    /// 脱敏响应摘要。
+    pub response_summary: Option<String>,
+    /// 重试次数。
+    pub attempt_count: u32,
+    /// 下次重试时间。
+    pub next_attempt_at: Option<Instant>,
+}
+
+/// 供应商动作更新数据（不含系统字段与关键字段）。
+///
+/// 子订单、动作类型、售后申请与幂等键创建后不可修改；重试计数走 [`SupplierOrderAction::record_attempt`]。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct SupplierOrderActionUpdate {
+    /// 动作状态；`None` 表示不修改。
+    pub status: Option<SupplierOrderActionStatus>,
+    /// 供应商请求号；`None` 表示不修改。
+    pub external_request_id: Option<String>,
+    /// 请求摘要；`None` 表示不修改。
+    pub request_summary: Option<String>,
+    /// 响应摘要；`None` 表示不修改。
+    pub response_summary: Option<String>,
+    /// 重试次数；`None` 表示不修改。
+    pub attempt_count: Option<u32>,
+    /// 下次重试时间；`None` 表示不修改。
+    pub next_attempt_at: Option<Instant>,
+}
+
+/// 供应商动作实体（数据模型 §6.19，正式单据）。
+#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
+pub struct SupplierOrderAction {
+    #[serde(flatten)]
+    pub base: BaseModel,
+    /// 供应商子订单。
+    pub supplier_fulfillment_order_id: SupplierFulfillmentOrderId,
+    /// 动作类型。
+    pub action_type: SupplierOrderActionType,
+    /// 商城售后申请。
+    pub after_sales_request_id: Option<MallAfterSalesRequestId>,
+    /// 对供应商动作幂等键。
+    pub idempotency_key: String,
+    /// 动作状态。
+    pub status: SupplierOrderActionStatus,
+    /// 供应商请求号。
+    pub external_request_id: Option<String>,
+    /// 脱敏请求摘要。
+    pub request_summary: Option<String>,
+    /// 脱敏响应摘要。
+    pub response_summary: Option<String>,
+    /// 重试次数。
+    pub attempt_count: u32,
+    /// 下次重试时间。
+    pub next_attempt_at: Option<Instant>,
+}
+
+impl SupplierOrderAction {
+    /// 创建供应商动作。
+    ///
+    /// 完成幂等键与摘要的校验和规范化，并强制动作类型与售后申请的关联一致性
+    /// （§6.19：取消/退款动作必填商城售后申请，下单/查询动作不得关联）。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键（`entities::ids::SupplierOrderActionId`）
+    /// * `data` - 创建数据
+    ///
+    /// # 返回
+    /// 返回新建的动作实体。
+    ///
+    /// # 错误
+    /// 幂等键为空/超长、摘要超长或动作类型与售后申请不一致时返回错误。
+    pub fn new(id: SupplierOrderActionId, data: SupplierOrderActionData) -> Result<Self> {
+        let idempotency_key = normalize_required_text(
+            data.idempotency_key,
+            "幂等键不能为空",
+            IDEMPOTENCY_KEY_MAX_LEN,
+            "幂等键过长",
+        )?;
+        let external_request_id = normalize_optional_text(
+            data.external_request_id,
+            "供应商请求号",
+            EXTERNAL_REQUEST_ID_MAX_LEN,
+        )?;
+        let request_summary = normalize_optional_text(data.request_summary, "请求摘要", SUMMARY_MAX_LEN)?;
+        let response_summary = normalize_optional_text(data.response_summary, "响应摘要", SUMMARY_MAX_LEN)?;
+        ensure_action_reference(data.action_type, &data.after_sales_request_id)?;
+
+        Ok(Self {
+            base: BaseModel::new(id.to_string()),
+            supplier_fulfillment_order_id: data.supplier_fulfillment_order_id,
+            action_type: data.action_type,
+            after_sales_request_id: data.after_sales_request_id,
+            idempotency_key,
+            status: data.status,
+            external_request_id,
+            request_summary,
+            response_summary,
+            attempt_count: data.attempt_count,
+            next_attempt_at: data.next_attempt_at,
+        })
+    }
+
+    /// 更新供应商动作。
+    ///
+    /// 复用 `new` 的校验规则；子订单、动作类型、售后申请与幂等键不可修改。
+    ///
+    /// # 参数
+    /// * `update` - 更新数据
+    ///
+    /// # 返回
+    /// 更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 请求号或摘要为空/超长时返回错误。
+    pub fn update(&mut self, update: SupplierOrderActionUpdate) -> Result<()> {
+        if let Some(status) = update.status {
+            self.status = status;
+        }
+        if let Some(external_request_id) = update.external_request_id {
+            self.apply_external_request_id(external_request_id)?;
+        }
+        apply_summary(&mut self.request_summary, update.request_summary, "请求摘要")?;
+        apply_summary(&mut self.response_summary, update.response_summary, "响应摘要")?;
+        if let Some(attempt_count) = update.attempt_count {
+            self.attempt_count = attempt_count;
+        }
+        if update.next_attempt_at.is_some() {
+            self.next_attempt_at = update.next_attempt_at;
+        }
+        Ok(())
+    }
+
+    /// 记录一次发送重试。
+    ///
+    /// 重试次数加一（饱和），并设置下次重试时间；自动和人工重试继续使用原幂等键（§6.19）。
+    ///
+    /// # 参数
+    /// * `next_attempt_at` - 下次重试时间；`None` 表示不再自动重试
+    pub fn record_attempt(&mut self, next_attempt_at: Option<Instant>) {
+        self.attempt_count = self.attempt_count.saturating_add(1);
+        self.next_attempt_at = next_attempt_at;
+    }
+
+    /// 应用供应商请求号更新。
+    ///
+    /// # 参数
+    /// * `value` - 新的请求号
+    ///
+    /// # 错误
+    /// 请求号为空或超长时返回错误。
+    fn apply_external_request_id(&mut self, value: String) -> Result<()> {
+        self.external_request_id = Some(normalize_required_text(
+            value,
+            "供应商请求号不能为空",
+            EXTERNAL_REQUEST_ID_MAX_LEN,
+            "供应商请求号过长",
+        )?);
+        Ok(())
+    }
+}
+
+/// 应用摘要更新。
+///
+/// # 参数
+/// * `target` - 目标摘要字段
+/// * `value` - 新的摘要
+/// * `label` - 字段中文名（用于错误信息）
+///
+/// # 错误
+/// 摘要为空或超长时返回错误。
+fn apply_summary(target: &mut Option<String>, value: Option<String>, label: &str) -> Result<()> {
+    let Some(value) = value else {
+        return Ok(());
+    };
+    *target = Some(normalize_required_text(
+        value,
+        &format!("{label}不能为空"),
+        SUMMARY_MAX_LEN,
+        &format!("{label}过长"),
+    )?);
+    Ok(())
+}
+
+/// 校验动作类型与售后申请的关联一致性（§6.19）。
+///
+/// # 参数
+/// * `action_type` - 动作类型
+/// * `after_sales_request_id` - 商城售后申请
+///
+/// # 错误
+/// 取消/退款缺售后申请，或下单/查询带售后申请时返回错误。
+fn ensure_action_reference(
+    action_type: SupplierOrderActionType,
+    after_sales_request_id: &Option<MallAfterSalesRequestId>,
+) -> Result<()> {
+    if action_type.requires_after_sales_request() && after_sales_request_id.is_none() {
+        return Err(Error::from("取消/退款动作必须关联商城售后申请"));
+    }
+    if !action_type.requires_after_sales_request() && after_sales_request_id.is_some() {
+        return Err(Error::from("下单/查询动作不得关联商城售后申请"));
+    }
+    Ok(())
+}
+
+/// 供应商动作行创建数据（不含系统字段）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct SupplierOrderActionLineData {
+    /// 所属动作头。
+    pub supplier_order_action_id: SupplierOrderActionId,
+    /// 动作内行号。
+    pub line_no: u32,
+    /// 原商城售后申请行。
+    pub after_sales_request_line_id: MallAfterSalesRequestLineId,
+    /// 本供应商履约明细。
+    pub supplier_fulfillment_item_id: SupplierFulfillmentItemId,
+    /// 本动作提交数量。
+    pub quantity: Quantity,
+    /// 本动作提交金额。
+    pub amount: Amount,
+}
+
+/// 供应商动作行实体（数据模型 §6.19，冻结一次取消或退款实际提交给该供应商的范围）。
+///
+/// 随动作头同事务创建，创建后不可修改；"不得超过对应申请行尚未提交的净余额"是跨记录
+/// 约束，由 P3 校验（§6.19）。
+#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
+pub struct SupplierOrderActionLine {
+    #[serde(flatten)]
+    pub base: BaseModel,
+    /// 所属动作头。
+    pub supplier_order_action_id: SupplierOrderActionId,
+    /// 动作内行号。
+    pub line_no: u32,
+    /// 原商城售后申请行。
+    pub after_sales_request_line_id: MallAfterSalesRequestLineId,
+    /// 本供应商履约明细。
+    pub supplier_fulfillment_item_id: SupplierFulfillmentItemId,
+    /// 本动作提交数量。
+    pub quantity: Quantity,
+    /// 本动作提交金额。
+    pub amount: Amount,
+}
+
+impl SupplierOrderActionLine {
+    /// 创建供应商动作行。
+    ///
+    /// 校验数量与金额必须大于零（取消/退款实际提交范围必须是正量）。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键（`entities::ids::SupplierOrderActionLineId`）
+    /// * `data` - 创建数据
+    ///
+    /// # 返回
+    /// 返回新建的动作行实体。
+    ///
+    /// # 错误
+    /// 数量或金额小于等于零时返回错误。
+    pub fn new(id: SupplierOrderActionLineId, data: SupplierOrderActionLineData) -> Result<Self> {
+        if data.quantity.to_decimal() <= Decimal::ZERO {
+            return Err(Error::from("动作行数量必须大于零"));
+        }
+        if data.amount.to_decimal() <= Decimal::ZERO {
+            return Err(Error::from("动作行金额必须大于零"));
+        }
+        Ok(Self {
+            base: BaseModel::new(id.to_string()),
+            supplier_order_action_id: data.supplier_order_action_id,
+            line_no: data.line_no,
+            after_sales_request_line_id: data.after_sales_request_line_id,
+            supplier_fulfillment_item_id: data.supplier_fulfillment_item_id,
+            quantity: data.quantity,
+            amount: data.amount,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ids::{
+        MallAfterSalesRequestId, MallAfterSalesRequestLineId, SupplierFulfillmentItemId,
+        SupplierOrderActionId, SupplierOrderActionLineId,
+    };
+    use std::str::FromStr;
+
+    fn sample_data() -> SupplierOrderActionData {
+        SupplierOrderActionData {
+            supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
+            action_type: SupplierOrderActionType::Place,
+            after_sales_request_id: None,
+            idempotency_key: " FO-2026-001 ".to_string(),
+            status: SupplierOrderActionStatus::Pending,
+            external_request_id: None,
+            request_summary: None,
+            response_summary: None,
+            attempt_count: 0,
+            next_attempt_at: None,
+        }
+    }
+
+    fn sample_line_data() -> SupplierOrderActionLineData {
+        SupplierOrderActionLineData {
+            supplier_order_action_id: SupplierOrderActionId::new("action-1"),
+            line_no: 1,
+            after_sales_request_line_id: MallAfterSalesRequestLineId::new("request-line-1"),
+            supplier_fulfillment_item_id: SupplierFulfillmentItemId::new("item-1"),
+            quantity: Quantity::from_str("2.000000").unwrap(),
+            amount: Amount::from_str("19.98").unwrap(),
+        }
+    }
+
+    #[test]
+    fn new_accepts_place_and_query_without_after_sales() {
+        let action = SupplierOrderAction::new(SupplierOrderActionId::new("action-1"), sample_data()).unwrap();
+        assert_eq!(action.idempotency_key, "FO-2026-001");
+        assert!(action.after_sales_request_id.is_none());
+        assert_eq!(action.status, SupplierOrderActionStatus::Pending);
+        assert_eq!(action.attempt_count, 0);
+
+        let query = SupplierOrderActionData {
+            action_type: SupplierOrderActionType::Query,
+            idempotency_key: "query-key-1".to_string(),
+            ..sample_data()
+        };
+        assert!(SupplierOrderAction::new(SupplierOrderActionId::new("action-2"), query).is_ok());
+    }
+
+    #[test]
+    fn new_accepts_cancel_and_refund_with_after_sales() {
+        for action_type in [SupplierOrderActionType::Cancel, SupplierOrderActionType::Refund] {
+            let data = SupplierOrderActionData {
+                action_type,
+                after_sales_request_id: Some(MallAfterSalesRequestId::new("request-1")),
+                idempotency_key: format!("order-1-{}-request-1", action_type.as_str()),
+                ..sample_data()
+            };
+            let action = SupplierOrderAction::new(SupplierOrderActionId::new("action-3"), data).unwrap();
+            assert_eq!(action.action_type, action_type);
+            assert_eq!(
+                action.after_sales_request_id,
+                Some(MallAfterSalesRequestId::new("request-1"))
+            );
+        }
+    }
+
+    #[test]
+    fn new_rejects_inconsistent_after_sales_reference() {
+        let cancel_without_request = SupplierOrderActionData {
+            action_type: SupplierOrderActionType::Cancel,
+            ..sample_data()
+        };
+        assert!(
+            SupplierOrderAction::new(SupplierOrderActionId::new("action-4"), cancel_without_request).is_err()
+        );
+
+        let place_with_request = SupplierOrderActionData {
+            action_type: SupplierOrderActionType::Place,
+            after_sales_request_id: Some(MallAfterSalesRequestId::new("request-1")),
+            ..sample_data()
+        };
+        assert!(
+            SupplierOrderAction::new(SupplierOrderActionId::new("action-5"), place_with_request).is_err()
+        );
+    }
+
+    #[test]
+    fn new_rejects_empty_or_overlong_idempotency_key_and_summaries() {
+        let empty_key = SupplierOrderActionData {
+            idempotency_key: "   ".to_string(),
+            ..sample_data()
+        };
+        assert!(SupplierOrderAction::new(SupplierOrderActionId::new("action-6"), empty_key).is_err());
+
+        let overlong_key = SupplierOrderActionData {
+            idempotency_key: "k".repeat(129),
+            ..sample_data()
+        };
+        assert!(SupplierOrderAction::new(SupplierOrderActionId::new("action-7"), overlong_key).is_err());
+
+        let overlong_summary = SupplierOrderActionData {
+            response_summary: Some("s".repeat(2049)),
+            ..sample_data()
+        };
+        assert!(SupplierOrderAction::new(SupplierOrderActionId::new("action-8"), overlong_summary).is_err());
+    }
+
+    #[test]
+    fn update_applies_mutable_fields_and_record_attempt_counts() {
+        let mut action =
+            SupplierOrderAction::new(SupplierOrderActionId::new("action-1"), sample_data()).unwrap();
+        action
+            .update(SupplierOrderActionUpdate {
+                status: Some(SupplierOrderActionStatus::Succeeded),
+                external_request_id: Some(" REQ-1 ".to_string()),
+                request_summary: Some("summary".to_string()),
+                ..Default::default()
+            })
+            .unwrap();
+        assert_eq!(action.status, SupplierOrderActionStatus::Succeeded);
+        assert_eq!(action.external_request_id.as_deref(), Some("REQ-1"));
+        assert_eq!(action.request_summary.as_deref(), Some("summary"));
+        assert_eq!(action.idempotency_key, "FO-2026-001", "关键字段不可修改");
+
+        action.record_attempt(Some(Instant::from_unix_secs(1_700_000_100)));
+        action.record_attempt(None);
+        assert_eq!(action.attempt_count, 2);
+        assert!(action.next_attempt_at.is_none());
+    }
+
+    #[test]
+    fn update_rejects_blank_external_request_id() {
+        let mut action =
+            SupplierOrderAction::new(SupplierOrderActionId::new("action-1"), sample_data()).unwrap();
+        assert!(action
+            .update(SupplierOrderActionUpdate {
+                external_request_id: Some("   ".to_string()),
+                ..Default::default()
+            })
+            .is_err());
+    }
+
+    #[test]
+    fn line_new_accepts_valid_line() {
+        let line = SupplierOrderActionLine::new(
+            SupplierOrderActionLineId::new("action-line-1"),
+            sample_line_data(),
+        )
+        .unwrap();
+        assert_eq!(line.line_no, 1);
+        assert_eq!(line.quantity, Quantity::from_str("2.000000").unwrap());
+        assert_eq!(line.amount, Amount::from_str("19.98").unwrap());
+    }
+
+    #[test]
+    fn line_new_rejects_non_positive_quantity_or_amount() {
+        let zero_quantity = SupplierOrderActionLineData {
+            quantity: Quantity::from_str("0.000000").unwrap(),
+            ..sample_line_data()
+        };
+        assert!(
+            SupplierOrderActionLine::new(SupplierOrderActionLineId::new("action-line-2"), zero_quantity)
+                .is_err()
+        );
+
+        let negative_amount = SupplierOrderActionLineData {
+            amount: Amount::from_str("-1.00").unwrap(),
+            ..sample_line_data()
+        };
+        assert!(SupplierOrderActionLine::new(
+            SupplierOrderActionLineId::new("action-line-3"),
+            negative_amount
+        )
+        .is_err());
+    }
+}
