@@ -1,0 +1,744 @@
+//! `purchase_order_submission` / `purchase_order_submission_line`（数据模型 §6.6）。
+//!
+//! 提交是不可变采购内容快照：进入待审核后头、行冻结；财务审批、工作任务及
+//! `workflow_action` 必须引用具体提交，不得审批可变采购主表（§6.6）。
+//! 提交没有 `fact_no`/`occurred_at`/`recorded_at` 语义字段，按 §6.6 字典精确建模，
+//! 不套用 `FactBase`。
+
+use entity_core::BaseModel;
+use entity_macros::Entity;
+use serde::{Deserialize, Serialize};
+
+use crate::common::time::{BusinessDate, Instant};
+use crate::errors::{Error, Result};
+use crate::ids::{
+    ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId,
+    SalesOrderSubmissionLineId, SkuId, SkuRevisionId, SupplierAccountId, SupplierCommercialProfileRevisionId,
+};
+use crate::money::{Amount, Quantity, Rate, UnitPrice};
+use crate::purchase_order::line_common::{normalize_and_validate_line, PurchaseLineDataRef};
+use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
+use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+use crate::validation::normalize_required_text;
+
+/// 提交序号最大长度。
+const SUBMISSION_NO_MAX_LEN: usize = 64;
+/// 操作人标识最大长度。
+const ACTOR_MAX_LEN: usize = 128;
+
+/// 提交状态（§6.6：草稿、待审核、已通过、已驳回、因重新提交失效）。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum SubmissionStatus {
+    /// 草稿。
+    Draft,
+    /// 待审核。
+    Pending,
+    /// 已通过。
+    Approved,
+    /// 已驳回。
+    Rejected,
+    /// 因重新提交失效。
+    Superseded,
+}
+
+impl SubmissionStatus {
+    /// 返回状态的中文展示名。
+    ///
+    /// # 返回
+    /// 返回面向用户的中文标签。
+    pub fn label(&self) -> &'static str {
+        match self {
+            Self::Draft => "草稿",
+            Self::Pending => "待审核",
+            Self::Approved => "已通过",
+            Self::Rejected => "已驳回",
+            Self::Superseded => "因重新提交失效",
+        }
+    }
+
+    /// 返回状态的稳定代码。
+    ///
+    /// # 返回
+    /// 返回用于持久化与查询的稳定字符串。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Draft => "DRAFT",
+            Self::Pending => "PENDING",
+            Self::Approved => "APPROVED",
+            Self::Rejected => "REJECTED",
+            Self::Superseded => "SUPERSEDED",
+        }
+    }
+}
+
+/// 采购提交创建数据（不含系统字段）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PurchaseOrderSubmissionData {
+    /// 所属采购单。
+    pub purchase_order_id: PurchaseOrderId,
+    /// 提交序号（聚合内唯一）。
+    pub submission_no: String,
+    /// 供应商（拆单维度）。
+    pub supplier_id: SupplierAccountId,
+    /// 采购类型（拆单维度）。
+    pub purchase_type: PurchaseType,
+    /// 履约责任（拆单维度）。
+    pub fulfillment_responsibility: FulfillmentResponsibility,
+    /// 提交时供应商版本。
+    pub supplier_revision_id: SupplierCommercialProfileRevisionId,
+    /// 提交时供应商快照。
+    pub supplier_snapshot: SupplierSnapshot,
+    /// 付款条件和先款后货门禁快照。
+    pub payment_term_snapshot: PaymentTermSnapshot,
+    /// 含税行汇总。
+    pub gross_amount: Amount,
+    /// 不含税行汇总。
+    pub net_amount: Amount,
+    /// 税额行汇总。
+    pub tax_amount: Amount,
+}
+
+/// 采购提交更新数据（仅草稿可编辑）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, Default)]
+pub struct PurchaseOrderSubmissionUpdate {
+    /// 供应商版本；`None` 表示不修改。
+    pub supplier_revision_id: Option<SupplierCommercialProfileRevisionId>,
+    /// 供应商快照；`None` 表示不修改。
+    pub supplier_snapshot: Option<SupplierSnapshot>,
+    /// 付款条件门禁快照；`None` 表示不修改。
+    pub payment_term_snapshot: Option<PaymentTermSnapshot>,
+}
+
+/// 采购提交实体（不可变提交，数据模型 §6.6）。
+#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
+pub struct PurchaseOrderSubmission {
+    #[serde(flatten)]
+    pub base: BaseModel,
+    /// 所属采购单。
+    pub purchase_order_id: PurchaseOrderId,
+    /// 提交序号。
+    pub submission_no: String,
+    /// 供应商。
+    pub supplier_id: SupplierAccountId,
+    /// 采购类型。
+    pub purchase_type: PurchaseType,
+    /// 履约责任。
+    pub fulfillment_responsibility: FulfillmentResponsibility,
+    /// 提交时供应商版本。
+    pub supplier_revision_id: SupplierCommercialProfileRevisionId,
+    /// 提交时供应商快照。
+    pub supplier_snapshot: SupplierSnapshot,
+    /// 付款条件和先款后货门禁快照。
+    pub payment_term_snapshot: PaymentTermSnapshot,
+    /// 含税行汇总。
+    pub gross_amount: Amount,
+    /// 不含税行汇总。
+    pub net_amount: Amount,
+    /// 税额行汇总。
+    pub tax_amount: Amount,
+    /// 提交状态。
+    pub status: SubmissionStatus,
+    /// 提交审计时间；与 `submitted_by` 成对出现。
+    pub submitted_at: Option<Instant>,
+    /// 提交审计人；与 `submitted_at` 成对出现。
+    pub submitted_by: Option<String>,
+}
+
+impl PurchaseOrderSubmission {
+    /// 创建采购提交。
+    ///
+    /// 完成 `submission_no` 校验与规范化，并强制表头金额守恒
+    /// （`gross = net + tax`，§4.2 铁律 4；行汇总只汇总已舍入的行金额，由 P3 提供）。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键（`entities::ids::PurchaseOrderSubmissionId`）
+    /// * `data` - 创建数据
+    ///
+    /// # 返回
+    /// 返回新建的提交实体（初始状态 `Draft`）。
+    ///
+    /// # 错误
+    /// 提交序号为空/超长，或表头金额三元组不守恒时返回错误。
+    pub fn new(id: PurchaseOrderSubmissionId, data: PurchaseOrderSubmissionData) -> Result<Self> {
+        let submission_no = normalize_required_text(
+            data.submission_no,
+            "提交序号不能为空",
+            SUBMISSION_NO_MAX_LEN,
+            "提交序号过长",
+        )?;
+        ensure_header_triple(
+            data.gross_amount,
+            data.net_amount,
+            data.tax_amount,
+            &submission_no,
+        )?;
+        Ok(Self {
+            base: BaseModel::new(id.to_string()),
+            purchase_order_id: data.purchase_order_id,
+            submission_no,
+            supplier_id: data.supplier_id,
+            purchase_type: data.purchase_type,
+            fulfillment_responsibility: data.fulfillment_responsibility,
+            supplier_revision_id: data.supplier_revision_id,
+            supplier_snapshot: data.supplier_snapshot,
+            payment_term_snapshot: data.payment_term_snapshot,
+            gross_amount: data.gross_amount,
+            net_amount: data.net_amount,
+            tax_amount: data.tax_amount,
+            status: SubmissionStatus::Draft,
+            submitted_at: None,
+            submitted_by: None,
+        })
+    }
+
+    /// 更新提交内容。
+    ///
+    /// 只允许在 `Draft` 状态编辑（§6.6：进入待审核时头、行冻结）；
+    /// `submission_no` 与拆单维度字段创建后不可修改。
+    ///
+    /// # 参数
+    /// * `update` - 更新数据
+    ///
+    /// # 返回
+    /// 更新成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 状态不是草稿时返回错误。
+    pub fn update(&mut self, update: PurchaseOrderSubmissionUpdate) -> Result<()> {
+        self.ensure_draft()?;
+        if let Some(revision_id) = update.supplier_revision_id {
+            self.supplier_revision_id = revision_id;
+        }
+        if let Some(snapshot) = update.supplier_snapshot {
+            self.supplier_snapshot = snapshot;
+        }
+        if let Some(snapshot) = update.payment_term_snapshot {
+            self.payment_term_snapshot = snapshot;
+        }
+        Ok(())
+    }
+
+    /// 提交财务审核。
+    ///
+    /// 从草稿进入待审核并写入提交审计；提交后头行冻结。
+    ///
+    /// # 参数
+    /// * `submitted_at` - 提交时间
+    /// * `submitted_by` - 提交人
+    ///
+    /// # 返回
+    /// 提交成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 状态不是草稿时返回错误。
+    pub fn submit(&mut self, submitted_at: Instant, submitted_by: impl Into<String>) -> Result<()> {
+        self.ensure_draft()?;
+        self.status = SubmissionStatus::Pending;
+        self.submitted_at = Some(submitted_at);
+        self.submitted_by = Some(normalize_required_text(
+            submitted_by.into(),
+            "提交人不能为空",
+            ACTOR_MAX_LEN,
+            "提交人标识过长",
+        )?);
+        Ok(())
+    }
+
+    /// 记录财务审核结论。
+    ///
+    /// 只能对待审核提交执行；通过 → `Approved`，驳回 → `Rejected`。
+    ///
+    /// # 参数
+    /// * `approved` - 是否审核通过
+    ///
+    /// # 返回
+    /// 记录成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 状态不是待审核时返回错误。
+    pub fn mark_reviewed(&mut self, approved: bool) -> Result<()> {
+        if self.status != SubmissionStatus::Pending {
+            return Err(Error::from("只有待审核的提交才能记录审核结论"));
+        }
+        self.status = if approved {
+            SubmissionStatus::Approved
+        } else {
+            SubmissionStatus::Rejected
+        };
+        Ok(())
+    }
+
+    /// 标记因重新提交失效（§6.6：修改内容必须新建提交并使旧复核失效）。
+    ///
+    /// # 返回
+    /// 标记成功返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 提交已通过并已形成正式事实时不允许失效，返回错误（由 P3 校验下游事实）。
+    pub fn mark_superseded(&mut self) -> Result<()> {
+        if self.status == SubmissionStatus::Approved {
+            return Err(Error::from("已通过的提交不得标记失效"));
+        }
+        self.status = SubmissionStatus::Superseded;
+        Ok(())
+    }
+
+    /// 校验当前状态为草稿。
+    ///
+    /// # 返回
+    /// 草稿状态返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 非草稿状态时返回错误。
+    fn ensure_draft(&self) -> Result<()> {
+        if self.status != SubmissionStatus::Draft {
+            return Err(Error::from("只有草稿状态的提交可以编辑"));
+        }
+        Ok(())
+    }
+}
+
+/// 采购提交行创建数据（不含系统字段）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct PurchaseOrderSubmissionLineData {
+    /// 所属提交。
+    pub purchase_order_submission_id: PurchaseOrderSubmissionId,
+    /// 行号（从 1 递增）。
+    pub line_no: u32,
+    /// 行类型。
+    pub line_type: PurchaseLineType,
+    /// 商品/服务行对应的采购二次确认分行；物流费用行为空。
+    pub procurement_confirmation_line_id: Option<ProcurementConfirmationLineId>,
+    /// 商品行引用的 SKU；物流费用行为空。
+    pub sku_id: Option<SkuId>,
+    /// 商品行引用的 SKU 版本；物流费用行为空。
+    pub sku_revision_id: Option<SkuRevisionId>,
+    /// 商品名称快照；物流费用行为空。
+    pub product_name_snapshot: Option<String>,
+    /// 规格快照；物流费用行为空。
+    pub specification_snapshot: Option<String>,
+    /// 基础单位数量；物流费用行为空。
+    pub quantity: Option<Quantity>,
+    /// 单位代码；物流费用行为空。
+    pub base_unit_code: Option<String>,
+    /// 含税采购单价；物流费用行为空。
+    pub unit_cost_gross: Option<UnitPrice>,
+    /// 含税行金额。
+    pub gross_amount: Amount,
+    /// 不含税行金额。
+    pub net_amount: Amount,
+    /// 税额。
+    pub tax_amount: Amount,
+    /// 进项税率。
+    pub input_tax_rate: Option<Rate>,
+    /// 预计交期。
+    pub expected_delivery_date: Option<BusinessDate>,
+    /// 商品行对应的销售提交行。
+    pub sales_order_submission_line_id: Option<SalesOrderSubmissionLineId>,
+    /// 商品行对应的分配数量。
+    pub allocated_quantity: Option<Quantity>,
+}
+
+impl PurchaseLineDataRef for PurchaseOrderSubmissionLineData {
+    fn line_type(&self) -> PurchaseLineType {
+        self.line_type
+    }
+
+    fn procurement_confirmation_line_id(&self) -> &Option<ProcurementConfirmationLineId> {
+        &self.procurement_confirmation_line_id
+    }
+
+    fn sku_id(&self) -> &Option<SkuId> {
+        &self.sku_id
+    }
+
+    fn product_name_snapshot(&self) -> &Option<String> {
+        &self.product_name_snapshot
+    }
+
+    fn specification_snapshot(&self) -> &Option<String> {
+        &self.specification_snapshot
+    }
+
+    fn quantity(&self) -> Option<Quantity> {
+        self.quantity
+    }
+
+    fn base_unit_code(&self) -> &Option<String> {
+        &self.base_unit_code
+    }
+
+    fn unit_cost_gross(&self) -> Option<UnitPrice> {
+        self.unit_cost_gross
+    }
+
+    fn gross_amount(&self) -> Amount {
+        self.gross_amount
+    }
+
+    fn net_amount(&self) -> Amount {
+        self.net_amount
+    }
+
+    fn tax_amount(&self) -> Amount {
+        self.tax_amount
+    }
+
+    fn input_tax_rate(&self) -> Option<Rate> {
+        self.input_tax_rate
+    }
+
+    fn ensure_allocation(&self) -> Result<()> {
+        match self.line_type {
+            PurchaseLineType::ItemService => {
+                if self.sales_order_submission_line_id.is_none() {
+                    return Err(Error::from("商品/服务行必须引用销售提交行"));
+                }
+                let quantity = self.allocated_quantity.ok_or("商品/服务行必须填写分配数量")?;
+                if quantity.to_decimal() <= rust_decimal::Decimal::ZERO {
+                    return Err(Error::from("商品/服务行分配数量必须为正"));
+                }
+            }
+            PurchaseLineType::LogisticsFee => {
+                if self.sales_order_submission_line_id.is_some() || self.allocated_quantity.is_some() {
+                    return Err(Error::from("物流费用行不得携带销售分配"));
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// 采购提交行实体（数据模型 §6.6）。
+#[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
+pub struct PurchaseOrderSubmissionLine {
+    #[serde(flatten)]
+    pub base: BaseModel,
+    /// 所属提交。
+    pub purchase_order_submission_id: PurchaseOrderSubmissionId,
+    /// 行号。
+    pub line_no: u32,
+    /// 行类型。
+    pub line_type: PurchaseLineType,
+    /// 商品/服务行对应的采购二次确认分行。
+    pub procurement_confirmation_line_id: Option<ProcurementConfirmationLineId>,
+    /// 商品行引用的 SKU。
+    pub sku_id: Option<SkuId>,
+    /// 商品行引用的 SKU 版本。
+    pub sku_revision_id: Option<SkuRevisionId>,
+    /// 商品名称快照。
+    pub product_name_snapshot: Option<String>,
+    /// 规格快照。
+    pub specification_snapshot: Option<String>,
+    /// 基础单位数量。
+    pub quantity: Option<Quantity>,
+    /// 单位代码。
+    pub base_unit_code: Option<String>,
+    /// 含税采购单价。
+    pub unit_cost_gross: Option<UnitPrice>,
+    /// 含税行金额。
+    pub gross_amount: Amount,
+    /// 不含税行金额。
+    pub net_amount: Amount,
+    /// 税额。
+    pub tax_amount: Amount,
+    /// 进项税率。
+    pub input_tax_rate: Option<Rate>,
+    /// 预计交期。
+    pub expected_delivery_date: Option<BusinessDate>,
+    /// 商品行对应的销售提交行。
+    pub sales_order_submission_line_id: Option<SalesOrderSubmissionLineId>,
+    /// 商品行对应的分配数量。
+    pub allocated_quantity: Option<Quantity>,
+}
+
+impl PurchaseOrderSubmissionLine {
+    /// 创建采购提交行。
+    ///
+    /// 完成快照文本的规范化，并按行类型强制字段归属与金额三元组守恒（§6.6）；
+    /// 商品行必须携带销售提交行引用与分配数量。
+    ///
+    /// # 参数
+    /// * `id` - 实体主键（`entities::ids::PurchaseOrderSubmissionLineId`）
+    /// * `data` - 创建数据
+    ///
+    /// # 返回
+    /// 返回新建的提交行实体。
+    ///
+    /// # 错误
+    /// 行号为零、字段归属与行类型不符、快照超长、数量/单价/税率越界或
+    /// 金额三元组不守恒时返回错误。
+    pub fn new(id: PurchaseOrderSubmissionLineId, data: PurchaseOrderSubmissionLineData) -> Result<Self> {
+        ensure_line_no(data.line_no)?;
+        let (product_name, specification, base_unit_code) = normalize_and_validate_line(&data)?;
+        Ok(Self {
+            base: BaseModel::new(id.to_string()),
+            purchase_order_submission_id: data.purchase_order_submission_id,
+            line_no: data.line_no,
+            line_type: data.line_type,
+            procurement_confirmation_line_id: data.procurement_confirmation_line_id,
+            sku_id: data.sku_id.clone(),
+            sku_revision_id: data.sku_revision_id,
+            product_name_snapshot: product_name,
+            specification_snapshot: specification,
+            quantity: data.quantity,
+            base_unit_code,
+            unit_cost_gross: data.unit_cost_gross,
+            gross_amount: data.gross_amount,
+            net_amount: data.net_amount,
+            tax_amount: data.tax_amount,
+            input_tax_rate: data.input_tax_rate,
+            expected_delivery_date: data.expected_delivery_date,
+            sales_order_submission_line_id: data.sales_order_submission_line_id,
+            allocated_quantity: data.allocated_quantity,
+        })
+    }
+}
+
+/// 校验行号从 1 开始。
+///
+/// # 参数
+/// * `line_no` - 行号
+///
+/// # 错误
+/// 行号为零时返回错误。
+fn ensure_line_no(line_no: u32) -> Result<()> {
+    if line_no == 0 {
+        return Err(Error::from("行号必须从 1 开始"));
+    }
+    Ok(())
+}
+
+/// 校验表头金额三元组守恒。
+///
+/// # 参数
+/// * `gross_amount` / `net_amount` / `tax_amount` - 表头汇总
+/// * `context` - 错误提示中的上下文（如提交序号）
+///
+/// # 错误
+/// `gross ≠ net + tax` 或任一分量为负时返回错误。
+fn ensure_header_triple(
+    gross_amount: Amount,
+    net_amount: Amount,
+    tax_amount: Amount,
+    context: &str,
+) -> Result<()> {
+    if gross_amount.to_decimal() != net_amount.to_decimal() + tax_amount.to_decimal()
+        || gross_amount.to_decimal() < rust_decimal::Decimal::ZERO
+        || net_amount.to_decimal() < rust_decimal::Decimal::ZERO
+        || tax_amount.to_decimal() < rust_decimal::Decimal::ZERO
+    {
+        return Err(Error::from(format!("提交表头金额三元组不守恒（{context}）")));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        PurchaseOrderSubmission, PurchaseOrderSubmissionData, PurchaseOrderSubmissionLine,
+        PurchaseOrderSubmissionLineData, PurchaseOrderSubmissionUpdate, SubmissionStatus,
+    };
+    use crate::common::time::{BusinessDate, Instant};
+    use crate::ids::{
+        ProcurementConfirmationLineId, PurchaseOrderId, PurchaseOrderSubmissionId,
+        PurchaseOrderSubmissionLineId, SalesOrderSubmissionLineId, SkuId, SupplierAccountId,
+        SupplierCommercialProfileRevisionId,
+    };
+    use crate::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
+    use crate::purchase_order::snapshot::{PaymentTermSnapshot, SupplierSnapshot};
+    use crate::purchase_order::types::{FulfillmentResponsibility, PurchaseLineType, PurchaseType};
+    use std::str::FromStr;
+
+    fn snapshot() -> SupplierSnapshot {
+        SupplierSnapshot::new("北京华联供应商".to_string()).unwrap()
+    }
+
+    fn payment_term() -> PaymentTermSnapshot {
+        PaymentTermSnapshot::new("NET-30".to_string(), false, None, None).unwrap()
+    }
+
+    fn submission_data() -> PurchaseOrderSubmissionData {
+        PurchaseOrderSubmissionData {
+            purchase_order_id: PurchaseOrderId::new("po-1"),
+            submission_no: " SUB-01 ".to_string(),
+            supplier_id: SupplierAccountId::new("sup-1"),
+            purchase_type: PurchaseType::Physical,
+            fulfillment_responsibility: FulfillmentResponsibility::Warehouse,
+            supplier_revision_id: SupplierCommercialProfileRevisionId::new("spr-1"),
+            supplier_snapshot: snapshot(),
+            payment_term_snapshot: payment_term(),
+            gross_amount: Amount::from_str("29.97").unwrap(),
+            net_amount: Amount::from_str("26.07").unwrap(),
+            tax_amount: Amount::from_str("3.90").unwrap(),
+        }
+    }
+
+    fn goods_line_data() -> PurchaseOrderSubmissionLineData {
+        let (gross, net, tax) = line_amounts(
+            UnitPrice::from_str("9.9900").unwrap(),
+            Quantity::from_str("3.000000").unwrap(),
+            Rate::from_str("0.130000").unwrap(),
+        );
+        PurchaseOrderSubmissionLineData {
+            purchase_order_submission_id: PurchaseOrderSubmissionId::new("sub-1"),
+            line_no: 1,
+            line_type: PurchaseLineType::ItemService,
+            procurement_confirmation_line_id: Some(ProcurementConfirmationLineId::new("pcl-1")),
+            sku_id: Some(SkuId::new("sku-1")),
+            sku_revision_id: Some(crate::ids::SkuRevisionId::new("skur-1")),
+            product_name_snapshot: Some(" 慰问礼包 ".to_string()),
+            specification_snapshot: Some(" 500g×2 ".to_string()),
+            quantity: Some(Quantity::from_str("3.000000").unwrap()),
+            base_unit_code: Some(" 箱 ".to_string()),
+            unit_cost_gross: Some(UnitPrice::from_str("9.9900").unwrap()),
+            gross_amount: gross,
+            net_amount: net,
+            tax_amount: tax,
+            input_tax_rate: Some(Rate::from_str("0.130000").unwrap()),
+            expected_delivery_date: Some(BusinessDate::from_ymd(2026, 8, 6).unwrap()),
+            sales_order_submission_line_id: Some(SalesOrderSubmissionLineId::new("ssl-1")),
+            allocated_quantity: Some(Quantity::from_str("3.000000").unwrap()),
+        }
+    }
+
+    #[test]
+    fn submission_new_trims_and_validates_header_triple() {
+        let submission =
+            PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("sub-1"), submission_data()).unwrap();
+        assert_eq!(submission.submission_no, "SUB-01");
+        assert_eq!(submission.status, SubmissionStatus::Draft);
+        assert!(submission.submitted_at.is_none());
+
+        let inconsistent = PurchaseOrderSubmissionData {
+            gross_amount: Amount::from_str("29.98").unwrap(),
+            ..submission_data()
+        };
+        assert!(PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("sub-2"), inconsistent).is_err());
+    }
+
+    #[test]
+    fn submission_submit_review_and_supersede_lifecycle() {
+        let mut submission =
+            PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("sub-1"), submission_data()).unwrap();
+        submission
+            .submit(Instant::from_unix_secs(1_700_000_000), " buyer-1 ")
+            .unwrap();
+        assert_eq!(submission.status, SubmissionStatus::Pending);
+        assert_eq!(submission.submitted_by.as_deref(), Some("buyer-1"));
+
+        assert!(
+            submission
+                .update(PurchaseOrderSubmissionUpdate::default())
+                .is_err(),
+            "待审核提交冻结"
+        );
+
+        submission.mark_reviewed(true).unwrap();
+        assert_eq!(submission.status, SubmissionStatus::Approved);
+        assert!(submission.mark_superseded().is_err(), "已通过提交不得失效");
+
+        let mut rejected =
+            PurchaseOrderSubmission::new(PurchaseOrderSubmissionId::new("sub-2"), submission_data()).unwrap();
+        rejected
+            .submit(Instant::from_unix_secs(1_700_000_000), "buyer-1")
+            .unwrap();
+        rejected.mark_reviewed(false).unwrap();
+        assert_eq!(rejected.status, SubmissionStatus::Rejected);
+        rejected.mark_superseded().unwrap();
+        assert_eq!(rejected.status, SubmissionStatus::Superseded);
+    }
+
+    #[test]
+    fn submission_line_goods_happy_path() {
+        let line =
+            PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("sl-1"), goods_line_data())
+                .unwrap();
+        assert_eq!(line.product_name_snapshot.as_deref(), Some("慰问礼包"));
+        assert_eq!(line.base_unit_code.as_deref(), Some("箱"));
+        assert_eq!(line.line_type, PurchaseLineType::ItemService);
+    }
+
+    #[test]
+    fn submission_line_logistics_fee_amounts_consistent() {
+        let gross = Amount::from_str("50.00").unwrap();
+        let tax = Amount::from_str("6.50").unwrap();
+        let net = Amount::from_str("43.50").unwrap();
+        let data = PurchaseOrderSubmissionLineData {
+            line_type: PurchaseLineType::LogisticsFee,
+            procurement_confirmation_line_id: None,
+            sku_id: None,
+            sku_revision_id: None,
+            product_name_snapshot: None,
+            specification_snapshot: None,
+            quantity: None,
+            base_unit_code: None,
+            unit_cost_gross: None,
+            gross_amount: gross,
+            net_amount: net,
+            tax_amount: tax,
+            input_tax_rate: Some(Rate::from_str("0.130000").unwrap()),
+            expected_delivery_date: None,
+            sales_order_submission_line_id: None,
+            allocated_quantity: None,
+            ..goods_line_data()
+        };
+        let line =
+            PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("sl-2"), data).unwrap();
+        assert_eq!(line.quantity, None);
+        assert_eq!(line.gross_amount, gross);
+    }
+
+    #[test]
+    fn submission_line_rejects_failures() {
+        // 商品行缺少销售提交行
+        let no_allocation = PurchaseOrderSubmissionLineData {
+            sales_order_submission_line_id: None,
+            ..goods_line_data()
+        };
+        assert!(
+            PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("sl-3"), no_allocation,)
+                .is_err()
+        );
+
+        // 物流费用行携带 SKU
+        let fee_with_sku = PurchaseOrderSubmissionLineData {
+            line_type: PurchaseLineType::LogisticsFee,
+            sku_id: Some(SkuId::new("sku-1")),
+            ..goods_line_data()
+        };
+        assert!(
+            PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("sl-4"), fee_with_sku)
+                .is_err()
+        );
+
+        // 商品行金额三元组不守恒
+        let bad_amounts = PurchaseOrderSubmissionLineData {
+            gross_amount: Amount::from_str("30.00").unwrap(),
+            ..goods_line_data()
+        };
+        assert!(
+            PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("sl-5"), bad_amounts)
+                .is_err()
+        );
+
+        // 行号为零
+        let zero_line = PurchaseOrderSubmissionLineData {
+            line_no: 0,
+            ..goods_line_data()
+        };
+        assert!(
+            PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("sl-6"), zero_line).is_err()
+        );
+
+        // 超长规格快照
+        let overlong = PurchaseOrderSubmissionLineData {
+            specification_snapshot: Some("s".repeat(513)),
+            ..goods_line_data()
+        };
+        assert!(
+            PurchaseOrderSubmissionLine::new(PurchaseOrderSubmissionLineId::new("sl-7"), overlong).is_err()
+        );
+    }
+}
