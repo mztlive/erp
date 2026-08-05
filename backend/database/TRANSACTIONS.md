@@ -1,8 +1,9 @@
 # MongoDB 事务
 
-跨实体或跨集合的业务事务边界由 Service 控制。Repository 只提供接收
-`&mut ClientSession` 的 `*_with_session` 方法，不自行启动、提交或回滚事务。
-`MongoCasbinAdapter` 的业务写接口只接收调用方 session。涉及 policy 的事务由
+跨实体或跨集合的业务事务边界由 Service 控制。Repository 的每个方法都接收
+`executor: &mut dyn Executor`，由 Service 决定传入事务会话还是 `NoTransaction`；
+Repository 不自行启动、提交或回滚事务。`MongoCasbinAdapter` 的业务写接口同样只接收
+调用方执行器。涉及 policy 的事务由
 `RbacService` 的授权或系统 policy 事务运行器统一持有并提交，确保请求取消后仍能完成提交
 结果处理和本地 Enforcer 刷新。该事务还会递增 `casbin_policy_state` 单例文档中的全局 revision；
 所有实例写入同一文档，跨实例并发 policy 事务因此产生可见冲突，而不是同时提交错误快照。
@@ -27,14 +28,8 @@ let transaction_db = db.clone();
 db.client()
     .with_transaction(move |session| {
         Box::pin(async move {
-            transaction_db
-                .accounts()
-                .create_with_session(&account, session)
-                .await?;
-            transaction_db
-                .audit_logs()
-                .create_with_session(&audit_log, session)
-                .await?;
+            transaction_db.accounts().create(&account, session).await?;
+            transaction_db.audit_logs().create(&audit_log, session).await?;
 
             Ok::<(), database::Error>(())
         })
@@ -46,23 +41,33 @@ db.client()
 警告，不覆盖原始错误。`with_transaction` 接受调用方错误类型，只要求该类型实现
 `From<database::Error>`。
 
-## Repository session 方法
+## Repository 执行器
 
-通用仓储提供事务内创建、查询和写入能力：
+`database::Executor` 只回答一个问题：本次操作使用哪个 MongoDB 会话。
 
-- `create_with_session`
-- `find_one_with_session`、`find_many_with_session`
-- `update_with_session`
-- `soft_delete_with_session`
-- `restore_with_session`
+```rust
+pub trait Executor: Send {
+    fn session(&mut self) -> Option<&mut ClientSession>;
+}
+```
 
-部分实体专用查询也提供 `_with_session` 版本，例如事务快照内查找已删除实体或校验可分配
-角色。只有实际事务用例需要的方法才应增加 session 版本。
+已有实现：
+
+- `NoTransaction`：返回 `None`，按自动提交语义执行。
+- `ClientSession`：返回自身，因此 `with_transaction` 闭包参数可以直接传给 Repository。
+- `&mut E`：透传内层执行器，支持在方法之间逐层重借用。
+
+同一个仓储方法既可用于事务内也可用于事务外，不再需要成对的 `_with_session` 方法。
+驱动层“带会话 / 不带会话”两套调用形态（包括 `find` 返回 `SessionCursor` 的差异）
+收敛在 `database::mongo_ops`。
+
+先删后写、读后写等多步骤方法（如 `replace_subject_roles`、`replace_role_permissions`、
+`remove_role`、`ensure_roles_assignable`）本身不构成原子边界，必须收到事务执行器；
+方法注释中已注明该约束。
 
 ## 乐观锁与软删除
 
-`update_with_session`、`soft_delete_with_session` 和 `restore_with_session` 共享相同的
-比较并交换规则；其中软删除和恢复只提供事务版本，避免绕过 Service 边界：
+`update`、`soft_delete` 和 `restore` 共享相同的比较并交换规则：
 
 - 更新和软删除只匹配未删除实体的当前 `id + version`。
 - 恢复只匹配已删除实体的当前 `id + version`。
@@ -72,7 +77,7 @@ db.client()
 因此，事务不能替代实体级并发控制；调用方仍需把冲突作为可见失败处理。
 
 角色引用使用相同协议：分配角色与仅更新角色权限时，事务内重读角色并通过
-`update_with_session` 递增版本；角色删除也通过同一 `id + version` CAS 写入。多实例并发
+`update` 递增版本；角色删除也通过同一 `id + version` CAS 写入。多实例并发
 绑定、权限更新或删除同一角色时，MongoDB 因文档写冲突中止其中一个事务，避免遗留指向
 已删除角色的 `g`/`p` 规则。角色版本与更新时间因此也表示最近一次引用或权限变更。
 
@@ -84,7 +89,7 @@ revision 与本地 Enforcer 已加载版本；版本变化时，只有在 reload
 回退并复用旧版本。数据库不可读、reload 失败或 policy 持续变化时均失败关闭，不使用旧缓存。
 
 禁止直接修改 `casbin_rules`，也禁止在 `RbacService` 的 policy 事务运行器之外调用
-Adapter 的 session 写方法。否则 revision 不会变化，其他实例无法感知该写入。Casbin
+Adapter 的 policy 写方法。否则 revision 不会变化，其他实例无法感知该写入。Casbin
 `Adapter` trait 的独立写入口会自行开启事务，并在规则确有变化时原子递增 revision。
 
 普通角色和账号管理必须使用授权版本运行器：事务内以 CAS 比较授权检查捕获的 revision，
@@ -113,7 +118,7 @@ MongoDB 为提交错误标记 `UnknownTransactionCommitResult` 时，实现在�
 
 ## 使用原则
 
-- 单集合且不要求跨步骤原子性的 CRUD 不使用事务。
+- 单集合且不要求跨步骤原子性的 CRUD 不使用事务，传入 `&mut NoTransaction`。
 - 多集合写入、角色实体与 policy 同步、账号与 Profile/角色绑定同步时使用事务。
 - 在事务闭包内完成依赖事务快照的存在性和状态校验。
 - 保持事务短小，不在事务内执行外部 HTTP、文件 I/O 或 CPU 密集工作。

@@ -1,19 +1,29 @@
 use super::Repository;
 use crate::errors::Result;
+use crate::{mongo_ops, Executor};
 use entities::Role;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
-use mongodb::{bson::doc, ClientSession};
+use mongodb::bson::doc;
 
 impl<'a> Repository<'a, Role> {
     /// 查询全部未删除且启用的角色。
     ///
+    /// # 参数
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回值
+    /// 返回全部未删除且启用的角色。
+    ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn list_enabled(&self) -> Result<Vec<Role>> {
-        self.find_many(doc! {
-            "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-            "disabled": false,
-        })
+    pub async fn list_enabled(&self, executor: &mut dyn Executor) -> Result<Vec<Role>> {
+        self.find_many(
+            doc! {
+                "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                "disabled": false,
+            },
+            executor,
+        )
         .await
     }
 
@@ -21,22 +31,26 @@ impl<'a> Repository<'a, Role> {
     ///
     /// # 参数
     /// * `role_ids` - 待校验的角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回值
     /// 返回存在且启用的角色，并按角色 ID 排序。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn enabled_roles(&self, role_ids: &[String]) -> Result<Vec<Role>> {
+    pub async fn enabled_roles(&self, role_ids: &[String], executor: &mut dyn Executor) -> Result<Vec<Role>> {
         if role_ids.is_empty() {
             return Ok(Vec::new());
         }
 
         let mut roles = self
-            .find_many(doc! {
-                "id": { "$in": role_ids },
-                "disabled": false,
-            })
+            .find_many(
+                doc! {
+                    "id": { "$in": role_ids },
+                    "disabled": false,
+                },
+                executor,
+            )
             .await?;
         roles.sort_by(|left, right| left.base.id.cmp(&right.base.id));
         Ok(roles)
@@ -49,18 +63,21 @@ impl<'a> Repository<'a, Role> {
     ///
     /// # 参数
     /// * `role_ids` - 待查询的角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回值
     /// 返回存在的未删除角色，并按角色 ID 排序。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn roles_by_ids(&self, role_ids: &[String]) -> Result<Vec<Role>> {
+    pub async fn roles_by_ids(&self, role_ids: &[String], executor: &mut dyn Executor) -> Result<Vec<Role>> {
         if role_ids.is_empty() {
             return Ok(Vec::new());
         }
 
-        let mut roles = self.find_many(doc! { "id": { "$in": role_ids } }).await?;
+        let mut roles = self
+            .find_many(doc! { "id": { "$in": role_ids } }, executor)
+            .await?;
         roles.sort_by(|left, right| left.base.id.cmp(&right.base.id));
         Ok(roles)
     }
@@ -71,51 +88,18 @@ impl<'a> Repository<'a, Role> {
     ///
     /// # 参数
     /// * `id` - 角色 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回值
     /// 返回匹配的角色记录。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_id_including_deleted(&self, id: &str) -> Result<Option<Role>> {
-        let role = self
-            .database()
-            .collection::<Role>(self.collection_name())
-            .find_one(doc! { "id": id })
-            .await?;
-        Ok(role)
-    }
-
-    /// 在调用方事务中查询一组存在且启用的角色。
-    ///
-    /// # 参数
-    /// * `role_ids` - 待校验的角色 ID
-    /// * `session` - 已启动事务的 MongoDB 会话
-    ///
-    /// # 返回值
-    /// 返回同一事务快照内存在且启用的角色，并按角色 ID 排序。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询失败时返回错误。
-    pub async fn enabled_roles_with_session(
+    pub async fn find_by_id_including_deleted(
         &self,
-        role_ids: &[String],
-        session: &mut ClientSession,
-    ) -> Result<Vec<Role>> {
-        if role_ids.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let mut roles = self
-            .find_many_with_session(
-                doc! {
-                    "id": { "$in": role_ids },
-                    "disabled": false,
-                },
-                session,
-            )
-            .await?;
-        roles.sort_by(|left, right| left.base.id.cmp(&right.base.id));
-        Ok(roles)
+        id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Role>> {
+        mongo_ops::find_one(&self.collection(), doc! { "id": id }, executor).await
     }
 }

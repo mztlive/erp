@@ -3,38 +3,15 @@
 //! 提供MongoDB数据库操作的通用接口，包括基础CRUD操作和各实体的特化方法
 
 use crate::errors::{Error, Result};
+use crate::mongo_ops;
+use crate::Executor;
 use entity_core::{BaseModel, HasBaseModel, NOT_DELETED_TIMESTAMP, NOT_DELETED_TIMESTAMP_BSON};
-use futures_util::StreamExt;
 use mongodb::{
     bson::{doc, to_document, Document},
-    ClientSession, Cursor, Database,
+    options::FindOptions,
+    Database,
 };
 use serde::{de::DeserializeOwned, Serialize};
-
-/// Converts a MongoDB cursor into a vector of items
-///
-/// # Type Parameters
-///
-/// * `T` - The type of items to collect from the cursor
-///
-/// # Arguments
-///
-/// * `cursor` - MongoDB cursor to convert
-///
-/// # Returns
-///
-/// Returns a Result containing a Vec of items or an error
-async fn cursor_to_vec<T>(mut cursor: Cursor<T>) -> Result<Vec<T>>
-where
-    Cursor<T>: futures_util::stream::StreamExt<Item = std::result::Result<T, mongodb::error::Error>>,
-{
-    let mut result = vec![];
-    while let Some(item) = cursor.next().await {
-        result.push(item?);
-    }
-
-    Ok(result)
-}
 
 /// Defines filter behavior for database queries
 ///
@@ -188,177 +165,53 @@ where
         }
     }
 
-    /// 创建实体
+    /// 创建实体。
     ///
     /// # 参数
     /// * `entity` - 实体对象
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
     /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
     ///
     /// # 错误
-    /// 当验证失败或底层操作失败时返回错误。
-    pub async fn create(&self, entity: &T) -> Result<()> {
-        self.db
-            .collection::<T>(self.collection_name)
-            .insert_one(entity)
-            .await?;
-        Ok(())
+    /// 当唯一索引冲突或底层写入失败时返回错误。
+    pub async fn create(&self, entity: &T, executor: &mut dyn Executor) -> Result<()> {
+        mongo_ops::insert_one(&self.collection(), entity, executor).await
     }
 
-    /// 创建实体（带事务）
-    ///
-    /// # 参数
-    /// * `entity` - 实体对象
-    /// * `session` - 事务会话
-    ///
-    /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-    ///
-    /// # 错误
-    /// 当验证失败或底层操作失败时返回错误。
-    pub async fn create_with_session(&self, entity: &T, session: &mut ClientSession) -> Result<()> {
-        self.db
-            .collection::<T>(self.collection_name)
-            .insert_one(entity)
-            .session(session)
-            .await?;
-        Ok(())
-    }
-
-    /// 根据ID查找
+    /// 根据ID查找未删除实体。
     ///
     /// # 参数
     /// * `id` - 标识符
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-    ///
-    /// # 错误
-    /// 当内部逻辑或依赖操作失败时返回错误。
-    pub async fn find_by_id(&self, id: &str) -> Result<Option<T>> {
-        let entity = self
-            .db
-            .collection::<T>(self.collection_name)
-            .find_one(doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON })
-            .await?;
-        Ok(entity)
-    }
-
-    /// 在调用方事务中根据 ID 查找未删除实体。
-    ///
-    /// # 参数
-    /// * `id` - 实体 ID
-    /// * `session` - 已启动事务的 MongoDB 会话
-    ///
-    /// # 返回值
-    /// 返回事务快照中匹配的未删除实体。
+    /// 返回匹配的未删除实体；无匹配时返回 `None`。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn find_by_id_with_session(&self, id: &str, session: &mut ClientSession) -> Result<Option<T>> {
-        let entity = self
-            .db
-            .collection::<T>(self.collection_name)
-            .find_one(doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON })
-            .session(session)
-            .await?;
-        Ok(entity)
+    pub async fn find_by_id(&self, id: &str, executor: &mut dyn Executor) -> Result<Option<T>> {
+        mongo_ops::find_one(
+            &self.collection(),
+            doc! { "id": id, "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            executor,
+        )
+        .await
     }
 
-    /// 更新实体（带乐观锁）
+    /// 更新实体（带乐观锁）。
     ///
     /// # 参数
     /// * `entity` - 实体对象
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
     /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-    ///
-    /// # 错误
-    /// 当验证失败或底层操作失败时返回错误。
-    pub async fn update(&self, entity: &mut T) -> Result<()>
-    where
-        T: HasBaseModel,
-    {
-        if entity.base().is_deleted() {
-            return Err(Error::OptimisticLockingError);
-        }
-
-        let metadata = write_metadata(entity.base())?;
-        let filter = active_cas_filter(entity.base(), metadata);
-        let mut document = to_document(&*entity)?;
-        document.insert("version", metadata.next_version_bson);
-        document.insert("updated_at", metadata.updated_at_bson);
-
-        let result = self
-            .db
-            .collection::<T>(self.collection_name)
-            .update_one(filter, doc! { "$set": document })
-            .await?;
-
-        apply_write_result(entity.base_mut(), metadata, None, result.matched_count)
-    }
-
-    /// 更新实体（带事务和乐观锁）
-    ///
-    /// # 参数
-    /// * `entity` - 实体对象
-    /// * `session` - 事务会话
-    ///
-    /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-    ///
-    /// # 错误
-    /// 当验证失败或底层操作失败时返回错误。
-    pub async fn update_with_session(&self, entity: &mut T, session: &mut ClientSession) -> Result<()>
-    where
-        T: HasBaseModel,
-    {
-        if entity.base().is_deleted() {
-            return Err(Error::OptimisticLockingError);
-        }
-
-        let metadata = write_metadata(entity.base())?;
-        let filter = active_cas_filter(entity.base(), metadata);
-        let mut document = to_document(&*entity)?;
-        document.insert("version", metadata.next_version_bson);
-        document.insert("updated_at", metadata.updated_at_bson);
-
-        let result = self
-            .db
-            .collection::<T>(self.collection_name)
-            .update_one(filter, doc! { "$set": document })
-            .session(session)
-            .await?;
-
-        apply_write_result(entity.base_mut(), metadata, None, result.matched_count)
-    }
-
-    /// 查找所有未删除的实体
-    ///
-    /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-    ///
-    /// # 错误
-    /// 当内部逻辑或依赖操作失败时返回错误。
-    pub async fn list_all(&self) -> Result<Vec<T>> {
-        let cursor = self
-            .db
-            .collection::<T>(self.collection_name)
-            .find(doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON })
-            .await?;
-        cursor_to_vec(cursor).await
-    }
-
-    /// 在事务中软删除活跃实体。
-    ///
-    /// # 参数
-    /// * `entity` - 待删除实体
-    /// * `session` - 事务会话
     ///
     /// # 错误
     /// 当实体已删除、版本冲突或底层写入失败时返回错误。
-    pub async fn soft_delete_with_session(&self, entity: &mut T, session: &mut ClientSession) -> Result<()>
+    pub async fn update(&self, entity: &mut T, executor: &mut dyn Executor) -> Result<()>
     where
         T: HasBaseModel,
     {
@@ -368,21 +221,57 @@ where
 
         let metadata = write_metadata(entity.base())?;
         let filter = active_cas_filter(entity.base(), metadata);
-        let result = self
-            .db
-            .collection::<T>(self.collection_name)
-            .update_one(
-                filter,
-                doc! {
-                    "$set": {
-                        "version": metadata.next_version_bson,
-                        "updated_at": metadata.updated_at_bson,
-                        "deleted_at": metadata.updated_at_bson,
-                    }
-                },
-            )
-            .session(session)
-            .await?;
+        let mut document = to_document(&*entity)?;
+        document.insert("version", metadata.next_version_bson);
+        document.insert("updated_at", metadata.updated_at_bson);
+
+        let result = mongo_ops::update_one(
+            &self.collection(),
+            filter,
+            doc! { "$set": document },
+            false,
+            executor,
+        )
+        .await?;
+
+        apply_write_result(entity.base_mut(), metadata, None, result.matched_count)
+    }
+
+    /// 软删除活跃实体。
+    ///
+    /// # 参数
+    /// * `entity` - 待删除实体
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
+    ///
+    /// # 错误
+    /// 当实体已删除、版本冲突或底层写入失败时返回错误。
+    pub async fn soft_delete(&self, entity: &mut T, executor: &mut dyn Executor) -> Result<()>
+    where
+        T: HasBaseModel,
+    {
+        if entity.base().is_deleted() {
+            return Err(Error::OptimisticLockingError);
+        }
+
+        let metadata = write_metadata(entity.base())?;
+        let filter = active_cas_filter(entity.base(), metadata);
+        let result = mongo_ops::update_one(
+            &self.collection(),
+            filter,
+            doc! {
+                "$set": {
+                    "version": metadata.next_version_bson,
+                    "updated_at": metadata.updated_at_bson,
+                    "deleted_at": metadata.updated_at_bson,
+                }
+            },
+            false,
+            executor,
+        )
+        .await?;
 
         apply_write_result(
             entity.base_mut(),
@@ -392,15 +281,18 @@ where
         )
     }
 
-    /// 在事务中恢复已软删除实体。
+    /// 恢复已软删除实体。
     ///
     /// # 参数
     /// * `entity` - 待恢复实体
-    /// * `session` - 事务会话
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
     ///
     /// # 错误
     /// 当实体未删除、版本冲突或底层写入失败时返回错误。
-    pub async fn restore_with_session(&self, entity: &mut T, session: &mut ClientSession) -> Result<()>
+    pub async fn restore(&self, entity: &mut T, executor: &mut dyn Executor) -> Result<()>
     where
         T: HasBaseModel,
     {
@@ -410,21 +302,20 @@ where
 
         let metadata = write_metadata(entity.base())?;
         let filter = deleted_cas_filter(entity.base(), metadata);
-        let result = self
-            .db
-            .collection::<T>(self.collection_name)
-            .update_one(
-                filter,
-                doc! {
-                    "$set": {
-                        "version": metadata.next_version_bson,
-                        "updated_at": metadata.updated_at_bson,
-                        "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
-                    }
-                },
-            )
-            .session(session)
-            .await?;
+        let result = mongo_ops::update_one(
+            &self.collection(),
+            filter,
+            doc! {
+                "$set": {
+                    "version": metadata.next_version_bson,
+                    "updated_at": metadata.updated_at_bson,
+                    "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
+                }
+            },
+            false,
+            executor,
+        )
+        .await?;
 
         apply_write_result(
             entity.base_mut(),
@@ -434,227 +325,170 @@ where
         )
     }
 
-    /// 根据单个字段查找一个实体
+    /// 查找所有未删除的实体。
+    ///
+    /// # 参数
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部未删除实体。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_all(&self, executor: &mut dyn Executor) -> Result<Vec<T>> {
+        mongo_ops::find_many(
+            &self.collection(),
+            doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON },
+            FindOptions::default(),
+            executor,
+        )
+        .await
+    }
+
+    /// 根据单个字段查找一个未删除实体。
     ///
     /// # 参数
     /// * `field` - 字段名
     /// * `value` - 值
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
+    /// 返回匹配的未删除实体；无匹配时返回 `None`。
     ///
     /// # 错误
-    /// 当验证失败或底层操作失败时返回错误。
-    pub async fn find_one_by_field<V>(&self, field: &str, value: V) -> Result<Option<T>>
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_one_by_field<V>(
+        &self,
+        field: &str,
+        value: V,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<T>>
     where
         V: Into<mongodb::bson::Bson> + Send,
     {
         let filter = doc! { field: value.into(), "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        let entity = self
-            .db
-            .collection::<T>(self.collection_name)
-            .find_one(filter)
-            .await?;
-        Ok(entity)
+        mongo_ops::find_one(&self.collection(), filter, executor).await
     }
 
-    /// 查找单个实体
+    /// 查找单个未删除实体。
     ///
     /// # 参数
     /// * `filter` - 过滤条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-    ///
-    /// # 错误
-    /// 当验证失败或底层操作失败时返回错误。
-    pub async fn find_one(&self, filter: Document) -> Result<Option<T>> {
-        let mut filter = filter;
-        filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
-
-        let entity = self
-            .db
-            .collection::<T>(self.collection_name)
-            .find_one(filter)
-            .await?;
-        Ok(entity)
-    }
-
-    /// 查找单个实体（带事务）
-    ///
-    /// # 参数
-    /// * `filter` - 过滤条件
-    /// * `session` - 事务会话
-    ///
-    /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-    ///
-    /// # 错误
-    /// 当验证失败或底层操作失败时返回错误。
-    pub async fn find_one_with_session(
-        &self,
-        filter: Document,
-        session: &mut ClientSession,
-    ) -> Result<Option<T>> {
-        let mut filter = filter;
-        filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
-
-        let entity = self
-            .db
-            .collection::<T>(self.collection_name)
-            .find_one(filter)
-            .session(session)
-            .await?;
-        Ok(entity)
-    }
-
-    /// 在调用方事务中判断是否存在符合条件的活跃实体。
-    ///
-    /// # 参数
-    /// * `filter` - 过滤条件
-    /// * `session` - 已启动事务的 MongoDB 会话
-    ///
-    /// # 返回值
-    /// 同一事务快照内存在匹配实体时返回 `true`。
+    /// 返回匹配的未删除实体；无匹配时返回 `None`。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn exists_with_session(&self, filter: Document, session: &mut ClientSession) -> Result<bool> {
-        let mut filter = filter;
-        filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
-        let document = self
-            .db
-            .collection::<Document>(self.collection_name)
-            .find_one(filter)
-            .projection(doc! { "_id": 1 })
-            .session(session)
-            .await?;
-        Ok(document.is_some())
-    }
-
-    /// 查找多个实体
-    ///
-    /// # 参数
-    /// * `filter` - 过滤条件
-    ///
-    /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
-    ///
-    /// # 错误
-    /// 当验证失败或底层操作失败时返回错误。
-    pub async fn find_many(&self, filter: Document) -> Result<Vec<T>> {
+    pub async fn find_one(&self, filter: Document, executor: &mut dyn Executor) -> Result<Option<T>> {
         let mut filter = filter;
         filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
 
-        let cursor = self.db.collection::<T>(self.collection_name).find(filter).await?;
-        cursor_to_vec(cursor).await
+        mongo_ops::find_one(&self.collection(), filter, executor).await
     }
 
-    /// 在调用方事务中查找多个实体。
+    /// 查找多个未删除实体。
     ///
     /// # 参数
     /// * `filter` - 过滤条件
-    /// * `session` - 已启动事务的 MongoDB 会话
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
     /// 返回符合条件且未删除的实体集合。
     ///
     /// # 错误
-    /// 当查询或游标读取失败时返回错误。
-    pub async fn find_many_with_session(
-        &self,
-        filter: Document,
-        session: &mut ClientSession,
-    ) -> Result<Vec<T>> {
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_many(&self, filter: Document, executor: &mut dyn Executor) -> Result<Vec<T>> {
         let mut filter = filter;
         filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
-        let mut cursor = self
-            .db
-            .collection::<T>(self.collection_name)
-            .find(filter)
-            .session(&mut *session)
-            .await?;
-        let mut entities = Vec::new();
-        while let Some(entity) = cursor.next(&mut *session).await.transpose()? {
-            entities.push(entity);
-        }
-        Ok(entities)
+
+        mongo_ops::find_many(&self.collection(), filter, FindOptions::default(), executor).await
     }
 
-    /// 查找多个实体（带排序）
+    /// 查找多个未删除实体（带排序）。
     ///
     /// # 参数
     /// * `filter` - 过滤条件
     /// * `sort` - 排序条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回
-    /// 返回执行结果，`Ok` 表示成功，`Err` 表示失败。
+    /// 返回排序后的未删除实体集合。
     ///
     /// # 错误
-    /// 当验证失败或底层操作失败时返回错误。
-    pub async fn find_many_sorted(&self, filter: Document, sort: Document) -> Result<Vec<T>> {
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_many_sorted(
+        &self,
+        filter: Document,
+        sort: Document,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<T>> {
         let mut filter = filter;
         filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
 
-        let cursor = self
-            .db
-            .collection::<T>(self.collection_name)
-            .find(filter)
-            .sort(sort)
-            .await?;
-        cursor_to_vec(cursor).await
+        mongo_ops::find_many(
+            &self.collection(),
+            filter,
+            FindOptions::builder().sort(sort).build(),
+            executor,
+        )
+        .await
     }
 
     /// 判断是否存在符合条件的活跃实体。
     ///
-    /// 查询只投影 MongoDB `_id`，并通过 `find_one` 在首条命中后停止，
+    /// 查询只投影 MongoDB `_id`，并在首条命中后停止，
     /// 避免为存在性判断加载完整实体或结果集合。
     ///
     /// # 参数
     /// * `filter` - 过滤条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回值
     /// 存在匹配实体时返回 `true`。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败时返回错误。
-    pub async fn exists(&self, filter: Document) -> Result<bool> {
+    pub async fn exists(&self, filter: Document, executor: &mut dyn Executor) -> Result<bool> {
         let mut filter = filter;
         filter.insert("deleted_at", NOT_DELETED_TIMESTAMP_BSON);
 
-        let document = self
-            .db
-            .collection::<Document>(self.collection_name)
-            .find_one(filter)
-            .projection(doc! { "_id": 1 })
-            .await?;
-        Ok(document.is_some())
+        mongo_ops::exists(
+            &self.db.collection::<Document>(self.collection_name),
+            filter,
+            executor,
+        )
+        .await
     }
 
-    /// Searches entities with pagination
+    /// 分页检索实体。
     ///
-    /// # Arguments
+    /// # 参数
+    /// * `filter` - 过滤与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// * `filter` - Filter and pagination criteria
+    /// # 返回值
+    /// 返回当前页实体与匹配总数。
     ///
-    /// # Returns
-    ///
-    /// Paginated result containing matched items and total count
-    pub async fn search<F>(&self, filter: &F) -> Result<PageResult<T>>
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    pub async fn search<F>(&self, filter: &F, executor: &mut dyn Executor) -> Result<PageResult<T>>
     where
         F: QueryFilter + Pagination + Send + Sync,
     {
-        let cursor = self
-            .database()
-            .collection::<T>(self.collection_name())
-            .find(filter.to_doc())
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .sort(doc! { "created_at": -1 })
-            .await?;
-
-        let items = cursor_to_vec(cursor).await?;
-        let total = self.search_count(filter).await?;
+        let items = mongo_ops::find_many(
+            &self.collection(),
+            filter.to_doc(),
+            FindOptions::builder()
+                .sort(doc! { "created_at": -1 })
+                .skip(filter.skip())
+                .limit(filter.limit())
+                .build(),
+            &mut *executor,
+        )
+        .await?;
+        let total = self.search_count(filter, executor).await?;
 
         Ok(PageResult {
             items,
@@ -662,42 +496,30 @@ where
         })
     }
 
-    /// Counts total number of entities matching a filter
+    /// 统计符合条件的实体总数。
     ///
-    /// # Arguments
+    /// # 参数
+    /// * `filter` - 过滤条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
-    /// * `filter` - Filter criteria
+    /// # 返回值
+    /// 返回匹配实体总数。
     ///
-    /// # Returns
-    ///
-    /// Total count of matching documents
-    async fn search_count<F>(&self, filter: &F) -> Result<u64>
+    /// # 错误
+    /// 当 MongoDB 统计失败时返回错误。
+    async fn search_count<F>(&self, filter: &F, executor: &mut dyn Executor) -> Result<u64>
     where
         F: QueryFilter + Send + Sync,
     {
-        let count = self
-            .database()
-            .collection::<T>(self.collection_name())
-            .count_documents(filter.to_doc())
-            .await?;
-
-        Ok(count)
+        mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await
     }
 
-    /// 获取数据库引用（内部使用）
+    /// 获取当前实体对应的 MongoDB 集合（内部使用）。
     ///
     /// # 返回
-    /// 返回引用，生命周期与持有者一致。
-    pub(crate) fn database(&self) -> &Database {
-        self.db
-    }
-
-    /// 获取集合名称（内部使用）
-    ///
-    /// # 返回
-    /// 返回引用，生命周期与持有者一致。
-    pub(crate) fn collection_name(&self) -> &str {
-        self.collection_name
+    /// 返回按实体类型参数化的集合句柄。
+    pub(crate) fn collection(&self) -> mongodb::Collection<T> {
+        self.db.collection::<T>(self.collection_name)
     }
 }
 

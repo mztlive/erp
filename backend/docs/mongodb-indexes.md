@@ -27,13 +27,13 @@ db.accounts.aggregate([
 
 ## RBAC 事务边界
 
-账号角色绑定、角色权限替换和角色删除都应复用业务事务中的 MongoDB
-`ClientSession`。`MongoCasbinAdapter` 的 `*_with_session` 方法只执行规则写入，
-不会自行提交事务：
+账号角色绑定、角色权限替换和角色删除都应把业务事务中的 MongoDB `ClientSession`
+作为执行器传入。`MongoCasbinAdapter` 的下列方法只执行规则写入，不会自行提交事务，
+且都是多步骤写入，必须收到事务执行器：
 
-- `replace_subject_roles_with_session`：覆盖主体的 `g` 规则。
-- `replace_role_permissions_with_session`：覆盖角色的 `p` 规则。
-- `remove_role_with_session`：删除角色的 `p` 规则及指向该角色的 `g` 规则。
+- `replace_subject_roles`：覆盖主体的 `g` 规则。
+- `replace_role_permissions`：覆盖角色的 `p` 规则。
+- `remove_role`：删除角色的 `p` 规则及指向该角色的 `g` 规则。
 
 RBAC Service 通过取消安全的 owned task 串行持有事务、提交重试和本地 Enforcer
 刷新，并在同一事务内递增 `casbin_policy_state` 的单例 revision 文档。该文档使用

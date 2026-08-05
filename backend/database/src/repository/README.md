@@ -12,19 +12,18 @@
 
 ## 通用能力
 
-`Repository<'a, T>` 提供：
+`Repository<'a, T>` 的每个方法都以 `executor: &mut dyn Executor` 结尾，提供：
 
-- `create` / `create_with_session`
-- `find_by_id`、`find_one`、`find_many` 及其必要的 session/sort 版本
-- `update` / `update_with_session`
-- `soft_delete_with_session`
-- `restore_with_session`
+- `create`
+- `find_by_id`、`find_one`、`find_one_by_field`、`find_many`、`find_many_sorted`
+- `update`
+- `soft_delete`
+- `restore`
 - `list_all`、`exists`
 - `search`：结合 `QueryFilter` 与 `Pagination` 返回 `PageResult<T>`
 
-实体更新、事务内软删除和事务内恢复都使用 `id + version + deleted_at` 做状态与版本比较；
+实体更新、软删除和恢复都使用 `id + version + deleted_at` 做状态与版本比较；
 写入成功后同步内存实体的 `version`、`updated_at` 和 `deleted_at`。
-软删除与恢复不提供非事务入口，避免绕过 Service 的审计和跨集合一致性边界。
 
 ## 分页查询
 
@@ -60,7 +59,7 @@ async fn query<T>(
 where
     T: serde::Serialize + serde::de::DeserializeOwned + Send + Sync,
 {
-    repository.search(filter).await
+    repository.search(filter, &mut database::NoTransaction).await
 }
 ```
 
@@ -76,12 +75,18 @@ where
 - Role 查询启用角色。
 
 方法使用 `find_*` 表达单项查找、`list_*` 表达集合查询、`has_*`/`exists`
-表达存在性判断。事务版本统一使用 `_with_session` 后缀。
+表达存在性判断，并同样以执行器参数结尾。
 
 ## 事务边界
 
 事务由 Service 通过 `database::Transactional` 发起；Repository 不自行开启或提交事务，
-只接受调用方传入的 `ClientSession`。仅多集合或多步骤原子写入使用事务。
+只按传入的执行器决定是否加入事务：
+
+- 单集合读写传 `&mut NoTransaction`。
+- 事务内调用把闭包中的 `&mut ClientSession` 直接作为执行器传入。
+
+会话与非会话两套驱动调用形态收敛在 `database::mongo_ops`，Repository 因此只写一份实现。
+先删后写等多步骤方法必须收到事务执行器，方法注释中已注明该约束。
 
 ## 扩展步骤
 

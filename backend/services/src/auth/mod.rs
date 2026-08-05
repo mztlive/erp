@@ -1,4 +1,4 @@
-use database::DatabaseExt;
+use database::{DatabaseExt, NoTransaction};
 use entities::{AccountCore, AccountKind as DomainAccountKind, LoginAccount, Secret};
 use mongodb::Database;
 use validator::Validate;
@@ -113,7 +113,10 @@ impl BackofficeAuthService {
         };
         if let Some(secret) = password_check.into_upgraded_secret() {
             stored_account.secret = secret;
-            self.db.accounts().update(&mut stored_account).await?;
+            self.db
+                .accounts()
+                .update(&mut stored_account, &mut NoTransaction)
+                .await?;
         }
         Ok(BackofficeAuthResult::from(&stored_account))
     }
@@ -141,7 +144,11 @@ impl BackofficeAuthService {
         account_kind: DomainAccountKind,
         account_version: u64,
     ) -> Result<BackofficeAuthResult> {
-        let stored_account = self.db.accounts().find_by_id(account_id).await?;
+        let stored_account = self
+            .db
+            .accounts()
+            .find_by_id(account_id, &mut NoTransaction)
+            .await?;
         let Some(stored_account) =
             valid_session_account(stored_account.as_ref(), account, account_kind, account_version)
         else {
@@ -157,7 +164,11 @@ impl BackofficeAuthService {
             return Ok(None);
         };
 
-        Ok(self.db.accounts().find_by_account(account.as_str()).await?)
+        Ok(self
+            .db
+            .accounts()
+            .find_by_account(account.as_str(), &mut NoTransaction)
+            .await?)
     }
 }
 

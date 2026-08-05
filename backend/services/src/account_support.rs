@@ -1,6 +1,6 @@
 //! 账号生命周期的共享校验与更新解析。
 
-use database::DatabaseExt;
+use database::{DatabaseExt, Executor};
 use entities::{AccountCore, AccountCoreUpdate, AccountKind, LoginAccount};
 use mongodb::Database;
 
@@ -35,6 +35,7 @@ pub(crate) fn account_of_kind(
 /// * `db` - 数据库实例
 /// * `account` - 待检查账号
 /// * `exclude_account_id` - 可选排除账号ID（更新场景）
+/// * `executor` - 数据访问执行器，由调用方决定是否位于事务中
 ///
 /// # 返回值
 /// 校验通过返回 Ok
@@ -45,10 +46,11 @@ pub(crate) async fn ensure_account_available(
     db: &Database,
     account: &LoginAccount,
     exclude_account_id: Option<&str>,
+    executor: &mut dyn Executor,
 ) -> Result<()> {
     let Some(existing) = db
         .accounts()
-        .find_by_account_including_deleted(account.as_str())
+        .find_by_account_including_deleted(account.as_str(), executor)
         .await?
     else {
         return Ok(());

@@ -39,7 +39,7 @@ Adapter，也提供事务内替换角色绑定、替换角色权限、删除角�
 
 `MongoCasbinAdapter` 确实持久化 policy；不能把它描述为只由 Service 或角色 Repository
 保存。Repository 负责领域实体，Adapter 负责 Casbin rule，二者由 Service 统一编排。
-业务代码只调用 Adapter 的 `_with_session` 写接口。普通管理操作由
+业务代码只调用 Adapter 的 policy 写接口，并传入事务执行器。普通管理操作由
 `RbacService::run_authorized_policy_transaction` 把授权快照 revision 与最终写事务绑定；
 内建角色初始化才使用无操作人快照的 `run_system_policy_transaction`。禁止绕过这个边界自行提交
 policy 事务。Casbin `Adapter` trait 暴露的独立写方法也会自行开启事务，并只在规则确有

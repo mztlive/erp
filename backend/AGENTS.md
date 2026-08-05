@@ -89,11 +89,12 @@
 - **并发与阻塞隔离**：CPU 密集或阻塞 I/O 使用 `spawn_blocking`，避免阻塞 async runtime。
 
 ## 事务使用约定
-- 事务边界由 Service 控制；Repository 不管理事务，仅提供 `_with_session` 版本的方法供事务内使用。
-- **单集合操作原则**：仅涉及单个集合的 CRUD（无需跨集合保证原子性）时，不需要事务，直接调用 `create/update/delete` 等方法。
-- **多集合/多步骤原子性原则**：涉及多个集合的写入/更新/删除，或需要保证原子性的关联操作，必须使用 MongoDB 事务。
+- 事务边界由 Service 控制；Repository 不管理事务，只按调用方传入的执行器决定本次操作是否加入事务。
+- Repository 的每个方法都接收 `executor: &mut dyn Executor`（`database::Executor`），不再提供 `_with_session` 重复方法。
+- **单集合操作原则**：仅涉及单个集合的 CRUD（无需跨集合保证原子性）时，不需要事务，传入 `&mut NoTransaction`。
+- **多集合/多步骤原子性原则**：涉及多个集合的写入/更新/删除，或需要保证原子性的关联操作，必须使用 MongoDB 事务，把事务闭包拿到的 `&mut ClientSession` 作为执行器传入。
 - 事务入口来自 `mongodb::Client`，统一使用 `database::Transactional::with_transaction`（自动 commit/abort）。
-- Repository 事务方法均以 `_with_session` 结尾，需传入 `&mut ClientSession`。
+- 多步骤写入的 Repository 与 policy 方法（如角色绑定替换、角色规则删除）必须收到事务执行器，注释中已注明该约束。
 
 ## 构建、运行与工具
 - 初始化配置：`cp config.toml.example config.toml`，填写 `app` 与 `database`。

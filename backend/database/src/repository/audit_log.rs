@@ -1,5 +1,6 @@
 use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
 use crate::errors::Result;
+use crate::Executor;
 use entities::AuditLog;
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -9,11 +10,19 @@ impl<'a> Repository<'a, AuditLog> {
     ///
     /// # 参数
     /// * `filter` - 审计日志筛选条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
     ///
     /// # 返回值
     /// 返回分页后的审计日志集合
-    pub async fn search_logs(&self, filter: &AuditLogFilter) -> Result<PageResult<AuditLog>> {
-        self.search(filter).await
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或计数失败时返回错误。
+    pub async fn search_logs(
+        &self,
+        filter: &AuditLogFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<AuditLog>> {
+        self.search(filter, executor).await
     }
 }
 

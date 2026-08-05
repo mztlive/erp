@@ -1,4 +1,4 @@
-use database::{repository::AuditLogFilter, DatabaseExt};
+use database::{repository::AuditLogFilter, DatabaseExt, NoTransaction};
 use entities::{AuditLog, AuditLogData};
 use id_generator::next_id;
 use mongodb::Database;
@@ -126,7 +126,7 @@ impl AuditLogService {
     pub async fn create(&self, data: AuditLogData) -> Result<AuditLog> {
         let id = next_id();
         let log = AuditLog::new(id, data)?;
-        self.db.audit_logs().create(&log).await?;
+        self.db.audit_logs().create(&log, &mut NoTransaction).await?;
         Ok(log)
     }
 
@@ -155,7 +155,11 @@ impl AuditLogService {
             page,
             page_size,
         };
-        let page = self.db.audit_logs().search_logs(&filter).await?;
+        let page = self
+            .db
+            .audit_logs()
+            .search_logs(&filter, &mut NoTransaction)
+            .await?;
         let items = page.items.into_iter().map(Into::into).collect();
         Ok(Page::new(items, page.total))
     }

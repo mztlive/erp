@@ -1,4 +1,4 @@
-use database::DatabaseExt;
+use database::{DatabaseExt, NoTransaction};
 use entities::{AccountCore, AccountKind, Permission};
 use mongodb::Database;
 use serde::Serialize;
@@ -94,7 +94,7 @@ impl AccountProfileService {
         not_found_message: &str,
     ) -> Result<AccountCore> {
         account_of_kind(
-            self.db.accounts().find_by_id(user_id).await?,
+            self.db.accounts().find_by_id(user_id, &mut NoTransaction).await?,
             account_kind,
             not_found_message,
         )

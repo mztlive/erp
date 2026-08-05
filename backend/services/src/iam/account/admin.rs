@@ -1,4 +1,4 @@
-use database::DatabaseExt;
+use database::{DatabaseExt, NoTransaction};
 use entities::{
     AccountCore, AccountCoreData, AccountCoreUpdate, AccountKind, AccountStatus, AuditLog, LoginAccount,
     RoleIdSet,
@@ -122,7 +122,7 @@ impl AdminService {
     pub async fn create_admin(&self, params: CreateAdminParams, actor: AuditActor) -> Result<()> {
         params.validate()?;
         let account = LoginAccount::new(params.account)?;
-        ensure_account_available(&self.db, &account, None).await?;
+        ensure_account_available(&self.db, &account, None, &mut NoTransaction).await?;
 
         let role_ids = RoleIdSet::parse_non_empty(params.role_ids)?.to_strings();
         let secret = password::hash_secret(account, params.password).await?;
@@ -178,7 +178,11 @@ impl AdminService {
     /// # 返回值
     /// * `Ok(Vec<AdminItem>)` - 包含角色 ID 的管理员集合
     pub async fn admin_list(&self) -> Result<Vec<AdminItem>> {
-        let admins: Vec<AccountCore> = self.db.accounts().list_by_kind(AccountKind::Admin).await?;
+        let admins: Vec<AccountCore> = self
+            .db
+            .accounts()
+            .list_by_kind(AccountKind::Admin, &mut NoTransaction)
+            .await?;
         let account_ids = admins
             .iter()
             .map(|account| account.base.id.clone())
@@ -241,7 +245,7 @@ impl AdminService {
             role_ids,
         } = params;
         let mut account = account_of_kind(
-            self.db.accounts().find_by_id(&id).await?,
+            self.db.accounts().find_by_id(&id, &mut NoTransaction).await?,
             AccountKind::Admin,
             "管理员不存在",
         )?;
@@ -280,7 +284,7 @@ impl AdminService {
         self.rbac
             .run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
                 Box::pin(async move {
-                    db.accounts().update_with_session(&mut account, session).await?;
+                    db.accounts().update(&mut account, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })
             })
@@ -299,7 +303,10 @@ impl AdminService {
     pub async fn update_admin_role(&self, params: UpdateAdminRoleParams, actor: AuditActor) -> Result<()> {
         params.validate()?;
         let account = account_of_kind(
-            self.db.accounts().find_by_id(&params.id).await?,
+            self.db
+                .accounts()
+                .find_by_id(&params.id, &mut NoTransaction)
+                .await?,
             AccountKind::Admin,
             "管理员不存在",
         )?;
@@ -324,7 +331,7 @@ impl AdminService {
         self.rbac
             .run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
                 Box::pin(async move {
-                    rbac.assign_roles_with_session(AccountKind::Admin, &account_id, grant, session)
+                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, session)
                         .await?;
                     Ok::<(), crate::errors::Error>(())
                 })
@@ -342,7 +349,7 @@ impl AdminService {
     /// * `NotFound` - 管理员不存在
     pub async fn delete_admin(&self, id: String, actor: AuditActor) -> Result<()> {
         let account = account_of_kind(
-            self.db.accounts().find_by_id(&id).await?,
+            self.db.accounts().find_by_id(&id, &mut NoTransaction).await?,
             AccountKind::Admin,
             "管理员不存在",
         )?;
@@ -381,8 +388,8 @@ impl AdminService {
         self.rbac
             .run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
                 Box::pin(async move {
-                    db.accounts().create_with_session(&account, session).await?;
-                    rbac.assign_roles_with_session(AccountKind::Admin, &account_id, grant, session)
+                    db.accounts().create(&account, session).await?;
+                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, session)
                         .await?;
                     Ok::<AccountCore, crate::errors::Error>(account)
                 })
@@ -415,8 +422,8 @@ impl AdminService {
         self.rbac
             .run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
                 Box::pin(async move {
-                    db.accounts().update_with_session(&mut account, session).await?;
-                    rbac.assign_roles_with_session(AccountKind::Admin, &account_id, grant, session)
+                    db.accounts().update(&mut account, session).await?;
+                    rbac.assign_roles(AccountKind::Admin, &account_id, grant, session)
                         .await?;
                     Ok::<AccountCore, crate::errors::Error>(account)
                 })
@@ -436,8 +443,8 @@ impl AdminService {
         self.rbac
             .run_system_policy_transaction(move |session| {
                 Box::pin(async move {
-                    db.accounts().create_with_session(&account, session).await?;
-                    rbac.assign_system_roles_with_session(AccountKind::Admin, &account_id, role_ids, session)
+                    db.accounts().create(&account, session).await?;
+                    rbac.assign_system_roles(AccountKind::Admin, &account_id, role_ids, session)
                         .await?;
                     Ok::<AccountCore, crate::errors::Error>(account)
                 })
@@ -458,10 +465,10 @@ impl AdminService {
             .run_system_policy_transaction(move |session| {
                 Box::pin(async move {
                     if matches!(state, ExistingSuperAdminState::Deleted) {
-                        db.accounts().restore_with_session(&mut account, session).await?;
+                        db.accounts().restore(&mut account, session).await?;
                     }
-                    db.accounts().update_with_session(&mut account, session).await?;
-                    rbac.assign_system_roles_with_session(
+                    db.accounts().update(&mut account, session).await?;
+                    rbac.assign_system_roles(
                         AccountKind::Admin,
                         &account_id,
                         vec![iam::ROOT_ROLE_ID.to_string()],
@@ -497,11 +504,8 @@ impl AdminService {
         self.rbac
             .run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
                 Box::pin(async move {
-                    db.accounts()
-                        .soft_delete_with_session(&mut account, session)
-                        .await?;
-                    rbac.clear_roles_with_session(AccountKind::Admin, &account_id, session)
-                        .await?;
+                    db.accounts().soft_delete(&mut account, session).await?;
+                    rbac.clear_roles(AccountKind::Admin, &account_id, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })
             })
@@ -518,7 +522,7 @@ impl AdminService {
         if let Some(current) = self
             .db
             .accounts()
-            .find_by_account_including_deleted(account.as_str())
+            .find_by_account_including_deleted(account.as_str(), &mut NoTransaction)
             .await?
         {
             return self.ensure_existing_super_admin(current, password, name).await;

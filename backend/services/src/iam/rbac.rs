@@ -11,7 +11,7 @@ use std::{
 };
 
 use casbin::{CoreApi, DefaultModel, Enforcer, RbacApi};
-use database::{DatabaseExt, MongoCasbinAdapter, Transactional};
+use database::{DatabaseExt, Executor, MongoCasbinAdapter, NoTransaction, Transactional};
 use entities::{AccountKind, AuditLog, Permission, PermissionSet, Role, RoleData, RoleIdSet, RoleUpdate};
 use mongodb::{ClientSession, Database};
 use tokio::sync::{Mutex, OnceCell, RwLock};
@@ -159,7 +159,7 @@ impl RbacService {
         if self.policy_stale.load(Ordering::Acquire) {
             return Ok(false);
         }
-        let database_revision = self.policy_store.policy_revision().await?;
+        let database_revision = self.policy_store.policy_revision(&mut NoTransaction).await?;
         Ok(policy_revisions_match(
             self.loaded_policy_revision.load(Ordering::Acquire),
             database_revision,
@@ -170,9 +170,9 @@ impl RbacService {
     async fn reload_enforcer(&self, enforcer: &mut Enforcer) -> Result<()> {
         self.policy_stale.store(true, Ordering::Release);
         for _ in 0..MAX_STABLE_POLICY_LOAD_ATTEMPTS {
-            let before = self.policy_store.policy_revision().await?;
+            let before = self.policy_store.policy_revision(&mut NoTransaction).await?;
             enforcer.load_policy().await.map_err(rbac_error)?;
-            let after = self.policy_store.policy_revision().await?;
+            let after = self.policy_store.policy_revision(&mut NoTransaction).await?;
             if let Some(revision) = stable_policy_revision(before, after) {
                 self.loaded_policy_revision.store(revision, Ordering::Release);
                 self.policy_stale.store(false, Ordering::Release);
@@ -255,7 +255,7 @@ impl RbacService {
         params: UpdateRoleParams,
         actor: AuditActor,
     ) -> Result<Role> {
-        let role = role_or_not_found(self.db.roles().find_by_id(id).await?)?;
+        let role = role_or_not_found(self.db.roles().find_by_id(id, &mut NoTransaction).await?)?;
         ensure_role_mutable(&role)?;
         let authorized = self
             .authorize_role_update(&actor, role.base.id.as_str(), params.permissions)
@@ -297,7 +297,7 @@ impl RbacService {
     /// # 错误
     /// 当角色不存在、角色为系统角色或删除失败时返回错误。
     pub async fn delete_role(self: &Arc<Self>, id: &str, actor: AuditActor) -> Result<()> {
-        let role = role_or_not_found(self.db.roles().find_by_id(id).await?)?;
+        let role = role_or_not_found(self.db.roles().find_by_id(id, &mut NoTransaction).await?)?;
         ensure_role_deletable(&role)?;
         let authorized = self
             .authorize_role_update(&actor, role.base.id.as_str(), None)
@@ -336,7 +336,7 @@ impl RbacService {
         let db = self.db.clone();
         self.run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
             Box::pin(async move {
-                db.roles().update_with_session(&mut role, session).await?;
+                db.roles().update(&mut role, session).await?;
                 Ok(role)
             })
         })
@@ -348,7 +348,7 @@ impl RbacService {
     /// # 错误
     /// 当 MongoDB 或 Casbin policy 查询失败时返回错误。
     pub async fn role_list(&self) -> Result<Vec<RoleItem>> {
-        let roles = self.db.roles().list_all().await?;
+        let roles = self.db.roles().list_all(&mut NoTransaction).await?;
         self.role_items(roles).await
     }
 
@@ -360,7 +360,7 @@ impl RbacService {
         let roles = self
             .db
             .roles()
-            .list_enabled()
+            .list_enabled(&mut NoTransaction)
             .await?
             .into_iter()
             .filter(role_is_assignable)
@@ -386,14 +386,13 @@ impl RbacService {
         let policy_store = self.policy_store.clone();
         self.run_policy_transaction_at_revision(expected_revision, move |session| {
             Box::pin(async move {
-                let mut role =
-                    role_or_not_found(db.roles().find_by_id_with_session(&role_id, session).await?)?;
-                db.roles().update_with_session(&mut role, session).await?;
+                let mut role = role_or_not_found(db.roles().find_by_id(&role_id, session).await?)?;
+                db.roles().update(&mut role, session).await?;
                 policy_store
-                    .replace_role_permissions_with_session(&role_key, &permissions, session)
+                    .replace_role_permissions(&role_key, &permissions, session)
                     .await?;
                 if let Some(audit) = audit {
-                    db.audit_logs().create_with_session(&audit, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
                 }
                 Ok(role)
             })
@@ -453,7 +452,11 @@ impl RbacService {
         role_ids: Vec<String>,
     ) -> Result<AuthorizedRoleGrant> {
         let role_ids = RoleIdSet::parse(role_ids)?.to_strings();
-        let roles = self.db.roles().enabled_roles(&role_ids).await?;
+        let roles = self
+            .db
+            .roles()
+            .enabled_roles(&role_ids, &mut NoTransaction)
+            .await?;
         ensure_all_roles_assignable(role_ids.len(), roles.len())?;
         ensure_roles_delegable(&roles)?;
 
@@ -543,7 +546,7 @@ impl RbacService {
         Ok(self
             .db
             .roles()
-            .roles_by_ids(&role_ids)
+            .roles_by_ids(&role_ids, &mut NoTransaction)
             .await?
             .into_iter()
             .map(|role| (role.base.id.clone(), role))
@@ -571,89 +574,100 @@ impl RbacService {
         })
     }
 
-    /// 使用调用方 MongoDB 事务覆盖账号角色绑定。
+    /// 覆盖账号角色绑定。
     ///
-    /// 该方法仅写入事务，不更新本地 Enforcer。调用方必须通过
+    /// 该方法只写数据，不更新本地 Enforcer；角色校验与绑定替换必须原子生效，
+    /// 调用方必须传入事务执行器，并通过
     /// [`Self::run_authorized_policy_transaction`] 建立取消安全的事务与刷新边界。
     ///
     /// # 参数
     /// * `account_kind` - 账号类型
     /// * `account_id` - 账号 ID
     /// * `grant` - 已按操作人权限和 policy 版本校验的授予上下文
-    /// * `session` - 已启动事务的 MongoDB 会话
+    /// * `executor` - 数据访问执行器，必须为事务执行器
     ///
     /// # 返回值
     /// 事务内角色校验和绑定替换成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 当角色无效或 MongoDB policy 写入失败时返回错误。
-    pub(crate) async fn assign_roles_with_session(
+    pub(crate) async fn assign_roles(
         &self,
         account_kind: AccountKind,
         account_id: &str,
         grant: AuthorizedRoleGrant,
-        session: &mut ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let role_ids = grant.role_ids;
-        self.ensure_roles_assignable_with_session(&role_ids, session)
-            .await?;
+        self.ensure_roles_assignable(&role_ids, executor).await?;
         let role_keys = role_ids
             .iter()
             .map(|role_id| role_key(role_id))
             .collect::<Vec<_>>();
         self.policy_store
-            .replace_subject_roles_with_session(&subject(account_kind, account_id), &role_keys, session)
+            .replace_subject_roles(&subject(account_kind, account_id), &role_keys, executor)
             .await?;
         Ok(())
     }
 
-    /// 使用调用方事务执行系统初始化角色绑定。
+    /// 执行系统初始化角色绑定。
     ///
     /// 仅超级管理员初始化可调用；普通管理入口必须使用
-    /// [`Self::assign_roles_with_session`] 的授权上下文。
-    pub(in crate::iam) async fn assign_system_roles_with_session(
+    /// [`Self::assign_roles`] 的授权上下文。
+    ///
+    /// # 参数
+    /// * `account_kind` - 账号类型
+    /// * `account_id` - 账号 ID
+    /// * `role_ids` - 完整角色 ID 集合
+    /// * `executor` - 数据访问执行器，必须为事务执行器
+    ///
+    /// # 返回值
+    /// 角色校验和绑定替换成功时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当角色无效或 MongoDB policy 写入失败时返回错误。
+    pub(in crate::iam) async fn assign_system_roles(
         &self,
         account_kind: AccountKind,
         account_id: &str,
         role_ids: Vec<String>,
-        session: &mut ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let role_ids = RoleIdSet::parse(role_ids)?.to_strings();
-        self.ensure_roles_assignable_with_session(&role_ids, session)
-            .await?;
+        self.ensure_roles_assignable(&role_ids, executor).await?;
         let role_keys = role_ids
             .iter()
             .map(|role_id| role_key(role_id))
             .collect::<Vec<_>>();
         self.policy_store
-            .replace_subject_roles_with_session(&subject(account_kind, account_id), &role_keys, session)
+            .replace_subject_roles(&subject(account_kind, account_id), &role_keys, executor)
             .await?;
         Ok(())
     }
 
-    /// 使用调用方 MongoDB 事务清除账号全部角色绑定。
+    /// 清除账号全部角色绑定。
     ///
-    /// 该方法仅写入事务，不更新本地 Enforcer。调用方必须通过
+    /// 该方法只写数据，不更新本地 Enforcer。调用方必须传入事务执行器，并通过
     /// [`Self::run_authorized_policy_transaction`] 建立取消安全的事务与刷新边界。
     ///
     /// # 参数
     /// * `account_kind` - 账号类型
     /// * `account_id` - 账号 ID
-    /// * `session` - 已启动事务的 MongoDB 会话
+    /// * `executor` - 数据访问执行器，必须为事务执行器
     ///
     /// # 返回值
     /// 事务内角色绑定清除成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 当 MongoDB policy 删除失败时返回错误。
-    pub(crate) async fn clear_roles_with_session(
+    pub(crate) async fn clear_roles(
         &self,
         account_kind: AccountKind,
         account_id: &str,
-        session: &mut ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         self.policy_store
-            .clear_subject_roles_with_session(&subject(account_kind, account_id), session)
+            .clear_subject_roles(&subject(account_kind, account_id), executor)
             .await?;
         Ok(())
     }
@@ -709,22 +723,25 @@ impl RbacService {
         parse_policy_permissions(policies)
     }
 
-    /// 在调用方事务内校验并 CAS touch 全部待分配角色。
+    /// 校验并 CAS touch 全部待分配角色。
     ///
-    /// 写触碰会与并发角色更新或删除产生写冲突，避免纯快照读取允许已删除角色被绑定。
-    async fn ensure_roles_assignable_with_session(
-        &self,
-        role_ids: &[String],
-        session: &mut ClientSession,
-    ) -> Result<()> {
-        let mut roles = self
-            .db
-            .roles()
-            .enabled_roles_with_session(role_ids, session)
-            .await?;
+    /// 写触碰会与并发角色更新或删除产生写冲突，避免纯快照读取允许已删除角色被绑定；
+    /// 因此调用方必须传入事务执行器。
+    ///
+    /// # 参数
+    /// * `role_ids` - 待分配角色 ID
+    /// * `executor` - 数据访问执行器，必须为事务执行器
+    ///
+    /// # 返回值
+    /// 全部角色存在、启用且写触碰成功时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当角色缺失、被停用或 MongoDB 写入冲突时返回错误。
+    async fn ensure_roles_assignable(&self, role_ids: &[String], executor: &mut dyn Executor) -> Result<()> {
+        let mut roles = self.db.roles().enabled_roles(role_ids, executor).await?;
         ensure_all_roles_assignable(role_ids.len(), roles.len())?;
         for role in &mut roles {
-            self.db.roles().update_with_session(role, session).await?;
+            self.db.roles().update(role, executor).await?;
         }
         Ok(())
     }
@@ -800,10 +817,10 @@ impl RbacService {
                         match expected_revision {
                             Some(revision) => {
                                 policy_store
-                                    .bump_policy_revision_if_matches_with_session(revision, session)
+                                    .bump_policy_revision_if_matches(revision, session)
                                     .await?;
                             }
-                            None => policy_store.bump_policy_revision_with_session(session).await?,
+                            None => policy_store.bump_policy_revision(session).await?,
                         }
                         Ok(value)
                     })
@@ -834,7 +851,7 @@ impl RbacService {
         self.run_authorized_policy_transaction(policy_revision, move |session| {
             Box::pin(async move {
                 let value = transaction(session).await?;
-                db.audit_logs().create_with_session(&audit, session).await?;
+                db.audit_logs().create(&audit, session).await?;
                 Ok(value)
             })
         })
@@ -907,12 +924,12 @@ impl RbacService {
         let permissions = permission_pairs(permissions);
         self.run_policy_transaction_at_revision(expected_revision, move |session| {
             Box::pin(async move {
-                db.roles().create_with_session(&role, session).await?;
+                db.roles().create(&role, session).await?;
                 policy_store
-                    .replace_role_permissions_with_session(&role_key, &permissions, session)
+                    .replace_role_permissions(&role_key, &permissions, session)
                     .await?;
                 if let Some(audit) = audit {
-                    db.audit_logs().create_with_session(&audit, session).await?;
+                    db.audit_logs().create(&audit, session).await?;
                 }
                 Ok::<Role, Error>(role)
             })
@@ -939,9 +956,9 @@ impl RbacService {
         let permissions = permission_pairs(permissions.into_vec());
         self.run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
             Box::pin(async move {
-                db.roles().update_with_session(&mut role, session).await?;
+                db.roles().update(&mut role, session).await?;
                 policy_store
-                    .replace_role_permissions_with_session(&role_key, &permissions, session)
+                    .replace_role_permissions(&role_key, &permissions, session)
                     .await?;
                 Ok::<Role, Error>(role)
             })
@@ -960,11 +977,11 @@ impl RbacService {
         self.run_policy_transaction_at_revision(None, move |session| {
             Box::pin(async move {
                 if role.base.is_deleted() {
-                    db.roles().restore_with_session(&mut role, session).await?;
+                    db.roles().restore(&mut role, session).await?;
                 }
-                db.roles().update_with_session(&mut role, session).await?;
+                db.roles().update(&mut role, session).await?;
                 policy_store
-                    .replace_role_permissions_with_session(&role_key, &permissions, session)
+                    .replace_role_permissions(&role_key, &permissions, session)
                     .await?;
                 Ok(role)
             })
@@ -984,8 +1001,8 @@ impl RbacService {
         let role_key = role_key(role.base.id.as_str());
         self.run_authorized_audited_policy_transaction(policy_revision, audit, move |session| {
             Box::pin(async move {
-                db.roles().soft_delete_with_session(&mut role, session).await?;
-                policy_store.remove_role_with_session(&role_key, session).await?;
+                db.roles().soft_delete(&mut role, session).await?;
+                policy_store.remove_role(&role_key, session).await?;
                 Ok::<(), Error>(())
             })
         })
@@ -1020,7 +1037,12 @@ pub async fn ensure_root_role(rbac: &SharedRbacService) -> Result<Role> {
 
 /// 执行一次可重入的 root 角色校验或修复。
 async fn ensure_root_role_once(rbac: &SharedRbacService, root_permission: &Permission) -> Result<Role> {
-    if let Some(role) = rbac.db.roles().find_by_id_including_deleted(ROOT_ROLE_ID).await? {
+    if let Some(role) = rbac
+        .db
+        .roles()
+        .find_by_id_including_deleted(ROOT_ROLE_ID, &mut NoTransaction)
+        .await?
+    {
         let enforcer = rbac.fresh_enforcer().await?.read().await;
         let permissions = permissions_for_role(&enforcer, ROOT_ROLE_ID)?;
         drop(enforcer);

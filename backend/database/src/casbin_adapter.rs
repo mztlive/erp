@@ -9,7 +9,7 @@ use mongodb::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{Result, Transactional};
+use crate::{mongo_ops, Executor, Result, Transactional};
 
 pub(crate) const CASBIN_RULES: &str = "casbin_rules";
 const CASBIN_POLICY_STATE: &str = "casbin_policy_state";
@@ -152,7 +152,7 @@ impl MongoCasbinAdapter {
         let adapter = self.clone();
         self.run_policy_write(move |session| {
             Box::pin(async move {
-                adapter.replace_policy_with_session(rules, session).await?;
+                adapter.replace_all_rules(rules, session).await?;
                 Ok(((), true))
             })
         })
@@ -177,7 +177,7 @@ impl MongoCasbinAdapter {
                 Box::pin(async move {
                     let (value, changed) = operation(session).await?;
                     if changed {
-                        adapter.bump_policy_revision_with_session(session).await?;
+                        adapter.bump_policy_revision(session).await?;
                     }
                     Ok(value)
                 })
@@ -189,16 +189,21 @@ impl MongoCasbinAdapter {
     ///
     /// 缺少版本文档表示尚未发生由新版本服务提交的 policy 变更，返回 `0`。
     ///
+    /// # 参数
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
     /// # 返回值
     /// 返回单调递增的已提交 policy 版本。
     ///
     /// # 错误
     /// 当 MongoDB 查询失败或持久化版本非法时返回错误。
-    pub async fn policy_revision(&self) -> Result<u64> {
-        let state = self
-            .policy_state_collection()
-            .find_one(Self::policy_revision_filter())
-            .await?;
+    pub async fn policy_revision(&self, executor: &mut dyn Executor) -> Result<u64> {
+        let state = mongo_ops::find_one(
+            &self.policy_state_collection(),
+            Self::policy_revision_filter(),
+            executor,
+        )
+        .await?;
         let Some(state) = state else {
             return Ok(0);
         };
@@ -206,194 +211,199 @@ impl MongoCasbinAdapter {
             .map_err(|_| crate::Error::EntityMetadataOutOfRange("casbin policy revision"))
     }
 
-    /// 在调用方事务内递增 Casbin policy 全局版本。
+    /// 递增 Casbin policy 全局版本。
     ///
     /// 所有 policy 事务写入同一个版本文档，使不同实例上的并发写产生 MongoDB
-    /// 事务写冲突，而不是基于彼此不可见的快照同时提交。
+    /// 事务写冲突，而不是基于彼此不可见的快照同时提交；因此调用方必须传入事务执行器。
     ///
     /// # 参数
-    /// * `session` - 已启动事务的 MongoDB 会话
+    /// * `executor` - 数据访问执行器，policy 写入必须传入事务执行器
+    ///
+    /// # 返回值
+    /// 版本递增成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 当版本文档无法更新时返回数据库错误。
-    pub async fn bump_policy_revision_with_session(&self, session: &mut ClientSession) -> Result<()> {
-        self.policy_state_collection()
-            .update_one(Self::policy_revision_filter(), Self::policy_revision_increment())
-            .upsert(true)
-            .session(session)
-            .await?;
+    pub async fn bump_policy_revision(&self, executor: &mut dyn Executor) -> Result<()> {
+        mongo_ops::update_one(
+            &self.policy_state_collection(),
+            Self::policy_revision_filter(),
+            Self::policy_revision_increment(),
+            true,
+            executor,
+        )
+        .await?;
         Ok(())
     }
 
-    /// 在调用方事务内以比较并交换方式递增 policy 版本。
+    /// 以比较并交换方式递增 policy 版本。
     ///
     /// 该方法用于把事务前完成的授权快照与最终 policy 写入绑定；版本已变化时返回
-    /// 乐观锁冲突并回滚整个业务事务。
+    /// 乐观锁冲突并回滚整个业务事务，因此调用方必须传入事务执行器。
     ///
     /// # 参数
     /// * `expected_revision` - 授权检查使用的 policy 版本
-    /// * `session` - 已启动事务的 MongoDB 会话
+    /// * `executor` - 数据访问执行器，policy 写入必须传入事务执行器
+    ///
+    /// # 返回值
+    /// 版本比较并递增成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 当版本超出 BSON 范围、版本已变化或 MongoDB 更新失败时返回错误。
-    pub async fn bump_policy_revision_if_matches_with_session(
+    pub async fn bump_policy_revision_if_matches(
         &self,
         expected_revision: u64,
-        session: &mut ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let expected_revision = i64::try_from(expected_revision)
             .map_err(|_| crate::Error::EntityMetadataOutOfRange("casbin policy revision"))?;
-        let result = self
-            .policy_state_collection()
-            .update_one(
-                doc! {
-                    "_id": POLICY_STATE_ID,
-                    "revision": expected_revision,
-                },
-                Self::policy_revision_increment(),
-            )
-            .upsert(expected_revision == 0)
-            .session(session)
-            .await?;
+        let result = mongo_ops::update_one(
+            &self.policy_state_collection(),
+            doc! {
+                "_id": POLICY_STATE_ID,
+                "revision": expected_revision,
+            },
+            Self::policy_revision_increment(),
+            expected_revision == 0,
+            executor,
+        )
+        .await?;
         if result.matched_count == 0 && result.upserted_id.is_none() {
             return Err(crate::Error::OptimisticLockingError);
         }
         Ok(())
     }
 
-    /// 使用调用方 MongoDB 会话覆盖指定主体的角色绑定。
+    /// 覆盖指定主体的角色绑定。
     ///
-    /// 该方法不会提交事务，调用方可以把账号、Profile 与角色绑定放入同一原子边界。
+    /// 该方法先删除再写入，本身不构成原子边界；调用方应传入事务执行器，
+    /// 把账号、Profile 与角色绑定放入同一原子边界。
     ///
     /// # 参数
     /// * `subject` - Casbin 主体标识
     /// * `role_keys` - 目标 Casbin 角色键
-    /// * `session` - 已启动事务的 MongoDB 会话
+    /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
+    ///
+    /// # 返回值
+    /// 角色绑定替换成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 当规则删除或写入失败时返回数据库错误。
-    pub async fn replace_subject_roles_with_session(
+    pub async fn replace_subject_roles(
         &self,
         subject: &str,
         role_keys: &[String],
-        session: &mut ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let collection = self.collection();
-        collection
-            .delete_many(doc! {
+        mongo_ops::delete_many(
+            &collection,
+            doc! {
                 "sec": "g",
                 "ptype": "g",
                 "values.0": subject,
-            })
-            .session(&mut *session)
-            .await?;
-
-        if role_keys.is_empty() {
-            return Ok(());
-        }
+            },
+            &mut *executor,
+        )
+        .await?;
 
         let rules = role_keys
             .iter()
             .map(|role| CasbinRule::new("g", "g", vec![subject.to_string(), role.clone()]))
             .collect::<Vec<_>>();
-        collection.insert_many(rules).session(&mut *session).await?;
-        Ok(())
+        mongo_ops::insert_many(&collection, rules, executor).await
     }
 
-    /// 使用调用方 MongoDB 会话清除指定主体的全部角色绑定。
+    /// 清除指定主体的全部角色绑定。
     ///
     /// # 参数
     /// * `subject` - Casbin 主体标识
-    /// * `session` - 已启动事务的 MongoDB 会话
+    /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
+    ///
+    /// # 返回值
+    /// 角色绑定清除成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 当规则删除失败时返回数据库错误。
-    pub async fn clear_subject_roles_with_session(
-        &self,
-        subject: &str,
-        session: &mut ClientSession,
-    ) -> Result<()> {
-        self.replace_subject_roles_with_session(subject, &[], session)
-            .await
+    pub async fn clear_subject_roles(&self, subject: &str, executor: &mut dyn Executor) -> Result<()> {
+        self.replace_subject_roles(subject, &[], executor).await
     }
 
-    /// 使用调用方 MongoDB 会话覆盖指定角色的全部权限规则。
+    /// 覆盖指定角色的全部权限规则。
     ///
-    /// 该方法不会提交事务。调用方应把角色实体更新与本方法放入同一个事务。
+    /// 该方法先删除再写入，本身不构成原子边界；调用方应传入事务执行器，
+    /// 把角色实体更新与权限规则写入放入同一个事务。
     ///
     /// # 参数
     /// * `role_key` - Casbin 角色键
     /// * `permissions` - 目标权限的 `(resource, action)` 集合
-    /// * `session` - 已启动事务的 MongoDB 会话
+    /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
     ///
     /// # 返回值
     /// 权限规则全部替换成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 当规则删除或写入失败时返回数据库错误。
-    pub async fn replace_role_permissions_with_session(
+    pub async fn replace_role_permissions(
         &self,
         role_key: &str,
         permissions: &[(String, String)],
-        session: &mut ClientSession,
+        executor: &mut dyn Executor,
     ) -> Result<()> {
         let collection = self.collection();
-        collection
-            .delete_many(Self::role_permission_filter(role_key))
-            .session(&mut *session)
-            .await?;
+        mongo_ops::delete_many(
+            &collection,
+            Self::role_permission_filter(role_key),
+            &mut *executor,
+        )
+        .await?;
 
         let rules = Self::role_permission_rules(role_key, permissions);
-        if !rules.is_empty() {
-            collection.insert_many(rules).session(&mut *session).await?;
-        }
-        Ok(())
+        mongo_ops::insert_many(&collection, rules, executor).await
     }
 
-    /// 使用调用方 MongoDB 会话删除指定角色的全部 Casbin 规则。
+    /// 删除指定角色的全部 Casbin 规则。
     ///
-    /// 该方法同时删除角色的 `p` 权限规则，以及以该角色为目标的 `g` 绑定规则，
-    /// 但不会提交事务。调用方应把角色实体删除与本方法放入同一个事务。
+    /// 该方法同时删除角色的 `p` 权限规则，以及以该角色为目标的 `g` 绑定规则；
+    /// 两步删除本身不构成原子边界，调用方应传入事务执行器，
+    /// 把角色实体删除与规则删除放入同一个事务。
     ///
     /// # 参数
     /// * `role_key` - Casbin 角色键
-    /// * `session` - 已启动事务的 MongoDB 会话
+    /// * `executor` - 数据访问执行器，多步骤写入必须传入事务执行器
     ///
     /// # 返回值
     /// 相关规则全部删除成功时返回 `Ok(())`。
     ///
     /// # 错误
     /// 当任一规则删除失败时返回数据库错误。
-    pub async fn remove_role_with_session(&self, role_key: &str, session: &mut ClientSession) -> Result<()> {
+    pub async fn remove_role(&self, role_key: &str, executor: &mut dyn Executor) -> Result<()> {
         let collection = self.collection();
-        collection
-            .delete_many(Self::role_permission_filter(role_key))
-            .session(&mut *session)
-            .await?;
-        collection
-            .delete_many(Self::role_binding_filter(role_key))
-            .session(&mut *session)
-            .await?;
+        mongo_ops::delete_many(
+            &collection,
+            Self::role_permission_filter(role_key),
+            &mut *executor,
+        )
+        .await?;
+        mongo_ops::delete_many(&collection, Self::role_binding_filter(role_key), executor).await?;
         Ok(())
     }
 
-    /// 使用调用方 MongoDB 会话覆盖全部 Casbin policy。
-    async fn replace_policy_with_session(
-        &self,
-        rules: Vec<CasbinRule>,
-        session: &mut ClientSession,
-    ) -> Result<()> {
-        self.collection()
-            .delete_many(doc! {})
-            .session(&mut *session)
-            .await?;
-        if !rules.is_empty() {
-            self.collection()
-                .insert_many(rules)
-                .session(&mut *session)
-                .await?;
-        }
-        Ok(())
+    /// 覆盖全部 Casbin policy 规则。
+    ///
+    /// # 参数
+    /// * `rules` - 覆盖后的全量规则
+    /// * `executor` - 数据访问执行器，全量覆盖必须传入事务执行器
+    ///
+    /// # 返回值
+    /// 全量覆盖成功时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 当规则删除或写入失败时返回数据库错误。
+    async fn replace_all_rules(&self, rules: Vec<CasbinRule>, executor: &mut dyn Executor) -> Result<()> {
+        let collection = self.collection();
+        mongo_ops::delete_many(&collection, doc! {}, &mut *executor).await?;
+        mongo_ops::insert_many(&collection, rules, executor).await
     }
 }
 
@@ -455,7 +465,7 @@ impl Adapter for MongoCasbinAdapter {
         let adapter = self.clone();
         self.run_policy_write(move |session| {
             Box::pin(async move {
-                let result = adapter.collection().delete_many(doc! {}).session(session).await?;
+                let result = mongo_ops::delete_many(&adapter.collection(), doc! {}, session).await?;
                 Ok(((), result.deleted_count > 0))
             })
         })
@@ -475,12 +485,14 @@ impl Adapter for MongoCasbinAdapter {
         let adapter = self.clone();
         self.run_policy_write(move |session| {
             Box::pin(async move {
-                let result = adapter
-                    .collection()
-                    .update_one(doc! { "_id": &rule.id }, doc! { "$setOnInsert": rule_doc })
-                    .upsert(true)
-                    .session(session)
-                    .await?;
+                let result = mongo_ops::update_one(
+                    &adapter.collection(),
+                    doc! { "_id": &rule.id },
+                    doc! { "$setOnInsert": rule_doc },
+                    true,
+                    session,
+                )
+                .await?;
                 let changed = result.upserted_id.is_some();
                 Ok((changed, changed))
             })
@@ -507,15 +519,16 @@ impl Adapter for MongoCasbinAdapter {
         let adapter = self.clone();
         self.run_policy_write(move |session| {
             Box::pin(async move {
-                let existing = adapter
-                    .collection()
-                    .count_documents(doc! { "_id": { "$in": ids } })
-                    .session(&mut *session)
-                    .await?;
+                let existing = mongo_ops::count_documents(
+                    &adapter.collection(),
+                    doc! { "_id": { "$in": ids } },
+                    &mut *session,
+                )
+                .await?;
                 if existing > 0 {
                     return Ok((false, false));
                 }
-                adapter.collection().insert_many(rules).session(session).await?;
+                mongo_ops::insert_many(&adapter.collection(), rules, session).await?;
                 Ok((true, true))
             })
         })
@@ -528,11 +541,8 @@ impl Adapter for MongoCasbinAdapter {
         let adapter = self.clone();
         self.run_policy_write(move |session| {
             Box::pin(async move {
-                let result = adapter
-                    .collection()
-                    .delete_one(doc! { "_id": id })
-                    .session(session)
-                    .await?;
+                let result =
+                    mongo_ops::delete_one(&adapter.collection(), doc! { "_id": id }, session).await?;
                 let changed = result.deleted_count > 0;
                 Ok((changed, changed))
             })
@@ -558,11 +568,9 @@ impl Adapter for MongoCasbinAdapter {
         let adapter = self.clone();
         self.run_policy_write(move |session| {
             Box::pin(async move {
-                let result = adapter
-                    .collection()
-                    .delete_many(doc! { "_id": { "$in": ids } })
-                    .session(session)
-                    .await?;
+                let result =
+                    mongo_ops::delete_many(&adapter.collection(), doc! { "_id": { "$in": ids } }, session)
+                        .await?;
                 Ok((result.deleted_count == expected_count, result.deleted_count > 0))
             })
         })
@@ -584,7 +592,7 @@ impl Adapter for MongoCasbinAdapter {
         let adapter = self.clone();
         self.run_policy_write(move |session| {
             Box::pin(async move {
-                let result = adapter.collection().delete_many(filter).session(session).await?;
+                let result = mongo_ops::delete_many(&adapter.collection(), filter, session).await?;
                 let changed = result.deleted_count > 0;
                 Ok((changed, changed))
             })
