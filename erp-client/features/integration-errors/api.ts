@@ -1,6 +1,5 @@
 /**
  * W29 session-mock API：queryFn / mutationFn 纯函数。
- * - claimToken 仅出现在领取响应，不进列表/详情 query 视图
  * - REPLAY 永不接受 originalActionIdempotencyKey；服务端锁定原键
  * - QUERY 后才可能开放 REPLAY（NO_RESULT_CONFIRMED + 安全）
  * - 暂挂/跳过保留在队列；RESOLVE/CLOSE/TRANSFER 才终结任务
@@ -9,7 +8,6 @@
 
 import { mockDelay } from "@/lib/mock-delay"
 import type {
-  ActionOutcome,
   ClaimResult,
   ControlledTerminalEvidenceRef,
   DirectReconciliationInput,
@@ -36,13 +34,11 @@ import {
   completeWorkItemSession,
   getCompletedQueueTaskIds,
   getHeldQueueTaskIds,
-  getSessionLeaseState,
+  getSessionLease,
   getWorkItemActionHistory,
   getWorkItemTerminal,
   markQueueTaskCompleted,
   markQueueTaskHeld,
-  queryIdempotencyResult,
-  setIdempotencySucceeded,
   transferWorkItemSession,
   WorkItemMockError,
 } from "@/mock/session-state"
@@ -237,7 +233,7 @@ function projectItem(
 
   const { allowed, blockers } = baseAllowed(seed, overlay)
   const lease = seed.workItem
-    ? getSessionLeaseState(seed.workItem.workItemId)
+    ? getSessionLease(seed.workItem.workItemId)
     : null
   const actionHistory = seed.workItem
     ? getWorkItemActionHistory(seed.workItem.workItemId)
@@ -267,8 +263,8 @@ function projectItem(
       status: isHeld ? "PENDING" : lease ? "IN_PROGRESS" : workItem.status,
       lease: lease
         ? {
-            leaseVersion: lease.leaseVersion,
-            leaseExpiresAt: lease.leaseExpiresAt,
+            ownerUserId: lease.ownerUserId,
+            subjectVersion: lease.subjectVersion,
             ownerDisplayName: "王敏（演示）",
           }
         : undefined,
@@ -474,22 +470,15 @@ export async function fetchIntegrationItem(input: {
 
 export async function claimIntegrationTask(input: {
   workItemId: string
-  subjectVersion: string
-  subjectHash: string
-  leaseVersion?: number
+  subjectVersion?: string
 }): Promise<ClaimResult> {
   await mockDelay(40)
   const lease = claimWorkItemSession({
     workItemId: input.workItemId,
     subjectVersion: input.subjectVersion,
-    subjectHash: input.subjectHash,
-    leaseVersion: input.leaseVersion ?? 1,
   })
   return {
     workItemId: lease.workItemId,
-    claimToken: lease.claimToken,
-    leaseVersion: lease.leaseVersion,
-    expiresAt: lease.leaseExpiresAt,
   }
 }
 
@@ -554,18 +543,6 @@ export async function applyIntegrationTaskAction(
   }
 
   try {
-    if (input.simulateTimeout) {
-      applyWorkItemActionSession({
-        workItemId: input.workItemId,
-        claimToken: input.claimToken,
-        leaseVersion: input.leaseVersion,
-        expectedSubjectHash: input.expectedSubjectHash,
-        idempotencyKey: input.idempotencyKey,
-        action: { kind: input.kind, note: input.comment },
-        simulateTimeout: true,
-      })
-    }
-
     if (input.kind === "QUERY_ORIGINAL_RESULT") {
       const o = getOverlay(input.itemId)
       let outcome: QueryOutcome = "NO_RESULT_CONFIRMED"
@@ -599,10 +576,7 @@ export async function applyIntegrationTaskAction(
 
       applyWorkItemActionSession({
         workItemId: input.workItemId,
-        claimToken: input.claimToken,
-        leaseVersion: input.leaseVersion,
-        expectedSubjectHash: input.expectedSubjectHash,
-        idempotencyKey: input.idempotencyKey,
+        expectedSubjectVersion: input.expectedSubjectVersion,
         action: {
           kind: "QUERY_ORIGINAL_RESULT",
           note: `outcome=${outcome}`,
@@ -646,10 +620,7 @@ export async function applyIntegrationTaskAction(
     if (input.kind === "REPLAY_ORIGINAL") {
       applyWorkItemActionSession({
         workItemId: input.workItemId,
-        claimToken: input.claimToken,
-        leaseVersion: input.leaseVersion,
-        expectedSubjectHash: input.expectedSubjectHash,
-        idempotencyKey: input.idempotencyKey,
+        expectedSubjectVersion: input.expectedSubjectVersion,
         action: {
           kind: "REPLAY_ORIGINAL",
           note: "server used locked originalActionIdempotencyKey",
@@ -721,10 +692,7 @@ export async function applyIntegrationTaskAction(
       })
       applyWorkItemActionSession({
         workItemId: input.workItemId,
-        claimToken: input.claimToken,
-        leaseVersion: input.leaseVersion,
-        expectedSubjectHash: input.expectedSubjectHash,
-        idempotencyKey: input.idempotencyKey,
+        expectedSubjectVersion: input.expectedSubjectVersion,
         action: {
           kind: input.kind,
           note: input.comment,
@@ -756,10 +724,7 @@ export async function applyIntegrationTaskAction(
     if (input.kind === "REATTRIBUTE") {
       applyWorkItemActionSession({
         workItemId: input.workItemId,
-        claimToken: input.claimToken,
-        leaseVersion: input.leaseVersion,
-        expectedSubjectHash: input.expectedSubjectHash,
-        idempotencyKey: input.idempotencyKey,
+        expectedSubjectVersion: input.expectedSubjectVersion,
         action: { kind: "REATTRIBUTE", note: input.comment },
       })
       appendEvidence(input.itemId, {
@@ -785,10 +750,7 @@ export async function applyIntegrationTaskAction(
     if (input.kind === "DEFER" || input.kind === "SKIP") {
       applyWorkItemActionSession({
         workItemId: input.workItemId,
-        claimToken: input.claimToken,
-        leaseVersion: input.leaseVersion,
-        expectedSubjectHash: input.expectedSubjectHash,
-        idempotencyKey: input.idempotencyKey,
+        expectedSubjectVersion: input.expectedSubjectVersion,
         action: {
           kind: input.kind,
           note: input.comment ?? input.reasonCode,
@@ -826,16 +788,6 @@ export async function applyIntegrationTaskAction(
       stayOnItem: true,
     }
   } catch (e) {
-    if (e instanceof WorkItemMockError && e.code === "TIMEOUT") {
-      return {
-        status: "unknown",
-        title: "动作结果未知",
-        description: e.message,
-        stayOnItem: true,
-        pendingIdempotencyKey: input.idempotencyKey,
-        terminal: false,
-      }
-    }
     throw e
   }
 }
@@ -882,16 +834,12 @@ export async function resolveIntegrationTask(
   try {
     const result = completeWorkItemSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: input.expectedSubjectHash,
-      idempotencyKey: input.idempotencyKey,
+      expectedSubjectVersion: input.expectedSubjectVersion,
       decision: {
         kind: "RESOLVE",
         note: input.comment,
         summary: `policy=${input.evidencePolicyId}@${input.evidencePolicyVersion}`,
       },
-      simulateTimeout: input.simulateTimeout,
     })
     markQueueTaskCompleted(WS, input.workItemId)
     markQueueTaskCompleted(WS, input.itemId)
@@ -919,15 +867,6 @@ export async function resolveIntegrationTask(
       ],
     }
   } catch (e) {
-    if (e instanceof WorkItemMockError && e.code === "TIMEOUT") {
-      return {
-        status: "unknown",
-        title: "解决结果未知",
-        description: e.message,
-        stayOnItem: true,
-        pendingIdempotencyKey: input.idempotencyKey,
-      }
-    }
     throw e
   }
 }
@@ -955,27 +894,15 @@ export async function closeIntegrationTask(
       stayOnItem: true,
     }
   }
-  if (!input.closureEvidenceReference.trim()) {
-    return {
-      status: "blocked",
-      title: "关闭证据必填",
-      description: "须提供受控关闭证据引用。",
-      stayOnItem: true,
-    }
-  }
 
   const result = closeWorkItemSession({
     workItemId: input.workItemId,
-    claimToken: input.claimToken,
-    leaseVersion: input.leaseVersion,
-    expectedSubjectHash: input.expectedSubjectHash,
-    idempotencyKey: input.idempotencyKey,
+    expectedSubjectVersion: input.expectedSubjectVersion,
     closeAllowed: true,
     closure: {
       kind: input.kind,
       reasonCode: input.reasonCode,
       replacementWorkItemId: input.replacementWorkItemId,
-      closureEvidenceReference: input.closureEvidenceReference,
       comment: input.comment,
     },
   })
@@ -998,7 +925,6 @@ export async function closeIntegrationTask(
         label: "原因",
         value: input.reasonCode === "DUPLICATE" ? "重复" : "错误路由",
       },
-      { label: "关闭证据", value: input.closureEvidenceReference },
       {
         label: "替代任务",
         value: input.replacementWorkItemId ? "已指定" : "—",
@@ -1024,12 +950,10 @@ export async function transferIntegrationTask(
   }
   const result = transferWorkItemSession({
     workItemId: input.workItemId,
-    claimToken: input.claimToken,
-    leaseVersion: input.leaseVersion,
-    expectedSubjectHash: input.expectedSubjectHash,
-    idempotencyKey: input.idempotencyKey,
+    expectedSubjectVersion: input.expectedSubjectVersion,
     transfer: {
-      toUserLabel: input.targetRole,
+      targetUserId: input.targetUserId ?? "user_transfer_demo",
+      targetRole: input.targetRole,
       reason: input.comment ?? input.reasonCode,
     },
   })
@@ -1039,17 +963,15 @@ export async function transferIntegrationTask(
     status: "succeeded",
     title: "已转交",
     description:
-      "原任务已转交，已创建待处理的后继任务。转交不是解决。",
+      "任务已转交，仅处理人变化，原任务仍是同一任务。转交不是解决。",
     reference: result.transferRecordId,
     outcome: "TRANSFERRED",
-    workItemStatus: "TRANSFERRED",
+    workItemStatus: "IN_PROGRESS",
     stayOnItem: false,
     terminal: true,
-    successorWorkItemId: result.successorWorkItemId,
     facts: [
       { label: "目标角色", value: input.targetRole },
-      { label: "后继任务", value: "已创建" },
-      { label: "原任务状态", value: "已转交" },
+      { label: "原任务状态", value: "处理中（已转交）" },
     ],
   }
 }
@@ -1167,10 +1089,6 @@ export async function applyDirectReconciliation(
     action: terminalDecision.conclusion,
     detail: "按注册原因确认 · 任务未关闭",
   })
-  setIdempotencySucceeded(input.idempotencyKey, terminalDecision.conclusion, {
-    differenceId: input.differenceId,
-    isTerminal: true,
-  })
 
   return {
     status: "succeeded",
@@ -1195,40 +1113,6 @@ export async function applyDirectReconciliation(
       },
       { label: "任务已关闭", value: "否（直接对账）" },
     ],
-  }
-}
-
-export async function queryIntegrationIdempotency(
-  key: string
-): Promise<IntegrationFormalResult> {
-  await mockDelay(30)
-  try {
-    const payload = queryIdempotencyResult(key)
-    if (!payload) {
-      return {
-        status: "unknown",
-        title: "仍无最终结果",
-        description: "请稍后用原任务号再查，勿自动下一项。",
-        stayOnItem: true,
-        pendingIdempotencyKey: key,
-      }
-    }
-    return {
-      status: "succeeded",
-      title: resultText.querySucceeded,
-      description: "请根据结果继续处理；非终结动作不自动下一项。",
-      reference: key,
-      stayOnItem: true,
-      facts: [{ label: resultText.originalTaskNo, value: key }],
-    }
-  } catch (e) {
-    return {
-      status: "unknown",
-      title: "查询失败",
-      description: e instanceof Error ? e.message : "未知错误",
-      stayOnItem: true,
-      pendingIdempotencyKey: key,
-    }
   }
 }
 

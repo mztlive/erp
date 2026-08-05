@@ -63,7 +63,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   useBalanceDetailQuery,
   useCreateAdjustmentDraftMutation,
-  useExportJobQuery,
   useInventoryListQuery,
   useResolveAdjustmentUnknownMutation,
   useStartInventoryExportMutation,
@@ -88,7 +87,7 @@ import {
   decodeInventoryCursor,
   encodeInventoryCursor,
 } from "@/features/inventory/cursor"
-import { bumpInventoryBalanceLock } from "@/mock/session-state"
+import { bumpInventoryBalanceLock, type W10ExportJob } from "@/mock/session-state"
 import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
 import { resultText } from "@/lib/ui-text"
 
@@ -263,7 +262,7 @@ export function InventoryLedgerPage() {
   } | null>(null)
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
-  const [exportJobId, setExportJobId] = React.useState<string | null>(null)
+  const [exportJob, setExportJob] = React.useState<W10ExportJob | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const [pendingPayload, setPendingPayload] = React.useState<{
@@ -362,7 +361,6 @@ export function InventoryLedgerPage() {
   const submitMutation = useSubmitAdjustmentMutation()
   const resolveUnknownMutation = useResolveAdjustmentUnknownMutation()
   const exportMutation = useStartInventoryExportMutation()
-  const exportJobQuery = useExportJobQuery(exportJobId)
 
   const data = listQuery.data
 
@@ -1086,7 +1084,6 @@ export function InventoryLedgerPage() {
           : "combos"
 
   const detail = detailQuery.data
-  const exportJob = exportJobQuery.data
 
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
@@ -1135,7 +1132,7 @@ export function InventoryLedgerPage() {
                       total: data.total,
                       filterSummary: data.filterSummary,
                     })
-                    .then((job) => setExportJobId(job.jobId))
+                    .then((job) => setExportJob(job))
                 },
               },
             ]}
@@ -1225,7 +1222,7 @@ export function InventoryLedgerPage() {
         />
       ) : null}
 
-      {exportJobId && exportJob ? (
+      {exportJob ? (
         <BackgroundJobProgress
           mode="all-or-nothing"
           status={
@@ -1258,7 +1255,7 @@ export function InventoryLedgerPage() {
               type="button"
               size="sm"
               variant="ghost"
-              onClick={() => setExportJobId(null)}
+              onClick={() => setExportJob(null)}
             >
               关闭
             </Button>

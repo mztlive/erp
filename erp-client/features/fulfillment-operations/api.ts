@@ -1,6 +1,5 @@
 /**
  * W09 session-mock API：queryFn / mutationFn 纯函数。
- * claimToken 仅出现在领取/续租响应；查询 View 不回显令牌。
  * 确认成功后才更新队列完成集合与业务结果；结果未知时不改库存/预占/队列。
  */
 
@@ -27,26 +26,19 @@ import { FULFILLMENT_OPERATIONS_SEED } from "@/mock/fulfillment-operations"
 import {
   applyWorkItemActionSession,
   claimWorkItemSession,
-  clearSessionLease,
   completeWorkItemSession,
-  finalizePendingComplete,
   getFulfillmentBusinessOutcome,
   getFulfillmentDraft,
   getFulfillmentPaymentGateOverride,
-  getIdempotencyEntry,
   getSessionLease,
-  getSessionLeaseState,
   isFulfillmentWorkItemHeld,
   isFulfillmentWorkItemTerminal,
   markQueueTaskCompleted,
   markQueueTaskHeld,
-  queryIdempotencyResult,
   saveFulfillmentDraft,
   setFulfillmentBusinessOutcome,
-  setIdempotencySucceeded,
   WorkItemMockError,
 } from "@/mock/session-state"
-import { leaseText } from "@/lib/ui-text"
 
 export type FulfillmentQueueFilters = {
   /** 演示角色：决定可见作业类型与「仅我的」匹配谁 */
@@ -68,7 +60,7 @@ function projectTask(seed: FulfillmentTask): FulfillmentTask | null {
   if (isFulfillmentWorkItemTerminal(seed.workItemId)) return null
   const held = isFulfillmentWorkItemHeld(seed.workItemId)
   const draftStore = getFulfillmentDraft(seed.workItemId)
-  const publicLease = getSessionLeaseState(seed.workItemId)
+  const publicLease = getSessionLease(seed.workItemId)
   const draft = (draftStore?.draft as FulfillmentDraft | undefined) ?? seed.draft
   const editVersion = draftStore?.editVersion ?? seed.editVersion
 
@@ -118,8 +110,6 @@ function projectTask(seed: FulfillmentTask): FulfillmentTask | null {
     lease: publicLease
       ? {
           claimedByLabel: "当前用户 · 履约经办",
-          expiresAt: publicLease.leaseExpiresAt,
-          leaseVersion: publicLease.leaseVersion,
         }
       : seed.lease,
   }
@@ -356,19 +346,14 @@ export async function claimFulfillmentWorkItem(
     throw new Error("这条已经处理完了")
   }
   try {
-    const lease = claimWorkItemSession({
+    claimWorkItemSession({
       workItemId,
       subjectVersion: seed.sourceVersion,
-      subjectHash: seed.subjectHash,
-      leaseVersion: seed.lease?.leaseVersion ?? 1,
       ownerUserId: "user_fulfillment",
     })
     return {
       workItemId,
       claimedByLabel: "当前用户 · 履约经办",
-      expiresAt: lease.leaseExpiresAt,
-      leaseVersion: lease.leaseVersion,
-      claimToken: lease.claimToken,
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) throw new Error(error.message)
@@ -379,10 +364,7 @@ export async function claimFulfillmentWorkItem(
 export async function saveFulfillmentOperation(input: {
   workItemId: string
   expectedEditVersion: number
-  claimToken: string
-  leaseVersion: number
   draft: FulfillmentDraft
-  idempotencyKey: string
 }): Promise<{ editVersion: number }> {
   await mockDelay(100)
   const seed = FULFILLMENT_OPERATIONS_SEED.find(
@@ -392,10 +374,7 @@ export async function saveFulfillmentOperation(input: {
   try {
     applyWorkItemActionSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: seed.subjectHash,
-      idempotencyKey: input.idempotencyKey,
+      expectedSubjectVersion: seed.sourceVersion,
       action: { kind: "SAVE_EVIDENCE", note: "保存履约作业草稿" },
     })
     return saveFulfillmentDraft(
@@ -757,62 +736,21 @@ function buildFormalOutcome(
 
 export async function postFulfillmentOperation(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
+  expectedSubjectVersion: string
   expectedSourceVersion: string
   expectedEditVersion: number
   draft: FulfillmentDraft
-  idempotencyKey: string
   nextWorkItemId?: string
   forceUnknown?: boolean
 }): Promise<FormalActionResponse> {
   await mockDelay(150)
 
-  const cachedBiz = getFulfillmentBusinessOutcome(input.workItemId)
-  const idem = getIdempotencyEntry(input.idempotencyKey)
-  if (idem?.state === "succeeded") {
-    const payload = idem.payload as { formalOutcome?: FulfillmentFormalOutcome }
-    if (payload?.formalOutcome) {
-      return { status: "succeeded", outcome: payload.formalOutcome }
-    }
-    if (cachedBiz) {
-      return {
-        status: "succeeded",
-        outcome: cachedBiz as FulfillmentFormalOutcome,
-      }
-    }
-  }
-  if (idem?.state === "pending" || input.forceUnknown) {
-    try {
-      if (input.forceUnknown) {
-        completeWorkItemSession({
-          workItemId: input.workItemId,
-          claimToken: input.claimToken,
-          leaseVersion: input.leaseVersion,
-          expectedSubjectHash: input.expectedSubjectHash,
-          idempotencyKey: input.idempotencyKey,
-          decision: { kind: "FULFILLMENT_POSTED" },
-          simulateTimeout: true,
-        })
-      }
-    } catch (error) {
-      if (error instanceof WorkItemMockError && error.code === "TIMEOUT") {
-        return {
-          status: "unknown",
-          message:
-            "这次提交没收到结果。先别当成已经做完 —— 库存和留货都还没动。留在这一条，点「查询最终结果」按原任务号查一下。",
-          idempotencyKey: input.idempotencyKey,
-        }
-      }
-    }
-    if (idem?.state === "pending") {
-      return {
-        status: "unknown",
-        message:
-          "这次提交没收到结果。先别当成已经做完 —— 库存和留货都还没动。留在这一条，点「查询最终结果」按原任务号查一下。",
-        idempotencyKey: input.idempotencyKey,
-      }
+  if (input.forceUnknown) {
+    return {
+      status: "unknown",
+      message:
+        "这次提交没收到结果。先别当成已经做完 —— 库存和留货都还没动。留在这一条，点「查询最终结果」按原任务号查一下。",
+      idempotencyKey: `post_${input.workItemId}_${Date.now().toString(36)}`,
     }
   }
 
@@ -822,10 +760,10 @@ export async function postFulfillmentOperation(input: {
   if (!seed) {
     return { status: "failed", code: "NOT_FOUND", message: "任务不存在" }
   }
-  if (seed.subjectHash !== input.expectedSubjectHash) {
+  if (seed.sourceVersion !== input.expectedSubjectVersion) {
     return {
       status: "failed",
-      code: "SUBJECT_HASH_MISMATCH",
+      code: "SUBJECT_VERSION_MISMATCH",
       message: "这条任务的来源单据有改动，请刷新后再处理",
     }
   }
@@ -854,10 +792,7 @@ export async function postFulfillmentOperation(input: {
   try {
     completeWorkItemSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: input.expectedSubjectHash,
-      idempotencyKey: input.idempotencyKey,
+      expectedSubjectVersion: input.expectedSubjectVersion,
       decision: {
         kind: `FULFILLMENT_${input.draft.type}`,
         summary: `${OPERATION_DONE_LABEL[input.draft.type]} ${outcome.factNo}`,
@@ -865,23 +800,9 @@ export async function postFulfillmentOperation(input: {
     })
     setFulfillmentBusinessOutcome(input.workItemId, outcome)
     markQueueTaskCompleted("W09", input.workItemId)
-    const entry = getIdempotencyEntry(input.idempotencyKey)
-    if (entry?.state === "succeeded") {
-      setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", {
-        ...(entry.payload as object),
-        formalOutcome: outcome,
-      })
-    }
     return { status: "succeeded", outcome }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
-      if (error.code === "TIMEOUT") {
-        return {
-          status: "unknown",
-          message: error.message,
-          idempotencyKey: input.idempotencyKey,
-        }
-      }
       return { status: "failed", code: error.code, message: error.message }
     }
     throw error
@@ -890,13 +811,10 @@ export async function postFulfillmentOperation(input: {
 
 export async function deferFulfillmentOperation(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
   queueContextId: string
   reasonCode: DeferReasonCode
   reasonNote?: string
   nextWorkItemId?: string
-  idempotencyKey: string
 }): Promise<FormalActionResponse> {
   await mockDelay(100)
   const seed = FULFILLMENT_OPERATIONS_SEED.find(
@@ -911,10 +829,7 @@ export async function deferFulfillmentOperation(input: {
   try {
     applyWorkItemActionSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: seed.subjectHash,
-      idempotencyKey: input.idempotencyKey,
+      expectedSubjectVersion: seed.sourceVersion,
       action: {
         kind: "DEFER",
         note: `${input.reasonCode}${input.reasonNote ? `: ${input.reasonNote}` : ""}`,
@@ -943,82 +858,21 @@ export async function deferFulfillmentOperation(input: {
 }
 
 export async function resolveUnknownFulfillmentResult(input: {
-  idempotencyKey: string
+  workItemId: string
   settle?: boolean
   settlePayload?: Parameters<typeof postFulfillmentOperation>[0]
 }): Promise<FormalActionResponse> {
   await mockDelay(80)
-  const entry = queryIdempotencyResult(input.idempotencyKey)
-  if (entry?.state === "succeeded") {
-    const payload = entry.payload as { formalOutcome?: FulfillmentFormalOutcome }
-    if (payload?.formalOutcome) {
-      return { status: "succeeded", outcome: payload.formalOutcome }
-    }
-    const biz = input.settlePayload
-      ? getFulfillmentBusinessOutcome(input.settlePayload.workItemId)
-      : null
-    if (biz) {
-      return { status: "succeeded", outcome: biz as FulfillmentFormalOutcome }
-    }
+  if (input.settle && input.settlePayload) {
+    return postFulfillmentOperation(input.settlePayload)
   }
-  if (entry?.state === "pending" && input.settle && input.settlePayload) {
-    try {
-      finalizePendingComplete({
-        idempotencyKey: input.idempotencyKey,
-        workItemId: input.settlePayload.workItemId,
-        expectedSubjectHash: input.settlePayload.expectedSubjectHash,
-        decision: {
-          kind: `FULFILLMENT_${input.settlePayload.draft.type}`,
-        },
-      })
-      const seed = FULFILLMENT_OPERATIONS_SEED.find(
-        (t) => t.workItemId === input.settlePayload!.workItemId
-      )
-      if (!seed) {
-        return { status: "failed", code: "NOT_FOUND", message: "任务不存在" }
-      }
-      const projected = projectTask(seed) ?? seed
-      const outcome = buildFormalOutcome(
-        projected,
-        input.settlePayload.draft,
-        input.settlePayload.nextWorkItemId
-      )
-      setFulfillmentBusinessOutcome(input.settlePayload.workItemId, outcome)
-      markQueueTaskCompleted("W09", input.settlePayload.workItemId)
-      setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", {
-        formalOutcome: outcome,
-      })
-      return { status: "succeeded", outcome }
-    } catch (error) {
-      if (error instanceof WorkItemMockError) {
-        return { status: "failed", code: error.code, message: error.message }
-      }
-      throw error
-    }
-  }
-  if (entry?.state === "pending") {
-    return {
-      status: "unknown",
-      message: "仍在处理中，处理结果待确认。停留当前项，不移动队列、不改库存。",
-      idempotencyKey: input.idempotencyKey,
-    }
+  const biz = getFulfillmentBusinessOutcome(input.workItemId)
+  if (biz) {
+    return { status: "succeeded", outcome: biz as FulfillmentFormalOutcome }
   }
   return {
     status: "failed",
     code: "NO_PENDING",
     message: "未找到该任务号对应的处理中请求",
   }
-}
-
-export async function renewFulfillmentLease(input: {
-  workItemId: string
-  claimToken: string
-}): Promise<WorkItemLease> {
-  await mockDelay(60)
-  const existing = getSessionLease(input.workItemId)
-  if (!existing || existing.claimToken !== input.claimToken) {
-    throw new Error(leaseText.reclaimed)
-  }
-  clearSessionLease(input.workItemId)
-  return claimFulfillmentWorkItem(input.workItemId)
 }

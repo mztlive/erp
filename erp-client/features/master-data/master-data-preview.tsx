@@ -15,7 +15,7 @@ import {
   masterDataCopy,
 } from "@/features/master-data/copy"
 import { formatEffectiveRange } from "@/features/master-data/filter"
-import { revealMasterDataSensitive } from "@/features/master-data/api"
+import { revealMasterDataSensitive } from "@/features/master-data/queries"
 import type {
   MasterDataCenterView,
   MasterDataListItem,

@@ -2132,6 +2132,3 @@ export function ProductDetailPage({
     </form.Subscribe>
   )
 }
-
-/** @deprecated 使用 ProductDetailPage；保留别名以免旧引用断裂 */
-export const ProductFormPage = ProductDetailPage

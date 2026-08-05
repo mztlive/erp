@@ -109,18 +109,6 @@ export type PeriodPolicyView =
       blocker: ActionBlocker
     }
 
-export type RefreshCutoffPolicyView =
-  | {
-      state: "CONFIGURED"
-      policyId: string
-      policyVersion: string
-      label: string
-    }
-  | {
-      state: "UNCONFIGURED"
-      blocker: ActionBlocker
-    }
-
 export type SettlementListRow = {
   statementId: string
   statementNo: string
@@ -323,9 +311,7 @@ export type SettlementDetailView = {
     subjectVersion: string
     subjectHash: string
     claimedBy?: ActorView
-    leaseVersion?: number
   }
-  refreshCutoffPolicy: RefreshCutoffPolicyView
   periodPolicy: PeriodPolicyView
   auditEvents: AuditEventView[]
   allowedActions: string[]
@@ -407,8 +393,6 @@ export type SubmitReviewInput = {
   statementId: string
   expectedLockVersion: number
   subjectHash: string
-  refreshCutoffPolicyId: string
-  expectedRefreshCutoffPolicyVersion: string
   role: DemoRole
   operationId: string
   idempotencyKey: string
@@ -418,10 +402,7 @@ export type SubmitReviewInput = {
 export type ReviewDecisionInput = {
   statementId: string
   workItemId: string
-  claimToken: string
-  leaseVersion: number
   expectedSubjectVersion: string
-  expectedSubjectHash: string
   expectedLockVersion: number
   action: "REJECT" | "CONFIRM"
   role: DemoRole

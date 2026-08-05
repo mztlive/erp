@@ -140,7 +140,7 @@ Excel 导入仍用批次对话框；API 同步由 W20 触发。三种来源入�
 
 - API 同步和后续 Excel 重导产生的新增、变化、停供、错误可进入队列。
 - 停供、不可供、库存为零或新鲜度超时仍按既有安全规则暂停相关发布。
-- 正常目录浏览不依赖任务；只有需要人工领取/终结的异常才使用 W02 的租约和幂等信封。
+- 正常目录浏览不依赖任务；只有需要人工领取/终结的异常才使用 W02 的领取和动作契约。
 - 来源是 Excel/手工时不显示“API 连接”链接。
 
 ### 5.3 供应商商品中心（与 W14 同构）
@@ -305,8 +305,8 @@ CreateOrLinkCompanySkuFromSupplierCatalog {
 `company_sku_id + expected_company_sku_revision_id`，且不能借关联命令改变其规格签名。
 
 `CREATE_COMPANY_PRODUCT_AND_SKU` 是单一数据库事务：创建公司 product/SKU 及其包含销售可见价和市场价的 `sku_revision`、精确
-SKU 映射、双价 offering 修订、审计、幂等结果与 outbox 必须一起
-提交；外部媒体归档须在事务前完成或在提交后由 outbox 处理，不能用 Saga 留下业务半状态。
+SKU 映射、双价 offering 修订、审计与幂等结果必须一起
+提交；外部媒体归档须在事务前完成或在提交后由投递任务处理，不能用 Saga 留下业务半状态。
 
 单项新建/关联公司商品与供给的正式粒度始终是 `supplier_catalog_sku_id`。供应商 SPU 页面可以多选 SKU，
 但批量提交必须拆成 SKU 级 `items[]`；每项都显式携带来源 SKU 与目标公司 SKU，独立执行

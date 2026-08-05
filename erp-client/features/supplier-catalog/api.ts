@@ -1,6 +1,6 @@
 /**
  * W21 session-mock API：queryFn / mutationFn 纯函数。
- * claimToken 仅出现在领取响应；任务内动作 / 终结复用 W02 会话信封语义。
+ * 任务内动作 / 终结复用 W02 会话信封语义。
  */
 
 import { mockDelay } from "@/lib/mock-delay"
@@ -42,18 +42,15 @@ import { SUPPLIER_CATALOG_SEED } from "@/mock/supplier-catalog"
 import {
   applyWorkItemActionSession,
   claimWorkItemSession,
-  clearSessionLease,
   completeWorkItemSession,
   getCompletedQueueTaskIds,
   getHeldQueueTaskIds,
-  getSessionLeaseState,
+  getSessionLease,
   getWorkItemActionHistory,
   getWorkItemTerminal,
   isWorkItemHeld,
   markQueueTaskCompleted,
   markQueueTaskHeld,
-  queryIdempotencyResult,
-  setIdempotencySucceeded,
   WorkItemMockError,
 } from "@/mock/session-state"
 
@@ -265,7 +262,7 @@ function projectItem(
 
   const publicLease =
     seed.changeType === "ERROR" || seed.changeType === "STOPPED"
-      ? getSessionLeaseState(seed.workItem.workItemId)
+      ? getSessionLease(seed.workItem.workItemId)
       : null
 
   const ep = seed.supplierProduct
@@ -348,9 +345,6 @@ function projectItem(
             ? "IN_PROGRESS"
             : base.workItem.workItemStatus,
         held,
-        leaseVersion: publicLease?.leaseVersion ?? base.workItem.leaseVersion,
-        leaseExpiresAt:
-          publicLease?.leaseExpiresAt ?? base.workItem.leaseExpiresAt,
         claimedBy: publicLease
           ? { userId: "user_demo", displayName: `当前用户 · ${DEMO_ROLE_LABEL[role]}` }
           : base.workItem.claimedBy,
@@ -682,19 +676,14 @@ export async function claimSupplierCatalogWorkItem(
     throw new Error("任务已完成，无法领取")
   }
   try {
-    const lease = claimWorkItemSession({
+    claimWorkItemSession({
       workItemId,
       subjectVersion: seed.workItem.subjectVersion,
-      subjectHash: seed.workItem.subjectHash,
-      leaseVersion: seed.workItem.leaseVersion ?? 1,
       ownerUserId: "user_demo",
     })
     return {
       workItemId,
       claimedByLabel: "当前用户",
-      expiresAt: lease.leaseExpiresAt,
-      leaseVersion: lease.leaseVersion,
-      claimToken: lease.claimToken,
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) throw new Error(error.message)
@@ -704,12 +693,7 @@ export async function claimSupplierCatalogWorkItem(
 
 export async function applySupplierCatalogWorkItemAction(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
   action: SupplierCatalogWorkItemAction
-  idempotencyKey: string
-  simulateTimeout?: boolean
 }): Promise<FormalActionResponse> {
   await mockDelay(100)
   const seed = SUPPLIER_CATALOG_SEED.find(
@@ -728,10 +712,6 @@ export async function applySupplierCatalogWorkItemAction(input: {
   try {
     const record = applyWorkItemActionSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: input.expectedSubjectHash,
-      idempotencyKey: input.idempotencyKey,
       action: {
         kind: input.action.kind,
         note:
@@ -741,7 +721,6 @@ export async function applySupplierCatalogWorkItemAction(input: {
               ? input.action.reasonCode
               : undefined,
       },
-      simulateTimeout: input.simulateTimeout,
     })
 
     if (input.action.kind === "HOLD") {
@@ -765,13 +744,6 @@ export async function applySupplierCatalogWorkItemAction(input: {
     return { status: "succeeded", outcome }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
-      if (error.code === "TIMEOUT") {
-        return {
-          status: "unknown",
-          message: error.message,
-          idempotencyKey: input.idempotencyKey,
-        }
-      }
       return { status: "failed", code: error.code, message: error.message }
     }
     throw error
@@ -780,12 +752,7 @@ export async function applySupplierCatalogWorkItemAction(input: {
 
 export async function completeSupplierCatalogWorkItem(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
   decision: SupplierCatalogDecision
-  idempotencyKey: string
-  simulateTimeout?: boolean
 }): Promise<FormalActionResponse> {
   await mockDelay(120)
   const seed = SUPPLIER_CATALOG_SEED.find(
@@ -837,19 +804,13 @@ export async function completeSupplierCatalogWorkItem(input: {
   try {
     const result = completeWorkItemSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: input.expectedSubjectHash,
-      idempotencyKey: input.idempotencyKey,
       decision: {
         kind: input.decision.kind,
         note: input.decision.comment,
         summary: input.decision.kind,
       },
-      simulateTimeout: input.simulateTimeout,
     })
     markQueueTaskCompleted("W21", input.workItemId)
-    clearSessionLease(input.workItemId)
 
     const business = {
       decisionKind: input.decision.kind,
@@ -859,138 +820,19 @@ export async function completeSupplierCatalogWorkItem(input: {
       publicationImpact: seed.publicationImpact,
       reference: `W21-DONE-${input.workItemId.toUpperCase()}`,
       completedAt: new Date().toISOString(),
-      subjectHash: input.expectedSubjectHash,
+      subjectHash: seed.workItem.subjectHash,
     }
 
     const outcome: FormalOutcome = {
       kind: "COMPLETED",
       business,
     }
-    setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", {
-      status: "succeeded",
-      outcome,
-    })
     return { status: "succeeded", outcome }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
-      if (error.code === "TIMEOUT") {
-        return {
-          status: "unknown",
-          message: error.message,
-          idempotencyKey: input.idempotencyKey,
-        }
-      }
       return { status: "failed", code: error.code, message: error.message }
     }
     throw error
-  }
-}
-
-export async function resolveUnknownSupplierCatalogResult(input: {
-  idempotencyKey: string
-  settle?: boolean
-}): Promise<FormalActionResponse> {
-  await mockDelay(80)
-  const entry = queryIdempotencyResult(input.idempotencyKey)
-  if (!entry) {
-    return {
-      status: "failed",
-      code: "UNKNOWN_KEY",
-      message: "找不到该任务号的结果",
-    }
-  }
-  if (entry.state === "succeeded") {
-    const payload = entry.payload as
-      | FormalActionResponse
-      | {
-          actionRecordId?: string
-          actionKind?: string
-          workItemStatus?: "PENDING" | "IN_PROGRESS"
-          recordedAt?: string
-          subjectHash?: string
-        }
-      | {
-          workItemStatus?: "COMPLETED"
-          completionRecordId?: string
-          businessResult?: { kind: string; reference: string; summary: string }
-          subjectHash?: string
-        }
-    if (payload && typeof payload === "object" && "status" in payload) {
-      return payload as FormalActionResponse
-    }
-    if (
-      payload &&
-      typeof payload === "object" &&
-      "actionKind" in payload &&
-      payload.actionKind
-    ) {
-      return {
-        status: "succeeded",
-        outcome: {
-          kind: "ACTION",
-          workItemId: "",
-          workItemStatus: payload.workItemStatus ?? "IN_PROGRESS",
-          actionKind: payload.actionKind,
-          resumeHint:
-            "已查到原处理结果，当前事项仍在待处理列表中。",
-          reference: payload.actionRecordId ?? input.idempotencyKey,
-        },
-      }
-    }
-    if (
-      payload &&
-      typeof payload === "object" &&
-      "completionRecordId" in payload &&
-      payload.completionRecordId
-    ) {
-      return {
-        status: "succeeded",
-        outcome: {
-          kind: "COMPLETED",
-          business: {
-            decisionKind:
-              (payload.businessResult?.kind as
-                | "CONFIRM_ERROR_RESOLVED"
-                | "CONFIRM_STOP_SUPPLY") ?? "CONFIRM_ERROR_RESOLVED",
-            supplierProductId: "",
-            supplierCatalogSkuId: "",
-            auditEventId: payload.completionRecordId,
-            publicationImpact: {
-              activePublicationCount: 0,
-              pausedPublicationCount: 0,
-              historicalPaidOrderCount: 0,
-              safetyPauseTriggered: false,
-              safetyPauseReasons: [],
-              pauseSubResults: [],
-              mallSalePriceAutoUpdate: false,
-              moqCopiedToMallMinPurchase: false,
-              note: payload.businessResult?.summary ?? "终结已确认",
-            },
-            reference:
-              payload.businessResult?.reference ?? payload.completionRecordId,
-            completedAt: new Date().toISOString(),
-            subjectHash: payload.subjectHash ?? "",
-          },
-        },
-      }
-    }
-    return {
-      status: "failed",
-      code: "UNKNOWN_PAYLOAD",
-      message: "处理结果格式无法识别",
-    }
-  }
-  if (entry.state === "pending") {
-    return {
-      status: "unknown",
-      message: "结果仍不确定，请稍后用原任务号再查",
-      idempotencyKey: input.idempotencyKey,
-    }
-  }
-  return {
-    status: "failed",
-    code: "FAILED",
-    message: entry.error ?? "动作失败",
   }
 }
 

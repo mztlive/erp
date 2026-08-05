@@ -10,6 +10,7 @@ import type {
   IntegrationResolutionQuery,
   IntegrationView,
 } from "./types"
+import { createUrlStateCodec } from "@/lib/url-state"
 
 export type IntegrationUrlState = {
   view: IntegrationView
@@ -25,88 +26,62 @@ export type IntegrationUrlState = {
   autoNext: boolean
 }
 
-const VIEWS: IntegrationView[] = [
+const VIEW_VALUES = [
   "mine",
   "result_unknown",
   "security",
   "auto_retry",
   "reconciliation",
   "resolved",
-]
+] as const
 
-const MODES: IntegrationMode[] = ["all", "errors", "reconciliation"]
-const ENVS = ["all", "production", "verification"] as const
-const OWNERS: IntegrationOwnerFilter[] = ["me", "role_pool", "claimed", "all"]
+const MODE_VALUES = ["all", "errors", "reconciliation"] as const
+const ENV_VALUES = ["all", "production", "verification"] as const
+const OWNER_VALUES = ["me", "role_pool", "claimed", "all"] as const
 
-export function parseIntegrationSearchParams(
-  params: URLSearchParams
-): IntegrationUrlState {
-  const viewRaw = params.get("view") ?? "mine"
-  const view = VIEWS.includes(viewRaw as IntegrationView)
-    ? (viewRaw as IntegrationView)
-    : "mine"
+const codec = createUrlStateCodec<IntegrationUrlState>([
+  {
+    key: "view",
+    type: "enum",
+    values: VIEW_VALUES,
+    defaultValue: "mine",
+    buildWhen: () => true,
+  },
+  { key: "mode", type: "enum", values: MODE_VALUES, defaultValue: "all" },
+  {
+    key: "environment",
+    type: "enum",
+    values: ENV_VALUES,
+    defaultValue: "production",
+  },
+  { key: "errorClass", type: "string" },
+  { key: "owner", type: "enum", values: OWNER_VALUES, defaultValue: "me" },
+  { key: "q", type: "string" },
+  {
+    key: "queueContextId",
+    type: "custom",
+    parse: (get, state) =>
+      get("queueContextId") ??
+      `queue:W29:${String(state.view)}:${String(state.mode)}`,
+    build: (value) => (value ? String(value) : undefined),
+  },
+  { key: "resolveWorkItemId", type: "string" },
+  { key: "taskId", name: "currentTaskId", type: "string", aliases: ["currentTaskId"] },
+  {
+    key: "differenceId",
+    name: "currentDifferenceId",
+    type: "string",
+    aliases: ["currentDifferenceId"],
+  },
+  { key: "autoNext", type: "boolean", defaultValue: true },
+])
 
-  const modeRaw = params.get("mode") ?? "all"
-  const mode = MODES.includes(modeRaw as IntegrationMode)
-    ? (modeRaw as IntegrationMode)
-    : "all"
-
-  const envRaw = params.get("environment") ?? "production"
-  const environment = ENVS.includes(envRaw as (typeof ENVS)[number])
-    ? (envRaw as IntegrationEnvironment | "all")
-    : "production"
-
-  const ownerRaw = params.get("owner") ?? "me"
-  const owner = OWNERS.includes(ownerRaw as IntegrationOwnerFilter)
-    ? (ownerRaw as IntegrationOwnerFilter)
-    : "me"
-
-  const autoNextParam = params.get("autoNext")
-  const autoNext =
-    autoNextParam === "0" ? false : autoNextParam === "1" ? true : true
-
-  return {
-    view,
-    mode,
-    environment,
-    errorClass: params.get("errorClass") ?? undefined,
-    owner,
-    q: params.get("q") ?? undefined,
-    queueContextId:
-      params.get("queueContextId") ?? `queue:W29:${view}:${mode}`,
-    resolveWorkItemId: params.get("resolveWorkItemId") ?? undefined,
-    currentTaskId: params.get("taskId") ?? params.get("currentTaskId") ?? undefined,
-    currentDifferenceId:
-      params.get("differenceId") ??
-      params.get("currentDifferenceId") ??
-      undefined,
-    autoNext,
-  }
-}
+export const parseIntegrationSearchParams = codec.parse
 
 export function buildIntegrationSearchParams(
   state: Partial<IntegrationUrlState> & Pick<IntegrationUrlState, "view">
 ): URLSearchParams {
-  const params = new URLSearchParams()
-  params.set("view", state.view)
-  if (state.mode && state.mode !== "all") params.set("mode", state.mode)
-  if (state.environment && state.environment !== "production") {
-    params.set("environment", state.environment)
-  }
-  if (state.errorClass) params.set("errorClass", state.errorClass)
-  if (state.owner && state.owner !== "me") params.set("owner", state.owner)
-  if (state.q) params.set("q", state.q)
-  if (state.queueContextId) params.set("queueContextId", state.queueContextId)
-  if (state.resolveWorkItemId) {
-    params.set("resolveWorkItemId", state.resolveWorkItemId)
-  }
-  if (state.currentTaskId) params.set("taskId", state.currentTaskId)
-  if (state.currentDifferenceId) {
-    params.set("differenceId", state.currentDifferenceId)
-  }
-  if (state.autoNext === false) params.set("autoNext", "0")
-  if (state.autoNext === true) params.set("autoNext", "1")
-  return params
+  return codec.buildParams(state as IntegrationUrlState)
 }
 
 export function toResolutionQuery(

@@ -64,7 +64,6 @@ import {
   useHistoryBackfillDemoControls,
   useHistoryBackfillDetailQuery,
   useHistoryBackfillListQuery,
-  useQueryHistoryBackfillIdempotencyMutation,
 } from "@/features/history-backfill/queries"
 import type {
   BackfillPipelineStage,
@@ -105,6 +104,7 @@ import {
 } from "@/features/history-backfill/url-state"
 import { formatDateTime } from "@/lib/datetime"
 import { resultText } from "@/lib/ui-text"
+import { createRoleOptions } from "@/lib/demo-roles"
 import { RoleDemoBar } from "@/components/business/role-demo-bar"
 import type { ComboboxOption } from "@/components/business/option-combobox"
 
@@ -170,12 +170,8 @@ function mapJobProgressStatus(
 
 function FormalResultBanner({
   result,
-  onQuery,
-  querying,
 }: {
   result: HistoryBackfillCommandResult | null
-  onQuery?: () => void
-  querying?: boolean
 }) {
   if (!result) return null
   const status =
@@ -201,29 +197,11 @@ function FormalResultBanner({
           ? [{ label: "下一步", value: result.nextStep }]
           : []),
       ]}
-      actions={
-        result.status === "RESULT_UNKNOWN" && onQuery ? (
-          <Button
-            type="button"
-            size="sm"
-            variant="secondary"
-            disabled={querying}
-            onClick={onQuery}
-          >
-            查询原操作结果
-          </Button>
-        ) : undefined
-      }
     />
   )
 }
 
-const HISTORY_ROLE_OPTIONS: ComboboxOption[] = (
-  Object.keys(ROLE_LABEL) as ViewerRoleDemo[]
-).map((r) => ({
-  value: r,
-  label: ROLE_LABEL[r],
-}))
+const HISTORY_ROLE_OPTIONS: ComboboxOption[] = createRoleOptions(ROLE_LABEL)
 
 function Fact({
   label,
@@ -337,7 +315,6 @@ function JobListView({
     React.useState<HistoryBackfillCommandResult | null>(null)
   const demo = useHistoryBackfillDemoControls()
   const commandMutation = useHistoryBackfillCommandMutation()
-  const queryIdem = useQueryHistoryBackfillIdempotencyMutation()
 
   const listQuery = useHistoryBackfillListQuery({
     view: urlState.view,
@@ -560,18 +537,7 @@ function JobListView({
         </Button>
       </div>
 
-      <FormalResultBanner
-        result={actionResult}
-        querying={queryIdem.isPending}
-        onQuery={() => {
-          if (!actionResult?.idempotencyKey) return
-          void queryIdem
-            .mutateAsync({ idempotencyKey: actionResult.idempotencyKey })
-            .then((r) => {
-              if (r) setActionResult(r)
-            })
-        }}
-      />
+      <FormalResultBanner result={actionResult} />
 
       <Tabs
         value={urlState.view}
@@ -992,7 +958,6 @@ function JobDetailView({
   const [downloadNote, setDownloadNote] = React.useState<string | null>(null)
   const demo = useHistoryBackfillDemoControls()
   const commandMutation = useHistoryBackfillCommandMutation()
-  const queryIdem = useQueryHistoryBackfillIdempotencyMutation()
 
   const results = urlState.result ? [urlState.result] : undefined
   const factTypes = urlState.factType ? [urlState.factType] : undefined
@@ -1299,18 +1264,7 @@ function JobDetailView({
         </Alert>
       ) : null}
 
-      <FormalResultBanner
-        result={actionResult}
-        querying={queryIdem.isPending}
-        onQuery={() => {
-          if (!actionResult?.idempotencyKey) return
-          void queryIdem
-            .mutateAsync({ idempotencyKey: actionResult.idempotencyKey })
-            .then((r) => {
-              if (r) setActionResult(r)
-            })
-        }}
-      />
+      <FormalResultBanner result={actionResult} />
 
       {downloadNote ? (
         <Alert>

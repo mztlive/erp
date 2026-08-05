@@ -41,12 +41,9 @@ import {
   completeWorkItemSession,
   getCompletedQueueTaskIds,
   getHeldQueueTaskIds,
-  getIdempotencyEntry,
-  getSessionLeaseState,
+  getSessionLease,
   markQueueTaskCompleted,
   markQueueTaskHeld,
-  queryIdempotencyResult,
-  setIdempotencySucceeded,
   WorkItemMockError,
 } from "@/mock/session-state"
 
@@ -162,7 +159,7 @@ function projectMappingTask(
   const held = getHeldQueueTaskIds(WORKSPACE_ID)
   const publicLease =
     seed.ownerRoutingState === "CONFIGURED"
-      ? getSessionLeaseState(seed.workItem.workItemId)
+      ? getSessionLease(seed.workItem.workItemId)
       : null
 
   let mappingTaskStatus = seed.mappingTaskStatus
@@ -302,8 +299,9 @@ function projectMappingTask(
           statusLabel: held.has(seed.workItem.workItemId)
             ? "已跳过（仍待处理）"
             : seed.workItem.statusLabel,
-          leaseVersion: publicLease?.leaseVersion ?? seed.workItem.leaseVersion,
-          leaseExpiresAt: publicLease?.leaseExpiresAt ?? seed.workItem.leaseExpiresAt,
+          claimedBy: publicLease?.ownerUserId ?? seed.workItem.claimedBy,
+          subjectVersion:
+            publicLease?.subjectVersion ?? seed.workItem.subjectVersion,
         }
       : undefined
 
@@ -647,7 +645,6 @@ export async function triggerManualIncremental(input: {
   demoRole: DemoRole
   policyConfigured?: boolean
   stage?: OwnershipStage
-  idempotencyKey: string
 }): Promise<TriggerMallSyncResult> {
   await mockDelay(120)
   const stage = input.stage ?? sessionStage
@@ -710,11 +707,6 @@ export async function triggerManualIncremental(input: {
     ...sessionManualJobs,
   ]
 
-  setIdempotencySucceeded(input.idempotencyKey, "TRIGGER_INCREMENTAL", {
-    jobId,
-    jobNo,
-  })
-
   return {
     status: "succeeded",
     jobId,
@@ -729,7 +721,6 @@ export async function triggerSingleOrderPull(input: {
   demoRole: DemoRole
   policyConfigured?: boolean
   stage?: OwnershipStage
-  idempotencyKey: string
 }): Promise<TriggerMallSyncResult> {
   await mockDelay(120)
   const stage = input.stage ?? sessionStage
@@ -803,7 +794,6 @@ export async function retryFailedJob(input: {
   reason: string
   demoRole: DemoRole
   stage?: OwnershipStage
-  idempotencyKey: string
 }): Promise<TriggerMallSyncResult> {
   await mockDelay(100)
   const stage = input.stage ?? sessionStage
@@ -841,43 +831,29 @@ export async function retryFailedJob(input: {
 
 export async function claimMappingWorkItem(input: {
   workItemId: string
-  subjectHash: string
   subjectVersion: string
-}): Promise<{
-  workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expiresAt: string
-}> {
+}): Promise<{ workItemId: string; subjectVersion: string }> {
   await mockDelay(60)
   const lease = claimWorkItemSession({
     workItemId: input.workItemId,
     subjectVersion: input.subjectVersion,
-    subjectHash: input.subjectHash,
-    leaseVersion: 1,
     ownerUserId: "user_mall_map",
   })
   return {
     workItemId: input.workItemId,
-    claimToken: lease.claimToken,
-    leaseVersion: lease.leaseVersion,
-    expiresAt: lease.leaseExpiresAt,
+    subjectVersion: lease.subjectVersion ?? input.subjectVersion,
   }
 }
 
 export async function confirmMapping(input: {
   mappingTaskId: string
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
+  expectedSubjectVersion: string
   expectedLockVersion: number
   targetObjectId: string
   targetLabel: string
   evidenceNote: string
   demoRole: DemoRole
-  idempotencyKey: string
-  forceUnknown?: boolean
 }): Promise<ConfirmMappingResult> {
   await mockDelay(140)
 
@@ -924,45 +900,16 @@ export async function confirmMapping(input: {
     }
   }
 
-  const cached = getIdempotencyEntry(input.idempotencyKey)
-  if (cached?.state === "succeeded") {
-    const payload = cached.payload as ConfirmMappingResult
-    if (payload?.status === "succeeded") return payload
-  }
-
   try {
-    if (input.forceUnknown) {
-      completeWorkItemSession({
-        workItemId: input.workItemId,
-        claimToken: input.claimToken,
-        leaseVersion: input.leaseVersion,
-        expectedSubjectHash: input.expectedSubjectHash,
-        idempotencyKey: input.idempotencyKey,
-        decision: { kind: "CONFIRM_MAPPING" },
-        simulateTimeout: true,
-      })
-    } else {
-      completeWorkItemSession({
-        workItemId: input.workItemId,
-        claimToken: input.claimToken,
-        leaseVersion: input.leaseVersion,
-        expectedSubjectHash: input.expectedSubjectHash,
-        idempotencyKey: input.idempotencyKey,
-        decision: {
-          kind: "CONFIRM_MAPPING",
-          summary: `确认 ${input.targetLabel}`,
-        },
-      })
-    }
+    completeWorkItemSession({
+      workItemId: input.workItemId,
+      expectedSubjectVersion: input.expectedSubjectVersion,
+      decision: {
+        kind: "CONFIRM_MAPPING",
+        summary: `确认 ${input.targetLabel}`,
+      },
+    })
   } catch (error) {
-    if (error instanceof WorkItemMockError && error.code === "TIMEOUT") {
-      return {
-        status: "unknown",
-        message:
-          "确认映射结果未知。不得标记为已解决，停留当前项并按原任务号查询。",
-        idempotencyKey: input.idempotencyKey,
-      }
-    }
     if (error instanceof WorkItemMockError) {
       return { status: "failed", code: error.code, message: error.message }
     }
@@ -992,7 +939,6 @@ export async function confirmMapping(input: {
     evidenceNote: input.evidenceNote,
   })
   markQueueTaskCompleted(WORKSPACE_ID, input.workItemId)
-  setIdempotencySucceeded(input.idempotencyKey, "CONFIRM_MAPPING", result)
 
   return result
 }
@@ -1000,14 +946,11 @@ export async function confirmMapping(input: {
 export async function deferMapping(input: {
   mappingTaskId: string
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
+  expectedSubjectVersion: string
   reasonCode: string
   note?: string
   queueContextId: string
   demoRole: DemoRole
-  idempotencyKey: string
 }): Promise<DeferMappingResult> {
   await mockDelay(90)
   if (input.demoRole === "admin") {
@@ -1027,10 +970,7 @@ export async function deferMapping(input: {
   try {
     applyWorkItemActionSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: input.expectedSubjectHash,
-      idempotencyKey: input.idempotencyKey,
+      expectedSubjectVersion: input.expectedSubjectVersion,
       action: {
         kind: "DEFER",
         note: `${input.reasonCode}${input.note ? `: ${input.note}` : ""}`,
@@ -1064,8 +1004,6 @@ export async function reapplyMallSnapshot(input: {
   mappingTaskId: string
   sourceSnapshotId: string
   demoRole: DemoRole
-  idempotencyKey: string
-  forceUnknown?: boolean
 }): Promise<ReapplyResult> {
   await mockDelay(150)
   if (input.demoRole === "admin") {
@@ -1092,22 +1030,6 @@ export async function reapplyMallSnapshot(input: {
   }
 
   const operationId = `reapply_${input.mappingTaskId}_${Date.now().toString().slice(-4)}`
-
-  if (input.forceUnknown) {
-    reapplyState.set(input.mappingTaskId, {
-      operationId,
-      status: "UNKNOWN",
-      lastUpdatedAt: new Date().toISOString(),
-    })
-    return {
-      status: "unknown",
-      reapplyOperationStatus: "UNKNOWN",
-      operationId,
-      message:
-        "重新归集结果未知。映射结论保持已解决，不回滚，不自动下一项。请按 operation ID 查询。",
-      idempotencyKey: input.idempotencyKey,
-    }
-  }
 
   const salesOrderId = `so_reapply_${input.mappingTaskId}`
   const salesOrderNo = `SO-R-${input.mappingTaskId.slice(-4).toUpperCase()}`
@@ -1231,22 +1153,4 @@ export async function assignMappingTask(input: {
 
 export function getMallSyncStageLabels() {
   return { STAGE_LABEL, DIRECTION_LABEL }
-}
-
-export async function queryConfirmIdempotency(
-  idempotencyKey: string
-): Promise<ConfirmMappingResult | null> {
-  await mockDelay(40)
-  const entry = queryIdempotencyResult(idempotencyKey)
-  if (entry?.state === "succeeded") {
-    return entry.payload as ConfirmMappingResult
-  }
-  if (entry?.state === "pending") {
-    return {
-      status: "unknown",
-      message: "仍在处理中",
-      idempotencyKey,
-    }
-  }
-  return null
 }

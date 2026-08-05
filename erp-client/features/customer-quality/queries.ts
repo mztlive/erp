@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
   fetchCustomerQuality,
-  fetchCustomerQualityExportJob,
   fetchCustomerQualityPeriodPolicy,
   startCustomerQualityExport,
 } from "@/features/customer-quality/api"
@@ -19,8 +18,6 @@ export const customerQualityKeys = {
     [...customerQualityKeys.all, "period-policy", scenario ?? "default"] as const,
   view: (query: CustomerQualityQuery) =>
     [...customerQualityKeys.all, "view", query] as const,
-  exportJob: (jobId: string) =>
-    [...customerQualityKeys.all, "export", jobId] as const,
 }
 
 export function useCustomerQualityPeriodPolicyQuery(
@@ -57,19 +54,6 @@ export function useCustomerQualityQuery(
 export function useStartCustomerQualityExportMutation() {
   return useMutation({
     mutationFn: startCustomerQualityExport,
-  })
-}
-
-export function useCustomerQualityExportJobQuery(jobId: string | null) {
-  return useQuery({
-    queryKey: customerQualityKeys.exportJob(jobId ?? ""),
-    queryFn: () => fetchCustomerQualityExportJob(jobId!),
-    enabled: Boolean(jobId),
-    refetchInterval: (q) => {
-      const status = q.state.data?.status
-      if (status === "succeeded" || status === "failed") return false
-      return 400
-    },
   })
 }
 

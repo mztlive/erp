@@ -5,25 +5,16 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { mockDelay } from "@/lib/mock-delay"
 import {
   applyWorkItemActionSession,
-  bumpWorkItemSubject,
   claimWorkItemSession,
-  clearSessionLease,
   closeWorkItemSession,
   completeWorkItemSession,
   ensureWorkItemSubject,
-  finalizePendingComplete,
-  getIdempotencyEntry,
   getPermissionVersion,
   getSessionLease,
-  getSessionLeaseState,
   getWorkItemActionHistory,
   getWorkItemTerminal,
   isPermissionRevoked,
   isWorkItemHeld,
-  loseSessionLease,
-  queryIdempotencyResult,
-  revokeWorkItemPermission,
-  restoreWorkItemPermission,
   transferWorkItemSession,
   WorkItemMockError,
   type CompleteSessionResult,
@@ -36,12 +27,9 @@ import {
 } from "@/mock/work-items"
 
 import type {
-  CloseWorkItemEnvelope,
-  CompleteWorkItemEnvelope,
+  InTaskActionKind,
   QueueWorkItemView,
-  TransferWorkItemEnvelope,
   UnifiedTaskQueueView,
-  WorkItemActionEnvelope,
 } from "./types"
 import { buildFilterSummary } from "./filter-work-items"
 import type { UnifiedQueueFilters } from "./types"
@@ -62,12 +50,9 @@ function toViewItem(fixture: WorkItemFixture): QueueWorkItemView | null {
 
   ensureWorkItemSubject(fixture.id, {
     subjectVersion: fixture.subjectVersion,
-    subjectHash: fixture.subjectHash,
-    leaseVersion: fixture.leaseVersion,
   })
 
   const held = isWorkItemHeld(fixture.id)
-  const leaseState = getSessionLeaseState(fixture.id)
   const lease = getSessionLease(fixture.id)
   const permissionRevoked = isPermissionRevoked()
   const history = getWorkItemActionHistory(fixture.id)
@@ -85,8 +70,6 @@ function toViewItem(fixture: WorkItemFixture): QueueWorkItemView | null {
     effectiveStatusCode = "IN_PROGRESS"
     status = { label: "处理中", tone: "info" }
   }
-
-  const claimedByOther = false // single-user session mock; LEASE_CONFLICT covers multi-user demos
 
   const impact = permissionRevoked
     ? "（权限已收回，敏感影响已清除）"
@@ -116,8 +99,6 @@ function toViewItem(fixture: WorkItemFixture): QueueWorkItemView | null {
     scopeTags,
     status,
     effectiveStatusCode,
-    leaseState,
-    claimedByOther,
     claimedByLabel: lease ? "我" : undefined,
     lastAction,
     permissionRevoked,
@@ -172,18 +153,12 @@ export function useUnifiedTaskQueueQuery(filters: UnifiedQueueFilters) {
   })
 }
 
-function newIdempotencyKey(prefix: string): string {
-  return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
-}
-
 export function useClaimWorkItemMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (input: {
       workItemId: string
-      subjectVersion: string
-      subjectHash: string
-      leaseVersion: number
+      subjectVersion?: string
     }): Promise<SessionLease> => {
       await mockDelay(100)
       return claimWorkItemSession(input)
@@ -197,22 +172,14 @@ export function useClaimWorkItemMutation() {
 export function useWorkItemActionMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (
-      envelope: WorkItemActionEnvelope<{
-        kind: "DEFER" | "SAVE_EVIDENCE" | "QUERY_RESULT"
-        note?: string
-      }> & { simulateTimeout?: boolean }
-    ) => {
+    mutationFn: async (input: {
+      workItemId: string
+      expectedSubjectVersion?: string
+      ownerUserId?: string
+      action: { kind: InTaskActionKind; note?: string }
+    }) => {
       await mockDelay(120)
-      return applyWorkItemActionSession({
-        workItemId: envelope.workItemId,
-        claimToken: envelope.claimToken,
-        leaseVersion: envelope.leaseVersion,
-        expectedSubjectHash: envelope.expectedSubjectHash,
-        idempotencyKey: envelope.idempotencyKey,
-        action: envelope.action,
-        simulateTimeout: envelope.simulateTimeout,
-      })
+      return applyWorkItemActionSession(input)
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: unifiedQueueKeys.all })
@@ -223,23 +190,14 @@ export function useWorkItemActionMutation() {
 export function useCompleteWorkItemMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (
-      envelope: CompleteWorkItemEnvelope<{
-        kind: string
-        note?: string
-        summary?: string
-      }> & { simulateTimeout?: boolean }
-    ): Promise<CompleteSessionResult> => {
+    mutationFn: async (input: {
+      workItemId: string
+      expectedSubjectVersion?: string
+      ownerUserId?: string
+      decision: { kind: string; note?: string; summary?: string }
+    }): Promise<CompleteSessionResult> => {
       await mockDelay(140)
-      return completeWorkItemSession({
-        workItemId: envelope.workItemId,
-        claimToken: envelope.claimToken,
-        leaseVersion: envelope.leaseVersion,
-        expectedSubjectHash: envelope.expectedSubjectHash,
-        idempotencyKey: envelope.idempotencyKey,
-        decision: envelope.decision,
-        simulateTimeout: envelope.simulateTimeout,
-      })
+      return completeWorkItemSession(input)
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: unifiedQueueKeys.all })
@@ -250,17 +208,20 @@ export function useCompleteWorkItemMutation() {
 export function useCloseWorkItemMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (envelope: CloseWorkItemEnvelope & { closeAllowed: boolean }) => {
+    mutationFn: async (input: {
+      workItemId: string
+      expectedSubjectVersion?: string
+      ownerUserId?: string
+      closeAllowed: boolean
+      closure: {
+        kind: "CLOSE_DUPLICATE" | "CLOSE_MISROUTED" | "CLOSE_WITH_REPLACEMENT"
+        reasonCode: string
+        replacementWorkItemId?: string
+        comment?: string
+      }
+    }) => {
       await mockDelay(120)
-      return closeWorkItemSession({
-        workItemId: envelope.workItemId,
-        claimToken: envelope.claimToken,
-        leaseVersion: envelope.leaseVersion,
-        expectedSubjectHash: envelope.expectedSubjectHash,
-        idempotencyKey: envelope.idempotencyKey,
-        closeAllowed: envelope.closeAllowed,
-        closure: envelope.closure,
-      })
+      return closeWorkItemSession(input)
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: unifiedQueueKeys.all })
@@ -271,50 +232,13 @@ export function useCloseWorkItemMutation() {
 export function useTransferWorkItemMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async (envelope: TransferWorkItemEnvelope) => {
-      await mockDelay(120)
-      return transferWorkItemSession({
-        workItemId: envelope.workItemId,
-        claimToken: envelope.claimToken,
-        leaseVersion: envelope.leaseVersion,
-        expectedSubjectHash: envelope.expectedSubjectHash,
-        idempotencyKey: envelope.idempotencyKey,
-        transfer: envelope.transfer,
-      })
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: unifiedQueueKeys.all })
-    },
-  })
-}
-
-export function useQueryIdempotencyMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
     mutationFn: async (input: {
-      idempotencyKey: string
-      /** If pending COMPLETE, finalize recovery path. */
-      completeRecovery?: {
-        workItemId: string
-        decision: { kind: string; note?: string; summary?: string }
-        expectedSubjectHash: string
-      }
+      workItemId: string
+      expectedSubjectVersion?: string
+      transfer: { targetUserId: string; reason: string }
     }) => {
-      await mockDelay(80)
-      const entry = queryIdempotencyResult(input.idempotencyKey)
-      if (!entry) {
-        throw new WorkItemMockError("NOT_FOUND", "未找到该任务号的结果。")
-      }
-      if (entry.state === "pending" && input.completeRecovery) {
-        return {
-          state: "succeeded" as const,
-          payload: finalizePendingComplete({
-            idempotencyKey: input.idempotencyKey,
-            ...input.completeRecovery,
-          }),
-        }
-      }
-      return entry
+      await mockDelay(120)
+      return transferWorkItemSession(input)
     },
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: unifiedQueueKeys.all })
@@ -322,45 +246,4 @@ export function useQueryIdempotencyMutation() {
   })
 }
 
-export function useLoseLeaseMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (workItemId: string) => {
-      await mockDelay(40)
-      loseSessionLease(workItemId)
-      clearSessionLease(workItemId)
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: unifiedQueueKeys.all })
-    },
-  })
-}
-
-export function useBumpSubjectMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (workItemId: string) => {
-      await mockDelay(40)
-      return bumpWorkItemSubject(workItemId)
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: unifiedQueueKeys.all })
-    },
-  })
-}
-
-export function useRevokePermissionMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (mode: "revoke" | "restore") => {
-      await mockDelay(40)
-      if (mode === "revoke") revokeWorkItemPermission()
-      else restoreWorkItemPermission()
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: unifiedQueueKeys.all })
-    },
-  })
-}
-
-export { WorkItemMockError, getIdempotencyEntry, newIdempotencyKey }
+export { WorkItemMockError }

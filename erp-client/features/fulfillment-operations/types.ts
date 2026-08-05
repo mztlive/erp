@@ -257,8 +257,6 @@ export type FulfillmentTask = Readonly<{
   }[]
   lease?: {
     claimedByLabel: string
-    expiresAt: string
-    leaseVersion: number
   }
 }>
 
@@ -302,9 +300,6 @@ export type FulfillmentQueueView = Readonly<{
 export type WorkItemLease = Readonly<{
   workItemId: string
   claimedByLabel: string
-  expiresAt: string
-  leaseVersion: number
-  claimToken: string
 }>
 
 export type InventoryDelta = Readonly<{

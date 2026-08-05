@@ -9,15 +9,16 @@ import type {
   MallOrderFactType,
   ViewerRoleDemo,
 } from "@/features/history-backfill/types"
+import { createUrlStateCodec } from "@/lib/url-state"
 
-const VIEWS = new Set<HistoryBackfillView>([
+const VIEW_VALUES = [
   "active",
   "processing_completed",
   "report_pending",
   "all",
-])
+] as const
 
-const PROCESSING = new Set<HistoryBackfillProcessingStatus>([
+const PROCESSING_VALUES = [
   "DRAFT",
   "VALIDATING",
   "READY",
@@ -25,39 +26,36 @@ const PROCESSING = new Set<HistoryBackfillProcessingStatus>([
   "PARTIAL",
   "COMPLETED",
   "FAILED",
-])
+] as const
 
-const REPORT_REVIEW = new Set<HistoryBackfillReportReviewStatus>([
+const REPORT_REVIEW_VALUES = [
   "NOT_READY",
   "POLICY_NOT_CONFIGURED",
   "PENDING",
   "CONFIRMED",
   "REJECTED",
-])
+] as const
 
-const ENVIRONMENTS = new Set<HistoryBackfillEnvironment>([
-  "production",
-  "verification",
-])
+const ENVIRONMENT_VALUES = ["production", "verification"] as const
 
-const RESULTS = new Set<ItemResult>([
+const RESULT_VALUES = [
   "INSERTED",
   "DEDUPLICATED",
   "UNATTRIBUTED",
   "FAILED",
-])
+] as const
 
-const FACT_TYPES = new Set<MallOrderFactType>([
+const FACT_TYPE_VALUES = [
   "PAYMENT_SUCCEEDED",
   "ORDER_CANCELED",
   "REFUND_SUCCEEDED",
   "ORDER_COMPLETED",
   "CARD_BALANCE_RESTORED",
-])
+] as const
 
-const COST_BASES = new Set<CostBasis>(["ACTUAL", "STANDARD", "NONE"])
+const COST_BASIS_VALUES = ["ACTUAL", "STANDARD", "NONE"] as const
 
-const SECTIONS = new Set<JobSection>([
+const SECTION_VALUES = [
   "overview",
   "facts",
   "dedupe",
@@ -65,14 +63,9 @@ const SECTIONS = new Set<JobSection>([
   "cost",
   "failures",
   "report",
-])
+] as const
 
-const ROLES = new Set<ViewerRoleDemo>([
-  "SYSTEM_ADMIN",
-  "FINANCE",
-  "OPERATIONS",
-  "NO_MODULE",
-])
+const ROLE_VALUES = ["SYSTEM_ADMIN", "FINANCE", "OPERATIONS", "NO_MODULE"] as const
 
 export type HistoryBackfillUrlState = {
   view: HistoryBackfillView
@@ -92,121 +85,39 @@ export type HistoryBackfillUrlState = {
   role?: ViewerRoleDemo
 }
 
-export function parseHistoryBackfillSearchParams(
-  searchParams: URLSearchParams | { get(name: string): string | null }
-): HistoryBackfillUrlState {
-  const viewRaw = searchParams.get("view")
-  const view: HistoryBackfillView =
-    viewRaw && VIEWS.has(viewRaw as HistoryBackfillView)
-      ? (viewRaw as HistoryBackfillView)
-      : "active"
+const codec = createUrlStateCodec<HistoryBackfillUrlState>([
+  { key: "view", type: "enum", values: VIEW_VALUES, defaultValue: "active" },
+  { key: "mallId", type: "string", aliases: ["mall"] },
+  { key: "environment", type: "enum", values: ENVIRONMENT_VALUES },
+  { key: "processingStatus", type: "enum", values: PROCESSING_VALUES },
+  { key: "reportReviewStatus", type: "enum", values: REPORT_REVIEW_VALUES },
+  { key: "basis", type: "enum", values: COST_BASIS_VALUES },
+  { key: "q", type: "string" },
+  { key: "page", type: "number", defaultValue: 1 },
+  {
+    key: "jobId",
+    type: "custom",
+    parse: (get) => get("jobId") ?? undefined,
+    build: (value, options) =>
+      value && !Boolean(options?.omitJobId) ? String(value) : undefined,
+  },
+  { key: "section", type: "enum", values: SECTION_VALUES, defaultValue: "overview" },
+  { key: "result", type: "enum", values: RESULT_VALUES },
+  { key: "factType", type: "enum", values: FACT_TYPE_VALUES },
+  { key: "costBasis", type: "enum", values: COST_BASIS_VALUES },
+  {
+    key: "role",
+    type: "enum",
+    values: ROLE_VALUES,
+    buildWhen: (value) => Boolean(value) && value !== "SYSTEM_ADMIN",
+  },
+])
 
-  const mallId =
-    searchParams.get("mallId") ?? searchParams.get("mall") ?? undefined
-
-  const envRaw = searchParams.get("environment")
-  const environment =
-    envRaw && ENVIRONMENTS.has(envRaw as HistoryBackfillEnvironment)
-      ? (envRaw as HistoryBackfillEnvironment)
-      : undefined
-
-  const psRaw = searchParams.get("processingStatus")
-  const processingStatus =
-    psRaw && PROCESSING.has(psRaw as HistoryBackfillProcessingStatus)
-      ? (psRaw as HistoryBackfillProcessingStatus)
-      : undefined
-
-  const rrRaw = searchParams.get("reportReviewStatus")
-  const reportReviewStatus =
-    rrRaw && REPORT_REVIEW.has(rrRaw as HistoryBackfillReportReviewStatus)
-      ? (rrRaw as HistoryBackfillReportReviewStatus)
-      : undefined
-
-  const basisRaw = searchParams.get("basis")
-  const basis =
-    basisRaw && COST_BASES.has(basisRaw as CostBasis)
-      ? (basisRaw as CostBasis)
-      : undefined
-
-  const q = searchParams.get("q") ?? undefined
-
-  const pageRaw = Number(searchParams.get("page") ?? "1")
-  const page =
-    Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1
-
-  const jobId = searchParams.get("jobId") ?? undefined
-
-  const sectionRaw = searchParams.get("section")
-  const section: JobSection =
-    sectionRaw && SECTIONS.has(sectionRaw as JobSection)
-      ? (sectionRaw as JobSection)
-      : "overview"
-
-  const resultRaw = searchParams.get("result")
-  const result =
-    resultRaw && RESULTS.has(resultRaw as ItemResult)
-      ? (resultRaw as ItemResult)
-      : undefined
-
-  const factRaw = searchParams.get("factType")
-  const factType =
-    factRaw && FACT_TYPES.has(factRaw as MallOrderFactType)
-      ? (factRaw as MallOrderFactType)
-      : undefined
-
-  const costRaw = searchParams.get("costBasis")
-  const costBasis =
-    costRaw && COST_BASES.has(costRaw as CostBasis)
-      ? (costRaw as CostBasis)
-      : undefined
-
-  const roleRaw = searchParams.get("role")
-  const role =
-    roleRaw && ROLES.has(roleRaw as ViewerRoleDemo)
-      ? (roleRaw as ViewerRoleDemo)
-      : undefined
-
-  return {
-    view,
-    mallId,
-    environment,
-    processingStatus,
-    reportReviewStatus,
-    basis,
-    q,
-    page,
-    jobId,
-    section,
-    result,
-    factType,
-    costBasis,
-    role,
-  }
-}
+export const parseHistoryBackfillSearchParams = codec.parse
 
 export function buildHistoryBackfillSearchParams(
   state: HistoryBackfillUrlState,
   options?: { omitJobId?: boolean }
 ): string {
-  const params = new URLSearchParams()
-  if (state.view !== "active") params.set("view", state.view)
-  if (state.mallId) params.set("mallId", state.mallId)
-  if (state.environment) params.set("environment", state.environment)
-  if (state.processingStatus)
-    params.set("processingStatus", state.processingStatus)
-  if (state.reportReviewStatus)
-    params.set("reportReviewStatus", state.reportReviewStatus)
-  if (state.basis) params.set("basis", state.basis)
-  if (state.q) params.set("q", state.q)
-  if (state.page > 1) params.set("page", String(state.page))
-  if (state.jobId && !options?.omitJobId) params.set("jobId", state.jobId)
-  if (state.section !== "overview") params.set("section", state.section)
-  if (state.result) params.set("result", state.result)
-  if (state.factType) params.set("factType", state.factType)
-  if (state.costBasis) params.set("costBasis", state.costBasis)
-  if (state.role && state.role !== "SYSTEM_ADMIN") {
-    params.set("role", state.role)
-  }
-  const qs = params.toString()
-  return qs ? `?${qs}` : ""
+  return codec.build(state, options)
 }

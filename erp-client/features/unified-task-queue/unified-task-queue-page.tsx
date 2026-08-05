@@ -6,11 +6,9 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   ArrowRightIcon,
   CircleCheckIcon,
-  KeyRoundIcon,
   PauseIcon,
   RefreshCwIcon,
   SearchIcon,
-  ShieldAlertIcon,
   XIcon,
 } from "lucide-react"
 import { z } from "zod"
@@ -46,7 +44,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { FAMILY_LABELS, type WorkItemFamily } from "@/mock/work-items"
 import type { SessionLease } from "@/mock/session-state"
 
-import { freshnessText, leaseText, resultText, sequentialText, versionText } from "@/lib/ui-text"
+import { freshnessText, leaseText, sequentialText, versionText } from "@/lib/ui-text"
 import {
   buildFilterSummary,
   filterAndSortWorkItems,
@@ -59,14 +57,9 @@ import {
   scopeLabel,
 } from "./queue-url"
 import {
-  newIdempotencyKey,
-  useBumpSubjectMutation,
   useClaimWorkItemMutation,
   useCloseWorkItemMutation,
   useCompleteWorkItemMutation,
-  useLoseLeaseMutation,
-  useQueryIdempotencyMutation,
-  useRevokePermissionMutation,
   useTransferWorkItemMutation,
   useUnifiedTaskQueueQuery,
   useWorkItemActionMutation,
@@ -82,21 +75,11 @@ const decisionSchema = z.object({
   note: z.string().max(500, "备注不超过 500 字"),
 })
 
-type LocalClaimMap = Map<string, SessionLease>
-
 type LastResult = {
   status: "succeeded" | "blocked" | "rejected" | "unknown" | "failed"
   title: string
   description: string
   reference: string
-}
-
-type PendingIdempotency = {
-  key: string
-  kind: "COMPLETE" | "DEFER" | "SAVE_EVIDENCE"
-  workItemId: string
-  decisionKind?: string
-  expectedSubjectHash?: string
 }
 
 export function UnifiedTaskQueuePage() {
@@ -133,14 +116,10 @@ export function UnifiedTaskQueuePage() {
   const completeMutation = useCompleteWorkItemMutation()
   const closeMutation = useCloseWorkItemMutation()
   const transferMutation = useTransferWorkItemMutation()
-  const idempotencyQueryMutation = useQueryIdempotencyMutation()
-  const loseLeaseMutation = useLoseLeaseMutation()
-  const bumpSubjectMutation = useBumpSubjectMutation()
-  const revokeMutation = useRevokePermissionMutation()
 
-  /** claimToken only in component memory — never URL / query view. */
-  const claimsRef = React.useRef<LocalClaimMap>(new Map())
-  const [claimEpoch, setClaimEpoch] = React.useState(0)
+  const [activeLeases, setActiveLeases] = React.useState<
+    ReadonlyMap<string, SessionLease>
+  >(new Map())
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [conflictOpen, setConflictOpen] = React.useState(false)
   const [conflictInfo, setConflictInfo] = React.useState<{
@@ -148,9 +127,6 @@ export function UnifiedTaskQueuePage() {
     serverVersion: string
   } | null>(null)
   const [lastResult, setLastResult] = React.useState<LastResult | null>(null)
-  const [pendingIdem, setPendingIdem] = React.useState<PendingIdempotency | null>(
-    null
-  )
   const [queueCollapsed, setQueueCollapsed] = React.useState(false)
   const [searchDraft, setSearchDraft] = React.useState(q)
   const titleRef = React.useRef<HTMLHeadingElement>(null)
@@ -158,20 +134,19 @@ export function UnifiedTaskQueuePage() {
 
   const sourceItems = queueQuery.data?.items ?? []
   const permissionRevoked = queueQuery.data?.permissionRevoked ?? false
-  const permissionVersion = queueQuery.data?.permissionVersion ?? 1
 
-  // Drop in-memory tokens when permission version changes / revoked
-  const lastPermissionVersion = React.useRef(permissionVersion)
-  React.useEffect(() => {
-    if (
-      permissionRevoked ||
-      lastPermissionVersion.current !== permissionVersion
-    ) {
-      claimsRef.current.clear()
-      setClaimEpoch((n) => n + 1)
-      lastPermissionVersion.current = permissionVersion
-    }
-  }, [permissionRevoked, permissionVersion])
+  const dropActiveLease = React.useCallback((workItemId: string) => {
+    setActiveLeases((prev) => {
+      if (!prev.has(workItemId)) return prev
+      const next = new Map(prev)
+      next.delete(workItemId)
+      return next
+    })
+  }, [])
+
+  const clearActiveLeases = React.useCallback(() => {
+    setActiveLeases(new Map())
+  }, [])
 
   const focusCandidate = React.useMemo(() => {
     if (!workItemFromUrl) return null
@@ -199,8 +174,7 @@ export function UnifiedTaskQueuePage() {
   const task = tasks[currentIndex]
   const completed = tasks.length === 0
 
-  const activeClaim = task ? claimsRef.current.get(task.id) : undefined
-  void claimEpoch
+  const activeClaim = task ? activeLeases.get(task.id) : undefined
 
   const decisionForm = useAppForm({
     defaultValues: { note: "" },
@@ -313,19 +287,16 @@ export function UnifiedTaskQueuePage() {
 
   const ensureClaimed = React.useCallback(
     async (item: QueueWorkItemView): Promise<SessionLease> => {
-      const existing = claimsRef.current.get(item.id)
+      const existing = activeLeases.get(item.id)
       if (existing) return existing
       const lease = await claimMutation.mutateAsync({
         workItemId: item.id,
         subjectVersion: item.subjectVersion,
-        subjectHash: item.subjectHash,
-        leaseVersion: item.leaseVersion,
       })
-      claimsRef.current.set(item.id, lease)
-      setClaimEpoch((n) => n + 1)
+      setActiveLeases((prev) => new Map(prev).set(item.id, lease))
       return lease
     },
-    [claimMutation]
+    [activeLeases, claimMutation]
   )
 
   const handleMockError = React.useCallback(
@@ -339,9 +310,8 @@ export function UnifiedTaskQueuePage() {
         })
         return
       }
-      if (error.code === "LEASE_LOST" || error.code === "LEASE_CONFLICT") {
-        claimsRef.current.delete(item.id)
-        setClaimEpoch((n) => n + 1)
+      if (error.code === "LEASE_LOST") {
+        dropActiveLease(item.id)
         setLastResult({
           status: "failed",
           title: leaseText.lost,
@@ -365,23 +335,13 @@ export function UnifiedTaskQueuePage() {
         return
       }
       if (error.code === "PERMISSION_REVOKED") {
-        claimsRef.current.clear()
-        setClaimEpoch((n) => n + 1)
+        clearActiveLeases()
         setLastResult({
           status: "failed",
           title: "权限已收回",
           description:
             "临时信息已清除。仅保留任务编号与返回上下文。",
           reference: item.id,
-        })
-        return
-      }
-      if (error.code === "TIMEOUT") {
-        setLastResult({
-          status: "unknown",
-          title: "结果不确定",
-          description: error.message,
-          reference: pendingIdem?.key ?? item.id,
         })
         return
       }
@@ -392,7 +352,7 @@ export function UnifiedTaskQueuePage() {
         reference: item.id,
       })
     },
-    [pendingIdem?.key]
+    [clearActiveLeases, dropActiveLease]
   )
 
   const onSaveEvidence = React.useCallback(async () => {
@@ -401,17 +361,11 @@ export function UnifiedTaskQueuePage() {
     draftsRef.current.set(task.id, note)
     try {
       const lease = await ensureClaimed(task)
-      const idempotencyKey = newIdempotencyKey("save")
-      const envelope = {
+      const record = await actionMutation.mutateAsync({
         workItemId: task.id,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
-        expectedSubjectHash: lease.subjectHash,
         expectedSubjectVersion: lease.subjectVersion,
-        idempotencyKey,
-        action: { kind: "SAVE_EVIDENCE" as const, note },
-      }
-      const record = await actionMutation.mutateAsync(envelope)
+        action: { kind: "SAVE_EVIDENCE", note },
+      })
       // Task stays PENDING/IN_PROGRESS — do NOT auto-advance
       setLastResult({
         status: "succeeded",
@@ -419,17 +373,6 @@ export function UnifiedTaskQueuePage() {
         description: `动作 ${record.actionKind} 成功；任务仍为 ${record.workItemStatus}，未完成、未自动下一项。`,
         reference: record.actionRecordId,
       })
-      if (record.lease) {
-        const prev = claimsRef.current.get(task.id)
-        if (prev) {
-          claimsRef.current.set(task.id, {
-            ...prev,
-            leaseVersion: record.lease.leaseVersion,
-            leaseExpiresAt: record.lease.leaseExpiresAt,
-          })
-          setClaimEpoch((n) => n + 1)
-        }
-      }
     } catch (error) {
       handleMockError(error, task)
     }
@@ -448,17 +391,12 @@ export function UnifiedTaskQueuePage() {
     draftsRef.current.set(task.id, note)
     try {
       const lease = await ensureClaimed(task)
-      const idempotencyKey = newIdempotencyKey("defer")
       const record = await actionMutation.mutateAsync({
         workItemId: task.id,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
-        expectedSubjectHash: lease.subjectHash,
-        idempotencyKey,
+        expectedSubjectVersion: lease.subjectVersion,
         action: { kind: "DEFER", note },
       })
-      claimsRef.current.delete(task.id)
-      setClaimEpoch((n) => n + 1)
+      dropActiveLease(task.id)
       setLastResult({
         status: "blocked",
         title: "已跳过",
@@ -475,6 +413,7 @@ export function UnifiedTaskQueuePage() {
     actionMutation,
     advanceToNext,
     decisionForm.state.values.note,
+    dropActiveLease,
     ensureClaimed,
     handleMockError,
     permissionRevoked,
@@ -482,160 +421,47 @@ export function UnifiedTaskQueuePage() {
     tasks,
   ])
 
-  const onComplete = React.useCallback(
-    async (options?: { simulateTimeout?: boolean }) => {
-      if (!task || permissionRevoked) return
-      if (task.handlerHref && !options?.simulateTimeout) {
-        // Domain-bound completion lives in specialized handler; open it with focus
-        router.push(task.handlerHref)
-        return
-      }
-      const note = decisionForm.state.values.note
-      draftsRef.current.set(task.id, note)
-      const idempotencyKey =
-        pendingIdem?.workItemId === task.id && pendingIdem.kind === "COMPLETE"
-          ? pendingIdem.key
-          : newIdempotencyKey("complete")
-      try {
-        const lease = await ensureClaimed(task)
-        if (options?.simulateTimeout) {
-          setPendingIdem({
-            key: idempotencyKey,
-            kind: "COMPLETE",
-            workItemId: task.id,
-            decisionKind: task.completionAction,
-            expectedSubjectHash: lease.subjectHash,
-          })
-        }
-        const result = await completeMutation.mutateAsync({
-          workItemId: task.id,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expectedSubjectHash: lease.subjectHash,
-          expectedSubjectVersion: lease.subjectVersion,
-          idempotencyKey,
-          decision: {
-            kind: task.completionAction,
-            note,
-            summary: `${task.workItemTypeLabel}结论与任务完成同一事务`,
-          },
-          simulateTimeout: options?.simulateTimeout,
-        })
-        claimsRef.current.delete(task.id)
-        setClaimEpoch((n) => n + 1)
-        setPendingIdem(null)
-        setLastResult({
-          status: "succeeded",
-          title: "完成已生效",
-          description: result.businessResult.summary,
-          reference: result.completionRecordId,
-        })
-        // Only advance after confirmed success
-        advanceToNext(task.id, tasks)
-      } catch (error) {
-        if (error instanceof WorkItemMockError && error.code === "TIMEOUT") {
-          setPendingIdem((prev) =>
-            prev ?? {
-              key: idempotencyKey,
-              kind: "COMPLETE",
-              workItemId: task.id,
-              decisionKind: task.completionAction,
-              expectedSubjectHash: task.subjectHash,
-            }
-          )
-          // Do NOT advance
-          setLastResult({
-            status: "unknown",
-            title: "结果不确定",
-            description:
-              "网络超时：未自动跳到下一项。请按原任务号查询最终结果。",
-            reference: idempotencyKey,
-          })
-          return
-        }
-        handleMockError(error, task)
-      }
-    },
-    [
-      advanceToNext,
-      completeMutation,
-      decisionForm.state.values.note,
-      ensureClaimed,
-      handleMockError,
-      pendingIdem,
-      permissionRevoked,
-      router,
-      task,
-      tasks,
-    ]
-  )
-
-  const onQueryIdempotency = React.useCallback(async () => {
-    if (!pendingIdem) return
+  const onComplete = React.useCallback(async () => {
+    if (!task || permissionRevoked) return
+    if (task.handlerHref) {
+      // Domain-bound completion lives in specialized handler; open it with focus
+      router.push(task.handlerHref)
+      return
+    }
+    const note = decisionForm.state.values.note
+    draftsRef.current.set(task.id, note)
     try {
-      const entry = await idempotencyQueryMutation.mutateAsync({
-        idempotencyKey: pendingIdem.key,
-        completeRecovery:
-          pendingIdem.kind === "COMPLETE"
-            ? {
-                workItemId: pendingIdem.workItemId,
-                decision: {
-                  kind: pendingIdem.decisionKind ?? "COMPLETE",
-                },
-                expectedSubjectHash:
-                  pendingIdem.expectedSubjectHash ?? task?.subjectHash ?? "",
-              }
-            : undefined,
+      const lease = await ensureClaimed(task)
+      const result = await completeMutation.mutateAsync({
+        workItemId: task.id,
+        expectedSubjectVersion: lease.subjectVersion,
+        decision: {
+          kind: task.completionAction,
+          note,
+          summary: `${task.workItemTypeLabel}结论与任务完成同一事务`,
+        },
       })
-      if (
-        entry &&
-        typeof entry === "object" &&
-        "state" in entry &&
-        entry.state === "succeeded"
-      ) {
-        const payload =
-          "payload" in entry ? entry.payload : undefined
-        const ref =
-          payload &&
-          typeof payload === "object" &&
-          payload !== null &&
-          "completionRecordId" in payload
-            ? String(
-                (payload as { completionRecordId: string }).completionRecordId
-              )
-            : pendingIdem.key
-        setLastResult({
-          status: "succeeded",
-          title: resultText.querySucceededOriginal,
-          description: "已按原任务号确认处理结果，现在可以打开下一项。",
-          reference: ref,
-        })
-        const fromId = pendingIdem.workItemId
-        setPendingIdem(null)
-        claimsRef.current.delete(fromId)
-        setClaimEpoch((n) => n + 1)
-        advanceToNext(fromId, tasks)
-      } else if (
-        entry &&
-        typeof entry === "object" &&
-        "state" in entry &&
-        entry.state === "pending"
-      ) {
-        setLastResult({
-          status: "unknown",
-          title: "仍不确定",
-          description: "系统仍在处理中，请稍后使用原任务编号查询结果。",
-          reference: pendingIdem.key,
-        })
-      }
+      dropActiveLease(task.id)
+      setLastResult({
+        status: "succeeded",
+        title: "完成已生效",
+        description: result.businessResult.summary,
+        reference: result.completionRecordId,
+      })
+      // Only advance after confirmed success
+      advanceToNext(task.id, tasks)
     } catch (error) {
-      if (task) handleMockError(error, task)
+      handleMockError(error, task)
     }
   }, [
     advanceToNext,
+    completeMutation,
+    decisionForm.state.values.note,
+    dropActiveLease,
+    ensureClaimed,
     handleMockError,
-    idempotencyQueryMutation,
-    pendingIdem,
+    permissionRevoked,
+    router,
     task,
     tasks,
   ])
@@ -646,21 +472,16 @@ export function UnifiedTaskQueuePage() {
       const lease = await ensureClaimed(task)
       const result = await closeMutation.mutateAsync({
         workItemId: task.id,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
-        expectedSubjectHash: lease.subjectHash,
-        idempotencyKey: newIdempotencyKey("close"),
+        expectedSubjectVersion: lease.subjectVersion,
         closeAllowed: task.closeAllowed,
         closure: {
           kind: "CLOSE_DUPLICATE",
           reasonCode: "DUPLICATE_OF_ACTIVE",
           replacementWorkItemId: "wi_pc_01",
-          closureEvidenceReference: `ev-close-${task.id}`,
           comment: decisionForm.state.values.note || undefined,
         },
       })
-      claimsRef.current.delete(task.id)
-      setClaimEpoch((n) => n + 1)
+      dropActiveLease(task.id)
       setLastResult({
         status: "succeeded",
         title: "任务已关闭（不改业务记录）",
@@ -675,6 +496,7 @@ export function UnifiedTaskQueuePage() {
     advanceToNext,
     closeMutation,
     decisionForm.state.values.note,
+    dropActiveLease,
     ensureClaimed,
     handleMockError,
     permissionRevoked,
@@ -689,21 +511,17 @@ export function UnifiedTaskQueuePage() {
       const lease = await ensureClaimed(task)
       const result = await transferMutation.mutateAsync({
         workItemId: task.id,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
-        expectedSubjectHash: lease.subjectHash,
-        idempotencyKey: newIdempotencyKey("xfr"),
+        expectedSubjectVersion: lease.subjectVersion,
         transfer: {
-          toUserLabel: "陈琳",
+          targetUserId: "陈琳",
           reason: decisionForm.state.values.note || "转交业务责任人",
         },
       })
-      claimsRef.current.delete(task.id)
-      setClaimEpoch((n) => n + 1)
+      dropActiveLease(task.id)
       setLastResult({
         status: "succeeded",
         title: "已转交",
-        description: `原任务 TRANSFERRED；后继 ${result.successorWorkItemId}（${result.successorWorkItemStatus}）`,
+        description: `任务已转交 ${result.targetUserId}，仍在处理中，未创建后继任务。`,
         reference: result.transferRecordId,
       })
       advanceToNext(task.id, tasks)
@@ -713,6 +531,7 @@ export function UnifiedTaskQueuePage() {
   }, [
     advanceToNext,
     decisionForm.state.values.note,
+    dropActiveLease,
     ensureClaimed,
     handleMockError,
     permissionRevoked,
@@ -752,8 +571,6 @@ export function UnifiedTaskQueuePage() {
       return "unclaimed" as const
     }
     if (activeClaim) return "active" as const
-    if (task.leaseState) return "active" as const
-    // Had processing rights but token missing
     if (
       task.effectiveStatusCode === "IN_PROGRESS" ||
       task.effectiveStatusCode === "PENDING"
@@ -771,7 +588,6 @@ export function UnifiedTaskQueuePage() {
     permissionRevoked ||
     completeMutation.isPending ||
     actionMutation.isPending ||
-    Boolean(pendingIdem) ||
     leaseStatus === "lost"
 
   const filterSummary = buildFilterSummary(
@@ -974,45 +790,6 @@ export function UnifiedTaskQueuePage() {
           ) : null}
         </form>
       </div>
-
-      {permissionRevoked ? (
-        <Alert variant="destructive">
-          <ShieldAlertIcon aria-hidden="true" />
-          <AlertTitle>权限已收回</AlertTitle>
-          <AlertDescription>
-            当前页面中的临时信息已清除，仅保留任务编号与返回上下文。
-            <Button
-              type="button"
-              variant="outline"
-              size="xs"
-              className="ml-2"
-              onClick={() => void revokeMutation.mutateAsync("restore")}
-            >
-              模拟恢复权限
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
-      {pendingIdem ? (
-        <Alert>
-          <KeyRoundIcon aria-hidden="true" />
-          <AlertTitle>结果待确认 · 原任务号已保留</AlertTitle>
-          <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <span className="font-mono text-xs break-all">
-              {pendingIdem.key}
-            </span>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => void onQueryIdempotency()}
-              disabled={idempotencyQueryMutation.isPending}
-            >
-              查询最终结果
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
 
       {lastResult ? (
         <FormalActionResult
@@ -1466,106 +1243,36 @@ export function UnifiedTaskQueuePage() {
                   </Button>
                 </div>
 
-                {/* Demo controls for concurrency states (honest mock, labeled) */}
-                <details className="rounded-lg border border-dashed border-border p-3 text-xs text-muted-foreground">
-                  <summary className="cursor-pointer font-medium text-foreground">
-                    页面内模拟（验收用）
-                  </summary>
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      onClick={() =>
-                        void loseLeaseMutation.mutateAsync(task.id).then(() => {
-                          claimsRef.current.delete(task.id)
-                          setClaimEpoch((n) => n + 1)
-                          setLastResult({
-                            status: "failed",
-                            title: "已模拟操作失效",
-                            description:
-                              "备注仍保留，但任务已被他人处理，请重新打开任务。",
-                            reference: task.id,
-                          })
-                        })
-                      }
-                    >
-                      模拟操作失效
-                    </Button>
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      onClick={() =>
-                        void bumpSubjectMutation
-                          .mutateAsync(task.id)
-                          .then((next) => {
-                            setConflictInfo({
-                              localVersion: task.subjectVersion,
-                              serverVersion: next.subjectVersion,
-                            })
-                            setLastResult({
-                              status: "failed",
-                              title: "已模拟数据版本变化",
-                              description:
-                                "下次提交将因数据版本不匹配被阻止，备注仍保留。",
-                              reference: next.subjectHash,
-                            })
-                          })
-                      }
-                    >
-                      模拟版本冲突
-                    </Button>
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      onClick={() => void onComplete({ simulateTimeout: true })}
-                    >
-                      模拟完成超时
-                    </Button>
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      onClick={() =>
-                        void revokeMutation.mutateAsync("revoke")
-                      }
-                    >
-                      模拟权限收回
-                    </Button>
-                    {!converge && !workItemType ? (
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant="secondary"
-                        onClick={() =>
-                          replaceQueueUrl({
-                            workItemType: task.workItemType,
-                            converge: true,
-                            currentWorkItemId: task.id,
-                          })
-                        }
-                      >
-                        收敛到同类连续处理
-                      </Button>
-                    ) : (
-                      <Button
-                        type="button"
-                        size="xs"
-                        variant="ghost"
-                        onClick={() =>
-                          replaceQueueUrl({
-                            workItemType: null,
-                            converge: false,
-                          })
-                        }
-                      >
-                        回到全部类型
-                      </Button>
-                    )}
-                  </div>
-                </details>
+                {!converge && !workItemType ? (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="secondary"
+                    onClick={() =>
+                      replaceQueueUrl({
+                        workItemType: task.workItemType,
+                        converge: true,
+                        currentWorkItemId: task.id,
+                      })
+                    }
+                  >
+                    收敛到同类连续处理
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    onClick={() =>
+                      replaceQueueUrl({
+                        workItemType: null,
+                        converge: false,
+                      })
+                    }
+                  >
+                    回到全部类型
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>
@@ -1633,10 +1340,9 @@ export function UnifiedTaskQueuePage() {
         }
         onReload={() => {
           void queueQuery.refetch().then(() => {
-            // After refresh, claim again with new hash
+            // After refresh, claim again with new subject version
             if (task) {
-              claimsRef.current.delete(task.id)
-              setClaimEpoch((n) => n + 1)
+              dropActiveLease(task.id)
             }
             setConflictOpen(false)
           })

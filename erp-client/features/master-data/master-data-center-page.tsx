@@ -21,7 +21,7 @@ import {
 } from "@/features/master-data/master-data-action-dialog"
 import { ProductDetailPage } from "@/features/master-data/product-detail-page"
 import { SupplierDetailPage } from "@/features/master-data/supplier-detail-page"
-import { revealMasterDataSensitive } from "@/features/master-data/api"
+import { revealMasterDataSensitive } from "@/features/master-data/queries"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
 import { formatEffectiveRange } from "@/features/master-data/filter"

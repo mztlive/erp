@@ -5,15 +5,11 @@ import type {
   WorkspaceMetricKey,
 } from "@/mock/workspace"
 import { sequentialText } from "@/lib/ui-text"
+import { createUrlStateCodec } from "@/lib/url-state"
 
-const DUE_VALUES = new Set<WorkspaceDueFilter>(["today", "overdue"])
-const FAMILY_VALUES = new Set<WorkspaceFamilyFilter>([
-  "approval",
-  "finance",
-  "fulfillment",
-  "exception",
-])
-const SCENARIO_VALUES = new Set(["forbidden", "no_scope", "empty"] as const)
+const DUE_VALUES = ["today", "overdue"] as const
+const FAMILY_VALUES = ["approval", "finance", "fulfillment", "exception"] as const
+const SCENARIO_VALUES = ["forbidden", "no_scope", "empty"] as const
 
 export type WorkspaceUrlState = {
   scope: "mine" | "role_pool"
@@ -24,49 +20,17 @@ export type WorkspaceUrlState = {
   scenario?: "forbidden" | "no_scope" | "empty"
 }
 
-export function parseWorkspaceSearchParams(
-  searchParams: URLSearchParams | { get(name: string): string | null }
-): WorkspaceUrlState {
-  const scopeRaw = searchParams.get("scope")
-  const scope = scopeRaw === "role_pool" ? "role_pool" : "mine"
-
-  const dueRaw = searchParams.get("due")
-  const due =
-    dueRaw && DUE_VALUES.has(dueRaw as WorkspaceDueFilter)
-      ? (dueRaw as WorkspaceDueFilter)
-      : undefined
-
-  const familyRaw = searchParams.get("family")
-  const family =
-    familyRaw && FAMILY_VALUES.has(familyRaw as WorkspaceFamilyFilter)
-      ? (familyRaw as WorkspaceFamilyFilter)
-      : undefined
-
-  const focusWorkItemId = searchParams.get("focusWorkItemId") ?? undefined
-
-  const scenarioRaw = searchParams.get("scenario")
-  const scenario =
-    scenarioRaw &&
-    (SCENARIO_VALUES as Set<string>).has(scenarioRaw)
-      ? (scenarioRaw as WorkspaceUrlState["scenario"])
-      : undefined
-
-  return { scope, due, family, focusWorkItemId, scenario }
-}
-
-export function buildWorkspaceSearchParams(
-  state: WorkspaceUrlState
-): string {
-  const params = new URLSearchParams()
+const codec = createUrlStateCodec<WorkspaceUrlState>([
   // Default scope=mine is omitted so `/workspace` stays clean.
-  if (state.scope === "role_pool") params.set("scope", "role_pool")
-  if (state.due) params.set("due", state.due)
-  if (state.family) params.set("family", state.family)
-  if (state.focusWorkItemId) params.set("focusWorkItemId", state.focusWorkItemId)
-  if (state.scenario) params.set("scenario", state.scenario)
-  const qs = params.toString()
-  return qs ? `?${qs}` : ""
-}
+  { key: "scope", type: "enum", values: ["mine", "role_pool"], defaultValue: "mine" },
+  { key: "due", type: "enum", values: DUE_VALUES },
+  { key: "family", type: "enum", values: FAMILY_VALUES },
+  { key: "focusWorkItemId", type: "string" },
+  { key: "scenario", type: "enum", values: SCENARIO_VALUES },
+])
+
+export const parseWorkspaceSearchParams = codec.parse
+export const buildWorkspaceSearchParams = codec.build
 
 export function metricKeyFromUrlState(
   state: Pick<WorkspaceUrlState, "due" | "family">

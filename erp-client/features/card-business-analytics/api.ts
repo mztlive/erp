@@ -4,15 +4,17 @@
  */
 
 import { mockDelay } from "@/lib/mock-delay"
+import { applyFieldPermissions } from "@/lib/field-permissions"
+import { resolveFreshness } from "@/lib/freshness"
 import type {
   AuthorizedCardMetric,
   CardBusinessAnalyticsQuery,
   CardBusinessAnalyticsView,
   CardBusinessExportJob,
+  CardBusinessFreshness,
   CardBusinessRow,
   DateBasis,
   DateBasisConfig,
-  ProjectionFreshnessState,
 } from "@/features/card-business-analytics/types"
 import { DATE_BASIS_LABEL } from "@/features/card-business-analytics/types"
 import {
@@ -35,7 +37,6 @@ import {
   W28_WECHAT_COST_NET,
   W28_WECHAT_EXCLUDED_NOTE,
   createW28ExportJob,
-  getW28ExportJob,
 } from "@/mock/card-business-analytics"
 
 export type DateBasisConfigQuery = {
@@ -94,76 +95,6 @@ function filterRows(
   }
 
   return list
-}
-
-function applyFieldPermissions(
-  row: CardBusinessRow,
-  fieldHide: CardBusinessAnalyticsQuery["fieldHide"]
-): CardBusinessRow {
-  if (fieldHide === "cost" || fieldHide === "profit") {
-    return {
-      ...row,
-      costNet: undefined,
-      supplierOrderHref: undefined,
-    }
-  }
-  return row
-}
-
-function resolveFreshness(
-  demo?: ProjectionFreshnessState
-): CardBusinessAnalyticsView["freshness"] {
-  const projectionUpdatedAt = "2026-08-01T09:28:40+08:00"
-  const consumedOutboxWatermark = "2026-08-01T09:28:10+08:00"
-  const sourceFactWatermark = "2026-08-01T09:28:05+08:00"
-  const balanceSnapshotAt = "2026-08-01T08:00:00+08:00"
-
-  if (demo === "stale") {
-    return {
-      projectionUpdatedAt: "2026-08-01T08:10:00+08:00",
-      consumedOutboxWatermark: "2026-08-01T08:09:00+08:00",
-      sourceFactWatermark: "2026-08-01T09:25:00+08:00",
-      balanceSnapshotAt,
-      lagSeconds: 95,
-      maxLagSeconds: 60,
-      slaState: "BREACHED",
-      state: "stale",
-    }
-  }
-  if (demo === "rebuilding") {
-    return {
-      projectionUpdatedAt,
-      consumedOutboxWatermark,
-      sourceFactWatermark,
-      balanceSnapshotAt,
-      lagSeconds: 12,
-      maxLagSeconds: 60,
-      slaState: "REBUILDING",
-      state: "rebuilding",
-    }
-  }
-  if (demo === "failed") {
-    return {
-      projectionUpdatedAt: "2026-08-01T08:55:00+08:00",
-      consumedOutboxWatermark: "2026-08-01T08:50:00+08:00",
-      sourceFactWatermark: "2026-08-01T08:50:00+08:00",
-      balanceSnapshotAt,
-      lagSeconds: 0,
-      maxLagSeconds: 60,
-      slaState: "FAILED",
-      state: "failed",
-    }
-  }
-  return {
-    projectionUpdatedAt,
-    consumedOutboxWatermark,
-    sourceFactWatermark,
-    balanceSnapshotAt,
-    lagSeconds: 18,
-    maxLagSeconds: 60,
-    slaState: "WITHIN_SLA",
-    state: "fresh",
-  }
 }
 
 function buildMetrics(options: {
@@ -315,7 +246,18 @@ export async function fetchCardBusinessAnalytics(
     query.dateBasis === "expiry" && query.expiryState === "expired"
 
   const filtered = filterRows(W28_ROWS, query).map((r) =>
-    applyFieldPermissions(r, fieldHide)
+    applyFieldPermissions(r, fieldHide, {
+      cost: (row) => ({
+        ...row,
+        costNet: undefined,
+        supplierOrderHref: undefined,
+      }),
+      profit: (row) => ({
+        ...row,
+        costNet: undefined,
+        supplierOrderHref: undefined,
+      }),
+    })
   )
 
   const coveredGross =
@@ -341,7 +283,52 @@ export async function fetchCardBusinessAnalytics(
         costNet: undefined,
       }))
 
-  const freshness = resolveFreshness(query.freshnessDemo)
+  const projectionUpdatedAt = "2026-08-01T09:28:40+08:00"
+  const consumedOutboxWatermark = "2026-08-01T09:28:10+08:00"
+  const sourceFactWatermark = "2026-08-01T09:28:05+08:00"
+  const balanceSnapshotAt = "2026-08-01T08:00:00+08:00"
+  const freshness: CardBusinessFreshness = resolveFreshness(query.freshnessDemo, {
+    fresh: {
+      projectionUpdatedAt,
+      consumedOutboxWatermark,
+      sourceFactWatermark,
+      balanceSnapshotAt,
+      lagSeconds: 18,
+      maxLagSeconds: 60,
+      slaState: "WITHIN_SLA",
+      state: "fresh",
+    },
+    stale: {
+      projectionUpdatedAt: "2026-08-01T08:10:00+08:00",
+      consumedOutboxWatermark: "2026-08-01T08:09:00+08:00",
+      sourceFactWatermark: "2026-08-01T09:25:00+08:00",
+      balanceSnapshotAt,
+      lagSeconds: 95,
+      maxLagSeconds: 60,
+      slaState: "BREACHED",
+      state: "stale",
+    },
+    rebuilding: {
+      projectionUpdatedAt,
+      consumedOutboxWatermark,
+      sourceFactWatermark,
+      balanceSnapshotAt,
+      lagSeconds: 12,
+      maxLagSeconds: 60,
+      slaState: "REBUILDING",
+      state: "rebuilding",
+    },
+    failed: {
+      projectionUpdatedAt: "2026-08-01T08:55:00+08:00",
+      consumedOutboxWatermark: "2026-08-01T08:50:00+08:00",
+      sourceFactWatermark: "2026-08-01T08:50:00+08:00",
+      balanceSnapshotAt,
+      lagSeconds: 0,
+      maxLagSeconds: 60,
+      slaState: "FAILED",
+      state: "failed",
+    },
+  })
 
   const filterParts = [
     `${query.from} ~ ${query.to}`,
@@ -481,11 +468,4 @@ export async function startCardBusinessExport(input: {
     wechatExcludedNote: input.view.wechatExcludedNote,
     rowCount: input.view.rows.total,
   })
-}
-
-export async function fetchCardBusinessExportJob(
-  jobId: string
-): Promise<CardBusinessExportJob | null> {
-  await mockDelay(40)
-  return getW28ExportJob(jobId)
 }

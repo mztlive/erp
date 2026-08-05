@@ -27,7 +27,7 @@
 - ERP 只有收到商城成功确认后，才把该发布版本标记为商城已生效。
 - 把“发布内容已形成”和“商城是否确认接收”分成两条状态轨，接口失败不得伪装为发布版本不存在。
 - 供货价变化不得自动修改商城销售价；销售价、最小购买量和主动业务暂停必须由服务端权限/政策判定。销售价或销项税率变化且复核政策未配置时固定返回 `REVIEW_POLICY_UNCONFIGURED`；恢复责任未确认时固定返回 `RECOVERY_RESPONSIBILITY_UNCONFIRMED`。
-- `STOPPED`、零库存、不可供、可供数据过期，以及成本或其它关键供给变化未确认时，系统对受影响在售发布实行 fail-closed：立即幂等形成不可变暂停修订/明确暂停动作、投递记录和 outbox；人工任务不阻塞首次暂停。
+- `STOPPED`、零库存、不可供、可供数据过期，以及成本或其它关键供给变化未确认时，系统对受影响在售发布实行 fail-closed：立即幂等形成不可变暂停修订/明确暂停动作和投递记录；人工任务不阻塞首次暂停。
 
 ### 1.3 不在本工作面完成
 
@@ -64,9 +64,9 @@
 ### 2.2 安全暂停责任边界
 
 - 安全暂停由目录/供给领域事件触发，不是运营页面按钮，也不等待运营、采购或管理员领取任务。触发范围固定为：供应商商品 `STOPPED`、库存为零、明确不可供、可供数据超过服务端新鲜度阈值，以及供货价、进项税率、费用、MOQ、区域或商品能力变化尚未确认。
-- 安全暂停以“来源对象 + 暂停原因 + 来源版本”作为事件级幂等身份，先冻结全部受影响在售发布集合；同一领域事务为每个发布写本地暂停、不可变暂停修订/动作、`product_publication_delivery` 和 outbox。若触发原因为 `SUPPLIER_STOPPED`，整个来源事件再只创建一个正式后续 `work_item`，各发布子结果引用同一任务；其它原因只固定记录与 cause 匹配的 follow-up blocker 与证据，不伪造任务。重复事件返回原操作和原子结果，如有任务则返回原任务。
+- 安全暂停以“来源对象 + 暂停原因 + 来源版本”作为事件级幂等身份，先冻结全部受影响在售发布集合；同一领域事务为每个发布写本地暂停、不可变暂停修订/动作和 `product_publication_delivery`。若触发原因为 `SUPPLIER_STOPPED`，整个来源事件再只创建一个正式后续 `work_item`，各发布子结果引用同一任务；其它原因只固定记录与 cause 匹配的 follow-up blocker 与证据，不伪造任务。重复事件返回原操作和原子结果，如有任务则返回原任务。
 - 仅 `SUPPLIER_STOPPED` 后续任务复用已注册 `work_item_type=BUSINESS_EXCEPTION`，业务对象是触发暂停的 `SUPPLIER_EXTERNAL_PRODUCT` 或 `SUPPLIER_OFFERING`，并由服务端固定 handler 路由 W21。零库存、不可供、过期、成本/关键供给变化等正常核对在权威注册表增加固定类型前保持 W21 实施 blocker，不得借用 `BUSINESS_EXCEPTION`。商城投递结果未知则另由已注册 `INTEGRATION_RESULT_UNKNOWN` 进入 W29。
-- 已注册人工任务当前只用于核对来源、固定影响和准备替代候选证据，不能选定替代供给或发起恢复发布。任务无人领取、租约过期、处理失败或被转交，以及其它原因尚无注册任务，都不能把商品恢复为可下单。
+- 已注册人工任务当前只用于核对来源、固定影响和准备替代候选证据，不能选定替代供给或发起恢复发布。任务无人领取、处理失败或被转交，以及其它原因尚无注册任务，都不能把商品恢复为可下单。
 - 恢复发起人、确认人与采购/运营交接还未确认。因此只允许系统安全暂停和人工暂停；任何从安全暂停转为 `ON_SALE` 的提交都必须被 `RECOVERY_RESPONSIBILITY_UNCONFIRMED` 阻断。库存重新出现、来源恢复可用或候选供给已就绪均不得自动解除暂停。
 
 ## 3. 入口、路由与任务页签
@@ -87,7 +87,7 @@
 ### 4.1 列表页（1440×900）
 
 ```text
-┌ PageHeader：商品发布                  数据水位 09:36 [刷新] [新建发布·已阻断]
+┌ PageHeader：商品发布                  数据更新时间 09:36 [刷新] [新建发布·已阻断]
 ├ MetricStrip：[待发布] [待商城确认] [失败/转人工] [商城已生效] [已暂停]
 ├ ListToolbar：SavedView | 搜索 | 商城 | 发布状态 | 投递状态 | 类目 | 更多筛选
 ├ 筛选摘要 / SelectionScopeBar（仅有批量动作时）
@@ -120,7 +120,7 @@
 | 区域 | 目的 | 主组件 | 是否固定 |
 | --- | --- | --- | --- |
 | 页头与状态轨 | 同时辨认稳定发布、版本和商城确认 | `PageHeader object-chrome` + `DocumentHeader density="compact"` `StatusTrackSummary` | 顶部固定 |
-| 指标与工具栏 | 快速进入当前处理水位 | `MetricStrip` `ListToolbar` | 列表顶部 |
+| 指标与工具栏 | 快速进入当前处理进度 | `MetricStrip` `ListToolbar` | 列表顶部 |
 | 发布内容 | 阅读当前选中修订的完整商城内容 | `DocumentSection` `DocumentSummary` | 否 |
 | 媒体 | 验证安全资产、用途、顺序和替代文本 | 媒体列表 / 预览 | 否 |
 | 固定供给 | 明确本版本唯一履约来源 | `RelatedDocumentList` | 否 |
@@ -160,7 +160,7 @@
 | `saleStatus` | 商城销售状态 | 发布修订 | 上架、下架、暂停下单 |
 | `productCapabilities` | 取消 / 退款 / 物流等能力 | 发布修订 | 来源于已确认能力，不由前端推断 |
 | `validFrom` / `validTo` | 生效区间 | 发布修订 | 使用公司工作时区，区间冲突由服务端校验 |
-| `contentHash` | 内容指纹 | 服务端 | 默认不展示全文；审计区可复制短摘要 |
+| `revisionNo` | 修订版本 | 服务端 | 审计区展示版本摘要 |
 
 ### 5.3 媒体与投递
 
@@ -198,8 +198,8 @@
 | 新建发布对象 | 列表页头 | 多商城/唯一性规则未确认，入口强制禁用 | 不打开确认框 | 无创建命令；固定显示 `PUBLICATION_IDENTITY_POLICY_UNCONFIRMED` | 规则写入权威合同并由服务端提供稳定创建命令后重新查询；不用 `SKU + 商城` 在前端去重 |
 | 准备普通新版本 | 现有对象中心 | `PREPARE_REVISION`；以 `publicationId` 定位的现有对象有效，且不是从安全暂停恢复 `ON_SALE` | 无正式确认 | 以指定历史/当前版本为起点进入当前页签会话编辑态；不调用保存 mutation | 版本变化提示重新取基线；刷新/关闭前提示会话输入将丢失 |
 | 会话内编辑 | 编辑区 | 有现有对象编辑权限；基线版本有效 | 无 | 只更新当前 TaskTab 内存中的输入和脏标记；不持久化、不自动保存、不形成发布修订 | 刷新/关闭前明确提示会丢失；用户取消离开则继续保留当前会话输入 |
-| 提交发布 | 编辑区主动作 | `PUBLISH`；必填字段、主图、安全扫描、唯一供给、类目和有效期校验通过；服务端返回 `publishGate.kind=READY` | `FormalActionConfirmDialog` 展示商城、价格、状态、供给、生效时间和复核政策结论 | 形成不可变发布修订和 outbox；固定展示版本号与“等待商城确认” | 销售价/销项税率变化且政策未配置时返回 `REVIEW_POLICY_UNCONFIGURED`；安全暂停恢复返回 `RECOVERY_RESPONSIBILITY_UNCONFIRMED`；结果未知时查询原请求，不创建新版本重试 |
-| 系统安全暂停 | 目录/供给事件处理器（非页面按钮） | 固定安全原因命中且存在受影响在售发布；不要求人工权限或任务租约 | 无人工确认 | 冻结受影响集合，同事务幂等提交所有本地暂停子结果/投递/outbox；`SUPPLIER_STOPPED` 另创建唯一 `BUSINESS_EXCEPTION`，其它原因固定返回与 cause 匹配的 `followUpBlocker` | 结果未知按原幂等键查询；投递失败转 W29，本地仍保持暂停 |
+| 提交发布 | 编辑区主动作 | `PUBLISH`；必填字段、主图、安全扫描、唯一供给、类目和有效期校验通过；服务端返回 `publishGate.kind=READY` | `FormalActionConfirmDialog` 展示商城、价格、状态、供给、生效时间和复核政策结论 | 形成不可变发布修订；固定展示版本号与“等待商城确认” | 销售价/销项税率变化且政策未配置时返回 `REVIEW_POLICY_UNCONFIGURED`；安全暂停恢复返回 `RECOVERY_RESPONSIBILITY_UNCONFIRMED`；结果未知时查询原请求，不创建新版本重试 |
+| 系统安全暂停 | 目录/供给事件处理器（非页面按钮） | 固定安全原因命中且存在受影响在售发布；不要求人工权限或任务处理权 | 无人工确认 | 冻结受影响集合，同事务幂等提交所有本地暂停子结果/投递；`SUPPLIER_STOPPED` 另创建唯一 `BUSINESS_EXCEPTION`，其它原因固定返回与 cause 匹配的 `followUpBlocker` | 结果未知按原幂等键查询；投递失败转 W29，本地仍保持暂停 |
 | 人工发布暂停版本 | 更多动作 | `PAUSE`；当前对象可暂停 | 展示受影响商城与生效时间 | 形成新的暂停发布修订并投递 | 失败不覆盖旧版本；按原修订查询/重试 |
 | 重试投递 | 投递区 | `RETRY_DELIVERY`；明确可重试且未在发送中 | 展示版本、商城、原幂等键 | 继续原投递，结果区展示尝试编号 | 超时先查询商城确认；仍未知转 W29 |
 | 查询最终结果 | 结果未知状态 | `QUERY_RESULT` | 无 | 更新明确确认、明确失败或仍未知 | 仍未知保留当前状态与人工处理入口 |
@@ -211,7 +211,7 @@
 - “提交发布”形成新的不可变发布修订；“重试投递”不能形成新修订。
 - 消息幂等依据为服务端已分配的 `publicationId + revisionId + destinationIdentity`，前端同时携带唯一 `requestId` 处理接口超时；不从 SKU/商城字段推导发布对象唯一性。
 - 销售价或销项税率是否变化、是否需要复核以及复核是否满足，全部使用服务端 `publishGate`。即使前端比较为“无变化”也不得自行跳过政策；价格/税率变化且政策未配置时必须 fail-closed。
-- 系统安全暂停的事件幂等依据为“来源对象 + 暂停原因 + 来源版本”；受影响发布子结果再按“发布对象 + 原因 + 来源版本”去重。冻结影响集合后，所有本地暂停子结果、暂停修订/动作、投递记录和 outbox 必须原子提交；仅 `SUPPLIER_STOPPED` 同事务创建唯一已注册后续任务，其它原因同事务记录与 cause 匹配的 blocker/evidence。outbox 消费和商城确认可以异步，但任何失败都不能回滚为可下单。
+- 系统安全暂停的事件幂等依据为“来源对象 + 暂停原因 + 来源版本”；受影响发布子结果再按“发布对象 + 原因 + 来源版本”去重。冻结影响集合后，所有本地暂停子结果、暂停修订/动作和投递记录必须原子提交；仅 `SUPPLIER_STOPPED` 同事务创建唯一已注册后续任务，其它原因同事务记录与 cause 匹配的 blocker/evidence。投递和商城确认可以异步，但任何失败都不能回滚为可下单。
 - 安全原因仍有效时，服务端必须阻断任何 `ON_SALE` 提交；来源重新可用只移除恢复 blocker 的一部分，不自动创建上架版本。即使供给已有效，恢复责任规则未确认前仍固定返回 `RECOVERY_RESPONSIBILITY_UNCONFIRMED`；当前只允许安全暂停或人工暂停继续执行。
 - 结果未知时先查询原请求或商城确认，不以再次点击“发布”解决。
 - 商城业务拒绝、鉴权失败和字段映射错误直接转人工；临时网络或限流才按策略自动重试。
@@ -252,7 +252,6 @@ type SafetyPauseFollowUpWorkItemRef = {
   businessObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
   businessObjectId: string
   subjectVersion: string
-  subjectHash: string
   handlerKey: string // 服务端固定注册并路由 W21
 }
 
@@ -279,7 +278,6 @@ type SafetyPauseAffectedPublicationView =
       pauseRevisionId: string
       pauseActionId?: never
       deliveryId: string
-      outboxMessageId: string
     }
   | {
       publicationId: string
@@ -287,7 +285,6 @@ type SafetyPauseAffectedPublicationView =
       pauseRevisionId?: never
       pauseActionId: string
       deliveryId: string
-      outboxMessageId: string
     }
 
 type KnownSafetyPauseOperationBase = {
@@ -296,7 +293,6 @@ type KnownSafetyPauseOperationBase = {
   sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
   sourceObjectId: string
   sourceVersion: string
-  subjectHash: string
   availabilityEffect: "PAUSED"
   affectedPublications: [SafetyPauseAffectedPublicationView, ...SafetyPauseAffectedPublicationView[]]
   committedAt: string
@@ -325,7 +321,6 @@ type SystemSafetyPauseOperationView =
       sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
       sourceObjectId: string
       sourceVersion: string
-      subjectHash: string
       originalIdempotencyKey: string
       availabilityEffect: "FAIL_CLOSED_PENDING_RESULT"
       affectedPublications?: never
@@ -496,7 +491,7 @@ type ProductPublicationView = {
 }
 ```
 
-`ProductPublicationRevisionView` 必须包含 §5.2、§5.3 的完整快照、唯一 `supplierOfferingRevisionId`、媒体列表和内容指纹。页面切换历史修订时不得以当前基础资料补写缺失值。
+`ProductPublicationRevisionView` 必须包含 §5.2、§5.3 的完整快照、唯一 `supplierOfferingRevisionId` 和媒体列表。页面切换历史修订时不得以当前基础资料补写缺失值。
 
 ### 8.3 提交
 
@@ -542,7 +537,6 @@ type SystemSafetyPauseTrigger = {
   sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"
   sourceObjectId: string
   sourceVersion: string
-  subjectHash: string
   affectedPublicationIds: string[] // 服务端冻结的完整在售影响集合
   occurredAt: string
   idempotencyKey: string
@@ -551,13 +545,13 @@ type SystemSafetyPauseTrigger = {
 ```
 
 - 表单使用 TanStack Form；服务端返回字段级错误和置顶校验摘要。
-- `expectedObjectVersion` / 内容指纹用于冲突检查；禁止静默覆盖他人新修订。
+- `expectedObjectVersion` 用于冲突检查；禁止静默覆盖他人新修订。
 - 发布工作副本的服务端持久化策略尚未确认。当前只保留 TaskTab 会话内输入，不定义草稿保存 mutation、不自动保存、不写本地持久存储；刷新/关闭前必须明确提示输入将丢失。
-- `expectedPublishGateVersion` 与对象版本一起防止绕过复核/恢复 blocker。服务端提交时重算 `PublicationPublishGate`；只有 `READY` 可写不可变修订，`REVIEW_POLICY_UNCONFIGURED`、`REVIEW_BLOCKED` 和 `RECOVERY_RESPONSIBILITY_UNCONFIRMED` 都不得写修订/outbox。
+- `expectedPublishGateVersion` 与对象版本一起防止绕过复核/恢复 blocker。服务端提交时重算 `PublicationPublishGate`；只有 `READY` 可写不可变修订，`REVIEW_POLICY_UNCONFIGURED`、`REVIEW_BLOCKED` 和 `RECOVERY_RESPONSIBILITY_UNCONFIRMED` 都不得写修订。
 - 投递是后台流程；本地发布提交成功和商城确认成功必须分别反馈。
 - `SystemSafetyPauseTrigger` 由服务端从可信目录/供给事实生成，浏览器不得构造。重复触发必须返回同一操作结果；调用方得到 `UNKNOWN` 时只按原 `idempotencyKey` 查询，不得新建暂停版本重试。
-- 安全暂停事务以本地 fail-closed 为成功边界：冻结的全部受影响发布暂停子结果、投递和 outbox 要么一起提交，要么一起不提交；`SUPPLIER_STOPPED` 还必须同事务提交唯一后续 `work_item`，其它原因则同事务提交与 cause 匹配的 `followUpBlocker`。商城投递失败由各自原 outbox 重试并进入 W29，不能删除任何暂停结果。
-- `COMMITTED` / `ALREADY_SAFE` 都是已落库结果，`affectedPublications` 必须覆盖首次冻结的非空集合，每项通过 `pauseArtifactKind` 强制且只能返回 `pauseRevisionId` / `pauseActionId` 之一，并返回 `deliveryId`、`outboxMessageId`。若 `cause=SUPPLIER_STOPPED`，结果必须且只返回一个 `followUpWorkItem`，其 `workItemType=BUSINESS_EXCEPTION`、业务对象与触发来源一致、handler 路由 W21。`ZERO_INVENTORY` / `SUPPLY_UNAVAILABLE` / `AVAILABILITY_STALE` 强制返回 `NO_MANUAL_FOLLOW_UP_TASK_BY_CURRENT_POLICY` blocker，明确不伪造人工任务；成本/关键供给变化强制返回 `NORMAL_REVIEW_WORK_ITEM_TYPE_UNREGISTERED`。这些分支均不得返回 `BUSINESS_EXCEPTION`。
+- 安全暂停事务以本地 fail-closed 为成功边界：冻结的全部受影响发布暂停子结果和投递要么一起提交，要么一起不提交；`SUPPLIER_STOPPED` 还必须同事务提交唯一后续 `work_item`，其它原因则同事务提交与 cause 匹配的 `followUpBlocker`。商城投递失败由投递任务重试并进入 W29，不能删除任何暂停结果。
+- `COMMITTED` / `ALREADY_SAFE` 都是已落库结果，`affectedPublications` 必须覆盖首次冻结的非空集合，每项通过 `pauseArtifactKind` 强制且只能返回 `pauseRevisionId` / `pauseActionId` 之一，并返回 `deliveryId`。若 `cause=SUPPLIER_STOPPED`，结果必须且只返回一个 `followUpWorkItem`，其 `workItemType=BUSINESS_EXCEPTION`、业务对象与触发来源一致、handler 路由 W21。`ZERO_INVENTORY` / `SUPPLY_UNAVAILABLE` / `AVAILABILITY_STALE` 强制返回 `NO_MANUAL_FOLLOW_UP_TASK_BY_CURRENT_POLICY` blocker，明确不伪造人工任务；成本/关键供给变化强制返回 `NORMAL_REVIEW_WORK_ITEM_TYPE_UNREGISTERED`。这些分支均不得返回 `BUSINESS_EXCEPTION`。
 - `resultStatus=UNKNOWN` 是独立分支，不得返回 `affectedPublications`、`committedAt`、`followUpWorkItem` 或 `followUpBlocker`；页面使用 `originalIdempotencyKey` 查询原操作，并以 `FAIL_CLOSED_PENDING_RESULT` 保持不可下单，不能用“没有后续任务”推断暂停未发生。列表、对象中心和操作结果全部复用同一 `SystemSafetyPauseOperationView`，不重新定义可选任务/blocker 结构。
 
 ### 8.4 前端边界
@@ -572,12 +566,12 @@ type SystemSafetyPauseTrigger = {
 | 状态 | 页面表现 | 可执行动作 | 恢复方式 |
 | --- | --- | --- | --- |
 | 初载 | 列表或对象中心按成稿结构显示 Skeleton | 应用壳导航可用 | 查询完成后原位替换 |
-| 刷新 | 保留旧行和当前修订，标记正在刷新 | 允许阅读；正式动作提交前重新校验 | 成功更新水位，失败保留旧数据 |
+| 刷新 | 保留旧行和当前修订，标记正在刷新 | 允许阅读；正式动作提交前重新校验 | 成功更新时间，失败保留旧数据 |
 | 空数据 | “尚无商品发布”，同时展示 `PUBLICATION_IDENTITY_POLICY_UNCONFIRMED` | 无可用新建动作 | 多商城/唯一性规则写入权威合同并实现服务端创建命令后重查 |
 | 筛选无结果 | 展示筛选摘要 | 清除筛选 | 恢复默认视图 |
 | 无数据范围 | 不展示 0 指标和对象内容 | 查看当前角色/申请范围 | 权限更新后重查 |
 | 查询失败 | 有缓存则保留并标记失败；无缓存显示 `BusinessFailureState` | 重试 | 查询成功 |
-| 数据陈旧 | 显示查询水位；投递状态超过 SLA 时提示 | 刷新、查看 W29 | 服务端状态追平 |
+| 数据陈旧 | 显示查询更新时间；投递状态超过 SLA 时提示 | 刷新、查看 W29 | 服务端状态追平 |
 | 字段级隐藏 | 字段标签保留，价格或供给值掩码 | 其它有权动作可用 | 权限变化后重查 |
 | 会话内编辑中 | 页签显示脏标记和“未持久化”；不显示“已保存”或自动保存状态 | 继续编辑、提交正式发布或放弃输入 | 关闭/刷新前明确提示；继续离开则输入丢失 |
 | 版本冲突 | 显示现版本与编辑基线差异 | 刷新比较、复制输入到新基线 | 不覆盖服务器版本 |
@@ -647,10 +641,10 @@ type SystemSafetyPauseTrigger = {
 
 ### 12.3 动作、投递与异常
 
-- [x] 提交发布形成不可变修订和 outbox，正式结果固定显示版本号与投递编号。
-- [x] 系统安全暂停按“来源对象 + 原因 + 来源版本”冻结全部受影响发布；mock API 原子提交所有暂停子结果/投递/outbox。`STOPPED` 再与唯一 `BUSINESS_EXCEPTION` 任务同事务，其它原因只返回 blocker/证据，不伪造任务。
+- [x] 提交发布形成不可变修订，正式结果固定显示版本号与投递编号。
+- [x] 系统安全暂停按“来源对象 + 原因 + 来源版本”冻结全部受影响发布；mock API 原子提交所有暂停子结果/投递。`STOPPED` 再与唯一 `BUSINESS_EXCEPTION` 任务同事务，其它原因只返回 blocker/证据，不伪造任务。
 - [x] `SystemSafetyPauseOperationView` 是列表/对象/操作结果的唯一结构：`SUPPLIER_STOPPED + COMMITTED/ALREADY_SAFE` 强制唯一 `followUpWorkItem`，其它已落库原因强制唯一 `followUpBlocker`，`UNKNOWN` 二者均禁止且保持 fail-closed。
-- [ ] 已注册安全暂停任务只用于核对来源/影响和准备候选证据，不阻塞首次暂停，也不能选定替代供给或发起恢复；任务失败、丢租约、无人领取或尚无注册正常复核类型时，本地仍保持不可下单。
+- [ ] 已注册安全暂停任务只用于核对来源/影响和准备候选证据，不阻塞首次暂停，也不能选定替代供给或发起恢复；任务失败、无人领取或尚无注册正常复核类型时，本地仍保持不可下单。
 - [x] 销售价/销项税率变化且复核政策未配置时，`PUBLISH` 固定被 `REVIEW_POLICY_UNCONFIGURED` 阻断；无变化也只使用服务端 `publishGate` 结论。
 - [x] 恢复责任未确认时，任何安全暂停到 `ON_SALE` 的提交都被 `RECOVERY_RESPONSIBILITY_UNCONFIRMED` 阻断；只允许安全暂停或人工暂停。
 - [x] 商城成功确认前不显示为“商城已生效”。

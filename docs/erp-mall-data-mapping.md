@@ -239,13 +239,13 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 
 第二期统一使用：
 
-- `outbox_message`：业务事务内写入待发送消息；
-- `inbox_message`：商城事件去重和处理结果；
-- `integration_attempt` / `integration_error_task`：尝试、结果未知、重试和人工处理；
 - `sales_order_projection_delivery`：卡券销售执行投影及商城确认；
-- `product_publication_delivery`：商品发布版本及商城确认。
+- `product_publication_delivery`：商品发布版本及商城确认；
+- `inbox_message`：商城事件去重和处理结果；
+- `integration_attempt` / `integration_error_task`：尝试、结果未知、重试和人工处理。
 
-业务事务与 `outbox_message` 同事务提交；每个消息持有稳定 `message_key` 和业务幂等键。
+发送/确认使用投递记录 + 定时重试 + 人工处理，不建 outbox 消息表：业务事务与投递记录
+同事务提交，每个投递持有稳定 `message_key` 和业务幂等键。
 发送失败不得回退已经生效的 ERP 销售事实，应生成接口异常任务并阻断对应商城执行
 或发布。结果未知时先按原外部请求号查询，重试仍使用原幂等键。
 
@@ -675,7 +675,7 @@ Token 和签名密钥不属于该业务表，统一由安全配置管理，不�
 ```text
 ERP 卡券销售单审批生效
 → 不可变销售单版本
-→ outbox_message
+→ 投递记录 + 定时重试
 → 商城执行投影
 → 商城确认接收
 → 商城配置玩法、制卡、绑定和激活

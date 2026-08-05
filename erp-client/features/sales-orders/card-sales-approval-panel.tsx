@@ -64,7 +64,7 @@ type CardSalesApprovalPanelProps = {
 
 /**
  * 卡券双审批：领导 / 运营共用处理区。
- * claimToken 仅存会话内存，不进 URL。
+ * 处理权仅在会话内存，刷新后需重新领取。
  */
 export function CardSalesApprovalPanel({
   order,
@@ -73,11 +73,9 @@ export function CardSalesApprovalPanel({
   const claimMutation = useClaimCardSalesApprovalMutation()
   const completeMutation = useCompleteCardSalesApprovalMutation()
 
-  /** claimToken 仅会话内存，不写入 query cache / URL */
+  /** 处理权仅会话内存，不写入 query cache / URL */
   const claimRef = React.useRef<{
     workItemId: string
-    claimToken: string
-    leaseVersion: number
   } | null>(null)
 
   const [result, setResult] = React.useState<{
@@ -163,9 +161,6 @@ export function CardSalesApprovalPanel({
         {approval.claimedByLabel ? (
           <p className="text-xs text-muted-foreground">
             处理人 {approval.claimedByLabel}
-            {approval.leaseExpiresAt
-              ? ` · 请在 ${new Date(approval.leaseExpiresAt).toLocaleString("zh-CN")} 前完成`
-              : null}
           </p>
         ) : (
           <p className="text-xs text-muted-foreground">
@@ -180,13 +175,11 @@ export function CardSalesApprovalPanel({
               size="sm"
               disabled={claimMutation.isPending}
               onClick={async () => {
-                const lease = await claimMutation.mutateAsync({
+                await claimMutation.mutateAsync({
                   workItemId: approval.workItemId,
                 })
                 claimRef.current = {
                   workItemId: approval.workItemId,
-                  claimToken: lease.claimToken,
-                  leaseVersion: lease.leaseVersion,
                 }
                 setResult({
                   status: "succeeded",
@@ -283,9 +276,6 @@ export function CardSalesApprovalPanel({
                 workItemId: approval.workItemId,
                 workItemType: approval.workItemType,
                 decision: "APPROVE",
-                claimToken: claim.claimToken,
-                leaseVersion: claim.leaseVersion,
-                idempotencyKey: `card-approve-${approval.workItemId}`,
               })
               claimRef.current = null
               setResult({
@@ -331,9 +321,6 @@ export function CardSalesApprovalPanel({
                 workItemId: approval.workItemId,
                 workItemType: approval.workItemType,
                 decision: "REJECT",
-                claimToken: claim.claimToken,
-                leaseVersion: claim.leaseVersion,
-                idempotencyKey: `card-reject-${approval.workItemId}`,
                 reasonCode: rejectPayload.reasonCode,
               })
               claimRef.current = null

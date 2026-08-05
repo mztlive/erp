@@ -8,7 +8,6 @@ import {
   decideSettlementReview,
   fetchSettlementDetail,
   fetchSettlementList,
-  queryFormalByIdempotency,
   refreshSettlementTrial,
   resolveDifference,
   submitSettlementReview,
@@ -110,18 +109,6 @@ export function useReviewDecisionMutation() {
         result.status === "rejected" ||
         result.status === "unknown"
       ) {
-        await invalidate()
-      }
-    },
-  })
-}
-
-export function useQueryFormalIdempotencyMutation() {
-  const invalidate = useInvalidateAll()
-  return useMutation({
-    mutationFn: (key: string) => queryFormalByIdempotency(key),
-    onSuccess: async (result) => {
-      if (result?.status === "succeeded" || result?.status === "rejected") {
         await invalidate()
       }
     },

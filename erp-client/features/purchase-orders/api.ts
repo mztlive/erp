@@ -1,6 +1,6 @@
 /**
  * W08 采购单 session-mock API：queryFn / mutationFn 纯函数。
- * draftEditToken / claimToken 仅存会话内存，不进入列表查询 View。
+ * draftEditToken 仅存会话内存，不进入列表查询 View；处理权仅存会话内存。
  */
 
 import { mockDelay } from "@/lib/mock-delay"
@@ -139,7 +139,6 @@ export async function savePurchaseOrderDraft(
       linePatches: input.lines,
       idempotencyKey: input.idempotencyKey,
       simulateConflict: input.simulateConflict,
-      simulateUnknown: input.simulateUnknown,
     })
     return {
       status: "succeeded",
@@ -152,13 +151,6 @@ export async function savePurchaseOrderDraft(
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
-      if (error.code === "TIMEOUT") {
-        return {
-          status: "unknown",
-          message: error.message,
-          idempotencyKey: input.idempotencyKey,
-        }
-      }
       return {
         status: "failed",
         message: error.message,
@@ -191,13 +183,6 @@ export async function submitPurchaseOrderForReview(
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
-      if (error.code === "TIMEOUT") {
-        return {
-          status: "unknown",
-          message: error.message,
-          idempotencyKey: input.idempotencyKey,
-        }
-      }
       return {
         status: "failed",
         message: error.message,
@@ -231,7 +216,6 @@ export async function reviewPurchaseOrder(
       reasonCode: input.reasonCode,
       comment: input.comment,
       idempotencyKey: input.idempotencyKey,
-      simulateUnknown: input.simulateUnknown,
     })
     return {
       status: "succeeded",
@@ -240,13 +224,6 @@ export async function reviewPurchaseOrder(
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
-      if (error.code === "TIMEOUT") {
-        return {
-          status: "unknown",
-          message: error.message,
-          idempotencyKey: input.idempotencyKey,
-        }
-      }
       return {
         status: "failed",
         message: error.message,

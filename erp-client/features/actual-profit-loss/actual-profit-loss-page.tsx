@@ -38,6 +38,7 @@ import {
   QuickPreviewSheet,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import type { FreshnessDemoState } from "@/lib/freshness"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import {
   Alert,
@@ -77,7 +78,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   useCostEntriesForRowQuery,
-  useExportJobQuery,
   useMarkCorrectionPendingMutation,
   usePeriodBasisConfigQuery,
   useProfitLossViewQuery,
@@ -88,6 +88,7 @@ import type {
   PeriodPreset,
   ProfitLossCoverage,
   ProfitLossDimension,
+  ProfitLossExportJob,
   ProfitLossQuery,
   ProfitLossRow,
   ProjectionFreshnessState,
@@ -268,7 +269,7 @@ export function ActualProfitLossPage() {
   const basisConfigScenario =
     searchParams.get("basisConfig") === "missing" ? "missing" : "default"
   const freshnessDemo = (searchParams.get("freshness") as
-    | ProjectionFreshnessState
+    | FreshnessDemoState
     | null) ?? undefined
   const fieldHideRaw = searchParams.get("fieldHide")
   const fieldHide =
@@ -288,7 +289,9 @@ export function ActualProfitLossPage() {
   const [selectedCostEntryId, setSelectedCostEntryId] = React.useState<
     string | null
   >(null)
-  const [exportJobId, setExportJobId] = React.useState<string | null>(null)
+  const [exportJob, setExportJob] = React.useState<ProfitLossExportJob | null>(
+    null
+  )
   const [refreshFailed, setRefreshFailed] = React.useState(false)
   const [refreshing, setRefreshing] = React.useState(false)
   const rowFocusRef = React.useRef<Map<string, HTMLElement | null>>(new Map())
@@ -351,8 +354,7 @@ export function ActualProfitLossPage() {
         freshnessDemo:
           freshnessDemo === "stale" ||
           freshnessDemo === "rebuilding" ||
-          freshnessDemo === "failed" ||
-          freshnessDemo === "fresh"
+          freshnessDemo === "failed"
             ? freshnessDemo
             : undefined,
         fieldHide,
@@ -361,7 +363,6 @@ export function ActualProfitLossPage() {
 
   const viewQuery = useProfitLossViewQuery(plQuery, analysisReady)
   const exportMutation = useStartProfitLossExportMutation()
-  const exportJobQuery = useExportJobQuery(exportJobId)
   const markCorrection = useMarkCorrectionPendingMutation()
 
   const costIds = costDetailRow?.costEntryIds ?? []
@@ -716,7 +717,7 @@ export function ActualProfitLossPage() {
       view: data,
       coverage,
     })
-    setExportJobId(job.jobId)
+    setExportJob(job)
 
     // 客户端落盘附带水印元数据（与后台任务一致）
     const wm = job.watermark
@@ -1082,35 +1083,35 @@ export function ActualProfitLossPage() {
                 </Alert>
               ) : null}
 
-              {exportJobId && exportJobQuery.data ? (
+              {exportJob ? (
                 <BackgroundJobProgress
                   mode="all-or-nothing"
                   status={
-                    exportJobQuery.data.status === "queued"
+                    exportJob.status === "queued"
                       ? "queued"
-                      : exportJobQuery.data.status === "running"
+                      : exportJob.status === "running"
                         ? "running"
-                        : exportJobQuery.data.status === "succeeded"
+                        : exportJob.status === "succeeded"
                           ? "succeeded"
                           : "failed"
                   }
-                  total={exportJobQuery.data.total}
-                  completed={exportJobQuery.data.completed}
+                  total={exportJob.total}
+                  completed={exportJob.completed}
                   succeeded={
-                    exportJobQuery.data.status === "succeeded"
-                      ? exportJobQuery.data.total
+                    exportJob.status === "succeeded"
+                      ? exportJob.total
                       : undefined
                   }
-                  label={`导出任务 ${exportJobQuery.data.jobId}`}
+                  label={`导出任务 ${exportJob.jobId}`}
                   description={
                     <>
-                      期间 {exportJobQuery.data.watermark.periodFrom}~
-                      {exportJobQuery.data.watermark.periodTo} · 归属口径{" "}
-                      {exportJobQuery.data.watermark.periodBasis} · 数据更新于{" "}
-                      {exportJobQuery.data.watermark.projectedAt}
-                      {exportJobQuery.data.downloadLabel ? (
+                      期间 {exportJob.watermark.periodFrom}~
+                      {exportJob.watermark.periodTo} · 归属口径{" "}
+                      {exportJob.watermark.periodBasis} · 数据更新于{" "}
+                      {exportJob.watermark.projectedAt}
+                      {exportJob.downloadLabel ? (
                         <span className="mt-1 block font-medium">
-                          可下载：{exportJobQuery.data.downloadLabel}
+                          可下载：{exportJob.downloadLabel}
                         </span>
                       ) : null}
                     </>
@@ -1120,7 +1121,7 @@ export function ActualProfitLossPage() {
                       type="button"
                       size="sm"
                       variant="ghost"
-                      onClick={() => setExportJobId(null)}
+                      onClick={() => setExportJob(null)}
                     >
                       关闭
                     </Button>

@@ -32,7 +32,7 @@
   `business_object_type=LEGACY_IMPORT_BATCH`、`handlerKey=import_business_confirmation`、
   `destinationWorkspaceId=W18`、`completion_action=COMPLETE_IMPORT_BUSINESS_CONFIRMATION`。
   `BUSINESS_EXCEPTION` 只承载异常，绝不能伪装正常必经确认，也不得上线页面私有类型。
-- 每个 `batchId × confirmationScope × trialVersion × subjectHash` 最多一个有效确认任务；
+- 每个 `batchId × confirmationScope` 最多一个有效确认任务；
   `confirmationScope` 与 `ownerRole` 共同决定责任范围。该任务登记是已确认的契约，直到
   后端 handler、W01/W02 展示映射和 W18 处理器实际接线前，运行时确认入口仍必须 fail-closed。
 
@@ -51,7 +51,7 @@
 | 审计人员 | W19 链入只读批次 | 授权审计范围 | 查看批次动作、规则版本、确认人和下载记录 |
 
 表中销售、采购、运营、仓储和财务的“待办进入”都使用同一固定类型；每项任务以
-`confirmationScope + ownerRole` 分责，不因某个角色已有页面权限就跳过任务、租约或版本校验。
+`confirmationScope + ownerRole` 分责，不因某个角色已有页面权限就跳过任务或版本校验。
 在 handler 与展示映射尚未实际接线前，所有正常业务确认入口统一禁用。
 
 ### 2.2 权限表达
@@ -74,12 +74,12 @@
 | 查看批次 | 系统导航“导入与期初” | `/governance/imports?environment=validation&status=active`；列表页签身份为当前用户 + 环境 | 返回保留筛选、页码和滚动位置 |
 | 创建批次 | 列表主动作 | 在同一列表打开创建 Dialog；创建成功后打开批次任务页签 | 关闭批次页签返回原列表 |
 | 打开批次 | 行、全局搜索或待办 | `/governance/imports/:batchId?section=overview`；身份为 `import-batch:{batchId}` | 聚焦已存在页签，不创建副本 |
-| 处理业务确认 | W01/W02 的 `IMPORT_BUSINESS_CONFIRMATION` 待办 | 打开同一批次页签并定位 `section=confirm&confirmationScope={scope}&workItemId={workItemId}&queueContextId={queueContextId}`；URL 只保存任务/队列身份，领取令牌仅保存在当前会话内存；handler 未接线时返回实施 blocker | 完成后回原待办或留在批次结果 |
+| 处理业务确认 | W01/W02 的 `IMPORT_BUSINESS_CONFIRMATION` 待办 | 打开同一批次页签并定位 `section=confirm&confirmationScope={scope}&workItemId={workItemId}&queueContextId={queueContextId}`；URL 只保存任务/队列身份；handler 未接线时返回实施 blocker | 完成后回原待办或留在批次结果 |
 | 查看问题行 | 批次问题统计 | URL 写入 `issueCode`、`objectType`、`page`，刷新可恢复 | 后退回试算摘要 |
 | 查看审计 | 批次“审计”入口 | 新开 W19 页签并携带批次稳定 ID | 返回聚焦 W18 批次页签 |
 
 批次阶段、当前子区、问题筛选和页码进入 URL；任务入口额外保存 `confirmationScope`、
-`workItemId` 与 `queueContextId`。上传进度、临时浮层和本地文件选择不跨刷新恢复。尚未提交的批次说明表单属于脏状态，关闭页签必须确认；文件一旦安全接收成功，其服务端资产身份不依赖浏览器页签。业务确认即使从批次页直接打开，也必须定位并领取对应正式 `work_item`；页面不得绕过 W02 的统一任务信封直接写确认事实。
+`workItemId` 与 `queueContextId`。上传进度、临时浮层和本地文件选择不跨刷新恢复。尚未提交的批次说明表单属于脏状态，关闭页签必须确认；文件一旦安全接收成功，其服务端资产身份不依赖浏览器页签。业务确认即使从批次页直接打开，也必须定位并领取对应正式 `work_item`；页面不得绕过 W02 的统一动作命令直接写确认事实。
 
 ## 4. 页面布局
 
@@ -100,7 +100,7 @@
 ┌ PageHeader object-chrome：导入与期初 › 批次号              [返回列表] ─┐
 ├ DocumentHeader compact：来源系统名 [批次状态]                           │
 │  批次号 · 版本 · 验证/生产 · 基准日 · 当前阶段 · 规则版本               │
-│ 数据水位 / 后台任务状态                         [阶段主动作]
+│ 数据更新时间 / 后台任务状态                       [阶段主动作]
 ├ ImportStageIndicator
 │ 安全接收 → 结构校验 → 业务校验与试算 → 责任确认 → 后台应用 → 结果
 ├ 锚点：概览 | 文件与规则 | 试算与问题 | 责任确认 | 执行进度 | 结果 | 审计
@@ -181,8 +181,8 @@ W18 只处理上线期初或治理型迁移。采购日常收到的供应商商�
 | 上传合规包 | 文件阶段 | `UPLOAD_IMPORT_PACKAGE`；批次仍可接收文件 | 提示允许格式、禁止内容和保留策略 | 文件进入安全扫描，阶段仍为“安全接收” | 断点/重传不创建重复资产；拒绝文件显示脱敏原因 |
 | 启动校验 | 阶段主动作 | 扫描通过、manifest 和规则版本完整 | 确认对象集与规则版本 | 创建后台校验任务并固定输入资产 | 结果未知时按请求 ID 查询，不重复创建任务 |
 | 重新校验 | 问题修复后 | 原批次可修复且规则未失效 | 展示将失效的旧试算和确认 | 新校验版本形成，旧确认全部失效 | 旧结果保留审计；失败停在当前阶段 |
-| 业务确认 | 责任确认卡 | 当前用户是指定确认人；持有对应正式任务的有效租约；试算版本、任务对象版本和内容指纹一致 | 展示对象数量、关键口径和影响摘要 | 同一事务追加确认事实与 `workflow_action`、完成对应 `work_item`；全部必要确认后允许提交应用 | 冲突时刷新最新试算并重新领取，不覆盖他人结论 |
-| 退回修复 | 责任确认卡 | 有本责任范围确认权；持有对应正式任务的有效租约；试算版本与任务指纹一致 | 原因必填 | `RETURN_FOR_FIX` 作为本次试算确认的正式 `REJECTED` 结论：同一事务记录结构化退回事实、`workflow_action` 并完成当前 `work_item`；不转交、不创建本任务后继 | 输入保留；提交失败用同一完成信封和幂等键查询或重试。修复并形成新试算版本后，再为新指纹创建新的确认任务 |
+| 业务确认 | 责任确认卡 | 当前用户是当前领取人；试算版本与任务对象版本一致 | 展示对象数量、关键口径和影响摘要 | 同一事务追加确认事实与 `workflow_action`、完成对应 `work_item`；全部必要确认后允许提交应用 | 冲突时刷新最新试算并重新领取，不覆盖他人结论 |
+| 退回修复 | 责任确认卡 | 当前用户是当前领取人；试算版本与任务对象版本一致 | 原因必填 | `RETURN_FOR_FIX` 作为本次试算确认的正式 `REJECTED` 结论：同一事务记录结构化退回事实、`workflow_action` 并完成当前 `work_item`；不转交、不创建本任务后继 | 输入保留；提交失败保留输入并查询结果。修复并形成新试算版本后，再创建新的确认任务 |
 | 提交生产应用 | 阶段主动作 | 生产权限、验证环境结果关联、全部确认、无阻塞问题、版本一致 | `FormalActionConfirmDialog` 二次确认环境、基准日、对象数和不可覆盖规则 | 创建后台应用任务，显示固定任务号和进度 | 结果未知停留并“查询最终结果”；不得再次创建批次 |
 | 取消后台任务 | 进度区 | 服务端允许取消且仅有未开始项 | 展示已提交事实不会回滚 | 仅停止未开始项，结果显示“部分完成/已取消” | 取消请求不确定时查询任务状态 |
 | 重跑失败项 | 结果区 | 使用原批次或显式修复批次；失败范围冻结 | 展示冻结目标、当前版本和将跳过项 | 创建修复任务；已成功对象按来源身份幂等跳过 | 版本/权限变化逐项失败并保留原因 |
@@ -258,14 +258,14 @@ type ImportIssuePage = {
 | --- | --- |
 | `work_item_type` | `IMPORT_BUSINESS_CONFIRMATION` |
 | `business_object_type` | `LEGACY_IMPORT_BATCH` |
-| 任务粒度 | 每个 `batchId × confirmationScope × trialVersion × subjectHash` 最多一个有效任务；`subjectHash` 必须包含责任范围，`confirmationScope + ownerRole` 决定责任范围 |
+| 任务粒度 | 每个 `batchId × confirmationScope` 最多一个有效任务；`confirmationScope + ownerRole` 决定责任范围 |
 | `handlerKey` / 去向 | `import_business_confirmation` / `W18` |
 | `completion_action` | `COMPLETE_IMPORT_BUSINESS_CONFIRMATION` |
-| 正式 decision | `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`；两者都经同一 `CompleteWorkItemEnvelope` 完成当前任务 |
-| 重试与新任务 | 修复并产生新的 `trialVersion` 或 `subjectHash` 后才创建新任务；旧任务保持 `COMPLETED` 并可审计 |
+| 正式 decision | `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`；两者都经同一 W02 动作命令完成当前任务 |
+| 重试与新任务 | 修复并产生新的试算版本后才创建新任务；旧任务保持 `COMPLETED` 并可审计 |
 
 此登记只定义跨层契约，不等同于前端或后端已实现。W01/W02 必须展示受控 handler，
-W18 必须能够领取并提交共享信封后，才可移除运行时 blocker。
+W18 必须能够领取并提交共享动作命令后，才可移除运行时 blocker。
 
 #### 提交
 
@@ -290,7 +290,7 @@ type ImportBusinessConfirmationDecision =
 
 // 直接复用 W02 的共享类型，不在 W18 另造缩水版任务命令。
 type ImportBusinessConfirmationCommand =
-  CompleteWorkItemEnvelope<ImportBusinessConfirmationDecision>
+  WorkItemActionCommand<ImportBusinessConfirmationDecision>
 
 type ImportExecutionCommand = {
   batchId: string
@@ -299,19 +299,19 @@ type ImportExecutionCommand = {
   action: "START_APPLY" | "CANCEL_PENDING" | "RETRY_FAILED"
   reasonCode?: string
   comment?: string
-  idempotencyKey: string
+  requestId: string
 }
 ```
 
-- 创建、校验、确认、应用、取消和重跑分别使用独立幂等键。
+- 创建、校验、确认、应用、取消和重跑分别使用独立 `requestId` 防重复，重复请求返回同一结果。
 - `ImportBusinessConfirmationCommand` 只由 `IMPORT_BUSINESS_CONFIRMATION` 的
-  `import_business_confirmation` handler 实现，且必须完整携带 W02 `CompleteWorkItemEnvelope` 的
-  `workItemId`、`claimToken`、`leaseVersion`、`expectedSubjectVersion`、`expectedSubjectHash` 和
-  `idempotencyKey`；`claimToken` 不进入 URL、日志或分析事件。`BUSINESS_EXCEPTION` 仅承载异常，不允许代替正常确认任务。
-- 服务端在同一事务校验领取人、`confirmationScope + ownerRole`、租约版本、任务版本/对象版本和内容指纹，并写确认或退回事实、`workflow_action` 与当前任务 `COMPLETED` 终态；前端不得随后再调用“标记任务完成”。`RETURN_FOR_FIX` 是 `REJECTED` 完成结论，不是转交、暂挂或关闭。
-- 业务确认响应同时返回 `resultStatus = CONFIRMED | REJECTED | UNKNOWN`、正式确认结果、当前任务完成结果、批次新版本和下一步；不得在同一 `CompleteWorkItemEnvelope` 响应里转交原任务或创建后继任务。执行命令返回后台任务号和批次新版本。
+  `import_business_confirmation` handler 实现，复用 W02 `WorkItemActionCommand`
+  （`kind="WORK_ITEM_ACTION"`），携带 `workItemId`、`expectedSubjectVersion` 和 `decision`。
+  `BUSINESS_EXCEPTION` 仅承载异常，不允许代替正常确认任务。
+- 服务端在同一事务校验当前领取人、`confirmationScope + ownerRole` 和对象版本，并写确认或退回事实、`workflow_action` 与当前任务 `COMPLETED` 终态；前端不得随后再调用“标记任务完成”。`RETURN_FOR_FIX` 是 `REJECTED` 完成结论，不是转交、暂挂或关闭。
+- 业务确认响应同时返回 `resultStatus = CONFIRMED | REJECTED | UNKNOWN`、正式确认结果、当前任务完成结果、批次新版本和下一步；不得在同一动作响应里转交原任务或创建后继任务。执行命令返回后台任务号和批次新版本。
 - `UNKNOWN` 时前端不改变阶段、不乐观增加成功数，只按同一请求身份查询最终结果。
-- 修复、重新校验并形成新试算版本后，服务端按新试算版本和新 `subjectHash` 创建新的确认任务；已 `CONFIRMED/REJECTED` 的旧任务保持完成并可审计，不复用、不转交。规则版本、manifest 或对象范围变化同样使旧试算结论不再适用于新版本。
+- 修复、重新校验并形成新试算版本后，服务端按新试算版本创建新的确认任务；已 `CONFIRMED/REJECTED` 的旧任务保持完成并可审计，不复用、不转交。规则版本、manifest 或对象范围变化同样使旧试算结论不再适用于新版本。
 
 ### 8.3 前端边界
 
@@ -333,11 +333,11 @@ type ImportExecutionCommand = {
 | 文件被拒绝/隔离 | 明确禁止原因类别，不回显危险内容 | 更换合规包 | 新资产扫描通过 |
 | 校验/应用中 | `BackgroundJobProgress` 展示计数、最近进度和任务号 | 查看问题；按规则取消未开始项 | 后台继续，刷新可恢复 |
 | 部分成功 | 成功、跳过、失败分列；不得显示成全量成功 | 下载结果、重跑失败项、打开成功对象 | 修复批次完成 |
-| 数据陈旧 | 显示最后进度水位；不推断任务卡死 | 刷新、进入 W29 查看任务异常 | 获取新进度 |
+| 数据陈旧 | 显示最后进度更新时间；不推断任务卡死 | 刷新、进入 W29 查看任务异常 | 获取新进度 |
 | 查询失败 | 有缓存则保留并标记失败；无缓存显示失败态 | 重试 | 查询成功 |
 | 版本冲突 | 显示新试算/规则变化，禁止提交 | 重新加载并重新确认 | 新版本确认完成 |
 | 业务退回已确认 | 固定展示本次试算 `REJECTED`、退回原因、完成任务号和审计时间；不显示转交/后继任务 | 修复数据、重新校验 | 新试算版本形成后创建新的确认任务 |
-| 正式动作成功 | `FormalActionResult` 固定展示批次号、全量/部分结果、正式对象数、水位和下一步 | 下载报告、打开正式对象、发起修复任务 | 用户明确关闭结果 |
+| 正式动作成功 | `FormalActionResult` 固定展示批次号、全量/部分结果、正式对象数、更新时间和下一步 | 下载报告、打开正式对象、发起修复任务 | 用户明确关闭结果 |
 | 正式结果不确定 | 固定结果区写“正在确认最终结果” | 查询最终结果、联系支持 | 得到同请求最终状态 |
 | 字段级隐藏 | 标签保留、值掩码，下载同步裁剪 | 其它有权动作 | 权限更新后重查 |
 | 权限收回 | 清除诊断缓存和下载链接，切无权限态 | 返回有权工作面 | 权限恢复后重查 |
@@ -397,14 +397,14 @@ type ImportExecutionCommand = {
 - [x] 成功资产与失败诊断资产分离，分别执行长期/30 天保留规则；导出 7 天到期。
 - [ ] 下载时重验当前对象、数据范围和字段权限，并记录下载审计。
 - [x] 业务确认人只能确认本人责任范围，系统管理员不能代替业务确认。
-- [ ] `IMPORT_BUSINESS_CONFIRMATION` 已在后端、W01/W02 和 W18 handler 实际接线；业务确认和退回都使用 W02 `CompleteWorkItemEnvelope`；`RETURN_FOR_FIX` 形成正式 `REJECTED` 并完成当前任务，不转交、不创建后继，也不存在第二次“标记完成”调用。
-- [ ] 修复并形成新试算版本后，按新版本/新指纹创建新的确认任务；旧 `CONFIRMED/REJECTED` 任务保持完成且可审计。
+- [ ] `IMPORT_BUSINESS_CONFIRMATION` 已在后端、W01/W02 和 W18 handler 实际接线；业务确认和退回都使用 W02 统一动作命令；`RETURN_FOR_FIX` 形成正式 `REJECTED` 并完成当前任务，不转交、不创建后继，也不存在第二次“标记完成”调用。
+- [ ] 修复并形成新试算版本后，按新版本创建新的确认任务；旧 `CONFIRMED/REJECTED` 任务保持完成且可审计。
 - [ ] 固定 `work_item_type=IMPORT_BUSINESS_CONFIRMATION`、`handlerKey=import_business_confirmation`、`destinationWorkspaceId=W18` 与 `completion_action=COMPLETE_IMPORT_BUSINESS_CONFIRMATION` 已完成代码登记、展示映射和端到端验证；在此之前运行时必须保持实施 blocker。
 - [ ] 权限收回后页面不残留诊断原值、文件短链或敏感缓存。
 
 ### 12.4 正式动作与状态
 
-- [ ] 创建、校验、确认、应用、取消、重跑均有独立幂等身份。
+- [ ] 创建、校验、确认、应用、取消、重跑均有独立请求身份，重复请求返回同一结果。
 - [ ] 正式应用结果不确定时不乐观跳阶段，可查询同请求最终结果。
 - [x] 试算或规则变化使旧确认失效，并阻止按旧版本应用。
 - [ ] §9 全部状态和 1440/1280/1024/768/375 五档视口完成验证。
@@ -422,7 +422,7 @@ W18，完成动作固定为 `COMPLETE_IMPORT_BUSINESS_CONFIRMATION`，decision �
 | Q1 | 各对象集合必须由哪些岗位分别确认，是否允许同一人兼任多个范围？ | 确认矩阵和岗位分离 | 各部门负责人 + 内控 | 按对象责任部门分别确认；生产期初库存和应收至少保留独立责任人 |
 | Q2 | 生产批次是否统一要求双人复核，还是按风险等级配置？ | 正式应用动作与权限模型 | 内控 + 系统负责人 | 生产应用采用发起/复核分离；验证环境可单人执行 |
 | Q3 | 单批文件、行数和问题诊断下载上限是多少？ | 上传、分页和后台任务容量 | 架构 + 运维 | 由服务端按对象集配置；超过上限拆批，不在浏览器分片后冒充一个批次 |
-| Q4 | 验证环境确认结果允许复用多久后进入生产？ | 试算过期与重新确认 | 上线负责人 + 业务负责人 | 绑定规则、manifest 和数据水位；任一变化或超过批准窗口即失效 |
+| Q4 | 验证环境确认结果允许复用多久后进入生产？ | 试算过期与重新确认 | 上线负责人 + 业务负责人 | 绑定规则、manifest 和数据更新时间；任一变化或超过批准窗口即失效 |
 | Q5 | 哪些非期初日常导入能力继续共用 W18？ | 导航范围与批次类型 | 产品 + 各业务部门 | 仅治理型批量导入共用；正式业务主路径仍在对象工作面，不能以导入替代流程 |
 
 待确认结论应写回权限、动作和数据章节，并从本表移除；不得把建议值当作已确认业务规则。

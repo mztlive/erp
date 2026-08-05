@@ -408,8 +408,6 @@ export type WorkItemView = {
   allowedTaskActions: string[]
   workItemStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED" | "TRANSFERRED"
   claimedBy?: { userId: string; displayName: string }
-  leaseVersion?: number
-  leaseExpiresAt?: string
   held?: boolean
 }
 
@@ -476,8 +474,6 @@ export type QueryResultInput = {
   idempotencyKey: string
   /** 任务入口时必填 */
   workItemId?: string
-  claimToken?: string
-  leaseVersion?: number
   expectedSubjectVersion?: string
   expectedSubjectHash?: string
   simulateUnknown?: boolean
@@ -487,7 +483,6 @@ export type QueryResultData = {
   evidence: InvestigationEvidenceView
   lockVersion: number
   workItemStatus?: "PENDING" | "IN_PROGRESS"
-  leaseVersion?: number
   subjectHash?: string
   allowedActions: string[]
   actionBlockers: ActionBlocker[]
@@ -500,8 +495,6 @@ export type ReplayInput = {
   operationId: string
   idempotencyKey: string
   workItemId?: string
-  claimToken?: string
-  leaseVersion?: number
   expectedSubjectVersion?: string
   expectedSubjectHash?: string
 }
@@ -510,7 +503,6 @@ export type ReplayResultData = {
   evidence: InvestigationEvidenceView
   lockVersion: number
   workItemStatus?: "PENDING" | "IN_PROGRESS"
-  leaseVersion?: number
   externalOrderNo?: string
   fulfillmentStatus: SupplierFulfillmentStatus
   allowedActions: string[]
@@ -520,8 +512,6 @@ export type ReplayResultData = {
 export type DeferTaskInput = {
   orderId: string
   workItemId: string
-  claimToken: string
-  leaseVersion: number
   expectedSubjectHash: string
   reasonCode: string
   comment?: string

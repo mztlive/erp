@@ -225,8 +225,6 @@ export const MALL_MAPPING_TASKS: MappingTaskView[] = [
       statusLabel: "处理中",
       completionAction: "CONFIRM_TARGET",
       claimedBy: "运营 · 李倩",
-      leaseVersion: 2,
-      leaseExpiresAt: "2026-08-01T18:00:00+08:00",
     },
     sourceEvidence: [
       { field: "voucherCategory", label: "来源卡券类目", value: "通用储值卡·面额 500" },

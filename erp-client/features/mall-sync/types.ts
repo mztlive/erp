@@ -153,8 +153,6 @@ export type MappingTaskWorkItemView = {
   statusLabel: string
   completionAction: string
   claimedBy?: string
-  leaseVersion?: number
-  leaseExpiresAt?: string
 }
 
 export type MappingCandidate = {

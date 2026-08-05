@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   createAdjustmentDraft,
   fetchBalanceDetail,
-  fetchExportJob,
   fetchInventoryList,
   getAdjustmentDraft,
   resolveAdjustmentUnknown,
@@ -23,8 +22,6 @@ export const inventoryKeys = {
     [...inventoryKeys.all, "detail", balanceId] as const,
   draft: (stockAdjustmentId: string) =>
     [...inventoryKeys.all, "draft", stockAdjustmentId] as const,
-  exportJob: (jobId: string) =>
-    [...inventoryKeys.all, "export", jobId] as const,
 }
 
 export function useInventoryListQuery(query: InventoryQuery) {
@@ -99,18 +96,5 @@ export function useResolveAdjustmentUnknownMutation() {
 export function useStartInventoryExportMutation() {
   return useMutation({
     mutationFn: startInventoryExport,
-  })
-}
-
-export function useExportJobQuery(jobId: string | null) {
-  return useQuery({
-    queryKey: inventoryKeys.exportJob(jobId ?? ""),
-    queryFn: () => fetchExportJob(jobId!),
-    enabled: Boolean(jobId),
-    refetchInterval: (query) => {
-      const status = query.state.data?.status
-      if (status === "succeeded" || status === "failed") return false
-      return 500
-    },
   })
 }

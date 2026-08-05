@@ -3,7 +3,6 @@
  * - 密钥永不返回正文
  * - 角色分离：采购确认需求 vs 运维配置引用 vs 管理员启停/能力
  * - 健康检查 / 目录同步返回后台任务
- * - 正式结果未知可按幂等键查询
  */
 
 import { mockDelay } from "@/lib/mock-delay"
@@ -34,12 +33,6 @@ import {
   seedToListItem,
   type SeedConnection,
 } from "@/mock/supplier-api-connections"
-import {
-  getIdempotencyEntry,
-  setIdempotencyPending,
-  setIdempotencySucceeded,
-} from "@/mock/session-state"
-import { resultText } from "@/lib/ui-text"
 
 const WORKSPACE = "W20"
 
@@ -609,9 +602,6 @@ export async function createConnection(input: {
     nextStep: "绑定地址/密钥引用 → 配置能力 → 健康检查",
   }
   createdConnections.unshift(seed)
-  setIdempotencySucceeded(input.idempotencyKey, "CREATE_CONNECTION", {
-    connectionId,
-  })
 
   return {
     status: "succeeded",
@@ -675,7 +665,6 @@ export async function bindCredentialReference(input: {
   }
 
   if (input.forceUnknown) {
-    setIdempotencyPending(input.idempotencyKey, "BIND_CREDENTIAL_REFERENCE")
     return {
       status: "unknown",
       title: "密钥引用绑定结果未知",
@@ -721,7 +710,6 @@ export async function bindCredentialReference(input: {
       { label: "配置版本", value: o.version },
     ],
   }
-  setIdempotencySucceeded(input.idempotencyKey, "BIND_CREDENTIAL_REFERENCE", result)
   return result
 }
 
@@ -832,11 +820,6 @@ export async function confirmCapabilityRequirement(input: {
       { label: "operationId", value: input.operationId },
     ],
   }
-  setIdempotencySucceeded(
-    input.idempotencyKey,
-    "CONFIRM_CAPABILITY_REQUIREMENT",
-    result
-  )
   return result
 }
 
@@ -922,7 +905,6 @@ export async function updateCapabilities(input: {
       value: c.enabled ? "启用" : "停用",
     })),
   }
-  setIdempotencySucceeded(input.idempotencyKey, "UPDATE_CAPABILITIES", result)
   return result
 }
 
@@ -978,7 +960,6 @@ export async function runHealthCheck(input: {
   const now = new Date().toISOString()
 
   if (input.forceUnknown) {
-    setIdempotencyPending(input.idempotencyKey, "RUN_HEALTH_CHECK")
     const o = ensureOverlay(input.connectionId, seed)
     o.lastHealth = {
       at: now,
@@ -1162,11 +1143,6 @@ export async function startCatalogSync(input: {
   }
   o.nextStep = `目录同步进行中 · ${jobNo}`
 
-  setIdempotencySucceeded(input.idempotencyKey, "START_CATALOG_SYNC", {
-    jobId,
-    jobNo,
-  })
-
   return {
     status: "processing",
     title: "目录同步任务已创建",
@@ -1250,7 +1226,6 @@ export async function disableConnection(input: {
       { label: "历史", value: "保留" },
     ],
   }
-  setIdempotencySucceeded(input.idempotencyKey, "DISABLE", result)
   return result
 }
 
@@ -1302,41 +1277,6 @@ export async function enableConnection(input: {
     message: "状态变为启用。不直接修改供应商商品、供给或历史订单。",
     reference: input.connectionId,
     connectionVersion: o.version,
-  }
-}
-
-export async function queryFormalByIdempotency(
-  idempotencyKey: string
-): Promise<FormalOutcome | null> {
-  await mockDelay(60)
-  const entry = getIdempotencyEntry(idempotencyKey)
-  if (!entry) return null
-  if (entry.state === "pending") {
-    return {
-      status: "unknown",
-      title: "结果仍未知",
-      message: "系统尚未给出最终结论，请稍后用原任务号再查。",
-      operationId: idempotencyKey,
-      idempotencyKey,
-    }
-  }
-  if (entry.state === "succeeded") {
-    const payload = entry.payload as FormalOutcome
-    if (payload && typeof payload === "object" && "status" in payload) {
-      return payload
-    }
-    return {
-      status: "succeeded",
-      title: resultText.operationSucceeded,
-      message: "按原任务号查询到成功结果",
-      reference: idempotencyKey,
-    }
-  }
-  return {
-    status: "failed",
-    code: "FAILED",
-    title: "操作失败",
-    message: entry.error ?? "按原任务号查询到失败结果",
   }
 }
 

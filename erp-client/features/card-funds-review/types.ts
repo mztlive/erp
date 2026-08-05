@@ -98,8 +98,6 @@ export type CardFundsReviewItemView = Readonly<{
     workItemStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED"
     dueAt?: string
     claimedBy?: { userId: string; displayName: string }
-    leaseVersion?: number
-    leaseExpiresAt?: string
     allowedActions: readonly (
       | "CLAIM"
       | "CONFIRM_ZERO"
@@ -199,12 +197,10 @@ export type CardFundsReviewQueueView = Readonly<{
 export type WorkItemLease = Readonly<{
   workItemId: string
   claimedByLabel: string
-  expiresAt: string
-  leaseVersion: number
-  claimToken: string
+  subjectVersion: string
 }>
 
-/** CompleteWorkItemEnvelope<CardFundsReviewDecision> 的 decision 段 */
+/** 统一动作命令<CardFundsReviewDecision> 的 decision 段 */
 export type CardFundsReviewDecision =
   | {
       reviewResult: "APPROVED"

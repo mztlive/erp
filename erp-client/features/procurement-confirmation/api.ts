@@ -1,6 +1,5 @@
 /**
  * W07 session-mock API：queryFn / mutationFn 纯函数。
- * claimToken 仅出现在领取/续租响应，不进入队列查询 View。
  * 租约 / 完成 / 暂挂复用 W02 session-state 统一信封语义。
  */
 
@@ -19,25 +18,18 @@ import { PROCUREMENT_CONFIRMATION_SEED } from "@/mock/procurement-confirmation"
 import {
   applyWorkItemActionSession,
   claimWorkItemSession,
-  clearSessionLease,
   completeWorkItemSession,
-  finalizePendingComplete,
-  getIdempotencyEntry,
   getProcurementBusinessOutcome,
   getProcurementDraft,
   getSessionLease,
-  getSessionLeaseState,
   isProcurementWorkItemHeld,
   isProcurementWorkItemTerminal,
   markQueueTaskCompleted,
   markQueueTaskHeld,
-  queryIdempotencyResult,
   saveProcurementDraft,
-  setIdempotencySucceeded,
   setProcurementBusinessOutcome,
   WorkItemMockError,
 } from "@/mock/session-state"
-import { leaseText } from "@/lib/ui-text"
 
 export type QueueFilters = {
   scope: "mine" | "role_pool"
@@ -130,7 +122,7 @@ function projectTask(
   if (isProcurementWorkItemTerminal(seed.workItemId)) return null
   const draft = getProcurementDraft(seed.workItemId)
   const held = isProcurementWorkItemHeld(seed.workItemId)
-  const publicLease = getSessionLeaseState(seed.workItemId)
+  const publicLease = getSessionLease(seed.workItemId)
   const lines = (draft?.lines as ConfirmationLineDraft[] | undefined) ??
     seed.confirmation.lines
   const editVersion = draft?.editVersion ?? seed.confirmation.editVersion
@@ -140,12 +132,10 @@ function projectTask(
     ...seed,
     status: held ? "IN_PROGRESS" : seed.status,
     held,
-    // 查询 View：仅公开租约元数据，永不包含 claimToken
+    // 查询 View：仅公开处理人信息
     lease: publicLease
       ? {
           claimedByLabel: "当前用户 · 李采购",
-          expiresAt: publicLease.leaseExpiresAt,
-          leaseVersion: publicLease.leaseVersion,
         }
       : seed.lease,
     confirmation: {
@@ -289,19 +279,14 @@ export async function claimProcurementWorkItem(
     throw new Error("任务已完成，无法领取")
   }
   try {
-    const lease = claimWorkItemSession({
+    claimWorkItemSession({
       workItemId,
       subjectVersion: seed.subjectVersion,
-      subjectHash: seed.salesSubmission.subjectHash,
-      leaseVersion: seed.lease?.leaseVersion ?? 1,
       ownerUserId: "user_procurement",
     })
     return {
       workItemId,
       claimedByLabel: "当前用户 · 李采购",
-      expiresAt: lease.leaseExpiresAt,
-      leaseVersion: lease.leaseVersion,
-      claimToken: lease.claimToken,
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) throw new Error(error.message)
@@ -309,33 +294,12 @@ export async function claimProcurementWorkItem(
   }
 }
 
-export async function renewProcurementWorkItem(input: {
-  workItemId: string
-  claimToken: string
-}): Promise<WorkItemLease> {
-  await mockDelay(60)
-  const seed = PROCUREMENT_CONFIRMATION_SEED.find(
-    (t) => t.workItemId === input.workItemId
-  )
-  if (!seed) throw new Error("任务不存在")
-  const existing = getSessionLease(input.workItemId)
-  if (!existing || existing.claimToken !== input.claimToken) {
-    throw new Error(leaseText.reclaimed)
-  }
-  // 续租 = 同用户再次 claim，签发新 token / 升 leaseVersion
-  clearSessionLease(input.workItemId)
-  return claimProcurementWorkItem(input.workItemId)
-}
-
 export async function saveProcurementConfirmation(input: {
   workItemId: string
   confirmationId: string
   submissionId: string
   expectedEditVersion: number
-  claimToken: string
-  leaseVersion: number
   lines: ConfirmationLineDraft[]
-  idempotencyKey: string
 }): Promise<{ editVersion: number }> {
   await mockDelay(100)
   const seed = PROCUREMENT_CONFIRMATION_SEED.find(
@@ -343,13 +307,9 @@ export async function saveProcurementConfirmation(input: {
   )
   if (!seed) throw new Error("任务不存在")
   try {
-    // WorkItemActionEnvelope · SAVE — 非终结
+    // 统一动作命令 · SAVE — 非终结
     applyWorkItemActionSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: seed.salesSubmission.subjectHash,
-      idempotencyKey: input.idempotencyKey,
       action: { kind: "SAVE_EVIDENCE", note: "保存采购确认分行" },
     })
     return saveProcurementDraft(
@@ -365,12 +325,7 @@ export async function saveProcurementConfirmation(input: {
 
 export async function completeProcurementDecision(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
   expectedSubjectVersion: string
-  idempotencyKey: string
-  forceUnknown?: boolean
   decision:
     | {
         reviewResult: "APPROVED"
@@ -395,55 +350,6 @@ export async function completeProcurementDecision(input: {
 }): Promise<FormalActionResponse> {
   await mockDelay(150)
 
-  const cachedBiz = getProcurementBusinessOutcome(input.workItemId)
-  const idem = getIdempotencyEntry(input.idempotencyKey)
-  if (idem?.state === "succeeded") {
-    const payload = idem.payload as { formalOutcome?: FormalOutcome }
-    if (payload?.formalOutcome) {
-      return { status: "succeeded", outcome: payload.formalOutcome }
-    }
-    if (cachedBiz) {
-      return { status: "succeeded", outcome: cachedBiz as FormalOutcome }
-    }
-  }
-  if (idem?.state === "pending" || input.forceUnknown) {
-    try {
-      if (input.forceUnknown) {
-        completeWorkItemSession({
-          workItemId: input.workItemId,
-          claimToken: input.claimToken,
-          leaseVersion: input.leaseVersion,
-          expectedSubjectHash: input.expectedSubjectHash,
-          idempotencyKey: input.idempotencyKey,
-          decision: {
-            kind:
-              input.decision.reviewResult === "APPROVED"
-                ? "APPROVED_AND_SALES_EFFECTIVE"
-                : "REJECTED_TO_SALES",
-          },
-          simulateTimeout: true,
-        })
-      }
-    } catch (error) {
-      if (error instanceof WorkItemMockError && error.code === "TIMEOUT") {
-        return {
-          status: "unknown",
-          message:
-            "处理结果尚未确定。请勿假定已通过或已驳回，停留当前项并按原任务号查询。",
-          idempotencyKey: input.idempotencyKey,
-        }
-      }
-    }
-    if (idem?.state === "pending") {
-      return {
-        status: "unknown",
-        message:
-          "处理结果尚未确定。请勿假定已通过或已驳回，停留当前项并按原任务号查询。",
-        idempotencyKey: input.idempotencyKey,
-      }
-    }
-  }
-
   const seed = PROCUREMENT_CONFIRMATION_SEED.find(
     (t) => t.workItemId === input.workItemId
   )
@@ -452,13 +358,6 @@ export async function completeProcurementDecision(input: {
   }
 
   if (input.decision.reviewResult === "APPROVED") {
-    if (seed.salesSubmission.subjectHash !== input.expectedSubjectHash) {
-      return {
-        status: "failed",
-        code: "SUBJECT_HASH_MISMATCH",
-        message: "销售提交数据已变化，请刷新后处理最新提交",
-      }
-    }
     const projected = projectTask(seed)
     if (!projected) {
       return { status: "failed", code: "ALREADY_DONE", message: "任务已完成" }
@@ -489,37 +388,18 @@ export async function completeProcurementDecision(input: {
     try {
       completeWorkItemSession({
         workItemId: input.workItemId,
-        claimToken: input.claimToken,
-        leaseVersion: input.leaseVersion,
-        expectedSubjectHash: input.expectedSubjectHash,
-        idempotencyKey: input.idempotencyKey,
+        expectedSubjectVersion: input.expectedSubjectVersion,
         decision: {
           kind: "APPROVED_AND_SALES_EFFECTIVE",
           summary: `采购确认通过；销售 ${input.decision.salesOrderNo} 生效；创建依据 ${outcome.procurementCreationBasisId}`,
         },
       })
-      // 把业务结果挂到幂等 payload 与 workItem 映射，供重放
+      // 业务结果挂到 workItem 映射，供详情查询
       setProcurementBusinessOutcome(input.workItemId, outcome)
       markQueueTaskCompleted("W07", input.workItemId)
-      // 覆盖通用 complete 的幂等 payload，附带 formalOutcome
-      const entry = getIdempotencyEntry(input.idempotencyKey)
-      if (entry?.state === "succeeded") {
-        // re-store with formalOutcome
-        setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", {
-          ...(entry.payload as object),
-          formalOutcome: outcome,
-        })
-      }
       return { status: "succeeded", outcome }
     } catch (error) {
       if (error instanceof WorkItemMockError) {
-        if (error.code === "TIMEOUT") {
-          return {
-            status: "unknown",
-            message: error.message,
-            idempotencyKey: input.idempotencyKey,
-          }
-        }
         return {
           status: "failed",
           code: error.code,
@@ -552,10 +432,7 @@ export async function completeProcurementDecision(input: {
   try {
     completeWorkItemSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: input.expectedSubjectHash,
-      idempotencyKey: input.idempotencyKey,
+      expectedSubjectVersion: input.expectedSubjectVersion,
       decision: {
         kind: "REJECTED_TO_SALES",
         summary: `采购确认驳回；无后继任务；销售三路待销售单处理`,
@@ -564,23 +441,9 @@ export async function completeProcurementDecision(input: {
     })
     setProcurementBusinessOutcome(input.workItemId, outcome)
     markQueueTaskCompleted("W07", input.workItemId)
-    const entry = getIdempotencyEntry(input.idempotencyKey)
-    if (entry?.state === "succeeded") {
-      setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", {
-        ...(entry.payload as object),
-        formalOutcome: outcome,
-      })
-    }
     return { status: "succeeded", outcome }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
-      if (error.code === "TIMEOUT") {
-        return {
-          status: "unknown",
-          message: error.message,
-          idempotencyKey: input.idempotencyKey,
-        }
-      }
       return { status: "failed", code: error.code, message: error.message }
     }
     throw error
@@ -589,11 +452,8 @@ export async function completeProcurementDecision(input: {
 
 export async function deferProcurementConfirmation(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
   queueContextId: string
   nextWorkItemId?: string
-  idempotencyKey: string
 }): Promise<FormalActionResponse> {
   await mockDelay(100)
   const seed = PROCUREMENT_CONFIRMATION_SEED.find(
@@ -605,10 +465,6 @@ export async function deferProcurementConfirmation(input: {
   try {
     applyWorkItemActionSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: seed.salesSubmission.subjectHash,
-      idempotencyKey: input.idempotencyKey,
       action: { kind: "DEFER", note: "采购确认跳过" },
     })
     markQueueTaskHeld("W07", input.workItemId)
@@ -626,98 +482,6 @@ export async function deferProcurementConfirmation(input: {
       return { status: "failed", code: error.code, message: error.message }
     }
     throw error
-  }
-}
-
-export async function resolveUnknownProcurementResult(input: {
-  idempotencyKey: string
-  settle?: boolean
-  settlePayload?: Parameters<typeof completeProcurementDecision>[0]
-}): Promise<FormalActionResponse> {
-  await mockDelay(80)
-  const entry = queryIdempotencyResult(input.idempotencyKey)
-  if (entry?.state === "succeeded") {
-    const payload = entry.payload as { formalOutcome?: FormalOutcome }
-    if (payload?.formalOutcome) {
-      return { status: "succeeded", outcome: payload.formalOutcome }
-    }
-  }
-  if (entry?.state === "pending" && input.settle && input.settlePayload) {
-    const decision = input.settlePayload.decision
-    try {
-      finalizePendingComplete({
-        idempotencyKey: input.idempotencyKey,
-        workItemId: input.settlePayload.workItemId,
-        expectedSubjectHash: input.settlePayload.expectedSubjectHash,
-        decision: {
-          kind:
-            decision.reviewResult === "APPROVED"
-              ? "APPROVED_AND_SALES_EFFECTIVE"
-              : "REJECTED_TO_SALES",
-        },
-      })
-      // Build outcome from settle payload
-      if (decision.reviewResult === "APPROVED") {
-        const outcome: FormalOutcome = {
-          kind: "APPROVED_AND_SALES_EFFECTIVE",
-          procurementConfirmationId: decision.confirmationId,
-          salesOrderId: decision.salesOrderId,
-          salesOrderNo: decision.salesOrderNo,
-          submissionId: decision.submissionId,
-          subjectHash: decision.subjectHash,
-          salesOrderRevisionId: `rev_${decision.submissionId}`,
-          receivableAccountId: `recv_${decision.salesOrderId}`,
-          procurementCreationBasisId: `pcb_${decision.confirmationId}`,
-          reference: `PC-OK-${input.settlePayload.workItemId.toUpperCase()}`,
-        }
-        setProcurementBusinessOutcome(input.settlePayload.workItemId, outcome)
-        markQueueTaskCompleted("W07", input.settlePayload.workItemId)
-        setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", {
-          formalOutcome: outcome,
-        })
-        return { status: "succeeded", outcome }
-      }
-      const outcome: FormalOutcome = {
-        kind: "REJECTED_TO_SALES",
-        procurementConfirmationId: decision.confirmationId,
-        salesOrderId: decision.salesOrderId,
-        salesOrderNo: decision.salesOrderNo,
-        rejectedSubmissionId: decision.submissionId,
-        rejectedSubjectHash: decision.subjectHash,
-        workflowActionId: `wa_rej_${input.settlePayload.workItemId}`,
-        nextSalesResolutions: [
-          "RESUBMIT_CHANGED_TERMS",
-          "REQUEST_LOW_MARGIN_ACCEPTANCE",
-          "VOID_AFTER_REJECTION",
-        ],
-        reference: `PC-REJ-${input.settlePayload.workItemId.toUpperCase()}`,
-        rejectReasonCode: decision.rejectReasonCode,
-        comment: decision.comment,
-      }
-      setProcurementBusinessOutcome(input.settlePayload.workItemId, outcome)
-      markQueueTaskCompleted("W07", input.settlePayload.workItemId)
-      setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", {
-        formalOutcome: outcome,
-      })
-      return { status: "succeeded", outcome }
-    } catch (error) {
-      if (error instanceof WorkItemMockError) {
-        return { status: "failed", code: error.code, message: error.message }
-      }
-      throw error
-    }
-  }
-  if (entry?.state === "pending") {
-    return {
-      status: "unknown",
-      message: "仍在处理中，处理结果待确认。停留当前项。",
-      idempotencyKey: input.idempotencyKey,
-    }
-  }
-  return {
-    status: "failed",
-    code: "NO_PENDING",
-    message: "未找到该任务号对应的处理中请求",
   }
 }
 

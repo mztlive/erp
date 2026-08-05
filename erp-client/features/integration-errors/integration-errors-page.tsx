@@ -59,7 +59,6 @@ import {
   useIntegrationActionMutation,
   useIntegrationItemQuery,
   useIntegrationQueueQuery,
-  useQueryIntegrationIdempotencyMutation,
   useResolveIntegrationMutation,
   useTransferIntegrationMutation,
 } from "./queries"
@@ -85,9 +84,6 @@ import {
 
 type SessionLease = {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expiresAt: string
 }
 
 function newKey(prefix: string) {
@@ -181,7 +177,6 @@ export function IntegrationErrorsPage({
   const closeMutation = useCloseIntegrationMutation()
   const transferMutation = useTransferIntegrationMutation()
   const directMutation = useDirectReconciliationMutation()
-  const idemQueryMutation = useQueryIntegrationIdempotencyMutation()
 
   const view = queueQuery.data
   const queueItems = view?.items ?? []
@@ -240,7 +235,6 @@ export function IntegrationErrorsPage({
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
-  const [closeEvidence, setCloseEvidence] = React.useState("ev_dup_ref_55102")
   const [replacementWi, setReplacementWi] = React.useState("wi_iet_orig_55102")
   const [transferRole, setTransferRole] = React.useState("研发运维")
   const [reconReasonId, setReconReasonId] = React.useState("")
@@ -251,7 +245,6 @@ export function IntegrationErrorsPage({
   const [activeLease, setActiveLease] = React.useState<SessionLease | null>(null)
   const resultRef = React.useRef<HTMLDivElement>(null)
   const headingRef = React.useRef<HTMLHeadingElement>(null)
-  const idemRef = React.useRef<Record<string, string>>({})
 
   const autoNext = urlState.autoNext
 
@@ -376,7 +369,6 @@ export function IntegrationErrorsPage({
   // Reset UI on item switch
   React.useEffect(() => {
     setActionError(null)
-    idemRef.current = {}
     if (item?.reconciliationReasonRegistry?.registeredReasons[0]) {
       setReconReasonId(
         item.reconciliationReasonRegistry.registeredReasons[0].registeredReasonId
@@ -394,15 +386,11 @@ export function IntegrationErrorsPage({
       .mutateAsync({
         workItemId: item.workItem.workItemId,
         subjectVersion: item.workItem.subjectVersion ?? "v1",
-        subjectHash: item.workItem.subjectHash,
       })
       .then((lease) => {
         if (cancelled) return
         const session: SessionLease = {
           workItemId: lease.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expiresAt: lease.expiresAt,
         }
         leaseRef.current = session
         setActiveLease(session)
@@ -456,23 +444,15 @@ export function IntegrationErrorsPage({
   const ensureLease = React.useCallback(async (): Promise<SessionLease> => {
     if (!item?.workItem) throw new Error("当前项无关联任务")
     const existing = leaseRef.current
-    if (
-      existing &&
-      existing.workItemId === item.workItem.workItemId &&
-      existing.claimToken
-    ) {
+    if (existing && existing.workItemId === item.workItem.workItemId) {
       return existing
     }
     const lease = await claimMutation.mutateAsync({
       workItemId: item.workItem.workItemId,
       subjectVersion: item.workItem.subjectVersion ?? "v1",
-      subjectHash: item.workItem.subjectHash,
     })
     const session: SessionLease = {
       workItemId: lease.workItemId,
-      claimToken: lease.claimToken,
-      leaseVersion: lease.leaseVersion,
-      expiresAt: lease.expiresAt,
     }
     leaseRef.current = session
     setActiveLease(session)
@@ -509,21 +489,15 @@ export function IntegrationErrorsPage({
   ) => {
     if (!item?.workItem) return
     try {
-      const lease = await ensureLease()
-      const key =
-        idemRef.current[kind] ?? newKey(kind.toLowerCase())
-      idemRef.current[kind] = key
+      await ensureLease()
       const result = await actionMutation.mutateAsync({
         itemType: item.identity.itemType,
         itemId: item.identity.id,
         workItemId: item.workItem.workItemId,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
-        expectedSubjectHash: item.workItem.subjectHash,
+        expectedSubjectVersion: item.workItem.subjectVersion,
         expectedWorkItemVersion: item.workItem.workItemVersion,
         kind,
         operationId: newKey("op"),
-        idempotencyKey: key,
         forceUnknown: kind === "QUERY_ORIGINAL_RESULT" ? forceUnknownOnce : false,
         comment: comment || undefined,
         evidenceRefs:
@@ -560,8 +534,7 @@ export function IntegrationErrorsPage({
 
   const leaseActive =
     Boolean(item?.workItem) &&
-    activeLease?.workItemId === item?.workItem?.workItemId &&
-    Boolean(activeLease?.claimToken)
+    activeLease?.workItemId === item?.workItem?.workItemId
 
   const leaseStatus = !item?.workItem
     ? item && !item.hasWorkItem
@@ -733,19 +706,14 @@ export function IntegrationErrorsPage({
   async function handleTransfer() {
     if (!item?.workItem) return
     try {
-      const lease = await ensureLease()
-      const key = idemRef.current.transfer ?? newKey("transfer")
-      idemRef.current.transfer = key
+      await ensureLease()
       const result = await transferMutation.mutateAsync({
         itemType: item.identity.itemType,
         itemId: item.identity.id,
         workItemId: item.workItem.workItemId,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
-        expectedSubjectHash: item.workItem.subjectHash,
+        expectedSubjectVersion: item.workItem.subjectVersion,
         expectedWorkItemVersion: item.workItem.workItemVersion,
         operationId: newKey("op"),
-        idempotencyKey: key,
         targetRole: transferRole,
         reasonCode: "ROLE_MISMATCH",
         comment: comment || undefined,
@@ -759,24 +727,18 @@ export function IntegrationErrorsPage({
   async function handleClose(kind: "CLOSE_DUPLICATE" | "CLOSE_MISROUTED") {
     if (!item?.workItem) return
     try {
-      const lease = await ensureLease()
-      const key = idemRef.current.close ?? newKey("close")
-      idemRef.current.close = key
+      await ensureLease()
       const result = await closeMutation.mutateAsync({
         itemType: item.identity.itemType,
         itemId: item.identity.id,
         workItemId: item.workItem.workItemId,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
-        expectedSubjectHash: item.workItem.subjectHash,
+        expectedSubjectVersion: item.workItem.subjectVersion,
         expectedWorkItemVersion: item.workItem.workItemVersion,
         operationId: newKey("op"),
-        idempotencyKey: key,
         kind,
         reasonCode: kind === "CLOSE_DUPLICATE" ? "DUPLICATE" : "MISROUTED",
         replacementWorkItemId:
           kind === "CLOSE_DUPLICATE" ? replacementWi : undefined,
-        closureEvidenceReference: closeEvidence,
         comment: comment || undefined,
       })
       afterResult(result)
@@ -788,9 +750,7 @@ export function IntegrationErrorsPage({
   async function handleResolve() {
     if (!item?.workItem || !item.resolutionEvidencePolicy) return
     try {
-      const lease = await ensureLease()
-      const key = idemRef.current.resolve ?? newKey("resolve")
-      idemRef.current.resolve = key
+      await ensureLease()
       const evidence =
         item.linkedEvidence.length > 0
           ? item.linkedEvidence
@@ -816,27 +776,21 @@ export function IntegrationErrorsPage({
           itemType: item.identity.itemType,
           itemId: item.identity.id,
           workItemId: item.workItem.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expectedSubjectHash: item.workItem.subjectHash,
+          expectedSubjectVersion: item.workItem.subjectVersion,
           expectedWorkItemVersion: item.workItem.workItemVersion,
           kind: "ADD_EVIDENCE",
           operationId: newKey("op"),
-          idempotencyKey: newKey("add_ev"),
           evidenceRefs: evidence,
         })
       }
-      const lease2 = await ensureLease()
+      await ensureLease()
       const result = await resolveMutation.mutateAsync({
         itemType: item.identity.itemType,
         itemId: item.identity.id,
         workItemId: item.workItem.workItemId,
-        claimToken: lease2.claimToken,
-        leaseVersion: lease2.leaseVersion,
-        expectedSubjectHash: item.workItem.subjectHash,
+        expectedSubjectVersion: item.workItem.subjectVersion,
         expectedWorkItemVersion: item.workItem.workItemVersion,
         operationId: newKey("op"),
-        idempotencyKey: key,
         evidencePolicyId: item.resolutionEvidencePolicy.evidencePolicyId,
         evidencePolicyVersion:
           item.resolutionEvidencePolicy.evidencePolicyVersion,
@@ -877,7 +831,6 @@ export function IntegrationErrorsPage({
         expectedDifferenceVersion: item.objectVersion,
         expectedSubjectHash: item.identity.subjectHash,
         operationId: newKey("op"),
-        idempotencyKey: newKey("direct"),
         decision: {
           kind: "TERMINAL_CONCLUSION",
           reasonRegistryId: reg.reasonRegistryId,
@@ -1145,20 +1098,7 @@ export function IntegrationErrorsPage({
             reference={lastResult.reference}
             facts={lastResult.facts}
             actions={
-              lastResult.pendingIdempotencyKey ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => {
-                    void idemQueryMutation
-                      .mutateAsync(lastResult.pendingIdempotencyKey!)
-                      .then(afterResult)
-                  }}
-                >
-                  用原任务号查询最终结果
-                </Button>
-              ) : lastResult.terminal && !autoNext ? (
+              lastResult.terminal && !autoNext ? (
                 <Button
                   type="button"
                   size="sm"
@@ -1275,7 +1215,7 @@ export function IntegrationErrorsPage({
                     !item.hasWorkItem
                       ? "直接对账（无处理任务）"
                       : leaseActive
-                        ? `已领取 · 至 ${formatDateTime(activeLease?.expiresAt, "default")}`
+                        ? "已领取"
                         : "未领取"
                   }
                   processLabel="处理当前"
@@ -1779,16 +1719,6 @@ export function IntegrationErrorsPage({
                               }
                             />
                           </div>
-                          <div className="space-y-1">
-                            <Label className="text-xs">关闭证据引用</Label>
-                            <Input
-                              className="h-8 w-40"
-                              value={closeEvidence}
-                              onChange={(e) =>
-                                setCloseEvidence(e.target.value)
-                              }
-                            />
-                          </div>
                           <Button
                             type="button"
                             size="sm"
@@ -1870,7 +1800,6 @@ export function IntegrationErrorsPage({
                                       expectedSubjectHash:
                                         item.identity.subjectHash,
                                       operationId: newKey("op"),
-                                      idempotencyKey: newKey("dne"),
                                       decision: {
                                         kind: "NON_TERMINAL_ACTION",
                                         action: "ADD_EVIDENCE",

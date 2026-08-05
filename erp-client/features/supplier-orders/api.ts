@@ -64,9 +64,6 @@ type SessionPatch = {
   notes: string[]
   workItemStatus?: WorkItemView["workItemStatus"]
   workItemHeld?: boolean
-  leaseVersion?: number
-  leaseExpiresAt?: string
-  claimToken?: string
   subjectHash?: string
   subjectVersion?: string
   afterSalesPatches?: Record<
@@ -553,11 +550,10 @@ function projectDetail(
       completionAction: seed.workItem.completionAction,
       allowedTaskActions: seed.workItem.allowedTaskActions,
       workItemStatus: session.workItemStatus ?? "PENDING",
-      claimedBy: session.claimToken
-        ? { userId: "u-demo", displayName: "当前处理人" }
-        : undefined,
-      leaseVersion: session.leaseVersion,
-      leaseExpiresAt: session.leaseExpiresAt,
+      claimedBy:
+        session.workItemStatus === "IN_PROGRESS"
+          ? { userId: "u-demo", displayName: "当前处理人" }
+          : undefined,
       held: session.workItemHeld,
     }
   }
@@ -740,8 +736,6 @@ export async function querySupplierResult(
   // Task stays non-terminal
   if (input.workItemId && seed.workItem) {
     session.workItemStatus = "IN_PROGRESS"
-    session.leaseVersion = (session.leaseVersion ?? 1) + 1
-    session.leaseExpiresAt = new Date(Date.now() + 15 * 60_000).toISOString()
     session.subjectHash = `sh_${seed.orderId}_v${session.lockVersion}`
     session.subjectVersion = String(session.lockVersion)
   }
@@ -762,7 +756,6 @@ export async function querySupplierResult(
     evidence,
     lockVersion: session.lockVersion,
     workItemStatus: input.workItemId ? "IN_PROGRESS" : undefined,
-    leaseVersion: session.leaseVersion,
     subjectHash: session.subjectHash,
     allowedActions: allowed,
     actionBlockers: blockers,
@@ -844,8 +837,6 @@ export async function replaySupplierOrder(
 
   if (input.workItemId) {
     session.workItemStatus = "IN_PROGRESS"
-    session.leaseVersion = (session.leaseVersion ?? 1) + 1
-    session.leaseExpiresAt = new Date(Date.now() + 15 * 60_000).toISOString()
     session.subjectHash = `sh_${seed.orderId}_v${session.lockVersion}`
   }
 
@@ -859,7 +850,6 @@ export async function replaySupplierOrder(
     evidence,
     lockVersion: session.lockVersion,
     workItemStatus: input.workItemId ? "IN_PROGRESS" : undefined,
-    leaseVersion: session.leaseVersion,
     externalOrderNo,
     fulfillmentStatus: "ACCEPTED",
     allowedActions: allowed,
@@ -889,10 +879,6 @@ export async function deferSupplierOrderTask(
   const session = getSession(input.orderId)
   session.workItemHeld = true
   session.workItemStatus = "PENDING"
-  // mock: release lease
-  session.claimToken = undefined
-  session.leaseVersion = undefined
-  session.leaseExpiresAt = undefined
   session.notes.push(
     `跳过：${input.reasonCode}${input.comment ? ` · ${input.comment}` : ""}`
   )

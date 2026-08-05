@@ -236,8 +236,6 @@ export type SavePurchaseOrderDraftInput = {
   }>
   /** demo: 模拟版本冲突 */
   simulateConflict?: boolean
-  /** demo: 模拟结果未知 */
-  simulateUnknown?: boolean
   idempotencyKey: string
 }
 
@@ -247,7 +245,6 @@ export type SubmitPurchaseOrderInput = {
   expectedDraftContentHash: string
   draftEditToken: string
   idempotencyKey: string
-  simulateUnknown?: boolean
 }
 
 export type ReviewPurchaseOrderInput = {
@@ -259,9 +256,6 @@ export type ReviewPurchaseOrderInput = {
   reasonCode?: string
   comment?: string
   idempotencyKey: string
-  /** 诚实 mock：非完整 W02 envelope，仅保留关键字段 */
-  claimToken?: string
-  simulateUnknown?: boolean
 }
 
 export type CreatePurchaseOrderFromBasisInput = {

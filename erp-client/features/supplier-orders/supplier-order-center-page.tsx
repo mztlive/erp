@@ -169,8 +169,6 @@ export function SupplierOrderCenterPage({
       const res = await deferMutation.mutateAsync({
         orderId: supplierOrderId,
         workItemId: detail.workItem.workItemId,
-        claimToken: "demo-claim",
-        leaseVersion: detail.workItem.leaseVersion ?? 1,
         expectedSubjectHash: detail.workItem.subjectHash,
         reasonCode: value.reasonCode,
         comment: value.comment || undefined,

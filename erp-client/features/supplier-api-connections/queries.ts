@@ -10,7 +10,6 @@ import {
   enableConnection,
   fetchConnectionCenter,
   fetchConnectionList,
-  queryFormalByIdempotency,
   runHealthCheck,
   startCatalogSync,
   updateCapabilities,
@@ -139,11 +138,5 @@ export function useEnableConnectionMutation() {
     onSuccess: async (result) => {
       if (result.status === "succeeded") await invalidate()
     },
-  })
-}
-
-export function useQueryFormalIdempotencyMutation() {
-  return useMutation({
-    mutationFn: (key: string) => queryFormalByIdempotency(key),
   })
 }

@@ -592,7 +592,6 @@ export function ExecutionProjectionsPage() {
         action: kind,
         expectedObjectVersion: version,
         requestId: `req-${Date.now().toString(36)}`,
-        idempotencyKey: `w23-${kind}-${row.projectionId}-${row.projectionRevisionId}`,
       })
       setResult(commandToResultState(result))
       setPendingAction(null)
@@ -617,7 +616,6 @@ export function ExecutionProjectionsPage() {
         action: kind,
         projectionIds: selectedIds,
         requestId: `bulk-${Date.now().toString(36)}`,
-        idempotencyKey: `w23-${kind}-${selectedIds.slice().sort().join(",")}`,
       })
       setBulkJob(job)
       setRowSelection({})

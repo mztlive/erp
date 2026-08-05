@@ -10,7 +10,6 @@ import {
   holdCardFundsReview,
   registerHistoricalInvoice,
   registerHistoricalReceipt,
-  resolveUnknownCardFundsResult,
   saveCardFundsEvidence,
 } from "@/features/card-funds-review/api"
 import type { CardFundsReviewQueueQuery } from "@/features/card-funds-review/types"
@@ -92,20 +91,6 @@ export function useSaveCardFundsEvidenceMutation() {
     mutationFn: saveCardFundsEvidence,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: cardFundsReviewKeys.all })
-    },
-  })
-}
-
-export function useResolveUnknownCardFundsMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: resolveUnknownCardFundsResult,
-    onSuccess: async (result) => {
-      if (result.status === "succeeded") {
-        await queryClient.invalidateQueries({
-          queryKey: cardFundsReviewKeys.all,
-        })
-      }
     },
   })
 }

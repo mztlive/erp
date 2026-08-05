@@ -37,7 +37,7 @@ import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   buildMasterDataExportCsv,
   downloadCsv,
-} from "@/features/master-data/api"
+} from "@/features/master-data/queries"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
 import { formatEffectiveRange } from "@/features/master-data/filter"

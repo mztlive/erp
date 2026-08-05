@@ -86,8 +86,6 @@ export type WorkspaceNavItem = Readonly<{
   label: string
   icon: LucideIcon
   badge?: string
-  /** When true, still required as a route but not a top-level nav leaf (e.g. W06). */
-  navHidden?: boolean
 }>
 
 export type WorkspaceNavGroup = Readonly<{
@@ -106,6 +104,38 @@ export type WorkspaceRouteEntry = Readonly<{
   /** Whether this entry is a nested section of another workspace. */
   nestedUnder?: WorkspaceId
 }>
+
+/** 侧栏导航项定义：仅存 route 引用与导航特有字段，id/默认名称/默认 href 派生自 WORKSPACE_ROUTES。 */
+type WorkspaceNavItemSpec = Readonly<{
+  routeId: WorkspaceId
+  icon: LucideIcon
+  badge?: string
+  href?: string
+  label?: string
+}>
+
+type WorkspaceNavGroupSpec = Readonly<{
+  label: string
+  items: readonly WorkspaceNavItemSpec[]
+}>
+
+function buildWorkspaceNavGroups(
+  groups: readonly WorkspaceNavGroupSpec[]
+): readonly WorkspaceNavGroup[] {
+  return groups.map((group) => ({
+    label: group.label,
+    items: group.items.map((spec) => {
+      const route = getWorkspaceById(spec.routeId)
+      return {
+        id: spec.routeId,
+        href: spec.href ?? route.navHref,
+        label: spec.label ?? route.name,
+        icon: spec.icon,
+        ...(spec.badge ? { badge: spec.badge } : {}),
+      }
+    }),
+  }))
+}
 
 /** Full W01–W30 index aligned with docs/ui-workspaces/README.md. */
 export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
@@ -317,19 +347,17 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
 ] as const
 
 /** Shell navigation groups covering every navigable W main route. */
-export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
+export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
+  buildWorkspaceNavGroups([
   {
     label: "工作",
     items: [
       {
-        id: "W01",
-        href: "/workspace",
-        label: "今日工作台",
+        routeId: "W01",
         icon: LayoutDashboardIcon,
       },
       {
-        id: "W02",
-        href: "/workspace/tasks",
+        routeId: "W02",
         label: "待办队列",
         icon: ListTodoIcon,
         badge: "18",
@@ -340,20 +368,15 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
     label: "销售",
     items: [
       {
-        id: "W03",
-        href: "/sales/customers",
-        label: "客户中心",
+        routeId: "W03",
         icon: UsersIcon,
       },
       {
-        id: "W04",
-        href: "/sales/contracts",
-        label: "合同",
+        routeId: "W04",
         icon: FileTextIcon,
       },
       {
-        id: "W05",
-        href: "/sales/orders",
+        routeId: "W05",
         label: "销售单",
         icon: ShoppingCartIcon,
       },
@@ -363,20 +386,17 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
     label: "采购与履约",
     items: [
       {
-        id: "W07",
-        href: "/procurement/confirm",
+        routeId: "W07",
         label: "二次确认",
         icon: ClipboardCheckIcon,
         badge: "3",
       },
       {
-        id: "W08",
-        href: "/procurement/orders",
-        label: "采购单",
+        routeId: "W08",
         icon: ClipboardListIcon,
       },
       {
-        id: "W09",
+        routeId: "W09",
         href: "/fulfillment?lane=procurement",
         label: "交付与代发",
         icon: TruckIcon,
@@ -385,8 +405,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
         badge: "3",
       },
       {
-        id: "W21",
-        href: "/procurement/supplier-catalog",
+        routeId: "W21",
         label: "供应商商品库",
         icon: PackageSearchIcon,
       },
@@ -396,8 +415,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
     label: "仓储",
     items: [
       {
-        id: "W09",
-        href: "/fulfillment?lane=warehouse",
+        routeId: "W09",
         label: "收货与发货",
         icon: PackageIcon,
         // 仓储 · 周航「仅我的」待处理数（mock/fulfillment-operations.ts 固定夹具）。
@@ -405,9 +423,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
         badge: "4",
       },
       {
-        id: "W10",
-        href: "/inventory",
-        label: "库存台账",
+        routeId: "W10",
         icon: WarehouseIcon,
       },
     ],
@@ -416,21 +432,15 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
     label: "财务",
     items: [
       {
-        id: "W11",
-        href: "/finance/customer-accounts",
-        label: "客户往来",
+        routeId: "W11",
         icon: ReceiptIcon,
       },
       {
-        id: "W12",
-        href: "/finance/supplier-accounts",
-        label: "供应商往来",
+        routeId: "W12",
         icon: WalletCardsIcon,
       },
       {
-        id: "W13",
-        href: "/finance/card-funds-review",
-        label: "卡券票款复核",
+        routeId: "W13",
         icon: ScaleIcon,
       },
     ],
@@ -439,43 +449,43 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
     label: "基础资料",
     items: [
       {
-        id: "W14",
+        routeId: "W14",
         href: "/master-data/sellable-items",
         label: "公司商品池",
         icon: BoxesIcon,
       },
       {
-        id: "W14",
+        routeId: "W14",
         href: "/master-data/products",
         label: "商品与 SKU",
         icon: PackageIcon,
       },
       {
-        id: "W14",
+        routeId: "W14",
         href: "/master-data/categories",
         label: "商品分类",
         icon: FolderTreeIcon,
       },
       {
-        id: "W14",
+        routeId: "W14",
         href: "/master-data/brands",
         label: "品牌",
         icon: TagsIcon,
       },
       {
-        id: "W14",
+        routeId: "W14",
         href: "/master-data/voucher-categories",
         label: "卡券类目",
         icon: TicketIcon,
       },
       {
-        id: "W14",
+        routeId: "W14",
         href: "/master-data/suppliers",
         label: "供应商与资质",
         icon: HandshakeIcon,
       },
       {
-        id: "W14",
+        routeId: "W14",
         href: "/master-data/warehouses",
         label: "仓库",
         icon: WarehouseIcon,
@@ -486,20 +496,15 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
     label: "分析",
     items: [
       {
-        id: "W15",
-        href: "/analytics/customer-quality",
-        label: "客户经营质量",
+        routeId: "W15",
         icon: GaugeIcon,
       },
       {
-        id: "W16",
-        href: "/analytics/profit-loss",
-        label: "实际经营盈亏",
+        routeId: "W16",
         icon: ScaleIcon,
       },
       {
-        id: "W28",
-        href: "/analytics/card-business",
+        routeId: "W28",
         label: "卡券经营分析",
         icon: ShoppingBagIcon,
       },
@@ -509,21 +514,15 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
     label: "商城与发布",
     items: [
       {
-        id: "W22",
-        href: "/commerce/publications",
-        label: "商品发布",
+        routeId: "W22",
         icon: StoreIcon,
       },
       {
-        id: "W23",
-        href: "/commerce/execution-projections",
-        label: "执行信息",
+        routeId: "W23",
         icon: WorkflowIcon,
       },
       {
-        id: "W25",
-        href: "/commerce/consumption-orders",
-        label: "商城消费订单",
+        routeId: "W25",
         icon: PackageIcon,
       },
     ],
@@ -532,21 +531,16 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
     label: "供应商 API",
     items: [
       {
-        id: "W20",
-        href: "/supplier-api/connections",
+        routeId: "W20",
         label: "API 连接",
         icon: PlugIcon,
       },
       {
-        id: "W26",
-        href: "/supplier-api/orders",
-        label: "供应商订单",
+        routeId: "W26",
         icon: HandshakeIcon,
       },
       {
-        id: "W27",
-        href: "/supplier-api/settlements",
-        label: "API 结算",
+        routeId: "W27",
         icon: FileStackIcon,
       },
     ],
@@ -555,27 +549,20 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
     label: "治理",
     items: [
       {
-        id: "W17",
-        href: "/governance/mall-sync",
-        label: "商城同步与映射",
+        routeId: "W17",
         icon: Link2Icon,
       },
       {
-        id: "W18",
-        href: "/governance/imports",
-        label: "导入与期初",
+        routeId: "W18",
         icon: UploadIcon,
       },
       {
-        id: "W29",
-        href: "/governance/integration-errors",
+        routeId: "W29",
         label: "接口错误与对账",
         icon: ShieldCheckIcon,
       },
       {
-        id: "W30",
-        href: "/governance/history-backfill",
-        label: "历史消费回填",
+        routeId: "W30",
         icon: HistoryIcon,
       },
     ],
@@ -584,14 +571,12 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] = [
     label: "系统",
     items: [
       {
-        id: "W19",
-        href: "/system/access-audit",
-        label: "权限与审计",
+        routeId: "W19",
         icon: ShieldCheckIcon,
       },
     ],
   },
-]
+])
 
 /** Flat list of every main nav href (and W06 nested path) for verification. */
 export function getAllWorkspaceNavHrefs(): readonly string[] {

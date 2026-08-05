@@ -75,7 +75,6 @@ import {
   useCreateConnectionMutation,
   useDisableConnectionMutation,
   useEnableConnectionMutation,
-  useQueryFormalIdempotencyMutation,
   useRunHealthCheckMutation,
   useStartCatalogSyncMutation,
   useUpdateCapabilitiesMutation,
@@ -135,7 +134,6 @@ function outcomeToResult(outcome: FormalOutcome): ResultState {
       title: outcome.title,
       description: outcome.message,
       reference: outcome.operationId,
-      pendingIdempotencyKey: outcome.idempotencyKey,
     }
   }
   return {
@@ -923,7 +921,6 @@ function ConnectionCenter({
   const startCatalog = useStartCatalogSyncMutation()
   const disableMut = useDisableConnectionMutation()
   const enableMut = useEnableConnectionMutation()
-  const queryIdem = useQueryFormalIdempotencyMutation()
   const listQuery = useConnectionListQuery({
     environment: "ALL",
     page: 1,
@@ -1200,24 +1197,6 @@ function ConnectionCenter({
             description={result.description}
             reference={result.reference}
             facts={result.facts}
-            actions={
-              result.pendingIdempotencyKey ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={queryIdem.isPending}
-                  onClick={async () => {
-                    const r = await queryIdem.mutateAsync(
-                      result.pendingIdempotencyKey!
-                    )
-                    if (r) applyOutcome(r)
-                  }}
-                >
-                  按原任务号查询最终结果
-                </Button>
-              ) : undefined
-            }
           />
           {result.jobNo ? (
             <BackgroundJobProgress

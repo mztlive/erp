@@ -234,8 +234,6 @@ export const PROCUREMENT_CONFIRMATION_SEED: readonly ProcurementConfirmationTask
       subjectHash: "sha256:a1b2c3d4e5f6789012345678abcdef01",
       lease: {
         claimedByLabel: "当前用户 · 李采购",
-        expiresAt: "2026-08-01T10:30:00+08:00",
-        leaseVersion: 1,
       },
       salesSubmission: {
         salesOrderId: "so_1001",
@@ -432,6 +430,3 @@ export const PROCUREMENT_CONFIRMATION_SEED: readonly ProcurementConfirmationTask
         "上级确认证据 LMMC-2026-0811-03 仅证明公司愿承担低毛利，不预填供应商、不自动通过。",
     }),
   ]
-
-/** @deprecated 旧扁平列表兼容导出，请使用 seed + session 投影。 */
-export const PROCUREMENT_CONFIRMATION_TASKS = PROCUREMENT_CONFIRMATION_SEED

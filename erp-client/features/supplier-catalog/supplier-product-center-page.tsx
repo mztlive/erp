@@ -77,7 +77,6 @@ import {
   useSupplierCatalogCenterQuery,
 } from "@/features/supplier-catalog/queries"
 import type {
-  DemoRole,
   SupplierCatalogWriteResult,
 } from "@/features/supplier-catalog/types"
 import {
@@ -91,6 +90,13 @@ import {
 import { BASE_UNIT_DICTIONARY } from "@/features/master-data/resource-fields"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
 import { cn } from "@/lib/utils"
+import { parseDemoRole } from "@/lib/demo-roles"
+
+const SUPPLIER_CATALOG_DEMO_ROLES = [
+  "operations",
+  "admin",
+  "ops_tech",
+] as const
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -239,13 +245,9 @@ export function SupplierProductCenterPage({
   const router = useRouter()
   const searchParams = useSearchParams()
   const isCreate = supplierProductId === "new"
-  const demoRoleParam = searchParams.get("demoRole")
-  const demoRole: DemoRole =
-    demoRoleParam === "operations" ||
-    demoRoleParam === "admin" ||
-    demoRoleParam === "ops_tech"
-      ? demoRoleParam
-      : "procurement"
+  const demoRole =
+    parseDemoRole(searchParams.get("demoRole"), SUPPLIER_CATALOG_DEMO_ROLES) ??
+    "procurement"
   const maskCost = searchParams.get("maskCost") === "1"
   const returnTo =
     searchParams.get("returnTo") ?? "/procurement/supplier-catalog?mode=list"

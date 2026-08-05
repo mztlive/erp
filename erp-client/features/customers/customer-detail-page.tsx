@@ -44,7 +44,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CustomerForm } from "@/features/customers/customer-form"
 import { useCustomerCenterQuery } from "@/features/customers/queries"
-import { revealCustomerSensitiveField } from "@/features/customers/api"
+import { revealCustomerSensitiveField } from "@/features/customers/queries"
 import type {
   CustomerCenterView,
   CustomerSectionId,

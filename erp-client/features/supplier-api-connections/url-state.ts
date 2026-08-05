@@ -5,6 +5,7 @@ import type {
   HealthResult,
 } from "@/features/supplier-api-connections/types"
 import { SECTIONS } from "@/features/supplier-api-connections/types"
+import { createUrlStateCodec } from "@/lib/url-state"
 
 export type ConnectionsUrlState = {
   environment: ConnectionEnvironment | "ALL"
@@ -22,87 +23,46 @@ export type ConnectionsUrlState = {
   demoFlag?: "no-permission" | "no-scope"
 }
 
-const ENV_SET = new Set(["DEVELOPMENT", "STAGING", "PRODUCTION", "ALL"])
-const ROLE_SET = new Set(["procurement", "ops", "admin"])
+const ENV_VALUES = ["DEVELOPMENT", "STAGING", "PRODUCTION", "ALL"] as const
+const ROLE_VALUES = ["procurement", "ops", "admin"] as const
+const FLAG_VALUES = ["no-permission", "no-scope"] as const
 
-export function parseConnectionsSearchParams(
-  searchParams: URLSearchParams | { get(name: string): string | null }
-): ConnectionsUrlState {
-  const envRaw = (searchParams.get("environment") ?? "PRODUCTION").toUpperCase()
-  const environment: ConnectionEnvironment | "ALL" = ENV_SET.has(envRaw)
-    ? (envRaw as ConnectionEnvironment | "ALL")
-    : "PRODUCTION"
+const codec = createUrlStateCodec<ConnectionsUrlState>([
+  {
+    key: "environment",
+    type: "enum",
+    values: ENV_VALUES,
+    defaultValue: "PRODUCTION",
+    normalize: (raw) => raw.toUpperCase(),
+  },
+  { key: "status", type: "string" },
+  { key: "health", type: "string" },
+  { key: "capability", type: "string" },
+  { key: "catalogFreshness", type: "string" },
+  { key: "supplierId", type: "string" },
+  { key: "q", type: "string", trim: true },
+  { key: "page", type: "number", defaultValue: 1 },
+  { key: "connectionId", type: "string", aliases: ["id"] },
+  {
+    key: "section",
+    type: "enum",
+    values: SECTIONS,
+    defaultValue: "overview",
+    buildWhen: (value, state) =>
+      value !== "overview" && Boolean(state.connectionId),
+  },
+  {
+    key: "role",
+    type: "enum",
+    values: ROLE_VALUES,
+    defaultValue: "admin",
+    aliases: ["demoRole"],
+  },
+  { key: "demoFlag", type: "enum", values: FLAG_VALUES },
+])
 
-  const status = searchParams.get("status") ?? undefined
-  const health = searchParams.get("health") ?? undefined
-  const capability = searchParams.get("capability") ?? undefined
-  const catalogFreshness = searchParams.get("catalogFreshness") ?? undefined
-  const supplierId = searchParams.get("supplierId") ?? undefined
-  const q = searchParams.get("q") ?? undefined
-  const connectionId =
-    searchParams.get("connectionId") ?? searchParams.get("id") ?? undefined
-
-  const sectionRaw = searchParams.get("section")
-  const section: ConnectionSection =
-    sectionRaw && (SECTIONS as string[]).includes(sectionRaw)
-      ? (sectionRaw as ConnectionSection)
-      : "overview"
-
-  const pageRaw = Number(searchParams.get("page") ?? "1")
-  const page =
-    Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1
-
-  const roleRaw = searchParams.get("role") ?? searchParams.get("demoRole")
-  const role: DemoRole =
-    roleRaw && ROLE_SET.has(roleRaw) ? (roleRaw as DemoRole) : "admin"
-
-  const flagRaw = searchParams.get("demoFlag")
-  const demoFlag =
-    flagRaw === "no-permission" || flagRaw === "no-scope"
-      ? flagRaw
-      : undefined
-
-  return {
-    environment,
-    status,
-    health,
-    capability,
-    catalogFreshness,
-    supplierId,
-    q,
-    page,
-    connectionId,
-    section,
-    role,
-    demoFlag,
-  }
-}
-
-export function buildConnectionsSearchParams(
-  state: ConnectionsUrlState
-): string {
-  const params = new URLSearchParams()
-  if (state.environment !== "PRODUCTION") {
-    params.set("environment", state.environment)
-  }
-  if (state.status) params.set("status", state.status)
-  if (state.health) params.set("health", state.health)
-  if (state.capability) params.set("capability", state.capability)
-  if (state.catalogFreshness) {
-    params.set("catalogFreshness", state.catalogFreshness)
-  }
-  if (state.supplierId) params.set("supplierId", state.supplierId)
-  if (state.q?.trim()) params.set("q", state.q.trim())
-  if (state.page > 1) params.set("page", String(state.page))
-  if (state.connectionId) {
-    params.set("connectionId", state.connectionId)
-    if (state.section !== "overview") params.set("section", state.section)
-  }
-  if (state.role !== "admin") params.set("role", state.role)
-  if (state.demoFlag) params.set("demoFlag", state.demoFlag)
-  const qs = params.toString()
-  return qs ? `?${qs}` : ""
-}
+export const parseConnectionsSearchParams = codec.parse
+export const buildConnectionsSearchParams = codec.build
 
 export function parseHealthFilter(raw?: string): HealthResult | undefined {
   if (

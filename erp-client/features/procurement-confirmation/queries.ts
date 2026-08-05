@@ -7,8 +7,6 @@ import {
   completeProcurementDecision,
   deferProcurementConfirmation,
   fetchProcurementQueue,
-  renewProcurementWorkItem,
-  resolveUnknownProcurementResult,
   saveProcurementConfirmation,
   type QueueFilters,
 } from "@/features/procurement-confirmation/api"
@@ -30,18 +28,6 @@ export function useClaimProcurementMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: claimProcurementWorkItem,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: procurementConfirmKeys.all,
-      })
-    },
-  })
-}
-
-export function useRenewProcurementLeaseMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: renewProcurementWorkItem,
     onSuccess: async () => {
       await queryClient.invalidateQueries({
         queryKey: procurementConfirmKeys.all,
@@ -80,20 +66,6 @@ export function useDeferProcurementMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: deferProcurementConfirmation,
-    onSuccess: async (result) => {
-      if (result.status === "succeeded") {
-        await queryClient.invalidateQueries({
-          queryKey: procurementConfirmKeys.all,
-        })
-      }
-    },
-  })
-}
-
-export function useResolveUnknownProcurementMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: resolveUnknownProcurementResult,
     onSuccess: async (result) => {
       if (result.status === "succeeded") {
         await queryClient.invalidateQueries({

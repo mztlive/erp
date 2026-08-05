@@ -69,7 +69,6 @@ export type SeedStatement = {
     subjectVersion: string
     subjectHash: string
     claimedBy?: ActorView
-    leaseVersion?: number
   }
   pendingCostDeltaGross?: string
   confirmedCostDeltaGross?: string
@@ -103,13 +102,6 @@ export const DEFAULT_PERIOD_POLICY = {
       label: "2026-08（自然月）",
     },
   ],
-}
-
-export const DEFAULT_REFRESH_CUTOFF = {
-  state: "CONFIGURED" as const,
-  policyId: "rcp_settlement_v1",
-  policyVersion: "2",
-  label: "提交复核前冻结：含当日 18:00 前不可变记录与账单版本",
 }
 
 function item(
@@ -421,7 +413,6 @@ export const SEED_STATEMENTS: SeedStatement[] = [
       subjectVersion: "6",
       subjectHash: "sh_mt_202607_sub",
       claimedBy: { ...ACTORS.review },
-      leaseVersion: 1,
     },
     items: [
       item({

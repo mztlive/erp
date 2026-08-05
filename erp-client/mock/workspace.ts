@@ -117,10 +117,6 @@ export type TodayWorkspaceView = Readonly<{
   temporaryPreviewLimitFallback: number
 }>
 
-/** @deprecated Prefer WorkspaceWorkItem via buildTodayWorkspaceView */
-export type WorkspaceTaskFilter = "all" | "today" | "overdue" | "sync"
-
-
 const TEMPORARY_PREVIEW_LIMIT = 5
 const FAMILY_META: Record<WorkspaceFamilyFilter, { label: string; defaultExpanded: boolean }> = {
     approval: {

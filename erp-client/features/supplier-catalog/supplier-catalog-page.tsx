@@ -58,7 +58,6 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
-  DemoRole,
   SupplierCatalogItemView,
   SupplierCatalogQueueQuery,
   SupplierCatalogSourceType,
@@ -79,7 +78,6 @@ import {
   useCompleteSupplierCatalogMutation,
   useSupplierCatalogActionMutation,
   useSupplierCatalogQueueQuery,
-  useResolveUnknownSupplierCatalogMutation,
   useSaveSupplierCatalogDraftMutation,
 } from "@/features/supplier-catalog/queries"
 import {
@@ -88,12 +86,17 @@ import {
 } from "@/features/supplier-catalog/supply-relationship-list-view"
 import { cn } from "@/lib/utils"
 import { compareDecimal } from "@/lib/fixed-decimal"
+import { parseDemoRole } from "@/lib/demo-roles"
+
+const SUPPLIER_CATALOG_DEMO_ROLES = [
+  "operations",
+  "admin",
+  "ops_tech",
+] as const
 
 type SessionLease = {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expiresAt: string
+  claimedByLabel: string
 }
 
 type ResultState = SharedResultState<FormalOutcome>
@@ -249,13 +252,9 @@ export function SupplierCatalogPage() {
   const status: "pending" | "held" =
     statusParam === "held" ? "held" : "pending"
 
-  const demoRoleParam = searchParams.get("demoRole")
-  const demoRole: DemoRole =
-    demoRoleParam === "operations" ||
-    demoRoleParam === "admin" ||
-    demoRoleParam === "ops_tech"
-      ? demoRoleParam
-      : "procurement"
+  const demoRole =
+    parseDemoRole(searchParams.get("demoRole"), SUPPLIER_CATALOG_DEMO_ROLES) ??
+    "procurement"
 
   const maskCost = searchParams.get("maskCost") === "1"
   const q = searchParams.get("q") ?? undefined
@@ -317,7 +316,6 @@ export function SupplierCatalogPage() {
   const actionMutation = useSupplierCatalogActionMutation()
   const completeMutation = useCompleteSupplierCatalogMutation()
   const saveDraftMutation = useSaveSupplierCatalogDraftMutation()
-  const resolveUnknownMutation = useResolveUnknownSupplierCatalogMutation()
   const [excelImportOpen, setExcelImportOpen] = React.useState(false)
   const [manualEntryOpen, setManualEntryOpen] = React.useState(false)
   const [promotionItem, setPromotionItem] =
@@ -360,7 +358,6 @@ export function SupplierCatalogPage() {
   const resultRef = React.useRef<HTMLDivElement>(null)
   const leaseRef = React.useRef<SessionLease | null>(null)
   const [activeLease, setActiveLease] = React.useState<SessionLease | null>(null)
-  const idempotencyRef = React.useRef<Record<string, string>>({})
 
   const offeringForm = useAppForm({
     defaultValues: {
@@ -454,7 +451,6 @@ export function SupplierCatalogPage() {
     })
     setSubstituteIds([])
     setActionError(null)
-    idempotencyRef.current = {}
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅按供应商商品身份重置草稿
   }, [item?.supplierProduct.id, skuId])
    
@@ -507,9 +503,7 @@ export function SupplierCatalogPage() {
         if (cancelled) return
         const session: SessionLease = {
           workItemId: lease.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expiresAt: lease.expiresAt,
+          claimedByLabel: lease.claimedByLabel,
         }
         leaseRef.current = session
         setActiveLease(session)
@@ -594,19 +588,13 @@ export function SupplierCatalogPage() {
     }
     const wi = item.workItem
     const existing = leaseRef.current
-    if (
-      existing &&
-      existing.workItemId === wi.workItemId &&
-      existing.claimToken
-    ) {
+    if (existing && existing.workItemId === wi.workItemId) {
       return existing
     }
     const lease = await claimMutation.mutateAsync(wi.workItemId)
     const session: SessionLease = {
       workItemId: lease.workItemId,
-      claimToken: lease.claimToken,
-      leaseVersion: lease.leaseVersion,
-      expiresAt: lease.expiresAt,
+      claimedByLabel: lease.claimedByLabel,
     }
     leaseRef.current = session
     setActiveLease(session)
@@ -616,7 +604,6 @@ export function SupplierCatalogPage() {
   const exceptionWorkItem =
     item && isExceptionItem(item) ? item.workItem : null
   const workItemId = exceptionWorkItem?.workItemId ?? null
-  const subjectHash = exceptionWorkItem?.subjectHash ?? ""
   const expectedRevision = item
     ? String(
         item.supplierProduct.incomingRevision?.revisionNo ??
@@ -629,8 +616,7 @@ export function SupplierCatalogPage() {
 
   const leaseActive =
     Boolean(workItemId) &&
-    activeLease?.workItemId === workItemId &&
-    Boolean(activeLease.claimToken)
+    activeLease?.workItemId === workItemId
 
   const leaseStatus = !workItemId
     ? ("unclaimed" as const)
@@ -658,35 +644,16 @@ export function SupplierCatalogPage() {
     onSubmit: async ({ value }) => {
       if (!item || !isExceptionItem(item)) return
       try {
-        const lease = await ensureLease()
-        const key =
-          idempotencyRef.current.hold ??
-          `hold_${item.workItem.workItemId}_${Date.now()}`
-        idempotencyRef.current.hold = key
+        await ensureLease()
         const result = await actionMutation.mutateAsync({
           workItemId: item.workItem.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expectedSubjectHash: item.workItem.subjectHash,
           action: {
             kind: "HOLD",
             reasonCode: value.reasonCode,
             comment: value.comment || undefined,
           },
-          idempotencyKey: key,
-          simulateTimeout: false,
         })
         setConfirmMode(null)
-        if (result.status === "unknown") {
-          setLastResult({
-            status: "unknown",
-            title: "稍后处理结果待确认",
-            description: result.message,
-            pendingIdempotencyKey: result.idempotencyKey,
-            stayOnItem: true,
-          })
-          return
-        }
         if (result.status === "failed") {
           setActionError(result.message)
           return
@@ -721,35 +688,16 @@ export function SupplierCatalogPage() {
     onSubmit: async ({ value }) => {
       if (!item || !isExceptionItem(item) || item.changeType !== "ERROR") return
       try {
-        const lease = await ensureLease()
-        const key =
-          idempotencyRef.current.return ??
-          `return_${item.workItem.workItemId}_${Date.now()}`
-        idempotencyRef.current.return = key
+        await ensureLease()
         const result = await actionMutation.mutateAsync({
           workItemId: item.workItem.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expectedSubjectHash: item.workItem.subjectHash,
           action: {
             kind: "RETURN_FOR_DATA_FIX",
             reasonCode: value.reasonCode,
             comment: value.comment,
           },
-          idempotencyKey: key,
-          simulateTimeout: false,
         })
         setConfirmMode(null)
-        if (result.status === "unknown") {
-          setLastResult({
-            status: "unknown",
-            title: "退回结果不确定",
-            description: result.message,
-            pendingIdempotencyKey: result.idempotencyKey,
-            stayOnItem: true,
-          })
-          return
-        }
         if (result.status === "failed") {
           setActionError(result.message)
           return
@@ -783,16 +731,9 @@ export function SupplierCatalogPage() {
             : null
       if (!decisionKind) return
       try {
-        const lease = await ensureLease()
-        const key =
-          idempotencyRef.current.complete ??
-          `complete_${item.workItem.workItemId}_${Date.now()}`
-        idempotencyRef.current.complete = key
+        await ensureLease()
         const result = await completeMutation.mutateAsync({
           workItemId: item.workItem.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expectedSubjectHash: subjectHash,
           decision:
             decisionKind === "CONFIRM_ERROR_RESOLVED"
               ? {
@@ -810,20 +751,8 @@ export function SupplierCatalogPage() {
                   reasonCode: "SUPPLIER_STOPPED",
                   comment: value.comment,
                 },
-          idempotencyKey: key,
-          simulateTimeout: false,
         })
         setConfirmMode(null)
-        if (result.status === "unknown") {
-          setLastResult({
-            status: "unknown",
-            title: "处理结果待确认",
-            description: result.message,
-            pendingIdempotencyKey: result.idempotencyKey,
-            stayOnItem: true,
-          })
-          return
-        }
         if (result.status === "failed") {
           setActionError(result.message)
           return
@@ -1155,75 +1084,30 @@ export function SupplierCatalogPage() {
             }
             actions={
               <div className="flex flex-wrap gap-2">
-                {lastResult.status === "unknown" ? (
+                {lastResult.terminal || autoNext ? (
                   <Button
                     type="button"
-                    variant="secondary"
-                    disabled={resolveUnknownMutation.isPending}
                     onClick={() => {
-                      if (!lastResult.pendingIdempotencyKey) return
-                      void resolveUnknownMutation
-                        .mutateAsync({
-                          idempotencyKey: lastResult.pendingIdempotencyKey,
-                        })
-                        .then((r) => {
-                          if (r.status === "succeeded") {
-                            setLastResult({
-                              status:
-                                r.outcome.kind === "COMPLETED"
-                                  ? "succeeded"
-                                  : "blocked",
-                              title: "查询到处理结果",
-                              description:
-                                r.outcome.kind === "COMPLETED"
-                                  ? "处理结果已经确认。"
-                                  : r.outcome.resumeHint,
-                              reference:
-                                r.outcome.kind === "COMPLETED"
-                                  ? r.outcome.business.reference
-                                  : r.outcome.reference,
-                              outcome: r.outcome,
-                              terminal: r.outcome.kind === "COMPLETED",
-                              stayOnItem: r.outcome.kind !== "COMPLETED",
-                            })
-                          } else if (r.status === "unknown") {
-                            setActionError(r.message)
-                          } else {
-                            setActionError(r.message)
-                          }
-                        })
+                      const next =
+                        neighbor(1) ??
+                        items.find(
+                          (i) =>
+                            i.supplierProduct.id !==
+                            item?.supplierProduct.id
+                        )
+                      goToItem(next)
                     }}
                   >
-                    查询处理结果
+                    下一项
                   </Button>
-                ) : (
-                  <>
-                    {lastResult.terminal || autoNext ? (
-                      <Button
-                        type="button"
-                        onClick={() => {
-                          const next =
-                            neighbor(1) ??
-                            items.find(
-                              (i) =>
-                                i.supplierProduct.id !==
-                                item?.supplierProduct.id
-                            )
-                          goToItem(next)
-                        }}
-                      >
-                        下一项
-                      </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setLastResult(null)}
-                    >
-                      继续当前项
-                    </Button>
-                  </>
-                )}
+                ) : null}
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setLastResult(null)}
+                >
+                  继续当前项
+                </Button>
               </div>
             }
           />
@@ -1271,7 +1155,6 @@ export function SupplierCatalogPage() {
             showProcessNext={false}
             processDisabled={
               formalPending ||
-              Boolean(lastResult?.status === "unknown") ||
               !isRegistered ||
               !canProcureWrite ||
               demoRole !== "procurement"

@@ -52,7 +52,7 @@
 - 不把第二期卡券消费触发的 API 供应商订单并入本工作面；该链路属于 W26。
 - 不在前端通过隐藏按钮实现付款门禁；服务端正式确认入口必须重验。
 
-## 2. 用户、权限、数据范围与租约
+## 2. 用户、权限与数据范围
 
 ### 2.1 角色与五类责任
 
@@ -89,19 +89,19 @@
 | 有对象查看权但不能执行 | 作业上下文可读，正式动作可见禁用并展示责任角色/门禁原因 |
 | 无客户地址/交付对象字段权限 | 标签保留、值掩码；执行需要该字段时由服务端判为关键字段权限不足 |
 | 无采购成本权限 | 作业数量和对象仍可见，成本字段不返回原值；仓储无需成本即可作业 |
-| 页面期间权限收回 | 停止续租/保存，清除地址、联系人、成本和附件敏感缓存，切无权限态 |
+| 页面期间权限收回 | 停止保存等写动作，清除地址、联系人、成本和附件敏感缓存，切无权限态 |
 
 服务端按作业类型、采购责任、仓库范围、销售参与权和字段权限过滤。前端不能读取全量任务后按角色隐藏。
 
-### 2.3 作业任务与租约边界
+### 2.3 作业任务与处理权边界
 
 - 普通履约队列由待确认事项 Q1 在以下两个候选中选择且只选择一个；同一作业类型、同一待处理事实不能同时物化为两种身份，也不能在前端互相映射状态。
-- `WORK_ITEM` 候选：后端先在统一数据模型/API 的固定注册表中固化普通履约 `work_item_type`，队列唯一身份是 `workItemId`，领取与租约完整遵循 W02。只有该候选可汇聚到 W01/W02；从 W01/W02 进入的正式确认必须包在 W02 `CompleteWorkItemEnvelope` 中，并把领域事实确认和任务完成放在同一事务。
+- `WORK_ITEM` 候选：后端先在统一数据模型/API 的固定注册表中固化普通履约 `work_item_type`，队列唯一身份是 `workItemId`，领取与处理权完整遵循 W02。只有该候选可汇聚到 W01/W02；从 W01/W02 进入的正式确认必须使用 W02 统一动作命令，并把领域事实确认和任务完成放在同一事务。
 - `DOMAIN_OPERATION` 候选：队列身份是 `operationTaskId`，它只是由来源单据、剩余可作业量和正式履约事实派生的领域作业投影，不是 `work_item`。它不得出现在 W01/W02，不得调用 `work_item` 领取、转交或完成接口，也不得复制 `work_item.status` 形成第二任务状态机；“可处理/历史”由正式领域事实派生。
-- 无论选哪个候选，都必须携带来源对象版本和一次有效处理租约；领域投影租约也须满足原子领取、令牌摘要、版本续期、失效审计和同一投影单处理人语义，但投影 ID 不得成为正式业务事实主键。
+- 无论选哪个候选，都必须携带来源对象版本并校验当前处理人；领域作业处理权由服务端原子校验，但投影 ID 不得成为正式业务事实主键。
 - `BUSINESS_EXCEPTION` 只承载异常，不得拿来伪装全部正常履约任务。
-- 租约令牌仅存当前会话内存，不写 URL、日志、本地长期存储或埋点。
-- 租约保护处理权，不改变采购、库存、履约或销售状态；“先跳过”只释放当前处理权并移动队列指针。
+- 不再有租约令牌；处理权只由服务端在动作提交时校验，不写 URL、日志、本地长期存储或埋点。
+- 处理权不改变采购、库存、履约或销售状态；“先跳过”只归还处理权并移动队列指针。
 
 Q1 确认并写回权威数据模型/API 前，W09 的全部正常履约执行入口都是实施 blocker：不得开放队列、领取、保存、先跳过或确认，也不得上线任何临时模式。
 
@@ -147,7 +147,7 @@ Q1 确认并写回权威数据模型/API 前，W09 的全部正常履约执行�
 
 TaskTabs 身份为 `queue:fulfillment:{userId}:{scopeDigest}`；五种类型共享一个 W09 页签，不为每类创建平行任务页签或一级菜单。打开具体正式事实的对象页签身份由其强类型事实稳定 ID 决定，但默认使用 W09 当前页内详情。
 
-URL 不包含地址、联系人、物流号、数量、权限结论、租约令牌或门禁结果。刷新和从 W05/W08 返回时必须重新查询这些事实。
+URL 不包含地址、联系人、物流号、数量、权限结论或门禁结果。刷新和从 W05/W08 返回时必须重新查询这些事实。
 
 ## 4. 页面布局
 
@@ -194,10 +194,10 @@ URL 不包含地址、联系人、物流号、数量、权限结论、租约令�
 
 | 区域 | 目的 | 主组件 | 是否固定 |
 | --- | --- | --- | --- |
-| 页头与指标 | 看清五类作业水位与更新时间 | `PageHeader` `MetricStrip` `DataFreshness` | 顶部 |
+| 页头与指标 | 看清五类作业的待处理规模与更新时间 | `PageHeader` `MetricStrip` `DataFreshness` | 顶部 |
 | 类型分段 | 在同一工作面筛选五类作业 | Segmented 控件 | 顶部 sticky |
 | 队列列表 | 扫描当前筛选任务、超期和责任 | `WorkTaskItem` | 桌面左栏独立滚动 |
-| 连续处理上下文 | 位置、租约、先款结果徽章、上下项、自动下一项 | `SequentialProcessBar` + `PrepaymentGate`（`presentation="badge"`，经 `statusExtras`） | 当前作业顶部 sticky |
+| 连续处理上下文 | 位置、先款结果徽章、上下项、自动下一项 | `SequentialProcessBar` + `PrepaymentGate`（`presentation="badge"`，经 `statusExtras`） | 当前作业顶部 sticky |
 | 来源上下文 | 销售/采购、供应商、SKU/服务、剩余量 | 来源字段网格（不内嵌完整门禁卡） | 否 |
 | 类型表单 | 五种作业的受控字段 | M5 简化表单 + 行表 | 右主滚动区 |
 | 校验与动作 | 守恒、敏感字段、版本和正式提交 | `ValidationSummary` `FormalActionConfirmDialog` | 右栏底部 sticky |
@@ -250,7 +250,7 @@ URL 不包含地址、联系人、物流号、数量、权限结论、租约令�
 | 队列 | `position` / `total` | 第 N/M 项 | 服务端当前队列快照 | 当前筛选位置，不是全局固定序号 | W09 用户 |
 | 队列 | `operationType` | 入库/仓发/代发/电子/服务 | 服务端作业投影 | 固定 UI 映射，不用五个菜单 | 按类型权限 |
 | 队列 | `priority` / `dueAt` | 优先级 / 截止 | 任务/作业投影 | 超期文字 + 时长 | 同上 |
-| 租约 | `claimedBy` / `leaseExpiresAt` | 处理人 / 占用到期 | 任务租约 | 不显示令牌 | 当前查看者 |
+| 处理 | `claimedByLabel` | 处理人 | `work_item` 领取 | 不显示内部标识 | 当前查看者 |
 | 来源 | `purchaseNo` / `salesOrderNo` | 采购单 / 销售单 | `business_document` 与强类型表 | 稳定业务号，可钻取 | 按对象权限 |
 | 来源 | `sourceRevision` | 来源版本 | 采购/销售当前有效版本 | 确认时重验 | 同上 |
 | 主体 | `supplierSnapshot` / `customerSnapshot` | 供应商 / 客户 | 正式版本快照 | 不追随当前基础资料改名 | 字段权限裁剪 |
@@ -318,7 +318,7 @@ URL 不包含地址、联系人、物流号、数量、权限结论、租约令�
 - 默认 `scope=mine`；类型不需要默认值 —— 角色已经把可见类型收敛好了，「全部」即「本角色全部」。仓储 = 入库+仓发，采购 = 直发+电子+服务。（`view` / `roundView` 见 §6.2，尚未实现。）
 - 指标与仓库选项跟随 `scope`，但**不**跟随类型/到期/货款/单号这些筛选收缩。理由：指标格可点击即筛选，若显示 3 点进去只有 2 条，一线每天点几十次很快就不再信任这个页面。
 - 默认排序：已超期 → 高优先级 → 截止时间 → 来源提交时间，由服务端完成。
-- 默认“成功后自动下一项”开启；正式结果不确定、版本冲突或租约丢失时强制暂停。
+- 默认“成功后自动下一项”开启；正式结果不确定或版本冲突时强制暂停。
 - 队列每批预取下一项的非敏感身份摘要，但不得提前领取或返回敏感地址/联系人。
 
 ### 6.2 筛选契约
@@ -351,30 +351,29 @@ URL 不包含地址、联系人、物流号、数量、权限结论、租约令�
 
 ### 6.3 队列指标
 
-- 五类数量由服务端按同一权限/数据范围与截止水位聚合，不能由当前加载队列求和。
+- 五类数量由服务端按同一权限/数据范围与截止时间聚合，不能由当前加载队列求和。
 - 指标可点击时具备按钮语义、选中态和筛选摘要；无权限类型整项不展示。
 - “付款门禁阻塞”是跨入库/直发/电子/服务的可处理前置异常，不是新的履约状态。
 
 ## 7. 操作契约
 
-下表是 Q1 确认后的统一交互要求；确认前全部领取、续租、保存、先跳过和正式主动作均返回 `FULFILLMENT_TASK_MODEL_UNCONFIRMED`。表内两个候选的差异用于评审，运行时实现只能保留选中的一个分支。
+下表是 Q1 确认后的统一交互要求；确认前全部领取、保存、先跳过和正式主动作均返回 `FULFILLMENT_TASK_MODEL_UNCONFIRMED`。表内两个候选的差异用于评审，运行时实现只能保留选中的一个分支。
 
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
-| 领取作业 | 队列项 | 类型动作权限；无有效他人租约 | 无 | 返回租约、当前来源版本和表单草稿 | 被领取时转只读并定位下一项 |
-| 续租 | 系统自动/倒计时 | 当前领取人、页签前台、租约有效 | 无 | 新 `leaseVersion` / 到期时间 | 失败停止写入，保留输入 |
-| 保存作业草稿 | 自动保存 / `⌘S` | 租约有效、来源版本未变、草稿版本匹配 | 无 | 返回新草稿版本与校验摘要 | 输入保留；冲突时不覆盖 |
-| 先跳过 | 连续处理条/底栏 | 当前事实尚未确认、选中契约的租约有效 | 脏输入确认保存或放弃，并填写受控原因 | 选 `WORK_ITEM` 时使用 `WorkItemActionEnvelope<DeferFulfillmentAction>` 并保持 `PENDING | IN_PROGRESS`；选 `DOMAIN_OPERATION` 时使用独立跳过命令释放领域租约。实现只保留一条路径，且只移动当前 `queueContextId` 游标 | mutation 失败停留当前项、保留令牌与游标；结果不确定按同幂等键查询，不能先跳下一项 |
-| 确认入库 | 入库主动作 | W09 入库权限、门禁满足、数量/仓库/版本/租约有效 | 展示合格/不合格、库存与预占影响 | 原子写入库、库存增加、余额、销售预占、成本与进度；固定结果后下一项 | 不确定时不更新本地库存，查询结果 |
-| 确认仓发 | 仓发主动作 | 仓发权限、有效预占、库存/销售数量/版本/租约有效 | 展示发货、预占消耗和库存减少 | 原子写发货、预占消耗、库存流水和余额；固定结果后下一项 | 失败保留草稿；冲突重取预占 |
+| 领取作业 | 队列项 | 类型动作权限；任务待领取 | 无 | W02 条件更新原子领取，返回当前来源版本和表单草稿 | 被领取时转只读并定位下一项 |
+| 保存作业草稿 | 自动保存 / `⌘S` | 当前领取人为本人、来源版本未变、草稿版本匹配 | 无 | 返回新草稿版本与校验摘要 | 输入保留；冲突时不覆盖 |
+| 先跳过 | 连续处理条/底栏 | 当前事实尚未确认、当前领取人为本人 | 脏输入确认保存或放弃，并填写受控原因 | 选 `WORK_ITEM` 时使用 W02 非终结动作记录原因并置回待领取；选 `DOMAIN_OPERATION` 时使用独立跳过命令归还领域处理权。实现只保留一条路径，且只移动当前 `queueContextId` 游标 | mutation 失败停留当前项；结果不确定按原请求查询，不能先跳下一项 |
+| 确认入库 | 入库主动作 | W09 入库权限、门禁满足、数量/仓库/版本/当前领取人有效 | 展示合格/不合格、库存与预占影响 | 原子写入库、库存增加、余额、销售预占、成本与进度；固定结果后下一项 | 不确定时不更新本地库存，查询结果 |
+| 确认仓发 | 仓发主动作 | 仓发权限、有效预占、库存/销售数量/版本/当前领取人有效 | 展示发货、预占消耗和库存减少 | 原子写发货、预占消耗、库存流水和余额；固定结果后下一项 | 失败保留草稿；冲突重取预占 |
 | 确认供应商直发 | 直发主动作 | 采购权限、付款门禁满足、有效采购销售分配 | 展示发货和“不影响自有库存” | 写直发事实，更新履约进度；固定结果后下一项 | 不确定时查询同幂等结果 |
 | 确认电子交付 | 电子主动作 | 采购权限、门禁满足、分配/敏感字段/凭证有效 | 展示对象、数量、结果、隐私提示 | 写不可覆盖电子交付事实；固定结果后下一项 | 失败输入保留，敏感值按策略清除/重填 |
 | 确认服务履约 | 服务主动作 | 采购权限、门禁满足、分配/时间/结果/凭证有效 | 展示服务对象、地点、时间、结果 | 写不可覆盖服务事实；固定结果后下一项 | 失败保留非敏感输入；重验来源 |
-| 去登记付款 | 顶栏先款徽章悬停卡 / `PrepaymentGate`（badge） | W12 权限 | 无 | 打开供应商往来并预选采购应付 | 返回 W09 重查门禁和租约 |
+| 去登记付款 | 顶栏先款徽章悬停卡 / `PrepaymentGate`（badge） | W12 权限 | 无 | 打开供应商往来并预选采购应付 | 返回 W09 重查门禁和处理权 |
 | 去客户验收 | 固定结果/历史 | W06 与销售单权限 | 无 | 聚焦 W05 验收子区并携带履约事实 ID | 返回 W09 队列保留 |
 | 查看/发起纠正 | 历史事实详情 | 对应退货/冲正/调整权限 | 强确认原事实与影响 | 进入原对象变更/异常流程或形成受控反向事实 | 失败不改原事实；不确定时查询 |
 
-先跳过不是本地队列操作。若选择 `WORK_ITEM`，由 W02 通用动作协议记录动作并保持正式任务 `PENDING | IN_PROGRESS`；客户端仅在 mutation 明确返回租约已释放时清除会话令牌。若选择 `DOMAIN_OPERATION`，实现不读写 `work_item`，释放领域租约后只在当前 `queueContextId` 标记“本轮已跳过”。未选路径必须从生成代码和服务端接口中删除；任何实现都不得写入 `paused` 业务/任务/投影状态。
+先跳过不是本地队列操作。若选择 `WORK_ITEM`，由 W02 通用动作协议记录原因并把任务置回待领取。若选择 `DOMAIN_OPERATION`，实现不读写 `work_item`，归还领域处理权后只在当前 `queueContextId` 标记“本轮已跳过”。未选路径必须从生成代码和服务端接口中删除；任何实现都不得写入 `paused` 业务/任务/投影状态。
 
 若选择 `WORK_ITEM`，五类正式主动作必须同时完成对应 `work_item`，不能先确认再由前端补调任务完成；若选择 `DOMAIN_OPERATION`，正式主动作只提交领域事实并让服务端重算投影资格，绝不调用 `work_item` 完成。两套候选的固定结果与自动下一项交互一致，但客户端不能在运行时选择或混用任务事实源。
 
@@ -516,12 +515,9 @@ type FulfillmentTaskCommon = {
   editVersion: number
 }
 
-type FulfillmentLeaseView = {
+type FulfillmentHandleView = {
   claimedByLabel?: string
   claimedByCurrentUser: boolean
-  expiresAt?: string
-  leaseVersion?: number
-  hasValidClaim: boolean
 }
 
 type WorkItemFulfillmentTaskContextCandidate = FulfillmentTaskCommon & {
@@ -529,16 +525,15 @@ type WorkItemFulfillmentTaskContextCandidate = FulfillmentTaskCommon & {
     workItemId: string
     workItemType: string // 必须来自后端固定注册表
     subjectVersion?: string
-    subjectHash: string
   }
   operation?: never
-  lease?: FulfillmentLeaseView
+  handle?: FulfillmentHandleView
 }
 
 type DomainOperationFulfillmentTaskContextCandidate = FulfillmentTaskCommon & {
   workItem?: never
   operation: { operationTaskId: string }
-  lease?: FulfillmentLeaseView
+  handle?: FulfillmentHandleView
 }
 
 type FulfillmentOperationViewBase = {
@@ -573,7 +568,7 @@ type DomainOperationFulfillmentOperationViewCandidate =
   FulfillmentOperationViewBase & DomainOperationFulfillmentTaskContextCandidate
 ```
 
-确认 Q1 后，正式 View 只能采用其中一个 Candidate，且请求与响应均无 `mode` 自选字段。选 `WORK_ITEM` 不返回 `operationTaskId`；选 `DOMAIN_OPERATION` 不返回任何 `workItemId` / `workItemType` / `work_item.status`。查询 View 只返回领取人、到期、租约版本和 `hasValidClaim` 等安全投影，不返回 `claimToken` / `operationLeaseToken`；令牌只由选中契约的 Claim / 续租 mutation 返回并只存当前会话内存，不进入 URL、持久化 Query 缓存、日志或埋点。保存、先跳过和正式确认响应也不得回显原始令牌。
+确认 Q1 后，正式 View 只能采用其中一个 Candidate，且请求与响应均无 `mode` 自选字段。选 `WORK_ITEM` 不返回 `operationTaskId`；选 `DOMAIN_OPERATION` 不返回任何 `workItemId` / `workItemType` / `work_item.status`。查询 View 只返回领取人等业务可读处理信息和来源版本；处理权由服务端在动作提交时按条件更新校验，不依赖查询响应中的任何令牌。
 
 ### 8.3 五类草稿与提交
 
@@ -652,12 +647,10 @@ type SaveFulfillmentDraftAction = {
 }
 
 type SaveFulfillmentWorkItemDraftCommandCandidate =
-  WorkItemActionEnvelope<SaveFulfillmentDraftAction>
+  WorkItemActionCommand<SaveFulfillmentDraftAction>
 
 type SaveFulfillmentDomainOperationDraftCommandCandidate = {
   operationTaskId: string
-  operationLeaseToken: string
-  operationLeaseVersion: number
   expectedSourceVersion: string
   expectedEditVersion: number
   draft: FulfillmentDraft
@@ -671,12 +664,10 @@ type DeferFulfillmentAction = {
 }
 
 type DeferFulfillmentWorkItemCommandCandidate =
-  WorkItemActionEnvelope<DeferFulfillmentAction>
+  WorkItemActionCommand<DeferFulfillmentAction>
 
 type DeferFulfillmentDomainOperationCommandCandidate = {
   operationTaskId: string
-  operationLeaseToken: string
-  operationLeaseVersion: number
   queueContextId: string
   reason: { code: string; note?: string }
   idempotencyKey: string
@@ -684,13 +675,10 @@ type DeferFulfillmentDomainOperationCommandCandidate = {
 
 type DeferFulfillmentWorkItemResultCandidate = {
   workItemId: string
-  workItemStatus: "PENDING" | "IN_PROGRESS"
+  workItemStatus: "UNCLAIMED" | "IN_PROGRESS"
   actionRecordId: string
   subjectVersion?: string
-  subjectHash: string
   queueContextId: string
-  leaseReleased: boolean
-  lease?: FulfillmentLeaseView
   nextTask?: WorkItemTaskRefCandidate
 }
 
@@ -698,7 +686,6 @@ type DeferFulfillmentDomainOperationResultCandidate = {
   operationTaskId: string
   idempotencyKey: string
   queueContextId: string
-  leaseReleased: true
   nextTask?: DomainOperationTaskRefCandidate
 }
 
@@ -709,12 +696,10 @@ type FulfillmentDecision = {
 }
 
 type PostFulfillmentWorkItemCommandCandidate =
-  CompleteWorkItemEnvelope<FulfillmentDecision>
+  WorkItemActionCommand<FulfillmentDecision>
 
 type PostFulfillmentDomainOperationCommandCandidate = {
   operationTaskId: string
-  operationLeaseToken: string
-  operationLeaseVersion: number
   decision: FulfillmentDecision
   idempotencyKey: string
 }
@@ -722,13 +707,13 @@ type PostFulfillmentDomainOperationCommandCandidate = {
 
 以上带 `Candidate` 的类型不是可同时调用的运行时端点。Q1 确认后仅保留选中候选对应的保存、先跳过和确认命令，并移除 `Candidate` 后缀；服务端不接收 `mode` 让客户端切换另一套命令。
 
-服务端保存后返回新 `editVersion`、规范化字段和完整校验摘要。若选择 `WORK_ITEM`，保存直接复用 W02 `WorkItemActionEnvelope`，成功只返回 `PENDING | IN_PROGRESS` 任务状态与可选安全租约投影，不完成任务、不返回原始 `claimToken`；若选择 `DOMAIN_OPERATION`，保存使用自己的 `idempotencyKey`，不读写 `work_item`、不返回 `operationLeaseToken`。
+服务端保存后返回新 `editVersion`、规范化字段和完整校验摘要。若选择 `WORK_ITEM`，保存直接复用 W02 `WorkItemActionCommand`，成功只返回任务状态与领取信息，不完成任务；若选择 `DOMAIN_OPERATION`，保存使用自己的 `idempotencyKey`，不读写 `work_item`。
 
-若选择 `WORK_ITEM`，先跳过复用 W02 `WorkItemActionEnvelope<DeferFulfillmentAction>`，结果中的正式任务状态只能是 `PENDING | IN_PROGRESS`。客户端以 mutation 返回的 `leaseReleased` 和安全 `lease` 投影为准：已释放就清除旧令牌；未释放时保留现有会话令牌，需要刷新令牌只能调用续租 mutation。先跳过响应本身不得返回原始 `claimToken`。若选择 `DOMAIN_OPERATION`，先跳过必须使用选中的领域命令；服务端验证领域租约、记录幂等动作、释放领域租约并只移动 `queueContextId` 游标，不写 `work_item`、`paused` 状态或独立完成状态，也不回显 `operationLeaseToken`。
+若选择 `WORK_ITEM`，先跳过复用 W02 非终结动作（`DEFER`），结果中的任务回到待领取（`UNCLAIMED`）。客户端以 mutation 返回的 `workItemStatus` 为准，只移动 `queueContextId` 游标。若选择 `DOMAIN_OPERATION`，先跳过必须使用选中的领域命令；服务端记录动作、归还领域处理权并只移动 `queueContextId` 游标，不写 `work_item`、`paused` 状态或独立完成状态。
 
 正式确认按 `draft.type` 调用强类型领域服务；不得用一个通用表吞掉各类型事务约束。
 
-若选择 `WORK_ITEM`，服务端必须校验完整 `CompleteWorkItemEnvelope`，并在同一事务原子写强类型履约事实、库存/预占等关联事实、审计以及任务完成；任一写入失败则全部回滚，前端不再调用“标记完成”。若选择 `DOMAIN_OPERATION`，服务端只校验领域投影租约并确认正式事实，随后从事实重算队列资格；它既不写 `work_item`，也不持久化一套与 `work_item` 同构的完成状态。
+若选择 `WORK_ITEM`，服务端必须校验完整 `WorkItemActionCommand`，并在同一事务原子写强类型履约事实、库存/预占等关联事实、审计以及任务完成；任一写入失败则全部回滚，前端不再调用“标记完成”。若选择 `DOMAIN_OPERATION`，服务端校验领域处理权并确认正式事实，随后从事实重算队列资格；它既不写 `work_item`，也不持久化一套与 `work_item` 同构的完成状态。
 
 ### 8.4 正式结果
 
@@ -781,22 +766,21 @@ type DomainOperationFulfillmentFormalResultCandidate = FulfillmentFormalResultBa
 | 查询失败无缓存 | `BusinessFailureState` | 重试、回工作台 | 重试成功 |
 | 查询失败有缓存 | 保留旧队列/事实并标陈旧 | 只读查看；确认禁用 | 取到当前事实 |
 | 领取中 | 当前项只读，显示“正在取得处理权” | 查看来源对象 | 领取成功或显示占用者 |
-| 他人租约 | 当前项只读，显示处理人/到期 | 去下一项 | 租约释放或完成 |
-| 租约即将到期 | 连续条倒计时 warning | 续租、保存、先跳过 | 续租成功 |
-| 租约丢失 | 本地非敏感输入只读保留，敏感值按策略清除 | 重新领取、复制允许字段 | 重取来源和版本 |
+| 任务已被他人领取 | 当前项只读，显示处理人 | 去下一项 | 转交/暂挂或任务完成后重查 |
+| 处理权丢失（版本冲突或已转交） | 本地非敏感输入只读保留，敏感值按策略清除 | 重新领取、复制允许字段 | 重取来源和版本 |
 | 保存中 | 保存指示，正式动作禁用 | 继续编辑非冲突字段 | 返回新编辑版本 |
 | 保存失败 | 输入保留，错误靠近保存区 | 重试 | 重试成功 |
-| 先跳过中 | 锁定当前项和队列导航，不提前显示“本轮已跳过” | 无其它租约动作 | mutation 返回确定租约与游标结果 |
-| 先跳过结果不确定 | 停留当前项，保留会话令牌且不移动游标 | 按同幂等键查询最终结果 | 明确已跳过后再清令牌并打开下一项，或明确失败后恢复操作 |
+| 先跳过中 | 锁定当前项和队列导航，不提前显示“本轮已跳过” | 无其它处理动作 | mutation 返回确定游标结果 |
+| 先跳过结果不确定 | 停留当前项，不移动游标 | 查询最终结果 | 明确结果后再打开下一项，或明确失败后恢复操作 |
 | 校验失败 | `ValidationSummary` + 行内错误 | 修正、先跳过 | 校验通过 |
 | 来源版本冲突 | 显示采购/销售/预占变化和受影响行 | 重载并重新分配 | 基于新版本保存 |
 | 付款门禁阻塞 | 顶栏先款徽章为「暂时不能收货」；悬停卡显示条件与缺口 | 去 W12、先跳过 | 有效付款核销后重查 |
 | 库存/预占并发冲突 | 不更新本地数量，显示最新可用/预占 | 刷新、调整本次数量 | 重验通过 |
 | 正式动作进行中 | 锁定当前任务和主动作 | 无其它正式动作 | 返回确定结果 |
 | 正式动作成功 | 固定结果显示事实号、库存/预占影响、剩余量、验收下一步 | 自动/手动下一项、去 W06/W05/W08 | 用户继续 |
-| 正式结果不确定 | 停留当前项，不宣称库存/履约变化 | 查询最终结果、同幂等键重试 | 确定成功或失败 |
+| 正式结果不确定 | 停留当前项，不宣称库存/履约变化 | 查询最终结果 | 确定成功或失败 |
 | 字段级隐藏 | 标签保留、值掩码；关键字段无权时动作阻塞 | 查看 blocker | 权限更新后重查 |
-| 权限收回 | 停止续租、清理敏感缓存、切无权限态 | 返回有权模块 | 权限恢复后重查 |
+| 权限收回 | 停止写动作、清理敏感缓存、切无权限态 | 返回有权模块 | 权限恢复后重查 |
 
 ## 10. 响应式、键盘与无障碍
 
@@ -804,9 +788,9 @@ type DomainOperationFulfillmentFormalResultCandidate = FulfillmentFormalResultBa
 
 | 视口 | 布局变化 | 必须保留 | 允许降级 |
 | --- | --- | --- | --- |
-| 1440×900 | 32/68 双栏；类型/筛选和动作固定；至少 5 条队列项可见 | 五类水位、当前类型、来源销售/采购、门禁、数量、主动作 | 无 |
+| 1440×900 | 32/68 双栏；类型/筛选和动作固定；至少 5 条队列项可见 | 五类待处理规模、当前类型、来源销售/采购、门禁、数量、主动作 | 无 |
 | 1280×800 | 28/72 双栏；队列项更紧凑 | 任务身份、超期、来源、表单与校验 | 次要来源说明折叠 |
-| 1024×768 | 队列收为可开合侧栏；当前作业单列 | 队列位置、租约、类型、来源、门禁、动作 | 历史/附件列表折叠 |
+| 1024×768 | 队列收为可开合侧栏；当前作业单列 | 队列位置、类型、来源、门禁、动作 | 历史/附件列表折叠 |
 | 768×1024 | 导航抽屉；队列与作业上下布局；行改卡片 | 稳定单号、数量、仓库/物流、验证与结果 | 指标 2×3；次要参考字段隐藏 |
 | 375×812 | 保证任务阅读、简单单行入库/发货/结果查看 | 当前对象、数量、门禁、结果 | 多行入库、复杂预占选择、敏感电子/服务交付和冲正转桌面 |
 
@@ -814,7 +798,7 @@ type DomainOperationFulfillmentFormalResultCandidate = FulfillmentFormalResultBa
 
 - 无输入焦点时 `j/k` 或方向键移动队列；`?` 展开/收起快捷键说明（同时提供可点击的「按 ? 看快捷键」入口，不让快捷键只能靠猜）。
 - `⌘S` / `Ctrl+S` 保存草稿；校验通过时 `⌘↵` / `Ctrl+Enter` 打开确认弹窗，不绕过影响预览。
-- **快捷键与按钮的可用条件必须一致**。二者判据不同会造成「点按钮能开、按快捷键没反应」且无任何解释。只读角色两个快捷键都不生效（`Ctrl+S` 尤其危险 —— 它会经 `ensureLease` 去抢别人的处理权）。
+- **快捷键与按钮的可用条件必须一致**。二者判据不同会造成「点按钮能开、按快捷键没反应」且无任何解释。只读角色两个快捷键都不生效（`Ctrl+S` 尤其危险 —— 它会误触发重新领取去抢别人的处理权）。
 - Tab 顺序：类型 → 筛选 → 队列项 → 连续处理条 → 来源摘要/门禁 → 表单 → 校验 → 先跳过/主动作。
 - 类型切换使用单选/多选语义和可读标签，不只靠图标或颜色。
 - 新任务打开后，**可执行角色**焦点落在「第一个真的要动手填的框」并全选（入库=到货数量、仓发/直发=物流单号、电子=交付数量、服务=完成说明）；对象标题挂 `aria-live=polite`，换条时照常播报，不靠抢焦点来通知。只读角色焦点仍落标题。
@@ -830,9 +814,9 @@ type DomainOperationFulfillmentFormalResultCandidate = FulfillmentFormalResultBa
 | 销售单 / 客户验收 | W05 / W06 | 销售单/明细、履约事实 ID、来源任务 | 返回 W09 保留类型/筛选；验收不改原履约事实 |
 | 采购单 | W08 | 采购单/版本/行、付款门禁、履约责任 | 返回 W08 履约子区并重查正式进度 |
 | 库存台账 | W10 | 仓库、SKU、库存余额、预占稳定 ID | 返回 W09 重取库存/预占，不用旧数量提交 |
-| 供应商往来 | W12 | 供应商、采购应付、门禁来源 | 返回重查有效付款净核销和租约 |
+| 供应商往来 | W12 | 供应商、采购应付、门禁来源 | 返回重查有效付款净核销和处理权 |
 | 基础资料 | W14 | 仓库、SKU、供应商能力/资质 | 返回作业时重验版本和权限 |
-| 权限与审计 | W19 | 正式事实、请求追踪号、处理人、租约审计 | 只读返回原作业 |
+| 权限与审计 | W19 | 正式事实、请求追踪号、处理人、处理权审计 | 只读返回原作业 |
 | API 供应商订单 | W26 | 第二期商城消费订单/供应商子订单身份 | 仅关联钻取；不把 W26 自动履约任务纳入 W09 |
 
 跨工作面只传稳定身份与来源上下文；数量、库存、预占、门禁、地址、状态和权限必须在目标页重查。
@@ -842,9 +826,9 @@ type DomainOperationFulfillmentFormalResultCandidate = FulfillmentFormalResultBa
 ### 12.1 信息架构与效率
 
 - [x] 侧栏按岗位两个入口（收货与发货 / 交付与代发）；入库、仓发、代发、电子、服务用同页分段筛选，不拆五套页面。
-- [x] 五类作业复用同一队列、租约、结果和自动下一项语言，但分别调用强类型正式事务。
+- [x] 五类作业复用同一队列、处理权、结果和自动下一项语言，但分别调用强类型正式事务。
 - [x] 采购/仓储从默认着陆到处理第一项不超过两次点击。
-- [ ] 1440×900 下五类水位、至少 5 条队列、当前来源、关键表单和主动作同屏可见。
+- [ ] 1440×900 下五类待处理规模、至少 5 条队列、当前来源、关键表单和主动作同屏可见。
 - [x] 从 W05/W08/W10 进入时无需再次搜索对象，返回仍保留来源页签。
 
 ### 12.2 业务、数据与权限
@@ -861,10 +845,10 @@ type DomainOperationFulfillmentFormalResultCandidate = FulfillmentFormalResultBa
 
 - [ ] Q1 未确认时所有正常履约入口返回 `FULFILLMENT_TASK_MODEL_UNCONFIRMED`，不开放队列、领取、保存、先跳过或确认。
 - [ ] Q1 确认后生成代码只保留一个 Candidate，服务端接口不接收 `mode`，客户端依赖中不存在未选命令、结果或任务 ID。
-- [ ] 若选择 `WORK_ITEM`，正式确认完整使用 W02 `CompleteWorkItemEnvelope` 且履约事实与任务完成同事务；保存/先跳过复用 W02 动作协议并保持 `PENDING | IN_PROGRESS`。
-- [ ] 若选择 `DOMAIN_OPERATION`，命令使用独立领域租约与幂等键，不进入 W01/W02、不调用任何 `work_item` 接口，也不复制任务状态机。
-- [ ] 查询 View 只返回领取人、到期、版本和 `hasValidClaim` 等安全租约投影；选中契约的原始令牌仅由 Claim / 续租 mutation 返回并留在会话内存。
-- [x] 选中契约的先跳过携带原因和幂等键，只按服务端结果释放租约与移动本轮游标，不写 `paused` 或第二任务状态。
+- [ ] 若选择 `WORK_ITEM`，正式确认完整使用 W02 统一动作命令且履约事实与任务完成同事务；保存/先跳过复用 W02 动作协议，先跳过置回待领取。
+- [ ] 若选择 `DOMAIN_OPERATION`，命令使用独立领域处理权与幂等键，不进入 W01/W02、不调用任何 `work_item` 接口，也不复制任务状态机。
+- [ ] 查询 View 只返回领取人等业务可读处理信息和对象版本；处理权由服务端在动作提交时校验。
+- [x] 选中契约的先跳过携带原因和幂等键，只按服务端结果归还处理权并移动本轮游标，不写 `paused` 或第二任务状态。
 - [x] 结果不确定时不乐观修改库存、预占、履约进度或队列位置。
 - [x] 正式成功固定显示强类型事实号、库存/预占影响、剩余量和验收下一步。
 - [ ] §9 全部状态完成组件测试或浏览器验证。
@@ -875,7 +859,7 @@ type DomainOperationFulfillmentFormalResultCandidate = FulfillmentFormalResultBa
 
 | ID | 问题 | 影响 | 建议决策人 | 当前建议 |
 | --- | --- | --- | --- | --- |
-| Q1 | 五类正常履约任务统一使用哪些固定 `work_item_type`，还是使用独立领域作业投影？ | 队列事实源、租约、W01/W02 汇聚和审计 | 架构负责人 + 采购/仓储负责人 | 确认前全部正常履约入口 blocker；确认后按 §2.3 二选一并在后端固化，生成/实现时裁剪未选 Candidate，服务端不接收 `mode` 自选且禁止混合兼容层 |
+| Q1 | 五类正常履约任务统一使用哪些固定 `work_item_type`，还是使用独立领域作业投影？ | 队列事实源、处理权、W01/W02 汇聚和审计 | 架构负责人 + 采购/仓储负责人 | 确认前全部正常履约入口 blocker；确认后按 §2.3 二选一并在后端固化，生成/实现时裁剪未选 Candidate，服务端不接收 `mode` 自选且禁止混合兼容层 |
 | Q2 | 一次作业允许跨多少行/多少采购单批量确认？ | 表单布局、事务锁范围和失败语义 | 采购 + 仓储 + 架构负责人 | 单次只处理一个采购/销售上下文，可多行但不跨采购单 |
 | Q3 | 五类作业分别哪些场景必须上传凭证，物流单号何时必填？ | 校验、移动端、附件保留 | 采购/仓储负责人 + 内控 | 按作业类型和结果配置；电子/服务失败及直发默认需凭证 |
 | Q4 | 采购超收的容差与审批路径是什么？ | 入库校验、额外待办、采购变更 | 采购 + 仓储 + 财务 | 默认不允许超收；需要时先完成明确采购变更/审批，不在 W09 硬编码容差 |
@@ -884,9 +868,9 @@ type DomainOperationFulfillmentFormalResultCandidate = FulfillmentFormalResultBa
 确认后把结论写回正式章节并删除对应问题；尤其 Q1 必须先在统一数据模型/API 固化唯一模式，再实现任务代码，不能让前端运行时猜测或同时维护两套状态。
 
 **Q1 与当前实现的关系（2026-08-03）**：Q1 仍未决。现有实现是**会话 mock 上的 UI 原型**，
-复用 `workItemId` + 会话租约，不代表服务端已固化任务身份。Q1 落地时：
+复用 `workItemId` + 会话处理权，不代表服务端已固化任务身份。Q1 落地时：
 
-- 队列身份、领取/续租/完成接口按选中候选重写 —— 这些集中在 `features/fulfillment-operations/api.ts`。
+- 队列身份、领取/完成接口按选中候选重写 —— 这些集中在 `features/fulfillment-operations/api.ts`。
 - **UI 层不需要跟着改**：文案、角色收敛、只读态、筛选控件都不依赖任务身份是 `work_item` 还是领域投影。
 - 不得因为「后端还没定」而把 UI 层的口径退回实现术语。
 
@@ -926,7 +910,7 @@ type DomainOperationFulfillmentFormalResultCandidate = FulfillmentFormalResultBa
 | 已为这单留的货 / 留货 | 预占、有效预占 | — |
 | 品名 + 数量 + 销售单号 | `rsv_*` / `pla_*` / `sv_*` 等内部 ID | — |
 | 已入库 / 已发出 / 已确认 | `POSTED` / `SHIPPED` / `CONFIRMED` 等枚举原值 | `FORMAL_STATUS_LABEL` |
-| 你正在处理这一条 / 只能查看 | 租约、领取、处理权 | — |
+| 你正在处理这一条 / 只能查看 | 领取、处理权 | — |
 | 待办 / 任务类型 | 作业队列 / 作业类型 | — |
 | 没确认成功之前，库存和留货都不会动 | 结果未确定前不会乐观修改 | — |
 
@@ -938,7 +922,7 @@ type DomainOperationFulfillmentFormalResultCandidate = FulfillmentFormalResultBa
 | --- | --- |
 | 主按钮叫「确认过账并下一项」，但关掉自动下一项后并不跳转 | 按钮文案跟 `autoNext` 动态变化 |
 | 提示「请先保存或放弃」，但界面上没有放弃入口 | 有「放弃修改」按钮，回到最近一次保存的草稿 |
-| `Ctrl+Enter` 与主按钮判据不同，快捷键静默失效 | 两者同条件；处理权由 `ensureLease` 兜底补领 |
+| `Ctrl+Enter` 与主按钮判据不同，快捷键静默失效 | 两者同条件；处理权由领取动作兜底补领 |
 | 非仓发任务显示标题写死的「仓发门禁」 | 标题按 `operationType` 区分 |
 | 演示控件（模拟结果不确定、演示结算）出现在生产界面 | `DEV_SIMULATION_ENABLED` 挡在 dev；生产构建里字符串会被消除 |
 | `unknown` 态只能靠演示按钮恢复 | 「查一下到底成没成」始终保留 —— 该状态在生产真实可达（同一幂等键重试命中 pending） |
@@ -962,7 +946,7 @@ W09 的口语化措辞与展示密度**不能**通过修改共享组件默认值
 | `PrepaymentGate` | `copy?: Partial<PrepaymentGateCopy>` | 不传 = 面向采购/财务的原措辞，W08 不受影响 |
 | `PrepaymentGate` | `presentation?: "panel" \| "badge"` | 默认 `panel` 完整卡片；W09 传 `badge`（顶栏结果徽章 + 悬停详情） |
 | `SequentialProcessBar` | `showProcess?: boolean` | 默认 `true`；只读角色传 `false`，同时隐藏主动作与「重新领取」 |
-| `SequentialProcessBar` | `statusExtras?: ReactNode` | 默认无；W09 传入先款徽章，放在位置/租约状态之后 |
+| `SequentialProcessBar` | `statusExtras?: ReactNode` | 默认无；W09 传入先款徽章，放在位置/处理状态之后 |
 
 ### 15.4 文件结构
 
@@ -975,7 +959,7 @@ W09 的口语化措辞与展示密度**不能**通过修改共享组件默认值
 | `lanes.ts` | 岗位通道：`lane` ↔ 页头标题/说明/面包屑 + 中性页头。**不放类型清单** —— 可见类型只有服务端角色收敛一个来源 |
 | `filters.ts` | URL 参数 ↔ 值互转、筛选选项 |
 | `validation.ts` | 提交前校验、影响预览、结果面板事实、数量联动 |
-| `fulfillment-operations-page.tsx` | 编排：URL、租约、mutation、结果态 |
+| `fulfillment-operations-page.tsx` | 编排：URL、领取、mutation、结果态 |
 | `fulfillment-queue-toolbar.tsx` / `-queue-list.tsx` / `-defer-dialog.tsx` | 工具栏、待办列表、跳过弹窗 |
 | `fulfillment-draft-form.tsx` + 五个 `-{receipt,ship,direct,electronic,service}-form.tsx` | 按类型分派的受控表单 |
 

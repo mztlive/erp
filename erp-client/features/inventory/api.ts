@@ -4,6 +4,7 @@
  */
 
 import { mockDelay } from "@/lib/mock-delay"
+import { filterRowsBySearch } from "@/lib/filter-utils"
 import {
   decodeInventoryCursor,
   encodeInventoryCursor,
@@ -36,7 +37,6 @@ import {
   createW10ExportJob,
   getInventoryBalanceLockVersion,
   getW10AdjustmentDraft,
-  getW10ExportJob,
   isInventoryPermissionRevoked,
   listW10SessionAdjustments,
   resolveW10AdjustmentUnknown,
@@ -133,15 +133,6 @@ function allAdjustments(): StockAdjustmentRow[] {
     (a) => !sessionIds.has(a.adjustmentId)
   )
   return [...session, ...seed]
-}
-
-function matchSearch(
-  q: string | undefined,
-  parts: readonly (string | undefined)[]
-): boolean {
-  if (!q?.trim()) return true
-  const needle = q.trim().toLowerCase()
-  return parts.some((p) => p?.toLowerCase().includes(needle))
 }
 
 function filterSummary(query: InventoryQuery, total: number): string {
@@ -303,15 +294,13 @@ export async function fetchInventoryList(
     balances = balances.filter((b) => b.skuId === query.skuId)
   }
   if (query.q?.trim()) {
-    balances = balances.filter((b) =>
-      matchSearch(query.q, [
-        b.skuCode,
-        b.skuName,
-        b.specSummary,
-        b.warehouseName,
-        b.warehouseCode,
-      ])
-    )
+    balances = filterRowsBySearch(balances, query.q, (b) => [
+      b.skuCode,
+      b.skuName,
+      b.specSummary,
+      b.warehouseName,
+      b.warehouseCode,
+    ])
   }
   if (query.availability && query.availability !== "all") {
     if (query.availability === "zero") {
@@ -349,15 +338,13 @@ export async function fetchInventoryList(
     movements = movements.filter((m) => m.skuId === query.skuId)
   }
   if (query.q?.trim()) {
-    movements = movements.filter((m) =>
-      matchSearch(query.q, [
-        m.skuCode,
-        m.skuName,
-        m.warehouseName,
-        m.sourceDocumentNo,
-        m.movementTypeLabel,
-      ])
-    )
+    movements = filterRowsBySearch(movements, query.q, (m) => [
+      m.skuCode,
+      m.skuName,
+      m.warehouseName,
+      m.sourceDocumentNo,
+      m.movementTypeLabel,
+    ])
   }
   if (query.balanceId) {
     movements = movements.filter((m) => m.balanceId === query.balanceId)
@@ -392,15 +379,13 @@ export async function fetchInventoryList(
     )
   }
   if (query.q?.trim()) {
-    reservations = reservations.filter((r) =>
-      matchSearch(query.q, [
-        r.skuCode,
-        r.skuName,
-        r.warehouseName,
-        r.salesOrderNo,
-        r.salesOrderLineLabel,
-      ])
-    )
+    reservations = filterRowsBySearch(reservations, query.q, (r) => [
+      r.skuCode,
+      r.skuName,
+      r.warehouseName,
+      r.salesOrderNo,
+      r.salesOrderLineLabel,
+    ])
   }
   if (query.balanceId) {
     reservations = reservations.filter((r) => r.balanceId === query.balanceId)
@@ -419,15 +404,13 @@ export async function fetchInventoryList(
     )
   }
   if (query.q?.trim()) {
-    adjustments = adjustments.filter((a) =>
-      matchSearch(query.q, [
-        a.skuCode,
-        a.skuName,
-        a.warehouseName,
-        a.adjustmentNo,
-        a.reasonTypeLabel,
-      ])
-    )
+    adjustments = filterRowsBySearch(adjustments, query.q, (a) => [
+      a.skuCode,
+      a.skuName,
+      a.warehouseName,
+      a.adjustmentNo,
+      a.reasonTypeLabel,
+    ])
   }
   if (query.balanceId) {
     adjustments = adjustments.filter((a) => a.balanceId === query.balanceId)
@@ -701,11 +684,6 @@ export async function startInventoryExport(input: {
     throw new Error("权限已收回，无法导出")
   }
   return createW10ExportJob(input)
-}
-
-export async function fetchExportJob(jobId: string): Promise<W10ExportJob | null> {
-  await mockDelay(40)
-  return getW10ExportJob(jobId)
 }
 
 function toDraftView(draft: NonNullable<ReturnType<typeof getW10AdjustmentDraft>>): AdjustmentDraftView {

@@ -4,6 +4,7 @@
  */
 
 import { mockDelay } from "@/lib/mock-delay"
+import { filterRowsBySearch } from "@/lib/filter-utils"
 import {
   W11_COUNTERPARTIES,
   W11_DEMO_HAS_DATA_SCOPE,
@@ -46,15 +47,6 @@ const PERMISSION_VERSION = "pv-w11-demo-1"
 function parseMoney(v: string): number {
   const n = Number(v)
   return Number.isFinite(n) ? n : 0
-}
-
-function matchSearch(
-  q: string | undefined,
-  parts: readonly (string | undefined)[]
-): boolean {
-  if (!q?.trim()) return true
-  const needle = q.trim().toLowerCase()
-  return parts.some((p) => p?.toLowerCase().includes(needle))
 }
 
 function reviewLabel(
@@ -377,30 +369,24 @@ export async function fetchCustomerAccountsList(
     )
   }
   if (query.q?.trim()) {
-    receivables = receivables.filter((r) =>
-      matchSearch(query.q, [
-        r.counterpartyPartyName,
-        r.customerName,
-        r.salesOrderNo,
-        r.accountId,
-      ])
-    )
-    receipts = receipts.filter((r) =>
-      matchSearch(query.q, [
-        r.receiptNo,
-        r.counterpartyPartyName,
-        r.customerName,
-        r.bankReferenceMasked,
-      ])
-    )
-    invoices = invoices.filter((r) =>
-      matchSearch(query.q, [
-        r.invoiceNo,
-        r.invoiceCode,
-        r.counterpartyPartyName,
-        r.customerName,
-      ])
-    )
+    receivables = filterRowsBySearch(receivables, query.q, (r) => [
+      r.counterpartyPartyName,
+      r.customerName,
+      r.salesOrderNo,
+      r.accountId,
+    ])
+    receipts = filterRowsBySearch(receipts, query.q, (r) => [
+      r.receiptNo,
+      r.counterpartyPartyName,
+      r.customerName,
+      r.bankReferenceMasked,
+    ])
+    invoices = filterRowsBySearch(invoices, query.q, (r) => [
+      r.invoiceNo,
+      r.invoiceCode,
+      r.counterpartyPartyName,
+      r.customerName,
+    ])
   }
   if (query.due && query.due !== "all") {
     receivables = receivables.filter((r) => r.dueState === query.due)

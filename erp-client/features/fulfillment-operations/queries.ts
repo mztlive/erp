@@ -7,7 +7,6 @@ import {
   deferFulfillmentOperation,
   fetchFulfillmentQueue,
   postFulfillmentOperation,
-  renewFulfillmentLease,
   resolveUnknownFulfillmentResult,
   saveFulfillmentOperation,
   type FulfillmentQueueFilters,
@@ -30,16 +29,6 @@ export function useClaimFulfillmentMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: claimFulfillmentWorkItem,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: fulfillmentKeys.all })
-    },
-  })
-}
-
-export function useRenewFulfillmentLeaseMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: renewFulfillmentLease,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: fulfillmentKeys.all })
     },

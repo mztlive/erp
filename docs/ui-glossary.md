@@ -10,7 +10,7 @@
 
 ### 1.1 目的
 
-本系统围绕内部工作流架构构建（work item、租约、投影、事实、幂等键）。这些概念**只在代码与文档中使用**，用户界面一律翻译成业务语言。
+本系统围绕内部工作流架构构建（work item、领取与动作命令、事实、对象版本）。这些概念**只在代码与文档中使用**，用户界面一律翻译成业务语言。
 
 ### 1.2 判断原则
 
@@ -26,7 +26,7 @@
 2. **状态说结果，不说锁**：用户看到的是"正在处理中"，不是"租约 v1 有效"。
 3. **错误说下一步，不说原理**：用户看到的是"请刷新后重新处理"，不是"幂等键冲突"。
 4. **"正式"默认删除**：除非与"草稿/预览"形成必要对比，否则"正式提交"就是"提交"。
-5. **内部词只出现在代码注释里**：租约、投影、幂等键、work_item、指纹、水位等词禁止进入任何用户可见字符串。
+5. **内部词只出现在代码注释里**：work_item、领取/动作命令、对象版本、幂等键、水位等实现词禁止进入任何用户可见字符串；租约、令牌、信封、指纹等分布式协议概念已从契约中移除。
 6. **不把工作面编号当导航**：用户提示写「客户往来」「接口错误中心」，不写「W11」「W29」。
 7. **不把命令名/字段名当文案**：禁止 `Complete*Command`、`subject_hash`、`mappingTaskStatus`、`fail-closed` 等进入界面。
 
@@ -219,13 +219,12 @@
 | 提交中 | 正在提交… |
 | 任务待领取 | 任务待认领 |
 
-### 3.3 处理权限（租约）提示
+### 3.3 并发编辑与领取冲突提示
 
 | 场景 | 推荐文案 |
 | --- | --- |
-| 持有处理权 | 正在处理中 · 请勿重复打开 |
+| 数据已被他人更新 | 数据已更新，请刷新后重新校验版本 |
 | 处理权丢失 | 操作已失效，请刷新后重新处理 |
-| 处理权收回 | 权限已收回，不能提交 |
 | 与别人冲突 | 此任务已被其他人领取，请稍后再试 |
 | 领取提示 | 领取任务后即可开始处理 |
 
@@ -267,7 +266,6 @@
 
 | 内部词 | 代码位置（示意） | 用户界面替代 |
 | --- | --- | --- |
-| lease / 租约 | `components/business/workflow.tsx`、`features/*/api.ts` | 处理权限 / 正在处理中 |
 | claimToken / 令牌 | `features/*/session.ts` | （不出现） |
 | projection / 投影 | `features/execution-projections/`、`features/workspace/freshness.ts` | 汇总 / 数据 / 摘要 |
 | fact / 事实 | `features/*/types.ts`、`mock/*` | 记录 / 凭证 |
@@ -412,7 +410,7 @@ W09 目标用户确认为一线仓储/采购经办，本轮按「全面口语化
 | `PrepaymentGate`（`components/business/domain.tsx`） | `copy?: Partial<PrepaymentGateCopy>` | 面向采购/财务的原措辞，W08 不受影响 |
 | `PrepaymentGate` | `presentation?: "panel" \| "badge"` | `panel` 完整卡片；W09 传 `badge`：顶栏结果徽章，悬停展开详情 |
 | `SequentialProcessBar`（`components/business/workflow.tsx`） | `showProcess?: boolean` | `true`；只读角色传 `false` |
-| `SequentialProcessBar` | `statusExtras?: ReactNode` | 无；W09 挂先款条件徽章（位置/租约之后） |
+| `SequentialProcessBar` | `statusExtras?: ReactNode` | 无；W09 挂先款条件徽章（位置/处理状态之后） |
 
 ### 待跟进（本轮未做）
 

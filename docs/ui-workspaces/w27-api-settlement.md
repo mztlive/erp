@@ -33,7 +33,7 @@
 
 | 角色 | 默认入口 | 可见范围 | 主要动作 |
 | --- | --- | --- | --- |
-| 财务经办 | 待对账 | 授权供应商和账期 | 结算期间与刷新截止策略均已配置时建立/刷新草稿并提交复核；否则只读核对与补充证据 |
+| 财务经办 | 待对账 | 授权供应商和账期 | 结算期间策略已配置时建立/刷新草稿并提交复核；否则只读核对与补充证据 |
 | 财务复核 | 待复核 | 授权供应商和账期 | 复核、驳回、确认结算；不得是本单经办人 |
 | 采购 | 差异协同 | 负责供应商的业务差异 | 查看订单与差异、提供供应商确认依据；不能确认结算 |
 | 财务负责人 / 管理层 | 汇总与异常 | 授权组织范围 | 只读结算进度、差异金额和应付衔接 |
@@ -54,7 +54,7 @@
 | 场景 | 入口 | URL / 页签行为 | 返回位置 |
 | --- | --- | --- | --- |
 | 浏览结算 | 侧栏“API 供应商结算” | `/supplier-api/settlements?view=pending` | 恢复筛选、分页和滚动位置 |
-| 财务待办 | W01 / W02 `SUPPLIER_SETTLEMENT_REVIEW` | 打开对象中心，只携带 `workItemId`、`statementId`和 `queueContextId`；目标页重新查询当前主题版本/指纹和租约 | 返回待办队列原位置 |
+| 财务待办 | W01 / W02 `SUPPLIER_SETTLEMENT_REVIEW` | 打开对象中心，只携带 `workItemId`、`statementId`和 `queueContextId`；目标页重新查询当前主题版本和领取状态 | 返回待办队列原位置 |
 | 从供应商订单钻取 | W26 成本与结算 | 聚焦已有结算页签或新建 | 返回 W26 原订单 |
 | 从供应商往来钻取 | W12 应付来源 | 打开已确认结算单只读中心 | 返回 W12 原应付会话 |
 | 列表核对 | W27 单击行 / Enter | 打开 `detail` 半屏，URL 增加 `preview={id}` | 关闭焦点回原行 |
@@ -153,7 +153,7 @@ TaskTab 身份为 `supplier-settlement:{statementId}`。相同结算单重复打
 | 刷新明细试算 | 草稿页头 | 财务经办；草稿/待对账，尚未提交复核 | 展示新增、移除、事实水位和金额变化影响 | 按稳定 `requestId` 更新可变草稿试算版本与 `sourceSnapshotHash`，不改原订单或事实 | 结果未知查询原请求；失败保留上次试算和水位，不新建刷新请求 |
 | 提供采购协同证据 | 差异证据区 | 被指派采购；结算未确认 | 无金额确认；说明证据用途 | 只追加供应商证据或业务意见和审计，不改变差异结论、试算金额或成本基线 | 保存失败保留证据输入，按原请求重试 |
 | 处理差异 | 差异行 | 财务经办；结算未确认；采购证据已按需齐备 | 选择受控结论，金额影响时展示预览 | 追加财务处理记录并刷新待确认成本差额 | 版本冲突保留输入，重载当前差异；结果未知查询原操作 |
-| 提交复核 | 页头主动作 | 全部差异已有允许进入复核的处理结论、明细守恒；Q4 的刷新截止策略已配置且当前试算满足该策略 | `FormalActionConfirmDialog` 展示刷新截止策略、最后来源水位、金额、差异及复核人 | 按该策略冻结提交版本、来源水位和 `subjectHash`，创建待办 | 截止策略缺失返回 `REFRESH_CUTOFF_POLICY_UNCONFIGURED`，不冻结、不创建待办；校验失败定位差异/明细 |
+| 提交复核 | 页头主动作 | 全部差异已有允许进入复核的处理结论、明细守恒 | `FormalActionConfirmDialog` 展示冻结来源快照时间、金额、差异及复核人 | 按服务端 `sourceAsOf` 冻结提交版本与来源快照，创建唯一待办 | 校验失败定位差异/明细 |
 | 驳回复核 | 复核区 | 当前复核人且指纹一致 | 原因必填 | 退回经办并保留复核记录 | 失败停留，原因保留 |
 | 确认结算 | 复核区主动作 | 财务复核；非经办人；无未解决阻断差异；指纹一致 | 展示最终成本差额、应付金额和不可逆影响 | 同事务追加成本差额、形成应付、更新已确认；固定返回应付编号 | 超时进入结果不确定，按操作 ID 查询，不重复确认 |
 | 查看/处理应付 | 结果区 | 已确认且有 W12 权限 | 无 | 打开 W12，预选结算单应付 | 无权限时保持编号只读 |
@@ -266,11 +266,8 @@ type SupplierSettlementDetailView = {
     businessObjectType: "SUPPLIER_SETTLEMENT_STATEMENT"
     businessObjectId: string
     subjectVersion: string
-    subjectHash: string
     completionAction: string
     claimedBy?: ActorView
-    leaseVersion?: number
-    leaseExpiresAt?: string
   }
   allowedActions: string[]
   actionBlockers: ActionBlocker[]
@@ -369,9 +366,8 @@ type SettlementObjectCommand =
       comment?: string
     }
 
-// 直接复用 W02 CompleteWorkItemEnvelope；expectedSubjectVersion 对应提交版本，
-// expectedSubjectHash 对应冻结来源快照、结算明细和差异结论的完整指纹。
-type SettlementReviewCommand = CompleteWorkItemEnvelope<{
+// 直接复用 W02 WorkItemActionCommand；expectedSubjectVersion 对应提交版本。
+type SettlementReviewCommand = WorkItemActionCommand<{
   statementId: string
   expectedLockVersion: number
   action: "REJECT" | "CONFIRM"
@@ -384,12 +380,12 @@ type SettlementReviewCommand = CompleteWorkItemEnvelope<{
 - `CREATE` 必须携带服务端当前供应商结算期间策略及版本，并严格选择其返回的完整周期；策略缺失、过期或客户端自行拼接期间时 fail-closed。`REFRESH` 必须携带结算单、当前锁版本和上一次 `sourceSnapshotHash`，且不能改供应商或期间。两者从不可变履约/取消/供应商退款历史及外部账单版本生成冻结来源快照；结果未知时按原 `requestId` / 幂等键查询或续跑，不能创建第二张草稿或第二次刷新。
 - `SettlementDifferenceEvidenceCommand` 只供采购或协同角色追加受控证据/意见，不改变差异状态、结算金额和成本。`SettlementDifferenceCommand` 只供财务经办登记正式结论，使用差异自身版本和追加处理记录，不修改左右证据或历史成本。
 - 差异处理结果未知时先按 `operationId` / 幂等键查询同一操作；确认既有操作失败后也必须沿用原键恢复，不能重复追加处理结论。
-- `SUBMIT_REVIEW` 只有在 Q4 的刷新截止策略已配置且版本一致时，才按该策略冻结来源快照、结算明细、差异结论和完整内容指纹，并在同一事务创建唯一 `SUPPLIER_SETTLEMENT_REVIEW`；策略缺失时返回 blocker，复核任务不得创建。
+- `SUBMIT_REVIEW` 按服务端 `sourceAsOf` 冻结来源快照、结算明细和差异结论，并在同一事务创建唯一 `SUPPLIER_SETTLEMENT_REVIEW`；复核任务唯一，不得重复创建。
 - `CONFIRM` 同时校验岗位分离、当前指纹、差异状态和供应商/期间重复覆盖约束。
-- `REJECT` 和 `CONFIRM` 只能使用独立的 `SettlementReviewCommand`，完整携带 W02 `CompleteWorkItemEnvelope` 的 `workItemId`、`claimToken`、`leaseVersion`、`expectedSubjectVersion`、`expectedSubjectHash` 和幂等键；服务端校验当前领取人、有效租约、结算单版本/指纹及任务唯一 `completion_action`。正式结算状态变化与该 `work_item` 完成在同一事务，任一失败均不留下半完成；任务完成本身不能单独追加成本或形成应付。
-- `SUBMIT_REVIEW` 与 `VOID_DRAFT` 使用独立 `SettlementObjectCommand`，不接受任务信封。普通对象入口即使读到已有复核任务，也必须先领取任务再用 `SettlementReviewCommand` 决策，不能绕过租约直接确认。
+- `REJECT` 和 `CONFIRM` 只能使用独立的 `SettlementReviewCommand`，复用 W02 `WorkItemActionCommand`（`kind="WORK_ITEM_ACTION"`），携带 `workItemId`、`expectedSubjectVersion` 和 `decision`；服务端校验当前领取人、结算单版本及任务唯一 `completionAction`。正式结算状态变化与该 `work_item` 完成在同一事务，任一失败均不留下半完成；任务完成本身不能单独追加成本或形成应付。
+- `SUBMIT_REVIEW` 与 `VOID_DRAFT` 使用独立 `SettlementObjectCommand`，不接受任务命令。普通对象入口即使读到已有复核任务，也必须先领取任务再用 `SettlementReviewCommand` 决策，不能绕过任务直接确认。
 - 正式确认返回成本调整事实、应付账户、应付分录、确认时间和下一步，不只返回成功布尔值。
-- 网络失败时先用 `operationId` / 幂等键查询原结果；结果不确定期间禁止再次生成新幂等键提交。
+- 网络失败时先用 `operationId` 查询原结果；结果不确定期间不得重复提交。
 
 ### 8.3 前端边界
 
@@ -412,7 +408,7 @@ type SettlementReviewCommand = CompleteWorkItemEnvelope<{
 | --- | --- | --- | --- |
 | 初载 | 列表或对象中心结构 Skeleton | 应用壳导航 | 原位替换 |
 | 结算期间策略未配置 | 列表可按显式历史范围只读查询；新建入口显示 `PERIOD_POLICY_UNCONFIGURED` | 查看历史、进入供应商配置 | 服务端返回时区、周期、边界和版本后才可新建 |
-| 刷新截止策略未配置 | 草稿与证据可读，提交复核主动作禁用并显示 `REFRESH_CUTOFF_POLICY_UNCONFIGURED` | 补充证据、查看来源水位 | 策略配置后重取试算并重新校验 |
+| 来源快照过期 | 草稿与证据可读，提示重新刷新明细试算 | 补充证据、刷新明细试算 | 重新试算后再提交复核 |
 | 刷新 | 保留旧数据并显示来源水位 | 可查看；正式动作服务端重验 | 成功更新；失败保留旧值 |
 | 空数据 | “当前范围没有结算单” | 期间策略已配置且有权限时新建草稿 | 选择供应商与策略返回的完整期间；策略缺失时先完成配置 |
 | 筛选无结果 | 显示当前筛选摘要 | 清除筛选 | 回默认待处理视图 |
@@ -428,7 +424,7 @@ type SettlementReviewCommand = CompleteWorkItemEnvelope<{
 | 版本冲突 | 显示新订单/退款/账单版本导致的变化 | 重新试算或放弃旧提交 | 新版本重新确认 |
 | 正式动作成功 | 固定结果显示确认号、成本调整和应付编号 | 去 W12 / 留在本单 | 不依赖 toast |
 | 正式动作结果不确定 | 本地状态不切换，显示“查询最终结果” | 查询原操作 | 得到终态后刷新 |
-| 任务租约 / 指纹冲突 | 显示当前复核任务领取人、租约或提交快照变化，保留阅读位置 | 刷新任务、重新领取；不能改走普通对象确认 | 当前任务、指纹和岗位分离重新满足后再操作 |
+| 任务处理权 / 提交版本冲突 | 显示当前复核任务领取人或提交快照变化，保留阅读位置 | 刷新任务、重新领取；不能改走普通对象确认 | 当前任务、提交版本和岗位分离重新满足后再操作 |
 | 权限收回 | 清除成本、附件和应付缓存 | 返回有权模块 | 权限恢复后重查 |
 
 ## 10. 响应式与键盘
@@ -452,7 +448,7 @@ type SettlementReviewCommand = CompleteWorkItemEnvelope<{
 | API 连接 | W20 | 供应商、连接、外部账单版本 | 返回保持结算页签 |
 | 接口错误与对账 | W29 | 账单消息、同步任务、差异证据 | 解决后重新试算，不直接改结算事实 |
 | 卡券经营分析 | W28 | 期间、供应商、成本调整来源 | 返回分析筛选不丢失 |
-| 工作台 / 待办 | W01 / W02 | `workItemId`、`statementId`、`queueContextId`；不跨页传递 `subjectHash` 等可变事实 | 目标页重查主题版本/指纹与租约；处理完成后原任务刷新 |
+| 工作台 / 待办 | W01 / W02 | `workItemId`、`statementId`、`queueContextId`；不跨页传递 `subjectHash` 等可变事实 | 目标页重查主题版本与领取状态；处理完成后原任务刷新 |
 
 ## 12. 验收清单
 
@@ -476,8 +472,8 @@ type SettlementReviewCommand = CompleteWorkItemEnvelope<{
 - [ ] 结果不确定时查询原操作，不重复形成成本和应付。
 - [ ] 新建/刷新草稿、差异处理均有独立命令和稳定请求/操作键；UNKNOWN 恢复不会生成第二草稿、重复刷新或重复差异结论。
 - [x] 新建草稿必须引用供应商当前结算期间策略及版本；策略缺失、过期或期间不匹配时 fail-closed，不接受任意自然日范围。
-- [ ] Q4 刷新截止策略未配置时不得提交复核或创建任务；配置后提交命令携带策略 ID/版本并按其冻结来源水位和内容指纹。
-- [ ] `REJECT` / `CONFIRM` 只接受完整 `CompleteWorkItemEnvelope`，校验正式 `work_item` 的领取、租约、指纹和完成动作，并与业务状态变化同事务；对象级命令不含可选任务字段。
+- [ ] 提交复核按服务端 `sourceAsOf` 冻结来源快照，并创建唯一复核任务。
+- [ ] `REJECT` / `CONFIRM` 只接受 W02 统一动作命令，校验正式 `work_item` 的当前领取人、对象版本和完成动作，并与业务状态变化同事务；对象级命令不含可选任务字段。
 
 ### 12.3 体验、权限和响应式
 
@@ -494,7 +490,6 @@ type SettlementReviewCommand = CompleteWorkItemEnvelope<{
 | Q1 | 各供应商结算期间边界是自然日、账单时区还是供应商商务配置？ | 订单纳入范围和重复覆盖约束 | 财务 + 采购 | 由供应商版本化结算期间策略返回时区和完整周期；策略未配置或过期时列表仅可显式查询历史，不得新建结算草稿 |
 | Q2 | 哪些差异类型允许“带差异提交复核”？ | 提交门禁和复核风险 | 财务负责人 | 仅已有完整处理结论且金额影响已进入试算的差异可提交；未知金额一律阻断 |
 | Q3 | 外部账单缺失时是否允许仅按 ERP 计算额确认结算？ | 无结算接口供应商的工作流 | 财务负责人 + 采购 | 仅供应商商务资料明确“无账单”且有人工对账证据时允许 |
-| Q4 | 结算草稿刷新明细的截止点是什么？ | 在途退款和账单版本变化 | 财务负责人 | 由版本化刷新截止策略决定；策略未配置时不得提交复核或创建任务，配置后按其冻结来源水位和内容指纹 |
 
 ## 14. 业务依据
 

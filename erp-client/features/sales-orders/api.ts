@@ -23,7 +23,6 @@ import {
   getW05CardTerminal,
   getW05ChangeOrder,
   getW05DraftPriceAdjusted,
-  getW05RejectionByIdempotency,
   getW05RejectionOutcome,
   getW04ContractCenter,
   hasW05DraftPriceAdjusted,
@@ -32,7 +31,6 @@ import {
   postSalesOrderAcceptance,
   resolveW05ProcurementRejection,
   startW05SalesChangeOrder,
-  verifyW05CardClaim,
 } from "@/mock/session-state"
 import {
   canonicalDecimal,
@@ -294,7 +292,6 @@ function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
           ...order.activeCardSalesApproval,
           workItemStatus: "CLAIMED",
           claimedByLabel: lease.claimedByLabel,
-          leaseExpiresAt: lease.expiresAt,
           allowedActions: ["APPROVE", "REJECT"],
           actionBlockers: [],
         },
@@ -578,10 +575,13 @@ export async function resolveProcurementRejection(input: {
   voidReason?: string
 }): Promise<ReturnType<typeof resolveW05ProcurementRejection>> {
   await mockDelay(180)
-  const cached = getW05RejectionByIdempotency(input.idempotencyKey)
+  const cached = getW05RejectionOutcome(input.salesOrderId)
   if (cached) return cached
   return resolveW05ProcurementRejection({
-    ...input,
+    salesOrderId: input.salesOrderId,
+    action: input.action,
+    lowMarginReason: input.lowMarginReason,
+    voidReason: input.voidReason,
     priceAdjusted: hasW05DraftPriceAdjusted(input.salesOrderId),
   })
 }
@@ -594,7 +594,12 @@ export async function decideLowMarginManager(input: {
   reason?: string
 }): Promise<ReturnType<typeof decideW05LowMargin>> {
   await mockDelay(180)
-  return decideW05LowMargin(input)
+  return decideW05LowMargin({
+    salesOrderId: input.salesOrderId,
+    workItemId: input.workItemId,
+    decision: input.decision,
+    reason: input.reason,
+  })
 }
 
 export async function startSalesChangeOrder(input: {
@@ -609,34 +614,24 @@ export async function startSalesChangeOrder(input: {
 export async function claimCardSalesApproval(input: {
   workItemId: string
 }): Promise<{
-  claimToken: string
-  leaseVersion: number
+  workItemId: string
   claimedByLabel: string
-  expiresAt: string
 }> {
   await mockDelay(100)
-  return claimW05CardApproval(input.workItemId)
+  const lease = claimW05CardApproval(input.workItemId)
+  return {
+    workItemId: input.workItemId,
+    claimedByLabel: lease.claimedByLabel,
+  }
 }
 
 export async function completeCardSalesApproval(input: {
   workItemId: string
   workItemType: "CARD_SALES_MANAGER_APPROVAL" | "CARD_SALES_OPERATION_APPROVAL"
   decision: "APPROVE" | "REJECT"
-  claimToken: string
-  leaseVersion: number
-  idempotencyKey: string
   reasonCode?: string
 }): Promise<ReturnType<typeof completeW05CardApproval>> {
   await mockDelay(180)
-  if (
-    !verifyW05CardClaim(
-      input.workItemId,
-      input.claimToken,
-      input.leaseVersion
-    )
-  ) {
-    throw new Error("LEASE_INVALID")
-  }
   return completeW05CardApproval(input)
 }
 

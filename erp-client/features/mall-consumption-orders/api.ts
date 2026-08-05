@@ -4,6 +4,7 @@
  */
 
 import { mockDelay } from "@/lib/mock-delay"
+import { filterRowsBySearch } from "@/lib/filter-utils"
 import type {
   EmptyReason,
   ExportCommand,
@@ -54,12 +55,6 @@ export async function fetchSalesOrderConsumptionSummary(
       restoredBalanceAmount: "0.00",
     }
   )
-}
-
-function matchSearch(q: string | undefined, parts: readonly string[]): boolean {
-  if (!q?.trim()) return true
-  const needle = q.trim().toLowerCase()
-  return parts.some((p) => p.toLowerCase().includes(needle))
 }
 
 function hasAutoException(row: MallConsumptionOrderRow): boolean {
@@ -125,15 +120,13 @@ function applyFilters(
   let next = rows
 
   if (query.q?.trim()) {
-    next = next.filter((r) =>
-      matchSearch(query.q, [
-        r.externalOrderNo,
-        r.mallOrderId,
-        r.customerLabel,
-        r.mallName,
-        r.customerId ?? "",
-      ])
-    )
+    next = filterRowsBySearch(next, query.q, (r) => [
+      r.externalOrderNo,
+      r.mallOrderId,
+      r.customerLabel,
+      r.mallName,
+      r.customerId ?? "",
+    ])
   }
 
   if (query.occurredFrom && query.occurredTo) {

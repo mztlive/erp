@@ -43,6 +43,7 @@ import {
   SalesOrderCombobox,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import type { FreshnessDemoState } from "@/lib/freshness"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
 import { useSalesOrdersQuery } from "@/features/sales-orders/queries"
@@ -78,13 +79,13 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
   useCardBusinessAnalyticsQuery,
-  useCardBusinessExportJobQuery,
   useDateBasisConfigQuery,
   useStartCardBusinessExportMutation,
 } from "@/features/card-business-analytics/queries"
 import type {
   CardBusinessAnalyticsQuery,
   CardBusinessDimension,
+  CardBusinessExportJob,
   CardBusinessRow,
   CostBasisCode,
   CoverageFilter,
@@ -293,7 +294,7 @@ export function CardBusinessAnalyticsPage() {
   const basisConfigScenario =
     searchParams.get("basisConfig") === "missing" ? "missing" : "default"
   const freshnessDemo = (searchParams.get("freshness") as
-    | ProjectionFreshnessState
+    | FreshnessDemoState
     | null) ?? undefined
   const fieldHideRaw = searchParams.get("fieldHide")
   const fieldHide =
@@ -312,7 +313,9 @@ export function CardBusinessAnalyticsPage() {
     pageIndex: 0,
     pageSize: 50,
   })
-  const [exportJobId, setExportJobId] = React.useState<string | null>(null)
+  const [exportJob, setExportJob] = React.useState<CardBusinessExportJob | null>(
+    null
+  )
   const [exportPreviewOpen, setExportPreviewOpen] = React.useState(false)
   const [basisSheetOpen, setBasisSheetOpen] = React.useState(false)
   const [refreshFailed, setRefreshFailed] = React.useState(false)
@@ -421,8 +424,7 @@ export function CardBusinessAnalyticsPage() {
         freshnessDemo:
           freshnessDemo === "stale" ||
           freshnessDemo === "rebuilding" ||
-          freshnessDemo === "failed" ||
-          freshnessDemo === "fresh"
+          freshnessDemo === "failed"
             ? freshnessDemo
             : undefined,
         fieldHide,
@@ -431,7 +433,6 @@ export function CardBusinessAnalyticsPage() {
 
   const viewQuery = useCardBusinessAnalyticsQuery(analysisQuery, analysisReady)
   const exportMutation = useStartCardBusinessExportMutation()
-  const exportJobQuery = useCardBusinessExportJobQuery(exportJobId)
 
   function patchUrl(
     patch: Record<string, string | null | undefined>,
@@ -493,7 +494,7 @@ export function CardBusinessAnalyticsPage() {
         rows: data.rows,
       },
     })
-    setExportJobId(job.jobId)
+    setExportJob(job)
   }
 
   const data = viewQuery.data
@@ -1177,49 +1178,47 @@ export function CardBusinessAnalyticsPage() {
             </Alert>
           ) : null}
 
-          {exportJobId && exportJobQuery.data ? (
+          {exportJob ? (
             <BackgroundJobProgress
               mode="all-or-nothing"
               status={
-                exportJobQuery.data.status === "queued"
+                exportJob.status === "queued"
                   ? "queued"
-                  : exportJobQuery.data.status === "running"
+                  : exportJob.status === "running"
                     ? "running"
-                    : exportJobQuery.data.status === "succeeded"
+                    : exportJob.status === "succeeded"
                       ? "succeeded"
                       : "failed"
               }
-              total={exportJobQuery.data.total}
-              completed={exportJobQuery.data.completed}
+              total={exportJob.total}
+              completed={exportJob.completed}
               succeeded={
-                exportJobQuery.data.status === "succeeded"
-                  ? exportJobQuery.data.total
-                  : undefined
+                exportJob.status === "succeeded" ? exportJob.total : undefined
               }
-              label={`导出任务 ${exportJobQuery.data.jobId}`}
+              label={`导出任务 ${exportJob.jobId}`}
               description={
                 <>
-                  口径/筛选：{exportJobQuery.data.watermark.filterSummary}
+                  口径/筛选：{exportJob.watermark.filterSummary}
                   <span className="mt-1 block">
-                  覆盖率 {exportJobQuery.data.watermark.coverageRate ?? "—"} ·
+                  覆盖率 {exportJob.watermark.coverageRate ?? "—"} ·
                   数据{" "}
                   {formatDateTime(
-                    exportJobQuery.data.watermark.projectionUpdatedAt,
+                    exportJob.watermark.projectionUpdatedAt,
                     "full"
                   )}{" "}
                   · 同步{" "}
                   {formatDateTime(
-                    exportJobQuery.data.watermark.consumedOutboxWatermark,
+                    exportJob.watermark.consumedOutboxWatermark,
                     "full"
                   )}{" "}
-                  · 延迟 {exportJobQuery.data.watermark.lagSeconds}s
+                  · 延迟 {exportJob.watermark.lagSeconds}s
                   </span>
                   <span className="mt-1 block text-xs">
-                    {exportJobQuery.data.watermark.taxDisclaimer}
+                    {exportJob.watermark.taxDisclaimer}
                   </span>
-                  {exportJobQuery.data.downloadLabel ? (
+                  {exportJob.downloadLabel ? (
                     <span className="mt-1 block font-medium">
-                      可下载：{exportJobQuery.data.downloadLabel}
+                      可下载：{exportJob.downloadLabel}
                     </span>
                   ) : null}
                 </>
@@ -1229,7 +1228,7 @@ export function CardBusinessAnalyticsPage() {
                   type="button"
                   size="sm"
                   variant="ghost"
-                  onClick={() => setExportJobId(null)}
+                  onClick={() => setExportJob(null)}
                 >
                   关闭
                 </Button>

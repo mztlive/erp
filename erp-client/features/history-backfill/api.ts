@@ -34,13 +34,6 @@ import {
   ITEM_SEEDS,
   buildReportForJob,
 } from "@/mock/history-backfill"
-import {
-  getIdempotencyEntry,
-  queryIdempotencyResult,
-  setIdempotencySucceeded,
-} from "@/mock/session-state"
-
-const IDEM_KIND = "W30_HISTORY_BACKFILL"
 
 type JobOverlay = Partial<
   Pick<
@@ -406,11 +399,6 @@ export async function submitHistoryBackfillCommand(
   const role = input.role ?? "SYSTEM_ADMIN"
   const { action, operationId, idempotencyKey } = input
 
-  const existing = getIdempotencyEntry(idempotencyKey)
-  if (existing?.state === "succeeded" && existing.payload) {
-    return existing.payload as HistoryBackfillCommandResult
-  }
-
   if (forceUnknownNext) {
     forceUnknownNext = false
     return {
@@ -537,10 +525,8 @@ export async function submitHistoryBackfillCommand(
       idempotencyKey,
       nextStep: "完成来源校验后开始回填",
     }
-    setIdempotencySucceeded(idempotencyKey, IDEM_KIND, result)
     return result
   }
-
   if (action === "VALIDATE_SOURCE") {
     if (!input.jobId) {
       return {
@@ -597,12 +583,9 @@ export async function submitHistoryBackfillCommand(
       idempotencyKey,
       nextStep: "确认后开始回填（后台执行）",
     }
-    setIdempotencySucceeded(idempotencyKey, IDEM_KIND, result)
     return result
   }
-
-  if (action === "START") {
-    if (!roleCanFormal(role)) {
+  if (action === "START") {    if (!roleCanFormal(role)) {
       return {
         status: "BLOCKED",
         title: "无权限开始回填",
@@ -702,10 +685,8 @@ export async function submitHistoryBackfillCommand(
       idempotencyKey,
       nextStep: "在任务详情查看处理进度",
     }
-    setIdempotencySucceeded(idempotencyKey, IDEM_KIND, result)
     return result
   }
-
   if (action === "RESUME") {
     if (!roleCanFormal(role)) {
       return {
@@ -779,10 +760,8 @@ export async function submitHistoryBackfillCommand(
       idempotencyKey,
       nextStep: "查看进度与失败明细",
     }
-    setIdempotencySucceeded(idempotencyKey, IDEM_KIND, result)
     return result
   }
-
   if (action === "REATTRIBUTE") {
     if (!input.jobId) {
       return {
@@ -814,10 +793,8 @@ export async function submitHistoryBackfillCommand(
       idempotencyKey,
       nextStep: "归集完成后刷新未归集清单",
     }
-    setIdempotencySucceeded(idempotencyKey, IDEM_KIND, result)
     return result
   }
-
   if (action === "CONFIRM_REPORT") {
     if (!input.jobId) {
       return {
@@ -895,10 +872,8 @@ export async function submitHistoryBackfillCommand(
         ? "可在门禁通过后进入下游"
         : "覆盖仍不完整，下游功能保持关闭",
     }
-    setIdempotencySucceeded(idempotencyKey, IDEM_KIND, result)
     return result
   }
-
   return {
     status: "FAILED",
     title: "未知动作",
@@ -906,15 +881,6 @@ export async function submitHistoryBackfillCommand(
     operationId,
     idempotencyKey,
   }
-}
-
-export async function queryHistoryBackfillIdempotency(input: {
-  idempotencyKey: string
-}): Promise<HistoryBackfillCommandResult | null> {
-  await mockDelay(120)
-  const hit = queryIdempotencyResult(input.idempotencyKey)
-  if (!hit || hit.state !== "succeeded" || !hit.payload) return null
-  return hit.payload as HistoryBackfillCommandResult
 }
 
 export function listMallOptions() {

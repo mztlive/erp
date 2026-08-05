@@ -352,8 +352,7 @@ export const W28_ROWS: readonly CardBusinessRow[] = [
   },
 ]
 
-// —— 导出任务 session state ——
-const exportJobs = new Map<string, CardBusinessExportJob>()
+// —— 导出任务（同步完成：创建即成功） ——
 let exportSeq = 1
 
 export function createW28ExportJob(input: {
@@ -373,12 +372,13 @@ export function createW28ExportJob(input: {
 }): CardBusinessExportJob {
   const jobId = `w28-export-${exportSeq++}`
   const createdAt = "2026-08-01T09:40:00+08:00"
-  const job: CardBusinessExportJob = {
+  return {
     jobId,
-    status: "queued",
+    status: "succeeded",
     total: 100,
-    completed: 0,
+    completed: 100,
     createdAt,
+    downloadLabel: `卡券经营分析_${input.periodFrom}_${input.periodTo}.csv`,
     watermark: {
       periodFrom: input.periodFrom,
       periodTo: input.periodTo,
@@ -395,28 +395,4 @@ export function createW28ExportJob(input: {
       rowCount: input.rowCount,
     },
   }
-  exportJobs.set(jobId, job)
-
-  // 模拟进度
-  globalThis.setTimeout(() => {
-    const current = exportJobs.get(jobId)
-    if (!current) return
-    exportJobs.set(jobId, { ...current, status: "running", completed: 40 })
-  }, 200)
-  globalThis.setTimeout(() => {
-    const current = exportJobs.get(jobId)
-    if (!current) return
-    exportJobs.set(jobId, {
-      ...current,
-      status: "succeeded",
-      completed: 100,
-      downloadLabel: `卡券经营分析_${input.periodFrom}_${input.periodTo}.csv`,
-    })
-  }, 800)
-
-  return job
-}
-
-export function getW28ExportJob(jobId: string): CardBusinessExportJob | null {
-  return exportJobs.get(jobId) ?? null
 }

@@ -46,7 +46,7 @@
 - 数据范围由服务端按供应商、商城、组织和责任任务过滤，前端不得加载全量后再隐藏。
 - 收货人、手机号和地址默认掩码；只有履约处理所需角色可短时揭示，揭示和下载均审计。
 - 成本、进项税率和结算信息使用独立字段权限；无权限时保留字段标签与布局、隐藏值。
-- `allowedActions` 和 `actionBlockers` 由服务端按订单状态、供应商能力、售后请求、租约和岗位权限计算。
+- `allowedActions` 和 `actionBlockers` 由服务端按订单状态、供应商能力、售后请求、任务处理权和岗位权限计算。
 - 页面打开期间权限被收回时，立即清除已揭示敏感值和缓存详情，切换为无权限或无数据范围状态。
 
 ## 3. 入口、路由与任务页签
@@ -69,7 +69,7 @@
 列表工作面：
 
 ```text
-┌ PageHeader：供应商订单                     [数据水位] [导出]
+┌ PageHeader：供应商订单                     [数据更新时间] [导出]
 ├ MetricStrip：待提交 | 结果未知 | 履约异常 | 售后待处理
 ├ ListToolbar：视图 | 搜索 | 供应商 | 三轨状态 | 支付时间 | 高级筛选
 ├ BusinessTableFrame
@@ -97,7 +97,7 @@
 
 | 区域 | 目的 | 主组件 | 是否固定 |
 | --- | --- | --- | --- |
-| 页头与指标 | 呈现处理水位并一键过滤 | `PageHeader` `MetricStrip` `DataFreshness` | 页头固定于内容顶部 |
+| 页头与指标 | 呈现处理进度并一键过滤 | `PageHeader` `MetricStrip` `DataFreshness` | 页头固定于内容顶部 |
 | 列表工具栏 | 高频查询和 Saved View | `ListToolbar` | 表格滚动时保持可见 |
 | 订单表格 | 扫描身份、三轨状态和下一步 | `BusinessTableFrame` `DataTable` | 订单号左固定，操作右固定 |
 | detail 预览 | 不离开列表核对主事实 | `QuickPreviewSheet size="detail"` | 浮层 |
@@ -119,7 +119,7 @@
 | 取消轨 | `cancelStatus` | 无 / 取消中 / 已取消 / 取消失败 / 待人工 | 取消动作及结果 | 与履约轨正交 | 售后权限 |
 | 退款轨 | `refundStatus` | 无 / 退款中 / 部分退款 / 全部退款 / 退款失败 / 待人工 | 供应商退款事实 | 部分退款不回退履约状态 | 成本金额按字段权限 |
 | 异常 | `errorClass` / `actionBlocker` | 异常原因 / 下一步 | 错误任务与服务端动作判断 | 业务语言，不展示堆栈 | 技术摘要仅管理员可见 |
-| 时间 | `lastBusinessAt` | 最近业务变化 | 状态历史 / 正式动作 | 发生时间 + 数据水位 | 全员有权对象可见 |
+| 时间 | `lastBusinessAt` | 最近业务变化 | 状态历史 / 正式动作 | 发生时间 + 数据更新时间 | 全员有权对象可见 |
 
 ### 5.2 对象中心
 
@@ -154,17 +154,17 @@
 
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
-| 查询原结果 | 结果未知提示 / 主动作 | `QUERY_RESULT` 可用，供应商具备查询能力 | 无破坏性确认 | 追加查询证据；任务入口同时追加任务处理记录，并保持当前任务为 `PENDING/IN_PROGRESS` 非终结状态；固定展示已受理、已拒绝、明确无结果或仍未知 | 停留当前订单；保留查询编号、当前任务和重试入口 |
-| 安全重放下单 | 查询结果后的动作 | 查询已明确“无结果”且服务端确认可安全重试 | 展示原订单、供应商及影响；正式确认 | 使用原 `fulfillmentOrderNo` 对应的供应商幂等键重放并追加结果证据；任务入口同时追加任务处理记录，并保持当前任务为 `PENDING/IN_PROGRESS` 非终结状态 | 结果未知不判成功、不跳转；继续“查询原结果” |
-| 暂挂 / 本轮跳过 | 正式任务处理器 | 当前租约有效；选择结构化原因 | 无破坏性确认 | 使用非终结动作信封记录原因；同一任务保持 `PENDING/IN_PROGRESS`，仅按服务端结果续租或释放租约并移动本轮队列游标 | 失败时停留当前任务，保留原因；刷新任务与队列快照后可用同一幂等键恢复 |
+| 查询原结果 | 结果未知提示 / 主动作 | `QUERY_RESULT` 可用，供应商具备查询能力 | 无破坏性确认 | 追加查询证据；任务入口同时追加任务处理记录，并保持当前任务为 `IN_PROGRESS` 非终结状态；固定展示已受理、已拒绝、明确无结果或仍未知 | 停留当前订单；保留查询编号、当前任务和重试入口 |
+| 安全重放下单 | 查询结果后的动作 | 查询已明确“无结果”且服务端确认可安全重试 | 展示原订单、供应商及影响；正式确认 | 使用原 `fulfillmentOrderNo` 对应的供应商幂等键重放并追加结果证据；任务入口同时追加任务处理记录，并保持当前任务为 `IN_PROGRESS` 非终结状态 | 结果未知不判成功、不跳转；继续“查询原结果” |
+| 暂挂 / 本轮跳过 | 正式任务处理器 | 当前领取人为本人；选择结构化原因 | 无破坏性确认 | 使用 W02 非终结动作记录原因，任务回到待领取状态并移动本轮队列游标 | 失败时停留当前任务，保留原因；刷新任务与队列快照后重试 |
 | 提交取消 / 退款（领域动作） | 售后子区 | 存在有效商城售后请求、商品能力支持且动作未重复 | 展示请求范围和已发生支付事实 | 以服务端固定幂等键提交并追加领域动作 / 结果；无论是否存在同对象任务，都不顺带完成任务 | 超时转结果未知；不得新建另一请求、更换幂等键或把任务标为完成 |
-| 确认可验证终态并完成任务 | 正式任务处理器 | 已取得可验证的下单、取消或退款终态；完成动作与任务处理器登记值一致 | 展示终态证据、对象版本和任务影响 | 同一事务重验终态证据并完成任务，固定展示业务结果和任务结果 | 证据仍未知或版本变化时保持同一任务为 `PENDING/IN_PROGRESS`，刷新证据后重提 |
-| 转人工 | 异常提示 | 自动路径不可用且任务允许显式转交 | 说明目标责任、原因与业务影响 | 原任务置为 `TRANSFERRED`、原租约失效并原子创建 `UNCLAIMED/PENDING` 后继正式任务；订单事实不变 | 原任务和租约保持不变，保留输入并允许使用同一动作幂等键恢复 |
+| 确认可验证终态并完成任务 | 正式任务处理器 | 已取得可验证的下单、取消或退款终态；完成动作与任务处理器登记值一致 | 展示终态证据、对象版本和任务影响 | 同一事务重验终态证据并完成任务，固定展示业务结果和任务结果 | 证据仍未知或版本变化时保持同一任务为 `IN_PROGRESS`，刷新证据后重提 |
+| 转人工 | 异常提示 | 自动路径不可用且任务允许显式转交 | 说明目标责任、原因与业务影响 | 直接更新责任人与转交审计，任务状态不变；订单事实不变 | 任务保持服务端当前状态，保留输入并允许重试 |
 | 记录协同说明 | 对象中心 | 有协同权限，订单版本未变化 | 无 | 追加审计说明，不改变状态 | 保留输入并提示版本冲突 |
 | 揭示敏感地址 | 履约区 | 有敏感字段权限且当前处理确需 | 短时揭示确认 | 限时显示并记录审计 | 权限变化立即隐藏 |
 | 导出 | 列表页头 | 有导出权限和当前数据范围 | `BatchImpactPreview` 展示范围、字段和过期时间 | 创建后台任务，结果 7 天内下载 | 部分失败报告逐项原因，不扩大范围 |
 
-任何动作都不得把 `RESULT_UNKNOWN` 直接改成成功。明确业务拒绝不自动重试；供应商无查询能力时进入 W29 人工异常。订单或售后已产生正式结果时，重复操作返回原结果而不是再次推进状态。查询 / 重放的接口成功只表示证据和处理记录已追加，不表示任务完成；只有另行确认可验证终态，或通过显式转交 / 替换动作原子创建合规的 `UNCLAIMED/PENDING` 后继任务，当前任务才可完成、转交或替换。
+任何动作都不得把 `RESULT_UNKNOWN` 直接改成成功。明确业务拒绝不自动重试；供应商无查询能力时进入 W29 人工异常。订单或售后已产生正式结果时，重复操作返回原结果而不是再次推进状态。查询 / 重放的接口成功只表示证据和处理记录已追加，不表示任务完成；只有另行确认可验证终态，或通过显式转交 / 替换动作原子创建合规的 `UNCLAIMED` 后继任务，当前任务才可完成、转交或替换。
 
 ## 8. 数据契约
 
@@ -251,12 +251,9 @@ type SupplierOrderDetailView = {
     businessObjectType: "SUPPLIER_FULFILLMENT_ORDER"
     businessObjectId: string
     subjectVersion?: string
-    subjectHash: string
     completionAction: string
     allowedTaskActions: string[]
     claimedBy?: ActorView
-    leaseVersion?: number
-    leaseExpiresAt?: string
   }
   allowedActions: string[]
   actionBlockers: Array<{ action: string; code: string; message: string }>
@@ -264,7 +261,7 @@ type SupplierOrderDetailView = {
 }
 ```
 
-Query Key 至少包含当前用户、角色、权限版本、数据范围版本、筛选、排序、分页和对象版本。列表、详情、售后和成本可以拆 Query，但对象头必须显示各区数据水位；局部失败不得把整个中心清空。
+Query Key 至少包含当前用户、角色、权限版本、数据范围版本、筛选、排序、分页和对象版本。列表、详情、售后和成本可以拆 Query，但对象头必须显示各区数据更新时间；局部失败不得把整个中心清空。
 
 ### 8.2 提交
 
@@ -279,7 +276,7 @@ type SupplierOrderObjectInvestigationCommand = {
 }
 
 type SupplierOrderTaskInvestigationCommand =
-  WorkItemActionEnvelope<{
+  WorkItemActionCommand<{
     type: "QUERY_RESULT" | "REPLAY"
     orderId: string
     expectedOrderLockVersion: number
@@ -306,13 +303,12 @@ type DeferSupplierOrderTaskAction = {
 }
 
 type DeferSupplierOrderTaskCommand =
-  WorkItemActionEnvelope<DeferSupplierOrderTaskAction>
+  WorkItemActionCommand<DeferSupplierOrderTaskAction>
 
 type DeferSupplierOrderTaskResult =
   WorkItemActionResult<{
     reasonCode: string
     queueContextId: string
-    leaseDisposition: "RENEWED" | "RELEASED"
     nextQueueCursor?: string
   }>
 
@@ -328,7 +324,7 @@ type SupplierOrderAfterSalesCommand = {
 }
 
 type SupplierOrderTaskCompletionCommand =
-  CompleteWorkItemEnvelope<{
+  WorkItemActionCommand<{
     type: "CONFIRM_VERIFIED_TERMINAL_RESULT"
     orderId: string
     expectedOrderLockVersion: number
@@ -342,7 +338,7 @@ type SupplierOrderTaskCompletionCommand =
   }> & { expectedSubjectVersion: string }
 
 type SupplierOrderTaskTransferCommand =
-  TransferWorkItemEnvelope<{
+  WorkItemActionCommand<{
     type: "TRANSFER_MANUAL"
     orderId: string
     targetOwnerRole: string
@@ -352,18 +348,18 @@ type SupplierOrderTaskTransferCommand =
   }> & { expectedSubjectVersion: string }
 ```
 
-- W26 直接引用 W02 的 `WorkItemActionEnvelope`、`CompleteWorkItemEnvelope` 和 `TransferWorkItemEnvelope`；其字段、校验和完成语义以 W02 为准，不在本工作面另造一套可选任务字段。
-- `SupplierOrderObjectInvestigationCommand` 只供非任务对象入口查询 / 重放；`SupplierOrderTaskInvestigationCommand` 只供正式任务入口。服务端不得因客户端漏传任务信封而把任务动作降级为普通对象动作。
-- 任务内 `QUERY_RESULT` / `REPLAY` 必须完整校验 `workItemId`、`claimToken`、`leaseVersion`、`expectedSubjectVersion`、`expectedSubjectHash`、订单当前版本和本次任务动作的 `idempotencyKey`；`targetSupplierActionId` 必须引用原供应商动作。
-- `WorkItemActionEnvelope.idempotencyKey` 只标识本次查询 / 重放任务动作。`REPLAY` 的外部调用仍由服务端沿用原供应商动作幂等键，两者不得混用；查询不产生新的业务订单或替换动作。
-- 查询 / 重放任务动作必须在同一事务追加查询或重放证据与任务处理记录，并返回 `WorkItemActionResult`。即使已取得可验证终态，动作结果也只能是 `workItemStatus: "PENDING" | "IN_PROGRESS"`，可返回续租后的新租约、任务版本和新对象指纹；前端不得自动下一项。
-- 若查询 / 重放后仍为 `RESULT_UNKNOWN`，必须保持同一 `workItemId` 为 `PENDING/IN_PROGRESS`，续租或更新租约版本，并保留下一次查询入口；不得完成、关闭、转交或偷换成新任务。
-- “暂挂 / 本轮跳过”只使用 `DeferSupplierOrderTaskCommand`。服务端记录结构化原因后返回非终结动作结果：任务仍为 `PENDING/IN_PROGRESS`，不得写入不存在的 `paused` 状态；租约是否续期或释放以及下一游标均以服务端结果为准，客户端只能在同一 `queueContextId` / 队列快照内移动本轮游标。
+- W26 直接引用 W02 的统一动作命令（`WorkItemActionCommand`）；其字段、校验和完成语义以 W02 为准，不在本工作面另造一套可选任务字段。
+- `SupplierOrderObjectInvestigationCommand` 只供非任务对象入口查询 / 重放；`SupplierOrderTaskInvestigationCommand` 只供正式任务入口。服务端不得因客户端漏传任务命令而把任务动作降级为普通对象动作。
+- 任务内 `QUERY_RESULT` / `REPLAY` 必须完整校验 `workItemId`、`expectedSubjectVersion`、订单当前版本和当前领取人；`targetSupplierActionId` 必须引用原供应商动作。
+- 查询 / 重放任务动作以唯一请求身份标识本次动作。`REPLAY` 的外部调用仍由服务端沿用原供应商动作幂等键（DB 唯一键），两者不得混用；查询不产生新的业务订单或替换动作。
+- 查询 / 重放任务动作必须在同一事务追加查询或重放证据与任务处理记录，并返回 `WorkItemActionResult`。即使已取得可验证终态，动作结果也只能是 `workItemStatus: "IN_PROGRESS"`，可返回任务版本；前端不得自动下一项。
+- 若查询 / 重放后仍为 `RESULT_UNKNOWN`，必须保持同一 `workItemId` 为 `IN_PROGRESS` 并保留下一次查询入口；不得完成、关闭、转交或偷换成新任务。
+- “暂挂 / 本轮跳过”只使用 `DeferSupplierOrderTaskCommand`。服务端记录结构化原因后返回非终结动作结果：任务回到待领取（`UNCLAIMED`），不得写入不存在的 `paused` 状态；下一游标以服务端结果为准，客户端只能在同一 `queueContextId` / 队列快照内移动本轮游标。
 - `SupplierOrderAfterSalesCommand` 是取消 / 退款领域直接动作：它只校验售后请求、订单版本和服务端固定幂等键，追加供应商动作及结果，不读取或改变 `work_item`。任务处理器不得把这类对象命令包装成“提交即完成”。
-- 只有已经取得可验证终态时，任务处理器才可用 `SupplierOrderTaskCompletionCommand`；服务端必须重新校验 `verifiedSupplierActionResultId`、订单版本、任务租约、主体版本 / 指纹和处理器登记的 `completionAction`，并在同一事务固定业务结果与任务 `COMPLETED` 结果。证据仍未知时拒绝完成并保持原任务为 `PENDING/IN_PROGRESS`；重复/误派等关闭场景只能另用 W02 `CloseWorkItemEnvelope`，不得复用本完成命令。
-- 显式转交只使用 `SupplierOrderTaskTransferCommand`。服务端在同一事务将原任务置为 `TRANSFERRED`、使原租约失效、追加转交记录并创建符合任务类型、责任范围和对象指纹约束的 `UNCLAIMED/PENDING` 后继任务；不得用转交伪造业务终态或直接覆盖责任人。
+- 只有已经取得可验证终态时，任务处理器才可用 `SupplierOrderTaskCompletionCommand`；服务端必须重新校验 `verifiedSupplierActionResultId`、订单版本、当前领取人、主体版本和处理器登记的 `completionAction`，并在同一事务固定业务结果与任务 `COMPLETED` 结果。证据仍未知时拒绝完成并保持原任务为 `IN_PROGRESS`；重复/误派等关闭场景只能另用 W02 `CLOSE` 动作，不得复用本完成命令。
+- 显式转交只使用 `SupplierOrderTaskTransferCommand`。服务端在同一事务直接更新责任人与转交审计，任务状态不变；不得用转交伪造业务终态。
 - mutation 返回 `operationId` / 动作记录、业务或证据结果、对象新版本和任务结果（如适用）；网络断开时按对应信封的幂等键查询同一次动作，不得换键重提。
-- 版本、租约或指纹冲突不静默覆盖，显示当前状态与用户操作目标，由用户重新领取或确认仍适用的动作。
+- 版本或处理权冲突不静默覆盖，显示当前状态与用户操作目标，由用户重新领取或确认仍适用的动作。
 
 ### 8.3 前端边界
 
@@ -377,7 +373,7 @@ type SupplierOrderTaskTransferCommand =
 | 状态 | 页面表现 | 可执行动作 | 恢复方式 |
 | --- | --- | --- | --- |
 | 初载 | 与列表/中心成稿一致的 Skeleton | 应用壳导航 | 查询完成原位替换 |
-| 刷新 | 保留旧数据，显示分区刷新和水位 | 可查看；正式动作提交时服务端重验 | 成功更新水位；失败保留旧值 |
+| 刷新 | 保留旧数据，显示分区刷新和更新时间 | 可查看；正式动作提交时服务端重验 | 成功更新时间；失败保留旧值 |
 | 空数据 | “当前范围没有供应商订单” | 调整时间或进入商城消费 | 新事实到达后刷新 |
 | 筛选无结果 | 展示筛选摘要 | 清除筛选 | 恢复默认视图 |
 | 无数据范围 | 专用无范围空态，不显示虚假 0 指标 | 查看当前角色 / 申请权限 | 范围变化后重查 |
@@ -387,12 +383,12 @@ type SupplierOrderTaskTransferCommand =
 | 字段级隐藏 | 标签保留、敏感值掩码 | 其余授权动作 | 权限恢复后重查 |
 | 提交中 | 锁定当前正式动作，禁止重复点击 | 取消不可中断已发送请求 | 返回正式结果或结果未知 |
 | 正式动作成功 | `FormalActionResult` 固定展示供应商订单、履约/取消/退款轨结果、时间和下一步 | 返回 W25、进入 W27、继续处理 | 用户明确关闭结果 |
-| 任务内查询 / 重放成功 | 固定展示本次证据、动作记录号、新租约与“任务仍待处理”；即使取得终态也不自动完成 | 继续查询、确认可验证终态、暂挂或转交 | 同一任务保持 `PENDING/IN_PROGRESS`；刷新任务版本和对象指纹 |
-| 暂挂成功 | 显示结构化原因、任务仍待处理、租约处置与本轮下一项 | 返回当前任务或继续同一队列快照 | 同一任务保持 `PENDING/IN_PROGRESS`；只移动本轮游标，不产生暂停状态 |
+| 任务内查询 / 重放成功 | 固定展示本次证据、动作记录号与“任务仍待处理”；即使取得终态也不自动完成 | 继续查询、确认可验证终态、暂挂或转交 | 同一任务保持 `IN_PROGRESS`；刷新任务版本 |
+| 暂挂成功 | 显示结构化原因，任务回到待领取，展示本轮下一项 | 返回当前任务或继续同一队列快照 | 只移动本轮游标，不产生暂停状态 |
 | 结果未知 | 固定警示，不改变本地订单状态 | 查询原结果；不能直接再次下单 | 得到可验证终态或转人工 |
 | 明确无结果 | 显示供应商查询证据与安全重放判断 | 允许时使用原幂等键重放 | 重放结果固定展示 |
 | 版本冲突 | 对比当前三轨状态和原操作目标 | 重新加载、放弃旧动作 | 重新确认当前可用动作 |
-| 任务租约 / 指纹冲突 | 保留订单事实和用户输入，显示当前领取人、租约或对象版本变化 | 返回任务刷新、重新领取；不能转普通对象操作绕过 | 新租约与当前指纹一致后重提 |
+| 处理权 / 版本冲突 | 保留订单事实和用户输入，显示当前领取人或对象版本变化 | 返回任务刷新、重新领取；不能转普通对象操作绕过 | 版本一致后重提 |
 | 后台导出 | `BackgroundJobProgress` 显示筛选快照、字段遮罩、进度和任务号 | 查看任务 | 完成后下载；失败按原快照重试 |
 | 权限收回 | 清除敏感缓存并切无权限态 | 返回有权工作面 | 权限恢复后重查 |
 
@@ -434,9 +430,9 @@ type SupplierOrderTaskTransferCommand =
 - [ ] 供应商拒单或履约异常不删除商城支付、消费、订单或成本事实。
 - [x] 三类退款相关事实能分别看见缺口和责任方。
 - [x] 履约主状态只使用九个正式枚举；“结果未知”快捷筛选等价于 `fulfillmentStatus = RESULT_UNKNOWN`，没有独立状态源。
-- [ ] 任务内查询 / 重放使用 W02 的非终结动作信封，完整校验领取、租约、对象版本 / 指纹和本次动作幂等键；成功后同一任务仍为 `PENDING/IN_PROGRESS`，不会自动下一项。
-- [ ] 暂挂使用 W02 非终结动作信封并记录结构化原因；任务不完成、不转交、不写 `paused`，租约与同一队列快照的本轮游标只按服务端结果更新。
-- [ ] 取消 / 退款领域命令不读写任务；只有可验证终态能通过正式完成信封终结任务，转交则必须原子创建合规的 `UNCLAIMED/PENDING` 后继任务。
+- [ ] 任务内查询 / 重放使用 W02 的非终结动作，完整校验当前领取人和对象版本；成功后同一任务仍为 `IN_PROGRESS`，不会自动下一项。
+- [ ] 暂挂使用 W02 非终结动作并记录结构化原因；任务回到待领取、不完成、不转交、不写 `paused`，同一队列快照的本轮游标只按服务端结果更新。
+- [ ] 取消 / 退款领域命令不读写任务；只有可验证终态能通过正式完成信封终结任务，转交则必须原子创建合规的 `UNCLAIMED` 后继任务。
 
 ### 12.2 数据、权限与安全
 
@@ -461,7 +457,7 @@ type SupplierOrderTaskTransferCommand =
 | Q1 | 采购与客服对“转人工”任务的默认责任边界如何按异常类型分配？ | 默认视图、责任人和 SLA | 采购负责人 + 客服负责人 | 供应商接单/履约归采购，员工售后沟通归客服，系统异常归管理员 |
 | Q2 | 敏感收货信息单次揭示的有效时长是多少？ | 安全交互与重新鉴权 | 安全负责人 + 客服负责人 | 5 分钟，离开对象页或权限变化立即清除 |
 | Q3 | 供应商结果未知在无查询能力时的人工确认需要哪些最低证据？ | 异常能否解决及审计 | 采购 + 运维 + 财务 | 外部工单/书面回复、核对时间、经办人和外部单号至少齐备 |
-| Q4 | 默认“可操作”视图是否包含长时间无状态变化但未超 SLA 的订单？ | 待办水位和噪声 | 采购负责人 | 未超 SLA 不进入异常指标，仅保留全部订单视图 |
+| Q4 | 默认“可操作”视图是否包含长时间无状态变化但未超 SLA 的订单？ | 待办数量与噪声 | 采购负责人 | 未超 SLA 不进入异常指标，仅保留全部订单视图 |
 
 确认后把结论写回对应章节并移除本表项，不让“当前建议”长期充当正式规则。
 
@@ -469,7 +465,7 @@ type SupplierOrderTaskTransferCommand =
 
 - `erp-phase-2.md` §3.5–§3.6：固定供应关系、支付事实与供应商下单失败补偿边界。
 - `erp-phase-2.md` §6.3、§10、§11：错误分类、供应商订单、状态、取消退款和售后责任。
-- `erp-phase-2.md` §13：两层幂等、结果未知先查询、人工重放沿用原幂等键和周期对账。
+- `erp-phase-2.md` §13：业务事实唯一键去重、结果未知先查询、人工重放沿用原幂等键和涉钱对账。
 - `erp-data-model.md` §6.19：`supplier_fulfillment_order`、三轨状态、动作和供应商退款事实。
 - `erp-data-model.md` §7.6、§8.4、§9.4：供应商履约状态机、正式事务和结果未知断言。
 - `erp-ui-design.md` §4.3、§4.5、§6、§11：M2/M4、第二期对象中心和通用状态契约。

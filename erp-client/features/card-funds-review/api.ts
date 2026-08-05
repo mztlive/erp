@@ -1,6 +1,6 @@
 /**
  * W13 session-mock API：queryFn / mutationFn 纯函数。
- * claimToken 仅出现在领取/续租响应；正式完成使用 CompleteWorkItemEnvelope 语义。
+ * 领取返回会话内租约（无令牌）；正式完成使用统一动作命令语义。
  */
 
 import { mockDelay } from "@/lib/mock-delay"
@@ -27,10 +27,7 @@ import {
   claimWorkItemSession,
   clearSessionLease,
   completeWorkItemSession,
-  finalizePendingComplete,
-  getIdempotencyEntry,
   getSessionLease,
-  getSessionLeaseState,
   getW13AppendedReviews,
   getW13BusinessOutcome,
   getW13FundsOverlay,
@@ -38,13 +35,11 @@ import {
   isW13WorkItemTerminal,
   markQueueTaskCompleted,
   markQueueTaskHeld,
-  queryIdempotencyResult,
-  setIdempotencySucceeded,
   setW13BusinessOutcome,
   setW13FundsOverlay,
   WorkItemMockError,
 } from "@/mock/session-state"
-import { resultText, versionText } from "@/lib/ui-text"
+import { versionText } from "@/lib/ui-text"
 
 function moneyNum(v: string): number {
   return Number(v) || 0
@@ -72,7 +67,7 @@ function projectItem(
   if (isW13WorkItemTerminal(seed.workItem.workItemId)) return null
 
   const held = isW13WorkItemHeld(seed.workItem.workItemId)
-  const publicLease = getSessionLeaseState(seed.workItem.workItemId)
+  const publicLease = getSessionLease(seed.workItem.workItemId)
   const overlay = getW13FundsOverlay(seed.workItem.workItemId)
   const appended = getW13AppendedReviews(seed.workItem.workItemId)
 
@@ -142,10 +137,10 @@ function projectItem(
     workItem: {
       ...seed.workItem,
       subjectHash,
+      subjectVersion:
+        publicLease?.subjectVersion ?? seed.workItem.subjectVersion,
       workItemStatus: held ? "IN_PROGRESS" : seed.workItem.workItemStatus,
       held,
-      leaseVersion: publicLease?.leaseVersion ?? seed.workItem.leaseVersion,
-      leaseExpiresAt: publicLease?.leaseExpiresAt ?? seed.workItem.leaseExpiresAt,
       claimedBy: publicLease
         ? { userId: "user_finance", displayName: "当前用户 · 王敏" }
         : seed.workItem.claimedBy,
@@ -304,17 +299,14 @@ export async function claimCardFundsReviewWorkItem(
   try {
     const lease = claimWorkItemSession({
       workItemId,
-      subjectVersion: projected?.workItem.subjectVersion ?? seed.workItem.subjectVersion,
-      subjectHash: projected?.workItem.subjectHash ?? seed.workItem.subjectHash,
-      leaseVersion: seed.workItem.leaseVersion ?? 1,
+      subjectVersion:
+        projected?.workItem.subjectVersion ?? seed.workItem.subjectVersion,
       ownerUserId: "user_finance",
     })
     return {
       workItemId,
       claimedByLabel: "当前用户 · 王敏",
-      expiresAt: lease.leaseExpiresAt,
-      leaseVersion: lease.leaseVersion,
-      claimToken: lease.claimToken,
+      subjectVersion: lease.subjectVersion ?? seed.workItem.subjectVersion,
     }
   } catch (error) {
     if (error instanceof WorkItemMockError) throw new Error(error.message)
@@ -324,11 +316,9 @@ export async function claimCardFundsReviewWorkItem(
 
 export async function holdCardFundsReview(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
+  expectedSubjectVersion: string
   reasonCode: string
   note?: string
-  idempotencyKey: string
   nextWorkItemId?: string
 }): Promise<FormalActionResponse> {
   await mockDelay(100)
@@ -342,11 +332,8 @@ export async function holdCardFundsReview(input: {
   try {
     applyWorkItemActionSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash:
-        projected?.workItem.subjectHash ?? seed.workItem.subjectHash,
-      idempotencyKey: input.idempotencyKey,
+      expectedSubjectVersion:
+        projected?.workItem.subjectVersion ?? seed.workItem.subjectVersion,
       action: {
         kind: "HOLD",
         note: input.note ?? input.reasonCode,
@@ -452,12 +439,7 @@ function validateDecisionAgainstItem(
 
 export async function completeCardFundsReview(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
   expectedSubjectVersion: string
-  idempotencyKey: string
-  forceUnknown?: boolean
   /** Demo: force server hash drift before validate */
   simulateHashDrift?: boolean
   decision: CardFundsReviewDecision
@@ -465,33 +447,26 @@ export async function completeCardFundsReview(input: {
   await mockDelay(150)
 
   const cachedBiz = getW13BusinessOutcome(input.workItemId)
-  const idem = getIdempotencyEntry(input.idempotencyKey)
-  if (idem?.state === "succeeded") {
-    const payload = idem.payload as { formalOutcome?: FormalOutcome }
-    if (payload?.formalOutcome) {
-      return { status: "succeeded", outcome: payload.formalOutcome }
-    }
-    if (cachedBiz) {
-      const outcome: FormalOutcome =
-        cachedBiz.reviewResult === "APPROVED"
-          ? {
-              kind: "APPROVED",
-              business: {
-                ...cachedBiz,
-                conclusion: cachedBiz.conclusion as
-                  | "NO_HISTORY_FROM_ZERO"
-                  | "RECORDED_FACTS_RECONCILED",
-              },
-            }
-          : {
-              kind: "REJECTED",
-              business: {
-                ...cachedBiz,
-                conclusion: "REJECTED",
-              },
-            }
-      return { status: "succeeded", outcome }
-    }
+  if (cachedBiz) {
+    const outcome: FormalOutcome =
+      cachedBiz.reviewResult === "APPROVED"
+        ? {
+            kind: "APPROVED",
+            business: {
+              ...cachedBiz,
+              conclusion: cachedBiz.conclusion as
+                | "NO_HISTORY_FROM_ZERO"
+                | "RECORDED_FACTS_RECONCILED",
+            },
+          }
+        : {
+            kind: "REJECTED",
+            business: {
+              ...cachedBiz,
+              conclusion: "REJECTED",
+            },
+          }
+    return { status: "succeeded", outcome }
   }
 
   if (input.simulateHashDrift) {
@@ -499,44 +474,6 @@ export async function completeCardFundsReview(input: {
       input.workItemId,
       `sha256:drift_${input.workItemId}_${Date.now()}`
     )
-  }
-
-  if (idem?.state === "pending" || input.forceUnknown) {
-    try {
-      if (input.forceUnknown) {
-        completeWorkItemSession({
-          workItemId: input.workItemId,
-          claimToken: input.claimToken,
-          leaseVersion: input.leaseVersion,
-          expectedSubjectHash: input.expectedSubjectHash,
-          idempotencyKey: input.idempotencyKey,
-          decision: {
-            kind:
-              input.decision.reviewResult === "APPROVED"
-                ? "CARD_FUNDS_APPROVED"
-                : "CARD_FUNDS_REJECTED",
-          },
-          simulateTimeout: true,
-        })
-      }
-    } catch (error) {
-      if (error instanceof WorkItemMockError && error.code === "TIMEOUT") {
-        return {
-          status: "unknown",
-          message:
-            "处理结果尚未确定。请勿假定已通过或已驳回，停留当前项并按原任务号查询。",
-          idempotencyKey: input.idempotencyKey,
-        }
-      }
-    }
-    if (idem?.state === "pending") {
-      return {
-        status: "unknown",
-        message:
-          "处理结果尚未确定。请勿假定已通过或已驳回，停留当前项并按原任务号查询。",
-        idempotencyKey: input.idempotencyKey,
-      }
-    }
   }
 
   const seed = CARD_FUNDS_REVIEW_SEED.find(
@@ -560,8 +497,8 @@ export async function completeCardFundsReview(input: {
     }
   }
 
-  // 信封层 subject_hash 与当前记录一致
-  if (input.expectedSubjectHash !== item.workItem.subjectHash) {
+  // 信封层 subject 与当前记录一致
+  if (input.expectedSubjectVersion !== item.workItem.subjectVersion) {
     return {
       status: "failed",
       code: "SUBJECT_HASH_MISMATCH",
@@ -573,7 +510,7 @@ export async function completeCardFundsReview(input: {
   const reviewNo = item.reviewChain.nextReviewNo
   const reviewId = `rfr_${input.workItemId}_${reviewNo}`
   const completedAt = new Date().toISOString()
-  const operationId = `op_w13_${input.idempotencyKey.slice(0, 12)}`
+  const operationId = `op_w13_${input.workItemId.slice(0, 12)}`
   const workflowActionId = `wa_w13_${input.workItemId}_${reviewNo}`
 
   if (input.decision.reviewResult === "APPROVED") {
@@ -594,10 +531,7 @@ export async function completeCardFundsReview(input: {
     try {
       completeWorkItemSession({
         workItemId: input.workItemId,
-        claimToken: input.claimToken,
-        leaseVersion: input.leaseVersion,
-        expectedSubjectHash: input.expectedSubjectHash,
-        idempotencyKey: input.idempotencyKey,
+        expectedSubjectVersion: input.expectedSubjectVersion,
         decision: {
           kind: "CARD_FUNDS_APPROVED",
           summary: `复核号 ${reviewNo} · ${APPROVE_CONCLUSION_LABEL[input.decision.conclusion]}`,
@@ -616,24 +550,9 @@ export async function completeCardFundsReview(input: {
       })
       setW13BusinessOutcome(input.workItemId, business)
       markQueueTaskCompleted("W13", input.workItemId)
-      const outcome: FormalOutcome = { kind: "APPROVED", business }
-      const entry = getIdempotencyEntry(input.idempotencyKey)
-      if (entry?.state === "succeeded") {
-        setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", {
-          ...(entry.payload as object),
-          formalOutcome: outcome,
-        })
-      }
-      return { status: "succeeded", outcome }
+      return { status: "succeeded", outcome: { kind: "APPROVED", business } }
     } catch (error) {
       if (error instanceof WorkItemMockError) {
-        if (error.code === "TIMEOUT") {
-          return {
-            status: "unknown",
-            message: error.message,
-            idempotencyKey: input.idempotencyKey,
-          }
-        }
         if (error.code === "VERSION_CONFLICT") {
           return {
             status: "failed",
@@ -675,10 +594,7 @@ export async function completeCardFundsReview(input: {
   try {
     completeWorkItemSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: input.expectedSubjectHash,
-      idempotencyKey: input.idempotencyKey,
+      expectedSubjectVersion: input.expectedSubjectVersion,
       decision: {
         kind: "CARD_FUNDS_REJECTED",
         summary: `复核号 ${reviewNo} · 驳回 · 后继未配置`,
@@ -697,24 +613,9 @@ export async function completeCardFundsReview(input: {
     })
     setW13BusinessOutcome(input.workItemId, business)
     markQueueTaskCompleted("W13", input.workItemId)
-    const outcome: FormalOutcome = { kind: "REJECTED", business }
-    const entry = getIdempotencyEntry(input.idempotencyKey)
-    if (entry?.state === "succeeded") {
-      setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", {
-        ...(entry.payload as object),
-        formalOutcome: outcome,
-      })
-    }
-    return { status: "succeeded", outcome }
+    return { status: "succeeded", outcome: { kind: "REJECTED", business } }
   } catch (error) {
     if (error instanceof WorkItemMockError) {
-      if (error.code === "TIMEOUT") {
-        return {
-          status: "unknown",
-          message: error.message,
-          idempotencyKey: input.idempotencyKey,
-        }
-      }
       return { status: "failed", code: error.code, message: error.message }
     }
     throw error
@@ -727,14 +628,12 @@ export async function completeCardFundsReview(input: {
  */
 export async function registerHistoricalReceipt(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
+  expectedSubjectVersion: string
   receiptNo: string
   receivedAt: string
   grossAmount: string
   allocations: readonly AllocationDraftLine[]
   evidenceReference: string
-  idempotencyKey: string
 }): Promise<RegisterFundsResult> {
   await mockDelay(120)
   const seed = CARD_FUNDS_REVIEW_SEED.find(
@@ -758,10 +657,7 @@ export async function registerHistoricalReceipt(input: {
   try {
     applyWorkItemActionSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: item.workItem.subjectHash,
-      idempotencyKey: input.idempotencyKey,
+      expectedSubjectVersion: item.workItem.subjectVersion,
       action: { kind: "REGISTER_RECEIPT", note: input.receiptNo },
     })
   } catch (error) {
@@ -850,8 +746,7 @@ export async function registerHistoricalReceipt(input: {
 
 export async function registerHistoricalInvoice(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
+  expectedSubjectVersion: string
   invoiceNo: string
   issuedAt: string
   grossAmount: string
@@ -859,7 +754,6 @@ export async function registerHistoricalInvoice(input: {
   taxAmount: string
   allocations: readonly AllocationDraftLine[]
   evidenceReference: string
-  idempotencyKey: string
 }): Promise<RegisterFundsResult> {
   await mockDelay(120)
   const seed = CARD_FUNDS_REVIEW_SEED.find(
@@ -883,10 +777,7 @@ export async function registerHistoricalInvoice(input: {
   try {
     applyWorkItemActionSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: item.workItem.subjectHash,
-      idempotencyKey: input.idempotencyKey,
+      expectedSubjectVersion: item.workItem.subjectVersion,
       action: { kind: "REGISTER_INVOICE", note: input.invoiceNo },
     })
   } catch (error) {
@@ -970,12 +861,10 @@ export async function registerHistoricalInvoice(input: {
 
 export async function saveCardFundsEvidence(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
+  expectedSubjectVersion: string
   evidenceDocumentIds: string[]
   evidenceReferences: string[]
   comment?: string
-  idempotencyKey: string
 }): Promise<{ ok: true }> {
   await mockDelay(60)
   const seed = CARD_FUNDS_REVIEW_SEED.find(
@@ -987,10 +876,7 @@ export async function saveCardFundsEvidence(input: {
   try {
     applyWorkItemActionSession({
       workItemId: input.workItemId,
-      claimToken: input.claimToken,
-      leaseVersion: input.leaseVersion,
-      expectedSubjectHash: item.workItem.subjectHash,
-      idempotencyKey: input.idempotencyKey,
+      expectedSubjectVersion: item.workItem.subjectVersion,
       action: { kind: "SAVE_EVIDENCE", note: "保存复核证据" },
     })
   } catch (error) {
@@ -1017,66 +903,6 @@ export async function saveCardFundsEvidence(input: {
     comment: input.comment,
   })
   return { ok: true }
-}
-
-export async function resolveUnknownCardFundsResult(input: {
-  idempotencyKey: string
-  settle?: boolean
-  settlePayload?: {
-    workItemId: string
-    claimToken: string
-    leaseVersion: number
-    expectedSubjectHash: string
-    expectedSubjectVersion: string
-    idempotencyKey: string
-    decision: CardFundsReviewDecision
-  }
-}): Promise<FormalActionResponse> {
-  await mockDelay(80)
-  const entry = queryIdempotencyResult(input.idempotencyKey)
-  if (entry?.state === "succeeded") {
-    const payload = entry.payload as { formalOutcome?: FormalOutcome }
-    if (payload?.formalOutcome) {
-      return { status: "succeeded", outcome: payload.formalOutcome }
-    }
-  }
-  if (entry?.state === "pending" && input.settle && input.settlePayload) {
-    try {
-      finalizePendingComplete({
-        idempotencyKey: input.idempotencyKey,
-        workItemId: input.settlePayload.workItemId,
-        decision: {
-          kind:
-            input.settlePayload.decision.reviewResult === "APPROVED"
-              ? "CARD_FUNDS_APPROVED"
-              : "CARD_FUNDS_REJECTED",
-        },
-        expectedSubjectHash: input.settlePayload.expectedSubjectHash,
-      })
-      // Re-run complete path to attach business result
-      return completeCardFundsReview({
-        ...input.settlePayload,
-        forceUnknown: false,
-      })
-    } catch (error) {
-      if (error instanceof WorkItemMockError) {
-        return { status: "failed", code: error.code, message: error.message }
-      }
-      throw error
-    }
-  }
-  if (entry?.state === "pending") {
-    return {
-      status: "unknown",
-      message: "结果仍不确定，请稍后查询或联系支持。",
-      idempotencyKey: input.idempotencyKey,
-    }
-  }
-  return {
-    status: "failed",
-    code: "NOT_FOUND",
-    message: resultText.queryNotFound,
-  }
 }
 
 export async function demoDriftCardFundsHash(

@@ -75,10 +75,9 @@ import {
   useCompleteProcurementMutation,
   useDeferProcurementMutation,
   useProcurementConfirmationQuery,
-  useResolveUnknownProcurementMutation,
   useSaveProcurementConfirmationMutation,
 } from "@/features/procurement-confirmation/queries"
-import { freshnessText, resultText, versionText } from "@/lib/ui-text"
+import { freshnessText, versionText } from "@/lib/ui-text"
 
 const rejectSchema = z.object({
   reasonCode: z.enum([
@@ -96,12 +95,10 @@ const money = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
 })
 
-/** 会话内存中的 claimToken（不写 URL / localStorage） */
+/** 会话内存中的处理权（不写 URL / localStorage） */
 type SessionLease = {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expiresAt: string
+  claimedByLabel: string
 }
 
 type ResultState = SharedResultState<FormalOutcome>
@@ -180,7 +177,6 @@ export function ProcurementConfirmationPage() {
   const saveMutation = useSaveProcurementConfirmationMutation()
   const completeMutation = useCompleteProcurementMutation()
   const deferMutation = useDeferProcurementMutation()
-  const resolveUnknownMutation = useResolveUnknownProcurementMutation()
 
   const view = queueQuery.data
   const tasks = view?.tasks ?? []
@@ -205,19 +201,13 @@ export function ProcurementConfirmationPage() {
   const [rejectOpen, setRejectOpen] = React.useState(false)
   const [advanceAfterConfirm, setAdvanceAfterConfirm] = React.useState(true)
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
-  const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [saveMessage, setSaveMessage] = React.useState<string | null>(null)
   const headingRef = React.useRef<HTMLHeadingElement>(null)
   const resultRef = React.useRef<HTMLDivElement>(null)
-  /** 会话内存 claimToken，禁止序列化到 URL / storage */
+  /** 会话内存处理权，禁止序列化到 URL / storage */
   const leaseRef = React.useRef<SessionLease | null>(null)
   const [leaseEpoch, setLeaseEpoch] = React.useState(0)
-  const idempotencyRef = React.useRef<{
-    approve?: string
-    reject?: string
-    defer?: string
-  }>({})
 
   // 同步当前任务分行草稿
   React.useEffect(() => {
@@ -230,11 +220,6 @@ export function ProcurementConfirmationPage() {
     setDirty(false)
     setActionError(null)
     setSaveMessage(null)
-    idempotencyRef.current = {}
-    // 切换任务时若租约不属于本任务则清空会话令牌展示态
-    if (leaseRef.current?.workItemId !== task.workItemId) {
-      // 保留令牌直至重新领取；UI 显示为未领取
-    }
   }, [task?.workItemId, task?.confirmation.editVersion])
 
   // 默认 URL：scope / currentWorkItemId / queueContextId（不写 autoNext 除非用户切换）
@@ -291,9 +276,7 @@ export function ProcurementConfirmationPage() {
         if (cancelled) return
         leaseRef.current = {
           workItemId: lease.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expiresAt: lease.expiresAt,
+          claimedByLabel: lease.claimedByLabel,
         }
         setLeaseEpoch((n) => n + 1)
       })
@@ -451,18 +434,13 @@ export function ProcurementConfirmationPage() {
 
   const ensureLease = React.useCallback(async () => {
     if (!task) throw new Error("无当前任务")
-    if (
-      leaseRef.current?.workItemId === task.workItemId &&
-      leaseRef.current.claimToken
-    ) {
+    if (leaseRef.current?.workItemId === task.workItemId) {
       return leaseRef.current
     }
     const lease = await claimMutation.mutateAsync(task.workItemId)
     const session: SessionLease = {
       workItemId: lease.workItemId,
-      claimToken: lease.claimToken,
-      leaseVersion: lease.leaseVersion,
-      expiresAt: lease.expiresAt,
+      claimedByLabel: lease.claimedByLabel,
     }
     leaseRef.current = session
     setLeaseEpoch((n) => n + 1)
@@ -472,16 +450,13 @@ export function ProcurementConfirmationPage() {
   const handleSave = React.useCallback(async () => {
     if (!task) return
     try {
-      const lease = await ensureLease()
+      await ensureLease()
       const result = await saveMutation.mutateAsync({
         workItemId: task.workItemId,
         confirmationId: task.confirmation.confirmationId,
         submissionId: task.salesSubmission.submissionId,
         expectedEditVersion: task.confirmation.editVersion,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
         lines: lineDrafts,
-        idempotencyKey: `save_${task.workItemId}_${Date.now()}`,
       })
       setDirty(false)
       setSaveMessage(`已保存 · 编辑版本 ${result.editVersion}`)
@@ -512,18 +487,10 @@ export function ProcurementConfirmationPage() {
     if (!task) return
     setActionError(null)
     try {
-      const lease = await ensureLease()
-      if (!idempotencyRef.current.approve) {
-        idempotencyRef.current.approve = `approve_${task.workItemId}_${crypto.randomUUID()}`
-      }
+      await ensureLease()
       const response = await completeMutation.mutateAsync({
         workItemId: task.workItemId,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
-        expectedSubjectHash: task.salesSubmission.subjectHash,
         expectedSubjectVersion: task.subjectVersion,
-        idempotencyKey: idempotencyRef.current.approve,
-        forceUnknown: forceUnknownOnce,
         decision: {
           reviewResult: "APPROVED",
           confirmationId: task.confirmation.confirmationId,
@@ -534,18 +501,7 @@ export function ProcurementConfirmationPage() {
           subjectHash: task.salesSubmission.subjectHash,
         },
       })
-      setForceUnknownOnce(false)
 
-      if (response.status === "unknown") {
-        setLastResult({
-          status: "unknown",
-          title: resultText.unknown,
-          description: response.message,
-          pendingIdempotencyKey: response.idempotencyKey,
-          stayOnItem: true,
-        })
-        return
-      }
       if (response.status === "failed") {
         setActionError(response.message)
         return
@@ -577,7 +533,6 @@ export function ProcurementConfirmationPage() {
     autoNext,
     completeMutation,
     ensureLease,
-    forceUnknownOnce,
     task,
   ])
 
@@ -586,17 +541,10 @@ export function ProcurementConfirmationPage() {
       if (!task) return
       setActionError(null)
       try {
-        const lease = await ensureLease()
-        if (!idempotencyRef.current.reject) {
-          idempotencyRef.current.reject = `reject_${task.workItemId}_${crypto.randomUUID()}`
-        }
+        await ensureLease()
         const response = await completeMutation.mutateAsync({
           workItemId: task.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expectedSubjectHash: task.salesSubmission.subjectHash,
           expectedSubjectVersion: task.subjectVersion,
-          idempotencyKey: idempotencyRef.current.reject,
           decision: {
             reviewResult: "REJECTED",
             confirmationId: task.confirmation.confirmationId,
@@ -610,16 +558,6 @@ export function ProcurementConfirmationPage() {
           },
         })
         setRejectOpen(false)
-        if (response.status === "unknown") {
-          setLastResult({
-            status: "unknown",
-            title: resultText.unknown,
-            description: response.message,
-            pendingIdempotencyKey: response.idempotencyKey,
-            stayOnItem: true,
-          })
-          return
-        }
         if (response.status === "failed") {
           setActionError(response.message)
           return
@@ -668,18 +606,12 @@ export function ProcurementConfirmationPage() {
       if (dirty) {
         await handleSave()
       }
-      const lease = await ensureLease()
-      if (!idempotencyRef.current.defer) {
-        idempotencyRef.current.defer = `defer_${task.workItemId}_${crypto.randomUUID()}`
-      }
+      await ensureLease()
       const nextId = neighborId(1)
       const response = await deferMutation.mutateAsync({
         workItemId: task.workItemId,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
         queueContextId,
         nextWorkItemId: nextId,
-        idempotencyKey: idempotencyRef.current.defer,
       })
       if (response.status !== "succeeded" || response.outcome.kind !== "DEFERRED") {
         if (response.status === "failed") setActionError(response.message)
@@ -709,71 +641,6 @@ export function ProcurementConfirmationPage() {
     queueContextId,
     task,
   ])
-
-  const handleResolveUnknown = React.useCallback(
-    async (settle: boolean) => {
-      if (!lastResult?.pendingIdempotencyKey || !task) return
-      const lease = leaseRef.current
-      const response = await resolveUnknownMutation.mutateAsync({
-        idempotencyKey: lastResult.pendingIdempotencyKey,
-        settle,
-        settlePayload:
-          settle && lease
-            ? {
-                workItemId: task.workItemId,
-                claimToken: lease.claimToken,
-                leaseVersion: lease.leaseVersion,
-                expectedSubjectHash: task.salesSubmission.subjectHash,
-                expectedSubjectVersion: task.subjectVersion,
-                idempotencyKey: lastResult.pendingIdempotencyKey,
-                decision: {
-                  reviewResult: "APPROVED",
-                  confirmationId: task.confirmation.confirmationId,
-                  submissionId: task.salesSubmission.submissionId,
-                  expectedConfirmationEditVersion:
-                    task.confirmation.editVersion,
-                  salesOrderId: task.salesSubmission.salesOrderId,
-                  salesOrderNo: task.salesSubmission.salesOrderNo,
-                  subjectHash: task.salesSubmission.subjectHash,
-                },
-              }
-            : undefined,
-      })
-      if (response.status === "unknown") {
-        setLastResult({
-          status: "unknown",
-          title: "处理结果仍待确认",
-          description: response.message,
-          pendingIdempotencyKey: response.idempotencyKey,
-          stayOnItem: true,
-        })
-        return
-      }
-      if (response.status === "failed") {
-        setActionError(response.message)
-        return
-      }
-      const outcome = response.outcome
-      if (outcome.kind === "APPROVED_AND_SALES_EFFECTIVE") {
-        setLastResult({
-          status: "succeeded",
-          title: "查询确认：采购确认已通过",
-          description: "原任务号返回同一处理结果，未重复推进销售状态。",
-          reference: outcome.reference,
-          outcome,
-          stayOnItem: !autoNext,
-        })
-        if (autoNext) advanceIfNeeded(true)
-      }
-    },
-    [
-      advanceIfNeeded,
-      autoNext,
-      lastResult?.pendingIdempotencyKey,
-      resolveUnknownMutation,
-      task,
-    ]
-  )
 
   // 键盘：无输入焦点时 j/k 切换；⌘S 保存；⌘↵ 打开通过
   React.useEffect(() => {
@@ -851,11 +718,9 @@ export function ProcurementConfirmationPage() {
 
   const leaseStatus = !task
     ? "unclaimed"
-    : lastResult?.status === "unknown"
+    : activeLease
       ? "active"
-      : activeLease
-        ? "active"
-        : "unclaimed"
+      : "unclaimed"
 
   const leaseLabel = activeLease
     ? "已领取 · 处理中"
@@ -929,15 +794,6 @@ export function ProcurementConfirmationPage() {
         <Badge variant="outline" className="font-normal">
           该偏好仅在本次操作内生效
         </Badge>
-        <label className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            className="size-3.5"
-            checked={forceUnknownOnce}
-            onChange={(e) => setForceUnknownOnce(e.target.checked)}
-          />
-          下次通过模拟结果未知
-        </label>
       </div>
 
       {lastResult ? (
@@ -965,9 +821,6 @@ export function ProcurementConfirmationPage() {
                     tasks[0]?.workItemId
                   goToWorkItem(next)
                 }}
-                onResolveUnknown={() => void handleResolveUnknown(false)}
-                onSettleUnknown={() => void handleResolveUnknown(true)}
-                resolving={resolveUnknownMutation.isPending}
               />
             }
           />
@@ -1008,11 +861,7 @@ export function ProcurementConfirmationPage() {
             leaseStatusLabel={leaseLabel}
             processLabel="确认通过"
             processNextLabel="通过并打开下一条"
-            processDisabled={
-              formalPending ||
-              Boolean(lastResult?.status === "unknown") ||
-              !allCovered
-            }
+            processDisabled={formalPending || !allCovered}
             pending={formalPending}
             onBack={() => router.push("/workspace")}
             onProcess={() => {
@@ -1601,7 +1450,7 @@ export function ProcurementConfirmationPage() {
               type="button"
               variant="outline"
               onClick={() => void handleDefer()}
-              disabled={formalPending || lastResult?.status === "unknown"}
+              disabled={formalPending}
             >
               <PauseIcon data-icon="inline-start" aria-hidden="true" />
               先跳过
@@ -1610,7 +1459,7 @@ export function ProcurementConfirmationPage() {
               type="button"
               variant="destructive"
               onClick={() => setRejectOpen(true)}
-              disabled={formalPending || lastResult?.status === "unknown"}
+              disabled={formalPending}
             >
               <XIcon data-icon="inline-start" aria-hidden="true" />
               驳回
@@ -1621,11 +1470,7 @@ export function ProcurementConfirmationPage() {
                 setAdvanceAfterConfirm(autoNext)
                 setConfirmOpen(true)
               }}
-              disabled={
-                formalPending ||
-                !allCovered ||
-                lastResult?.status === "unknown"
-              }
+              disabled={formalPending || !allCovered}
             >
               <CheckIcon data-icon="inline-start" aria-hidden="true" />
               确认通过并使销售单生效
@@ -1839,41 +1684,12 @@ function ResultActions({
   taskSalesOrderId,
   returnTo,
   onNext,
-  onResolveUnknown,
-  onSettleUnknown,
-  resolving,
 }: {
   lastResult: NonNullable<ResultState>
   taskSalesOrderId?: string
   returnTo: string
   onNext: () => void
-  onResolveUnknown: () => void
-  onSettleUnknown: () => void
-  resolving: boolean
 }) {
-  if (lastResult.status === "unknown") {
-    return (
-      <>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={resolving}
-          onClick={onResolveUnknown}
-        >
-          查询最终结果
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          disabled={resolving}
-          onClick={onSettleUnknown}
-        >
-          同任务号完成（演示）
-        </Button>
-      </>
-    )
-  }
   return (
     <>
       {taskSalesOrderId ? (

@@ -4,6 +4,7 @@
  */
 
 import { mockDelay } from "@/lib/mock-delay"
+import { filterRowsBySearch } from "@/lib/filter-utils"
 import type {
   CustomerQualityExportJob,
   CustomerQualityMetric,
@@ -26,9 +27,6 @@ const DEFAULT_SCOPE = {
   label: "华东销售团队（授权）",
   permissionVersion: PERMISSION_VERSION,
 }
-
-/** In-memory export jobs for this SPA session. */
-const exportJobs = new Map<string, CustomerQualityExportJob>()
 
 export async function fetchCustomerQualityPeriodPolicy(input?: {
   scenario?: CustomerQualityScenario
@@ -110,18 +108,13 @@ function filterRows(
   rows: readonly CustomerQualityRow[],
   query: CustomerQualityQuery
 ): CustomerQualityRow[] {
-  let next = [...rows]
+  let next = filterRowsBySearch(rows, query.q, (r) => [
+    r.customerNo,
+    r.customerName,
+  ])
 
   if (query.customerId) {
     next = next.filter((r) => r.customerId === query.customerId)
-  }
-  if (query.q) {
-    const q = query.q.trim().toLowerCase()
-    next = next.filter(
-      (r) =>
-        r.customerNo.toLowerCase().includes(q) ||
-        r.customerName.toLowerCase().includes(q)
-    )
   }
   if (query.scaleTag) {
     next = next.filter((r) => r.scaleTierCode === query.scaleTag)
@@ -386,41 +379,18 @@ export async function startCustomerQualityExport(input: {
 }): Promise<CustomerQualityExportJob> {
   await mockDelay(120)
   const jobId = `EXP-W15-${Date.now().toString(36)}`
-  const job: CustomerQualityExportJob = {
+  return {
     jobId,
-    status: "running",
+    status: "succeeded",
     total: Math.max(1, input.rowCount),
-    completed: 0,
+    completed: Math.max(1, input.rowCount),
     filterSummary: input.filterSummary,
     period: { from: input.query.from, to: input.query.to },
     permissionVersion: input.permissionVersion,
     projectionWatermark: input.projectionWatermark,
     amountBasisNote:
       "成交金额=含税(GROSS)；实际盈亏=不含税(NET)；卡券收入不进入实际盈亏列；缺失成本不写作 0。",
+    downloadLabel: `客户经营质量_${input.query.from}_${input.query.to}.csv`,
+    expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
   }
-  exportJobs.set(jobId, job)
-
-  // Mock progress → succeeded with 7-day download
-  queueMicrotask(() => {
-    window.setTimeout(() => {
-      const current = exportJobs.get(jobId)
-      if (!current) return
-      exportJobs.set(jobId, {
-        ...current,
-        status: "succeeded",
-        completed: current.total,
-        downloadLabel: `客户经营质量_${input.query.from}_${input.query.to}.csv`,
-        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
-      })
-    }, 600)
-  })
-
-  return job
-}
-
-export async function fetchCustomerQualityExportJob(
-  jobId: string
-): Promise<CustomerQualityExportJob | null> {
-  await mockDelay(40)
-  return exportJobs.get(jobId) ?? null
 }

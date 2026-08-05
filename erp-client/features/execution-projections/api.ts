@@ -8,6 +8,7 @@
  */
 
 import { mockDelay } from "@/lib/mock-delay"
+import { filterRowsBySearch } from "@/lib/filter-utils"
 import type {
   BulkItemOutcome,
   BulkProjectionJob,
@@ -37,11 +38,6 @@ import {
   seedToListRow,
   type ProjectionSeed,
 } from "@/mock/execution-projections"
-import {
-  getIdempotencyEntry,
-  queryIdempotencyResult,
-  setIdempotencySucceeded,
-} from "@/mock/session-state"
 
 const PERMISSION_VERSION = "pv-w23-demo-1"
 const BULK_LIMIT = 20
@@ -268,18 +264,13 @@ function filterRows(
   query: ExecutionProjectionListQuery
 ): ExecutionProjectionRow[] {
   const statuses = parseStatuses(query.deliveryStatus)
-  let next = rows
+  let next = filterRowsBySearch(rows, query.q, (r) => [
+    r.salesOrderNo,
+    r.projectionNo,
+    r.projectionId,
+    r.customerLabel,
+  ])
 
-  if (query.q?.trim()) {
-    const q = query.q.trim().toLowerCase()
-    next = next.filter(
-      (r) =>
-        r.salesOrderNo.toLowerCase().includes(q) ||
-        r.projectionNo.toLowerCase().includes(q) ||
-        r.projectionId.toLowerCase().includes(q) ||
-        r.customerLabel.toLowerCase().includes(q)
-    )
-  }
   if (query.mallId && query.mallId !== "all") {
     next = next.filter((r) => r.targetMallId === query.mallId)
   }
@@ -665,7 +656,6 @@ export type DeliveryCommandInput = {
   action: "QUERY_RESULT" | "RETRY" | "ESCALATE"
   expectedObjectVersion: string
   requestId: string
-  idempotencyKey: string
   /** 演示：强制查询仍返回未知 */
   forceStillUnknown?: boolean
 }
@@ -674,15 +664,6 @@ export async function submitProjectionDeliveryCommand(
   input: DeliveryCommandInput
 ): Promise<ProjectionDeliveryCommandResult> {
   await mockDelay(120)
-
-  const existing = getIdempotencyEntry(input.idempotencyKey)
-  if (existing?.state === "succeeded" && existing.payload) {
-    return existing.payload as ProjectionDeliveryCommandResult
-  }
-  const queried = queryIdempotencyResult(input.idempotencyKey)
-  if (queried?.state === "succeeded" && queried.payload) {
-    return queried.payload as ProjectionDeliveryCommandResult
-  }
 
   const base = getSeed(input.projectionId)
   if (!base) {
@@ -814,7 +795,6 @@ export async function submitProjectionDeliveryCommand(
     objectVersion: overlay.objectVersion,
   }
 
-  setIdempotencySucceeded(input.idempotencyKey, input.action, payload)
   return payload
 }
 
@@ -823,18 +803,12 @@ export type BulkCommandInput = {
   /** 仅显式选择的稳定 ID；拒绝“当前筛选全部” */
   projectionIds: string[]
   requestId: string
-  idempotencyKey: string
 }
 
 export async function submitBulkProjectionCommand(
   input: BulkCommandInput
 ): Promise<BulkProjectionJob> {
   await mockDelay(150)
-
-  const existing = getIdempotencyEntry(input.idempotencyKey)
-  if (existing?.state === "succeeded" && existing.payload) {
-    return existing.payload as BulkProjectionJob
-  }
 
   if (!input.projectionIds.length) {
     throw new Error("请先逐项显式勾选失败/可处理项")
@@ -1021,7 +995,6 @@ export async function submitBulkProjectionCommand(
   }
 
   bulkJobs.set(job.jobId, job)
-  setIdempotencySucceeded(input.idempotencyKey, input.action, job)
   return job
 }
 

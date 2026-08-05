@@ -105,16 +105,13 @@ import { freshnessText, resultText } from "@/lib/ui-text"
 
 type SessionLease = {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expiresAt: string
 }
 
 type ResultState = SharedResultState<FulfillmentFormalOutcome | DeferOutcome>
 
 /**
  * 演示专用控件（人为制造「结果未确定」、跳过查询直接结算）只在开发环境出现。
- * unknown 态本身在生产可达（同一幂等键重试命中 pending），故其「查一下到底成没成」始终保留。
+ * unknown 态仅由演示开关产生，故其「查一下到底成没成」始终保留。
  */
 const DEV_SIMULATION_ENABLED = process.env.NODE_ENV !== "production"
 
@@ -227,7 +224,6 @@ export function FulfillmentOperationsPage() {
   const resultRef = React.useRef<HTMLDivElement>(null)
   const leaseRef = React.useRef<SessionLease | null>(null)
   const [leaseEpoch, setLeaseEpoch] = React.useState(0)
-  const idempotencyRef = React.useRef<{ post?: string; defer?: string }>({})
 
   React.useEffect(() => {
     if (!task) {
@@ -239,7 +235,6 @@ export function FulfillmentOperationsPage() {
     setDirty(false)
     setActionError(null)
     setSaveMessage(null)
-    idempotencyRef.current = {}
   }, [task?.workItemId, task?.editVersion])
 
   React.useEffect(() => {
@@ -294,9 +289,6 @@ export function FulfillmentOperationsPage() {
         if (cancelled) return
         leaseRef.current = {
           workItemId: lease.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expiresAt: lease.expiresAt,
         }
         setLeaseEpoch((n) => n + 1)
       })
@@ -384,18 +376,12 @@ export function FulfillmentOperationsPage() {
 
   const ensureLease = React.useCallback(async () => {
     if (!task) throw new Error("无当前任务")
-    if (
-      leaseRef.current?.workItemId === task.workItemId &&
-      leaseRef.current.claimToken
-    ) {
+    if (leaseRef.current?.workItemId === task.workItemId) {
       return leaseRef.current
     }
     const lease = await claimMutation.mutateAsync(task.workItemId)
     const session: SessionLease = {
       workItemId: lease.workItemId,
-      claimToken: lease.claimToken,
-      leaseVersion: lease.leaseVersion,
-      expiresAt: lease.expiresAt,
     }
     leaseRef.current = session
     setLeaseEpoch((n) => n + 1)
@@ -419,14 +405,11 @@ export function FulfillmentOperationsPage() {
   const handleSave = React.useCallback(async () => {
     if (!task || !draft) return
     try {
-      const lease = await ensureLease()
+      await ensureLease()
       await saveMutation.mutateAsync({
         workItemId: task.workItemId,
         expectedEditVersion: task.editVersion,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
         draft,
-        idempotencyKey: `save_${task.workItemId}_${Date.now()}`,
       })
       setDirty(false)
       setSaveMessage("草稿已保存")
@@ -455,20 +438,14 @@ export function FulfillmentOperationsPage() {
     if (!task || !draft) return
     setActionError(null)
     try {
-      const lease = await ensureLease()
-      if (!idempotencyRef.current.post) {
-        idempotencyRef.current.post = `post_${task.workItemId}_${crypto.randomUUID()}`
-      }
+      await ensureLease()
       const nextId = neighborId(1)
       const response = await postMutation.mutateAsync({
         workItemId: task.workItemId,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
-        expectedSubjectHash: task.subjectHash,
+        expectedSubjectVersion: task.sourceVersion,
         expectedSourceVersion: task.sourceVersion,
         expectedEditVersion: task.editVersion,
         draft,
-        idempotencyKey: idempotencyRef.current.post,
         nextWorkItemId: nextId,
         forceUnknown: forceUnknownOnce,
       })
@@ -525,20 +502,14 @@ export function FulfillmentOperationsPage() {
       setActionError(null)
       try {
         if (dirty) await handleSave()
-        const lease = await ensureLease()
-        if (!idempotencyRef.current.defer) {
-          idempotencyRef.current.defer = `defer_${task.workItemId}_${crypto.randomUUID()}`
-        }
+        await ensureLease()
         const nextId = neighborId(1)
         const response = await deferMutation.mutateAsync({
           workItemId: task.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
           queueContextId,
           reasonCode: value.reasonCode,
           reasonNote: value.reasonNote?.trim() || undefined,
           nextWorkItemId: nextId,
-          idempotencyKey: idempotencyRef.current.defer,
         })
         setDeferOpen(false)
         if (
@@ -580,22 +551,19 @@ export function FulfillmentOperationsPage() {
 
   const handleResolveUnknown = React.useCallback(
     async (settle: boolean) => {
-      if (!lastResult?.pendingIdempotencyKey || !task || !draft) return
+      if (!task || !draft) return
       const lease = leaseRef.current
       const response = await resolveUnknownMutation.mutateAsync({
-        idempotencyKey: lastResult.pendingIdempotencyKey,
+        workItemId: task.workItemId,
         settle,
         settlePayload:
           settle && lease
             ? {
                 workItemId: task.workItemId,
-                claimToken: lease.claimToken,
-                leaseVersion: lease.leaseVersion,
-                expectedSubjectHash: task.subjectHash,
+                expectedSubjectVersion: task.sourceVersion,
                 expectedSourceVersion: task.sourceVersion,
                 expectedEditVersion: task.editVersion,
                 draft,
-                idempotencyKey: lastResult.pendingIdempotencyKey,
                 nextWorkItemId: neighborId(1),
               }
             : undefined,
@@ -630,7 +598,6 @@ export function FulfillmentOperationsPage() {
       advanceIfNeeded,
       autoNext,
       draft,
-      lastResult?.pendingIdempotencyKey,
       neighborId,
       resolveUnknownMutation,
       task,

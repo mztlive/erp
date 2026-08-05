@@ -1,10 +1,9 @@
 "use client"
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 
 import {
   fetchCardBusinessAnalytics,
-  fetchCardBusinessExportJob,
   fetchDateBasisConfig,
   startCardBusinessExport,
   type DateBasisConfigQuery,
@@ -17,8 +16,6 @@ export const cardBusinessKeys = {
     [...cardBusinessKeys.all, "date-basis", q] as const,
   view: (query: CardBusinessAnalyticsQuery) =>
     [...cardBusinessKeys.all, "view", query] as const,
-  exportJob: (jobId: string) =>
-    [...cardBusinessKeys.all, "export", jobId] as const,
 }
 
 export function useDateBasisConfigQuery(q: DateBasisConfigQuery = {}) {
@@ -55,28 +52,9 @@ export function useCardBusinessAnalyticsQuery(
   })
 }
 
-export function useCardBusinessExportJobQuery(jobId: string | null) {
-  return useQuery({
-    queryKey: cardBusinessKeys.exportJob(jobId ?? ""),
-    queryFn: () => fetchCardBusinessExportJob(jobId!),
-    enabled: Boolean(jobId),
-    refetchInterval: (q) => {
-      const status = q.state.data?.status
-      if (status === "succeeded" || status === "failed") return false
-      return 400
-    },
-  })
-}
-
 export function useStartCardBusinessExportMutation() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: startCardBusinessExport,
-    onSuccess: async (job) => {
-      await queryClient.invalidateQueries({
-        queryKey: cardBusinessKeys.exportJob(job.jobId),
-      })
-    },
   })
 }
 

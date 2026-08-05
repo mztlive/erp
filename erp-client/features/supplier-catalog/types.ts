@@ -202,8 +202,6 @@ export type SupplierCatalogExceptionWorkItem = Readonly<{
   workItemStatus: "PENDING" | "IN_PROGRESS" | "COMPLETED"
   dueAt?: string
   claimedBy?: { userId: string; displayName: string }
-  leaseVersion?: number
-  leaseExpiresAt?: string
   allowedActions: readonly (
     | "CLAIM"
     | "HOLD"
@@ -410,9 +408,6 @@ export type SupplierCatalogCenterView = Readonly<{
 export type WorkItemLease = Readonly<{
   workItemId: string
   claimedByLabel: string
-  expiresAt: string
-  leaseVersion: number
-  claimToken: string
 }>
 
 export type SupplierCatalogWorkItemAction =
@@ -473,7 +468,6 @@ export type FormalOutcome =
 export type FormalActionResponse =
   | { status: "succeeded"; outcome: FormalOutcome }
   | { status: "failed"; message: string; code: string }
-  | { status: "unknown"; message: string; idempotencyKey: string }
 
 /** 会话内映射/供给草稿（非正式）；按供应商 SKU 为粒度。 */
 export type SessionCatalogDraft = Readonly<{

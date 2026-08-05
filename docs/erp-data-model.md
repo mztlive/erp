@@ -33,8 +33,7 @@
     多公司或多币种模型。卡券玩法规则继续由商城管理，不进入 ERP。
 11. 当前两期均为单公司、单账套、人民币。旧商城表中的 `tenant_id` 不构成 ERP
     多租户依据；金额字段固定表达人民币，不增加无业务含义的公司或币种维度。
-12. 正式事实与待发送消息使用同事务 outbox；工作台、经营分析和预警是可重建投影，
-    不得反向改写正式事实。
+12. 统计查询直连正式表；确需缓存时定时刷新可重建投影，不得反向改写正式事实。
 
 ---
 
@@ -67,7 +66,7 @@
 | 商城售后 | `mall_after_sales_request` | 取消/退款动作、结果事实、余额恢复 | 商城订单、供应商订单 |
 | 供应商履约 | `supplier_fulfillment_order` | 子订单明细、动作、状态历史、退款事实 | 商城商品明细、固定供给 |
 | 供应商结算 | `supplier_settlement_statement` | 结算明细、差异、确认 | 供应商订单、应付 |
-| 集成治理 | `outbox_message` / `inbox_message` | 尝试、错误任务、对账批次和差异 | 所有跨系统聚合 |
+| 集成治理（普通表组，非顶级聚合） | — | `inbox_message`、`integration_error_task`、`reconciliation_difference` / `reconciliation_difference_resolution` | 跨系统消息接收、错误任务与对账差异 | 所有跨系统消费者 |
 
 聚合间只能通过稳定主键或明确的分配表关联。不得用名称、面额、手机号、
 当前价格或来源表自增 ID 推断同一业务对象。
@@ -219,8 +218,8 @@ erDiagram
    基础资料身份及修订永久保留。
 4. `audit_event` 记录操作者、动作、对象、请求追踪号、时间和变更字段名。
    敏感字段只记录“已变更”和摘要，不记录完整旧值或新值。
-5. 银行账号、联系人手机号、履约地址等敏感值加密保存；低熵敏感值的精确查询使用
-   带密钥的规范化 HMAC 及密钥版本，禁止使用可离线枚举的裸摘要。
+5. 银行账号、联系人手机号、履约地址等敏感值在数据库加密列保存；低熵敏感值的精确
+   查询使用带密钥的规范化 HMAC，禁止使用可离线枚举的裸摘要。
    页面是否展示完整值由权限决定，接口日志和操作日志始终不记录完整值。
 6. ERP 不保存卡号、卡密、卡实例绑定手机号及其可逆映射。
 7. 成功形成正式数据的导入文件经过文件安全检查、字段白名单和敏感内容清理后，
@@ -303,10 +302,9 @@ erDiagram
 | 成本 | `cost_entry`、`cost_allocation` |
 | 退拒纠错 | `sales_return_case`、`sales_return_line`、`purchase_return_order`、`purchase_return_line`、`customer_refund`、`supplier_refund`、`receipt_reversal`、`payment_reversal` |
 | 旧数据导入 | `legacy_import_batch`、`legacy_import_row`、`legacy_import_confirmation` |
-| 商城拉取 | `mall_sales_sync_job`、`mall_sales_sync_cursor`、`mall_sales_sync_cursor_tie`、`mall_sales_order_snapshot`、`mall_sales_reconciliation_job`、`mall_sales_reconciliation_item`、`master_mapping_task` |
+| 商城拉取 | `mall_sales_sync_job`、`mall_sales_sync_cursor`、`mall_sales_order_snapshot`、`mall_sales_reconciliation_job`、`mall_sales_reconciliation_item`、`master_mapping_task` |
 | 供应商商品库 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_product_revision_media`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`、`supplier_product_mapping`、`supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
 | 多供应商供给 | `supplier_offering`、`supplier_offering_revision` |
-| 内部可靠事件 | `outbox_message`（一期仅允许内部投影消费者，不配置外部 endpoint） |
 
 供应商商品库、供应商 SKU 映射和多供应商供给全部在第一期启用。第一期来源仅开放
 `MANUAL` / `EXCEL`；API 连接、自动同步和 API 变化处理在第二期启用，但继续写入上述同一套
@@ -319,18 +317,17 @@ erDiagram
 | 供应商 API | `supplier_api_connection`、`supplier_api_capability` |
 | 商品发布 | `product_publication`、`product_publication_revision`、`product_publication_revision_media`、`product_publication_delivery` |
 | 执行投影 | `sales_order_projection`、`sales_order_projection_revision`、`sales_order_projection_delivery` |
-| 卡实例与余额 | `mall_consumption_cutover`、`mall_consumption_cutover_check`、`mall_card_instance`、`mall_card_instance_correction`、`mall_balance_snapshot` |
+| 卡实例与余额 | `mall_consumption_cutover`、`mall_card_instance`、`mall_card_instance_correction`、`mall_balance_snapshot` |
 | 商城关键事实 | `mall_order_fact`、`mall_order_cancel_fact`、`mall_order_completion_fact`、`mall_order`、`mall_order_item`、`mall_payment_source`、`mall_item_funding_allocation`、`mall_consumption_entry`、`mall_consumption_cost_assessment` |
 | 商城售后 | `mall_after_sales_request`、`mall_after_sales_request_line`、`mall_refund`、`mall_refund_line`、`mall_refund_allocation`、`mall_balance_restoration`、`mall_balance_restoration_allocation` |
 | 历史回填 | `mall_consumption_backfill_job`、`mall_consumption_backfill_item` |
 | 供应商履约 | `supplier_fulfillment_order`、`supplier_fulfillment_item`、`supplier_order_action`、`supplier_order_action_line`、`supplier_order_status_history`、`supplier_refund_fact`、`supplier_refund_allocation` |
 | 供应商结算 | `supplier_settlement_statement`、`supplier_settlement_item`、`supplier_settlement_difference` |
-| 双向集成治理 | `inbox_message`、`integration_attempt`、`integration_error_task`、`reconciliation_job`、`reconciliation_difference`、`reconciliation_difference_resolution`；复用一期 `outbox_message`，不新建第二张 outbox 或 `integration_message` 同义表 |
+| 集成治理（普通表组） | `inbox_message`、`integration_error_task`、`reconciliation_difference`、`reconciliation_difference_resolution` |
 
-一期已经建设唯一的 `outbox_message`，只用于 ERP 内部正式事实变更流和 W01/W15/W16 等
-可重建投影；一期不配置外部 endpoint、webhook、供应商 API 外发、外部 dispatcher 或
-`inbox_message`。二期复用同一张 outbox 表并开启外部投递能力，同时新增 inbox、协议尝试、
-错误中心和通用对账。`integration_message` 只能作为 outbox/inbox 的概念总称，不是第三张物理表。
+集成表均为普通表组，不构成顶级聚合或消息中间件：`inbox_message` 记录已接收的外部
+消息，`integration_error_task` 记录投递或处理失败及人工处理，`reconciliation_*` 记录
+对账差异。商城主动轮询仍使用 `mall_sales_sync_*` / `mall_sales_reconciliation_*` 专用表。
 
 ---
 
@@ -429,13 +426,11 @@ erDiagram
 | `from_status` / `to_status` | 状态变化 |
 | `actor_id` / `actor_role` | 实际操作者和责任角色 |
 | `comment` | 意见或驳回原因 |
-| `subject_hash` | 审批所针对的内容指纹 |
 
 必需约束与索引：
 
 - `document_id + recorded_at` 历史索引；
 - `actor_id + recorded_at` 审计索引；
-- 审批通过记录的 `subject_hash` 必须等于当次提交快照指纹。
 
 #### `work_item`
 
@@ -458,38 +453,30 @@ erDiagram
 | `IMPORT_BUSINESS_CONFIRMATION` | `LEGACY_IMPORT_BATCH` | `import_business_confirmation` | `W18` | `COMPLETE_IMPORT_BUSINESS_CONFIRMATION` |
 
 该完成动作的领域 decision 仅允许 `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`。每个“批次 ×
-`confirmation_scope` × `trial_version` / `subject_hash`”创建一个任务；责任差异由
-`confirmation_scope + owner_role` 表达，不改变任务类型、handler 或完成动作。`subject_hash`
-必须覆盖批次、责任范围、试算版本、规则版本和 manifest 摘要，确保同一批次多个范围不会
-因共用任务类型而错误去重。
+`confirmation_scope` × `trial_version`”创建一个任务；责任差异由
+`confirmation_scope + owner_role` 表达，不改变任务类型、handler 或完成动作。
 
 | 字段 | 说明 |
 | --- | --- |
 | `work_item_type` | 采购确认、低毛利上级确认、审批、复核、异常等固定类型 |
 | `business_object_type` / `business_object_id` | 任务对应的稳定业务对象 |
-| `subject_version` / `subject_hash` | 任务针对的对象版本和内容指纹 |
-| `status` | 待领取、待处理、处理中、已完成、已转交、已关闭 |
+| `subject_version` | 任务针对的对象版本 |
+| `status` | `UNCLAIMED` / `IN_PROGRESS` / `COMPLETED` / `CLOSED` |
 | `owner_role` / `owner_user_id` | 责任角色和当前责任人 |
 | `priority` / `due_at` | 优先级和时限 |
 | `reason_code` / `impact_summary` | 产生原因和业务影响 |
 | `completion_action` | 该任务唯一允许的完成动作 |
-| `claimed_by` / `claim_token_hash` | 原子领取人和不可逆租约令牌摘要 |
-| `lease_expires_at` / `lease_version` | 领取租约及续期版本 |
 | `completed_at` / `completed_by` | 正式完成审计 |
-| `transferred_from_work_item_id` / `transferred_to_work_item_id` | 转交前后任务链 |
-| `closed_reason_code` / `replacement_work_item_id` | 人工关闭原因及替代正式任务 |
-| `closure_evidence_document_id` / `closure_evidence_reference` | 关闭所依据的正式单据或受控证据 |
 
 必需约束与索引：
 
-- 同一业务对象、任务类型和 `subject_hash` 同时最多一个有效任务；
+- 同一业务对象、任务类型同时最多一个有效任务；
 - `owner_role + owner_user_id + status + due_at` 工作队列索引；
-- 领取使用条件更新并返回租约令牌；已被有效租约领取的任务不能被另一用户同时处理；
-- 正式处理同时校验领取人、租约、对象版本、内容指纹和岗位分离；
-- 转交在同一事务把原任务标记为已转交、失效原租约并创建一个继承业务对象和
-  `subject_hash` 的待领取后继任务；不得只改责任人而丢失转交历史；
+- 领取 = 条件更新（行锁）原子完成：仅当状态为 `UNCLAIMED` 时更新为 `IN_PROGRESS` 并
+  写入领取人，同一时刻只能被一个用户处理，无需租约或令牌；
+- 正式处理同时校验当前领取人、对象版本和岗位分离；
 - 审批、确认、结果未知和未完成补偿任务不得人工关闭；
-- 只有重复、误派或已有替代正式任务时允许关闭，必须记录结构化原因和替代证据；
+- 只有重复、误派或已有替代正式任务时允许关闭，必须记录关闭原因；
 - 完成或关闭任务本身不修改正式业务事实；业务状态变化由对应强类型事务完成。
 
 #### `bulk_selection_snapshot` 与 `bulk_selection_item`
@@ -499,7 +486,6 @@ erDiagram
 | 字段 | 说明 |
 | --- | --- |
 | `selection_type` | 导出、责任人分配、导入应用、映射、补拉等 |
-| `filter_digest` / `sort_digest` | 预览时业务筛选与排序摘要 |
 | `data_cutoff_at` | 选择范围的数据截止水位 |
 | `item_count` | 冻结目标数 |
 | `created_by` / `created_at` / `expires_at` | 创建与有效期 |
@@ -512,7 +498,6 @@ erDiagram
 | `selection_snapshot_id` | 选择快照 |
 | `object_type` / `object_id` | 目标稳定身份 |
 | `expected_version` / `expected_hash` | 预览时版本和内容摘要 |
-| `authorization_scope_digest` | 预览时责任域摘要，只用于审计，不替代执行时鉴权 |
 | `result_status` / `result_code` | 成功、跳过、失败及原因 |
 
 必需约束与索引：
@@ -533,7 +518,6 @@ erDiagram
 | `domain_job_type` / `domain_job_id` | 适用时关联强类型领域任务 |
 | `selection_snapshot_id` | 批量或导出使用的不可变选择快照 |
 | `requested_by` / `request_id` | 发起人和请求幂等身份 |
-| `authorization_scope_digest` | 发起时权限范围摘要，只用于审计 |
 | `input_file_asset_id` / `result_file_asset_id` | 合规输入包和结果文件 |
 | `status` | 等待执行、执行中、部分成功、成功、失败、已取消 |
 | `total_count` / `processed_count` / `success_count` / `skipped_count` / `failed_count` | 进度 |
@@ -556,7 +540,7 @@ erDiagram
 
 - `job_no`、`request_id` 分别唯一；`(background_job_id, item_no)` 唯一；
 - 普通任务允许逐项提交并显示部分成功；
-- 任务执行逐项重验当前权限、数据范围、状态和版本；发起时权限摘要不能替代当前鉴权；
+- 任务执行逐项重验当前权限、数据范围、状态和版本；
 - 导出必须保存选择快照、字段清单和遮罩规则；下载时再次校验当前用户对每类业务对象
   和敏感字段的权限，使用短时链接并记录下载审计；
 - 导出结果保留 7 天。成功导入长期保留独立的成功白名单包、manifest、规则版本、
@@ -572,7 +556,7 @@ erDiagram
 | --- | --- |
 | `storage_object_key` | 加密受控对象存储中的不可猜测对象键 |
 | `file_name` / `content_type` / `byte_size` | 展示元数据 |
-| `content_hmac` / `hmac_key_version` | keyed HMAC 和密钥版本，不保存可被离线枚举的裸敏感摘要 |
+| `content_hmac` | keyed HMAC，不保存可被离线枚举的裸敏感摘要 |
 | `security_scan_status` | 待扫描、通过、拒绝、隔离 |
 | `sensitivity_class` / `retention_class` | 敏感级别和保留策略 |
 | `expires_at` / `destroyed_at` | 到期和销毁审计 |
@@ -619,19 +603,17 @@ erDiagram
 | `bank_account_no` | ERP 内部稳定账户编号 |
 | `party_id` | 所属企业主体 |
 | `account_name` / `bank_name` / `bank_branch_name` | 户名、银行及支行 |
-| `account_number_ciphertext` / `encryption_key_version` | 账号密文和加密密钥版本 |
-| `account_number_query_hmac` / `hmac_key_version` | 规范化账号的 keyed HMAC 和密钥版本 |
+| `account_number_ciphertext` | 数据库加密列保存的账号密文 |
+| `account_number_query_hmac` | 规范化账号的 keyed HMAC |
 | `valid_from` / `valid_to` / `status` | 有效期和启停状态 |
 | `is_default` | 是否为当前默认账户 |
 
 必需约束与索引：
 
-- `bank_account_no` 唯一；同一 HMAC 密钥版本下
-  `(party_id, account_number_query_hmac, hmac_key_version)` 唯一；
-- 查询和重复校验只能使用 keyed HMAC；密钥轮换期间同时计算新旧版本并完成后台迁移，
-  不得回退为明文或裸哈希；
+- `bank_account_no` 唯一；`(party_id, account_number_query_hmac)` 唯一；
+- 查询和重复校验只能使用 keyed HMAC，不得回退为明文或裸哈希；
 - 同一主体同一时点最多一个默认有效账户；历史单据保存使用时账户快照，不受后续停用
-  或密钥轮换影响。
+  影响。
 
 #### `customer_account`、`supplier_account`
 
@@ -1170,7 +1152,6 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | --- | --- |
 | `sales_order_id` / `submission_no` | 销售单及提交序号 |
 | `working_copy_id` / `working_copy_version` | 形成提交的草稿及其服务端确认版本 |
-| `subject_hash` | 完整提交内容指纹 |
 | `business_type` | 与销售单一致 |
 | `customer_id` / `contract_revision_id` / `settlement_party_id` | 提交时业务对象 |
 | 客户、结算、付款、开票及卡券表头字段组 | 使用正式版本相同的结构化列和基础资料快照 |
@@ -1192,12 +1173,12 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 
 - `(sales_order_id, submission_no)` 唯一；
 - `(submission_id, sales_order_line_id)` 唯一；
-- 提交头、明细和指纹形成后不可修改；
+- 提交头、明细形成后不可修改；
 - 每次销售修改后重新提交必须新建 `submission_no`；
 - 卡券提交同样执行恰好一条卡券明细断言；
 - 全部审批和采购二次确认引用具体 `submission_id`；
 - 最终通过时，事务把该提交的结构化字段原样写为正式
-  `sales_order_revision` 和版本明细，并再次比较 `subject_hash`。
+  `sales_order_revision` 和版本明细。
 
 #### `sales_order_review`
 
@@ -1206,7 +1187,6 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | `sales_order_id` | 销售单 |
 | `submission_id` | 被审批的不可变提交快照 |
 | `review_stage` | 销售领导审批、运营审批、低毛利上级确认 |
-| `subject_hash` | 提交内容指纹 |
 | `status` | 待处理、通过、驳回、因内容变化失效 |
 | `reviewer_id` / `reviewed_at` | 审批人和时间 |
 | `decision_reason` | 意见或驳回原因 |
@@ -1270,10 +1250,10 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 
 `sales_change_submission` 及 `sales_change_submission_line` 保存拟变更后的**完整目标头和行**，
 字段与 `sales_order_submission` 相同，并增加 `sales_change_order_id`、
-`submission_no`、`base_revision_id` 和 `subject_hash`。草稿自动保存仍使用
+`submission_no`、`base_revision_id`。草稿自动保存仍使用
 `sales_order_working_copy`；发起影响确认时才形成不可变变更提交。
 
-`sales_change_review` 保存 `sales_change_submission_id`、`review_stage`、`subject_hash`、
+`sales_change_review` 保存 `sales_change_submission_id`、`review_stage`、
 采购或运营的履约影响确认、财务金额影响复核和审批意见。
 
 必需约束与索引：
@@ -1282,11 +1262,11 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 - `(sales_change_order_id, submission_no)` 唯一，提交头行形成后不可更新；
 - 生效前校验 `base_revision_id` 仍是当前版本，防止并发覆盖；
 - 每次修改拟变更内容都形成新的变更提交并使旧复核失效；所有复核必须引用同一个
-  `sales_change_submission_id` 和 `subject_hash`；
+  `sales_change_submission_id`；
 - 实物及服务变更走采购影响确认；卡券变更走运营人工确认商城可执行性；
 - 卡券变更完成运营确认后再做财务影响复核；
 - 变更生效事务把通过复核的结构化目标提交原样复制成新
-  `sales_order_revision` 及版本明细，新增应收差额和必要 outbox，
+  `sales_order_revision` 及版本明细，新增应收差额，
   不改写旧版本、既有回款、发票或履约事实。
 
 ### 6.6 采购单、采购分配与采购变更
@@ -1314,7 +1294,6 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | 字段 | 说明 |
 | --- | --- |
 | `purchase_order_id` / `submission_no` | 采购单和提交序号 |
-| `subject_hash` | 完整采购头、行和销售分配指纹 |
 | `supplier_id` / `purchase_type` / `fulfillment_responsibility` | 拆单维度 |
 | `supplier_revision_id` / `supplier_snapshot` | 提交时供应商版本和快照 |
 | `payment_term_snapshot` | 付款条件和先款后货门禁快照 |
@@ -1333,9 +1312,9 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | 商品、数量、单位、成本、进项税、预计交期字段组 | 与正式采购版本行相同 |
 | `sales_order_submission_line_id` / `allocated_quantity` | 商品行对应的销售提交和数量 |
 
-草稿状态允许使用 `lock_version` 自动保存；进入待审核时头、行和 `subject_hash` 冻结。
-财务审批、工作任务及 `workflow_action` 必须引用具体 `purchase_order_submission_id` 和
-`subject_hash`，不得审批可变采购主表。
+草稿状态允许使用 `lock_version` 自动保存；进入待审核时头、行冻结。
+财务审批、工作任务及 `workflow_action` 必须引用具体 `purchase_order_submission_id`，
+不得审批可变采购主表。
 
 `purchase_order_revision`：
 
@@ -1355,7 +1334,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 - 一张采购单只属于一张销售单和一个供应商；
 - 同一销售单内供应商、采购类型、付款条件、履约责任任一不同必须拆单；
 - `supplier_id + status + expected_date`、`sales_order_id + status` 查询索引；
-- 财务审核通过事务锁定提交及指纹，把结构化提交原样复制为采购生效版本和版本行，
+- 财务审核通过事务锁定提交，把结构化提交原样复制为采购生效版本和版本行，
   同时形成应付原始分录；
 - 财务审核与实际付款是独立事实。
 
@@ -1415,8 +1394,8 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 
 `purchase_change_submission` 和 `purchase_change_submission_line` 保存拟变更后的**完整采购
 头、行及销售分配**，字段分别与 `purchase_order_submission` 及其明细相同，并增加
-`purchase_change_order_id`、`submission_no`、`base_revision_id` 和 `subject_hash`。
-仓储影响确认与财务复核均引用该不可变提交及同一指纹。
+`purchase_change_order_id`、`submission_no`、`base_revision_id`。
+仓储影响确认与财务复核均引用该不可变提交。
 
 必需约束与索引：
 
@@ -1732,7 +1711,6 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | `receivable_account_id` / `review_no` | 往来子账和递增复核号 |
 | `review_type` | `OPENING` 或 `SYNC_DELTA` |
 | `work_item_id` | 对应 `CARD_FUNDS_REVIEW` 或 `CARD_FUNDS_DELTA_REVIEW` |
-| `subject_hash` | 当前销售版本、应收分录、净回款分配和净发票分配的规范化指纹 |
 | `evidence_document_id` / `evidence_reference` | 银行、发票或正式核对证据 |
 | `review_result` | 通过或驳回 |
 | `reviewed_by` / `reviewed_at` | 财务复核审计 |
@@ -1744,11 +1722,10 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
   `supersedes_review_id` 唯一且必须属于同一子账；
 - `review_no = 1` 时前驱为空；后续复核必须锁定当前链尾，递增一号并引用链尾，
   禁止多根或分叉；
-- 完成任务时重新计算 `subject_hash`，必须与任务和复核记录三方一致；证据不能为空；
-- 后续同步差额、回款/分配或发票/分配变化会使旧指纹自然失效，并创建新的
+- 完成任务时按任务提交的事实对照当前子账、回款和发票复核，证据不能为空；
+- 后续同步差额、回款/分配或发票/分配变化会创建新的
   `CARD_FUNDS_DELTA_REVIEW`；不得把旧通过记录复制为新复核；
-- 当前有效复核由“链尾通过且其 `subject_hash` 等于当前重算值”派生，历史复核不可
-  更新或删除。
+- 当前有效复核由链尾通过记录派生，历史复核不可更新或删除。
 - `receivable_account.review_status` 及最近复核人/时间/证据仅为事务内同步的查询缓存，
   权威记录是本表链；缓存必须可重建且不得覆盖历史。
 
@@ -2108,7 +2085,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | `successful_sanitized_file_asset_id` / `success_manifest_file_asset_id` | 成功对象的白名单包和 manifest，成功数为零时可空 |
 | `failure_diagnostic_file_asset_id` | 失败对象的合规诊断包，按 30 天销毁 |
 | `import_rule_version` | 本批解析、清理和映射规则版本 |
-| `source_file_hmac` / `hmac_key_version` | 受控临时区计算的 keyed HMAC 和密钥版本，仅用于审计去重 |
+| `source_file_hmac` | 受控临时区计算的 keyed HMAC，仅用于审计去重 |
 | `status` | 待校验、校验中、待确认、导入中、完成、部分失败、失败 |
 | `total_rows` / `success_rows` / `failed_rows` | 处理统计 |
 | `failure_code_summary` | 脱敏错误码及计数，不含原值和行列明细 |
@@ -2134,7 +2111,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | `legacy_import_confirmation_id` / `batch_id` | 确认事实身份和所属导入批次 |
 | `confirmation_scope` / `owner_role` | 销售、采购、运营、仓储、财务等责任范围及责任角色 |
 | `batch_version` / `trial_version` | 本次确认针对的批次与试算版本 |
-| `import_rule_version` / `manifest_digest` / `subject_hash` | 规则、输入清单与完整确认对象指纹 |
+| `import_rule_version` | 本次确认针对的导入规则版本 |
 | `status` | `PENDING`、`CONFIRMED`、`REJECTED`、`INVALIDATED` |
 | `decision` | `CONFIRM_SCOPE` 或 `RETURN_FOR_FIX`；待确认/失效时为空 |
 | `reason_code` / `comment` | 退回原因必填；确认意见可选 |
@@ -2144,15 +2121,15 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 
 必需约束与索引：
 
-- `(batch_id, confirmation_scope, trial_version, subject_hash)` 唯一，`work_item_id` 唯一；
+- `(batch_id, confirmation_scope, trial_version)` 唯一，`work_item_id` 唯一；
 - 每个批次按版本化确认矩阵为必要范围各创建一个任务，系统管理员不得替代责任角色确认；
-- `CONFIRM_SCOPE` 与 `RETURN_FOR_FIX` 都通过 W02 `CompleteWorkItemEnvelope` 调用
+- `CONFIRM_SCOPE` 与 `RETURN_FOR_FIX` 都通过 W02 统一动作命令调用
   `COMPLETE_IMPORT_BUSINESS_CONFIRMATION`；同一事务写确认事实、`workflow_action`、批次新版本
   和当前任务 `COMPLETED`，不得随后再调用通用“标记完成”；
 - `RETURN_FOR_FIX` 形成 `REJECTED` 业务结论，不转交、不创建后继任务；修复并产生新
-  `trial_version` / `subject_hash` 后才创建新的确认事实和任务；
-- 已完成的 `CONFIRMED` / `REJECTED` 永久保留；尚未完成但已被新试算取代的任务由系统按
-  `SUBJECT_SUPERSEDED` 关闭并关联 replacement，不能继续领取或完成；
+  `trial_version` 后才创建新的确认事实和任务；
+- 已完成的 `CONFIRMED` / `REJECTED` 永久保留；尚未完成但已被新试算取代的任务由系统
+  关闭（`CLOSED`），不能继续领取或完成；
 - 只有当前版本全部必要范围均 `CONFIRMED`，生产应用 guard 才能通过；批次上的确认状态仅为
   这些事实的派生摘要。
 
@@ -2160,11 +2137,11 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 
 - `batch_no` 唯一；
 - `(batch_id, source_object_type, source_row_key)` 唯一；
-- `source_file_hmac + hmac_key_version + source_object_set + baseline_date` 用于重复导入预警；
+- `source_file_hmac + source_object_set + baseline_date` 用于重复导入预警；
 - `parse_status + mapping_status + import_status` 处理队列索引；
 - 本表是唯一持久兼容层，不为旧五张表各建一套 ERP 影子业务表；
 - 原始 SQL 仅在临时 ETL 区读取，持久层只保存白名单规范化行以及
-  `source_file_hmac + hmac_key_version`，不保存可反推原文件内容的普通摘要；
+  `source_file_hmac`，不保存可反推原文件内容的普通摘要；
 - 成功白名单包、manifest、规则版本、成功结果行及映射审计长期保留；
 - 失败行的规范化载荷、原值和行列诊断明细及 `failure_diagnostic_file_asset_id` 按
   30 天策略清理；`legacy_import_batch` 元数据、汇总计数、`failure_code_summary`
@@ -2182,7 +2159,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | 字段 | 说明 |
 | --- | --- |
 | `source_system_id` | 来源商城 |
-| `job_type` | 期初基线、增量拉取、每日全量核对、单号补拉 |
+| `job_type` | 期初基线、增量拉取、按月全量核对、单号补拉 |
 | `range_start` / `range_end` | 本次查询时间边界 |
 | `started_at` / `finished_at` | 任务时间 |
 | `status` | 运行中、成功、部分失败、失败 |
@@ -2197,16 +2174,16 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | `last_success_job_id` | 最近成功任务 |
 | `lock_version` | 防止并发任务推进同一水位 |
 
-`mall_sales_sync_cursor_tie` 保存高水位时刻已完成的来源销售单二进制比较键集合，
-用于处理多个单据更新时间完全相同的情况。
+同一更新时间（同刻）的多个来源单按 `external_order_key` 排序整批处理完后再前移水位，
+不建同刻游标表。
 
 必需约束与索引：
 
 - 每个来源商城一个当前水位；
 - 同一来源商城只允许一个有效增量任务推进水位；
 - 水位按重叠区间前移；
-- 增量接口固定按 `(source_updated_at, external_order_key)` 升序稳定分页；翻页条件、
-  同刻游标和数据库索引使用同一二进制比较语义；
+- 增量接口固定按 `(source_updated_at, external_order_key)` 升序稳定分页；同刻多单
+  整批处理完再前移水位；
 - 任一分页未持久化完成或请求失败时水位不前移；
 - 期初基线后的水位初值取基线拉取开始时间；
 - `source_system_id + started_at` 任务查询索引。
@@ -2217,7 +2194,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 | --- | --- |
 | `source_system_id` / `external_order_no` / `external_order_key` | 一期来源原值及二进制比较键 |
 | `source_updated_at` | 商城更新时间 |
-| `content_hash` | 商业事实投影指纹 |
+| `content_hash` | 商业事实投影指纹（可选列，仅用于变更判断） |
 | `source_status_code` | 商城当前状态 |
 | `normalized_snapshot` | 规范化外部快照归档 |
 | `raw_payload_reference` | 可选的加密原始报文引用 |
@@ -2228,15 +2205,13 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 
 必需约束与索引：
 
-- `(source_system_id, external_order_key, source_updated_at, content_hash)` 唯一；
+- `(source_system_id, external_order_key, source_updated_at)` 唯一，重复推送时保留最新快照；
 - `source_system_id + source_updated_at + external_order_key` 增量处理索引；
 - `mapping_status + observed_at` 差异处理索引；
 - 同一来源单收到更早 `source_updated_at` 的快照直接丢弃，不持久化、不推进当前版本；
 - 只有指纹与**当前销售版本**相同才只更新最近同步时间，不创建新销售版本；
-- 来源内容出现 A → B → A 时，第三次 A 的来源更新时间不同，必须保留新的观测快照并
-  再形成销售版本；不能因历史上曾出现相同 `content_hash` 而吞掉有效回变；
-- 同一来源单、同一 `source_updated_at` 出现不同指纹时视为来源冲突，全部保留并转人工，
-  不按到达先后静默选择；
+- 同一来源单、同一 `source_updated_at` 重复推送不同内容时保留最新快照并转人工核对，
+  不按内容历史重放；
 - 指纹不同且映射成功时追加 `sales_order_revision`；
 - 零条或多条卡券明细、金额解析失败、基础资料无法映射均不得写错误应收或经营归属。
 
@@ -2248,14 +2223,14 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 
 #### `mall_sales_reconciliation_job` 与 `mall_sales_reconciliation_item`
 
-一期每日全量清单核对使用专用强类型表，不等到二期通用接口对账才启用。
+一期按月全量或按单抽查核对使用专用强类型表，不等到二期通用接口对账才启用。
 
 `mall_sales_reconciliation_job`：
 
 | 字段 | 说明 |
 | --- | --- |
 | `source_system_id` / `job_no` | 来源商城和核对批次 |
-| `source_list_as_of` / `source_list_digest` | 商城全量清单边界及整体摘要 |
+| `source_list_as_of` | 商城全量清单边界 |
 | `source_count` / `erp_count` / `difference_count` | 双方数量和差异 |
 | `status` | 运行中、完成、有差异、失败 |
 | `started_at` / `finished_at` | 执行时间 |
@@ -2275,8 +2250,9 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 必需约束与索引：
 
 - `job_no` 唯一，`(reconciliation_job_id, external_order_key)` 唯一；
-- 全量范围必须包含全部曾达到正式状态的来源单，包括后来关闭或作废的单据，不含草稿；
-- 比较当前状态和**完整内容指纹**，不能只比较状态或金额合计；
+- 按月全量核对必须包含全部曾达到正式状态的来源单，包括后来关闭或作废的单据，不含
+  草稿；日常以按单抽查为主；
+- 比较当前状态和内容指纹，不能只比较状态或金额合计；
 - 商城缺失、ERP 缺失或指纹差异都持久化明细，并按原来源身份发起单号补拉或转
   `work_item`；系统管理员不得手工补建另一张销售单；
 - 核对只生成差异和任务，不直接覆盖来源快照、ERP 销售版本、应收或经营事实；
@@ -2350,7 +2326,7 @@ Excel、API 和手工录入共同使用本节的供应商 SPU/SKU、映射和供
 
 `supplier_catalog_product_revision` 保存来源 SPU 内容快照：`name`、`description`、可选
 `source_product_kind`、来源分类、来源品牌、结构化描述属性、`source_revision_token`、`source_updated_at`、
-规范化白名单字段的 keyed HMAC、密钥版本和有效期。字段语义可与公司
+规范化白名单字段的 keyed HMAC 和有效期。字段语义可与公司
 `product_revision` 高度重合，但必须保持独立修订和所有权；供应商变化不得直接覆盖公司
 商品。
 
@@ -2413,7 +2389,7 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 | `bulk_minimum_order_quantity` | 集采起订量 |
 | `available_quantity` / `availability_status` | 来源库存或可供状态 |
 | `source_updated_at` / `received_at` | 来源更新时间与 ERP 接收时间；手工来源可相同 |
-| `source_payload_hmac` / `hmac_key_version` | 规范化白名单字段的 keyed HMAC 及密钥版本 |
+| `source_payload_hmac` | 规范化白名单字段的 keyed HMAC |
 
 必需约束与索引：
 
@@ -2423,7 +2399,7 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 - `(supplier_catalog_product_id, revision_no)` 唯一；
 - `(supplier_catalog_sku_id, revision_no)` 唯一；
 - 供应商有版本号时，供应商版本幂等唯一；没有版本号时使用
-  `source_payload_hmac + hmac_key_version` 幂等，不保存或比较原始明文；
+  `source_payload_hmac` 幂等，不保存或比较原始明文；
 - `status + source_updated_at`、`availability_status + source_updated_at` 新鲜度索引；
 - 来源修订先进入供应商商品库，不直接修改公司 SKU 修订、公司商品销售查询或商城商品。
 - 供应商商品中心「详情即编辑」保存只追加来源修订，必须带期望来源修订号；不得顺带
@@ -2432,7 +2408,7 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
   固定精确 `supplier_catalog_sku_id` 与来源修订，自动预填所有语义相同字段，允许采购修改，
   并要求独立 `product_kind`、销售可见价与市场价均非空；`product_kind` 不得由分类派生，
   最终所选分类必须允许该类型；公司商品/SKU 及含销售可见价/市场价的 SKU 修订、映射、双价供给修订、
-  审计、幂等结果和 outbox 必须同一事务提交，任一步失败全部回滚；
+   审计和幂等结果必须同一事务提交，任一步失败全部回滚；
 - 若业务需要采用供应商图文，须在 W14 手工创建公司商品修订并引用已归档 `file_asset`；
   未归档 URL 不得作为公司长期媒体。启用公司 SKU 缺主图仍由 W14 阻断。
 - 供应商目录独有字段（代发/集采底价、集采起订量、可供数量/状态等）不得写入公司 `product`/`sku` 修订。
@@ -2659,42 +2635,15 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | `enabled_at` | 消费回流和自动履约启用时间 `T` |
 | `enabled_by` | 上线负责人 |
 | `status` | 准备、已启用 |
-| `confirmation_digest` | P0/P1 完整链路开放确认摘要 |
+| `checklist_reference` | 上线核对文档引用（`document_attachment` 或外部链接） |
 
-`mall_consumption_cutover_check` 保存上线负责人最终确认时看到的结构化证据快照，
-不是另一套自动化阶段退出平台。
-
-| 字段 | 说明 |
-| --- | --- |
-| `cutover_id` / `check_code` / `check_no` | 本次切换、固定检查代码和递增检查号 |
-| `check_status` | 通过或不通过 |
-| `subject_hash` | 当次检查覆盖的版本、配置和业务范围摘要 |
-| `evidence_reference` | 发布记录、对账批次、探测结果或人工确认记录 |
-| `supersedes_check_id` | 本次复检替代的同代码上一证据，可空 |
-| `checked_by` / `checked_at` | 责任人和确认时间 |
-
-固定必需 `check_code` 为：
-
-- `PRODUCT_PUBLICATION`、`SALES_PROJECTION`、`MALL_FACT_INTAKE`；
-- `SUPPLIER_ORDER`、`SUPPLIER_REJECTION`、`AFTER_SALES_CANCEL`；
-- `MALL_REFUND`、`CARD_BALANCE_RESTORATION`、`SUPPLIER_REFUND`；
-- `COST_FINALIZATION`、`SUPPLIER_SETTLEMENT`、`PAYABLE_LINKAGE`；
-- `MANUAL_EXCEPTION`、`RECONCILIATION`、`BACKFILL_CAPABILITY`；
-- `PHASE1_POLLING_STOPPED`、`MALL_B2B_ENTRY_CLOSED`、
-  `MALL_COMMERCIAL_FIELDS_READONLY`。
+上线切换使用文档 checklist 人工核对（P0/P1 完整链路开放、一期轮询停止、T 起 B2B
+停止创建、商城商业字段只读等），核对记录和 `enabled_at` 时间戳保存到本表，不建证据
+链数据库。
 
 必需约束与索引：
 
 - 每个商城只能有一个已启用 `T`；
-- `(cutover_id, check_code, check_no)` 唯一，非空 `supersedes_check_id` 唯一且必须
-  指向本切换同代码的上一检查；当前证据由未被后继引用的链尾派生，失败、过期和旧
-  通过证据均不可覆盖或删除；
-- `check_no = 1` 时 `supersedes_check_id` 必须为空；后续检查必须在锁定同代码当前
-  链尾后写 `check_no = previous.check_no + 1` 并引用该链尾，禁止多根或分叉；
-- 登记 `T` 时上述代码必须各有且只有一个链尾且全部
-  `check_status = PASSED`，`subject_hash` 必须与当时部署、配置和业务范围重算一致；
-- `BACKFILL_CAPABILITY` 只证明回填程序、幂等键和报告能力在 `T` 前已就绪，
-  正式历史回填任务必须在登记 `T` 后执行；
 - `enabled_at` 一经启用不可修改或删除；
 - `mall_order.fulfillment_chain` 以支付成功事实的 `occurred_at` 与本表 `enabled_at`
   比较，不能以 ERP 接收时间或回填时间判断。
@@ -2721,8 +2670,8 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | `mall_card_instance_id` | 原不可变基线 |
 | `correction_no` | 同卡实例递增纠错号 |
 | `correction_type` | 销售单归属或初始余额纠错 |
-| `before_digest` / `after_value` | 原摘要和经确认的新值 |
-| `subject_hash` / `work_item_id` | 审批对象指纹和财务纠错任务 |
+| `before_value` / `after_value` | 原值和经确认的新值 |
+| `work_item_id` | 财务纠错任务 |
 | `supersedes_correction_id` | 本次纠错承接的同卡实例上一纠错，可空 |
 | `reason` / `approved_by` / `approved_at` | 纠错依据 |
 
@@ -2749,7 +2698,7 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
   唯一且必须指向同卡实例上一记录；
 - 同卡实例 `correction_no = 1` 才允许无前驱；后续纠错必须锁定该实例当前链尾，
   递增一号并引用链尾，禁止多根或分叉；
-- 纠错只在 `FINANCE_CORRECTION_REVIEW` 指纹与 `subject_hash` 一致且有证据时追加；
+- 纠错只在 `FINANCE_CORRECTION_REVIEW` 审批通过且有证据时追加；
   当前归属或余额纠错值由整条链中该类型最后一条记录派生，不覆盖基线或旧纠错；
 - 商城提供 `source_snapshot_version` 时，非空
   `(mall_card_instance_id, source_snapshot_version)` 唯一并参与冲突校验；
@@ -2765,7 +2714,7 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | 字段 | 说明 |
 | --- | --- |
 | `mall_id` / `source_event_id` | 消息来源和事件 ID |
-| `inbox_message_id` | 承载契约版本、商城发送时间、签名和原始载荷摘要的共同信封 |
+| `inbox_message_id` | 承载契约版本、商城发送时间和原始载荷的共同信封 |
 | `fact_type` | `PAYMENT_SUCCEEDED`、`ORDER_CANCELED`、`REFUND_SUCCEEDED`、`ORDER_COMPLETED`、`CARD_BALANCE_RESTORED` |
 | `business_fact_key` | 跨实时和回填的稳定事实键 |
 | `external_order_no` | 商城订单号 |
@@ -2774,8 +2723,7 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | `original_payment_fact_id` | 后续结果关联原支付 |
 | `occurred_at` / `received_at` | 事实发生与 ERP 接收时间 |
 | `data_source` | 实时或历史回填 |
-| `signature_result` | 验签结果 |
-| `payload_digest` / `raw_payload_reference` | 摘要及加密原文引用 |
+| `raw_payload_reference` | 可选的加密原文引用 |
 | `processing_status` | 已保存、待归集、已归集、差异、拒绝 |
 
 必需约束与索引：
@@ -2790,14 +2738,14 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 - 余额恢复键：商城 + 余额恢复 + 恢复单号 + 恢复版本；
 - 商城订单号不能单独作为幂等键；
 - 同一 `(mall_id, external_order_no)` 只能有一个被正式归集的
-  `PAYMENT_SUCCEEDED`。第一份验签、金额守恒且满足事实契约的支付事实以同一事务
+  `PAYMENT_SUCCEEDED`。第一份金额守恒且满足事实契约的支付事实以同一事务
   创建唯一 `mall_order`；后到的不同支付版本仍保存为 `processing_status = DIFFERENCE`
-  并创建人工差异任务，不得再创建订单、消费、供应商动作或 outbox；
+  并创建人工差异任务，不得再创建订单、消费或供应商动作；
 - 已归集支付事实不可被新版本替换。来源确有错误时，使用退款、余额恢复及经复核的
   追加式财务纠错事实闭环，不改写原支付事实或 `mall_order.payment_fact_id`；
 - 取消、退款、完成和余额恢复必须关联原支付；
 - 取消、退款和余额恢复必须携带商城售后请求 ID；
-- 先保存验签通过的原始事实，再做商品、卡实例、成本和供应商归集；
+- 先保存通过完整性校验的原始事实，再做商品、卡实例、成本和供应商归集；
 - 归集条件缺失时保留事实并进入差异，不拒收、不复制第二份事实；
 - 不接收待支付、支付中、退款中或履约中等商城中间状态。
 
@@ -3189,7 +3137,7 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 - 一条商城商品明细只属于一个供应商子订单，不拆量给多个供应商；
 - `mall_order_item_id` 唯一有效归属；
 - 后续供给关系变化不影响已支付订单；
-- 子订单、全部明细、首个 `PLACE` 动作和 outbox 必须同事务创建；
+- 子订单、全部明细和首个 `PLACE` 动作必须同事务创建；
   唯一键冲突时加载既有子订单继续原幂等动作，不得再生成新单号；
 - `supplier_id + fulfillment_status + created_at`、`external_order_no` 查询索引。
 
@@ -3207,7 +3155,7 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | `idempotency_key` | 对供应商动作幂等键 |
 | `status` | 待发送、发送中、结果未知、成功、明确失败、待人工 |
 | `external_request_id` | 供应商请求号 |
-| `request_digest` / `response_digest` | 脱敏摘要 |
+| `request_summary` / `response_summary` | 脱敏请求/响应摘要 |
 | `attempt_count` / `next_attempt_at` | 重试 |
 
 `supplier_order_action_line` 冻结一次取消或退款实际提交给该供应商的范围：
@@ -3338,37 +3286,12 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 - 确认后的差额以追加 `cost_entry` 表达；
 - 结算单应付复用第一期付款、进项发票和多对多核销。
 
-### 6.21 一期内部 outbox 与二期双向集成治理
+### 6.21 集成治理（普通表组）
 
-阶段边界：一期只启用本节的 `outbox_message`，用于 ERP 内部事件消费者和可重建查询投影；
-不启用外部 endpoint、webhook、外部 dispatcher、`inbox_message`、`integration_attempt`、
-接口错误中心或通用接口对账。二期复用同一 outbox 表并开放外部目的地，同时启用本节其余
-双向治理表。商城一期主动轮询和每日全量核对继续使用专用 `mall_sales_sync_*` /
-`mall_sales_reconciliation_*`，不伪装成 inbox 或二期通用对账。
-
-#### `outbox_message`
-
-| 字段 | 说明 |
-| --- | --- |
-| `event_id` | ERP 消息事件 ID |
-| `aggregate_type` / `aggregate_id` / `aggregate_revision` | 来源聚合及版本 |
-| `event_type` | 一期内部正式事实事件；二期扩展商品发布、销售投影、供应商动作等外部事件 |
-| `delivery_scope` / `destination_key` | `INTERNAL_PROJECTION` 或 `EXTERNAL_ENDPOINT` 及受控消费者/目的地；一期只允许前者 |
-| `idempotency_key` | 消费或投递幂等键 |
-| `payload_schema_version` | 契约版本 |
-| `payload_reference` / `payload_digest` | 规范化消息内容和摘要 |
-| `status` | 待发送、发送中、待重试、已送达、死信、人工关闭 |
-| `available_at` / `attempt_count` | 调度与次数 |
-| `created_at` | 必须与正式业务事实同事务写入 |
-
-必需约束与索引：
-
-- `event_id` 和 `idempotency_key` 分别唯一；一期 capability gate 必须拒绝
-  `delivery_scope = EXTERNAL_ENDPOINT`；
-- `status + available_at` 投递扫描索引；
-- `aggregate_type + aggregate_id + aggregate_revision` 追溯索引；
-- 业务事务成功而 outbox 失败时整个业务事务回滚；
-- 投递成功只更新消息状态，不再次执行业务事务。
+双向集成不建消息中间件、outbox 或投递状态机，以下均为普通表：`inbox_message` 记录
+已接收的外部消息，`integration_error_task` 记录投递或处理失败及人工处理，
+`reconciliation_*` 记录对账差异。商城主动轮询继续使用专用 `mall_sales_sync_*` /
+`mall_sales_reconciliation_*` 表。
 
 #### `inbox_message`
 
@@ -3378,8 +3301,7 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | `message_type` | 商城关键事实或供应商回调等 |
 | `business_fact_key` | 适用的业务事实键 |
 | `payload_schema_version` | 来源契约版本 |
-| `payload_reference` / `payload_digest` | 规范化内容和摘要 |
-| `signature_status` | 验签结果 |
+| `payload_reference` | 规范化内容引用 |
 | `status` | 已接收、处理中、已处理、重复、失败、转人工 |
 | `source_sent_at` / `received_at` / `processed_at` | 来源系统发送、ERP 接收和处理时间 |
 
@@ -3390,14 +3312,13 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 - `status + received_at` 积压扫描索引；
 - 先做消息去重，再做业务事实去重；
 - 同一事实来自实时和回填时只形成一份正式记录。
-- `mall_order_fact` 必须引用本信封；`payload_schema_version`、`source_sent_at`、
-  `signature_status` 和 `payload_digest` 以本表为契约审计真相，事实表同名摘要字段仅可
-  作不可变查询投影且必须与信封一致。
+- `mall_order_fact` 必须引用本信封；`payload_schema_version`、`source_sent_at` 以本表为
+  契约审计真相。
 
-#### `integration_attempt` 与 `integration_error_task`
+#### `integration_error_task`
 
-`integration_attempt` 保存消息、尝试序号、开始/结束时间、结果分类、HTTP 或协议结果、
-外部请求号及脱敏请求/响应摘要。
+投递或处理尝试不另建 `integration_attempt` 表，重试次数、最近尝试时间和脱敏结果直接
+记录在错误任务上：
 
 `integration_error_task`：
 
@@ -3407,12 +3328,13 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | `error_class` | 能力不足、映射错误、业务拒绝、临时故障、结果未知、鉴权签名、限流、乱序 |
 | `status` | 待处理、自动重试中、待人工、已解决、已关闭 |
 | `owner_role` / `owner_user_id` | 责任人 |
+| `attempt_count` / `last_attempt_at` / `last_attempt_summary` | 重试次数、最近尝试时间和脱敏结果 |
 | `resolution_type` / `resolution` | 查询确认、修复映射、重放、补偿、关闭 |
 | `resolved_at` | 完成时间 |
 
 必需约束与索引：
 
-- `(message_id, attempt_no)` 唯一；
+- `(message_id, error_class)` 唯一；
 - 同一消息和错误分类只允许一个进行中错误任务；
 - `status + owner_role + created_at` 工作队列索引；
 - 参数/映射错误和业务明确拒绝不自动重试；
@@ -3425,25 +3347,14 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 - 只有取得可验证终态，或形成经复核的取消、退款、冲正或补偿事实并完成对账后才能解决；
   重复或误派任务关闭时必须关联替代任务或终态证据。
 
-#### `reconciliation_job` 与 `reconciliation_difference`
+#### `reconciliation_difference` 与 `reconciliation_difference_resolution`
 
-`reconciliation_job`：
-
-| 字段 | 说明 |
-| --- | --- |
-| `job_no` / `rerun_no` | 对账批次和同边界重跑序号 |
-| `reconciliation_type` | 发布、销售投影、商城事实、分摊、余额、供应商订单、结算、退款等 |
-| `boundary_start` / `boundary_end` | 对账数据边界 |
-| `status` | 运行中、完成、有差异、失败 |
-| `expected_count` / `actual_count` / `difference_count` | 统计 |
-
-`reconciliation_difference`：
+对账不建批次台账，只持久化差异本身。`reconciliation_difference`：
 
 | 字段 | 说明 |
 | --- | --- |
-| `reconciliation_job_id` | 所属对账批次 |
 | `business_object_type` / `business_object_id` | 差异对象 |
-| `difference_type` / `difference_digest` | 差异分类和摘要 |
+| `difference_type` | 差异分类 |
 | `left_fact_reference` / `right_fact_reference` | 两侧不可变证据引用 |
 | `created_at` | 差异发现时间 |
 
@@ -3459,12 +3370,10 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 
 必需约束与索引：
 
-- `job_no` 唯一；`(reconciliation_type, boundary_start, boundary_end, rerun_no)` 唯一；
-- `(reconciliation_job_id, business_object_type, business_object_id, difference_type,
-  difference_digest)` 唯一；
+- `(business_object_type, business_object_id, difference_type)` 唯一；
 - `(reconciliation_difference_id, resolution_no)` 唯一；当前处理状态由最后一条处理动作
   派生，处理记录不可更新或删除；
-- `reconciliation_job_id + created_at` 差异查询索引，待处理队列使用处理状态投影；
+- `business_object_type + created_at` 差异查询索引，待处理队列使用处理状态投影；
 - 对账任务只生成差异和任务，不直接修改正式事实；
 - 处理差异需要修改业务时，必须调用相应变更、纠错或重放入口，并在处理记录引用正式
   结果；关闭重复或误报必须关联替代任务或终态证据。
@@ -3542,7 +3451,7 @@ DRAFT
 - 任一审批驳回回到销售处理；
 - 销售修改任何内容后，必须从销售领导审批重新开始；
 - 运营只能通过或驳回，不得修改商业字段；
-- 运营通过时同事务形成首个销售版本、应收和执行投影 outbox；
+- 运营通过时同事务形成首个销售版本、应收和执行投影修订；
 - 商城接收失败不回退 `EFFECTIVE`；
 - 商城确认接收前，执行进度为待接收/接收失败，不允许受该版本影响的商城执行；
 - 生效后的变更通过卡券销售变更单：
@@ -3617,18 +3526,11 @@ refund_status: NONE → REFUND_PENDING → PARTIAL → REFUNDED
 - 部分退款不把已完成履约改回处理中；
 - 明确拒单不自动删除商城支付，后续必须完成退款/余额恢复或人工补偿闭环。
 
-### 7.7 集成投递
+### 7.7 消息投递
 
-```text
-PENDING → SENDING → DELIVERED
-                  ↘ RETRY_WAIT → SENDING
-                  ↘ MANUAL_REQUIRED → DELIVERED | CLOSED
-```
-
-- 鉴权/签名失败、参数映射错误和明确业务拒绝直接转人工；
-- 网络超时、临时不可用和限流可按规则重试；
-- 结果未知动作先查原结果；
-- 自动和人工重试均使用原幂等键。
+投递状态由 `integration_error_task.status` 表达（待处理、自动重试中、待人工、已解决、
+已关闭），不另设消息投递状态机。网络超时、临时不可用和限流可按规则自动重试；结果
+未知动作先查原结果；自动和人工重试均使用原幂等键。
 
 ### 7.8 销售单服务切换
 
@@ -3641,9 +3543,8 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 - 商城草稿统一作废，不在 ERP 补建；
 - T 前商城开单的卡券商业字段在 ERP 只读，T 后正式销售单商业变更一律走销售变更单；
 - T 前支付只回填台账，T 及以后支付进入自动供应商履约；
-- 停止一期轮询只形成 `PHASE1_POLLING_STOPPED` 证据，不能单独登记 `T`；
-- 仅当第 6.17 节全部固定检查代码的当前链尾均为 `PASSED` 时，才由上线负责人按
-  第 8.4 节原子登记唯一 `T`。
+- 停止一期轮询记录在切换 checklist 中，不能单独登记 `T`；
+- 仅当第 6.17 节文档 checklist 全部核对通过时，才由上线负责人按第 8.4 节登记唯一 `T`。
 
 ---
 
@@ -3660,14 +3561,13 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
    - 更新销售单当前版本和状态；
    - 形成应收原始分录；
    - 生成后续采购待办或采购草稿依据；
-   - 写审计和必要 outbox。
+   - 写审计。
 2. 第二期卡券运营审批通过：
-   - 锁定审批内容指纹；
+   - 锁定审批提交；
    - 校验销售领导审批仍有效；
    - 形成销售版本和应收；
    - 更新销售状态；
-   - 形成执行投影修订；
-   - 写 outbox。
+   - 形成执行投影修订。
 3. 销售或采购变更生效：
    - 校验基准版本仍为当前版本；
    - 写新版本；
@@ -3675,7 +3575,7 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
    - 更新当前版本；
    - 不修改已发生事实。
 4. 采购财务审核通过：
-   - 锁定不可变采购提交及其 `subject_hash`；
+   - 锁定不可变采购提交；
    - 校验采购明细逐行引用已确认的采购确认分配；
    - 形成采购生效版本；
    - 更新采购状态；
@@ -3740,10 +3640,10 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
    - 单纯入库不得创建公司 SKU、公司商品销售查询记录或供给；
    - 选择入池时先锁定精确供应商 SKU 来源修订并按版本化策略重验同款候选；已有目标分支
      锁定公司 SKU，无同款分支在同一事务创建公司 product/SKU 及修订；
-   - 已有目标分支同一事务只写映射、双价 `supplier_offering_revision`、审计、幂等结果和 outbox；
+   - 已有目标分支同一事务只写映射、双价 `supplier_offering_revision`、审计和幂等结果；
    - 无同款分支要求同字段自动预填且允许采购修改，独立 `product_kind`、销售可见价与市场价必填；同一事务创建
      公司 product/SKU 及含销售可见价/市场价的 SKU 修订、精确映射、双价 `supplier_offering_revision`、
-     审计、幂等结果和 outbox；
+     审计和幂等结果；
    - 增加第二家供应商不修改现有公司 SKU 修订；销售资格以当前 SKU 修订和有效供给实时派生，
      不存在 `KEEP_EXISTING` / `SET_PRICE` 或商品池修订复用；
    - 任一校验失败整体回滚，不允许留下孤立公司 SKU、有映射无供给或不具备销售资格却被销售查询返回的 SKU；
@@ -3757,13 +3657,13 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
    - 分页全部安全持久化后才前移水位。
 3. 商城关键事实接收：
    - inbox 消息去重；
-   - 验签和基本完整性校验；
+   - 基本完整性校验；
    - 业务事实键去重，并按 `(mall_id, external_order_no)` 串行处理支付；
    - 保存不可变事实；
    - 首份有效支付以同事务创建唯一 `mall_order`；唯一冲突时加载既有订单并把后到
-     不同版本标记为差异，不产生消费、供应商动作或 outbox；
+     不同版本标记为差异，不产生消费或供应商动作；
    - 归集条件不足时标记待归集并生成差异；
-   - `T` 后支付且供给完整时，与供应商订单和下单 outbox 同事务形成。
+   - `T` 后支付且供给完整时，与供应商订单同事务形成。
 3. 商城退款：
    - 写 `REFUND_SUCCEEDED`；
    - 写退款头、商品退款行和沿原支付来源的 `APPLY` 分配；
@@ -3791,8 +3691,8 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
    - 不修改旧评估、支付矩阵或原消费。
 8. 切换启用：
    - 以上线负责人为操作者锁定商城切换记录；
-   - 校验一期轮询封存、P0/P1 检查链尾和范围摘要；
-   - 全部通过后原子写唯一 `T`、`enabled_by` 与确认摘要，失败不留下部分启用。
+   - 校验一期轮询封存和 P0/P1 文档 checklist 核对记录；
+   - 全部通过后原子写唯一 `T`、`enabled_by` 与 checklist 引用，失败不留下部分启用。
 
 所有正式分配、抵销和纠错在过账后不可更新或删除。退款、成本、应收/应付、付款和
 发票纠错均追加引用原行的 `REVERSE` 或反向分录，并在同一事务按稳定顺序锁定两侧，
@@ -3865,7 +3765,7 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | 应收、回款、销项票 | 启用 | 复用 | 卡券票款连续保留 |
 | 应付、付款、进项票 | 采购单来源 | 增加供应商结算单来源 | 同一核销内核 |
 | 退货、拒收、退款、冲正、红票、库存调整 | 启用 | 复用 | 二期商城/供应商退款事实另行追加 |
-| 一期商城销售拉取 | 基线、增量、每日全量清单核对（含已关闭、作废及来源缺失） | 切换完成后停止 | 快照、每日差异和历史版本永久可查，水位封存 |
+| 一期商城销售拉取 | 基线、增量、按月全量/按单抽查核对（含已关闭、作废及来源缺失） | 切换完成后停止 | 快照、核对差异和历史版本永久可查，水位封存 |
 | 供应商商品库、映射、供给 | Excel/手工来源启用 | 增加 API 来源和自动变化处理 | 复用同一供应商 SPU/SKU 与供给身份，不迁移成第二套表 |
 | 供应商 API 连接 | 仅登记供应商 API 能力 | 启用连接、同步与履约接口 | API 连接只作为来源元数据，不成为非 API 商品父对象 |
 | 商品发布与商城确认 | 不启用 | 启用 | 引用一期 SKU |
@@ -3876,7 +3776,7 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | 自动供应商订单 | 不启用 | 仅 `T` 后支付启用 | `T` 前订单保持原人工履约链 |
 | 供应商取消、退款、余额恢复闭环 | 不启用 | 与自动下单同批启用 | 未就绪不得开放 `T` 后自动履约 |
 | 供应商周期结算 | 不启用 | 启用 | 确认后进入一期应付 |
-| outbox、inbox、错误和对账 | 启用唯一 `outbox_message`，仅内部事实事件/投影消费；商城主动拉取与每日核对使用专用表；无 inbox、外部 dispatcher 或通用接口治理 | 复用一期 outbox 开启外部目的地；新增 inbox、协议尝试、错误中心和通用对账 | 不建立第二张 outbox 或 `integration_message` 同义表；正式事实与 outbox 同事务 |
+| 集成治理 | `inbox_message`、`integration_error_task`、`reconciliation_difference` 等普通表组 | 复用 | 不建 outbox、消息中间件或投递状态机；商城主动拉取与核对使用专用表 |
 | 经营分析 | 非卡券实际盈亏；卡券标记成本未覆盖 | 增加卡券消费、成本、余额和覆盖率 | 查询投影可重建 |
 
 第二期 P0 与 P1 必须同批具备生产能力。商品发布、销售投影、支付回流、
@@ -3971,8 +3871,8 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 - 供应商履约分析；
 - 预警和管理报表。
 
-异步投影必须保存消费的 outbox 水位。系统每天从正式版本、流水、关键事实和核销明细
-全量核对并重建。重建失败只影响查询新鲜度，不修改正式事实。
+投影由定时任务从正式版本、流水、关键事实和核销明细定时刷新（物化视图或定时重建），
+无需水位与核对。重建失败只影响查询新鲜度，不修改正式事实。
 
 客户经营质量、利润和卡券指标页面必须展示数据更新时间。卡券利润指标还必须同屏展示：
 

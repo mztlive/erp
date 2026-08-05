@@ -3,6 +3,7 @@
  */
 
 import { mockDelay } from "@/lib/mock-delay"
+import { filterRowsBySearch } from "@/lib/filter-utils"
 import type {
   ManualPauseCommand,
   ManualPauseResult,
@@ -84,12 +85,6 @@ function computeMetrics(rows: readonly ProductPublicationRow[]) {
   }
 }
 
-function matchSearch(q: string | undefined, parts: readonly string[]): boolean {
-  if (!q?.trim()) return true
-  const needle = q.trim().toLowerCase()
-  return parts.some((p) => p.toLowerCase().includes(needle))
-}
-
 function filterSummary(
   query: ProductPublicationListQuery,
   total: number
@@ -141,15 +136,13 @@ export async function fetchPublicationList(
   const metrics = computeMetrics(rows)
 
   if (query.q?.trim()) {
-    rows = rows.filter((r) =>
-      matchSearch(query.q, [
-        r.publicationCode,
-        r.skuCode,
-        r.productName,
-        r.targetMallName,
-        r.publicationId,
-      ])
-    )
+    rows = filterRowsBySearch(rows, query.q, (r) => [
+      r.publicationCode,
+      r.skuCode,
+      r.productName,
+      r.targetMallName,
+      r.publicationId,
+    ])
   }
   if (query.skuId) {
     rows = rows.filter((row) => row.skuId === query.skuId)

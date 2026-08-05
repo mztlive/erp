@@ -170,8 +170,8 @@ export type IntegrationResolutionItemView = {
     subjectHash: string
     completionAction: string
     lease?: {
-      leaseVersion: number
-      leaseExpiresAt: string
+      ownerUserId: string
+      subjectVersion?: string
       ownerDisplayName: string
     }
   }
@@ -283,26 +283,19 @@ export type IntegrationFormalResult = {
   /** Stay on current item — never auto-next for non-terminal / unknown */
   stayOnItem: boolean
   terminal?: boolean
-  successorWorkItemId?: string
   replacementWorkItemId?: string
   facts?: { label: string; value: string }[]
-  pendingIdempotencyKey?: string
 }
 
 export type ClaimResult = {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expiresAt: string
 }
 
 export type IntegrationTaskActionInput = {
   itemType: IntegrationItemType
   itemId: string
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
+  expectedSubjectVersion?: string
   expectedWorkItemVersion: string
   kind:
     | "QUERY_ORIGINAL_RESULT"
@@ -313,47 +306,37 @@ export type IntegrationTaskActionInput = {
     | "SKIP"
     | "DEFER"
   operationId: string
-  idempotencyKey: string
   reasonCode?: string
   comment?: string
   evidenceRefs?: ControlledTerminalEvidenceRef[]
   /** Demo: force RESULT_UNKNOWN after query */
   forceUnknown?: boolean
-  simulateTimeout?: boolean
 }
 
 export type IntegrationResolveInput = {
   itemType: IntegrationItemType
   itemId: string
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
+  expectedSubjectVersion?: string
   expectedWorkItemVersion: string
   operationId: string
-  idempotencyKey: string
   evidencePolicyId: string
   evidencePolicyVersion: number
   policyKey: { errorType: string; fundsImpact: FundsImpact }
   evidenceRefs: ControlledTerminalEvidenceRef[]
   comment?: string
-  simulateTimeout?: boolean
 }
 
 export type IntegrationCloseInput = {
   itemType: IntegrationItemType
   itemId: string
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
+  expectedSubjectVersion?: string
   expectedWorkItemVersion: string
   operationId: string
-  idempotencyKey: string
   kind: "CLOSE_DUPLICATE" | "CLOSE_MISROUTED"
   reasonCode: string
   replacementWorkItemId?: string
-  closureEvidenceReference: string
   comment?: string
 }
 
@@ -361,12 +344,9 @@ export type IntegrationTransferInput = {
   itemType: IntegrationItemType
   itemId: string
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
+  expectedSubjectVersion?: string
   expectedWorkItemVersion: string
   operationId: string
-  idempotencyKey: string
   targetRole: string
   targetUserId?: string
   reasonCode: string
@@ -378,7 +358,6 @@ export type DirectReconciliationInput = {
   expectedDifferenceVersion: string
   expectedSubjectHash: string
   operationId: string
-  idempotencyKey: string
   decision:
     | {
         kind: "NON_TERMINAL_ACTION"

@@ -76,7 +76,6 @@ import {
 import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
-  useCustomerQualityExportJobQuery,
   useCustomerQualityPeriodPolicyQuery,
   useCustomerQualityQuery,
   useRefreshCustomerQualityMutation,
@@ -84,6 +83,7 @@ import {
 } from "@/features/customer-quality/queries"
 import type {
   BusinessTag,
+  CustomerQualityExportJob,
   CustomerQualityQuery,
   CustomerQualityRow,
   CustomerQualityScenario,
@@ -274,7 +274,9 @@ export function CustomerQualityPage() {
     pageSize: 20,
   })
   const [tagDialog, setTagDialog] = React.useState<BusinessTag | null>(null)
-  const [exportJobId, setExportJobId] = React.useState<string | null>(null)
+  const [exportJob, setExportJob] = React.useState<CustomerQualityExportJob | null>(
+    null
+  )
   const [periodWriteDone, setPeriodWriteDone] = React.useState(false)
   const rowFocusRef = React.useRef<string | null>(focusCustomerId ?? null)
 
@@ -399,11 +401,9 @@ export function CustomerQualityPage() {
 
   const viewQuery = useCustomerQualityQuery(analysisQuery)
   const exportMutation = useStartCustomerQualityExportMutation()
-  const exportJobQuery = useCustomerQualityExportJobQuery(exportJobId)
   const refreshMutation = useRefreshCustomerQualityMutation()
 
   const data = viewQuery.data
-  const exportJob = exportJobQuery.data
 
   function patchUrl(
     patch: Record<string, string | null | undefined>,
@@ -743,7 +743,7 @@ export function CustomerQualityPage() {
       permissionVersion: data.scope.permissionVersion,
       rowCount: data.customers.filteredTotal,
     })
-    setExportJobId(job.jobId)
+    setExportJob(job)
   }
 
   function applyExplicitPeriod() {
@@ -1798,7 +1798,7 @@ export function CustomerQualityPage() {
         </>
       )}
 
-      {exportJobId && exportJob ? (
+      {exportJob ? (
         <BackgroundJobProgress
           mode="all-or-nothing"
           status={

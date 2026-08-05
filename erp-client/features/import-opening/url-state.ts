@@ -6,8 +6,9 @@ import type {
   IssueRowStatus,
   ViewerRoleDemo,
 } from "@/features/import-opening/types"
+import { createUrlStateCodec } from "@/lib/url-state"
 
-const SECTIONS = new Set<BatchSection>([
+const SECTION_VALUES = [
   "overview",
   "files",
   "trial",
@@ -15,9 +16,9 @@ const SECTIONS = new Set<BatchSection>([
   "progress",
   "result",
   "audit",
-])
+] as const
 
-const ISSUE_CODES = new Set<ImportIssueCode>([
+const ISSUE_CODE_VALUES = [
   "CUSTOMER_NOT_FOUND",
   "AMOUNT_PRECISION",
   "BASELINE_DATE_MISMATCH",
@@ -26,9 +27,9 @@ const ISSUE_CODES = new Set<ImportIssueCode>([
   "MAPPING_CONFLICT",
   "QUALIFICATION_EXPIRED",
   "STOCK_QTY_INVALID",
-])
+] as const
 
-const OBJECT_CODES = new Set<ImportObjectCode>([
+const OBJECT_CODE_VALUES = [
   "CUSTOMER",
   "CONTRACT",
   "SUPPLIER",
@@ -38,14 +39,20 @@ const OBJECT_CODES = new Set<ImportObjectCode>([
   "CARD_CATEGORY",
   "CARD_SALES_ORDER",
   "CARD_OPENING_AR",
-])
+] as const
 
-const ROW_STATUSES = new Set<IssueRowStatus>([
+const ROW_STATUS_VALUES = [
   "PENDING_MAPPING",
   "CONFLICT",
   "FAILED",
   "SKIPPED",
-])
+] as const
+
+const ROLE_VALUES = [
+  "WAREHOUSE_CONFIRMER",
+  "FINANCE_CONFIRMER",
+  "SYSTEM_ADMIN",
+] as const
 
 export type ImportOpeningUrlState = {
   environment: ImportEnvironment
@@ -62,96 +69,46 @@ export type ImportOpeningUrlState = {
   role?: ViewerRoleDemo
 }
 
-export function parseImportOpeningSearchParams(
-  searchParams: URLSearchParams | { get(name: string): string | null }
-): ImportOpeningUrlState {
-  const envRaw = searchParams.get("environment")
-  const environment: ImportEnvironment =
-    envRaw === "PRODUCTION" || envRaw === "production"
-      ? "PRODUCTION"
-      : "VALIDATION"
+const codec = createUrlStateCodec<ImportOpeningUrlState>([
+  {
+    key: "environment",
+    type: "custom",
+    parse: (get) => {
+      const raw = get("environment")
+      return raw === "PRODUCTION" || raw === "production"
+        ? "PRODUCTION"
+        : "VALIDATION"
+    },
+    build: (value) => (value === "VALIDATION" ? undefined : String(value)),
+  },
+  { key: "status", type: "string" },
+  { key: "objectType", type: "enum", values: OBJECT_CODE_VALUES },
+  { key: "q", type: "string" },
+  { key: "batchId", type: "string", aliases: ["id"] },
+  {
+    key: "section",
+    type: "enum",
+    values: SECTION_VALUES,
+    defaultValue: "overview",
+    buildWhen: (value, state) =>
+      value !== "overview" && Boolean(state.batchId),
+  },
+  { key: "issueCode", type: "enum", values: ISSUE_CODE_VALUES },
+  {
+    key: "issueObject",
+    name: "issueObjectType",
+    type: "enum",
+    values: OBJECT_CODE_VALUES,
+  },
+  { key: "rowStatus", type: "enum", values: ROW_STATUS_VALUES },
+  { key: "page", type: "number", defaultValue: 1 },
+  {
+    key: "role",
+    type: "enum",
+    values: ROLE_VALUES,
+    buildWhen: (value) => Boolean(value) && value !== "SYSTEM_ADMIN",
+  },
+])
 
-  const status = searchParams.get("status") ?? undefined
-  const objectRaw = searchParams.get("objectType")
-  const objectType =
-    objectRaw && OBJECT_CODES.has(objectRaw as ImportObjectCode)
-      ? (objectRaw as ImportObjectCode)
-      : undefined
-  const q = searchParams.get("q") ?? undefined
-  const batchId =
-    searchParams.get("batchId") ?? searchParams.get("id") ?? undefined
-
-  const sectionRaw = searchParams.get("section")
-  const section: BatchSection =
-    sectionRaw && SECTIONS.has(sectionRaw as BatchSection)
-      ? (sectionRaw as BatchSection)
-      : "overview"
-
-  const issueRaw = searchParams.get("issueCode")
-  const issueCode =
-    issueRaw && ISSUE_CODES.has(issueRaw as ImportIssueCode)
-      ? (issueRaw as ImportIssueCode)
-      : undefined
-
-  const issueObjectRaw = searchParams.get("issueObject")
-  const issueObjectType =
-    issueObjectRaw && OBJECT_CODES.has(issueObjectRaw as ImportObjectCode)
-      ? (issueObjectRaw as ImportObjectCode)
-      : undefined
-
-  const rowRaw = searchParams.get("rowStatus")
-  const rowStatus =
-    rowRaw && ROW_STATUSES.has(rowRaw as IssueRowStatus)
-      ? (rowRaw as IssueRowStatus)
-      : undefined
-
-  const pageRaw = Number(searchParams.get("page") ?? "1")
-  const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1
-
-  const roleRaw = searchParams.get("role")
-  const role: ViewerRoleDemo | undefined =
-    roleRaw === "WAREHOUSE_CONFIRMER" ||
-    roleRaw === "FINANCE_CONFIRMER" ||
-    roleRaw === "SYSTEM_ADMIN"
-      ? roleRaw
-      : undefined
-
-  return {
-    environment,
-    status,
-    objectType,
-    q,
-    batchId,
-    section,
-    issueCode,
-    issueObjectType,
-    rowStatus,
-    page,
-    role,
-  }
-}
-
-export function buildImportOpeningSearchParams(
-  state: ImportOpeningUrlState
-): string {
-  const params = new URLSearchParams()
-  if (state.environment !== "VALIDATION") {
-    params.set("environment", state.environment)
-  }
-  if (state.status) params.set("status", state.status)
-  if (state.objectType) params.set("objectType", state.objectType)
-  if (state.q) params.set("q", state.q)
-  if (state.batchId) params.set("batchId", state.batchId)
-  if (state.batchId && state.section !== "overview") {
-    params.set("section", state.section)
-  }
-  if (state.issueCode) params.set("issueCode", state.issueCode)
-  if (state.issueObjectType) params.set("issueObject", state.issueObjectType)
-  if (state.rowStatus) params.set("rowStatus", state.rowStatus)
-  if (state.page > 1) params.set("page", String(state.page))
-  if (state.role && state.role !== "SYSTEM_ADMIN") {
-    params.set("role", state.role)
-  }
-  const qs = params.toString()
-  return qs ? `?${qs}` : ""
-}
+export const parseImportOpeningSearchParams = codec.parse
+export const buildImportOpeningSearchParams = codec.build

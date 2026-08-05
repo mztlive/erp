@@ -9,7 +9,6 @@ import {
   closeIntegrationTask,
   fetchIntegrationItem,
   fetchIntegrationQueue,
-  queryIntegrationIdempotency,
   resolveIntegrationTask,
   transferIntegrationTask,
 } from "@/features/integration-errors/api"
@@ -132,18 +131,6 @@ export function useDirectReconciliationMutation() {
           queryKey: integrationErrorKeys.all,
         })
       }
-    },
-  })
-}
-
-export function useQueryIntegrationIdempotencyMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: queryIntegrationIdempotency,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: integrationErrorKeys.all,
-      })
     },
   })
 }

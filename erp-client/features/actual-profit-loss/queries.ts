@@ -6,7 +6,6 @@ import {
   clearSourceCorrectionPending,
   fetchCostEntriesForRow,
   fetchCostEntryDetail,
-  fetchExportJob,
   fetchPeriodBasisConfig,
   fetchProfitLossView,
   markSourceCorrectionPending,
@@ -28,8 +27,6 @@ export const profitLossKeys = {
     [...profitLossKeys.all, "cost-entry", id] as const,
   costEntries: (ids: readonly string[]) =>
     [...profitLossKeys.all, "cost-entries", [...ids].sort().join(",")] as const,
-  exportJob: (jobId: string) =>
-    [...profitLossKeys.all, "export", jobId] as const,
 }
 
 export function usePeriodBasisConfigQuery(q: PeriodBasisConfigQuery = {}) {
@@ -78,28 +75,9 @@ export function useCostEntriesForRowQuery(costEntryIds: readonly string[]) {
   })
 }
 
-export function useExportJobQuery(jobId: string | null) {
-  return useQuery({
-    queryKey: profitLossKeys.exportJob(jobId ?? ""),
-    queryFn: () => fetchExportJob(jobId!),
-    enabled: Boolean(jobId),
-    refetchInterval: (q) => {
-      const status = q.state.data?.status
-      if (status === "succeeded" || status === "failed") return false
-      return 400
-    },
-  })
-}
-
 export function useStartProfitLossExportMutation() {
-  const queryClient = useQueryClient()
   return useMutation({
     mutationFn: startProfitLossExport,
-    onSuccess: async (job) => {
-      await queryClient.invalidateQueries({
-        queryKey: profitLossKeys.exportJob(job.jobId),
-      })
-    },
   })
 }
 

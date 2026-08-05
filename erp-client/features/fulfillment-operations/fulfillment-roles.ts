@@ -8,6 +8,7 @@
  */
 
 import type { FulfillmentOperationType } from "@/features/fulfillment-operations/types"
+import { parseDemoRole } from "@/lib/demo-roles"
 
 export type FulfillmentRole =
   | "warehouse"
@@ -61,11 +62,11 @@ export const FULFILLMENT_ROLES: Record<FulfillmentRole, FulfillmentRoleDef> = {
 
 export const DEFAULT_FULFILLMENT_ROLE: FulfillmentRole = "warehouse"
 
+const FULFILLMENT_ROLE_KEYS = Object.keys(FULFILLMENT_ROLES) as FulfillmentRole[]
+
 export function resolveRole(raw: string | null): FulfillmentRoleDef {
-  if (raw && raw in FULFILLMENT_ROLES) {
-    return FULFILLMENT_ROLES[raw as FulfillmentRole]
-  }
-  return FULFILLMENT_ROLES[DEFAULT_FULFILLMENT_ROLE]
+  const value = parseDemoRole(raw, FULFILLMENT_ROLE_KEYS)
+  return FULFILLMENT_ROLES[value ?? DEFAULT_FULFILLMENT_ROLE]
 }
 
 export const ROLE_OPTIONS = (

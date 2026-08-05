@@ -13,7 +13,6 @@ import {
   fetchCompanySkuOptions,
   fetchSupplierCatalogQueue,
   promoteSupplierProductToPool,
-  resolveUnknownSupplierCatalogResult,
   reviseSupplierCatalogProduct,
   saveSessionDraft,
 } from "@/features/supplier-catalog/api"
@@ -168,20 +167,6 @@ export function useSaveSupplierCatalogDraftMutation() {
       await queryClient.invalidateQueries({
         queryKey: supplierCatalogKeys.all,
       })
-    },
-  })
-}
-
-export function useResolveUnknownSupplierCatalogMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: resolveUnknownSupplierCatalogResult,
-    onSuccess: async (result) => {
-      if (result.status === "succeeded") {
-        await queryClient.invalidateQueries({
-          queryKey: supplierCatalogKeys.all,
-        })
-      }
     },
   })
 }

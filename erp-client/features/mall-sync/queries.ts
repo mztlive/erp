@@ -8,7 +8,6 @@ import {
   confirmMapping,
   deferMapping,
   fetchMallSyncPage,
-  queryConfirmIdempotency,
   reapplyMallSnapshot,
   resolveUnknownReapply,
   retryFailedJob,
@@ -137,12 +136,6 @@ export function useAssignMappingMutation() {
         await queryClient.invalidateQueries({ queryKey: mallSyncKeys.all })
       }
     },
-  })
-}
-
-export function useQueryConfirmIdempotencyMutation() {
-  return useMutation({
-    mutationFn: queryConfirmIdempotency,
   })
 }
 

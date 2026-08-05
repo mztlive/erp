@@ -82,10 +82,9 @@ import {
   useHoldCardFundsMutation,
   useRegisterInvoiceMutation,
   useRegisterReceiptMutation,
-  useResolveUnknownCardFundsMutation,
   useSaveCardFundsEvidenceMutation,
 } from "@/features/card-funds-review/queries"
-import { freshnessText, openWorkspaceLabel, resultText, versionText } from "@/lib/ui-text"
+import { freshnessText, openWorkspaceLabel, versionText } from "@/lib/ui-text"
 
 const money = new Intl.NumberFormat("zh-CN", {
   style: "currency",
@@ -95,9 +94,7 @@ const money = new Intl.NumberFormat("zh-CN", {
 
 type SessionLease = {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expiresAt: string
+  subjectVersion: string
 }
 
 type ResultState = SharedResultState<FormalOutcome>
@@ -180,7 +177,6 @@ export function CardFundsReviewPage() {
   const registerReceiptMutation = useRegisterReceiptMutation()
   const registerInvoiceMutation = useRegisterInvoiceMutation()
   const saveEvidenceMutation = useSaveCardFundsEvidenceMutation()
-  const resolveUnknownMutation = useResolveUnknownCardFundsMutation()
   const driftMutation = useDemoDriftHashMutation()
 
   const view = queueQuery.data
@@ -201,7 +197,6 @@ export function CardFundsReviewPage() {
   const [confirmMode, setConfirmMode] = React.useState<ConfirmMode>(null)
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
-  const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const [simulateHashDrift, setSimulateHashDrift] = React.useState(false)
   const [allocationMode, setAllocationMode] = React.useState<
     null | "receipt" | "invoice"
@@ -227,12 +222,6 @@ export function CardFundsReviewPage() {
   const resultRef = React.useRef<HTMLDivElement>(null)
   const leaseRef = React.useRef<SessionLease | null>(null)
   const [leaseEpoch, setLeaseEpoch] = React.useState(0)
-  const idempotencyRef = React.useRef<{
-    approve?: string
-    reject?: string
-    hold?: string
-    zero?: string
-  }>({})
 
   React.useEffect(() => {
     if (!task) return
@@ -241,7 +230,6 @@ export function CardFundsReviewPage() {
     setComment(task.currentEvidence.comment ?? "")
     setActionError(null)
     setAllocationMode(null)
-    idempotencyRef.current = {}
   }, [task?.workItem.workItemId, task?.fundsFactVersion])
 
   // URL 默认：保留 queueContextId / type / scope / currentWorkItemId
@@ -286,9 +274,7 @@ export function CardFundsReviewPage() {
         if (cancelled) return
         leaseRef.current = {
           workItemId: lease.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expiresAt: lease.expiresAt,
+          subjectVersion: lease.subjectVersion,
         }
         setLeaseEpoch((n) => n + 1)
       })
@@ -356,24 +342,17 @@ export function CardFundsReviewPage() {
   const leaseStatus: "active" | "unclaimed" | "lost" | "expiring" = activeLease
     ? "active"
     : "unclaimed"
-  const leaseLabel = activeLease
-    ? `已领取 · 至 ${new Date(activeLease.expiresAt).toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" })}`
-    : "未领取"
+  const leaseLabel = activeLease ? "已领取" : "未领取"
 
   const ensureLease = React.useCallback(async () => {
     if (!task) throw new Error("无当前任务")
-    if (
-      leaseRef.current?.workItemId === task.workItem.workItemId &&
-      leaseRef.current.claimToken
-    ) {
+    if (leaseRef.current?.workItemId === task.workItem.workItemId) {
       return leaseRef.current
     }
     const lease = await claimMutation.mutateAsync(task.workItem.workItemId)
     const session: SessionLease = {
       workItemId: lease.workItemId,
-      claimToken: lease.claimToken,
-      leaseVersion: lease.leaseVersion,
-      expiresAt: lease.expiresAt,
+      subjectVersion: lease.subjectVersion,
     }
     leaseRef.current = session
     setLeaseEpoch((n) => n + 1)
@@ -436,48 +415,29 @@ export function CardFundsReviewPage() {
       if (!task) return
       setActionError(null)
       try {
-        const lease = await ensureLease()
-        const keyField = conclusion === "NO_HISTORY_FROM_ZERO" ? "zero" : "approve"
-        if (!idempotencyRef.current[keyField]) {
-          idempotencyRef.current[keyField] =
-            `${keyField}_${task.workItem.workItemId}_${crypto.randomUUID()}`
-        }
-        const base = buildDecisionBase("APPROVED")
-        const decision: CardFundsReviewDecision = {
-          ...base,
-          reviewResult: "APPROVED",
-          conclusion,
-        }
-        const response = await completeMutation.mutateAsync({
-          workItemId: task.workItem.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expectedSubjectHash: task.workItem.subjectHash,
-          expectedSubjectVersion: task.workItem.subjectVersion,
-          idempotencyKey: idempotencyRef.current[keyField]!,
-          forceUnknown: forceUnknownOnce,
-          simulateHashDrift,
-          decision,
-        })
-        setForceUnknownOnce(false)
-        setSimulateHashDrift(false)
-        setConfirmMode(null)
+      const lease = await ensureLease()
+      const base = buildDecisionBase("APPROVED")
+      const decision: CardFundsReviewDecision = {
+        ...base,
+        reviewResult: "APPROVED",
+        conclusion,
+      }
+      const response = await completeMutation.mutateAsync({
+        workItemId: task.workItem.workItemId,
+        expectedSubjectVersion: lease.subjectVersion,
+        simulateHashDrift,
+        decision,
+      })
+      setSimulateHashDrift(false)
+      setConfirmMode(null)
 
-        if (response.status === "unknown") {
-          setLastResult({
-            status: "unknown",
-            title: resultText.unknown,
-            description: response.message,
-            pendingIdempotencyKey: response.idempotencyKey,
-            stayOnItem: true,
-          })
-          return
-        }
+      if (response.status !== "succeeded") {
         if (response.status === "failed") {
           setActionError(response.message)
-          return
         }
-        if (response.outcome.kind !== "APPROVED") return
+        return
+      }
+      if (response.outcome.kind !== "APPROVED") return
         const biz = response.outcome.business
         leaseRef.current = null
         setLeaseEpoch((n) => n + 1)
@@ -503,7 +463,6 @@ export function CardFundsReviewPage() {
       buildDecisionBase,
       completeMutation,
       ensureLease,
-      forceUnknownOnce,
       simulateHashDrift,
       task,
     ]
@@ -520,9 +479,6 @@ export function CardFundsReviewPage() {
       setActionError(null)
       try {
         const lease = await ensureLease()
-        if (!idempotencyRef.current.reject) {
-          idempotencyRef.current.reject = `reject_${task.workItem.workItemId}_${crypto.randomUUID()}`
-        }
         const base = buildDecisionBase("REJECTED")
         const decision: CardFundsReviewDecision = {
           ...base,
@@ -541,26 +497,14 @@ export function CardFundsReviewPage() {
         }
         const response = await completeMutation.mutateAsync({
           workItemId: task.workItem.workItemId,
-          claimToken: lease.claimToken,
-          leaseVersion: lease.leaseVersion,
-          expectedSubjectHash: task.workItem.subjectHash,
-          expectedSubjectVersion: task.workItem.subjectVersion,
-          idempotencyKey: idempotencyRef.current.reject,
+          expectedSubjectVersion: lease.subjectVersion,
           decision,
         })
         setConfirmMode(null)
-        if (response.status === "unknown") {
-          setLastResult({
-            status: "unknown",
-            title: resultText.unknown,
-            description: response.message,
-            pendingIdempotencyKey: response.idempotencyKey,
-            stayOnItem: true,
-          })
-          return
-        }
-        if (response.status === "failed") {
-          setActionError(response.message)
+        if (response.status !== "succeeded") {
+          if (response.status === "failed") {
+            setActionError(response.message)
+          }
           return
         }
         if (response.outcome.kind !== "REJECTED") return
@@ -589,17 +533,12 @@ export function CardFundsReviewPage() {
     setActionError(null)
     try {
       const lease = await ensureLease()
-      if (!idempotencyRef.current.hold) {
-        idempotencyRef.current.hold = `hold_${task.workItem.workItemId}_${crypto.randomUUID()}`
-      }
       const nextId = neighborId(1)
       const response = await holdMutation.mutateAsync({
         workItemId: task.workItem.workItemId,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
+        expectedSubjectVersion: lease.subjectVersion,
         reasonCode: "NEED_MORE_EVIDENCE",
         note: comment.trim() || "跳过：待补充票款证据",
-        idempotencyKey: idempotencyRef.current.hold,
         nextWorkItemId: nextId,
       })
       setConfirmMode(null)
@@ -646,14 +585,12 @@ export function CardFundsReviewPage() {
       const lease = await ensureLease()
       const result = await registerReceiptMutation.mutateAsync({
         workItemId: task.workItem.workItemId,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
+        expectedSubjectVersion: lease.subjectVersion,
         receiptNo: receiptForm.receiptNo.trim() || `SK-W13-${Date.now().toString(36)}`,
         receivedAt: receiptForm.receivedAt,
         grossAmount: receiptForm.grossAmount,
         allocations: allocLines,
         evidenceReference: evidenceRef.trim() || "银行回单-本次登记",
-        idempotencyKey: `rcpt_${task.workItem.workItemId}_${crypto.randomUUID()}`,
       })
       // 登记后停留当前项，刷新金额/指纹（invalidate 后 query 更新）
       setAllocationMode(null)
@@ -694,8 +631,7 @@ export function CardFundsReviewPage() {
         moneyStrSafe(Number(gross) - Number(net))
       const result = await registerInvoiceMutation.mutateAsync({
         workItemId: task.workItem.workItemId,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
+        expectedSubjectVersion: lease.subjectVersion,
         invoiceNo: invoiceForm.invoiceNo.trim() || `FP-W13-${Date.now().toString(36)}`,
         issuedAt: invoiceForm.issuedAt,
         grossAmount: gross,
@@ -703,7 +639,6 @@ export function CardFundsReviewPage() {
         taxAmount: tax,
         allocations: allocLines,
         evidenceReference: evidenceRef.trim() || "发票扫描件-本次登记",
-        idempotencyKey: `inv_${task.workItem.workItemId}_${crypto.randomUUID()}`,
       })
       setAllocationMode(null)
       setLastResult({
@@ -731,12 +666,10 @@ export function CardFundsReviewPage() {
       const lease = await ensureLease()
       await saveEvidenceMutation.mutateAsync({
         workItemId: task.workItem.workItemId,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
+        expectedSubjectVersion: lease.subjectVersion,
         evidenceDocumentIds: evidenceDocId.trim() ? [evidenceDocId.trim()] : [],
         evidenceReferences: evidenceRef.trim() ? [evidenceRef.trim()] : [],
         comment: comment.trim() || undefined,
-        idempotencyKey: `ev_${task.workItem.workItemId}_${Date.now()}`,
       })
     } catch (error) {
       setActionError(error instanceof Error ? error.message : "保存证据失败")
@@ -922,15 +855,6 @@ export function CardFundsReviewPage() {
           <input
             type="checkbox"
             className="size-3.5"
-            checked={forceUnknownOnce}
-            onChange={(e) => setForceUnknownOnce(e.target.checked)}
-          />
-          演示：下次完成模拟结果未知
-        </label>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            className="size-3.5"
             checked={simulateHashDrift}
             onChange={(e) => setSimulateHashDrift(e.target.checked)}
           />
@@ -948,57 +872,18 @@ export function CardFundsReviewPage() {
             facts={buildResultFacts(lastResult.outcome)}
             actions={
               <div className="flex flex-wrap gap-2">
-                {lastResult.status === "unknown" ? (
-                  <>
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      disabled={resolveUnknownMutation.isPending}
-                      onClick={() => {
-                        if (!lastResult.pendingIdempotencyKey) return
-                        void resolveUnknownMutation
-                          .mutateAsync({
-                            idempotencyKey: lastResult.pendingIdempotencyKey,
-                            settle: false,
-                          })
-                          .then((r) => {
-                            if (r.status === "succeeded") {
-                              setLastResult({
-                                status:
-                                  r.outcome.kind === "REJECTED"
-                                    ? "rejected"
-                                    : "succeeded",
-                                title: "查询到处理结果",
-                                description: "已确认处理结果，可继续下一项。",
-                                reference:
-                                  r.outcome.kind === "HELD"
-                                    ? r.outcome.reference
-                                    : r.outcome.business.reference,
-                                outcome: r.outcome,
-                              })
-                            } else if (r.status === "unknown") {
-                              setActionError(r.message)
-                            }
-                          })
-                      }}
-                    >
-                      查询最终结果
-                    </Button>
-                  </>
-                ) : (
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      const next =
-                        context?.nextWorkItemId ??
-                        neighborId(1) ??
-                        tasks[0]?.workItem.workItemId
-                      goToWorkItem(next)
-                    }}
-                  >
-                    下一项
-                  </Button>
-                )}
+                <Button
+                  type="button"
+                  onClick={() => {
+                    const next =
+                      context?.nextWorkItemId ??
+                      neighborId(1) ??
+                      tasks[0]?.workItem.workItemId
+                    goToWorkItem(next)
+                  }}
+                >
+                  下一项
+                </Button>
                 {task ? (
                   <Button
                     type="button"

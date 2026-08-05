@@ -41,7 +41,7 @@ W17 把第一期卡券销售单的商城同步运行状态、来源快照、业�
 
 | 角色 | 默认子视图 | 可见范围 | 主要动作 |
 | --- | --- | --- | --- |
-| 系统管理员 | 运行总览 / 同步任务 | 授权来源商城的任务、水位、脱敏快照、技术错误和差异摘要 | 查看定时同步；人工治理策略已配置时按策略立即增量或按单补拉；技术重试、指派业务任务、运行核对；不可确认业务归属 |
+| 系统管理员 | 运行总览 / 同步任务 | 授权来源商城的任务、水位、脱敏快照、技术错误和差异摘要 | 查看定时同步；直接执行立即增量或按单补拉，操作留审计；技术重试、指派业务任务、运行核对；不可确认业务归属 |
 | 销售 | 我的映射任务 | 负责客户、合同，以及 `ownerRole=SALES` 时的结算主体差异及必要来源销售摘要 | 确认有权业务对象映射、在当前映射任务内追加来源修复说明与证据、查看重新归集结果 |
 | 运营 | 我的映射任务 | 卡券类目、卡形态、唯一明细及授权销售摘要 | 确认卡券类目映射、处理运营语义差异；不可改商业字段 |
 | 财务 | 我的映射任务 / 核对摘要 | 明确分派且授权的税率、开票、金额格式，以及 `ownerRole=FINANCE` 时的结算归属与结果摘要 | 确认财务语义或退回责任方；不可修正来源金额 |
@@ -57,7 +57,7 @@ W17 把第一期卡券销售单的商城同步运行状态、来源快照、业�
 | 只有技术权限 | 可看任务、水位、错误码和脱敏来源摘要；业务候选和“确认映射”不可用 |
 | 只有业务映射权限 | 只看指派任务与业务白名单字段；不可查看连接配置、原始报文或触发全量任务 |
 | 无敏感字段权限 | 客户联系方式、税务、合同附件等值掩码；卡密等禁止字段任何角色均不可见 |
-| 人工同步治理策略未配置 | “立即增量”和“按单号补拉”保留解释但禁用，显示 `MANUAL_GOVERNANCE_POLICY_MISSING`；服务端拒绝旧页面或重放请求。系统定时增量仍按调度契约运行，不受该人工策略影响 |
+| 人工同步动作 | “立即增量”和“按单号补拉”直接可用，操作追加审计；服务端按阶段校验并拒绝封存后的人工动作。系统定时增量仍按调度契约运行 |
 | T 后（封存） | W17 转为只读历史态：不再从商城拉取新商业事实，同步、核对及执行类写动作全部禁用，历史证据保留可查；当前动作引导至 W23/W29 |
 | 权限运行中收回 | 清除来源快照和候选对象缓存，保留任务稳定身份与返回上下文 |
 
@@ -86,7 +86,7 @@ TaskTabs 身份：工作面为 `governance:mall-sync:{sourceSystemId}`；映射�
 ### 4.1 桌面布局
 
 ```text
-┌ PageHeader：商城同步与映射    来源：福利商城生产   [数据水位] [立即增量（按策略）]
+┌ PageHeader：商城同步与映射    来源：福利商城生产   [数据水位] [立即增量]
 ├ OwnershipBanner
 │ 当前方向：商城 → ERP 商业事实  · 商城开单 · ERP 只读接收
 │ 或：T 后已封存（商城停单、ERP 全面服务，只读历史） · [前往投影/错误中心]
@@ -132,7 +132,6 @@ TaskTabs 身份：工作面为 `governance:mall-sync:{sourceSystemId}`；映射�
 | 边界 | `ownershipStage` | 商城开单（T 前）/ T 后 ERP 全面服务（只读历史） | 销售单来源 | T 后仅历史只读，不回写商城；不用“原生/影子单”等旧称 | 全部有权用户 |
 | 边界 | `syncDirection` | 商城 → ERP 商业事实 / 已封存（不再拉取） | 服务端阶段状态 | 第一阶段只读拉取；T 起停止从商城拉取新商业事实，不再捕获或应用一期快照 | 全部有权用户 |
 | 边界 | `sealedAt/finalWatermark` | 封存时间 / 最终水位 | T 切换与同步封存事实 | 绝对时间和证据引用 | 有历史权限 |
-| 治理 | `manualGovernancePolicy` | 人工同步治理 | 服务端治理策略 | 未配置 / 单人理由 / 双人授权；仅约束立即增量和按单补拉，定时同步不受影响 | 管理员可见配置态；策略内容按权限裁剪 |
 | 指标 | `syncLagSeconds` | 同步延迟 | 安全水位与来源安全时间 | 服务端计算；显示最近成功时间 | 管理员；业务只看等级 |
 | 指标 | `failedJobCount` | 失败任务 | `mall_sales_sync_job` | 当前未恢复失败/部分失败数 | 管理员 |
 | 指标 | `pendingMappingCount` | 待映射 | `master_mapping_task` | 当前角色/范围内进行中任务 | 按任务角色过滤 |
@@ -175,18 +174,18 @@ detail 只展示安全白名单商业字段：状态、客户、合同、结算�
 
 | 字段 | 用户文案 / 表现 | 数据来源 | 说明 |
 | --- | --- | --- | --- |
-| `mappingTaskId/workItemId` | 映射差异 / 正式待办 | `master_mapping_task` + `work_item` | 前者保存领域差异与解决状态，后者保存领取、租约、责任、指纹和完成动作；不得合并成一个私有任务状态 |
+| `mappingTaskId/workItemId` | 映射差异 / 正式待办 | `master_mapping_task` + `work_item` | 前者保存领域差异与解决状态，后者保存领取、责任和完成动作；不得合并成一个私有任务状态 |
 | `mappingType` | 客户/合同/结算主体/卡券类目/唯一明细/金额格式 | `master_mapping_task` | 类型决定候选对象类型；结算主体必须由服务端配置唯一 `ownerRole` |
 | `sourceEvidence` | 来源字段和值 | 白名单快照 | 只显示完成判断必需内容 |
 | `candidateTargets` | ERP 候选 | 规范对象查询 | 相似只作候选，绝不自动确认/合并 |
 | `currentTargets` | 当前来源身份谱系 | `external_identity_map/target` | 显示有效期、关系角色和历史 |
 | `mappingTaskStatus` | 待处理/已解决/无法处理/已关闭 | `master_mapping_task` | 关闭必须有替代任务或证据；不复用来源快照或重新归集状态 |
-| `ownerRoutingState/workItemStatus/owner` | 待责任配置，或待领取/待处理/处理中/已完成/已转交/已关闭 · 责任角色/人员 | 责任路由配置 + `work_item` | 结算主体责任未配置时不创建可执行确认待办；配置后只创建一个正式待办。领取和转交服从统一租约，管理员可指派但不能替代业务确认 |
+| `ownerRoutingState/workItemStatus/owner` | 待责任配置，或待领取/待处理/处理中/已完成/已转交/已关闭 · 责任角色/人员 | 责任路由配置 + `work_item` | 结算主体责任未配置时不创建可执行确认待办；配置后只创建一个正式待办。领取和转交服从 W02 统一契约，管理员可指派但不能替代业务确认 |
 | `reapplyOperationStatus` | 未开始/排队/运行/成功/失败/结果未知 | 重新归集强类型操作 | 映射已解决后独立推进；结果未知不得把 `mappingTaskStatus` 回滚为待处理 |
 | `impactSummary` | 业务影响 | 服务端 | 如“未形成应收和经营归属”，不写技术堆栈 |
 | `resolutionHistory` | 处理结论、依据、结果 | 不可变处理审计 | 包含重新归集正式结果引用 |
 
-映射任务的处理区左右对照：左侧来源白名单事实，右侧 ERP 候选/当前对象，中部明确“确认的是身份关系，不是修改来源销售单”。每个已完成责任路由、需要人工处理的有效 `master_mapping_task` 必须关联一个有效 `work_item`；转交时原待办转交并创建后继待办，两者仍关联同一映射任务，页面不维护第二套领取或租约字段。结算主体责任未配置时，领域差异可保存但不进入业务确认队列，待配置生效后原子创建唯一正式待办。
+映射任务的处理区左右对照：左侧来源白名单事实，右侧 ERP 候选/当前对象，中部明确“确认的是身份关系，不是修改来源销售单”。每个已完成责任路由、需要人工处理的有效 `master_mapping_task` 必须关联一个有效 `work_item`；转交直接更新责任人并记录审计，两者仍关联同一映射任务，页面不维护第二套领取字段。结算主体责任未配置时，领域差异可保存但不进入业务确认队列，待配置生效后原子创建唯一正式待办。
 
 责任路由固定遵守唯一责任人语义：客户映射进入销售、合同映射进入销售、卡券类目/唯一明细进入运营、税率和金额口径进入财务；结算主体由服务端 `ownerRole` 配置在销售与财务中二选一。结算主体未配置唯一 `ownerRole` 时，任务显示“待责任配置”，`CONFIRM_TARGET` 禁用；不得同时向销售和财务生成两个可完成待办，也不得由前端按当前登录人选择责任。
 
@@ -221,27 +220,27 @@ detail 只展示安全白名单商业字段：状态、客户、合同、结算�
 
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
-| 立即执行增量 | 页头 / 总览 | 管理员；阶段严格为 `FIRST_PHASE_MALL_OWNED` 且轮询启用；同来源无有效推进任务；人工治理策略已配置 | 展示当前安全水位、系统计算范围、“不修改来源”及本次采用单人理由或双人授权 | 按当前策略携带理由或有效双人授权后创建后台任务；完成后分别展示来源捕获水位和后续映射积压 | 策略缺失、版本变化或授权无效时服务端拒绝且不创建任务；其它失败使用原任务查询/重试，水位规则不变 |
-| 按单号补拉 | 差异 / 快照 / 管理员动作 | 管理员；有效来源单号；阶段严格为 `FIRST_PHASE_MALL_OWNED`；人工治理策略已配置 | 确认来源、单号、影响、原身份，以及单人模式理由或双人模式授权信息 | 按当前策略使用原来源身份创建单号补拉任务 | 策略缺失、版本变化或授权无效时服务端拒绝；其它失败保留差异并沿原幂等身份重试；迁移时点后入口禁用且服务端拒绝 |
+| 立即执行增量 | 页头 / 总览 | 管理员；阶段严格为 `FIRST_PHASE_MALL_OWNED` 且轮询启用；同来源无有效推进任务 | 展示当前安全水位、系统计算范围和“不修改来源” | 创建后台任务并记录审计；完成后分别展示来源捕获水位和后续映射积压 | 失败使用原任务查询/重试，水位规则不变 |
+| 按单号补拉 | 差异 / 快照 / 管理员动作 | 管理员；有效来源单号；阶段严格为 `FIRST_PHASE_MALL_OWNED` | 确认来源、单号、影响和原身份 | 使用原来源身份创建单号补拉任务并记录审计 | 失败保留差异并沿原幂等身份重试；迁移时点后入口禁用且服务端拒绝 |
 | 重试失败任务 | 任务 detail | 管理员；阶段严格为 `FIRST_PHASE_MALL_OWNED`；原任务属于普通一期且错误类别允许重试 | 展示原范围、原水位和错误分类 | 新增重试尝试/任务并关联原任务 | 明确失败；不手工改成功或推进水位；迁移时点后重试入口不可用 |
 | 执行每日核对 | 核对子视图 | 管理员；阶段严格为 `FIRST_PHASE_MALL_OWNED`；无同边界运行任务 | 展示清单边界与比较内容 | 后台产生核对批次和逐单差异 | 同边界使用 `rerunNo` 重跑，旧证据不覆盖；迁移时点后每日核对停止，W17 转只读历史态 |
 | 指派映射任务 | 映射 detail | 管理员；目标角色有业务权限 | 确认责任类型和截止 | 追加指派审计并进入责任人待办 | 失败保留原责任；管理员不能代确认 |
 
-“立即增量”不能让用户输入或移动高水位；服务端按当前水位、重叠窗口、`safeNow` 和稳定分页形成范围。人工治理策略未配置时，“立即增量”和“按单号补拉”均 fail-closed，定时同步继续按既有调度契约运行；策略配置后，服务端按其固定的单人理由或双人授权模式校验每次人工动作。来源不可用时商城继续运行，ERP 水位保持不变。按单补拉、普通失败重试和普通每日核对均是 `FIRST_PHASE_MALL_OWNED` 专属动作：迁移时点后普通增量与核对停止，即使用户保留旧页面或重放旧请求，服务端也必须拒绝；W17 转只读历史态，仅保留历史查询与证据追溯。
+“立即增量”不能让用户输入或移动高水位；服务端按当前水位、重叠窗口、`safeNow` 和稳定分页形成范围，每次人工动作追加审计。来源不可用时商城继续运行，ERP 水位保持不变。按单补拉、普通失败重试和普通每日核对均是 `FIRST_PHASE_MALL_OWNED` 专属动作：迁移时点后普通增量与核对停止，即使用户保留旧页面或重放旧请求，服务端也必须拒绝；W17 转只读历史态，仅保留历史查询与证据追溯。
 
 ### 7.2 业务映射操作
 
 | 操作 | 入口 | 权限 / 前置条件 | 确认 | 成功结果 | 失败恢复 |
 | --- | --- | --- | --- | --- | --- |
-| 确认映射 | 映射处理区 | 当前 `work_item` 领取人、租约、对象版本和 `subjectHash` 均有效；对应唯一 `ownerRole`；目标对象类型正确且当前可用；阶段为 `FIRST_PHASE_MALL_OWNED` | 展示来源身份、ERP 目标、关系角色、依据和影响 | 同一事务追加可审计映射目标、把 `mappingTaskStatus` 置为已解决并完成当前正式待办；不立即伪称已形成销售版本 | 冲突时保留选择并刷新当前谱系，不静默覆盖；结算主体未配置责任，或阶段已封存时 fail-closed |
-| 请求来源修复 | 映射处理区 | 来源事实确有缺失/矛盾；当前正式待办租约有效 | 必填内部说明、所需修复内容和证据引用；明确当前不创建跨系统协同对象 | 使用 `WorkItemActionEnvelope<RequestSourceFixAction>` 只向当前映射任务追加内部证据记录；`mappingTaskStatus` 与正式待办保持 `PENDING/IN_PROGRESS`，不终结、不自动下一项 | 新来源快照沿原身份到达后继续当前任务，不编辑旧快照；提交失败保留当前项并用本次动作幂等键查询/重试 |
-| 转交映射责任 | 任务更多菜单 | 当前责任路由已配置但实际责任人/角色需变更；有转交权限和有效租约 | 展示目标责任、原因、原租约失效和后继待办 | 使用 `TransferWorkItemEnvelope<MappingWorkItemTransfer>` 原子把原待办置为 `TRANSFERRED`、失效原租约并创建 `UNCLAIMED/PENDING` 后继待办；`mappingTaskStatus` 保持待处理 | 失败保留原任务、原租约和输入；不得用来源修复动作顺带改责任人 |
+| 确认映射 | 映射处理区 | 当前 `work_item` 领取人、对象版本均有效；对应唯一 `ownerRole`；目标对象类型正确且当前可用；阶段为 `FIRST_PHASE_MALL_OWNED` | 展示来源身份、ERP 目标、关系角色、依据和影响 | 同一事务追加可审计映射目标、把 `mappingTaskStatus` 置为已解决并完成当前正式待办；不立即伪称已形成销售版本 | 冲突时保留选择并刷新当前谱系，不静默覆盖；结算主体未配置责任，或阶段已封存时 fail-closed |
+| 请求来源修复 | 映射处理区 | 来源事实确有缺失/矛盾；当前正式待办已领取 | 必填内部说明、所需修复内容和证据引用；明确当前不创建跨系统协同对象 | 使用 W02 非终结动作只向当前映射任务追加内部证据记录；`mappingTaskStatus` 保持 `PENDING`、任务保持 `IN_PROGRESS`，不终结、不自动下一项 | 新来源快照沿原身份到达后继续当前任务，不编辑旧快照；提交失败保留当前项并重试 |
+| 转交映射责任 | 任务更多菜单 | 当前责任路由已配置但实际责任人/角色需变更；有转交权限 | 展示目标责任和原因 | 使用 W02 `TRANSFER` 动作直接更新责任人并记录审计，任务状态不变；`mappingTaskStatus` 保持待处理 | 失败保留原任务和输入；不得用来源修复动作顺带改责任人 |
 | 拒绝错误候选 | 候选行 | 有映射权限 | 无正式业务动作确认；需记录依据 | 只更新本任务候选判断，不停用 ERP 对象 | 保留其它候选和输入 |
 | 重新归集 | 已解决任务固定下一步 | `mappingTaskStatus=RESOLVED`；原快照仍有效；阶段为 `FIRST_PHASE_MALL_OWNED` | 展示将重用原快照和幂等身份 | 独立重新归集操作后台应用快照；成功固定展示 ERP 销售单/版本和应收结果 | 结果未知只把 `reapplyOperationStatus` 标为 `UNKNOWN` 并停留当前项；映射仍保持已解决，不得自动下一项 |
-| 暂挂当前映射 | 连续处理条 | 当前正式待办租约有效；输入已保存 | 必选结构化原因，可填备注；展示本轮 `queueContextId` | 使用 `DeferMappingTaskCommand` 追加非终结动作；`mappingTaskStatus` 不变，待办保持 `PENDING/IN_PROGRESS`，不写 `paused`、不完成任务。租约按服务端结果保留或释放，界面只按返回值移动本轮队列游标 | 提交失败停原项并保留输入；结果未知不释放本地处理权或移动游标，按本次动作幂等键查询 |
-| 浏览上一项 / 下一项 | 连续处理条 | 当前无脏输入；目标仍属于本轮队列快照 | 无 | 只更新 URL 和本轮队列游标，不提交任务动作、不改变待办、映射或租约状态 | 目标失效时按服务端快照定位下一有效项；失败停原项 |
+| 暂挂当前映射 | 连续处理条 | 当前正式待办已领取；输入已保存 | 必选结构化原因，可填备注；展示本轮 `queueContextId` | 使用 `DeferMappingTaskCommand` 追加非终结动作；`mappingTaskStatus` 不变，任务回到待领取状态，不写 `paused`、不完成任务。界面只按返回值移动本轮队列游标 | 提交失败停原项并保留输入；结果未知不移动游标，查询最终结果 |
+| 浏览上一项 / 下一项 | 连续处理条 | 当前无脏输入；目标仍属于本轮队列快照 | 无 | 只更新 URL 和本轮队列游标，不提交任务动作、不改变待办或映射状态 | 目标失效时按服务端快照定位下一有效项；失败停原项 |
 
-只有“确认映射”使用 `CompleteWorkItemEnvelope`：它携带 `mappingTaskId`、`workItemId`、`subjectHash`、领取令牌、租约版本、映射任务版本、来源快照 ID 和当前映射谱系版本，领域映射变化与正式待办完成在同一事务提交。“请求来源修复”和“暂挂当前映射”是非终结任务动作，使用 `WorkItemActionEnvelope`；前者只追加当前映射任务内部证据/说明，不创建外部协同对象、外部责任人或外部状态，也不引入 `WAITING_SOURCE_FIX` 正式状态；改变责任人只使用 `TransferWorkItemEnvelope`。重新归集使用独立 operation ID、幂等键和状态。映射提交结果不确定时不得在前端标记已解决；重新归集结果不确定时不回滚已经服务端确认的映射结论，且不得形成前端应收或自动跳下一项。
+只有“确认映射”使用 W02 统一动作命令：它携带 `mappingTaskId`、`workItemId`、`expectedSubjectVersion`、映射任务版本、来源快照 ID 和当前映射谱系版本，领域映射变化与正式待办完成在同一事务提交。“请求来源修复”和“暂挂当前映射”是非终结任务动作，使用 W02 非终结动作；前者只追加当前映射任务内部证据/说明，不创建外部协同对象、外部责任人或外部状态，也不引入 `WAITING_SOURCE_FIX` 正式状态；改变责任人只使用 W02 `TRANSFER` 动作。重新归集使用独立 operation ID 和状态。映射提交结果不确定时不得在前端标记已解决；重新归集结果不确定时不回滚已经服务端确认的映射结论，且不得形成前端应收或自动跳下一项。
 
 ### 7.3 禁止动作
 
@@ -293,26 +292,15 @@ type FirstPhaseMallSyncExecutionContext = {
   executionStage: "FIRST_PHASE_MALL_OWNED"
 }
 
-type ManualMallSyncGovernancePolicyView =
-  | {
-      state: "MISSING"
-      blockerCode: "MANUAL_GOVERNANCE_POLICY_MISSING"
-    }
-  | {
-      state: "CONFIGURED"
-      policyVersion: string
-      executionMode: "SINGLE_OPERATOR_REASON" | "DUAL_CONTROL_AUTHORIZATION"
-    }
-
 type MallSyncContext = {
   sourceSystem: { id: string; code: string; name: string; environmentLabel: string }
-  manualGovernancePolicy: ManualMallSyncGovernancePolicyView
   ownership: {
     businessType: "VOUCHER"
     stage: "FIRST_PHASE_MALL_OWNED" | "ARCHIVED"
     originSystemSummary: "MALL" | "ERP"
     mallOwnedOrderCount?: number
-    erpOwnedOrderCount?: number    syncDirection:
+    erpOwnedOrderCount?: number
+    syncDirection:
       | "MALL_TO_ERP_COMMERCIAL_FACT"
       | "SEALED_HISTORY"
     firstPhasePollingEnabled: boolean
@@ -378,12 +366,9 @@ type MappingTaskWorkItemView = {
   businessObjectType: "MASTER_MAPPING_TASK"
   businessObjectId: string
   subjectVersion: string
-  subjectHash: string
   status: WorkItemStatus // 直接复用 W02 的唯一正式任务状态契约
   completionAction: string
   claimedBy?: string
-  leaseVersion?: number
-  leaseExpiresAt?: string
 }
 
 type MappingTaskViewBase = {
@@ -447,7 +432,7 @@ type MappingTaskView =
 - 同步任务、水位、来源快照、映射任务和核对使用各自强类型查询；前端不把通用日志拼成业务状态。
 - 运行中后台任务按服务器建议间隔轮询或订阅；离开页面不取消已提交任务。
 - 来源快照 detail 仅返回当前角色允许的白名单字段；禁止字段不得先返回再在组件隐藏。
-- `manualGovernancePolicy` 缺失时，服务端不得在 `allowedActions` 返回人工立即增量或按单补拉；配置后返回固定执行模式和版本。系统定时增量不读取该人工策略，也不因其缺失停摆。
+- 管理员的人工立即增量与按单补拉直接可用并在 `allowedActions` 返回，每次操作追加审计；系统定时增量不依赖任何人工配置。
 - `MappingTaskView` 以 `ownerRoutingState` 强判别：`MISSING` 分支禁止 `ownerRole` 和 `workItem`，`CONFIGURED` 分支强制返回唯一 `ownerRole` 与正式 `workItem`；前端不得把可选字段补成可执行责任路由。
 - 封存（`ARCHIVED`）后 `allowedActions` 不再返回任何同步、核对或映射写动作；历史查询与证据追溯仍可用。T 切换由服务端运营行为完成，不属于 W17 可执行工作面，契约不提供任何切换执行上下文。
 
@@ -459,20 +444,6 @@ type MallSyncCommandBase = {
   idempotencyKey: string
 }
 
-type ManualMallSyncGovernanceContext =
-  | {
-      manualGovernancePolicyVersion: string
-      manualGovernanceMode: "SINGLE_OPERATOR_REASON"
-      reason: string
-      dualControlAuthorizationId?: never
-    }
-  | {
-      manualGovernancePolicyVersion: string
-      manualGovernanceMode: "DUAL_CONTROL_AUTHORIZATION"
-      reason?: never
-      dualControlAuthorizationId: string
-    }
-
 type ScheduledIncrementalMallSyncCommand =
   MallSyncCommandBase &
   FirstPhaseMallSyncExecutionContext &
@@ -480,10 +451,6 @@ type ScheduledIncrementalMallSyncCommand =
     mode: "INCREMENTAL"
     triggerSource: "SCHEDULED"
     baseCursorVersion?: number
-    manualGovernancePolicyVersion?: never
-    manualGovernanceMode?: never
-    reason?: never
-    dualControlAuthorizationId?: never
     externalOrderNo?: never
     failedJobId?: never
     reconciliationBoundary?: never
@@ -491,8 +458,7 @@ type ScheduledIncrementalMallSyncCommand =
 
 type ManualIncrementalMallSyncCommand =
   MallSyncCommandBase &
-  FirstPhaseMallSyncExecutionContext &
-  ManualMallSyncGovernanceContext & {
+  FirstPhaseMallSyncExecutionContext & {
     mode: "INCREMENTAL"
     triggerSource: "MANUAL"
     baseCursorVersion?: number
@@ -503,8 +469,7 @@ type ManualIncrementalMallSyncCommand =
 
 type ManualSingleOrderMallSyncCommand =
   MallSyncCommandBase &
-  FirstPhaseMallSyncExecutionContext &
-  ManualMallSyncGovernanceContext & {
+  FirstPhaseMallSyncExecutionContext & {
     mode: "SINGLE_ORDER"
     triggerSource: "MANUAL"
     externalOrderNo: string
@@ -563,7 +528,7 @@ type ConfirmMappingDecisionPayload = {
 type ConfirmMappingDecision =
   ConfirmMappingDecisionPayload & MallMappingExecutionContext
 
-type ConfirmMappingCommand = CompleteWorkItemEnvelope<ConfirmMappingDecision>
+type ConfirmMappingCommand = WorkItemActionCommand<ConfirmMappingDecision>
 
 type RequestSourceFixAction = {
   type: "REQUEST_SOURCE_FIX"
@@ -576,7 +541,7 @@ type RequestSourceFixAction = {
   requestedEvidence: string[]
 }
 
-type RequestSourceFixCommand = WorkItemActionEnvelope<RequestSourceFixAction>
+type RequestSourceFixCommand = WorkItemActionCommand<RequestSourceFixAction>
 
 type DeferMappingTaskAction = {
   type: "DEFER_MAPPING_TASK"
@@ -589,7 +554,7 @@ type DeferMappingTaskAction = {
 }
 
 type DeferMappingTaskCommand =
-  WorkItemActionEnvelope<DeferMappingTaskAction>
+  WorkItemActionCommand<DeferMappingTaskAction>
 
 type MappingWorkItemTransfer = {
   mappingTaskId: string
@@ -600,7 +565,7 @@ type MappingWorkItemTransfer = {
 }
 
 type TransferMappingWorkItemCommand =
-  TransferWorkItemEnvelope<MappingWorkItemTransfer>
+  WorkItemActionCommand<MappingWorkItemTransfer>
 
 type ConfirmMappingBusinessResultPayload = {
   mappingTaskId: string
@@ -614,7 +579,7 @@ type ConfirmMappingBusinessResult =
   ConfirmMappingBusinessResultPayload & MallMappingExecutionContext
 
 type ConfirmMappingResult =
-  CompleteWorkItemResult<ConfirmMappingBusinessResult>
+  WorkItemActionResult<ConfirmMappingBusinessResult>
 
 type RequestSourceFixResult = WorkItemActionResult<{
   mappingTaskId: string
@@ -625,7 +590,6 @@ type RequestSourceFixResult = WorkItemActionResult<{
 
 type DeferMappingTaskResult = WorkItemActionResult<{
   mappingTaskId: string
-  leaseDisposition: "RETAINED" | "RELEASED"
   queueContextId: string
   nextQueueCursor?: string
   recordedAt: string
@@ -655,21 +619,21 @@ type GovernanceActionResult = {
 }
 ```
 
-W17 直接复用 W02 的 `WorkItemActionEnvelope`、`CompleteWorkItemEnvelope`、`TransferWorkItemEnvelope` 及对应结果类型，不重定义同名或私有领取信封。`completionAction` 由服务端当前 `work_item` 元数据约束；客户端不能另传任意完成动作。
+W17 直接复用 W02 的统一动作命令（`WorkItemActionCommand`）及对应结果类型，不重定义同名或私有任务命令。`completionAction` 由服务端当前 `work_item` 元数据约束；客户端不能另传任意完成动作。
 
 - `TriggerMallSyncCommand` 以 `executionStage` 强判别：`FIRST_PHASE_MALL_OWNED` 只能使用普通增量、按单补拉、普通失败重试或普通核对；阶段已封存时同步、核对及一切执行类写命令整体拒绝。
-- 定时增量只走 `ScheduledIncrementalMallSyncCommand`，显式禁止人工治理字段，不依赖人工策略。人工立即增量与按单补拉只能走对应 manual 分支：服务端必须重读当前策略及版本，并校验提交模式与策略一致；单人模式要求理由，双人模式要求有效、未消费且满足岗位分离的 `dualControlAuthorizationId`，两种控制不由客户端混用或降级。策略缺失、版本不一致、模式不一致或授权无效均整体拒绝，不创建同步任务。
+- 定时增量只走 `ScheduledIncrementalMallSyncCommand`，不携带人工字段。人工立即增量与按单补拉只能走对应 manual 分支，每次提交追加审计；服务端按阶段校验，封存后人工动作整体拒绝。
 - `executionStage` 是并发校验值，不是客户端可选择的放行开关。所有同步、确认映射与重新归集提交都先由服务端重读当前阶段；实际已封存却提交普通一期分支时必须整体拒绝，未知阶段值也按契约错误拒绝而不是忽略。
 - `INCREMENTAL` 的实际查询范围由服务端根据安全水位、重叠窗口和 `safeNow` 生成；客户端不能传任意范围覆盖水位。
 - 普通按单补拉必须使用协议规范化后的原来源单号，不创建新的来源身份；已封存后不存在单号补拉、普通失败重试或普通每日核对分支，旧页面请求也必须被服务端拒绝。
 - 已封存（`ARCHIVED`）后服务端不再接受任何增量、补拉、重试、核对、确认映射或重新归集写命令；旧页面或重放请求一律整体拒绝，只保留历史证据查询与追溯。
 - 映射目标类型、稳定身份、有效性和关系角色由服务端校验；相似候选不构成确认。
-- `ConfirmMappingCommand` 同时校验 `work_item` 领取人、不可伪造领取令牌、租约版本、任务对象版本、`subjectHash` 和岗位分离；追加映射结论、更新 `master_mapping_task` 与完成当前 `work_item` 必须处于同一事务。完成待办本身不能脱离该强类型事务修改业务事实。若 `executionStage=ARCHIVED`，确认映射整体不提交。
-- `RequestSourceFixCommand` 只向当前 `master_mapping_task` 追加内部说明和证据，成功返回 `mappingEvidenceEntryId`，并保持正式待办 `PENDING/IN_PROGRESS`、`mappingTaskStatus=PENDING`；不得创建外部协同对象、外部 `assignee/status`，不得写 `WAITING_SOURCE_FIX`，也不得完成、关闭、转交任务或自动下一项。新快照沿原来源身份到达后继续同一映射任务。
-- `DeferMappingTaskCommand` 只追加结构化暂挂原因、备注和本轮 `queueContextId`。成功必须返回 `DeferMappingTaskResult`，其统一信封状态为 `PENDING/IN_PROGRESS`，不写也不改变 `mappingTaskStatus`，且没有 `paused` 状态；`leaseDisposition` 决定是否清除当前会话租约，`nextQueueCursor` 只能移动同一 `queueContextId` 内的浏览位置，不能重排正式队列或暗示任务完成。
-- 若需改变责任人，必须另交 `TransferMappingWorkItemCommand`；原任务转交、原租约失效和后继任务创建服从 W02 原子语义，不写映射结论、不改变 `mappingTaskStatus`。
+- `ConfirmMappingCommand` 同时校验 `work_item` 当前领取人和任务对象版本；追加映射结论、更新 `master_mapping_task` 与完成当前 `work_item` 必须处于同一事务。完成待办本身不能脱离该强类型事务修改业务事实。若 `executionStage=ARCHIVED`，确认映射整体不提交。
+- `RequestSourceFixCommand` 只向当前 `master_mapping_task` 追加内部说明和证据，成功返回 `mappingEvidenceEntryId`，并保持任务 `IN_PROGRESS`、`mappingTaskStatus=PENDING`；不得创建外部协同对象、外部 `assignee/status`，不得写 `WAITING_SOURCE_FIX`，也不得完成、关闭、转交任务或自动下一项。新快照沿原来源身份到达后继续同一映射任务。
+- `DeferMappingTaskCommand` 只追加结构化暂挂原因、备注和本轮 `queueContextId`。成功必须返回 `DeferMappingTaskResult`，任务回到待领取（`UNCLAIMED`），不写也不改变 `mappingTaskStatus`，且没有 `paused` 状态；`nextQueueCursor` 只能移动同一 `queueContextId` 内的浏览位置，不能重排正式队列或暗示任务完成。
+- 若需改变责任人，必须另交 `TransferMappingWorkItemCommand`；责任人与转交审计更新服从 W02 原子语义，不写映射结论、不改变 `mappingTaskStatus`。
 - 重新归集复用原快照、原销售来源身份和业务幂等约束；不得建立第二张销售单。已封存后不再接受重新归集命令；历史证据经 `view=history` 只读追溯。
-- 确认映射提交 `UNKNOWN` 时保留查询前状态；来源修复请求或转交结果未知时同样不乐观改变任务/责任并停留当前项。重新归集 `UNKNOWN` 时映射仍保持 `RESOLVED`。各动作按自身 operation/idempotency identity 查询最终结果；只有明确无结果且服务端确认安全时，才使用原幂等键重试。
+- 确认映射提交 `UNKNOWN` 时保留查询前状态；来源修复请求或转交结果未知时同样不乐观改变任务/责任并停留当前项。重新归集 `UNKNOWN` 时映射仍保持 `RESOLVED`。各动作按自身操作身份查询最终结果；只有明确无结果且服务端确认安全时才重试。
 
 ### 8.3 前端边界
 
@@ -691,15 +655,15 @@ W17 直接复用 W02 的 `WorkItemActionEnvelope`、`CompleteWorkItemEnvelope`�
 | 无数据范围 | 不展示来源总量和 0 指标 | 查看范围 / 申请权限 | 范围更新后重查 |
 | 查询失败且无缓存 | `BusinessFailureState`，区分权限、网络、来源和投影故障 | 重试、返回其它模块 | 查询成功 |
 | 查询失败但有缓存 | 保留旧内容，水位标陈旧/刷新失败 | 允许只读查看；动作服务端重校验 | 重试成功 |
-| 人工同步治理策略未配置 | 页头与差异区保留“立即增量”“按单号补拉”的只读解释，动作禁用并显示 `MANUAL_GOVERNANCE_POLICY_MISSING` | 查看定时同步、历史水位与配置入口；不能人工触发 | 策略正式配置后重新查询，按返回的单人理由或双人授权模式执行 |
+| 人工同步动作 | 页头与差异区提供“立即增量”“按单号补拉”入口，操作追加审计 | 查看定时同步与历史水位；触发人工动作 | 服务端按阶段校验，封存后拒绝 |
 | 来源商城不可用 | 明确“商城继续运行，ERP 水位未推进”及最近成功水位 | 正常一期可安全重试；已封存后不重试、不推进；业务映射旧快照仍按阶段条件处理 | 来源恢复后按对应阶段的原水位补齐 |
 | 已封存后收到普通一期动作 | 入口隐藏或禁用；旧页面请求显示“W17 已封存为只读历史”，不创建后台任务 | 仅查看历史证据；不可按单补拉、普通重试或普通每日核对 | 历史证据经 `view=history` 只读追溯，当前动作转 W23/W29 |
 | 后台任务运行 | 常驻进度、范围和已处理数量 | 可离开页面；禁止重复触发同来源推进任务 | 任务终态刷新 |
 | 来源捕获部分失败 | 列出失败分页/对象；来源读取、白名单规范化或快照持久化未完成时明确“水位未推进” | 正常一期可安全重试/按单补拉；已封存后不续跑 | 原身份按对应阶段合法命令续跑并安全持久化成功 |
 | 映射/应用失败 | 来源快照与已推进捕获水位保持不变，独立显示 `mappingTaskStatus`、责任待办、重新归集状态和业务影响 | 领取正式待办、修复映射、按原快照重新归集 | 映射与重新归集分别取得终态 |
 | 映射冲突 | 左右差异和当前谱系并列，提交禁用 | 刷新候选、请求责任人确认 | 形成明确映射或来源修复 |
-| 来源修复说明已记录 | 显示当前映射任务内的证据记录号、说明和证据；不显示外部责任人或外部状态；`mappingTaskStatus=PENDING`、待办保持 `PENDING/IN_PROGRESS` | 继续补充内部证据；如需换当前待办责任另行转交 | 新快照沿原身份到达后继续当前映射任务 |
-| 当前映射已暂挂 | 显示结构化原因和动作时间；不出现 `paused` 业务状态，`mappingTaskStatus` 不变且待办仍为 `PENDING/IN_PROGRESS` | 按 `leaseDisposition` 保留或清除当前租约；只按 `nextQueueCursor` 浏览本轮下一项 | 重新定位该任务并按统一领取规则继续 |
+| 来源修复说明已记录 | 显示当前映射任务内的证据记录号、说明和证据；不显示外部责任人或外部状态；`mappingTaskStatus=PENDING`、待办保持 `IN_PROGRESS` | 继续补充内部证据；如需换当前待办责任另行转交 | 新快照沿原身份到达后继续当前映射任务 |
+| 当前映射已暂挂 | 显示结构化原因和动作时间；不出现 `paused` 业务状态，`mappingTaskStatus` 不变且任务回到待领取 | 只按 `nextQueueCursor` 浏览本轮下一项 | 重新定位该任务并按统一领取规则继续 |
 | 映射待办已转交 | 固定展示原任务、目标责任和后继任务；不显示映射已解决 | 返回队列、打开有权后继任务 | 后继任务被领取并继续处理 |
 | 确认映射 / 重新归集成功 | `FormalActionResult` 固定展示映射/归集结果、销售单或应收引用、时间和下一步 | 打开 W05/W11、下一项 | 等待正式查询水位刷新 |
 | 重新归集结果不确定 | 固定结果区，`reapplyOperationStatus=UNKNOWN`；映射结论和已完成映射待办不回滚，不自动下一项 | 按 operation ID 查询最终结果、原幂等重试（服务端允许时） | 取得销售版本/应收终态 |
@@ -753,16 +717,16 @@ W17 直接复用 W02 的 `WorkItemActionEnvelope`、`CompleteWorkItemEnvelope`�
 - [x] 同步失败或差异处理不存在“在 ERP 手工补建销售单”入口。
 - [ ] 同一来源快照重复处理幂等；迟到、同刻冲突和 A→B→A 均按服务端证据展示。
 - [ ] 按单补拉、普通失败重试和普通每日核对只在 `FIRST_PHASE_MALL_OWNED` 可用；T 起普通增量与核对停止，W17 转只读历史态，旧页面或重放请求也不能恢复。
-- [ ] 人工治理策略未配置时立即增量和按单补拉在界面禁用、服务端拒绝，定时增量不受影响；配置后服务端按策略版本严格执行单人理由或双人授权，不能由客户端降级。
+- [ ] 管理员可直接执行“立即增量”和“按单号补拉”，操作留审计；定时增量不受影响；封存后人工动作整体拒绝。
 - [ ] `TriggerMallSyncCommand` 以阶段强判别：`FIRST_PHASE_MALL_OWNED` 分支只允许普通增量、按单补拉、失败重试与核对；已封存后全部执行类命令整体拒绝，不允许以旧页面或重放绕过。
 - [ ] T 切换完成后 W17 进入只读历史态（封存）：不再从商城拉取新商业事实，历史证据保留可查；当前动作正确导向 W23（执行投影）与 W29（通用错误对账）。
 
 ### 12.2 映射与核对
 
 - [x] 系统管理员只能补拉、重试、指派和排障，不能替业务角色确认映射。
-- [ ] 每个已完成责任路由、需要人工处理的映射差异同时具有 `master_mapping_task` 与正式 `work_item` 双身份；路由缺失时只保留领域差异且不可执行。配置后统一领取/租约生效，映射结论与待办完成在同一事务，转交链可追溯。
-- [ ] 只有确认映射使用 `CompleteWorkItemEnvelope`；请求来源修复只以非终结 `WorkItemActionEnvelope` 追加当前映射任务内部说明/证据，保持任务 `PENDING/IN_PROGRESS`，不创建外部协同对象、外部责任或 `WAITING_SOURCE_FIX`；改变责任人只使用 `TransferWorkItemEnvelope`。
-- [ ] 暂挂使用 `DeferMappingTaskCommand`，只记录结构化原因/备注/队列上下文；不改 `mappingTaskStatus`、不写 `paused`、不完成任务，租约和本轮队列游标严格采用服务端结果。
+- [ ] 每个已完成责任路由、需要人工处理的映射差异同时具有 `master_mapping_task` 与正式 `work_item` 双身份；路由缺失时只保留领域差异且不可执行。配置后统一领取生效，映射结论与待办完成在同一事务，转交可追溯。
+- [ ] 只有确认映射使用 W02 统一动作命令；请求来源修复只以非终结动作追加当前映射任务内部说明/证据，保持任务 `IN_PROGRESS`，不创建外部协同对象、外部责任或 `WAITING_SOURCE_FIX`；改变责任人只使用 W02 `TRANSFER` 动作。
+- [ ] 暂挂使用 `DeferMappingTaskCommand`，只记录结构化原因/备注/队列上下文；不改 `mappingTaskStatus`、不写 `paused`、不完成任务，本轮队列游标严格采用服务端结果。
 - [ ] 结算主体只有一个服务端配置的 `ownerRole`；未配置时确认动作阻断，不会向销售和财务同时生成可完成待办。
 - [x] `MappingTaskView` 按 `ownerRoutingState` 强判别：`MISSING` 不含 `ownerRole/workItem`，`CONFIGURED` 必含唯一 `ownerRole/workItem`。
 - [x] 映射处理清楚展示来源事实、ERP 候选、当前谱系、业务影响和确认依据。
@@ -786,7 +750,7 @@ W17 直接复用 W02 的 `WorkItemActionEnvelope`、`CompleteWorkItemEnvelope`�
 | --- | --- | --- | --- | --- |
 | Q1 | 业务映射任务的默认 SLA 和超期升级路径如何按类型区分？ | 工作台预警、排序和管理指标 | 销售/运营/财务负责人 | 客户合同类 1 个工作日，类目/唯一明细类 4 小时；最终按实际运营量校准 |
 | Q2 | 结算主体映射的唯一 `ownerRole` 固定为销售还是财务？ | 责任路由、正式待办和 `allowedActions` | 销售负责人 + 财务负责人 | 倾向销售确认业务关系；正式决定写入服务端配置前，结算主体确认保持阻断。税率/金额口径固定由财务确认，技术解析失败由管理员排障 |
-| Q3 | 人工“立即增量”和单号补拉是否需要双人复核或仅记录理由？ | 管理员操作效率和风险 | 系统负责人 + 审计负责人 | 决策并配置 `manualGovernancePolicy` 前两项人工动作均 fail-closed，定时同步不受影响；配置后只能按固定的单人理由或双人授权模式执行，禁止手工水位编辑 |
+| Q3 | 人工“立即增量”和单号补拉是否需要在服务端二次确认？ | 管理员操作效率和风险 | 系统负责人 + 审计负责人 | 管理员直接可执行，操作追加审计；禁止手工水位编辑 |
 | Q4 | 来源修复请求是否需要在 ERP 内形成对商城责任人的外部协同状态？ | 映射任务状态和跨系统沟通 | 运营负责人 + 系统负责人 | 决策前只允许在当前映射任务内追加说明和证据，不创建外部协同对象、外部责任/状态或 `WAITING_SOURCE_FIX`；新快照到达后继续原任务 |
 | Q5 | 第一阶段封存后 W17 历史数据默认保留多长时间、哪些角色可导出？ | 存储、审计和权限 | 审计/合规负责人 + 系统负责人 | 同步任务、快照谱系、映射和核对证据长期可查；原始受控报文按独立安全策略，不开放普通导出 |
 

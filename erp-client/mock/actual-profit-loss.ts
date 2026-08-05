@@ -440,7 +440,7 @@ export function setW16CorrectionPending(value: boolean) {
   w16CorrectionPending = value
 }
 
-/** 导出任务 session 态 */
+/** 导出任务记录（同步完成：创建即成功） */
 export type W16ExportJobRecord = {
   jobId: string
   status: "queued" | "running" | "succeeded" | "failed"
@@ -465,44 +465,19 @@ export type W16ExportJobRecord = {
   }
 }
 
-const exportJobs = new Map<string, W16ExportJobRecord>()
 let exportSeq = 0
 
 export function createW16ExportJob(
   watermark: W16ExportJobRecord["watermark"]
 ): W16ExportJobRecord {
   const jobId = `exp-w16-${++exportSeq}`
-  const job: W16ExportJobRecord = {
+  return {
     jobId,
-    status: "queued",
+    status: "succeeded",
     total: watermark.rowCount,
-    completed: 0,
+    completed: watermark.rowCount,
     createdAt: new Date().toISOString(),
+    downloadLabel: `实际盈亏导出-非卡券不含税-${jobId}.csv`,
     watermark,
   }
-  exportJobs.set(jobId, job)
-  globalThis.setTimeout(() => {
-    const current = exportJobs.get(jobId)
-    if (!current) return
-    exportJobs.set(jobId, {
-      ...current,
-      status: "running",
-      completed: Math.max(1, Math.ceil(current.total / 2)),
-    })
-  }, 400)
-  globalThis.setTimeout(() => {
-    const current = exportJobs.get(jobId)
-    if (!current) return
-    exportJobs.set(jobId, {
-      ...current,
-      status: "succeeded",
-      completed: current.total,
-      downloadLabel: `实际盈亏导出-非卡券不含税-${jobId}.csv`,
-    })
-  }, 1200)
-  return job
-}
-
-export function getW16ExportJob(jobId: string): W16ExportJobRecord | null {
-  return exportJobs.get(jobId) ?? null
 }

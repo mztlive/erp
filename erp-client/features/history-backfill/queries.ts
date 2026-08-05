@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   fetchHistoryBackfillDetail,
   fetchHistoryBackfillList,
-  queryHistoryBackfillIdempotency,
   setHistoryBackfillCreateContextMode,
   setHistoryBackfillForceUnknown,
   submitHistoryBackfillCommand,
@@ -60,12 +59,6 @@ export function useHistoryBackfillCommandMutation() {
         })
       }
     },
-  })
-}
-
-export function useQueryHistoryBackfillIdempotencyMutation() {
-  return useMutation({
-    mutationFn: queryHistoryBackfillIdempotency,
   })
 }
 

@@ -4,6 +4,9 @@
  */
 
 import { mockDelay } from "@/lib/mock-delay"
+import { filterRowsBySearch } from "@/lib/filter-utils"
+import { applyFieldPermissions } from "@/lib/field-permissions"
+import { resolveFreshness } from "@/lib/freshness"
 import type {
   CostEntryDetail,
   ProfitLossExportJob,
@@ -11,7 +14,6 @@ import type {
   ProfitLossQuery,
   ProfitLossRow,
   ProfitLossView,
-  ProjectionFreshnessState,
 } from "@/features/actual-profit-loss/types"
 import {
   W16_COST_COMPOSITION,
@@ -27,7 +29,6 @@ import {
   W16_STAGE_REFERENCE,
   W16_TREND,
   createW16ExportJob,
-  getW16ExportJob,
   setW16CorrectionPending,
   w16CorrectionPending,
 } from "@/mock/actual-profit-loss"
@@ -44,15 +45,6 @@ function basisLabel(
   return (
     config.allowedPeriodBases.find((b) => b.code === code)?.label ?? code
   )
-}
-
-function matchSearch(
-  q: string | undefined,
-  parts: readonly (string | undefined)[]
-): boolean {
-  if (!q?.trim()) return true
-  const needle = q.trim().toLowerCase()
-  return parts.some((p) => p?.toLowerCase().includes(needle))
 }
 
 function filterRows(
@@ -87,14 +79,12 @@ function filterRows(
     )
   }
 
-  list = list.filter((r) =>
-    matchSearch(query.q, [
-      r.identityLabel,
-      r.customerLabel,
-      r.customerId,
-      r.objectId,
-    ])
-  )
+  list = filterRowsBySearch(list, query.q, (r) => [
+    r.identityLabel,
+    r.customerLabel,
+    r.customerId,
+    r.objectId,
+  ])
 
   // 默认：实际盈亏升序（亏损优先）；未覆盖无利润排最后
   const sort = query.sort || "actualProfitLossNet:asc"
@@ -115,61 +105,6 @@ function filterRows(
   return list
 }
 
-function applyFieldPermissions(
-  row: ProfitLossRow,
-  fieldHide: ProfitLossQuery["fieldHide"]
-): ProfitLossRow {
-  if (fieldHide === "cost") {
-    return {
-      ...row,
-      actualProcurementCostNet: undefined,
-      actualFulfillmentCostNet: undefined,
-      reductionsNet: undefined,
-      costEntryIds: [],
-      allowedDrilldowns: row.allowedDrilldowns.filter((d) => d !== "cost_entry"),
-    }
-  }
-  if (fieldHide === "profit") {
-    return {
-      ...row,
-      actualProfitLossNet: undefined,
-      marginRate: undefined,
-      marginUnavailableReason: "无利润字段权限",
-    }
-  }
-  return row
-}
-
-function resolveFreshness(
-  demo?: ProjectionFreshnessState
-): ProfitLossView["freshness"] {
-  const projectedAt = "2026-08-01T09:28:00+08:00"
-  const sourceWatermark = "2026-08-01T09:27:12+08:00"
-  if (demo === "stale") {
-    return {
-      projectedAt: "2026-08-01T08:10:00+08:00",
-      sourceWatermark: "2026-08-01T09:25:00+08:00",
-      state: "stale",
-    }
-  }
-  if (demo === "rebuilding") {
-    return {
-      projectedAt,
-      sourceWatermark,
-      state: "rebuilding",
-    }
-  }
-  if (demo === "failed") {
-    return {
-      projectedAt: "2026-08-01T08:55:00+08:00",
-      sourceWatermark: "2026-08-01T08:50:00+08:00",
-      state: "failed",
-    }
-  }
-  return { projectedAt, sourceWatermark, state: "fresh" }
-}
-
-/** 服务端投影 totals：由 seed 行汇总的**预计算**结果（模拟服务端），非前端 ad-hoc 重算入口。 */
 function projectTotalsFromSeed(rows: readonly ProfitLossRow[]): {
   netSalesRevenue: string
   actualProcurementCostNet: string
@@ -327,14 +262,49 @@ export async function fetchProfitLossView(
   const canViewRevenue = true
 
   const filtered = filterRows(W16_SALES_ORDER_ROWS, query).map((r) =>
-    applyFieldPermissions(r, fieldHide)
+    applyFieldPermissions(r, fieldHide, {
+      cost: (row) => ({
+        ...row,
+        actualProcurementCostNet: undefined,
+        actualFulfillmentCostNet: undefined,
+        reductionsNet: undefined,
+        costEntryIds: [],
+        allowedDrilldowns: row.allowedDrilldowns.filter(
+          (d) => d !== "cost_entry"
+        ),
+      }),
+      profit: (row) => ({
+        ...row,
+        actualProfitLossNet: undefined,
+        marginRate: undefined,
+        marginUnavailableReason: "无利润字段权限",
+      }),
+    })
   )
 
   // 服务端在同一数据范围上投影 totals / 趋势 / 构成 / 明细
   const seedForTotals = filterRows(W16_SALES_ORDER_ROWS, query)
   const projected = projectTotalsFromSeed(seedForTotals)
 
-  const freshness = resolveFreshness(query.freshnessDemo)
+  const projectedAt = "2026-08-01T09:28:00+08:00"
+  const sourceWatermark = "2026-08-01T09:27:12+08:00"
+  const freshness: ProfitLossView["freshness"] = resolveFreshness(
+    query.freshnessDemo,
+    {
+      fresh: { projectedAt, sourceWatermark, state: "fresh" },
+      stale: {
+        projectedAt: "2026-08-01T08:10:00+08:00",
+        sourceWatermark: "2026-08-01T09:25:00+08:00",
+        state: "stale",
+      },
+      rebuilding: { projectedAt, sourceWatermark, state: "rebuilding" },
+      failed: {
+        projectedAt: "2026-08-01T08:55:00+08:00",
+        sourceWatermark: "2026-08-01T08:50:00+08:00",
+        state: "failed",
+      },
+    }
+  )
 
   const costComposition = canViewCost
     ? W16_COST_COMPOSITION
@@ -481,13 +451,6 @@ export async function startProfitLossExport(input: {
     rowCount: input.view.rows.total,
   })
   return job
-}
-
-export async function fetchExportJob(
-  jobId: string
-): Promise<ProfitLossExportJob | null> {
-  await mockDelay(40)
-  return getW16ExportJob(jobId)
 }
 
 /** 演示：标记来源纠错后等待投影（不改本地金额） */

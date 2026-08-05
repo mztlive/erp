@@ -90,6 +90,7 @@ import {
 } from "@/features/mall-sync/queries"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/datetime"
+import { parseDemoRole } from "@/lib/demo-roles"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { type ResultState } from "@/components/business/feedback"
 import { freshnessText, versionText } from "@/lib/ui-text"
@@ -108,17 +109,7 @@ function parseView(raw: string | null): MallSyncViewName {
   return "overview"
 }
 
-function parseRole(raw: string | null): DemoRole {
-  if (
-    raw === "admin" ||
-    raw === "sales" ||
-    raw === "operations" ||
-    raw === "finance"
-  ) {
-    return raw
-  }
-  return "admin"
-}
+const DEMO_ROLES = ["admin", "sales", "operations", "finance"] as const
 
 function parseStage(raw: string | null): OwnershipStage | undefined {
   if (
@@ -132,9 +123,7 @@ function parseStage(raw: string | null): OwnershipStage | undefined {
 
 type SessionLease = {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expiresAt: string
+  subjectVersion: string
 }
 
 const confirmSchema = z.object({
@@ -166,9 +155,11 @@ export function MallSyncPage() {
   const searchParams = useSearchParams()
 
   const view = parseView(searchParams.get("view"))
-  const demoRole = parseRole(
-    searchParams.get("demoRole") ?? searchParams.get("role")
-  )
+  const demoRole =
+    parseDemoRole(
+      searchParams.get("demoRole") ?? searchParams.get("role"),
+      DEMO_ROLES
+    ) ?? "admin"
   const demoStage = parseStage(searchParams.get("demoStage"))
   const policyParam = searchParams.get("policy")
   const policy: "missing" | "configured" | undefined =
@@ -206,7 +197,6 @@ export function MallSyncPage() {
   const [deferOpen, setDeferOpen] = React.useState(false)
   const [pullOpen, setPullOpen] = React.useState(false)
   const [incrementalOpen, setIncrementalOpen] = React.useState(false)
-  const [forceUnknown, setForceUnknown] = React.useState(false)
   const [actionError, setActionError] = React.useState<string | null>(null)
 
   const queryInput = React.useMemo(
@@ -343,14 +333,12 @@ export function MallSyncPage() {
     defaultValues: { externalOrderNo: "", reason: "" },
     validators: { onChange: pullSchema },
     onSubmit: async ({ value }) => {
-      const key = `idem_so_${Date.now()}`
       const res = await triggerSo.mutateAsync({
         externalOrderNo: value.externalOrderNo,
         reason: value.reason,
         demoRole,
         policyConfigured: !policyMissing,
         stage,
-        idempotencyKey: key,
       })
       if (res.status === "succeeded") {
         setResult({
@@ -371,13 +359,11 @@ export function MallSyncPage() {
     defaultValues: { reason: "" },
     validators: { onChange: incrementalSchema },
     onSubmit: async ({ value }) => {
-      const key = `idem_inc_${Date.now()}`
       const res = await triggerInc.mutateAsync({
         reason: value.reason,
         demoRole,
         policyConfigured: !policyMissing,
         stage,
-        idempotencyKey: key,
       })
       if (res.status === "succeeded") {
         setResult({
@@ -400,14 +386,11 @@ export function MallSyncPage() {
     try {
       const lease = await claimMutation.mutateAsync({
         workItemId: mappingTask.workItem.workItemId,
-        subjectHash: mappingTask.workItem.subjectHash,
         subjectVersion: mappingTask.workItem.subjectVersion,
       })
       setSessionLease({
         workItemId: lease.workItemId,
-        claimToken: lease.claimToken,
-        leaseVersion: lease.leaseVersion,
-        expiresAt: lease.expiresAt,
+        subjectVersion: lease.subjectVersion,
       })
     } catch (e) {
       setActionError(e instanceof Error ? e.message : "领取失败")
@@ -426,20 +409,15 @@ export function MallSyncPage() {
     const evidenceNote = String(
       confirmForm.getFieldValue("evidenceNote") ?? ""
     ).trim()
-    const key = `idem_confirm_${mappingTask.mappingTaskId}_${Date.now()}`
     const res = await confirmMutation.mutateAsync({
       mappingTaskId: mappingTask.mappingTaskId,
       workItemId: mappingTask.workItem.workItemId,
-      claimToken: sessionLease.claimToken,
-      leaseVersion: sessionLease.leaseVersion,
-      expectedSubjectHash: mappingTask.workItem.subjectHash,
+      expectedSubjectVersion: mappingTask.workItem.subjectVersion,
       expectedLockVersion: mappingTask.lockVersion,
       targetObjectId: candidate.objectId,
       targetLabel: `${candidate.stableNo} ${candidate.label}`,
       evidenceNote,
       demoRole,
-      idempotencyKey: key,
-      forceUnknown,
     })
     setConfirmOpen(false)
     if (res.status === "succeeded") {
@@ -451,14 +429,6 @@ export function MallSyncPage() {
       })
       setSessionLease(null)
       void pageQuery.refetch()
-    } else if (res.status === "unknown") {
-      setResult({
-        status: "unknown",
-        title: "确认结果未知",
-        description: res.message,
-        stayOnItem: true,
-        pendingIdempotencyKey: res.idempotencyKey,
-      })
     } else {
       setActionError(res.message)
     }
@@ -469,18 +439,14 @@ export function MallSyncPage() {
       setActionError("请先领取任务")
       return
     }
-    const key = `idem_defer_${mappingTask.mappingTaskId}_${Date.now()}`
     const res = await deferMutation.mutateAsync({
       mappingTaskId: mappingTask.mappingTaskId,
       workItemId: mappingTask.workItem.workItemId,
-      claimToken: sessionLease.claimToken,
-      leaseVersion: sessionLease.leaseVersion,
-      expectedSubjectHash: mappingTask.workItem.subjectHash,
+      expectedSubjectVersion: mappingTask.workItem.subjectVersion,
       reasonCode,
       note,
       queueContextId,
       demoRole,
-      idempotencyKey: key,
     })
     setDeferOpen(false)
     if (res.status === "succeeded") {
@@ -511,15 +477,12 @@ export function MallSyncPage() {
     }
   }
 
-  async function handleReapply(forceUnk = false) {
+  async function handleReapply() {
     if (!mappingTask) return
-    const key = `idem_reapply_${mappingTask.mappingTaskId}_${Date.now()}`
     const res = await reapplyMutation.mutateAsync({
       mappingTaskId: mappingTask.mappingTaskId,
       sourceSnapshotId: mappingTask.sourceSnapshotId,
       demoRole,
-      idempotencyKey: key,
-      forceUnknown: forceUnk,
     })
     if (res.status === "succeeded") {
       setResult({
@@ -1101,7 +1064,7 @@ export function MallSyncPage() {
             <OptionCombobox
               value={demoRole}
               onValueChange={(v) => {
-                const role = parseRole(v)
+                const role = parseDemoRole(v, DEMO_ROLES) ?? "admin"
                 const defaultView =
                   role === "admin" ? "overview" : "mapping"
                 patchUrl({
@@ -1398,7 +1361,6 @@ export function MallSyncPage() {
                         reason: "安全重试部分失败分页",
                         demoRole,
                         stage,
-                        idempotencyKey: `retry_${data.selectedJob!.jobId}_${Date.now()}`,
                       })
                       if (res.status === "succeeded") {
                         setResult({
@@ -1765,16 +1727,6 @@ export function MallSyncPage() {
                             />
                           )}
                         />
-                        <div className="flex items-center gap-2">
-                          <Switch
-                            id="force-unk"
-                            checked={forceUnknown}
-                            onCheckedChange={setForceUnknown}
-                          />
-                          <Label htmlFor="force-unk" className="text-xs">
-                            模拟结果不确定（仅演示）
-                          </Label>
-                        </div>
                         <div className="flex flex-wrap gap-2">
                           <confirmForm.AppForm>
                             <confirmForm.SubmitButton
@@ -1862,24 +1814,14 @@ export function MallSyncPage() {
                         ) : (
                           <div className="flex flex-wrap gap-2">
                             {demoRole !== "admin" ? (
-                              <>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  disabled={reapplyMutation.isPending}
-                                  onClick={() => void handleReapply(false)}
-                                >
-                                  重新归集
-                                </Button>
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => void handleReapply(true)}
-                                >
-                                  模拟结果不确定（仅演示）
-                                </Button>
-                              </>
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={reapplyMutation.isPending}
+                                onClick={() => void handleReapply()}
+                              >
+                                重新归集
+                              </Button>
                             ) : null}
                             {mappingTask.reapplyOperation?.status ===
                             "UNKNOWN" ? (

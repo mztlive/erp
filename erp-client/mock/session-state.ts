@@ -8,11 +8,10 @@
  * - held: task remains in the active queue, status becomes 已暂挂
  *
  * W02 work-item mock contract (explicit, session-only):
- * - claimToken only lives in this module's lease map; list/detail query views never return it
- * - WorkItemActionEnvelope → PENDING/IN_PROGRESS, no auto-complete
- * - CompleteWorkItemEnvelope → COMPLETED with business result in one mock transaction
- * - CloseWorkItemEnvelope → CLOSED without mutating business facts
- * - TransferWorkItemEnvelope → TRANSFERRED + successor id
+ * - 领取 = 归属当前用户（ownerUserId 仅存会话内存），无令牌与到期；任务动作按条件校验并记录，不自动完成
+ * - 统一动作命令 → COMPLETED with business result in one mock transaction
+ * - 统一动作命令 → CLOSED without mutating business facts
+ * - 统一动作命令 → TRANSFERRED + successor id
  * - Idempotency map supports timeout → query-by-same-key
  */
 
@@ -166,61 +165,33 @@ export function applyQueueTaskOutcome(
 
 export type SessionLease = {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  leaseExpiresAt: string
   ownerUserId: string
   subjectVersion?: string
-  subjectHash: string
-}
-
-/** Public lease state without token (safe for action results / UI). */
-export type SessionLeaseState = {
-  workItemId: string
-  leaseVersion: number
-  leaseExpiresAt: string
 }
 
 export type WorkItemTerminalRecord = {
-  status: "COMPLETED" | "TRANSFERRED" | "CLOSED"
+  status: "COMPLETED" | "CLOSED"
   recordId: string
   businessResult?: { kind: string; reference: string; summary: string }
   reasonCode?: string
   replacementWorkItemId?: string
-  successorWorkItemId?: string
   closedAt: string
 }
 
 export type WorkItemActionRecord = {
   actionRecordId: string
   actionKind: string
-  workItemStatus: "PENDING" | "IN_PROGRESS"
+  workItemStatus: "IN_PROGRESS"
   evidenceNote?: string
   recordedAt: string
-  lease?: SessionLeaseState
-  subjectHash: string
 }
-
-export type IdempotencyEntry =
-  | { state: "pending"; startedAt: string; kind: string }
-  | {
-      state: "succeeded"
-      kind: string
-      payload: unknown
-      finishedAt: string
-    }
-  | { state: "failed"; kind: string; error: string; finishedAt: string }
 
 const workItemLeases = new Map<string, SessionLease>()
 const workItemTerminal = new Map<string, WorkItemTerminalRecord>()
 const workItemHeld = new Set<string>()
-const workItemSubject = new Map<
-  string,
-  { subjectVersion: string; subjectHash: string; leaseVersion: number }
->()
+const workItemSubject = new Map<string, { subjectVersion: string }>()
 const workItemActions = new Map<string, WorkItemActionRecord[]>()
-const idempotencyStore = new Map<string, IdempotencyEntry>()
-/** Permission version bumps invalidate in-memory claim tokens (UI must drop snapshots). */
+/** Permission version bumps invalidate in-memory claims (UI must drop snapshots). */
 let permissionVersion = 1
 let permissionRevoked = false
 
@@ -250,36 +221,24 @@ export function getWorkItemSubject(workItemId: string) {
 
 export function ensureWorkItemSubject(
   workItemId: string,
-  seed: { subjectVersion: string; subjectHash: string; leaseVersion: number }
-): { subjectVersion: string; subjectHash: string; leaseVersion: number } {
+  seed: { subjectVersion: string }
+): { subjectVersion: string } {
   const existing = workItemSubject.get(workItemId)
   if (existing) return existing
   workItemSubject.set(workItemId, { ...seed })
   return seed
 }
 
-/** Bump subject version (for conflict demos / refresh). */
+/** Bump subject version (concurrent-edit demo / refresh). */
 export function bumpWorkItemSubject(workItemId: string): {
   subjectVersion: string
-  subjectHash: string
 } {
   const current = workItemSubject.get(workItemId)
-  if (!current) {
-    const next = {
-      subjectVersion: "v2",
-      subjectHash: `sha_${workItemId}_bumped`,
-      leaseVersion: 1,
-    }
-    workItemSubject.set(workItemId, next)
-    return next
-  }
   const versionNum =
-    Number.parseInt(current.subjectVersion.replace(/\D/g, ""), 10) || 1
-  const next = {
-    subjectVersion: `v${versionNum + 1}`,
-    subjectHash: `sha_${workItemId}_v${versionNum + 1}`,
-    leaseVersion: current.leaseVersion,
-  }
+    (current
+      ? Number.parseInt(current.subjectVersion.replace(/\D/g, ""), 10)
+      : 1) || 1
+  const next = { subjectVersion: `v${versionNum + 1}` }
   workItemSubject.set(workItemId, next)
   return next
 }
@@ -288,24 +247,7 @@ export function getSessionLease(workItemId: string): SessionLease | null {
   return workItemLeases.get(workItemId) ?? null
 }
 
-export function getSessionLeaseState(
-  workItemId: string
-): SessionLeaseState | null {
-  const lease = workItemLeases.get(workItemId)
-  if (!lease) return null
-  return {
-    workItemId: lease.workItemId,
-    leaseVersion: lease.leaseVersion,
-    leaseExpiresAt: lease.leaseExpiresAt,
-  }
-}
-
 export function clearSessionLease(workItemId: string): void {
-  workItemLeases.delete(workItemId)
-}
-
-/** Drop lease token while keeping task processable after re-claim (租约丢失). */
-export function loseSessionLease(workItemId: string): void {
   workItemLeases.delete(workItemId)
 }
 
@@ -325,50 +267,6 @@ export function getWorkItemActionHistory(
   return workItemActions.get(workItemId) ?? []
 }
 
-export function getIdempotencyEntry(
-  key: string
-): IdempotencyEntry | undefined {
-  return idempotencyStore.get(key)
-}
-
-export function setIdempotencyPending(key: string, kind: string): void {
-  idempotencyStore.set(key, {
-    state: "pending",
-    kind,
-    startedAt: new Date().toISOString(),
-  })
-}
-
-export function setIdempotencySucceeded(
-  key: string,
-  kind: string,
-  payload: unknown
-): void {
-  idempotencyStore.set(key, {
-    state: "succeeded",
-    kind,
-    payload,
-    finishedAt: new Date().toISOString(),
-  })
-}
-
-export function setIdempotencyFailed(
-  key: string,
-  kind: string,
-  error: string
-): void {
-  idempotencyStore.set(key, {
-    state: "failed",
-    kind,
-    error,
-    finishedAt: new Date().toISOString(),
-  })
-}
-
-function newToken(): string {
-  return `ct_${Math.random().toString(36).slice(2, 12)}_${Date.now().toString(36)}`
-}
-
 function newRecordId(prefix: string): string {
   return `${prefix}-${Date.now().toString(36).toUpperCase()}`
 }
@@ -376,13 +274,11 @@ function newRecordId(prefix: string): string {
 export class WorkItemMockError extends Error {
   code:
     | "LEASE_LOST"
-    | "LEASE_CONFLICT"
     | "VERSION_CONFLICT"
     | "PERMISSION_REVOKED"
     | "ACTION_NOT_ALLOWED"
-    | "TIMEOUT"
-    | "NOT_FOUND"
     | "ALREADY_TERMINAL"
+    | "NOT_FOUND"
 
   constructor(
     code: WorkItemMockError["code"],
@@ -396,9 +292,7 @@ export class WorkItemMockError extends Error {
 
 export function claimWorkItemSession(input: {
   workItemId: string
-  subjectVersion: string
-  subjectHash: string
-  leaseVersion: number
+  subjectVersion?: string
   ownerUserId?: string
 }): SessionLease {
   if (permissionRevoked) {
@@ -414,38 +308,14 @@ export function claimWorkItemSession(input: {
       `任务已结束（${terminal.status}），不能领取。`
     )
   }
-  const existing = workItemLeases.get(input.workItemId)
-  if (
-    existing &&
-    existing.ownerUserId !== (input.ownerUserId ?? "user_wangmin") &&
-    new Date(existing.leaseExpiresAt).getTime() > Date.now()
-  ) {
-    throw new WorkItemMockError(
-      "LEASE_CONFLICT",
-      "任务已被其他用户领取，正在处理中，不能同时处理。"
-    )
-  }
-
   const subject = ensureWorkItemSubject(input.workItemId, {
-    subjectVersion: input.subjectVersion,
-    subjectHash: input.subjectHash,
-    leaseVersion: Math.max(1, input.leaseVersion),
+    subjectVersion: input.subjectVersion ?? "v1",
   })
-
   const lease: SessionLease = {
     workItemId: input.workItemId,
-    claimToken: newToken(),
-    leaseVersion: subject.leaseVersion + (existing ? 1 : 0) || 1,
-    leaseExpiresAt: new Date(Date.now() + 30 * 60 * 1000).toISOString(),
     ownerUserId: input.ownerUserId ?? "user_wangmin",
     subjectVersion: subject.subjectVersion,
-    subjectHash: subject.subjectHash,
   }
-  // Normalize leaseVersion
-  const nextVersion = (existing?.leaseVersion ?? subject.leaseVersion) + 1
-  lease.leaseVersion = nextVersion
-  subject.leaseVersion = nextVersion
-  workItemSubject.set(input.workItemId, subject)
   workItemLeases.set(input.workItemId, lease)
   workItemHeld.delete(input.workItemId)
   return lease
@@ -453,8 +323,8 @@ export function claimWorkItemSession(input: {
 
 function requireValidLease(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
+  expectedSubjectVersion?: string
+  ownerUserId?: string
 }): SessionLease {
   if (permissionRevoked) {
     workItemLeases.delete(input.workItemId)
@@ -470,23 +340,21 @@ function requireValidLease(input: {
       "操作已失效，你输入的内容可保留但不能提交。请重新领取。"
     )
   }
-  if (lease.claimToken !== input.claimToken) {
+  if (lease.ownerUserId !== (input.ownerUserId ?? "user_wangmin")) {
     throw new WorkItemMockError(
       "LEASE_LOST",
-      "操作已失效或过期，不能提交。"
+      "任务已转交他人，不能提交。请重新领取。"
     )
   }
-  if (lease.leaseVersion !== input.leaseVersion) {
+  const subject = workItemSubject.get(input.workItemId)
+  if (
+    subject &&
+    input.expectedSubjectVersion &&
+    subject.subjectVersion !== input.expectedSubjectVersion
+  ) {
     throw new WorkItemMockError(
-      "LEASE_CONFLICT",
-      "数据已更新，请刷新后重新领取。"
-    )
-  }
-  if (new Date(lease.leaseExpiresAt).getTime() <= Date.now()) {
-    workItemLeases.delete(input.workItemId)
-    throw new WorkItemMockError(
-      "LEASE_LOST",
-      "操作已过期，你输入的内容可保留但不能提交。"
+      "VERSION_CONFLICT",
+      "数据已更新，请刷新后重试。"
     )
   }
   return lease
@@ -494,51 +362,11 @@ function requireValidLease(input: {
 
 export function applyWorkItemActionSession(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
-  idempotencyKey: string
+  expectedSubjectVersion?: string
+  ownerUserId?: string
   action: { kind: string; note?: string }
-  /** When true, leave idempotency as pending and throw TIMEOUT (no state change). */
-  simulateTimeout?: boolean
 }): WorkItemActionRecord {
-  const existingIdem = idempotencyStore.get(input.idempotencyKey)
-  if (existingIdem?.state === "succeeded") {
-    return existingIdem.payload as WorkItemActionRecord
-  }
-  if (existingIdem?.state === "pending") {
-    throw new WorkItemMockError(
-      "TIMEOUT",
-      "上次动作结果仍不确定，请按原任务号查询最终结果。"
-    )
-  }
-
-  if (input.simulateTimeout) {
-    setIdempotencyPending(input.idempotencyKey, input.action.kind)
-    throw new WorkItemMockError(
-      "TIMEOUT",
-      "网络超时：任务状态未变更，请按原任务号查询最终结果。"
-    )
-  }
-
-  // If a prior timeout left pending, allow "query" path to finalize DEFER/SAVE
-  if (existingIdem?.state === "failed") {
-    // fall through to retry
-  }
-
-  requireValidLease({
-    workItemId: input.workItemId,
-    claimToken: input.claimToken,
-    leaseVersion: input.leaseVersion,
-  })
-
-  const subject = workItemSubject.get(input.workItemId)
-  if (subject && subject.subjectHash !== input.expectedSubjectHash) {
-    throw new WorkItemMockError(
-      "VERSION_CONFLICT",
-      "版本或数据版本已变化，请刷新比较后再提交。"
-    )
-  }
+  requireValidLease(input)
 
   const terminal = workItemTerminal.get(input.workItemId)
   if (terminal) {
@@ -548,53 +376,23 @@ export function applyWorkItemActionSession(input: {
     )
   }
 
-  const leaseState = getSessionLeaseState(input.workItemId) ?? undefined
-  const status: "PENDING" | "IN_PROGRESS" =
-    input.action.kind === "DEFER" ? "PENDING" : "IN_PROGRESS"
-
   if (input.action.kind === "DEFER") {
     workItemHeld.add(input.workItemId)
-    // DEFER may release lease per server; mock releases token but keeps hold mark
     workItemLeases.delete(input.workItemId)
   }
 
   const record: WorkItemActionRecord = {
     actionRecordId: newRecordId("ACT"),
     actionKind: input.action.kind,
-    workItemStatus: status,
+    workItemStatus: "IN_PROGRESS",
     evidenceNote: input.action.note,
     recordedAt: new Date().toISOString(),
-    lease: input.action.kind === "DEFER" ? undefined : leaseState,
-    subjectHash: subject?.subjectHash ?? input.expectedSubjectHash,
   }
 
   const history = workItemActions.get(input.workItemId) ?? []
   history.push(record)
   workItemActions.set(input.workItemId, history)
-  setIdempotencySucceeded(input.idempotencyKey, input.action.kind, record)
   return record
-}
-
-/**
- * Finalize a previously timed-out action with the same idempotency key.
- * Demo path: if pending, complete the deferred action successfully without re-token
- * only for QUERY_RESULT; for DEFER/SAVE the client re-submits with same key after lease check.
- */
-export function resolvePendingIdempotencyAsSuccess(input: {
-  idempotencyKey: string
-  finalize: () => WorkItemActionRecord | CompleteSessionResult | CloseSessionResult | TransferSessionResult
-}): unknown {
-  const entry = idempotencyStore.get(input.idempotencyKey)
-  if (!entry) {
-    throw new WorkItemMockError("NOT_FOUND", "未找到该任务号的待查结果。")
-  }
-  if (entry.state === "succeeded") return entry.payload
-  if (entry.state === "failed") {
-    throw new WorkItemMockError("NOT_FOUND", entry.error)
-  }
-  // pending → run finalize
-  const payload = input.finalize()
-  return payload
 }
 
 export type CompleteSessionResult = {
@@ -603,51 +401,17 @@ export type CompleteSessionResult = {
   completionRecordId: string
   businessResult: { kind: string; reference: string; summary: string }
   subjectVersion?: string
-  subjectHash: string
 }
 
 export function completeWorkItemSession(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
-  idempotencyKey: string
+  expectedSubjectVersion?: string
+  ownerUserId?: string
   decision: { kind: string; note?: string; summary?: string }
-  simulateTimeout?: boolean
 }): CompleteSessionResult {
-  const existingIdem = idempotencyStore.get(input.idempotencyKey)
-  if (existingIdem?.state === "succeeded") {
-    return existingIdem.payload as CompleteSessionResult
-  }
-  if (existingIdem?.state === "pending") {
-    throw new WorkItemMockError(
-      "TIMEOUT",
-      "上次完成结果仍不确定，请按原任务号查询，勿跳到下一项。"
-    )
-  }
-
-  if (input.simulateTimeout) {
-    setIdempotencyPending(input.idempotencyKey, "COMPLETE")
-    throw new WorkItemMockError(
-      "TIMEOUT",
-      "网络超时：未写入完成态，请按原任务号查询最终结果。"
-    )
-  }
-
-  requireValidLease({
-    workItemId: input.workItemId,
-    claimToken: input.claimToken,
-    leaseVersion: input.leaseVersion,
-  })
+  requireValidLease(input)
 
   const subject = workItemSubject.get(input.workItemId)
-  if (subject && subject.subjectHash !== input.expectedSubjectHash) {
-    throw new WorkItemMockError(
-      "VERSION_CONFLICT",
-      "数据版本已变更，完成已阻止。你输入的内容已保留。"
-    )
-  }
-
   if (workItemTerminal.get(input.workItemId)) {
     throw new WorkItemMockError("ALREADY_TERMINAL", "任务已结束，不能再次完成。")
   }
@@ -665,7 +429,6 @@ export function completeWorkItemSession(input: {
         `业务结论「${input.decision.kind}」与任务完成同一事务生效`,
     },
     subjectVersion: subject?.subjectVersion,
-    subjectHash: subject?.subjectHash ?? input.expectedSubjectHash,
   }
 
   workItemTerminal.set(input.workItemId, {
@@ -676,70 +439,6 @@ export function completeWorkItemSession(input: {
   })
   workItemHeld.delete(input.workItemId)
   workItemLeases.delete(input.workItemId)
-  setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", result)
-  return result
-}
-
-/** Complete a previously pending COMPLETE idempotency key (demo recovery). */
-export function finalizePendingComplete(input: {
-  idempotencyKey: string
-  workItemId: string
-  decision: { kind: string; note?: string; summary?: string }
-  expectedSubjectHash: string
-}): CompleteSessionResult {
-  const entry = idempotencyStore.get(input.idempotencyKey)
-  if (entry?.state === "succeeded") {
-    return entry.payload as CompleteSessionResult
-  }
-  if (entry?.state !== "pending") {
-    throw new WorkItemMockError(
-      "NOT_FOUND",
-      "没有可查询的未决完成结果。"
-    )
-  }
-  // Recovery path: mock server eventually committed — do not require live token
-  if (workItemTerminal.get(input.workItemId)) {
-    const terminal = workItemTerminal.get(input.workItemId)!
-    const recovered: CompleteSessionResult = {
-      workItemId: input.workItemId,
-      workItemStatus: "COMPLETED",
-      completionRecordId: terminal.recordId,
-      businessResult: terminal.businessResult ?? {
-        kind: input.decision.kind,
-        reference: terminal.recordId,
-        summary: "已完成",
-      },
-      subjectHash: input.expectedSubjectHash,
-    }
-    setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", recovered)
-    return recovered
-  }
-
-  const completionRecordId = newRecordId("CMP")
-  const subject = workItemSubject.get(input.workItemId)
-  const result: CompleteSessionResult = {
-    workItemId: input.workItemId,
-    workItemStatus: "COMPLETED",
-    completionRecordId,
-    businessResult: {
-      kind: input.decision.kind,
-      reference: completionRecordId,
-      summary:
-        input.decision.summary ??
-        `业务结论与任务完成已一并生效`,
-    },
-    subjectVersion: subject?.subjectVersion,
-    subjectHash: subject?.subjectHash ?? input.expectedSubjectHash,
-  }
-  workItemTerminal.set(input.workItemId, {
-    status: "COMPLETED",
-    recordId: completionRecordId,
-    businessResult: result.businessResult,
-    closedAt: new Date().toISOString(),
-  })
-  workItemHeld.delete(input.workItemId)
-  workItemLeases.delete(input.workItemId)
-  setIdempotencySucceeded(input.idempotencyKey, "COMPLETE", result)
   return result
 }
 
@@ -749,30 +448,20 @@ export type CloseSessionResult = {
   closureRecordId: string
   reasonCode: string
   replacementWorkItemId?: string
-  closureEvidenceReference: string
-  subjectHash: string
 }
 
 export function closeWorkItemSession(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
-  idempotencyKey: string
+  expectedSubjectVersion?: string
+  ownerUserId?: string
   closeAllowed: boolean
   closure: {
     kind: "CLOSE_DUPLICATE" | "CLOSE_MISROUTED" | "CLOSE_WITH_REPLACEMENT"
     reasonCode: string
     replacementWorkItemId?: string
-    closureEvidenceReference: string
     comment?: string
   }
 }): CloseSessionResult {
-  const existingIdem = idempotencyStore.get(input.idempotencyKey)
-  if (existingIdem?.state === "succeeded") {
-    return existingIdem.payload as CloseSessionResult
-  }
-
   if (!input.closeAllowed) {
     throw new WorkItemMockError(
       "ACTION_NOT_ALLOWED",
@@ -780,11 +469,7 @@ export function closeWorkItemSession(input: {
     )
   }
 
-  requireValidLease({
-    workItemId: input.workItemId,
-    claimToken: input.claimToken,
-    leaseVersion: input.leaseVersion,
-  })
+  requireValidLease(input)
 
   if (
     (input.closure.kind === "CLOSE_DUPLICATE" ||
@@ -804,8 +489,6 @@ export function closeWorkItemSession(input: {
     closureRecordId,
     reasonCode: input.closure.reasonCode,
     replacementWorkItemId: input.closure.replacementWorkItemId,
-    closureEvidenceReference: input.closure.closureEvidenceReference,
-    subjectHash: input.expectedSubjectHash,
   }
 
   workItemTerminal.set(input.workItemId, {
@@ -817,65 +500,46 @@ export function closeWorkItemSession(input: {
   })
   workItemLeases.delete(input.workItemId)
   workItemHeld.delete(input.workItemId)
-  setIdempotencySucceeded(input.idempotencyKey, "CLOSE", result)
   return result
 }
 
 export type TransferSessionResult = {
-  originalWorkItemId: string
-  originalWorkItemStatus: "TRANSFERRED"
+  workItemId: string
+  workItemStatus: "IN_PROGRESS"
   transferRecordId: string
-  successorWorkItemId: string
-  successorWorkItemStatus: "UNCLAIMED" | "PENDING"
+  targetUserId: string
 }
 
 export function transferWorkItemSession(input: {
   workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectHash: string
-  idempotencyKey: string
-  transfer: { toUserLabel: string; reason: string }
+  expectedSubjectVersion?: string
+  ownerUserId?: string
+  transfer: { targetUserId: string; targetRole?: string; reason: string }
 }): TransferSessionResult {
-  const existingIdem = idempotencyStore.get(input.idempotencyKey)
-  if (existingIdem?.state === "succeeded") {
-    return existingIdem.payload as TransferSessionResult
-  }
+  requireValidLease(input)
 
-  requireValidLease({
-    workItemId: input.workItemId,
-    claimToken: input.claimToken,
-    leaseVersion: input.leaseVersion,
-  })
+  const lease = workItemLeases.get(input.workItemId)!
+  lease.ownerUserId = input.transfer.targetUserId
+  workItemLeases.set(input.workItemId, lease)
 
   const transferRecordId = newRecordId("XFR")
-  const successorWorkItemId = `${input.workItemId}_xfr_${Date.now().toString(36)}`
-  const result: TransferSessionResult = {
-    originalWorkItemId: input.workItemId,
-    originalWorkItemStatus: "TRANSFERRED",
-    transferRecordId,
-    successorWorkItemId,
-    successorWorkItemStatus: "UNCLAIMED",
+  const record: WorkItemActionRecord = {
+    actionRecordId: transferRecordId,
+    actionKind: "TRANSFER",
+    workItemStatus: "IN_PROGRESS",
+    evidenceNote: input.transfer.reason,
+    recordedAt: new Date().toISOString(),
   }
+  const history = workItemActions.get(input.workItemId) ?? []
+  history.push(record)
+  workItemActions.set(input.workItemId, history)
 
-  workItemTerminal.set(input.workItemId, {
-    status: "TRANSFERRED",
-    recordId: transferRecordId,
-    successorWorkItemId,
-    closedAt: new Date().toISOString(),
-  })
-  workItemLeases.delete(input.workItemId)
-  workItemHeld.delete(input.workItemId)
-  setIdempotencySucceeded(input.idempotencyKey, "TRANSFER", result)
-  return result
-}
-
-/**
- * Query final result for an idempotency key without advancing UI.
- * For pending COMPLETE keys, does not auto-finalize unless `finalizePending` is true.
- */
-export function queryIdempotencyResult(idempotencyKey: string): IdempotencyEntry | null {
-  return idempotencyStore.get(idempotencyKey) ?? null
+  return {
+    workItemId: input.workItemId,
+    workItemStatus: "IN_PROGRESS",
+    transferRecordId,
+    targetUserId: input.transfer.targetUserId,
+  }
 }
 
 // —— W05 sales order session domain ——
@@ -901,7 +565,6 @@ export type W05ProcurementResolutionOutcome = {
 }
 
 const w05RejectionOutcomes = new Map<string, W05ProcurementResolutionOutcome>()
-const w05RejectionIdempotency = new Map<string, W05ProcurementResolutionOutcome>()
 const w05ChangeOrders = new Map<
   string,
   {
@@ -913,15 +576,7 @@ const w05ChangeOrders = new Map<
     impactPath: "procurement" | "operations"
   }
 >()
-const w05CardClaims = new Map<
-  string,
-  {
-    claimToken: string
-    leaseVersion: number
-    claimedByLabel: string
-    expiresAt: string
-  }
->()
+const w05CardClaims = new Map<string, { claimedByLabel: string }>()
 const w05CardTerminal = new Map<
   string,
   {
@@ -935,26 +590,10 @@ const w05CardTerminal = new Map<
     primaryStatusLabel?: string
   }
 >()
-const w05CardIdempotency = new Map<string, (typeof w05CardTerminal extends Map<string, infer V> ? V : never)>()
 const w05DraftPriceAdjust = new Map<string, { unitPriceGross: string; note: string }>()
-const w05ExportJobs = new Map<
-  string,
-  {
-    jobId: string
-    status: "queued" | "running" | "succeeded" | "failed"
-    rowCount: number
-    permissionVersion: string
-    createdAt: string
-    downloadLabel: string
-  }
->()
 
 export function getW05RejectionOutcome(salesOrderId: string) {
   return w05RejectionOutcomes.get(salesOrderId) ?? null
-}
-
-export function getW05RejectionByIdempotency(key: string) {
-  return w05RejectionIdempotency.get(key) ?? null
 }
 
 export function resolveW05ProcurementRejection(input: {
@@ -963,13 +602,12 @@ export function resolveW05ProcurementRejection(input: {
     | "RESUBMIT_CHANGED_TERMS"
     | "REQUEST_LOW_MARGIN_ACCEPTANCE"
     | "VOID_AFTER_REJECTION"
-  idempotencyKey: string
   lowMarginReason?: string
   voidReason?: string
   priceAdjusted?: boolean
 }): W05ProcurementResolutionOutcome {
-  const cached = w05RejectionIdempotency.get(input.idempotencyKey)
-  if (cached) return cached
+  const resolved = w05RejectionOutcomes.get(input.salesOrderId)
+  if (resolved) return resolved
 
   let outcome: W05ProcurementResolutionOutcome
   const stamp = Date.now().toString(36).toUpperCase()
@@ -1011,7 +649,6 @@ export function resolveW05ProcurementRejection(input: {
     }
   }
 
-  w05RejectionIdempotency.set(input.idempotencyKey, outcome)
   w05RejectionOutcomes.set(input.salesOrderId, outcome)
   return outcome
 }
@@ -1020,11 +657,10 @@ export function decideW05LowMargin(input: {
   salesOrderId: string
   workItemId: string
   decision: "APPROVE" | "REJECT"
-  idempotencyKey: string
   reason?: string
 }): W05ProcurementResolutionOutcome {
-  const cached = w05RejectionIdempotency.get(input.idempotencyKey)
-  if (cached) return cached
+  const resolved = w05RejectionOutcomes.get(input.salesOrderId)
+  if (resolved) return resolved
 
   const stamp = Date.now().toString(36).toUpperCase()
   const outcome: W05ProcurementResolutionOutcome =
@@ -1048,7 +684,6 @@ export function decideW05LowMargin(input: {
           primaryStatusLabel: "待销售处理",
         }
 
-  w05RejectionIdempotency.set(input.idempotencyKey, outcome)
   w05RejectionOutcomes.set(input.salesOrderId, outcome)
   return outcome
 }
@@ -1105,46 +740,23 @@ export function startW05SalesChangeOrder(input: {
 }
 
 export function claimW05CardApproval(workItemId: string): {
-  claimToken: string
-  leaseVersion: number
   claimedByLabel: string
-  expiresAt: string
 } {
   const existing = w05CardClaims.get(workItemId)
-  const leaseVersion = (existing?.leaseVersion ?? 0) + 1
-  const claimToken = `ct_card_${workItemId}_${leaseVersion}_${Math.random().toString(36).slice(2, 10)}`
   const lease = {
-    claimToken,
-    leaseVersion,
-    claimedByLabel: "当前用户 · 销售经理",
-    expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
+    claimedByLabel: existing?.claimedByLabel ?? "当前用户 · 销售经理",
   }
   w05CardClaims.set(workItemId, lease)
   return lease
 }
 
-/** Public lease without claimToken */
+/** Public claim state (no token). */
 export function getW05CardLeasePublic(workItemId: string) {
   const lease = w05CardClaims.get(workItemId)
   if (!lease) return null
   return {
     claimedByLabel: lease.claimedByLabel,
-    expiresAt: lease.expiresAt,
-    leaseVersion: lease.leaseVersion,
   }
-}
-
-export function verifyW05CardClaim(
-  workItemId: string,
-  claimToken: string,
-  leaseVersion: number
-): boolean {
-  const lease = w05CardClaims.get(workItemId)
-  return Boolean(
-    lease &&
-      lease.claimToken === claimToken &&
-      lease.leaseVersion === leaseVersion
-  )
 }
 
 export function getW05CardTerminal(workItemId: string) {
@@ -1155,9 +767,6 @@ export function completeW05CardApproval(input: {
   workItemId: string
   workItemType: "CARD_SALES_MANAGER_APPROVAL" | "CARD_SALES_OPERATION_APPROVAL"
   decision: "APPROVE" | "REJECT"
-  claimToken: string
-  leaseVersion: number
-  idempotencyKey: string
   reasonCode?: string
 }): {
   outcome:
@@ -1169,10 +778,10 @@ export function completeW05CardApproval(input: {
   nextWorkItemId?: string
   primaryStatusLabel?: string
 } {
-  const cached = w05CardIdempotency.get(input.idempotencyKey)
-  if (cached) return cached
+  const terminal = w05CardTerminal.get(input.workItemId)
+  if (terminal) return terminal
 
-  if (!verifyW05CardClaim(input.workItemId, input.claimToken, input.leaseVersion)) {
+  if (!w05CardClaims.has(input.workItemId)) {
     throw new Error("LEASE_INVALID")
   }
 
@@ -1213,7 +822,6 @@ export function completeW05CardApproval(input: {
     }
   }
 
-  w05CardIdempotency.set(input.idempotencyKey, result)
   w05CardTerminal.set(input.workItemId, result)
   w05CardClaims.delete(input.workItemId)
   return result
@@ -1231,7 +839,7 @@ export function createW05ExportJob(input: {
   downloadLabel: string
 } {
   const jobId = `EXP-SO-${Date.now().toString(36).toUpperCase()}`
-  const job = {
+  return {
     jobId,
     status: "succeeded" as const,
     rowCount: input.rowCount,
@@ -1239,14 +847,7 @@ export function createW05ExportJob(input: {
     createdAt: new Date().toISOString(),
     downloadLabel: `销售单导出_${jobId}.csv（演示·受权限版本约束）`,
   }
-  w05ExportJobs.set(jobId, job)
-  return job
 }
-
-export function getW05ExportJob(jobId: string) {
-  return w05ExportJobs.get(jobId) ?? null
-}
-
 
 // ─── W06 customer acceptance session mock ───────────────────────────────────
 
@@ -1685,7 +1286,7 @@ export function postSalesOrderAcceptance(
 }
 
 // ─── W07 procurement confirmation drafts ───
-// claimToken / lease / complete / defer use shared W02 work_item session helpers above.
+// 领取/动作契约沿用上方共享的 W02 work_item 会话助手。
 // Only confirmation line drafts + editVersion are W07-specific working data.
 
 type W07ConfirmationLineDraft = {
@@ -2114,7 +1715,6 @@ export type W10ExportJob = {
   downloadLabel?: string
 }
 
-const w10ExportJobs = new Map<string, W10ExportJob>()
 let w10ExportSeq = 0
 
 export function createW10ExportJob(input: {
@@ -2122,40 +1722,15 @@ export function createW10ExportJob(input: {
   filterSummary: string
 }): W10ExportJob {
   const jobId = `exp-w10-${++w10ExportSeq}`
-  const job: W10ExportJob = {
+  return {
     jobId,
-    status: "queued",
+    status: "succeeded",
     total: input.total,
-    completed: 0,
+    completed: input.total,
     filterSummary: input.filterSummary,
     createdAt: new Date().toISOString(),
+    downloadLabel: `库存台账导出-${jobId}.csv`,
   }
-  w10ExportJobs.set(jobId, job)
-  // Advance demo job asynchronously within session
-  globalThis.setTimeout(() => {
-    const current = w10ExportJobs.get(jobId)
-    if (!current) return
-    w10ExportJobs.set(jobId, {
-      ...current,
-      status: "running",
-      completed: Math.ceil(current.total / 2),
-    })
-  }, 400)
-  globalThis.setTimeout(() => {
-    const current = w10ExportJobs.get(jobId)
-    if (!current) return
-    w10ExportJobs.set(jobId, {
-      ...current,
-      status: "succeeded",
-      completed: current.total,
-      downloadLabel: `库存台账导出-${jobId}.csv`,
-    })
-  }, 1200)
-  return job
-}
-
-export function getW10ExportJob(jobId: string): W10ExportJob | null {
-  return w10ExportJobs.get(jobId) ?? null
 }
 
 // ─── W04 contract session mock ──────────────────────────────────────────────
@@ -2164,7 +1739,6 @@ export function getW10ExportJob(jobId: string): W10ExportJob | null {
 const w04CreatedContracts = new Map<string, ContractListRow>()
 const w04CenterOverrides = new Map<string, ContractCenterView>()
 const w04UploadIdempotency = new Map<string, UploadContractPdfResult>()
-const w04ExportJobs = new Map<string, ContractExportJob>()
 
 export function listW04Contracts(): ContractListRow[] {
   const base = [...MOCK_CONTRACT_LIST]
@@ -2409,7 +1983,7 @@ export function createW04ExportJob(input: {
   filterSnapshotLabel: string
 }): ContractExportJob {
   const jobId = `EXP-CT-${Date.now().toString(36).toUpperCase()}`
-  const job: ContractExportJob = {
+  return {
     jobId,
     status: "succeeded",
     rowCount: input.rowCount,
@@ -2418,12 +1992,6 @@ export function createW04ExportJob(input: {
     createdAt: new Date().toISOString(),
     downloadLabel: `合同导出_${jobId}.csv（服务端筛选结果·重新鉴权）`,
   }
-  w04ExportJobs.set(jobId, job)
-  return job
-}
-
-export function getW04ExportJob(jobId: string) {
-  return w04ExportJobs.get(jobId) ?? null
 }
 
 // ─── W09 fulfillment operations session mock ───────────────────────────────
@@ -2479,7 +2047,7 @@ export function isFulfillmentWorkItemHeld(workItemId: string): boolean {
 }
 
 // ─── W08 purchase order session mock ─────────────────────────────────────────
-// draftEditToken lives only here (not URL). Review uses simplified claimToken mock.
+// draftEditToken lives only here (not URL). Review claim follows shared W02 owner contract.
 
 type W08DraftOverlay = {
   paymentTermCode: string
@@ -2534,7 +2102,6 @@ const w08DraftTokens = new Map<
   { token: string; lockVersion: number }
 >()
 const w08Idempotency = new Map<string, unknown>()
-const w08PendingUnknown = new Set<string>()
 const w08ChangeWorkcopies = new Map<
   string,
   { changeId: string; baseRevisionNo: number; createdAt: string }
@@ -2916,7 +2483,6 @@ export function saveW08PurchaseOrderDraft(input: {
   }>
   idempotencyKey: string
   simulateConflict?: boolean
-  simulateUnknown?: boolean
 }): {
   lockVersion: number
   draftContentHash: string
@@ -2925,21 +2491,6 @@ export function saveW08PurchaseOrderDraft(input: {
 } {
   const existing = w08Idempotency.get(input.idempotencyKey)
   if (existing) return existing as ReturnType<typeof saveW08PurchaseOrderDraft>
-
-  if (w08PendingUnknown.has(input.idempotencyKey)) {
-    throw new WorkItemMockError(
-      "TIMEOUT",
-      "上次保存结果仍不确定，请按原任务号查询。"
-    )
-  }
-
-  if (input.simulateUnknown) {
-    w08PendingUnknown.add(input.idempotencyKey)
-    throw new WorkItemMockError(
-      "TIMEOUT",
-      "网络超时：草稿保存结果未知，输入已保留，请查询最终结果。"
-    )
-  }
 
   if (input.simulateConflict) {
     throw new WorkItemMockError(
@@ -3009,10 +2560,6 @@ export function saveW08PurchaseOrderDraft(input: {
 }
 
 export function queryW08IdempotentResult(idempotencyKey: string): unknown | null {
-  if (w08PendingUnknown.has(idempotencyKey) && !w08Idempotency.has(idempotencyKey)) {
-    // finalize pending save/submit as failed-unknown until retry
-    return { pending: true }
-  }
   return w08Idempotency.get(idempotencyKey) ?? null
 }
 
@@ -3022,7 +2569,6 @@ export function submitW08PurchaseOrder(input: {
   expectedDraftContentHash: string
   draftEditToken: string
   idempotencyKey: string
-  simulateUnknown?: boolean
 }): {
   submissionId: string
   submissionNo: string
@@ -3033,14 +2579,6 @@ export function submitW08PurchaseOrder(input: {
 } {
   const existing = w08Idempotency.get(input.idempotencyKey)
   if (existing) return existing as ReturnType<typeof submitW08PurchaseOrder>
-
-  if (input.simulateUnknown) {
-    w08PendingUnknown.add(input.idempotencyKey)
-    throw new WorkItemMockError(
-      "TIMEOUT",
-      "提交结果未知：不得切到待审核态，请按原任务号查询。"
-    )
-  }
 
   requireDraftToken(
     input.purchaseOrderId,
@@ -3169,7 +2707,6 @@ export function reviewW08PurchaseOrder(input: {
   idempotencyKey: string
   /** 岗位分离：提交人不可自审 */
   actorLabel?: string
-  simulateUnknown?: boolean
 }): {
   reviewResult: "APPROVED" | "REJECTED"
   revisionId?: string
@@ -3180,14 +2717,6 @@ export function reviewW08PurchaseOrder(input: {
 } {
   const existing = w08Idempotency.get(input.idempotencyKey)
   if (existing) return existing as ReturnType<typeof reviewW08PurchaseOrder>
-
-  if (input.simulateUnknown) {
-    w08PendingUnknown.add(input.idempotencyKey)
-    throw new WorkItemMockError(
-      "TIMEOUT",
-      "审核结果未知：不得直接生效，请查询最终结果。"
-    )
-  }
 
   const center = getW08PurchaseOrderCenter(input.purchaseOrderId)
   if (!center) throw new WorkItemMockError("NOT_FOUND", "采购单不存在")
@@ -3724,14 +3253,11 @@ export function bumpW13SubjectHash(workItemId: string, nextHash: string): void {
     : `sv_w13_init_${Date.now()}`
   workItemSubject.set(workItemId, {
     subjectVersion: nextVersion,
-    subjectHash: nextHash,
-    leaseVersion: current?.leaseVersion ?? 1,
   })
   const lease = workItemLeases.get(workItemId)
   if (lease) {
     workItemLeases.set(workItemId, {
       ...lease,
-      subjectHash: nextHash,
       subjectVersion: nextVersion,
     })
   }

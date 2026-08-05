@@ -2,7 +2,7 @@
  * W27 session-mock API
  * - 金额/差异方向/是否可确认均由 mock 投影给出
  * - 岗位分离：采购只证据；经办结论；另一名复核人确认
- * - 策略缺失 fail-closed；UNKNOWN 可按幂等键查询
+ * - 策略缺失 fail-closed
  */
 
 import { mockDelay } from "@/lib/mock-delay"
@@ -35,7 +35,6 @@ import {
 } from "@/features/supplier-settlements/types"
 import {
   DEFAULT_PERIOD_POLICY,
-  DEFAULT_REFRESH_CUTOFF,
   SEED_STATEMENTS,
   SUPPLIERS,
   projectDifference,
@@ -43,13 +42,6 @@ import {
   withDirection,
   type SeedStatement,
 } from "@/mock/supplier-settlements"
-import {
-  getIdempotencyEntry,
-  setIdempotencyPending,
-  setIdempotencySucceeded,
-} from "@/mock/session-state"
-
-const WORKSPACE = "W27"
 
 type Overlay = Partial<
   Pick<
@@ -80,7 +72,6 @@ type Overlay = Partial<
 
 const overlays = new Map<string, Overlay>()
 const created: SeedStatement[] = []
-let forceRefreshCutoffMissing = false
 
 export type ListQueryInput = {
   view: SettlementView
@@ -142,21 +133,6 @@ function periodPolicy(demoFlag?: ListQueryInput["demoFlag"]) {
   return { ...DEFAULT_PERIOD_POLICY }
 }
 
-function refreshCutoffPolicy() {
-  if (forceRefreshCutoffMissing) {
-    return {
-      state: "UNCONFIGURED" as const,
-      blocker: {
-        action: "SUBMIT_REVIEW",
-        code: "REFRESH_CUTOFF_POLICY_UNCONFIGURED",
-        message:
-          "刷新截止策略未配置，不得提交复核或创建任务；请先完成策略配置",
-      },
-    }
-  }
-  return { ...DEFAULT_REFRESH_CUTOFF }
-}
-
 /** 差异是否已有处理结论（status 为 5 值结论状态，非 PENDING 即已结论） */
 function isConcludedStatus(status: string): boolean {
   return status !== "PENDING"
@@ -180,7 +156,6 @@ function roleActions(
   const openBlocking = seed.differences.some(
     (d) => d.blocking && d.status === "PENDING"
   )
-  const cutoff = refreshCutoffPolicy()
 
   if (role === "manager") {
     blockers.push(
@@ -258,10 +233,6 @@ function roleActions(
         code: "BLOCKING_DIFFERENCES",
         message: "存在未处理的阻断差异，须先完成受控结论后方可提交复核",
       })
-      allowed.delete("SUBMIT_REVIEW")
-    }
-    if (cutoff.state === "UNCONFIGURED") {
-      blockers.push(cutoff.blocker)
       allowed.delete("SUBMIT_REVIEW")
     }
     blockers.push(
@@ -445,10 +416,8 @@ function toDetail(seed: SeedStatement, role: DemoRole): SettlementDetailView {
           subjectVersion: seed.workItem.subjectVersion,
           subjectHash: seed.workItem.subjectHash,
           claimedBy: seed.workItem.claimedBy,
-          leaseVersion: seed.workItem.leaseVersion,
         }
       : undefined,
-    refreshCutoffPolicy: refreshCutoffPolicy(),
     periodPolicy: periodPolicy(),
     auditEvents: seed.auditEvents,
     allowedActions: allowed,
@@ -789,9 +758,6 @@ export async function createSettlementDraft(
     ],
   }
   created.unshift(seed)
-  setIdempotencySucceeded(input.idempotencyKey, `${WORKSPACE}:CREATE`, {
-    statementId,
-  })
 
   return {
     status: "succeeded",
@@ -910,7 +876,6 @@ export async function refreshSettlementTrial(
       { label: "请求编号", value: input.requestId },
     ],
   }
-  setIdempotencySucceeded(input.idempotencyKey, `${WORKSPACE}:REFRESH`, result)
   return result
 }
 
@@ -1004,11 +969,6 @@ export async function appendDifferenceEvidence(
       { label: "说明", value: input.comment ?? "—" },
     ],
   }
-  setIdempotencySucceeded(
-    input.idempotencyKey,
-    `${WORKSPACE}:EVIDENCE`,
-    result
-  )
   return result
 }
 
@@ -1149,11 +1109,6 @@ export async function resolveDifference(
       { label: "差异版本", value: String(diff.version + 1) },
     ],
   }
-  setIdempotencySucceeded(
-    input.idempotencyKey,
-    `${WORKSPACE}:RESOLVE`,
-    result
-  )
   return result
 }
 
@@ -1194,26 +1149,6 @@ export async function submitSettlementReview(
       message: "数据版本不一致，请刷新后重试",
     }
   }
-  const cutoff = refreshCutoffPolicy()
-  if (cutoff.state !== "CONFIGURED") {
-    return {
-      status: "blocked",
-      code: "REFRESH_CUTOFF_POLICY_UNCONFIGURED",
-      title: "刷新截止策略未配置",
-      message: cutoff.blocker.message,
-    }
-  }
-  if (
-    input.refreshCutoffPolicyId !== cutoff.policyId ||
-    input.expectedRefreshCutoffPolicyVersion !== cutoff.policyVersion
-  ) {
-    return {
-      status: "blocked",
-      code: "REFRESH_CUTOFF_STALE",
-      title: "截止策略版本过期",
-      message: "请重取策略版本后再提交",
-    }
-  }
   if (
     seed.differences.some((d) => d.blocking && d.status === "PENDING")
   ) {
@@ -1235,7 +1170,6 @@ export async function submitSettlementReview(
     subjectVersion: String(o.lockVersion),
     subjectHash: o.subjectHash,
     claimedBy: undefined,
-    leaseVersion: 0,
   }
   o.reviewRecords = [
     {
@@ -1254,7 +1188,7 @@ export async function submitSettlementReview(
       at: now,
       actor: ACTORS.prep.displayName,
       action: "SUBMIT_REVIEW",
-      summary: `提交复核 · 截止策略 ${cutoff.policyId}@${cutoff.policyVersion}`,
+      summary: "提交复核 · 冻结来源快照与账单版本",
       auditNo: `AUD-W27-${Date.now().toString().slice(-4)}`,
     },
     ...seed.auditEvents,
@@ -1271,13 +1205,8 @@ export async function submitSettlementReview(
     facts: [
       { label: "workItemId", value: o.workItem.workItemId },
       { label: "subjectHash", value: o.subjectHash! },
-      {
-        label: "截止策略",
-        value: `${cutoff.policyId}@${cutoff.policyVersion}`,
-      },
     ],
   }
-  setIdempotencySucceeded(input.idempotencyKey, `${WORKSPACE}:SUBMIT`, result)
   return result
 }
 
@@ -1326,13 +1255,10 @@ export async function decideSettlementReview(
       message: "请刷新任务与结算单后重试",
     }
   }
-  if (
-    seed.workItem.subjectHash !== input.expectedSubjectHash ||
-    (seed.subjectHash && seed.subjectHash !== input.expectedSubjectHash)
-  ) {
+  if (seed.workItem.subjectVersion !== input.expectedSubjectVersion) {
     return {
       status: "failed",
-      code: "SUBJECT_HASH_MISMATCH",
+      code: "SUBJECT_VERSION_MISMATCH",
       title: "数据已变更",
       message: "提交数据已变化，不能静默确认过期试算",
     }
@@ -1349,7 +1275,6 @@ export async function decideSettlementReview(
   }
 
   if (input.forceUnknown) {
-    setIdempotencyPending(input.idempotencyKey, `${WORKSPACE}:REVIEW`)
     return {
       status: "unknown",
       title: "确认结果未知",
@@ -1424,7 +1349,6 @@ export async function decideSettlementReview(
         { label: "说明", value: input.comment ?? "—" },
       ],
     }
-    setIdempotencySucceeded(input.idempotencyKey, `${WORKSPACE}:REVIEW`, result)
     return result
   }
 
@@ -1490,34 +1414,8 @@ export async function decideSettlementReview(
       { label: "operationId", value: input.operationId },
     ],
   }
-  setIdempotencySucceeded(input.idempotencyKey, `${WORKSPACE}:REVIEW`, result)
   return result
 }
 
-export async function queryFormalByIdempotency(
-  key: string
-): Promise<FormalOutcome | null> {
-  await mockDelay(80)
-  const entry = getIdempotencyEntry(key)
-  if (!entry) return null
-  if (entry.state === "pending") {
-    return {
-      status: "unknown",
-      title: "结果仍未知",
-      message: "请稍后按原任务号再次查询，勿换新键重提。",
-      idempotencyKey: key,
-      operationId: entry.kind,
-    }
-  }
-  if (entry.state === "succeeded" && entry.payload) {
-    return entry.payload as FormalOutcome
-  }
-  return null
-}
-
 /** Demo helpers */
-export function setRefreshCutoffMissing(missing: boolean) {
-  forceRefreshCutoffMissing = missing
-}
-
 export type { SettlementStatus }

@@ -77,7 +77,6 @@ import { Textarea } from "@/components/ui/textarea"
 import {
   useAppendEvidenceMutation,
   useCreateDraftMutation,
-  useQueryFormalIdempotencyMutation,
   useRefreshTrialMutation,
   useResolveDifferenceMutation,
   useReviewDecisionMutation,
@@ -133,7 +132,6 @@ function outcomeToResult(outcome: FormalOutcome): ResultState {
       title: outcome.title,
       description: outcome.message,
       reference: outcome.operationId,
-      pendingIdempotencyKey: outcome.idempotencyKey,
     }
   }
   if (outcome.status === "rejected") {
@@ -1144,7 +1142,6 @@ function SettlementCenter({
   const evidenceMutation = useAppendEvidenceMutation()
   const submitMutation = useSubmitReviewMutation()
   const decisionMutation = useReviewDecisionMutation()
-  const queryIdem = useQueryFormalIdempotencyMutation()
 
   const [result, setResult] = React.useState<ResultState>(null)
   const [activeDiffId, setActiveDiffId] = React.useState<string | null>(null)
@@ -1284,21 +1281,10 @@ function SettlementCenter({
   }
 
   async function onSubmitReview() {
-    const cutoff = detail.refreshCutoffPolicy
-    if (cutoff.state !== "CONFIGURED") {
-      setResult({
-        status: "blocked",
-        title: "刷新截止策略未配置",
-        description: cutoff.blocker.message,
-      })
-      return
-    }
     const outcome = await submitMutation.mutateAsync({
       statementId: st.id,
       expectedLockVersion: st.lockVersion,
       subjectHash: st.subjectHash ?? `sh_${st.id}`,
-      refreshCutoffPolicyId: cutoff.policyId,
-      expectedRefreshCutoffPolicyVersion: cutoff.policyVersion,
       role: urlState.role,
       operationId: newKey("op"),
       idempotencyKey: newKey("submit"),
@@ -1323,10 +1309,7 @@ function SettlementCenter({
     const outcome = await decisionMutation.mutateAsync({
       statementId: st.id,
       workItemId: detail.workItem.workItemId,
-      claimToken: "demo_claim",
-      leaseVersion: detail.workItem.leaseVersion ?? 1,
       expectedSubjectVersion: detail.workItem.subjectVersion,
-      expectedSubjectHash: detail.workItem.subjectHash,
       expectedLockVersion: st.lockVersion,
       action: "CONFIRM",
       role: urlState.role,
@@ -1346,10 +1329,7 @@ function SettlementCenter({
     const outcome = await decisionMutation.mutateAsync({
       statementId: st.id,
       workItemId: detail.workItem.workItemId,
-      claimToken: "demo_claim",
-      leaseVersion: detail.workItem.leaseVersion ?? 1,
       expectedSubjectVersion: detail.workItem.subjectVersion,
-      expectedSubjectHash: detail.workItem.subjectHash,
       expectedLockVersion: st.lockVersion,
       action: "REJECT",
       role: urlState.role,
@@ -1500,8 +1480,7 @@ function SettlementCenter({
       {blockers.filter((b) =>
         ["CONFIRM", "SUBMIT_REVIEW", "SOD_VIOLATION"].includes(b.action) ||
         b.code === "SOD_VIOLATION" ||
-        b.code === "BLOCKING_DIFFERENCES" ||
-        b.code === "REFRESH_CUTOFF_POLICY_UNCONFIGURED"
+        b.code === "BLOCKING_DIFFERENCES"
       ).length > 0 ? (
         <Alert variant="warning">
           <AlertTitle>动作门禁</AlertTitle>
@@ -1513,8 +1492,7 @@ function SettlementCenter({
                     b.action === "CONFIRM" ||
                     b.action === "SUBMIT_REVIEW" ||
                     b.code === "SOD_VIOLATION" ||
-                    b.code === "BLOCKING_DIFFERENCES" ||
-                    b.code === "REFRESH_CUTOFF_POLICY_UNCONFIGURED"
+                    b.code === "BLOCKING_DIFFERENCES"
                 )
                 .map((b) => (
                   <li key={`${b.action}-${b.code}`}>
@@ -1547,27 +1525,6 @@ function SettlementCenter({
                   >
                     去供应商往来 处理应付
                     <ExternalLinkIcon className="size-3.5" />
-                  </Button>
-                ) : null}
-                {result.pendingIdempotencyKey ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    disabled={queryIdem.isPending}
-                    onClick={async () => {
-                      const r = await queryIdem.mutateAsync(
-                        result.pendingIdempotencyKey!
-                      )
-                      if (r) setResult(outcomeToResult(r))
-                      else
-                        setResult({
-                          ...result,
-                          description: "结果仍未返回，请稍后重试。",
-                        })
-                    }}
-                  >
-                    查询处理结果
                   </Button>
                 ) : null}
               </div>
@@ -2099,7 +2056,7 @@ function SettlementCenter({
         open={submitOpen}
         onOpenChange={setSubmitOpen}
         title="提交复核"
-        description="将按刷新截止策略冻结来来源更新时间、明细与差异结论，并创建唯一复核待办。"
+        description="将冻结来源更新时间、明细与差异结论，并创建唯一复核待办。"
         actionLabel="提交复核"
         confirmLabel="确认提交"
         fromStatus={{ label: st.statusLabel, tone: st.statusTone }}
@@ -2108,9 +2065,6 @@ function SettlementCenter({
           st.statementNo,
           "来源数据版本已锁定",
           "数据版本已锁定",
-          detail.refreshCutoffPolicy.state === "CONFIGURED"
-            ? "截止策略已确认"
-            : "截止策略未配置",
         ]}
         effects={["冻结来源数据与差异结论", "创建结算复核待办"]}
         pending={submitMutation.isPending}
@@ -2223,7 +2177,7 @@ function DifferencesWorkspace({
       <BusinessEmptyState
         kind="no-data"
         title="无差异"
-        description="当前结算单没有差异记录，可直接进入复核（在截止策略与明细守恒满足时）。"
+        description="当前结算单没有差异记录，可直接进入复核（在明细守恒满足时）。"
       />
     )
   }

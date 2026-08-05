@@ -72,9 +72,6 @@ export type ProcurementConfirmationTask = Readonly<{
   held?: boolean
   lease?: {
     claimedByLabel: string
-    expiresAt: string
-    leaseVersion: number
-    /** 查询视图不得返回 claimToken；此字段仅在领取/续租结果中出现。 */
   }
   salesSubmission: {
     salesOrderId: string
@@ -145,10 +142,6 @@ export type ProcurementQueueView = Readonly<{
 export type WorkItemLease = Readonly<{
   workItemId: string
   claimedByLabel: string
-  expiresAt: string
-  leaseVersion: number
-  /** 一次性令牌，仅 mutation 返回，客户端只存会话内存 */
-  claimToken: string
 }>
 
 export type FormalOutcome =
@@ -195,7 +188,6 @@ export type FormalOutcome =
 export type FormalActionResponse =
   | { status: "succeeded"; outcome: FormalOutcome }
   | { status: "failed"; message: string; code: string }
-  | { status: "unknown"; message: string; idempotencyKey: string }
 
 export const FULFILLMENT_MODE_LABEL: Record<FulfillmentMode, string> = {
   WAREHOUSE: "入仓",

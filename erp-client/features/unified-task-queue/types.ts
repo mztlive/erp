@@ -4,65 +4,7 @@ import type {
   WorkItemFixture,
   WorkItemStatusCode,
 } from "@/mock/work-items"
-import type {
-  SessionLease,
-  SessionLeaseState,
-  WorkItemActionRecord,
-} from "@/mock/session-state"
-
-/** Envelope types aligned with W02 §8.2 (client-side mock contracts). */
-
-export type ClaimWorkItemCommand = {
-  workItemId: string
-  expectedLeaseVersion?: number
-  idempotencyKey: string
-}
-
-export type WorkItemActionEnvelope<TAction> = {
-  workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectVersion?: string
-  expectedSubjectHash: string
-  idempotencyKey: string
-  action: TAction
-}
-
-export type CompleteWorkItemEnvelope<TDecision> = {
-  workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectVersion?: string
-  expectedSubjectHash: string
-  idempotencyKey: string
-  decision: TDecision
-}
-
-export type CloseWorkItemEnvelope = {
-  workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectVersion?: string
-  expectedSubjectHash: string
-  idempotencyKey: string
-  closure: {
-    kind: "CLOSE_DUPLICATE" | "CLOSE_MISROUTED" | "CLOSE_WITH_REPLACEMENT"
-    reasonCode: string
-    replacementWorkItemId?: string
-    closureEvidenceReference: string
-    comment?: string
-  }
-}
-
-export type TransferWorkItemEnvelope = {
-  workItemId: string
-  claimToken: string
-  leaseVersion: number
-  expectedSubjectVersion?: string
-  expectedSubjectHash: string
-  idempotencyKey: string
-  transfer: { toUserLabel: string; reason: string }
-}
+import type { WorkItemActionRecord } from "@/mock/session-state"
 
 export type QueueScopeSlug = "mine" | "role_pool" | "team" | "hold"
 
@@ -79,9 +21,6 @@ export type UnifiedQueueFilters = {
 export type QueueWorkItemView = WorkItemFixture & {
   /** Derived status after session terminal/hold overlays. */
   effectiveStatusCode: WorkItemStatusCode
-  /** Lease state without token. */
-  leaseState: SessionLeaseState | null
-  claimedByOther: boolean
   claimedByLabel?: string
   lastAction?: WorkItemActionRecord
   /** Sensitive fields masked when permission revoked. */
@@ -100,8 +39,6 @@ export type UnifiedTaskQueueView = {
   counts: { mine: number; rolePool: number; overdue: number }
   items: QueueWorkItemView[]
 }
-
-export type ActiveClaim = SessionLease
 
 export type InTaskActionKind = "DEFER" | "SAVE_EVIDENCE" | "QUERY_RESULT"
 

@@ -136,7 +136,6 @@ export type ProcurementRejectionResolution = {
     workItemType: "LOW_MARGIN_MANAGER_CONFIRMATION"
     workItemStatus: "UNCLAIMED" | "CLAIMED" | "COMPLETED"
     claimedByLabel?: string
-    leaseExpiresAt?: string
     subjectHash: string
     allowedActions: Array<"CLAIM" | "APPROVE" | "REJECT">
     actionBlockers: ActionBlocker[]
@@ -175,7 +174,6 @@ export type CardSalesApproval = {
   subjectVersion: string
   subjectHash: string
   claimedByLabel?: string
-  leaseExpiresAt?: string
   /** 冻结提交摘要（只读） */
   frozenSubmissionSummary: string
   expectedReviewStatus: "PENDING_SALES_LEAD" | "PENDING_OPERATIONS"
