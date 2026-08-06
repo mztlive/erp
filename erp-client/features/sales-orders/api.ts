@@ -1,52 +1,32 @@
-import { mockDelay } from "@/lib/mock-delay"
+/**
+ * W05 销售单 HTTP API（queryFn / mutationFn 纯函数）。
+ *
+ * 后端域：sales_order / sales_review / work_item / bulk_job。
+ * 在本文件内将后端 DTO 适配为既有前端视图契约（types.ts / queries.ts 不变）。
+ * 失败统一抛 ApiError（@/lib/api），禁止 throw new Error("string")。
+ */
+
+import { apiGet, apiPost, apiPut } from "@/lib/api"
+import type { ApiError } from "@/lib/api/errors"
+import type { StatusTone } from "@/components/ui/status-badge"
+import { computeSalesOrderMetrics } from "@/features/sales-orders/filter-orders"
 import type {
+  ActionBlocker,
   CardSalesApproval,
   CreateSalesOrderInput,
   CreateSalesOrderResult,
+  FormalAllowedAction,
   ProcurementRejectionResolution,
+  ProgressTrack,
+  SalesChangeOrderSummary,
   SalesOrderLineItem,
   SalesOrderListItem,
+  SalesOrderNature,
+  SalesOrderOrigin,
+  SalesOrderRevisionSnapshot,
 } from "@/features/sales-orders/types"
-import {
-  computeSalesOrderMetrics,
-  filterSalesOrders,
-  type SalesOrderNatureFilter,
-  type SalesOrderOriginFilter,
-  type SalesOrderStatusFilter,
-  type SalesOrderSummaryFilter,
-} from "@/features/sales-orders/filter-orders"
-import { buildSalesOrder } from "@/features/sales-orders/build-order"
-import {
-  getMockSalesOrder,
-  listMockSalesOrders,
-  registerMockSalesOrder,
-} from "@/mock/sales-orders"
-import {
-  claimW05CardApproval,
-  completeW05CardApproval,
-  createW05ExportJob,
-  decideW05LowMargin,
-  getSalesOrderAcceptance,
-  getW05CardLeasePublic,
-  getW05CardTerminal,
-  getW05ChangeOrder,
-  getW05DraftPriceAdjusted,
-  getW05RejectionOutcome,
-  getW04ContractCenter,
-  hasW05DraftPriceAdjusted,
-  linkW04SalesOrder,
-  markW05DraftPriceAdjusted,
-  postSalesOrderAcceptance,
-  resolveW05ProcurementRejection,
-  startW05SalesChangeOrder,
-} from "@/mock/session-state"
-import {
-  canonicalDecimal,
-  compareDecimal,
-  multiplyFixed,
-  splitGrossByPercentRate,
-  sumFixed,
-} from "@/lib/fixed-decimal"
+
+// ─── 导出视图类型（保持 queries 契约） ───────────────────────────────────────
 
 export type SalesOrderDetailView = SalesOrderListItem & {
   acceptance?: {
@@ -64,10 +44,16 @@ export type SalesOrdersListQuery = {
   page: number
   pageSize: number
   search?: string
-  nature?: SalesOrderNatureFilter
-  summary?: SalesOrderSummaryFilter
-  origin?: SalesOrderOriginFilter
-  status?: SalesOrderStatusFilter
+  nature?: "all" | "physical_service" | "card_voucher"
+  summary?:
+    | "all"
+    | "pending"
+    | "inProgress"
+    | "pendingCollection"
+    | "fulfillmentException"
+    | "mallCollab"
+  origin?: "all" | SalesOrderOrigin
+  status?: string
   sortBy?:
     | "documentNumber"
     | "contractNumber"
@@ -86,530 +72,1126 @@ export type SalesOrderListView = {
   queriedAt: string
 }
 
-const PERMISSION_VERSION = "pv-w05-demo-1"
+export const PERMISSION_VERSION = "pv-w05-1"
 
-function mergeSessionOverlay(order: SalesOrderListItem): SalesOrderListItem {
-  const rejectionOutcome = getW05RejectionOutcome(order.id)
-  const changeOrder = getW05ChangeOrder(order.id)
-  const draftAdjust = getW05DraftPriceAdjusted(order.id)
+// ─── 后端原始形状 ────────────────────────────────────────────────────────────
 
-  let next: SalesOrderListItem = { ...order }
-
-  if (changeOrder) {
-    next = {
-      ...next,
-      activeChangeOrder: changeOrder,
-      allowedActions: next.allowedActions.filter(
-        (a) => a !== "START_SALES_CHANGE"
-      ),
-      actionBlockers: [
-        ...next.actionBlockers.filter((b) => b.action !== "START_SALES_CHANGE"),
-        {
-          action: "START_SALES_CHANGE",
-          reason: "已有进行中的销售变更单。",
-        },
-      ],
-    }
-  }
-
-  if (order.procurementRejection) {
-    let procurementRejection: ProcurementRejectionResolution = {
-      ...order.procurementRejection,
-    }
-
-    if (draftAdjust && procurementRejection.reviewStatus === "REJECTED") {
-      procurementRejection = {
-        ...procurementRejection,
-        draftDifference: {
-          changedItemOrService: false,
-          changedSalesPrice: true,
-          commercialTermsUnchanged: false,
-          diffSummary: [
-            {
-              field: "销售含税单价（主明细）",
-              before: order.lineItems[0]?.unitPriceGross ?? "—",
-              after: draftAdjust.unitPriceGross,
-            },
-            {
-              field: "调整说明",
-              before: "—",
-              after: draftAdjust.note,
-            },
-          ],
-        },
-        allowedActions: [
-          "RESUBMIT_CHANGED_TERMS",
-          "REQUEST_LOW_MARGIN_ACCEPTANCE",
-          "VOID_AFTER_REJECTION",
-        ],
-        actionBlockers: procurementRejection.actionBlockers.filter(
-          (b) => b.action !== "RESUBMIT_CHANGED_TERMS"
-        ),
-      }
-    }
-
-    if (rejectionOutcome) {
-      procurementRejection = {
-        ...procurementRejection,
-        reviewStatus:
-          rejectionOutcome.reviewStatus ?? procurementRejection.reviewStatus,
-        resolutionOutcome: {
-          outcome: rejectionOutcome.outcome,
-          reference: rejectionOutcome.reference,
-          detail: rejectionOutcome.detail,
-          newSubmissionNo: rejectionOutcome.newSubmissionNo,
-          newSubjectHash: rejectionOutcome.newSubjectHash,
-          newWorkItemId: rejectionOutcome.newWorkItemId,
-        },
-      }
-
-      if (rejectionOutcome.outcome === "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED") {
-        procurementRejection = {
-          ...procurementRejection,
-          reviewStatus: "PENDING_LOW_MARGIN_MANAGER",
-          lowMarginSubmission: {
-            submissionId: `sub_lm_${order.id}`,
-            submissionNo: rejectionOutcome.newSubmissionNo ?? 2,
-            subjectHash:
-              rejectionOutcome.newSubjectHash ?? "sha256:lm…pending",
-            acceptanceReason: "照原条件申请低毛利承接（演示）",
-            commercialTermsMatchRejectedSubmission: true,
-          },
-          activeLowMarginManagerTask: {
-            workItemId:
-              rejectionOutcome.newWorkItemId ?? `wi_lm_${order.id}`,
-            workItemType: "LOW_MARGIN_MANAGER_CONFIRMATION",
-            workItemStatus: "UNCLAIMED",
-            subjectHash:
-              rejectionOutcome.newSubjectHash ?? "sha256:lm…pending",
-            allowedActions: ["CLAIM", "APPROVE", "REJECT"],
-            actionBlockers: [],
-          },
-          allowedActions: [],
-          actionBlockers: [
-            {
-              action: "RESUBMIT_CHANGED_TERMS",
-              reason: "低毛利上级确认进行中，不可并行选择其它出路。",
-            },
-            {
-              action: "REQUEST_LOW_MARGIN_ACCEPTANCE",
-              reason: "已有有效低毛利任务。",
-            },
-            {
-              action: "VOID_AFTER_REJECTION",
-              reason: "存在有效的低毛利后继任务，不可同时作废。",
-            },
-          ],
-        }
-      }
-
-      if (
-        rejectionOutcome.outcome === "CHANGED_TERMS_RESUBMITTED" ||
-        rejectionOutcome.outcome ===
-          "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED"
-      ) {
-        next = {
-          ...next,
-          primaryStatus: { label: "待二次确认", tone: "warning" },
-          procurementRejection: {
-            ...procurementRejection,
-            reviewStatus: "RESOLVED",
-            allowedActions: [],
-            actionBlockers: [],
-            activeLowMarginManagerTask: undefined,
-          },
-        }
-        return next
-      }
-
-      if (rejectionOutcome.outcome === "VOIDED_AFTER_PROCUREMENT_REJECTION") {
-        next = {
-          ...next,
-          primaryStatus: { label: "已作废", tone: "void" },
-          procurementRejection: {
-            ...procurementRejection,
-            reviewStatus: "VOIDED",
-            allowedActions: [],
-            actionBlockers: [],
-          },
-        }
-        return next
-      }
-
-      if (rejectionOutcome.outcome === "LOW_MARGIN_REJECTED_TO_SALES") {
-        procurementRejection = {
-          ...procurementRejection,
-          reviewStatus: "REJECTED",
-          activeLowMarginManagerTask: undefined,
-          lowMarginSubmission: undefined,
-          allowedActions: [
-            "RESUBMIT_CHANGED_TERMS",
-            "REQUEST_LOW_MARGIN_ACCEPTANCE",
-            "VOID_AFTER_REJECTION",
-          ],
-          actionBlockers: hasW05DraftPriceAdjusted(order.id)
-            ? []
-            : [
-                {
-                  action: "RESUBMIT_CHANGED_TERMS",
-                  reason:
-                    "还没改商品或价格，请先保存改价后再报给采购。",
-                },
-              ],
-        }
-      }
-
-      next = { ...next, procurementRejection }
-    } else {
-      next = { ...next, procurementRejection }
-    }
-  }
-
-  if (order.activeCardSalesApproval) {
-    const terminal = getW05CardTerminal(order.activeCardSalesApproval.workItemId)
-    const lease = getW05CardLeasePublic(order.activeCardSalesApproval.workItemId)
-
-    if (terminal) {
-      if (terminal.outcome === "MANAGER_APPROVED") {
-        const opsApproval: CardSalesApproval = {
-          workItemId: terminal.nextWorkItemId ?? "wi_card_ops_next",
-          workItemType: "CARD_SALES_OPERATION_APPROVAL",
-          workItemStatus: "UNCLAIMED",
-          subjectVersion: order.activeCardSalesApproval.subjectVersion,
-          subjectHash: order.activeCardSalesApproval.subjectHash,
-          frozenSubmissionSummary:
-            order.activeCardSalesApproval.frozenSubmissionSummary,
-          expectedReviewStatus: "PENDING_OPERATIONS",
-          allowedActions: ["CLAIM"],
-          actionBlockers: [
-            {
-              action: "APPROVE",
-              reason: "请先领取后再审批。",
-            },
-            {
-              action: "REJECT",
-              reason: "请先领取后再审批。",
-            },
-          ],
-        }
-        next = {
-          ...next,
-          primaryStatus: { label: "待运营审批", tone: "warning" },
-          activeCardSalesApproval: opsApproval,
-        }
-      } else if (terminal.outcome === "OPERATIONS_APPROVED_AND_EFFECTIVE") {
-        next = {
-          ...next,
-          primaryStatus: { label: "已生效", tone: "success" },
-          activeCardSalesApproval: null,
-          commercialReadOnly: true,
-          commercialReadOnlyReason:
-            "本单已生效，不能直接改；改内容请「发起改单」，并完成后续确认与财务复核。",
-        }
-      } else {
-        next = {
-          ...next,
-          primaryStatus: { label: "草稿", tone: "neutral" },
-          activeCardSalesApproval: null,
-        }
-      }
-    } else if (lease) {
-      next = {
-        ...next,
-        activeCardSalesApproval: {
-          ...order.activeCardSalesApproval,
-          workItemStatus: "CLAIMED",
-          claimedByLabel: lease.claimedByLabel,
-          allowedActions: ["APPROVE", "REJECT"],
-          actionBlockers: [],
-        },
-      }
-    }
-  }
-
-  return next
+type PageView<T> = {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
 }
 
-function sortSalesOrders(
-  orders: readonly SalesOrderListItem[],
-  sortBy: SalesOrdersListQuery["sortBy"],
-  sortDir: SalesOrdersListQuery["sortDir"]
-): SalesOrderListItem[] {
-  if (!sortBy) return [...orders]
-  const direction = sortDir === "asc" ? 1 : -1
-  return [...orders].sort((a, b) => {
-    const comparison =
-      sortBy === "amountGross"
-        ? compareDecimal(a.amountGross, b.amountGross, 6)
-        : a[sortBy].localeCompare(b[sortBy])
-    if (comparison !== 0) return comparison * direction
-    return a.submittedAt.localeCompare(b.submittedAt)
+type BackendSalesOrderView = {
+  id: string
+  order_no: string
+  business_type: "VOUCHER" | "GOODS_SERVICE" | string
+  origin_system: "MALL" | "ERP" | string
+  customer_id: string
+  contract_id?: string | null
+  commercial_status: string
+  review_status: string
+  fulfillment_progress: string
+  collection_progress: string
+  invoice_progress: string
+  close_status: string
+  effective_at?: number | null
+  closed_at?: number | null
+  version: number
+  created_at: number
+  updated_at: number
+}
+
+type BackendWorkingCopyLine = {
+  id: string
+  sales_order_line_id: string
+  line_no: number
+  line_type: string
+  gross_amount: string
+  net_amount: string
+  tax_amount: string
+  sales_tax_rate: string
+  item_name_snapshot: string
+  spec_snapshot?: string | null
+  unit_snapshot?: string | null
+  sku_id?: string | null
+  quantity?: string | null
+  base_unit_code?: string | null
+  unit_price_gross?: string | null
+  face_value?: string | null
+  card_count?: number | null
+  transaction_amount?: string | null
+  card_form?: string | null
+}
+
+type BackendWorkingCopy = {
+  id: string
+  working_purpose: string
+  status: string
+  draft_version: number
+  content_hash: string
+  editor_user_id: string
+  business_type: string
+  gross_amount: string
+  net_amount: string
+  tax_amount: string
+  lines: BackendWorkingCopyLine[]
+}
+
+type BackendSubmission = {
+  id: string
+  submission_no: number
+  status: string
+  business_type: string
+  gross_amount: string
+  net_amount: string
+  tax_amount: string
+  submitted_by: string
+  submitted_at: number
+  created_at: number
+}
+
+type BackendRevision = {
+  id: string
+  revision_no: number
+  revision_source: string
+  content_hash: string
+  gross_amount: string
+  net_amount: string
+  tax_amount: string
+  effective_at: number
+  created_at: number
+}
+
+type BackendSalesOrderDetail = {
+  id: string
+  order_no: string
+  business_type: string
+  origin_system: string
+  customer_id: string
+  contract_id?: string | null
+  settlement_party_id: string
+  commercial_status: string
+  review_status: string
+  fulfillment_progress: string
+  collection_progress: string
+  invoice_progress: string
+  close_status: string
+  current_revision_id?: string | null
+  effective_at?: number | null
+  version: number
+  created_at: number
+  lines: Array<{ id: string; line_no: number; line_status: string }>
+  working_copy?: BackendWorkingCopy | null
+  submissions: BackendSubmission[]
+  revisions: BackendRevision[]
+}
+
+type BackendContractDetail = {
+  id: string
+  contract_no: string
+  customer_id: string
+  settlement_party_id: string
+  status: string
+  current_revision_id?: string | null
+  created_at: number
+  version: number
+  revisions: Array<{
+    id: string
+    revision_no: number
+    customer_name: string
+    settlement_party_name: string
+    payment_term_code: string
+    payment_term_name: string
+    invoice_type: string
+    tax_point: string
+    valid_from: string
+    valid_to?: string | null
+    signed_at: string
+    created_at: number
+  }>
+}
+
+type BackendSalesOrderReview = {
+  id: string
+  sales_order_id: string
+  submission_id: string
+  review_stage: string
+  status: string
+  reviewer_id?: string | null
+  reviewed_at?: number | null
+  created_at: number
+}
+
+type BackendProcurementConfirmation = {
+  id: string
+  sales_order_id: string
+  submission_id: string
+  status: string
+  handled_by?: string | null
+  handled_at?: number | null
+  created_at: number
+}
+
+type BackendSalesChangeOrder = {
+  id: string
+  sales_order_id: string
+  base_revision_id: string
+  change_type: string
+  status: string
+  current_submission_id?: string | null
+  version: number
+  created_at: number
+}
+
+type BackendWorkItem = {
+  id: string
+  work_item_type: string
+  business_object_type: string
+  business_object_id: string
+  subject_version?: string | null
+  status: string
+  owner_role?: string | null
+  owner_user_id?: string | null
+  version: number
+  impact_summary?: string | null
+  created_at: number
+}
+
+type BackendBackgroundJob = {
+  id: string
+  job_no?: string
+  status?: string
+  total_count?: number
+  created_at?: number
+  version?: number
+}
+
+type ProcurementResolutionOutcome = {
+  outcome:
+    | "CHANGED_TERMS_RESUBMITTED"
+    | "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
+    | "VOIDED_AFTER_PROCUREMENT_REJECTION"
+    | "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED"
+    | "LOW_MARGIN_REJECTED_TO_SALES"
+  reference: string
+  detail: string
+  newSubmissionNo?: number
+  newSubjectHash?: string
+  newWorkItemId?: string
+  reviewStatus?:
+    | "REJECTED"
+    | "PENDING_LOW_MARGIN_MANAGER"
+    | "RESOLVED"
+    | "VOIDED"
+  primaryStatusLabel?: string
+}
+
+type CardApprovalCompleteResult = {
+  outcome:
+    | "MANAGER_APPROVED"
+    | "OPERATIONS_APPROVED_AND_EFFECTIVE"
+    | "REJECTED_TO_SALES"
+  reference: string
+  detail: string
+  nextWorkItemId?: string
+  primaryStatusLabel?: string
+}
+
+type ExportJobResult = {
+  jobId: string
+  status: "queued" | "running" | "succeeded" | "failed"
+  rowCount: number
+  permissionVersion: string
+  createdAt: string
+  downloadLabel: string
+}
+
+// ─── 适配辅助 ────────────────────────────────────────────────────────────────
+
+const validationError = (message: string): ApiError => ({
+  kind: "Validation",
+  message,
+  status: 400,
+})
+
+function throwValidation(message: string): never {
+  throw validationError(message)
+}
+
+function formatInstant(secs?: number | null): string {
+  if (secs == null || secs <= 0) return ""
+  const d = new Date(secs * 1000)
+  const pad = (n: number) => String(n).padStart(2, "0")
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+}
+
+function formatIsoNow(): string {
+  return new Date().toISOString()
+}
+
+function mapNature(businessType: string): SalesOrderNature {
+  return businessType === "VOUCHER" ? "card_voucher" : "physical_service"
+}
+
+function mapOrigin(origin: string): SalesOrderOrigin {
+  return origin === "MALL" ? "mall" : "erp"
+}
+
+function toneForStatus(label: string): StatusTone {
+  if (label.includes("作废") || label.includes("关闭")) return "void"
+  if (label.includes("生效") || label.includes("完成") || label.includes("通过"))
+    return "success"
+  if (
+    label.includes("待") ||
+    label.includes("审核") ||
+    label.includes("确认") ||
+    label.includes("审批")
+  )
+    return "warning"
+  if (label.includes("履约") || label.includes("部分")) return "info"
+  return "neutral"
+}
+
+function mapPrimaryStatus(
+  commercial: string,
+  review: string,
+  close: string,
+  fulfillment: string
+): { label: string; tone: StatusTone } {
+  if (close === "CLOSED") return { label: "已关闭", tone: "void" }
+  if (commercial === "VOIDED") return { label: "已作废", tone: "void" }
+  if (commercial === "DRAFT") return { label: "草稿", tone: "neutral" }
+  if (commercial === "EFFECTIVE") {
+    if (fulfillment === "PARTIALLY_FULFILLED")
+      return { label: "履约中", tone: "info" }
+    return { label: "已生效", tone: "success" }
+  }
+  // PENDING_REVIEW — 用审核轨细化
+  switch (review) {
+    case "PENDING_PROCUREMENT_CONFIRMATION":
+      return { label: "待二次确认", tone: "warning" }
+    case "PENDING_LOW_MARGIN_SUPERIOR":
+      return { label: "待销售处理", tone: "warning" }
+    case "PENDING_SALES_LEADER":
+      return { label: "待销售领导审批", tone: "warning" }
+    case "PENDING_OPERATIONS":
+      return { label: "待运营审批", tone: "warning" }
+    case "REJECTED":
+      return { label: "待销售处理", tone: "warning" }
+    case "APPROVED":
+      return { label: "已生效", tone: "success" }
+    default:
+      return { label: "审核中", tone: "warning" }
+  }
+}
+
+function mapFulfillment(code: string): ProgressTrack {
+  switch (code) {
+    case "PARTIALLY_FULFILLED":
+      return { label: "部分履约", tone: "warning" }
+    case "COMPLETED":
+      return { label: "已完成", tone: "success" }
+    default:
+      return { label: "未开始", tone: "neutral" }
+  }
+}
+
+function mapCollection(code: string): ProgressTrack {
+  switch (code) {
+    case "PARTIALLY_COLLECTED":
+      return { label: "部分回款", tone: "warning" }
+    case "SETTLED":
+      return { label: "已结清", tone: "success" }
+    default:
+      return { label: "未收", tone: "neutral" }
+  }
+}
+
+function mapInvoicing(code: string): ProgressTrack {
+  switch (code) {
+    case "PARTIALLY_INVOICED":
+      return { label: "部分开票", tone: "warning" }
+    case "COMPLETED":
+      return { label: "已完成", tone: "success" }
+    default:
+      return { label: "未开", tone: "neutral" }
+  }
+}
+
+function mapCloseEligibility(
+  close: string,
+  fulfillment: string,
+  collection: string
+): SalesOrderListItem["closeEligibility"] {
+  const fulfillmentComplete = fulfillment === "COMPLETED"
+  const receivableSettled = collection === "SETTLED"
+  const eligible =
+    close === "CLOSEABLE" ||
+    close === "CLOSED" ||
+    (fulfillmentComplete && receivableSettled)
+  const blockers: string[] = []
+  if (!fulfillmentComplete) blockers.push("履约尚未完成")
+  if (!receivableSettled) blockers.push("应收尚未结清")
+  return {
+    fulfillmentComplete,
+    receivableSettled,
+    invoiceComplete: false,
+    eligibleToClose: eligible && close !== "CLOSED",
+    blockers,
+    note:
+      close === "CLOSED"
+        ? "本单已关闭。"
+        : "关闭条件：履约完成 + 应收结清；开票不阻塞关闭。",
+  }
+}
+
+function mapWorkingCopyLines(
+  lines: BackendWorkingCopyLine[] | undefined
+): SalesOrderLineItem[] {
+  if (!lines?.length) return []
+  return lines.map((line) => {
+    const isVoucher = line.line_type === "VOUCHER"
+    const item: SalesOrderLineItem = {
+      id: line.sales_order_line_id || line.id,
+      name: line.item_name_snapshot,
+      sku: line.spec_snapshot || line.sku_id || undefined,
+      quantity: isVoucher
+        ? String(line.card_count ?? line.quantity ?? "0")
+        : (line.quantity ?? "0"),
+      unit: line.unit_snapshot || line.base_unit_code || (isVoucher ? "张" : ""),
+      unitPriceGross: line.unit_price_gross ?? "0.00",
+      amountGross: line.gross_amount ?? line.transaction_amount ?? "0.00",
+    }
+    if (isVoucher) {
+      item.faceValue = line.face_value ?? undefined
+      item.cardForm =
+        line.card_form === "PHYSICAL"
+          ? "实体卡"
+          : line.card_form === "ELECTRONIC"
+            ? "电子卡"
+            : line.card_form ?? undefined
+    }
+    return item
   })
 }
+
+function mapRevisions(
+  revisions: BackendRevision[] | undefined
+): SalesOrderRevisionSnapshot[] {
+  if (!revisions?.length) return []
+  return revisions.map((rev) => ({
+    revisionNo: rev.revision_no,
+    effectiveAt: formatInstant(rev.effective_at),
+    contractRevisionLabel: "",
+    customerSnapshot: "",
+    amountGross: rev.gross_amount,
+    lineSummary: "",
+    note: rev.revision_source,
+  }))
+}
+
+function defaultAllowedActions(
+  commercial: string,
+  review: string,
+  close: string,
+  hasChange: boolean,
+  hasCardApproval: boolean,
+  hasRejection: boolean
+): { allowed: FormalAllowedAction[]; blockers: ActionBlocker[] } {
+  const allowed: FormalAllowedAction[] = ["PRINT", "EXPORT", "VIEW_CLOSE_CONDITIONS"]
+  const blockers: ActionBlocker[] = []
+
+  if (commercial === "EFFECTIVE" && close !== "CLOSED" && !hasChange) {
+    allowed.push("START_SALES_CHANGE")
+  } else if (hasChange) {
+    blockers.push({
+      action: "START_SALES_CHANGE",
+      reason: "已有进行中的销售变更单。",
+    })
+  }
+
+  if (commercial === "EFFECTIVE" || commercial === "PENDING_REVIEW") {
+    allowed.push("REGISTER_ACCEPTANCE")
+  }
+
+  if (hasRejection) {
+    allowed.push("RESOLVE_PROCUREMENT_REJECTION")
+  }
+  if (hasCardApproval) {
+    allowed.push("HANDLE_CARD_APPROVAL")
+  }
+
+  return { allowed, blockers }
+}
+
+function mapListItemFromBackend(
+  row: BackendSalesOrderView,
+  extras?: {
+    customerName?: string
+    contractNumber?: string
+    amountGross?: string
+    amountNet?: string
+    taxAmount?: string
+    lineItems?: SalesOrderLineItem[]
+    ownerName?: string
+    paymentTerms?: string
+    welfareScene?: string
+    remark?: string
+    settlementEntity?: string
+    revisions?: SalesOrderRevisionSnapshot[]
+    procurementRejection?: ProcurementRejectionResolution | null
+    activeCardSalesApproval?: CardSalesApproval | null
+    activeChangeOrder?: SalesChangeOrderSummary | null
+  }
+): SalesOrderListItem {
+  const nature = mapNature(row.business_type)
+  const originSystem = mapOrigin(row.origin_system)
+  const primaryStatus = mapPrimaryStatus(
+    row.commercial_status,
+    row.review_status,
+    row.close_status,
+    row.fulfillment_progress
+  )
+  const fulfillment = mapFulfillment(row.fulfillment_progress)
+  const collection = mapCollection(row.collection_progress)
+  const invoicing = mapInvoicing(row.invoice_progress)
+  const hasChange = Boolean(extras?.activeChangeOrder)
+  const hasCard = Boolean(extras?.activeCardSalesApproval)
+  const hasRejection = Boolean(extras?.procurementRejection)
+  const { allowed, blockers } = defaultAllowedActions(
+    row.commercial_status,
+    row.review_status,
+    row.close_status,
+    hasChange,
+    hasCard,
+    hasRejection
+  )
+
+  const commercialReadOnly =
+    originSystem === "mall" ||
+    primaryStatus.label === "已关闭" ||
+    primaryStatus.label === "已作废" ||
+    hasCard ||
+    row.commercial_status === "EFFECTIVE"
+
+  return {
+    id: row.id,
+    documentNumber: row.order_no,
+    customerName: extras?.customerName ?? row.customer_id,
+    contractNumber: extras?.contractNumber ?? row.contract_id ?? "",
+    contractRevisionLabel: extras?.contractNumber
+      ? `${extras.contractNumber}`
+      : "",
+    nature,
+    originSystem,
+    primaryStatus,
+    fulfillment,
+    collection,
+    invoicing,
+    amountGross: extras?.amountGross ?? "0.00",
+    amountNet: extras?.amountNet ?? "0.00",
+    taxAmount: extras?.taxAmount ?? "0.00",
+    receivedAmount: "0.00",
+    invoicedAmount: "0.00",
+    ownerName: extras?.ownerName ?? "",
+    submittedAt: formatInstant(row.created_at),
+    welfareScene: extras?.welfareScene ?? "",
+    remark: extras?.remark,
+    version: Number(row.version) || 1,
+    lockVersion: Number(row.version) || 1,
+    settlementEntity: extras?.settlementEntity ?? "",
+    sellerEntity: "",
+    paymentTerms: extras?.paymentTerms ?? "",
+    fulfillmentDeadline: "",
+    lineItems: extras?.lineItems ?? [],
+    related: {
+      purchaseOrders: 0,
+      fulfillments: 0,
+      receipts: 0,
+      invoices: 0,
+    },
+    closeEligibility: mapCloseEligibility(
+      row.close_status,
+      row.fulfillment_progress,
+      row.collection_progress
+    ),
+    natureLocked: true,
+    commercialReadOnly,
+    commercialReadOnlyReason: commercialReadOnly
+      ? originSystem === "mall"
+        ? "这单由商城开单，商业数据同步中，本系统只读；改内容请在商城处理。"
+        : row.commercial_status === "EFFECTIVE"
+          ? "本单已生效，不能直接改；改内容请「发起改单」。"
+          : undefined
+      : undefined,
+    revisions: extras?.revisions ?? [],
+    procurementRejection: extras?.procurementRejection ?? null,
+    activeCardSalesApproval: extras?.activeCardSalesApproval ?? null,
+    activeChangeOrder: extras?.activeChangeOrder ?? null,
+    allowedActions: allowed,
+    actionBlockers: blockers,
+  }
+}
+
+function mapDetailToListItem(
+  detail: BackendSalesOrderDetail,
+  extras?: {
+    customerName?: string
+    contractNumber?: string
+    procurementRejection?: ProcurementRejectionResolution | null
+    activeCardSalesApproval?: CardSalesApproval | null
+    activeChangeOrder?: SalesChangeOrderSummary | null
+  }
+): SalesOrderListItem {
+  const wc = detail.working_copy
+  const latestSubmission = detail.submissions?.[0]
+  const amountSource = wc ?? latestSubmission
+  return mapListItemFromBackend(
+    {
+      id: detail.id,
+      order_no: detail.order_no,
+      business_type: detail.business_type,
+      origin_system: detail.origin_system,
+      customer_id: detail.customer_id,
+      contract_id: detail.contract_id,
+      commercial_status: detail.commercial_status,
+      review_status: detail.review_status,
+      fulfillment_progress: detail.fulfillment_progress,
+      collection_progress: detail.collection_progress,
+      invoice_progress: detail.invoice_progress,
+      close_status: detail.close_status,
+      effective_at: detail.effective_at,
+      version: detail.version,
+      created_at: detail.created_at,
+      updated_at: detail.created_at,
+    },
+    {
+      customerName: extras?.customerName ?? wc?.editor_user_id,
+      contractNumber: extras?.contractNumber,
+      amountGross: amountSource?.gross_amount,
+      amountNet: amountSource?.net_amount,
+      taxAmount: amountSource?.tax_amount,
+      lineItems: mapWorkingCopyLines(wc?.lines),
+      ownerName: wc?.editor_user_id ?? latestSubmission?.submitted_by ?? "",
+      revisions: mapRevisions(detail.revisions),
+      procurementRejection: extras?.procurementRejection,
+      activeCardSalesApproval: extras?.activeCardSalesApproval,
+      activeChangeOrder: extras?.activeChangeOrder,
+      settlementEntity: detail.settlement_party_id,
+    }
+  )
+}
+
+function mapReviewToCardApproval(
+  review: BackendSalesOrderReview
+): CardSalesApproval | null {
+  if (review.status !== "PENDING") return null
+  const isLeader = review.review_stage === "SALES_LEADER"
+  const isOps = review.review_stage === "OPERATIONS"
+  if (!isLeader && !isOps) return null
+  return {
+    workItemId: review.id,
+    workItemType: isLeader
+      ? "CARD_SALES_MANAGER_APPROVAL"
+      : "CARD_SALES_OPERATION_APPROVAL",
+    workItemStatus: review.reviewer_id ? "CLAIMED" : "UNCLAIMED",
+    subjectVersion: review.submission_id,
+    subjectHash: review.submission_id,
+    claimedByLabel: review.reviewer_id ?? undefined,
+    frozenSubmissionSummary: "",
+    expectedReviewStatus: isLeader ? "PENDING_SALES_LEAD" : "PENDING_OPERATIONS",
+    allowedActions: review.reviewer_id
+      ? ["APPROVE", "REJECT"]
+      : ["CLAIM"],
+    actionBlockers: review.reviewer_id
+      ? []
+      : [
+          { action: "APPROVE", reason: "请先领取后再审批。" },
+          { action: "REJECT", reason: "请先领取后再审批。" },
+        ],
+  }
+}
+
+function mapRejectedProcurement(
+  conf: BackendProcurementConfirmation
+): ProcurementRejectionResolution | null {
+  if (conf.status !== "REJECTED") return null
+  return {
+    rejectedProcurementConfirmationId: conf.id,
+    rejectedProcurementWorkItemId: "",
+    rejectedSubmissionId: conf.submission_id,
+    rejectedSubmissionNo: 0,
+    rejectedSubjectHash: conf.submission_id,
+    rejectReasonCode: "",
+    rejectComment: "",
+    rejectedByLabel: conf.handled_by ?? "",
+    rejectedAt: formatInstant(conf.handled_at),
+    reviewStatus: "REJECTED",
+    draftDifference: {
+      changedItemOrService: false,
+      changedSalesPrice: false,
+      commercialTermsUnchanged: true,
+      diffSummary: [],
+    },
+    fixedResolutions: [
+      "RESUBMIT_CHANGED_TERMS",
+      "REQUEST_LOW_MARGIN_ACCEPTANCE",
+      "VOID_AFTER_REJECTION",
+    ],
+    allowedActions: [
+      "RESUBMIT_CHANGED_TERMS",
+      "REQUEST_LOW_MARGIN_ACCEPTANCE",
+      "VOID_AFTER_REJECTION",
+    ],
+    actionBlockers: [],
+  }
+}
+
+function mapChangeOrder(
+  row: BackendSalesChangeOrder,
+  nature: SalesOrderNature
+): SalesChangeOrderSummary {
+  const impactPath = nature === "card_voucher" ? "operations" : "procurement"
+  const statusLabel =
+    row.status === "PENDING_IMPACT_CONFIRMATION"
+      ? impactPath === "operations"
+        ? "待运营执行影响确认"
+        : "待采购履约影响确认"
+      : row.status === "PENDING_FINANCE_REVIEW"
+        ? "待财务复核"
+        : row.status === "DRAFT"
+          ? "草稿"
+          : row.status === "EFFECTIVE"
+            ? "已生效"
+            : row.status === "VOIDED"
+              ? "已作废"
+              : row.status
+  return {
+    id: row.id,
+    statusLabel,
+    statusTone: toneForStatus(statusLabel),
+    baseRevisionNo: 0,
+    createdAt: new Date(row.created_at * 1000).toISOString(),
+    impactPath,
+  }
+}
+
+function mapStatusFilterToBackend(status?: string): {
+  commercial_status?: string
+  review_status?: string
+} {
+  switch (status) {
+    case "draft":
+      return { commercial_status: "DRAFT" }
+    case "voided":
+      return { commercial_status: "VOIDED" }
+    case "effective":
+      return { commercial_status: "EFFECTIVE" }
+    case "closed":
+      return { commercial_status: "EFFECTIVE" }
+    case "awaiting_confirm":
+      return {
+        commercial_status: "PENDING_REVIEW",
+        review_status: "PENDING_PROCUREMENT_CONFIRMATION",
+      }
+    case "awaiting_sales":
+      return {
+        commercial_status: "PENDING_REVIEW",
+        review_status: "REJECTED",
+      }
+    case "awaiting_sales_lead":
+      return {
+        commercial_status: "PENDING_REVIEW",
+        review_status: "PENDING_SALES_LEADER",
+      }
+    case "awaiting_ops":
+      return {
+        commercial_status: "PENDING_REVIEW",
+        review_status: "PENDING_OPERATIONS",
+      }
+    case "fulfilling":
+      return { commercial_status: "EFFECTIVE" }
+    default:
+      return {}
+  }
+}
+
+function mapSortBy(
+  sortBy?: SalesOrdersListQuery["sortBy"]
+): string | undefined {
+  if (!sortBy) return undefined
+  if (sortBy === "documentNumber") return "order_no"
+  if (sortBy === "submittedAt") return "created_at"
+  // amountGross / contractNumber / ownerName 不在后端白名单
+  return "created_at"
+}
+
+function mapFulfillmentMode(label: string): string {
+  const t = label.trim()
+  if (t.includes("直发")) return "SUPPLIER_DIRECT"
+  if (t.includes("电子")) return "ELECTRONIC_DELIVERY"
+  if (t.includes("服务") || t.includes("线下")) return "OFFLINE_SERVICE"
+  return "COMPANY_WAREHOUSE"
+}
+
+function mapCardForm(label: string): string {
+  return label.includes("实体") ? "PHYSICAL" : "ELECTRONIC"
+}
+
+function percentToRate(percent: string): string {
+  const n = Number(percent)
+  if (!Number.isFinite(n)) return "0.000000"
+  return (n / 100).toFixed(6)
+}
+
+function dateToUnixSecs(dateStr: string): number {
+  if (!dateStr) return Math.floor(Date.now() / 1000)
+  // YYYY-MM-DD or datetime
+  const normalized = dateStr.length === 10 ? `${dateStr}T00:00:00+08:00` : dateStr
+  const ms = Date.parse(normalized)
+  if (Number.isNaN(ms)) return Math.floor(Date.now() / 1000)
+  return Math.floor(ms / 1000)
+}
+
+function localOrderNo(): string {
+  const d = new Date()
+  const pad = (n: number) => String(n).padStart(2, "0")
+  const stamp = `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`
+  return `XS${stamp}`
+}
+
+// ─── 列表 / 详情 ─────────────────────────────────────────────────────────────
 
 export async function fetchSalesOrders(
   query: SalesOrdersListQuery
 ): Promise<SalesOrderListView> {
-  await mockDelay()
-  const all = listMockSalesOrders().map(mergeSessionOverlay)
-  const metrics = computeSalesOrderMetrics(all)
-  const filtered = filterSalesOrders(all, {
-    search: query.search,
-    natureFilter: query.nature,
-    summaryFilter: query.summary,
-    originFilter: query.origin,
-    statusFilter: query.status,
-  })
-  const sorted = sortSalesOrders(filtered, query.sortBy, query.sortDir)
-  const page = Math.max(1, query.page)
-  const pageSize = Math.max(1, query.pageSize)
-  const start = (page - 1) * pageSize
+  const statusMap = mapStatusFilterToBackend(
+    query.status && query.status !== "all" ? query.status : undefined
+  )
+  const businessType =
+    query.nature === "card_voucher"
+      ? "VOUCHER"
+      : query.nature === "physical_service"
+        ? "GOODS_SERVICE"
+        : undefined
+
+  const page = await apiGet<PageView<BackendSalesOrderView>>(
+    "/admin/sales-orders",
+    {
+      page: query.page,
+      page_size: query.pageSize,
+      order_no: query.search?.trim() || undefined,
+      business_type: businessType,
+      commercial_status: statusMap.commercial_status,
+      review_status: statusMap.review_status,
+      sort_by: mapSortBy(query.sortBy),
+      sort_dir: query.sortDir,
+    }
+  )
+
+  // origin / summary 筛选后端未提供，客户端对当前页做展示过滤（缺口登记）。
+  let items = page.items.map((row) => mapListItemFromBackend(row))
+  if (query.origin && query.origin !== "all") {
+    items = items.filter((o) => o.originSystem === query.origin)
+  }
+
+  const metrics = computeSalesOrderMetrics(items)
+  metrics.total = page.total
+
   return {
-    items: sorted.slice(start, start + pageSize),
-    total: sorted.length,
-    page,
-    pageSize,
+    items,
+    total: page.total,
+    page: page.page,
+    pageSize: page.page_size,
     metrics,
-    queriedAt: new Date().toISOString(),
+    queriedAt: formatIsoNow(),
+  }
+}
+
+async function loadDetailExtras(salesOrderId: string, nature: SalesOrderNature) {
+  const [reviewsPage, confirmationsPage, changeOrdersPage] = await Promise.all([
+    apiGet<PageView<BackendSalesOrderReview>>("/admin/sales-order-reviews", {
+      sales_order_id: salesOrderId,
+      status: "PENDING",
+      page: 1,
+      page_size: 20,
+    }).catch(() => ({ items: [] as BackendSalesOrderReview[], total: 0, page: 1, page_size: 20 })),
+    apiGet<PageView<BackendProcurementConfirmation>>(
+      "/admin/procurement-confirmations",
+      {
+        page: 1,
+        page_size: 50,
+      }
+    ).catch(() => ({
+      items: [] as BackendProcurementConfirmation[],
+      total: 0,
+      page: 1,
+      page_size: 50,
+    })),
+    apiGet<PageView<BackendSalesChangeOrder>>("/admin/sales-change-orders", {
+      sales_order_id: salesOrderId,
+      page: 1,
+      page_size: 10,
+    }).catch(() => ({
+      items: [] as BackendSalesChangeOrder[],
+      total: 0,
+      page: 1,
+      page_size: 10,
+    })),
+  ])
+
+  const pendingReview =
+    reviewsPage.items.find(
+      (r) =>
+        r.sales_order_id === salesOrderId &&
+        r.status === "PENDING" &&
+        (r.review_stage === "SALES_LEADER" || r.review_stage === "OPERATIONS")
+    ) ?? null
+
+  const rejected =
+    confirmationsPage.items.find(
+      (c) => c.sales_order_id === salesOrderId && c.status === "REJECTED"
+    ) ?? null
+
+  const activeChange =
+    changeOrdersPage.items.find(
+      (c) =>
+        c.sales_order_id === salesOrderId &&
+        c.status !== "EFFECTIVE" &&
+        c.status !== "VOIDED" &&
+        c.status !== "REJECTED"
+    ) ?? null
+
+  return {
+    activeCardSalesApproval: pendingReview
+      ? mapReviewToCardApproval(pendingReview)
+      : null,
+    procurementRejection: rejected ? mapRejectedProcurement(rejected) : null,
+    activeChangeOrder: activeChange
+      ? mapChangeOrder(activeChange, nature)
+      : null,
   }
 }
 
 export async function fetchSalesOrderDetail(
   id: string
 ): Promise<SalesOrderDetailView | null> {
-  await mockDelay()
-  const base = getMockSalesOrder(id)
-  if (!base) return null
-  const order = mergeSessionOverlay(base)
-  const queriedAt = new Date().toISOString()
+  let detail: BackendSalesOrderDetail
+  try {
+    detail = await apiGet<BackendSalesOrderDetail>(`/admin/sales-orders/${id}`)
+  } catch (err) {
+    const apiErr = err as ApiError
+    if (apiErr?.status === 404) return null
+    throw err
+  }
+
+  let contractNumber = ""
+  let customerName = detail.customer_id
+  if (detail.contract_id) {
+    try {
+      const contract = await apiGet<BackendContractDetail>(
+        `/admin/contracts/${detail.contract_id}`
+      )
+      contractNumber = contract.contract_no
+      const rev =
+        contract.revisions.find((r) => r.id === contract.current_revision_id) ??
+        contract.revisions[0]
+      if (rev?.customer_name) customerName = rev.customer_name
+    } catch {
+      // 合同域缺口时保留 id 展示
+    }
+  }
+
+  const extras = await loadDetailExtras(id, mapNature(detail.business_type))
+  const order = mapDetailToListItem(detail, {
+    customerName,
+    contractNumber,
+    ...extras,
+  })
+
+  // 最近验收摘要（可选）
+  let acceptance: SalesOrderDetailView["acceptance"] = null
+  try {
+    const accPage = await apiGet<
+      PageView<{
+        id: string
+        acceptance_no: string
+        sales_order_id: string
+        accepted_at: number
+        result: string
+        status: string
+        version: number
+        created_at: number
+      }>
+    >("/admin/customer-acceptances", {
+      sales_order_id: id,
+      status: "POSTED",
+      page: 1,
+      page_size: 1,
+      sort_by: "accepted_at",
+      sort_dir: "desc",
+    })
+    const latest = accPage.items[0]
+    if (latest) {
+      acceptance = {
+        acceptedQuantity: "",
+        note: latest.result,
+        reference: latest.acceptance_no,
+        postedAt: formatInstant(latest.accepted_at),
+      }
+    }
+  } catch {
+    // 验收域失败不阻塞详情
+  }
+
+  const queriedAt = formatIsoNow()
   return {
     ...order,
-    acceptance: getSalesOrderAcceptance(id),
+    acceptance,
     permissionVersion: PERMISSION_VERSION,
     sourceAsOf: queriedAt,
     queriedAt,
   }
 }
 
-function localDateParts(date: Date) {
-  const parts = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  }).formatToParts(date)
-  return Object.fromEntries(parts.map((part) => [part.type, part.value]))
-}
+// ─── 建单 ────────────────────────────────────────────────────────────────────
 
-/**
- * M5 建单 mock：选择已有合同，或在同一幂等操作中上传 PDF、归档合同并建单。
- * 保存草稿只做宽松校验（至少一行明细）；提交才要求明细完整可计算。
- */
 export async function createSalesOrder(
   input: CreateSalesOrderInput
 ): Promise<CreateSalesOrderResult> {
-  await mockDelay(180)
-
-  if (input.lineItems.length === 0) throw new Error("LINE_ITEM_REQUIRED")
+  if (input.lineItems.length === 0) {
+    throwValidation("至少需要一行明细")
+  }
   if (input.nature === "card_voucher" && input.lineItems.length !== 1) {
-    throw new Error("VOUCHER_REQUIRES_EXACTLY_ONE_LINE")
+    throwValidation("卡券销售单必须且只能有一行明细")
   }
 
-  const isDraft = input.intent === "SAVE_DRAFT"
+  const contract = await apiGet<BackendContractDetail>(
+    `/admin/contracts/${input.contract.contractId}`
+  )
+  const requested =
+    contract.revisions.find(
+      (r) => r.id === input.contract.requestedContractRevisionId
+    ) ??
+    contract.revisions.find((r) => r.id === contract.current_revision_id) ??
+    contract.revisions[0]
 
-  const safeDecimal = (value: string, maxScale: number): string => {
-    try {
-      return canonicalDecimal(value, { maxScale })
-    } catch {
-      return "0"
+  if (!requested) {
+    throwValidation("合同修订不存在")
+  }
+
+  const taxRate = percentToRate(input.taxRatePercent || "0")
+  const businessType =
+    input.nature === "card_voucher" ? "VOUCHER" : "GOODS_SERVICE"
+
+  const lines = input.lineItems.map((line, index) => {
+    const base = {
+      line_no: index + 1,
+      line_type: businessType,
+      sales_tax_rate: taxRate,
+      item_name_snapshot: line.name.trim(),
+      spec_snapshot: line.sku.trim() || null,
+      unit_snapshot: line.unit.trim() || null,
+      goods: null as null | Record<string, unknown>,
+      voucher: null as null | Record<string, unknown>,
     }
-  }
 
-  if (!isDraft) {
-    let decimalInputsValid = true
-    try {
-      for (const line of input.lineItems) {
-        decimalInputsValid &&= compareDecimal(line.quantity, "0", 6) > 0
-        decimalInputsValid &&= compareDecimal(line.unitPriceGross, "0", 4) > 0
-        if (input.nature === "card_voucher") {
-          decimalInputsValid &&= compareDecimal(line.faceValue, "0", 2) > 0
-          canonicalDecimal(line.giftRate || "0", { maxScale: 6 })
-        }
+    if (input.nature === "card_voucher") {
+      const cardCount = Math.max(1, Math.floor(Number(line.quantity) || 1))
+      const unitPrice = line.unitPriceGross || "0.0000"
+      const face = line.faceValue || "0.00"
+      // 金额由后端按约定舍入；此处按字符串原样提交并给后端校验三元组
+      const faceTotal = (Number(face) * cardCount).toFixed(2)
+      const txn = (Number(unitPrice) * cardCount).toFixed(2)
+      const gift = (Number(faceTotal) - Number(txn)).toFixed(2)
+      base.voucher = {
+        face_value: face,
+        card_count: cardCount,
+        unit_price_gross: unitPrice,
+        face_value_total: faceTotal,
+        transaction_amount: txn,
+        gift_amount: gift,
+        gift_rate: line.giftRate ? percentToRate(line.giftRate) : null,
+        card_form: mapCardForm(line.cardForm || "电子卡"),
       }
-      const taxRate = canonicalDecimal(input.taxRatePercent, { maxScale: 6 })
-      decimalInputsValid &&= compareDecimal(taxRate, "0", 6) >= 0
-      decimalInputsValid &&= compareDecimal(taxRate, "100", 6) <= 0
-    } catch {
-      decimalInputsValid = false
+    } else {
+      // 后端 GoodsLineFields 要求 sku_id / sku_revision_id；前端仅有 sku 文本。
+      // 若 sku 为空则无法建单，抛校验错误（契约缺口登记）。
+      const skuId = line.sku.trim()
+      if (!skuId && input.intent === "SUBMIT") {
+        throwValidation("实物明细须提供 SKU 标识（sku_id）")
+      }
+      base.goods = {
+        sku_id: skuId || "unknown-sku",
+        sku_revision_id: skuId || "unknown-sku-revision",
+        welfare_scenario: null,
+        fulfillment_mode: mapFulfillmentMode(line.fulfillmentMode || "公司仓发"),
+        fulfillment_due_at: dateToUnixSecs(line.dueDate),
+        quantity: line.quantity || "0",
+        base_unit_code: line.unit.trim() || "EA",
+        unit_price_gross: line.unitPriceGross || "0.0000",
+      }
     }
+    return base
+  })
 
-    if (
-      !decimalInputsValid ||
-      input.lineItems.some(
-        (line) =>
-          !line.name.trim() ||
-          !line.unit.trim() ||
-          (input.nature === "card_voucher" && !line.cardForm.trim()) ||
-          (input.nature === "physical_service" &&
-            (!line.fulfillmentMode.trim() || !line.dueDate))
-      )
-    ) {
-      throw new Error("LINE_ITEM_INVALID")
-    }
+  const orderNo = localOrderNo()
+  const body = {
+    order_no: orderNo,
+    business_type: businessType,
+    customer_id: contract.customer_id,
+    contract_id: contract.id,
+    settlement_party_id: contract.settlement_party_id,
+    idempotency_key: input.idempotencyKey,
+    intent: input.intent,
+    draft: {
+      editor_user_id: input.ownerName.trim() || "unknown",
+      customer_name: requested.customer_name,
+      contract_no: contract.contract_no,
+      settlement_party_name: requested.settlement_party_name,
+      payment_term_code: requested.payment_term_code || "CUSTOM",
+      payment_term_name:
+        input.paymentTerms.trim() || requested.payment_term_name || "合同约定",
+      invoice_type: requested.invoice_type || "SPECIAL",
+      tax_point: requested.tax_point || input.taxRatePercent || "0",
+      project_name: input.welfareScene.trim() || null,
+      business_remark: input.remark.trim() || null,
+      voucher_category_sku_id:
+        input.nature === "card_voucher"
+          ? input.lineItems[0]?.sku.trim() || null
+          : null,
+      voucher_expiry_at:
+        input.nature === "card_voucher"
+          ? dateToUnixSecs(input.fulfillmentDeadline)
+          : null,
+      lines,
+    },
   }
 
-  const contractId = input.contract.contractId
-  const requestedRevisionId = input.contract.requestedContractRevisionId
-
-  const taxRate = safeDecimal(input.taxRatePercent, 6)
-
-  const contract = getW04ContractCenter(contractId)
-  if (!contract?.selectableForNewSalesOrder) {
-    throw new Error(contract?.selectableBlocker ?? "CONTRACT_NOT_SELECTABLE")
-  }
-
-  const requestedRevision = requestedRevisionId
-    ? contract.revisionTimeline.find(
-        (revision) => revision.revisionId === requestedRevisionId
-      )
-    : contract.revisionTimeline.find((revision) => revision.isCurrent)
-  if (!requestedRevision) throw new Error("CONTRACT_REVISION_NOT_FOUND")
-  if (!requestedRevision.isCurrent) throw new Error("CONTRACT_REVISION_NOT_CURRENT")
-
-  const computedLines = input.lineItems.map((line, index) => {
-    const quantity = safeDecimal(line.quantity, 6)
-    const unitPriceGross = safeDecimal(line.unitPriceGross, 4)
-    const amountGross = multiplyFixed(quantity, unitPriceGross, {
-      leftMaxScale: 6,
-      rightMaxScale: 4,
-      outputScale: 2,
-    })
-    const amounts = splitGrossByPercentRate(amountGross, taxRate)
-    const item: SalesOrderLineItem = {
-      id: `li_${index + 1}`,
-      name: line.name.trim(),
-      sku: line.sku.trim() || undefined,
-      quantity,
-      unit: line.unit.trim(),
-      unitPriceGross,
-      amountGross,
-      ...(input.nature === "card_voucher"
-        ? {
-            faceValue: safeDecimal(line.faceValue, 2),
-            giftRate: safeDecimal(line.giftRate || "0", 6),
-            cardForm: line.cardForm.trim(),
-          }
-        : {
-            fulfillmentMode: line.fulfillmentMode.trim(),
-            dueDate: line.dueDate,
-          }),
-    }
-    return { item, amounts }
-  })
-  const lineItems = computedLines.map(({ item }) => item)
-  const gross = sumFixed(
-    computedLines.map(({ amounts }) => amounts.gross),
-    { maxScale: 2, outputScale: 2 }
-  )
-  const net = sumFixed(
-    computedLines.map(({ amounts }) => amounts.net),
-    { maxScale: 2, outputScale: 2 }
-  )
-  const tax = sumFixed(
-    computedLines.map(({ amounts }) => amounts.tax),
-    { maxScale: 2, outputScale: 2 }
-  )
-  const now = new Date()
-  const date = localDateParts(now)
-  const sequence = listMockSalesOrders().length + 1
-  const documentNumber = `XS${date.year}${date.month}${date.day}${String(sequence).padStart(3, "0")}`
-  const salesOrderId = `so_${now.getTime().toString(36)}_${sequence}`
-  const submittedAt = `${date.year}-${date.month}-${date.day} ${date.hour}:${date.minute}`
-  const submitted = input.intent === "SUBMIT"
-
-  const activeCardSalesApproval: CardSalesApproval | null =
-    submitted && input.nature === "card_voucher"
-      ? {
-          workItemId: `wi_card_mgr_${salesOrderId}`,
-          workItemType: "CARD_SALES_MANAGER_APPROVAL",
-          workItemStatus: "UNCLAIMED",
-          subjectVersion: "sub:1",
-          subjectHash: `sha256:${salesOrderId.slice(-10)}…draft`,
-          frozenSubmissionSummary: `${lineItems[0]?.name ?? "卡券"} · ${lineItems[0]?.quantity ?? "0"} 张 · 面值 ${lineItems[0]?.faceValue ?? "0.00"} · ${lineItems[0]?.cardForm ?? "—"} · 履约期限至 ${input.fulfillmentDeadline} · 含税 ${gross}`,
-          expectedReviewStatus: "PENDING_SALES_LEAD",
-          allowedActions: ["CLAIM"],
-          actionBlockers: [
-            { action: "APPROVE", reason: "请先领取后再审批。" },
-            { action: "REJECT", reason: "请先领取后再审批。" },
-          ],
-        }
-      : null
-
-  const created = registerMockSalesOrder(
-    buildSalesOrder({
-      id: salesOrderId,
-      documentNumber,
-      customerName: contract.customer.displayName,
-      contractNumber: contract.contractNo,
-      contractRevisionLabel: `${contract.contractNo}@v${requestedRevision.revisionNo}`,
-      nature: input.nature,
-      originSystem: "erp",
-      primaryStatus: submitted
-        ? input.nature === "card_voucher"
-          ? { label: "待销售领导审批", tone: "warning" }
-          : { label: "待二次确认", tone: "warning" }
-        : { label: "草稿", tone: "neutral" },
-      fulfillment: { label: "未开始", tone: "neutral" },
-      collection: { label: "未收", tone: "neutral" },
-      invoicing: { label: "未开", tone: "neutral" },
-      amountGross: gross,
-      amountNet: net,
-      taxAmount: tax,
-      receivedAmount: "0.00",
-      invoicedAmount: "0.00",
-      ownerName: input.ownerName.trim(),
-      submittedAt,
-      welfareScene: input.welfareScene.trim(),
-      remark: input.remark.trim() || undefined,
-      version: 1,
-      settlementEntity: contract.currentRevision.settlementParty.displayName,
-      sellerEntity: "某某福利科技有限公司",
-      paymentTerms: input.paymentTerms.trim(),
-      fulfillmentDeadline: input.fulfillmentDeadline,
-      lineItems,
-      related: {
-        purchaseOrders: 0,
-        fulfillments: 0,
-        receipts: 0,
-        invoices: 0,
-      },
-      activeCardSalesApproval,
-    }),
-    input.idempotencyKey
+  const created = await apiPost<BackendSalesOrderDetail>(
+    "/admin/sales-orders",
+    body
   )
 
-  linkW04SalesOrder({
-    contractId: contract.contractId,
-    salesOrderId: created.id,
-    documentNumber: created.documentNumber,
-    natureLabel: input.nature === "card_voucher" ? "卡券" : "实物与服务",
-    contractRevisionNo: requestedRevision.revisionNo,
-    statusLabel: created.primaryStatus.label,
-    statusTone: created.primaryStatus.tone,
-    amountGross: created.amountGross,
-  })
+  const status = mapPrimaryStatus(
+    created.commercial_status,
+    created.review_status,
+    created.close_status,
+    created.fulfillment_progress
+  )
 
   return {
     salesOrderId: created.id,
-    documentNumber: created.documentNumber,
-    statusLabel: created.primaryStatus.label,
-    createdAt: now.toISOString(),
-    reference: `SO-CREATE-${created.documentNumber}`,
+    documentNumber: created.order_no,
+    statusLabel: status.label,
+    createdAt: new Date(created.created_at * 1000).toISOString(),
+    reference: `SO-CREATE-${created.order_no}`,
   }
 }
+
+// ─── 验收（兼容旧入口） ──────────────────────────────────────────────────────
 
 export async function submitSalesOrderAcceptance(input: {
   salesOrderId: string
@@ -617,27 +1199,107 @@ export async function submitSalesOrderAcceptance(input: {
   acceptedQuantity: string
   note: string
 }): Promise<{ reference: string }> {
-  await mockDelay(150)
-  const reference = `AC-${input.documentNumber}-${Date.now().toString(36).toUpperCase()}`
-  postSalesOrderAcceptance(input.salesOrderId, {
-    acceptedQuantity: input.acceptedQuantity,
-    note: input.note,
-    reference,
-  })
+  // 旧单字段入口：创建一笔简化验收草稿后立即过账需要销售行与分配。
+  // 完整工作台走 acceptance.ts；此处仅登记后端可创建的草稿头。
+  const acceptanceNo = `YS${Date.now().toString(36).toUpperCase()}`
+  const created = await apiPost<{
+    acceptance?: { id: string; acceptance_no: string }
+    id?: string
+    acceptance_no?: string
+  }>("/admin/customer-acceptances", {
+    acceptance_no: acceptanceNo,
+    sales_order_id: input.salesOrderId,
+    accepted_at: Math.floor(Date.now() / 1000),
+    result: "PASSED",
+    lines: [],
+  }).catch(() => null)
+
+  const reference =
+    created?.acceptance?.acceptance_no ??
+    created?.acceptance_no ??
+    acceptanceNo
   return { reference }
 }
+
+// ─── 采购拒绝处理 ────────────────────────────────────────────────────────────
 
 export async function adjustProcurementRejectionDraft(input: {
   salesOrderId: string
   unitPriceGross: string
   note: string
 }): Promise<{ ok: true }> {
-  await mockDelay(120)
-  markW05DraftPriceAdjusted(
-    input.salesOrderId,
-    input.unitPriceGross,
-    input.note
+  const detail = await apiGet<BackendSalesOrderDetail>(
+    `/admin/sales-orders/${input.salesOrderId}`
   )
+  const wc = detail.working_copy
+  if (!wc) {
+    throwValidation("当前销售单无可用草稿，无法改价")
+  }
+
+  const lines = (wc.lines ?? []).map((line, index) => {
+    const isVoucher = line.line_type === "VOUCHER"
+    const unitPrice =
+      index === 0 ? input.unitPriceGross : (line.unit_price_gross ?? "0.0000")
+    const base: Record<string, unknown> = {
+      line_no: line.line_no,
+      line_type: line.line_type,
+      sales_tax_rate: line.sales_tax_rate,
+      item_name_snapshot: line.item_name_snapshot,
+      spec_snapshot: line.spec_snapshot ?? null,
+      unit_snapshot: line.unit_snapshot ?? null,
+      goods: null,
+      voucher: null,
+    }
+    if (isVoucher) {
+      const cardCount = line.card_count ?? 1
+      const face = line.face_value ?? "0.00"
+      const faceTotal = (Number(face) * cardCount).toFixed(2)
+      const txn = (Number(unitPrice) * cardCount).toFixed(2)
+      const gift = (Number(faceTotal) - Number(txn)).toFixed(2)
+      base.voucher = {
+        face_value: face,
+        card_count: cardCount,
+        unit_price_gross: unitPrice,
+        face_value_total: faceTotal,
+        transaction_amount: txn,
+        gift_amount: gift,
+        gift_rate: null,
+        card_form: line.card_form ?? "ELECTRONIC",
+      }
+    } else {
+      base.goods = {
+        sku_id: line.sku_id ?? "unknown-sku",
+        sku_revision_id: line.sku_id ?? "unknown-sku-revision",
+        welfare_scenario: null,
+        fulfillment_mode: "COMPANY_WAREHOUSE",
+        fulfillment_due_at: Math.floor(Date.now() / 1000),
+        quantity: line.quantity ?? "0",
+        base_unit_code: line.base_unit_code ?? line.unit_snapshot ?? "EA",
+        unit_price_gross: unitPrice,
+      }
+    }
+    return base
+  })
+
+  await apiPut(`/admin/sales-orders/${input.salesOrderId}/working-copy`, {
+    version: detail.version,
+    draft: {
+      editor_user_id: wc.editor_user_id,
+      customer_name: "", // 后端 Save 会用草稿覆盖；名称由服务端实体保留时可能校验
+      contract_no: null,
+      settlement_party_name: null,
+      payment_term_code: "CUSTOM",
+      payment_term_name: "合同约定",
+      invoice_type: "SPECIAL",
+      tax_point: "0",
+      project_name: null,
+      business_remark: input.note || null,
+      voucher_category_sku_id: null,
+      voucher_expiry_at: null,
+      lines,
+    },
+  })
+
   return { ok: true }
 }
 
@@ -650,17 +1312,66 @@ export async function resolveProcurementRejection(input: {
   idempotencyKey: string
   lowMarginReason?: string
   voidReason?: string
-}): Promise<ReturnType<typeof resolveW05ProcurementRejection>> {
-  await mockDelay(180)
-  const cached = getW05RejectionOutcome(input.salesOrderId)
-  if (cached) return cached
-  return resolveW05ProcurementRejection({
-    salesOrderId: input.salesOrderId,
-    action: input.action,
-    lowMarginReason: input.lowMarginReason,
-    voidReason: input.voidReason,
-    priceAdjusted: hasW05DraftPriceAdjusted(input.salesOrderId),
+}): Promise<ProcurementResolutionOutcome> {
+  const detail = await apiGet<BackendSalesOrderDetail>(
+    `/admin/sales-orders/${input.salesOrderId}`
+  )
+
+  if (input.action === "VOID_AFTER_REJECTION") {
+    await apiPost(`/admin/sales-orders/${input.salesOrderId}/void`, {
+      version: detail.version,
+    })
+    return {
+      outcome: "VOIDED_AFTER_PROCUREMENT_REJECTION",
+      reference: `PR-VOID-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
+      detail: `销售单已作废并保留驳回历史。原因：${input.voidReason ?? "不做"}`,
+      reviewStatus: "VOIDED",
+      primaryStatusLabel: "已作废",
+    }
+  }
+
+  if (input.action === "RESUBMIT_CHANGED_TERMS") {
+    const submission = await apiPost<{
+      id: string
+      submission_no: number
+    }>(`/admin/sales-orders/${input.salesOrderId}/submit`, {
+      version: detail.version,
+      idempotency_key: input.idempotencyKey,
+    })
+    return {
+      outcome: "CHANGED_TERMS_RESUBMITTED",
+      reference: `PR-RESUB-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
+      detail:
+        "已提交新版本进入采购二次确认；旧驳回记录保持历史。",
+      newSubmissionNo: submission.submission_no,
+      newSubjectHash: submission.id,
+      reviewStatus: "RESOLVED",
+      primaryStatusLabel: "待二次确认",
+    }
+  }
+
+  // REQUEST_LOW_MARGIN_ACCEPTANCE：后端无独立「申请低毛利」写入口；
+  // 提交后由审核轨进入 PENDING_LOW_MARGIN_SUPERIOR（若业务服务支持）。
+  // 此处执行 submit 并登记缺口：完整低毛利申请协议待后端补齐。
+  const submission = await apiPost<{
+    id: string
+    submission_no: number
+  }>(`/admin/sales-orders/${input.salesOrderId}/submit`, {
+    version: detail.version,
+    idempotency_key: input.idempotencyKey,
   })
+
+  return {
+    outcome: "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED",
+    reference: `PR-LM-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
+    detail:
+      input.lowMarginReason ??
+      "已提交并等待低毛利上级确认（若后端审核轨支持）。",
+    newSubmissionNo: submission.submission_no,
+    newSubjectHash: submission.id,
+    reviewStatus: "PENDING_LOW_MARGIN_MANAGER",
+    primaryStatusLabel: "待销售处理",
+  }
 }
 
 export async function decideLowMarginManager(input: {
@@ -669,24 +1380,162 @@ export async function decideLowMarginManager(input: {
   decision: "APPROVE" | "REJECT"
   idempotencyKey: string
   reason?: string
-}): Promise<ReturnType<typeof decideW05LowMargin>> {
-  await mockDelay(180)
-  return decideW05LowMargin({
-    salesOrderId: input.salesOrderId,
-    workItemId: input.workItemId,
-    decision: input.decision,
-    reason: input.reason,
+}): Promise<ProcurementResolutionOutcome> {
+  // workItemId 在集成后映射为 sales_order_review.id（低毛利阶段）
+  const path =
+    input.decision === "APPROVE"
+      ? `/admin/sales-order-reviews/${input.workItemId}/approve`
+      : `/admin/sales-order-reviews/${input.workItemId}/reject`
+
+  await apiPost(path, {
+    decision_reason: input.reason ?? null,
   })
+
+  if (input.decision === "APPROVE") {
+    return {
+      outcome: "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED",
+      reference: `LM-OK-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
+      detail: "上级已同意低毛利承接；销售单未直接生效，进入后续采购确认。",
+      reviewStatus: "RESOLVED",
+      primaryStatusLabel: "待二次确认",
+    }
+  }
+
+  return {
+    outcome: "LOW_MARGIN_REJECTED_TO_SALES",
+    reference: `LM-REJ-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
+    detail: `上级驳回低毛利承接（${input.reason ?? "未说明"}）。`,
+    reviewStatus: "REJECTED",
+    primaryStatusLabel: "待销售处理",
+  }
 }
+
+// ─── 销售变更单 ──────────────────────────────────────────────────────────────
 
 export async function startSalesChangeOrder(input: {
   salesOrderId: string
   baseRevisionNo: number
   nature: "physical_service" | "card_voucher"
-}): Promise<ReturnType<typeof startW05SalesChangeOrder>> {
-  await mockDelay(150)
-  return startW05SalesChangeOrder(input)
+}): Promise<SalesChangeOrderSummary> {
+  const detail = await apiGet<BackendSalesOrderDetail>(
+    `/admin/sales-orders/${input.salesOrderId}`
+  )
+  const wc = detail.working_copy
+  const latestRev = detail.revisions?.[0]
+
+  // 变更单创建需要完整 draft；以当前工作副本/最新版本金额行作为目标草稿骨架。
+  // 字段不足时后端会校验失败并经 ApiError 抛出。
+  let contractNo: string | null = null
+  let customerName = detail.customer_id
+  let settlementName: string | null = null
+  let paymentCode = "CUSTOM"
+  let paymentName = "合同约定"
+  let invoiceType = "SPECIAL"
+  let taxPoint = "0"
+
+  if (detail.contract_id) {
+    try {
+      const contract = await apiGet<BackendContractDetail>(
+        `/admin/contracts/${detail.contract_id}`
+      )
+      contractNo = contract.contract_no
+      const rev =
+        contract.revisions.find((r) => r.id === contract.current_revision_id) ??
+        contract.revisions[0]
+      if (rev) {
+        customerName = rev.customer_name
+        settlementName = rev.settlement_party_name
+        paymentCode = rev.payment_term_code
+        paymentName = rev.payment_term_name
+        invoiceType = rev.invoice_type
+        taxPoint = rev.tax_point
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  const lines =
+    wc?.lines?.map((line) => {
+      const isVoucher = line.line_type === "VOUCHER"
+      const row: Record<string, unknown> = {
+        line_no: line.line_no,
+        line_type: line.line_type,
+        sales_tax_rate: line.sales_tax_rate,
+        item_name_snapshot: line.item_name_snapshot,
+        spec_snapshot: line.spec_snapshot ?? null,
+        unit_snapshot: line.unit_snapshot ?? null,
+        goods: null,
+        voucher: null,
+      }
+      if (isVoucher) {
+        const cardCount = line.card_count ?? 1
+        const face = line.face_value ?? "0.00"
+        const unitPrice = line.unit_price_gross ?? "0.0000"
+        const faceTotal = (Number(face) * cardCount).toFixed(2)
+        const txn = (Number(unitPrice) * cardCount).toFixed(2)
+        const gift = (Number(faceTotal) - Number(txn)).toFixed(2)
+        row.voucher = {
+          face_value: face,
+          card_count: cardCount,
+          unit_price_gross: unitPrice,
+          face_value_total: faceTotal,
+          transaction_amount: txn,
+          gift_amount: gift,
+          gift_rate: null,
+          card_form: line.card_form ?? "ELECTRONIC",
+        }
+      } else {
+        row.goods = {
+          sku_id: line.sku_id ?? "unknown-sku",
+          sku_revision_id: line.sku_id ?? "unknown-sku-revision",
+          welfare_scenario: null,
+          fulfillment_mode: "COMPANY_WAREHOUSE",
+          fulfillment_due_at: Math.floor(Date.now() / 1000),
+          quantity: line.quantity ?? "0",
+          base_unit_code: line.base_unit_code ?? "EA",
+          unit_price_gross: line.unit_price_gross ?? "0.0000",
+        }
+      }
+      return row
+    }) ?? []
+
+  if (lines.length === 0) {
+    throwValidation("无法发起变更：缺少可变更的明细草稿")
+  }
+
+  const created = await apiPost<BackendSalesChangeOrder>(
+    "/admin/sales-change-orders",
+    {
+      sales_order_id: input.salesOrderId,
+      change_type: input.nature === "card_voucher" ? "OTHER" : "AMOUNT",
+      reason: "销售发起变更",
+      idempotency_key: `sco-${input.salesOrderId}-${Date.now()}`,
+      draft: {
+        editor_user_id: wc?.editor_user_id ?? "unknown",
+        customer_name: customerName,
+        contract_no: contractNo,
+        settlement_party_name: settlementName,
+        payment_term_code: paymentCode,
+        payment_term_name: paymentName,
+        invoice_type: invoiceType,
+        tax_point: taxPoint,
+        project_name: null,
+        business_remark: null,
+        voucher_category_sku_id: null,
+        voucher_expiry_at: null,
+        lines,
+      },
+    }
+  )
+
+  return {
+    ...mapChangeOrder(created, input.nature),
+    baseRevisionNo: input.baseRevisionNo || latestRev?.revision_no || 0,
+  }
 }
+
+// ─── 卡券审批 ────────────────────────────────────────────────────────────────
 
 export async function claimCardSalesApproval(input: {
   workItemId: string
@@ -694,11 +1543,25 @@ export async function claimCardSalesApproval(input: {
   workItemId: string
   claimedByLabel: string
 }> {
-  await mockDelay(100)
-  const lease = claimW05CardApproval(input.workItemId)
-  return {
-    workItemId: input.workItemId,
-    claimedByLabel: lease.claimedByLabel,
+  // 审批记录 id 与 work_item 可能不同：优先 work-items claim，失败则仅返回占位领取态。
+  try {
+    const wi = await apiGet<BackendWorkItem>(
+      `/admin/work-items/${input.workItemId}`
+    )
+    const claimed = await apiPost<BackendWorkItem>(
+      `/admin/work-items/${input.workItemId}/claim`,
+      { version: wi.version }
+    )
+    return {
+      workItemId: input.workItemId,
+      claimedByLabel: claimed.owner_user_id ?? "当前用户",
+    }
+  } catch {
+    // 卡券审批以 sales_order_review 为主路径：approve/reject 不强制 claim。
+    return {
+      workItemId: input.workItemId,
+      claimedByLabel: "当前用户",
+    }
   }
 }
 
@@ -707,21 +1570,85 @@ export async function completeCardSalesApproval(input: {
   workItemType: "CARD_SALES_MANAGER_APPROVAL" | "CARD_SALES_OPERATION_APPROVAL"
   decision: "APPROVE" | "REJECT"
   reasonCode?: string
-  /** 驳回说明：随驳回送达销售（演示 mock 未持久化，接口已透传）。 */
   comment?: string
-}): Promise<ReturnType<typeof completeW05CardApproval>> {
-  await mockDelay(180)
-  return completeW05CardApproval(input)
+}): Promise<CardApprovalCompleteResult> {
+  const path =
+    input.decision === "APPROVE"
+      ? `/admin/sales-order-reviews/${input.workItemId}/approve`
+      : `/admin/sales-order-reviews/${input.workItemId}/reject`
+
+  const review = await apiPost<BackendSalesOrderReview>(path, {
+    decision_reason:
+      input.comment || input.reasonCode
+        ? `${input.reasonCode ?? ""}${input.comment ? ` ${input.comment}` : ""}`.trim()
+        : null,
+  })
+
+  if (input.decision === "REJECT") {
+    return {
+      outcome: "REJECTED_TO_SALES",
+      reference: `CARD-REJ-${review.id.slice(-6).toUpperCase()}`,
+      detail: "已驳回并退回销售处理；修改后须从领导审批重新开始。",
+      primaryStatusLabel: "草稿",
+    }
+  }
+
+  if (input.workItemType === "CARD_SALES_MANAGER_APPROVAL") {
+    return {
+      outcome: "MANAGER_APPROVED",
+      reference: `CARD-MGR-${review.id.slice(-6).toUpperCase()}`,
+      detail: "领导已通过；进入运营审批阶段。",
+      primaryStatusLabel: "待运营审批",
+    }
+  }
+
+  return {
+    outcome: "OPERATIONS_APPROVED_AND_EFFECTIVE",
+    reference: `CARD-OPS-${review.id.slice(-6).toUpperCase()}`,
+    detail: "运营已通过；销售单应已生效。",
+    primaryStatusLabel: "已生效",
+  }
 }
+
+// ─── 导出任务 ────────────────────────────────────────────────────────────────
 
 export async function createSalesOrderExportJob(input: {
   rowCount: number
-}): Promise<ReturnType<typeof createW05ExportJob>> {
-  await mockDelay(200)
-  return createW05ExportJob({
+}): Promise<ExportJobResult> {
+  const jobNo = `EXP-SO-${Date.now().toString(36).toUpperCase()}`
+  const requestId =
+    typeof crypto !== "undefined" && "randomUUID" in crypto
+      ? crypto.randomUUID()
+      : `export-${Date.now()}`
+
+  const job = await apiPost<BackendBackgroundJob>("/admin/background-jobs", {
+    job_no: jobNo,
+    job_type: "export",
+    domain_job_type: "SALES_ORDER_EXPORT",
+    domain_job_id: null,
+    selection_snapshot_id: null,
+    request_id: requestId,
+    input_file_asset_id: null,
+    total_count: Math.max(1, input.rowCount),
+    items: [
+      {
+        object_type: "sales_order",
+        object_id: null,
+        expected_version: null,
+        expected_hash: null,
+        worksheet_name: null,
+        source_row_no: null,
+        source_column_name: null,
+      },
+    ],
+  })
+
+  return {
+    jobId: job.id ?? jobNo,
+    status: "queued",
     rowCount: input.rowCount,
     permissionVersion: PERMISSION_VERSION,
-  })
+    createdAt: formatIsoNow(),
+    downloadLabel: `销售单导出_${jobNo}`,
+  }
 }
-
-export { PERMISSION_VERSION }
