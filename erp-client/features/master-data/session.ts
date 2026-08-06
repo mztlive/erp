@@ -1,5 +1,9 @@
 /**
  * W14 session-only mutable state for create / revise / disable demos.
+ *
+ * P4 F1: master-data 运行时路径已迁到 `api.ts`（真实 HTTP）。
+ * 本文件仍被 F9 `supplier-catalog` 的 mock 创建公司商品路径引用，暂保留；
+ * F9 集成后应删除本文件与 `data.ts` 中的 seed。
  */
 
 import {
