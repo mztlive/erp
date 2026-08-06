@@ -22,7 +22,7 @@
 | 2 | [conventions.md](./conventions.md) | 跨阶段统一契约：注册约定、事务、错误、测试、验收证据 |
 | 3 | [domains.md](./domains.md) | 域切分矩阵 D01–D34：表 ↔ 依赖 ↔ 期 ↔ 页面 ↔ 落点 |
 | 4 | [P0-foundation.md](./P0-foundation.md) | **串行前置**：地基、防冲突改造、垂直样板 |
-| 5 | [P1-entities.md](./P1-entities.md) … [P5-hardening.md](./P5-hardening.md) | 各层阶段说明与验收 |
+| 5 | [P1-entities.md](./P1-entities.md) … [P6-integration-tests.md](./P6-integration-tests.md) | 各层阶段说明与验收 |
 | 6 | [`_meta.json`](./_meta.json) | 机器可读的阶段/子阶段/分支/依赖/验收命令 |
 
 ---
@@ -34,10 +34,11 @@
 ```
                  G1 平台   G2 伙伴   G3 商品   …   G12 集成治理     ← 子阶段（域批次，可并行）
 P1 领域模型        A-G1     A-G2     A-G3          A-G12
-P2 仓储            B-G1     B-G2     B-G3          B-G12
-P3 服务与接口      C-G1     C-G2     C-G3          C-G12
+P2 仓储            B-G1     B-G2     B-G3          B-G12   ← 只交付实现，不强制 Mongo IT
+P3 服务与接口      C-G1     C-G2     C-G3          C-G12   ← 只交付实现，不强制 HTTP IT
 P4 前端集成            F1 … F10（按页面批次切，依赖对应 C 单元）
-P5 加固                    跨域不变量、并发、对账、投影
+P5 加固                    投影实现（E3）、治理脚本（E4）
+P6 后端集成测试        I-G1…I-G12 域内 IT + I-X1/X2/X3 跨域/并发/投影 IT（最后收口）
 ```
 
 每个格子（层 × 域批次）= 一个 worktree = 一个 PR = 一次独立验收。
@@ -94,6 +95,16 @@ P0 的核心工作是把这七处**一次性预声明全部 34 个域**（生成
 （表少、无跨域依赖、被所有域引用）走完 entities → repository → service → handler → 前端调用，
 产出的不是业务价值，而是**后续 100+ 个子阶段直接复制的骨架**。
 
+**（四）真实 Mongo 集成测试从 P2/P3 剥离，统一到最后阶段 P6 收口。**
+
+原方案在每个 B/C 子阶段强制 `include-ignored` 仓储/HTTP IT，编写夹具与排障成本高，
+显著拖慢并行实现。调整后：
+
+- P2/P3 只要求编译与单元门禁 + 索引/接口/不变量**实现**证据；
+- P0 仍落地 `test-support` 与 D01 样板 IT，作为 P6 模板；
+- **P6** 按域批次补齐全部 repository/HTTP IT，再补跨域不变量、并发与投影 IT；
+- 未通过 P6 **不得**作为生产模型发布（数据模型 §13）。
+
 ---
 
 ## 2. 阶段总表
@@ -102,12 +113,13 @@ P0 的核心工作是把这七处**一次性预声明全部 34 个域**（生成
 | --- | --- | --- | --- | --- | --- |
 | **P0** | 地基、防冲突改造与垂直样板 | 1（串行） | true | 全部 34 域模块骨架就位；样板域端到端跑通 | [P0-foundation.md](./P0-foundation.md) |
 | **P1** | 领域模型（entities） | 12 | true | `cargo test -p entities` 覆盖该域全部不变式 | [P1-entities.md](./P1-entities.md) |
-| **P2** | 仓储（database） | 12 | true | 真实 MongoDB 副本集集成测试 + 索引断言 | [P2-repository.md](./P2-repository.md) |
-| **P3** | 服务与接口（services + web-api） | 12 | true | HTTP 集成测试：鉴权、权限、错误码、事务不变量 | [P3-service-api.md](./P3-service-api.md) |
+| **P2** | 仓储（database） | 12 | true | 仓储实现 + 索引清单；**不强制** Mongo IT | [P2-repository.md](./P2-repository.md) |
+| **P3** | 服务与接口（services + web-api） | 12 | true | 可对接 HTTP 实现 + 权限产物；**不强制** HTTP IT | [P3-service-api.md](./P3-service-api.md) |
 | **P4** | 前端集成（erp-client） | 10 | — | 该页面批次 mock 引用归零，对真后端联调通过 | [P4-frontend.md](./P4-frontend.md) |
-| **P5** | 跨域不变量与加固 | 4 | true | 数据模型第 8/9/13 章逐条测试证据 | [P5-hardening.md](./P5-hardening.md) |
+| **P5** | 跨域加固（投影 + 治理） | 2 | true | E3 投影实现、E4 治理脚本接入 CI | [P5-hardening.md](./P5-hardening.md) |
+| **P6** | 后端集成测试（收口） | 12+3 | true | 域内 IT + 跨域/并发/投影 IT；`include-ignored` 全绿 | [P6-integration-tests.md](./P6-integration-tests.md) |
 
-**没有 `must_compile = false` 的阶段。** 任何子阶段的 PR 若不能通过全量门禁，即为未完成。
+**没有 `must_compile = false` 的阶段。** 任何子阶段的 PR 若不能通过**该阶段适用**的门禁，即为未完成。
 
 ---
 
@@ -169,8 +181,8 @@ cargo fmt --all && cargo check --workspace \
 | 格式 | `cargo fmt --all -- --check` | 后端全部阶段 |
 | 编译 | `cargo check --workspace` | 后端全部阶段 |
 | Lint | `cargo clippy --workspace --all-targets --all-features -- -D warnings` | 后端全部阶段 |
-| 测试 | `cargo test --workspace` | 后端全部阶段 |
-| 集成测试 | `ERP_TEST_MONGO_URI=... cargo test --workspace -- --include-ignored` | P2 起 |
+| 测试 | `cargo test --workspace` | 后端全部阶段（不含 ignored） |
+| 集成测试 | `ERP_TEST_MONGO_URI=... cargo test --workspace -- --include-ignored` | **P0 样板 + P6 收口**（发布前置）；P2–P5 不强制 |
 | 权限产物 | 生成文件无漂移（见 conventions 第 6 节） | P3 |
 | 前端 | `npm run lint` + `npx tsc --noEmit` | P4 |
 | mock 归零 | 该批次 feature 内 `@/mock` 引用计数为 0 | P4 |

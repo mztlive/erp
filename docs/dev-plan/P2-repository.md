@@ -6,9 +6,13 @@
 | 并行度 | 12（域间零依赖，可再细分） |
 | 依赖 | 同域 P1 已合并 |
 | `must_compile` | true |
-| owns | `database/src/repository/<domain>.rs`、`database/src/repository/extensions/<domain>.rs`、`database/src/indexes/<domain>.rs`、`database/tests/<domain>_repository.rs` |
+| owns | `database/src/repository/<domain>.rs`、`database/src/repository/extensions/<domain>.rs`、`database/src/indexes/<domain>.rs` |
 
 本层把实体落到 MongoDB，并把查询细节全部关在仓储内。**本层不做事务编排、不做业务判定。**
+
+> **集成测试策略**：真实 MongoDB 上的仓储集成测试**不在本层强制验收**，统一在
+> [P6-integration-tests.md](./P6-integration-tests.md) 收口，以免拖慢并行实现节奏。
+> P0 的 D01 样板仍保留可复制的 IT 写法；本层可自愿补测，但不作为合并门禁。
 
 ---
 
@@ -19,7 +23,6 @@
 2. **访问器**：在 `extensions/<domain>.rs` 定义 `pub trait <Domain>Ext`，
    为 `Database` 实现，返回各集合 Repository。集合名用本域常量。
 3. **索引**：在 `indexes/<domain>.rs` 的 `ensure()` 中声明数据模型第 6 章列出的**全部必需索引**。
-4. **集成测试**：`database/tests/<domain>_repository.rs`。
 
 ---
 
@@ -29,7 +32,7 @@
 
 - Repository **不得**调用 `with_transaction`，不得自行 `start_session`。
 - 多步骤方法（先删后写、读后写、批量替换）在文档注释中写明
-  「必须收到事务执行器」，并在测试中验证传入 `NoTransaction` 时的行为可预期。
+  「必须收到事务执行器」。
 - 参考 `backend/database/TRANSACTIONS.md` 与 `repository/role.rs`
   的 `replace_subject_roles` 写法。
 
@@ -64,27 +67,14 @@ cargo fmt --all -- --check
 cargo check --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
-ERP_TEST_MONGO_URI=mongodb://127.0.0.1:27017/?replicaSet=rs0 \
-  cargo test -p database --test <domain>_repository -- --include-ignored
 ```
 
-### 3.2 集成测试必须覆盖
+本层**不要求** `cargo test -- --include-ignored`。仓储集成测试覆盖表见
+[P6 §1.1](./P6-integration-tests.md)。
 
-| 用例 | 断言 |
-| --- | --- |
-| 创建 + 按 ID 读取 | 往返一致，含 Decimal128 金额、时间字段 |
-| 更新乐观锁成功 | version 递增，`updated_at` 更新 |
-| 更新乐观锁冲突 | 用陈旧 version 更新返回 `OptimisticLockingError` |
-| 软删除与恢复 | 仅匹配对应删除状态；正式事实类集合**不提供**软删除方法 |
-| 唯一索引冲突 | 重复身份写入返回明确错误，不是静默覆盖 |
-| 索引存在 | `assert_indexes` 断言 `ensure()` 后全部必需索引就位 |
-| 事务参与 | 同一 session 内两次写入，回滚后两者都不可见 |
-| 列表查询 | 分页边界、排序白名单、投影字段集合正确 |
-| 多步骤方法 | 事务内先删后写，冲突时整体回滚 |
+### 3.2 PR 证据
 
-### 3.3 PR 证据
-
-除 conventions §7.3 模板外，额外附：
+conventions §7.3 模板（集成测试一栏写「延期至 P6 / I-Gx」）+ 以下两项：
 
 - 本域索引清单与数据模型 §6.x「必需索引」的逐条对照表（含"文档要求 / 已实现 / 索引名"）
 - 未实现的索引及原因（应为空）

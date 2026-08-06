@@ -9,7 +9,7 @@
 
 编译 `web-api` 时，`apps/web-api/build.rs` 会生成：
 
-- `fronts/admin/src/constants/permissions.generated.ts`
+- `erp-client/lib/permissions.generated.ts`
 
 生成文件只用于前端菜单和权限勾选；运行时由 `with_permission` 中间件调用
 Casbin，根据当前主体、`resource` 和 `action` 判定。

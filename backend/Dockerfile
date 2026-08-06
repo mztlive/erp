@@ -47,7 +47,6 @@ COPY config ./config
 COPY crates ./crates
 COPY database ./database
 COPY entities ./entities
-COPY fronts/admin ./fronts/admin
 COPY services ./services
 
 RUN --mount=type=cache,target=/usr/local/cargo/registry \

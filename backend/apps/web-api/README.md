@@ -142,4 +142,4 @@ HTTP 上传逻辑分为三层：
    cargo test --workspace
    ```
 
-修改 `fronts/admin` 或生成权限定义时，额外运行管理端 lint 并确认生成文件未漂移。
+生成权限定义后，确认生成文件未漂移。

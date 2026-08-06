@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # P0-6.2 权限生成物漂移校验脚本。
 #
-# apps/web-api/build.rs 会把权限定义写入两处生成物：
-#   - backend/fronts/admin/src/constants/permissions.generated.ts
+# apps/web-api/build.rs 会把权限定义写入生成物：
 #   - erp-client/lib/permissions.generated.ts
 # 本脚本先重新构建 web-api 触发重新生成，再逐个校验生成物与提交版本一致，
 # 存在漂移（缺失/未纳入版本控制/内容不一致）时以非零状态退出。
@@ -12,7 +11,6 @@ BACKEND_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO_DIR="$(cd "${BACKEND_DIR}/.." && pwd)"
 
 GENERATED_FILES=(
-    "${BACKEND_DIR}/fronts/admin/src/constants/permissions.generated.ts"
     "${REPO_DIR}/erp-client/lib/permissions.generated.ts"
 )
 

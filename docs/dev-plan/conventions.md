@@ -13,9 +13,10 @@
 | 层 | owns |
 | --- | --- |
 | P1 实体 | `backend/entities/src/<domain>/**` |
-| P2 仓储 | `backend/database/src/repository/<domain>.rs`（或同名目录）、`backend/database/src/repository/extensions/<domain>.rs`、`backend/database/src/indexes/<domain>.rs`、`backend/database/tests/<domain>_repository.rs` |
-| P3 服务与接口 | `backend/services/src/<domain>/**`、`backend/apps/web-api/src/core/handler/<domain>/**`、`backend/apps/web-api/src/core/routes/<domain>.rs`、`backend/apps/web-api/tests/<domain>_api.rs` |
+| P2 仓储 | `backend/database/src/repository/<domain>.rs`（或同名目录）、`backend/database/src/repository/extensions/<domain>.rs`、`backend/database/src/indexes/<domain>.rs` |
+| P3 服务与接口 | `backend/services/src/<domain>/**`、`backend/apps/web-api/src/core/handler/<domain>/**`、`backend/apps/web-api/src/core/routes/<domain>.rs` |
 | P4 前端 | `erp-client/features/<feature>/**`、该批次页面路由目录 |
+| P6 后端集成测试 | `backend/database/tests/<domain>_repository.rs`、`backend/apps/web-api/tests/<domain>_api.rs`；跨域为 `web-api/tests/invariants/**`、`concurrency/**` 等（见 P6） |
 
 新增文件也必须落在上述前缀内。需要放在别处的文件，说明该内容不属于本子阶段。
 
@@ -154,19 +155,26 @@ HTTP 传输契约（信封/错误码/分页/时间与数值/权限生成物）�
 
 ### 7.1 分层测试形态
 
-| 层 | 位置 | 依赖 | 必须覆盖 |
-| --- | --- | --- | --- |
-| P1 | `entities/src/<domain>/**` 内联 `mod tests` | 无 | 构造/更新校验、边界、状态邻接、金额舍入 |
-| P2 | `database/tests/<domain>_repository.rs` | 真实 MongoDB 副本集 | CRUD、乐观锁冲突、软删除/恢复、索引存在与唯一冲突、事务参与与回滚 |
-| P3 | `services` 内联 + `apps/web-api/tests/<domain>_api.rs` | 真实 MongoDB 副本集 | 用例 happy path、鉴权 401、权限 403、校验 400、并发 409、事务不变量 |
-| P4 | `erp-client` 类型检查 + 联调记录 | 真实后端 | 列表/详情/写操作/错误提示/权限隐藏 |
+| 层 | 位置 | 依赖 | 何时强制 | 必须覆盖 |
+| --- | --- | --- | --- | --- |
+| P1 | `entities/src/<domain>/**` 内联 `mod tests` | 无 | P1 合并门禁 | 构造/更新校验、边界、状态邻接、金额舍入 |
+| P2 | 实现 only；IT 文件属 P6 | — | P2 **不强制** IT | 索引清单与编译门禁；IT 见 P6 §1.1 |
+| P3 | 实现 only；IT 文件属 P6 | — | P3 **不强制** IT | 接口清单、不变量实现落点；IT 见 P6 §1.2 |
+| P4 | `erp-client` 类型检查 + 联调记录 | 真实后端 | P4 合并门禁 | 列表/详情/写操作/错误提示/权限隐藏 |
+| P5 | 投影实现 + 治理脚本 | 相关 C | P5 合并门禁 | E3 可运行投影、E4 脚本化治理；跨域/并发 IT 见 P6 |
+| P6 | `database/tests/*`、`web-api/tests/*` | 对应 C（及 E3） | **发布前置** | 域内仓储/HTTP IT + 跨域不变量 + 并发/故障 + 投影 IT |
+
+**策略**：P2/P3 优先并行交付实现；需真实 MongoDB 的集成测试集中在 **P6 收口**，
+避免前期拖慢进度。P0 仍须提供 `test-support` 与 D01 样板 IT，供 P6 复制。
 
 ### 7.2 集成测试执行
 
 P0 提供 `backend/scripts/dev-mongo.sh` 启动单节点副本集（事务需要副本集，standalone 不支持）。
 需要数据库的测试统一用 P0 提供的 `#[ignore]` + `ERP_TEST_MONGO_URI` 门控宏，
-使无数据库环境的 `cargo test --workspace` 仍然全绿；CI 与验收执行
-`cargo test --workspace -- --include-ignored`。
+使无数据库环境的 `cargo test --workspace` 仍然全绿。
+
+- **P0–P5 日常门禁**：`cargo test --workspace`（不含 ignored）。
+- **P6 与发布 / CI 集成段**：`cargo test --workspace -- --include-ignored`。
 
 每个测试用独立随机数据库名，测试结束 drop，禁止共享固定库名。
 
@@ -177,12 +185,13 @@ P0 提供 `backend/scripts/dev-mongo.sh` 启动单节点副本集（事务需要
 - 范围：<阶段 ID> / <域列表>
 - 契约来源：erp-data-model.md §6.x、§7.x、§8.x；erp-phase-N.md §x.x；ui-workspaces/wNN.md
 - 门禁：fmt / check / clippy / test 全绿（贴命令与结论）
-- 集成测试：<命令> + 用例清单
+- 集成测试：<命令 + 用例清单 | 或「延期至 P6 / I-Gx」>
 - 覆盖的不变量：<数据模型第 8 章条目号>
 - 未实现且已知的缺口：<列表，或"无">
 ```
 
 "未实现且已知的缺口"为空是可以的，但**不允许留空不写**。
+P2/P3 PR 的「集成测试」栏必须写明延期至哪个 I-Gx，不得省略该行。
 
 ---
 

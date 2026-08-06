@@ -97,7 +97,7 @@ fn main() {
             return;
         }
     };
-    // `fronts/admin` 位于 backend 下；`erp-client` 位于仓库根（backend 的兄弟目录）。
+    // `erp-client` 位于仓库根（backend 的兄弟目录）。
     let repo_root = match backend_root.parent() {
         Some(path) => path.to_path_buf(),
         None => {
@@ -163,16 +163,7 @@ fn main() {
         }
     }
 
-    let admin_output_path = repo_root.join("fronts/admin/src/constants/permissions.generated.ts");
-    if let Err(err) = write_generated_file(
-        &admin_output_path,
-        &groups,
-        "import type { PermissionItem } from \"@/types/admin\";\n",
-    ) {
-        println!("cargo:warning=failed to write generated permissions: {}", err);
-    }
-
-    // P0-4.1：权限生成物落点修正，同时输出到 erp-client（实际前端）。
+    // P0-4.1：权限生成物落点修正，输出到 erp-client（实际前端）。
     // erp-client 侧自包含 PermissionItem 类型（其 tsconfig 无 @/types/admin 映射）。
     let client_output_path = repo_root.join("erp-client/lib/permissions.generated.ts");
     if let Err(err) = write_generated_file(&client_output_path, &groups, client_permission_item_source()) {

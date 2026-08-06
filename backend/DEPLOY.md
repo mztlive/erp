@@ -1,9 +1,8 @@
 # Docker 与 Jenkins 部署
 
-当前容器部署包含两个服务：
+当前容器部署包含一个服务：
 
 - `web-api`：Rust HTTP API，容器端口 `10001`。
-- `admin`：Next.js standalone 管理端，容器端口 `3000`。
 
 MongoDB 不在 Compose 中；配置中的 MongoDB 地址必须能从容器网络访问。
 该 MongoDB 必须是副本集或支持事务的分片集群；Web API 和超级管理员初始化命令都会在
@@ -14,7 +13,6 @@ Web API 启动。
 ## 文件职责
 
 - `Dockerfile`：构建后端镜像，包含 `web-api` 和 `init_super_admin`。
-- `fronts/admin/Dockerfile`：构建 Next.js standalone 管理端镜像。
 - `docker-compose.yml`：本地构建和容器联调。
 - `docker-compose.production.yml`：生产部署，只接受 digest 固定的镜像。
 - `Jenkinsfile`：选择 Git ref、构建推送镜像、归档发布清单并 SSH
@@ -44,14 +42,6 @@ chmod 0770 uploads
 `docker compose` 时，可通过
 `RS_PROJECT_TEMPLATE_LOCAL_UID` 和 `RS_PROJECT_TEMPLATE_LOCAL_GID` 显式指定。
 
-管理端 API 地址在镜像构建时写入浏览器静态产物。默认本地值是
-`http://localhost:10001`，可显式覆盖：
-
-```bash
-RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL=http://192.168.1.20:10001 \
-  ./manage.sh start
-```
-
 验证：
 
 ```bash
@@ -73,9 +63,6 @@ Pipeline 还依赖 Git Parameter、SSH Agent 插件，以及 ID 为 `deploy-ssh`
 - `DEPLOY_TARGET`：`user@host` 形式的 SSH 目标。
 - `DEPLOY_DIR`：部署机上的绝对目录。
 - `RS_PROJECT_TEMPLATE_API_HOST_PORT`：Web API 宿主机端口。
-- `RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT`：管理端宿主机端口。
-- `RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL`：构建进管理端、供浏览器访问的
-  API 绝对地址；它不是容器内地址。
 
 Pipeline 使用 Git SHA 与 Jenkins build number 标记镜像。推送后读取镜像仓库
 返回的 RepoDigest，生成 `release-artifacts/<tag>.env`。生产 Compose 不包含
@@ -105,10 +92,9 @@ install -m 0640 /secure/path/config.toml \
 
 ## 健康检查与回滚
 
-部署完成必须同时通过：
+部署完成必须通过：
 
 - Web API `GET /health`。
-- 管理端 `GET /login`。
 
 新版本失败且存在上一份发布清单时，部署脚本会重新拉起上一版本并复检。手工回滚：
 

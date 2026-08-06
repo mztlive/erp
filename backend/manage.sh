@@ -13,17 +13,17 @@ usage() {
 usage: ./manage.sh <command> [service]
 
 commands:
-  start              Build and start web-api and admin
+  start              Build and start web-api
   stop               Stop the local stack
   restart            Restart the local stack
   status             Show service status
   logs [service]     Follow all logs or one service log
   build              Build local images
-  health             Check Web API and Admin health
+  health             Check Web API health
   shell <service>    Open a shell in a running service
   help               Show this help
 
-services: web-api, admin
+services: web-api
 EOF
 }
 
@@ -55,10 +55,7 @@ health() {
   docker compose exec -T web-api \
     curl --fail --silent --show-error --max-time 3 \
     http://127.0.0.1:10001/health >/dev/null
-  docker compose exec -T admin \
-    node -e \
-    "fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
-  echo "web-api and admin are healthy"
+  echo "web-api is healthy"
 }
 
 main() {

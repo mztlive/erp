@@ -129,11 +129,10 @@
       "owns_pattern": [
         "backend/database/src/repository/{module}.rs",
         "backend/database/src/repository/extensions/{module}.rs",
-        "backend/database/src/indexes/{module}.rs",
-        "backend/database/tests/{module}_repository.rs"
+        "backend/database/src/indexes/{module}.rs"
       ],
       "cross_batch_deps": false,
-      "acceptance": ["gates.backend", "gates.backend_integration"]
+      "acceptance": ["gates.backend"]
     },
     "P3": {
       "title": "服务与接口",
@@ -144,11 +143,10 @@
       "owns_pattern": [
         "backend/services/src/{module}/**",
         "backend/apps/web-api/src/core/handler/{module}/**",
-        "backend/apps/web-api/src/core/routes/{module}.rs",
-        "backend/apps/web-api/tests/{module}_api.rs"
+        "backend/apps/web-api/src/core/routes/{module}.rs"
       ],
       "cross_batch_deps": "repository_only",
-      "acceptance": ["gates.backend", "gates.backend_integration", "permissions_no_drift"]
+      "acceptance": ["gates.backend", "permissions_no_drift"]
     },
     "P4": {
       "title": "前端集成",
@@ -158,12 +156,25 @@
       "acceptance": ["gates.frontend", "mock_references_zero"]
     },
     "P5": {
-      "title": "跨域不变量与加固",
+      "title": "跨域加固（投影与治理）",
       "doc": "P5-hardening.md",
       "letter": "E",
-      "parallel": 4,
+      "parallel": 2,
       "must_compile": true,
-      "acceptance": ["gates.backend", "gates.backend_integration"]
+      "acceptance": ["gates.backend"]
+    },
+    "P6": {
+      "title": "后端集成测试收口",
+      "doc": "P6-integration-tests.md",
+      "letter": "I",
+      "parallel": 12,
+      "must_compile": true,
+      "owns_pattern": [
+        "backend/database/tests/{module}_repository.rs",
+        "backend/apps/web-api/tests/{module}_api.rs"
+      ],
+      "acceptance": ["gates.backend", "gates.backend_integration"],
+      "$comment_acceptance": "I-X1/X2/X3 额外 owns 为 tests/invariants|concurrency 等，见 P6 文档"
     }
   },
   "stages": [
@@ -208,8 +219,6 @@
     { "id": "C-G11", "layer": "P3", "batch": "G11", "branch": "feat/erp-c-g11-supplier-exec", "depends_on": ["B-G5", "B-G7", "B-G9", "B-G10", "B-G11"] },
     { "id": "C-G12", "layer": "P3", "batch": "G12", "branch": "feat/erp-c-g12-integration-ops", "depends_on": ["B-G1", "B-G10", "B-G11", "B-G12"] },
 
-    { "id": "E1", "layer": "P5", "branch": "feat/erp-e1-invariants", "depends_on": ["C-G4", "C-G5", "C-G6", "C-G7"] },
-    { "id": "E2", "layer": "P5", "branch": "feat/erp-e2-concurrency", "depends_on": ["C-G6", "C-G7"] },
     { "id": "E3", "layer": "P5", "branch": "feat/erp-e3-projection", "depends_on": ["C-G1", "C-G7", "C-G10"] },
     { "id": "E4", "layer": "P5", "branch": "feat/erp-e4-governance", "depends_on": ["C-G1", "C-G2", "C-G3", "C-G4", "C-G5", "C-G6", "C-G7", "C-G8", "C-G9", "C-G10", "C-G11", "C-G12"] },
 
@@ -222,6 +231,23 @@
     { "id": "F7", "layer": "P4", "branch": "feat/erp-f7-workbench-analytics", "workspaces": ["W01", "W02", "W15", "W16", "W28"], "features": ["workspace", "unified-task-queue", "customer-quality", "actual-profit-loss", "card-business-analytics"], "depends_on": ["C-G1", "C-G7", "C-G10", "E3"] },
     { "id": "F8", "layer": "P4", "branch": "feat/erp-f8-sync-import-audit", "workspaces": ["W17", "W18", "W19"], "features": ["mall-sync", "import-opening", "access-audit"], "depends_on": ["C-G1", "C-G8"] },
     { "id": "F9", "layer": "P4", "branch": "feat/erp-f9-supply-publication", "workspaces": ["W20", "W21", "W22", "W23"], "features": ["supplier-api-connections", "supplier-catalog", "product-publications", "execution-projections"], "depends_on": ["C-G5", "C-G9"] },
-    { "id": "F10", "layer": "P4", "branch": "feat/erp-f10-mall-supplier-ops", "workspaces": ["W25", "W26", "W27", "W29", "W30"], "features": ["mall-consumption-orders", "supplier-orders", "supplier-settlements", "integration-errors", "history-backfill"], "depends_on": ["C-G10", "C-G11", "C-G12"] }
+    { "id": "F10", "layer": "P4", "branch": "feat/erp-f10-mall-supplier-ops", "workspaces": ["W25", "W26", "W27", "W29", "W30"], "features": ["mall-consumption-orders", "supplier-orders", "supplier-settlements", "integration-errors", "history-backfill"], "depends_on": ["C-G10", "C-G11", "C-G12"] },
+
+    { "id": "I-G1", "layer": "P6", "batch": "G1", "branch": "feat/erp-i-g1-platform", "depends_on": ["C-G1"] },
+    { "id": "I-G2", "layer": "P6", "batch": "G2", "branch": "feat/erp-i-g2-party", "depends_on": ["C-G2"] },
+    { "id": "I-G3", "layer": "P6", "batch": "G3", "branch": "feat/erp-i-g3-catalog", "depends_on": ["C-G3"] },
+    { "id": "I-G4", "layer": "P6", "batch": "G4", "branch": "feat/erp-i-g4-sales", "depends_on": ["C-G4"] },
+    { "id": "I-G5", "layer": "P6", "batch": "G5", "branch": "feat/erp-i-g5-procurement", "depends_on": ["C-G5"] },
+    { "id": "I-G6", "layer": "P6", "batch": "G6", "branch": "feat/erp-i-g6-fulfillment", "depends_on": ["C-G6"] },
+    { "id": "I-G7", "layer": "P6", "batch": "G7", "branch": "feat/erp-i-g7-finance", "depends_on": ["C-G7"] },
+    { "id": "I-G8", "layer": "P6", "batch": "G8", "branch": "feat/erp-i-g8-mall-sync", "depends_on": ["C-G8"] },
+    { "id": "I-G9", "layer": "P6", "batch": "G9", "branch": "feat/erp-i-g9-publication", "depends_on": ["C-G9"] },
+    { "id": "I-G10", "layer": "P6", "batch": "G10", "branch": "feat/erp-i-g10-mall", "depends_on": ["C-G10"] },
+    { "id": "I-G11", "layer": "P6", "batch": "G11", "branch": "feat/erp-i-g11-supplier-exec", "depends_on": ["C-G11"] },
+    { "id": "I-G12", "layer": "P6", "batch": "G12", "branch": "feat/erp-i-g12-integration-ops", "depends_on": ["C-G12"] },
+
+    { "id": "I-X1", "layer": "P6", "branch": "feat/erp-i-x1-invariants", "depends_on": ["I-G4", "I-G5", "I-G6", "I-G7"] },
+    { "id": "I-X2", "layer": "P6", "branch": "feat/erp-i-x2-concurrency", "depends_on": ["I-G6", "I-G7"] },
+    { "id": "I-X3", "layer": "P6", "branch": "feat/erp-i-x3-projection", "depends_on": ["E3", "I-G1", "I-G7", "I-G10"] }
   ]
 }

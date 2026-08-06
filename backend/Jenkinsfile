@@ -40,16 +40,6 @@ pipeline {
             defaultValue: '10001',
             description: 'Web API 对宿主机发布的端口'
         )
-        string(
-            name: 'RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT',
-            defaultValue: '3000',
-            description: '管理端对宿主机发布的端口'
-        )
-        string(
-            name: 'RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL',
-            defaultValue: 'http://172.16.16.15:10001',
-            description: '构建进管理端、供浏览器访问的 Web API 地址'
-        )
     }
 
     stages {
@@ -87,7 +77,6 @@ pipeline {
                         scripts/jenkins/deploy-release.sh
                     docker compose -f docker-compose.yml config --quiet
                     RS_PROJECT_TEMPLATE_BACKEND_IMAGE=example.invalid/backend@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
-                    RS_PROJECT_TEMPLATE_ADMIN_IMAGE=example.invalid/admin@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
                         docker compose -f docker-compose.production.yml config --quiet
                 '''
             }

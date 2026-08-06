@@ -147,20 +147,24 @@ core/routes/admin.rs       ← 一次性 .merge(<domain>::routes(&rbac_service))
 
 ## 3. 任务 P0-3：测试夹具
 
-当前后端**没有任何 `tests/` 目录**，而 P2 起的验收全部依赖真实 MongoDB（事务需要副本集）。
+当前后端**没有任何 `tests/` 目录**。P2/P3 实现阶段**不强制**跑真实 Mongo IT；
+但 P0 必须先把夹具与样板 IT 建好，供最后阶段 [P6](./P6-integration-tests.md) 批量复制。
 
 1. `backend/scripts/dev-mongo.sh`：启动单节点副本集容器（`--replSet rs0` + 自动 `rs.initiate()`），
    输出连接串；`docker-compose.yml` 增加对应 profile。
 2. `backend/crates/test-support`（新 crate，dev-dependency）：
    - `TestDb`：按随机库名连接、创建、`Drop` 时清理；
    - `require_mongo!()` 宏：读 `ERP_TEST_MONGO_URI`，缺失时跳过并打印原因；
-   - `seed_*` 辅助：最小账号/角色/权限种子，供 P3 HTTP 测试鉴权；
+   - `seed_*` 辅助：最小账号/角色/权限种子，供 HTTP 集成测试鉴权；
    - `assert_indexes(db, collection, &[names])`：索引存在性断言；
    - HTTP 测试客户端：启动 `web-api` Router，带 JWT 发请求。
-3. `#[ignore]` 门控约定与 CI 两段式执行（见 conventions 7.2）。
+3. `#[ignore]` 门控约定与 CI 两段式执行（见 conventions 7.2）：
+   - 日常/P1–P5：`cargo test --workspace`；
+   - P0 样板 + P6 / 发布：`cargo test --workspace -- --include-ignored`。
 
 **验收**：`cargo test --workspace` 在无数据库环境全绿；
-`ERP_TEST_MONGO_URI=... cargo test --workspace -- --include-ignored` 在有库环境全绿。
+`ERP_TEST_MONGO_URI=... cargo test --workspace -- --include-ignored` 在有库环境全绿
+（至少覆盖 D01 样板 IT 与既有 IAM 相关测试）。
 
 ---
 
@@ -173,8 +177,7 @@ core/routes/admin.rs       ← 一次性 .merge(<domain>::routes(&rbac_service))
 - 列表查询参数统一：`page`、`page_size`、`sort_by`、`sort_dir`、域内筛选字段扁平传递。
 - 时间统一以秒级 Unix 时间戳传输，金额与数量以**字符串**传输（避免 JS 浮点失真），
   前端用 `lib/fixed-decimal.ts` 消费。此项必须与 `erp-client` 现有 mock 形态核对后确定并写进文档。
-- **权限产物落点修正**：`apps/web-api/build.rs` 当前写入 `fronts/admin/src/constants/permissions.generated.ts`，
-  而实际前端是 `erp-client`。P0 改为同时（或改为）输出到
+- **权限产物落点修正**：`apps/web-api/build.rs` 输出到
   `erp-client/lib/permissions.generated.ts`，并在 CI 校验无漂移。
 
 ### 4.2 前端接入基座（`erp-client/lib/api/`）
@@ -203,21 +206,22 @@ lib/api/feature-source.ts 按 feature 切换 mock / 真实实现的开关
 | 层 | 产物 | 作为样板演示的点 |
 | --- | --- | --- |
 | 实体 | `entities/src/source_registry/` | ids 用法、StableBase、状态机 trait、内联单测 |
-| 仓储 | `repository/source_registry.rs`、`indexes/source_registry.rs`、`extensions/source_registry.rs` | Executor 传参、投影查询、唯一索引、乐观锁、集成测试写法 |
+| 仓储 | `repository/source_registry.rs`、`indexes/source_registry.rs`、`extensions/source_registry.rs` | Executor 传参、投影查询、唯一索引、乐观锁；**含**样板仓储 IT 写法供 P6 复制 |
 | 服务 | `services/src/source_registry/{mod.rs,dto.rs}` | 事务模板、审计事务、DTO 定义、错误映射 |
-| 接口 | `handler/source_registry/`、`routes/source_registry.rs` | 权限宏、路由挂载、`ApiResponse`、HTTP 集成测试 |
+| 接口 | `handler/source_registry/`、`routes/source_registry.rs` | 权限宏、路由挂载、`ApiResponse`；**含**样板 HTTP IT 写法供 P6 复制 |
 | 前端 | `erp-client/features/mall-sync` 中来源相关取数 | `api.ts` 替换姿势、开关用法、错误提示 |
 
-**验收**：外部身份映射的建立/查询接口可鉴权调用；测试覆盖 happy path、403、400、409（乐观锁）；
-前端能取到真实数据。
+**验收**：外部身份映射的建立/查询接口可鉴权调用；D01 样板 IT 覆盖 happy path、403、400、409（乐观锁）
+（后续域的同类 IT 在 P6 批量补齐，不阻塞 P2/P3）；前端能取到真实数据。
 
 ---
 
 ## 6. 任务 P0-6：文档与 CI
 
 1. 在 `backend/AGENTS.md` 追加一节"分阶段并行开发约束"，指向本目录，并写明冻结文件清单。
-2. CI 增加：`cargo test --workspace -- --include-ignored`（带 Mongo service）、
-   权限生成物漂移校验、`erp-client` 的 `npm run lint` 与 `tsc --noEmit`。
+2. CI 两段：默认 `cargo test --workspace`；集成段（Mongo service）
+   `cargo test --workspace -- --include-ignored`（P0 样板 + 后续 P6 全量）。
+   另含权限生成物漂移校验、`erp-client` 的 `npm run lint` 与 `tsc --noEmit`。
 3. 在 `docs/dev-plan/_meta.json` 校验分支名与 owns 前缀无重叠（可用一次性脚本）。
 
 ---

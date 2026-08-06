@@ -57,42 +57,6 @@ services:
       - ALL
     logging: *bounded-json-logging
 
-  admin:
-    image: rs-project-template-admin:${RS_PROJECT_TEMPLATE_LOCAL_TAG:-dev}
-    build:
-      context: .
-      dockerfile: fronts/admin/Dockerfile
-      target: runtime
-      args:
-        NEXT_PUBLIC_API_URL: ${RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL:-http://localhost:10001}
-    restart: unless-stopped
-    init: true
-    environment:
-      NODE_ENV: production
-      TZ: ${TZ:-Asia/Shanghai}
-    ports:
-      - "${RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT:-3000}:3000"
-    depends_on:
-      web-api:
-        condition: service_healthy
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    healthcheck:
-      test:
-        [
-          "CMD",
-          "node",
-          "-e",
-          "fetch('http://127.0.0.1:3000/login').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
-        ]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 20s
-    logging: *bounded-json-logging
-
   # 集成测试专用 MongoDB 单节点副本集（事务需要副本集）。
   # 启动：docker compose --profile test up -d mongo
   mongo:

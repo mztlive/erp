@@ -10,7 +10,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 : "${DEPLOY_DIR:?Jenkins must provide DEPLOY_DIR}"
 
 RS_PROJECT_TEMPLATE_API_HOST_PORT="${RS_PROJECT_TEMPLATE_API_HOST_PORT:-10001}"
-RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT="${RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT:-3000}"
 
 validate_port() {
   local name="$1" value="$2" port
@@ -26,13 +25,7 @@ validate_port() {
 }
 
 validate_port RS_PROJECT_TEMPLATE_API_HOST_PORT "$RS_PROJECT_TEMPLATE_API_HOST_PORT"
-validate_port RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT "$RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT"
 RS_PROJECT_TEMPLATE_API_HOST_PORT=$((10#$RS_PROJECT_TEMPLATE_API_HOST_PORT))
-RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT=$((10#$RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT))
-if [[ "$RS_PROJECT_TEMPLATE_API_HOST_PORT" == "$RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT" ]]; then
-  echo "Web API and Admin host ports must be distinct" >&2
-  exit 2
-fi
 
 if [[ ! "$DEPLOY_TARGET" =~ ^[A-Za-z0-9._-]+@[A-Za-z0-9.-]+$ ]]; then
   echo "DEPLOY_TARGET must use the user@host form: $DEPLOY_TARGET" >&2
@@ -59,7 +52,6 @@ cp "$release_manifest" "$deploy_manifest"
 {
   printf '\n%s\n' '# Jenkins deployment parameters; safe to retain for rollback.'
   printf 'RS_PROJECT_TEMPLATE_API_HOST_PORT=%s\n' "$RS_PROJECT_TEMPLATE_API_HOST_PORT"
-  printf 'RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT=%s\n' "$RS_PROJECT_TEMPLATE_ADMIN_HOST_PORT"
 } >>"$deploy_manifest"
 
 ssh "$DEPLOY_TARGET" bash -s -- "$DEPLOY_DIR" <<'REMOTE_PREPARE'

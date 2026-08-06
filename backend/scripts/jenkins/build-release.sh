@@ -7,7 +7,6 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 : "${WORKSPACE:?Jenkins must provide WORKSPACE}"
 : "${BUILD_NUMBER:?Jenkins must provide BUILD_NUMBER}"
 : "${REGISTRY_HOST:?Jenkins must provide REGISTRY_HOST}"
-: "${RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL:?Jenkins must provide RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL}"
 
 if [[ ! "$REGISTRY_HOST" =~ ^[A-Za-z0-9.-]+(:[0-9]{1,5})?$ ]]; then
   echo "REGISTRY_HOST must be a host name or host:port: $REGISTRY_HOST" >&2
@@ -23,7 +22,6 @@ if [[ "$REGISTRY_HOST" == *:* ]]; then
 fi
 
 export RS_PROJECT_TEMPLATE_BACKEND_IMAGE_REPOSITORY="$REGISTRY_HOST/rs-project-template-backend"
-export RS_PROJECT_TEMPLATE_ADMIN_IMAGE_REPOSITORY="$REGISTRY_HOST/rs-project-template-admin"
 commit="$(git -C "$ROOT_DIR" rev-parse --verify HEAD)"
 export RS_PROJECT_TEMPLATE_RELEASE_TAG="${commit}-${BUILD_NUMBER}"
 export RS_PROJECT_TEMPLATE_RELEASE_OUTPUT_DIR="${RS_PROJECT_TEMPLATE_RELEASE_OUTPUT_DIR:-$WORKSPACE/release-artifacts}"

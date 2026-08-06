@@ -1,13 +1,12 @@
 # RS Project Template
 
-Rust + Next template that ships an Axum-based Web API, Mongo-backed repositories, and an admin frontend. Authentication, RBAC, account management, and file upload are wired end to end.
+Rust template that ships an Axum-based Web API and Mongo-backed repositories. Authentication, RBAC, account management, and file upload are wired end to end.
 
 ## What’s Included
 - **Axum Web API (`apps/web-api`)**: JWT authentication for ERP operators, Casbin RBAC backed by MongoDB, account management, and authenticated image upload with read-only local file serving.
 - **Mongo repositories (`database/`)**: Generic `Repository<T>` with soft-delete, paging, and transaction helpers, plus typed accessors via `DatabaseExt`.
 - **Domain/services (`entities/`, `services/`)**: Domain entities and application services for ERP operator accounts, audit logs, and RBAC.
 - **Shared crates (`crates/`)**: coordination-free UUID generation (`id-generator`), local file storage (`storage`), and proc macros for entities and permissions.
-- **Admin frontend (`fronts/admin`)**: Next.js 15 management console for accounts, roles, audit logs, and the other active admin domains.
 
 ## Project Layout
 - `apps/web-api/` – Axum entrypoint, routes, authentication/rate-limit middleware, Casbin authorization, and handlers (`core/handler/{admin,auth,upload.rs}`).
@@ -16,7 +15,6 @@ Rust + Next template that ships an Axum-based Web API, Mongo-backed repositories
 - `database/` – Generic MongoDB repositories, typed `DatabaseExt` accessors, entity-specific queries, indexes, and transaction support.
 - `config/` – Config loader with CLI args and optional Nacos hot-reload.
 - `crates/` – Shared libraries (`id-generator`, `storage`, `entity-*`, `permission-macros`).
-- `fronts/admin/` – Next.js admin application.
 - `config.toml.example` – Minimal local configuration template.
 
 ## API Surface (current)
@@ -55,7 +53,7 @@ Rust + Next template that ships an Axum-based Web API, Mongo-backed repositories
    ```
 
 ## Run Locally
-1. Prerequisites: Rust toolchain (edition 2021, rustfmt/clippy), MongoDB instance, Node 18+ if you touch the frontend.
+1. Prerequisites: Rust toolchain (edition 2021, rustfmt/clippy), MongoDB instance.
 2. Initialize or repair the super admin. Re-running this command restores the account and rotates
    its name/password to the supplied values:
    ```bash
@@ -70,18 +68,11 @@ Rust + Next template that ships an Axum-based Web API, Mongo-backed repositories
    RUST_LOG=info cargo run -p web-api -- --config-path ./config.toml
    # LOG_FORMAT=json to emit JSON tracing
    ```
-4. Admin frontend:
-   ```bash
-   cd fronts/admin
-   npm install
-   NEXT_PUBLIC_API_URL=http://localhost:10001 npm run dev
-   ```
 
 ## Development Checklist
 - Format and lint: `cargo fmt --all` and `cargo clippy --workspace --all-targets --all-features`.
 - Tests: `cargo test --workspace` (service and entity tests live inline); add a happy-path test for every functional change.
-- Frontend (if modified): `npm run lint` and keep Biome formatting (4-space indent) intact.
-- Docker: `docker-compose.yml` builds the local Web API and admin stack; production uses
+- Docker: `docker-compose.yml` builds the local Web API; production uses
   digest-pinned images through `docker-compose.production.yml` and `Jenkinsfile`.
   See `DEPLOY.md` for local build, Jenkins parameters, deployment, and rollback.
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build, push, and record one immutable rs-project-template image release.
+# Build, push, and record one immutable rs-project-template backend image release.
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,8 +12,6 @@ usage: scripts/release-image.sh <build|push>
 
 Required environment:
   RS_PROJECT_TEMPLATE_BACKEND_IMAGE_REPOSITORY
-  RS_PROJECT_TEMPLATE_ADMIN_IMAGE_REPOSITORY
-  RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL
 
 Optional:
   RS_PROJECT_TEMPLATE_RELEASE_TAG
@@ -24,9 +22,7 @@ EOF
 require_env() {
   local variable
   for variable in \
-    RS_PROJECT_TEMPLATE_BACKEND_IMAGE_REPOSITORY \
-    RS_PROJECT_TEMPLATE_ADMIN_IMAGE_REPOSITORY \
-    RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL
+    RS_PROJECT_TEMPLATE_BACKEND_IMAGE_REPOSITORY
   do
     if [[ -z "${!variable:-}" ]]; then
       echo "missing required environment: $variable" >&2
@@ -37,10 +33,6 @@ require_env() {
     echo "release tag contains unsupported characters: $TAG" >&2
     exit 2
   fi
-  if [[ ! "$RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL" =~ ^https?://[^[:space:]]+$ ]]; then
-    echo "RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL must be an absolute HTTP(S) URL" >&2
-    exit 2
-  fi
 }
 
 image_ref() {
@@ -48,20 +40,12 @@ image_ref() {
 }
 
 backend_image="$(image_ref "${RS_PROJECT_TEMPLATE_BACKEND_IMAGE_REPOSITORY:-}")"
-admin_image="$(image_ref "${RS_PROJECT_TEMPLATE_ADMIN_IMAGE_REPOSITORY:-}")"
 
 build() {
   docker build \
     --pull \
     --target runtime \
     --tag "$backend_image" \
-    "$ROOT_DIR"
-  docker build \
-    --pull \
-    --file "$ROOT_DIR/fronts/admin/Dockerfile" \
-    --target runtime \
-    --build-arg "NEXT_PUBLIC_API_URL=$RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL" \
-    --tag "$admin_image" \
     "$ROOT_DIR"
 }
 
@@ -85,7 +69,6 @@ digest_ref() {
 push() {
   mkdir -p "$RELEASE_DIR"
   docker push "$backend_image"
-  docker push "$admin_image"
 
   local manifest="$RELEASE_DIR/$TAG.env"
   umask 077
@@ -95,10 +78,6 @@ push() {
     printf 'RS_PROJECT_TEMPLATE_GIT_COMMIT=%s\n' "$(git -C "$ROOT_DIR" rev-parse HEAD)"
     printf 'RS_PROJECT_TEMPLATE_BACKEND_IMAGE=%s\n' \
       "$(digest_ref "$RS_PROJECT_TEMPLATE_BACKEND_IMAGE_REPOSITORY")"
-    printf 'RS_PROJECT_TEMPLATE_ADMIN_IMAGE=%s\n' \
-      "$(digest_ref "$RS_PROJECT_TEMPLATE_ADMIN_IMAGE_REPOSITORY")"
-    printf 'RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL=%s\n' \
-      "$RS_PROJECT_TEMPLATE_ADMIN_API_BASE_URL"
   } >"$manifest"
   echo "deployable release manifest: $manifest"
 }

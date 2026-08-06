@@ -6,12 +6,17 @@
 | 并行度 | 12（前提是遵守 §2 的跨域协作规则） |
 | 依赖 | 同域 P2 已合并 + `domains.md` 中「依赖域」的 P2 已合并 |
 | `must_compile` | true |
-| owns | `services/src/<domain>/**`、`web-api/src/core/handler/<domain>/**`、`web-api/src/core/routes/<domain>.rs`、`web-api/tests/<domain>_api.rs` |
+| owns | `services/src/<domain>/**`、`web-api/src/core/handler/<domain>/**`、`web-api/src/core/routes/<domain>.rs` |
 
-本层交付**可被前端调用的接口**。验收标准就是"带鉴权的 HTTP 调用返回契约形状"。
+本层交付**可被前端调用的接口**。实现验收以编译门禁 + 接口清单 +（可选）手工/联调冒烟为准；
+完整 HTTP 集成测试统一在 [P6](./P6-integration-tests.md) 收口。
 
 Handler 与 Service 合并在同一阶段，因为 Handler 按 `AGENTS.md` 只做协议适配，
-薄到不值得单列一层；而只有接口跑通，P4 才有确定的对接对象。
+薄到不值得单列一层；而只有接口可对接，P4 才有确定的对接对象。
+
+> **集成测试策略**：401/403/400/409/happy path 等自动化 HTTP IT **不在本层强制验收**，
+> 以免拖慢服务层并行交付。P0 的 D01 样板保留可复制的 HTTP IT 写法；
+> 本层可自愿补测，但不作为合并门禁。
 
 ---
 
@@ -23,7 +28,6 @@ Handler 与 Service 合并在同一阶段，因为 Handler 按 `AGENTS.md` 只�
 3. `web-api/src/core/handler/<domain>/`：每组接口一个文件，复用 service DTO，
    标注 `#[permission_macros::permission(...)]`。
 4. `web-api/src/core/routes/<domain>.rs`：填充 P0 预留的 `routes()`，挂 JWT + RBAC。
-5. `web-api/tests/<domain>_api.rs`：HTTP 集成测试。
 
 ---
 
@@ -115,29 +119,27 @@ cargo fmt --all -- --check
 cargo check --workspace
 cargo clippy --workspace --all-targets --all-features -- -D warnings
 cargo test --workspace
-ERP_TEST_MONGO_URI=... cargo test -p web-api --test <domain>_api -- --include-ignored
 git diff --exit-code erp-client/lib/permissions.generated.ts   # 无漂移
 ```
 
-### 5.2 HTTP 集成测试必须覆盖
+本层**不要求** `cargo test -- --include-ignored`。HTTP 集成测试覆盖表见
+[P6 §1.2](./P6-integration-tests.md)。
 
-| 用例 | 断言 |
+### 5.2 实现侧验收（非自动化 IT）
+
+| 项 | 要求 |
 | --- | --- |
-| 未带 token | 401 |
-| 带 token 但无权限 | 403 |
-| 请求体校验失败 | 400 + 稳定错误结构 |
-| happy path | 200 + 契约形状（字段名与前端 `api.ts` 类型一致） |
-| 乐观锁/并发冲突 | 409 |
-| 事务不变量 | 关键写入路径：断言多集合结果同时生效；注入失败后断言全部不可见 |
-| 幂等 | 资金/状态类入口重复提交只产生一条正式事实 |
-| 分页与排序 | 边界页、非法排序字段被拒 |
+| 接口清单 | 方法、路径、权限键、对应页面章节齐全 |
+| 事务不变量 | PR 列出本域覆盖的第 8 章条目号，并说明实现落点（service 方法名） |
+| 契约形状 | DTO 字段与前端 `api.ts` 类型可对照；差异记入「契约变更」 |
+| 权限 | 权限宏齐全，生成物无漂移 |
 
 ### 5.3 PR 证据
 
-conventions §7.3 模板 + 以下两项：
+conventions §7.3 模板（集成测试一栏写「延期至 P6 / I-Gx」）+ 以下两项：
 
 - 本域接口清单：方法、路径、权限键、对应页面（`ui-workspaces/wNN.md` 章节号）
-- 本域覆盖的第 8 章不变量条目号与对应测试函数名
+- 本域覆盖的第 8 章不变量条目号与实现方法名（自动化测试函数名在 P6 补齐）
 
 ---
 

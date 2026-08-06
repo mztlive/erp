@@ -13,7 +13,6 @@
 - `database`：MongoDB 仓储层与 `DatabaseExt` 访问器（如 `account_core`、`role`、`consumer`）。
 - `crates`：共享工具与基础设施（`id-generator` ID、`storage` 上传、`entity-core`/`entity-macros`、`permission-macros`）。
 - `config`：配置加载与 Nacos 热更新（`SafeConfig`）。
-- `fronts/admin`：Next.js 管理端；如有修改需遵循 Biome（4 空格）并运行 `npm run lint`。
 - `docs`：专项说明（Casbin RBAC、权限生成等）。
 - `scripts`：脚本与自动化工具。
 - `logs`：仅在显式设置 `LOG_TO_FILE=true` 时使用的本地文件日志目录。
@@ -101,7 +100,6 @@
 - API：`cargo run -p web-api -- --config-path ./config.toml`（支持 `RUST_LOG=info|debug`、`LOG_FORMAT=json`）。
 - Workspace：`cargo build --workspace`、`cargo test --workspace`。
 - 质量门禁：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace`。
-- 前端：`cd fronts/admin && npm install && npm run dev`；如有修改需运行 `npm run lint`。
 - Docker：`./manage.sh start|status|logs` 封装 `docker compose`；`config.toml` 与 `./uploads` 按 `docker-compose.yml` 挂载。
 
 ## 测试期望
@@ -113,7 +111,6 @@
 
 ## CI 与质量门禁
 - CI 必须执行并通过：`cargo fmt --all -- --check`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features -D warnings`、`cargo test --workspace`。
-- 修改 `fronts/admin` 时，CI 需额外执行 `npm run lint`。
 - 任何生成文件（如权限定义）必须在 CI 中校验未漂移。
 
 ## API 契约与兼容性
