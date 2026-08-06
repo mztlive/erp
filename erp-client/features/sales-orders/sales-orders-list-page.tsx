@@ -29,6 +29,7 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
   StatusTrackSummary,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -482,7 +483,7 @@ export function SalesOrdersListPage() {
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
+    <PageScaffold density="compact">
       <PageHeader
         title="销售单"
         breadcrumbs={[
@@ -788,7 +789,7 @@ export function SalesOrdersListPage() {
               }}
             />
           ) : items.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 border-y bg-card px-4 py-10 text-center">
+            <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
               <p className="text-sm text-muted-foreground">
                 {filtersActive ? "当前筛选没有结果" : "还没有销售单"}
               </p>
@@ -847,6 +848,6 @@ export function SalesOrdersListPage() {
           if (!open) setPaperId(null)
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }

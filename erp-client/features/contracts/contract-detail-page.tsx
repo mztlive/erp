@@ -17,7 +17,11 @@ import {
   MoneyValue,
   PageActions,
   PageHeader,
+  PageScaffold,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
+import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -104,20 +108,20 @@ export function ContractDetailPage({
 
   if (query.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="合同" description="正在加载详情…" />
         <div className="space-y-3" aria-busy="true" aria-label="加载中">
           <div className="h-16 animate-pulse rounded-lg bg-muted" />
-          <div className="h-24 animate-pulse rounded-2xl bg-muted" />
-          <div className="h-40 animate-pulse rounded-2xl bg-muted" />
+          <div className="h-24 animate-pulse rounded-lg bg-muted" />
+          <div className="h-40 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (query.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="合同" />
         <BusinessFailureState
           kind="system"
@@ -127,13 +131,13 @@ export function ContractDetailPage({
             void query.refetch()
           }}
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!contract) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title="合同不存在"
           description="未找到这份合同。可能编号有误，或当前角色无权查看。"
@@ -141,7 +145,7 @@ export function ContractDetailPage({
             <Button render={<Link href="/sales/contracts" />}>返回列表</Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -188,7 +192,7 @@ export function ContractDetailPage({
   const rev = contract.currentRevision
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -302,7 +306,7 @@ export function ContractDetailPage({
 
       <nav
         aria-label="对象分区"
-        className="flex flex-wrap gap-2 border-b border-border pb-2"
+        className="flex flex-wrap gap-2 border-b border-border/30 pb-2"
       >
         {navItems.map((item) => {
           const active = activeSection === item.id
@@ -329,8 +333,8 @@ export function ContractDetailPage({
 
       {activeSection === "overview" ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card size="sm">
-            <CardHeader className="border-b">
+          <Card size="sm" className={surfacePanelClassName}>
+            <CardHeader className="border-b border-border/30">
               <CardTitle>概览</CardTitle>
               <CardDescription>
                 展示合同身份、客户、状态、版本与有效期；不含合同级金额。
@@ -398,8 +402,8 @@ export function ContractDetailPage({
             </CardContent>
           </Card>
 
-          <Card size="sm">
-            <CardHeader className="border-b">
+          <Card size="sm" className={surfacePanelClassName}>
+            <CardHeader className="border-b border-border/30">
               <CardTitle>关联销售摘要</CardTitle>
               <CardDescription>
                 金额仅为各销售单摘要，不汇总为合同金额。更新于{" "}
@@ -416,7 +420,8 @@ export function ContractDetailPage({
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
+                variant="secondary"
+                className="rounded-lg shadow-none"
                 render={<Link href={`${baseHref}?section=sales-orders`} />}
               >
                 查看关联销售单
@@ -427,8 +432,8 @@ export function ContractDetailPage({
       ) : null}
 
       {activeSection === "settlement" ? (
-        <Card size="sm">
-          <CardHeader className="border-b">
+        <Card size="sm" className={surfacePanelClassName}>
+          <CardHeader className="border-b border-border/30">
             <CardTitle>结算与开票</CardTitle>
             <CardDescription>
               当前合同修订的结构化记录；销售单关联时锁定该版本。
@@ -503,8 +508,8 @@ export function ContractDetailPage({
       ) : null}
 
       {activeSection === "sales-orders" ? (
-        <Card size="sm">
-          <CardHeader className="border-b">
+        <Card size="sm" className={surfacePanelClassName}>
+          <CardHeader className="border-b border-border/30">
             <CardTitle>关联销售单</CardTitle>
             <CardDescription>
               追溯每张销售单使用的合同版本；金额仅作单据摘要。
@@ -516,7 +521,7 @@ export function ContractDetailPage({
             {contract.relatedSalesOrders.length === 0 ? (
               <p className="text-sm text-muted-foreground">暂无关联销售单。</p>
             ) : (
-              <div className="overflow-hidden rounded-lg border border-border">
+              <div className="overflow-hidden rounded-lg ring-1 ring-foreground/[0.04]">
                 <Table data-density="compact">
                   <TableHeader>
                     <TableRow>
@@ -579,8 +584,8 @@ export function ContractDetailPage({
 
       {activeSection === "versions" ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card size="sm">
-            <CardHeader className="border-b">
+          <Card size="sm" className={surfacePanelClassName}>
+            <CardHeader className="border-b border-border/30">
               <div className="flex flex-wrap items-center gap-2">
                 <HistoryIcon
                   className="size-4 text-muted-foreground"
@@ -602,7 +607,7 @@ export function ContractDetailPage({
                   {contract.revisionTimeline.map((item) => (
                     <li
                       key={item.revisionId}
-                      className="rounded-lg border border-border px-3 py-2.5"
+                      className={cn(surfaceInsetClassName, "px-3 py-2.5")}
                     >
                       <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-2">
@@ -642,8 +647,8 @@ export function ContractDetailPage({
             </CardContent>
           </Card>
 
-          <Card size="sm">
-            <CardHeader className="border-b">
+          <Card size="sm" className={surfacePanelClassName}>
+            <CardHeader className="border-b border-border/30">
               <CardTitle>审计时间线</CardTitle>
               <CardDescription>
                 PDF 上传、版本归档、终止与下载等处理动作。
@@ -654,7 +659,7 @@ export function ContractDetailPage({
                 {contract.auditTimeline.map((event) => (
                   <li
                     key={event.id}
-                    className="rounded-lg border border-border px-3 py-2.5"
+                    className={cn(surfaceInsetClassName, "px-3 py-2.5")}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-sm font-medium">
@@ -681,6 +686,6 @@ export function ContractDetailPage({
         open={paperOpen}
         onOpenChange={setPaperOpen}
       />
-    </div>
+    </PageScaffold>
   )
 }

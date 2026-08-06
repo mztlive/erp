@@ -25,8 +25,11 @@ import {
   FormalActionResult,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   SequentialProcessBar,
   SupplierCombobox,
+  surfaceInsetClassName,
+  surfacePanelClassName,
   ValidationSummary,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
@@ -774,23 +777,23 @@ export function ProcurementConfirmationPage() {
 
   if (queueQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="采购二次确认" description="正在加载队列…" />
         <div
-          className="h-24 animate-pulse rounded-2xl bg-muted"
+          className="h-12 animate-pulse rounded-lg bg-muted"
           aria-hidden="true"
         />
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
-          <div className="h-80 animate-pulse rounded-2xl bg-muted" />
-          <div className="h-64 animate-pulse rounded-2xl bg-muted" />
+        <div className="grid gap-3 md:gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(16rem,1fr)]">
+          <div className="h-80 animate-pulse rounded-lg bg-muted" />
+          <div className="h-64 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (queueQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="采购二次确认" description="队列加载失败" />
         <BusinessFailureState
           kind="system"
@@ -807,12 +810,12 @@ export function ProcurementConfirmationPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="采购二次确认"
         breadcrumbs={[
@@ -843,7 +846,9 @@ export function ProcurementConfirmationPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2 text-sm">
+      <div
+        className={`${surfacePanelClassName} sticky top-0 z-10 flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm`}
+      >
         <div className="flex items-center gap-2">
           <Label htmlFor="auto-next" className="text-muted-foreground">
             自动下一项
@@ -859,17 +864,17 @@ export function ProcurementConfirmationPage() {
           </span>
         </div>
         <Badge variant="outline" className="font-normal">
-          该偏好仅在本次操作内生效
+          仅本次会话
         </Badge>
         <span className="ml-auto hidden text-xs text-muted-foreground md:inline">
-          快捷键：j / k 切换任务 · ⌘S 保存 · ⌘↵ 打开通过确认
+          快捷键：j / k 切换 · ⌘S 保存 · ⌘↵ 通过确认
         </span>
       </div>
 
       {finishedResult && !lastResult ? (
         <div
           role="status"
-          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl border border-border bg-card px-3 py-2 text-sm"
+          className={`${surfaceInsetClassName} flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm`}
         >
           <CircleCheckIcon
             className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
@@ -1048,8 +1053,8 @@ export function ProcurementConfirmationPage() {
           />
 
           {/* 1440 双栏：左销售提交+分行，右决策摘要 sticky */}
-          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,66fr)_minmax(17rem,34fr)]">
-            <div className="min-w-0 space-y-4">
+          <div className="grid min-w-0 gap-3 md:gap-4 xl:grid-cols-[minmax(0,66fr)_minmax(17rem,34fr)]">
+            <div className={`min-w-0 space-y-4 p-3 md:p-4 ${surfacePanelClassName}`}>
               {task.salesSubmission.resubmissionContext ? (
                 <Alert variant="info">
                   <TriangleAlertIcon aria-hidden="true" />
@@ -1457,10 +1462,10 @@ export function ProcurementConfirmationPage() {
               </Card>
             </div>
 
-            {/* 决策摘要：桌面 sticky */}
-            <aside className="space-y-4 xl:sticky xl:top-4 xl:self-start">
-              <Card size="sm">
-                <CardHeader className="border-b">
+            {/* 决策摘要：桌面 sticky；top 避开 sticky 处理条 */}
+            <aside className="space-y-3 md:space-y-4 xl:sticky xl:top-16 xl:self-start">
+              <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="rounded-t-lg border-b border-border/30">
                   <CardTitle>决策摘要</CardTitle>
                   <CardDescription>
                     数量覆盖按明细独立展示，不可跨行抵消。
@@ -1548,8 +1553,8 @@ export function ProcurementConfirmationPage() {
                 </CardContent>
               </Card>
 
-              <Card size="sm">
-                <CardHeader className="border-b">
+              <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="rounded-t-lg border-b border-border/30">
                   <CardTitle>销售单详情</CardTitle>
                   <CardDescription>
                     深挖后返回仍恢复队列位置、筛选与当前项。
@@ -1737,7 +1742,7 @@ export function ProcurementConfirmationPage() {
           </Dialog>
         </>
       ) : null}
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -1853,8 +1858,8 @@ function ProcurementRejectionNextSteps({
   returnTo: string
 }) {
   return (
-    <Card size="sm" className="mt-3">
-      <CardHeader className="border-b">
+    <Card size="sm" className={`mt-3 ${surfacePanelClassName}`}>
+      <CardHeader className="rounded-t-lg border-b border-border/30">
         <CardTitle>销售三条固定出路</CardTitle>
         <CardDescription>
           上一驳回提交已作废；本页只读展示出路，不代销售选择。

@@ -11,9 +11,13 @@ import {
   DocumentSection,
   PageActions,
   PageHeader,
+  PageScaffold,
   RevisionTimeline,
   SensitiveValue,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
+import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -64,7 +68,7 @@ export function MasterDataCenterPage({
 }) {
   if (!isResource(resource)) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title={masterDataCopy.unknownResourceTitle}
           description={masterDataCopy.unknownResourceDesc()}
@@ -74,7 +78,7 @@ export function MasterDataCenterPage({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -120,19 +124,19 @@ function MasterDataCenterBody({
 
   if (query.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title="基础资料详情"
           description={masterDataCopy.centerLoading}
         />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (query.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="基础资料详情" />
         <BusinessFailureState
           kind="system"
@@ -143,13 +147,13 @@ function MasterDataCenterBody({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!data) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title={masterDataCopy.centerMissingTitle}
           description={masterDataCopy.centerMissingDesc}
@@ -159,7 +163,7 @@ function MasterDataCenterBody({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -173,7 +177,7 @@ function MasterDataCenterBody({
   const disableBlocker = data.actionBlockers.find((b) => b.action === "DISABLE")
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -192,7 +196,7 @@ function MasterDataCenterBody({
                 actionKey: "back",
                 label: masterDataCopy.actionBackList,
                 icon: ArrowLeftIcon,
-                variant: "outline",
+                variant: "ghost",
                 onClick: () => {
                   // SPA 内导航：保留列表滚动与筛选状态
                   router.push(listHref)
@@ -290,7 +294,7 @@ function MasterDataCenterBody({
 
       <nav
         aria-label="资料分区"
-        className="sticky top-0 z-10 flex flex-wrap gap-2 border-b border-border bg-background/95 py-2 backdrop-blur"
+        className="sticky top-0 z-10 inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
       >
         {SECTION_NAV.map((item) => {
           const selected = item.id === activeSection
@@ -298,7 +302,13 @@ function MasterDataCenterBody({
             <Button
               key={item.id}
               size="sm"
-              variant={selected ? "secondary" : "ghost"}
+              variant="ghost"
+              className={cn(
+                "h-7 rounded-md px-2.5 text-sm",
+                selected
+                  ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10 hover:bg-card"
+                  : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+              )}
               render={
                 <Link href={`${baseHref}?section=${item.id}`} />
               }
@@ -309,7 +319,7 @@ function MasterDataCenterBody({
         })}
       </nav>
 
-      <div className="space-y-6">
+      <div className={cn(surfacePanelClassName, "space-y-6 p-4 md:p-5")}>
         <DocumentSection
           id="md-section-overview"
           title={masterDataCopy.centerOverview}
@@ -389,7 +399,12 @@ function MasterDataCenterBody({
           ) : null}
 
           {data.warehouseStockSummary ? (
-            <div className="mt-4 space-y-2 rounded-lg border border-border p-3 text-sm">
+            <div
+              className={cn(
+                surfaceInsetClassName,
+                "mt-4 space-y-2 p-3 text-sm"
+              )}
+            >
               <p className="text-xs text-muted-foreground">
                 {data.warehouseStockSummary.policyNote}
               </p>
@@ -405,7 +420,8 @@ function MasterDataCenterBody({
               </p>
               <Button
                 size="sm"
-                variant="outline"
+                variant="secondary"
+                className="rounded-lg shadow-none"
                 render={
                   <Link href={data.warehouseStockSummary.w10Href} />
                 }
@@ -500,7 +516,7 @@ function MasterDataCenterBody({
               {data.auditEvents.map((ev) => (
                 <li
                   key={ev.id}
-                  className="rounded-md border border-border px-3 py-2"
+                  className={cn(surfaceInsetClassName, "px-3 py-2")}
                 >
                   <div className="flex flex-wrap gap-2">
                     <span className="num text-xs text-muted-foreground">
@@ -529,6 +545,6 @@ function MasterDataCenterBody({
         resource={resource}
         target={data}
       />
-    </div>
+    </PageScaffold>
   )
 }

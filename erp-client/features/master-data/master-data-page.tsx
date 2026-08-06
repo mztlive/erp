@@ -26,6 +26,7 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -83,7 +84,7 @@ function ResourceNav({
     <nav
       ref={navRef}
       aria-label={masterDataCopy.resourceNavAria}
-      className="flex flex-wrap gap-2 border-b border-border pb-3"
+      className="flex flex-wrap gap-2 border-b border-border/30 pb-3"
     >
       {MASTER_DATA_RESOURCES.map((item) => {
         const selected = item.key === resource
@@ -158,13 +159,13 @@ export function MasterDataPage({ resource }: { resource: string }) {
 
   if (!valid) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title={masterDataCopy.unknownResourceTitle}
           description={masterDataCopy.unknownResourceDesc()}
         />
         <ResourceNav resource="" navRef={navRef} />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -516,11 +517,11 @@ function MasterDataListWorkspace({
 
   if (listQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold density="compact">
         <PageHeader title={masterDataCopy.pageTitle(resourceLabel(resource))} />
         <ResourceNav resource={resource} navRef={navRef} />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -534,9 +535,7 @@ function MasterDataListWorkspace({
   const noDataWithCreate = !listLoadFailed && rows.length === 0
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:gap-3.5 md:p-4">
-
-
+    <PageScaffold density="compact">
       <PageHeader
         title={masterDataCopy.pageTitle(resourceLabel(resource))}
         breadcrumbs={[
@@ -791,6 +790,7 @@ function MasterDataListWorkspace({
               noDataWithCreate ? (
                 <BusinessEmptyState
                   kind={hasActiveFilters ? "filter" : "no-data"}
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   title={
                     hasActiveFilters
                       ? "当前筛选无结果"
@@ -805,8 +805,9 @@ function MasterDataListWorkspace({
                     !hasActiveFilters && !isWarehouse ? (
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="secondary"
                         size="sm"
+                        className="rounded-lg shadow-none"
                         onClick={() => {
                           if (isProductResource || isSupplierResource) {
                             router.push(`/master-data/${resource}/new`)
@@ -988,6 +989,6 @@ function MasterDataListWorkspace({
         resource={resource}
         target={disableTarget}
       />
-    </div>
+    </PageScaffold>
   )
 }

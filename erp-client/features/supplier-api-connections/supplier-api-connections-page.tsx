@@ -34,6 +34,9 @@ import {
   OptionCombobox,
   SupplierCombobox,
   PageHeader,
+  PageScaffold,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
@@ -78,6 +81,7 @@ import {
   useStartCatalogSyncMutation,
   useUpdateCapabilitiesMutation,
 } from "@/features/supplier-api-connections/queries"
+import { cn } from "@/lib/utils"
 import type {
   CapabilityCode,
   CapabilityView,
@@ -461,17 +465,17 @@ function ConnectionList({
 
   if (listQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold density="compact">
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-        <div className="h-16 animate-pulse rounded-xl bg-muted" />
-        <div className="h-72 animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-16 animate-pulse rounded-lg bg-muted" />
+        <div className="h-72 animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (listQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold density="compact">
         <PageHeader title="API 供应商连接" description="加载失败" />
         <BusinessFailureState
           kind="system"
@@ -483,14 +487,14 @@ function ConnectionList({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   const empty = data?.emptyReason
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
+    <PageScaffold density="compact">
       <PageHeader
         title="API 供应商连接"
         breadcrumbs={[
@@ -518,7 +522,8 @@ function ConnectionList({
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant="ghost"
+              className="text-muted-foreground hover:text-foreground"
               onClick={() => void listQuery.refetch()}
             >
               <RefreshCwIcon className="size-3.5" aria-hidden="true" />
@@ -564,12 +569,14 @@ function ConnectionList({
       {empty === "FILTER_NO_RESULT" ? (
         <BusinessEmptyState
           kind="filter"
+          className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
           title="当前筛选无结果"
           description="没有连接符合当前环境/状态/能力/健康条件，可清除筛选。"
           action={
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
+              className="rounded-lg shadow-none"
               onClick={() =>
                 patchUrl({
                   status: undefined,
@@ -587,6 +594,7 @@ function ConnectionList({
       ) : empty === "NO_CONNECTIONS" ? (
         <BusinessEmptyState
           kind="no-data"
+          className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
           title="尚未接入供应商连接"
           description="当前环境还没有连接身份。有权限时可新建连接。"
           action={
@@ -909,7 +917,7 @@ function ConnectionList({
             <DialogFooter>
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 onClick={() => setCreateOpen(false)}
               >
                 取消
@@ -921,7 +929,7 @@ function ConnectionList({
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -969,17 +977,17 @@ function ConnectionCenter({
 
   if (centerQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-40 animate-pulse rounded-lg bg-muted" />
-        <div className="h-24 animate-pulse rounded-xl bg-muted" />
-        <div className="h-64 animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-24 animate-pulse rounded-lg bg-muted" />
+        <div className="h-64 animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (centerQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="system"
           title="连接详情加载失败"
@@ -990,23 +998,24 @@ function ConnectionCenter({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!conn) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <Button type="button" variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeftIcon className="size-4" aria-hidden="true" />
           返回列表
         </Button>
         <BusinessEmptyState
           kind="no-data"
+          className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
           title="未找到连接"
           description="该连接不存在或当前角色无权查看。可返回列表重新选择。"
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -1015,7 +1024,7 @@ function ConnectionCenter({
   const resultUnknown = conn.lastHealth?.result === "UNKNOWN"
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -1197,13 +1206,17 @@ function ConnectionCenter({
         </div>
       ) : null}
 
+      <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
       <Tabs
         value={section}
         onValueChange={(v) => {
           if (v) patchUrl({ section: v as ConnectionSection })
         }}
       >
-        <TabsList className="flex h-auto flex-wrap justify-start gap-1">
+        <TabsList
+          variant="line"
+          className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-border/30 bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
+        >
           {SECTIONS.map((s) => (
             <TabsTrigger key={s} value={s} className="text-xs sm:text-sm">
               {SECTION_LABEL[s]}
@@ -1212,6 +1225,7 @@ function ConnectionCenter({
         </TabsList>
       </Tabs>
 
+      <div className="space-y-4 p-3 md:p-4">
       {section === "overview" ? (
         <OverviewSection conn={conn} />
       ) : null}
@@ -1252,6 +1266,8 @@ function ConnectionCenter({
       ) : null}
       {section === "related" ? <RelatedSection conn={conn} /> : null}
       {section === "audit" ? <AuditSection conn={conn} /> : null}
+      </div>
+      </div>
 
       {/* 停用影响预览 */}
       <Dialog open={disableOpen} onOpenChange={setDisableOpen}>
@@ -1605,15 +1621,15 @@ function ConnectionCenter({
           if (outcome.status === "succeeded") setCapConfigOpen(false)
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }
 
 function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
   return (
     <div className="grid gap-3 lg:grid-cols-2">
-      <Card>
-        <CardHeader className="pb-2">
+      <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+        <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
           <CardTitle className="text-base">业务身份</CardTitle>
           <CardDescription>采购主责供应商与业务影响</CardDescription>
         </CardHeader>
@@ -1639,8 +1655,8 @@ function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
           <Row label="下一步" value={conn.nextStep} />
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader className="pb-2">
+      <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+        <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
           <CardTitle className="text-base">技术就绪</CardTitle>
           <CardDescription>地址/密钥引用与适配器</CardDescription>
         </CardHeader>
@@ -1687,8 +1703,11 @@ function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
           />
         </CardContent>
       </Card>
-      <Card className="lg:col-span-2">
-        <CardHeader className="pb-2">
+      <Card
+        size="sm"
+        className={cn(surfaceInsetClassName, "shadow-none ring-0 lg:col-span-2")}
+      >
+        <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
           <CardTitle className="text-base">能力与健康摘要</CardTitle>
           <CardDescription>
             连接级能力声明不等于每个商品可用 ·{" "}
@@ -1835,6 +1854,7 @@ function CapabilitiesSection({
             emptyState={
               <BusinessEmptyState
                 kind="no-data"
+                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 title="尚未配置能力"
                 description="可配置能力启停；业务需求与验证状态随后端数据返回。"
               />
@@ -1865,8 +1885,8 @@ function SecuritySection({
         </AlertDescription>
       </Alert>
       <div className="grid gap-3 sm:grid-cols-2">
-        <Card>
-          <CardHeader className="pb-2">
+        <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+          <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
             <CardTitle className="text-base">地址配置引用</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
@@ -1881,8 +1901,8 @@ function SecuritySection({
             </Button>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
+        <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+          <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
             <CardTitle className="text-base">密钥配置引用</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 text-sm">
@@ -2020,6 +2040,7 @@ function HealthSection({
             emptyState={
               <BusinessEmptyState
                 kind="no-data"
+                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 title="暂无健康记录"
                 description="技术角色可在页头执行健康检查，结果会记录在本页。"
               />
@@ -2043,8 +2064,8 @@ function CatalogSection({
   const progress = conn.catalog.progress
   return (
     <div className="space-y-3">
-      <Card>
-        <CardHeader className="pb-2">
+      <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+        <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
           <CardTitle className="text-base">目录同步进度</CardTitle>
           <CardDescription>
             与连接状态分开展示 ·{" "}
@@ -2121,7 +2142,11 @@ function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
           href: "/procurement/supplier-catalog",
         },
       ].map((item) => (
-        <Card key={item.label}>
+        <Card
+          key={item.label}
+          size="sm"
+          className={cn(surfaceInsetClassName, "shadow-none ring-0")}
+        >
           <CardHeader className="pb-1">
             <CardDescription>{item.label}</CardDescription>
             <CardTitle className="num text-2xl">{item.value}</CardTitle>
@@ -2161,7 +2186,7 @@ function AuditSection({ conn }: { conn: ConnectionCenterView }) {
         {events.map((e) => (
           <li
             key={e.eventId}
-            className="rounded-xl border bg-card px-3 py-2 text-sm"
+            className={cn(surfaceInsetClassName, "px-3 py-2 text-sm")}
           >
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-medium">
@@ -2181,6 +2206,7 @@ function AuditSection({ conn }: { conn: ConnectionCenterView }) {
         {conn.auditEvents.length === 0 ? (
           <BusinessEmptyState
             kind="no-data"
+            className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
             title="暂无审计事件"
             description="配置与确认动作会追加审计记录。"
           />
@@ -2190,7 +2216,8 @@ function AuditSection({ conn }: { conn: ConnectionCenterView }) {
         <Button
           type="button"
           size="sm"
-          variant="outline"
+          variant="ghost"
+          className="text-muted-foreground hover:text-foreground"
           onClick={() => setExpanded((v) => !v)}
         >
           {expanded ? "收起" : `查看更多（共 ${conn.auditEvents.length} 条）`}

@@ -13,7 +13,7 @@
 | --- | --- |
 | **Wxx** | `erp-ui-design.md` 中的工作面 |
 | **M x** | 页面模式 |
-| **页签** | 应用内 TaskTabs，不是浏览器 Tab |
+| **导航** | 侧栏 + URL；不使用应用内多任务页签 |
 | **队列** | M3 连续处理，默认「完成后自动下一项」 |
 | **detail 预览** | `QuickPreviewSheet` `size="detail"` 半屏双栏，列表内读主事实 |
 | **纸质投影** | `PaperDocument`；容器为**透明宽层**（弱化 Dialog 壳）或打印页，默认**不提供**页脚打印钮 |
@@ -31,7 +31,7 @@ flowchart LR
   List[单据列表] -->|单击行 / Enter| Detail[detail 半屏预览]
   Detail -->|多数核对结束| Done[关闭回到列表]
   Detail -->|需要版式阅读| Paper[PaperDocument 宽层]
-  Detail -->|履约/票款/变更等作业| Center[对象中心页签]
+  Detail -->|履约/票款/变更等作业| Center[对象中心页面]
   List -->|行内去确认等| Queue[M3 队列]
 ```
 

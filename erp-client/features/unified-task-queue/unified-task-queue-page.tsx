@@ -21,9 +21,12 @@ import {
   FormalActionConfirmDialog,
   FormalActionResult,
   PageHeader,
+  PageScaffold,
   SequentialProcessBar,
+  surfacePanelClassName,
   WorkTaskItem,
 } from "@/components/business"
+import { cn } from "@/lib/utils"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -678,19 +681,19 @@ export function UnifiedTaskQueuePage() {
 
   if (queueQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="统一待办队列" description="正在加载队列…" />
         <div className="grid gap-4 xl:grid-cols-[34%_minmax(0,1fr)]">
-          <div className="h-64 animate-pulse rounded-xl bg-muted" />
-          <div className="h-64 animate-pulse rounded-xl bg-muted" />
+          <div className="h-64 animate-pulse rounded-lg bg-muted" />
+          <div className="h-64 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (queueQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="统一待办队列" description="队列加载失败" />
         <BusinessFailureState
           kind="system"
@@ -714,12 +717,12 @@ export function UnifiedTaskQueuePage() {
             </div>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <div className="sr-only" aria-live="polite" ref={liveRef} />
 
       {/* 筛选结果只读给读屏用户；视觉上由工具栏本身表达 */}
@@ -740,8 +743,9 @@ export function UnifiedTaskQueuePage() {
         actions={
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
+            className="text-muted-foreground hover:text-foreground"
             disabled={queueQuery.isFetching}
             onClick={() => void queueQuery.refetch()}
           >
@@ -753,23 +757,10 @@ export function UnifiedTaskQueuePage() {
 
       {/* Toolbar: scope · family · due · search，单排排布 */}
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <ToggleGroup
-          value={[scope]}
-          onValueChange={(values) => {
-            const next = values[0] as QueueScopeSlug | undefined
-            if (!next) return
-            setLastResult(null)
-            replaceQueueUrl({
-              scope: next,
-              currentWorkItemId: null,
-              workItemType: null,
-              converge: false,
-            })
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
-          className="w-fit max-w-full flex-wrap"
+        <div
+          role="group"
+          aria-label="责任范围"
+          className="inline-flex max-w-full flex-wrap items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
         >
           {(
             [
@@ -778,15 +769,44 @@ export function UnifiedTaskQueuePage() {
               ["team", "团队", queueQuery.data?.counts.team],
               ["hold", "已跳过", queueQuery.data?.counts.hold],
             ] as const
-          ).map(([value, label, count]) => (
-            <ToggleGroupItem key={value} value={value}>
-              {label}
-              {typeof count === "number" ? (
-                <span className="num ml-1 text-muted-foreground">{count}</span>
-              ) : null}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+          ).map(([value, label, count]) => {
+            const active = scope === value
+            return (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={active}
+                onClick={() => {
+                  setLastResult(null)
+                  replaceQueueUrl({
+                    scope: value,
+                    currentWorkItemId: null,
+                    workItemType: null,
+                    converge: false,
+                  })
+                }}
+                className={cn(
+                  "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  active
+                    ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                    : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                )}
+              >
+                {label}
+                {typeof count === "number" ? (
+                  <span
+                    className={cn(
+                      "num",
+                      active ? "text-muted-foreground" : "text-muted-foreground/80"
+                    )}
+                  >
+                    {count}
+                  </span>
+                ) : null}
+              </button>
+            )
+          })}
+        </div>
 
         <ToggleGroup
           value={family ? [family] : []}
@@ -972,10 +992,15 @@ export function UnifiedTaskQueuePage() {
         sourceItems.length === 0 ? (
           <BusinessEmptyState
             kind="no-tasks"
+            className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
             title="当前没有待办任务"
             description="当前责任范围下没有任务。可切换其它责任范围，或返回工作台。"
             action={
-              <Button render={<Link href="/workspace" />}>
+              <Button
+                variant="secondary"
+                className="rounded-lg shadow-none"
+                render={<Link href="/workspace" />}
+              >
                 返回今日工作台
               </Button>
             }
@@ -983,6 +1008,7 @@ export function UnifiedTaskQueuePage() {
         ) : (
           <BusinessEmptyState
             kind="no-tasks"
+            className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
             title="本筛选项已处理完"
             description="当前队列已经清空，可以清除筛选、切换责任范围或返回工作台。"
             action={
@@ -990,7 +1016,8 @@ export function UnifiedTaskQueuePage() {
                 {q || family || due || workItemType ? (
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
+                    className="rounded-lg shadow-none"
                     onClick={() => {
                       setSearchDraft("")
                       replaceQueueUrl({
@@ -1027,10 +1054,13 @@ export function UnifiedTaskQueuePage() {
             className={
               queueCollapsed
                 ? "hidden"
-                : "min-w-0 max-h-[min(70vh,40rem)] overflow-hidden lg:max-h-[calc(100vh-12rem)]"
+                : cn(
+                    surfacePanelClassName,
+                    "min-w-0 max-h-[min(70vh,40rem)] overflow-hidden lg:max-h-[calc(100vh-12rem)]"
+                  )
             }
           >
-            <CardHeader className="border-b">
+            <CardHeader className="border-b border-border/30">
               <div className="flex items-center justify-between gap-2">
                 <CardTitle>任务队列</CardTitle>
                 <Button
@@ -1204,8 +1234,8 @@ export function UnifiedTaskQueuePage() {
               />
             </div>
 
-            <Card size="sm">
-              <CardHeader className="border-b">
+            <Card size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <div className="flex flex-wrap items-center gap-2">
                   <CardTitle
                     ref={titleRef}
@@ -1448,11 +1478,14 @@ export function UnifiedTaskQueuePage() {
       ) : currentFocusId ? (
         <BusinessEmptyState
           kind="filter"
+          className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
           title="当前任务不在筛选结果中"
           description="该任务可能已完成、已转交或不匹配当前筛选。"
           action={
             <Button
               type="button"
+              variant="secondary"
+              className="rounded-lg shadow-none"
               onClick={() =>
                 replaceQueueUrl({
                   family: null,
@@ -1581,6 +1614,6 @@ export function UnifiedTaskQueuePage() {
           setConflictOpen(false)
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }

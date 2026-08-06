@@ -28,6 +28,7 @@ import {
   MetricStrip,
   PageActions,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
@@ -486,7 +487,7 @@ export function ContractsListPage({
   const isFiltered = search.trim() !== "" || metricKey !== "all"
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:gap-3.5 md:p-4">
+    <PageScaffold density="compact">
       <PageHeader
         title="合同"
         breadcrumbs={[
@@ -647,7 +648,7 @@ export function ContractsListPage({
             }
             filters={
               lockedCustomer ? (
-                <span className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2 py-1 text-xs text-muted-foreground">
+                <span className="inline-flex items-center gap-1.5 rounded-lg bg-muted/40 px-2 py-1 text-xs text-muted-foreground ring-1 ring-border/40">
                   当前客户：{lockedCustomer.displayName}
                   <button
                     type="button"
@@ -673,7 +674,7 @@ export function ContractsListPage({
               }}
             />
           ) : pageRows.length === 0 && !contractsQuery.isPending ? (
-            <div className="flex flex-col items-center gap-2 border-y bg-card px-4 py-10 text-center">
+            <div className="flex flex-col items-center gap-2 rounded-lg border-0 bg-transparent px-4 py-10 text-center shadow-none ring-0">
               <p className="text-sm text-muted-foreground">
                 {isFiltered ? "当前筛选没有结果" : "还没有合同"}
               </p>
@@ -687,7 +688,8 @@ export function ContractsListPage({
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
+                    className="rounded-lg shadow-none"
                     onClick={clearAllFilters}
                   >
                     清除筛选
@@ -696,6 +698,8 @@ export function ContractsListPage({
                   <Button
                     type="button"
                     size="sm"
+                    variant="secondary"
+                    className="rounded-lg shadow-none"
                     onClick={() => setUploadOpen(true)}
                   >
                     <FileUpIcon data-icon="inline-start" aria-hidden="true" />
@@ -817,6 +821,6 @@ export function ContractsListPage({
         initialCustomerId={initialCustomerId}
         onSuccess={handleUploadSuccess}
       />
-    </div>
+    </PageScaffold>
   )
 }

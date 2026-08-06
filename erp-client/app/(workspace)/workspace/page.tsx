@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { PageScaffold } from "@/components/business"
 import { WorkspaceHomePage as WorkspaceHome } from "@/features/workspace/workspace-home-page"
 
 export const metadata: Metadata = {
@@ -9,11 +10,15 @@ export const metadata: Metadata = {
 
 function WorkspaceHomeFallback() {
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-      <div className="h-8 w-64 animate-pulse rounded-2xl bg-muted" />
-      <div className="h-24 w-full animate-pulse rounded-2xl bg-muted" />
-      <div className="h-80 w-full animate-pulse rounded-2xl bg-muted" />
-    </div>
+    <PageScaffold>
+      <div className="h-8 w-64 animate-pulse rounded-lg bg-muted" />
+      <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />
+        ))}
+      </div>
+      <div className="h-80 w-full animate-pulse rounded-lg bg-muted" />
+    </PageScaffold>
   )
 }
 

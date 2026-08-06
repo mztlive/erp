@@ -23,10 +23,14 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
   PrepaymentGate,
   QuantityValue,
   StatusTrackSummary,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
+import { cn } from "@/lib/utils"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -568,15 +572,20 @@ export function PurchaseOrderDetailPage({
 
   if (query.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="采购单" description="正在加载详情…" />
-      </div>
+        <div className="space-y-3" aria-busy="true" aria-label="加载中">
+          <div className="h-16 animate-pulse rounded-lg bg-muted" />
+          <div className="h-24 animate-pulse rounded-lg bg-muted" />
+          <div className="h-40 animate-pulse rounded-lg bg-muted" />
+        </div>
+      </PageScaffold>
     )
   }
 
   if (query.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="采购单" description="详情加载失败" />
         <BusinessFailureState
           kind="system"
@@ -593,25 +602,30 @@ export function PurchaseOrderDetailPage({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!order) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="采购单不存在" description="单据可能已删除或编号有误" />
         <BusinessEmptyState
           kind="no-data"
           title="未找到该采购单"
           description="该采购单可能已删除或不在当前数据范围内。"
+          className="rounded-lg border-0 bg-transparent shadow-none ring-0"
           action={
-            <Button render={<Link href="/procurement/orders" />}>
+            <Button
+              variant="secondary"
+              className="rounded-lg shadow-none"
+              render={<Link href="/procurement/orders" />}
+            >
               返回列表
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -680,7 +694,7 @@ export function PurchaseOrderDetailPage({
         : "详情"
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -892,23 +906,6 @@ export function PurchaseOrderDetailPage({
         ]}
       />
 
-      <nav
-        className="flex flex-wrap gap-1 border-b border-border pb-2"
-        aria-label="详情子区"
-      >
-        {navItems.map((item) => (
-          <Button
-            key={item.id}
-            type="button"
-            size="sm"
-            variant={activeSection === item.id ? "secondary" : "ghost"}
-            render={<Link href={item.href} />}
-          >
-            {item.label}
-          </Button>
-        ))}
-      </nav>
-
       {mode === "review" && canReview ? (
         <ReviewSurface
           order={order}
@@ -935,6 +932,25 @@ export function PurchaseOrderDetailPage({
         />
       ) : null}
 
+      <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
+      <nav
+        className="flex flex-wrap gap-1 border-b border-border/30 px-3 py-1.5"
+        aria-label="详情子区"
+      >
+        {navItems.map((item) => (
+          <Button
+            key={item.id}
+            type="button"
+            size="sm"
+            variant={activeSection === item.id ? "secondary" : "ghost"}
+            render={<Link href={item.href} />}
+          >
+            {item.label}
+          </Button>
+        ))}
+      </nav>
+
+      <div className="space-y-4 px-3 py-4 md:px-4">
       {(mode === "view" || activeSection !== "overview") ? (
         <div className="grid gap-4">
           {activeSection === "overview" && mode === "view" ? (
@@ -1262,7 +1278,10 @@ export function PurchaseOrderDetailPage({
                   {order.changes.map((change) => (
                     <li
                       key={change.changeId}
-                      className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm"
+                      className={cn(
+                        surfaceInsetClassName,
+                        "flex items-center justify-between px-3 py-2 text-sm"
+                      )}
                     >
                       <span>
                         {change.label}
@@ -1308,7 +1327,7 @@ export function PurchaseOrderDetailPage({
                 {order.workflow.map((item) => (
                   <li
                     key={item.id}
-                    className="rounded-lg border border-border px-3 py-2 text-sm"
+                    className={cn(surfaceInsetClassName, "px-3 py-2 text-sm")}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="font-medium">{item.actionLabel}</span>
@@ -1333,6 +1352,8 @@ export function PurchaseOrderDetailPage({
           ) : null}
         </div>
       ) : null}
+      </div>
+      </div>
 
       <FormalActionConfirmDialog
         open={submitConfirmOpen}
@@ -1440,7 +1461,7 @@ export function PurchaseOrderDetailPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -1454,7 +1475,7 @@ function LinesTable({
   costMasked: boolean
 }) {
   return (
-    <div className="overflow-hidden rounded-lg border border-border">
+    <div className="overflow-hidden rounded-lg ring-1 ring-foreground/[0.04]">
       <Table data-density="compact">
         <TableHeader>
           <TableRow>
@@ -1558,8 +1579,8 @@ function EditSurface({
   onSubmitOpen: () => void
 }) {
   return (
-    <Card>
-      <CardHeader className="border-b border-border">
+    <Card className={surfacePanelClassName}>
+      <CardHeader className="border-b border-border/30">
         <CardTitle>
           {order.identity.reviewStatus === "REJECTED"
             ? "被驳回待修改"
@@ -1588,13 +1609,13 @@ function EditSurface({
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label>供应商（只读）</Label>
-            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+            <div className={cn(surfaceInsetClassName, "px-3 py-2 text-sm")}>
               {order.header.supplierSnapshot}
             </div>
           </div>
           <div className="space-y-1.5">
             <Label>采购类型 / 履约责任（只读）</Label>
-            <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-sm">
+            <div className={cn(surfaceInsetClassName, "px-3 py-2 text-sm")}>
               {PURCHASE_TYPE_LABEL[order.header.purchaseType]} ·{" "}
               {
                 FULFILLMENT_RESPONSIBILITY_LABEL[
@@ -1640,7 +1661,7 @@ function EditSurface({
 
         <div className="space-y-2">
           <h3 className="text-sm font-semibold">明细（系统计算）</h3>
-          <div className="overflow-hidden rounded-lg border border-border">
+          <div className="overflow-hidden rounded-lg ring-1 ring-foreground/[0.04]">
             <Table data-density="compact">
               <TableHeader>
                 <TableRow>
@@ -1815,8 +1836,8 @@ function ReviewSurface({
   costMasked: boolean
 }) {
   return (
-    <Card>
-      <CardHeader className="border-b border-border">
+    <Card className={surfacePanelClassName}>
+      <CardHeader className="border-b border-border/30">
         <CardTitle>财务审核视图</CardTitle>
         <CardDescription>
           以下为采购提交的只读回显，不可修改
@@ -1869,7 +1890,7 @@ function ReviewSurface({
         </div>
 
         <form
-          className="space-y-3 rounded-lg border border-border p-3"
+          className={cn(surfaceInsetClassName, "space-y-3 p-3")}
           onSubmit={(event) => {
             event.preventDefault()
             void reviewForm.handleSubmit()

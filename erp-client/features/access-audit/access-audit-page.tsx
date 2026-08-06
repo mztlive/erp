@@ -33,7 +33,9 @@ import {
   ListToolbar,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
+  surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
@@ -190,7 +192,7 @@ function PolicyBanner({
   return (
     <Collapsible
       data-slot="policy-banner"
-      className="rounded-xl border border-border bg-card"
+      className={surfacePanelClassName}
     >
       <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40">
         <ShieldAlertIcon
@@ -223,7 +225,7 @@ function PolicyBanner({
           className="size-4 shrink-0 text-muted-foreground transition-transform group-aria-expanded:rotate-180"
         />
       </CollapsibleTrigger>
-      <CollapsibleContent className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+      <CollapsibleContent className="border-t border-border/30 px-3 py-2 text-xs text-muted-foreground">
         <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
           {(view === "users" || view === "roles") && (
             <p>
@@ -324,7 +326,13 @@ function EmptyByReason({
           description="没有记录符合当前条件。可清除筛选后重试。"
           action={
             onClearFilters ? (
-              <Button type="button" size="sm" onClick={onClearFilters}>
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                className="rounded-lg shadow-none"
+                onClick={onClearFilters}
+              >
                 清除筛选
               </Button>
             ) : null
@@ -1366,29 +1374,34 @@ export function AccessAuditPage() {
 
   if (pageQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
+      <PageScaffold density="compact">
         <div className="h-9 w-40 animate-pulse rounded-lg bg-muted" />
         <div className="h-9 animate-pulse rounded-lg bg-muted" />
-        <div className="h-10 animate-pulse rounded-xl bg-muted" />
-        <div className="h-[32rem] animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-10 animate-pulse rounded-lg bg-muted" />
+        <div className="h-[32rem] animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (pageQuery.isError || !data) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
+      <PageScaffold density="compact">
         <PageHeader title="权限与审计" />
         <BusinessFailureState
           kind="system"
           description="加载权限/审计数据失败。"
           action={
-            <Button type="button" onClick={() => void pageQuery.refetch()}>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-lg shadow-none"
+              onClick={() => void pageQuery.refetch()}
+            >
               重试
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -1745,7 +1758,7 @@ export function AccessAuditPage() {
         <Button
           type="button"
           size="sm"
-          variant="outline"
+          variant="ghost"
           disabled={exportBlocked}
           title={exportBlocker?.message}
           onClick={handleExport}
@@ -1758,7 +1771,7 @@ export function AccessAuditPage() {
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
+    <PageScaffold density="compact">
       <PageHeader
         title="权限与审计"
         description={
@@ -2472,6 +2485,6 @@ export function AccessAuditPage() {
           }}
         />
       ) : null}
-    </div>
+    </PageScaffold>
   )
 }

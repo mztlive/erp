@@ -16,11 +16,15 @@ import {
   MetricStrip,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { cn } from "@/lib/utils"
 import type {
   SupplierCatalogItemView,
   SupplierCatalogQueueView,
@@ -417,7 +421,7 @@ function SupplyRelationshipListView({
       : "统一管理 Excel、API 和手工录入的供应商商品，确认后加入公司商品池"
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold density="compact">
       <PageHeader
         title={pageTitle}
         description={pageDescription}
@@ -458,11 +462,11 @@ function SupplyRelationshipListView({
                 手工录入
               </Button>
             )}
-            <Button variant="outline" size="sm" render={<Link href={queueHref} />}>
+            <Button variant="ghost" size="sm" render={<Link href={queueHref} />}>
               处理来源变化
             </Button>
             {returnTo ? (
-              <Button variant="secondary" size="sm" render={<Link href={returnTo} />}>
+              <Button variant="secondary" size="sm" className="rounded-lg shadow-none" render={<Link href={returnTo} />}>
                 返回商品与 SKU
               </Button>
             ) : null}
@@ -471,7 +475,7 @@ function SupplyRelationshipListView({
       />
 
       {skuId ? (
-        <Card size="sm">
+        <Card size="sm" className={surfacePanelClassName}>
           <CardContent className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] md:items-center">
             <div className="min-w-0">
               <div className="text-xs font-medium text-muted-foreground">
@@ -488,7 +492,7 @@ function SupplyRelationshipListView({
               <ArrowLeftIcon className="size-4 -rotate-90 md:rotate-0" aria-hidden="true" />
               <span>供给到当前 SKU</span>
             </div>
-            <div className="min-w-0 rounded-lg bg-muted/50 px-3 py-2.5">
+            <div className={cn(surfaceInsetClassName, "min-w-0 px-3 py-2.5")}>
               <div className="text-xs font-medium text-muted-foreground">
                 供应商商品
               </div>
@@ -595,11 +599,13 @@ function SupplyRelationshipListView({
                   kind="filter"
                   title="没有符合条件的供应商商品"
                   description="可调整搜索、来源或清除筛选后重试。"
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   action={
                     onSortChange ? (
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         type="button"
+                        className="rounded-lg shadow-none"
                         onClick={() => {
                           onSearchInputChange("")
                           onSearch()
@@ -615,19 +621,22 @@ function SupplyRelationshipListView({
                   kind="no-data"
                   title={skuId ? "当前 SKU 暂无供应商供给" : "暂无供应商商品"}
                   description="可以导入供应商 Excel、运行 API 同步或手工录入。三种来源均可录入；手工录入使用与公司商品相同的表单。"
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   action={
                     skuId && onOpenManualEntry ? (
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         type="button"
+                        className="rounded-lg shadow-none"
                         onClick={onOpenManualEntry}
                       >
                         添加供应商并登记成本
                       </Button>
                     ) : (
                       <Button
-                        variant="outline"
+                        variant="secondary"
                         type="button"
+                        className="rounded-lg shadow-none"
                         render={
                           <Link
                             href={`/procurement/supplier-catalog/new?returnTo=${encodeURIComponent(returnHref)}`}
@@ -644,7 +653,7 @@ function SupplyRelationshipListView({
           />
         }
       />
-    </div>
+    </PageScaffold>
   )
 }
 

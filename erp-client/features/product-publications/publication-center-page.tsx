@@ -25,8 +25,10 @@ import {
   FormalActionResult,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   RevisionTimeline,
   StatusTrackSummary,
+  surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { type ResultState } from "@/components/business/feedback"
@@ -286,7 +288,7 @@ function RevisionContent({
         <div className="mb-1 text-xs font-medium text-muted-foreground">
           唯一固定供给
         </div>
-        <Card size="sm">
+        <Card size="sm" className="border-0 bg-muted/40 shadow-none ring-0">
           <CardContent className="space-y-1 pt-3 text-sm">
             <div>
               {rev.fixedOffering.supplierName} ·{" "}
@@ -321,7 +323,7 @@ function RevisionContent({
           {rev.media.map((m) => (
             <li
               key={`${m.fileAssetId}-${m.sortNo}`}
-              className="flex gap-2 rounded-lg border border-border p-2 text-sm"
+              className="flex gap-2 rounded-lg bg-muted/40 p-2 text-sm"
             >
               <div className="flex size-14 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
                 {MEDIA_ROLE_LABEL[m.mediaRole]}
@@ -673,33 +675,41 @@ export function PublicationCenterPage({
 
   if (detailQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="商品发布" description="正在加载…" />
-        <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
-      </div>
+        <div className="space-y-3" aria-busy="true" aria-label="加载中">
+          <div className="h-16 animate-pulse rounded-lg bg-muted" />
+          <div className="h-40 animate-pulse rounded-lg bg-muted" />
+        </div>
+      </PageScaffold>
     )
   }
 
   if (detailQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="商品发布" />
         <BusinessFailureState
           kind="system"
           description="加载发布对象失败。"
           action={
-            <Button type="button" onClick={() => void detailQuery.refetch()}>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-lg shadow-none"
+              onClick={() => void detailQuery.refetch()}
+            >
               重试
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!data) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessEmptyState
           kind="no-data"
           title="发布对象不存在"
@@ -707,13 +717,15 @@ export function PublicationCenterPage({
           action={
             <Button
               type="button"
+              variant="secondary"
+              className="rounded-lg shadow-none"
               render={<Link href="/commerce/publications" />}
             >
               返回列表
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -742,7 +754,7 @@ export function PublicationCenterPage({
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -775,7 +787,7 @@ export function PublicationCenterPage({
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               disabled={detailQuery.isFetching}
               onClick={() => void detailQuery.refetch()}
@@ -915,8 +927,8 @@ export function PublicationCenterPage({
       />
 
       {/* 一屏识别：稳定发布 / 商城生效版 / 最新待确认版 */}
-      <Card>
-        <CardHeader className="pb-2">
+      <Card className={surfacePanelClassName}>
+        <CardHeader className="border-b border-border/30 pb-2">
           <CardTitle className="text-base">发布身份与版本</CardTitle>
           <CardDescription>
             展示商城实际生效版本与最新提交版本，避免误判。
@@ -977,19 +989,25 @@ export function PublicationCenterPage({
       </Card>
 
       <nav
-        className="sticky top-0 z-10 flex flex-wrap gap-1 border-b border-border bg-background/95 py-2 backdrop-blur"
+        role="group"
         aria-label="发布对象锚点"
+        className="sticky top-0 z-10 inline-flex flex-wrap rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
       >
         {SECTIONS.map((s) => (
-          <Button
+          <button
             key={s.id}
             type="button"
-            size="sm"
-            variant={section === s.id ? "secondary" : "ghost"}
+            aria-pressed={section === s.id}
             onClick={() => setSection(s.id)}
+            className={cn(
+              "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all",
+              section === s.id
+                ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+            )}
           >
             {s.label}
-          </Button>
+          </button>
         ))}
       </nav>
 
@@ -1008,7 +1026,7 @@ export function PublicationCenterPage({
       <PublishGateAlert gate={data.publishGate} />
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(16rem,20rem)]">
-        <div className="min-w-0 space-y-6">
+        <div className={cn(surfacePanelClassName, "min-w-0 space-y-6 p-3 md:p-4")}>
           <DocumentSection
             id="pub-section-overview"
             title="概览"
@@ -1160,7 +1178,7 @@ export function PublicationCenterPage({
                     {(field) => <field.TextField label="失效时间（可空）" />}
                   </form.AppField>
                 </div>
-                <div className="space-y-2 rounded-lg border p-3">
+                <div className="space-y-2 rounded-lg bg-muted/40 p-3">
                   <div className="text-sm font-medium">发布媒体资料</div>
                   {sessionEdit?.media.map((media, index) => (
                     <div key={media.fileAssetId} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_2fr]">
@@ -1215,7 +1233,7 @@ export function PublicationCenterPage({
               {data.selectedRevision.media.map((m) => (
                 <li
                   key={`${m.fileAssetId}-${m.mediaRole}-${m.sortNo}`}
-                  className="rounded-lg border border-border p-3 text-sm"
+                  className="rounded-lg bg-muted/40 p-3 text-sm"
                 >
                   <div className="mb-2 flex size-full min-h-20 items-center justify-center rounded bg-muted text-xs text-muted-foreground">
                     {MEDIA_ROLE_LABEL[m.mediaRole]}
@@ -1234,7 +1252,7 @@ export function PublicationCenterPage({
             title="固定供给"
             description="本版本唯一履约来源"
           >
-            <Card>
+            <Card className="border-0 bg-muted/40 shadow-none ring-0">
               <CardContent className="space-y-2 pt-4 text-sm">
                 <div>
                   供应商 {data.selectedRevision.fixedOffering.supplierName}
@@ -1330,10 +1348,10 @@ export function PublicationCenterPage({
                       <li
                         key={d.deliveryId}
                         className={cn(
-                          "rounded-lg border p-3 text-sm",
+                          "rounded-lg p-3 text-sm ring-1",
                           d.revisionId === data.selectedRevision.revisionId
-                            ? "border-primary/40 bg-primary/5"
-                            : "border-border"
+                            ? "bg-primary/5 ring-primary/40"
+                            : "bg-muted/40 ring-transparent"
                         )}
                       >
                         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1450,7 +1468,7 @@ export function PublicationCenterPage({
                 .map((r) => (
                   <li
                     key={r.revisionId}
-                    className="flex flex-wrap justify-between gap-2 border-b border-border/60 py-2"
+                    className="flex flex-wrap justify-between gap-2 border-b border-border/30 py-2"
                   >
                     <span>
                       r{r.revisionNo} · {r.createdBy} · {r.saleStatusLabel}
@@ -1465,8 +1483,8 @@ export function PublicationCenterPage({
         </div>
 
         <aside className="min-w-0 space-y-3 xl:sticky xl:top-14 xl:self-start">
-          <Card size="sm">
-            <CardHeader className="pb-2">
+          <Card size="sm" className={surfacePanelClassName}>
+            <CardHeader className="border-b border-border/30 pb-2">
               <CardTitle className="text-sm">选中修订</CardTitle>
             </CardHeader>
             <CardContent className="space-y-1 text-sm">
@@ -1487,8 +1505,8 @@ export function PublicationCenterPage({
               </div>
             </CardContent>
           </Card>
-          <Card size="sm">
-            <CardHeader className="pb-2">
+          <Card size="sm" className={surfacePanelClassName}>
+            <CardHeader className="border-b border-border/30 pb-2">
               <CardTitle className="text-sm">版本对照</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2 text-sm">
@@ -1612,6 +1630,6 @@ export function PublicationCenterPage({
         </AlertDialogContent>
       </AlertDialog>
 
-    </div>
+    </PageScaffold>
   )
 }

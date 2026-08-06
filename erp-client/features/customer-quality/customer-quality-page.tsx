@@ -40,6 +40,8 @@ import {
   MoneyValue,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
+  surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
@@ -843,22 +845,22 @@ export function CustomerQualityPage() {
   // —— Loading shells ——
   if (periodPolicyQuery.isPending || (!periodWriteDone && !needsPeriodBlocker)) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-24 w-full" />
+      <PageScaffold>
+        <Skeleton className="h-10 w-64 rounded-lg" />
+        <Skeleton className="h-24 w-full rounded-lg" />
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-20 rounded-lg" />
           ))}
         </div>
-        <Skeleton className="h-64 w-full" />
-      </div>
+        <Skeleton className="h-64 w-full rounded-lg" />
+      </PageScaffold>
     )
   }
 
   if (periodPolicyQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="system"
           title="期间配置加载失败"
@@ -872,14 +874,14 @@ export function CustomerQualityPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   // —— Period blocker ——
   if (needsPeriodBlocker) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title="客户经营质量"
           description="未配置默认统计期间，请选择起止日期后开始分析。"
@@ -895,8 +897,8 @@ export function CustomerQualityPage() {
             尚未设置默认统计期间。选定期间后才会显示指标、图表与明细。
           </AlertDescription>
         </Alert>
-        <Card size="sm">
-          <CardHeader className="border-b">
+        <Card size="sm" className={surfacePanelClassName}>
+          <CardHeader className="border-b border-border/30">
             <CardTitle>显式期间</CardTitle>
             <CardDescription>
               选定后作为本页所有统计的唯一期间。
@@ -959,13 +961,13 @@ export function CustomerQualityPage() {
             </CardContent>
           ) : null}
         </Card>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (viewQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="projection"
           title="经营质量数据加载失败"
@@ -976,28 +978,28 @@ export function CustomerQualityPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (viewQuery.isPending || !data) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-28 w-full" />
+      <PageScaffold>
+        <Skeleton className="h-10 w-64 rounded-lg" />
+        <Skeleton className="h-28 w-full rounded-lg" />
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-20 rounded-lg" />
           ))}
         </div>
-        <Skeleton className="h-72 w-full" />
-      </div>
+        <Skeleton className="h-72 w-full rounded-lg" />
+      </PageScaffold>
     )
   }
 
   if (data.emptyKind === "forbidden") {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="permission"
           title="无客户经营质量权限"
@@ -1008,7 +1010,7 @@ export function CustomerQualityPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -1021,7 +1023,7 @@ export function CustomerQualityPage() {
   const isVoucherOnly = businessType === "VOUCHER"
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="客户经营质量"
         breadcrumbs={[
@@ -1054,8 +1056,9 @@ export function CustomerQualityPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
+              className="text-muted-foreground hover:text-foreground"
               disabled={viewQuery.isFetching}
               onClick={() => {
                 void handleRefresh()
@@ -1146,7 +1149,7 @@ export function CustomerQualityPage() {
       ) : null}
 
       {/* Filters */}
-      <Card size="sm">
+      <Card size="sm" className={surfacePanelClassName}>
         <CardContent className="flex flex-col gap-3 pt-4">
           <div className="flex flex-wrap items-end gap-3">
             <div className="space-y-1.5">
@@ -1372,8 +1375,8 @@ export function CustomerQualityPage() {
         <>
           {/* Coverage: card funds + cost — always co-displayed with affected metrics */}
           <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-            <Card size="sm" data-slot="card-funds-coverage-notice">
-              <CardHeader className="border-b">
+            <Card size="sm" className={surfacePanelClassName} data-slot="card-funds-coverage-notice">
+              <CardHeader className="border-b border-border/30">
                 <CardTitle>卡券票款复核进度</CardTitle>
                 <CardDescription>
                   与受影响应收指标同屏；未复核不得假装可靠。
@@ -1545,8 +1548,8 @@ export function CustomerQualityPage() {
 
           {/* Charts + equivalent tables */}
           <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-            <Card size="sm">
-              <CardHeader className="border-b">
+            <Card size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <CardTitle>{scaleDimension?.title ?? "客户规模分层"}</CardTitle>
                 <CardDescription>
                   点击柱形筛选明细
@@ -1661,8 +1664,8 @@ export function CustomerQualityPage() {
               </CardContent>
             </Card>
 
-            <Card size="sm">
-              <CardHeader className="border-b">
+            <Card size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <CardTitle>
                   {profitDimension?.title ?? "利润贡献分布"}
                 </CardTitle>
@@ -1872,6 +1875,7 @@ export function CustomerQualityPage() {
               kind="no-data"
               title="期间内无授权经营记录"
               description="可调整统计期间或数据范围后重查。"
+              className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
             />
           ) : data.emptyKind === "filter" ? (
             <BusinessEmptyState
@@ -1883,11 +1887,13 @@ export function CustomerQualityPage() {
                   {data.filterSummary}
                 </>
               }
+              className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
               action={
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
+                  className="rounded-lg shadow-none"
                   onClick={() => {
                     patchUrl({
                       q: null,
@@ -2023,6 +2029,6 @@ export function CustomerQualityPage() {
           ) : null}
         </DialogContent>
       </Dialog>
-    </div>
+    </PageScaffold>
   )
 }

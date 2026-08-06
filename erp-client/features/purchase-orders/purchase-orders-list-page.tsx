@@ -28,8 +28,10 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
   StatusTrackSummary,
+  surfaceInsetClassName,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -607,17 +609,17 @@ export function PurchaseOrdersListPage() {
 
   if (listQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold density="compact">
         <PageHeader title="采购单" description="正在加载列表…" />
-        <div className="h-24 animate-pulse rounded-2xl bg-muted" />
-        <div className="h-96 animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-24 animate-pulse rounded-lg bg-muted" />
+        <div className="h-96 animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (listQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold density="compact">
         <PageHeader
           title="采购单"
           description="列表加载失败"
@@ -627,12 +629,18 @@ export function PurchaseOrdersListPage() {
             </Button>
           }
         />
-      </div>
+        <BusinessFailureState
+          kind="system"
+          title="列表加载失败"
+          description="未能加载采购单列表，请重试；若持续失败可稍后再来。"
+          onRetry={() => void listQuery.refetch()}
+        />
+      </PageScaffold>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold density="compact">
       <PageHeader
         title="采购单"
         breadcrumbs={[
@@ -838,8 +846,9 @@ export function PurchaseOrdersListPage() {
                 Boolean(url.q) ? (
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
+                    className="rounded-lg shadow-none"
                     onClick={() =>
                       pushUrl({
                         q: undefined,
@@ -854,8 +863,9 @@ export function PurchaseOrdersListPage() {
                 ) : (
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
+                    className="rounded-lg shadow-none"
                     render={<Link href="/procurement/confirm" />}
                   >
                     去采购二次确认
@@ -1051,7 +1061,7 @@ export function PurchaseOrdersListPage() {
                   )
                   if (!basis) return null
                   return (
-                    <div className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
+                    <div className={`${surfaceInsetClassName} p-3 text-xs text-muted-foreground`}>
                       <p className="font-medium text-foreground">
                         拆单键（不可混拼）
                       </p>
@@ -1088,6 +1098,6 @@ export function PurchaseOrdersListPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageScaffold>
   )
 }

@@ -9,6 +9,8 @@ import {
   Clock3Icon,
   RefreshCwIcon,
   TriangleAlertIcon,
+  UserIcon,
+  UsersIcon,
 } from "lucide-react"
 
 import {
@@ -20,6 +22,8 @@ import {
   MetricStrip,
   PageActions,
   PageHeader,
+  PageScaffold,
+  surfacePanelClassName,
   WorkTaskItem,
 } from "@/components/business"
 import {
@@ -42,7 +46,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { Skeleton } from "@/components/ui/skeleton"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { cn } from "@/lib/utils"
 import {
   buildProcessHref,
   buildViewHref,
@@ -102,24 +106,24 @@ function canView(item: WorkspaceWorkItem): boolean {
 
 function WorkspaceHomeSkeleton() {
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <div className="space-y-2">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-4 w-96 max-w-full" />
       </div>
-      <div className="grid gap-px overflow-hidden rounded-lg border sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-2 sm:grid-cols-2 sm:gap-3 lg:grid-cols-4">
         {Array.from({ length: 4 }).map((_, index) => (
-          <Skeleton key={index} className="h-24 rounded-none" />
+          <Skeleton key={index} className="h-20 rounded-lg" />
         ))}
       </div>
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)]">
-        <Skeleton className="min-h-80 w-full" />
-        <div className="space-y-4">
-          <Skeleton className="h-40 w-full" />
-          <Skeleton className="h-32 w-full" />
+      <div className="grid min-w-0 gap-3 md:gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)]">
+        <Skeleton className="min-h-80 w-full rounded-lg" />
+        <div className="space-y-3 md:space-y-4">
+          <Skeleton className="h-40 w-full rounded-lg" />
+          <Skeleton className="h-32 w-full rounded-lg" />
         </div>
       </div>
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -388,7 +392,7 @@ export function WorkspaceHomePage() {
 
   if (dashboardQuery.isError && !view) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="system"
           description="今日工作台暂时无法加载，请重试。业务记录未被修改。"
@@ -398,7 +402,7 @@ export function WorkspaceHomePage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -408,19 +412,19 @@ export function WorkspaceHomePage() {
 
   if (view.access === "forbidden") {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="permission"
           title="无今日工作台权限"
           description="当前账号没有今日工作台模块权限。入口应已隐藏；若通过链接直接访问，请联系管理员开通权限。"
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (view.access === "no_data_scope") {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title={greetingForNow(view.viewer.displayName)}
           description={`${view.viewer.activeRoleLabel}工作台`}
@@ -430,7 +434,7 @@ export function WorkspaceHomePage() {
           title="当前角色无数据范围"
           description="你可以进入此页面，但当前权限范围内没有可查看的任务与指标。系统不会展示虚假的 0 指标。"
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -453,7 +457,7 @@ export function WorkspaceHomePage() {
       : "success"
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title={greetingForNow(view.viewer.displayName)}
         description={`${view.viewer.activeRoleLabel}工作台 · 先处理超期项，再完成今日到期任务。`}
@@ -476,41 +480,64 @@ export function WorkspaceHomePage() {
           </div>
         }
         actions={
-          <PageActions
-            actions={[
-              {
-                actionKey: "refresh",
-                label: refreshing ? "刷新中" : "刷新",
-                icon: RefreshCwIcon,
-                variant: "outline",
-                disabled: refreshing,
-                onClick: refresh,
-              },
-            ]}
-          />
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {/*
+              分段切换：轨道 + 图标 + 选中白底浮起 / 未选中弱字色，
+              明确是「二选一控件」而不是静态标签。
+            */}
+            <div
+              role="group"
+              aria-label="责任范围"
+              className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
+            >
+              <button
+                type="button"
+                aria-pressed={urlState.scope === "mine"}
+                onClick={() => onScopeChange("mine")}
+                className={cn(
+                  "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  urlState.scope === "mine"
+                    ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                    : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                )}
+              >
+                <UserIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                我的待办
+              </button>
+              <button
+                type="button"
+                aria-pressed={urlState.scope === "role_pool"}
+                onClick={() => onScopeChange("role_pool")}
+                className={cn(
+                  "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  urlState.scope === "role_pool"
+                    ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                    : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                )}
+              >
+                <UsersIcon className="size-3.5 shrink-0" aria-hidden="true" />
+                团队待认领
+              </button>
+            </div>
+            <PageActions
+              actions={[
+                {
+                  actionKey: "refresh",
+                  label: refreshing ? "刷新中" : "刷新",
+                  icon: RefreshCwIcon,
+                  variant: "ghost",
+                  disabled: refreshing,
+                  onClick: refresh,
+                  className: "text-muted-foreground hover:text-foreground",
+                },
+              ]}
+            />
+          </div>
         }
       />
 
       {/* 数据新鲜度由页头 DataFreshness 徽章统一表达；刷新失败由任务卡内
           AsyncSectionState 错误卡承载，避免同一故障两处噪音（P2-8/P2-10）。 */}
-
-      <div className="flex justify-end">
-        <ToggleGroup
-          value={[urlState.scope]}
-          onValueChange={(values) => {
-            const next = values[0] as "mine" | "role_pool" | undefined
-            if (!next) return
-            onScopeChange(next)
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
-          aria-label="责任范围"
-        >
-          <ToggleGroupItem value="mine">我的待办</ToggleGroupItem>
-          <ToggleGroupItem value="role_pool">团队待认领</ToggleGroupItem>
-        </ToggleGroup>
-      </div>
 
       <MetricStrip columns={4} aria-label="待办筛选">
         {metrics.map((metric) => (
@@ -530,9 +557,9 @@ export function WorkspaceHomePage() {
         ))}
       </MetricStrip>
 
-      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)]">
-        <Card size="sm" className="min-w-0">
-          <CardHeader className="border-b">
+      <div className="grid min-w-0 gap-3 md:gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(18rem,2fr)]">
+        <Card size="sm" className={cn("min-w-0", surfacePanelClassName)}>
+          <CardHeader className="rounded-t-lg border-b border-border/30">
             <CardTitle id="workspace-task-main-title">{filterLabel}</CardTitle>
             <CardDescription aria-live="polite" aria-atomic="true">
               {hasActiveFilter
@@ -553,7 +580,8 @@ export function WorkspaceHomePage() {
               {view.canOpenTaskQueue ? (
                 <Button
                   size="xs"
-                  variant="outline"
+                  variant="secondary"
+                  className="rounded-md shadow-none"
                   render={<Link href={taskQueueHref} />}
                 >
                   查看全部待办
@@ -582,11 +610,15 @@ export function WorkspaceHomePage() {
                   kind="no-tasks"
                   title="当前没有待处理事项"
                   description="当前没有待处理事项。可查看最近打开记录，或进入其它业务模块。"
+                  // 嵌在任务卡内：去掉空态自带描边/底，避免框中套框
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0 md:p-8"
                   action={
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      {/* secondary chip：有底有 hover，比 ghost 更像可点，比 outline 更轻 */}
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="secondary"
+                        className="rounded-lg shadow-none"
                         render={
                           <Link href={resolveWorkspaceHref("W05")} />
                         }
@@ -595,7 +627,8 @@ export function WorkspaceHomePage() {
                       </Button>
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="secondary"
+                        className="rounded-lg shadow-none"
                         render={
                           <Link href={resolveWorkspaceHref("W07")} />
                         }
@@ -604,7 +637,8 @@ export function WorkspaceHomePage() {
                       </Button>
                       <Button
                         size="sm"
-                        variant="outline"
+                        variant="secondary"
+                        className="rounded-lg shadow-none"
                         render={
                           <Link href={resolveWorkspaceHref("W10")} />
                         }
@@ -621,8 +655,15 @@ export function WorkspaceHomePage() {
                   kind="filter"
                   title="当前筛选无结果"
                   description={`没有符合「${filterLabel}」的待办。可清除筛选查看全部任务。`}
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0 md:p-8"
                   action={
-                    <Button type="button" variant="outline" onClick={clearFilters}>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      className="rounded-lg shadow-none"
+                      onClick={clearFilters}
+                    >
                       清除筛选
                     </Button>
                   }
@@ -647,9 +688,9 @@ export function WorkspaceHomePage() {
           </CardContent>
         </Card>
 
-        <div className="space-y-4">
-          <Card size="sm">
-            <CardHeader className="border-b">
+        <div className="space-y-3 md:space-y-4">
+          <Card size="sm" className={surfacePanelClassName}>
+            <CardHeader className="rounded-t-lg border-b border-border/30">
               <CardTitle>需要关注的预警</CardTitle>
               <CardDescription>
                 只显示需要你关注的异常
@@ -701,8 +742,8 @@ export function WorkspaceHomePage() {
             </CardContent>
           </Card>
 
-          <Card size="sm">
-            <CardHeader className="border-b">
+          <Card size="sm" className={surfacePanelClassName}>
+            <CardHeader className="rounded-t-lg border-b border-border/30">
               <CardTitle>最近打开</CardTitle>
               <CardDescription>
                 快速回到上次处理的任务。
@@ -730,6 +771,6 @@ export function WorkspaceHomePage() {
           </Card>
         </div>
       </div>
-    </div>
+    </PageScaffold>
   )
 }

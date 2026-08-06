@@ -384,7 +384,7 @@ function MetricItem({
       data-density={density}
       data-detail-mode={detailMode}
       className={cn(
-        "min-w-0 bg-card",
+        "min-w-0 rounded-lg bg-card shadow-xs ring-1 ring-foreground/[0.04]",
         compact ? "p-2 sm:p-2.5" : "p-2.5 sm:p-3",
         className
       )}
@@ -453,15 +453,16 @@ function MetricFilterItem({
   const compact = density === "compact"
   const showInlineDetail = detail != null && detailMode === "inline"
   return (
-    <div className="min-w-0 bg-card">
+    <div className="min-w-0">
       <button
         type="button"
         aria-pressed={active}
         data-density={density}
         className={cn(
-          "h-full w-full border-l-2 border-transparent text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset xl:flex xl:items-baseline xl:gap-2",
+          "h-full w-full rounded-lg bg-card text-left shadow-xs ring-1 ring-foreground/[0.04] transition-colors hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
           compact ? "p-2 sm:p-2.5" : "p-2.5 sm:p-3",
-          active && "border-l-primary bg-accent text-accent-foreground",
+          active &&
+            "bg-accent text-accent-foreground shadow-none ring-primary/25",
           className
         )}
         {...props}
@@ -525,7 +526,8 @@ function MetricStrip({
       data-slot="metric-strip"
       data-density={density}
       className={cn(
-        "grid gap-px overflow-hidden rounded-lg border border-grid bg-grid",
+        // 浮动画布：各指标独立轻卡，与主表/主任务卡同圆角体系
+        "grid gap-2 sm:gap-3",
         metricColumnClasses[columns],
         className
       )}
@@ -597,6 +599,44 @@ function DataFreshness({
   )
 }
 
+/**
+ * 工作面内容区统一脚手架：max-width、页边距、区块间距。
+ * 标题贴画布；主工作面用 1～2 张浮起表面（见 surfacePanelClassName）。
+ */
+export type PageScaffoldDensity = "default" | "compact"
+
+export type PageScaffoldProps = React.ComponentProps<"div"> & {
+  density?: PageScaffoldDensity
+}
+
+function PageScaffold({
+  density = "default",
+  className,
+  ...props
+}: PageScaffoldProps) {
+  return (
+    <div
+      data-slot="page-scaffold"
+      data-density={density}
+      className={cn(
+        "mx-auto flex w-full max-w-shell flex-col",
+        density === "compact"
+          ? "gap-3 p-3 md:px-5 md:py-4"
+          : "gap-3 p-4 md:gap-4 md:px-6 md:py-5",
+        className
+      )}
+      {...props}
+    />
+  )
+}
+
+/** 主工作面浮起表面：靠浅阴影浮起，避免重描边。 */
+const surfacePanelClassName =
+  "rounded-lg bg-card shadow-xs ring-1 ring-foreground/[0.04]"
+
+/** 主卡内轻提示/工具条：无描边，仅浅底区分。 */
+const surfaceInsetClassName = "rounded-md bg-muted/40"
+
 export {
   DataFreshness,
   MetricItem,
@@ -604,4 +644,7 @@ export {
   MetricStrip,
   PageActions,
   PageHeader,
+  PageScaffold,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 }

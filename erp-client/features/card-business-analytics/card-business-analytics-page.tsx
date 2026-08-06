@@ -43,8 +43,10 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
   SalesOrderCombobox,
+  surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
@@ -798,22 +800,22 @@ export function CardBusinessAnalyticsPage() {
   // —— Loading shells ——
   if (basisQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-24 w-full" />
+      <PageScaffold>
+        <Skeleton className="h-10 w-64 rounded-lg" />
+        <Skeleton className="h-24 w-full rounded-lg" />
         <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
           {Array.from({ length: 8 }).map((_, i) => (
             <Skeleton key={i} className="h-20 rounded-lg" />
           ))}
         </div>
-        <Skeleton className="h-64 w-full" />
-      </div>
+        <Skeleton className="h-64 w-full rounded-lg" />
+      </PageScaffold>
     )
   }
 
   if (basisQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="system"
           title="日期口径配置加载失败"
@@ -827,14 +829,14 @@ export function CardBusinessAnalyticsPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   // —— Q2 期间与日期口径选择态 ——
   if (analysisBlocked) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title="卡券消费台账与经营分析"
           description="系统尚未配置默认日期口径。请显式选择期间与日期口径后再开始分析。"
@@ -850,8 +852,8 @@ export function CardBusinessAnalyticsPage() {
             选择完整的期间与日期口径后才会发起查询；该选择将作用于全部指标与图表。
           </AlertDescription>
         </Alert>
-        <Card size="sm">
-          <CardHeader className="border-b">
+        <Card size="sm" className={surfacePanelClassName}>
+          <CardHeader className="border-b border-border/30">
             <CardTitle>显式期间与日期口径</CardTitle>
             <CardDescription>
               选择完整的期间与日期口径后才会发起查询；该选择将作用于全部指标与图表。
@@ -914,7 +916,7 @@ export function CardBusinessAnalyticsPage() {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -927,7 +929,7 @@ export function CardBusinessAnalyticsPage() {
     : { uiState: "unknown" as const, statusLabel: "—" }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="卡券消费台账与经营分析"
         breadcrumbs={[
@@ -1008,7 +1010,8 @@ export function CardBusinessAnalyticsPage() {
                 actionKey: "refresh",
                 label: refreshing ? "刷新中" : "刷新",
                 icon: RefreshCwIcon,
-                variant: "outline",
+                variant: "ghost",
+                className: "text-muted-foreground hover:text-foreground",
                 disabled: !data || refreshing,
                 onClick: () => {
                   void handleRefresh()
@@ -1027,7 +1030,7 @@ export function CardBusinessAnalyticsPage() {
       />
 
       {/* Filter bar */}
-      <Card size="sm">
+      <Card size="sm" className={surfacePanelClassName}>
         <CardContent className="flex flex-col gap-3 pt-4 sm:flex-row sm:flex-wrap sm:items-end">
           <div className="space-y-1.5">
             <Label htmlFor="w28-preset">期间快捷</Label>
@@ -1515,8 +1518,8 @@ export function CardBusinessAnalyticsPage() {
 
           {/* Charts 2×2 */}
           <div className="grid min-w-0 gap-4 xl:grid-cols-2">
-            <Card size="sm">
-              <CardHeader className="border-b">
+            <Card size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <CardTitle>消费与余额趋势</CardTitle>
                 <CardDescription>
                   销售 / 消费 / 退款 / 余额（含税，万元展示）。全量口径，不随明细筛选变化。
@@ -1605,8 +1608,8 @@ export function CardBusinessAnalyticsPage() {
               </CardContent>
             </Card>
 
-            <Card size="sm">
-              <CardHeader className="border-b">
+            <Card size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <CardTitle>成本口径构成</CardTitle>
                 <CardDescription>
                   实际成本 / 标准成本 / 无可用成本消费金额占比。三者合计须等于累计卡券消费{" "}
@@ -1682,8 +1685,8 @@ export function CardBusinessAnalyticsPage() {
               </CardContent>
             </Card>
 
-            <Card size="sm">
-              <CardHeader className="border-b">
+            <Card size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <CardTitle>经营贡献与覆盖率</CardTitle>
                 <CardDescription>
                   利润金额不含税；覆盖率同屏辅助。全量口径，与指标一致，不随明细筛选变化。
@@ -1798,13 +1801,14 @@ export function CardBusinessAnalyticsPage() {
                     kind="no-scope"
                     title="无利润字段权限"
                     description="经营贡献趋势已隐藏；覆盖率与风险等级仍按授权可见。"
+                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   />
                 )}
               </CardContent>
             </Card>
 
-            <Card size="sm">
-              <CardHeader className="border-b">
+            <Card size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <CardTitle>类目 / 客户构成</CardTitle>
                 <CardDescription>
                   排名不越过数据范围。全量口径，不随明细筛选变化。
@@ -1860,11 +1864,13 @@ export function CardBusinessAnalyticsPage() {
               kind="filter"
               title="当前筛选无卡券经营记录"
               description="请调整期间、客户、销售单、成本口径或覆盖筛选。"
+              className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
               action={
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
+                  className="rounded-lg shadow-none"
                   onClick={() =>
                     patchUrl({
                       customerId: null,
@@ -2021,6 +2027,6 @@ export function CardBusinessAnalyticsPage() {
           </div>
         ) : null}
       </QuickPreviewSheet>
-    </div>
+    </PageScaffold>
   )
 }

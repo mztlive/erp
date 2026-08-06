@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 import { Suspense } from "react"
 
+import { PageScaffold } from "@/components/business"
 import { SupplierOrdersListPage } from "@/features/supplier-orders/supplier-orders-list-page"
 
 export const metadata: Metadata = {
@@ -9,12 +10,12 @@ export const metadata: Metadata = {
 
 function OrdersFallback() {
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-      <div className="h-16 animate-pulse rounded-xl bg-muted" />
-      <div className="h-24 animate-pulse rounded-2xl bg-muted" />
-      <div className="h-72 animate-pulse rounded-2xl bg-muted" />
-    </div>
+      <div className="h-16 animate-pulse rounded-lg bg-muted" />
+      <div className="h-24 animate-pulse rounded-lg bg-muted" />
+      <div className="h-72 animate-pulse rounded-lg bg-muted" />
+    </PageScaffold>
   )
 }
 

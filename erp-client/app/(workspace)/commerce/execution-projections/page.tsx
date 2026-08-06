@@ -9,11 +9,11 @@ export const metadata: Metadata = {
 
 function ExecutionProjectionsFallback() {
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
+    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:px-5 md:py-4">
       <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
       <div className="h-16 animate-pulse rounded-xl bg-muted" />
-      <div className="h-24 animate-pulse rounded-2xl bg-muted" />
-      <div className="h-72 animate-pulse rounded-2xl bg-muted" />
+      <div className="h-24 animate-pulse rounded-lg bg-muted" />
+      <div className="h-72 animate-pulse rounded-lg bg-muted" />
     </div>
   )
 }

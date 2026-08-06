@@ -22,19 +22,16 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-} from "@/components/ui/card"
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { cn } from "@/lib/utils"
 import { CustomerCreateDialog } from "@/features/customers/customer-create-dialog"
 import {
   parseCustomerScope,
@@ -325,7 +322,7 @@ export function CustomerCenterPage() {
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="客户中心"
         breadcrumbs={[
@@ -364,11 +361,11 @@ export function CustomerCenterPage() {
           }}
         />
       ) : directoryQuery.isPending && !data ? (
-        <Card size="sm">
-          <CardContent className="p-8 text-sm text-muted-foreground">
-            正在加载客户目录…
-          </CardContent>
-        </Card>
+        <div
+          className="h-40 animate-pulse rounded-lg bg-muted"
+          aria-busy="true"
+          aria-label="正在加载客户目录"
+        />
       ) : data && !data.hasCustomerScope ? (
         <BusinessEmptyState
           kind="no-scope"
@@ -381,7 +378,12 @@ export function CustomerCenterPage() {
           title="当前范围尚无客户"
           description={`${SCOPE_LABELS[scope]}下还没有客户。有权时可新建客户。`}
           action={
-            <Button type="button" onClick={() => setCreateOpen(true)}>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-lg shadow-none"
+              onClick={() => setCreateOpen(true)}
+            >
               新建客户
             </Button>
           }
@@ -393,7 +395,12 @@ export function CustomerCenterPage() {
           description={`范围「${SCOPE_LABELS[scope]}」${status !== "active" ? ` · 状态 ${status}` : ""}${q ? ` · 关键词「${q}」` : ""} 下没有匹配客户。`}
           action={
             hasActiveFilters ? (
-              <Button type="button" variant="outline" onClick={clearFilters}>
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-lg shadow-none"
+                onClick={clearFilters}
+              >
                 清除筛选
               </Button>
             ) : null
@@ -433,25 +440,31 @@ export function CustomerCenterPage() {
               }
               filters={
                 <div className="flex flex-wrap items-center gap-2">
-                  <ToggleGroup
-                    value={[scope]}
-                    onValueChange={(values) => {
-                      const next = values[0] as CustomerScope | undefined
-                      if (next) {
-                        pushState({ scope: next, page: 1 })
-                      }
-                    }}
-                    variant="outline"
-                    size="sm"
-                    spacing={0}
+                  <div
+                    role="group"
                     aria-label="客户范围"
+                    className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
                   >
-                    {SCOPE_ORDER.map((key) => (
-                      <ToggleGroupItem key={key} value={key}>
-                        {SCOPE_LABELS[key]}
-                      </ToggleGroupItem>
-                    ))}
-                  </ToggleGroup>
+                    {SCOPE_ORDER.map((key) => {
+                      const active = scope === key
+                      return (
+                        <button
+                          key={key}
+                          type="button"
+                          aria-pressed={active}
+                          onClick={() => pushState({ scope: key, page: 1 })}
+                          className={cn(
+                            "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                            active
+                              ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                              : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                          )}
+                        >
+                          {SCOPE_LABELS[key]}
+                        </button>
+                      )
+                    })}
+                  </div>
                   <OptionCombobox
                     aria-label="客户状态"
                     value={status}
@@ -506,6 +519,6 @@ export function CustomerCenterPage() {
           router.push(`/sales/customers/${customerId}`)
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }

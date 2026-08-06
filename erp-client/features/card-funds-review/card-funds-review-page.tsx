@@ -27,8 +27,12 @@ import {
   MetricStrip,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   SequentialProcessBar,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
+import { cn } from "@/lib/utils"
 import { type ResultState as SharedResultState } from "@/components/business/feedback"
 import { useAppForm } from "@/components/form"
 import {
@@ -65,7 +69,6 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import type {
   AllocationDraftLine,
   ApproveConclusion,
@@ -837,30 +840,30 @@ export function CardFundsReviewPage() {
 
   if (queueQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-        <div className="h-24 animate-pulse rounded-2xl bg-muted" />
+        <div className="h-24 animate-pulse rounded-lg bg-muted" />
         <div className="grid gap-4 xl:grid-cols-[minmax(0,64fr)_minmax(16rem,36fr)]">
-          <div className="h-80 animate-pulse rounded-2xl bg-muted" />
-          <div className="h-64 animate-pulse rounded-2xl bg-muted" />
+          <div className="h-80 animate-pulse rounded-lg bg-muted" />
+          <div className="h-64 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (queueQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="卡券票款复核" description="队列加载失败" />
         <Button type="button" onClick={() => void queueQuery.refetch()}>
           重试
         </Button>
-      </div>
+      </PageScaffold>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="卡券票款复核"
         breadcrumbs={[
@@ -891,69 +894,137 @@ export function CardFundsReviewPage() {
         }
       />
 
-      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card px-3 py-2 text-sm">
-        <ToggleGroup
-          value={[scope]}
-          onValueChange={(v) => {
-            const next = (v[0] as typeof scope | undefined) ?? "mine"
-            replaceUrl({
-              scope: next === "mine" ? null : next,
-              queueContextId: null,
-              currentWorkItemId: null,
-            })
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
+      <div
+        className={`${surfacePanelClassName} sticky top-0 z-10 flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm`}
+      >
+        <div
+          role="group"
           aria-label="责任范围"
+          className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
         >
-          <ToggleGroupItem value="mine">仅我的</ToggleGroupItem>
-          <ToggleGroupItem value="role_pool">团队</ToggleGroupItem>
-        </ToggleGroup>
-        <ToggleGroup
-          value={[type]}
-          onValueChange={(v) => {
-            const next = (v[0] as typeof type | undefined) ?? "all"
-            replaceUrl({ type: next, currentWorkItemId: null })
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
+          {(
+            [
+              { value: "mine" as const, label: "仅我的" },
+              { value: "role_pool" as const, label: "团队" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              aria-pressed={scope === opt.value}
+              onClick={() =>
+                replaceUrl({
+                  scope: opt.value === "mine" ? null : opt.value,
+                  queueContextId: null,
+                  currentWorkItemId: null,
+                })
+              }
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                scope === opt.value
+                  ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                  : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div
+          role="group"
           aria-label="任务类型"
+          className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
         >
-          <ToggleGroupItem value="all">全部类型</ToggleGroupItem>
-          <ToggleGroupItem value="opening">期初</ToggleGroupItem>
-          <ToggleGroupItem value="delta">同步差额</ToggleGroupItem>
-        </ToggleGroup>
-        <ToggleGroup
-          value={[due]}
-          onValueChange={(v) => {
-            const next = (v[0] as typeof due | undefined) ?? "all"
-            replaceUrl({ due: next === "all" ? null : next, currentWorkItemId: null })
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
+          {(
+            [
+              { value: "all" as const, label: "全部类型" },
+              { value: "opening" as const, label: "期初" },
+              { value: "delta" as const, label: "同步差额" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              aria-pressed={type === opt.value}
+              onClick={() =>
+                replaceUrl({ type: opt.value, currentWorkItemId: null })
+              }
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                type === opt.value
+                  ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                  : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div
+          role="group"
           aria-label="到期时限"
+          className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
         >
-          <ToggleGroupItem value="all">全部时限</ToggleGroupItem>
-          <ToggleGroupItem value="today">今日到期</ToggleGroupItem>
-          <ToggleGroupItem value="overdue">已超期</ToggleGroupItem>
-        </ToggleGroup>
-        <ToggleGroup
-          value={[status]}
-          onValueChange={(v) => {
-            const next = (v[0] as typeof status | undefined) ?? "pending"
-            replaceUrl({ status: next === "pending" ? null : next, currentWorkItemId: null })
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
+          {(
+            [
+              { value: "all" as const, label: "全部时限" },
+              { value: "today" as const, label: "今日到期" },
+              { value: "overdue" as const, label: "已超期" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              aria-pressed={due === opt.value}
+              onClick={() =>
+                replaceUrl({
+                  due: opt.value === "all" ? null : opt.value,
+                  currentWorkItemId: null,
+                })
+              }
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                due === opt.value
+                  ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                  : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div
+          role="group"
           aria-label="队列范围"
+          className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
         >
-          <ToggleGroupItem value="pending">待处理</ToggleGroupItem>
-          <ToggleGroupItem value="held">已跳过</ToggleGroupItem>
-        </ToggleGroup>
+          {(
+            [
+              { value: "pending" as const, label: "待处理" },
+              { value: "held" as const, label: "已跳过" },
+            ] as const
+          ).map((opt) => (
+            <button
+              key={opt.value}
+              type="button"
+              aria-pressed={status === opt.value}
+              onClick={() =>
+                replaceUrl({
+                  status: opt.value === "pending" ? null : opt.value,
+                  currentWorkItemId: null,
+                })
+              }
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                status === opt.value
+                  ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                  : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
         <div className="flex items-center gap-2">
           <Label htmlFor="auto-next" className="text-muted-foreground">
             自动下一项
@@ -1044,7 +1115,13 @@ export function CardFundsReviewPage() {
           title="当前筛选项已处理完"
           description="卡券票款复核有效队列已清空。可切换类型/跳过范围，或返回工作台。"
           action={
-            <Button render={<Link href="/workspace" />}>返回今日工作台</Button>
+            <Button
+              variant="secondary"
+              className="rounded-lg shadow-none"
+              render={<Link href="/workspace" />}
+            >
+              返回今日工作台
+            </Button>
           }
         />
       ) : task ? (
@@ -1099,8 +1176,8 @@ export function CardFundsReviewPage() {
 
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,64fr)_minmax(17rem,36fr)]">
             <div className="min-w-0 space-y-4">
-              <Card size="sm">
-                <CardHeader className="border-b">
+              <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30">
                   <div className="flex flex-wrap items-center gap-2">
                     <CardTitle>
                       <h2
@@ -1270,8 +1347,8 @@ export function CardFundsReviewPage() {
                     </div>
                   ) : null}
 
-                  <Card size="sm">
-                    <CardHeader className="border-b py-3">
+                  <Card size="sm" className={surfacePanelClassName}>
+                    <CardHeader className="border-b border-border/30 py-3">
                       <CardTitle className="text-base">
                         回款与发票明细
                       </CardTitle>
@@ -1290,7 +1367,7 @@ export function CardFundsReviewPage() {
                       {task.receiptFacts.map((r) => (
                         <div
                           key={r.receiptId}
-                          className="rounded-lg border border-border px-3 py-2 text-sm"
+                          className={`${surfaceInsetClassName} px-3 py-2 text-sm`}
                         >
                           <div className="flex flex-wrap gap-2 font-medium">
                             <ReceiptIcon className="size-4 text-muted-foreground" />
@@ -1311,7 +1388,7 @@ export function CardFundsReviewPage() {
                       {task.invoiceFacts.map((inv) => (
                         <div
                           key={inv.invoiceId}
-                          className="rounded-lg border border-border px-3 py-2 text-sm"
+                          className={`${surfaceInsetClassName} px-3 py-2 text-sm`}
                         >
                           <div className="flex flex-wrap gap-2 font-medium">
                             发票 {inv.invoiceNo}
@@ -1360,8 +1437,8 @@ export function CardFundsReviewPage() {
 
                   {allocationMode ? (
                     <div className="space-y-3">
-                      <Card size="sm">
-                        <CardHeader className="border-b py-3">
+                      <Card size="sm" className={surfacePanelClassName}>
+                        <CardHeader className="border-b border-border/30 py-3">
                           <CardTitle className="text-base">
                             {allocationMode === "receipt"
                               ? "登记历史回款"
@@ -1579,9 +1656,9 @@ export function CardFundsReviewPage() {
               {/* sticky 决策区 */}
               <Card
                 size="sm"
-                className="sticky bottom-2 z-10 border-primary/20 shadow-md"
+                className={cn(surfacePanelClassName, "sticky bottom-2 z-10")}
               >
-                <CardHeader className="border-b py-3">
+                <CardHeader className="border-b border-border/30 py-3">
                   <CardTitle className="text-base">结论区</CardTitle>
                   <CardDescription>
                     提交时将核对账户、历史复核记录与数据版本。快捷键：j/k 切换任务 ·
@@ -1717,8 +1794,8 @@ export function CardFundsReviewPage() {
             </div>
 
             <aside className="min-w-0 space-y-4 xl:sticky xl:top-4 xl:self-start">
-              <Card size="sm">
-                <CardHeader className="border-b py-3">
+              <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30 py-3">
                   <CardTitle className="text-base">复核记录（只读）</CardTitle>
                   <CardDescription>
                     历史复核记录只读，不可修改或删除；本次将形成复核号{" "}
@@ -1767,8 +1844,8 @@ export function CardFundsReviewPage() {
                 </CardContent>
               </Card>
 
-              <Card size="sm">
-                <CardHeader className="border-b py-3">
+              <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30 py-3">
                   <CardTitle className="text-base">证据与导航</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4 text-sm">
@@ -1805,6 +1882,8 @@ export function CardFundsReviewPage() {
           action={
             <Button
               type="button"
+              variant="secondary"
+              className="rounded-lg shadow-none"
               onClick={() =>
                 replaceUrl({
                   type: "all",
@@ -1996,7 +2075,7 @@ export function CardFundsReviewPage() {
           }
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }
 

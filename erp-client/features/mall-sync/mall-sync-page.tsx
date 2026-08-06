@@ -27,7 +27,9 @@ import {
   MetricStrip,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   SequentialProcessBar,
+  surfacePanelClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import {
@@ -845,21 +847,21 @@ export function MallSyncPage() {
 
   if (pageQuery.isPending && !data) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-        <div className="h-16 animate-pulse rounded-xl bg-muted" />
-        <div className="h-24 animate-pulse rounded-2xl bg-muted" />
+        <div className="h-16 animate-pulse rounded-lg bg-muted" />
+        <div className="h-24 animate-pulse rounded-lg bg-muted" />
         <div className="grid gap-4 lg:grid-cols-2">
-          <div className="h-72 animate-pulse rounded-2xl bg-muted" />
-          <div className="h-72 animate-pulse rounded-2xl bg-muted" />
+          <div className="h-72 animate-pulse rounded-lg bg-muted" />
+          <div className="h-72 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (pageQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="商城同步与映射" description="加载失败" />
         <Alert variant="destructive">
           <AlertTitle>查询失败</AlertTitle>
@@ -867,15 +869,20 @@ export function MallSyncPage() {
             {(pageQuery.error as Error)?.message ?? "请重试"}
           </AlertDescription>
         </Alert>
-        <Button type="button" onClick={() => void pageQuery.refetch()}>
+        <Button
+          type="button"
+          variant="secondary"
+          className="rounded-lg shadow-none"
+          onClick={() => void pageQuery.refetch()}
+        >
           重试
         </Button>
-      </div>
+      </PageScaffold>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="商城同步与映射"
         breadcrumbs={[
@@ -906,8 +913,9 @@ export function MallSyncPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
               size="sm"
+              className="rounded-lg shadow-none"
               disabled={!canManualSync}
               title={manualSyncDisabledReason ?? "立即增量（按策略）"}
               onClick={() => {
@@ -919,7 +927,6 @@ export function MallSyncPage() {
             </Button>
             <Button
               type="button"
-              variant="outline"
               size="sm"
               disabled={!canManualSync}
               title={manualSyncDisabledReason ?? "按单号补拉"}
@@ -934,6 +941,7 @@ export function MallSyncPage() {
               type="button"
               variant="ghost"
               size="sm"
+              className="text-muted-foreground"
               onClick={() => void pageQuery.refetch()}
             >
               <RefreshCwIcon className="size-4" aria-hidden />
@@ -1066,7 +1074,9 @@ export function MallSyncPage() {
         ))}
       </MetricStrip>
 
-      <div className="sticky top-0 z-10 -mx-1 border-b bg-background/95 px-1 py-2 backdrop-blur">
+      <div
+        className={`${surfacePanelClassName} sticky top-0 z-10 flex flex-wrap items-center gap-3 px-3 py-2.5`}
+      >
         <Tabs
           value={view}
           onValueChange={(v) => {
@@ -1156,8 +1166,8 @@ export function MallSyncPage() {
       {/* ── 子视图内容 ── */}
       {view === "overview" ? (
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card size="sm">
-            <CardHeader>
+          <Card size="sm" className={surfacePanelClassName}>
+            <CardHeader className="border-b border-border/30">
               <CardTitle>运行摘要</CardTitle>
               <CardDescription>
                 同步进度仅证明来源数据已捕获，不证明映射或应收已成功。
@@ -1197,8 +1207,8 @@ export function MallSyncPage() {
               </p>
             </CardContent>
           </Card>
-          <Card size="sm">
-            <CardHeader>
+          <Card size="sm" className={surfacePanelClassName}>
+            <CardHeader className="border-b border-border/30">
               <CardTitle>最近同步任务</CardTitle>
             </CardHeader>
             <CardContent className="space-y-2">
@@ -1244,8 +1254,8 @@ export function MallSyncPage() {
             }
           />
           {data?.selectedJob ? (
-            <Card size="sm">
-              <CardHeader>
+            <Card size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <CardTitle className="text-base">
                   {data.selectedJob.jobNo}
                 </CardTitle>
@@ -1325,8 +1335,8 @@ export function MallSyncPage() {
             }
           />
           {data?.selectedSnapshot ? (
-            <Card size="sm">
-              <CardHeader>
+            <Card size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <CardTitle className="font-mono text-base">
                   {data.selectedSnapshot.externalOrderNo}
                 </CardTitle>
@@ -1366,6 +1376,7 @@ export function MallSyncPage() {
               kind="no-data"
               title="选择结果"
               description="从左侧列表选择一条记录"
+              className="rounded-lg border-0 bg-transparent shadow-none ring-0"
             />
           )}
         </div>
@@ -1391,6 +1402,7 @@ export function MallSyncPage() {
                   ? "清除筛选后查看其它任务。"
                   : "新任务到达后刷新"
               }
+              className="rounded-lg border-0 bg-transparent shadow-none ring-0"
             />
           ) : null}
 
@@ -1412,8 +1424,8 @@ export function MallSyncPage() {
 
             {mappingTask ? (
               <div className="space-y-3">
-                <Card size="sm">
-                  <CardHeader className="space-y-2">
+                <Card size="sm" className={surfacePanelClassName}>
+                  <CardHeader className="space-y-2 border-b border-border/30">
                     <div className="flex flex-wrap items-center gap-2">
                       <CardTitle className="text-base">
                         {mappingTask.mappingTypeLabel}
@@ -1769,6 +1781,7 @@ export function MallSyncPage() {
                 kind="no-data"
                 title="选择映射任务"
                 description="从左侧列表打开处理区"
+                className="rounded-lg border-0 bg-transparent shadow-none ring-0"
               />
             )}
           </div>
@@ -1780,8 +1793,8 @@ export function MallSyncPage() {
           {data?.reconciliation ? (
             <>
               <div className="space-y-3">
-                <Card size="sm">
-                  <CardHeader>
+                <Card size="sm" className={surfacePanelClassName}>
+                  <CardHeader className="border-b border-border/30">
                     <CardTitle>{data.reconciliation.jobNo}</CardTitle>
                     <CardDescription>
                       {data.reconciliation.boundaryLabel} · 商城{" "}
@@ -1807,8 +1820,8 @@ export function MallSyncPage() {
                 />
               </div>
               {data.selectedDifference ? (
-                <Card size="sm">
-                  <CardHeader>
+                <Card size="sm" className={surfacePanelClassName}>
+                  <CardHeader className="border-b border-border/30">
                     <CardTitle className="font-mono text-base">
                       {data.selectedDifference.externalOrderNo}
                     </CardTitle>
@@ -1853,6 +1866,7 @@ export function MallSyncPage() {
               kind="no-scope"
               title="当前无核对范围"
               description="当前没有可核对的差异；清除筛选后重试。"
+              className="rounded-lg border-0 bg-transparent shadow-none ring-0"
             />
           )}
         </div>
@@ -1869,8 +1883,8 @@ export function MallSyncPage() {
             </Alert>
           ) : null}
           {(data?.history ?? []).map((h) => (
-            <Card key={h.id} size="sm">
-              <CardHeader>
+            <Card key={h.id} size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <CardTitle className="text-base">{h.title}</CardTitle>
                 <CardDescription>
                   {formatDateTime(h.recordedAt, "default")}
@@ -2084,6 +2098,6 @@ export function MallSyncPage() {
         pending={confirmMutation.isPending}
         onConfirm={() => handleConfirm()}
       />
-    </div>
+    </PageScaffold>
   )
 }

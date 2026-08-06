@@ -30,9 +30,11 @@ import {
   MultiOptionCombobox,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
   StatusTrackSummary,
   SupplierCombobox,
+  surfacePanelClassName,
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -42,7 +44,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { cn } from "@/lib/utils"
 import { listSupplierOptions } from "@/features/supplier-orders/api"
 import {
   useQueryResultMutation,
@@ -149,7 +151,7 @@ export function SupplierOrdersListPage() {
     setSearchDraft(url.q ?? "")
   }, [url.q])
 
-  // W25 钻取：supplierOrderId / from=W25 时进入对象中心（TaskTab 身份稳定）
+  // W25 钻取：supplierOrderId / from=W25 时进入对象中心
   React.useEffect(() => {
     const soId =
       searchParams.get("supplierOrderId") ?? searchParams.get("preview")
@@ -573,7 +575,7 @@ export function SupplierOrdersListPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="供应商订单"
         breadcrumbs={[
@@ -607,14 +609,20 @@ export function SupplierOrdersListPage() {
       />
 
       {returnTo ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 text-sm">
+        <div
+          className={cn(
+            surfacePanelClassName,
+            "flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 text-sm"
+          )}
+        >
           <span className="text-muted-foreground">
             从关联页面进来的。返回时会回到原来的位置。
           </span>
           <Button
             type="button"
             size="sm"
-            variant="outline"
+            variant="secondary"
+            className="rounded-lg shadow-none"
             render={<Link href={returnTo} />}
           >
             返回来源
@@ -744,7 +752,7 @@ export function SupplierOrdersListPage() {
       ) : null}
 
       {exportPreviewOpen ? (
-        <div className="space-y-3 rounded-2xl border border-border p-4">
+        <div className={cn(surfacePanelClassName, "space-y-3 p-4")}>
           <BatchImpactPreview
             title="导出当前筛选全部"
             description="按当前筛选快照导出，不限于当前页；结果 7 天内可下载，下载时将重新校验权限。"
@@ -782,7 +790,7 @@ export function SupplierOrdersListPage() {
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant="ghost"
               onClick={() => setExportPreviewOpen(false)}
             >
               取消
@@ -822,25 +830,31 @@ export function SupplierOrdersListPage() {
             }
             filters={
               <div className="flex flex-wrap items-center gap-2">
-                <ToggleGroup
-                  value={[url.view]}
-                  onValueChange={(values) => {
-                    const next =
-                      (values[0] as ListView | undefined) ?? "actionable"
-                    pushUrl({ view: next, page: 1 })
-                  }}
-                  variant="outline"
-                  size="sm"
-                  spacing={0}
+                <div
+                  role="group"
+                  aria-label="列表视图"
+                  className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
                 >
-                  {(
-                    Object.keys(VIEW_LABEL) as ListView[]
-                  ).map((v) => (
-                    <ToggleGroupItem key={v} value={v}>
-                      {VIEW_LABEL[v]}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
+                  {(Object.keys(VIEW_LABEL) as ListView[]).map((v) => {
+                    const active = url.view === v
+                    return (
+                      <button
+                        key={v}
+                        type="button"
+                        aria-pressed={active}
+                        onClick={() => pushUrl({ view: v, page: 1 })}
+                        className={cn(
+                          "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                          active
+                            ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                            : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                        )}
+                      >
+                        {VIEW_LABEL[v]}
+                      </button>
+                    )
+                  })}
+                </div>
 
                 <SupplierCombobox
                   value={url.supplierId || undefined}
@@ -1022,13 +1036,15 @@ export function SupplierOrdersListPage() {
               !listQuery.isPending && rows.length === 0 ? (
                 <BusinessEmptyState
                   kind="filter"
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   title="当前范围没有供应商订单"
                   description="调整视图、供应商或支付时间，或从商城消费订单钻取。"
                   action={
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
+                      className="rounded-lg shadow-none"
                       render={<Link href="/commerce/consumption-orders" />}
                     >
                       打开商城消费订单
@@ -1173,6 +1189,6 @@ export function SupplierOrdersListPage() {
           </div>
         )}
       </QuickPreviewSheet>
-    </div>
+    </PageScaffold>
   )
 }

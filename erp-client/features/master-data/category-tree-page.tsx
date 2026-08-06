@@ -26,7 +26,10 @@ import {
   FormalActionResult,
   PageActions,
   PageHeader,
+  PageScaffold,
+  surfacePanelClassName,
 } from "@/components/business"
+import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -34,7 +37,6 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import { cn } from "@/lib/utils"
 import {
   buildCategoryForest,
   flattenCategoryForest,
@@ -67,7 +69,7 @@ function ResourceNav({
     <nav
       ref={navRef}
       aria-label={masterDataCopy.resourceNavAria}
-      className="flex flex-wrap gap-2 border-b border-border pb-3"
+      className="flex flex-wrap gap-2 border-b border-border/30 pb-3"
     >
       {MASTER_DATA_RESOURCES.map((item) => {
         const selected = item.key === resource
@@ -308,17 +310,17 @@ export function CategoryTreePage({
 
   if (listQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold density="compact">
         <PageHeader title={masterDataCopy.pageTitle("商品分类")} />
         <ResourceNav resource="categories" navRef={navRef} />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (listQuery.isError || !listQuery.data) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold density="compact">
         <PageHeader title={masterDataCopy.pageTitle("商品分类")} />
         <ResourceNav resource="categories" navRef={navRef} />
         <BusinessFailureState
@@ -330,12 +332,12 @@ export function CategoryTreePage({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:gap-3.5 md:p-4">
+    <PageScaffold density="compact">
       <PageHeader
         title={masterDataCopy.pageTitle("商品分类")}
         breadcrumbs={[
@@ -447,10 +449,10 @@ export function CategoryTreePage({
 
       <div className="grid min-h-[28rem] gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
         <section
-          className="flex min-h-0 flex-col rounded-xl border border-border bg-card shadow-sm"
+          className={cn(surfacePanelClassName, "flex min-h-0 flex-col")}
           aria-label={masterDataCopy.categoryTreeTitle}
         >
-          <div className="flex items-center justify-between border-b border-border px-3 py-2">
+          <div className="flex items-center justify-between border-b border-border/30 px-3 py-2">
             <h2 className="text-sm font-semibold">
               {masterDataCopy.categoryTreeTitle}
             </h2>
@@ -471,7 +473,8 @@ export function CategoryTreePage({
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="secondary"
+                    className="rounded-lg shadow-none"
                     onClick={() => {
                       setSearch("")
                       setLifecycleStatus("all")
@@ -509,10 +512,10 @@ export function CategoryTreePage({
         </section>
 
         <section
-          className="flex min-h-0 flex-col rounded-xl border border-border bg-card shadow-sm"
+          className={cn(surfacePanelClassName, "flex min-h-0 flex-col")}
           aria-label="分类详情"
         >
-          <div className="border-b border-border px-3 py-2">
+          <div className="border-b border-border/30 px-3 py-2">
             <h2 className="text-sm font-semibold">分类详情</h2>
           </div>
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
@@ -524,7 +527,8 @@ export function CategoryTreePage({
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
+                  variant="secondary"
+                  className="rounded-lg shadow-none"
                   onClick={() => {
                     setSearch("")
                     setLifecycleStatus("all")
@@ -599,7 +603,7 @@ export function CategoryTreePage({
                     </dd>
                   </div>
                 </dl>
-                <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+                <div className="flex flex-wrap gap-2 border-t border-border/30 pt-3">
                   <Button
                     type="button"
                     size="sm"
@@ -714,7 +718,7 @@ export function CategoryTreePage({
         resource="categories"
         target={disableTarget}
       />
-    </div>
+    </PageScaffold>
   )
 }
 

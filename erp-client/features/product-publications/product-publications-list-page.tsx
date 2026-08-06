@@ -22,6 +22,7 @@ import {
   MetricStrip,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
 } from "@/components/business"
 import {
@@ -349,7 +350,7 @@ export function ProductPublicationsListPage() {
   const metrics = data?.metrics
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="商品发布"
         breadcrumbs={[
@@ -368,7 +369,7 @@ export function ProductPublicationsListPage() {
           <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => void listQuery.refetch()}
             >
@@ -464,169 +465,175 @@ export function ProductPublicationsListPage() {
         />
       </MetricStrip>
 
-      <ListToolbar
-        search={
-          <InputGroup className="max-w-md">
-            <InputGroupAddon>
-              <SearchIcon className="size-4" />
-            </InputGroupAddon>
-            <InputGroupInput
-              ref={searchInputRef}
-              value={searchInput}
-              placeholder="发布编号、SKU、商品名（/ 聚焦）"
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") commitSearch()
-              }}
-            />
-          </InputGroup>
-        }
-        filters={
-          <div className="flex flex-wrap items-center gap-2">
-            <OptionCombobox
-              value={mallId ?? "all"}
-              onValueChange={(v) => {
-                const next = v ?? "all"
-                replaceParams({
-                  mall: next === "all" ? undefined : next,
-                })
-              }}
-              options={[
-                { value: "all", label: "全部商城" },
-                ...MALLS.map((m) => ({
-                  value: m.id,
-                  label: m.name,
-                })),
-              ]}
-              className="w-36"
-              size="sm"
-              allowClear={false}
-              aria-label="目标商城"
-              placeholder="全部商城"
-            />
-            <OptionCombobox
-              value={publicationStatus}
-              onValueChange={(v) =>
-                replaceParams({
-                  publicationStatus: v ?? "all",
-                  metric: undefined,
-                })
-              }
-              options={[
-                { value: "all", label: "有效发布" },
-                ...(
-                  Object.keys(PUBLICATION_STATUS_LABEL) as Array<
-                    keyof typeof PUBLICATION_STATUS_LABEL
-                  >
-                ).map((k) => ({
-                  value: k,
-                  label: PUBLICATION_STATUS_LABEL[k],
-                })),
-              ]}
-              className="w-36"
-              size="sm"
-              allowClear={false}
-              aria-label="发布状态"
-              placeholder="发布状态"
-            />
-            <OptionCombobox
-              value={deliveryStatus}
-              onValueChange={(v) =>
-                replaceParams({
-                  deliveryStatus: v ?? "all",
-                  metric: undefined,
-                })
-              }
-              options={[
-                { value: "all", label: "发送状态" },
-                { value: "pending_confirm", label: "待商城确认" },
-                { value: "failed", label: "失败" },
-                { value: "handoff", label: "转人工" },
-                { value: "acked", label: "已确认" },
-              ]}
-              className="w-40"
-              size="sm"
-              allowClear={false}
-              aria-label="发送状态"
-              placeholder="发送状态"
-            />
-            {(qParam ||
-              mallId ||
-              skuId ||
-              supplierOfferingRevisionId ||
-              publicationStatus !== "all" ||
-              deliveryStatus !== "all" ||
-              metric !== "all") && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSearchInput("")
-                  router.replace(pathname)
-                }}
-              >
-                清除筛选
-              </Button>
-            )}
-          </div>
-        }
-      />
-
-      {(skuId && data?.resolvedFilters.skuCode) ||
-      (supplierOfferingRevisionId && data?.resolvedFilters.supplierName) ? (
-        <div
-          className="flex flex-wrap items-center gap-2"
-          role="group"
-          aria-label="来源筛选"
-        >
-          {skuId && data?.resolvedFilters.skuCode ? (
-            <Badge variant="outline" className="gap-1">
-              已按 SKU：{data.resolvedFilters.skuCode}
-              <button
-                type="button"
-                aria-label={`移除按 ${data.resolvedFilters.skuCode} 筛选`}
-                className="ml-1 text-muted-foreground hover:text-foreground"
-                onClick={() =>
-                  replaceParams({
-                    skuId: undefined,
-                    supplierOfferingRevisionId: undefined,
-                  })
-                }
-              >
-                ×
-              </button>
-            </Badge>
-          ) : null}
-          {supplierOfferingRevisionId &&
-          data?.resolvedFilters.supplierName ? (
-            <Badge variant="outline" className="gap-1">
-              已按固定供给：{data.resolvedFilters.supplierName}
-              <button
-                type="button"
-                aria-label={`移除按 ${data.resolvedFilters.supplierName} 筛选`}
-                className="ml-1 text-muted-foreground hover:text-foreground"
-                onClick={() =>
-                  replaceParams({
-                    skuId: undefined,
-                    supplierOfferingRevisionId: undefined,
-                  })
-                }
-              >
-                ×
-              </button>
-            </Badge>
-          ) : null}
-        </div>
-      ) : null}
-
-      {data?.filterSummary ? (
-        <p className="text-xs text-muted-foreground">{data.filterSummary}</p>
-      ) : null}
-
       <BusinessTableFrame
         title="发布列表"
         description="管理各 SKU 在目标商城的发布版本与发送确认状态。"
+        toolbar={
+          <>
+            <ListToolbar
+              search={
+                <InputGroup className="max-w-md">
+                  <InputGroupAddon>
+                    <SearchIcon className="size-4" />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    ref={searchInputRef}
+                    value={searchInput}
+                    placeholder="发布编号、SKU、商品名（/ 聚焦）"
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") commitSearch()
+                    }}
+                  />
+                </InputGroup>
+              }
+              filters={
+                <div className="flex flex-wrap items-center gap-2">
+                  <OptionCombobox
+                    value={mallId ?? "all"}
+                    onValueChange={(v) => {
+                      const next = v ?? "all"
+                      replaceParams({
+                        mall: next === "all" ? undefined : next,
+                      })
+                    }}
+                    options={[
+                      { value: "all", label: "全部商城" },
+                      ...MALLS.map((m) => ({
+                        value: m.id,
+                        label: m.name,
+                      })),
+                    ]}
+                    className="w-36"
+                    size="sm"
+                    allowClear={false}
+                    aria-label="目标商城"
+                    placeholder="全部商城"
+                  />
+                  <OptionCombobox
+                    value={publicationStatus}
+                    onValueChange={(v) =>
+                      replaceParams({
+                        publicationStatus: v ?? "all",
+                        metric: undefined,
+                      })
+                    }
+                    options={[
+                      { value: "all", label: "有效发布" },
+                      ...(
+                        Object.keys(PUBLICATION_STATUS_LABEL) as Array<
+                          keyof typeof PUBLICATION_STATUS_LABEL
+                        >
+                      ).map((k) => ({
+                        value: k,
+                        label: PUBLICATION_STATUS_LABEL[k],
+                      })),
+                    ]}
+                    className="w-36"
+                    size="sm"
+                    allowClear={false}
+                    aria-label="发布状态"
+                    placeholder="发布状态"
+                  />
+                  <OptionCombobox
+                    value={deliveryStatus}
+                    onValueChange={(v) =>
+                      replaceParams({
+                        deliveryStatus: v ?? "all",
+                        metric: undefined,
+                      })
+                    }
+                    options={[
+                      { value: "all", label: "发送状态" },
+                      { value: "pending_confirm", label: "待商城确认" },
+                      { value: "failed", label: "失败" },
+                      { value: "handoff", label: "转人工" },
+                      { value: "acked", label: "已确认" },
+                    ]}
+                    className="w-40"
+                    size="sm"
+                    allowClear={false}
+                    aria-label="发送状态"
+                    placeholder="发送状态"
+                  />
+                  {(qParam ||
+                    mallId ||
+                    skuId ||
+                    supplierOfferingRevisionId ||
+                    publicationStatus !== "all" ||
+                    deliveryStatus !== "all" ||
+                    metric !== "all") && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSearchInput("")
+                        router.replace(pathname)
+                      }}
+                    >
+                      清除筛选
+                    </Button>
+                  )}
+                </div>
+              }
+            />
+
+            {(skuId && data?.resolvedFilters.skuCode) ||
+            (supplierOfferingRevisionId &&
+              data?.resolvedFilters.supplierName) ? (
+              <div
+                className="flex flex-wrap items-center gap-2"
+                role="group"
+                aria-label="来源筛选"
+              >
+                {skuId && data?.resolvedFilters.skuCode ? (
+                  <Badge variant="outline" className="gap-1">
+                    已按 SKU：{data.resolvedFilters.skuCode}
+                    <button
+                      type="button"
+                      aria-label={`移除按 ${data.resolvedFilters.skuCode} 筛选`}
+                      className="ml-1 text-muted-foreground hover:text-foreground"
+                      onClick={() =>
+                        replaceParams({
+                          skuId: undefined,
+                          supplierOfferingRevisionId: undefined,
+                        })
+                      }
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ) : null}
+                {supplierOfferingRevisionId &&
+                data?.resolvedFilters.supplierName ? (
+                  <Badge variant="outline" className="gap-1">
+                    已按固定供给：{data.resolvedFilters.supplierName}
+                    <button
+                      type="button"
+                      aria-label={`移除按 ${data.resolvedFilters.supplierName} 筛选`}
+                      className="ml-1 text-muted-foreground hover:text-foreground"
+                      onClick={() =>
+                        replaceParams({
+                          skuId: undefined,
+                          supplierOfferingRevisionId: undefined,
+                        })
+                      }
+                    >
+                      ×
+                    </button>
+                  </Badge>
+                ) : null}
+              </div>
+            ) : null}
+
+            {data?.filterSummary ? (
+              <p className="text-xs text-muted-foreground">
+                {data.filterSummary}
+              </p>
+            ) : null}
+          </>
+        }
         table={
           listQuery.isPending ? (
             <div className="h-64 animate-pulse rounded-lg bg-muted" aria-busy />
@@ -635,8 +642,14 @@ export function ProductPublicationsListPage() {
               kind="no-data"
               title="加载失败"
               description="无法读取商品发布列表。"
+              className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
               action={
-                <Button type="button" onClick={() => void listQuery.refetch()}>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="rounded-lg shadow-none"
+                  onClick={() => void listQuery.refetch()}
+                >
                   重试
                 </Button>
               }
@@ -656,12 +669,14 @@ export function ProductPublicationsListPage() {
                   ? "可清除筛选或调整条件后重试；已失效发布请在「发布状态」选择「已失效」查看。"
                   : data?.creationBlocker.message
               }
+              className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
               action={
                 data?.emptyReason === "FILTER_NO_RESULT" ? (
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
+                    className="rounded-lg shadow-none"
                     onClick={() => {
                       setSearchInput("")
                       router.replace(pathname)
@@ -789,6 +804,6 @@ export function ProductPublicationsListPage() {
           </div>
         ) : null}
       </QuickPreviewSheet>
-    </div>
+    </PageScaffold>
   )
 }

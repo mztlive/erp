@@ -23,7 +23,9 @@ import {
   MetricStrip,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   SequentialProcessBar,
+  surfacePanelClassName,
   WorkTaskItem,
   type InterfaceErrorClass,
   type InterfaceErrorStatus,
@@ -49,7 +51,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 
 import {
@@ -667,41 +668,46 @@ export function IntegrationErrorsPage({
 
   if (queueQuery.isPending && !focusMode) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-        <div className="h-16 animate-pulse rounded-2xl bg-muted" />
+        <div className="h-16 animate-pulse rounded-lg bg-muted" />
         <div className="grid gap-4 xl:grid-cols-[minmax(0,38fr)_minmax(0,62fr)]">
-          <div className="h-80 animate-pulse rounded-2xl bg-muted" />
-          <div className="h-80 animate-pulse rounded-2xl bg-muted" />
+          <div className="h-80 animate-pulse rounded-lg bg-muted" />
+          <div className="h-80 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (focusLoading) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-        <div className="h-16 animate-pulse rounded-2xl bg-muted" />
-        <div className="h-80 animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-16 animate-pulse rounded-lg bg-muted" />
+        <div className="h-80 animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (queueQuery.isError && !focusMode) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="接口错误与对账中心" description="加载失败" />
-        <Button type="button" onClick={() => void queueQuery.refetch()}>
+        <Button
+          type="button"
+          variant="secondary"
+          className="rounded-lg shadow-none"
+          onClick={() => void queueQuery.refetch()}
+        >
           重试
         </Button>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (focusError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title="接口错误与对账中心"
           description="未找到该任务"
@@ -710,18 +716,21 @@ export function IntegrationErrorsPage({
           kind="no-data"
           title="未找到该任务或差异"
           description="任务可能已结束或链接失效；可返回队列重新选择。"
+          className="rounded-lg border-0 bg-transparent shadow-none ring-0"
           action={
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant="secondary"
+                className="rounded-lg shadow-none"
                 onClick={() => void detailItemQuery.refetch()}
               >
                 重试
               </Button>
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
+                className="rounded-lg shadow-none"
                 render={
                   <Link
                     href={`/governance/integration-errors?view=${urlState.view}&queueContextId=${encodeURIComponent(urlState.queueContextId)}`}
@@ -733,7 +742,7 @@ export function IntegrationErrorsPage({
             </div>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -898,7 +907,7 @@ export function IntegrationErrorsPage({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title={
           focusMode
@@ -980,29 +989,39 @@ export function IntegrationErrorsPage({
 
       {!focusMode ? (
         <div className="flex flex-wrap items-center gap-2">
-          <ToggleGroup
-            value={[urlState.view]}
-            onValueChange={(v) => {
-              const next = (v[0] as IntegrationView | undefined) ?? "mine"
-              replaceUrl({
-                view: next,
-                taskId: null,
-                differenceId: null,
-              })
-            }}
-            variant="outline"
-            size="sm"
-            spacing={0}
+          <div
+            role="group"
             aria-label="保存的视图"
+            className="inline-flex flex-wrap items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
           >
             {(Object.keys(VIEW_LABEL) as IntegrationView[])
               .filter((v) => v !== "resolved" && v !== "auto_retry")
-              .map((v) => (
-                <ToggleGroupItem key={v} value={v}>
-                  {VIEW_LABEL[v]}
-                </ToggleGroupItem>
-              ))}
-          </ToggleGroup>
+              .map((v) => {
+                const active = urlState.view === v
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() =>
+                      replaceUrl({
+                        view: v,
+                        taskId: null,
+                        differenceId: null,
+                      })
+                    }
+                    className={cn(
+                      "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                      active
+                        ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                        : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                    )}
+                  >
+                    {VIEW_LABEL[v]}
+                  </button>
+                )
+              })}
+          </div>
 
           <OptionCombobox
             value={urlState.mode}
@@ -1122,12 +1141,18 @@ export function IntegrationErrorsPage({
           <Button
             type="button"
             size="sm"
-            variant="outline"
+            variant="ghost"
             render={<Link href={`/governance/integration-errors?view=${urlState.view}&queueContextId=${encodeURIComponent(urlState.queueContextId)}`} />}
           >
             返回队列
           </Button>
-          <Button type="button" size="sm" variant="secondary" onClick={returnRefresh}>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            className="text-muted-foreground"
+            onClick={returnRefresh}
+          >
             <RefreshCwIcon data-icon="inline-start" aria-hidden />
             刷新当前任务
           </Button>
@@ -1179,6 +1204,7 @@ export function IntegrationErrorsPage({
           kind="no-tasks"
           title="当前筛选项已处理完"
           description="可切换视图、清除筛选，或返回工作台。"
+          className="rounded-lg border-0 bg-transparent shadow-none ring-0"
         />
       ) : (
         <div
@@ -1190,8 +1216,8 @@ export function IntegrationErrorsPage({
           )}
         >
           {!focusMode ? (
-            <Card size="sm" className="min-h-[28rem]">
-              <CardHeader className="border-b">
+            <Card size="sm" className={cn("min-h-[28rem]", surfacePanelClassName)}>
+              <CardHeader className="border-b border-border/30">
                 <CardTitle>任务 / 差异队列</CardTitle>
                 <CardDescription>
                   共 {items.length} 项 · 安全故障与结果未知优先
@@ -1335,8 +1361,8 @@ export function IntegrationErrorsPage({
                   </Button>
                 </div>
 
-                <Card size="sm">
-                  <CardHeader className="border-b">
+                <Card size="sm" className={surfacePanelClassName}>
+                  <CardHeader className="border-b border-border/30">
                     <CardTitle
                       ref={headingRef}
                       tabIndex={-1}
@@ -1517,8 +1543,8 @@ export function IntegrationErrorsPage({
                 </Card>
 
                 {/* Evidence — append-only timelines */}
-                <Card size="sm">
-                  <CardHeader className="border-b">
+                <Card size="sm" className={surfacePanelClassName}>
+                  <CardHeader className="border-b border-border/30">
                     <CardTitle>证据与尝试（历史保留）</CardTitle>
                     <CardDescription>
                       消息、尝试与处理记录只保留，不提供覆盖控件
@@ -1656,8 +1682,8 @@ export function IntegrationErrorsPage({
                 ) : null}
 
                 {/* Action zone */}
-                <Card size="sm" ref={actionZoneRef}>
-                  <CardHeader className="border-b">
+                <Card size="sm" className={surfacePanelClassName} ref={actionZoneRef}>
+                  <CardHeader className="border-b border-border/30">
                     <CardTitle>处理动作</CardTitle>
                     <CardDescription>
                       仅展示可操作范围；阻断原因见下方说明
@@ -1941,12 +1967,13 @@ export function IntegrationErrorsPage({
                 kind="filter"
                 title="未选择处理项"
                 description="从左侧队列选择任务或差异。"
+                className="rounded-lg border-0 bg-transparent shadow-none ring-0"
               />
             )}
           </div>
         </div>
       )}
-    </div>
+    </PageScaffold>
   )
 }
 

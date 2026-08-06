@@ -30,9 +30,12 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
   RevisionTimeline,
   StatusTrackSummary,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
 import {
   Alert,
@@ -624,27 +627,34 @@ export function ExecutionProjectionsPage() {
 
   if (listQuery.isPending && !view) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
+      <PageScaffold density="compact">
         <PageHeader title="执行信息" description="正在加载列表…" />
-        <div className="h-20 animate-pulse rounded-xl bg-muted" />
-        <div className="h-64 animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="space-y-3" aria-busy="true" aria-label="加载中">
+          <div className="h-20 animate-pulse rounded-lg bg-muted" />
+          <div className="h-64 animate-pulse rounded-lg bg-muted" />
+        </div>
+      </PageScaffold>
     )
   }
 
   if (listQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
+      <PageScaffold density="compact">
         <PageHeader title="执行信息" description="列表加载失败" />
-        <Button type="button" onClick={() => void listQuery.refetch()}>
+        <Button
+          type="button"
+          variant="secondary"
+          className="rounded-lg shadow-none"
+          onClick={() => void listQuery.refetch()}
+        >
           重试
         </Button>
-      </div>
+      </PageScaffold>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:gap-3.5 md:p-4">
+    <PageScaffold density="compact">
       <PageHeader
         title="执行信息"
         breadcrumbs={[
@@ -674,7 +684,7 @@ export function ExecutionProjectionsPage() {
                 actionKey: "refresh",
                 label: "刷新",
                 icon: RefreshCwIcon,
-                variant: "outline",
+                variant: "ghost",
                 onClick: () => {
                   void listQuery.refetch()
                 },
@@ -933,7 +943,10 @@ export function ExecutionProjectionsPage() {
         <div
           role="region"
           aria-label="批量选择"
-          className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-muted/40 px-3 py-2 text-sm"
+          className={cn(
+            surfaceInsetClassName,
+            "flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+          )}
         >
           <span>
             已选择{" "}
@@ -1033,11 +1046,13 @@ export function ExecutionProjectionsPage() {
                       ? `当前筛选：${view.filterSummary}`
                       : "可清除筛选或返回销售单查看协同。"
                   }
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   action={
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
+                      className="rounded-lg shadow-none"
                       onClick={() =>
                         replaceParams({
                           q: null,
@@ -1090,7 +1105,7 @@ export function ExecutionProjectionsPage() {
         }
       >
         {detailQuery.isPending ? (
-          <div className="h-48 animate-pulse rounded-xl bg-muted" />
+          <div className="h-48 animate-pulse rounded-lg bg-muted" />
         ) : detailQuery.isError || !detail ? (
           <BusinessEmptyState
             kind="no-data"
@@ -1636,7 +1651,7 @@ export function ExecutionProjectionsPage() {
           )
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -1662,8 +1677,8 @@ function WhitelistContentGrid({
   return (
     <dl
       className={cn(
-        "grid gap-3 sm:grid-cols-2",
-        "rounded-xl border border-border bg-card p-3 text-sm"
+        "grid gap-3 sm:grid-cols-2 p-3 text-sm",
+        surfacePanelClassName
       )}
     >
       <div>

@@ -34,7 +34,9 @@ import {
   FormalActionResult,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   RevisionTimeline,
+  surfacePanelClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -686,19 +688,19 @@ export function ProductDetailPage({
 
   if (!isCreate && detailQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title="商品详情"
           description={masterDataCopy.centerLoading}
         />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!isCreate && (detailQuery.isError || !data)) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="商品详情" />
         <BusinessFailureState
           kind="system"
@@ -719,7 +721,7 @@ export function ProductDetailPage({
             )
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -853,8 +855,7 @@ export function ProductDetailPage({
           }))
         }
         return (
-          <div
-            className="mx-auto w-full max-w-shell"
+          <PageScaffold
             style={
               {
                 "--product-sticky-offset": `${stickyOffsetPx}px`,
@@ -870,7 +871,7 @@ export function ProductDetailPage({
               */}
               <header
                 ref={stickyHeaderRef}
-                className="sticky top-0 z-30 border-b border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur md:px-5"
+                className="sticky top-0 z-30 border-b border-border/30 bg-background/95 py-3 backdrop-blur"
               >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0 space-y-1">
@@ -970,7 +971,7 @@ export function ProductDetailPage({
                 </div>
               </header>
 
-              <div className="flex flex-col gap-4 p-4 md:p-5">
+              <div className="flex flex-col gap-4">
                 {!isCreate && !canRevise ? (
                   <Alert variant="info">
                     <AlertTitle>你只能查看</AlertTitle>
@@ -1066,8 +1067,8 @@ export function ProductDetailPage({
                     className="space-y-4 xl:sticky xl:self-start xl:max-h-[calc(100dvh-var(--product-sticky-offset)-1rem)] xl:overflow-y-auto"
                     style={{ top: stickyOffsetPx + 16 }}
                   >
-                  <Card size="sm">
-                    <CardHeader>
+                  <Card size="sm" className={surfacePanelClassName}>
+                    <CardHeader className="border-b border-border/30">
                       <div className="flex items-center justify-between gap-2">
                         <CardTitle className="flex items-center gap-2">
                           <ClipboardCheckIcon className="size-4" aria-hidden />
@@ -1133,8 +1134,8 @@ export function ProductDetailPage({
                     </CardContent>
                   </Card>
 
-                  <Card size="sm">
-                    <CardHeader>
+                  <Card size="sm" className={surfacePanelClassName}>
+                    <CardHeader className="border-b border-border/30">
                       <CardTitle className="flex items-center gap-2">
                         <PackageOpenIcon className="size-4" aria-hidden />
                         商品摘要
@@ -1157,7 +1158,7 @@ export function ProductDetailPage({
                         <span className="text-muted-foreground">基础单位</span>
                         <span>{fields.baseUnit || "待选择"}</span>
                       </div>
-                      <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+                      <p className="border-t border-border/30 pt-3 text-xs text-muted-foreground">
                         规格由规格项自动组合；图片、价格和条码随商品版本一起保存。
                       </p>
                     </CardContent>
@@ -1168,35 +1169,37 @@ export function ProductDetailPage({
                   <nav
                     aria-label="商品编辑分区"
                     className={cn(
-                      "sticky z-10 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-background/95 p-1 shadow-sm backdrop-blur",
+                      "sticky z-10 grid grid-cols-2 gap-0.5 rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10",
                       isCreate ? "sm:grid-cols-4" : "sm:grid-cols-5",
                     )}
                     style={{ top: stickyOffsetPx }}
                   >
                     {PRODUCT_EDITOR_SECTIONS.filter(
                       (section) => !isCreate || section.id !== "history",
-                    ).map((section) => (
-                      <Button
-                        key={section.id}
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={cn(
-                          "relative rounded-xl",
-                          activeSection === section.id &&
-                            "bg-accent text-accent-foreground",
-                        )}
-                        aria-current={
-                          activeSection === section.id ? "location" : undefined
-                        }
-                        onClick={() => {
-                          setActiveSection(section.id)
-                          scrollToProductSection(section.id)
-                        }}
-                      >
-                        {section.label}
-                      </Button>
-                    ))}
+                    ).map((section) => {
+                      const active = activeSection === section.id
+                      return (
+                        <Button
+                          key={section.id}
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className={cn(
+                            "relative h-7 rounded-md text-sm",
+                            active
+                              ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10 hover:bg-card"
+                              : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                          )}
+                          aria-current={active ? "location" : undefined}
+                          onClick={() => {
+                            setActiveSection(section.id)
+                            scrollToProductSection(section.id)
+                          }}
+                        >
+                          {section.label}
+                        </Button>
+                      )
+                    })}
                   </nav>
 
                   {formError ? (
@@ -1226,7 +1229,7 @@ export function ProductDetailPage({
 
                   <fieldset
                     id="product-section-basic"
-                    className="scroll-mt-[var(--product-section-scroll-margin)] space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                    className={cn(surfacePanelClassName, "scroll-mt-[var(--product-section-scroll-margin)] space-y-3 p-5")}
                     disabled={!canRevise}
                   >
                     <legend className="px-1 text-base font-semibold">
@@ -1364,7 +1367,7 @@ export function ProductDetailPage({
 
                   <fieldset
                     id="product-section-media"
-                    className="scroll-mt-[var(--product-section-scroll-margin)] space-y-5 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                    className={cn(surfacePanelClassName, "scroll-mt-[var(--product-section-scroll-margin)] space-y-5 p-5")}
                     disabled={!canRevise}
                   >
                     <legend className="px-1 text-base font-semibold">
@@ -1402,7 +1405,7 @@ export function ProductDetailPage({
 
                   <fieldset
                     id="product-section-sku"
-                    className="scroll-mt-[var(--product-section-scroll-margin)] space-y-4 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                    className={cn(surfacePanelClassName, "scroll-mt-[var(--product-section-scroll-margin)] space-y-4 p-5")}
                     disabled={!canRevise}
                   >
                     <legend className="px-1 text-base font-semibold">
@@ -1599,7 +1602,7 @@ export function ProductDetailPage({
                   </fieldset>
 
                   <fieldset
-                    className="min-w-0 max-w-full space-y-4 overflow-hidden rounded-2xl border border-border bg-card p-5 shadow-sm"
+                    className={cn(surfacePanelClassName, "min-w-0 max-w-full space-y-4 overflow-hidden p-5")}
                     disabled={!canRevise}
                   >
                     <legend className="px-1 text-base font-semibold">
@@ -2007,7 +2010,7 @@ export function ProductDetailPage({
 
                   <fieldset
                     id="product-section-effective"
-                    className="scroll-mt-[var(--product-section-scroll-margin)] space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                    className={cn(surfacePanelClassName, "scroll-mt-[var(--product-section-scroll-margin)] space-y-3 p-5")}
                     disabled={!canRevise}
                   >
                     <legend className="px-1 text-base font-semibold">
@@ -2057,7 +2060,7 @@ export function ProductDetailPage({
                     <section
                       id="product-section-history"
                       aria-label="历史与引用"
-                      className="scroll-mt-[var(--product-section-scroll-margin)] overflow-hidden rounded-2xl border border-border bg-card px-5 shadow-sm"
+                      className={cn(surfacePanelClassName, "scroll-mt-[var(--product-section-scroll-margin)] overflow-hidden px-5")}
                     >
                       <DocumentSection
                         title={masterDataCopy.centerVersions}
@@ -2228,7 +2231,7 @@ export function ProductDetailPage({
                 }
               }}
             />
-          </div>
+          </PageScaffold>
         )
       }}
     </form.Subscribe>

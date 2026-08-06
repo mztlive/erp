@@ -20,8 +20,11 @@ import {
   FormalActionConfirmDialog,
   FormalActionResult,
   PageHeader,
+  PageScaffold,
   PrepaymentGate,
   SequentialProcessBar,
+  surfaceInsetClassName,
+  surfacePanelClassName,
   ValidationSummary,
 } from "@/components/business"
 import {
@@ -728,21 +731,21 @@ export function FulfillmentOperationsPage() {
 
   if (queueQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title={header.label} description="正在加载队列…" />
-        <div className="h-20 animate-pulse rounded-2xl bg-muted" />
+        <div className="h-20 animate-pulse rounded-lg bg-muted" />
         <div className="grid gap-4 xl:grid-cols-[minmax(16rem,1fr)_minmax(0,2fr)]">
-          <div className="h-80 animate-pulse rounded-2xl bg-muted" />
-          <div className="h-96 animate-pulse rounded-2xl bg-muted" />
+          <div className="h-80 animate-pulse rounded-lg bg-muted" />
+          <div className="h-96 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
+      </PageScaffold>
     )
   }
 
   // 查询失败必须与「没有符合条件的任务」区分：系统故障 ≠ 没活干
   if (queueQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title={header.label} description="队列加载失败" />
         <BusinessFailureState
           kind="system"
@@ -756,12 +759,12 @@ export function FulfillmentOperationsPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title={header.label}
         description={header.description}
@@ -794,7 +797,9 @@ export function FulfillmentOperationsPage() {
       />
 
       {sourceReturnHref ? (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 text-sm">
+        <div
+          className={`${surfaceInsetClassName} flex flex-wrap items-center justify-between gap-2 px-3 py-2.5 text-sm`}
+        >
           <span className="text-muted-foreground">
             从
             {fromWorkspace
@@ -811,7 +816,7 @@ export function FulfillmentOperationsPage() {
           <Button
             type="button"
             size="sm"
-            variant="outline"
+            variant="ghost"
             render={<Link href={sourceReturnHref} />}
           >
             返回来源
@@ -973,6 +978,7 @@ export function FulfillmentOperationsPage() {
       {completed ? (
         <BusinessEmptyState
           kind="no-tasks"
+          className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
           title={
             operationTypes?.length === 1
               ? OPERATION_CLEARED_LABEL[operationTypes[0]]
@@ -981,7 +987,12 @@ export function FulfillmentOperationsPage() {
           description="可以换个类型看看，或者清掉筛选、回工作台。"
           action={
             <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" onClick={clearAllFilters}>
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-lg shadow-none"
+                onClick={clearAllFilters}
+              >
                 清除全部筛选
               </Button>
               <Button render={<Link href="/workspace" />}>回今日工作台</Button>
@@ -1143,8 +1154,8 @@ export function FulfillmentOperationsPage() {
                 : "按 ? 看快捷键"}
             </button>
 
-            <Card size="sm">
-              <CardHeader className="border-b">
+            <Card size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <CardTitle
@@ -1263,10 +1274,10 @@ export function FulfillmentOperationsPage() {
                 ) : null}
 
                 {canExecute ? (
-                  <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-border bg-card/95 py-3 backdrop-blur">
+                  <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-border/30 bg-card/95 py-3 backdrop-blur">
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="ghost"
                       disabled={formalPending}
                       onClick={() => setDeferOpen(true)}
                     >
@@ -1275,7 +1286,7 @@ export function FulfillmentOperationsPage() {
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="ghost"
                       disabled={formalPending || !dirty}
                       onClick={handleDiscard}
                     >
@@ -1284,7 +1295,8 @@ export function FulfillmentOperationsPage() {
                     </Button>
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
+                      className="rounded-lg shadow-none"
                       disabled={formalPending || !dirty}
                       onClick={() => void handleSave()}
                     >
@@ -1304,7 +1316,7 @@ export function FulfillmentOperationsPage() {
                   </div>
                 ) : (
                   /* 只读角色：与其摆一排点不动的按钮，不如说清楚谁在处理 */
-                  <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-border bg-card/95 py-3 backdrop-blur">
+                  <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-border/30 bg-card/95 py-3 backdrop-blur">
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">
                       <EyeIcon className="size-4 shrink-0" aria-hidden="true" />
                       {readOnlyNote}
@@ -1312,7 +1324,8 @@ export function FulfillmentOperationsPage() {
                     <Button
                       type="button"
                       size="sm"
-                      variant="outline"
+                      variant="secondary"
+                      className="rounded-lg shadow-none"
                       render={
                         <Link
                           href={`/sales/orders/${task.source.salesOrderId}?from=W09&returnTo=${encodeURIComponent(
@@ -1333,12 +1346,18 @@ export function FulfillmentOperationsPage() {
       ) : view?.emptyReason === "NO_PERMISSION" ? (
         <BusinessEmptyState
           kind="no-scope"
+          className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
           title="你没有这类任务的权限"
           description={`${context?.roleLabel ?? FULFILLMENT_ROLES[roleValue].label}能处理的是：${visibleTypes
             .map((t) => OPERATION_TYPE_SHORT[t])
             .join("、")}。`}
           action={
-            <Button type="button" variant="outline" onClick={clearAllFilters}>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-lg shadow-none"
+              onClick={clearAllFilters}
+            >
               回到我能处理的
             </Button>
           }
@@ -1346,10 +1365,16 @@ export function FulfillmentOperationsPage() {
       ) : (
         <BusinessEmptyState
           kind="filter"
+          className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
           title="没有符合条件的任务"
           description={context?.filterSummary ?? "换个类型或单号试试"}
           action={
-            <Button type="button" variant="outline" onClick={clearAllFilters}>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-lg shadow-none"
+              onClick={clearAllFilters}
+            >
               清除全部筛选
             </Button>
           }
@@ -1384,6 +1409,6 @@ export function FulfillmentOperationsPage() {
         pending={deferMutation.isPending}
         onSubmit={handleDefer}
       />
-    </div>
+    </PageScaffold>
   )
 }

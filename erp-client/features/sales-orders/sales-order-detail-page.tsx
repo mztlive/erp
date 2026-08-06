@@ -28,7 +28,10 @@ import {
   MoneyValue,
   PageActions,
   PageHeader,
+  PageScaffold,
   StatusTrackSummary,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
 import {
   Alert,
@@ -225,20 +228,20 @@ export function SalesOrderDetailPage({
 
   if (query.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="销售单" description="正在加载详情…" />
         <div className="space-y-3" aria-busy="true" aria-label="加载中">
           <div className="h-16 animate-pulse rounded-lg bg-muted" />
           <div className="h-24 animate-pulse rounded-lg bg-muted" />
-          <div className="h-40 animate-pulse rounded-2xl bg-muted" />
+          <div className="h-40 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (query.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="销售单" />
         <BusinessFailureState
           kind="system"
@@ -248,13 +251,13 @@ export function SalesOrderDetailPage({
             void query.refetch()
           }}
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!order) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title="销售单不存在"
           description="未找到这张销售单。可能编号有误，或当前角色无权查看。"
@@ -262,7 +265,7 @@ export function SalesOrderDetailPage({
             <Button render={<Link href="/sales/orders" />}>返回列表</Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -367,7 +370,7 @@ export function SalesOrderDetailPage({
     ) : null
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -379,6 +382,17 @@ export function SalesOrderDetailPage({
             current: true,
           },
         ]}
+        metadata={
+          fromQueue ? (
+            <span>
+              {fromWorkspace === "W09"
+                ? "从履约处理打开 · 处理完可点返回，回到列表原位"
+                : fromWorkspace === "W08"
+                  ? "从采购单打开 · 处理完可点返回，回到列表原位"
+                  : "从采购确认打开 · 处理完可点返回，回到列表原位"}
+            </span>
+          ) : undefined
+        }
         actions={
           <PageActions
             actions={[
@@ -393,16 +407,6 @@ export function SalesOrderDetailPage({
           />
         }
       />
-
-      {fromQueue ? (
-        <p className="text-xs text-muted-foreground">
-          {fromWorkspace === "W09"
-            ? "从履约处理打开 · 处理完可点上方返回，回到原来的列表位置"
-            : fromWorkspace === "W08"
-              ? "从采购单打开 · 处理完可点上方返回，回到原来的列表位置"
-              : "从采购确认打开 · 处理完可点上方返回，回到原来的列表位置"}
-        </p>
-      ) : null}
 
       <DocumentHeader
         density="compact"
@@ -520,7 +524,7 @@ export function SalesOrderDetailPage({
       ) : null}
 
       {order.commercialReadOnly ? (
-        <Collapsible className="rounded-lg border border-border bg-card px-3 py-2">
+        <Collapsible className={`${surfaceInsetClassName} px-3 py-2`}>
           <CollapsibleTrigger className="group flex w-full items-center justify-between gap-2 text-left text-sm text-muted-foreground hover:text-foreground">
             <span>
               金额和明细不能直接改
@@ -607,6 +611,7 @@ export function SalesOrderDetailPage({
         />
       ) : null}
 
+      <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
       <Tabs
         value={activeSection}
         onValueChange={(next) => {
@@ -616,7 +621,7 @@ export function SalesOrderDetailPage({
       >
         <TabsList
           variant="line"
-          className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-border bg-background/95 py-1 backdrop-blur supports-backdrop-filter:bg-background/80"
+          className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-border/30 bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
         >
           {visibleNav.map((item) => {
             const Icon = item.icon
@@ -660,7 +665,7 @@ export function SalesOrderDetailPage({
           })}
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-4 pt-4">
+        <TabsContent value="overview" className="space-y-4 px-3 pt-4 pb-4 md:px-4">
           <DocumentSection
             title="订单信息"
             description={
@@ -714,7 +719,7 @@ export function SalesOrderDetailPage({
               isCard ? "卡券明细一行" : `共 ${order.lineItems.length} 行`
             }
           >
-            <div className="overflow-hidden rounded-lg border border-border">
+            <div className="overflow-hidden rounded-lg ring-1 ring-foreground/[0.04]">
               <table className="w-full text-sm">
                 <thead className="bg-muted/50 text-left">
                   <tr>
@@ -732,7 +737,7 @@ export function SalesOrderDetailPage({
                 </thead>
                 <tbody>
                   {order.lineItems.map((line) => (
-                    <tr key={line.id} className="border-t border-border">
+                    <tr key={line.id} className="border-t border-border/30">
                       <td className="px-3 py-2">
                         <div>{line.name}</div>
                         {line.sku ? (
@@ -822,7 +827,7 @@ export function SalesOrderDetailPage({
           </DocumentSection>
         </TabsContent>
 
-        <TabsContent value="procurement-rejection" className="pt-4">
+        <TabsContent value="procurement-rejection" className="px-3 pt-4 pb-4 md:px-4">
           {order.procurementRejection ? (
             <ProcurementRejectionCard
               order={order}
@@ -833,7 +838,7 @@ export function SalesOrderDetailPage({
           )}
         </TabsContent>
 
-        <TabsContent value="approval" className="pt-4">
+        <TabsContent value="approval" className="px-3 pt-4 pb-4 md:px-4">
           {order.activeCardSalesApproval ? (
             <CardSalesApprovalPanel
               order={order}
@@ -844,7 +849,7 @@ export function SalesOrderDetailPage({
           )}
         </TabsContent>
 
-        <TabsContent value="acceptance" className="pt-4">
+        <TabsContent value="acceptance" className="px-3 pt-4 pb-4 md:px-4">
           {isCard ? (
             <Alert variant="warning">
               <AlertTitle>卡券单不用做客户验收</AlertTitle>
@@ -858,7 +863,7 @@ export function SalesOrderDetailPage({
           )}
         </TabsContent>
 
-        <TabsContent value="close" className="space-y-4 pt-4">
+        <TabsContent value="close" className="space-y-4 px-3 pt-4 pb-4 md:px-4">
           <DocumentSection title="当前进度">
             <StatusTrackSummary
               tracks={[
@@ -892,7 +897,7 @@ export function SalesOrderDetailPage({
           <CloseConditionsCard order={order} />
         </TabsContent>
 
-        <TabsContent value="collaboration" className="pt-4">
+        <TabsContent value="collaboration" className="px-3 pt-4 pb-4 md:px-4">
           {isCard ? (
             <SalesOrderCollaborationCard
               salesOrderId={order.id}
@@ -903,7 +908,7 @@ export function SalesOrderDetailPage({
           )}
         </TabsContent>
 
-        <TabsContent value="versions" className="pt-4">
+        <TabsContent value="versions" className="px-3 pt-4 pb-4 md:px-4">
           <RevisionHistoryCard
             revisions={order.revisions}
             currentVersion={order.version}
@@ -925,6 +930,7 @@ export function SalesOrderDetailPage({
           ) : null}
         </TabsContent>
       </Tabs>
+      </div>
 
       <FormalActionConfirmDialog
         open={changeConfirmOpen}
@@ -966,7 +972,7 @@ export function SalesOrderDetailPage({
           }
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }
 

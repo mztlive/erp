@@ -28,6 +28,7 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
   SupplierCombobox,
 } from "@/components/business"
@@ -771,7 +772,7 @@ export function SupplierAccountsPage() {
 
   if (session) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <AllocationSession
           {...session}
           onClose={closeSession}
@@ -783,27 +784,27 @@ export function SupplierAccountsPage() {
             setLastResult(result)
           }}
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (listQuery.isPending && !data) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold density="compact">
         <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
         <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-20 animate-pulse rounded-2xl bg-muted" />
+            <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />
           ))}
         </div>
-        <div className="h-[28rem] animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-[28rem] animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (listQuery.isError && !data) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="system"
           title="供应商往来加载失败"
@@ -818,7 +819,7 @@ export function SupplierAccountsPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -826,25 +827,25 @@ export function SupplierAccountsPage() {
 
   if (!data.moduleAllowed) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessEmptyState
           kind="no-scope"
           title="无供应商往来权限"
           description="权限已收回或未授权。敏感字段与导出结果已清除，不能提交。"
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!data.hasDataScope) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessEmptyState
           kind="no-scope"
           title="当前角色未配置供应商往来范围"
           description="不能显示为 0 元应付。请联系管理员配置组织/供应商范围后再查询。"
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -865,7 +866,7 @@ export function SupplierAccountsPage() {
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-2 p-3 md:p-4">
+    <PageScaffold density="compact">
       <PageHeader
         title="供应商往来"
         breadcrumbs={[
@@ -895,7 +896,8 @@ export function SupplierAccountsPage() {
                 actionKey: "refresh",
                 label: "刷新",
                 icon: RefreshCwIcon,
-                variant: "outline",
+                variant: "ghost",
+                className: "text-muted-foreground hover:text-foreground",
                 onClick: () => void listQuery.refetch(),
               },
               {
@@ -1106,212 +1108,216 @@ export function SupplierAccountsPage() {
         </TabsList>
       </Tabs>
 
-      <ListToolbar
-        search={
-          <InputGroup className="max-w-md">
-            <InputGroupAddon>
-              <SearchIcon className="size-4" />
-            </InputGroupAddon>
-            <InputGroupInput
-              ref={searchInputRef}
-              placeholder="供应商、采购单、付款单、发票号"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              aria-label="搜索供应商往来"
-            />
-          </InputGroup>
+      <BusinessTableFrame
+        title={VIEW_LABEL[view]}
+        description={`${stripSummaryCount(data.filterSummary)} · 金额与状态均来自系统最新数据；付款与进项票轨道独立。`}
+        toolbar={
+          <ListToolbar
+            search={
+              <InputGroup className="max-w-md">
+                <InputGroupAddon>
+                  <SearchIcon className="size-4" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  ref={searchInputRef}
+                  placeholder="供应商、采购单、付款单、发票号"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  aria-label="搜索供应商往来"
+                />
+              </InputGroup>
+            }
+            filters={
+              <div className="flex flex-wrap items-end gap-2">
+                <div>
+                  <Label className="sr-only">供应商</Label>
+                  <SupplierCombobox
+                    value={supplierId || undefined}
+                    onValueChange={(id) => {
+                      setPagination((p) => ({ ...p, pageIndex: 0 }))
+                      patchUrl({ supplierId: id || null })
+                    }}
+                    suppliers={data.suppliers.map((s) => ({
+                      supplierId: s.supplierId,
+                      supplierName: s.supplierName,
+                      statusLabel: "可选",
+                      statusTone: "neutral",
+                    }))}
+                    className="w-[12rem]"
+                    aria-label="供应商"
+                    placeholder="全部供应商"
+                  />
+                </div>
+                {view === "unallocated" ? (
+                  <div>
+                    <Label className="sr-only">轨道</Label>
+                    <OptionCombobox
+                      value={trackFilter}
+                      onValueChange={(v) => {
+                        setPagination((p) => ({ ...p, pageIndex: 0 }))
+                        patchUrl({
+                          track: v && v !== "all" ? v : null,
+                        })
+                      }}
+                      options={[
+                        { value: "all", label: "全部轨道" },
+                        { value: "payment", label: "付款" },
+                        { value: "purchase_invoice", label: "进项票" },
+                      ]}
+                      className="w-36"
+                      size="sm"
+                      allowClear={false}
+                      aria-label="轨道"
+                      placeholder="轨道"
+                    />
+                  </div>
+                ) : null}
+                {view === "payable" ? (
+                  <>
+                    <div>
+                      <Label className="sr-only">来源类型</Label>
+                      <OptionCombobox
+                        value={sourceType ?? ""}
+                        onValueChange={(v) => {
+                          setPagination((p) => ({ ...p, pageIndex: 0 }))
+                          patchUrl({ sourceType: v || null })
+                        }}
+                        options={[
+                          { value: "", label: "全部来源" },
+                          { value: "PURCHASE_ORDER", label: "采购单" },
+                          {
+                            value: "SUPPLIER_SETTLEMENT",
+                            label: "供应商结算单",
+                          },
+                        ]}
+                        className="w-[9rem]"
+                        size="sm"
+                        allowClear={false}
+                        aria-label="来源类型"
+                        placeholder="全部来源"
+                      />
+                    </div>
+                    <div>
+                      <Label className="sr-only">状态</Label>
+                      <OptionCombobox
+                        value={status ?? ""}
+                        onValueChange={(v) => {
+                          setPagination((p) => ({ ...p, pageIndex: 0 }))
+                          patchUrl({ status: v || null })
+                        }}
+                        options={[
+                          { value: "", label: "全部状态" },
+                          { value: "OPEN", label: "未结" },
+                          { value: "PARTIAL", label: "部分结清" },
+                          { value: "SETTLED", label: "已结清" },
+                        ]}
+                        className="w-[8rem]"
+                        size="sm"
+                        allowClear={false}
+                        aria-label="状态"
+                        placeholder="全部状态"
+                      />
+                    </div>
+                  </>
+                ) : null}
+              </div>
+            }
+          />
         }
-        filters={
-          <div className="flex flex-wrap items-end gap-2">
-            <div>
-              <Label className="sr-only">供应商</Label>
-              <SupplierCombobox
-                value={supplierId || undefined}
-                onValueChange={(id) => {
-                  setPagination((p) => ({ ...p, pageIndex: 0 }))
-                  patchUrl({ supplierId: id || null })
-                }}
-                suppliers={data.suppliers.map((s) => ({
-                  supplierId: s.supplierId,
-                  supplierName: s.supplierName,
-                  statusLabel: "可选",
-                  statusTone: "neutral",
-                }))}
-                className="w-[12rem]"
-                aria-label="供应商"
-                placeholder="全部供应商"
-              />
-            </div>
-            {view === "unallocated" ? (
-              <div>
-                <Label className="sr-only">轨道</Label>
-                <OptionCombobox
-                  value={trackFilter}
-                  onValueChange={(v) => {
-                    setPagination((p) => ({ ...p, pageIndex: 0 }))
+        table={
+          data.emptyReason === "FILTER_NO_RESULT" ? (
+            <BusinessEmptyState
+              kind="filter"
+              title="当前筛选无结果"
+              description={`没有符合「${stripSummaryCount(data.filterSummary)}」的记录。`}
+              className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+              action={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="rounded-lg shadow-none"
+                  onClick={() => {
+                    setSearchInput("")
                     patchUrl({
-                      track: v && v !== "all" ? v : null,
+                      q: null,
+                      supplierId: null,
+                      sourceType: null,
+                      status: null,
+                      due: null,
+                      paymentGate: null,
+                      purchaseOrderId: null,
+                      track: null,
                     })
                   }}
-                  options={[
-                    { value: "all", label: "全部轨道" },
-                    { value: "payment", label: "付款" },
-                    { value: "purchase_invoice", label: "进项票" },
-                  ]}
-                  className="w-36"
-                  size="sm"
-                  allowClear={false}
-                  aria-label="轨道"
-                  placeholder="轨道"
+                >
+                  清除筛选
+                </Button>
+              }
+            />
+          ) : data.emptyReason === "NO_DATA" ? (
+            <BusinessEmptyState
+              kind="no-data"
+              title="当前范围尚无供应商往来记录"
+              description="应付形成后刷新；可从采购单或结算来源进入。"
+              className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+            />
+          ) : (
+            <>
+              {view === "payable" ? (
+                <DataTable
+                  columns={payableColumns}
+                  data={pageRows as PayableRow[]}
+                  getRowId={(r) => r.payableAccountId}
+                  pagination={pagination}
+                  onPaginationChange={setPagination}
+                  sorting={sorting}
+                  onSortingChange={setSorting}
+                  rowCount={data.payables.length}
+                  layout="flush"
+                  density="compact"
                 />
-              </div>
-            ) : null}
-            {view === "payable" ? (
-              <>
-                <div>
-                  <Label className="sr-only">来源类型</Label>
-                  <OptionCombobox
-                    value={sourceType ?? ""}
-                    onValueChange={(v) => {
-                      setPagination((p) => ({ ...p, pageIndex: 0 }))
-                      patchUrl({ sourceType: v || null })
-                    }}
-                    options={[
-                      { value: "", label: "全部来源" },
-                      { value: "PURCHASE_ORDER", label: "采购单" },
-                      {
-                        value: "SUPPLIER_SETTLEMENT",
-                        label: "供应商结算单",
-                      },
-                    ]}
-                    className="w-[9rem]"
-                    size="sm"
-                    allowClear={false}
-                    aria-label="来源类型"
-                    placeholder="全部来源"
-                  />
-                </div>
-                <div>
-                  <Label className="sr-only">状态</Label>
-                  <OptionCombobox
-                    value={status ?? ""}
-                    onValueChange={(v) => {
-                      setPagination((p) => ({ ...p, pageIndex: 0 }))
-                      patchUrl({ status: v || null })
-                    }}
-                    options={[
-                      { value: "", label: "全部状态" },
-                      { value: "OPEN", label: "未结" },
-                      { value: "PARTIAL", label: "部分结清" },
-                      { value: "SETTLED", label: "已结清" },
-                    ]}
-                    className="w-[8rem]"
-                    size="sm"
-                    allowClear={false}
-                    aria-label="状态"
-                    placeholder="全部状态"
-                  />
-                </div>
-              </>
-            ) : null}
-          </div>
+              ) : null}
+              {view === "payment" ? (
+                <DataTable
+                  columns={paymentColumns}
+                  data={pageRows as PaymentRow[]}
+                  getRowId={(r) => r.paymentId}
+                  pagination={pagination}
+                  onPaginationChange={setPagination}
+                  rowCount={data.payments.length}
+                  layout="flush"
+                  density="compact"
+                />
+              ) : null}
+              {view === "purchase_invoice" ? (
+                <DataTable
+                  columns={invoiceColumns}
+                  data={pageRows as PurchaseInvoiceRow[]}
+                  getRowId={(r) => r.invoiceId}
+                  pagination={pagination}
+                  onPaginationChange={setPagination}
+                  rowCount={data.invoices.length}
+                  layout="flush"
+                  density="compact"
+                />
+              ) : null}
+              {view === "unallocated" ? (
+                <DataTable
+                  columns={unallocatedColumns}
+                  data={pageRows as UnallocatedRow[]}
+                  getRowId={(r) => r.id}
+                  pagination={pagination}
+                  onPaginationChange={setPagination}
+                  rowCount={rows.length}
+                  layout="flush"
+                  density="compact"
+                />
+              ) : null}
+            </>
+          )
         }
       />
-
-      {data.emptyReason === "FILTER_NO_RESULT" ? (
-        <BusinessEmptyState
-          kind="filter"
-          title="当前筛选无结果"
-          description={`没有符合「${stripSummaryCount(data.filterSummary)}」的记录。`}
-          action={
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setSearchInput("")
-                patchUrl({
-                  q: null,
-                  supplierId: null,
-                  sourceType: null,
-                  status: null,
-                  due: null,
-                  paymentGate: null,
-                  purchaseOrderId: null,
-                  track: null,
-                })
-              }}
-            >
-              清除筛选
-            </Button>
-          }
-        />
-      ) : data.emptyReason === "NO_DATA" ? (
-        <BusinessEmptyState
-          kind="no-data"
-          title="当前范围尚无供应商往来记录"
-          description="应付形成后刷新；可从采购单或结算来源进入。"
-        />
-      ) : (
-        <BusinessTableFrame
-          title={VIEW_LABEL[view]}
-          description={`${stripSummaryCount(data.filterSummary)} · 金额与状态均来自系统最新数据；付款与进项票轨道独立。`}
-          table={
-            <>
-          {view === "payable" ? (
-            <DataTable
-              columns={payableColumns}
-              data={pageRows as PayableRow[]}
-              getRowId={(r) => r.payableAccountId}
-              pagination={pagination}
-              onPaginationChange={setPagination}
-              sorting={sorting}
-              onSortingChange={setSorting}
-              rowCount={data.payables.length}
-              layout="flush"
-              density="compact"
-            />
-          ) : null}
-          {view === "payment" ? (
-            <DataTable
-              columns={paymentColumns}
-              data={pageRows as PaymentRow[]}
-              getRowId={(r) => r.paymentId}
-              pagination={pagination}
-              onPaginationChange={setPagination}
-              rowCount={data.payments.length}
-              layout="flush"
-              density="compact"
-            />
-          ) : null}
-          {view === "purchase_invoice" ? (
-            <DataTable
-              columns={invoiceColumns}
-              data={pageRows as PurchaseInvoiceRow[]}
-              getRowId={(r) => r.invoiceId}
-              pagination={pagination}
-              onPaginationChange={setPagination}
-              rowCount={data.invoices.length}
-              layout="flush"
-              density="compact"
-            />
-          ) : null}
-          {view === "unallocated" ? (
-            <DataTable
-              columns={unallocatedColumns}
-              data={pageRows as UnallocatedRow[]}
-              getRowId={(r) => r.id}
-              pagination={pagination}
-              onPaginationChange={setPagination}
-              rowCount={rows.length}
-              layout="flush"
-              density="compact"
-            />
-          ) : null}
-            </>
-          }
-        />
-      )}
 
       <QuickPreviewSheet
         open={Boolean(previewPayableId)}
@@ -1667,6 +1673,6 @@ export function SupplierAccountsPage() {
           </DialogContent>
         </Dialog>
       ) : null}
-    </div>
+    </PageScaffold>
   )
 }

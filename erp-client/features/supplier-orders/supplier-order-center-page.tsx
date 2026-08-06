@@ -23,7 +23,10 @@ import {
   MoneyValue,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   StatusTrackSummary,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import {
@@ -69,6 +72,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { clearAddressReveal } from "@/features/supplier-orders/api"
 import { formatDateTime } from "@/lib/datetime"
+import { cn } from "@/lib/utils"
 import {
   useAddNoteMutation,
   useAfterSalesActionMutation,
@@ -483,17 +487,17 @@ export function SupplierOrderCenterPage({
 
   if (query.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-        <div className="h-28 animate-pulse rounded-2xl bg-muted" />
-        <div className="h-64 animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-28 animate-pulse rounded-lg bg-muted" />
+        <div className="h-64 animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (query.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="system"
           title="供应商订单加载失败"
@@ -504,13 +508,13 @@ export function SupplierOrderCenterPage({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!detail) {
     return (
-      <div className="mx-auto max-w-shell p-5">
+      <PageScaffold>
         <Alert variant="warning">
           <AlertTitle>未找到供应商订单</AlertTitle>
           <AlertDescription>
@@ -525,7 +529,7 @@ export function SupplierOrderCenterPage({
             </Button>
           </AlertDescription>
         </Alert>
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -553,7 +557,7 @@ export function SupplierOrderCenterPage({
           .toFixed(2)
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -788,8 +792,8 @@ export function SupplierOrderCenterPage({
       ) : null}
 
       {detail.workItem ? (
-        <Card>
-          <CardHeader className="pb-2">
+        <Card size="sm" className={surfacePanelClassName}>
+          <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
             <CardTitle className="text-sm">
               {WORK_ITEM_TYPE_LABEL[detail.workItem.workItemType]}
             </CardTitle>
@@ -872,11 +876,15 @@ export function SupplierOrderCenterPage({
         />
       ) : null}
 
+      <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
       <Tabs
         value={activeSection}
         onValueChange={(v) => setSection(resolveSection(v))}
       >
-        <TabsList variant="line" className="h-auto flex-wrap">
+        <TabsList
+          variant="line"
+          className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-border/30 bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
+        >
           {SECTIONS.map((s) => (
             <TabsTrigger key={s} value={s}>
               {SECTION_LABEL[s]}
@@ -885,6 +893,7 @@ export function SupplierOrderCenterPage({
         </TabsList>
       </Tabs>
 
+      <div className="space-y-4 p-3 md:p-4">
       {activeSection === "overview" ? (
         <DocumentSection title="概览" description="来源支付、供应商与下单记录版本">
           <DescriptionList className="gap-y-3">
@@ -1029,8 +1038,8 @@ export function SupplierOrderCenterPage({
             />
           </DescriptionList>
 
-          <Card>
-            <CardHeader className="pb-2">
+          <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+            <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
               <CardTitle className="text-sm">收货信息</CardTitle>
               <CardDescription className="text-xs">
                 默认打码；仅履约所需角色可短时揭示，揭示写入审计。
@@ -1096,7 +1105,7 @@ export function SupplierOrderCenterPage({
               {detail.statusHistory.map((h) => (
                 <li
                   key={h.id}
-                  className="rounded-lg border border-border px-3 py-2 text-xs"
+                  className={cn(surfaceInsetClassName, "px-3 py-2 text-xs")}
                 >
                   <div className="flex flex-wrap gap-2">
                     <Badge variant="secondary">{h.track}</Badge>
@@ -1129,8 +1138,12 @@ export function SupplierOrderCenterPage({
           ) : (
             <div className="space-y-4">
               {detail.afterSales.map((as) => (
-                <Card key={as.requestId}>
-                  <CardHeader className="pb-2">
+                <Card
+                  key={as.requestId}
+                  size="sm"
+                  className={cn(surfaceInsetClassName, "shadow-none ring-0")}
+                >
+                  <CardHeader className="rounded-t-lg border-b border-border/30 pb-2">
                     <CardTitle className="text-sm">
                       {as.requestNo}{" "}
                       <span className="num font-normal text-muted-foreground">
@@ -1395,6 +1408,8 @@ export function SupplierOrderCenterPage({
           </form>
         </DocumentSection>
       ) : null}
+      </div>
+      </div>
 
       <FormalActionConfirmDialog
         open={replayOpen}
@@ -1530,7 +1545,7 @@ export function SupplierOrderCenterPage({
           }
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -1561,7 +1576,7 @@ function FactGap({
   gap?: string
 }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-3 text-xs">
+    <div className={cn(surfaceInsetClassName, "p-3 text-xs")}>
       <div className="font-medium">{title}</div>
       <div className="mt-1">{status}</div>
       {amount != null && amount !== "" ? (

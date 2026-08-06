@@ -22,8 +22,8 @@
 
 | 页面模式 | 组件 | 文件 | 覆盖场景 |
 | --- | --- | --- | --- |
-| 应用壳 | `ErpAppShell`、`GlobalTopbar`、`TaskTabs`、`MaintenanceBanner` | `shell.tsx` | 全局导航、内部任务页签、维护与主责迁移冻结 |
-| 页面公共区 | `PageHeader`（`page` / `object-chrome`）、`PageActions`、`MetricStrip`、`MetricItem`（`detailMode`）、`MetricFilterItem`（`status` 指标徽章）、`DataFreshness` | `page.tsx` | 标题、动作、工作台统计、数据水位；一级 `page` 不展示面包屑；M4 用 object-chrome + 面包屑 |
+| 应用壳 | `ErpAppShell`、`GlobalTopbar`、`MaintenanceBanner` | `shell.tsx` | 全局导航、维护与主责迁移冻结 |
+| 页面公共区 | `PageScaffold`、`PageHeader`（`page` / `object-chrome`）、`PageActions`、`MetricStrip`、`MetricItem`（`detailMode`）、`MetricFilterItem`（`status` 指标徽章）、`DataFreshness`、`surfacePanelClassName` / `surfaceInsetClassName` | `page.tsx` | 内容区脚手架与浮起表面；**固定模式见** `docs/erp-ui-design.md` §2.5；一级 `page` 不展示面包屑；M4 用 object-chrome + 面包屑 |
 | 高密度列表 | `DataTable`、`DataTableViewOptions`、`DataTablePagination` | `data-table.tsx` | 服务端分页、排序、筛选、显隐、固定、调宽、跨页稳定选择和键盘行导航 |
 | 列表编排 | `ListToolbar`、`SelectionScopeBar`、`StatusMatrix`、`BusinessTableFrame`、`QuickPreviewSheet` | `list.tsx` | 常驻筛选、选择范围、多轨状态、加载/空态/失败、右侧快速预览 |
 | 选择与筛选 | `OptionCombobox`、`BusinessObjectCombobox`、业务实体 Combobox（合同/销售单/客户/采购单/供应商/商品/品牌/商品分类/结算主体/仓库/负责人）、`SavedViewPicker`、`AdvancedFilterSheet` | `option-combobox.tsx`、`entity-comboboxes.tsx`、`selectors.tsx` | 可搜索枚举/筛选、有效业务对象选择、个人/团队视图、高级筛选；**禁止**在业务页继续使用 `Select` / `NativeSelect`；**禁止**用自由 `Input` 录入已有业务对象 ID/名称 |
@@ -159,6 +159,13 @@ Tabs、Dialog、Popover、Tooltip 等仍直接使用 `components/ui`，不增加
 1. 列表页使用 `PageHeader`（`variant="page"`，默认）+ `ListToolbar` + `BusinessTableFrame` +
    `DataTable`；需要半屏业务核对时再组合 `QuickPreviewSheet`。**W05 销售单列表不要**再挂
    `QuickPreviewSheet` / 行内预览按钮。
+   - **筛选 vs 视图切换分层**：`ListToolbar`（搜索框、字段筛选 Combobox、"高级筛选"）过滤的是
+     当前这张表的行，**一律传给 `BusinessTableFrame` 的 `toolbar=`**，让筛选区嵌在卡片内、和
+     结果强绑定；**不要**把 `ListToolbar` 单独摆在 `BusinessTableFrame` 外面。
+   - 决定"看哪张表/哪个口径"的视图切换 `Tabs`（比如台账的"余额/流水/预留/调整"）级别高于表格
+     筛选，**放在 `BusinessTableFrame` 外面**、作为页面级导航；**不要**塞进 `toolbar=` 的
+     `filters=` 插槽，否则会和字段筛选混在一起。可参考 `inventory-ledger-page.tsx` /
+     `customer-receivables-page.tsx` 的写法。
 2. **M4 对象中心**使用：
    - `PageHeader variant="object-chrome"`：仅面包屑 + 轻动作（返回），**不要**再写工作面大标题；
    - `DocumentHeader density="compact"`：唯一身份头（名称 / 单号 / 版本 / 状态 / 主动作）；

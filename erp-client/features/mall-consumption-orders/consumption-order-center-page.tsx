@@ -19,8 +19,10 @@ import {
   DocumentSummary,
   MoneyValue,
   PageHeader,
+  PageScaffold,
   RelatedDocumentList,
   StatusTrackSummary,
+  surfacePanelClassName,
 } from "@/components/business"
 import {
   Alert,
@@ -141,7 +143,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
           商品 × 支付来源分摊矩阵（仅卡券 / 微信）
         </caption>
         <thead>
-          <tr className="border-b border-border text-left">
+          <tr className="border-b border-border/30 text-left">
             <th className="sticky left-0 bg-card p-2 font-medium">商品明细</th>
             {sources.map((s) => (
               <th key={s.paymentSourceId} className="p-2 font-medium">
@@ -202,7 +204,7 @@ function PaymentMatrix({ view }: { view: MallConsumptionOrderView }) {
           })}
         </tbody>
         <tfoot>
-          <tr className="border-t border-border font-medium">
+          <tr className="border-t border-border/30 font-medium">
             <th scope="row" className="sticky left-0 bg-card p-2 text-left">
               来源合计
             </th>
@@ -257,10 +259,10 @@ function FactCard({
       type="button"
       onClick={onSelect}
       className={cn(
-        "w-full rounded-xl border p-3 text-left transition-colors",
+        "w-full rounded-lg p-3 text-left transition-colors ring-1",
         selected
-          ? "border-primary bg-primary/5"
-          : "border-border hover:bg-muted/40"
+          ? "bg-primary/5 ring-primary/40"
+          : "bg-card ring-foreground/[0.04] hover:bg-muted/40"
       )}
       aria-current={selected ? "true" : undefined}
     >
@@ -348,17 +350,19 @@ export function ConsumptionOrderCenterPage({
 
   if (detailQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-        <div className="h-24 animate-pulse rounded-xl bg-muted" />
-        <div className="h-96 animate-pulse rounded-2xl bg-muted" />
-      </div>
+      <PageScaffold>
+        <div className="space-y-3" aria-busy="true" aria-label="加载中">
+          <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
+          <div className="h-24 animate-pulse rounded-lg bg-muted" />
+          <div className="h-96 animate-pulse rounded-lg bg-muted" />
+        </div>
+      </PageScaffold>
     )
   }
 
   if (detailQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="system"
           title="加载失败"
@@ -367,7 +371,8 @@ export function ConsumptionOrderCenterPage({
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
-                variant="outline"
+                variant="secondary"
+                className="rounded-lg shadow-none"
                 onClick={() => void detailQuery.refetch()}
               >
                 重试
@@ -382,13 +387,13 @@ export function ConsumptionOrderCenterPage({
             </div>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!view) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessEmptyState
           kind="no-data"
           title="未找到消费订单"
@@ -396,14 +401,15 @@ export function ConsumptionOrderCenterPage({
           action={
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
+              className="rounded-lg shadow-none"
               render={<Link href="/commerce/consumption-orders" />}
             >
               返回列表
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -454,7 +460,7 @@ export function ConsumptionOrderCenterPage({
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -482,7 +488,7 @@ export function ConsumptionOrderCenterPage({
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               onClick={() => {
                 void navigator.clipboard.writeText(view.identity.externalOrderNo)
@@ -493,7 +499,7 @@ export function ConsumptionOrderCenterPage({
             </Button>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="sm"
               disabled={detailQuery.isFetching}
               onClick={() => void detailQuery.refetch()}
@@ -609,19 +615,23 @@ export function ConsumptionOrderCenterPage({
         </AlertDescription>
       </Alert>
 
+      <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
       <Tabs
         value={section}
         onValueChange={(v) => setSection(v as ObjectCenterSectionId)}
       >
-        <TabsList className="flex h-auto flex-wrap gap-1">
+        <TabsList
+          variant="line"
+          className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-border/30 bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
+        >
           {OBJECT_CENTER_SECTIONS.map((s) => (
-            <TabsTrigger key={s.id} value={s.id}>
+            <TabsTrigger key={s.id} value={s.id} className="flex-none">
               {s.label}
             </TabsTrigger>
           ))}
         </TabsList>
 
-      <TabsContent value="overview">
+      <TabsContent value="overview" className="space-y-4 px-3 pt-4 pb-4 md:px-4">
         <div className="space-y-4">
           <DocumentSection title="金额与身份">
             <DocumentSummary
@@ -761,7 +771,7 @@ export function ConsumptionOrderCenterPage({
         </div>
       </TabsContent>
 
-      <TabsContent value="facts">
+      <TabsContent value="facts" className="px-3 pt-4 pb-4 md:px-4">
         <DocumentSection
           title="五类关键记录时间线"
           description="以业务发生时间排序，并展示接收时间。多次部分退款与余额恢复逐笔展示，不按订单号合并。"
@@ -779,12 +789,15 @@ export function ConsumptionOrderCenterPage({
         </DocumentSection>
       </TabsContent>
 
-      <TabsContent value="items">
+      <TabsContent value="items" className="px-3 pt-4 pb-4 md:px-4">
         <DocumentSection title="商品明细（下单时）">
           <div className="space-y-3">
             {view.items.map((item) => (
-              <Card key={item.mallOrderItemId}>
-                <CardHeader className="pb-2">
+              <Card
+                key={item.mallOrderItemId}
+                className="rounded-lg border-0 bg-muted/40 shadow-none ring-0"
+              >
+                <CardHeader className="border-b border-border/30 pb-2">
                   <CardTitle className="text-base">
                     {item.nameSnapshot}
                   </CardTitle>
@@ -884,7 +897,7 @@ export function ConsumptionOrderCenterPage({
         </DocumentSection>
       </TabsContent>
 
-      <TabsContent value="payment">
+      <TabsContent value="payment" className="px-3 pt-4 pb-4 md:px-4">
         <DocumentSection
           title="支付与分摊"
           description="商品与支付来源的守恒校验；合计与状态以系统结果为准。"
@@ -901,15 +914,18 @@ export function ConsumptionOrderCenterPage({
         </DocumentSection>
       </TabsContent>
 
-      <TabsContent value="origin">
+      <TabsContent value="origin" className="px-3 pt-4 pb-4 md:px-4">
         <DocumentSection
           title="来源追溯"
           description="从卡券引用可追溯到客户、原销售单与对应卡券明细；不展示卡号与卡密。"
         >
           <div className="space-y-3">
             {view.paymentSources.map((s) => (
-              <Card key={s.paymentSourceId}>
-                <CardHeader className="pb-2">
+              <Card
+                key={s.paymentSourceId}
+                className="rounded-lg border-0 bg-muted/40 shadow-none ring-0"
+              >
+                <CardHeader className="border-b border-border/30 pb-2">
                   <CardTitle className="text-base">
                     {s.sourceType === "CARD" ? "卡券来源" : "微信支付"}
                     <span className="num ml-2 text-sm font-normal">
@@ -1034,7 +1050,7 @@ export function ConsumptionOrderCenterPage({
         </DocumentSection>
       </TabsContent>
 
-      <TabsContent value="supplier">
+      <TabsContent value="supplier" className="px-3 pt-4 pb-4 md:px-4">
         <DocumentSection title="供应商履约">
           {view.fulfillment.chain === "LEGACY_MANUAL" ? (
             <Alert variant="default">
@@ -1070,8 +1086,11 @@ export function ConsumptionOrderCenterPage({
           ) : (
             <div className="space-y-3">
               {view.supplierOrders.map((so) => (
-                <Card key={so.supplierFulfillmentOrderId}>
-                  <CardHeader className="pb-2">
+                <Card
+                  key={so.supplierFulfillmentOrderId}
+                  className="rounded-lg border-0 bg-muted/40 shadow-none ring-0"
+                >
+                  <CardHeader className="border-b border-border/30 pb-2">
                     <CardTitle className="text-base">
                       <span className="num">{so.fulfillmentOrderNo}</span>
                       <span className="mx-2 font-normal text-muted-foreground">
@@ -1172,7 +1191,7 @@ export function ConsumptionOrderCenterPage({
         </DocumentSection>
       </TabsContent>
 
-      <TabsContent value="cost">
+      <TabsContent value="cost" className="px-3 pt-4 pb-4 md:px-4">
         <DocumentSection
           title="成本口径"
           description="无成本时仅显示原因，不按零成本计入利润。"
@@ -1212,8 +1231,11 @@ export function ConsumptionOrderCenterPage({
               view.consumptionEntries.map((entry) => {
                 const ca = entry.currentCostAssessment
                 return (
-                  <Card key={entry.consumptionEntryId}>
-                    <CardHeader className="pb-2">
+                  <Card
+                    key={entry.consumptionEntryId}
+                    className="rounded-lg border-0 bg-muted/40 shadow-none ring-0"
+                  >
+                    <CardHeader className="border-b border-border/30 pb-2">
                       <CardTitle className="text-base">
                         {entry.direction === "REVERSAL" ? "冲减" : "消费"}{" "}
                         <span className="num text-sm font-normal">
@@ -1283,14 +1305,14 @@ export function ConsumptionOrderCenterPage({
         </DocumentSection>
       </TabsContent>
 
-      <TabsContent value="aftersales">
+      <TabsContent value="aftersales" className="px-3 pt-4 pb-4 md:px-4">
         <DocumentSection
           title="售后结果分轨"
           description="商城退款仅冲减消费，卡券余额恢复仅记回补，供应商退款另行分列，不替代商城退款。"
         >
           <div className="grid gap-3 md:grid-cols-3">
-            <Card>
-              <CardHeader>
+            <Card className="rounded-lg border-0 bg-muted/40 shadow-none ring-0">
+              <CardHeader className="border-b border-border/30">
                 <CardTitle className="text-base">商城退款</CardTitle>
                 <CardDescription>冲减消费</CardDescription>
               </CardHeader>
@@ -1302,8 +1324,8 @@ export function ConsumptionOrderCenterPage({
                 笔记录（逐笔展示）
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
+            <Card className="rounded-lg border-0 bg-muted/40 shadow-none ring-0">
+              <CardHeader className="border-b border-border/30">
                 <CardTitle className="text-base">卡券余额恢复</CardTitle>
                 <CardDescription>只记余额回补</CardDescription>
               </CardHeader>
@@ -1316,8 +1338,8 @@ export function ConsumptionOrderCenterPage({
                 笔记录（与退款分轨）
               </CardContent>
             </Card>
-            <Card>
-              <CardHeader>
+            <Card className="rounded-lg border-0 bg-muted/40 shadow-none ring-0">
+              <CardHeader className="border-b border-border/30">
                 <CardTitle className="text-base">供应商退款</CardTitle>
                 <CardDescription>成本/应付/现金分列</CardDescription>
               </CardHeader>
@@ -1348,7 +1370,7 @@ export function ConsumptionOrderCenterPage({
                   f.factType === "ORDER_CANCELED"
               )
               .map((f) => (
-                <li key={f.factId} className="rounded-lg border p-3">
+                <li key={f.factId} className="rounded-lg bg-muted/40 p-3">
                   <BusinessStatusBadge
                     context="list"
                     label={FACT_TYPE_LABEL[f.factType]}
@@ -1368,7 +1390,7 @@ export function ConsumptionOrderCenterPage({
         </DocumentSection>
       </TabsContent>
 
-      <TabsContent value="audit">
+      <TabsContent value="audit" className="px-3 pt-4 pb-4 md:px-4">
         <DocumentSection title="审计与禁止动作">
           <DocumentSummary
             columns="two"
@@ -1420,7 +1442,7 @@ export function ConsumptionOrderCenterPage({
                 {view.actionBlockers.map((b) => (
                   <li
                     key={`${b.action}-${b.code}`}
-                    className="rounded-lg border p-3 text-sm"
+                    className="rounded-lg bg-muted/40 p-3 text-sm"
                   >
                     {BLOCKED_ACTION_LABEL[b.action] ? (
                       <span className="font-medium">
@@ -1458,6 +1480,7 @@ export function ConsumptionOrderCenterPage({
         </DocumentSection>
       </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </PageScaffold>
   )
 }

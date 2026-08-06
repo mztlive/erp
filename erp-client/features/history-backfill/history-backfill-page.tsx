@@ -31,6 +31,8 @@ import {
   MetricStrip,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
+  surfacePanelClassName,
   type ImportStageStates,
 } from "@/components/business"
 import {
@@ -465,7 +467,7 @@ function JobListView({
   }, [urlState.page])
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="历史消费回填"
         breadcrumbs={[
@@ -730,8 +732,14 @@ function JobListView({
           kind="no-data"
           title="任务列表加载失败"
           description="请重试。不会自行补造任务。"
+          className="rounded-lg border-0 bg-transparent shadow-none ring-0"
           action={
-            <Button type="button" onClick={() => void listQuery.refetch()}>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-lg shadow-none"
+              onClick={() => void listQuery.refetch()}
+            >
               重试
             </Button>
           }
@@ -785,7 +793,7 @@ function JobListView({
           }
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -989,37 +997,44 @@ function JobDetailView({
 
   if (detailQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-        <div className="h-24 animate-pulse rounded-2xl bg-muted" />
-        <div className="h-40 animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-24 animate-pulse rounded-lg bg-muted" />
+        <div className="h-40 animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (detailQuery.isError || !job) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessEmptyState
           kind="no-data"
           title="无法打开该任务"
           description="任务可能已结束或链接失效；也可返回任务列表重新选择。"
+          className="rounded-lg border-0 bg-transparent shadow-none ring-0"
           action={
             <div className="flex flex-wrap gap-2">
               <Button
                 type="button"
                 variant="secondary"
+                className="rounded-lg shadow-none"
                 onClick={() => void detailQuery.refetch()}
               >
                 重试
               </Button>
-              <Button type="button" variant="outline" onClick={onBack}>
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-lg shadow-none"
+                onClick={onBack}
+              >
                 返回列表
               </Button>
             </div>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -1096,7 +1111,7 @@ function JobDetailView({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -1118,14 +1133,15 @@ function JobDetailView({
         ]}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" size="sm" onClick={onBack}>
+            <Button type="button" variant="ghost" size="sm" onClick={onBack}>
               <ArrowLeftIcon className="size-4" />
               返回任务列表
             </Button>
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant="ghost"
+              className="text-muted-foreground"
               disabled={detailQuery.isFetching}
               onClick={() => void detailQuery.refetch()}
             >
@@ -1340,7 +1356,9 @@ function JobDetailView({
         }
       />
 
-      <div className="grid gap-3 rounded-2xl border bg-card p-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        className={`${surfacePanelClassName} grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-4`}
+      >
         <Fact label="发起人" value={currentJob.requestedBy} />
         <Fact label="发起时间" value={formatDateTime(currentJob.requestedAt, "dateStyle")} />
         <Fact label="来源更新时间" value={formatDateTime(currentJob.sourceAsOf, "dateStyle")} />
@@ -1518,7 +1536,7 @@ function JobDetailView({
           )
         }
       />
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -1533,7 +1551,7 @@ function ItemFilters({
 }) {
   const [qDraft, setQDraft] = React.useState(urlState.q ?? "")
   return (
-    <div className="flex flex-wrap items-end gap-2 rounded-xl border bg-muted/30 p-3">
+    <div className="flex flex-wrap items-end gap-2 rounded-lg bg-muted/40 p-3">
       {section === "facts" ? (
         <>
           <div className="space-y-1">
@@ -1663,8 +1681,8 @@ function OverviewSection({
 }) {
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Card>
-        <CardHeader>
+      <Card className={surfacePanelClassName}>
+        <CardHeader className="border-b border-border/30">
           <CardTitle>任务身份与范围</CardTitle>
           <CardDescription>范围起点固定等于必须覆盖起点</CardDescription>
         </CardHeader>
@@ -1687,8 +1705,8 @@ function OverviewSection({
           />
         </CardContent>
       </Card>
-      <Card>
-        <CardHeader>
+      <Card className={surfacePanelClassName}>
+        <CardHeader className="border-b border-border/30">
           <CardTitle>结果记录</CardTitle>
           <CardDescription>统计由系统统一计算；明细可按页浏览。</CardDescription>
         </CardHeader>
@@ -1944,8 +1962,8 @@ function CostSection({
     <div className="space-y-4">
       <div className="grid gap-3 md:grid-cols-3">
         {job.costBasis.map((row) => (
-          <Card key={row.basis}>
-            <CardHeader className="pb-2">
+          <Card key={row.basis} className={surfacePanelClassName}>
+            <CardHeader className="border-b border-border/30 pb-2">
               <CardTitle className="text-base">
                 {COST_BASIS_LABEL[row.basis]}
               </CardTitle>
@@ -2012,6 +2030,7 @@ function ReportSection({
         kind="no-data"
         title="技术报告尚未生成"
         description="处理状态达到部分完成或技术处理完成后可生成可审计报告。"
+        className="rounded-lg border-0 bg-transparent shadow-none ring-0"
       />
     )
   }
@@ -2020,8 +2039,8 @@ function ReportSection({
 
   return (
     <div className="space-y-4">
-      <Card>
-        <CardHeader>
+      <Card className={surfacePanelClassName}>
+        <CardHeader className="border-b border-border/30">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
               <CardTitle>审计报告</CardTitle>

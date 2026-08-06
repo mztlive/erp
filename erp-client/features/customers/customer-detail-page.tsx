@@ -23,8 +23,12 @@ import {
   MetricStrip,
   MoneyValue,
   PageHeader,
+  PageScaffold,
   SensitiveValue,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
+import { cn } from "@/lib/utils"
 import {
   Alert,
   AlertDescription,
@@ -156,20 +160,20 @@ export function CustomerDetailPage({
 
   if (query.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="客户详情" description="正在加载客户…" />
         <div className="space-y-3" aria-busy="true" aria-label="加载中">
           <div className="h-16 animate-pulse rounded-lg bg-muted" />
           <div className="h-20 animate-pulse rounded-lg bg-muted" />
           <div className="h-40 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (query.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="客户详情" />
         <BusinessFailureState
           kind="system"
@@ -180,13 +184,13 @@ export function CustomerDetailPage({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!customer) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title="客户不存在或无权访问"
           description="未找到该客户。可能编号有误，或当前角色无权访问该客户。"
@@ -196,7 +200,7 @@ export function CustomerDetailPage({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -236,7 +240,7 @@ export function CustomerDetailPage({
   )
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -353,6 +357,7 @@ export function CustomerDetailPage({
         />
       </MetricStrip>
 
+      <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
       <Tabs
         value={activeSection}
         onValueChange={(next) => {
@@ -361,7 +366,7 @@ export function CustomerDetailPage({
       >
         <TabsList
           variant="line"
-          className="sticky top-0 z-10 w-full justify-start overflow-x-auto rounded-none border-b border-border bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/80"
+          className="sticky top-0 z-10 w-full justify-start overflow-x-auto rounded-none border-b border-border/30 bg-card/95 px-3 backdrop-blur supports-backdrop-filter:bg-card/80"
         >
           {SECTION_NAV.map((item) => (
             <TabsTrigger key={item.id} value={item.id} className="flex-none">
@@ -370,7 +375,7 @@ export function CustomerDetailPage({
           ))}
         </TabsList>
 
-        <TabsContent value="overview">
+        <TabsContent value="overview" className="px-3 pb-3 md:px-4 md:pb-4">
           <div className="space-y-4 pt-4">
             {editing ? (
               <>
@@ -497,8 +502,8 @@ export function CustomerDetailPage({
                     />
                   ) : (
                     <div className="grid gap-4 lg:grid-cols-2">
-                      <Card size="sm">
-                        <CardHeader>
+                      <Card size="sm" className="shadow-none ring-1 ring-foreground/[0.04]">
+                        <CardHeader className="border-b border-border/30">
                           <CardTitle className="text-sm">有效联系人</CardTitle>
                           <CardDescription>默认打码手机；揭示操作会留记录</CardDescription>
                         </CardHeader>
@@ -509,7 +514,7 @@ export function CustomerDetailPage({
                             customer.contacts.map((c) => (
                               <div
                                 key={c.id}
-                                className="rounded-lg border border-border p-3 text-sm"
+                                className={cn(surfaceInsetClassName, "p-3 text-sm")}
                               >
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="font-medium">{c.name}</span>
@@ -554,8 +559,8 @@ export function CustomerDetailPage({
                         </CardContent>
                       </Card>
 
-                      <Card size="sm">
-                        <CardHeader>
+                      <Card size="sm" className="shadow-none ring-1 ring-foreground/[0.04]">
+                        <CardHeader className="border-b border-border/30">
                           <CardTitle className="text-sm">地址</CardTitle>
                           <CardDescription>履约地址按权限打码</CardDescription>
                         </CardHeader>
@@ -566,7 +571,7 @@ export function CustomerDetailPage({
                             customer.addresses.map((a) => (
                               <div
                                 key={a.id}
-                                className="rounded-lg border border-border p-3 text-sm"
+                                className={cn(surfaceInsetClassName, "p-3 text-sm")}
                               >
                                 <div className="flex flex-wrap items-center gap-2">
                                   <span className="font-medium">{a.addressType}</span>
@@ -608,7 +613,7 @@ export function CustomerDetailPage({
                   {customer.bankAccounts.length === 0 ? (
                     <p className="text-sm text-muted-foreground">暂无银行账户</p>
                   ) : (
-                    <Card size="sm">
+                    <Card size="sm" className="shadow-none ring-1 ring-foreground/[0.04]">
                       <CardContent className="space-y-2">
                         {customer.bankAccounts.map((b) => (
                           <div
@@ -645,7 +650,7 @@ export function CustomerDetailPage({
           </div>
         </TabsContent>
 
-        <TabsContent value="related">
+        <TabsContent value="related" className="px-3 pb-3 md:px-4 md:pb-4">
           <div className="space-y-4 pt-4">
             <DocumentSection
               title="合同与销售"
@@ -655,7 +660,7 @@ export function CustomerDetailPage({
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
                     render={
                       <Link
                         href={`/sales/contracts?customerId=${encodeURIComponent(customer.customerId)}`}
@@ -667,7 +672,7 @@ export function CustomerDetailPage({
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
                     render={
                       <Link
                         href={`/sales/orders?customerId=${encodeURIComponent(customer.customerId)}`}
@@ -707,7 +712,7 @@ export function CustomerDetailPage({
           </div>
         </TabsContent>
 
-        <TabsContent value="settlement">
+        <TabsContent value="settlement" className="px-3 pb-3 md:px-4 md:pb-4">
           <div className="space-y-4 pt-4">
             <DocumentSection
               title="票款摘要"
@@ -716,7 +721,7 @@ export function CustomerDetailPage({
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   render={<Link href={receivableHref} />}
                 >
                   {openWorkspaceLabel("W11")}
@@ -793,13 +798,14 @@ export function CustomerDetailPage({
                   kind="no-data"
                   title="暂无票款摘要"
                   description="系统暂无应收数据。"
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 />
               )}
             </DocumentSection>
           </div>
         </TabsContent>
 
-        <TabsContent value="quality">
+        <TabsContent value="quality" className="px-3 pb-3 md:px-4 md:pb-4">
           <div className="space-y-4 pt-4">
             <DocumentSection
               title="经营摘要"
@@ -808,7 +814,7 @@ export function CustomerDetailPage({
                 <Button
                   type="button"
                   size="sm"
-                  variant="outline"
+                  variant="ghost"
                   render={<Link href={qualityHref} />}
                 >
                   打开经营质量
@@ -868,6 +874,7 @@ export function CustomerDetailPage({
                     kind="no-data"
                     title="暂无经营摘要"
                     description="数据尚未生成。"
+                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   />
                 ) : null}
               </AsyncSectionState>
@@ -875,7 +882,7 @@ export function CustomerDetailPage({
           </div>
         </TabsContent>
 
-        <TabsContent value="audit">
+        <TabsContent value="audit" className="px-3 pb-3 md:px-4 md:pb-4">
           <div className="space-y-4 pt-4">
             <DocumentSection title="归属与审计" description="每位客户只有一位负责销售；协作销售显示有效期">
               {customer.partitions.audit === "error" ? (
@@ -890,8 +897,8 @@ export function CustomerDetailPage({
                 />
               ) : (
                 <div className="grid gap-4 lg:grid-cols-2">
-                  <Card size="sm">
-                    <CardHeader>
+                  <Card size="sm" className="shadow-none ring-1 ring-foreground/[0.04]">
+                    <CardHeader className="border-b border-border/30">
                       <CardTitle className="text-sm">当前责任关系</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2 text-sm">
@@ -900,7 +907,10 @@ export function CustomerDetailPage({
                         .map((a) => (
                           <div
                             key={a.id}
-                            className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
+                            className={cn(
+                              surfaceInsetClassName,
+                              "flex flex-wrap items-center justify-between gap-2 px-3 py-2"
+                            )}
                           >
                             <div>
                               <BusinessStatusBadge
@@ -920,8 +930,8 @@ export function CustomerDetailPage({
                         ))}
                     </CardContent>
                   </Card>
-                  <Card size="sm">
-                    <CardHeader>
+                  <Card size="sm" className="shadow-none ring-1 ring-foreground/[0.04]">
+                    <CardHeader className="border-b border-border/30">
                       <CardTitle className="text-sm">修订时间线</CardTitle>
                       <CardDescription>
                         新版本不覆盖历史合同/销售单记录
@@ -931,7 +941,7 @@ export function CustomerDetailPage({
                       {customer.revisionTimeline.map((r) => (
                         <div
                           key={r.id}
-                          className="rounded-md border border-border px-3 py-2"
+                          className={cn(surfaceInsetClassName, "px-3 py-2")}
                         >
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="num font-medium">v{r.revisionNo}</span>
@@ -954,6 +964,7 @@ export function CustomerDetailPage({
           </div>
         </TabsContent>
       </Tabs>
+      </div>
 
       <DiscardConfirmDialog
         open={pendingSection != null}
@@ -974,7 +985,7 @@ export function CustomerDetailPage({
           }
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -988,8 +999,8 @@ function RelatedList({
   items: CustomerCenterView["contracts"]
 }) {
   return (
-    <Card size="sm">
-      <CardHeader>
+    <Card size="sm" className="shadow-none ring-1 ring-foreground/[0.04]">
+      <CardHeader className="border-b border-border/30">
         <CardTitle className="text-sm">{title}</CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
@@ -999,7 +1010,10 @@ function RelatedList({
           items.map((item) => (
             <div
               key={item.id}
-              className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-3 py-2 text-sm"
+              className={cn(
+                surfaceInsetClassName,
+                "flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+              )}
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">

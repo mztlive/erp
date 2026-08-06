@@ -707,13 +707,18 @@ function DataTable<TData>({
         ref={tableSurfaceRef}
         className={cn(
           "overflow-x-auto bg-card",
-          layout === "inset" ? "rounded-lg border" : "border-y"
+          layout === "inset"
+            ? "rounded-lg border"
+            : // flush 恒套在 BusinessTableFrame 内：顶部分隔已由卡片的
+              // Separator 承担，这里只补一条与之同权重的底部软分隔线，
+              // 避免顶部出现两条边框叠加导致的"筛选区/表格衔接处偏重"。
+              "border-b border-border/30"
         )}
       >
         {loading && data.length > 0 && showRefreshingBanner ? (
           <div
             role="status"
-            className="flex items-center gap-2 border-b bg-surface-sunken px-3 py-2 text-xs text-muted-foreground"
+            className="flex items-center gap-2 border-b border-border/30 bg-surface-sunken px-3 py-2 text-xs text-muted-foreground"
           >
             <Spinner />
             {refreshingLabel}
@@ -781,7 +786,9 @@ function DataTable<TData>({
                           variant="ghost"
                           size="xs"
                           className={cn(
-                            "w-full px-0",
+                            // size="xs" 自带 text-xs，会比非排序表头继承的 text-sm 小一号；
+                            // 排序表头只需要更矮的点击区域，字号要跟未排序列对齐。
+                            "w-full px-0 text-sm",
                             sortableHeaderClass(meta?.align)
                           )}
                           onClick={header.column.getToggleSortingHandler()}

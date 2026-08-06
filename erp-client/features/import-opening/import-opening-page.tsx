@@ -28,6 +28,8 @@ import {
   MetricStrip,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
+  surfacePanelClassName,
   type ImportStageStates,
 } from "@/components/business"
 import {
@@ -323,7 +325,7 @@ function BatchListView({
   }, [urlState.page])
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="导入与期初"
         breadcrumbs={[
@@ -476,9 +478,12 @@ function BatchListView({
           kind="no-data"
           title="批次列表加载失败"
           description="请重试。不会自行补造批次。"
+          className="rounded-lg border-0 bg-transparent shadow-none ring-0"
           action={
             <Button
               type="button"
+              variant="secondary"
+              className="rounded-lg shadow-none"
               onClick={() => void listQuery.refetch()}
             >
               重试
@@ -507,7 +512,7 @@ function BatchListView({
           }
         />
       )}
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -540,25 +545,27 @@ function BatchDetailView({
 
   if (detailQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-        <div className="h-24 animate-pulse rounded-2xl bg-muted" />
-        <div className="h-40 animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-24 animate-pulse rounded-lg bg-muted" />
+        <div className="h-40 animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (detailQuery.isError || !batch) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessEmptyState
           kind="no-data"
           title="批次不存在或无权查看"
           description="请返回列表或检查批次身份。"
+          className="rounded-lg border-0 bg-transparent shadow-none ring-0"
           action={
             <Button
               type="button"
               variant="secondary"
+              className="rounded-lg shadow-none"
               onClick={() =>
                 replaceUrl({
                   ...urlState,
@@ -571,7 +578,7 @@ function BatchDetailView({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -593,7 +600,7 @@ function BatchDetailView({
   const workItemTypeMissing = !batch.productionGates.workItemTypeRegistered
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -608,7 +615,7 @@ function BatchDetailView({
         actions={
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
             onClick={() =>
               replaceUrl({
@@ -679,7 +686,7 @@ function BatchDetailView({
       />
 
       {/* 批次身份摘要：对象集、试算版本、来源系统等（环境/基准日/规则版本见页头） */}
-      <Card size="sm">
+      <Card size="sm" className={surfacePanelClassName}>
         <CardContent className="grid gap-3 pt-4 sm:grid-cols-2 lg:grid-cols-4">
           <Fact
             label="对象集合"
@@ -765,8 +772,8 @@ function BatchDetailView({
 
       {/* 生产应用门禁：仅提交应用前阶段展示 */}
       {batch.stage !== "RESULT" && batch.stage !== "APPLY" ? (
-        <Card size="sm">
-        <CardHeader className="border-b">
+        <Card size="sm" className={surfacePanelClassName}>
+        <CardHeader className="border-b border-border/30">
           <CardTitle>提交前检查</CardTitle>
           <CardDescription>
             验证环境校验与业务确认是生产应用前置条件；系统管理员不能代替确认。
@@ -821,7 +828,7 @@ function BatchDetailView({
         </CardContent>
       </Card>
       ) : null}
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -864,8 +871,8 @@ function OverviewSection({
 }) {
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
-      <Card size="sm">
-        <CardHeader className="border-b">
+      <Card size="sm" className={surfacePanelClassName}>
+        <CardHeader className="border-b border-border/30">
           <CardTitle>试算摘要</CardTitle>
           <CardDescription>
             试算统计由系统统一计算，与问题明细可能因筛选存在差异。
@@ -899,8 +906,8 @@ function OverviewSection({
         </CardContent>
       </Card>
 
-      <Card size="sm">
-        <CardHeader className="border-b">
+      <Card size="sm" className={surfacePanelClassName}>
+        <CardHeader className="border-b border-border/30">
           <CardTitle>期初口径</CardTitle>
           <CardDescription>提示按本批对象固定生成，不可修改。</CardDescription>
         </CardHeader>
@@ -960,8 +967,8 @@ function FilesSection({ batch }: { batch: ImportBatchView }) {
   const [previewAsset, setPreviewAsset] = React.useState<string | null>(null)
   return (
     <div className="grid gap-4 lg:grid-cols-2">
-      <Card size="sm">
-        <CardHeader className="border-b">
+      <Card size="sm" className={surfacePanelClassName}>
+        <CardHeader className="border-b border-border/30">
           <CardTitle>合规输入包</CardTitle>
           <CardDescription>
             仅展示白名单包元数据；不展示原始存储键、签名 URL 或文件正文。
@@ -1010,8 +1017,8 @@ function FilesSection({ batch }: { batch: ImportBatchView }) {
         </CardContent>
       </Card>
 
-      <Card size="sm">
-        <CardHeader className="border-b">
+      <Card size="sm" className={surfacePanelClassName}>
+        <CardHeader className="border-b border-border/30">
           <CardTitle>结果与诊断资产保留</CardTitle>
           <CardDescription>
             成功审计长期 · 失败诊断 30 天 · 导出 7 天；下载前重鉴权。
@@ -1271,8 +1278,8 @@ function ConfirmSection({
             !workItemTypeMissing &&
             c.result === "PENDING"
           return (
-            <Card key={c.scope} size="sm">
-              <CardHeader className="border-b">
+            <Card key={c.scope} size="sm" className={surfacePanelClassName}>
+              <CardHeader className="border-b border-border/30">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <CardTitle className="text-base">
                     {CONFIRMATION_SCOPE_LABEL[c.scope]}
@@ -1400,7 +1407,7 @@ function ProgressSection({ batch }: { batch: ImportBatchView }) {
           </span>
         }
       />
-      <Card size="sm">
+      <Card size="sm" className={surfacePanelClassName}>
         <CardContent className="grid gap-3 pt-4 sm:grid-cols-4">
           <Fact label="已处理" value={`${job.processed}/${job.total}`} mono />
           <Fact label="成功" value={job.succeeded} mono />
@@ -1494,8 +1501,8 @@ function ResultSection({
 
 function AuditSection({ batch }: { batch: ImportBatchView }) {
   return (
-    <Card size="sm">
-      <CardHeader className="border-b">
+    <Card size="sm" className={surfacePanelClassName}>
+      <CardHeader className="border-b border-border/30">
         <CardTitle>可追溯谱系</CardTitle>
         <CardDescription>
           来源身份、规则版本、manifest、成功结果与映射谱系可审计；详细事件在权限与审计中。

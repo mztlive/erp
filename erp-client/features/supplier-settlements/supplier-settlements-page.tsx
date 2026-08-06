@@ -38,10 +38,14 @@ import {
   MoneyValue,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
   SupplierCombobox,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import { cn } from "@/lib/utils"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -515,17 +519,17 @@ function SettlementList({
 
   if (listQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-        <div className="h-16 animate-pulse rounded-xl bg-muted" />
-        <div className="h-72 animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-16 animate-pulse rounded-lg bg-muted" />
+        <div className="h-72 animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (listQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="API 供应商结算" description="加载失败" />
         <BusinessFailureState
           kind="system"
@@ -537,14 +541,14 @@ function SettlementList({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   const empty = data?.emptyReason
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="API 供应商结算"
         metadata={
@@ -560,7 +564,8 @@ function SettlementList({
             <Button
               type="button"
               size="sm"
-              variant="outline"
+              variant="ghost"
+              className="text-muted-foreground hover:text-foreground"
               onClick={() => void listQuery.refetch()}
             >
               <RefreshCwIcon className="size-3.5" aria-hidden="true" />
@@ -669,6 +674,28 @@ function SettlementList({
         </MetricStrip>
       ) : null}
 
+      <Tabs
+        value={urlState.view}
+        onValueChange={(v) =>
+          patchUrl({
+            view: v as SettlementsUrlState["view"],
+            status: undefined,
+            differenceType: undefined,
+            page: 1,
+          })
+        }
+      >
+        <TabsList>
+          {(
+            Object.keys(VIEW_LABEL) as Array<keyof typeof VIEW_LABEL>
+          ).map((k) => (
+            <TabsTrigger key={k} value={k}>
+              {VIEW_LABEL[k]}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
       <BusinessTableFrame
         title="结算单列表"
         description={data?.filterSummary ?? "默认待处理"}
@@ -713,29 +740,6 @@ function SettlementList({
             }
             filters={
               <div className="flex flex-wrap items-center gap-2">
-                <Tabs
-                  value={urlState.view}
-                  onValueChange={(v) =>
-                    patchUrl({
-                      view: v as SettlementsUrlState["view"],
-                      status: undefined,
-                      differenceType: undefined,
-                      page: 1,
-                    })
-                  }
-                >
-                  <TabsList>
-                    {(
-                      Object.keys(VIEW_LABEL) as Array<
-                        keyof typeof VIEW_LABEL
-                      >
-                    ).map((k) => (
-                      <TabsTrigger key={k} value={k}>
-                        {VIEW_LABEL[k]}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
                 <SupplierCombobox
                   value={urlState.supplierId || undefined}
                   onValueChange={(id) =>
@@ -844,12 +848,14 @@ function SettlementList({
               {empty === "FILTER_NO_RESULT" ? (
                 <BusinessEmptyState
                   kind="filter"
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   title="当前筛选无结果"
                   description={`筛选摘要：${data?.filterSummary ?? "—"}。可清除筛选回到默认待处理视图。`}
                   action={
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
+                      className="rounded-lg shadow-none"
                       onClick={() =>
                         patchUrl({
                           view: "pending",
@@ -870,6 +876,7 @@ function SettlementList({
               ) : (
                 <BusinessEmptyState
                   kind="no-data"
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   title="当前范围没有结算单"
                   description="可选择供应商与期间后重查，或新建结算草稿。"
                   action={
@@ -1079,7 +1086,7 @@ function SettlementList({
             <DialogFooter>
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 onClick={() => setCreateOpen(false)}
               >
                 取消
@@ -1091,7 +1098,7 @@ function SettlementList({
           </form>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -1162,20 +1169,20 @@ function SettlementCenter({
 
   if (detailQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-        <div className="h-24 animate-pulse rounded-xl bg-muted" />
-        <div className="h-96 animate-pulse rounded-2xl bg-muted" />
+        <div className="h-24 animate-pulse rounded-lg bg-muted" />
+        <div className="h-96 animate-pulse rounded-lg bg-muted" />
         <p className="text-sm text-muted-foreground">
           正在加载结算单，请稍候…
         </p>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (detailQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <Button type="button" variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeftIcon className="size-4" />
           返回列表
@@ -1190,23 +1197,24 @@ function SettlementCenter({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!data) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <Button type="button" variant="ghost" size="sm" onClick={onBack}>
           <ArrowLeftIcon className="size-4" />
           返回列表
         </Button>
         <BusinessEmptyState
           kind="no-data"
+          className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
           title="结算单不存在"
           description="该结算单不存在或已被作废。可返回列表重新选择，或检查分享链接是否正确。"
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -1353,7 +1361,7 @@ function SettlementCenter({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         variant="object-chrome"
         breadcrumbs={[
@@ -1533,8 +1541,8 @@ function SettlementCenter({
         ) : null}
       </div>
 
-      <Card size="sm">
-        <CardHeader className="border-b py-3">
+      <Card size="sm" className={surfacePanelClassName}>
+        <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
           <CardTitle className="text-base">金额摘要</CardTitle>
           <CardDescription>
             订单、运费、服务费、退款与 ERP 计算金额、供应商账单金额、差异方向对比 · 全部
@@ -1650,7 +1658,12 @@ function SettlementCenter({
         </CardContent>
       </Card>
 
-      <div className="rounded-xl border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+      <div
+        className={cn(
+          surfaceInsetClassName,
+          "px-3 py-2 text-xs text-muted-foreground"
+        )}
+      >
         <span className="font-medium text-foreground">来源数据 </span>
         更新时间 {formatDateTime(st.sourceAsOf, "default")}
         {st.externalBillNo ? (
@@ -1663,13 +1676,17 @@ function SettlementCenter({
         <span className="ml-2">以下数据仅供参考，不进入结算结果</span>
       </div>
 
+      <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
       <Tabs
         value={section}
         onValueChange={(v) =>
           patchUrl({ section: v as SettlementSection })
         }
       >
-        <TabsList className="flex h-auto flex-wrap">
+        <TabsList
+          variant="line"
+          className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-border/30 bg-card/95 px-3 py-1.5 backdrop-blur supports-backdrop-filter:bg-card/80"
+        >
           {SECTIONS.map((s) => (
             <TabsTrigger key={s} value={s}>
               {SECTION_LABEL[s]}
@@ -1680,13 +1697,14 @@ function SettlementCenter({
           ))}
         </TabsList>
       </Tabs>
+      <div className="space-y-4 p-3 md:p-4">
       <p className="text-xs text-muted-foreground">
         快捷键 d 可直达差异处理
       </p>
 
       {section === "overview" ? (
-        <Card size="sm">
-          <CardHeader className="border-b py-3">
+        <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+          <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
             <CardTitle className="text-base">概览</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 pt-4 text-sm">
@@ -1727,8 +1745,8 @@ function SettlementCenter({
       ) : null}
 
       {section === "items" ? (
-        <Card size="sm">
-          <CardHeader className="border-b py-3">
+        <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+          <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
             <CardTitle className="text-base">结算明细</CardTitle>
             <CardDescription>
               冻结数据 + 不可变完成/取消/退款记录 · 金额只读，不可修改
@@ -1846,8 +1864,8 @@ function SettlementCenter({
       ) : null}
 
       {section === "review" ? (
-        <Card size="sm">
-          <CardHeader className="border-b py-3">
+        <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+          <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
             <CardTitle className="text-base">复核记录</CardTitle>
             <CardDescription>
               提交 / 驳回 / 确认追加式记录；岗位分离由系统校验
@@ -1904,7 +1922,7 @@ function SettlementCenter({
               detail.reviewRecords.map((r) => (
                 <div
                   key={r.recordId}
-                  className="rounded-lg border px-3 py-2 text-sm"
+                  className={cn(surfaceInsetClassName, "px-3 py-2 text-sm")}
                 >
                   <div className="font-medium">
                     {r.actionLabel} · {r.by.displayName}
@@ -1924,8 +1942,8 @@ function SettlementCenter({
       ) : null}
 
       {section === "payable" ? (
-        <Card size="sm">
-          <CardHeader className="border-b py-3">
+        <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+          <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
             <CardTitle className="text-base">应付与票款</CardTitle>
             <CardDescription>
               确认后形成唯一应付；付款/进项发票/核销进入供应商往来，不在本页复制
@@ -1967,15 +1985,15 @@ function SettlementCenter({
       ) : null}
 
       {section === "audit" ? (
-        <Card size="sm">
-          <CardHeader className="border-b py-3">
+        <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+          <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
             <CardTitle className="text-base">审计</CardTitle>
           </CardHeader>
           <CardContent className="space-y-2 pt-4">
             {detail.auditEvents.map((e) => (
               <div
                 key={e.eventId}
-                className="rounded-lg border px-3 py-2 text-sm"
+                className={cn(surfaceInsetClassName, "px-3 py-2 text-sm")}
               >
                 <div className="flex flex-wrap gap-2">
                   <span className="font-medium">
@@ -1995,6 +2013,8 @@ function SettlementCenter({
           </CardContent>
         </Card>
       ) : null}
+      </div>
+      </div>
 
       {/* Resolve difference */}
       <Dialog open={resolveOpen} onOpenChange={setResolveOpen}>
@@ -2166,7 +2186,7 @@ function SettlementCenter({
           <DialogFooter>
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               onClick={() => setRejectOpen(false)}
             >
               取消
@@ -2181,7 +2201,7 @@ function SettlementCenter({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageScaffold>
   )
 }
 
@@ -2204,6 +2224,7 @@ function DifferencesWorkspace({
     return (
       <BusinessEmptyState
         kind="no-data"
+        className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
         title="无差异"
         description="当前结算单没有差异记录，明细金额核对一致时可直接进入复核。"
       />
@@ -2212,8 +2233,8 @@ function DifferencesWorkspace({
 
   return (
     <div className="grid gap-4 xl:grid-cols-[16rem_minmax(0,1fr)]">
-      <Card size="sm">
-        <CardHeader className="border-b py-3">
+      <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+        <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
           <CardTitle className="text-base">差异列表</CardTitle>
         </CardHeader>
         <CardContent className="space-y-1 p-2">
@@ -2221,9 +2242,12 @@ function DifferencesWorkspace({
             <button
               key={d.differenceId}
               type="button"
-              className={`flex w-full flex-col rounded-lg px-2 py-2 text-left text-sm hover:bg-muted ${
-                activeDiff?.differenceId === d.differenceId ? "bg-muted" : ""
-              }`}
+              className={cn(
+                "flex w-full flex-col rounded-md px-2 py-2 text-left text-sm hover:bg-foreground/5",
+                activeDiff?.differenceId === d.differenceId
+                  ? "bg-card font-medium shadow-sm ring-1 ring-foreground/10"
+                  : "text-muted-foreground"
+              )}
               onClick={() => onSelect(d.differenceId)}
             >
               <span className="font-medium">{d.typeLabel}</span>
@@ -2247,8 +2271,8 @@ function DifferencesWorkspace({
 
       {activeDiff ? (
         <div className="space-y-4">
-          <Card size="sm">
-            <CardHeader className="border-b py-3">
+          <Card size="sm" className={cn(surfaceInsetClassName, "shadow-none ring-0")}>
+            <CardHeader className="rounded-t-lg border-b border-border/30 py-3">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
                   <CardTitle className="text-base">
@@ -2281,7 +2305,7 @@ function DifferencesWorkspace({
             </CardHeader>
             <CardContent className="space-y-3 pt-4">
               <div className="grid gap-2 sm:grid-cols-2 text-sm">
-                <div className="rounded-lg border p-3">
+                <div className={cn(surfaceInsetClassName, "p-3")}>
                   <div className="text-xs text-muted-foreground">ERP 侧</div>
                   <div>{activeDiff.erpSideLabel}</div>
                   {activeDiff.erpSideAmount ? (
@@ -2291,7 +2315,7 @@ function DifferencesWorkspace({
                     />
                   ) : null}
                 </div>
-                <div className="rounded-lg border p-3">
+                <div className={cn(surfaceInsetClassName, "p-3")}>
                   <div className="text-xs text-muted-foreground">供应商侧</div>
                   <div>{activeDiff.supplierSideLabel}</div>
                   {activeDiff.supplierSideAmount ? (
@@ -2329,7 +2353,7 @@ function DifferencesWorkspace({
                     {activeDiff.evidence.map((e) => (
                       <li
                         key={e.evidenceId}
-                        className="rounded-lg border px-3 py-2 text-sm"
+                        className={cn(surfaceInsetClassName, "px-3 py-2 text-sm")}
                       >
                         <div className="font-medium">
                           {e.label} · {e.by.displayName}

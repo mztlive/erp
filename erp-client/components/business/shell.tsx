@@ -21,7 +21,6 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Kbd } from "@/components/ui/kbd"
-import { Separator } from "@/components/ui/separator"
 import {
   Sidebar,
   SidebarContent,
@@ -32,13 +31,11 @@ import {
   SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { cn } from "@/lib/utils"
 
 type ButtonProps = React.ComponentProps<typeof Button>
 type BadgeProps = React.ComponentProps<typeof Badge>
 type SidebarProps = React.ComponentProps<typeof Sidebar>
-type TabsProps = React.ComponentProps<typeof Tabs>
 
 interface GlobalSearchBase {
   ariaLabel: string
@@ -96,64 +93,67 @@ function GlobalTopbar({
   leading,
   actions = [],
   trailing,
-  showSidebarTrigger = true,
-  sidebarTriggerLabel = "切换导航栏",
+  showSidebarTrigger = false,
+  sidebarTriggerLabel = "打开导航",
   className,
   ...props
 }: GlobalTopbarProps) {
-  const showLeadingSeparator = showSidebarTrigger && Boolean(leading || search)
-  const showTrailing = actions.length > 0 || trailing
+  const showTrailing = Boolean(search || leading || actions.length > 0 || trailing)
 
   return (
     <header
       data-slot="global-topbar"
       className={cn(
-        "flex h-topbar shrink-0 items-center gap-3 border-b bg-card px-3",
+        // IDURAR：顶栏操作全部右对齐，无实心底/分割线；仅移动端显示菜单按钮
+        "flex h-topbar shrink-0 items-center gap-3 bg-transparent px-4 pt-2 md:px-6",
         className
       )}
       {...props}
     >
       {showSidebarTrigger ? (
-        <SidebarTrigger aria-label={sidebarTriggerLabel} />
-      ) : null}
-      {showLeadingSeparator ? (
-        <Separator orientation="vertical" className="h-4" />
-      ) : null}
-      {leading}
-      {search ? (
-        <InputGroup className="max-w-96">
-          <InputGroupAddon>
-            <SearchIcon aria-hidden="true" />
-          </InputGroupAddon>
-          <InputGroupInput
-            type="search"
-            aria-label={search.ariaLabel}
-            placeholder={search.placeholder}
-            value={search.value}
-            defaultValue={search.defaultValue}
-            name={search.name}
-            disabled={search.disabled}
-            onChange={search.onChange}
-            onKeyDown={search.onKeyDown}
-            onFocus={search.onFocus}
-            onBlur={search.onBlur}
-          />
-          {search.shortcut ? (
-            <InputGroupAddon align="inline-end">
-              <Kbd>{search.shortcut}</Kbd>
-            </InputGroupAddon>
-          ) : null}
-        </InputGroup>
+        <SidebarTrigger
+          aria-label={sidebarTriggerLabel}
+          className="md:hidden"
+        />
       ) : null}
       {showTrailing ? (
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex min-w-0 shrink-0 items-center gap-2 sm:gap-3">
+          {leading}
+          {search ? (
+            <InputGroup className="w-[min(100%,16rem)] border-border/40 bg-card/80 shadow-xs sm:w-64 md:w-72">
+              <InputGroupAddon>
+                <SearchIcon aria-hidden="true" />
+              </InputGroupAddon>
+              <InputGroupInput
+                type="search"
+                aria-label={search.ariaLabel}
+                placeholder={search.placeholder}
+                value={search.value}
+                defaultValue={search.defaultValue}
+                name={search.name}
+                disabled={search.disabled}
+                onChange={search.onChange}
+                onKeyDown={search.onKeyDown}
+                onFocus={search.onFocus}
+                onBlur={search.onBlur}
+              />
+              {search.shortcut ? (
+                <InputGroupAddon
+                  align="inline-end"
+                  className="hidden sm:flex"
+                >
+                  <Kbd>{search.shortcut}</Kbd>
+                </InputGroupAddon>
+              ) : null}
+            </InputGroup>
+          ) : null}
           {actions.map((action) => {
             const {
               actionKey,
               label,
               icon: Icon,
               badge,
-              variant = "ghost",
+              variant = "outline",
               ...buttonProps
             } = action
 
@@ -162,6 +162,7 @@ function GlobalTopbar({
                 key={actionKey}
                 variant={variant}
                 size="sm"
+                className="border-border/40 bg-card/80 shadow-xs"
                 {...buttonProps}
               >
                 {Icon ? <Icon data-icon="inline-start" aria-hidden="true" /> : null}
@@ -176,77 +177,6 @@ function GlobalTopbar({
         </div>
       ) : null}
     </header>
-  )
-}
-
-export interface TaskTabBadge {
-  label: React.ReactNode
-  variant?: BadgeProps["variant"]
-}
-
-export interface TaskTabItem {
-  value: string
-  label: React.ReactNode
-  icon?: LucideIcon
-  badge?: TaskTabBadge
-  disabled?: boolean
-}
-
-export type TaskTabsProps = Pick<
-  TabsProps,
-  "value" | "defaultValue" | "onValueChange"
-> & {
-  items: readonly TaskTabItem[]
-  ariaLabel?: string
-  trailing?: React.ReactNode
-  className?: string
-}
-
-function TaskTabs({
-  items,
-  value,
-  defaultValue,
-  onValueChange,
-  ariaLabel = "已打开的任务",
-  trailing,
-  className,
-}: TaskTabsProps) {
-  return (
-    <div
-      data-slot="task-tabs"
-      className={cn(
-        "flex h-tabs shrink-0 items-center gap-2 border-b bg-surface-sunken px-3",
-        className
-      )}
-    >
-      <Tabs
-        value={value}
-        defaultValue={value === undefined ? defaultValue ?? items[0]?.value : undefined}
-        onValueChange={onValueChange}
-        className="min-w-0 flex-1 gap-0"
-      >
-        <TabsList aria-label={ariaLabel} className="max-w-full justify-start overflow-x-auto">
-          {items.map((item) => {
-            const Icon = item.icon
-
-            return (
-              <TabsTrigger
-                key={item.value}
-                value={item.value}
-                disabled={item.disabled}
-              >
-                {Icon ? <Icon aria-hidden="true" /> : null}
-                <span className="truncate">{item.label}</span>
-                {item.badge ? (
-                  <Badge variant={item.badge.variant}>{item.badge.label}</Badge>
-                ) : null}
-              </TabsTrigger>
-            )
-          })}
-        </TabsList>
-      </Tabs>
-      {trailing ? <div className="shrink-0">{trailing}</div> : null}
-    </div>
   )
 }
 
@@ -317,7 +247,6 @@ export interface ErpAppShellProps {
   sidebarHeader?: React.ReactNode
   sidebarFooter?: React.ReactNode
   topbar?: React.ReactNode
-  taskTabs?: React.ReactNode
   maintenanceBanner?: React.ReactNode
   defaultSidebarOpen?: boolean
   sidebarOpen?: boolean
@@ -337,15 +266,14 @@ function ErpAppShell({
   sidebarHeader,
   sidebarFooter,
   topbar,
-  taskTabs,
   maintenanceBanner,
   defaultSidebarOpen = true,
   sidebarOpen,
   onSidebarOpenChange,
-  sidebarCollapsible = "icon",
+  sidebarCollapsible = "none",
   sidebarSide = "left",
   sidebarVariant = "sidebar",
-  showSidebarRail = true,
+  showSidebarRail = false,
   contentId = "main-content",
   contentLabel,
   className,
@@ -365,7 +293,9 @@ function ErpAppShell({
         {sidebarHeader ? <SidebarHeader>{sidebarHeader}</SidebarHeader> : null}
         <SidebarContent>{sidebarContent}</SidebarContent>
         {sidebarFooter ? <SidebarFooter>{sidebarFooter}</SidebarFooter> : null}
-        {showSidebarRail ? <SidebarRail /> : null}
+        {showSidebarRail && sidebarCollapsible !== "none" ? (
+          <SidebarRail />
+        ) : null}
       </Sidebar>
       <SidebarInset
         id={contentId}
@@ -374,7 +304,6 @@ function ErpAppShell({
       >
         {topbar}
         {maintenanceBanner}
-        {taskTabs}
         <div
           data-slot="erp-shell-content"
           className="flex min-h-0 flex-1 flex-col overflow-auto"
@@ -390,5 +319,4 @@ export {
   ErpAppShell,
   GlobalTopbar,
   MaintenanceBanner,
-  TaskTabs,
 }

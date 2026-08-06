@@ -219,7 +219,11 @@ function BusinessEmptyState({
       data-slot="business-empty-state"
       data-kind={kind}
       role="status"
-      className={cn("border bg-card", className)}
+      className={cn(
+        // 默认轻浮起、弱分割；嵌在主卡内时由页面 className 去掉边框
+        "border-0 bg-muted/20 ring-1 ring-foreground/[0.04]",
+        className
+      )}
     >
       <EmptyHeader>
         <EmptyMedia variant="icon">

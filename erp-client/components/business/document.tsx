@@ -90,8 +90,9 @@ function DocumentHeader({
       data-slot="document-header"
       data-density={density}
       className={cn(
-        "border-b border-border",
-        compact ? "pb-3" : "pb-5",
+        // 浮动画布：身份区轻浮起，避免重描边
+        "rounded-lg bg-card shadow-xs ring-1 ring-foreground/[0.04]",
+        compact ? "p-3 md:p-4" : "p-4 md:p-5",
         className
       )}
       {...props}
@@ -161,7 +162,7 @@ function DocumentHeader({
           role="list"
           aria-label="单据并行状态"
           className={cn(
-            "flex flex-wrap gap-x-5 gap-y-2 rounded-lg bg-surface-sunken",
+            "flex flex-wrap gap-x-5 gap-y-2 rounded-md bg-muted/40",
             compact ? "mt-2.5 px-3 py-2" : "mt-4 gap-y-3 px-4 py-3"
           )}
         >
@@ -212,7 +213,10 @@ function DocumentSummary({
   return (
     <section
       data-slot="document-summary"
-      className={cn("rounded-lg border border-border bg-card p-5", className)}
+      className={cn(
+        "rounded-lg bg-card p-5 shadow-xs ring-1 ring-foreground/[0.04]",
+        className
+      )}
       {...props}
     >
       <DescriptionList columns={columns}>
@@ -271,7 +275,7 @@ function DocumentSection({
   return (
     <section
       data-slot="document-section"
-      className={cn("border-b border-border py-5 last:border-b-0", className)}
+      className={cn("border-b border-border/30 py-5 last:border-b-0", className)}
       {...props}
     >
       {collapsible ? (
@@ -449,7 +453,7 @@ function RelatedDocumentList({
         <>
           <div
             aria-hidden="true"
-            className="hidden grid-cols-12 gap-3 border-b border-border pb-2 text-xs font-medium text-muted-foreground md:grid"
+            className="hidden grid-cols-12 gap-3 border-b border-border/30 pb-2 text-xs font-medium text-muted-foreground md:grid"
           >
             <span className="col-span-4">单据</span>
             <span className="col-span-2">状态</span>
@@ -457,7 +461,7 @@ function RelatedDocumentList({
             <span className="col-span-2">责任人</span>
             <span className="col-span-2 text-right">操作</span>
           </div>
-          <ul className="divide-y divide-border">
+          <ul className="divide-y divide-border/30">
             {documents.map((document) => {
               const measureLabel =
                 document.measure.label ??
@@ -571,12 +575,12 @@ function ResponsibilityPanel({
     <section
       data-slot="responsibility-panel"
       className={cn(
-        "overflow-hidden rounded-lg border border-border bg-card",
+        "overflow-hidden rounded-lg bg-card shadow-xs ring-1 ring-foreground/[0.04]",
         className
       )}
       {...props}
     >
-      <div className="border-b border-border px-4 py-3">
+      <div className="border-b border-border/30 px-4 py-3">
         <h2 className="font-heading text-base font-semibold">{title}</h2>
         {description != null ? (
           <div className="mt-1 text-sm text-muted-foreground">
@@ -586,7 +590,7 @@ function ResponsibilityPanel({
       </div>
 
       {tracks.length > 0 ? (
-        <ul className="divide-y divide-border">
+        <ul className="divide-y divide-border/30">
           {tracks.map((track) => (
             <li key={track.id} className="p-4">
               <div className="grid gap-4 lg:grid-cols-12 lg:items-start">

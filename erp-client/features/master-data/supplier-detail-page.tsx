@@ -19,7 +19,9 @@ import {
   FormalActionResult,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   RevisionTimeline,
+  surfacePanelClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -475,19 +477,19 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
   if (!isCreate && detailQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title="供应商详情"
           description={masterDataCopy.centerLoading}
         />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!isCreate && (detailQuery.isError || !data)) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="供应商详情" />
         <BusinessFailureState
           kind="system"
@@ -508,7 +510,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
             )
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -571,9 +573,9 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
           void form.handleSubmit()
         }
         return (
-          <div className="mx-auto w-full max-w-shell">
+          <PageScaffold>
             <form id={formId} onSubmit={handleSubmit}>
-              <header className="sticky top-0 z-30 border-b border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur md:px-5">
+              <header className="sticky top-0 z-30 border-b border-border/30 bg-background/95 py-3 backdrop-blur">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0 space-y-1">
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -659,7 +661,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                 </div>
               </header>
 
-              <div className="space-y-4 p-4 md:p-5">
+              <div className="space-y-4">
                 {!isCreate && !canRevise ? (
                   <Alert variant="info">
                     <AlertTitle>你只能查看</AlertTitle>
@@ -739,42 +741,44 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
                 <nav
                   aria-label="供应商编辑分区"
-                  className="sticky top-16 z-10 flex flex-wrap gap-1 rounded-2xl border border-border bg-background/95 p-1 shadow-sm backdrop-blur"
+                  className="sticky top-16 z-10 inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
                 >
                   {SUPPLIER_SECTIONS.filter(
                     (section) => !isCreate || section.id !== "history"
-                  ).map((section) => (
-                    <Button
-                      key={section.id}
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className={cn(
-                        "rounded-xl",
-                        activeSection === section.id &&
-                          "bg-accent text-accent-foreground"
-                      )}
-                      aria-current={
-                        activeSection === section.id ? "location" : undefined
-                      }
-                      onClick={() => {
-                        setActiveSection(section.id)
-                        document
-                          .getElementById(`supplier-section-${section.id}`)
-                          ?.scrollIntoView({
-                            block: "start",
-                            behavior: "smooth",
-                          })
-                      }}
-                    >
-                      {section.label}
-                    </Button>
-                  ))}
+                  ).map((section) => {
+                    const active = activeSection === section.id
+                    return (
+                      <Button
+                        key={section.id}
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className={cn(
+                          "h-7 rounded-md px-2.5 text-sm",
+                          active
+                            ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10 hover:bg-card"
+                            : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                        )}
+                        aria-current={active ? "location" : undefined}
+                        onClick={() => {
+                          setActiveSection(section.id)
+                          document
+                            .getElementById(`supplier-section-${section.id}`)
+                            ?.scrollIntoView({
+                              block: "start",
+                              behavior: "smooth",
+                            })
+                        }}
+                      >
+                        {section.label}
+                      </Button>
+                    )
+                  })}
                 </nav>
 
                 <section
                   id="supplier-section-basic"
-                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
                 >
                   <h2 className="px-1 text-base font-semibold">基本信息</h2>
                   <p className="px-1 text-xs text-muted-foreground">
@@ -849,7 +853,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
                 <section
                   id="supplier-section-commercial"
-                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
                 >
                   <h2 className="px-1 text-base font-semibold">商务与资质</h2>
                   <p className="px-1 text-xs text-muted-foreground">
@@ -928,7 +932,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
                 <section
                   id="supplier-section-qualification"
-                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
                 >
                   <h2 className="px-1 text-base font-semibold">资质附件</h2>
                   <p className="px-1 text-xs text-muted-foreground">
@@ -949,7 +953,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
                 <section
                   id="supplier-section-contract"
-                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
                 >
                   <h2 className="px-1 text-base font-semibold">合同与授权</h2>
                   <p className="px-1 text-xs text-muted-foreground">
@@ -1071,7 +1075,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
                 <section
                   id="supplier-section-invoice"
-                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
                 >
                   <h2 className="px-1 text-base font-semibold">开票信息</h2>
                   <p className="px-1 text-xs text-muted-foreground">
@@ -1150,7 +1154,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
                 <section
                   id="supplier-section-evaluation"
-                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
                 >
                   <h2 className="px-1 text-base font-semibold">合作评估</h2>
                   <p className="px-1 text-xs text-muted-foreground">
@@ -1207,7 +1211,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
                 <section
                   id="supplier-section-effective"
-                  className="scroll-mt-40 space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
                 >
                   <h2 className="px-1 text-base font-semibold">生效与原因</h2>
                   <div className="grid gap-3 px-1 sm:grid-cols-2">
@@ -1263,7 +1267,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                   <section
                     id="supplier-section-history"
                     aria-label="历史与引用"
-                    className="scroll-mt-40 overflow-hidden rounded-2xl border border-border bg-card px-5 shadow-sm"
+                    className={cn(surfacePanelClassName, "scroll-mt-40 overflow-hidden px-5")}
                   >
                     <DocumentSection
                       title={masterDataCopy.centerVersions}
@@ -1401,7 +1405,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                 }
               }}
             />
-          </div>
+          </PageScaffold>
         )
       }}
       </form.Subscribe>

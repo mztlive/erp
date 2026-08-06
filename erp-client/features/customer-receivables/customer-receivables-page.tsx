@@ -28,6 +28,7 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
   SettlementPartyCombobox,
 } from "@/components/business"
@@ -732,15 +733,15 @@ export function CustomerReceivablesPage() {
   if (sessionId) {
     if (sessionQuery.isPending) {
       return (
-        <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <PageScaffold>
           <div className="h-10 w-64 animate-pulse rounded-lg bg-muted" />
-          <div className="h-96 animate-pulse rounded-2xl bg-muted" />
-        </div>
+          <div className="h-96 animate-pulse rounded-lg bg-muted" />
+        </PageScaffold>
       )
     }
     if (!sessionQuery.data) {
       return (
-        <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+        <PageScaffold>
           <BusinessFailureState
             kind="business"
             title="本次核销无效"
@@ -754,11 +755,11 @@ export function CustomerReceivablesPage() {
               </Button>
             }
           />
-        </div>
+        </PageScaffold>
       )
     }
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <AllocationSessionPanel
           session={sessionQuery.data}
           onClose={() => {
@@ -773,13 +774,13 @@ export function CustomerReceivablesPage() {
             void listQuery.refetch()
           }}
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (listQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="system"
           title="客户往来加载失败"
@@ -790,7 +791,7 @@ export function CustomerReceivablesPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -799,7 +800,7 @@ export function CustomerReceivablesPage() {
     data?.counterparties ?? []
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-2 p-3 md:p-4">
+    <PageScaffold density="compact">
       <PageHeader
         title="客户往来"
         breadcrumbs={[
@@ -994,7 +995,7 @@ export function CustomerReceivablesPage() {
               {Array.from({ length: 4 }).map((_, i) => (
                 <div
                   key={i}
-                  className="h-20 animate-pulse rounded-2xl bg-muted"
+                  className="h-20 animate-pulse rounded-lg bg-muted"
                 />
               ))}
             </div>
@@ -1163,7 +1164,8 @@ export function CustomerReceivablesPage() {
                   <Button
                     type="button"
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
+                    className="text-muted-foreground hover:text-foreground"
                     onClick={() => void listQuery.refetch()}
                   >
                     <RefreshCwIcon data-icon="inline-start" aria-hidden="true" />
@@ -1197,6 +1199,7 @@ export function CustomerReceivablesPage() {
                         kind="no-data"
                         title="无待分配回款"
                         description="已确认且仍有未分配余额的回款将出现在此。"
+                        className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                       />
                     ) : (
                       <DataTable
@@ -1231,6 +1234,7 @@ export function CustomerReceivablesPage() {
                         kind="no-data"
                         title="无待分配销项发票"
                         description="已登记蓝票且仍有未分配余额的发票将出现在此。"
+                        className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                       />
                     ) : (
                       <DataTable
@@ -1254,10 +1258,12 @@ export function CustomerReceivablesPage() {
                     kind="filter"
                     title="无匹配往来记录"
                     description="无匹配记录，可清除筛选后重试。"
+                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                     action={
                       <Button
                         type="button"
-                        variant="outline"
+                        variant="secondary"
+                        className="rounded-lg shadow-none"
                         onClick={() => {
                           patchUrl({
                             q: null,
@@ -1280,6 +1286,7 @@ export function CustomerReceivablesPage() {
                     kind="no-data"
                     title="当前范围尚无客户往来记录"
                     description="可从销售单进入登记；登记后刷新查看。"
+                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   />
                 )
               ) : view === "receivable" && data ? (
@@ -1687,7 +1694,7 @@ export function CustomerReceivablesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageScaffold>
   )
 }
 

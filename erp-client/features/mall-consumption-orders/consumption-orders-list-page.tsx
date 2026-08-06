@@ -31,8 +31,11 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
+  surfacePanelClassName,
 } from "@/components/business"
+import { cn } from "@/lib/utils"
 import {
   Alert,
   AlertDescription,
@@ -563,7 +566,7 @@ export function ConsumptionOrdersListPage() {
   const empty = data?.emptyReason
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-2.5 p-3 md:p-4">
+    <PageScaffold density="compact">
       <PageHeader
         title="商城消费订单"
         breadcrumbs={[
@@ -589,7 +592,7 @@ export function ConsumptionOrdersListPage() {
                 actionKey: "refresh",
                 label: "刷新",
                 icon: RefreshCwIcon,
-                variant: "outline",
+                variant: "ghost",
                 onClick: () => {
                   void listQuery.refetch()
                 },
@@ -656,7 +659,7 @@ export function ConsumptionOrdersListPage() {
       ) : null}
 
       {exportPreviewOpen ? (
-        <div className="space-y-3 rounded-2xl border border-border p-4">
+        <div className={cn(surfacePanelClassName, "space-y-3 p-4")}>
           <BatchImpactPreview
             title="导出当前筛选全部"
             description="按当前筛选结果导出，不限于当前页；下载时将重新校验权限。"
@@ -784,215 +787,219 @@ export function ConsumptionOrdersListPage() {
             </p>
           ) : null}
 
-          <ListToolbar
-            search={
-              <InputGroup className="w-full">
-                <InputGroupAddon>
-                  <SearchIcon className="size-4" />
-                </InputGroupAddon>
-                <InputGroupInput
-                  ref={searchInputRef}
-                  value={searchInput}
-                  onChange={(e) => setSearchInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") commitSearch()
-                  }}
-                  placeholder="商城单号、客户、ERP 编号"
-                  aria-label="搜索消费订单"
-                />
-              </InputGroup>
-            }
-            filters={
-              <>
-                <OptionCombobox
-                  value={mallId}
-                  onValueChange={(v) =>
-                    replaceParams({ mall: v || undefined })
-                  }
-                  options={[
-                    { value: "all", label: "全部商城" },
-                    ...(data?.malls ?? []).map((m) => ({
-                      value: m.id,
-                      label: m.name,
-                    })),
-                  ]}
-                  className="w-44"
-                  size="sm"
-                  allowClear={false}
-                  aria-label="来源商城"
-                  placeholder="全部商城"
-                />
-                <DateRangePicker
-                  value={
-                    occurredFrom || occurredTo
-                      ? {
-                          from: occurredFrom || undefined,
-                          to: occurredTo || undefined,
-                        }
-                      : undefined
-                  }
-                  onValueChange={(range) =>
-                    replaceParams({
-                      occurredFrom: range?.from || undefined,
-                      occurredTo: range?.to || undefined,
-                    })
-                  }
-                  placeholder="记录发生时间"
-                  className="w-56"
-                />
-                <OptionCombobox
-                  value={fulfillmentChain}
-                  onValueChange={(v) =>
-                    replaceParams({
-                      fulfillmentChain: v || undefined,
-                    })
-                  }
-                  options={[
-                    { value: "all", label: "履约链" },
-                    { value: "LEGACY_MANUAL", label: "原人工" },
-                    { value: "ERP_AUTOMATED", label: "ERP 自动" },
-                  ]}
-                  className="w-36"
-                  size="sm"
-                  allowClear={false}
-                  aria-label="履约链"
-                  placeholder="履约链"
-                />
-                <OptionCombobox
-                  value={attributionStatus}
-                  onValueChange={(v) =>
-                    replaceParams({
-                      attributionStatus: v || undefined,
-                    })
-                  }
-                  options={[
-                    { value: "all", label: "归集" },
-                    { value: "ATTRIBUTED", label: "已归集" },
-                    { value: "PENDING", label: "待归集" },
-                    { value: "DIFFERENCE", label: "差异" },
-                  ]}
-                  className="w-32"
-                  size="sm"
-                  allowClear={false}
-                  aria-label="归集状态"
-                  placeholder="归集"
-                />
-                <MultiOptionCombobox
-                  value={factTypes}
-                  onValueChange={(v) =>
-                    replaceParams({
-                      factType: v.length ? v.join(",") : undefined,
-                    })
-                  }
-                  options={FACT_TYPES.map((t) => ({
-                    value: t,
-                    label: FACT_TYPE_LABEL[t],
-                  }))}
-                  className="w-40"
-                  size="sm"
-                  aria-label="事实类型"
-                  placeholder="事实类型"
-                />
-                <MultiOptionCombobox
-                  value={supplierStatuses}
-                  onValueChange={(v) =>
-                    replaceParams({
-                      supplierStatus: v.length ? v.join(",") : undefined,
-                    })
-                  }
-                  options={SUPPLIER_STATUSES.map((s) => ({
-                    value: s,
-                    label: SUPPLIER_STATUS_LABEL[s],
-                  }))}
-                  className="w-40"
-                  size="sm"
-                  aria-label="供应商状态"
-                  placeholder="供应商状态"
-                />
-                <MultiOptionCombobox
-                  value={dataSources}
-                  onValueChange={(v) =>
-                    replaceParams({
-                      dataSource: v.length ? v.join(",") : undefined,
-                    })
-                  }
-                  options={DATA_SOURCES.map((d) => ({
-                    value: d,
-                    label: DATA_SOURCE_LABEL[d],
-                  }))}
-                  className="w-32"
-                  size="sm"
-                  aria-label="数据来源"
-                  placeholder="数据来源"
-                />
-                <OptionCombobox
-                  value={paymentSource}
-                  onValueChange={(v) =>
-                    replaceParams({
-                      paymentSource: v || undefined,
-                    })
-                  }
-                  options={[
-                    { value: "all", label: "支付方式" },
-                    { value: "CARD", label: "卡券" },
-                    { value: "WECHAT", label: "微信" },
-                    { value: "MIXED", label: "组合" },
-                  ]}
-                  className="w-32"
-                  size="sm"
-                  allowClear={false}
-                  aria-label="支付方式"
-                  placeholder="支付方式"
-                />
-                <OptionCombobox
-                  value={costBasis}
-                  onValueChange={(v) =>
-                    replaceParams({
-                      costBasis: v || undefined,
-                    })
-                  }
-                  options={[
-                    { value: "all", label: "成本口径" },
-                    { value: "ACTUAL", label: COST_BASIS_LABEL.ACTUAL },
-                    { value: "STANDARD", label: COST_BASIS_LABEL.STANDARD },
-                    { value: "NONE", label: COST_BASIS_LABEL.NONE },
-                  ]}
-                  className="w-32"
-                  size="sm"
-                  allowClear={false}
-                  aria-label="成本口径"
-                  placeholder="成本口径"
-                />
-              </>
-            }
-            actions={
-              <Button type="button" variant="ghost" size="sm" onClick={commitSearch}>
-                搜索
-              </Button>
-            }
-          />
-
-          {searchInput.trim() !== qParam ? (
-            <p className="text-xs text-muted-foreground" aria-live="polite">
-              搜索框内容尚未应用，回车或点「搜索」后生效。
-            </p>
-          ) : null}
-
-          {data?.filterSummary ? (
-            <p className="text-sm text-muted-foreground" aria-live="polite">
-              筛选摘要：{data.filterSummary}
-            </p>
-          ) : null}
-
           <BusinessTableFrame
             title="消费订单列表"
             description="商城订单与操作列固定；金额为人民币含税实付。Enter 打开预览抽屉。"
+            toolbar={
+              <>
+                <ListToolbar
+                  search={
+                    <InputGroup className="w-full">
+                      <InputGroupAddon>
+                        <SearchIcon className="size-4" />
+                      </InputGroupAddon>
+                      <InputGroupInput
+                        ref={searchInputRef}
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") commitSearch()
+                        }}
+                        placeholder="商城单号、客户、ERP 编号"
+                        aria-label="搜索消费订单"
+                      />
+                    </InputGroup>
+                  }
+                  filters={
+                    <>
+                      <OptionCombobox
+                        value={mallId}
+                        onValueChange={(v) =>
+                          replaceParams({ mall: v || undefined })
+                        }
+                        options={[
+                          { value: "all", label: "全部商城" },
+                          ...(data?.malls ?? []).map((m) => ({
+                            value: m.id,
+                            label: m.name,
+                          })),
+                        ]}
+                        className="w-44"
+                        size="sm"
+                        allowClear={false}
+                        aria-label="来源商城"
+                        placeholder="全部商城"
+                      />
+                      <DateRangePicker
+                        value={
+                          occurredFrom || occurredTo
+                            ? {
+                                from: occurredFrom || undefined,
+                                to: occurredTo || undefined,
+                              }
+                            : undefined
+                        }
+                        onValueChange={(range) =>
+                          replaceParams({
+                            occurredFrom: range?.from || undefined,
+                            occurredTo: range?.to || undefined,
+                          })
+                        }
+                        placeholder="记录发生时间"
+                        className="w-56"
+                      />
+                      <OptionCombobox
+                        value={fulfillmentChain}
+                        onValueChange={(v) =>
+                          replaceParams({
+                            fulfillmentChain: v || undefined,
+                          })
+                        }
+                        options={[
+                          { value: "all", label: "履约链" },
+                          { value: "LEGACY_MANUAL", label: "原人工" },
+                          { value: "ERP_AUTOMATED", label: "ERP 自动" },
+                        ]}
+                        className="w-36"
+                        size="sm"
+                        allowClear={false}
+                        aria-label="履约链"
+                        placeholder="履约链"
+                      />
+                      <OptionCombobox
+                        value={attributionStatus}
+                        onValueChange={(v) =>
+                          replaceParams({
+                            attributionStatus: v || undefined,
+                          })
+                        }
+                        options={[
+                          { value: "all", label: "归集" },
+                          { value: "ATTRIBUTED", label: "已归集" },
+                          { value: "PENDING", label: "待归集" },
+                          { value: "DIFFERENCE", label: "差异" },
+                        ]}
+                        className="w-32"
+                        size="sm"
+                        allowClear={false}
+                        aria-label="归集状态"
+                        placeholder="归集"
+                      />
+                      <MultiOptionCombobox
+                        value={factTypes}
+                        onValueChange={(v) =>
+                          replaceParams({
+                            factType: v.length ? v.join(",") : undefined,
+                          })
+                        }
+                        options={FACT_TYPES.map((t) => ({
+                          value: t,
+                          label: FACT_TYPE_LABEL[t],
+                        }))}
+                        className="w-40"
+                        size="sm"
+                        aria-label="事实类型"
+                        placeholder="事实类型"
+                      />
+                      <MultiOptionCombobox
+                        value={supplierStatuses}
+                        onValueChange={(v) =>
+                          replaceParams({
+                            supplierStatus: v.length ? v.join(",") : undefined,
+                          })
+                        }
+                        options={SUPPLIER_STATUSES.map((s) => ({
+                          value: s,
+                          label: SUPPLIER_STATUS_LABEL[s],
+                        }))}
+                        className="w-40"
+                        size="sm"
+                        aria-label="供应商状态"
+                        placeholder="供应商状态"
+                      />
+                      <MultiOptionCombobox
+                        value={dataSources}
+                        onValueChange={(v) =>
+                          replaceParams({
+                            dataSource: v.length ? v.join(",") : undefined,
+                          })
+                        }
+                        options={DATA_SOURCES.map((d) => ({
+                          value: d,
+                          label: DATA_SOURCE_LABEL[d],
+                        }))}
+                        className="w-32"
+                        size="sm"
+                        aria-label="数据来源"
+                        placeholder="数据来源"
+                      />
+                      <OptionCombobox
+                        value={paymentSource}
+                        onValueChange={(v) =>
+                          replaceParams({
+                            paymentSource: v || undefined,
+                          })
+                        }
+                        options={[
+                          { value: "all", label: "支付方式" },
+                          { value: "CARD", label: "卡券" },
+                          { value: "WECHAT", label: "微信" },
+                          { value: "MIXED", label: "组合" },
+                        ]}
+                        className="w-32"
+                        size="sm"
+                        allowClear={false}
+                        aria-label="支付方式"
+                        placeholder="支付方式"
+                      />
+                      <OptionCombobox
+                        value={costBasis}
+                        onValueChange={(v) =>
+                          replaceParams({
+                            costBasis: v || undefined,
+                          })
+                        }
+                        options={[
+                          { value: "all", label: "成本口径" },
+                          { value: "ACTUAL", label: COST_BASIS_LABEL.ACTUAL },
+                          { value: "STANDARD", label: COST_BASIS_LABEL.STANDARD },
+                          { value: "NONE", label: COST_BASIS_LABEL.NONE },
+                        ]}
+                        className="w-32"
+                        size="sm"
+                        allowClear={false}
+                        aria-label="成本口径"
+                        placeholder="成本口径"
+                      />
+                    </>
+                  }
+                  actions={
+                    <Button type="button" variant="ghost" size="sm" onClick={commitSearch}>
+                      搜索
+                    </Button>
+                  }
+                />
+
+                {searchInput.trim() !== qParam ? (
+                  <p className="text-xs text-muted-foreground" aria-live="polite">
+                    搜索框内容尚未应用，回车或点「搜索」后生效。
+                  </p>
+                ) : null}
+
+                {data?.filterSummary ? (
+                  <p className="text-sm text-muted-foreground" aria-live="polite">
+                    筛选摘要：{data.filterSummary}
+                  </p>
+                ) : null}
+              </>
+            }
             table={
               !periodSelected ? (
                 <BusinessEmptyState
                   kind="filter"
                   title="请选择记录发生起止时间"
                   description="默认期间策略未配置：请选择完整的事实发生起止时间后再查询，不静默拉取全量记录。"
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 />
               ) : listQuery.isPending ? (
                 <div
@@ -1004,11 +1011,13 @@ export function ConsumptionOrdersListPage() {
                   kind="no-data"
                   title="查询失败"
                   description="保留上次成功数据或重试。"
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   action={
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
+                      className="rounded-lg shadow-none"
                       onClick={() => void listQuery.refetch()}
                     >
                       重试
@@ -1020,11 +1029,13 @@ export function ConsumptionOrdersListPage() {
                   kind="filter"
                   title="当前筛选无结果"
                   description="可调整期间、商城、履约链、归集、支付方式、成本口径、记录类型、供应商状态、数据来源或搜索条件后重试。"
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   action={
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
                       size="sm"
+                      className="rounded-lg shadow-none"
                       onClick={() => {
                         replaceParams({
                           q: undefined,
@@ -1051,6 +1062,7 @@ export function ConsumptionOrdersListPage() {
                   kind="no-data"
                   title="当前范围没有消费订单"
                   description="新支付记录到达后会自动显示。"
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 />
               ) : (
                 <DataTable
@@ -1163,6 +1175,6 @@ export function ConsumptionOrdersListPage() {
           </div>
         )}
       </QuickPreviewSheet>
-    </div>
+    </PageScaffold>
   )
 }

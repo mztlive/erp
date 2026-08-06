@@ -8,6 +8,8 @@ import { z } from "zod"
 import {
   BusinessFailureState,
   PageHeader,
+  PageScaffold,
+  surfacePanelClassName,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import {
@@ -105,18 +107,18 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
   // 编辑模式：角色列表加载中
   if (isEdit && rolesQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold density="compact">
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-        <div className="h-16 animate-pulse rounded-xl bg-muted" />
-        <div className="h-96 animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-16 animate-pulse rounded-lg bg-muted" />
+        <div className="h-96 animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   // 编辑模式：角色列表加载失败
   if (isEdit && rolesQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold density="compact">
         <PageHeader
           title="编辑角色"
           breadcrumbs={[
@@ -136,21 +138,22 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
           action={
             <Button
               type="button"
-              variant="outline"
+              variant="secondary"
+              className="rounded-lg shadow-none"
               onClick={() => void rolesQuery.refetch()}
             >
               重试
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   // 编辑模式：角色不存在
   if (isEdit && !role) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold density="compact">
         <PageHeader
           title="编辑角色"
           breadcrumbs={[
@@ -168,17 +171,22 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
           title="未找到角色"
           description="该角色不存在或已被删除，可返回角色列表重新选择。"
           action={
-            <Button type="button" variant="outline" onClick={() => router.push(ROLES_LIST_HREF)}>
+            <Button
+              type="button"
+              variant="secondary"
+              className="rounded-lg shadow-none"
+              onClick={() => router.push(ROLES_LIST_HREF)}
+            >
               返回角色列表
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
+    <PageScaffold density="compact">
       <PageHeader
         title={isEdit ? "编辑角色" : "新建角色"}
         description={
@@ -198,7 +206,7 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
         actions={
           <Button
             type="button"
-            variant="outline"
+            variant="ghost"
             size="sm"
             disabled={pending}
             onClick={() => router.push(ROLES_LIST_HREF)}
@@ -209,8 +217,8 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
         }
       />
 
-      <Card>
-        <CardHeader>
+      <Card className={surfacePanelClassName}>
+        <CardHeader className="border-b border-border/30">
           <CardTitle>角色配置</CardTitle>
           <CardDescription>
             角色名称为 2-32 个字符；系统内置角色不可修改或删除。权限按模块分组勾选，可搜索过滤。
@@ -266,10 +274,10 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
                 <AlertDescription>{submitError}</AlertDescription>
               </Alert>
             ) : null}
-            <CardFooter className="flex justify-end gap-2 border-t px-0 pb-0 pt-4">
+            <CardFooter className="flex justify-end gap-2 border-t border-border/30 px-0 pb-0 pt-4">
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 disabled={pending}
                 onClick={() => router.push(ROLES_LIST_HREF)}
               >
@@ -282,6 +290,6 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
           </form>
         </CardContent>
       </Card>
-    </div>
+    </PageScaffold>
   )
 }

@@ -25,8 +25,11 @@ import {
   FormalActionResult,
   OptionCombobox,
   PageHeader,
+  PageScaffold,
   RevisionTimeline,
   SequentialProcessBar,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { type ResultState as SharedResultState } from "@/components/business/feedback"
@@ -802,20 +805,20 @@ export function SupplierCatalogPage() {
 
   if (queueQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-        <div className="h-16 animate-pulse rounded-2xl bg-muted" />
+        <div className="h-16 animate-pulse rounded-lg bg-muted" />
         <div className="grid gap-4 xl:grid-cols-[minmax(0,58fr)_minmax(16rem,42fr)]">
-          <div className="h-80 animate-pulse rounded-2xl bg-muted" />
-          <div className="h-80 animate-pulse rounded-2xl bg-muted" />
+          <div className="h-80 animate-pulse rounded-lg bg-muted" />
+          <div className="h-80 animate-pulse rounded-lg bg-muted" />
         </div>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (queueQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title={mode === "list" ? "供应商商品库" : "供应商商品待处理"}
           description="加载失败"
@@ -835,7 +838,7 @@ export function SupplierCatalogPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -929,7 +932,7 @@ export function SupplierCatalogPage() {
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="供应商商品变化待处理"
         description="处理 Excel、API 与手工来源中的新增、关键变化、停供和数据异常"
@@ -951,16 +954,18 @@ export function SupplierCatalogPage() {
         }
         actions={
           safeReturnTo ? (
-            <Button variant="outline" size="sm" render={<Link href={safeReturnTo} />}>
+            <Button variant="ghost" size="sm" render={<Link href={safeReturnTo} />}>
               返回商品与 SKU
             </Button>
           ) : undefined
         }
       />
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div
+        className={`${surfacePanelClassName} sticky top-0 z-10 flex flex-wrap items-center gap-2 px-3 py-2.5 text-sm`}
+      >
         {skuId ? (
-          <div className="flex items-center gap-2 rounded-md border border-border bg-muted/40 px-2 py-1">
+          <div className={cn(surfaceInsetClassName, "flex items-center gap-2 px-2 py-1")}>
             <Badge variant="outline">
               {view?.skuContext
                 ? `${view.skuContext.productName}（${view.skuContext.skuCode}）`
@@ -1013,24 +1018,50 @@ export function SupplierCatalogPage() {
           </ToggleGroupItem>
           <ToggleGroupItem value="all">全部</ToggleGroupItem>
         </ToggleGroup>
-        <ToggleGroup
-          value={[status]}
-          onValueChange={(v) => {
-            const next = (v[0] as typeof status | undefined) ?? "pending"
-            replaceUrl({
-              status: next === "pending" ? null : next,
-              currentSupplierProductId: null,
-              currentWorkItemId: null,
-            })
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
+        <div
+          role="group"
           aria-label="队列范围"
+          className="inline-flex rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
         >
-          <ToggleGroupItem value="pending">待处理</ToggleGroupItem>
-          <ToggleGroupItem value="held">稍后处理</ToggleGroupItem>
-        </ToggleGroup>
+          <button
+            type="button"
+            aria-pressed={status === "pending"}
+            className={cn(
+              "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all",
+              status === "pending"
+                ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+            )}
+            onClick={() =>
+              replaceUrl({
+                status: null,
+                currentSupplierProductId: null,
+                currentWorkItemId: null,
+              })
+            }
+          >
+            待处理
+          </button>
+          <button
+            type="button"
+            aria-pressed={status === "held"}
+            className={cn(
+              "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all",
+              status === "held"
+                ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+            )}
+            onClick={() =>
+              replaceUrl({
+                status: "held",
+                currentSupplierProductId: null,
+                currentWorkItemId: null,
+              })
+            }
+          >
+            稍后处理
+          </button>
+        </div>
         <div className="flex items-center gap-2">
           <Label htmlFor="w21-auto-next" className="text-muted-foreground">
             完成后显示下一项
@@ -1064,7 +1095,7 @@ export function SupplierCatalogPage() {
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="供应商商品编码 / SKU / 名称"
-              className="h-8 w-48 pr-8"
+              className="h-8 w-48 border-border/40 pr-8"
               aria-label="搜索"
             />
             {searchInput ? (
@@ -1085,7 +1116,7 @@ export function SupplierCatalogPage() {
               </button>
             ) : null}
           </div>
-          <Button type="submit" size="sm" variant="secondary">
+          <Button type="submit" size="sm" variant="ghost">
             搜索
           </Button>
         </form>
@@ -1182,10 +1213,12 @@ export function SupplierCatalogPage() {
             kind="filter"
             title="当前筛选没有结果"
             description="没有符合变化类型、待处理范围或搜索条件的供应商商品，可调整筛选后重试。"
+            className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
             action={
               <div className="flex flex-wrap gap-2">
                 <Button
-                  variant="outline"
+                  variant="secondary"
+                  className="rounded-lg shadow-none"
                   onClick={() =>
                     replaceUrl({
                       changeType: "actionable",
@@ -1198,7 +1231,11 @@ export function SupplierCatalogPage() {
                 >
                   清除筛选
                 </Button>
-                <Button render={<Link href="/workspace" />}>
+                <Button
+                  variant="secondary"
+                  className="rounded-lg shadow-none"
+                  render={<Link href="/workspace" />}
+                >
                   返回今日工作台
                 </Button>
               </div>
@@ -1209,8 +1246,15 @@ export function SupplierCatalogPage() {
             kind="no-scope"
             title="当前角色无数据范围"
             description="你可以进入此页面，但当前角色范围内没有可查看的供应商商品。"
+            className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
             action={
-              <Button render={<Link href="/workspace" />}>返回今日工作台</Button>
+              <Button
+                variant="secondary"
+                className="rounded-lg shadow-none"
+                render={<Link href="/workspace" />}
+              >
+                返回今日工作台
+              </Button>
             }
           />
         ) : (
@@ -1218,8 +1262,15 @@ export function SupplierCatalogPage() {
             kind="no-tasks"
             title="当前队列已处理完"
             description="可切换变化类型或稍后处理范围，也可以返回工作台。"
+            className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
             action={
-              <Button render={<Link href="/workspace" />}>返回今日工作台</Button>
+              <Button
+                variant="secondary"
+                className="rounded-lg shadow-none"
+                render={<Link href="/workspace" />}
+              >
+                返回今日工作台
+              </Button>
             }
           />
         )
@@ -1305,7 +1356,7 @@ export function SupplierCatalogPage() {
           </div>
 
           {/* 身份与风险条 */}
-          <Card size="sm">
+          <Card size="sm" className={surfacePanelClassName}>
             <CardContent className="flex flex-wrap items-start gap-3 py-3">
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
@@ -1407,8 +1458,8 @@ export function SupplierCatalogPage() {
                 }))}
               />
 
-              <Card size="sm">
-                <CardHeader className="border-b py-3">
+              <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30 py-3">
                   <CardTitle className="text-base">供应商商品资料</CardTitle>
                   <CardDescription>
                     供应商更新不会直接修改 ERP 商品或商城商品，确认后才会生效
@@ -1529,8 +1580,8 @@ export function SupplierCatalogPage() {
               </Card>
 
               {item.offering && item.offering.revisionHistory.length > 0 ? (
-                <Card size="sm">
-                  <CardHeader className="border-b py-3">
+                <Card size="sm" className={surfacePanelClassName}>
+                  <CardHeader className="border-b border-border/30 py-3">
                     <CardTitle className="text-base">
                       供货条件历史
                     </CardTitle>
@@ -1576,8 +1627,8 @@ export function SupplierCatalogPage() {
                 </Card>
               ) : null}
 
-              <Card size="sm">
-                <CardHeader className="border-b py-3">
+              <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30 py-3">
                   <CardTitle className="text-base">发布影响</CardTitle>
                   <CardDescription>
                     每个商城商品版本使用一条确定的供给，系统不会自动切换供应商
@@ -1598,7 +1649,7 @@ export function SupplierCatalogPage() {
                   {item.publicationImpact.pauseSubResults.map((p) => (
                     <div
                       key={p.id}
-                      className="rounded-lg border px-3 py-2 text-xs"
+                      className={cn(surfaceInsetClassName, "px-3 py-2 text-xs")}
                     >
                       {safetyReasonLabel(p.reason)} ·{" "}
                       {publicationPauseStatusLabel(p.status)}
@@ -1624,8 +1675,8 @@ export function SupplierCatalogPage() {
 
             {/* 决策侧栏 */}
             <div className="min-w-0 space-y-4">
-              <Card size="sm">
-                <CardHeader className="border-b py-3">
+              <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30 py-3">
                   <CardTitle className="text-base">关联 ERP 商品规格</CardTitle>
                   <CardDescription>
                     一个供应商商品只能关联一个 ERP SKU；同一 SKU 可以有多个供应商
@@ -1633,7 +1684,7 @@ export function SupplierCatalogPage() {
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
                   {item.mapping?.mappingStatus === "ACTIVE" ? (
-                    <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
+                    <div className={cn(surfaceInsetClassName, "px-3 py-2 text-sm")}>
                       <div className="font-medium">
                         当前有效：{item.mapping.skuCode} ·{" "}
                         {item.mapping.skuName}
@@ -1727,8 +1778,8 @@ export function SupplierCatalogPage() {
                 </CardContent>
               </Card>
 
-              <Card size="sm">
-                <CardHeader className="border-b py-3">
+              <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30 py-3">
                   <CardTitle className="text-base">供货条件</CardTitle>
                   <CardDescription>
                     可准备价格、起订量、区域和有效期草稿；确认功能暂未开放
@@ -1854,8 +1905,8 @@ export function SupplierCatalogPage() {
               </Card>
 
               {item.changeType === "STOPPED" ? (
-                <Card size="sm">
-                  <CardHeader className="border-b py-3">
+                <Card size="sm" className={surfacePanelClassName}>
+                  <CardHeader className="border-b border-border/30 py-3">
                     <CardTitle className="text-base">
                       替代供应商候选
                     </CardTitle>
@@ -1904,8 +1955,8 @@ export function SupplierCatalogPage() {
                 </Card>
               ) : null}
 
-              <Card size="sm">
-                <CardHeader className="border-b py-3">
+              <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30 py-3">
                   <CardTitle className="text-base">处理动作</CardTitle>
                   <CardDescription>
                     {isRegistered
@@ -2132,7 +2183,7 @@ export function SupplierCatalogPage() {
           await completeForm.handleSubmit()
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }
 

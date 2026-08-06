@@ -27,6 +27,7 @@ import {
   StatusBadge,
   type StatusTone,
 } from "@/components/ui/status-badge"
+import { surfacePanelClassName } from "@/components/business/page"
 import { cn } from "@/lib/utils"
 
 type DivProps = React.ComponentPropsWithoutRef<"div">
@@ -103,7 +104,7 @@ function ListToolbar({
           {hasQueryTools ? (
             <Separator
               orientation="vertical"
-              className="hidden lg:block"
+              className="hidden bg-border/30 lg:block"
             />
           ) : null}
           <div
@@ -326,10 +327,15 @@ function BusinessTableFrame({
   return (
     <Card
       data-business-component="table-frame"
-      className={cn("gap-0 py-0", className)}
+      className={cn(
+        // 账本列表：6px 圆角 + 轻阴影，覆盖 Card 默认大圆角
+        "gap-0 py-0",
+        surfacePanelClassName,
+        className
+      )}
       {...props}
     >
-      <CardHeader className="gap-1 py-2">
+      <CardHeader className="gap-1 rounded-t-lg py-3">
         <Heading className="font-heading text-base font-medium text-foreground">
           {title}
         </Heading>
@@ -339,15 +345,15 @@ function BusinessTableFrame({
         {headerActions ? <CardAction>{headerActions}</CardAction> : null}
       </CardHeader>
 
-      <Separator />
+      <Separator className="bg-border/30" />
 
       {hasControls ? (
         <>
-          <CardContent className="space-y-2 py-1.5">
+          <CardContent className="space-y-2 py-2.5">
             {toolbar}
             {selectionBar}
           </CardContent>
-          <Separator />
+          <Separator className="bg-border/30" />
         </>
       ) : null}
 
@@ -357,8 +363,8 @@ function BusinessTableFrame({
 
       {footer ? (
         <>
-          <Separator />
-          <CardFooter className="justify-between gap-3 py-3">
+          <Separator className="bg-border/30" />
+          <CardFooter className="justify-between gap-3 rounded-b-lg py-3">
             {footer}
           </CardFooter>
         </>

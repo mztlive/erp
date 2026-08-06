@@ -19,8 +19,8 @@
 
 | 目标 | 含义 |
 | --- | --- |
-| **现代** | 清晰层级、克制装饰、企业标准蓝体系；状态靠文字 + 图标 + 色相同时表达 |
-| **美观** | 白底内容面 + 深海军导航拉开层次；金额/数量等宽对齐；表格与单据有「账本感」但不压抑 |
+| **现代** | 清晰层级、克制装饰、Ant Design 默认色板；状态靠文字 + 图标 + 色相同时表达 |
+| **美观** | 浅灰画布 + 透明侧栏 + 白卡片浮起；金额/数量等宽对齐；表格与单据有「账本感」但不压抑 |
 | **高效率** | 键盘可达、批量连续处理、少跳转、默认落到「待我处理」而非空列表 |
 | **不割裂** | 一次完整业务在同一工作面内完成；关联对象以内嵌区/侧栏/任务页签呈现，不强迫用户记忆路径 |
 
@@ -66,15 +66,15 @@
 
 | 角色 | Token / 观感 | 用法 |
 | --- | --- | --- |
-| 画布 | `--background` 冷灰白 | 页面底层 |
-| 内容面 | `--card` 纯白 | 列表卡片、单据主体、对话框 |
-| 主色 | `--primary` `#1c65d4` | **唯一**页面级主动作、选中强调 |
-| 轻强调 | `--accent` 浅蓝 | 行选中、菜单 hover 高亮（不抢主按钮） |
-| 导航 | `--sidebar` 深海军 | 左侧导航；浅色模式下也保持深色 |
-| 成功/警告/信息/危险 | `success` / `warning` / `info` / `destructive` 四槽位 | 状态徽章、Alert、进度 |
+| 画布 | `--background` `#f9fafc` | 整页底层；侧栏与内容共享 |
+| 内容面 | `--card` `#ffffff`（`colorBgContainer`） | 浮起卡片、列表主体、对话框 |
+| 主色 | `--primary` `#1677ff`（antd `colorPrimary`） | **唯一**页面级主动作 |
+| 轻强调 | `--accent` `#e6f4ff`（blue-1） | 菜单选中、行选中、hover |
+| 导航 | `--sidebar` **透明** | 无独立底色；选中项 = antd Menu 浅蓝 pill |
+| 成功/警告/信息/危险 | `#389e0d` / `#d48806` / `#1677ff` / `#ff4d4f` 及 soft 槽 | 状态徽章、Alert、进度 |
 | 表格 | `table-header` / `row-hover` / `row-selected` / `grid` | 高密度账表 |
 
-深色模式：蓝灰底非纯黑；主色改为浅蓝填充 + 深字，保证链接与按钮对比度。
+深色模式：贴近 antd `darkAlgorithm`（`#141414` 底 + 容器灰 + 同系主色）。
 
 ### 2.2 尺寸密度
 
@@ -84,11 +84,11 @@
 | `tabs` | 36px | 内部任务页签 |
 | `row` | 36px | 标准列表行（默认密度） |
 | `row-comfortable` | 44px | 多行复合单元格 |
-| `nav` / `nav-icon` | 208px / 64px | 侧栏展开 / 折叠 |
+| `nav` / `nav-icon` | 240px / 64px | 侧栏固定宽度 /（已不再折叠，icon 宽度仅兼容 token） |
 | `preview` | 400px（`25rem`） | 右侧**轻量**预览 Sheet：筛选、轻摘要、少量字段 |
 | `detail` | 768px（`48rem`，且 ≤92vw） | 右侧**半屏详情**抽屉：列表内读完主事实（方案 A） |
 | `shell` | 1440px | 基准工作宽度（内容区可更宽，分析页可全宽） |
-| 圆角 | `--radius` 4px 基线 | 单据系统严谨感，避免大圆角消费级风格 |
+| 圆角 | `--radius` 6px 基线 | 对齐 antd `borderRadius: 6` |
 
 Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`QuickPreviewSheet` 同步暴露 `size`。
 
@@ -102,8 +102,104 @@ Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`Quic
 
 - **像专业账本，不像营销后台**：少插画、少渐变、少大卡片堆叠。  
 - **一层纸、一条线**：主内容一张白卡压在浅灰画布上；分隔用 `border` / `grid`，少重阴影。  
+- **内容区表面收敛**：页头贴画布；主工作面 1～2 张浮起表面（`surfacePanelClassName`，约 6px 圆角）；禁止页内叠多层 `rounded-2xl` 便签式线框。  
 - **一个主动作**：顶栏或单据头只有一个实心 primary；其余 ghost / outline / secondary。  
 - **状态一眼可读**：主状态 + 多轨进度（履约 / 回款 / 开票）并排，不挤成一颗色点。
+
+### 2.5 浮动画布内容区固定模式（Floating Canvas Content）
+
+壳层已是「浅灰画布 + 透明侧栏 + 白卡浮起」。业务页必须遵守下列固定模式，**禁止**各 feature 自造 padding / 重描边 / 多层 `rounded-2xl` 便签。
+
+样板页（已落地）：`/workspace`、`/sales/orders`、`/procurement/confirm`、`/sales/orders/[id]`。
+
+#### 2.5.1 脚手架
+
+| 规则 | 实现 |
+| --- | --- |
+| 唯一内容外框 | 使用 `PageScaffold`（`default` 或列表 `density="compact"`） |
+| 禁止 | 手写 `mx-auto max-w-shell flex-col gap-? p-?` 平行布局 |
+| 骨架/错误态 | 同样包在 `PageScaffold` 内，圆角用 `rounded-lg` 而非 `rounded-2xl` |
+
+```tsx
+import { PageHeader, PageScaffold, surfacePanelClassName } from "@/components/business"
+
+return (
+  <PageScaffold>{/* or density="compact" for dense M2 lists */}
+    <PageHeader title="…" actions={…} />
+    {/* 1～2 张主表面 */}
+  </PageScaffold>
+)
+```
+
+#### 2.5.2 表面层级（最多两层重表面）
+
+```
+[画布 background]
+  PageHeader / object-chrome     ← 贴画布，无底、无框
+  MetricStrip / 处理条 / 分段切换  ← 轻控件，不另开厚卡
+  主工作面 1～2 张                ← surfacePanelClassName
+```
+
+| Token / 类 | 用法 |
+| --- | --- |
+| `surfacePanelClassName` | 列表卡、任务卡、对象身份卡、正文 Tabs 外壳：`rounded-lg bg-card shadow-xs ring-1 ring-foreground/[0.04]` |
+| `surfaceInsetClassName` | 卡内轻提示：仅 `bg-muted/40`，**无描边** |
+| `BusinessTableFrame` | 已内置 surfacePanel；勿再外包一层 border 卡 |
+| `DocumentHeader` | 已内置身份浮卡；M4 不要再叠 `border-b` 裸头 |
+| `MetricStrip` | 各指标独立轻卡（非拼缝网格） |
+
+**禁止**：页内叠多层 `rounded-2xl border border-border bg-card` 便签条；用 inset 或主卡内 `border-b border-border/30` 分区。
+
+#### 2.5.3 边框与分割线
+
+| 元素 | 规则 |
+| --- | --- |
+| 浮卡外轮廓 | 优先 shadow + 极轻 ring，不用 `border-border` 实线 |
+| 分割线 `Separator` | 全局已为 `bg-border/40`；表内可再 `/30` |
+| 卡头底边 | `border-b border-border/30` |
+| 表行 | 数据行用 `border-grid`；表头 `border-border/30` |
+
+#### 2.5.4 控件层级（可点且不重）
+
+| 角色 | 推荐 | 避免 |
+| --- | --- | --- |
+| 页级唯一主动作 | `default`（solid primary） | 多个 solid |
+| 空态/卡内次要入口 | `secondary` 浅底 chip（`rounded-lg shadow-none`） | 一排 outline；纯 ghost 文案（易像不可点） |
+| 工具刷新、次级文字操作 | `ghost` + 图标，可用 `text-muted-foreground` | 与主切换同级的 outline |
+| 二选一/三选一范围 | **分段轨道**：灰底 track + 选中白底阴影 + 未选中弱字色 + 可选图标 | 整组 outline Toggle；无选中对比的 muted 条 |
+| 顶栏搜索/角标 | 轻 outline（`border-border/40`） | 厚 `border-border` |
+
+分段切换参考实现（工作台「我的待办 / 团队待认领」）：
+
+```tsx
+<div role="group" aria-label="…" className="inline-flex rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10">
+  <button type="button" aria-pressed={active}
+    className={cn(
+      "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all",
+      active
+        ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+        : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+    )}
+  >…</button>
+</div>
+```
+
+#### 2.5.5 空态嵌套
+
+- 空态嵌在主卡内：`BusinessEmptyState` 传 `className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"`  
+- 行动区用 `secondary` chip，不用 outline 群、不用圆点分隔的纯 ghost 文字链  
+
+#### 2.5.6 按模式骨架
+
+| 模式 | 骨架 |
+| --- | --- |
+| M1 工作台 | `PageScaffold` → Header（含分段/刷新）→ Metric → 双栏 surface 卡 |
+| M2 列表 | `PageScaffold` → Header → Metric → **一张** `BusinessTableFrame` |
+| M3 队列 | `PageScaffold` → Header → sticky 处理条（surface）→ 主卡 + 侧卡 |
+| M4 对象中心 | `PageScaffold` → object-chrome → `DocumentHeader` → Metric → 正文 surface（Tabs 外壳） |
+| M5–M7 | 同：Header 贴画布 + 1～2 主表面 |
+
+验收：1440 视口下，内容区不应出现「标题裸飘 + 三层不同圆角边框块」；分割线弱于控件边框；切换控件有明确选中块。
 
 ---
 
@@ -115,10 +211,10 @@ Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`Quic
 ┌──────────────────────────────────────────────────────────────────┐
 │ GlobalTopbar  48px   [≡] 全局搜索 ⌘K   待办角标  用户/环境        │
 ├────────────┬─────────────────────────────────────────────────────┤
-│            │ TaskTabs  36px   [工作台] [SO-… ✕] [核销:客户A ✕] … │
-│  Sidebar   ├─────────────────────────────────────────────────────┤
+│            │                                                     │
+│  Sidebar   │  当前页面内容区（滚动容器）                           │
 │  208/64    │                                                     │
-│            │  当前任务内容区（滚动容器）                           │
+│            │                                                     │
 │  模块导航  │                                                     │
 │  角色折叠  │                                                     │
 │            │                                                     │
@@ -127,7 +223,7 @@ Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`Quic
 └──────────────────────────────────────────────────────────────────┘
 ```
 
-组件：`ErpAppShell`、`GlobalTopbar`、`TaskTabs`、`MaintenanceBanner`（`shell.tsx`）。
+组件：`ErpAppShell`、`GlobalTopbar`、`MaintenanceBanner`（`shell.tsx`）。导航靠侧栏 + URL，不使用应用内多任务页签。
 
 ### 3.2 顶栏
 
@@ -216,17 +312,17 @@ Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`Quic
 | 用户有模块权限，但数据范围内没有记录 | 展示「当前数据范围暂无记录」空态，并提供查看范围或申请权限入口 |
 | 字段级无权限 | 保留布局与字段标签，值使用 `SensitiveValue` 隐藏或掩码；不得导致列跳动 |
 
-### 3.4 任务页签（TaskTabs）—— 解决跨页割裂的核心机制
+### 3.4 导航与 URL（无内部页签）
 
-浏览器只有一个 URL，但用户经常并行处理多张单。页签规则必须如下：
+应用**不使用**内部多任务页签（TaskTabs）。页面切换依赖侧栏导航与浏览器 URL：
 
 | 规则 | 说明 |
 | --- | --- |
-| 身份聚焦 | 页签身份为稳定对象 ID，标题为「类型缩写 + 单号/名称」；同一对象重复打开聚焦原页签，不创建副本，对象标题更新不改变页签身份 |
-| URL 可恢复 | 当前页签必须有可复制 URL；刷新恢复当前对象与必要子区，不要求恢复临时浮层 |
-| 上限 | 软上限必须为 12；超出必须提示关闭最少使用的页签，不得无限新开 |
+| 单页单 URL | 每个工作面/对象中心对应可复制 URL；刷新恢复当前对象与必要子区，不要求恢复临时浮层 |
+| 返回路径 | 对象详情通过浏览器后退或页面内「返回列表」回到来源，不在壳层维护打开页签列表 |
+| 并行处理 | 需要对照多张单时使用浏览器多标签；应用内不维护跨对象页签会话 |
 
-**原则**：关联单据默认在**当前页签内**用子区域打开；只有用户明确「在新任务中打开」时才新开页签。草稿/未保存显示圆点并在关闭时二次确认；页签打开期间权限被收回时保留对象身份和导航上下文，内容区切为无权限态，不渲染陈旧敏感值。
+草稿/未保存状态由页面自身在离开前确认；权限被收回时内容区切为无权限态，不渲染陈旧敏感值。
 
 ### 3.5 响应式
 
@@ -250,10 +346,10 @@ Sheet 尺寸对应 `components/ui/sheet` 的 `size="preview" | "detail"`；`Quic
 
 | 模式 | 代号 | 适用 | 主组件 |
 | --- | --- | --- | --- |
-| 角色工作台 | M1 | 今日工作台、经营首页 | `PageHeader` `MetricStrip` `WorkTaskItem` |
-| 高密度查询列表 | M2 | 单据列表、台账、同步批次 | `ListToolbar` `DataTable` `BusinessTableFrame` `QuickPreviewSheet` |
-| 连续处理队列 | M3 | 二次确认、审批、复核、异常 | `SequentialProcessBar` `WorkTaskItem` |
-| 对象中心（单据枢纽） | M4 | 销售单、采购单、客户、供应商 | `PageHeader(object-chrome)` + `DocumentHeader(compact)` `DocumentSection` … |
+| 角色工作台 | M1 | 今日工作台、经营首页 | `PageScaffold` `PageHeader` `MetricStrip` `WorkTaskItem` |
+| 高密度查询列表 | M2 | 单据列表、台账、同步批次 | `PageScaffold` `ListToolbar` `DataTable` `BusinessTableFrame` `QuickPreviewSheet` |
+| 连续处理队列 | M3 | 二次确认、审批、复核、异常 | `PageScaffold` `SequentialProcessBar` `WorkTaskItem` |
+| 对象中心（单据枢纽） | M4 | 销售单、采购单、客户、供应商 | `PageScaffold` `PageHeader(object-chrome)` + `DocumentHeader(compact)` `DocumentSection` … |
 | 编辑工作区 | M5 | 建单/改单、行项目、分摊核销 | `EditableLineItemTable` `AllocationWorkspace` |
 | 只读分析 | M6 | 经营质量、盈亏、卡券分析 | `MetricStrip` 图表 + 下钻表 |
 | 治理与导入 | M7 | 映射差异、导入、错误中心 | `ImportStageIndicator` `BusinessDiffPanel` `InterfaceErrorResolutionPanel` |
@@ -769,7 +865,7 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 | W29 | 接口错误与对账中心 | M7 | — | ✓ | 管理员/运维 |
 | W30 | 历史消费回填 | M7 | — | ✓ | 管理员/财务 |
 
-路由必须：一级路径 `/app/workspace/...` 对应工作面；对象中心用查询或路径 ID 定位；编辑必须在同一对象路由/页签内完成，**禁止另造平行 `/edit` 路由树**。
+路由必须：一级路径 `/app/workspace/...` 对应工作面；对象中心用查询或路径 ID 定位；编辑必须在同一对象路由内完成，**禁止另造平行 `/edit` 路由树**。
 
 ---
 
@@ -777,8 +873,9 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 
 | 需求 | 使用 |
 | --- | --- |
-| 壳与页签 | `ErpAppShell` `GlobalTopbar` `TaskTabs` |
-| 页头指标 | `PageHeader`（M1/M2 默认 `page`；M4 必须 `object-chrome`）`PageActions` `MetricStrip` |
+| 应用壳 | `ErpAppShell` `GlobalTopbar` |
+| 内容脚手架 | `PageScaffold`（统一 max-width / 页边距）；主表面 `surfacePanelClassName`，卡内轻提示 `surfaceInsetClassName` |
+| 页头指标 | `PageHeader`（M1/M2 默认 `page`；M4 必须 `object-chrome`）`PageActions` `MetricStrip`（独立轻卡） |
 | 列表 | `ListToolbar` `DataTable` `BusinessTableFrame` `QuickPreviewSheet`（单据默认 `size="detail"`） |
 | 状态金额 | `BusinessStatusBadge` / `StatusBadge` `MoneyValue` `QuantityValue` `RateValue` `DocumentTotals` |
 | 单据/对象中心 | `DocumentHeader density="compact"` `DocumentSummary` `DocumentSection` `RevisionTimeline`；禁止与 page 大标题叠放 |

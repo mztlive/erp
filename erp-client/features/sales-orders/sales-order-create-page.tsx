@@ -12,11 +12,15 @@ import {
   MoneyValue,
   OwnerCombobox,
   PageHeader,
+  PageScaffold,
   ProductCombobox,
   StickyTotalBar,
   ValidationSummary,
+  surfaceInsetClassName,
+  surfacePanelClassName,
   type EditableLineItemColumn,
 } from "@/components/business"
+import { cn } from "@/lib/utils"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
 import type { StandardSchemaV1Issue } from "@tanstack/react-form"
@@ -585,7 +589,7 @@ export function SalesOrderCreatePage({
   })
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 pb-8 md:gap-5 md:p-5">
+    <PageScaffold className="pb-8">
       <PageHeader
         density="compact"
         title="新建销售单"
@@ -635,8 +639,8 @@ export function SalesOrderCreatePage({
         }}
       >
         <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_17.5rem] xl:gap-5">
-          <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-card">
-            <section className="border-b border-border p-4 md:p-5 lg:p-6">
+          <div className={cn(surfacePanelClassName, "min-w-0 overflow-hidden")}>
+            <section className="border-b border-border/30 p-4 md:p-5 lg:p-6">
               <div className="mb-4 flex items-center justify-between gap-2">
                 <h2 className="font-heading text-sm font-semibold">单据头</h2>
                 <span className="text-xs text-muted-foreground">
@@ -719,7 +723,12 @@ export function SalesOrderCreatePage({
                       {contractRevisionLabel ||
                       customerName ||
                       settlementEntity ? (
-                        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-dashed border-border bg-muted/40 px-3 py-2.5 text-xs">
+                        <div
+                          className={cn(
+                            surfaceInsetClassName,
+                            "flex flex-wrap items-center gap-2 px-3 py-2.5 text-xs"
+                          )}
+                        >
                           {contractRevisionLabel ? (
                             <Badge variant="outline" className="font-normal">
                               {contractRevisionLabel}
@@ -867,7 +876,7 @@ export function SalesOrderCreatePage({
 
             <section
               id="sales-line-items-section"
-              className="border-b border-border p-4 md:p-5 lg:p-6"
+              className="border-b border-border/30 p-4 md:p-5 lg:p-6"
             >
               <div className="mb-4 flex items-center justify-between gap-2">
                 <h2 className="font-heading text-sm font-semibold">销售明细</h2>
@@ -1197,7 +1206,7 @@ export function SalesOrderCreatePage({
                     : "提交后内容锁定并进入采购二次确认；生效以确认通过为准。"
                 return (
                   <StickyTotalBar
-                    className="rounded-none border-0 border-t border-border px-4 py-4 shadow-none md:px-5 md:py-4"
+                    className="rounded-none border-0 border-t border-border/30 px-4 py-4 shadow-none md:px-5 md:py-4"
                     items={[
                       {
                         id: "gross",
@@ -1285,7 +1294,12 @@ export function SalesOrderCreatePage({
                     ? "提交后进入销售领导 → 运营两级审批"
                     : "提交后进入采购二次确认"
                 return (
-                  <div className="sticky top-14 space-y-4 rounded-xl border border-border bg-card p-4">
+                  <div
+                    className={cn(
+                      surfacePanelClassName,
+                      "sticky top-14 space-y-4 p-4"
+                    )}
+                  >
                     <div>
                       <h2 className="font-heading text-sm font-semibold">
                         本单摘要
@@ -1323,7 +1337,7 @@ export function SalesOrderCreatePage({
                           {values.lineItems.length} 行
                         </dd>
                       </div>
-                      <div className="border-t border-border pt-3">
+                      <div className="border-t border-border/30 pt-3">
                         <div className="flex justify-between gap-2">
                           <dt className="text-muted-foreground">含税预估</dt>
                           <dd className="num font-semibold">
@@ -1341,7 +1355,12 @@ export function SalesOrderCreatePage({
                         </div>
                       </div>
                     </dl>
-                    <p className="rounded-md bg-muted/50 px-2.5 py-2 text-xs leading-relaxed text-muted-foreground">
+                    <p
+                      className={cn(
+                        surfaceInsetClassName,
+                        "px-2.5 py-2 text-xs leading-relaxed text-muted-foreground"
+                      )}
+                    >
                       {nextStep}
                     </p>
                   </div>
@@ -1384,6 +1403,6 @@ export function SalesOrderCreatePage({
           setPendingNature(null)
         }}
       />
-    </div>
+    </PageScaffold>
   )
 }

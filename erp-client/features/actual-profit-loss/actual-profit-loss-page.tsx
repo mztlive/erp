@@ -39,7 +39,9 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
+  surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
@@ -818,7 +820,7 @@ export function ActualProfitLossPage() {
   // —— 初载 / 配置加载 ——
   if (basisQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title={`实际经营盈亏（${SCOPE_LABEL}）`}
           description="读取期间归属口径配置…"
@@ -827,20 +829,20 @@ export function ActualProfitLossPage() {
             { id: "pl", label: "实际经营盈亏", current: true },
           ]}
         />
-        <Skeleton className="h-16 w-full" />
-        <Skeleton className="h-24 w-full" />
+        <Skeleton className="h-16 w-full rounded-lg" />
+        <Skeleton className="h-24 w-full rounded-lg" />
         <div className="grid gap-2">
           {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} className="h-10 w-full" />
+            <Skeleton key={i} className="h-10 w-full rounded-lg" />
           ))}
         </div>
-      </div>
+      </PageScaffold>
     )
   }
 
   if (basisQuery.isError || !basisConfig) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title={`实际经营盈亏（${SCOPE_LABEL}）`}
           breadcrumbs={[
@@ -858,12 +860,12 @@ export function ActualProfitLossPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title={`实际经营盈亏（${SCOPE_LABEL}）`}
         breadcrumbs={[
@@ -897,7 +899,8 @@ export function ActualProfitLossPage() {
                 actionKey: "refresh",
                 label: "刷新",
                 icon: RefreshCwIcon,
-                variant: "outline",
+                variant: "ghost",
+                className: "text-muted-foreground hover:text-foreground",
                 disabled: !analysisReady,
                 onClick: () => {
                   void handleRefresh()
@@ -925,8 +928,8 @@ export function ActualProfitLossPage() {
       />
 
       {/* 期间 / 归属口径 */}
-      <Card size="sm">
-        <CardHeader className="border-b">
+      <Card size="sm" className={surfacePanelClassName}>
+        <CardHeader className="border-b border-border/30">
           <CardTitle>统计期间与归属口径</CardTitle>
           <CardDescription>
             查询与导出仅按此处明确的期间与归属口径执行。
@@ -1073,8 +1076,8 @@ export function ActualProfitLossPage() {
       ) : null}
 
       {analysisBlocked ? (
-        <Card size="sm">
-          <CardHeader>
+        <Card size="sm" className={surfacePanelClassName}>
+          <CardHeader className="border-b border-border/30">
             <CardTitle>公式与边界（查询阻断中）</CardTitle>
             <CardDescription>选定口径后加载数据。</CardDescription>
           </CardHeader>
@@ -1346,8 +1349,8 @@ export function ActualProfitLossPage() {
               </Alert>
 
               <div className="grid min-w-0 gap-4 xl:grid-cols-[3fr_2fr]">
-                <Card size="sm">
-                  <CardHeader className="border-b">
+                <Card size="sm" className={surfacePanelClassName}>
+                  <CardHeader className="border-b border-border/30">
                 <CardTitle>盈亏趋势（{SCOPE_LABEL} · 万元）</CardTitle>
                 <CardDescription>
                   收入 / 实际成本 / 实际盈亏。趋势为固定口径序列，不随期间与覆盖筛选变化；指标与明细已按当前筛选汇总。
@@ -1447,8 +1450,8 @@ export function ActualProfitLossPage() {
                   </CardContent>
                 </Card>
 
-                <Card size="sm">
-                  <CardHeader className="border-b">
+                <Card size="sm" className={surfacePanelClassName}>
+                  <CardHeader className="border-b border-border/30">
                     <CardTitle>成本构成（{SCOPE_LABEL}）</CardTitle>
                     <CardDescription>
                       仅统计实际成本与冲减；返点等冲减显示为负值贡献。构成与图表为固定口径序列，不随覆盖筛选变化。
@@ -1523,8 +1526,8 @@ export function ActualProfitLossPage() {
               </div>
 
               {/* EXPECTED / CONFIRMED 对照区 */}
-              <Card size="sm">
-                <CardHeader className="border-b">
+              <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="border-b border-border/30">
                   <CardTitle>预计/已确认成本参考</CardTitle>
                   <CardDescription>
                     仅执行期对照，不参与实际经营盈亏或实际利润率；与实际成本使用不同文案样式。
@@ -1649,10 +1652,12 @@ export function ActualProfitLossPage() {
                   kind="filter"
                   title="当前筛选无非卡券经营结果"
                   description={`范围：${data.filterSummary}。可调整期间、覆盖口径或清除搜索。`}
+                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   action={
                     <Button
                       type="button"
-                      variant="outline"
+                      variant="secondary"
+                      className="rounded-lg shadow-none"
                       onClick={() => {
                         patchUrl({
                           q: null,
@@ -1808,7 +1813,7 @@ export function ActualProfitLossPage() {
           )}
         </div>
       </QuickPreviewSheet>
-    </div>
+    </PageScaffold>
   )
 }
 

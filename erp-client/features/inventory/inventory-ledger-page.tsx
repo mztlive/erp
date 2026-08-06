@@ -30,7 +30,9 @@ import {
   OptionCombobox,
   PageActions,
   PageHeader,
+  PageScaffold,
   QuickPreviewSheet,
+  surfaceInsetClassName,
   WarehouseCombobox,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
@@ -1027,22 +1029,22 @@ export function InventoryLedgerPage() {
 
   if (listQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 animate-pulse rounded-2xl bg-muted" />
+            <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />
           ))}
         </div>
-        <div className="h-12 animate-pulse rounded-xl bg-muted" />
-        <div className="h-[28rem] animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-12 animate-pulse rounded-lg bg-muted" />
+        <div className="h-[28rem] animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (listQuery.isError || !data) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader title="库存台账" description="加载失败" />
         <BusinessFailureState
           kind="system"
@@ -1052,13 +1054,13 @@ export function InventoryLedgerPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (data.emptyReason === "PERMISSION_REVOKED") {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title="库存台账"
           description="模块权限已收回，相关数据已不再展示。"
@@ -1073,13 +1075,13 @@ export function InventoryLedgerPage() {
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (data.emptyReason === "NO_DATA_SCOPE") {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <PageHeader
           title="库存台账"
           description="有模块权限但未配置仓库数据范围。"
@@ -1089,7 +1091,7 @@ export function InventoryLedgerPage() {
           title="当前角色未配置仓库数据范围"
           description="不能显示为库存为 0。请联系管理员配置仓库授权后再查询。"
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -1126,7 +1128,7 @@ export function InventoryLedgerPage() {
   const detail = detailQuery.data
 
   return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+    <PageScaffold>
       <PageHeader
         title="库存台账"
         description={
@@ -1153,7 +1155,7 @@ export function InventoryLedgerPage() {
                 actionKey: "refresh",
                 label: "刷新",
                 icon: RefreshCwIcon,
-                variant: "outline",
+                variant: "ghost",
                 onClick: () => {
                   void listQuery.refetch()
                   if (previewBalanceId) void detailQuery.refetch()
@@ -1290,7 +1292,7 @@ export function InventoryLedgerPage() {
         </Alert>
       ) : null}
 
-      <details className="rounded-xl border border-border bg-card px-4 py-2.5 text-sm">
+      <details className={`${surfaceInsetClassName} px-3 py-2.5 text-sm`}>
         <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
           自有实物库存边界说明
         </summary>
@@ -1617,13 +1619,15 @@ export function InventoryLedgerPage() {
             data.emptyReason === "FILTER_NO_RESULT" ? (
               <BusinessEmptyState
                 kind="filter"
+                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 title="当前筛选无结果"
                 description={`没有符合「${data.filterSummary}」的记录。可清除筛选或切换视图。`}
                 action={
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
+                    className="rounded-lg shadow-none"
                     onClick={() => {
                       setSearchInput("")
                       patchUrl({
@@ -1644,13 +1648,15 @@ export function InventoryLedgerPage() {
             ) : (
               <BusinessEmptyState
                 kind="no-data"
+                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                 title="当前仓库尚无 ERP 自有库存记录"
                 description="期初库存需在「导入与期初」完成导入后才会形成流水；商城旧库存不会自动显示在此。"
                 action={
                   <Button
                     type="button"
-                    variant="outline"
+                    variant="secondary"
                     size="sm"
+                    className="rounded-lg shadow-none"
                     render={<Link href="/governance/imports" />}
                   >
                     前往导入与期初
@@ -2197,6 +2203,6 @@ export function InventoryLedgerPage() {
         pending={submitMutation.isPending}
         onConfirm={() => void doSubmit()}
       />
-    </div>
+    </PageScaffold>
   )
 }

@@ -36,6 +36,9 @@ import {
   DocumentSummary,
   FormalActionResult,
   OptionCombobox,
+  PageScaffold,
+  surfaceInsetClassName,
+  surfacePanelClassName,
 } from "@/components/business"
 import {
   Alert,
@@ -125,8 +128,8 @@ function OfferingConditionCard({
   offering: SupplierOfferingRevisionView
 }) {
   return (
-    <Card size="sm">
-      <CardHeader className="border-b py-3">
+    <Card size="sm" className={surfacePanelClassName}>
+      <CardHeader className="border-b border-border/30 py-3">
         <CardTitle className="text-base">供给条件</CardTitle>
         <CardDescription>
           供应商当前对商品池的供给；销售只读取公司商品池价格，不读取这里的采购成本。
@@ -254,7 +257,7 @@ function MediaListEditor({
         {value.map((name, index) => (
           <div
             key={`${name}-${index}`}
-            className="group relative overflow-hidden rounded-xl border border-border bg-surface-sunken"
+            className="group relative overflow-hidden rounded-lg bg-surface-sunken ring-1 ring-foreground/[0.04]"
           >
             <div
               className={cn(
@@ -276,7 +279,7 @@ function MediaListEditor({
             {mode === "carousel" && index === 0 ? (
               <Badge className="absolute right-2 top-2">首图</Badge>
             ) : null}
-            <div className="flex items-center justify-center gap-1 border-t border-border bg-background/95 p-1">
+            <div className="flex items-center justify-center gap-1 border-t border-border/30 bg-background/95 p-1">
               <Button
                 type="button"
                 variant="ghost"
@@ -689,16 +692,16 @@ export function SupplierProductCenterPage({
 
   if (!isCreate && centerQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <div className="h-10 w-56 animate-pulse rounded-lg bg-muted" />
-        <div className="h-40 animate-pulse rounded-2xl bg-muted" />
-      </div>
+        <div className="h-40 animate-pulse rounded-lg bg-muted" />
+      </PageScaffold>
     )
   }
 
   if (!isCreate && centerQuery.isError) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessFailureState
           kind="system"
           title="详情加载失败"
@@ -714,20 +717,29 @@ export function SupplierProductCenterPage({
             </Button>
           }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
   if (!isCreate && !item) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <PageScaffold>
         <BusinessEmptyState
           kind="no-data"
           title="未找到该供应商商品"
           description="该供应商商品可能已移出当前目录范围。"
-          action={<Button render={<Link href={returnTo} />}>返回列表</Button>}
+          className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+          action={
+            <Button
+              variant="secondary"
+              className="rounded-lg shadow-none"
+              render={<Link href={returnTo} />}
+            >
+              返回列表
+            </Button>
+          }
         />
-      </div>
+      </PageScaffold>
     )
   }
 
@@ -762,8 +774,8 @@ export function SupplierProductCenterPage({
   }))
 
   return (
-    <div
-      className="mx-auto w-full max-w-shell"
+    <PageScaffold
+      className="gap-0 p-0 md:gap-0 md:px-0 md:py-0"
       style={
         {
           "--product-sticky-offset": `${stickyOffsetPx}px`,
@@ -774,7 +786,10 @@ export function SupplierProductCenterPage({
       <form id="supplier-product-detail-form" onSubmit={(e) => void handleSubmit(e)}>
         <header
           ref={stickyHeaderRef}
-          className="sticky top-0 z-30 border-b border-border bg-background/95 px-4 py-3 shadow-sm backdrop-blur md:px-5"
+          className={cn(
+            surfacePanelClassName,
+            "sticky top-0 z-30 mx-4 mt-4 rounded-lg px-4 py-3 backdrop-blur md:mx-6 md:mt-5 md:px-5"
+          )}
         >
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div className="min-w-0 space-y-1">
@@ -835,7 +850,7 @@ export function SupplierProductCenterPage({
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 onClick={(event) => {
                   event.preventDefault()
                   navigateWithGuard(returnTo)
@@ -847,7 +862,7 @@ export function SupplierProductCenterPage({
               <Button
                 type="button"
                 size="sm"
-                variant="outline"
+                variant="ghost"
                 disabled={pending}
                 onClick={runLocalCheck}
               >
@@ -866,7 +881,7 @@ export function SupplierProductCenterPage({
           </div>
         </header>
 
-        <div className="flex flex-col gap-4 p-4 md:p-5">
+        <div className="flex flex-col gap-4 p-4 md:gap-4 md:px-6 md:py-5">
           {!isCreate &&
           item &&
           (item.changeType === "NEW" || item.changeType === "CHANGED") ? (
@@ -901,7 +916,7 @@ export function SupplierProductCenterPage({
               className="space-y-4 xl:sticky xl:self-start xl:max-h-[calc(100dvh-var(--product-sticky-offset)-1rem)] xl:overflow-y-auto"
               style={{ top: stickyOffsetPx + 16 }}
             >
-              <Card size="sm">
+              <Card size="sm" className={surfacePanelClassName}>
                 <CardHeader>
                   <div className="flex items-center justify-between gap-2">
                     <CardTitle className="flex items-center gap-2">
@@ -933,7 +948,10 @@ export function SupplierProductCenterPage({
                         <button
                           key={issue.title}
                           type="button"
-                          className="flex w-full gap-2 rounded-lg border border-border bg-background p-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className={cn(
+                            surfaceInsetClassName,
+                            "flex w-full gap-2 p-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          )}
                           onClick={() => {
                             setActiveSection(issue.section)
                             scrollToSection(issue.section)
@@ -966,7 +984,7 @@ export function SupplierProductCenterPage({
                 </CardContent>
               </Card>
 
-              <Card size="sm">
+              <Card size="sm" className={surfacePanelClassName}>
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
                     <PackageOpenIcon className="size-4" aria-hidden />
@@ -1000,7 +1018,7 @@ export function SupplierProductCenterPage({
                         : "未映射"}
                     </span>
                   </div>
-                  <p className="border-t border-border pt-3 text-xs text-muted-foreground">
+                  <p className="border-t border-border/30 pt-3 text-xs text-muted-foreground">
                     保存只更新供应商商品资料；公司商品图文与销售价独立维护。
                   </p>
                 </CardContent>
@@ -1011,7 +1029,8 @@ export function SupplierProductCenterPage({
               <nav
                 aria-label="供应商商品编辑分区"
                 className={cn(
-                  "sticky z-10 grid grid-cols-2 gap-1 rounded-2xl border border-border bg-background/95 p-1 shadow-sm backdrop-blur",
+                  surfacePanelClassName,
+                  "sticky z-10 grid grid-cols-2 gap-1 bg-card/95 p-1 backdrop-blur",
                   isCreate ? "sm:grid-cols-3" : "sm:grid-cols-4",
                 )}
                 style={{ top: stickyOffsetPx }}
@@ -1023,9 +1042,9 @@ export function SupplierProductCenterPage({
                     variant="ghost"
                     size="sm"
                     className={cn(
-                      "relative rounded-xl",
+                      "relative rounded-md",
                       activeSection === section.id &&
-                        "bg-accent text-accent-foreground",
+                        "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10",
                     )}
                     aria-current={
                       activeSection === section.id ? "location" : undefined
@@ -1060,7 +1079,10 @@ export function SupplierProductCenterPage({
 
               <fieldset
                 id="supplier-product-section-basic"
-                className="scroll-mt-[var(--product-section-scroll-margin)] space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                className={cn(
+                  surfacePanelClassName,
+                  "scroll-mt-[var(--product-section-scroll-margin)] space-y-3 p-5"
+                )}
               >
                 <legend className="px-1 text-base font-semibold">基础信息</legend>
                 <p className="text-xs text-muted-foreground">
@@ -1208,7 +1230,10 @@ export function SupplierProductCenterPage({
 
               <fieldset
                 id="supplier-product-section-media"
-                className="scroll-mt-[var(--product-section-scroll-margin)] space-y-5 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                className={cn(
+                  surfacePanelClassName,
+                  "scroll-mt-[var(--product-section-scroll-margin)] space-y-5 p-5"
+                )}
               >
                 <legend className="px-1 text-base font-semibold">图文信息</legend>
                 <p className="text-xs text-muted-foreground">
@@ -1224,7 +1249,7 @@ export function SupplierProductCenterPage({
                     }))
                   }
                 />
-                <div className="border-t border-border" />
+                <div className="border-t border-border/30" />
                 <MediaListEditor
                   label="详情图"
                   mode="detail"
@@ -1240,7 +1265,10 @@ export function SupplierProductCenterPage({
 
               <fieldset
                 id="supplier-product-section-sku"
-                className="scroll-mt-[var(--product-section-scroll-margin)] space-y-4 rounded-2xl border border-border bg-card p-5 shadow-sm"
+                className={cn(
+                  surfacePanelClassName,
+                  "scroll-mt-[var(--product-section-scroll-margin)] space-y-4 p-5"
+                )}
               >
                 <legend className="px-1 text-base font-semibold">
                   SKU / 规格与供给
@@ -1256,7 +1284,7 @@ export function SupplierProductCenterPage({
                 </div>
 
                 {!isCreate ? (
-                  <div className="space-y-1.5 rounded-lg border border-border bg-muted/30 p-3">
+                  <div className={cn(surfaceInsetClassName, "space-y-1.5 p-3")}>
                     <Label htmlFor="sp-reason">变更原因 *</Label>
                     <Textarea
                       id="sp-reason"
@@ -1277,9 +1305,9 @@ export function SupplierProductCenterPage({
                   {fields.specDrafts.map((draft, index) => (
                     <div
                       key={index}
-                      className="rounded-xl border border-border bg-surface-sunken"
+                      className="rounded-lg bg-surface-sunken ring-1 ring-foreground/[0.04]"
                     >
-                      <div className="flex flex-wrap items-end gap-3 border-b border-border px-3 py-3">
+                      <div className="flex flex-wrap items-end gap-3 border-b border-border/30 px-3 py-3">
                         <div className="flex items-center gap-2 self-center">
                           <GripVerticalIcon
                             className="size-4 text-muted-foreground"
@@ -1443,7 +1471,7 @@ export function SupplierProductCenterPage({
                       规格组合生成 SKU 表；每行维护编码、条码、1:1 主图、代发/集采底价与起订量、可供状态。
                     </p>
                   </div>
-                  <div className="overflow-x-auto rounded-xl border border-border">
+                  <div className="overflow-x-auto rounded-lg ring-1 ring-foreground/[0.04]">
                     <table className="w-full min-w-[72rem] text-sm">
                       <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
                         <tr>
@@ -1459,12 +1487,12 @@ export function SupplierProductCenterPage({
                           ) : (
                             <th className="px-3 py-2 font-medium">规格</th>
                           )}
-                          <th className="border-l border-border px-3 py-2 font-medium">
+                          <th className="border-l border-border/30 px-3 py-2 font-medium">
                             供应商 SKU 编码 *
                           </th>
                           <th className="px-3 py-2 font-medium">条码</th>
                           <th className="px-3 py-2 font-medium">主图</th>
-                          <th className="border-l border-border px-3 py-2 font-medium">
+                          <th className="border-l border-border/30 px-3 py-2 font-medium">
                             一件代发底价（含税运）*
                           </th>
                           <th className="px-3 py-2 font-medium">
@@ -1478,7 +1506,7 @@ export function SupplierProductCenterPage({
                       <tbody>
                         {fields.skus.map((sku, index) => (
                           <React.Fragment key={sku.rowKey}>
-                            <tr className="border-t border-border align-top">
+                            <tr className="border-t border-border/30 align-top">
                               {activeSpecDims.length > 0 ? (
                                 activeSpecDims.map((spec, specIndex) => (
                                   <td
@@ -1495,7 +1523,7 @@ export function SupplierProductCenterPage({
                                   <Badge variant="secondary">默认规格</Badge>
                                 </td>
                               )}
-                              <td className="border-l border-border px-3 py-3">
+                              <td className="border-l border-border/30 px-3 py-3">
                                 <Input
                                   className="h-8"
                                   value={sku.supplierSkuCode}
@@ -1562,7 +1590,7 @@ export function SupplierProductCenterPage({
                                   />
                                 )}
                               </td>
-                              <td className="border-l border-border px-3 py-3">
+                              <td className="border-l border-border/30 px-3 py-3">
                                 <Input
                                   className="h-8"
                                   value={sku.dropshipFloorPriceGross}
@@ -1650,8 +1678,8 @@ export function SupplierProductCenterPage({
                       offering={item.offering.currentRevision}
                     />
                   ) : null}
-                  <Card size="sm">
-                    <CardHeader className="border-b py-3">
+                  <Card size="sm" className={surfacePanelClassName}>
+                    <CardHeader className="border-b border-border/30 py-3">
                       <CardTitle className="text-base">映射与商品池</CardTitle>
                       <CardDescription>
                         映射到公司 SKU 后，销售只看到商品池价；本页不改公司主档内容。
@@ -1684,7 +1712,7 @@ export function SupplierProductCenterPage({
                         item.mapping.history.map((history) => (
                           <div
                             key={history.id}
-                            className="rounded-lg border px-3 py-2"
+                            className={cn(surfaceInsetClassName, "px-3 py-2")}
                           >
                             {history.at} · {history.skuCode} ·{" "}
                             {mappingHistoryStatusLabel(history.status)} ·{" "}
@@ -1817,6 +1845,6 @@ export function SupplierProductCenterPage({
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </PageScaffold>
   )
 }
