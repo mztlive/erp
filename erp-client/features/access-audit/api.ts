@@ -220,6 +220,8 @@ function toUserRow(
     id: admin.id,
     userId: admin.id,
     displayName: admin.name || admin.account,
+    accountName: admin.account,
+    roleIds: admin.role_ids,
     accountStatus: "enabled",
     statusLabel: "启用",
     statusTone: "success",

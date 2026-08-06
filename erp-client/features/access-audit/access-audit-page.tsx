@@ -6,9 +6,12 @@ import {
   DownloadIcon,
   EyeIcon,
   LockIcon,
+  PencilIcon,
+  PlusIcon,
   SearchIcon,
   ShieldAlertIcon,
   ShieldOffIcon,
+  Trash2Icon,
   TriangleAlertIcon,
 } from "lucide-react"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
@@ -67,6 +70,13 @@ import {
   useSetAccessDemoFlagsMutation,
   useSubmitAccessChangeMutation,
 } from "@/features/access-audit/queries"
+import {
+  AccountFormDialog,
+  type AccountDraft,
+} from "@/features/admin/account-form-dialog"
+import { DeleteAdminDialog } from "@/features/admin/delete-admin-dialog"
+import { DeleteRoleDialog } from "@/features/admin/delete-role-dialog"
+import { useAssignableRolesQuery } from "@/features/admin/queries"
 import type {
   AccessChangeCommand,
   AccessChangeOutcome,
@@ -304,6 +314,19 @@ export function AccessAuditPage() {
   const [impact, setImpact] = React.useState<AccessImpactPreview | null>(null)
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
+  // 账号新建 / 编辑弹窗（账号字段少，弹窗足够；角色编辑走整页表单）
+  const [accountForm, setAccountForm] = React.useState<{
+    mode: "create" | "edit"
+    account: AccountDraft | null
+  } | null>(null)
+  const [deletingAccount, setDeletingAccount] = React.useState<{
+    id: string
+    account: string
+  } | null>(null)
+  const [deletingRole, setDeletingRole] = React.useState<{
+    id: string
+    name: string
+  } | null>(null)
   const idempotencyRef = React.useRef<string | null>(null)
   const rowFocusRef = React.useRef<Map<string, HTMLButtonElement | null>>(
     new Map()
@@ -459,6 +482,8 @@ export function AccessAuditPage() {
   const previewMutation = usePreviewAccessChangeMutation()
   const submitMutation = useSubmitAccessChangeMutation()
   const demoMutation = useSetAccessDemoFlagsMutation()
+  // 账号表单角色选项：仅当前操作者可分配的角色（API 层失败时回落全部角色）
+  const assignableRolesQuery = useAssignableRolesQuery()
 
   const data = pageQuery.data
   const policies = data?.governancePolicies
@@ -765,6 +790,32 @@ export function AccessAuditPage() {
               <EyeIcon data-icon="inline-start" aria-hidden="true" />
               有效权限
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                router.push(`/system/roles/${row.original.id}/edit`)
+              }
+            >
+              <PencilIcon data-icon="inline-start" aria-hidden="true" />
+              编辑
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={() =>
+                setDeletingRole({
+                  id: row.original.id,
+                  name: row.original.name,
+                })
+              }
+            >
+              <Trash2Icon data-icon="inline-start" aria-hidden="true" />
+              删除
+            </Button>
             {row.original.status === "enabled" &&
             !row.original.riskFlags.includes("HIGH_PRIVILEGE") ? (
               <Button
@@ -851,7 +902,7 @@ export function AccessAuditPage() {
         ),
       },
     ],
-    [openExplain, startChange, data?.permissionVersion, data?.emptyReason]
+    [openExplain, startChange, router, data?.permissionVersion, data?.emptyReason]
   )
 
   const userColumns = React.useMemo<ColumnDef<UserRow>[]>(
@@ -935,6 +986,40 @@ export function AccessAuditPage() {
             >
               <EyeIcon data-icon="inline-start" aria-hidden="true" />
               有效权限
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                setAccountForm({
+                  mode: "edit",
+                  account: {
+                    id: row.original.userId,
+                    account: row.original.accountName,
+                    name: row.original.displayName,
+                    role_ids: [...row.original.roleIds],
+                  },
+                })
+              }
+            >
+              <PencilIcon data-icon="inline-start" aria-hidden="true" />
+              编辑
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              className="text-destructive hover:text-destructive"
+              onClick={() =>
+                setDeletingAccount({
+                  id: row.original.userId,
+                  account: row.original.accountName,
+                })
+              }
+            >
+              <Trash2Icon data-icon="inline-start" aria-hidden="true" />
+              删除
             </Button>
             {row.original.roleAssignmentId ? (
               <Button
@@ -1238,34 +1323,58 @@ export function AccessAuditPage() {
           />
         }
         actions={
-          <PageActions
-            actions={[
-              {
-                actionKey: "export",
-                label: isAudit ? "导出审计" : "导出配置",
-                icon: DownloadIcon,
-                variant: "outline",
-                mobileVisibility: "hide",
-                disabled: exportBlocked,
-                title: exportBlocker?.message,
-                onClick: () => {
-                  if (exportBlocked) {
-                    setActionError(
-                      exportBlocker?.message ??
-                        "导出策略未配置，导出已禁用。"
-                    )
-                    return
-                  }
-                  setLastResult({
-                    status: "blocked",
-                    title: "导出功能待接入",
-                    description:
-                      "演示环境暂未接入真实导出；正式环境将按权限策略生成导出文件。",
-                  })
+          <div className="flex flex-wrap items-center gap-2">
+            {!isAudit && view === "roles" ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => router.push("/system/roles/new")}
+              >
+                <PlusIcon className="size-3.5" aria-hidden="true" />
+                新建角色
+              </Button>
+            ) : null}
+            {!isAudit && view === "users" ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() =>
+                  setAccountForm({ mode: "create", account: null })
+                }
+              >
+                <PlusIcon className="size-3.5" aria-hidden="true" />
+                新建账号
+              </Button>
+            ) : null}
+            <PageActions
+              actions={[
+                {
+                  actionKey: "export",
+                  label: isAudit ? "导出审计" : "导出配置",
+                  icon: DownloadIcon,
+                  variant: "outline",
+                  mobileVisibility: "hide",
+                  disabled: exportBlocked,
+                  title: exportBlocker?.message,
+                  onClick: () => {
+                    if (exportBlocked) {
+                      setActionError(
+                        exportBlocker?.message ??
+                          "导出策略未配置，导出已禁用。"
+                      )
+                      return
+                    }
+                    setLastResult({
+                      status: "blocked",
+                      title: "导出功能待接入",
+                      description:
+                        "演示环境暂未接入真实导出；正式环境将按权限策略生成导出文件。",
+                    })
+                  },
                 },
-              },
-            ]}
-          />
+              ]}
+            />
+          </div>
         }
       />
 
@@ -2202,6 +2311,43 @@ export function AccessAuditPage() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* 账号新建 / 编辑（字段少，弹窗承载；角色走整页表单） */}
+      {accountForm ? (
+        <AccountFormDialog
+          key={
+            accountForm.mode === "edit"
+              ? accountForm.account?.id ?? "edit"
+              : "create"
+          }
+          mode={accountForm.mode}
+          account={accountForm.account}
+          roleOptions={assignableRolesQuery.data ?? []}
+          onOpenChange={(open) => {
+            if (!open) setAccountForm(null)
+          }}
+        />
+      ) : null}
+
+      {deletingAccount ? (
+        <DeleteAdminDialog
+          key={deletingAccount.id}
+          account={deletingAccount}
+          onOpenChange={(open) => {
+            if (!open) setDeletingAccount(null)
+          }}
+        />
+      ) : null}
+
+      {deletingRole ? (
+        <DeleteRoleDialog
+          key={deletingRole.id}
+          role={deletingRole}
+          onOpenChange={(open) => {
+            if (!open) setDeletingRole(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

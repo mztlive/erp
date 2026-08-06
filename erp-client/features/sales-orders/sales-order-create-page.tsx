@@ -377,25 +377,42 @@ export function SalesOrderCreatePage({
     [productsQuery.data?.rows]
   )
 
+  /**
+   * 必须稳定：createEmptyLine 每次生成新 rowKey。
+   * useAppForm 在 layout effect 里会 deep-compare defaultValues，
+   * 未 touch 时若每次渲染都变，会 setState → 重渲染 → 死循环
+   *（Maximum update depth exceeded @ Field）。
+   */
+  const defaultValues = React.useMemo(
+    () =>
+      ({
+        contractId: initialContractId,
+        requestedContractRevisionId: initialContractRevisionId,
+        contractRevisionLabel: "",
+        customerId: initialCustomerId,
+        customerName: "",
+        settlementPartyId: "",
+        settlementEntity: "",
+        nature: initialNature,
+        ownerUserId: "",
+        ownerName: "",
+        welfareScene: "",
+        paymentTerms: "",
+        fulfillmentDeadline: "",
+        taxRatePercent: initialNature === "card_voucher" ? "6.00" : "13.00",
+        remark: "",
+        lineItems: [createEmptyLine(initialNature)],
+      }) satisfies CreateSalesOrderFormValues,
+    [
+      initialContractId,
+      initialContractRevisionId,
+      initialCustomerId,
+      initialNature,
+    ]
+  )
+
   const form = useAppForm({
-    defaultValues: {
-      contractId: initialContractId,
-      requestedContractRevisionId: initialContractRevisionId,
-      contractRevisionLabel: "",
-      customerId: initialCustomerId,
-      customerName: "",
-      settlementPartyId: "",
-      settlementEntity: "",
-      nature: initialNature,
-      ownerUserId: "",
-      ownerName: "",
-      welfareScene: "",
-      paymentTerms: "",
-      fulfillmentDeadline: "",
-      taxRatePercent: initialNature === "card_voucher" ? "6.00" : "13.00",
-      remark: "",
-      lineItems: [createEmptyLine(initialNature)],
-    } satisfies CreateSalesOrderFormValues,
+    defaultValues,
     validators: {
       onSubmit: ({ value }) =>
         validateSalesOrderForm(value, submitIntentRef.current),

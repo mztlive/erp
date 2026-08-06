@@ -112,6 +112,10 @@ export type UserRow = Readonly<{
   id: string
   userId: string
   displayName: string
+  /** 登录账号（原名，非展示名），供账号编辑回填。 */
+  accountName: string
+  /** 已绑定角色 ID 列表，供账号编辑回填。 */
+  roleIds: readonly string[]
   accountStatus: "enabled" | "disabled"
   statusLabel: string
   statusTone: "success" | "neutral" | "warning" | "destructive" | "info"
