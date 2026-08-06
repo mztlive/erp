@@ -1,10 +1,93 @@
-//! 域 D22 `legacy_import`：legacy_import_batch、legacy_import_row、legacy_import_confirmation（页面：W18）。P0 骨架占位；P3 填充路由与权限挂载（管理端路由必须带 #[permission]）。
+//! 域 D22 `legacy_import` 管理端路由。
+//!
+//! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/legacy-import-batches`、
+//! `/admin/legacy-import-batches/{id}`、`/admin/legacy-import-batches/{id}/rows`、
+//! `/admin/legacy-import-batches/{id}/apply`、`/admin/legacy-import-confirmations`、
+//! `/admin/legacy-import-confirmations/{id}/decide`；每条路由统一走
+//! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
 
-use axum::Router;
+use axum::{
+    routing::{get, post},
+    Router,
+};
+use services::iam::SharedRbacService;
 
-use crate::app_state::AppState;
+use crate::{
+    app_state::AppState,
+    core::{handler::legacy_import, middleware::with_permission},
+};
 
-/// 返回本域管理端路由集合（P3 填充）。
-pub fn routes(_rbac: &services::iam::SharedRbacService) -> Router<AppState> {
-    Router::<AppState>::new()
+/// 返回本域管理端路由集合。
+///
+/// # 参数
+/// * `rbac` - 共享 Casbin RBAC 服务
+///
+/// # 返回
+/// 返回挂载了权限校验层的路由集合。
+pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/legacy-import-batches",
+            with_permission(
+                get(legacy_import::legacy_import_batch_list),
+                rbac,
+                legacy_import::legacy_import_batch_list_permission_key(),
+            ),
+        )
+        .route(
+            "/legacy-import-batches",
+            with_permission(
+                post(legacy_import::legacy_import_batch_create),
+                rbac,
+                legacy_import::legacy_import_batch_create_permission_key(),
+            ),
+        )
+        .route(
+            "/legacy-import-batches/{id}",
+            with_permission(
+                get(legacy_import::legacy_import_batch_detail),
+                rbac,
+                legacy_import::legacy_import_batch_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/legacy-import-batches/{id}/rows",
+            with_permission(
+                get(legacy_import::legacy_import_row_list),
+                rbac,
+                legacy_import::legacy_import_row_list_permission_key(),
+            ),
+        )
+        .route(
+            "/legacy-import-batches/{id}/apply",
+            with_permission(
+                post(legacy_import::legacy_import_batch_apply),
+                rbac,
+                legacy_import::legacy_import_batch_apply_permission_key(),
+            ),
+        )
+        .route(
+            "/legacy-import-confirmations",
+            with_permission(
+                get(legacy_import::legacy_import_confirmation_list),
+                rbac,
+                legacy_import::legacy_import_confirmation_list_permission_key(),
+            ),
+        )
+        .route(
+            "/legacy-import-confirmations",
+            with_permission(
+                post(legacy_import::legacy_import_confirmation_create),
+                rbac,
+                legacy_import::legacy_import_confirmation_create_permission_key(),
+            ),
+        )
+        .route(
+            "/legacy-import-confirmations/{id}/decide",
+            with_permission(
+                post(legacy_import::legacy_import_confirmation_decide),
+                rbac,
+                legacy_import::legacy_import_confirmation_decide_permission_key(),
+            ),
+        )
 }
