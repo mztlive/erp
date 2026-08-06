@@ -1,1 +1,601 @@
-//! 域 D02 `document_registry`：business_document、document_relation、document_participant、workflow_action（页面：全部单据页）。P0 预声明空模块；P2 填充仓储（Executor 传参、投影、乐观锁）。
+//! 域 D02 `document_registry` 仓储：business_document、document_relation、document_participant、workflow_action。
+//!
+//! 单一集合 CRUD 与乐观锁直接复用 [`Repository`] 基类（base.rs：
+//! `update`/`soft_delete`/`restore` 比较 `id + version` 做 CAS，版本不匹配返回
+//! [`crate::Error::OptimisticLockingError`]）；本文件只补充域特有查询与
+//! 跨集合多步骤写入入口。集合名常量统一从 `extensions::DocumentRegistryExt`
+//! 关联常量导入（conventions §4.3）。
+//!
+//! 筛选/行类型定义在本文件，经 `DocumentRegistryExt` 的关联类型对外暴露。
+
+use entities::document_registry::{
+    BusinessDocument, BusinessDocumentId, DocumentParticipant, DocumentRelation, DocumentType,
+    WorkflowAction, WorkflowActionType,
+};
+use entity_core::NOT_DELETED_TIMESTAMP_BSON;
+use mongodb::bson::{doc, Document};
+use mongodb::options::FindOptions;
+use mongodb::Database;
+use serde::{Deserialize, Serialize};
+
+use super::extensions::DocumentRegistryExt;
+use super::{regex_filter::insert_literal_regex_filter, PageResult, Pagination, QueryFilter, Repository};
+use crate::executor::Executor;
+use crate::{mongo_ops, Error, Result};
+
+/// `business_document` 集合名（单一来源：`DocumentRegistryExt` 关联常量）。
+const BUSINESS_DOCUMENTS: &str = <mongodb::Database as DocumentRegistryExt>::BUSINESS_DOCUMENTS;
+/// `workflow_action` 集合名（单一来源：`DocumentRegistryExt` 关联常量）。
+const WORKFLOW_ACTIONS: &str = <mongodb::Database as DocumentRegistryExt>::WORKFLOW_ACTIONS;
+
+/// 单据注册列表投影行（列表接口只取必要字段，禁止返回整文档）。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct BusinessDocumentRow {
+    /// 实体主键。
+    pub id: String,
+    /// 强类型业务表类型。
+    pub document_type: DocumentType,
+    /// 全局可查询业务编号。
+    pub document_no: String,
+    /// 首次正式化时间（秒级时间戳）。
+    pub formalized_at: Option<u64>,
+    /// 乐观锁版本（`BaseModel.version` ≡ 数据模型 `lock_version`）。
+    pub version: u64,
+    /// 创建时间（秒级时间戳）。
+    pub created_at: u64,
+}
+
+/// 单据注册列表筛选条件。
+#[derive(Debug, Clone)]
+pub struct BusinessDocumentFilter {
+    /// 强类型业务表类型；`None` 表示不筛选。
+    pub document_type: Option<DocumentType>,
+    /// 单据编号（忽略大小写字面量模糊匹配，支持全局搜索索引）；`None` 表示不筛选。
+    pub document_no: Option<String>,
+    /// 页码（1 起）。
+    pub page: u64,
+    /// 单页条数。
+    pub page_size: u32,
+    /// 排序字段（白名单：`created_at` / `updated_at`，默认 `created_at`）。
+    pub sort_by: Option<String>,
+    /// 是否升序；`false` 表示降序（默认）。
+    pub sort_ascending: bool,
+}
+
+impl QueryFilter for BusinessDocumentFilter {
+    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    ///
+    /// # 返回
+    /// 返回查询条件文档。
+    fn to_doc(&self) -> Document {
+        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        if let Some(document_type) = self.document_type {
+            filter.insert("document_type", document_type.as_str());
+        }
+        insert_literal_regex_filter(&mut filter, "document_no", self.document_no.as_deref());
+        filter
+    }
+}
+
+impl Pagination for BusinessDocumentFilter {
+    /// 返回页码与单页条数。
+    ///
+    /// # 返回
+    /// 返回 `(page, page_size)` 元组。
+    fn page_and_size(&self) -> (u64, u64) {
+        (self.page, u64::from(self.page_size))
+    }
+}
+
+impl<'a> Repository<'a, BusinessDocument> {
+    /// 幂等注册业务单据。
+    ///
+    /// 跨域注册表入口（数据模型 §6.1）：由 `uk_business_documents_identity`
+    /// 唯一索引 `(document_type, document_no)` 承担并发仲裁。已存在同身份且同 ID
+    /// 的注册时视为幂等成功并返回已存在行；同身份但 ID 不同的重复注册透出
+    /// [`crate::Error::DuplicateKey`]（由 Service 映射为冲突），不会产生第二条注册行。
+    ///
+    /// 本方法采用「先插后查」：唯一索引保证并发下最多一条注册行，不存在
+    /// 读后写的竞态窗口，**不需要事务执行器**；传入 `NoTransaction` 时行为
+    /// 可预期（单条写入自动提交）。身份字段全局唯一：注册行软删除后仍占用
+    /// `(document_type, document_no)` 身份（与 accounts 处理一致），恢复语义
+    /// 不被身份复用破坏。
+    ///
+    /// # 参数
+    /// * `doc` - 待注册的单据（`document_no` 已由实体校验规范化）
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回 `Ok(None)` 表示本次写入新注册行；`Ok(Some(existing))` 表示同身份
+    /// 同 ID 的幂等命中，返回已存在的注册行。
+    ///
+    /// # 错误
+    /// 同身份不同 ID（含已软删除身份）写入时返回 [`crate::Error::DuplicateKey`]；
+    /// 其他 MongoDB 写入或查询失败时返回错误。
+    pub async fn register(
+        &self,
+        doc: &BusinessDocument,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessDocument>> {
+        match mongo_ops::insert_one(&self.collection(), doc, executor).await {
+            Ok(()) => Ok(None),
+            Err(Error::DuplicateKey(duplicate)) => {
+                let existing = self
+                    .find_by_type_and_no(doc.document_type, &doc.document_no, executor)
+                    .await?;
+                if existing.as_ref().is_some_and(|row| row.base.id == doc.base.id) {
+                    Ok(existing)
+                } else {
+                    Err(Error::DuplicateKey(duplicate))
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// 按「单据类型 + 单据编号」查找注册行。
+    ///
+    /// 查询覆盖 `uk_business_documents_identity` 唯一索引前缀；服务层不得
+    /// 用「先查后插」做重复性判断，唯一约束由索引承担。
+    ///
+    /// # 参数
+    /// * `document_type` - 强类型业务表类型
+    /// * `document_no` - 全局可查询业务编号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除注册行；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_by_type_and_no(
+        &self,
+        document_type: DocumentType,
+        document_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<BusinessDocument>> {
+        self.find_one(
+            doc! {
+                "document_type": document_type.as_str(),
+                "document_no": document_no,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 分页检索单据注册列表（投影查询）。
+    ///
+    /// 只返回 [`BusinessDocumentRow`] 所需的列表字段，不加载整文档；
+    /// `document_no` 按字面量忽略大小写模糊匹配（复用
+    /// `repository::regex_filter`，禁止自拼正则）。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    pub async fn search_business_documents(
+        &self,
+        filter: &BusinessDocumentFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<BusinessDocumentRow>> {
+        let options = FindOptions::builder()
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(business_document_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<BusinessDocumentRow>();
+        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+
+        Ok(PageResult {
+            items,
+            total: total as i64,
+        })
+    }
+}
+
+impl<'a> Repository<'a, DocumentRelation> {
+    /// 按源单据查询全部出向关系（变更、退货、退款、冲正、红票、派生）。
+    ///
+    /// # 参数
+    /// * `from_document_id` - 源单据 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按创建时间升序排列的出向关系。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_from_document(
+        &self,
+        from_document_id: &BusinessDocumentId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DocumentRelation>> {
+        self.find_many_sorted(
+            doc! { "from_document_id": from_document_id.to_string() },
+            doc! { "created_at": 1 },
+            executor,
+        )
+        .await
+    }
+
+    /// 按目标单据查询全部入向关系（反向查询索引 `idx_document_relations_reverse`）。
+    ///
+    /// # 参数
+    /// * `to_document_id` - 被引用或被纠正的原单 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按创建时间升序排列的入向关系。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_to_document(
+        &self,
+        to_document_id: &BusinessDocumentId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DocumentRelation>> {
+        self.find_many_sorted(
+            doc! { "to_document_id": to_document_id.to_string() },
+            doc! { "created_at": 1 },
+            executor,
+        )
+        .await
+    }
+}
+
+impl<'a> Repository<'a, DocumentParticipant> {
+    /// 按「单据 + 参与人」查询参与记录（客户历史查看权依据，§4.6）。
+    ///
+    /// 参与记录只追加不删除；本方法供查看权校验使用。
+    ///
+    /// # 参数
+    /// * `document_id` - 业务单据 ID
+    /// * `user_id` - 参与人用户 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的未删除参与记录；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_by_document_and_user(
+        &self,
+        document_id: &BusinessDocumentId,
+        user_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<DocumentParticipant>> {
+        self.find_one(
+            doc! {
+                "document_id": document_id.to_string(),
+                "participant_user_id": user_id,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 按参与人查询其参与过的全部单据（“我的参与单据”）。
+    ///
+    /// # 参数
+    /// * `user_id` - 参与人用户 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按参与时间倒序排列的参与记录。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_user(
+        &self,
+        user_id: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<DocumentParticipant>> {
+        self.find_many_sorted(
+            doc! { "participant_user_id": user_id },
+            doc! { "created_at": -1 },
+            executor,
+        )
+        .await
+    }
+}
+
+/// 工作流动作列表投影行。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct WorkflowActionRow {
+    /// 实体主键。
+    pub id: String,
+    /// 业务单据 ID。
+    pub document_id: String,
+    /// 动作类型。
+    pub action_type: WorkflowActionType,
+    /// 迁移前状态代码。
+    pub from_status: String,
+    /// 迁移后状态代码。
+    pub to_status: String,
+    /// 实际操作者。
+    pub actor_id: String,
+    /// 动作发生时的责任角色。
+    pub actor_role: String,
+    /// 创建时间（秒级时间戳）。
+    pub created_at: u64,
+}
+
+/// 工作流动作列表筛选条件。
+#[derive(Debug, Clone)]
+pub struct WorkflowActionFilter {
+    /// 业务单据 ID；`None` 表示不筛选。
+    pub document_id: Option<BusinessDocumentId>,
+    /// 操作者（忽略大小写字面量模糊匹配）；`None` 表示不筛选。
+    pub actor_id: Option<String>,
+    /// 动作类型；`None` 表示不筛选。
+    pub action_type: Option<WorkflowActionType>,
+    /// 页码（1 起）。
+    pub page: u64,
+    /// 单页条数。
+    pub page_size: u32,
+    /// 排序字段（白名单：`created_at` / `updated_at`，默认 `created_at`）。
+    pub sort_by: Option<String>,
+    /// 是否升序；`false` 表示降序（默认）。
+    pub sort_ascending: bool,
+}
+
+impl QueryFilter for WorkflowActionFilter {
+    /// 转换为 MongoDB 查询条件（自动追加未删除过滤）。
+    ///
+    /// # 返回
+    /// 返回查询条件文档。
+    fn to_doc(&self) -> Document {
+        let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
+        if let Some(document_id) = &self.document_id {
+            filter.insert("document_id", document_id.to_string());
+        }
+        insert_literal_regex_filter(&mut filter, "actor_id", self.actor_id.as_deref());
+        if let Some(action_type) = self.action_type {
+            filter.insert("action_type", action_type.as_str());
+        }
+        filter
+    }
+}
+
+impl Pagination for WorkflowActionFilter {
+    /// 返回页码与单页条数。
+    ///
+    /// # 返回
+    /// 返回 `(page, page_size)` 元组。
+    fn page_and_size(&self) -> (u64, u64) {
+        (self.page, u64::from(self.page_size))
+    }
+}
+
+impl<'a> Repository<'a, WorkflowAction> {
+    /// 分页检索工作流动作（投影查询）。
+    ///
+    /// 只返回 [`WorkflowActionRow`] 所需的列表字段，不加载整文档；
+    /// `actor_id` 按字面量忽略大小写模糊匹配（复用 `repository::regex_filter`）。
+    ///
+    /// # 参数
+    /// * `filter` - 筛选与分页条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页投影行与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
+    pub async fn search_workflow_actions(
+        &self,
+        filter: &WorkflowActionFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<WorkflowActionRow>> {
+        let options = FindOptions::builder()
+            .sort(sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
+            .skip(filter.skip())
+            .limit(filter.limit())
+            .projection(workflow_action_projection())
+            .build();
+        let collection = self.collection().clone_with_type::<WorkflowActionRow>();
+        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
+        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
+
+        Ok(PageResult {
+            items,
+            total: total as i64,
+        })
+    }
+
+    /// 按单据查询动作历史（`idx_workflow_actions_document_created`）。
+    ///
+    /// # 参数
+    /// * `document_id` - 业务单据 ID
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回按时间倒序排列的动作历史。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn list_by_document(
+        &self,
+        document_id: &BusinessDocumentId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<WorkflowAction>> {
+        self.find_many_sorted(
+            doc! { "document_id": document_id.to_string() },
+            doc! { "created_at": -1 },
+            executor,
+        )
+        .await
+    }
+}
+
+/// D02 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
+///
+/// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
+/// 跨集合原子写入入口，由 `DocumentRegistryExt::document_registry()` 访问。
+pub struct DocumentRegistryRepository<'a> {
+    db: &'a Database,
+}
+
+impl<'a> DocumentRegistryRepository<'a> {
+    /// 创建域专用仓储。
+    ///
+    /// # 参数
+    /// * `db` - 目标 MongoDB 数据库
+    ///
+    /// # 返回
+    /// 返回仓储实例。
+    pub fn new(db: &'a Database) -> Self {
+        Self { db }
+    }
+
+    /// 注册单据并追加首个工作流动作（跨集合多步骤写入）。
+    ///
+    /// 依次写入 `business_documents` 与 `workflow_actions`，保证「注册行 + 首个
+    /// 动作」原子可见（数据模型 §6.1）。**必须收到事务执行器**：本方法不构成
+    /// 原子边界，传入 `NoTransaction` 时两笔写入各自自动提交，第二笔失败会留下
+    /// 只有注册没有动作的半成品；Service 必须通过
+    /// `database::Transactional::with_transaction` 传入事务会话。
+    ///
+    /// # 参数
+    /// * `doc` - 待注册的业务单据
+    /// * `action` - 待追加的工作流动作
+    /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 错误
+    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]，由 Service 映射
+    /// 为冲突语义）或 MongoDB 写入失败时返回错误。
+    pub async fn create_document_with_action(
+        &self,
+        doc: &BusinessDocument,
+        action: &WorkflowAction,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        mongo_ops::insert_one(
+            &self.db.collection::<BusinessDocument>(BUSINESS_DOCUMENTS),
+            doc,
+            executor,
+        )
+        .await?;
+        mongo_ops::insert_one(
+            &self.db.collection::<WorkflowAction>(WORKFLOW_ACTIONS),
+            action,
+            executor,
+        )
+        .await?;
+        Ok(())
+    }
+}
+
+/// 构建排序文档（排序字段白名单化，禁止透传任意字段名）。
+///
+/// 仅允许 `created_at` / `updated_at`；未知字段回落默认 `created_at`。
+///
+/// # 参数
+/// * `sort_by` - 排序字段；`None` 或白名单外字段时默认 `created_at`
+/// * `sort_ascending` - 升序为 `true`，降序为 `false`
+///
+/// # 返回
+/// 返回排序条件文档。
+fn sort_doc(sort_by: Option<&str>, sort_ascending: bool) -> Document {
+    let direction = if sort_ascending { 1 } else { -1 };
+    let field = match sort_by {
+        Some("updated_at") => "updated_at",
+        _ => "created_at",
+    };
+    doc! { field: direction }
+}
+
+/// 单据注册列表投影字段。
+///
+/// # 返回
+/// 返回投影条件文档。
+fn business_document_projection() -> Document {
+    doc! {
+        "id": 1,
+        "document_type": 1,
+        "document_no": 1,
+        "formalized_at": 1,
+        "version": 1,
+        "created_at": 1,
+    }
+}
+
+/// 工作流动作列表投影字段。
+///
+/// # 返回
+/// 返回投影条件文档。
+fn workflow_action_projection() -> Document {
+    doc! {
+        "id": 1,
+        "document_id": 1,
+        "action_type": 1,
+        "from_status": 1,
+        "to_status": 1,
+        "actor_id": 1,
+        "actor_role": 1,
+        "created_at": 1,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{sort_doc, BusinessDocumentFilter, QueryFilter, WorkflowActionFilter};
+    use entities::document_registry::{BusinessDocumentId, DocumentType, WorkflowActionType};
+    use mongodb::bson::doc;
+
+    #[test]
+    fn business_document_filter_applies_type_and_no_regex() {
+        let filter = BusinessDocumentFilter {
+            document_type: Some(DocumentType::SalesOrder),
+            document_no: Some("so-001".to_string()),
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        let document = filter.to_doc();
+        assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
+        assert_eq!(document.get_str("document_type").unwrap(), "sales_order");
+        let no = document.get_document("document_no").unwrap();
+        assert_eq!(no.get_str("$regex").unwrap(), r"so\-001");
+        assert_eq!(no.get_str("$options").unwrap(), "i");
+    }
+
+    #[test]
+    fn workflow_action_filter_applies_document_and_action_type() {
+        let filter = WorkflowActionFilter {
+            document_id: Some(BusinessDocumentId::new("order-1")),
+            actor_id: None,
+            action_type: Some(WorkflowActionType::Approve),
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        let document = filter.to_doc();
+        assert_eq!(document.get_str("document_id").unwrap(), "order-1");
+        assert_eq!(document.get_str("action_type").unwrap(), "approve");
+    }
+
+    #[test]
+    fn sort_doc_defaults_to_created_at_and_whitelists_fields() {
+        assert_eq!(sort_doc(None, false), doc! { "created_at": -1 });
+        assert_eq!(sort_doc(Some("created_at"), true), doc! { "created_at": 1 });
+        assert_eq!(sort_doc(Some("updated_at"), false), doc! { "updated_at": -1 });
+        assert_eq!(
+            sort_doc(Some("document_no"), false),
+            doc! { "created_at": -1 },
+            "白名单外字段回落默认排序"
+        );
+    }
+}
