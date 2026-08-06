@@ -218,7 +218,7 @@ async fn happy_path_cutover_enable_then_card_instance_with_contract_shape() {
         let instance_id = instance["id"].as_str().unwrap().to_string();
 
         let (status, body) = api
-            .get(&format!("/admin/card-instances?mall_id=mall-a"), Some(&token))
+            .get("/admin/card-instances?mall_id=mall-a", Some(&token))
             .await;
         assert_ok_envelope(status, &body);
         assert_eq!(body["data"]["total"], 1);

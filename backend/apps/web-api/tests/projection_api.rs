@@ -339,7 +339,7 @@ async fn happy_path_create_projection_revision_deliver_with_contract_shape() {
             result["delivery_status"], "failed",
             "默认连接器失败关闭 → 下发失败"
         );
-        assert!(result["error_task_id"].as_str().unwrap().len() > 0);
+        assert!(!result["error_task_id"].as_str().unwrap().is_empty());
 
         let inbox_count = test_db
             .db()

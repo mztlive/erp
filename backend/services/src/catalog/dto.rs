@@ -1486,6 +1486,7 @@ impl VoucherCategoryProfileListParams {
 mod tests {
     use super::{normalize_sort, SortDir};
     use entities::catalog::ProductKind;
+    use validator::Validate;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

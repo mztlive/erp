@@ -434,7 +434,7 @@ impl FulfillmentService {
             .items
             .into_iter()
             .map(|row| DeliveryView {
-                id: row.id,
+                id: row.id.clone(),
                 delivery_no: row.delivery_no,
                 delivery_type: row.delivery_type,
                 sales_order_id: row.sales_order_id.to_string(),
@@ -709,7 +709,7 @@ impl FulfillmentService {
             .items
             .into_iter()
             .map(|row| ElectronicDeliveryView {
-                id: row.id,
+                id: row.id.clone(),
                 fulfillment_no: row.fulfillment_no,
                 sales_order_line_id: row.sales_order_line_id.to_string(),
                 purchase_order_id: row.purchase_order_id.to_string(),
@@ -900,7 +900,7 @@ impl FulfillmentService {
             .items
             .into_iter()
             .map(|row| ServiceFulfillmentView {
-                id: row.id,
+                id: row.id.clone(),
                 fulfillment_no: row.fulfillment_no,
                 sales_order_line_id: row.sales_order_line_id.to_string(),
                 purchase_order_id: row.purchase_order_id.to_string(),

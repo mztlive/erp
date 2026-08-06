@@ -202,6 +202,3556 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
+        name: "单据注册",
+        description: "跨域单据稳定注册表与工作流动作",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/business-documents",
+                description: "查询单据注册列表",
+                permission: {
+                    resource: "business_document",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/business-documents",
+                description: "注册业务单据（幂等）",
+                permission: {
+                    resource: "business_document",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/business-documents/{id}",
+                description: "查询单据注册详情",
+                permission: {
+                    resource: "business_document",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/workflow-actions",
+                description: "查询工作流动作列表",
+                permission: {
+                    resource: "workflow_action",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/workflow-actions",
+                description: "追加工作流动作",
+                permission: {
+                    resource: "workflow_action",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/documents/{id}/relations",
+                description: "查询单据关系列表",
+                permission: {
+                    resource: "document_relation",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/document-relations",
+                description: "建立单据关系",
+                permission: {
+                    resource: "document_relation",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/document-participants",
+                description: "查询单据参与人列表",
+                permission: {
+                    resource: "document_participant",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/document-participants",
+                description: "登记单据参与人",
+                permission: {
+                    resource: "document_participant",
+                    action: "create",
+                },
+            },
+        ],
+    },
+    {
+        name: "统一待办",
+        description: "正式待办队列与处理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/work-items",
+                description: "查询待办列表",
+                permission: {
+                    resource: "work_item",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items",
+                description: "派发待办",
+                permission: {
+                    resource: "work_item",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/work-items/{id}",
+                description: "查询待办详情",
+                permission: {
+                    resource: "work_item",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items/{id}/claim",
+                description: "领取待办",
+                permission: {
+                    resource: "work_item",
+                    action: "claim",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items/{id}/defer",
+                description: "暂挂待办",
+                permission: {
+                    resource: "work_item",
+                    action: "defer",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items/{id}/transfer",
+                description: "转交待办",
+                permission: {
+                    resource: "work_item",
+                    action: "transfer",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items/{id}/complete",
+                description: "完成任务",
+                permission: {
+                    resource: "work_item",
+                    action: "complete",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items/{id}/close",
+                description: "关闭待办",
+                permission: {
+                    resource: "work_item",
+                    action: "close",
+                },
+            },
+        ],
+    },
+    {
+        name: "批量任务",
+        description: "批量选择快照与后台任务中心",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/bulk-selection-snapshots",
+                description: "查询选择快照列表",
+                permission: {
+                    resource: "bulk_selection_snapshot",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/bulk-selection-snapshots",
+                description: "创建选择快照",
+                permission: {
+                    resource: "bulk_selection_snapshot",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/bulk-selection-snapshots/{id}/confirm",
+                description: "确认选择快照",
+                permission: {
+                    resource: "bulk_selection_snapshot",
+                    action: "confirm",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/bulk-selection-snapshots/{id}/expire",
+                description: "失效选择快照",
+                permission: {
+                    resource: "bulk_selection_snapshot",
+                    action: "expire",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/bulk-selection-snapshots/{id}/items",
+                description: "查询选择快照逐项结果",
+                permission: {
+                    resource: "bulk_selection_item",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/background-jobs",
+                description: "查询后台任务列表",
+                permission: {
+                    resource: "background_job",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/background-jobs",
+                description: "创建后台任务",
+                permission: {
+                    resource: "background_job",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/background-jobs/{id}",
+                description: "查询后台任务详情",
+                permission: {
+                    resource: "background_job",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/background-jobs/{id}/cancel",
+                description: "取消后台任务",
+                permission: {
+                    resource: "background_job",
+                    action: "cancel",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/background-jobs/{id}/items",
+                description: "查询后台任务逐项结果",
+                permission: {
+                    resource: "background_job_item",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "文件资产",
+        description: "文件元数据、单据附件与安全检查",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/file-assets",
+                description: "查询文件资产列表",
+                permission: {
+                    resource: "file_asset",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/file-assets/upload",
+                description: "上传并登记文件资产",
+                permission: {
+                    resource: "file_asset",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/file-assets/register",
+                description: "登记文件资产",
+                permission: {
+                    resource: "file_asset",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/file-assets/{id}",
+                description: "查询文件资产详情",
+                permission: {
+                    resource: "file_asset",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/file-assets/{id}/scan-result",
+                description: "记录安全检查结果",
+                permission: {
+                    resource: "file_asset",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/file-assets/{id}/destroy",
+                description: "销毁文件资产",
+                permission: {
+                    resource: "file_asset",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/document-attachments",
+                description: "建立单据附件关联",
+                permission: {
+                    resource: "document_attachment",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/documents/{id}/attachments",
+                description: "查询单据附件列表",
+                permission: {
+                    resource: "document_attachment",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "权限与审计",
+        description: "权限目录、数据范围、用户授权与审计查询",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/permissions",
+                description: "查询权限定义列表",
+                permission: {
+                    resource: "permission",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/permissions",
+                description: "创建权限定义",
+                permission: {
+                    resource: "permission",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/permissions/{id}",
+                description: "更新权限定义",
+                permission: {
+                    resource: "permission",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/permissions/{id}",
+                description: "删除权限定义",
+                permission: {
+                    resource: "permission",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/data-scopes",
+                description: "查询数据范围列表",
+                permission: {
+                    resource: "data_scope",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/data-scopes",
+                description: "创建数据范围",
+                permission: {
+                    resource: "data_scope",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/data-scopes/{id}",
+                description: "删除数据范围",
+                permission: {
+                    resource: "data_scope",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/user-roles",
+                description: "查询用户角色绑定",
+                permission: {
+                    resource: "user_role",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/user-roles",
+                description: "分配用户角色",
+                permission: {
+                    resource: "user_role",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/user-roles/{id}/revoke",
+                description: "撤权用户角色",
+                permission: {
+                    resource: "user_role",
+                    action: "revoke",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/audit-events",
+                description: "查询审计事件列表",
+                permission: {
+                    resource: "audit_event",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "业务伙伴-主体",
+        description: "企业主体稳定身份与历史名称资料管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties",
+                description: "查询主体列表",
+                permission: {
+                    resource: "party",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/parties",
+                description: "创建主体",
+                permission: {
+                    resource: "party",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}",
+                description: "查询主体详情",
+                permission: {
+                    resource: "party",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/parties/{id}",
+                description: "更新主体并形成新修订",
+                permission: {
+                    resource: "party",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/parties/{id}",
+                description: "删除主体",
+                permission: {
+                    resource: "party",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}/revisions",
+                description: "查询主体修订列表",
+                permission: {
+                    resource: "party_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}/contacts",
+                description: "查询联系人列表",
+                permission: {
+                    resource: "party_contact",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/parties/{id}/contacts",
+                description: "创建联系人",
+                permission: {
+                    resource: "party_contact",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/party-contacts/{id}",
+                description: "更新联系人",
+                permission: {
+                    resource: "party_contact",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}/addresses",
+                description: "查询地址列表",
+                permission: {
+                    resource: "party_address",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/parties/{id}/addresses",
+                description: "创建地址",
+                permission: {
+                    resource: "party_address",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/party-addresses/{id}",
+                description: "更新地址",
+                permission: {
+                    resource: "party_address",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}/tax-profiles",
+                description: "查询税务资料列表",
+                permission: {
+                    resource: "party_tax_profile",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/parties/{id}/tax-profiles",
+                description: "创建税务资料",
+                permission: {
+                    resource: "party_tax_profile",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/party-tax-profiles/{id}",
+                description: "更新税务资料",
+                permission: {
+                    resource: "party_tax_profile",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}/bank-accounts",
+                description: "查询银行账户列表",
+                permission: {
+                    resource: "party_bank_account",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/parties/{id}/bank-accounts",
+                description: "创建银行账户",
+                permission: {
+                    resource: "party_bank_account",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/party-bank-accounts/{id}",
+                description: "更新银行账户",
+                permission: {
+                    resource: "party_bank_account",
+                    action: "update",
+                },
+            },
+        ],
+    },
+    {
+        name: "业务伙伴-客户",
+        description: "客户角色与归属管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customers",
+                description: "查询客户列表",
+                permission: {
+                    resource: "customer",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customers",
+                description: "创建客户",
+                permission: {
+                    resource: "customer",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customers/{id}",
+                description: "查询客户详情",
+                permission: {
+                    resource: "customer",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/customers/{id}",
+                description: "更新客户",
+                permission: {
+                    resource: "customer",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/customers/{id}",
+                description: "删除客户",
+                permission: {
+                    resource: "customer",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customers/{id}/assignments",
+                description: "查询客户归属列表",
+                permission: {
+                    resource: "customer_assignment",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customers/{id}/assignments",
+                description: "调整客户归属",
+                permission: {
+                    resource: "customer_assignment",
+                    action: "create",
+                },
+            },
+        ],
+    },
+    {
+        name: "业务伙伴-供应商",
+        description: "供应商角色、商务结算版本、能力与资质管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers",
+                description: "查询供应商列表",
+                permission: {
+                    resource: "supplier",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers",
+                description: "创建供应商",
+                permission: {
+                    resource: "supplier",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{id}",
+                description: "查询供应商详情",
+                permission: {
+                    resource: "supplier",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/suppliers/{id}",
+                description: "更新供应商",
+                permission: {
+                    resource: "supplier",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/suppliers/{id}",
+                description: "删除供应商",
+                permission: {
+                    resource: "supplier",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{id}/commercial-profiles",
+                description: "查询商务结算版本列表",
+                permission: {
+                    resource: "supplier_commercial_profile",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers/{id}/commercial-profiles",
+                description: "追加商务结算版本",
+                permission: {
+                    resource: "supplier_commercial_profile",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{id}/capabilities",
+                description: "查询供应商能力列表",
+                permission: {
+                    resource: "supplier_capability",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers/{id}/capabilities",
+                description: "创建供应商能力",
+                permission: {
+                    resource: "supplier_capability",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-capabilities/{id}",
+                description: "更新供应商能力",
+                permission: {
+                    resource: "supplier_capability",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{id}/qualifications",
+                description: "查询供应商资质列表",
+                permission: {
+                    resource: "supplier_qualification",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers/{id}/qualifications",
+                description: "创建供应商资质",
+                permission: {
+                    resource: "supplier_qualification",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-qualifications/{id}",
+                description: "更新供应商资质",
+                permission: {
+                    resource: "supplier_qualification",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{id}/ratings",
+                description: "查询供应商评估版本列表",
+                permission: {
+                    resource: "supplier_rating",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers/{id}/ratings",
+                description: "创建供应商评估版本",
+                permission: {
+                    resource: "supplier_rating",
+                    action: "create",
+                },
+            },
+        ],
+    },
+    {
+        name: "商品与仓库",
+        description: "公司商品池、商品、类目、供应商与仓库基础资料",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-categories",
+                description: "查询商品分类列表",
+                permission: {
+                    resource: "product_category",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-categories",
+                description: "创建商品分类",
+                permission: {
+                    resource: "product_category",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/product-categories/{id}",
+                description: "更新商品分类",
+                permission: {
+                    resource: "product_category",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/product-categories/{id}/parent",
+                description: "移动商品分类",
+                permission: {
+                    resource: "product_category",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/product-categories/{id}",
+                description: "删除商品分类",
+                permission: {
+                    resource: "product_category",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-brands",
+                description: "查询商品品牌列表",
+                permission: {
+                    resource: "product_brand",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-brands",
+                description: "创建商品品牌",
+                permission: {
+                    resource: "product_brand",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/product-brands/{id}",
+                description: "更新商品品牌",
+                permission: {
+                    resource: "product_brand",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/product-brands/{id}",
+                description: "删除商品品牌",
+                permission: {
+                    resource: "product_brand",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/unit-of-measures",
+                description: "查询计量单位列表",
+                permission: {
+                    resource: "unit_of_measure",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/unit-of-measures",
+                description: "创建计量单位",
+                permission: {
+                    resource: "unit_of_measure",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/unit-of-measures/{id}",
+                description: "更新计量单位",
+                permission: {
+                    resource: "unit_of_measure",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/unit-of-measures/{id}",
+                description: "删除计量单位",
+                permission: {
+                    resource: "unit_of_measure",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sku-attributes",
+                description: "查询规格属性列表",
+                permission: {
+                    resource: "sku_attribute",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sku-attributes",
+                description: "创建规格属性",
+                permission: {
+                    resource: "sku_attribute",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/sku-attributes/{id}",
+                description: "更新规格属性",
+                permission: {
+                    resource: "sku_attribute",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/sku-attributes/{id}",
+                description: "删除规格属性",
+                permission: {
+                    resource: "sku_attribute",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sku-attribute-values",
+                description: "查询规格属性值列表",
+                permission: {
+                    resource: "sku_attribute_value",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sku-attribute-values",
+                description: "创建规格属性值",
+                permission: {
+                    resource: "sku_attribute_value",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/sku-attribute-values/{id}",
+                description: "更新规格属性值",
+                permission: {
+                    resource: "sku_attribute_value",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/sku-attribute-values/{id}",
+                description: "删除规格属性值",
+                permission: {
+                    resource: "sku_attribute_value",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/products",
+                description: "查询商品列表",
+                permission: {
+                    resource: "product",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/products",
+                description: "创建商品",
+                permission: {
+                    resource: "product",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/products/{id}",
+                description: "规格编辑商品",
+                permission: {
+                    resource: "product",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-revisions",
+                description: "查询商品修订列表",
+                permission: {
+                    resource: "product_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/skus",
+                description: "查询SKU列表",
+                permission: {
+                    resource: "sku",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sku-revisions",
+                description: "查询SKU修订列表",
+                permission: {
+                    resource: "sku_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/voucher-category-profiles",
+                description: "查询卡券类目列表",
+                permission: {
+                    resource: "voucher_category_profile",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/voucher-category-profiles",
+                description: "创建卡券类目",
+                permission: {
+                    resource: "voucher_category_profile",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/warehouses",
+                description: "查询仓库列表",
+                permission: {
+                    resource: "warehouse",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/warehouses",
+                description: "创建仓库",
+                permission: {
+                    resource: "warehouse",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/warehouses/{id}",
+                description: "更新仓库",
+                permission: {
+                    resource: "warehouse",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/warehouse-revisions",
+                description: "查询仓库修订列表",
+                permission: {
+                    resource: "warehouse_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/warehouse-sku-policies",
+                description: "查询仓库SKU预警策略列表",
+                permission: {
+                    resource: "warehouse_sku_policy",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/warehouse-sku-policies",
+                description: "创建仓库SKU预警策略",
+                permission: {
+                    resource: "warehouse_sku_policy",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/warehouse-sku-policies/{id}",
+                description: "更新仓库SKU预警策略",
+                permission: {
+                    resource: "warehouse_sku_policy",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/warehouse-sku-policies/{id}",
+                description: "删除仓库SKU预警策略",
+                permission: {
+                    resource: "warehouse_sku_policy",
+                    action: "delete",
+                },
+            },
+        ],
+    },
+    {
+        name: "合同",
+        description: "合同 PDF 档案管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contracts",
+                description: "查询合同列表",
+                permission: {
+                    resource: "contract",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contracts",
+                description: "首次归档合同 PDF",
+                permission: {
+                    resource: "contract",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contracts/{id}",
+                description: "查询合同详情",
+                permission: {
+                    resource: "contract",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contracts/{id}/revisions",
+                description: "归档合同新版本",
+                permission: {
+                    resource: "contract",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contracts/{id}/terminate",
+                description: "终止合同",
+                permission: {
+                    resource: "contract",
+                    action: "update",
+                },
+            },
+        ],
+    },
+    {
+        name: "销售单",
+        description: "销售单（W05）管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-orders",
+                description: "查询销售单列表",
+                permission: {
+                    resource: "sales_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-orders",
+                description: "创建销售单",
+                permission: {
+                    resource: "sales_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-orders/{id}",
+                description: "查询销售单详情",
+                permission: {
+                    resource: "sales_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/sales-orders/{id}/working-copy",
+                description: "保存销售单草稿",
+                permission: {
+                    resource: "sales_order",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-orders/{id}/submit",
+                description: "提交销售单",
+                permission: {
+                    resource: "sales_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-orders/{id}/void",
+                description: "作废销售单草稿",
+                permission: {
+                    resource: "sales_order",
+                    action: "delete",
+                },
+            },
+        ],
+    },
+    {
+        name: "销售复核",
+        description: "销售审批与采购二次确认（W05/W07）管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-order-reviews",
+                description: "查询销售审批记录列表",
+                permission: {
+                    resource: "sales_order_review",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-reviews/{id}/approve",
+                description: "通过卡券销售审批",
+                permission: {
+                    resource: "sales_order_review",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-reviews/{id}/reject",
+                description: "驳回卡券销售审批",
+                permission: {
+                    resource: "sales_order_review",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-confirmations",
+                description: "查询采购确认队列",
+                permission: {
+                    resource: "procurement_confirmation",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-confirmations/{id}",
+                description: "查询采购确认详情",
+                permission: {
+                    resource: "procurement_confirmation",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/procurement-confirmations/{id}/lines",
+                description: "保存采购确认分行",
+                permission: {
+                    resource: "procurement_confirmation",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-confirmations/{id}/approve",
+                description: "采购确认通过",
+                permission: {
+                    resource: "procurement_confirmation",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-confirmations/{id}/reject",
+                description: "采购确认驳回",
+                permission: {
+                    resource: "procurement_confirmation",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-change-orders",
+                description: "查询销售变更单列表",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders",
+                description: "创建销售变更单",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-change-orders/{id}",
+                description: "查询销售变更单详情",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/submit-impact",
+                description: "发起销售变更影响确认",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/impact-confirm",
+                description: "通过变更履约影响确认",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/impact-reject",
+                description: "驳回变更履约影响确认",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/finance-confirm",
+                description: "通过变更财务复核",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/finance-reject",
+                description: "驳回变更财务复核",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/void",
+                description: "作废销售变更单",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "delete",
+                },
+            },
+        ],
+    },
+    {
+        name: "采购单",
+        description: "采购单、采购提交与采购变更管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders",
+                description: "查询采购单列表",
+                permission: {
+                    resource: "purchase_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders",
+                description: "依据采购确认创建采购单",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}",
+                description: "查询采购单对象中心",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/draft",
+                description: "保存采购草稿",
+                permission: {
+                    resource: "purchase_order",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/submit",
+                description: "提交采购财务审核",
+                permission: {
+                    resource: "purchase_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/review/approve",
+                description: "采购财务审核通过",
+                permission: {
+                    resource: "purchase_order",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/review/reject",
+                description: "采购财务审核驳回",
+                permission: {
+                    resource: "purchase_order",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-creation-bases",
+                description: "查询采购创建依据",
+                permission: {
+                    resource: "purchase_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/changes",
+                description: "发起采购变更",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-change-orders",
+                description: "查询采购变更单列表",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-change-orders/{id}",
+                description: "查询采购变更单详情",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-change-orders/{id}/submit",
+                description: "提交采购变更目标内容",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-change-orders/{id}/effect",
+                description: "采购变更生效",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "post",
+                },
+            },
+        ],
+    },
+    {
+        name: "履约",
+        description: "采购入库、发货、交付、服务与客户验收管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-receipts",
+                description: "查询采购入库单列表",
+                permission: {
+                    resource: "purchase_receipt",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-receipts",
+                description: "创建采购入库单",
+                permission: {
+                    resource: "purchase_receipt",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-receipts/{id}",
+                description: "查询采购入库单详情",
+                permission: {
+                    resource: "purchase_receipt",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/purchase-receipts/{id}",
+                description: "更新采购入库单",
+                permission: {
+                    resource: "purchase_receipt",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-receipts/{id}/post",
+                description: "过账采购入库",
+                permission: {
+                    resource: "purchase_receipt",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/deliveries",
+                description: "查询发货单列表",
+                permission: {
+                    resource: "delivery",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/deliveries",
+                description: "创建发货单",
+                permission: {
+                    resource: "delivery",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/deliveries/{id}",
+                description: "查询发货单详情",
+                permission: {
+                    resource: "delivery",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/deliveries/{id}",
+                description: "更新发货单",
+                permission: {
+                    resource: "delivery",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/deliveries/{id}/post",
+                description: "过账发货",
+                permission: {
+                    resource: "delivery",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/electronic-deliveries",
+                description: "查询电子交付记录列表",
+                permission: {
+                    resource: "electronic_delivery",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/electronic-deliveries",
+                description: "创建电子交付记录",
+                permission: {
+                    resource: "electronic_delivery",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/electronic-deliveries/{id}/confirm",
+                description: "确认电子交付",
+                permission: {
+                    resource: "electronic_delivery",
+                    action: "confirm",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/service-fulfillments",
+                description: "查询服务履约记录列表",
+                permission: {
+                    resource: "service_fulfillment",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/service-fulfillments",
+                description: "创建服务履约记录",
+                permission: {
+                    resource: "service_fulfillment",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/service-fulfillments/{id}/confirm",
+                description: "确认服务履约",
+                permission: {
+                    resource: "service_fulfillment",
+                    action: "confirm",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-acceptances",
+                description: "查询客户验收单列表",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-acceptances",
+                description: "创建客户验收单",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-acceptances/eligible",
+                description: "查询客户验收工作台",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-acceptances/{id}",
+                description: "查询客户验收单详情",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-acceptances/{id}/post",
+                description: "过账客户验收",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-acceptances/{id}/reverse",
+                description: "冲正客户验收",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "reverse",
+                },
+            },
+        ],
+    },
+    {
+        name: "库存",
+        description: "库存台账与库存调整管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-balances",
+                description: "查询库存余额列表",
+                permission: {
+                    resource: "stock_balance",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-balances/{id}",
+                description: "查询库存余额详情",
+                permission: {
+                    resource: "stock_balance",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-movements",
+                description: "查询库存流水台账",
+                permission: {
+                    resource: "stock_movement",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-reservations",
+                description: "查询库存预占列表",
+                permission: {
+                    resource: "stock_reservation",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-adjustments",
+                description: "查询库存调整单列表",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/stock-adjustments",
+                description: "创建库存调整单",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-adjustments/{id}",
+                description: "查询库存调整单详情",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/stock-adjustments/{id}",
+                description: "更新库存调整单",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/stock-adjustments/{id}/submit",
+                description: "提交库存调整仓储复核",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/stock-adjustments/{id}/approve",
+                description: "库存调整仓储复核通过",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/stock-adjustments/{id}/reject",
+                description: "驳回库存调整",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/stock-adjustments/{id}/post",
+                description: "过账库存调整",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "post",
+                },
+            },
+        ],
+    },
+    {
+        name: "客户往来",
+        description: "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/receivable-accounts",
+                description: "查询应收往来子账列表",
+                permission: {
+                    resource: "receivable_account",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/receivable-accounts",
+                description: "建立应收往来子账",
+                permission: {
+                    resource: "receivable_account",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/receivable-accounts/{id}",
+                description: "查询应收往来子账详情",
+                permission: {
+                    resource: "receivable_account",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/receivable-accounts/{id}/review",
+                description: "更新应收往来子账复核缓存",
+                permission: {
+                    resource: "receivable_account",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/receivable-funds-reviews",
+                description: "追加卡券票款正式复核",
+                permission: {
+                    resource: "receivable_funds_review",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-receipts",
+                description: "查询客户回款单列表",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts",
+                description: "登记客户回款草稿",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-receipts/{id}",
+                description: "查询客户回款单详情",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts/{id}/post",
+                description: "客户回款过账并核销",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/invoices",
+                description: "查询发票列表",
+                permission: {
+                    resource: "invoice",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices",
+                description: "登记发票草稿",
+                permission: {
+                    resource: "invoice",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/invoices/{id}",
+                description: "查询发票详情",
+                permission: {
+                    resource: "invoice",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices/{id}/post",
+                description: "发票登记过账并分配",
+                permission: {
+                    resource: "invoice",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices/{id}/red-issue",
+                description: "开具红票并红冲",
+                permission: {
+                    resource: "invoice",
+                    action: "reverse",
+                },
+            },
+        ],
+    },
+    {
+        name: "供应商往来",
+        description: "应付台账、付款单与进项发票登记管理（W12）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/payable-accounts",
+                description: "查询应付往来子账列表",
+                permission: {
+                    resource: "payable_account",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/payable-accounts",
+                description: "建立应付往来子账",
+                permission: {
+                    resource: "payable_account",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/payable-accounts/{id}",
+                description: "查询应付往来子账详情",
+                permission: {
+                    resource: "payable_account",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-payments",
+                description: "查询供应商付款单列表",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-payments",
+                description: "登记供应商付款草稿",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-payments/{id}",
+                description: "查询供应商付款单详情",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-payments/{id}/post",
+                description: "供应商付款过账并核销",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-invoice-allocations",
+                description: "查询进项发票分配列表",
+                permission: {
+                    resource: "purchase_invoice_allocation",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-invoice-allocations",
+                description: "进项发票登记过账并分配",
+                permission: {
+                    resource: "purchase_invoice_allocation",
+                    action: "post",
+                },
+            },
+        ],
+    },
+    {
+        name: "实际经营盈亏",
+        description: "成本事实与成本分配管理（W16）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/cost-entries",
+                description: "查询成本事实列表",
+                permission: {
+                    resource: "cost_entry",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/cost-entries",
+                description: "手工登记成本事实",
+                permission: {
+                    resource: "cost_entry",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/cost-entries/{id}",
+                description: "查询成本事实详情",
+                permission: {
+                    resource: "cost_entry",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/cost-allocations",
+                description: "查询成本分配列表",
+                permission: {
+                    resource: "cost_allocation",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "退货退款",
+        description: "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-return-cases",
+                description: "查询销售退货处理单列表",
+                permission: {
+                    resource: "sales_return_case",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-return-cases",
+                description: "建立销售退货处理单",
+                permission: {
+                    resource: "sales_return_case",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-return-cases/{id}",
+                description: "查询销售退货处理单详情",
+                permission: {
+                    resource: "sales_return_case",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-return-orders",
+                description: "查询采购退货单列表",
+                permission: {
+                    resource: "purchase_return_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-return-orders",
+                description: "建立采购退货单",
+                permission: {
+                    resource: "purchase_return_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-return-orders/{id}",
+                description: "查询采购退货单详情",
+                permission: {
+                    resource: "purchase_return_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-refunds",
+                description: "查询客户退款列表",
+                permission: {
+                    resource: "customer_refund",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-refunds",
+                description: "登记客户退款草稿",
+                permission: {
+                    resource: "customer_refund",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-refunds/{id}",
+                description: "查询客户退款详情",
+                permission: {
+                    resource: "customer_refund",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-refunds/{id}/post",
+                description: "客户退款过账",
+                permission: {
+                    resource: "customer_refund",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-refunds",
+                description: "登记供应商退款草稿",
+                permission: {
+                    resource: "supplier_refund",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-refunds/{id}/post",
+                description: "供应商退款过账",
+                permission: {
+                    resource: "supplier_refund",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/receipt-reversals",
+                description: "登记回款冲正草稿",
+                permission: {
+                    resource: "receipt_reversal",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/receipt-reversals/{id}/post",
+                description: "回款冲正过账",
+                permission: {
+                    resource: "receipt_reversal",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/payment-reversals",
+                description: "登记付款冲正草稿",
+                permission: {
+                    resource: "payment_reversal",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/payment-reversals/{id}/post",
+                description: "付款冲正过账",
+                permission: {
+                    resource: "payment_reversal",
+                    action: "post",
+                },
+            },
+        ],
+    },
+    {
+        name: "导入与期初",
+        description: "旧数据导入批次、导入行与业务确认事实管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/legacy-import-batches",
+                description: "查询导入批次列表",
+                permission: {
+                    resource: "legacy_import_batch",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/legacy-import-batches",
+                description: "创建导入批次",
+                permission: {
+                    resource: "legacy_import_batch",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/legacy-import-batches/{id}",
+                description: "查询导入批次详情",
+                permission: {
+                    resource: "legacy_import_batch",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/legacy-import-batches/{id}/rows",
+                description: "查询导入行列表",
+                permission: {
+                    resource: "legacy_import_row",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/legacy-import-batches/{id}/apply",
+                description: "应用导入批次",
+                permission: {
+                    resource: "legacy_import_batch",
+                    action: "apply",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/legacy-import-confirmations",
+                description: "查询导入确认事实列表",
+                permission: {
+                    resource: "legacy_import_confirmation",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/legacy-import-confirmations",
+                description: "创建导入确认事实",
+                permission: {
+                    resource: "legacy_import_confirmation",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/legacy-import-confirmations/{id}/decide",
+                description: "决策导入确认事实",
+                permission: {
+                    resource: "legacy_import_confirmation",
+                    action: "decide",
+                },
+            },
+        ],
+    },
+    {
+        name: "商城同步与映射",
+        description: "商城卡券销售单同步作业、快照、核对与映射任务管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-sync-jobs",
+                description: "查询同步作业列表",
+                permission: {
+                    resource: "mall_sales_sync_job",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-sales-sync-jobs",
+                description: "创建同步作业",
+                permission: {
+                    resource: "mall_sales_sync_job",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-sync-jobs/{id}",
+                description: "查询同步作业详情",
+                permission: {
+                    resource: "mall_sales_sync_job",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-sales-sync-jobs/{id}/complete",
+                description: "完成同步作业",
+                permission: {
+                    resource: "mall_sales_sync_job",
+                    action: "complete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-order-snapshots",
+                description: "查询商城销售单快照列表",
+                permission: {
+                    resource: "mall_sales_order_snapshot",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-sales-order-snapshots",
+                description: "落盘商城销售单快照",
+                permission: {
+                    resource: "mall_sales_order_snapshot",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-sync-cursors",
+                description: "查询同步水位游标",
+                permission: {
+                    resource: "mall_sales_sync_cursor",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-reconciliation-jobs",
+                description: "查询核对作业列表",
+                permission: {
+                    resource: "mall_sales_reconciliation_job",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-sales-reconciliation-jobs",
+                description: "创建核对作业",
+                permission: {
+                    resource: "mall_sales_reconciliation_job",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-reconciliation-jobs/{id}/items",
+                description: "查询核对差异明细列表",
+                permission: {
+                    resource: "mall_sales_reconciliation_item",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-sales-reconciliation-items/{id}/resolve",
+                description: "处理核对差异明细",
+                permission: {
+                    resource: "mall_sales_reconciliation_item",
+                    action: "resolve",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/master-mapping-tasks",
+                description: "查询映射任务列表",
+                permission: {
+                    resource: "master_mapping_task",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/master-mapping-tasks",
+                description: "创建映射任务",
+                permission: {
+                    resource: "master_mapping_task",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/master-mapping-tasks/{id}/resolve",
+                description: "处理映射任务",
+                permission: {
+                    resource: "master_mapping_task",
+                    action: "resolve",
+                },
+            },
+        ],
+    },
+    {
+        name: "供应商商品库",
+        description: "供应商商品、SKU、映射、供给与入库批次管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/products",
+                description: "查询供应商 SPU 列表",
+                permission: {
+                    resource: "supplier_catalog_product",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/products",
+                description: "创建供应商商品（Excel/API/手工入库）",
+                permission: {
+                    resource: "supplier_catalog_product",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/products/{id}",
+                description: "查询供应商 SPU 详情",
+                permission: {
+                    resource: "supplier_catalog_product",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/products/{id}/revisions",
+                description: "保存供应商商品来源修订",
+                permission: {
+                    resource: "supplier_catalog_product",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/skus",
+                description: "查询供应商 SKU 列表",
+                permission: {
+                    resource: "supplier_catalog_sku",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/mappings",
+                description: "查询供应商 SKU 映射列表",
+                permission: {
+                    resource: "supplier_product_mapping",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/mappings",
+                description: "创建供应商 SKU 映射",
+                permission: {
+                    resource: "supplier_product_mapping",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/mappings/{id}/approve",
+                description: "确认映射并登记双价供给",
+                permission: {
+                    resource: "supplier_product_mapping",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/offerings",
+                description: "查询供给列表",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/offerings/{id}/revisions",
+                description: "保存供给修订",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/intake-batches",
+                description: "查询供应商商品入库批次",
+                permission: {
+                    resource: "supplier_catalog_intake_batch",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "API 供应商连接",
+        description: "供应商 API 连接与能力治理（W20）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-connections",
+                description: "查询供应商 API 连接列表",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections",
+                description: "创建供应商 API 连接",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-connections/{id}",
+                description: "查询供应商 API 连接详情",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-api-connections/{id}",
+                description: "更新供应商 API 连接",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-api-connections/{id}/capabilities",
+                description: "替换供应商 API 连接能力清单",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/health-check",
+                description: "执行连接健康检查",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "health_check",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-capabilities",
+                description: "查询连接能力列表",
+                permission: {
+                    resource: "supplier_api_capability",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "商品发布",
+        description: "二期商品发布与投递（W22）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-publications",
+                description: "查询商品发布列表",
+                permission: {
+                    resource: "product_publication",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-publications",
+                description: "创建商品发布",
+                permission: {
+                    resource: "product_publication",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-publications/{id}",
+                description: "查询商品发布详情",
+                permission: {
+                    resource: "product_publication",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/product-publications/{id}",
+                description: "更新商品发布",
+                permission: {
+                    resource: "product_publication",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-publications/{id}/revisions",
+                description: "形成发布修订",
+                permission: {
+                    resource: "product_publication_revision",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-publications/{id}/revisions",
+                description: "查询发布修订列表",
+                permission: {
+                    resource: "product_publication_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-publication-revisions/{revision_id}/media",
+                description: "查询发布修订媒体列表",
+                permission: {
+                    resource: "product_publication_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-publications/{id}/revisions/{revision_no}/deliver",
+                description: "投递发布修订到目标商城",
+                permission: {
+                    resource: "product_publication_delivery",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-publication-deliveries",
+                description: "查询发布投递列表",
+                permission: {
+                    resource: "product_publication_delivery",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "执行投影",
+        description: "销售单执行投影与下发（W23）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-order-projections",
+                description: "查询执行投影列表",
+                permission: {
+                    resource: "sales_order_projection",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-projections",
+                description: "建立执行投影",
+                permission: {
+                    resource: "sales_order_projection",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-order-projections/{id}",
+                description: "查询执行投影详情",
+                permission: {
+                    resource: "sales_order_projection",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-projections/{id}/revisions",
+                description: "推进执行投影版本",
+                permission: {
+                    resource: "sales_order_projection_revision",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-order-projections/{id}/revisions",
+                description: "查询投影版本列表",
+                permission: {
+                    resource: "sales_order_projection_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-projections/{id}/revisions/{revision_no}/deliver",
+                description: "下发投影版本到目标商城",
+                permission: {
+                    resource: "sales_order_projection_delivery",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-order-projection-deliveries",
+                description: "查询投影下发记录列表",
+                permission: {
+                    resource: "sales_order_projection_delivery",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "卡券消费台账",
+        description: "商城消费回流切换、卡实例基线与余额快照管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/consumption-cutovers",
+                description: "查询商城切换记录列表",
+                permission: {
+                    resource: "mall_consumption_cutover",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/consumption-cutovers",
+                description: "创建商城切换记录",
+                permission: {
+                    resource: "mall_consumption_cutover",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/consumption-cutovers/{id}",
+                description: "查询商城切换记录详情",
+                permission: {
+                    resource: "mall_consumption_cutover",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/consumption-cutovers/{id}/enable",
+                description: "启用商城切换（登记唯一 T）",
+                permission: {
+                    resource: "mall_consumption_cutover",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/card-instances",
+                description: "查询卡实例列表",
+                permission: {
+                    resource: "mall_card_instance",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/card-instances",
+                description: "建立卡实例基线",
+                permission: {
+                    resource: "mall_card_instance",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/card-instances/{id}",
+                description: "查询卡实例详情",
+                permission: {
+                    resource: "mall_card_instance",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/card-instances/{id}/balance-snapshots",
+                description: "查询卡实例余额快照列表",
+                permission: {
+                    resource: "mall_balance_snapshot",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/card-instances/{id}/balance-snapshots",
+                description: "追加卡实例余额快照",
+                permission: {
+                    resource: "mall_balance_snapshot",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/card-instances/{id}/corrections",
+                description: "查询卡实例纠错列表",
+                permission: {
+                    resource: "mall_card_instance_correction",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "商城消费订单",
+        description: "商城消费订单追溯与关键事实接收",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-orders",
+                description: "查询商城消费订单列表",
+                permission: {
+                    resource: "mall_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-orders/{id}",
+                description: "查询商城消费订单详情",
+                permission: {
+                    resource: "mall_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-order-facts",
+                description: "查询商城关键事实列表",
+                permission: {
+                    resource: "mall_order_fact",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-order-facts",
+                description: "接收商城支付/取消/完成关键事实",
+                permission: {
+                    resource: "mall_order_fact",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-refunds",
+                description: "接收商城退款成功事实",
+                permission: {
+                    resource: "mall_refund",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-refunds",
+                description: "查询商城退款列表",
+                permission: {
+                    resource: "mall_refund",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-balance-restorations",
+                description: "接收卡券余额恢复事实",
+                permission: {
+                    resource: "mall_balance_restoration",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-balance-restorations",
+                description: "查询卡券余额恢复列表",
+                permission: {
+                    resource: "mall_balance_restoration",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-after-sales-requests",
+                description: "查询商城售后请求列表",
+                permission: {
+                    resource: "mall_after_sales_request",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "历史消费回填",
+        description: "历史消费回填任务管理与执行",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-consumption-backfill-jobs",
+                description: "查询历史消费回填任务列表",
+                permission: {
+                    resource: "mall_consumption_backfill_job",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-consumption-backfill-jobs",
+                description: "创建历史消费回填任务",
+                permission: {
+                    resource: "mall_consumption_backfill_job",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-consumption-backfill-jobs/{id}",
+                description: "查询历史消费回填任务详情",
+                permission: {
+                    resource: "mall_consumption_backfill_job",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-consumption-backfill-jobs/{id}/commands",
+                description: "执行历史消费回填命令",
+                permission: {
+                    resource: "mall_consumption_backfill_job",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-consumption-backfill-items",
+                description: "查询历史消费回填明细列表",
+                permission: {
+                    resource: "mall_consumption_backfill_item",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "供应商订单",
+        description: "供应商履约订单、动作与退款事实管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-fulfillment-orders",
+                description: "查询供应商履约订单列表",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders",
+                description: "向供应商提交下单",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-fulfillment-orders/{id}",
+                description: "查询供应商履约订单详情",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders/{id}/cancel",
+                description: "向供应商提交取消",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "cancel",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders/{id}/refund",
+                description: "向供应商提交退款",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "refund",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders/{id}/reject",
+                description: "登记供应商拒单结果",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-refund-facts",
+                description: "登记供应商退款成功结果",
+                permission: {
+                    resource: "supplier_refund_fact",
+                    action: "post",
+                },
+            },
+        ],
+    },
+    {
+        name: "供应商结算",
+        description: "供应商周期结算单、明细与差异管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-settlement-statements",
+                description: "查询供应商结算单列表",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-statements",
+                description: "创建供应商结算草稿",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-settlement-statements/{id}",
+                description: "查询供应商结算单详情",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-statements/{id}/submit-review",
+                description: "提交结算复核",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-statements/{id}/confirm",
+                description: "确认结算并形成应付",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "confirm",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-statements/{id}/void",
+                description: "作废结算单",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "void",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-settlement-items",
+                description: "查询供应商结算明细列表",
+                permission: {
+                    resource: "supplier_settlement_item",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-settlement-differences",
+                description: "查询供应商结算差异列表",
+                permission: {
+                    resource: "supplier_settlement_difference",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-differences/{id}/resolve",
+                description: "登记结算差异处理结论",
+                permission: {
+                    resource: "supplier_settlement_difference",
+                    action: "update",
+                },
+            },
+        ],
+    },
+    {
         name: "集成治理",
         description: "入站消息、错误任务与对账差异（W29）",
         permissions: [

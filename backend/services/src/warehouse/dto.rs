@@ -478,6 +478,7 @@ impl WarehouseSkuPolicyListParams {
 mod tests {
     use super::normalize_sort;
     use super::SortDir;
+    use validator::Validate;
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {

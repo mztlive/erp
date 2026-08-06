@@ -155,12 +155,14 @@ impl WarehouseService {
             id.clone(),
             revision_id,
             1,
-            req.name,
-            req.address,
-            req.contact,
-            req.effective_from,
-            req.effective_to,
-            req.change_reason,
+            WarehouseRevisionInput {
+                name: req.name,
+                address: req.address,
+                contact: req.contact,
+                effective_from: req.effective_from,
+                effective_to: req.effective_to,
+                change_reason: req.change_reason,
+            },
         )?;
         let audit = actor
             .clone()
@@ -216,12 +218,14 @@ impl WarehouseService {
             WarehouseId::new(id.to_string()),
             WarehouseRevisionId::new(next_id()),
             revision_no,
-            req.name,
-            req.address,
-            req.contact,
-            req.effective_from,
-            req.effective_to,
-            req.change_reason,
+            WarehouseRevisionInput {
+                name: req.name,
+                address: req.address,
+                contact: req.contact,
+                effective_from: req.effective_from,
+                effective_to: req.effective_to,
+                change_reason: req.change_reason,
+            },
         )?;
         warehouse.stable.current_revision_id = Some(revision.base.id.clone());
         warehouse.stable.status = req.status;
@@ -373,12 +377,12 @@ impl WarehouseService {
         req.validate()?;
         self.db
             .warehouses()
-            .find_by_id(&req.warehouse_id.to_string(), &mut NoTransaction)
+            .find_by_id(req.warehouse_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("仓库不存在".to_string()))?;
         self.db
             .skus()
-            .find_by_id(&req.sku_id.to_string(), &mut NoTransaction)
+            .find_by_id(req.sku_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("SKU不存在".to_string()))?;
         self.ensure_no_overlap(
@@ -593,6 +597,22 @@ fn ensure_version(current: u64, expected: u64) -> Result<()> {
     Ok(())
 }
 
+/// 仓库修订构建输入（名称/地址/联系人/生效区间/变更原因）。
+struct WarehouseRevisionInput {
+    /// 仓库名称。
+    name: String,
+    /// 地址明文。
+    address: String,
+    /// 联系人明文。
+    contact: String,
+    /// 生效起始日。
+    effective_from: BusinessDate,
+    /// 生效截止日。
+    effective_to: Option<BusinessDate>,
+    /// 变更原因。
+    change_reason: String,
+}
+
 /// 构造仓库修订（名称/变更原因校验 + 地址/联系人敏感值指纹化）。
 ///
 /// 地址与联系人按数据模型 §4.5.5 生成带密钥 HMAC 指纹的 `SensitiveText`；
@@ -603,11 +623,7 @@ fn ensure_version(current: u64, expected: u64) -> Result<()> {
 /// * `warehouse_id` - 所属仓库
 /// * `revision_id` - 修订 ID
 /// * `revision_no` - 修订序号
-/// * `name` - 仓库名称
-/// * `address` - 地址明文
-/// * `contact` - 联系人明文
-/// * `effective_from` / `effective_to` - 生效区间
-/// * `change_reason` - 变更原因
+/// * `input` - 修订内容
 ///
 /// # 返回
 /// 返回仓库修订实体。
@@ -618,24 +634,25 @@ fn build_warehouse_revision(
     warehouse_id: WarehouseId,
     revision_id: WarehouseRevisionId,
     revision_no: u32,
-    name: String,
-    address: String,
-    contact: String,
-    effective_from: BusinessDate,
-    effective_to: Option<BusinessDate>,
-    change_reason: String,
+    input: WarehouseRevisionInput,
 ) -> Result<WarehouseRevision> {
     Ok(WarehouseRevision::new(
         revision_id,
         WarehouseRevisionData {
             warehouse_id,
             revision_no,
-            name,
-            address: SensitiveText::new(address.clone(), content_fingerprint(&address, FINGERPRINT_KEY))?,
-            contact: SensitiveText::new(contact.clone(), content_fingerprint(&contact, FINGERPRINT_KEY))?,
-            effective_from,
-            effective_to,
-            change_reason,
+            name: input.name,
+            address: SensitiveText::new(
+                input.address.clone(),
+                content_fingerprint(&input.address, FINGERPRINT_KEY),
+            )?,
+            contact: SensitiveText::new(
+                input.contact.clone(),
+                content_fingerprint(&input.contact, FINGERPRINT_KEY),
+            )?,
+            effective_from: input.effective_from,
+            effective_to: input.effective_to,
+            change_reason: input.change_reason,
         },
     )?)
 }

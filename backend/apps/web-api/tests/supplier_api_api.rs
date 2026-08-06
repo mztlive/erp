@@ -419,7 +419,7 @@ async fn health_check_failure_degrades_to_observable_error_and_is_idempotent() {
         assert_ok_envelope(status, &body);
         let result = &body["data"];
         assert_eq!(result["result"], "failed", "默认网关失败关闭 → 健康检查失败");
-        assert!(result["error_task_id"].as_str().unwrap().len() > 0);
+        assert!(!result["error_task_id"].as_str().unwrap().is_empty());
         assert!(!result["inbox_message_id"].as_str().unwrap().is_empty());
 
         let inbox_count = test_db

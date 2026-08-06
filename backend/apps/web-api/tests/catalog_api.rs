@@ -261,7 +261,7 @@ async fn happy_path_dictionary_crud_and_product_create_with_contract_shape() {
                     "PHYSICAL",
                     json!([spec_sku(
                         "SKU-001",
-                        &dictionaries["unit_id"].as_str().unwrap(),
+                        dictionaries["unit_id"].as_str().unwrap(),
                         "L",
                         "99.90"
                     )]),

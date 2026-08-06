@@ -113,6 +113,22 @@ struct SkuEditItem {
     attribute_values: Vec<SkuRevisionAttributeValue>,
 }
 
+/// 新 SKU 构建上下文（所属 SPU、名称快照、分类、生效区间、操作人）。
+struct NewSkuContext<'a> {
+    /// 所属 SPU。
+    product_id: &'a ProductId,
+    /// 商品名称（作为 SKU 修订名称快照）。
+    product_name: &'a str,
+    /// ERP 分类（规格适用性校验）。
+    category_id: &'a ProductCategoryId,
+    /// 生效起始日。
+    effective_from: BusinessDate,
+    /// 生效截止日。
+    effective_to: Option<BusinessDate>,
+    /// 操作人 ID。
+    created_by: &'a str,
+}
+
 /// 一条已解析的规格属性-值（回填字典身份后进入签名计算与行写入）。
 struct ResolvedSpecEntry {
     /// 规格属性代码（签名用）。
@@ -1012,7 +1028,7 @@ impl CatalogService {
         actor: &AuditActor,
     ) -> Result<SkuAttributeValueView> {
         req.validate()?;
-        self.load_attribute(&req.attribute_id.to_string()).await?;
+        self.load_attribute(req.attribute_id.as_ref()).await?;
         let id = SkuAttributeValueId::new(next_id());
         let value = SkuAttributeValue::new(
             id.clone(),
@@ -1454,13 +1470,13 @@ impl CatalogService {
         let sku = self
             .db
             .skus()
-            .find_by_id(&req.sku_id.to_string(), &mut NoTransaction)
+            .find_by_id(req.sku_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("SKU不存在".to_string()))?;
         let product = self
             .db
             .products()
-            .find_by_id(&sku.product_id.to_string(), &mut NoTransaction)
+            .find_by_id(sku.product_id.as_ref(), &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("商品不存在".to_string()))?;
         if product.product_kind != ProductKind::Voucher {
@@ -1672,13 +1688,15 @@ impl CatalogService {
         for sku_input in req.skus {
             let item = self
                 .build_new_sku_item(
-                    &product_id,
-                    &req.name,
-                    &req.category_id,
-                    req.effective_from,
-                    req.effective_to,
+                    NewSkuContext {
+                        product_id: &product_id,
+                        product_name: &req.name,
+                        category_id: &req.category_id,
+                        effective_from: req.effective_from,
+                        effective_to: req.effective_to,
+                        created_by: actor.id(),
+                    },
                     sku_input,
-                    actor.id(),
                 )
                 .await?;
             sku_items.push(item);
@@ -1687,7 +1705,7 @@ impl CatalogService {
         let revision = ProductRevision::new(
             revision_id.clone(),
             ProductRevisionData {
-                product_id: product_id,
+                product_id,
                 revision_no: 1,
                 name: req.name,
                 description: req.description,
@@ -1728,13 +1746,13 @@ impl CatalogService {
         skus: &[ProductSkuInput],
         product_kind: ProductKind,
     ) -> Result<()> {
-        let category = self.load_category(&category_id.to_string()).await?;
+        let category = self.load_category(category_id.as_ref()).await?;
         if category.product_kind != product_kind {
             return Err(Error::BusinessLogicError("所选分类不允许该商品类型".to_string()));
         }
-        self.load_brand(&brand_id.to_string()).await?;
+        self.load_brand(brand_id.as_ref()).await?;
         for sku in skus {
-            let unit = self.load_unit(&sku.base_unit_id.to_string()).await?;
+            let unit = self.load_unit(sku.base_unit_id.as_ref()).await?;
             if !unit.is_active() {
                 return Err(Error::BusinessLogicError("基础单位已停用".to_string()));
             }
@@ -1765,7 +1783,7 @@ impl CatalogService {
             let asset = self
                 .db
                 .file_assets()
-                .find_by_id(&input.file_asset_id.to_string(), &mut NoTransaction)
+                .find_by_id(input.file_asset_id.as_ref(), &mut NoTransaction)
                 .await?
                 .ok_or_else(|| Error::NotFound("媒体文件不存在".to_string()))?;
             if !asset.is_usable_for_business(entities::common::time::Instant::now()) {
@@ -1790,10 +1808,7 @@ impl CatalogService {
     /// 构造新 SKU 行（解析规格 → 计算签名 → 生成 SKU 身份 + 首个修订 + 规格值）。
     ///
     /// # 参数
-    /// * `product_id` - 所属 SPU
-    /// * `product_name` - 商品名称（作为 SKU 修订名称快照）
-    /// * `category_id` - ERP 分类（规格适用性校验）
-    /// * `effective_from` / `effective_to` - 生效区间
+    /// * `ctx` - 新 SKU 上下文（所属 SPU、名称快照、分类、生效区间、操作人）
     /// * `input` - SKU 输入行
     ///
     /// # 返回
@@ -1803,16 +1818,11 @@ impl CatalogService {
     /// 规格属性/值不存在、签名冲突、条码冲突时返回错误。
     async fn build_new_sku_item(
         &self,
-        product_id: &ProductId,
-        product_name: &str,
-        category_id: &ProductCategoryId,
-        effective_from: BusinessDate,
-        effective_to: Option<BusinessDate>,
+        ctx: NewSkuContext<'_>,
         input: ProductSkuInput,
-        created_by: &str,
     ) -> Result<SkuEditItem> {
         let (signature, resolved) = self
-            .resolve_spec_entries(category_id, &input.spec_entries)
+            .resolve_spec_entries(ctx.category_id, &input.spec_entries)
             .await?;
         self.ensure_barcode_available(&input.barcode, None).await?;
         let sku_id = SkuId::new(next_id());
@@ -1822,7 +1832,7 @@ impl CatalogService {
             SkuRevisionData {
                 sku_id: sku_id.clone(),
                 revision_no: 1,
-                name: product_name.to_string(),
+                name: ctx.product_name.to_string(),
                 description: None,
                 specification: None,
                 barcode: input.barcode,
@@ -1831,8 +1841,8 @@ impl CatalogService {
                 sales_visible_price_gross: input.sales_visible_price_gross,
                 market_price: input.market_price,
                 status: EnableStatus::Active,
-                effective_from,
-                effective_to,
+                effective_from: ctx.effective_from,
+                effective_to: ctx.effective_to,
             },
         )?;
         let attribute_values = build_attribute_value_rows(&revision_id, &resolved)?;
@@ -1840,12 +1850,12 @@ impl CatalogService {
             sku_id,
             SkuData {
                 sku_no: input.sku_no,
-                product_id: product_id.clone(),
+                product_id: ctx.product_id.clone(),
                 base_unit_id: input.base_unit_id,
                 specification_signature: signature,
                 status: EnableStatus::Active,
             },
-            created_by,
+            ctx.created_by,
         )?;
         sku.stable.current_revision_id = Some(revision.base.id.clone());
         Ok(SkuEditItem {
@@ -2191,13 +2201,15 @@ impl CatalogService {
                 // 全新签名：分配新 SKU 身份。
                 let item = self
                     .build_new_sku_item(
-                        &product_id,
-                        &req.name,
-                        &req.category_id,
-                        req.effective_from,
-                        req.effective_to,
+                        NewSkuContext {
+                            product_id: &product_id,
+                            product_name: &req.name,
+                            category_id: &req.category_id,
+                            effective_from: req.effective_from,
+                            effective_to: req.effective_to,
+                            created_by: actor.id(),
+                        },
                         sku_input,
-                        actor.id(),
                     )
                     .await?;
                 sku_items.push(item);

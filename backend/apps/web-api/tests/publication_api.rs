@@ -312,7 +312,7 @@ async fn happy_path_publication_revision_deliver_with_contract_shape() {
         assert_eq!(revision["name"], "福利商城卡");
         assert_eq!(revision["sales_price_gross"], "100.00", "金额按字符串序列化");
         assert_eq!(revision["sale_status"], "on_sale");
-        assert!(revision["id"].as_str().unwrap().len() > 0);
+        assert!(!revision["id"].as_str().unwrap().is_empty());
 
         let (status, body) = api
             .get(
@@ -361,7 +361,7 @@ async fn happy_path_publication_revision_deliver_with_contract_shape() {
             result["delivery_status"], "failed",
             "默认连接器失败关闭 → 投递失败"
         );
-        assert!(result["error_task_id"].as_str().unwrap().len() > 0);
+        assert!(!result["error_task_id"].as_str().unwrap().is_empty());
         assert!(!result["inbox_message_id"].as_str().unwrap().is_empty());
 
         let (status, body) = api
