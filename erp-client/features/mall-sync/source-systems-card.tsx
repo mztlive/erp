@@ -23,9 +23,7 @@ import {
 import { isAuthenticated } from "@/lib/api/session"
 
 /**
- * 来源系统卡片（P0-5 垂直样板：真实 useQuery 取数并渲染）。
- * 仅由 mall-sync 页面在真实模式（isFeatureReal("mall-sync")）下挂载；
- * mock 模式不渲染本组件，页面数据路径保持不变。
+ * 来源系统卡片（真实 useQuery 取数并渲染）。
  * 展示走中文 label 映射（类型 / 状态），内部 id 不上屏（AGENTS.md §5）。
  */
 export function SourceSystemsCard() {
