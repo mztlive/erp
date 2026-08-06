@@ -1,6 +1,60 @@
-//! 域 D08 `customer`：customer_account、customer_assignment（页面：W03、W15）。P0 预声明空 trait；P2 在本文件填充仓储访问器。
+//! 域 D08 `customer` 仓储访问器。
+//!
+//! 集合名常量定义为 trait 关联常量（唯一权威来源，conventions §4.3「Repository
+//! 与索引共用同一常量」）：`indexes/` 与 `repository/` 均为冻结声明下的私有
+//! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
+//! `<mongodb::Database as CustomerExt>::CUSTOMER_ACCOUNTS` 等值。
 
-/// 域 D08 仓储访问器（P2 填充）。
-pub trait CustomerExt: Sized {}
+use entities::customer::{CustomerAccount, CustomerAssignment};
+use mongodb::Database;
 
-impl CustomerExt for mongodb::Database {}
+use super::super::customer::{CustomerAccountFilter, CustomerAssignmentFilter, CustomerRepository};
+use crate::Repository;
+
+/// 域 D08 仓储访问器。
+pub trait CustomerExt {
+    /// `customer_account` 集合名。
+    const CUSTOMER_ACCOUNTS: &'static str = "customer_accounts";
+    /// `customer_assignment` 集合名。
+    const CUSTOMER_ASSIGNMENTS: &'static str = "customer_assignments";
+
+    /// 客户角色列表筛选条件类型（定义见 `repository::customer`）。
+    type CustomerAccountFilter;
+    /// 客户归属列表筛选条件类型（定义见 `repository::customer`）。
+    type CustomerAssignmentFilter;
+
+    /// 获取 `customer_account` 集合的 Repository。
+    ///
+    /// # 返回
+    /// 返回 `Repository<'_, entities::customer::CustomerAccount>`。
+    fn customer_accounts(&self) -> Repository<'_, CustomerAccount>;
+
+    /// 获取 `customer_assignment` 集合的 Repository（按有效期的归属事实行）。
+    ///
+    /// # 返回
+    /// 返回 `Repository<'_, entities::customer::CustomerAssignment>`。
+    fn customer_assignments(&self) -> Repository<'_, CustomerAssignment>;
+
+    /// 获取承载跨集合事务写入的域专用仓储。
+    ///
+    /// # 返回
+    /// 返回 `CustomerRepository` 实例。
+    fn customer(&self) -> CustomerRepository<'_>;
+}
+
+impl CustomerExt for Database {
+    type CustomerAccountFilter = CustomerAccountFilter;
+    type CustomerAssignmentFilter = CustomerAssignmentFilter;
+
+    fn customer_accounts(&self) -> Repository<'_, CustomerAccount> {
+        Repository::new(self, Self::CUSTOMER_ACCOUNTS)
+    }
+
+    fn customer_assignments(&self) -> Repository<'_, CustomerAssignment> {
+        Repository::new(self, Self::CUSTOMER_ASSIGNMENTS)
+    }
+
+    fn customer(&self) -> CustomerRepository<'_> {
+        CustomerRepository::new(self)
+    }
+}
