@@ -201,4 +201,458 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "客户往来",
+        description: "应收台账、回款、销项发票与卡券票款复核管理（W11/W13）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/receivable-accounts",
+                description: "查询应收往来子账列表",
+                permission: {
+                    resource: "receivable_account",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/receivable-accounts",
+                description: "建立应收往来子账",
+                permission: {
+                    resource: "receivable_account",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/receivable-accounts/{id}",
+                description: "查询应收往来子账详情",
+                permission: {
+                    resource: "receivable_account",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/receivable-accounts/{id}/review",
+                description: "更新应收往来子账复核缓存",
+                permission: {
+                    resource: "receivable_account",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/receivable-funds-reviews",
+                description: "追加卡券票款正式复核",
+                permission: {
+                    resource: "receivable_funds_review",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-receipts",
+                description: "查询客户回款单列表",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts",
+                description: "登记客户回款草稿",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-receipts/{id}",
+                description: "查询客户回款单详情",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-receipts/{id}/post",
+                description: "客户回款过账并核销",
+                permission: {
+                    resource: "customer_receipt",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/invoices",
+                description: "查询发票列表",
+                permission: {
+                    resource: "invoice",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices",
+                description: "登记发票草稿",
+                permission: {
+                    resource: "invoice",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/invoices/{id}",
+                description: "查询发票详情",
+                permission: {
+                    resource: "invoice",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices/{id}/post",
+                description: "发票登记过账并分配",
+                permission: {
+                    resource: "invoice",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/invoices/{id}/red-issue",
+                description: "开具红票并红冲",
+                permission: {
+                    resource: "invoice",
+                    action: "reverse",
+                },
+            },
+        ],
+    },
+    {
+        name: "供应商往来",
+        description: "应付台账、付款单与进项发票登记管理（W12）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/payable-accounts",
+                description: "查询应付往来子账列表",
+                permission: {
+                    resource: "payable_account",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/payable-accounts",
+                description: "建立应付往来子账",
+                permission: {
+                    resource: "payable_account",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/payable-accounts/{id}",
+                description: "查询应付往来子账详情",
+                permission: {
+                    resource: "payable_account",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-payments",
+                description: "查询供应商付款单列表",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-payments",
+                description: "登记供应商付款草稿",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-payments/{id}",
+                description: "查询供应商付款单详情",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-payments/{id}/post",
+                description: "供应商付款过账并核销",
+                permission: {
+                    resource: "supplier_payment",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-invoice-allocations",
+                description: "查询进项发票分配列表",
+                permission: {
+                    resource: "purchase_invoice_allocation",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-invoice-allocations",
+                description: "进项发票登记过账并分配",
+                permission: {
+                    resource: "purchase_invoice_allocation",
+                    action: "post",
+                },
+            },
+        ],
+    },
+    {
+        name: "实际经营盈亏",
+        description: "成本事实与成本分配管理（W16）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/cost-entries",
+                description: "查询成本事实列表",
+                permission: {
+                    resource: "cost_entry",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/cost-entries",
+                description: "手工登记成本事实",
+                permission: {
+                    resource: "cost_entry",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/cost-entries/{id}",
+                description: "查询成本事实详情",
+                permission: {
+                    resource: "cost_entry",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/cost-allocations",
+                description: "查询成本分配列表",
+                permission: {
+                    resource: "cost_allocation",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "退货退款",
+        description: "销售退货/拒收、采购退货与退款冲正管理（W05/W09/W11/W12）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-return-cases",
+                description: "查询销售退货处理单列表",
+                permission: {
+                    resource: "sales_return_case",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-return-cases",
+                description: "建立销售退货处理单",
+                permission: {
+                    resource: "sales_return_case",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-return-cases/{id}",
+                description: "查询销售退货处理单详情",
+                permission: {
+                    resource: "sales_return_case",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-return-orders",
+                description: "查询采购退货单列表",
+                permission: {
+                    resource: "purchase_return_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-return-orders",
+                description: "建立采购退货单",
+                permission: {
+                    resource: "purchase_return_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-return-orders/{id}",
+                description: "查询采购退货单详情",
+                permission: {
+                    resource: "purchase_return_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-refunds",
+                description: "查询客户退款列表",
+                permission: {
+                    resource: "customer_refund",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-refunds",
+                description: "登记客户退款草稿",
+                permission: {
+                    resource: "customer_refund",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-refunds/{id}",
+                description: "查询客户退款详情",
+                permission: {
+                    resource: "customer_refund",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-refunds/{id}/post",
+                description: "客户退款过账",
+                permission: {
+                    resource: "customer_refund",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-refunds",
+                description: "登记供应商退款草稿",
+                permission: {
+                    resource: "supplier_refund",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-refunds/{id}/post",
+                description: "供应商退款过账",
+                permission: {
+                    resource: "supplier_refund",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/receipt-reversals",
+                description: "登记回款冲正草稿",
+                permission: {
+                    resource: "receipt_reversal",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/receipt-reversals/{id}/post",
+                description: "回款冲正过账",
+                permission: {
+                    resource: "receipt_reversal",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/payment-reversals",
+                description: "登记付款冲正草稿",
+                permission: {
+                    resource: "payment_reversal",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/payment-reversals/{id}/post",
+                description: "付款冲正过账",
+                permission: {
+                    resource: "payment_reversal",
+                    action: "post",
+                },
+            },
+        ],
+    },
 ];

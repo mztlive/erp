@@ -1,10 +1,58 @@
-//! 域 D20 `cost`：cost_entry、cost_allocation（页面：W16）。P0 骨架占位；P3 填充路由与权限挂载（管理端路由必须带 #[permission]）。
+//! 域 D20 `cost` 管理端路由。
+//!
+//! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/cost-entries`、
+//! `/admin/cost-allocations`；每条路由统一走 JWT + RBAC（`with_permission`）。
 
-use axum::Router;
+use axum::{
+    routing::{get, post},
+    Router,
+};
+use services::iam::SharedRbacService;
 
-use crate::app_state::AppState;
+use crate::{
+    app_state::AppState,
+    core::{handler::cost, middleware::with_permission},
+};
 
-/// 返回本域管理端路由集合（P3 填充）。
-pub fn routes(_rbac: &services::iam::SharedRbacService) -> Router<AppState> {
-    Router::<AppState>::new()
+/// 返回本域管理端路由集合。
+///
+/// # 参数
+/// * `rbac` - 共享 Casbin RBAC 服务
+///
+/// # 返回
+/// 返回挂载了权限校验层的路由集合。
+pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/cost-entries",
+            with_permission(
+                get(cost::cost_entry_list),
+                rbac,
+                cost::cost_entry_list_permission_key(),
+            ),
+        )
+        .route(
+            "/cost-entries",
+            with_permission(
+                post(cost::cost_entry_create),
+                rbac,
+                cost::cost_entry_create_permission_key(),
+            ),
+        )
+        .route(
+            "/cost-entries/{id}",
+            with_permission(
+                get(cost::cost_entry_detail),
+                rbac,
+                cost::cost_entry_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/cost-allocations",
+            with_permission(
+                get(cost::cost_allocation_list),
+                rbac,
+                cost::cost_allocation_list_permission_key(),
+            ),
+        )
 }
