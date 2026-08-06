@@ -192,4 +192,176 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "供应商订单",
+        description: "供应商履约订单、动作与退款事实管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-fulfillment-orders",
+                description: "查询供应商履约订单列表",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders",
+                description: "向供应商提交下单",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-fulfillment-orders/{id}",
+                description: "查询供应商履约订单详情",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders/{id}/cancel",
+                description: "向供应商提交取消",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "cancel",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders/{id}/refund",
+                description: "向供应商提交退款",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "refund",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-fulfillment-orders/{id}/reject",
+                description: "登记供应商拒单结果",
+                permission: {
+                    resource: "supplier_fulfillment_order",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-refund-facts",
+                description: "登记供应商退款成功结果",
+                permission: {
+                    resource: "supplier_refund_fact",
+                    action: "post",
+                },
+            },
+        ],
+    },
+    {
+        name: "供应商结算",
+        description: "供应商周期结算单、明细与差异管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-settlement-statements",
+                description: "查询供应商结算单列表",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-statements",
+                description: "创建供应商结算草稿",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-settlement-statements/{id}",
+                description: "查询供应商结算单详情",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-statements/{id}/submit-review",
+                description: "提交结算复核",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-statements/{id}/confirm",
+                description: "确认结算并形成应付",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "confirm",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-statements/{id}/void",
+                description: "作废结算单",
+                permission: {
+                    resource: "supplier_settlement_statement",
+                    action: "void",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-settlement-items",
+                description: "查询供应商结算明细列表",
+                permission: {
+                    resource: "supplier_settlement_item",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-settlement-differences",
+                description: "查询供应商结算差异列表",
+                permission: {
+                    resource: "supplier_settlement_difference",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-settlement-differences/{id}/resolve",
+                description: "登记结算差异处理结论",
+                permission: {
+                    resource: "supplier_settlement_difference",
+                    action: "update",
+                },
+            },
+        ],
+    },
 ];
