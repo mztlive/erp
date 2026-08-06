@@ -1,7 +1,3 @@
-import {
-  getW04ContractCenter,
-  listW04Contracts,
-} from "@/mock/session-state"
 import type { ContractAttachmentView } from "@/features/contracts/types"
 
 export const MAX_CONTRACT_PDF_BYTES = 20 * 1024 * 1024
@@ -40,33 +36,19 @@ export type OriginalContractPdfTarget = {
   attachment: ContractAttachmentView | null
 }
 
-/** 按合同号解析原始 PDF 下载目标；演示环境无真实对象存储时仍给出文件名。 */
+/**
+ * 按合同号解析原始 PDF 下载目标。
+ * 真实文件流应由鉴权下载 URL 提供；此处仅返回文件名元数据，避免依赖 mock 会话。
+ */
 export function resolveOriginalContractPdf(
   contractNo: string
 ): OriginalContractPdfTarget {
   const normalized = contractNo.trim()
-  const row = listW04Contracts().find(
-    (item) =>
-      item.contractNo.toLocaleLowerCase() === normalized.toLocaleLowerCase()
-  )
-  if (!row) {
-    return {
-      contractId: null,
-      contractNo: normalized,
-      fileName: `${normalized}.pdf`,
-      attachment: null,
-    }
-  }
-
-  const center = getW04ContractCenter(row.contractId)
-  const attachment = pickOriginalContractPdfAttachment(
-    center?.attachments ?? []
-  )
   return {
-    contractId: row.contractId,
-    contractNo: row.contractNo,
-    fileName: attachment?.name ?? `${row.contractNo}.pdf`,
-    attachment,
+    contractId: null,
+    contractNo: normalized,
+    fileName: `${normalized || "contract"}.pdf`,
+    attachment: null,
   }
 }
 
@@ -100,7 +82,8 @@ export function buildDemoContractPdfBlob(contractNo: string): Blob {
 export function downloadOriginalContractPdf(contractNo: string): OriginalContractPdfTarget {
   const target = resolveOriginalContractPdf(contractNo)
   if (target.attachment && !target.attachment.canDownload) {
-    throw new Error("原始合同 PDF 当前不可下载（安全检查未通过或处理中）")
+    const err = new Error("原始合同 PDF 当前不可下载（安全检查未通过或处理中）")
+    throw err
   }
 
   const blob = buildDemoContractPdfBlob(target.contractNo)
