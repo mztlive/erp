@@ -192,4 +192,236 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "导入与期初",
+        description: "旧数据导入批次、导入行与业务确认事实管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/legacy-import-batches",
+                description: "查询导入批次列表",
+                permission: {
+                    resource: "legacy_import_batch",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/legacy-import-batches",
+                description: "创建导入批次",
+                permission: {
+                    resource: "legacy_import_batch",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/legacy-import-batches/{id}",
+                description: "查询导入批次详情",
+                permission: {
+                    resource: "legacy_import_batch",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/legacy-import-batches/{id}/rows",
+                description: "查询导入行列表",
+                permission: {
+                    resource: "legacy_import_row",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/legacy-import-batches/{id}/apply",
+                description: "应用导入批次",
+                permission: {
+                    resource: "legacy_import_batch",
+                    action: "apply",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/legacy-import-confirmations",
+                description: "查询导入确认事实列表",
+                permission: {
+                    resource: "legacy_import_confirmation",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/legacy-import-confirmations",
+                description: "创建导入确认事实",
+                permission: {
+                    resource: "legacy_import_confirmation",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/legacy-import-confirmations/{id}/decide",
+                description: "决策导入确认事实",
+                permission: {
+                    resource: "legacy_import_confirmation",
+                    action: "decide",
+                },
+            },
+        ],
+    },
+    {
+        name: "商城同步与映射",
+        description: "商城卡券销售单同步作业、快照、核对与映射任务管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-sync-jobs",
+                description: "查询同步作业列表",
+                permission: {
+                    resource: "mall_sales_sync_job",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-sales-sync-jobs",
+                description: "创建同步作业",
+                permission: {
+                    resource: "mall_sales_sync_job",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-sync-jobs/{id}",
+                description: "查询同步作业详情",
+                permission: {
+                    resource: "mall_sales_sync_job",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-sales-sync-jobs/{id}/complete",
+                description: "完成同步作业",
+                permission: {
+                    resource: "mall_sales_sync_job",
+                    action: "complete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-order-snapshots",
+                description: "查询商城销售单快照列表",
+                permission: {
+                    resource: "mall_sales_order_snapshot",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-sales-order-snapshots",
+                description: "落盘商城销售单快照",
+                permission: {
+                    resource: "mall_sales_order_snapshot",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-sync-cursors",
+                description: "查询同步水位游标",
+                permission: {
+                    resource: "mall_sales_sync_cursor",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-reconciliation-jobs",
+                description: "查询核对作业列表",
+                permission: {
+                    resource: "mall_sales_reconciliation_job",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-sales-reconciliation-jobs",
+                description: "创建核对作业",
+                permission: {
+                    resource: "mall_sales_reconciliation_job",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-sales-reconciliation-jobs/{id}/items",
+                description: "查询核对差异明细列表",
+                permission: {
+                    resource: "mall_sales_reconciliation_item",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-sales-reconciliation-items/{id}/resolve",
+                description: "处理核对差异明细",
+                permission: {
+                    resource: "mall_sales_reconciliation_item",
+                    action: "resolve",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/master-mapping-tasks",
+                description: "查询映射任务列表",
+                permission: {
+                    resource: "master_mapping_task",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/master-mapping-tasks",
+                description: "创建映射任务",
+                permission: {
+                    resource: "master_mapping_task",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/master-mapping-tasks/{id}/resolve",
+                description: "处理映射任务",
+                permission: {
+                    resource: "master_mapping_task",
+                    action: "resolve",
+                },
+            },
+        ],
+    },
 ];
