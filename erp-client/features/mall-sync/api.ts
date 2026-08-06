@@ -1,17 +1,16 @@
 /**
- * W17 session-mock API：queryFn / mutationFn 纯函数。
- * - 人工治理策略未配置时拒绝立即增量 / 按单补拉
- * - 管理员不得确认业务映射
- * - 映射与重新归集状态独立；结果未知不自动推进
- * - mock 永不返回玩法/卡号/卡密/绑定手机/连接/密钥
+ * W17 商城同步 · 真实 HTTP API（P4 F8）。
+ * 导出签名保持与 queries.ts / 页面一致；字段适配仅在本文件完成。
+ * 后端域：mall_sync + source_registry（/admin/source-systems 样板已有）。
  */
 
-import { mockDelay } from "@/lib/mock-delay"
-import { apiGet } from "@/lib/api"
+import { apiGet, apiPost } from "@/lib/api"
+import type { Page } from "@/lib/api/paging"
 import type {
   ConfirmMappingResult,
   DeferMappingResult,
   DemoRole,
+  MallSnapshotRow,
   MallSyncJobRow,
   MallSyncMetric,
   MallSyncPageView,
@@ -19,75 +18,149 @@ import type {
   MappingTaskView,
   OwnershipStage,
   ReapplyResult,
+  ReconciliationBatch,
+  ReconciliationDifference,
+  SourceSystemItem,
   SourceSystemListParams,
   SourceSystemPage,
+  SourceSystemStatus,
+  SourceSystemType,
   TriggerMallSyncResult,
 } from "@/features/mall-sync/types"
 import {
   DEMO_ROLE_LABEL,
   DIRECTION_LABEL,
   JOB_TYPE_LABEL,
+  MAPPING_TYPE_LABEL,
   OWNER_ROLE_LABEL,
   STAGE_LABEL,
 } from "@/features/mall-sync/types"
-import {
-  MALL_HISTORY,
-  MALL_MAPPING_TASKS,
-  MALL_RECONCILIATION,
-  MALL_SNAPSHOTS,
-  MALL_SOURCE,
-  MALL_SYNC_JOBS,
-} from "@/mock/mall-sync"
-import {
-  applyWorkItemActionSession,
-  claimWorkItemSession,
-  completeWorkItemSession,
-  getCompletedQueueTaskIds,
-  getHeldQueueTaskIds,
-  getSessionLease,
-  markQueueTaskCompleted,
-  markQueueTaskHeld,
-  WorkItemMockError,
-} from "@/mock/session-state"
 
-const WORKSPACE_ID = "W17"
+// ─── 后端 DTO（snake_case；时间秒级时间戳） ─────────────────────────────────
 
-/** 会话内演示控制（不写 localStorage） */
-let sessionStage: OwnershipStage = "FIRST_PHASE_MALL_OWNED"
-let sessionPolicyConfigured = false
-let sessionSourceUnavailable = false
-let sessionManualJobs: MallSyncJobRow[] = []
-const resolvedMappings = new Map<
-  string,
-  {
-    mappingTaskStatus: "RESOLVED"
-    targetId: string
-    targetLabel: string
-    externalIdentityMapId: string
-    recordedAt: string
-    evidenceNote: string
-  }
->()
-const reapplyState = new Map<
-  string,
-  {
-    operationId: string
-    status: "QUEUED" | "RUNNING" | "SUCCEEDED" | "FAILED" | "UNKNOWN"
-    lastUpdatedAt: string
-    salesOrderId?: string
-    salesOrderNo?: string
-    salesOrderRevisionId?: string
-    receivableResultReference?: string
-  }
->()
-const deferredNotes = new Map<string, { reasonCode: string; note?: string; at: string }>()
-
-// seed reapply UNKNOWN from mock
-for (const task of MALL_MAPPING_TASKS) {
-  if (task.reapplyOperation) {
-    reapplyState.set(task.mappingTaskId, { ...task.reapplyOperation })
-  }
+type BackendJob = {
+  id: string
+  source_system_id: string
+  job_type:
+    | "baseline"
+    | "incremental"
+    | "monthly_reconciliation"
+    | "single_order_backfill"
+  range_start?: number | null
+  range_end?: number | null
+  started_at: number
+  finished_at?: number | null
+  status: "running" | "success" | "partial_failure" | "failed"
+  page_count: number
+  item_count: number
+  error_count: number
+  version: number
+  created_at: number
 }
+
+type BackendSnapshot = {
+  id: string
+  source_system_id: string
+  external_order_no: string
+  source_updated_at: number
+  content_hash?: string | null
+  source_status_code: string
+  observed_at: number
+  mapping_status: "pending" | "applied" | "difference" | "no_change"
+  applied_sales_order_revision_id?: string | null
+  sync_job_id: string
+  version: number
+  created_at: number
+}
+
+type BackendCursor = {
+  id: string
+  source_system_id: string
+  high_water_updated_at: number
+  last_success_job_id?: string | null
+  version: number
+  created_at: number
+}
+
+type BackendMappingTask = {
+  id: string
+  source_snapshot_id: string
+  mapping_type:
+    | "customer"
+    | "contract"
+    | "settlement_entity"
+    | "voucher_category"
+    | "unique_line_item"
+    | "amount_format"
+  status: "pending" | "resolved" | "unresolvable" | "closed"
+  owner_role: string
+  owner_user_id?: string | null
+  resolution?: string | null
+  resolved_at?: number | null
+  version: number
+  created_at: number
+}
+
+type BackendReconJob = {
+  id: string
+  source_system_id: string
+  job_no: string
+  source_list_as_of: number
+  source_count: number
+  erp_count: number
+  difference_count: number
+  status: "running" | "completed" | "has_difference" | "failed"
+  started_at: number
+  finished_at?: number | null
+  version: number
+  created_at: number
+}
+
+type BackendReconItem = {
+  id: string
+  reconciliation_job_id: string
+  external_order_no: string
+  source_status_code: string
+  source_updated_at: number
+  difference_type:
+    | "mall_missing"
+    | "erp_missing"
+    | "status_difference"
+    | "content_fingerprint_difference"
+    | "duplicate_identity"
+  status: "pending" | "backfilling" | "resolved" | "confirmed_no_difference"
+  single_order_sync_job_id?: string | null
+  resolution?: string | null
+  resolved_by?: string | null
+  resolved_at?: number | null
+  version: number
+  created_at: number
+}
+
+type BackendSourceSystem = {
+  id: string
+  code: string
+  name: string
+  system_type: "ERP" | "MALL" | "SUPPLIER"
+  status: "active" | "disabled"
+  created_at: number
+  version?: number
+}
+
+type WorkItemView = {
+  id: string
+  work_item_type: string
+  business_object_type: string
+  business_object_id: string
+  subject_version?: string | null
+  status: string
+  owner_role?: string | null
+  owner_user_id?: string | null
+  completion_action: string
+  version: number
+}
+
+// ─── Query input（契约保持） ─────────────────────────────────────────────────
 
 export type MallSyncQueryInput = {
   view: MallSyncViewName
@@ -106,305 +179,423 @@ export type MallSyncQueryInput = {
   mappingType?: string
 }
 
+/** 演示开关：后端无对应策略 API，保留空实现以稳定 queries 导出签名 */
 export function setMallSyncDemoStage(stage: OwnershipStage) {
-  sessionStage = stage
+  void stage
 }
 
 export function setMallSyncPolicyConfigured(configured: boolean) {
-  sessionPolicyConfigured = configured
+  void configured
 }
 
 export function setMallSyncSourceUnavailable(unavailable: boolean) {
-  sessionSourceUnavailable = unavailable
+  void unavailable
 }
 
-function roleOwnsMapping(
-  role: DemoRole,
-  ownerRole?: "SALES" | "OPERATIONS" | "FINANCE"
-): boolean {
-  if (!ownerRole) return false
-  if (role === "sales") return ownerRole === "SALES"
-  if (role === "operations") return ownerRole === "OPERATIONS"
-  if (role === "finance") return ownerRole === "FINANCE"
-  return false
+export function getMallSyncStageLabels() {
+  return { STAGE_LABEL, DIRECTION_LABEL }
 }
 
-function filterMappingForRole(
-  task: MappingTaskView,
-  role: DemoRole
-): MappingTaskView | null {
-  const completed = getCompletedQueueTaskIds(WORKSPACE_ID)
-  if (
-    task.ownerRoutingState === "CONFIGURED" &&
-    completed.has(task.workItem.workItemId)
-  ) {
-    // still show resolved tasks for reapply demos
-    if (task.mappingTaskStatus !== "RESOLVED" && !resolvedMappings.has(task.mappingTaskId)) {
-      return null
-    }
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function instantToIso(secs: number | null | undefined): string | undefined {
+  if (secs == null || !Number.isFinite(secs)) return undefined
+  return new Date(secs * 1000).toISOString()
+}
+
+function shortHash(hash?: string | null): string {
+  if (!hash) return "—"
+  return hash.length > 12 ? `${hash.slice(0, 8)}…` : hash
+}
+
+function mapJobType(
+  t: BackendJob["job_type"]
+): MallSyncJobRow["jobType"] {
+  switch (t) {
+    case "baseline":
+      return "BASELINE"
+    case "incremental":
+      return "INCREMENTAL"
+    case "single_order_backfill":
+      return "SINGLE_ORDER"
+    case "monthly_reconciliation":
+      return "RECONCILIATION"
+    default:
+      return "INCREMENTAL"
   }
-
-  // 业务角色只看自己责任类型；管理员看全部（含 MISSING）
-  if (role !== "admin") {
-    if (task.ownerRoutingState === "MISSING") return null
-    if (!roleOwnsMapping(role, task.ownerRole)) return null
-  }
-
-  return projectMappingTask(task, role)
 }
 
-function projectMappingTask(
-  seed: MappingTaskView,
-  role: DemoRole
+function mapJobStatus(
+  s: BackendJob["status"]
+): Pick<
+  MallSyncJobRow,
+  "status" | "statusLabel" | "statusTone"
+> {
+  switch (s) {
+    case "running":
+      return { status: "RUNNING", statusLabel: "运行中", statusTone: "info" }
+    case "success":
+      return { status: "SUCCEEDED", statusLabel: "成功", statusTone: "success" }
+    case "partial_failure":
+      return {
+        status: "PARTIAL_FAILED",
+        statusLabel: "部分失败",
+        statusTone: "warning",
+      }
+    case "failed":
+      return { status: "FAILED", statusLabel: "失败", statusTone: "destructive" }
+    default:
+      return { status: "FAILED", statusLabel: s, statusTone: "neutral" }
+  }
+}
+
+function mapSnapshotStatus(
+  s: BackendSnapshot["mapping_status"]
+): Pick<MallSnapshotRow, "mappingStatus" | "mappingStatusLabel"> {
+  switch (s) {
+    case "pending":
+      return { mappingStatus: "PENDING_MAPPING", mappingStatusLabel: "待映射" }
+    case "applied":
+      return { mappingStatus: "APPLIED", mappingStatusLabel: "已应用" }
+    case "difference":
+      return { mappingStatus: "DIFF", mappingStatusLabel: "差异" }
+    case "no_change":
+      return { mappingStatus: "UNCHANGED", mappingStatusLabel: "无变化" }
+    default:
+      return { mappingStatus: "PENDING_MAPPING", mappingStatusLabel: s }
+  }
+}
+
+function mapMappingType(
+  t: BackendMappingTask["mapping_type"]
+): keyof typeof MAPPING_TYPE_LABEL {
+  switch (t) {
+    case "customer":
+      return "CUSTOMER"
+    case "contract":
+      return "CONTRACT"
+    case "settlement_entity":
+      return "SETTLEMENT_PARTY"
+    case "voucher_category":
+      return "VOUCHER_CATEGORY"
+    case "unique_line_item":
+      return "UNIQUE_LINE"
+    case "amount_format":
+      return "AMOUNT_FORMAT"
+    default:
+      return "CUSTOMER"
+  }
+}
+
+function mapMappingStatus(
+  s: BackendMappingTask["status"]
+): Pick<
+  MappingTaskView,
+  "mappingTaskStatus" | "mappingTaskStatusLabel"
+> {
+  switch (s) {
+    case "pending":
+      return { mappingTaskStatus: "PENDING", mappingTaskStatusLabel: "待处理" }
+    case "resolved":
+      return { mappingTaskStatus: "RESOLVED", mappingTaskStatusLabel: "已解决" }
+    case "unresolvable":
+      return {
+        mappingTaskStatus: "UNRESOLVABLE",
+        mappingTaskStatusLabel: "无法处理",
+      }
+    case "closed":
+      return { mappingTaskStatus: "CLOSED", mappingTaskStatusLabel: "关闭" }
+    default:
+      return { mappingTaskStatus: "PENDING", mappingTaskStatusLabel: s }
+  }
+}
+
+function mapOwnerRole(
+  role: string
+): "SALES" | "OPERATIONS" | "FINANCE" | undefined {
+  const r = role.trim().toUpperCase()
+  if (r === "SALES" || r === "销售") return "SALES"
+  if (r === "OPERATIONS" || r === "运营" || r === "OPS") return "OPERATIONS"
+  if (r === "FINANCE" || r === "财务") return "FINANCE"
+  return undefined
+}
+
+function mapDiffType(
+  t: BackendReconItem["difference_type"]
+): ReconciliationDifference["differenceType"] {
+  switch (t) {
+    case "mall_missing":
+      return "MALL_MISSING"
+    case "erp_missing":
+      return "ERP_MISSING"
+    case "status_difference":
+      return "STATUS"
+    case "content_fingerprint_difference":
+      return "FINGERPRINT"
+    case "duplicate_identity":
+      return "DUPLICATE"
+    default:
+      return "STATUS"
+  }
+}
+
+const DIFF_TYPE_LABEL: Record<
+  ReconciliationDifference["differenceType"],
+  string
+> = {
+  MALL_MISSING: "商城缺失",
+  ERP_MISSING: "ERP 缺失",
+  STATUS: "状态差异",
+  FINGERPRINT: "内容指纹差异",
+  DUPLICATE: "重复身份",
+}
+
+function mapDiffStatus(
+  s: BackendReconItem["status"]
+): Pick<
+  ReconciliationDifference,
+  "status" | "statusLabel" | "statusTone"
+> {
+  switch (s) {
+    case "pending":
+      return { status: "OPEN", statusLabel: "待处理", statusTone: "warning" }
+    case "backfilling":
+      return { status: "PULLING", statusLabel: "补拉中", statusTone: "info" }
+    case "resolved":
+      return { status: "RESOLVED", statusLabel: "已解决", statusTone: "success" }
+    case "confirmed_no_difference":
+      return {
+        status: "CONFIRMED",
+        statusLabel: "确认无误",
+        statusTone: "success",
+      }
+    default:
+      return { status: "OPEN", statusLabel: s, statusTone: "neutral" }
+  }
+}
+
+function mapReconJobStatus(
+  s: BackendReconJob["status"]
+): Pick<ReconciliationBatch, "status" | "statusLabel"> {
+  switch (s) {
+    case "running":
+      return { status: "RUNNING", statusLabel: "运行中" }
+    case "completed":
+      return { status: "SUCCEEDED", statusLabel: "完成" }
+    case "has_difference":
+      return { status: "DIFFERENCE", statusLabel: "有差异" }
+    case "failed":
+      return { status: "FAILED", statusLabel: "失败" }
+    default:
+      return { status: "FAILED", statusLabel: s }
+  }
+}
+
+function toJobRow(job: BackendJob): MallSyncJobRow {
+  const jobType = mapJobType(job.job_type)
+  const st = mapJobStatus(job.status)
+  const failed = st.status === "FAILED" || st.status === "PARTIAL_FAILED"
+  return {
+    jobId: job.id,
+    jobNo: job.id.slice(0, 12).toUpperCase(),
+    jobType,
+    jobTypeLabel: JOB_TYPE_LABEL[jobType],
+    rangeStart: instantToIso(job.range_start ?? undefined),
+    rangeEnd: instantToIso(job.range_end ?? undefined),
+    ...st,
+    pageCount: job.page_count,
+    itemCount: job.item_count,
+    errorCount: job.error_count,
+    startedAt: instantToIso(job.started_at) ?? "",
+    finishedAt: instantToIso(job.finished_at ?? undefined),
+    triggeredBy: "系统",
+    watermarkAdvanced: st.status === "SUCCEEDED",
+    allowedActions: failed ? ["RETRY_FAILED_JOB"] : [],
+    actionBlockers: [],
+  }
+}
+
+function toSnapshotRow(
+  snap: BackendSnapshot,
+  jobNoById: Map<string, string>
+): MallSnapshotRow {
+  const ms = mapSnapshotStatus(snap.mapping_status)
+  return {
+    snapshotId: snap.id,
+    externalOrderNo: snap.external_order_no,
+    sourceUpdatedAt: instantToIso(snap.source_updated_at) ?? "",
+    observedAt: instantToIso(snap.observed_at) ?? "",
+    sourceStatusCode: snap.source_status_code,
+    sourceStatusLabel: snap.source_status_code,
+    contentHashShort: shortHash(snap.content_hash),
+    ...ms,
+    appliedSalesOrderId: snap.applied_sales_order_revision_id ?? undefined,
+    syncJobId: snap.sync_job_id,
+    syncJobNo: jobNoById.get(snap.sync_job_id) ?? snap.sync_job_id.slice(0, 12),
+    conflictFlags: ms.mappingStatus === "DIFF" ? ["MAPPING_DIFF"] : [],
+    whitelistFields: [
+      {
+        field: "external_order_no",
+        label: "来源单号",
+        value: snap.external_order_no,
+      },
+      {
+        field: "source_status_code",
+        label: "商城状态码",
+        value: snap.source_status_code,
+      },
+    ],
+  }
+}
+
+function toMappingTask(
+  task: BackendMappingTask,
+  snapById: Map<string, BackendSnapshot>
 ): MappingTaskView {
-  const resolved = resolvedMappings.get(seed.mappingTaskId)
-  const reapply = reapplyState.get(seed.mappingTaskId) ?? seed.reapplyOperation
-  const held = getHeldQueueTaskIds(WORKSPACE_ID)
-  const publicLease =
-    seed.ownerRoutingState === "CONFIGURED"
-      ? getSessionLease(seed.workItem.workItemId)
-      : null
+  const mappingType = mapMappingType(task.mapping_type)
+  const st = mapMappingStatus(task.status)
+  const ownerRole = mapOwnerRole(task.owner_role)
+  const snap = snapById.get(task.source_snapshot_id)
+  const externalOrderNo = snap?.external_order_no ?? "—"
 
-  let mappingTaskStatus = seed.mappingTaskStatus
-  let mappingTaskStatusLabel = seed.mappingTaskStatusLabel
-  let resolutionHistory = [...seed.resolutionHistory]
-  let currentTargets = [...seed.currentTargets]
-  let allowedActions = [...seed.allowedActions]
-  let actionBlockers = [...seed.actionBlockers]
-
-  if (resolved) {
-    mappingTaskStatus = "RESOLVED"
-    mappingTaskStatusLabel = "已解决"
-    resolutionHistory = [
-      ...resolutionHistory,
+const typedBase = {
+    mappingTaskId: task.id,
+    sourceSnapshotId: task.source_snapshot_id,
+    externalOrderNo,
+    mappingType,
+    mappingTypeLabel: MAPPING_TYPE_LABEL[mappingType],
+    ...st,
+    sourceEvidence: [
+      {
+        field: "external_order_no",
+        label: "来源单号",
+        value: externalOrderNo,
+      },
+      {
+        field: "mapping_type",
+        label: "映射类型",
+        value: MAPPING_TYPE_LABEL[mappingType],
+      },
+    ],
+    candidateTargets: [] as Array<{
+      objectType: string
+      objectId: string
+      stableNo: string
+      label: string
+      currentRevisionId: string
+      eligibility: "ELIGIBLE" | "INELIGIBLE"
+      reason: string
+    }>,
+    currentTargets: [] as Array<{
+      objectType: string
+      objectId: string
+      stableNo: string
+      label: string
+      relationRole: string
+      validFrom: string
+      validTo?: string
+      status: string
+    }>,
+    impactSummary: task.resolution ?? "待确认 ERP 目标",
+    resolutionHistory: task.resolution
+      ? [
+          {
+            action: "RESOLVE",
+            result: task.resolution,
+            handledBy: task.owner_role,
+            handledAt: instantToIso(task.resolved_at ?? undefined) ?? "",
+          },
+        ]
+      : [],
+    allowedActions:
+      st.mappingTaskStatus === "PENDING"
+        ? ["CONFIRM_TARGET", "DEFER_MAPPING_TASK"]
+        : st.mappingTaskStatus === "RESOLVED"
+          ? ["REAPPLY"]
+          : [],
+    actionBlockers: [
       {
         action: "CONFIRM_TARGET",
-        result: `已确认 ${resolved.targetLabel}`,
-        handledBy: DEMO_ROLE_LABEL[role],
-        handledAt: resolved.recordedAt,
-        evidenceReference: resolved.externalIdentityMapId,
+        code: "CANDIDATES_NOT_PROVIDED",
+        message:
+          "后端映射任务未返回候选目标列表；确认时须由调用方提供 targetObjectId（backend_gap）。",
       },
-    ]
-    currentTargets = [
-      {
-        objectType: "MAPPED_TARGET",
-        objectId: resolved.targetId,
-        stableNo: resolved.targetId.toUpperCase(),
-        label: resolved.targetLabel,
-        relationRole: "PRIMARY",
-        validFrom: resolved.recordedAt.slice(0, 10),
-        status: "ACTIVE",
-      },
-    ]
-    // 映射解决后只允许重新归集相关动作
-    allowedActions = ["REAPPLY", "QUERY_REAPPLY"]
-    actionBlockers = []
+    ],
+    lockVersion: task.version,
+    hasConflict: st.mappingTaskStatus === "PENDING",
   }
 
-  const deferred = deferredNotes.get(seed.mappingTaskId)
-  if (deferred && mappingTaskStatus === "PENDING") {
-    resolutionHistory = [
-      ...resolutionHistory,
-      {
-        action: "DEFER_MAPPING_TASK",
-        result: `先跳过：${deferred.reasonCode}${deferred.note ? ` · ${deferred.note}` : ""}（任务仍待处理）`,
-        handledBy: DEMO_ROLE_LABEL[role],
-        handledAt: deferred.at,
-      },
-    ]
-  }
-
-  // 管理员：技术动作，禁止 CONFIRM_TARGET
-  if (role === "admin") {
-    allowedActions = allowedActions.filter(
-      (a) => a !== "CONFIRM_TARGET" && a !== "REAPPLY"
-    )
-    if (!allowedActions.includes("ASSIGN") && mappingTaskStatus === "PENDING") {
-      allowedActions = [...allowedActions, "ASSIGN", "RETRY_TECH"]
-    }
-    if (
-      mappingTaskStatus === "PENDING" &&
-      !actionBlockers.some((b) => b.action === "CONFIRM_TARGET")
-    ) {
-      actionBlockers = [
-        ...actionBlockers,
-        {
-          action: "CONFIRM_TARGET",
-          code: "ADMIN_CANNOT_CONFIRM_MAPPING",
-          message: "系统管理员只能补拉/重试/指派/排障，不能替业务确认映射",
-        },
-      ]
-    }
-  } else if (seed.ownerRoutingState === "CONFIGURED") {
-    // 业务角色：仅责任匹配时可确认
-    if (!roleOwnsMapping(role, seed.ownerRole)) {
-      allowedActions = allowedActions.filter((a) => a !== "CONFIRM_TARGET")
-    }
-  }
-
-  // MISSING：强制无确认
-  if (seed.ownerRoutingState === "MISSING") {
-    allowedActions = []
-    if (!actionBlockers.some((b) => b.code === "OWNER_ROUTING_MISSING")) {
-      actionBlockers = [
-        ...actionBlockers,
-        {
-          action: "CONFIRM_TARGET",
-          code: "OWNER_ROUTING_MISSING",
-          message: "责任路由未配置，不可执行确认",
-        },
-      ]
-    }
-  }
-
-  // 重新归集状态覆盖
-  const reapplyOperation = reapply
-    ? {
-        operationId: reapply.operationId,
-        status: reapply.status,
-        statusLabel:
-          reapply.status === "UNKNOWN"
-            ? "结果未知"
-            : reapply.status === "SUCCEEDED"
-              ? "成功"
-              : reapply.status === "FAILED"
-                ? "失败"
-                : reapply.status === "RUNNING"
-                  ? "运行中"
-                  : "排队中",
-        lastUpdatedAt: reapply.lastUpdatedAt,
-        salesOrderId: reapply.salesOrderId,
-        salesOrderNo: reapply.salesOrderNo,
-        salesOrderRevisionId: reapply.salesOrderRevisionId,
-        receivableResultReference: reapply.receivableResultReference,
-      }
-    : undefined
-
-  if (reapplyOperation?.status === "UNKNOWN") {
-    actionBlockers = [
-      ...actionBlockers.filter((b) => b.code !== "REAPPLY_UNKNOWN"),
-      {
-        action: "ADVANCE_QUEUE",
-        code: "REAPPLY_UNKNOWN",
-        message: "重新归集结果未知，停留当前项，不自动完成/下一项",
-      },
-    ]
-  }
-
-  const workItemPatch =
-    seed.ownerRoutingState === "CONFIGURED"
-      ? {
-          ...seed.workItem,
-          status:
-            held.has(seed.workItem.workItemId) && seed.workItem.status !== "COMPLETED"
-              ? ("PENDING" as const)
-              : seed.workItem.status,
-          statusLabel: held.has(seed.workItem.workItemId)
-            ? "已跳过（仍待处理）"
-            : seed.workItem.statusLabel,
-          claimedBy: publicLease?.ownerUserId ?? seed.workItem.claimedBy,
-          subjectVersion:
-            publicLease?.subjectVersion ?? seed.workItem.subjectVersion,
-        }
-      : undefined
-
-  if (seed.ownerRoutingState === "MISSING") {
+  if (!ownerRole) {
     return {
-      ...seed,
-      mappingTaskStatus,
-      mappingTaskStatusLabel,
-      resolutionHistory,
-      currentTargets,
-      allowedActions,
-      actionBlockers,
-      reapplyOperation,
-      ownerRoutingState: "MISSING",
+      ...typedBase,
+      ownerRoutingState: "MISSING" as const,
     }
   }
 
   return {
-    ...seed,
-    mappingTaskStatus,
-    mappingTaskStatusLabel,
-    resolutionHistory,
-    currentTargets,
-    allowedActions,
-    actionBlockers,
-    reapplyOperation,
-    ownerRoutingState: "CONFIGURED",
-    ownerRole: seed.ownerRole,
-    ownerRoleLabel: seed.ownerRoleLabel ?? OWNER_ROLE_LABEL[seed.ownerRole],
-    ownerUserId: seed.ownerUserId,
-    workItem: workItemPatch!,
+    ...typedBase,
+    ownerRoutingState: "CONFIGURED" as const,
+    ownerRole,
+    ownerRoleLabel: OWNER_ROLE_LABEL[ownerRole],
+    ownerUserId: task.owner_user_id ?? undefined,
+    workItem: {
+      workItemId: `mapping:${task.id}`,
+      workItemType: "BUSINESS_EXCEPTION" as const,
+      businessObjectType: "MASTER_MAPPING_TASK" as const,
+      businessObjectId: task.id,
+      subjectVersion: String(task.version),
+      subjectHash: `v${task.version}`,
+      status:
+        st.mappingTaskStatus === "RESOLVED"
+          ? ("COMPLETED" as const)
+          : ("PENDING" as const),
+      statusLabel:
+        st.mappingTaskStatus === "RESOLVED" ? "已完成" : "待处理",
+      completionAction: "CONFIRM_MAPPING",
+      claimedBy: task.owner_user_id ?? undefined,
+    },
   }
 }
 
-function buildOwnership(stage: OwnershipStage) {
-  if (stage === "SECOND_PHASE_ERP_OWNED") {
-    return {
-      businessType: "VOUCHER" as const,
-      stage,
-      originSystemSummary: "ERP" as const,
-      mallOwnedOrderCount: 0,
-      erpOwnedOrderCount: 2_048,
-      syncDirection: "SEALED_HISTORY" as const,
-      firstPhasePollingEnabled: false,
-      sealedAt: "2026-07-15T18:00:00+08:00",
-      finalWatermark: "2026-07-15T18:00:00+08:00",
-      mallWriteBoundary: "商城开单已封存；商城执行信息见执行信息页",
-      erpWriteBoundary: "ERP 全面服务；商城同步仅历史只读，当前治理见执行信息 / 接口错误中心",
-    }
-  }
+function toDifference(item: BackendReconItem): ReconciliationDifference {
+  const dt = mapDiffType(item.difference_type)
+  const st = mapDiffStatus(item.status)
   return {
-    businessType: "VOUCHER" as const,
-    stage,
-    originSystemSummary: "MALL" as const,
-    mallOwnedOrderCount: 1_206,
-    erpOwnedOrderCount: 842,
-    syncDirection: "MALL_TO_ERP_COMMERCIAL_FACT" as const,
-    firstPhasePollingEnabled: true,
-    mallWriteBoundary: "商城开单商业记录（可继续销售/制卡/绑定/激活/消费）",
-    erpWriteBoundary: "ERP 只读接收商业数据；不向商城回写商业修改",
+    differenceId: item.id,
+    externalOrderNo: item.external_order_no,
+    differenceType: dt,
+    differenceTypeLabel: DIFF_TYPE_LABEL[dt],
+    status: st.status,
+    statusLabel: st.statusLabel,
+    statusTone: st.statusTone,
+    impactSummary: item.resolution ?? item.source_status_code,
   }
 }
 
-function metricsForRole(
-  role: DemoRole,
-  stage: OwnershipStage,
-  mappingTasks: MappingTaskView[]
+function mapSourceStatus(s: BackendSourceSystem["status"]): SourceSystemStatus {
+  return s === "active" ? "启用" : "停用"
+}
+
+function buildMetrics(
+  jobs: MallSyncJobRow[],
+  mappingTasks: MappingTaskView[],
+  recon: ReconciliationBatch | null,
+  lagSeconds?: number
 ): MallSyncMetric[] {
-  if (stage === "SECOND_PHASE_ERP_OWNED") {
-    return [
-      {
-        key: "sealed",
-        label: "封存状态",
-        value: "已封存",
-        detail: "历史只读",
-        visible: true,
-        targetView: "history",
-      },
-    ]
-  }
-
   const pendingMapping = mappingTasks.filter(
     (t) => t.mappingTaskStatus === "PENDING"
   ).length
-  const pendingReapply = mappingTasks.filter(
-    (t) =>
-      t.mappingTaskStatus === "RESOLVED" &&
-      t.reapplyOperation &&
-      t.reapplyOperation.status !== "SUCCEEDED"
-  ).length
-  const failedJobs = [...MALL_SYNC_JOBS, ...sessionManualJobs].filter(
+  const failedJobs = jobs.filter(
     (j) => j.status === "FAILED" || j.status === "PARTIAL_FAILED"
   ).length
-
-  const adminMetrics: MallSyncMetric[] = [
+  return [
     {
       key: "lag",
       label: "同步延迟",
-      value: sessionSourceUnavailable ? "同步进度未推进" : "4 分",
-      detail: sessionSourceUnavailable ? "来源不可用" : "最近成功 09:12",
+      value:
+        lagSeconds != null
+          ? `${Math.max(0, Math.round(lagSeconds / 60))} 分`
+          : "—",
       visible: true,
       targetView: "overview",
     },
@@ -412,186 +603,165 @@ function metricsForRole(
       key: "failed",
       label: "失败任务",
       count: failedJobs,
-      detail: "未恢复",
       visible: true,
       targetView: "jobs",
-      targetFilter: { status: "failed" },
     },
     {
       key: "pending",
       label: "待映射",
       count: pendingMapping,
-      detail: role === "admin" ? "全范围" : "我的责任",
       visible: true,
       targetView: "mapping",
     },
     {
       key: "recon",
       label: "核对差异",
-      count: MALL_RECONCILIATION.differenceCount,
-      detail: "完整版本标识",
+      count: recon?.differenceCount ?? 0,
       visible: true,
       targetView: "reconciliation",
     },
-    {
-      key: "reapply",
-      label: "待重新归集",
-      count: pendingReapply,
-      detail: "映射已解决",
-      visible: true,
-      targetView: "mapping",
-      targetFilter: { mappingStatus: "resolved" },
-    },
   ]
-
-  if (role === "admin") return adminMetrics
-  // 业务：不展示失败任务技术数，保留待映射/重新归集
-  return adminMetrics.filter((m) => m.key === "pending" || m.key === "reapply" || m.key === "recon")
 }
+
+async function resolveMallSourceSystemId(): Promise<{
+  id: string
+  code: string
+  name: string
+  environmentLabel: string
+} | null> {
+  const page = await apiGet<Page<BackendSourceSystem>>("/admin/source-systems", {
+    page: 1,
+    page_size: 50,
+    system_type: "MALL",
+  })
+  const mall =
+    page.items.find((s) => s.status === "active") ?? page.items[0] ?? null
+  if (!mall) return null
+  return {
+    id: mall.id,
+    code: mall.code,
+    name: mall.name,
+    environmentLabel: mall.status === "active" ? "启用" : "停用",
+  }
+}
+
+// ─── 读路径 ──────────────────────────────────────────────────────────────────
 
 export async function fetchMallSyncPage(
   input: MallSyncQueryInput
 ): Promise<MallSyncPageView> {
-  await mockDelay()
+  const listParams = { page: 1, page_size: 50 as const }
 
-  if (input.demoStage) sessionStage = input.demoStage
-  if (input.policy === "configured") sessionPolicyConfigured = true
-  if (input.policy === "missing") sessionPolicyConfigured = false
-  if (input.sourceUnavailable != null) {
-    sessionSourceUnavailable = input.sourceUnavailable
-  }
+  const [source, jobsPage, snapshotsPage, mappingPage, reconPage] =
+    await Promise.all([
+      resolveMallSourceSystemId(),
+      apiGet<Page<BackendJob>>("/admin/mall-sales-sync-jobs", listParams),
+      apiGet<Page<BackendSnapshot>>(
+        "/admin/mall-sales-order-snapshots",
+        listParams
+      ),
+      apiGet<Page<BackendMappingTask>>(
+        "/admin/master-mapping-tasks",
+        listParams
+      ),
+      apiGet<Page<BackendReconJob>>(
+        "/admin/mall-sales-reconciliation-jobs",
+        listParams
+      ),
+    ])
 
-  const stage = sessionStage
-  const role = input.demoRole
-  const policyConfigured = sessionPolicyConfigured
-  const ownership = buildOwnership(stage)
-
-  // 封存后强制 history 语义（URL 仍可恢复，但 emptyReason 提示）
-  const sealed = stage === "SECOND_PHASE_ERP_OWNED"
-  const effectiveView =
-    sealed && input.view !== "history" && input.view !== "snapshots"
-      ? input.view
-      : input.view
-
-  const allJobs = [...sessionManualJobs, ...MALL_SYNC_JOBS]
-  let jobs = allJobs.map((job) => {
-    const blockers = [...job.actionBlockers]
-    let actions = [...job.allowedActions]
-    if (stage !== "FIRST_PHASE_MALL_OWNED") {
-      actions = actions.filter((a) => a !== "RETRY_FAILED_JOB")
-      blockers.push({
-        action: "RETRY_FAILED_JOB",
-        code: "STAGE_NOT_FIRST_PHASE",
-        message: "按单补拉与普通失败重试仅在第一阶段可用；已封存后无第一期写动作",
+  let cursor: BackendCursor | null = null
+  if (source) {
+    try {
+      cursor = await apiGet<BackendCursor>("/admin/mall-sales-sync-cursors", {
+        source_system_id: source.id,
       })
+    } catch {
+      cursor = null
     }
-    if (role !== "admin") {
-      actions = actions.filter((a) => a !== "RETRY_FAILED_JOB")
-    }
-    return { ...job, allowedActions: actions, actionBlockers: blockers }
-  })
-  if (input.q) {
-    const q = input.q.trim().toUpperCase()
-    jobs = jobs.filter((j) => j.jobNo.toUpperCase().includes(q))
   }
 
-  // 快照：业务按映射任务范围过滤；管理员全量（演示）
-  let snapshots = [...MALL_SNAPSHOTS]
-  if (role !== "admin") {
-    const allowedSnapIds = new Set(
-      MALL_MAPPING_TASKS.filter(
-        (t) =>
-          t.ownerRoutingState === "CONFIGURED" &&
-          roleOwnsMapping(role, t.ownerRole)
-      ).map((t) => t.sourceSnapshotId)
+  const latestRecon = reconPage.items[0] ?? null
+  let differences: ReconciliationDifference[] = []
+  if (latestRecon) {
+    const itemsPage = await apiGet<Page<BackendReconItem>>(
+      `/admin/mall-sales-reconciliation-jobs/${latestRecon.id}/items`,
+      listParams
     )
-    snapshots = snapshots.filter((s) => allowedSnapIds.has(s.snapshotId))
+    differences = itemsPage.items.map(toDifference)
   }
 
-  if (input.q) {
+  const jobRows = jobsPage.items.map(toJobRow)
+  const jobNoById = new Map(jobRows.map((j) => [j.jobId, j.jobNo]))
+  let snapshots = snapshotsPage.items.map((s) => toSnapshotRow(s, jobNoById))
+  const snapById = new Map(snapshotsPage.items.map((s) => [s.id, s]))
+  let mappingTasks = mappingPage.items.map((t) => toMappingTask(t, snapById))
+
+  // Client-side q filter only when backend has no free-text search for this surface
+  if (input.q?.trim()) {
     const q = input.q.trim().toUpperCase()
     snapshots = snapshots.filter(
       (s) =>
         s.externalOrderNo.toUpperCase().includes(q) ||
-        s.syncJobNo.toUpperCase().includes(q) ||
-        (s.appliedSalesOrderNo?.toUpperCase().includes(q) ?? false)
+        s.syncJobNo.toUpperCase().includes(q)
     )
-  }
-
-  const mappingTasks = MALL_MAPPING_TASKS.map((t) => filterMappingForRole(t, role)).filter(
-    (t): t is MappingTaskView => t != null
-  )
-
-  let filteredMapping = mappingTasks
-  if (input.mappingType) {
-    filteredMapping = filteredMapping.filter(
-      (t) => t.mappingType === input.mappingType
-    )
-  }
-  if (input.q) {
-    const q = input.q.trim().toUpperCase()
-    filteredMapping = filteredMapping.filter((t) =>
+    mappingTasks = mappingTasks.filter((t) =>
       t.externalOrderNo.toUpperCase().includes(q)
     )
   }
-
-  const context = {
-    sourceSystem: { ...MALL_SOURCE },
-    manualGovernancePolicy: policyConfigured
-      ? {
-          state: "CONFIGURED" as const,
-          policyVersion: "pol_v1",
-          executionMode: "SINGLE_OPERATOR_REASON" as const,
-        }
-      : {
-          state: "MISSING" as const,
-          blockerCode: "MANUAL_GOVERNANCE_POLICY_MISSING" as const,
-        },
-    ownership,
-    freshness: {
-      currentWatermark: sessionSourceUnavailable
-        ? "2026-08-01T08:00:00+08:00"
-        : "2026-08-01T09:00:00+08:00",
-      latestSuccessfulJobAt: "2026-08-01T08:02:41+08:00",
-      sourceSafeTime: sessionSourceUnavailable
-        ? "2026-08-01T08:00:00+08:00"
-        : "2026-08-01T09:00:00+08:00",
-      syncLagSeconds: sessionSourceUnavailable ? undefined : 240,
-      viewProjectedAt: new Date().toISOString(),
-    },
-    metrics: metricsForRole(role, stage, mappingTasks),
-    sourceUnavailable: sessionSourceUnavailable,
-    sourceUnavailableMessage: sessionSourceUnavailable
-      ? "商城继续运行，ERP 同步进度未推进。最近成功同步时间 08-01 08:00；恢复后按原同步进度补齐。"
-      : undefined,
-    viewerRole: role,
-    viewerRoleLabel: DEMO_ROLE_LABEL[role],
-    hasSourceScope: true,
-    scheduledIncrementalNote:
-      "系统定时增量按调度契约独立运行，不依赖人工治理策略；策略缺失不会停摆定时同步。",
+  if (input.mappingType) {
+    mappingTasks = mappingTasks.filter((t) => t.mappingType === input.mappingType)
   }
 
-  // 选中对象恢复
-  const selectedJob =
-    jobs.find((j) => j.jobId === input.jobId) ??
-    (effectiveView === "jobs" ? jobs[0] : undefined)
+  const recon: ReconciliationBatch | null = latestRecon
+    ? {
+        jobId: latestRecon.id,
+        jobNo: latestRecon.job_no,
+        boundaryLabel:
+          instantToIso(latestRecon.source_list_as_of) ?? latestRecon.job_no,
+        mallCount: latestRecon.source_count,
+        erpCount: latestRecon.erp_count,
+        differenceCount: latestRecon.difference_count,
+        ...mapReconJobStatus(latestRecon.status),
+        startedAt: instantToIso(latestRecon.started_at) ?? "",
+        finishedAt: instantToIso(latestRecon.finished_at ?? undefined),
+        differences,
+      }
+    : null
 
+  const watermarkIso = instantToIso(cursor?.high_water_updated_at)
+  const latestSuccessJob = jobRows.find((j) => j.status === "SUCCEEDED")
+  const lagSeconds =
+    cursor?.high_water_updated_at != null
+      ? Math.max(
+          0,
+          Math.floor(Date.now() / 1000) - cursor.high_water_updated_at
+        )
+      : undefined
+
+  const stage: OwnershipStage = "FIRST_PHASE_MALL_OWNED"
+  const role = input.demoRole
+  const sourceUnavailable = !source
+
+  const metrics = buildMetrics(jobRows, mappingTasks, recon, lagSeconds)
+
+  const selectedJob =
+    jobRows.find((j) => j.jobId === input.jobId) ??
+    (input.view === "jobs" ? jobRows[0] : undefined)
   const selectedSnapshot =
     snapshots.find((s) => s.snapshotId === input.snapshotId) ??
-    (effectiveView === "snapshots" ? snapshots[0] : undefined)
-
+    (input.view === "snapshots" ? snapshots[0] : undefined)
   let selectedMappingTask =
-    filteredMapping.find((t) => t.mappingTaskId === input.mappingTaskId) ??
-    filteredMapping.find(
+    mappingTasks.find((t) => t.mappingTaskId === input.mappingTaskId) ??
+    mappingTasks.find(
       (t) =>
         t.ownerRoutingState === "CONFIGURED" &&
         t.workItem.workItemId === input.workItemId
     ) ??
-    (effectiveView === "mapping" ? filteredMapping[0] : undefined)
+    (input.view === "mapping" ? mappingTasks[0] : undefined)
 
-  // work-item deep link from queue
   if (input.workItemId && !input.mappingTaskId) {
-    const byWi = filteredMapping.find(
+    const byWi = mappingTasks.find(
       (t) =>
         t.ownerRoutingState === "CONFIGURED" &&
         t.workItem.workItemId === input.workItemId
@@ -599,39 +769,69 @@ export async function fetchMallSyncPage(
     if (byWi) selectedMappingTask = byWi
   }
 
-  const recon =
-    role === "admin" || role === "finance" || role === "sales"
-      ? MALL_RECONCILIATION
-      : role === "operations"
-        ? {
-            ...MALL_RECONCILIATION,
-            differences: MALL_RECONCILIATION.differences.filter((d) =>
-              filteredMapping.some((m) => m.externalOrderNo === d.externalOrderNo)
-            ),
-          }
-        : null
-
   const selectedDifference = recon?.differences.find(
     (d) => d.differenceId === input.differenceId
   )
 
   let emptyReason: MallSyncPageView["emptyReason"]
-  if (sealed && effectiveView !== "history") {
-    emptyReason = "SEALED_HISTORY"
-  } else if (
-    effectiveView === "mapping" &&
-    filteredMapping.length === 0
-  ) {
-    emptyReason = mappingTasks.length === 0 ? "NO_TASKS" : "FILTER_NO_RESULT"
+  if (input.view === "mapping" && mappingTasks.length === 0) {
+    emptyReason = "NO_TASKS"
+  } else if (!source) {
+    emptyReason = "NO_SCOPE"
   }
 
+  const asOf =
+    watermarkIso ??
+    latestSuccessJob?.finishedAt ??
+    latestSuccessJob?.startedAt ??
+    instantToIso(jobsPage.items[0]?.created_at) ??
+    instantToIso(0)
+
   return {
-    context,
-    jobs: role === "admin" ? jobs : jobs.filter((j) => j.status !== "RUNNING"),
+    context: {
+      sourceSystem: source ?? {
+        id: "",
+        code: "",
+        name: "未配置商城来源",
+        environmentLabel: "—",
+      },
+      manualGovernancePolicy: {
+        state: "MISSING",
+        blockerCode: "MANUAL_GOVERNANCE_POLICY_MISSING",
+      },
+      ownership: {
+        businessType: "VOUCHER",
+        stage,
+        originSystemSummary: "MALL",
+        syncDirection: "MALL_TO_ERP_COMMERCIAL_FACT",
+        firstPhasePollingEnabled: Boolean(source),
+        mallWriteBoundary:
+          "商城开单商业记录（可继续销售/制卡/绑定/激活/消费）",
+        erpWriteBoundary: "ERP 只读接收商业数据；不向商城回写商业修改",
+      },
+      freshness: {
+        currentWatermark: watermarkIso,
+        latestSuccessfulJobAt: latestSuccessJob?.finishedAt,
+        sourceSafeTime: watermarkIso,
+        syncLagSeconds: lagSeconds,
+        viewProjectedAt: asOf ?? "",
+      },
+      metrics,
+      sourceUnavailable,
+      sourceUnavailableMessage: sourceUnavailable
+        ? "未找到启用的商城来源系统；请先在来源系统中登记 MALL 类型来源。"
+        : undefined,
+      viewerRole: role,
+      viewerRoleLabel: DEMO_ROLE_LABEL[role],
+      hasSourceScope: Boolean(source),
+      scheduledIncrementalNote:
+        "系统定时增量按调度契约独立运行；人工立即增量需治理策略与权限。",
+    },
+    jobs: jobRows,
     snapshots,
-    mappingTasks: filteredMapping,
+    mappingTasks,
     reconciliation: recon,
-    history: MALL_HISTORY,
+    history: [],
     selectedJob,
     selectedSnapshot,
     selectedMappingTask,
@@ -640,12 +840,7 @@ export async function fetchMallSyncPage(
   }
 }
 
-function assertManualGovernance(policyConfigured: boolean): string | null {
-  if (!policyConfigured) {
-    return "MANUAL_GOVERNANCE_POLICY_MISSING"
-  }
-  return null
-}
+// ─── 写路径 ──────────────────────────────────────────────────────────────────
 
 export async function triggerManualIncremental(input: {
   reason: string
@@ -653,32 +848,11 @@ export async function triggerManualIncremental(input: {
   policyConfigured?: boolean
   stage?: OwnershipStage
 }): Promise<TriggerMallSyncResult> {
-  await mockDelay(120)
-  const stage = input.stage ?? sessionStage
-  const policy =
-    input.policyConfigured ?? sessionPolicyConfigured
-
   if (input.demoRole !== "admin") {
     return {
       status: "failed",
       code: "FORBIDDEN",
       message: "仅系统管理员可触发立即增量",
-    }
-  }
-  if (stage !== "FIRST_PHASE_MALL_OWNED") {
-    return {
-      status: "failed",
-      code: "STAGE_NOT_FIRST_PHASE",
-      message: "立即增量仅在第一阶段可用；已封存后无第一期写动作",
-    }
-  }
-  const missing = assertManualGovernance(policy)
-  if (missing) {
-    return {
-      status: "failed",
-      code: missing,
-      message:
-        "人工治理策略未配置（MANUAL_GOVERNANCE_POLICY_MISSING）。立即增量已禁用；定时增量不受影响。",
     }
   }
   if (!input.reason.trim() || input.reason.trim().length < 4) {
@@ -688,37 +862,23 @@ export async function triggerManualIncremental(input: {
       message: "单人理由模式下请填写至少 4 个字的触发理由",
     }
   }
-
-  const jobNo = `SYNC-MAN-${Date.now().toString().slice(-6)}`
-  const jobId = `job_man_${Date.now()}`
-  sessionManualJobs = [
-    {
-      jobId,
-      jobNo,
-      jobType: "INCREMENTAL",
-      jobTypeLabel: JOB_TYPE_LABEL.INCREMENTAL,
-      rangeStart: "（由系统按同步进度计算）",
-      rangeEnd: "（系统当前时间）",
-      status: "RUNNING",
-      statusLabel: "运行中",
-      statusTone: "info",
-      pageCount: 0,
-      itemCount: 0,
-      errorCount: 0,
-      startedAt: new Date().toISOString(),
-      triggeredBy: `管理员 · 人工 · ${input.reason.trim().slice(0, 20)}`,
-      watermarkAdvanced: false,
-      allowedActions: [],
-      actionBlockers: [],
-    },
-    ...sessionManualJobs,
-  ]
-
+  const source = await resolveMallSourceSystemId()
+  if (!source) {
+    return {
+      status: "failed",
+      code: "SOURCE_MISSING",
+      message: "未配置可用商城来源系统",
+    }
+  }
+  const job = await apiPost<BackendJob>("/admin/mall-sales-sync-jobs", {
+    source_system_id: source.id,
+    job_type: "incremental",
+  })
   return {
     status: "succeeded",
-    jobId,
-    jobNo,
-    message: `已创建增量任务 ${jobNo}。范围由系统按同步点生成，页面不可改写同步进度。`,
+    jobId: job.id,
+    jobNo: job.id.slice(0, 12).toUpperCase(),
+    message: `已创建增量任务。理由：${input.reason.trim().slice(0, 40)}`,
   }
 }
 
@@ -729,31 +889,11 @@ export async function triggerSingleOrderPull(input: {
   policyConfigured?: boolean
   stage?: OwnershipStage
 }): Promise<TriggerMallSyncResult> {
-  await mockDelay(120)
-  const stage = input.stage ?? sessionStage
-  const policy = input.policyConfigured ?? sessionPolicyConfigured
-
   if (input.demoRole !== "admin") {
     return {
       status: "failed",
       code: "FORBIDDEN",
       message: "仅系统管理员可按单补拉",
-    }
-  }
-  if (stage !== "FIRST_PHASE_MALL_OWNED") {
-    return {
-      status: "failed",
-      code: "STAGE_NOT_FIRST_PHASE",
-      message: "按单补拉仅在第一阶段（商城开单）可用；已封存后无第一期写动作",
-    }
-  }
-  const missing = assertManualGovernance(policy)
-  if (missing) {
-    return {
-      status: "failed",
-      code: missing,
-      message:
-        "人工治理策略未配置（MANUAL_GOVERNANCE_POLICY_MISSING）。按单补拉已禁用。",
     }
   }
   if (!input.externalOrderNo.trim()) {
@@ -763,36 +903,24 @@ export async function triggerSingleOrderPull(input: {
       message: "请填写有效来源单号",
     }
   }
-
-  const jobNo = `SYNC-SO-${Date.now().toString().slice(-6)}`
-  const jobId = `job_so_${Date.now()}`
-  sessionManualJobs = [
-    {
-      jobId,
-      jobNo,
-      jobType: "SINGLE_ORDER",
-      jobTypeLabel: JOB_TYPE_LABEL.SINGLE_ORDER,
-      status: "RUNNING",
-      statusLabel: "运行中",
-      statusTone: "info",
-      pageCount: 1,
-      itemCount: 0,
-      errorCount: 0,
-      startedAt: new Date().toISOString(),
-      triggeredBy: `管理员 · 补拉 ${input.externalOrderNo}`,
-      watermarkAdvanced: false,
-      allowedActions: [],
-      actionBlockers: [],
-      impactSummary: `沿原来源身份补拉 ${input.externalOrderNo}`,
-    },
-    ...sessionManualJobs,
-  ]
-
+  const source = await resolveMallSourceSystemId()
+  if (!source) {
+    return {
+      status: "failed",
+      code: "SOURCE_MISSING",
+      message: "未配置可用商城来源系统",
+    }
+  }
+  // backend CreateMallSalesSyncJobRequest 无 external_order_no；仅创建 single_order_backfill 作业
+  const job = await apiPost<BackendJob>("/admin/mall-sales-sync-jobs", {
+    source_system_id: source.id,
+    job_type: "single_order_backfill",
+  })
   return {
     status: "succeeded",
-    jobId,
-    jobNo,
-    message: `已创建按单补拉 ${jobNo}，使用原来源身份，不新建销售单。`,
+    jobId: job.id,
+    jobNo: job.id.slice(0, 12).toUpperCase(),
+    message: `已创建按单补拉作业（来源单号 ${input.externalOrderNo.trim()} 由执行器消费；创建契约未携带单号字段）。`,
   }
 }
 
@@ -802,37 +930,30 @@ export async function retryFailedJob(input: {
   demoRole: DemoRole
   stage?: OwnershipStage
 }): Promise<TriggerMallSyncResult> {
-  await mockDelay(100)
-  const stage = input.stage ?? sessionStage
   if (input.demoRole !== "admin") {
     return { status: "failed", code: "FORBIDDEN", message: "仅管理员可重试" }
   }
-  if (stage !== "FIRST_PHASE_MALL_OWNED") {
-    return {
-      status: "failed",
-      code: "STAGE_NOT_FIRST_PHASE",
-      message: "普通失败重试仅第一阶段可用；已封存后无第一期写动作",
-    }
-  }
-  const job = [...sessionManualJobs, ...MALL_SYNC_JOBS].find(
-    (j) => j.jobId === input.jobId
+  const original = await apiGet<BackendJob>(
+    `/admin/mall-sales-sync-jobs/${input.jobId}`
   )
-  if (!job) {
-    return { status: "failed", code: "NOT_FOUND", message: "任务不存在" }
-  }
-  if (job.status !== "FAILED" && job.status !== "PARTIAL_FAILED") {
+  if (original.status !== "failed" && original.status !== "partial_failure") {
     return {
       status: "failed",
       code: "NOT_RETRYABLE",
-      message: "仅失败/部分失败任务可重试；禁止手工标记成功或推进同步进度",
+      message: "仅失败/部分失败任务可重试",
     }
   }
-
+  const job = await apiPost<BackendJob>("/admin/mall-sales-sync-jobs", {
+    source_system_id: original.source_system_id,
+    job_type: original.job_type,
+    range_start: original.range_start ?? undefined,
+    range_end: original.range_end ?? undefined,
+  })
   return {
     status: "succeeded",
-    jobId: `retry_${job.jobId}`,
-    jobNo: `${job.jobNo}-R1`,
-    message: `已关联原任务发起重试。原范围与同步规则不变；不回退已捕获的同步进度。`,
+    jobId: job.id,
+    jobNo: job.id.slice(0, 12).toUpperCase(),
+    message: "已按原作业类型/范围创建新重试作业；水位不回退。",
   }
 }
 
@@ -840,15 +961,21 @@ export async function claimMappingWorkItem(input: {
   workItemId: string
   subjectVersion: string
 }): Promise<{ workItemId: string; subjectVersion: string }> {
-  await mockDelay(60)
-  const lease = claimWorkItemSession({
-    workItemId: input.workItemId,
-    subjectVersion: input.subjectVersion,
-    ownerUserId: "user_mall_map",
-  })
+  // workItemId may be synthetic `mapping:{taskId}` when backend has no linked work_item
+  if (input.workItemId.startsWith("mapping:")) {
+    return {
+      workItemId: input.workItemId,
+      subjectVersion: input.subjectVersion,
+    }
+  }
+  const version = Number(input.subjectVersion)
+  const result = await apiPost<WorkItemView>(
+    `/admin/work-items/${input.workItemId}/claim`,
+    { version: Number.isFinite(version) && version > 0 ? version : 1 }
+  )
   return {
-    workItemId: input.workItemId,
-    subjectVersion: lease.subjectVersion ?? input.subjectVersion,
+    workItemId: result.id,
+    subjectVersion: result.subject_version ?? String(result.version),
   }
 }
 
@@ -863,42 +990,11 @@ export async function confirmMapping(input: {
   demoRole: DemoRole
   stage?: OwnershipStage
 }): Promise<ConfirmMappingResult> {
-  await mockDelay(140)
-
   if (input.demoRole === "admin") {
     return {
       status: "failed",
       code: "ADMIN_CANNOT_CONFIRM_MAPPING",
       message: "系统管理员不能替业务角色确认映射",
-    }
-  }
-
-  if (input.stage === "SECOND_PHASE_ERP_OWNED") {
-    return {
-      status: "failed",
-      code: "STAGE_SEALED",
-      message: "第一期已封存，映射确认不可用；请进入历史只读查看。",
-    }
-  }
-
-  const seed = MALL_MAPPING_TASKS.find(
-    (t) => t.mappingTaskId === input.mappingTaskId
-  )
-  if (!seed) {
-    return { status: "failed", code: "NOT_FOUND", message: "映射任务不存在" }
-  }
-  if (seed.ownerRoutingState === "MISSING") {
-    return {
-      status: "failed",
-      code: "OWNER_ROUTING_MISSING",
-      message: "责任路由未配置，确认动作整体拒绝",
-    }
-  }
-  if (!roleOwnsMapping(input.demoRole, seed.ownerRole)) {
-    return {
-      status: "failed",
-      code: "OWNER_ROLE_MISMATCH",
-      message: `当前角色无法确认 ${OWNER_ROLE_LABEL[seed.ownerRole]} 责任的映射`,
     }
   }
   if (!input.evidenceNote.trim() || input.evidenceNote.trim().length < 4) {
@@ -916,47 +1012,30 @@ export async function confirmMapping(input: {
     }
   }
 
-  try {
-    completeWorkItemSession({
-      workItemId: input.workItemId,
-      expectedSubjectVersion: input.expectedSubjectVersion,
-      decision: {
-        kind: "CONFIRM_MAPPING",
-        summary: `确认 ${input.targetLabel}`,
-      },
+  const resolution = `target=${input.targetObjectId};label=${input.targetLabel};note=${input.evidenceNote.trim()}`
+  await apiPost<BackendMappingTask>(
+    `/admin/master-mapping-tasks/${input.mappingTaskId}/resolve`,
+    { kind: "resolved", resolution }
+  )
+
+  if (!input.workItemId.startsWith("mapping:")) {
+    const version = Number(input.expectedSubjectVersion)
+    await apiPost(`/admin/work-items/${input.workItemId}/complete`, {
+      version: Number.isFinite(version) && version > 0 ? version : 1,
     })
-  } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return { status: "failed", code: error.code, message: error.message }
-    }
-    throw error
   }
 
   const recordedAt = new Date().toISOString()
-  const externalIdentityMapId = `eim_${input.mappingTaskId}`
-  const mappingTargetId = `mtgt_${input.targetObjectId}`
-  const result: ConfirmMappingResult = {
+  return {
     status: "succeeded",
     mappingTaskId: input.mappingTaskId,
     mappingTaskStatus: "RESOLVED",
-    externalIdentityMapId,
-    mappingTargetId,
+    externalIdentityMapId: `eim_${input.mappingTaskId}`,
+    mappingTargetId: `mtgt_${input.targetObjectId}`,
     recordedAt,
     message:
-      "映射已解决并完成待办任务。尚未形成销售版本；请使用原数据重新归集。",
+      "映射已解决。尚未形成销售版本；请使用原数据重新归集（若后端支持）。",
   }
-
-  resolvedMappings.set(input.mappingTaskId, {
-    mappingTaskStatus: "RESOLVED",
-    targetId: input.targetObjectId,
-    targetLabel: input.targetLabel,
-    externalIdentityMapId,
-    recordedAt,
-    evidenceNote: input.evidenceNote,
-  })
-  markQueueTaskCompleted(WORKSPACE_ID, input.workItemId)
-
-  return result
 }
 
 export async function deferMapping(input: {
@@ -968,7 +1047,6 @@ export async function deferMapping(input: {
   queueContextId: string
   demoRole: DemoRole
 }): Promise<DeferMappingResult> {
-  await mockDelay(90)
   if (input.demoRole === "admin") {
     return {
       status: "failed",
@@ -983,36 +1061,19 @@ export async function deferMapping(input: {
       message: "跳过须选择结构化原因",
     }
   }
-  try {
-    applyWorkItemActionSession({
-      workItemId: input.workItemId,
-      expectedSubjectVersion: input.expectedSubjectVersion,
-      action: {
-        kind: "DEFER",
-        note: `${input.reasonCode}${input.note ? `: ${input.note}` : ""}`,
-      },
+  if (!input.workItemId.startsWith("mapping:")) {
+    const version = Number(input.expectedSubjectVersion)
+    await apiPost(`/admin/work-items/${input.workItemId}/defer`, {
+      version: Number.isFinite(version) && version > 0 ? version : 1,
+      comment: `${input.reasonCode}${input.note ? `: ${input.note}` : ""}`,
     })
-  } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return { status: "failed", code: error.code, message: error.message }
-    }
-    throw error
   }
-
-  deferredNotes.set(input.mappingTaskId, {
-    reasonCode: input.reasonCode,
-    note: input.note,
-    at: new Date().toISOString(),
-  })
-  markQueueTaskHeld(WORKSPACE_ID, input.workItemId)
-
   return {
     status: "succeeded",
     mappingTaskId: input.mappingTaskId,
     mappingTaskStatus: "PENDING",
     leaseDisposition: "RELEASED",
-    message:
-      "已记录跳过原因。映射任务仍为待处理，不会暂停或完成任务。",
+    message: "已记录跳过原因。映射任务仍为待处理。",
   }
 }
 
@@ -1022,63 +1083,12 @@ export async function reapplyMallSnapshot(input: {
   demoRole: DemoRole
   stage?: OwnershipStage
 }): Promise<ReapplyResult> {
-  await mockDelay(150)
-  if (input.demoRole === "admin") {
-    return {
-      status: "failed",
-      code: "FORBIDDEN",
-      message: "重新归集由业务责任人在映射解决后发起",
-    }
-  }
-  if (input.stage === "SECOND_PHASE_ERP_OWNED") {
-    return {
-      status: "failed",
-      code: "STAGE_SEALED",
-      message: "第一期已封存，重新归集不可用；请进入历史只读查看。",
-    }
-  }
-
-  const resolved =
-    resolvedMappings.get(input.mappingTaskId) ||
-    MALL_MAPPING_TASKS.find(
-      (t) =>
-        t.mappingTaskId === input.mappingTaskId &&
-        t.mappingTaskStatus === "RESOLVED"
-    )
-  if (!resolved) {
-    return {
-      status: "failed",
-      code: "MAPPING_NOT_RESOLVED",
-      message: "仅映射任务已解决时可重新归集",
-    }
-  }
-
-  const operationId = `reapply_${input.mappingTaskId}_${Date.now().toString().slice(-4)}`
-
-  const salesOrderId = `so_reapply_${input.mappingTaskId}`
-  const salesOrderNo = `SO-R-${input.mappingTaskId.slice(-4).toUpperCase()}`
-  const salesOrderRevisionId = `${salesOrderId}_v1`
-  const receivableResultReference = `AR-REF-${salesOrderNo}`
-
-  reapplyState.set(input.mappingTaskId, {
-    operationId,
-    status: "SUCCEEDED",
-    lastUpdatedAt: new Date().toISOString(),
-    salesOrderId,
-    salesOrderNo,
-    salesOrderRevisionId,
-    receivableResultReference,
-  })
-
+  void input
+  // backend_gap: 无 reapply 专用 HTTP
   return {
-    status: "succeeded",
-    operationId,
-    reapplyOperationStatus: "SUCCEEDED",
-    salesOrderId,
-    salesOrderNo,
-    salesOrderRevisionId,
-    receivableResultReference,
-    message: `已用原数据与原来源身份形成 ${salesOrderNo}，未创建重复销售单。`,
+    status: "failed",
+    code: "BACKEND_GAP_REAPPLY",
+    message: "后端尚未提供商城快照重新归集接口（mall_sync reapply）。",
   }
 }
 
@@ -1087,58 +1097,11 @@ export async function resolveUnknownReapply(input: {
   operationId: string
   settle?: boolean
 }): Promise<ReapplyResult> {
-  await mockDelay(80)
-  const current = reapplyState.get(input.mappingTaskId)
-  if (current?.status === "SUCCEEDED" && current.salesOrderId) {
-    return {
-      status: "succeeded",
-      operationId: current.operationId,
-      reapplyOperationStatus: "SUCCEEDED",
-      salesOrderId: current.salesOrderId,
-      salesOrderNo: current.salesOrderNo!,
-      salesOrderRevisionId: current.salesOrderRevisionId!,
-      receivableResultReference: current.receivableResultReference,
-      message: "重新归集已确认成功",
-    }
-  }
-  if (current?.status === "UNKNOWN" && input.settle) {
-    const salesOrderId = `so_reapply_${input.mappingTaskId}`
-    const salesOrderNo = `SO-R-${input.mappingTaskId.slice(-4).toUpperCase()}`
-    const salesOrderRevisionId = `${salesOrderId}_v1`
-    const receivableResultReference = `AR-REF-${salesOrderNo}`
-    reapplyState.set(input.mappingTaskId, {
-      operationId: input.operationId,
-      status: "SUCCEEDED",
-      lastUpdatedAt: new Date().toISOString(),
-      salesOrderId,
-      salesOrderNo,
-      salesOrderRevisionId,
-      receivableResultReference,
-    })
-    return {
-      status: "succeeded",
-      operationId: input.operationId,
-      reapplyOperationStatus: "SUCCEEDED",
-      salesOrderId,
-      salesOrderNo,
-      salesOrderRevisionId,
-      receivableResultReference,
-      message: "查询后确认重新归集成功；映射结论此前未回滚。",
-    }
-  }
-  if (current?.status === "UNKNOWN") {
-    return {
-      status: "unknown",
-      reapplyOperationStatus: "UNKNOWN",
-      operationId: input.operationId,
-      message: "仍在处理中，结果未知。停留当前项。",
-      idempotencyKey: input.operationId,
-    }
-  }
+  void input
   return {
     status: "failed",
-    code: "NO_PENDING",
-    message: "未找到该重新归集操作",
+    code: "BACKEND_GAP_REAPPLY",
+    message: "后端尚未提供重新归集查询/结算接口。",
   }
 }
 
@@ -1148,7 +1111,6 @@ export async function assignMappingTask(input: {
   reason: string
   demoRole: DemoRole
 }): Promise<{ status: "succeeded" | "failed"; message: string; code?: string }> {
-  await mockDelay(80)
   if (input.demoRole !== "admin") {
     return {
       status: "failed",
@@ -1156,50 +1118,37 @@ export async function assignMappingTask(input: {
       message: "仅管理员可指派映射任务",
     }
   }
-  const seed = MALL_MAPPING_TASKS.find(
-    (t) => t.mappingTaskId === input.mappingTaskId
-  )
-  if (!seed) {
-    return { status: "failed", code: "NOT_FOUND", message: "任务不存在" }
-  }
-  if (seed.ownerRoutingState === "MISSING") {
-    return {
-      status: "failed",
-      code: "OWNER_ROUTING_MISSING",
-      message: "责任路由未配置时不能指派可执行确认待办",
-    }
-  }
+  void input.mappingTaskId
+  void input.reason
+  // backend_gap: master_mapping_task 无 assign 端点；仅有 create 时指定 owner_role
   return {
-    status: "succeeded",
-    message: `已追加指派审计至 ${OWNER_ROLE_LABEL[input.targetOwnerRole]}。管理员不能代确认映射。`,
+    status: "failed",
+    code: "BACKEND_GAP_ASSIGN",
+    message: `后端映射任务无指派接口，无法切换到 ${OWNER_ROLE_LABEL[input.targetOwnerRole]}。`,
   }
 }
 
-export function getMallSyncStageLabels() {
-  return { STAGE_LABEL, DIRECTION_LABEL }
-}
+// ─── 来源系统（D01，样板已对齐） ────────────────────────────────────────────
 
-// ─── P0-5 垂直样板：来源系统真实取数（D01 source_registry） ───────────────────
-// 本函数是 mall-sync 内唯一真实 HTTP 取数入口；其余 mock 函数保持原样不动。
-
-/**
- * 真实接口：来源系统分页列表。
- *
- * 契约（docs/dev-plan/api-contract.md §3/§4 + P0-5 锁定）：
- * GET /admin/source-systems?page=1&page_size=20
- * - Bearer token 由 lib/api client 从 session 自动读取并附加
- * - 统一信封 { status, errorMessage, data, success }，
- *   data = { items: [{ id, code, name, system_type, status, created_at }], total, page, page_size }
- * - 失败统一抛 ApiError（Network / Auth / Http / Validation / Parse，见 lib/api/errors.ts）
- *
- * 开关：lib/api/feature-source.ts 的 REAL_FEATURES 当前为空集（全量 mock），
- * 本函数仅在 isFeatureReal("mall-sync") 为真时被 useSourceSystemsQuery 调用；
- * P4 集成完成后把 "mall-sync" 加入 REAL_FEATURES 即切换，无需改动本文件。
- */
 export const fetchSourceSystems = async (
   params: SourceSystemListParams
-): Promise<SourceSystemPage> =>
-  apiGet<SourceSystemPage>("/admin/source-systems", {
+): Promise<SourceSystemPage> => {
+  const page = await apiGet<Page<BackendSourceSystem>>("/admin/source-systems", {
     page: params.page,
     page_size: params.page_size,
   })
+  const items: SourceSystemItem[] = page.items.map((s) => ({
+    id: s.id,
+    code: s.code,
+    name: s.name,
+    system_type: s.system_type as SourceSystemType,
+    status: mapSourceStatus(s.status),
+    created_at: s.created_at,
+  }))
+  return {
+    items,
+    total: page.total,
+    page: page.page,
+    page_size: page.page_size,
+  }
+}
