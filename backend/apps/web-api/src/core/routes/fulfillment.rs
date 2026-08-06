@@ -1,10 +1,204 @@
-//! 域 D16 `fulfillment`：purchase_receipt(+_line)、delivery(+_line)、electronic_delivery、service_fulfillment、customer_acceptance(+_line)、acceptance_fulfillment_allocation（页面：W06、W09）。P0 骨架占位；P3 填充路由与权限挂载（管理端路由必须带 #[permission]）。
+//! 域 D16 `fulfillment` 管理端路由。
+//!
+//! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/purchase-receipts`、
+//! `/admin/deliveries`、`/admin/electronic-deliveries`、`/admin/service-fulfillments`、
+//! `/admin/customer-acceptances`；每条路由统一走 JWT + RBAC（`with_permission`），
+//! handler 标注 `#[permission_macros::permission]`。
 
-use axum::Router;
+use axum::{
+    routing::{get, post, put},
+    Router,
+};
+use services::iam::SharedRbacService;
 
-use crate::app_state::AppState;
+use crate::{
+    app_state::AppState,
+    core::{handler::fulfillment, middleware::with_permission},
+};
 
-/// 返回本域管理端路由集合（P3 填充）。
-pub fn routes(_rbac: &services::iam::SharedRbacService) -> Router<AppState> {
-    Router::<AppState>::new()
+/// 返回本域管理端路由集合。
+///
+/// # 参数
+/// * `rbac` - 共享 Casbin RBAC 服务
+///
+/// # 返回
+/// 返回挂载了权限校验层的路由集合。
+pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/purchase-receipts",
+            with_permission(
+                get(fulfillment::purchase_receipt_list),
+                rbac,
+                fulfillment::purchase_receipt_list_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-receipts",
+            with_permission(
+                post(fulfillment::purchase_receipt_create),
+                rbac,
+                fulfillment::purchase_receipt_create_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-receipts/{id}",
+            with_permission(
+                get(fulfillment::purchase_receipt_detail),
+                rbac,
+                fulfillment::purchase_receipt_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-receipts/{id}",
+            with_permission(
+                put(fulfillment::purchase_receipt_update),
+                rbac,
+                fulfillment::purchase_receipt_update_permission_key(),
+            ),
+        )
+        .route(
+            "/purchase-receipts/{id}/post",
+            with_permission(
+                post(fulfillment::purchase_receipt_post),
+                rbac,
+                fulfillment::purchase_receipt_post_permission_key(),
+            ),
+        )
+        .route(
+            "/deliveries",
+            with_permission(
+                get(fulfillment::delivery_list),
+                rbac,
+                fulfillment::delivery_list_permission_key(),
+            ),
+        )
+        .route(
+            "/deliveries",
+            with_permission(
+                post(fulfillment::delivery_create),
+                rbac,
+                fulfillment::delivery_create_permission_key(),
+            ),
+        )
+        .route(
+            "/deliveries/{id}",
+            with_permission(
+                get(fulfillment::delivery_detail),
+                rbac,
+                fulfillment::delivery_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/deliveries/{id}",
+            with_permission(
+                put(fulfillment::delivery_update),
+                rbac,
+                fulfillment::delivery_update_permission_key(),
+            ),
+        )
+        .route(
+            "/deliveries/{id}/post",
+            with_permission(
+                post(fulfillment::delivery_post),
+                rbac,
+                fulfillment::delivery_post_permission_key(),
+            ),
+        )
+        .route(
+            "/electronic-deliveries",
+            with_permission(
+                get(fulfillment::electronic_delivery_list),
+                rbac,
+                fulfillment::electronic_delivery_list_permission_key(),
+            ),
+        )
+        .route(
+            "/electronic-deliveries",
+            with_permission(
+                post(fulfillment::electronic_delivery_create),
+                rbac,
+                fulfillment::electronic_delivery_create_permission_key(),
+            ),
+        )
+        .route(
+            "/electronic-deliveries/{id}/confirm",
+            with_permission(
+                post(fulfillment::electronic_delivery_confirm),
+                rbac,
+                fulfillment::electronic_delivery_confirm_permission_key(),
+            ),
+        )
+        .route(
+            "/service-fulfillments",
+            with_permission(
+                get(fulfillment::service_fulfillment_list),
+                rbac,
+                fulfillment::service_fulfillment_list_permission_key(),
+            ),
+        )
+        .route(
+            "/service-fulfillments",
+            with_permission(
+                post(fulfillment::service_fulfillment_create),
+                rbac,
+                fulfillment::service_fulfillment_create_permission_key(),
+            ),
+        )
+        .route(
+            "/service-fulfillments/{id}/confirm",
+            with_permission(
+                post(fulfillment::service_fulfillment_confirm),
+                rbac,
+                fulfillment::service_fulfillment_confirm_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-acceptances",
+            with_permission(
+                get(fulfillment::customer_acceptance_list),
+                rbac,
+                fulfillment::customer_acceptance_list_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-acceptances",
+            with_permission(
+                post(fulfillment::customer_acceptance_create),
+                rbac,
+                fulfillment::customer_acceptance_create_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-acceptances/eligible",
+            with_permission(
+                get(fulfillment::customer_acceptance_eligible),
+                rbac,
+                fulfillment::customer_acceptance_eligible_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-acceptances/{id}",
+            with_permission(
+                get(fulfillment::customer_acceptance_detail),
+                rbac,
+                fulfillment::customer_acceptance_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-acceptances/{id}/post",
+            with_permission(
+                post(fulfillment::customer_acceptance_post),
+                rbac,
+                fulfillment::customer_acceptance_post_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-acceptances/{id}/reverse",
+            with_permission(
+                post(fulfillment::customer_acceptance_reverse),
+                rbac,
+                fulfillment::customer_acceptance_reverse_permission_key(),
+            ),
+        )
 }

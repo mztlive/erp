@@ -201,4 +201,356 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "履约",
+        description: "采购入库、发货、交付、服务与客户验收管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-receipts",
+                description: "查询采购入库单列表",
+                permission: {
+                    resource: "purchase_receipt",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-receipts",
+                description: "创建采购入库单",
+                permission: {
+                    resource: "purchase_receipt",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-receipts/{id}",
+                description: "查询采购入库单详情",
+                permission: {
+                    resource: "purchase_receipt",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/purchase-receipts/{id}",
+                description: "更新采购入库单",
+                permission: {
+                    resource: "purchase_receipt",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-receipts/{id}/post",
+                description: "过账采购入库",
+                permission: {
+                    resource: "purchase_receipt",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/deliveries",
+                description: "查询发货单列表",
+                permission: {
+                    resource: "delivery",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/deliveries",
+                description: "创建发货单",
+                permission: {
+                    resource: "delivery",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/deliveries/{id}",
+                description: "查询发货单详情",
+                permission: {
+                    resource: "delivery",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/deliveries/{id}",
+                description: "更新发货单",
+                permission: {
+                    resource: "delivery",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/deliveries/{id}/post",
+                description: "过账发货",
+                permission: {
+                    resource: "delivery",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/electronic-deliveries",
+                description: "查询电子交付记录列表",
+                permission: {
+                    resource: "electronic_delivery",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/electronic-deliveries",
+                description: "创建电子交付记录",
+                permission: {
+                    resource: "electronic_delivery",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/electronic-deliveries/{id}/confirm",
+                description: "确认电子交付",
+                permission: {
+                    resource: "electronic_delivery",
+                    action: "confirm",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/service-fulfillments",
+                description: "查询服务履约记录列表",
+                permission: {
+                    resource: "service_fulfillment",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/service-fulfillments",
+                description: "创建服务履约记录",
+                permission: {
+                    resource: "service_fulfillment",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/service-fulfillments/{id}/confirm",
+                description: "确认服务履约",
+                permission: {
+                    resource: "service_fulfillment",
+                    action: "confirm",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-acceptances",
+                description: "查询客户验收单列表",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-acceptances",
+                description: "创建客户验收单",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-acceptances/eligible",
+                description: "查询客户验收工作台",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-acceptances/{id}",
+                description: "查询客户验收单详情",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-acceptances/{id}/post",
+                description: "过账客户验收",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "post",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-acceptances/{id}/reverse",
+                description: "冲正客户验收",
+                permission: {
+                    resource: "customer_acceptance",
+                    action: "reverse",
+                },
+            },
+        ],
+    },
+    {
+        name: "库存",
+        description: "库存台账与库存调整管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-balances",
+                description: "查询库存余额列表",
+                permission: {
+                    resource: "stock_balance",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-balances/{id}",
+                description: "查询库存余额详情",
+                permission: {
+                    resource: "stock_balance",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-movements",
+                description: "查询库存流水台账",
+                permission: {
+                    resource: "stock_movement",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-reservations",
+                description: "查询库存预占列表",
+                permission: {
+                    resource: "stock_reservation",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-adjustments",
+                description: "查询库存调整单列表",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/stock-adjustments",
+                description: "创建库存调整单",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/stock-adjustments/{id}",
+                description: "查询库存调整单详情",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/stock-adjustments/{id}",
+                description: "更新库存调整单",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/stock-adjustments/{id}/submit",
+                description: "提交库存调整仓储复核",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/stock-adjustments/{id}/approve",
+                description: "库存调整仓储复核通过",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/stock-adjustments/{id}/reject",
+                description: "驳回库存调整",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/stock-adjustments/{id}/post",
+                description: "过账库存调整",
+                permission: {
+                    resource: "stock_adjustment",
+                    action: "post",
+                },
+            },
+        ],
+    },
 ];
