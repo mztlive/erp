@@ -723,8 +723,6 @@ export type DeliveryCommandInput = {
   action: "QUERY_RESULT" | "RETRY" | "ESCALATE"
   expectedObjectVersion: string
   requestId: string
-  /** 演示：强制查询仍返回未知 */
-  forceStillUnknown?: boolean
 }
 
 export async function submitProjectionDeliveryCommand(
@@ -766,21 +764,7 @@ export async function submitProjectionDeliveryCommand(
     }
   }
 
-  if (input.action === "QUERY_RESULT" || input.forceStillUnknown) {
-    if (input.forceStillUnknown) {
-      return {
-        operationId: `op_query_${input.requestId}`,
-        deliveryId: input.deliveryId,
-        projectionId: input.projectionId,
-        salesOrderNo: input.projectionId,
-        result: "STILL_UNKNOWN",
-        resultLabel: "结果仍未知",
-        occurredAt: new Date().toISOString(),
-        nextAction: "保留当前项，可再次查询或升级到接口错误中心",
-        stillUnknown: true,
-        objectVersion: input.expectedObjectVersion,
-      }
-    }
+  if (input.action === "QUERY_RESULT") {
     const deliveryPage = await apiGet<Page<BackendDelivery>>(
       "/admin/sales-order-projection-deliveries",
       { page: 1, page_size: 50 }

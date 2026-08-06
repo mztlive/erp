@@ -75,13 +75,14 @@ import {
   useTransferWorkItemMutation,
   useUnifiedTaskQueueQuery,
   useWorkItemActionMutation,
-  WorkItemMockError,
+  WorkItemApiError,
 } from "./queries"
 import type {
   QueueScopeSlug,
   QueueWorkItemView,
   UnifiedQueueFilters,
 } from "./types"
+import { useTeamOptionsQuery } from "@/hooks/use-options"
 
 const decisionSchema = z.object({
   note: z.string().max(500, "备注不超过 500 字"),
@@ -96,13 +97,11 @@ type LastResult = {
   referenceLabel?: string
 }
 
-/** 转交目标候选（mock 团队名单；确认弹窗展示「任务将转交 ×××」）。 */
-const TRANSFER_CANDIDATES = ["陈琳", "李倩", "刘青", "周航"] as const
-
 export function UnifiedTaskQueuePage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const { data: teamOptions } = useTeamOptionsQuery()
 
   const scope = parseScopeSlug(searchParams.get("scope"))
   const family = parseFamily(searchParams.get("family"))
@@ -146,8 +145,11 @@ export function UnifiedTaskQueuePage() {
   const [closeConfirmOpen, setCloseConfirmOpen] = React.useState(false)
   const [transferConfirmOpen, setTransferConfirmOpen] = React.useState(false)
   const [transferTarget, setTransferTarget] = React.useState<string>(
-    TRANSFER_CANDIDATES[0]
+    teamOptions?.[0]?.userId ?? ""
   )
+  const transferTargetLabel =
+    teamOptions?.find((t) => t.userId === transferTarget)?.displayName ??
+    transferTarget
   const [conflictOpen, setConflictOpen] = React.useState(false)
   const [conflictInfo, setConflictInfo] = React.useState<{
     localVersion: string
@@ -333,9 +335,9 @@ export function UnifiedTaskQueuePage() {
     [activeLeases, claimMutation]
   )
 
-  const handleMockError = React.useCallback(
+  const handleActionError = React.useCallback(
     (error: unknown, item: QueueWorkItemView) => {
-      if (!(error instanceof WorkItemMockError)) {
+      if (!(error instanceof WorkItemApiError)) {
         setLastResult({
           status: "failed",
           title: "提交失败",
@@ -408,13 +410,13 @@ export function UnifiedTaskQueuePage() {
         reference: record.actionRecordId,
       })
     } catch (error) {
-      handleMockError(error, task)
+      handleActionError(error, task)
     }
   }, [
     actionMutation,
     decisionForm.state.values.note,
     ensureClaimed,
-    handleMockError,
+    handleActionError,
     permissionRevoked,
     task,
   ])
@@ -441,7 +443,7 @@ export function UnifiedTaskQueuePage() {
       // DEFER opens next per §7
       advanceToNext(task.id, tasks)
     } catch (error) {
-      handleMockError(error, task)
+      handleActionError(error, task)
     }
   }, [
     actionMutation,
@@ -449,7 +451,7 @@ export function UnifiedTaskQueuePage() {
     decisionForm.state.values.note,
     dropActiveLease,
     ensureClaimed,
-    handleMockError,
+    handleActionError,
     permissionRevoked,
     task,
     tasks,
@@ -485,7 +487,7 @@ export function UnifiedTaskQueuePage() {
       // Only advance after confirmed success
       advanceToNext(task.id, tasks)
     } catch (error) {
-      handleMockError(error, task)
+      handleActionError(error, task)
     }
   }, [
     advanceToNext,
@@ -493,7 +495,7 @@ export function UnifiedTaskQueuePage() {
     decisionForm.state.values.note,
     dropActiveLease,
     ensureClaimed,
-    handleMockError,
+    handleActionError,
     permissionRevoked,
     router,
     task,
@@ -525,7 +527,7 @@ export function UnifiedTaskQueuePage() {
       })
       advanceToNext(task.id, tasks)
     } catch (error) {
-      handleMockError(error, task)
+      handleActionError(error, task)
     }
   }, [
     advanceToNext,
@@ -533,7 +535,7 @@ export function UnifiedTaskQueuePage() {
     decisionForm.state.values.note,
     dropActiveLease,
     ensureClaimed,
-    handleMockError,
+    handleActionError,
     permissionRevoked,
     task,
     tasks,
@@ -550,19 +552,19 @@ export function UnifiedTaskQueuePage() {
           expectedSubjectVersion: lease.subjectVersion,
           transfer: {
             targetUserId,
-            reason: decisionForm.state.values.note || `转交${targetUserId}处理`,
+            reason: decisionForm.state.values.note || `转交${transferTargetLabel}处理`,
           },
         })
         dropActiveLease(task.id)
         setLastResult({
           status: "succeeded",
           title: "已转交",
-          description: `任务已转交 ${result.targetUserId}，仍在待处理列表，已自动打开下一条。`,
+          description: `任务已转交 ${transferTargetLabel}，仍在待处理列表，已自动打开下一条。`,
           reference: result.transferRecordId,
         })
         advanceToNext(task.id, tasks)
       } catch (error) {
-        handleMockError(error, task)
+        handleActionError(error, task)
       }
     },
     [
@@ -570,11 +572,12 @@ export function UnifiedTaskQueuePage() {
       decisionForm.state.values.note,
       dropActiveLease,
       ensureClaimed,
-      handleMockError,
+      handleActionError,
       permissionRevoked,
       task,
       tasks,
       transferMutation,
+      transferTargetLabel,
     ]
   )
 
@@ -613,12 +616,12 @@ export function UnifiedTaskQueuePage() {
         referenceLabel: "领取任务数",
       })
     } catch (error) {
-      handleMockError(error, task)
+      handleActionError(error, task)
     }
   }, [
     activeLeases,
     batchClaimMutation,
-    handleMockError,
+    handleActionError,
     permissionRevoked,
     task,
     tasks,
@@ -1196,7 +1199,7 @@ export function UnifiedTaskQueuePage() {
                         reference: task.id,
                       })
                     })
-                    .catch((error) => handleMockError(error, task))
+                    .catch((error) => handleActionError(error, task))
                 }}
               />
             </div>
@@ -1245,7 +1248,7 @@ export function UnifiedTaskQueuePage() {
                                 currentWorkItemId: task.id,
                               })
                             })
-                            .catch((error) => handleMockError(error, task))
+                            .catch((error) => handleActionError(error, task))
                         }
                         disabled={claimMutation.isPending || permissionRevoked}
                       >
@@ -1379,11 +1382,11 @@ export function UnifiedTaskQueuePage() {
                         }
                         className="h-9 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        {TRANSFER_CANDIDATES.map((name) => (
-                          <option key={name} value={name}>
-                            {name}
+                        {teamOptions?.map((t) => (
+                          <option key={t.userId} value={t.userId}>
+                            {t.displayName}
                           </option>
-                        ))}
+                        )) ?? []}
                       </select>
                       <Button
                         type="button"
@@ -1521,9 +1524,9 @@ export function UnifiedTaskQueuePage() {
         open={transferConfirmOpen}
         onOpenChange={setTransferConfirmOpen}
         title={`转交任务：${task?.workItemTypeLabel ?? ""}`}
-        description={`任务将转交 ${transferTarget}，由对方继续处理。`}
+        description={`任务将转交 ${transferTargetLabel}，由对方继续处理。`}
         actionLabel="转交"
-        confirmLabel={`转交${transferTarget}`}
+        confirmLabel={`转交${transferTargetLabel}`}
         fromStatus={{ label: task?.status.label ?? "待处理", tone: "warning" }}
         toStatus={{ label: "已转交", tone: "info" }}
         lockedFields={[
@@ -1532,7 +1535,7 @@ export function UnifiedTaskQueuePage() {
           versionText.dataVersion,
         ]}
         effects={[
-          `任务处理权将移交 ${transferTarget}`,
+          `任务处理权将移交 ${transferTargetLabel}`,
           "转交后任务仍在待处理列表，不改动业务记录",
           "确认后自动打开下一条任务",
         ]}

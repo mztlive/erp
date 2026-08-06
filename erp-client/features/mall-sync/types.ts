@@ -11,8 +11,6 @@ export type MallSyncViewName =
   | "reconciliation"
   | "history"
 
-export type DemoRole = "admin" | "sales" | "operations" | "finance"
-
 export type OwnershipStage =
   | "FIRST_PHASE_MALL_OWNED"
   | "SECOND_PHASE_ERP_OWNED"
@@ -80,9 +78,6 @@ export type MallSyncContext = {
   /** §9 来源商城不可用 */
   sourceUnavailable?: boolean
   sourceUnavailableMessage?: string
-  /** 演示角色（mock 会话） */
-  viewerRole: DemoRole
-  viewerRoleLabel: string
   hasSourceScope: boolean
   /** 定时增量说明（策略缺失时仍可读） */
   scheduledIncrementalNote: string
@@ -376,13 +371,6 @@ export const VIEW_LABEL: Record<MallSyncViewName, string> = {
   mapping: "映射任务",
   reconciliation: "每日核对",
   history: "历史",
-}
-
-export const DEMO_ROLE_LABEL: Record<DemoRole, string> = {
-  admin: "系统管理员",
-  sales: "销售",
-  operations: "运营",
-  finance: "财务",
 }
 
 export const STAGE_LABEL: Record<OwnershipStage, string> = {

@@ -1,5 +1,4 @@
 import type {
-  DemoRole,
   DifferenceType,
   SettlementSection,
   SettlementView,
@@ -19,8 +18,6 @@ export type SettlementsUrlState = {
   preview?: string
   statementId?: string
   section: SettlementSection
-  role: DemoRole
-  demoFlag?: "no-permission" | "no-scope" | "policy-missing"
   returnTo?: string
   /** 差异工作台选中项锚定（刷新/分享不丢上下文） */
   diff?: string
@@ -32,12 +29,6 @@ const VIEW_VALUES = [
   "review_by_me",
   "confirmed",
 ] as const
-const ROLE_VALUES = [
-  "finance_prep",
-  "finance_review",
-  "procurement",
-  "manager",
-] as const
 const DIFF_VALUES = [
   "MISSING_ORDER",
   "DUPLICATE",
@@ -45,7 +36,6 @@ const DIFF_VALUES = [
   "REFUND",
   "STATUS",
 ] as const
-const FLAG_VALUES = ["no-permission", "no-scope", "policy-missing"] as const
 
 const codec = createUrlStateCodec<SettlementsUrlState>([
   { key: "view", type: "enum", values: VIEW_VALUES, defaultValue: "pending" },
@@ -66,14 +56,6 @@ const codec = createUrlStateCodec<SettlementsUrlState>([
     buildWhen: (value, state) =>
       value !== "overview" && Boolean(state.statementId),
   },
-  {
-    key: "role",
-    type: "enum",
-    values: ROLE_VALUES,
-    defaultValue: "finance_prep",
-    aliases: ["demoRole"],
-  },
-  { key: "demoFlag", type: "enum", values: FLAG_VALUES },
   { key: "returnTo", type: "string" },
   { key: "diff", type: "string" },
 ])

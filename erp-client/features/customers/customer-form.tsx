@@ -9,13 +9,11 @@ import {
   DiscardConfirmDialog,
   DocumentSection,
   FormalActionResult,
-  OptionCombobox,
   OwnerCombobox,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
 import {
-  DEMO_OWNER_OPTIONS,
   PAYMENT_TERM_OPTIONS,
   paymentTermLabel,
 } from "@/lib/business-options"
@@ -31,7 +29,6 @@ import {
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert"
-import { Label } from "@/components/ui/label"
 import {
   useCreateCustomerMutation,
   useQueryCustomerIdempotencyMutation,
@@ -41,6 +38,7 @@ import type {
   CustomerCenterView,
   CustomerMutationResult,
 } from "@/features/customers/types"
+import { useOwnerOptionsQuery } from "@/hooks/use-options"
 
 const contactRowSchema = z.object({
   name: z.string().trim().min(1, "请填写联系人姓名"),
@@ -248,11 +246,9 @@ export function CustomerForm({
   const createMutation = useCreateCustomerMutation()
   const saveMutation = useSaveCustomerDetailsMutation()
   const queryIdempotency = useQueryCustomerIdempotencyMutation()
+  const { data: ownerOptions } = useOwnerOptionsQuery()
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey(mode === "create" ? "create" : "revise")
-  )
-  const [simulate, setSimulate] = React.useState<"ok" | "conflict" | "unknown">(
-    "ok"
   )
   const [result, setResult] = React.useState<CustomerMutationResult | null>(
     null
@@ -318,14 +314,12 @@ export function CustomerForm({
                 : undefined,
               ownerUserId: value.ownerUserId,
               ownerName:
-                DEMO_OWNER_OPTIONS.find(
-                  (o) => o.userId === value.ownerUserId
-                )?.displayName ?? value.ownerUserId,
+                ownerOptions?.find((o) => o.userId === value.ownerUserId)
+                  ?.displayName ?? value.ownerUserId,
               contacts,
               addresses,
               bankAccounts,
               idempotencyKey,
-              simulate,
             })
           : await saveMutation.mutateAsync({
               customerId: customer!.customerId,
@@ -339,7 +333,6 @@ export function CustomerForm({
               addresses,
               bankAccounts,
               idempotencyKey,
-              simulate,
             })
 
       setResult(response)
@@ -453,7 +446,7 @@ export function CustomerForm({
                   <OwnerCombobox
                     value={field.state.value || undefined}
                     onValueChange={(id) => field.handleChange(id ?? "")}
-                    owners={DEMO_OWNER_OPTIONS}
+                    owners={ownerOptions ?? []}
                     placeholder="搜索负责人"
                   />
                   {isInvalid ? <FieldError errors={errors} /> : null}
@@ -763,36 +756,6 @@ export function CustomerForm({
         </div>
       ) : null}
 
-      <details className="rounded-lg border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-        <summary className="cursor-pointer select-none">
-          演示模式（模拟提交结果）
-        </summary>
-        <div className="mt-2 space-y-2">
-          <Label htmlFor="customer-form-simulate">演示结果</Label>
-          <OptionCombobox
-            id="customer-form-simulate"
-            value={simulate}
-            onValueChange={(v) =>
-              setSimulate((v ?? "ok") as "ok" | "conflict" | "unknown")
-            }
-            options={[
-              { value: "ok", label: "正常成功" },
-              {
-                value: "conflict",
-                label:
-                  mode === "create"
-                    ? "重复候选冲突（保留输入）"
-                    : "数据已更新（保留输入）",
-              },
-              { value: "unknown", label: "结果不确定（保留输入）" },
-            ]}
-            allowClear={false}
-            aria-label="演示结果"
-            placeholder="请选择演示结果"
-          />
-        </div>
-      </details>
-
       {result?.outcome === "succeeded" ? (
         <FormalActionResult
           status="succeeded"
@@ -888,7 +851,7 @@ export function CustomerForm({
         <ConflictResolutionDialog
           open={conflictOpen}
           onOpenChange={setConflictOpen}
-          title={mode === "create" ? "存在重复候选（演示）" : undefined}
+          title={mode === "create" ? "存在重复候选" : undefined}
           description={result.message}
           currentVersion={
             mode === "create"
@@ -919,7 +882,6 @@ export function CustomerForm({
             setIdempotencyKey(
               newIdempotencyKey(mode === "create" ? "create" : "revise")
             )
-            setSimulate("ok")
             setResult(null)
           }}
           onSaveCopy={() => setConflictOpen(false)}

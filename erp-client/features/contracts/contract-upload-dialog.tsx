@@ -12,7 +12,6 @@ import { toFieldErrors, useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
 import {
   PAYMENT_TERM_OPTIONS,
-  SETTLEMENT_PARTY_OPTIONS,
   paymentTermLabel,
 } from "@/lib/business-options"
 import { Button } from "@/components/ui/button"
@@ -43,6 +42,7 @@ import {
   useCustomerCenterQuery,
   useCustomerDirectoryQuery,
 } from "@/features/customers/queries"
+import { usePartyOptionsQuery } from "@/hooks/use-options"
 
 const uploadSchema = z
   .object({
@@ -103,6 +103,7 @@ export function ContractUploadDialog({
     status: "active",
   })
   const uploadMutation = useUploadContractPdfMutation()
+  const { data: partyOptions } = usePartyOptionsQuery()
   const seededCustomerRef = React.useRef(false)
   const [discardOpen, setDiscardOpen] = React.useState(false)
 
@@ -304,15 +305,14 @@ export function ContractUploadDialog({
                             onValueChange={(id) => {
                               const next = id ?? ""
                               field.handleChange(next)
-                              const party = SETTLEMENT_PARTY_OPTIONS.find(
-                                (p) => p.partyId === next
-                              )
                               form.setFieldValue(
                                 "settlementPartyName",
-                                party?.displayName ?? ""
+                                partyOptions?.find(
+                                  (p) => p.partyId === next
+                                )?.displayName ?? ""
                               )
                             }}
-                            parties={[...SETTLEMENT_PARTY_OPTIONS]}
+                            parties={[...(partyOptions ?? [])]}
                             placeholder="搜索结算主体"
                           />
                           {isInvalid ? <FieldError errors={errors} /> : null}

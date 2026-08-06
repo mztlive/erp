@@ -61,7 +61,6 @@ import type {
   PurchaseOrderListItem,
   PurchaseOrderMetricFilter,
   PurchaseOrderStatusFilter,
-  ViewerRole,
 } from "@/features/purchase-orders/types"
 import {
   FULFILLMENT_RESPONSIBILITY_LABEL,
@@ -84,8 +83,6 @@ export function PurchaseOrdersListPage() {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const basisFromUrl = searchParams.get("basisId")
-  const [viewerRole, setViewerRole] =
-    React.useState<ViewerRole>("procurement")
 
   const url = React.useMemo(
     () => parsePurchaseOrdersSearchParams(searchParams),
@@ -125,7 +122,6 @@ export function PurchaseOrdersListPage() {
 
   const listQueryInput = React.useMemo<PurchaseOrderListQuery>(
     () => ({
-      role: viewerRole,
       q: url.q,
       status: url.status,
       metric: effectiveMetric,
@@ -134,7 +130,7 @@ export function PurchaseOrdersListPage() {
       sortBy,
       sortDir,
     }),
-    [effectiveMetric, sortBy, sortDir, url, viewerRole]
+    [effectiveMetric, sortBy, sortDir, url]
   )
   const listQuery = usePurchaseOrdersQuery(listQueryInput)
   const exportQuery = usePurchaseOrderExportDataQuery(listQueryInput)
@@ -193,10 +189,7 @@ export function PurchaseOrdersListPage() {
     return () => globalThis.clearTimeout(handle)
   }, [pushUrl, searchDraft, url.q])
 
-  const previewQuery = usePurchaseOrderCenterQuery(
-    previewId ?? "",
-    viewerRole
-  )
+  const previewQuery = usePurchaseOrderCenterQuery(previewId ?? "")
 
   React.useEffect(() => {
     setFocusedIndex(0)
@@ -309,7 +302,7 @@ export function PurchaseOrdersListPage() {
     setActionResult({
       status: "succeeded",
       title: "导出已生成",
-      description: `已下载当前筛选 ${rows.length} 条（已按角色打码成本字段）。`,
+      description: `已下载当前筛选 ${rows.length} 条。`,
       reference: `EXPORT-${rows.length}`,
     })
   }, [exportQuery])
@@ -495,8 +488,7 @@ export function PurchaseOrdersListPage() {
           align: "end",
           numeric: true,
         },
-        enableSorting:
-          viewerRole === "sales" || viewerRole === "warehouse" ? false : true,
+        enableSorting: true,
         cell: ({ row }) =>
           row.original.costMasked ? (
             <span className="text-sm text-muted-foreground">•••</span>
@@ -547,7 +539,7 @@ export function PurchaseOrdersListPage() {
                 size="xs"
                 render={
                   <Link
-                    href={`/procurement/orders/${row.original.purchaseOrderId}?demoRole=${viewerRole}`}
+                    href={`/procurement/orders/${row.original.purchaseOrderId}`}
                   />
                 }
               >
@@ -560,7 +552,7 @@ export function PurchaseOrdersListPage() {
                   size="xs"
                   render={
                     <Link
-                      href={`/procurement/orders/${row.original.purchaseOrderId}?mode=edit&demoRole=${viewerRole}`}
+                      href={`/procurement/orders/${row.original.purchaseOrderId}?mode=edit`}
                     />
                   }
                 >
@@ -574,7 +566,7 @@ export function PurchaseOrdersListPage() {
                   size="xs"
                   render={
                     <Link
-                      href={`/procurement/orders/${row.original.purchaseOrderId}?mode=review&demoRole=${viewerRole}`}
+                      href={`/procurement/orders/${row.original.purchaseOrderId}?mode=review`}
                     />
                   }
                 >
@@ -610,7 +602,7 @@ export function PurchaseOrdersListPage() {
         },
       },
     ],
-    [focusedIndex, listReturnHref, pageRows, viewerRole]
+    [focusedIndex, listReturnHref, pageRows]
   )
 
   if (listQuery.isPending) {
@@ -713,30 +705,6 @@ export function PurchaseOrdersListPage() {
           }
         />
       ) : null}
-
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-xs text-muted-foreground">演示角色视图</span>
-        <ToggleGroup
-          value={[viewerRole]}
-          onValueChange={(values) => {
-            const next = values[0] as ViewerRole | undefined
-            if (next) setViewerRole(next)
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
-        >
-          <ToggleGroupItem value="procurement">采购</ToggleGroupItem>
-          <ToggleGroupItem value="finance">财务</ToggleGroupItem>
-          <ToggleGroupItem value="sales">销售</ToggleGroupItem>
-          <ToggleGroupItem value="warehouse">仓储</ToggleGroupItem>
-        </ToggleGroup>
-        {(viewerRole === "sales" || viewerRole === "warehouse") && (
-          <span className="text-xs text-muted-foreground">
-            成本金额已打码
-          </span>
-        )}
-      </div>
 
       <MetricStrip
         columns={Math.min(4, Math.max(2, metrics.length)) as 2 | 3 | 4}

@@ -7,7 +7,6 @@ import {
   fetchPublicationList,
   manualPausePublication,
   publishRevision,
-  resolvePublishUnknown,
   retryDelivery,
 } from "@/features/product-publications/api"
 import type { ProductPublicationListQuery } from "@/features/product-publications/types"
@@ -46,18 +45,6 @@ export function usePublishRevisionMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: publishRevision,
-    onSuccess: async (result) => {
-      if (result.status === "succeeded") {
-        await queryClient.invalidateQueries({ queryKey: publicationKeys.all })
-      }
-    },
-  })
-}
-
-export function useResolvePublishUnknownMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: resolvePublishUnknown,
     onSuccess: async (result) => {
       if (result.status === "succeeded") {
         await queryClient.invalidateQueries({ queryKey: publicationKeys.all })

@@ -22,7 +22,6 @@ import type {
   ReviewPurchaseOrderInput,
   SavePurchaseOrderDraftInput,
   SubmitPurchaseOrderInput,
-  ViewerRole,
 } from "@/features/purchase-orders/types"
 import {
   PAYMENT_TERM_OPTIONS,
@@ -32,7 +31,6 @@ import {
 } from "@/features/purchase-orders/types"
 
 export type PurchaseOrderListQuery = {
-  role?: ViewerRole
   q?: string
   status?: PurchaseOrderStatusFilter
   metric?: PurchaseOrderMetricFilter
@@ -353,19 +351,14 @@ function mapFulfillment(
 }
 
 function deriveAllowedActions(
-  status: PurchaseOrderStatus,
-  role: ViewerRole
+  status: PurchaseOrderStatus
 ): string[] {
   const common = ["OPEN_CENTER", "PRINT"]
   if (status === "DRAFT") {
-    return role === "finance"
-      ? common
-      : [...common, "EDIT", "SUBMIT", "VOID"]
+    return [...common, "EDIT", "SUBMIT", "VOID"]
   }
   if (status === "PENDING_REVIEW") {
-    return role === "finance"
-      ? [...common, "REVIEW"]
-      : common
+    return [...common, "REVIEW"]
   }
   if (status === "EFFECTIVE" || status === "PARTIAL") {
     return [...common, "FULFILL", "PAY", "START_CHANGE"]
@@ -374,8 +367,7 @@ function deriveAllowedActions(
 }
 
 function mapListItem(
-  row: BackendListItem,
-  role: ViewerRole
+  row: BackendListItem
 ): PurchaseOrderListItem {
   const status = fromBackendStatus(row.status)
   const reviewStatus = fromBackendReviewStatus(row.review_status, status)
@@ -414,14 +406,13 @@ function mapListItem(
     paymentGate: "NOT_APPLICABLE" as PaymentGateState,
     expectedDate: undefined,
     updatedAt: secsToIso(row.created_at),
-    allowedActions: deriveAllowedActions(status, role),
+    allowedActions: deriveAllowedActions(status),
     actionBlockers: [],
   }
 }
 
 function mapCenter(
-  center: BackendCenter,
-  role: ViewerRole
+  center: BackendCenter
 ): PurchaseOrderCenterView {
   const status = fromBackendStatus(center.status)
   const reviewStatus = fromBackendReviewStatus(
@@ -552,7 +543,7 @@ function mapCenter(
       baseRevisionNo: undefined,
     })),
     workflow: [],
-    allowedActions: deriveAllowedActions(status, role),
+    allowedActions: deriveAllowedActions(status),
     actionBlockers: [],
     fieldVisibility: {},
     reviewWorkItem: undefined,
@@ -677,7 +668,6 @@ async function buildMetrics(
 export async function fetchPurchaseOrders(
   query: PurchaseOrderListQuery = {}
 ): Promise<PurchaseOrderListResult> {
-  const role = query.role ?? "procurement"
   const pageSize = Math.min(
     Math.max(1, query.pageSize ?? PURCHASE_ORDER_DEFAULT_PAGE_SIZE),
     PURCHASE_ORDER_MAX_PAGE_SIZE
@@ -729,7 +719,7 @@ export async function fetchPurchaseOrders(
   )
 
   const bases = await fetchCreationBases().catch(() => [] as PurchaseCreationBasis[])
-  const rows = (pageData.items ?? []).map((item) => mapListItem(item, role))
+  const rows = (pageData.items ?? []).map(mapListItem)
 
   return {
     rows,
@@ -757,14 +747,13 @@ export async function fetchPurchaseOrderExportData(
 }
 
 export async function fetchPurchaseOrderCenter(
-  purchaseOrderId: string,
-  role: ViewerRole = "procurement"
+  purchaseOrderId: string
 ): Promise<PurchaseOrderCenterView | null> {
   try {
     const center = await apiGet<BackendCenter>(
       `/admin/purchase-orders/${encodeURIComponent(purchaseOrderId)}`
     )
-    return mapCenter(center, role)
+    return mapCenter(center)
   } catch (error) {
     if (isApiError(error) && error.status === 404) return null
     throw error

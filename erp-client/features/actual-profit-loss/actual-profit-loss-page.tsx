@@ -42,7 +42,6 @@ import {
   QuickPreviewSheet,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
-import type { FreshnessDemoState } from "@/lib/freshness"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import {
   Alert,
@@ -83,7 +82,6 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   useCostEntriesForRowQuery,
-  useMarkCorrectionPendingMutation,
   usePeriodBasisConfigQuery,
   useProfitLossViewQuery,
   useStartProfitLossExportMutation,
@@ -300,24 +298,6 @@ export function ActualProfitLossPage() {
   const salesOrderId = searchParams.get("salesOrderId") ?? undefined
   const qParam = searchParams.get("q") ?? ""
   const sort = searchParams.get("sort") ?? "actualProfitLossNet:asc"
-  // 演示/QA 参数仅开发构建生效，生产构建一律回落默认值，避免 URL 残留隐形状态。
-  const demoControlsEnabled = process.env.NODE_ENV === "development"
-  const basisConfigScenario =
-    demoControlsEnabled && searchParams.get("basisConfig") === "missing"
-      ? "missing"
-      : "default"
-  const freshnessDemo = (
-    demoControlsEnabled
-      ? (searchParams.get("freshness") as FreshnessDemoState | null)
-      : null
-  ) ?? undefined
-  const fieldHideRaw = demoControlsEnabled
-    ? searchParams.get("fieldHide")
-    : null
-  const fieldHide =
-    fieldHideRaw === "cost" || fieldHideRaw === "profit"
-      ? fieldHideRaw
-      : "none"
 
   const [searchInput, setSearchInput] = React.useState(qParam)
   const searchInputRef = React.useRef<HTMLInputElement | null>(null)
@@ -339,9 +319,7 @@ export function ActualProfitLossPage() {
   const rowFocusRef = React.useRef<Map<string, HTMLElement | null>>(new Map())
   const restoreFocusIdRef = React.useRef<string | null>(null)
 
-  const basisQuery = usePeriodBasisConfigQuery({
-    scenario: basisConfigScenario,
-  })
+  const basisQuery = usePeriodBasisConfigQuery()
   const basisConfig = basisQuery.data
 
   // 服务端已配置时，若 URL 无 periodBasis，写入配置值（非静默猜口径）
@@ -393,19 +371,11 @@ export function ActualProfitLossPage() {
         q: qParam || undefined,
         sort,
         pageSize: 20,
-        freshnessDemo:
-          freshnessDemo === "stale" ||
-          freshnessDemo === "rebuilding" ||
-          freshnessDemo === "failed"
-            ? freshnessDemo
-            : undefined,
-        fieldHide,
       }
     : null
 
   const viewQuery = useProfitLossViewQuery(plQuery, analysisReady)
   const exportMutation = useStartProfitLossExportMutation()
-  const markCorrection = useMarkCorrectionPendingMutation()
 
   const costIds = costDetailRow?.costEntryIds ?? []
   const costEntriesQuery = useCostEntriesForRowQuery(costIds)
@@ -777,14 +747,8 @@ export function ActualProfitLossPage() {
     setRefreshing(true)
     setRefreshFailed(false)
     try {
-      if (freshnessDemo === "failed") {
-        // 演示刷新失败：保留旧数据
-        await new Promise((r) => globalThis.setTimeout(r, 400))
-        setRefreshFailed(true)
-      } else {
-        await viewQuery.refetch()
-        await basisQuery.refetch()
-      }
+      await viewQuery.refetch()
+      await basisQuery.refetch()
     } catch {
       setRefreshFailed(true)
     } finally {
@@ -1725,29 +1689,6 @@ export function ActualProfitLossPage() {
                   }
                 />
               )}
-
-              <div
-                className="flex flex-wrap items-center gap-2 rounded-xl border border-dashed bg-muted/30 px-3 py-2"
-                data-slot="demo-qa-controls"
-              >
-                <span className="text-xs font-medium text-muted-foreground">
-                  演示控件
-                </span>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={markCorrection.isPending}
-                  onClick={() => {
-                    void markCorrection.mutateAsync()
-                  }}
-                >
-                  演示：来源纠错后等待刷新
-                </Button>
-                <span className="text-xs text-muted-foreground">
-                  纠错后不改本页金额；固定提示等待数据追平。
-                </span>
-              </div>
             </>
           ) : null}
         </>

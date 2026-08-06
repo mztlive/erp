@@ -7,7 +7,6 @@ import type {
   ItemResult,
   JobSection,
   MallOrderFactType,
-  ViewerRoleDemo,
 } from "@/features/history-backfill/types"
 import { createUrlStateCodec } from "@/lib/url-state"
 
@@ -65,8 +64,6 @@ const SECTION_VALUES = [
   "report",
 ] as const
 
-const ROLE_VALUES = ["SYSTEM_ADMIN", "FINANCE", "OPERATIONS", "NO_MODULE"] as const
-
 export type HistoryBackfillUrlState = {
   view: HistoryBackfillView
   mallId?: string
@@ -82,7 +79,6 @@ export type HistoryBackfillUrlState = {
   result?: ItemResult
   factType?: MallOrderFactType
   costBasis?: CostBasis
-  role?: ViewerRoleDemo
 }
 
 const codec = createUrlStateCodec<HistoryBackfillUrlState>([
@@ -105,12 +101,6 @@ const codec = createUrlStateCodec<HistoryBackfillUrlState>([
   { key: "result", type: "enum", values: RESULT_VALUES },
   { key: "factType", type: "enum", values: FACT_TYPE_VALUES },
   { key: "costBasis", type: "enum", values: COST_BASIS_VALUES },
-  {
-    key: "role",
-    type: "enum",
-    values: ROLE_VALUES,
-    buildWhen: (value) => Boolean(value) && value !== "SYSTEM_ADMIN",
-  },
 ])
 
 export const parseHistoryBackfillSearchParams = codec.parse

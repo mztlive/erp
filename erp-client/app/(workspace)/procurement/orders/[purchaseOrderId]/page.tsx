@@ -15,12 +15,10 @@ export default async function PurchaseOrderObjectPage({
   searchParams: Promise<{
     section?: string
     mode?: string
-    demoRole?: string
-    maskCost?: string
   }>
 }) {
   const { purchaseOrderId } = await params
-  const { section, mode, demoRole, maskCost } = await searchParams
+  const { section, mode } = await searchParams
   return (
     <Suspense
       fallback={
@@ -34,8 +32,6 @@ export default async function PurchaseOrderObjectPage({
         purchaseOrderId={purchaseOrderId}
         section={section}
         mode={mode}
-        demoRole={demoRole}
-        maskCost={maskCost}
       />
     </Suspense>
   )

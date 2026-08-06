@@ -93,7 +93,6 @@ import type {
 } from "@/features/supplier-catalog/types"
 import {
   CHANGE_TYPE_LABEL,
-  DEMO_ROLE_LABEL,
 } from "@/features/supplier-catalog/types"
 import {
   offeringStatusLabel,
@@ -102,16 +101,9 @@ import {
   toBrandComboboxItems,
   toCategoryComboboxItems,
 } from "@/features/master-data/category-tree-model"
-import { BASE_UNIT_DICTIONARY } from "@/features/master-data/resource-fields"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
+import { useUnitOptionsQuery } from "@/hooks/use-options"
 import { cn } from "@/lib/utils"
-import { parseDemoRole } from "@/lib/demo-roles"
-
-const SUPPLIER_CATALOG_DEMO_ROLES = [
-  "operations",
-  "admin",
-  "ops_tech",
-] as const
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -129,10 +121,8 @@ function mappingHistoryStatusLabel(status: string) {
 
 function OfferingConditionCard({
   offering,
-  costMasked,
 }: {
   offering: SupplierOfferingRevisionView
-  costMasked: boolean
 }) {
   return (
     <Card size="sm">
@@ -155,11 +145,9 @@ function OfferingConditionCard({
             {
               id: "cost",
               label: "采购确认成本（含税）",
-              value: costMasked
-                ? "***"
-                : offering.supplyPriceGross
-                  ? `¥${offering.supplyPriceGross}`
-                  : "—",
+              value: offering.supplyPriceGross
+                ? `¥${offering.supplyPriceGross}`
+                : "—",
               numeric: true,
             },
             {
@@ -353,18 +341,12 @@ export function SupplierProductCenterPage({
   const router = useRouter()
   const searchParams = useSearchParams()
   const isCreate = supplierProductId === "new"
-  const demoRole =
-    parseDemoRole(searchParams.get("demoRole"), SUPPLIER_CATALOG_DEMO_ROLES) ??
-    "procurement"
-  const maskCost = searchParams.get("maskCost") === "1"
   const returnTo =
     searchParams.get("returnTo") ?? "/procurement/supplier-catalog?mode=list"
 
   const centerQuery = useSupplierCatalogCenterQuery({
     supplierProductId: isCreate ? "" : supplierProductId,
     section: "overview",
-    demoRole,
-    maskCost,
     enabled: !isCreate,
   })
   const supplierQuery = useMasterDataListQuery({
@@ -390,6 +372,8 @@ export function SupplierProductCenterPage({
     () => toBrandComboboxItems(brandListQuery.data?.rows ?? []),
     [brandListQuery.data?.rows],
   )
+  const unitOptionsQuery = useUnitOptionsQuery()
+  const unitOptions = unitOptionsQuery.data ?? []
   const createMutation = useCreateSupplierCatalogItemMutation()
   const reviseMutation = useReviseSupplierCatalogProductMutation()
 
@@ -448,6 +432,7 @@ export function SupplierProductCenterPage({
       })),
       categoryOptions,
       brandOptions,
+      unitOptions,
     })
     setFields(next)
     hydratedKeyRef.current = key
@@ -460,6 +445,7 @@ export function SupplierProductCenterPage({
     categoryOptions,
     centerQuery.data,
     isCreate,
+    unitOptions,
   ])
 
   React.useLayoutEffect(() => {
@@ -485,10 +471,7 @@ export function SupplierProductCenterPage({
   }
 
   const pending = createMutation.isPending || reviseMutation.isPending
-  const canEdit = demoRole === "procurement"
   const item = centerQuery.data?.item
-  const costFieldVisibility =
-    centerQuery.data?.costFieldVisibility ?? (maskCost ? "masked" : "visible")
 
   const contentPayload = React.useCallback(
     (nextFields: SupplierProductFormFields) => {
@@ -829,7 +812,6 @@ export function SupplierProductCenterPage({
                   <span>
                     {ep.supplierSpuCode ?? "—"} / {ep.supplierSkuCode}
                   </span>
-                  <span>角色 {DEMO_ROLE_LABEL[demoRole]}</span>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">
@@ -844,7 +826,6 @@ export function SupplierProductCenterPage({
                   type="button"
                   size="sm"
                   variant="secondary"
-                  disabled={!canEdit}
                   onClick={openPromote}
                 >
                   <ShoppingBasketIcon data-icon="inline-start" aria-hidden />
@@ -867,13 +848,13 @@ export function SupplierProductCenterPage({
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={!canEdit || pending}
+                disabled={pending}
                 onClick={runLocalCheck}
               >
                 <ClipboardCheckIcon data-icon="inline-start" aria-hidden />
                 填写检查
               </Button>
-              <Button type="submit" size="sm" disabled={!canEdit || pending}>
+              <Button type="submit" size="sm" disabled={pending}>
                 <SaveIcon data-icon="inline-start" aria-hidden />
                 {pending
                   ? "正在保存…"
@@ -898,25 +879,12 @@ export function SupplierProductCenterPage({
             </Alert>
           ) : null}
 
-          {costFieldVisibility === "masked" ? (
-            <Badge variant="outline">价格/税率/费用字段已按权限隐藏</Badge>
-          ) : null}
-
           {created && !result ? (
             <FormalActionResult
               status="succeeded"
               title="供应商商品已保存"
               description="内容保存在供应商商品库；不会自动改写公司商品或商品池价格。"
             />
-          ) : null}
-
-          {!canEdit ? (
-            <Alert>
-              <AlertTitle>当前角色只读</AlertTitle>
-              <AlertDescription>
-                仅采购可维护供应商商品来源内容；运营可看发布准备，销售不进入本页。
-              </AlertDescription>
-            </Alert>
           ) : null}
 
           {result ? (
@@ -1093,7 +1061,6 @@ export function SupplierProductCenterPage({
               <fieldset
                 id="supplier-product-section-basic"
                 className="scroll-mt-[var(--product-section-scroll-margin)] space-y-3 rounded-2xl border border-border bg-card p-5 shadow-sm"
-                disabled={!canEdit}
               >
                 <legend className="px-1 text-base font-semibold">基础信息</legend>
                 <p className="text-xs text-muted-foreground">
@@ -1175,7 +1142,7 @@ export function SupplierProductCenterPage({
                     <OptionCombobox
                       value={fields.baseUnitId || null}
                       onValueChange={(id) => {
-                        const unit = BASE_UNIT_DICTIONARY.find(
+                        const unit = unitOptions.find(
                           (candidate) => candidate.id === id,
                         )
                         patchFields((previous) => ({
@@ -1185,7 +1152,7 @@ export function SupplierProductCenterPage({
                           baseUnit: unit?.label ?? "",
                         }))
                       }}
-                      options={BASE_UNIT_DICTIONARY.map((unit) => ({
+                      options={unitOptions.map((unit) => ({
                         value: unit.id,
                         label: `${unit.label} · ${unit.code}`,
                       }))}
@@ -1242,7 +1209,6 @@ export function SupplierProductCenterPage({
               <fieldset
                 id="supplier-product-section-media"
                 className="scroll-mt-[var(--product-section-scroll-margin)] space-y-5 rounded-2xl border border-border bg-card p-5 shadow-sm"
-                disabled={!canEdit}
               >
                 <legend className="px-1 text-base font-semibold">图文信息</legend>
                 <p className="text-xs text-muted-foreground">
@@ -1275,7 +1241,6 @@ export function SupplierProductCenterPage({
               <fieldset
                 id="supplier-product-section-sku"
                 className="scroll-mt-[var(--product-section-scroll-margin)] space-y-4 rounded-2xl border border-border bg-card p-5 shadow-sm"
-                disabled={!canEdit}
               >
                 <legend className="px-1 text-base font-semibold">
                   SKU / 规格与供给
@@ -1600,12 +1565,7 @@ export function SupplierProductCenterPage({
                               <td className="border-l border-border px-3 py-3">
                                 <Input
                                   className="h-8"
-                                  value={
-                                    costFieldVisibility === "masked"
-                                      ? "***"
-                                      : sku.dropshipFloorPriceGross
-                                  }
-                                  disabled={costFieldVisibility === "masked"}
+                                  value={sku.dropshipFloorPriceGross}
                                   onChange={(event) =>
                                     updateSku(index, {
                                       dropshipFloorPriceGross:
@@ -1618,12 +1578,7 @@ export function SupplierProductCenterPage({
                               <td className="px-3 py-3">
                                 <Input
                                   className="h-8"
-                                  value={
-                                    costFieldVisibility === "masked"
-                                      ? "***"
-                                      : sku.bulkFloorPriceGross
-                                  }
-                                  disabled={costFieldVisibility === "masked"}
+                                  value={sku.bulkFloorPriceGross}
                                   onChange={(event) =>
                                     updateSku(index, {
                                       bulkFloorPriceGross: event.target.value,
@@ -1693,7 +1648,6 @@ export function SupplierProductCenterPage({
                   {item.offering?.currentRevision ? (
                     <OfferingConditionCard
                       offering={item.offering.currentRevision}
-                      costMasked={costFieldVisibility === "masked"}
                     />
                   ) : null}
                   <Card size="sm">

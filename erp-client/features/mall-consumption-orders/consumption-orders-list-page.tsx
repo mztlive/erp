@@ -57,7 +57,6 @@ import type {
   CostBasis,
   FactType,
   FulfillmentChain,
-  ListDemoFlag,
   MallConsumptionOrderListQuery,
   MallConsumptionOrderMetricKey,
   MallConsumptionOrderRow,
@@ -91,13 +90,6 @@ function parseMetric(
     return raw
   }
   return "all"
-}
-
-function parseDemoFlag(raw: string | null): ListDemoFlag | undefined {
-  if (raw === "no-permission" || raw === "no-scope" || raw === "empty") {
-    return raw
-  }
-  return undefined
 }
 
 /** 逗号分隔多值 URL 参数 → 白名单过滤后的数组；非法值忽略。 */
@@ -189,7 +181,6 @@ export function ConsumptionOrdersListPage() {
   const dataSources = parseMultiValue(searchParams.get("dataSource"), DATA_SOURCES)
   const periodSelected = Boolean(occurredFrom && occurredTo)
   const metric = parseMetric(searchParams.get("metric"))
-  const demoFlag = parseDemoFlag(searchParams.get("demo"))
   const previewId = searchParams.get("preview")
   const pageFromUrl = Math.max(1, Number(searchParams.get("page") ?? "1") || 1)
 
@@ -281,14 +272,12 @@ export function ConsumptionOrdersListPage() {
       metric: metric === "all" ? undefined : metric,
       page: pagination.pageIndex + 1,
       pageSize: pagination.pageSize,
-      demoFlag,
       sort: "occurredAt.desc",
     }),
     [
       attributionStatus,
       costBasis,
       dataSources,
-      demoFlag,
       factTypes,
       fulfillmentChain,
       mallId,
@@ -633,29 +622,6 @@ export function ConsumptionOrdersListPage() {
           {data?.boundaryNotice ??
             "本页只读：不修改支付状态、不编辑分摊、不重试供应商动作；导出与信息揭示均有审计。"}
         </AlertDescription>
-        <div className="flex items-center gap-2 text-sm">
-          <span className="whitespace-nowrap text-muted-foreground">演示状态</span>
-          <OptionCombobox
-            value={demoFlag ?? "normal"}
-            onValueChange={(v) => {
-              const next = v ?? "normal"
-              replaceParams({
-                demo: next === "normal" ? undefined : next,
-              })
-            }}
-            options={[
-              { value: "normal", label: "正常数据范围" },
-              { value: "no-permission", label: "无模块权限" },
-              { value: "no-scope", label: "无数据范围" },
-              { value: "empty", label: "空数据" },
-            ]}
-            className="w-40"
-            size="sm"
-            allowClear={false}
-            aria-label="演示空态"
-            placeholder="演示空态"
-          />
-        </div>
       </Alert>
 
       {exportResult ? (

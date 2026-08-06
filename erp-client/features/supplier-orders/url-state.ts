@@ -1,6 +1,5 @@
 import type {
   CancelStatus,
-  DemoRole,
   ListView,
   OrderSection,
   RefundStatus,
@@ -27,7 +26,6 @@ export type SupplierOrdersUrlState = {
   page: number
   pageSize: number
   preview?: string
-  role: DemoRole
   section: OrderSection
   workItemId?: string
   from?: string
@@ -37,7 +35,6 @@ export type SupplierOrdersUrlState = {
 }
 
 const VIEWS = ["actionable", "all", "recent_completed"] as const
-const ROLES = ["procurement", "cs", "ops", "finance", "admin"] as const
 
 const codec = createUrlStateCodec<SupplierOrdersUrlState>([
   { key: "view", type: "enum", values: VIEWS, defaultValue: "actionable" },
@@ -67,13 +64,6 @@ const codec = createUrlStateCodec<SupplierOrdersUrlState>([
   { key: "page", type: "number", defaultValue: 1 },
   { key: "pageSize", type: "number", defaultValue: 50, min: 1, max: 100 },
   { key: "preview", type: "string", aliases: ["supplierOrderId"] },
-  {
-    key: "role",
-    type: "enum",
-    values: ROLES,
-    defaultValue: "procurement",
-    aliases: ["demoRole"],
-  },
   { key: "section", type: "enum", values: SECTIONS, defaultValue: "overview" },
   { key: "workItemId", type: "string" },
   { key: "from", type: "string" },

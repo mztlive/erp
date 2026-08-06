@@ -5,7 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   claimCardFundsReviewWorkItem,
   completeCardFundsReview,
-  demoDriftCardFundsHash,
   fetchCardFundsReviewQueue,
   holdCardFundsReview,
   registerHistoricalInvoice,
@@ -89,16 +88,6 @@ export function useSaveCardFundsEvidenceMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: saveCardFundsEvidence,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: cardFundsReviewKeys.all })
-    },
-  })
-}
-
-export function useDemoDriftHashMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: demoDriftCardFundsHash,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: cardFundsReviewKeys.all })
     },

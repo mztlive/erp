@@ -1,5 +1,5 @@
 /**
- * Decimal-string helpers used by mock APIs to emulate server-side fixed-point
+ * Decimal-string helpers for fixed-point arithmetic.
  * arithmetic. Business amounts must never pass through JavaScript `number`.
  */
 

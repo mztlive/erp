@@ -56,7 +56,7 @@ function toInternal(options: readonly ComboboxOption[]): InternalOption[] {
 
 /**
  * 基于 `components/ui/combobox` 的可搜索单选。
- * 用于替代 Select / NativeSelect：筛选条、表单枚举、演示角色等。
+ * 用于替代 Select / NativeSelect：筛选条、表单枚举等。
  */
 export function OptionCombobox({
   options,

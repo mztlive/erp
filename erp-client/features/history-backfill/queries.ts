@@ -5,8 +5,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import {
   fetchHistoryBackfillDetail,
   fetchHistoryBackfillList,
-  setHistoryBackfillCreateContextMode,
-  setHistoryBackfillForceUnknown,
   submitHistoryBackfillCommand,
 } from "@/features/history-backfill/api"
 import type {
@@ -60,18 +58,4 @@ export function useHistoryBackfillCommandMutation() {
       }
     },
   })
-}
-
-/** 演示控制：覆盖缺口 / 结果未知 */
-export function useHistoryBackfillDemoControls() {
-  const queryClient = useQueryClient()
-  return {
-    setCreateContextMode: async (mode: "ok" | "gap") => {
-      setHistoryBackfillCreateContextMode(mode)
-      await queryClient.invalidateQueries({ queryKey: historyBackfillKeys.all })
-    },
-    setForceUnknown: (next: boolean) => {
-      setHistoryBackfillForceUnknown(next)
-    },
-  }
 }

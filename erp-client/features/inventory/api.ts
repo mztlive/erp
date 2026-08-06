@@ -130,7 +130,7 @@ type BackendBackgroundJob = {
   created_at: number
 }
 
-/** 导出任务视图（原 mock W10ExportJob；保留签名供页面消费）。 */
+/** 导出任务视图（保留签名供页面消费）。 */
 export type InventoryExportJob = {
   jobId: string
   status: "queued" | "running" | "succeeded" | "failed"
@@ -1066,17 +1066,7 @@ export async function submitAdjustment(input: {
   note: string
   occurredAt: string
   idempotencyKey: string
-  forceUnknown?: boolean
 }): Promise<AdjustmentSubmitResponse> {
-  if (input.forceUnknown) {
-    return {
-      status: "unknown",
-      message:
-        "这次提交没收到结果。先别当成已经提交成功，请按原请求号查询最终结果。",
-      idempotencyKey: input.idempotencyKey,
-    }
-  }
-
   try {
     // ensure reason is saved before submit
     const detail = await apiGet<BackendStockAdjustmentDetail>(
@@ -1144,16 +1134,13 @@ export async function submitAdjustment(input: {
 
 export async function resolveAdjustmentUnknown(input: {
   idempotencyKey: string
-  settle?: boolean
-  settlePayload?: Parameters<typeof submitAdjustment>[0]
+  stockAdjustmentId?: string
+  expectedBalanceLockVersion?: number
 }): Promise<AdjustmentSubmitResponse> {
-  if (input.settle && input.settlePayload) {
-    return submitAdjustment(input.settlePayload)
-  }
-  if (input.settlePayload?.stockAdjustmentId) {
+  if (input.stockAdjustmentId) {
     try {
       const detail = await apiGet<BackendStockAdjustmentDetail>(
-        `/admin/stock-adjustments/${encodeURIComponent(input.settlePayload.stockAdjustmentId)}`
+        `/admin/stock-adjustments/${encodeURIComponent(input.stockAdjustmentId)}`
       )
       const st = adjustmentStatusMap(detail.adjustment.status)
       if (
@@ -1171,7 +1158,8 @@ export async function resolveAdjustmentUnknown(input: {
             reference: detail.adjustment.adjustment_no,
             submittedAt: secsToIso(detail.adjustment.created_at),
             balanceLockVersion:
-              input.settlePayload.expectedBalanceLockVersion,
+              input.expectedBalanceLockVersion ??
+              detail.adjustment.version,
           },
         }
       }

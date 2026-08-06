@@ -527,18 +527,8 @@ export async function holdCardFundsReview(input: {
 export async function completeCardFundsReview(input: {
   workItemId: string
   expectedSubjectVersion: string
-  simulateHashDrift?: boolean
   decision: CardFundsReviewDecision
 }): Promise<FormalActionResponse> {
-  if (input.simulateHashDrift) {
-    return {
-      status: "failed",
-      code: "SUBJECT_HASH_MISMATCH",
-      message:
-        "复核对象数据已变更（演示漂移），已阻断静默通过。请刷新后重新核对。",
-    }
-  }
-
   try {
     const detail = await apiGet<BackendWorkItem>(
       `/admin/work-items/${encodeURIComponent(input.workItemId)}`
@@ -874,13 +864,6 @@ export async function saveCardFundsEvidence(input: {
   // Formal evidence is submitted with complete (append_funds_review).
   void input
   return { ok: true }
-}
-
-export async function demoDriftCardFundsHash(
-  workItemId: string
-): Promise<{ subjectHash: string }> {
-  // Demo-only; real hash is server-side. Return a synthetic marker without mutating server.
-  return { subjectHash: `sha256:demo_drift_${workItemId}` }
 }
 
 /** W11 列表辅助：卡券相关应收可靠性（从真实应收子账 review_status 读取）。 */

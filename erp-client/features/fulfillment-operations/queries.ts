@@ -11,10 +11,7 @@ import {
   saveFulfillmentOperation,
   type FulfillmentQueueFilters,
 } from "@/features/fulfillment-operations/api"
-import {
-  FULFILLMENT_LANES,
-  type FulfillmentLane,
-} from "@/features/fulfillment-operations/lanes"
+import type { FulfillmentLane } from "@/features/fulfillment-operations/lanes"
 
 export const fulfillmentKeys = {
   all: ["fulfillment-operations"] as const,
@@ -37,7 +34,7 @@ export function useFulfillmentCountQuery(lane: FulfillmentLane) {
     queryKey: fulfillmentKeys.counts(lane),
     queryFn: async () => {
       const view = await fetchFulfillmentQueue({
-        role: FULFILLMENT_LANES[lane].defaultDemoRole,
+        role: lane,
         scope: "mine",
       })
       return { pending: view.context.total }

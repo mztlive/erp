@@ -67,7 +67,6 @@ import {
   useAuditEventQuery,
   useEffectiveAccessQuery,
   usePreviewAccessChangeMutation,
-  useSetAccessDemoFlagsMutation,
   useSubmitAccessChangeMutation,
 } from "@/features/access-audit/queries"
 import {
@@ -481,7 +480,6 @@ export function AccessAuditPage() {
   const eventQuery = useAuditEventQuery(eventOpenId)
   const previewMutation = usePreviewAccessChangeMutation()
   const submitMutation = useSubmitAccessChangeMutation()
-  const demoMutation = useSetAccessDemoFlagsMutation()
   // 账号表单角色选项：仅当前操作者可分配的角色（API 层失败时回落全部角色）
   const assignableRolesQuery = useAssignableRolesQuery()
 
@@ -1368,7 +1366,7 @@ export function AccessAuditPage() {
                       status: "blocked",
                       title: "导出功能待接入",
                       description:
-                        "演示环境暂未接入真实导出；正式环境将按权限策略生成导出文件。",
+                        "导出尚未接入后端；正式环境将按权限策略生成导出文件。",
                     })
                   },
                 },
@@ -1668,72 +1666,6 @@ export function AccessAuditPage() {
         }
         actions={<span />}
       />
-
-      <details className="group rounded-xl border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
-        <summary className="cursor-pointer list-none [&::-webkit-details-marker]:hidden">
-          演示模式（仅演示）
-        </summary>
-        <div className="mt-2 flex flex-wrap items-center gap-2">
-          <OptionCombobox
-            value="none"
-            onValueChange={(v) => {
-              const next = v ?? "none"
-              void demoMutation.mutateAsync({
-                emptyReason:
-                  next === "none" ? null : (next as AccessEmptyReason),
-              })
-            }}
-            options={[
-              { value: "none", label: "正常" },
-              { value: "NO_MODULE_PERMISSION", label: "无模块权限" },
-              { value: "NO_DATA_SCOPE", label: "无数据范围" },
-              { value: "NO_RECORDS_IN_SCOPE", label: "范围内无记录" },
-              { value: "FIELD_MASKED", label: "字段打码" },
-            ]}
-            className="w-40"
-            size="sm"
-            allowClear={false}
-            aria-label="演示空态"
-            placeholder="演示空态"
-          />
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              void demoMutation.mutateAsync({
-                userRoleTimePolicyConfigured: true,
-              })
-            }
-          >
-            启用时间策略
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              void demoMutation.mutateAsync({
-                fieldGranularityConfigured: true,
-              })
-            }
-          >
-            启用字段粒度
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={() =>
-              void demoMutation.mutateAsync({
-                auditAccessPolicyConfigured: true,
-              })
-            }
-          >
-            启用审计策略
-          </Button>
-        </div>
-      </details>
 
       {!isAudit ? (
         <p className="text-xs text-muted-foreground" aria-live="polite">

@@ -34,10 +34,7 @@ type SupplyRelationshipListViewProps = {
   returnTo?: string
   returnHref: string
   updatedAt?: string
-  costMasked: boolean
   emptyReason?: "NO_TASKS" | "FILTER_NO_RESULT" | "NO_DATA_SCOPE"
-  demoRole?: string
-  maskCost?: boolean
   sort?: string
   onSortChange?: (sort: string | undefined) => void
   onOpenItem?: (item: SupplierCatalogItemView) => void
@@ -128,8 +125,7 @@ function inferSkuContext(items: SupplierCatalogItemView[], skuId?: string) {
   return undefined
 }
 
-function displayAmount(value: string | null | undefined, masked: boolean) {
-  if (masked) return "无查看权限"
+function displayAmount(value: string | null | undefined) {
   return value ? `¥${value}` : "—"
 }
 
@@ -140,10 +136,7 @@ function SupplyRelationshipListView({
   returnTo,
   returnHref,
   updatedAt,
-  costMasked,
   emptyReason,
-  demoRole,
-  maskCost,
   sort,
   onSortChange,
   onOpenItem,
@@ -173,8 +166,8 @@ function SupplyRelationshipListView({
 
   const detailHrefFor = React.useCallback(
     (item: SupplierCatalogItemView) =>
-      `/procurement/supplier-catalog/${item.supplierProduct.id}?section=overview&demoRole=${demoRole ?? "procurement"}&maskCost=${maskCost ? 1 : 0}&returnTo=${encodeURIComponent(returnHref)}`,
-    [maskCost, returnHref, demoRole]
+      `/procurement/supplier-catalog/${item.supplierProduct.id}?section=overview&returnTo=${encodeURIComponent(returnHref)}`,
+    [returnHref]
   )
 
   const [sortBy, sortDir] = React.useMemo(() => {
@@ -328,7 +321,7 @@ function SupplyRelationshipListView({
           if (confirmedCost) {
             return (
               <span className="num">
-                {displayAmount(confirmedCost, costMasked)}
+                {displayAmount(confirmedCost)}
               </span>
             )
           }
@@ -338,11 +331,9 @@ function SupplyRelationshipListView({
               .dropshipFloorPriceGross
           return (
             <span className="text-xs text-muted-foreground">
-              {costMasked
-                ? "无查看权限"
-                : quote
-                  ? `报价 ¥${quote} · 待确认`
-                  : "待确认"}
+              {quote
+                ? `报价 ¥${quote} · 待确认`
+                : "待确认"}
             </span>
           )
         },
@@ -412,7 +403,7 @@ function SupplyRelationshipListView({
         ),
       },
     ],
-    [costMasked, currentSku?.baseUnit, detailHrefFor, onPromote, skuId]
+    [currentSku?.baseUnit, detailHrefFor, onPromote, skuId]
   )
 
   const queueHref = `/procurement/supplier-catalog?mode=queue${skuId ? `&skuId=${encodeURIComponent(skuId)}` : ""}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`

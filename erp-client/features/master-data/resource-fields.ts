@@ -51,54 +51,11 @@ export const SUPPLIER_CAPABILITY_OPTIONS = [
   "印刷",
 ] as const
 
-/** mock API 返回的启用计量单位字典；表单提交稳定 ID/代码与显示快照。 */
-export const BASE_UNIT_DICTIONARY = [
-  { id: "uom_piece", code: "EA", label: "件" },
-  { id: "uom_item", code: "ITEM", label: "个" },
-  { id: "uom_box", code: "BOX", label: "盒" },
-  { id: "uom_set", code: "SET", label: "套" },
-  { id: "uom_case", code: "CASE", label: "箱" },
-  { id: "uom_bottle", code: "BTL", label: "瓶" },
-  { id: "uom_bag", code: "BAG", label: "袋" },
-  { id: "uom_portion", code: "PORTION", label: "份" },
-  { id: "uom_card", code: "CARD", label: "张" },
-  { id: "uom_basket", code: "BASKET", label: "篮" },
-  { id: "uom_kg", code: "KG", label: "kg" },
-  { id: "uom_g", code: "G", label: "g" },
-] as const
-
-export const BASE_UNIT_OPTIONS = BASE_UNIT_DICTIONARY.map((item) => item.label)
-
 export const PRODUCT_KIND_OPTIONS = [
   "实物",
   "虚拟",
   "服务",
   "卡券",
-] as const
-
-/**
- * 商品分类下拉选项（演示）。
- * 正式环境从 `categories` 资源当前启用修订查询；此处与种子数据名称对齐。
- */
-export const CATEGORY_OPTIONS = [
-  "礼盒",
-  "茶叶",
-  "零食",
-  "酒水",
-  "卡券",
-  "办公",
-] as const
-
-/**
- * 品牌下拉选项（演示）。
- * 正式环境从 `brands` 资源当前启用修订查询；此处与种子数据名称对齐。
- */
-export const BRAND_OPTIONS = [
-  "新芽",
-  "明前",
-  "礼遇",
-  "企业优选",
-  "无品牌",
 ] as const
 
 export type ResourceFieldKind =
@@ -175,7 +132,6 @@ export const RESOURCE_FIELDS: Readonly<
       key: "baseUnit",
       label: masterDataCopy.fBaseUnit,
       kind: "select",
-      options: BASE_UNIT_OPTIONS,
       required: true,
       listFact: true,
       section: "identity",
@@ -184,7 +140,6 @@ export const RESOURCE_FIELDS: Readonly<
       key: "category",
       label: masterDataCopy.fCategory,
       kind: "select",
-      options: CATEGORY_OPTIONS,
       required: true,
       listFact: true,
       section: "catalog",
@@ -193,7 +148,6 @@ export const RESOURCE_FIELDS: Readonly<
       key: "brand",
       label: masterDataCopy.fBrand,
       kind: "select",
-      options: BRAND_OPTIONS,
       required: true,
       listFact: true,
       section: "catalog",

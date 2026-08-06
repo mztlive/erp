@@ -3,9 +3,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
-  demoRestorePermission,
-  demoRevokePermission,
-  demoSetPolicyState,
   fetchAllocationSession,
   fetchPayableDetail,
   fetchSupplierAccounts,
@@ -155,29 +152,6 @@ export function useResolveUnknownMutation() {
       if (result?.status === "succeeded") {
         await invalidateFinanceAndSources(queryClient)
       }
-    },
-  })
-}
-
-export function useDemoSetPolicyMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: demoSetPolicyState,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: supplierPayablesKeys.all })
-    },
-  })
-}
-
-export function useDemoPermissionMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: async (action: "revoke" | "restore") => {
-      if (action === "revoke") await demoRevokePermission()
-      else await demoRestorePermission()
-    },
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: supplierPayablesKeys.all })
     },
   })
 }

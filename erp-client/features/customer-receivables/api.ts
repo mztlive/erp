@@ -946,17 +946,6 @@ export async function postAllocation(
   const cached = postIdempotency.get(input.idempotencyKey)
   if (cached) return cached
 
-  if (input.forceUnknown) {
-    const unknown: PostAllocationResult = {
-      status: "unknown",
-      message: "提交结果不确定。请按原任务号查询最终结果，勿重复提交。",
-      idempotencyKey: input.idempotencyKey,
-      operationId: `op_pending_${input.idempotencyKey.slice(-8)}`,
-    }
-    postIdempotency.set(input.idempotencyKey, unknown)
-    return unknown
-  }
-
   const s = sessions.get(input.draftSessionId)
   if (!s || s.status !== "draft") {
     const failed: PostAllocationResult = {
@@ -973,15 +962,6 @@ export async function postAllocation(
       code: "VERSION_CONFLICT",
       message: "草稿数据已更新，请保存或刷新后重试。",
     }
-  }
-  if (input.forceCrossParty) {
-    const failed: PostAllocationResult = {
-      status: "failed",
-      code: "CROSS_PARTY",
-      message: "仅可分配当前往来主体的开放应收，已拒绝提交。",
-    }
-    postIdempotency.set(input.idempotencyKey, failed)
-    return failed
   }
 
   const positiveLines = s.allocations.filter(

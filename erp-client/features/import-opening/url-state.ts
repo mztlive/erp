@@ -4,7 +4,6 @@ import type {
   ImportIssueCode,
   ImportObjectCode,
   IssueRowStatus,
-  ViewerRoleDemo,
 } from "@/features/import-opening/types"
 import { createUrlStateCodec } from "@/lib/url-state"
 
@@ -48,12 +47,6 @@ const ROW_STATUS_VALUES = [
   "SKIPPED",
 ] as const
 
-const ROLE_VALUES = [
-  "WAREHOUSE_CONFIRMER",
-  "FINANCE_CONFIRMER",
-  "SYSTEM_ADMIN",
-] as const
-
 export type ImportOpeningUrlState = {
   environment: ImportEnvironment
   status?: string
@@ -65,8 +58,6 @@ export type ImportOpeningUrlState = {
   issueObjectType?: ImportObjectCode
   rowStatus?: IssueRowStatus
   page: number
-  /** Mock 角色演示，不写入业务记录 */
-  role?: ViewerRoleDemo
 }
 
 const codec = createUrlStateCodec<ImportOpeningUrlState>([
@@ -102,12 +93,6 @@ const codec = createUrlStateCodec<ImportOpeningUrlState>([
   },
   { key: "rowStatus", type: "enum", values: ROW_STATUS_VALUES },
   { key: "page", type: "number", defaultValue: 1 },
-  {
-    key: "role",
-    type: "enum",
-    values: ROLE_VALUES,
-    buildWhen: (value) => Boolean(value) && value !== "SYSTEM_ADMIN",
-  },
 ])
 
 export const parseImportOpeningSearchParams = codec.parse

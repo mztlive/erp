@@ -1,7 +1,6 @@
 /** W28 卡券消费台账与经营分析 · 客户端契约（对齐 docs/ui-workspaces/w28 §8） */
 
 import type { StatusTone } from "@/components/ui/status-badge"
-import type { FreshnessDemoState } from "@/lib/freshness"
 
 export type DateBasis = "consumption" | "sales" | "expiry"
 
@@ -66,10 +65,6 @@ export type CardBusinessAnalyticsQuery = Readonly<{
   sort: string
   page: number
   pageSize: number
-  /** Mock QA：强制水位态 */
-  freshnessDemo?: FreshnessDemoState
-  /** Mock QA：fieldHide */
-  fieldHide?: "none" | "cost" | "profit"
 }>
 
 export type AuthorizedCardMetric = Readonly<{

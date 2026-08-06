@@ -56,30 +56,24 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type {
-  DemoRole,
   MallSnapshotRow,
   MallSyncJobRow,
   MallSyncViewName,
   MappingTaskView,
-  OwnershipStage,
   ReconciliationDifference,
 } from "@/features/mall-sync/types"
 import {
   DEFER_REASON_OPTIONS,
-  DEMO_ROLE_LABEL,
   DIRECTION_LABEL,
   STAGE_LABEL,
   VIEW_LABEL,
 } from "@/features/mall-sync/types"
 import {
-  useAssignMappingMutation,
   useClaimMappingMutation,
   useConfirmMappingMutation,
   useDeferMappingMutation,
-  useMallSyncDemoControls,
   useMallSyncPageQuery,
   useReapplyMutation,
   useResolveUnknownReapplyMutation,
@@ -90,7 +84,6 @@ import {
 import { SourceSystemsCard } from "@/features/mall-sync/source-systems-card"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/datetime"
-import { parseDemoRole } from "@/lib/demo-roles"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { type ResultState } from "@/components/business/feedback"
 import {
@@ -98,11 +91,6 @@ import {
   versionText,
   workspaceLabel,
 } from "@/lib/ui-text"
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible"
 import {
   JOB_ERROR_CLASS_LABEL,
 } from "@/features/mall-sync/types"
@@ -119,18 +107,6 @@ const VIEWS: MallSyncViewName[] = [
 function parseView(raw: string | null): MallSyncViewName {
   if (raw && (VIEWS as string[]).includes(raw)) return raw as MallSyncViewName
   return "overview"
-}
-
-const DEMO_ROLES = ["admin", "sales", "operations", "finance"] as const
-
-function parseStage(raw: string | null): OwnershipStage | undefined {
-  if (
-    raw === "FIRST_PHASE_MALL_OWNED" ||
-    raw === "SECOND_PHASE_ERP_OWNED"
-  ) {
-    return raw
-  }
-  return undefined
 }
 
 type SessionLease = {
@@ -167,20 +143,6 @@ export function MallSyncPage() {
   const searchParams = useSearchParams()
 
   const view = parseView(searchParams.get("view"))
-  const demoRole =
-    parseDemoRole(
-      searchParams.get("demoRole") ?? searchParams.get("role"),
-      DEMO_ROLES
-    ) ?? "admin"
-  const demoStage = parseStage(searchParams.get("demoStage"))
-  const policyParam = searchParams.get("policy")
-  const policy: "missing" | "configured" | undefined =
-    policyParam === "configured"
-      ? "configured"
-      : policyParam === "missing"
-        ? "missing"
-        : undefined
-  const sourceUnavailableParam = searchParams.get("sourceUnavailable")
   const q = searchParams.get("q") ?? ""
   const jobId = searchParams.get("jobId") ?? undefined
   const snapshotId = searchParams.get("snapshotId") ?? undefined
@@ -191,7 +153,7 @@ export function MallSyncPage() {
     undefined
   const differenceId = searchParams.get("differenceId") ?? undefined
   const queueContextId =
-    searchParams.get("queueContextId") ?? `queue:W17:mall-sync:${demoRole}`
+    searchParams.get("queueContextId") ?? "queue:W17:mall-sync"
 
   const [searchInput, setSearchInput] = React.useState(q)
   const [pagination, setPagination] = React.useState<PaginationState>({
@@ -215,15 +177,6 @@ export function MallSyncPage() {
   const queryInput = React.useMemo(
     () => ({
       view,
-      demoRole,
-      demoStage,
-      policy,
-      sourceUnavailable:
-        sourceUnavailableParam === "1"
-          ? true
-          : sourceUnavailableParam === "0"
-            ? false
-            : undefined,
       q: q || undefined,
       jobId,
       snapshotId,
@@ -234,10 +187,6 @@ export function MallSyncPage() {
     }),
     [
       view,
-      demoRole,
-      demoStage,
-      policy,
-      sourceUnavailableParam,
       q,
       jobId,
       snapshotId,
@@ -249,7 +198,6 @@ export function MallSyncPage() {
   )
 
   const pageQuery = useMallSyncPageQuery(queryInput)
-  const demoControls = useMallSyncDemoControls()
   const triggerInc = useTriggerIncrementalMutation()
   const triggerSo = useTriggerSingleOrderMutation()
   const retryJob = useRetryJobMutation()
@@ -258,7 +206,6 @@ export function MallSyncPage() {
   const deferMutation = useDeferMappingMutation()
   const reapplyMutation = useReapplyMutation()
   const resolveReapply = useResolveUnknownReapplyMutation()
-  const assignMutation = useAssignMappingMutation()
 
   const data = pageQuery.data
   const context = data?.context
@@ -349,7 +296,6 @@ export function MallSyncPage() {
       const res = await triggerSo.mutateAsync({
         externalOrderNo: value.externalOrderNo,
         reason: value.reason,
-        demoRole,
         policyConfigured: !policyMissing,
         stage,
       })
@@ -374,7 +320,6 @@ export function MallSyncPage() {
     onSubmit: async ({ value }) => {
       const res = await triggerInc.mutateAsync({
         reason: value.reason,
-        demoRole,
         policyConfigured: !policyMissing,
         stage,
       })
@@ -430,7 +375,6 @@ export function MallSyncPage() {
       targetObjectId: candidate.objectId,
       targetLabel: `${candidate.stableNo} ${candidate.label}`,
       evidenceNote,
-      demoRole,
       stage,
     })
     setConfirmOpen(false)
@@ -478,7 +422,6 @@ export function MallSyncPage() {
       reasonCode,
       note,
       queueContextId,
-      demoRole,
     })
     setDeferOpen(false)
     if (res.status === "succeeded") {
@@ -514,7 +457,6 @@ export function MallSyncPage() {
     const res = await reapplyMutation.mutateAsync({
       mappingTaskId: mappingTask.mappingTaskId,
       sourceSnapshotId: mappingTask.sourceSnapshotId,
-      demoRole,
       stage,
     })
     if (res.status === "succeeded") {
@@ -545,7 +487,6 @@ export function MallSyncPage() {
     const res = await retryJob.mutateAsync({
       jobId: data.selectedJob.jobId,
       reason: "重试未成功部分的分页",
-      demoRole,
       stage,
     })
     setRetryConfirmOpen(false)
@@ -588,16 +529,14 @@ export function MallSyncPage() {
   }
 
   const canManualSync =
-    demoRole === "admin" && firstPhase && !policyMissing && !context?.sourceUnavailable
+    firstPhase && !policyMissing && !context?.sourceUnavailable
   const manualSyncDisabledReason = !firstPhase
     ? "已封存：无第一期写动作"
     : policyMissing
       ? "人工治理策略未配置：立即增量/按单补拉已禁用"
-      : demoRole !== "admin"
-        ? "仅管理员可触发"
-        : context?.sourceUnavailable
-          ? "来源不可用时不新建推进任务（可重试既有失败）"
-          : null
+      : context?.sourceUnavailable
+        ? "来源不可用时不新建推进任务（可重试既有失败）"
+        : null
 
   const jobColumns = React.useMemo<ColumnDef<MallSyncJobRow>[]>(
     () => [
@@ -882,18 +821,15 @@ export function MallSyncPage() {
   )
 
   const leaseStatus: "active" | "unclaimed" | "lost" | "released" =
-    demoRole === "admin"
+    mappingTask?.ownerRoutingState !== "CONFIGURED"
       ? "released"
-      : mappingTask?.ownerRoutingState !== "CONFIGURED"
+      : mappingTask.mappingTaskStatus === "RESOLVED"
         ? "released"
-        : mappingTask.mappingTaskStatus === "RESOLVED"
-          ? "released"
-          : sessionLease?.workItemId === mappingTask.workItem.workItemId
-            ? "active"
-            : "unclaimed"
+        : sessionLease?.workItemId === mappingTask.workItem.workItemId
+          ? "active"
+          : "unclaimed"
 
   const canConfirmMapping =
-    demoRole !== "admin" &&
     mappingTask?.ownerRoutingState === "CONFIGURED" &&
     mappingTask.mappingTaskStatus === "PENDING" &&
     mappingTask.allowedActions.includes("CONFIRM_TARGET") &&
@@ -964,7 +900,6 @@ export function MallSyncPage() {
             <Badge variant="outline">
               {context?.sourceSystem.name} · {context?.sourceSystem.environmentLabel}
             </Badge>
-            <Badge variant="secondary">{context?.viewerRoleLabel}</Badge>
           </div>
         }
         actions={
@@ -1108,99 +1043,8 @@ export function MallSyncPage() {
         </Alert>
       ) : null}
 
-      {/* P0-5 垂直样板：真实模式渲染来源系统列表（mock 模式不渲染） */}
+      {/* 来源系统列表 */}
       <SourceSystemsCard />
-
-      {/* 演示控制：角色 / 阶段 / 策略 / 来源（mock） */}
-      <Collapsible className="rounded-2xl border bg-card">
-        <CollapsibleTrigger className="flex w-full items-center justify-between gap-3 border-b px-4 py-3 text-left">
-          <span className="text-sm font-semibold">
-            演示控制（仅本次操作生效）
-          </span>
-          <span className="text-xs text-muted-foreground">
-            角色 / 主责阶段 / 策略 / 来源
-          </span>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <CardContent className="flex flex-wrap items-end gap-4 pt-3">
-          <div className="space-y-1">
-            <Label className="text-xs">演示角色</Label>
-            <OptionCombobox
-              value={demoRole}
-              onValueChange={(v) => {
-                const role = parseDemoRole(v, DEMO_ROLES) ?? "admin"
-                const defaultView =
-                  role === "admin" ? "overview" : "mapping"
-                patchUrl({
-                  demoRole: role,
-                  view: view === "overview" && role !== "admin" ? defaultView : view,
-                })
-              }}
-              options={(Object.keys(DEMO_ROLE_LABEL) as DemoRole[]).map(
-                (r) => ({
-                  value: r,
-                  label: DEMO_ROLE_LABEL[r],
-                })
-              )}
-              className="w-40"
-              allowClear={false}
-            />
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs">主责阶段</Label>
-            <OptionCombobox
-              value={stage}
-              onValueChange={(v) => {
-                const s = parseStage(v) ?? "FIRST_PHASE_MALL_OWNED"
-                void demoControls.setStage(s)
-                patchUrl({
-                  demoStage: s,
-                  view: s === "SECOND_PHASE_ERP_OWNED" ? "history" : view,
-                })
-              }}
-              options={[
-                {
-                  value: "FIRST_PHASE_MALL_OWNED",
-                  label: "第一阶段 · 商城主责",
-                },
-                {
-                  value: "SECOND_PHASE_ERP_OWNED",
-                  label: "已封存 · ERP 主责",
-                },
-              ]}
-              className="w-48"
-              allowClear={false}
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              id="policy"
-              checked={!policyMissing}
-              onCheckedChange={(checked) => {
-                void demoControls.setPolicy(checked)
-                patchUrl({ policy: checked ? "configured" : "missing" })
-              }}
-            />
-            <Label htmlFor="policy" className="text-xs">
-              人工治理策略已配置
-            </Label>
-          </div>
-          <div className="flex items-center gap-2">
-            <Switch
-              id="src-down"
-              checked={!!context?.sourceUnavailable}
-              onCheckedChange={(checked) => {
-                void demoControls.setSourceUnavailable(checked)
-                patchUrl({ sourceUnavailable: checked ? "1" : "0" })
-              }}
-            />
-            <Label htmlFor="src-down" className="text-xs">
-              来源不可用
-            </Label>
-          </div>
-          </CardContent>
-        </CollapsibleContent>
-      </Collapsible>
 
       <MetricStrip
         columns={Math.min(5, Math.max(2, context?.metrics.length ?? 4)) as 2 | 3 | 4 | 5}
@@ -1439,8 +1283,7 @@ export function MallSyncPage() {
                       : "—"}
                   </span>
                 </div>
-                {demoRole === "admin" &&
-                data.selectedJob.allowedActions.includes("RETRY_FAILED_JOB") ? (
+                {data.selectedJob.allowedActions.includes("RETRY_FAILED_JOB") ? (
                   <Button
                     type="button"
                     size="sm"
@@ -1545,7 +1388,7 @@ export function MallSyncPage() {
               }
               description={
                 data.emptyReason === "FILTER_NO_RESULT"
-                  ? "清除筛选或切换角色后查看其它任务。"
+                  ? "清除筛选后查看其它任务。"
                   : "新任务到达后刷新"
               }
             />
@@ -1618,9 +1461,6 @@ export function MallSyncPage() {
                       <AlertTitle>确认的是身份关系</AlertTitle>
                       <AlertDescription>
                         不是修改来源销售单；相似候选绝不自动确认/合并。
-                        {demoRole === "admin"
-                          ? " 管理员可指派/排障，不能替业务确认。"
-                          : ""}
                       </AlertDescription>
                     </Alert>
 
@@ -1680,7 +1520,6 @@ export function MallSyncPage() {
                                 disabled={
                                   c.eligibility !== "ELIGIBLE" ||
                                   mappingTask.mappingTaskStatus !== "PENDING" ||
-                                  demoRole === "admin" ||
                                   mappingTask.ownerRoutingState === "MISSING"
                                 }
                                 onClick={() =>
@@ -1783,8 +1622,7 @@ export function MallSyncPage() {
                       </div>
                     ) : null}
 
-                    {demoRole !== "admin" &&
-                    mappingTask.ownerRoutingState === "CONFIGURED" &&
+                    {mappingTask.ownerRoutingState === "CONFIGURED" &&
                     mappingTask.mappingTaskStatus === "PENDING" ? (
                       <form
                         className="space-y-2"
@@ -1836,41 +1674,6 @@ export function MallSyncPage() {
                       </form>
                     ) : null}
 
-                    {demoRole === "admin" &&
-                    mappingTask.ownerRoutingState === "CONFIGURED" &&
-                    mappingTask.mappingTaskStatus === "PENDING" ? (
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          disabled={assignMutation.isPending}
-                          onClick={async () => {
-                            const res = await assignMutation.mutateAsync({
-                              mappingTaskId: mappingTask.mappingTaskId,
-                              targetOwnerRole: mappingTask.ownerRole,
-                              reason: "管理员指派",
-                              demoRole,
-                            })
-                            if (res.status === "succeeded") {
-                              setResult({
-                                status: "succeeded",
-                                title: "已指派",
-                                description: res.message,
-                              })
-                            } else {
-                              setActionError(res.message)
-                            }
-                          }}
-                        >
-                          指派业务责任人
-                        </Button>
-                        <p className="w-full text-xs text-muted-foreground">
-                          管理员不能确认映射，需指派给业务责任人后由其确认。
-                        </p>
-                      </div>
-                    ) : null}
-
                     {mappingTask.mappingTaskStatus === "RESOLVED" ? (
                       <div className="space-y-2 rounded-xl border p-3">
                         <p className="text-sm font-medium">
@@ -1901,16 +1704,14 @@ export function MallSyncPage() {
                           </p>
                         ) : (
                           <div className="flex flex-wrap gap-2">
-                            {demoRole !== "admin" ? (
-                              <Button
-                                type="button"
-                                size="sm"
-                                disabled={reapplyMutation.isPending}
-                                onClick={() => void handleReapply()}
-                              >
-                                重新归集
-                              </Button>
-                            ) : null}
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={reapplyMutation.isPending}
+                              onClick={() => void handleReapply()}
+                            >
+                              重新归集
+                            </Button>
                             {mappingTask.reapplyOperation?.status ===
                             "UNKNOWN" ? (
                               <Button
@@ -1947,7 +1748,6 @@ export function MallSyncPage() {
                     processLabel="确认映射"
                     // 没有独立的「并打开下一条」路径：两个 handler 同义
                     showProcessNext={false}
-                    showProcess={demoRole !== "admin"}
                     processDisabled={!canConfirmMapping}
                     onBack={() =>
                       router.push(
@@ -2028,7 +1828,7 @@ export function MallSyncPage() {
                         ERP 销售单 {data.selectedDifference.erpSalesOrderNo}
                       </p>
                     ) : null}
-                    {demoRole === "admin" && firstPhase && !policyMissing ? (
+                    {firstPhase && !policyMissing ? (
                       <Button
                         type="button"
                         size="sm"
@@ -2051,8 +1851,8 @@ export function MallSyncPage() {
           ) : (
             <BusinessEmptyState
               kind="no-scope"
-              title="当前角色无核对范围"
-              description="当前角色没有可核对的任务，可切换角色或清除筛选后重试。"
+              title="当前无核对范围"
+              description="当前没有可核对的差异；清除筛选后重试。"
             />
           )}
         </div>

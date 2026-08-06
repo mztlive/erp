@@ -421,24 +421,6 @@ async function fetchAllPages<T>(
   return items
 }
 
-function permissionSnapshot(): MasterDataListResult["permissionDemo"] {
-  return {
-    hasModuleAccess: true,
-    resourceAccess: {
-      "sellable-items": true,
-      products: true,
-      categories: true,
-      brands: true,
-      "voucher-categories": true,
-      suppliers: true,
-      warehouses: true,
-    },
-    canExport: true,
-    roleLabel: "—",
-    canRevealSensitive: false,
-  }
-}
-
 function wrapListResult(
   resource: MasterDataResource,
   rows: MasterDataListItem[]
@@ -453,7 +435,6 @@ function wrapListResult(
     eligibilityAsOf: now,
     queriedAt: now,
     metrics: [...computeMetrics(rows)],
-    permissionDemo: permissionSnapshot(),
   }
 }
 
@@ -1859,13 +1840,6 @@ export async function createMasterDataObject(
   input: CreateMasterDataInput
 ): Promise<MasterDataMutationResult> {
   if (input.resource === "warehouses") return blockedWarehouse()
-  if (input.simulate === "overlap") {
-    return {
-      outcome: "blocked",
-      code: "EFFECTIVE_RANGE_OVERLAP",
-      message: "生效期间与已有内容重叠，无法保存。",
-    }
-  }
   switch (input.resource) {
     case "categories":
       return createCategory(input)
@@ -1892,28 +1866,6 @@ export async function createMasterDataRevision(
   input: CreateRevisionInput
 ): Promise<MasterDataMutationResult> {
   if (input.resource === "warehouses") return blockedWarehouse()
-  if (input.simulate === "conflict") {
-    return {
-      outcome: "conflict",
-      message: "资料已被他人更新，请刷新后重新填写。",
-      serverLockVersion: input.expectedLockVersion,
-      serverRevisionNo: 0,
-    }
-  }
-  if (input.simulate === "overlap") {
-    return {
-      outcome: "blocked",
-      code: "EFFECTIVE_RANGE_OVERLAP",
-      message: "生效期间与已有内容重叠。",
-    }
-  }
-  if (input.simulate === "base_unit" && input.resource === "products") {
-    return {
-      outcome: "blocked",
-      code: "BASE_UNIT_LOCKED",
-      message: "已被业务单据使用的商品不能改基础单位。请先停用，再新建商品。",
-    }
-  }
 
   try {
     switch (input.resource) {
@@ -2110,14 +2062,6 @@ export async function disableMasterDataObject(
   input: DisableMasterDataInput
 ): Promise<MasterDataMutationResult> {
   if (input.resource === "warehouses") return blockedWarehouse()
-  if (input.simulate === "conflict") {
-    return {
-      outcome: "conflict",
-      message: "资料已被他人更新，请刷新后重试。",
-      serverLockVersion: input.expectedLockVersion,
-      serverRevisionNo: 0,
-    }
-  }
 
   try {
     switch (input.resource) {

@@ -48,7 +48,6 @@ import {
   NATURE_LABEL,
   ORIGIN_LABEL,
 } from "@/features/sales-orders/labels"
-import { downloadOriginalContractPdf } from "@/features/contracts/pdf"
 import { SalesOrderPaperDialog } from "@/features/sales-orders/sales-order-paper-dialog"
 import {
   salesOrderStatusLabel,
@@ -397,23 +396,7 @@ export function SalesOrdersListPage() {
         header: "合同",
         meta: { label: "合同", width: "default" },
         cell: ({ row }) => (
-          <span className="inline-flex items-center gap-1.5">
-            <span className="num text-sm">{row.original.contractNumber}</span>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-6"
-              title="下载合同 PDF"
-              aria-label={`下载合同 ${row.original.contractNumber} PDF`}
-              onClick={(event) => {
-                event.stopPropagation()
-                downloadOriginalContractPdf(row.original.contractNumber)
-              }}
-            >
-              <DownloadIcon aria-hidden="true" className="size-3.5" />
-            </Button>
-          </span>
+          <span className="num text-sm">{row.original.contractNumber}</span>
         ),
       },
       {

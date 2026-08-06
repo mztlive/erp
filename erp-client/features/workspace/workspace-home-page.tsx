@@ -340,9 +340,8 @@ export function WorkspaceHomePage() {
     setFocusedStableNumber(null)
     pushUrl({
       scope: urlState.scope,
-      scenario: urlState.scenario,
     })
-  }, [pushUrl, urlState.scope, urlState.scenario])
+  }, [pushUrl, urlState.scope])
 
   const onOpenTask = React.useCallback(
     (item: WorkspaceWorkItem) => {

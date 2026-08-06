@@ -21,7 +21,6 @@ import { toFieldErrors, useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
 import type { StandardSchemaV1Issue } from "@tanstack/react-form"
 import {
-  DEMO_OWNER_OPTIONS,
   PAYMENT_TERM_OPTIONS,
   paymentTermLabel,
 } from "@/lib/business-options"
@@ -51,6 +50,7 @@ import {
 import type { UploadContractPdfResult } from "@/features/contracts/types"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
 import { useCreateSalesOrderMutation } from "@/features/sales-orders/queries"
+import { useOwnerOptionsQuery } from "@/hooks/use-options"
 import type {
   CreateSalesOrderInput,
   SalesOrderCreateIntent,
@@ -352,6 +352,7 @@ export function SalesOrderCreatePage({
     lifecycleStatus: "enabled",
   })
   const createMutation = useCreateSalesOrderMutation()
+  const { data: ownerOptions } = useOwnerOptionsQuery()
   const [selectedContractId, setSelectedContractId] =
     React.useState(initialContractId)
   const [uploadOpen, setUploadOpen] = React.useState(false)
@@ -521,7 +522,7 @@ export function SalesOrderCreatePage({
       contract.currentRevision.settlementParty.displayName
     )
     const ownerLabel = contract.ownerLabel.split(" · ")[0] ?? ""
-    const ownerMatch = DEMO_OWNER_OPTIONS.find(
+    const ownerMatch = (ownerOptions ?? []).find(
       (o) => o.displayName === ownerLabel
     )
     form.setFieldValue("ownerUserId", ownerMatch?.userId ?? "")
@@ -531,7 +532,7 @@ export function SalesOrderCreatePage({
       (o) => o.label === termLabel || o.value === termLabel
     )
     form.setFieldValue("paymentTerms", termMatch?.value ?? "CONTRACT")
-  }, [contractQuery.data, form])
+  }, [contractQuery.data, form, ownerOptions])
 
   const handleContractChange = React.useCallback(
     (contractId: string) => {
@@ -792,15 +793,14 @@ export function SalesOrderCreatePage({
                             onValueChange={(id) => {
                               const next = id ?? ""
                               field.handleChange(next)
-                              const owner = DEMO_OWNER_OPTIONS.find(
-                                (o) => o.userId === next
-                              )
                               form.setFieldValue(
                                 "ownerName",
-                                owner?.displayName ?? ""
+                                ownerOptions?.find(
+                                  (o) => o.userId === next
+                                )?.displayName ?? ""
                               )
                             }}
-                            owners={DEMO_OWNER_OPTIONS}
+                            owners={ownerOptions ?? []}
                             placeholder="搜索负责人"
                           />
                           {isInvalid ? <FieldError errors={errors} /> : null}

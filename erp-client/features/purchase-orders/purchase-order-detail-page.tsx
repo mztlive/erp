@@ -74,7 +74,6 @@ import {
   useStartPurchaseChangeMutation,
   useSubmitPurchaseOrderMutation,
 } from "@/features/purchase-orders/queries"
-import type { ViewerRole } from "@/features/purchase-orders/types"
 import {
   FULFILLMENT_RESPONSIBILITY_LABEL,
   PAYMENT_TERM_OPTIONS,
@@ -121,16 +120,6 @@ const reviewSchema = z.object({
   comment: z.string().trim().min(2, "请填写说明"),
 })
 
-/** demo 审核经办人固定为财务 · 周敏；岗位分离判定使用真实提交人字段 */
-const W08_REVIEWER_NAME = "周敏"
-
-const VIEWER_ROLES: readonly ViewerRole[] = [
-  "procurement",
-  "finance",
-  "sales",
-  "warehouse",
-]
-
 const positiveDecimal = (value: string | undefined) =>
   value === undefined ||
   value === "" ||
@@ -144,24 +133,13 @@ export function PurchaseOrderDetailPage({
   purchaseOrderId,
   section,
   mode: modeParam,
-  demoRole: demoRoleParam,
-  maskCost: maskCostParam,
 }: {
   purchaseOrderId: string
   section?: string
   mode?: string
-  demoRole?: string
-  maskCost?: string
 }) {
   const router = useRouter()
-  const [viewerRole] = React.useState<ViewerRole>(() => {
-    if (maskCostParam === "1") return "sales"
-    if (demoRoleParam && (VIEWER_ROLES as readonly string[]).includes(demoRoleParam)) {
-      return demoRoleParam as ViewerRole
-    }
-    return "procurement"
-  })
-  const query = usePurchaseOrderCenterQuery(purchaseOrderId, viewerRole)
+  const query = usePurchaseOrderCenterQuery(purchaseOrderId)
   const acquireToken = useAcquireDraftTokenMutation()
   const saveMutation = useSavePurchaseOrderDraftMutation()
   const submitMutation = useSubmitPurchaseOrderMutation()
@@ -205,7 +183,7 @@ export function PurchaseOrderDetailPage({
     },
     validators: { onChange: draftSchema },
     onSubmit: async () => {
-      await handleSave(false)
+      await handleSave()
     },
   })
 
@@ -303,7 +281,7 @@ export function PurchaseOrderDetailPage({
       if (mode !== "edit") return
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault()
-        void handleSave(false)
+        void handleSave()
       }
       if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
         event.preventDefault()
@@ -315,7 +293,7 @@ export function PurchaseOrderDetailPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, draftEditToken, lineEdits, order])
 
-  async function handleSave(simulateConflict: boolean): Promise<boolean> {
+  async function handleSave(): Promise<boolean> {
     if (!order || !draftEditToken) return false
     // 行内即时校验：数量/单价为正数，税率为 0-1 小数
     const invalidLine = order.currentContent.lines.find((line) => {
@@ -357,7 +335,6 @@ export function PurchaseOrderDetailPage({
         logisticsFeeReason: line.logisticsFeeReason,
       })),
       idempotencyKey: `save-${purchaseOrderId}-${Date.now()}`,
-      simulateConflict,
     })
 
     if (response.status === "succeeded") {
@@ -953,7 +930,7 @@ export function PurchaseOrderDetailPage({
           draftEditToken={draftEditToken}
           canSubmit={canSubmit}
           savePending={saveMutation.isPending}
-          onSave={() => void handleSave(false)}
+          onSave={() => void handleSave()}
           onSubmitOpen={() => setSubmitConfirmOpen(true)}
         />
       ) : null}
@@ -1442,7 +1419,7 @@ export function PurchaseOrderDetailPage({
               variant="outline"
               disabled={saveMutation.isPending}
               onClick={async () => {
-                const ok = await handleSave(false)
+                const ok = await handleSave()
                 if (!ok) return
                 setLeaveGuardOpen(false)
                 pendingLeave?.()
@@ -1837,10 +1814,6 @@ function ReviewSurface({
   onApprove: () => void
   costMasked: boolean
 }) {
-  const samePerson =
-    order.header.submittedBy === W08_REVIEWER_NAME ||
-    order.reviewWorkItem?.submittedBy === W08_REVIEWER_NAME
-
   return (
     <Card>
       <CardHeader className="border-b border-border">
@@ -1857,14 +1830,6 @@ function ReviewSurface({
             {order.header.submittedAt ?? "—"}
           </AlertDescription>
         </Alert>
-        {samePerson ? (
-          <Alert variant="destructive">
-            <AlertTitle>岗位分离限制</AlertTitle>
-            <AlertDescription>
-              审核人不得为提交经办人，当前不能通过或驳回本次提交。
-            </AlertDescription>
-          </Alert>
-        ) : null}
 
         <DescriptionList columns="three">
           <DescriptionItem>
@@ -1896,16 +1861,11 @@ function ReviewSurface({
         <div className="flex flex-wrap items-end gap-3">
           <Button
             type="button"
-            disabled={pending || samePerson || !order.reviewWorkItem}
+            disabled={pending || !order.reviewWorkItem}
             onClick={onApprove}
           >
             通过
           </Button>
-          {samePerson ? (
-            <span className="text-xs text-destructive">
-              岗位分离：审核人不得为提交经办人
-            </span>
-          ) : null}
         </div>
 
         <form
@@ -1952,7 +1912,7 @@ function ReviewSurface({
           <reviewForm.AppForm>
             <reviewForm.SubmitButton
               label={pending ? "提交中…" : "确认驳回"}
-              disabled={samePerson || !order.reviewWorkItem}
+              disabled={!order.reviewWorkItem}
             />
           </reviewForm.AppForm>
         </form>

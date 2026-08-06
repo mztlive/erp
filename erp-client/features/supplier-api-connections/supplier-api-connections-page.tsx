@@ -36,7 +36,6 @@ import {
   PageHeader,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
-import { PROCUREMENT_SUPPLIER_OPTIONS } from "@/lib/business-options"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import {
   Alert,
@@ -70,7 +69,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   useBindCredentialMutation,
   useBindEndpointMutation,
-  useConfirmCapabilityMutation,
   useConnectionCenterQuery,
   useConnectionListQuery,
   useCreateConnectionMutation,
@@ -86,14 +84,12 @@ import type {
   ConnectionCenterView,
   ConnectionListItem,
   ConnectionSection,
-  DemoRole,
   FormalOutcome,
   HealthRecordView,
 } from "@/features/supplier-api-connections/types"
 import {
   AUDIT_ACTION_LABEL,
   CAPABILITY_LABEL,
-  DEMO_ROLE_LABEL,
   REFERENCE_STATE_LABEL,
   SECTION_LABEL,
   SECTIONS,
@@ -103,11 +99,10 @@ import {
   parseConnectionsSearchParams,
   type ConnectionsUrlState,
 } from "@/features/supplier-api-connections/url-state"
+import { useSupplierOptionsQuery } from "@/hooks/use-options"
 import { freshnessText } from "@/lib/ui-text"
 import { formatDateTime } from "@/lib/datetime"
 import { type ResultState } from "@/components/business/feedback"
-import { RoleDemoBar } from "@/components/business/role-demo-bar"
-import type { ComboboxOption } from "@/components/business/option-combobox"
 
 function outcomeToResult(outcome: FormalOutcome): ResultState {
   if (outcome.status === "succeeded") {
@@ -173,7 +168,6 @@ export function SupplierApiConnectionsPage() {
         const base = `/supplier-api/connections/${pathConnectionId}`
         const params = new URLSearchParams()
         if (next.section !== "overview") params.set("section", next.section)
-        if (next.role !== "admin") params.set("role", next.role)
         const qs = params.toString()
         router.replace(qs ? `${base}?${qs}` : base, { scroll: false })
         return
@@ -214,29 +208,6 @@ export function SupplierApiConnectionsPage() {
   )
 }
 
-const CONNECTION_ROLE_OPTIONS: ComboboxOption[] = [
-  { value: "procurement", label: "采购" },
-  { value: "ops", label: "研发运维" },
-  { value: "admin", label: "系统管理员" },
-]
-
-const CONNECTION_FLAG_OPTIONS: ComboboxOption[] = [
-  { value: "normal", label: "正常权限" },
-  { value: "no-permission", label: "无模块权限" },
-  { value: "no-scope", label: "无数据范围" },
-]
-
-const connectionRoleHint = (role: DemoRole) => (
-  <>
-    当前：{DEMO_ROLE_LABEL[role]}
-    {role === "procurement"
-      ? " · 业务确认，不可写能力状态/密钥"
-      : role === "ops"
-        ? " · 技术引用与健康检查"
-        : " · 启停与能力治理；不可代采购确认"}
-  </>
-)
-
 function ConnectionList({
   urlState,
   patchUrl,
@@ -252,6 +223,7 @@ function ConnectionList({
     (ResultState & { actions?: React.ReactNode }) | null
   >(null)
   const createMutation = useCreateConnectionMutation()
+  const { data: supplierOptions } = useSupplierOptionsQuery()
 
   React.useEffect(() => {
     setSearchDraft(urlState.q ?? "")
@@ -267,8 +239,6 @@ function ConnectionList({
     q: urlState.q,
     page: urlState.page,
     pageSize: urlState.pageSize,
-    role: urlState.role,
-    demoFlag: urlState.demoFlag,
   })
 
   const data = listQuery.data
@@ -461,7 +431,6 @@ function ConnectionList({
         supplierId: value.supplierId,
         supplierName: value.supplierName,
         environment: value.environment,
-        role: urlState.role,
         idempotencyKey: newIdempotencyKey("create"),
       })
       const mapped = outcomeToResult(outcome)
@@ -559,13 +528,11 @@ function ConnectionList({
               <GuardedBusinessAction
                 type="button"
                 size="sm"
-                disabled={
-                  urlState.role !== "admin" || !data?.hasModulePermission
-                }
+                disabled={!data?.hasModulePermission}
                 reason={
-                  urlState.role !== "admin"
-                    ? "仅系统管理员可新建连接"
-                    : undefined
+                  data?.hasModulePermission
+                    ? undefined
+                    : "当前账号无模块权限"
                 }
                 onClick={() => setCreateOpen(true)}
               >
@@ -575,18 +542,6 @@ function ConnectionList({
             </div>
           </div>
         }
-      />
-
-      <RoleDemoBar
-        role={urlState.role}
-        demoFlag={urlState.demoFlag}
-        onRole={(r) => patchUrl({ role: r, page: 1 })}
-        onFlag={(f) => patchUrl({ demoFlag: f, page: 1 })}
-        roleOptions={CONNECTION_ROLE_OPTIONS}
-        roleClassName="w-[9rem]"
-        flagOptions={CONNECTION_FLAG_OPTIONS}
-        flagClassName="w-[11rem]"
-        hintFor={connectionRoleHint}
       />
 
       {result ? (
@@ -606,17 +561,44 @@ function ConnectionList({
         />
       ) : null}
 
-      {empty === "NO_PERMISSION" ? (
+      {empty === "FILTER_NO_RESULT" ? (
         <BusinessEmptyState
-          kind="no-scope"
-          title="无模块权限"
-          description="当前角色无权访问 API 供应商连接，请联系系统管理员开通。"
+          kind="filter"
+          title="当前筛选无结果"
+          description="没有连接符合当前环境/状态/能力/健康条件，可清除筛选。"
+          action={
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                patchUrl({
+                  status: undefined,
+                  health: undefined,
+                  catalogFreshness: undefined,
+                  q: undefined,
+                  page: 1,
+                })
+              }
+            >
+              清除筛选
+            </Button>
+          }
         />
-      ) : empty === "NO_SCOPE" ? (
+      ) : empty === "NO_CONNECTIONS" ? (
         <BusinessEmptyState
-          kind="no-scope"
-          title="当前角色无连接数据范围"
-          description="你可进入此页面，但授权供应商/环境范围内暂无可见连接，可联系管理员扩展数据范围。"
+          kind="no-data"
+          title="尚未接入供应商连接"
+          description="当前环境还没有连接身份。有权限时可新建连接。"
+          action={
+            data?.hasModulePermission ? (
+              <Button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+              >
+                新建连接
+              </Button>
+            ) : null
+          }
         />
       ) : (
         <>
@@ -787,12 +769,7 @@ function ConnectionList({
                       page: 1,
                     })
                   }
-                  suppliers={PROCUREMENT_SUPPLIER_OPTIONS.map((s) => ({
-                    supplierId: s.supplierId,
-                    supplierName: s.supplierName,
-                    statusLabel: "可选",
-                    statusTone: "neutral",
-                  }))}
+                  suppliers={supplierOptions ?? []}
                   className="w-[12rem]"
                   placeholder="全部供应商"
                 />
@@ -847,48 +824,6 @@ function ConnectionList({
                   })
                 }}
                 onRowOpen={(row) => onOpen(row.connectionId)}
-                emptyState={
-                  empty === "FILTER_NO_RESULT" ? (
-                    <BusinessEmptyState
-                      kind="filter"
-                      title="当前筛选无结果"
-                      description="没有连接符合当前环境/状态/能力/健康条件，可清除筛选。"
-                      action={
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() =>
-                            patchUrl({
-                              status: undefined,
-                              health: undefined,
-                              catalogFreshness: undefined,
-                              q: undefined,
-                              page: 1,
-                            })
-                          }
-                        >
-                          清除筛选
-                        </Button>
-                      }
-                    />
-                  ) : empty === "NO_CONNECTIONS" ? (
-                    <BusinessEmptyState
-                      kind="no-data"
-                      title="尚未接入供应商连接"
-                      description="当前环境还没有连接身份。有权限时可新建连接。"
-                      action={
-                        urlState.role === "admin" ? (
-                          <Button
-                            type="button"
-                            onClick={() => setCreateOpen(true)}
-                          >
-                            新建连接
-                          </Button>
-                        ) : null
-                      }
-                    />
-                  ) : undefined
-                }
               />
             }
           />
@@ -930,7 +865,7 @@ function ConnectionList({
                       onValueChange={(id) => {
                         const next = id ?? ""
                         field.handleChange(next)
-                        const supplier = PROCUREMENT_SUPPLIER_OPTIONS.find(
+                        const supplier = supplierOptions?.find(
                           (s) => s.supplierId === next
                         )
                         form.setFieldValue(
@@ -938,7 +873,7 @@ function ConnectionList({
                           supplier?.supplierName ?? ""
                         )
                       }}
-                      suppliers={PROCUREMENT_SUPPLIER_OPTIONS}
+                      suppliers={supplierOptions ?? []}
                       placeholder="搜索供应商名称或编码"
                     />
                     {isInvalid ? <FieldError errors={errors} /> : null}
@@ -1001,7 +936,7 @@ function ConnectionCenter({
   patchUrl: (patch: Partial<ConnectionsUrlState>) => void
   onBack: () => void
 }) {
-  const centerQuery = useConnectionCenterQuery(connectionId, urlState.role)
+  const centerQuery = useConnectionCenterQuery(connectionId)
   const [result, setResult] = React.useState<ResultState>(null)
   const [disableOpen, setDisableOpen] = React.useState(false)
   const [credOpen, setCredOpen] = React.useState(false)
@@ -1015,7 +950,6 @@ function ConnectionCenter({
 
   const bindCred = useBindCredentialMutation()
   const bindEndpoint = useBindEndpointMutation()
-  const confirmCap = useConfirmCapabilityMutation()
   const updateCaps = useUpdateCapabilitiesMutation()
   const runHealth = useRunHealthCheckMutation()
   const startCatalog = useStartCatalogSyncMutation()
@@ -1024,16 +958,10 @@ function ConnectionCenter({
   const listQuery = useConnectionListQuery({
     environment: "ALL",
     page: 1,
-    role: urlState.role,
   })
 
   const conn = centerQuery.data
   const section = urlState.section
-
-  const can = (action: string) =>
-    Boolean(conn?.allowedActions.includes(action))
-  const blockerMsg = (action: string) =>
-    conn?.actionBlockers.find((b) => b.action === action)?.message
 
   const applyOutcome = (outcome: FormalOutcome) => {
     setResult(outcomeToResult(outcome))
@@ -1111,18 +1039,6 @@ function ConnectionCenter({
         }
       />
 
-      <RoleDemoBar
-        role={urlState.role}
-        demoFlag={urlState.demoFlag}
-        onRole={(r) => patchUrl({ role: r })}
-        onFlag={(f) => patchUrl({ demoFlag: f })}
-        roleOptions={CONNECTION_ROLE_OPTIONS}
-        roleClassName="w-[9rem]"
-        flagOptions={CONNECTION_FLAG_OPTIONS}
-        flagClassName="w-[11rem]"
-        hintFor={connectionRoleHint}
-      />
-
       <DocumentHeader
         density="compact"
         title={`${conn.connectionCode} · ${conn.supplier.name}`}
@@ -1180,31 +1096,27 @@ function ConnectionCenter({
         ]}
         primaryAction={
           <div className="flex flex-wrap gap-2">
-            {can("RUN_HEALTH_CHECK") ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={runHealth.isPending}
-                title={blockerMsg("RUN_HEALTH_CHECK")}
-                onClick={() => setConfirmHealthOpen(true)}
-              >
-                <RefreshCwIcon className="size-4" aria-hidden="true" />
-                健康检查
-              </Button>
-            ) : null}
-            {can("ENABLE") && conn.status !== "ENABLED" ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              disabled={runHealth.isPending}
+              onClick={() => setConfirmHealthOpen(true)}
+            >
+              <RefreshCwIcon className="size-4" aria-hidden="true" />
+              健康检查
+            </Button>
+            {conn.status !== "ENABLED" ? (
               <Button
                 type="button"
                 size="sm"
                 disabled={enableMut.isPending}
-                title={blockerMsg("ENABLE")}
                 onClick={() => setConfirmEnableOpen(true)}
               >
                 启用连接
               </Button>
             ) : null}
-            {can("DISABLE") && conn.status === "ENABLED" ? (
+            {conn.status === "ENABLED" ? (
               <Button
                 type="button"
                 size="sm"
@@ -1214,19 +1126,6 @@ function ConnectionCenter({
                 停用连接
               </Button>
             ) : null}
-            {conn.actionBlockers
-              .filter((b) =>
-                ["RUN_HEALTH_CHECK", "ENABLE", "DISABLE"].includes(b.action)
-              )
-              .slice(0, 2)
-              .map((b) => (
-                <p
-                  key={`${b.action}-${b.code}`}
-                  className="w-full text-xs text-muted-foreground"
-                >
-                  {b.message}
-                </p>
-              ))}
           </div>
         }
       />
@@ -1314,40 +1213,17 @@ function ConnectionCenter({
       </Tabs>
 
       {section === "overview" ? (
-        <OverviewSection conn={conn} role={urlState.role} />
+        <OverviewSection conn={conn} />
       ) : null}
       {section === "capabilities" ? (
         <CapabilitiesSection
           conn={conn}
-          role={urlState.role}
-          can={can}
-          blockerMsg={blockerMsg}
-          onConfirm={async (code, requirement) => {
-            const cap = conn.capabilities.find((c) => c.capabilityCode === code)
-            if (!cap) return
-            const outcome = await confirmCap.mutateAsync({
-              connectionId: conn.connectionId,
-              capabilityCode: code,
-              requirement,
-              reasonCode: "BUSINESS_NEED",
-              expectedConnectionVersion: conn.version,
-              expectedCapabilityVersion: cap.version,
-              role: urlState.role,
-              operationId: newIdempotencyKey("op_ccr"),
-              idempotencyKey: newIdempotencyKey("ccr"),
-            })
-            applyOutcome(outcome)
-          }}
           onOpenConfig={() => setCapConfigOpen(true)}
-          confirming={confirmCap.isPending}
         />
       ) : null}
       {section === "security" ? (
         <SecuritySection
           conn={conn}
-          role={urlState.role}
-          canBind={can("BIND_CREDENTIAL_REFERENCE")}
-          canBindEndpoint={can("BIND_ENDPOINT_REFERENCE")}
           onBind={() => {
             setSelectedRef("")
             setCredOpen(true)
@@ -1364,13 +1240,10 @@ function ConnectionCenter({
       {section === "catalog" ? (
         <CatalogSection
           conn={conn}
-          canSync={can("START_CATALOG_SYNC")}
-          blocker={blockerMsg("START_CATALOG_SYNC")}
           syncing={startCatalog.isPending}
           onSync={async () => {
             const outcome = await startCatalog.mutateAsync({
               connectionId: conn.connectionId,
-              role: urlState.role,
               idempotencyKey: newIdempotencyKey("catalog"),
             })
             applyOutcome(outcome)
@@ -1469,7 +1342,6 @@ function ConnectionCenter({
                 const outcome = await disableMut.mutateAsync({
                   connectionId: conn.connectionId,
                   expectedVersion: conn.version,
-                  role: urlState.role,
                   reasonCode: "ADMIN_DISABLE",
                   idempotencyKey: newIdempotencyKey("disable"),
                 })
@@ -1544,7 +1416,6 @@ function ConnectionCenter({
                   connectionId: conn.connectionId,
                   opaqueReferenceId: selectedRef,
                   expectedVersion: conn.version,
-                  role: urlState.role,
                   idempotencyKey: newIdempotencyKey("cred"),
                 })
                 applyOutcome(outcome)
@@ -1618,7 +1489,6 @@ function ConnectionCenter({
                   connectionId: conn.connectionId,
                   opaqueReferenceId: selectedEndpointRef,
                   expectedVersion: conn.version,
-                  role: urlState.role,
                   idempotencyKey: newIdempotencyKey("endpoint"),
                 })
                 applyOutcome(outcome)
@@ -1659,7 +1529,6 @@ function ConnectionCenter({
                 const outcome = await runHealth.mutateAsync({
                   connectionId: conn.connectionId,
                   expectedVersion: conn.version,
-                  role: urlState.role,
                   idempotencyKey: newIdempotencyKey("health"),
                 })
                 applyOutcome(outcome)
@@ -1700,7 +1569,6 @@ function ConnectionCenter({
                 const outcome = await enableMut.mutateAsync({
                   connectionId: conn.connectionId,
                   expectedVersion: conn.version,
-                  role: urlState.role,
                   idempotencyKey: newIdempotencyKey("enable"),
                 })
                 applyOutcome(outcome)
@@ -1730,7 +1598,6 @@ function ConnectionCenter({
             expectedConnectionVersion: conn.version,
             expectedCapabilityVersions,
             reasonCode: "ADMIN_CONFIG",
-            role: urlState.role,
             operationId: newIdempotencyKey("op_cap"),
             idempotencyKey: newIdempotencyKey("cap"),
           })
@@ -1742,13 +1609,7 @@ function ConnectionCenter({
   )
 }
 
-function OverviewSection({
-  conn,
-  role,
-}: {
-  conn: ConnectionCenterView
-  role: DemoRole
-}) {
+function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
   return (
     <div className="grid gap-3 lg:grid-cols-2">
       <Card>
@@ -1781,11 +1642,7 @@ function OverviewSection({
       <Card>
         <CardHeader className="pb-2">
           <CardTitle className="text-base">技术就绪</CardTitle>
-          <CardDescription>
-            {role === "procurement"
-              ? "采购角色仅查看就绪状态"
-              : "地址/密钥引用与适配器"}
-          </CardDescription>
+          <CardDescription>地址/密钥引用与适配器</CardDescription>
         </CardHeader>
         <CardContent className="grid gap-2 text-sm">
           <Row
@@ -1879,23 +1736,10 @@ function OverviewSection({
 
 function CapabilitiesSection({
   conn,
-  role,
-  can,
-  blockerMsg,
-  onConfirm,
   onOpenConfig,
-  confirming,
 }: {
   conn: ConnectionCenterView
-  role: DemoRole
-  can: (a: string) => boolean
-  blockerMsg: (a: string) => string | undefined
-  onConfirm: (
-    code: CapabilityCode,
-    requirement: "REQUIRED" | "NOT_REQUIRED"
-  ) => Promise<void>
   onOpenConfig: () => void
-  confirming: boolean
 }) {
   const columns = React.useMemo<ColumnDef<CapabilityView>[]>(
     () => [
@@ -1954,40 +1798,10 @@ function CapabilitiesSection({
         id: "actions",
         header: "动作",
         meta: { label: "动作" },
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            {role === "procurement" &&
-            can("CONFIRM_CAPABILITY_REQUIREMENT") ? (
-              <>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={confirming}
-                  onClick={() =>
-                    void onConfirm(row.original.capabilityCode, "REQUIRED")
-                  }
-                >
-                  确认需要
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="ghost"
-                  disabled={confirming}
-                  onClick={() =>
-                    void onConfirm(row.original.capabilityCode, "NOT_REQUIRED")
-                  }
-                >
-                  不需要
-                </Button>
-              </>
-            ) : null}
-          </div>
-        ),
+        cell: () => <span className="text-xs text-muted-foreground">—</span>,
       },
     ],
-    [can, confirming, onConfirm, role]
+    []
   )
 
   return (
@@ -1996,23 +1810,14 @@ function CapabilitiesSection({
         <AlertTitle>能力边界</AlertTitle>
         <AlertDescription>
           下表为<strong>连接级</strong>
-          统一能力声明，不表示每个供应商商品都可用。商品/供给/发布级能力由供应商商品库 / 商品发布返回。采购确认只追加业务需求与审计，不写能力启停；能力启停由系统管理员配置。
+          统一能力声明，不表示每个供应商商品都可用。商品/供给/发布级能力由供应商商品库 / 商品发布返回。能力启停由系统管理员配置。
         </AlertDescription>
       </Alert>
-      {can("UPDATE_CAPABILITIES") ? (
-        <div className="flex justify-end">
-          <Button type="button" size="sm" onClick={onOpenConfig}>
-            配置能力（管理员）
-          </Button>
-        </div>
-      ) : (
-        <p className="text-xs text-muted-foreground">
-          {blockerMsg("UPDATE_CAPABILITIES") ??
-            (role === "procurement"
-              ? "你可确认业务需求；能力启停由管理员配置。"
-              : "当前角色不可配置能力启停。")}
-        </p>
-      )}
+      <div className="flex justify-end">
+        <Button type="button" size="sm" onClick={onOpenConfig}>
+          配置能力
+        </Button>
+      </div>
       <BusinessTableFrame
         title="能力矩阵"
         description="连接级能力 × 状态 × 业务需求 × 验证；不等于商品级可用"
@@ -2026,12 +1831,12 @@ function CapabilitiesSection({
             density="compact"
             layout="flush"
             showPagination={false}
-            defaultColumnPinning={{ left: ["code"], right: ["actions"] }}
+            defaultColumnPinning={{ left: ["code"] }}
             emptyState={
               <BusinessEmptyState
                 kind="no-data"
                 title="尚未配置能力"
-                description="管理员可配置能力；采购可在能力出现后确认业务需求。"
+                description="可配置能力启停；业务需求与验证状态随后端数据返回。"
               />
             }
           />
@@ -2043,16 +1848,10 @@ function CapabilitiesSection({
 
 function SecuritySection({
   conn,
-  role,
-  canBind,
-  canBindEndpoint,
   onBind,
   onBindEndpoint,
 }: {
   conn: ConnectionCenterView
-  role: DemoRole
-  canBind: boolean
-  canBindEndpoint: boolean
   onBind: () => void
   onBindEndpoint: () => void
 }) {
@@ -2062,11 +1861,7 @@ function SecuritySection({
         <KeyRoundIcon aria-hidden="true" />
         <AlertTitle>安全配置引用</AlertTitle>
         <AlertDescription>
-          仅显示绑定状态
-          {role === "procurement"
-            ? "（采购不显示别名/版本）"
-            : "、安全别名与版本"}
-          。永不展示、复制或导出密钥正文。轮换只能选择密钥管理系统不透明引用。
+          仅显示绑定状态、安全别名与版本。永不展示、复制或导出密钥正文。轮换只能选择密钥管理系统不透明引用。
         </AlertDescription>
       </Alert>
       <div className="grid gap-3 sm:grid-cols-2">
@@ -2081,15 +1876,9 @@ function SecuritySection({
               version={conn.safeReferences.endpoint.version}
               visible={conn.safeReferences.endpoint.visible}
             />
-            {canBindEndpoint ? (
-              <Button type="button" size="sm" onClick={onBindEndpoint}>
-                绑定/轮换地址
-              </Button>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                当前角色不可绑定/轮换地址引用
-              </p>
-            )}
+            <Button type="button" size="sm" onClick={onBindEndpoint}>
+              绑定/轮换地址
+            </Button>
           </CardContent>
         </Card>
         <Card>
@@ -2103,15 +1892,9 @@ function SecuritySection({
               version={conn.safeReferences.credential.version}
               visible={conn.safeReferences.credential.visible}
             />
-            {canBind ? (
-              <Button type="button" size="sm" onClick={onBind}>
-                绑定/轮换引用
-              </Button>
-            ) : (
-              <p className="text-xs text-muted-foreground">
-                当前角色不可轮换密钥引用
-              </p>
-            )}
+            <Button type="button" size="sm" onClick={onBind}>
+              绑定/轮换引用
+            </Button>
           </CardContent>
         </Card>
       </div>
@@ -2250,14 +2033,10 @@ function HealthSection({
 
 function CatalogSection({
   conn,
-  canSync,
-  blocker,
   syncing,
   onSync,
 }: {
   conn: ConnectionCenterView
-  canSync: boolean
-  blocker?: string
   syncing: boolean
   onSync: () => Promise<void>
 }) {
@@ -2305,15 +2084,11 @@ function CatalogSection({
             <Button
               type="button"
               size="sm"
-              disabled={!canSync || syncing}
-              title={blocker}
+              disabled={syncing}
               onClick={() => void onSync()}
             >
               触发目录同步
             </Button>
-            {!canSync && blocker ? (
-              <span className="text-xs text-muted-foreground">{blocker}</span>
-            ) : null}
           </div>
         </CardContent>
       </Card>

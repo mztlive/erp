@@ -30,7 +30,7 @@ const SCOPE_OPTIONS = [
 /**
  * W09 队列工具栏。
  *
- * 只暴露 mock api 真正参与过滤的维度（单号、仓库、到期、门禁），
+ * 只暴露接口真正参与过滤的维度（单号、仓库、到期、门禁），
  * 以及来源页带入的对象筛选 —— 后者做成可移除的标记，避免 URL 里留下界面改不动的隐形状态。
  */
 export function FulfillmentQueueToolbar({
@@ -48,9 +48,6 @@ export function FulfillmentQueueToolbar({
   scope,
   showScope,
   showAutoNext,
-  roleValue,
-  roleOptions,
-  devSimulation,
   onPatch,
   onAutoNextChange,
 }: {
@@ -71,9 +68,6 @@ export function FulfillmentQueueToolbar({
   showScope: boolean
   /** 只读角色不会连续处理，不显示自动下一项 */
   showAutoNext: boolean
-  roleValue: string
-  roleOptions: ReadonlyArray<{ value: string; label: string }>
-  devSimulation?: React.ReactNode
   onPatch: (patch: QueueFilterPatch) => void
   onAutoNextChange: (next: boolean) => void
 }) {
@@ -203,23 +197,6 @@ export function FulfillmentQueueToolbar({
           <span className="text-xs text-muted-foreground" aria-live="polite">
             待处理 {total}
           </span>
-          <OptionCombobox
-            value={roleValue}
-            options={roleOptions}
-            allowClear={false}
-            aria-label="当前身份（演示）"
-            onValueChange={(v) =>
-              onPatch({
-                demoRole: v ?? null,
-                // 换身份后可见类型变了，旧的类型/单号筛选和游标一律作废
-                type: null,
-                currentWorkItemId: null,
-                warehouseId: null,
-                salesOrderId: null,
-                purchaseOrderId: null,
-              })
-            }
-          />
           {showAutoNext ? (
             <div className="flex items-center gap-2">
               <Label htmlFor="ff-auto-next" className="text-muted-foreground">
@@ -232,7 +209,6 @@ export function FulfillmentQueueToolbar({
               />
             </div>
           ) : null}
-          {devSimulation}
         </>
       }
     />

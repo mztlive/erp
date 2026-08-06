@@ -65,8 +65,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { AllocationSession } from "@/features/supplier-payables/allocation-session"
 import {
-  useDemoPermissionMutation,
-  useDemoSetPolicyMutation,
   usePayableDetailQuery,
   useReverseInvoiceMutation,
   useReversePaymentMutation,
@@ -211,8 +209,6 @@ export function SupplierAccountsPage() {
   const detailQuery = usePayableDetailQuery(previewPayableId)
   const reversePayment = useReversePaymentMutation()
   const reverseInvoice = useReverseInvoiceMutation()
-  const demoPolicy = useDemoSetPolicyMutation()
-  const demoPerm = useDemoPermissionMutation()
 
   const data = listQuery.data
 
@@ -835,15 +831,6 @@ export function SupplierAccountsPage() {
           kind="no-scope"
           title="无供应商往来权限"
           description="权限已收回或未授权。敏感字段与导出结果已清除，不能提交。"
-          action={
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void demoPerm.mutateAsync("restore")}
-            >
-              演示：恢复权限
-            </Button>
-          }
         />
       </div>
     )
@@ -1228,37 +1215,6 @@ export function SupplierAccountsPage() {
               </>
             ) : null}
           </div>
-        }
-        actions={
-          <details className="text-xs text-muted-foreground">
-            <summary className="cursor-pointer">演示选项（仅演示环境）</summary>
-            <div className="mt-1 flex flex-col gap-1">
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                onClick={() => void demoPolicy.mutateAsync("MISSING")}
-              >
-                模拟：分配策略未配置
-              </Button>
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                onClick={() => void demoPolicy.mutateAsync("AVAILABLE")}
-              >
-                模拟：分配策略恢复
-              </Button>
-              <Button
-                type="button"
-                size="xs"
-                variant="ghost"
-                onClick={() => void demoPerm.mutateAsync("revoke")}
-              >
-                收回权限
-              </Button>
-            </div>
-          </details>
         }
       />
 

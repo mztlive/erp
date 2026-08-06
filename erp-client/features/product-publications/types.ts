@@ -395,8 +395,6 @@ export type PublishRevisionCommand = {
       altText: string
     }>
   }
-  /** 演示：强制 UNKNOWN 一次 */
-  forceUnknown?: boolean
 }
 
 export type PublishRevisionResult =
@@ -462,12 +460,7 @@ export type RetryDeliveryResult =
   | { status: "blocked"; code: string; message: string }
   | { status: "unknown"; requestId: string; message: string }
 
-export type ResolvePublishUnknownCommand = {
-  requestId: string
-  settle?: boolean
-}
-
-/** 仅供 mock 领域事件处理器调用；浏览器页面不得构造。 */
+/** 仅供领域事件处理器调用；浏览器页面不得构造。 */
 export type SystemSafetyPauseTrigger = {
   cause: SafetyPauseCause
   sourceObjectType: "SUPPLIER_EXTERNAL_PRODUCT" | "SUPPLIER_OFFERING"

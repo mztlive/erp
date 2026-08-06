@@ -1,4 +1,4 @@
-/** W08 采购单 · 客户端契约类型（对齐工作面文档 §5/§8，session-mock 语义）。 */
+/** W08 采购单 · 客户端契约类型（对齐工作面文档 §5/§8）。 */
 
 import type { StatusTone } from "@/components/ui/status-badge"
 
@@ -25,8 +25,6 @@ export type PurchaseReviewStatus =
   | "REJECTED"
 
 export type PaymentGateState = "SATISFIED" | "BLOCKED" | "NOT_APPLICABLE"
-
-export type ViewerRole = "procurement" | "finance" | "sales" | "warehouse"
 
 export type PurchaseOrderStatusFilter = "all" | PurchaseOrderStatus
 
@@ -214,7 +212,7 @@ export type PurchaseOrderCenterView = Readonly<{
   allowedActions: readonly string[]
   actionBlockers: readonly ActionBlocker[]
   fieldVisibility: Record<string, "full" | "masked" | "hidden">
-  /** 会话 mock 审核任务（仅待审核且存在提交时） */
+  /** 审核任务（仅待审核且存在提交时） */
   reviewWorkItem?: {
     workItemId: string
     subjectHash: string
@@ -264,8 +262,6 @@ export type SavePurchaseOrderDraftInput = {
     inputTaxRate: string
     logisticsFeeReason?: string
   }>
-  /** demo: 模拟版本冲突 */
-  simulateConflict?: boolean
   idempotencyKey: string
 }
 

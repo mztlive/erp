@@ -22,7 +22,7 @@ function CatalogFallback() {
 
 /**
  * SPA 壳：URL 恢复 changeType / currentSupplierProductId / currentWorkItemId /
- * queueContextId / autoNext / demoRole。业务数据不在服务端 fetch。
+ * queueContextId / autoNext。业务数据不在服务端 fetch。
  */
 export default function Page() {
   return (

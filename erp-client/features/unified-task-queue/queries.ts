@@ -11,7 +11,7 @@ import {
   fetchUnifiedTaskQueue,
   fetchUnifiedTaskQueueCounts,
   transferWorkItem,
-  WorkItemMockError,
+  WorkItemApiError,
 } from "@/features/unified-task-queue/api"
 import type {
   InTaskActionKind,
@@ -132,4 +132,4 @@ export function useTransferWorkItemMutation() {
   })
 }
 
-export { WorkItemMockError }
+export { WorkItemApiError }

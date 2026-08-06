@@ -309,8 +309,6 @@ export type IntegrationTaskActionInput = {
   reasonCode?: string
   comment?: string
   evidenceRefs?: ControlledTerminalEvidenceRef[]
-  /** Demo: force RESULT_UNKNOWN after query */
-  forceUnknown?: boolean
 }
 
 export type IntegrationResolveInput = {

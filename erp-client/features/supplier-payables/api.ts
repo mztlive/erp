@@ -649,17 +649,6 @@ export async function submitPayment(
   const cached = submitIdempotency.get(input.idempotencyKey)
   if (cached) return cached
 
-  if (input.forceUnknown) {
-    const unknown: FormalSubmitResult = {
-      status: "unknown",
-      title: "结果不确定",
-      description: "提交结果不确定。请查询后勿重复提交。",
-      operationId: input.idempotencyKey,
-    }
-    submitIdempotency.set(input.idempotencyKey, unknown)
-    return unknown
-  }
-
   try {
     let paymentId = input.existingPaymentId
     let paymentNo = ""
@@ -740,17 +729,6 @@ export async function submitInvoice(
 ): Promise<FormalSubmitResult> {
   const cached = submitIdempotency.get(input.idempotencyKey)
   if (cached) return cached
-
-  if (input.forceUnknown) {
-    const unknown: FormalSubmitResult = {
-      status: "unknown",
-      title: "结果不确定",
-      description: "提交结果不确定。请查询后勿重复提交。",
-      operationId: input.idempotencyKey,
-    }
-    submitIdempotency.set(input.idempotencyKey, unknown)
-    return unknown
-  }
 
   try {
     const targets = input.targets.filter((t) => t.amount && Number(t.amount) > 0)
@@ -939,19 +917,4 @@ export async function resolveUnknownResult(
   idempotencyKey: string
 ): Promise<FormalSubmitResult | null> {
   return submitIdempotency.get(idempotencyKey) ?? null
-}
-
-/** Demo helpers — no-op against real backend (policy/permission demos removed). */
-export async function demoSetPolicyState(
-  _state: "AVAILABLE" | "MISSING" | "STALE"
-): Promise<void> {
-  void _state
-}
-
-export async function demoRevokePermission(): Promise<void> {
-  // no-op: real RBAC is server-side
-}
-
-export async function demoRestorePermission(): Promise<void> {
-  // no-op
 }

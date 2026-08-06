@@ -359,20 +359,6 @@ function emptyCreateContext(): CreateBackfillContext {
 }
 
 // ---------------------------------------------------------------------------
-// Demo controls (no mock state; keep signatures for queries.ts)
-// ---------------------------------------------------------------------------
-
-export function setHistoryBackfillCreateContextMode(mode: "ok" | "gap") {
-  void mode
-  // no-op: real backend owns create context
-}
-
-export function setHistoryBackfillForceUnknown(next: boolean) {
-  void next
-  // no-op
-}
-
-// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -380,21 +366,6 @@ export async function fetchHistoryBackfillList(
   query: HistoryBackfillListQuery
 ): Promise<HistoryBackfillListView> {
   const queriedAt = new Date().toISOString()
-  if (query.role === "NO_MODULE") {
-    return {
-      metrics: {
-        running: 0,
-        unattributed: 0,
-        deduplicated: 0,
-        noneConsumption: 0,
-        failed: 0,
-      },
-      rows: [],
-      totalCount: 0,
-      queriedAt,
-      createContext: emptyCreateContext(),
-    }
-  }
 
   const pageRes = await apiGet<Page<BackendJob>>(
     "/admin/mall-consumption-backfill-jobs",
@@ -463,8 +434,6 @@ export async function fetchHistoryBackfillList(
 export async function fetchHistoryBackfillDetail(
   query: HistoryBackfillDetailQuery
 ): Promise<HistoryBackfillDetailView | null> {
-  if (query.role === "NO_MODULE") return null
-
   try {
     const detail = await apiGet<BackendJobDetail>(
       `/admin/mall-consumption-backfill-jobs/${encodeURIComponent(query.jobId)}`

@@ -10,7 +10,6 @@ import {
   CategoryCombobox,
   DiscardConfirmDialog,
   FormalActionResult,
-  OptionCombobox,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
 import {
@@ -570,7 +569,6 @@ export function MasterDataCreateDialog({
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey("create")
   )
-  const [simulate, setSimulate] = React.useState<"ok" | "overlap">("ok")
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null
   )
@@ -579,11 +577,6 @@ export function MasterDataCreateDialog({
   const isWarehouse = resource === "warehouses"
   const wide = usesWideDialog(resource)
   const showEffectivePeriod = usesEffectivePeriod(resource)
-
-  // 演示控件不跨打开会话残留：每次打开回到「正常保存」。
-  React.useEffect(() => {
-    if (open) setSimulate("ok")
-  }, [open])
 
   const defaults: ResourceFormValues = {
     name: "",
@@ -614,7 +607,6 @@ export function MasterDataCreateDialog({
         changeReason: value.changeReason.trim(),
         fields: buildResourceFields(resource, value),
         idempotencyKey,
-        simulate: isWarehouse ? "ok" : simulate,
       })
       setResult(response)
     },
@@ -733,31 +725,6 @@ export function MasterDataCreateDialog({
                   />
                 )}
               />
-              {!isWarehouse && showEffectivePeriod ? (
-                <div className="space-y-2">
-                  <Label htmlFor="create-sim">
-                    {masterDataCopy.demoSimulateLabel}
-                  </Label>
-                  <OptionCombobox
-                    id="create-sim"
-                    value={simulate}
-                    onValueChange={(v) =>
-                      setSimulate((v ?? "ok") as "ok" | "overlap")
-                    }
-                    options={[
-                      { value: "ok", label: masterDataCopy.demoOk },
-                      {
-                        value: "overlap",
-                        label: masterDataCopy.demoOverlap,
-                      },
-                    ]}
-                    className="w-full"
-                    allowClear={false}
-                    aria-label={masterDataCopy.demoSimulateLabel}
-                    placeholder={masterDataCopy.demoSimulateLabel}
-                  />
-                </div>
-              ) : null}
               <DialogFooter>
                 <DialogClose
                   render={<Button type="button" variant="outline" />}
@@ -824,9 +791,6 @@ export function MasterDataReviseDialog({
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey("revise")
   )
-  const [simulate, setSimulate] = React.useState<
-    "ok" | "overlap" | "base_unit" | "conflict"
-  >("ok")
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null
   )
@@ -895,7 +859,6 @@ export function MasterDataReviseDialog({
         changeReason: value.changeReason.trim(),
         fields: buildResourceFields(resource, value),
         idempotencyKey,
-        simulate: isWarehouse ? "ok" : simulate,
       })
       setResult(response)
     },
@@ -923,7 +886,6 @@ export function MasterDataReviseDialog({
       }
       setResult(null)
       setIdempotencyKey(newIdempotencyKey("revise"))
-      setSimulate("ok")
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- reset only when target opens
   }, [open, stableId, baseRevisionId])
@@ -1074,41 +1036,6 @@ export function MasterDataReviseDialog({
                   />
                 )}
               />
-              {!isWarehouse && showEffectivePeriod ? (
-                <div className="space-y-2">
-                  <Label htmlFor="rev-sim">
-                    {masterDataCopy.demoSimulateLabel}
-                  </Label>
-                  <OptionCombobox
-                    id="rev-sim"
-                    value={simulate}
-                    onValueChange={(v) =>
-                      setSimulate(
-                        (v ?? "ok") as
-                          | "ok"
-                          | "overlap"
-                          | "base_unit"
-                          | "conflict"
-                      )
-                    }
-                    options={[
-                      { value: "ok", label: masterDataCopy.demoOk },
-                      {
-                        value: "overlap",
-                        label: masterDataCopy.demoOverlap,
-                      },
-                      {
-                        value: "conflict",
-                        label: masterDataCopy.demoConflict,
-                      },
-                    ]}
-                    className="w-full"
-                    allowClear={false}
-                    aria-label={masterDataCopy.demoSimulateLabel}
-                    placeholder={masterDataCopy.demoSimulateLabel}
-                  />
-                </div>
-              ) : null}
               <DialogFooter>
                 <DialogClose
                   render={<Button type="button" variant="outline" />}
@@ -1164,9 +1091,6 @@ export function MasterDataDisableDialog({
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey("disable")
   )
-  const [simulate, setSimulate] = React.useState<
-    "ok" | "warehouse_stock" | "conflict"
-  >("ok")
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null
   )
@@ -1198,7 +1122,6 @@ export function MasterDataDisableDialog({
         changeReason: value.changeReason.trim(),
         effectiveFrom: value.effectiveFrom,
         idempotencyKey,
-        simulate: isWarehouse ? "warehouse_stock" : simulate,
       })
       setResult(response)
     },
@@ -1208,7 +1131,6 @@ export function MasterDataDisableDialog({
     if (open) {
       setResult(null)
       setIdempotencyKey(newIdempotencyKey("disable"))
-      setSimulate("ok")
       form.reset()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1355,30 +1277,6 @@ export function MasterDataDisableDialog({
                 />
               )}
             />
-            {!isWarehouse ? (
-              <div className="space-y-2">
-                <Label htmlFor="dis-sim">
-                  {masterDataCopy.demoSimulateLabel}
-                </Label>
-                <OptionCombobox
-                  id="dis-sim"
-                  value={simulate}
-                  onValueChange={(v) =>
-                    setSimulate(
-                      (v ?? "ok") as "ok" | "warehouse_stock" | "conflict"
-                    )
-                  }
-                  options={[
-                    { value: "ok", label: masterDataCopy.demoDisableOk },
-                    { value: "conflict", label: masterDataCopy.demoConflict },
-                  ]}
-                  className="w-full"
-                  allowClear={false}
-                  aria-label={masterDataCopy.demoSimulateLabel}
-                  placeholder={masterDataCopy.demoSimulateLabel}
-                />
-              </div>
-            ) : null}
             <DialogFooter>
               <DialogClose render={<Button type="button" variant="outline" />}>
                 关闭

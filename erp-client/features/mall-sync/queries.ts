@@ -12,15 +12,11 @@ import {
   reapplyMallSnapshot,
   resolveUnknownReapply,
   retryFailedJob,
-  setMallSyncDemoStage,
-  setMallSyncPolicyConfigured,
-  setMallSyncSourceUnavailable,
   triggerManualIncremental,
   triggerSingleOrderPull,
   type MallSyncQueryInput,
 } from "@/features/mall-sync/api"
 import type {
-  OwnershipStage,
   SourceSystemListParams,
 } from "@/features/mall-sync/types"
 import { isAuthenticated } from "@/lib/api"
@@ -167,23 +163,4 @@ export function useAssignMappingMutation() {
       }
     },
   })
-}
-
-/** 演示控制：后端无对应资源，仅失效缓存以刷新 UI */
-export function useMallSyncDemoControls() {
-  const queryClient = useQueryClient()
-  return {
-    setStage: async (stage: OwnershipStage) => {
-      setMallSyncDemoStage(stage)
-      await queryClient.invalidateQueries({ queryKey: mallSyncKeys.all })
-    },
-    setPolicy: async (configured: boolean) => {
-      setMallSyncPolicyConfigured(configured)
-      await queryClient.invalidateQueries({ queryKey: mallSyncKeys.all })
-    },
-    setSourceUnavailable: async (unavailable: boolean) => {
-      setMallSyncSourceUnavailable(unavailable)
-      await queryClient.invalidateQueries({ queryKey: mallSyncKeys.all })
-    },
-  }
 }

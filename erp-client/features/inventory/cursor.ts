@@ -1,6 +1,6 @@
 import type { InventoryView } from "@/features/inventory/types"
 
-/** Mock API 的不透明游标；页面只负责原样回传，不从中推导业务事实。 */
+/** 后端不透明游标；页面只负责原样回传，不从中推导业务事实。 */
 export function encodeInventoryCursor(
   view: InventoryView,
   offset: number

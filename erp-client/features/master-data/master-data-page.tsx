@@ -252,7 +252,6 @@ function MasterDataListWorkspace({
     () => listQuery.data?.rows ?? [],
     [listQuery.data?.rows]
   )
-  const permissionDemo = listQuery.data?.permissionDemo
 
   const previewDetailQuery = useMasterDataCenterQuery(
     resource,
@@ -307,7 +306,6 @@ function MasterDataListWorkspace({
 
   const handleExport = React.useCallback(() => {
     if (!listQuery.data || rows.length === 0) return
-    if (!permissionDemo?.canExport) return
     const csv = buildMasterDataExportCsv(rows, filterSnapshotLabel)
     downloadCsv(csv, `基础资料-${resourceLabel(resource)}`)
     const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "")
@@ -316,7 +314,7 @@ function MasterDataListWorkspace({
       rowCount: rows.length,
       filterSnapshotLabel,
     })
-  }, [filterSnapshotLabel, listQuery.data, permissionDemo?.canExport, resource, rows])
+  }, [filterSnapshotLabel, listQuery.data, resource, rows])
 
   const columns = React.useMemo<ColumnDef<MasterDataListItem>[]>(
     () => [
@@ -570,7 +568,7 @@ function MasterDataListWorkspace({
                 icon: DownloadIcon,
                 variant: "outline",
                 mobileVisibility: "hide",
-                disabled: rows.length === 0 || !permissionDemo?.canExport,
+                disabled: rows.length === 0,
                 onClick: handleExport,
               },
               {

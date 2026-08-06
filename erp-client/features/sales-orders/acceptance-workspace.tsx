@@ -47,8 +47,6 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import {
-  demoRestoreAcceptancePermission,
-  demoRevokeAcceptancePermission,
   fetchCustomerAcceptanceWorkspace,
   postCustomerAcceptanceWorkspace,
   reverseCustomerAcceptanceWorkspace,
@@ -792,43 +790,6 @@ export function AcceptanceWorkspace({
         >
           全部历史记录
         </Button>
-        <span className="ms-auto inline-flex flex-wrap gap-2">
-          <details className="rounded-lg border border-dashed border-border px-2 py-1 text-xs text-muted-foreground">
-            <summary className="cursor-pointer select-none">
-              演示模式（测试权限变化）
-            </summary>
-            <div className="mt-2 flex gap-2 pb-1">
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="text-muted-foreground"
-                onClick={() => {
-                  demoRevokeAcceptancePermission()
-                  void queryClient.invalidateQueries({
-                    queryKey: salesOrderKeys.acceptanceRoot(salesOrderId),
-                  })
-                }}
-              >
-                收回权限
-              </Button>
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                className="text-muted-foreground"
-                onClick={() => {
-                  demoRestoreAcceptancePermission()
-                  void queryClient.invalidateQueries({
-                    queryKey: salesOrderKeys.acceptanceRoot(salesOrderId),
-                  })
-                }}
-              >
-                恢复权限
-              </Button>
-            </div>
-          </details>
-        </span>
       </div>
 
       {isCard || !canCreate ? (

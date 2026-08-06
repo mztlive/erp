@@ -69,12 +69,10 @@ import {
   useSaveFulfillmentMutation,
 } from "@/features/fulfillment-operations/queries"
 import {
-  resolveRole,
-  ROLE_OPTIONS,
-  type FulfillmentRole,
+  DEFAULT_FULFILLMENT_ROLE,
+  FULFILLMENT_ROLES,
 } from "@/features/fulfillment-operations/fulfillment-roles"
 import {
-  FULFILLMENT_LANES,
   laneHeader,
   resolveLane,
 } from "@/features/fulfillment-operations/lanes"
@@ -110,27 +108,15 @@ type SessionLease = {
 
 type ResultState = SharedResultState<FulfillmentFormalOutcome | DeferOutcome>
 
-/**
- * 演示专用控件（人为制造「结果未确定」、跳过查询直接结算）只在开发环境出现。
- * unknown 态仅由演示开关产生，故其「查一下到底成没成」始终保留。
- */
-const DEV_SIMULATION_ENABLED = process.env.NODE_ENV !== "production"
-
 export function FulfillmentOperationsPage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
 
-  const lane = resolveLane(
-    searchParams.get("lane"),
-    searchParams.get("demoRole")
-  )
+  const lane = resolveLane(searchParams.get("lane"))
   const header = laneHeader(lane)
-  // 显式 demoRole 优先；否则按岗位通道默认（仓储/采购经办）；都没有时回落默认角色
-  const role = resolveRole(
-    searchParams.get("demoRole") ??
-      (lane ? FULFILLMENT_LANES[lane].defaultDemoRole : null)
-  )
+  // 队列按岗位通道取角色（仓储/采购经办）；无岗位深链回落默认角色
+  const roleValue = lane ?? DEFAULT_FULFILLMENT_ROLE
   const scope: "mine" | "role_pool" =
     searchParams.get("scope") === "role_pool" ? "role_pool" : "mine"
   const operationTypes = parseTypeParam(searchParams.get("type"))
@@ -146,7 +132,7 @@ export function FulfillmentOperationsPage() {
   const laneKey = lane ?? "any"
   const queueContextId =
     searchParams.get("queueContextId") ??
-    `queue:W09:${laneKey}:${role.value}:${scope}`
+    `queue:W09:${laneKey}:${roleValue}:${scope}`
   const returnTo = searchParams.get("returnTo") ?? undefined
   const fromWorkspace = searchParams.get("from") ?? undefined
 
@@ -161,7 +147,7 @@ export function FulfillmentOperationsPage() {
 
   const filters = React.useMemo(
     (): import("@/features/fulfillment-operations/api").FulfillmentQueueFilters => ({
-      role: role.value,
+      role: roleValue,
       scope,
       operationTypes,
       warehouseId,
@@ -174,7 +160,7 @@ export function FulfillmentOperationsPage() {
       queueContextId,
     }),
     [
-      role.value,
+      roleValue,
       scope,
       operationTypes,
       warehouseId,
@@ -198,7 +184,9 @@ export function FulfillmentOperationsPage() {
   const view = queueQuery.data
   const tasks = React.useMemo(() => view?.tasks ?? [], [view?.tasks])
   const context = view?.context
-  const visibleTypes = context?.visibleTypes ?? role.types
+  const canExecute = context?.canExecute ?? true
+  const visibleTypes =
+    context?.visibleTypes ?? FULFILLMENT_ROLES[roleValue].types
   const task =
     tasks.find((t) => t.workItemId === currentWorkItemId) ??
     view?.current ??
@@ -216,7 +204,6 @@ export function FulfillmentOperationsPage() {
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [deferOpen, setDeferOpen] = React.useState(false)
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
-  const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [saveMessage, setSaveMessage] = React.useState<string | null>(null)
@@ -279,7 +266,7 @@ export function FulfillmentOperationsPage() {
   React.useEffect(() => {
     if (!task) return
     // 只读角色不占用别人的处理权
-    if (!role.canExecute) return
+    if (!canExecute) return
     if (leaseRef.current?.workItemId === task.workItemId) return
     if (claimMutation.isPending) return
     let cancelled = false
@@ -299,7 +286,7 @@ export function FulfillmentOperationsPage() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅任务切换时接手
-  }, [task?.workItemId, role.canExecute])
+  }, [task?.workItemId, canExecute])
 
   React.useEffect(() => {
     if (lastResult) {
@@ -309,7 +296,7 @@ export function FulfillmentOperationsPage() {
     if (!task) return
     // 可执行角色直接落到第一个要填的框并全选，省一次鼠标；
     // 标题挂了 aria-live，换条时仍会播报，不靠抢焦点来通知。
-    if (role.canExecute) {
+    if (canExecute) {
       const el = document.getElementById(
         FIRST_INPUT_ID[task.operationType]
       ) as HTMLInputElement | HTMLTextAreaElement | null
@@ -320,7 +307,7 @@ export function FulfillmentOperationsPage() {
       }
     }
     headingRef.current?.focus()
-  }, [task, lastResult, role.canExecute])
+  }, [task, lastResult, canExecute])
 
   const replaceUrl = React.useCallback(
     (patch: Record<string, string | null | undefined>) => {
@@ -363,7 +350,7 @@ export function FulfillmentOperationsPage() {
   const validationIssues =
     task && draft ? clientValidation(task, draft) : []
   const canPost =
-    role.canExecute &&
+    canExecute &&
     Boolean(task && draft) &&
     validationIssues.length === 0 &&
     !(task?.gate.state === "BLOCKED" && task.operationType !== "WAREHOUSE_SHIP") &&
@@ -449,9 +436,7 @@ export function FulfillmentOperationsPage() {
         expectedEditVersion: task.editVersion,
         draft,
         nextWorkItemId: nextId,
-        forceUnknown: forceUnknownOnce,
       })
-      setForceUnknownOnce(false)
       setConfirmOpen(false)
 
       if (response.status === "unknown") {
@@ -492,7 +477,6 @@ export function FulfillmentOperationsPage() {
     autoNext,
     draft,
     ensureLease,
-    forceUnknownOnce,
     neighborId,
     postMutation,
     task,
@@ -558,60 +542,37 @@ export function FulfillmentOperationsPage() {
     ]
   )
 
-  const handleResolveUnknown = React.useCallback(
-    async (settle: boolean) => {
-      if (!task || !draft) return
-      const lease = leaseRef.current
-      const response = await resolveUnknownMutation.mutateAsync({
-        workItemId: task.workItemId,
-        settle,
-        settlePayload:
-          settle && lease
-            ? {
-                workItemId: task.workItemId,
-                expectedSubjectVersion: task.sourceVersion,
-                expectedSourceVersion: task.sourceVersion,
-                expectedEditVersion: task.editVersion,
-                draft,
-                nextWorkItemId: neighborId(1),
-              }
-            : undefined,
+  const handleResolveUnknown = React.useCallback(async () => {
+    if (!task || !draft) return
+    const response = await resolveUnknownMutation.mutateAsync({
+      workItemId: task.workItemId,
+    })
+    if (response.status === "unknown") {
+      setLastResult({
+        status: "unknown",
+        title: "还是没查到结果",
+        description: response.message,
+        pendingIdempotencyKey: response.idempotencyKey,
+        stayOnItem: true,
       })
-      if (response.status === "unknown") {
-        setLastResult({
-          status: "unknown",
-          title: "还是没查到结果",
-          description: response.message,
-          pendingIdempotencyKey: response.idempotencyKey,
-          stayOnItem: true,
-        })
-        return
-      }
-      if (response.status === "failed") {
-        setActionError(response.message)
-        return
-      }
-      if (response.outcome.kind === "POSTED") {
-        setLastResult({
-          status: "succeeded",
-          title: "查到了：这一条已经做完",
-          description: "查到的是同一条记录，库存和留货没有被重复改动。",
-          reference: response.outcome.factNo,
-          outcome: response.outcome,
-          stayOnItem: !autoNext,
-        })
-        if (autoNext) advanceIfNeeded(true, response.outcome.nextWorkItemId)
-      }
-    },
-    [
-      advanceIfNeeded,
-      autoNext,
-      draft,
-      neighborId,
-      resolveUnknownMutation,
-      task,
-    ]
-  )
+      return
+    }
+    if (response.status === "failed") {
+      setActionError(response.message)
+      return
+    }
+    if (response.outcome.kind === "POSTED") {
+      setLastResult({
+        status: "succeeded",
+        title: "查到了：这一条已经做完",
+        description: "查到的是同一条记录，库存和留货没有被重复改动。",
+        reference: response.outcome.factNo,
+        outcome: response.outcome,
+        stayOnItem: !autoNext,
+      })
+      if (autoNext) advanceIfNeeded(true, response.outcome.nextWorkItemId)
+    }
+  }, [advanceIfNeeded, autoNext, draft, resolveUnknownMutation, task])
 
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -626,7 +587,7 @@ export function FulfillmentOperationsPage() {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "s") {
         event.preventDefault()
         // 只读角色按 Ctrl+S 不能触发保存 —— 那会去抢处理权
-        if (role.canExecute) void handleSave()
+        if (canExecute) void handleSave()
         return
       }
       if (
@@ -680,7 +641,7 @@ export function FulfillmentOperationsPage() {
     goToWorkItem,
     handleSave,
     neighborId,
-    role.canExecute,
+    canExecute,
   ])
 
   const setTypeFilter = React.useCallback(
@@ -693,10 +654,10 @@ export function FulfillmentOperationsPage() {
       replaceUrl({
         type: next === "all" ? null : TYPE_SLUG[next],
         currentWorkItemId: null,
-        queueContextId: `queue:W09:${laneKey}:${role.value}:${scope}:${next === "all" ? "all" : TYPE_SLUG[next]}`,
+        queueContextId: `queue:W09:${laneKey}:${roleValue}:${scope}:${next === "all" ? "all" : TYPE_SLUG[next]}`,
       })
     },
-    [dirty, laneKey, replaceUrl, role.value, scope]
+    [dirty, laneKey, replaceUrl, roleValue, scope]
   )
 
   /** 空态出口：类型、单号、仓库、到期、门禁和来源对象筛选一次清干净 */
@@ -715,38 +676,20 @@ export function FulfillmentOperationsPage() {
       salesOrderId: null,
       purchaseOrderId: null,
       currentWorkItemId: null,
-      queueContextId: `queue:W09:${laneKey}:${role.value}:${scope}:all`,
+      queueContextId: `queue:W09:${laneKey}:${roleValue}:${scope}:all`,
     })
-  }, [dirty, laneKey, replaceUrl, role.value, scope])
+  }, [dirty, laneKey, replaceUrl, roleValue, scope])
 
-  /** 演示身份切换时同步岗位通道，侧栏高亮跟当前干活的人走 */
-  const handleRolePatch = React.useCallback(
+  const handlePatch = React.useCallback(
     (patch: Record<string, string | null | undefined>) => {
       if (dirty) {
         setActionError("有没保存的修改，先保存或放弃再改筛选")
         return
       }
       setLastResult(null)
-      const next: Record<string, string | null | undefined> = { ...patch }
-      if (patch.demoRole != null) {
-        const nextRole = patch.demoRole as FulfillmentRole
-        // 只读角色（销售/财务）队列里五类都在，没有归属岗位：清掉 lane 走中性页头，
-        // 否则页头会顶着「收货与发货」列出电子交付和线下服务。
-        const nextLane =
-          nextRole === "warehouse" || nextRole === "procurement"
-            ? nextRole
-            : null
-        next.lane = nextLane
-        next.currentWorkItemId = null
-        // 只读角色没有「我的」概念，scope 选择器会隐藏：参数一并清掉，避免隐形状态
-        if (nextRole !== "warehouse" && nextRole !== "procurement") {
-          next.scope = null
-        }
-        next.queueContextId = `queue:W09:${nextLane ?? "any"}:${nextRole}:${scope}:all`
-      }
-      replaceUrl(next)
+      replaceUrl(patch)
     },
-    [dirty, replaceUrl, scope]
+    [dirty, replaceUrl]
   )
 
   const leaseStatus = !task
@@ -757,7 +700,7 @@ export function FulfillmentOperationsPage() {
         ? "active"
         : "unclaimed"
 
-  const leaseLabel = !role.canExecute
+  const leaseLabel = !canExecute
     ? "只能查看"
     : activeLease
       ? "你正在处理这一条"
@@ -917,28 +860,13 @@ export function FulfillmentOperationsPage() {
         autoNext={autoNext}
         total={context?.total ?? tasks.length}
         scope={scope}
-        showScope={Boolean(role.userLabel)}
-        showAutoNext={role.canExecute}
-        roleValue={role.value}
-        roleOptions={ROLE_OPTIONS}
-        onPatch={handleRolePatch}
+        showScope={Boolean(context?.viewerLabel)}
+        showAutoNext={canExecute}
+        onPatch={handlePatch}
         onAutoNextChange={(next) => {
           setSessionAutoNext(next)
           replaceUrl({ autoNext: next ? "1" : "0" })
         }}
-        devSimulation={
-          DEV_SIMULATION_ENABLED ? (
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input
-                type="checkbox"
-                className="size-3.5"
-                checked={forceUnknownOnce}
-                onChange={(e) => setForceUnknownOnce(e.target.checked)}
-              />
-              模拟：提交结果不确定（仅开发环境）
-            </label>
-          ) : null
-        }
       />
 
       {lastResult ? (
@@ -986,25 +914,13 @@ export function FulfillmentOperationsPage() {
             actions={
               <div className="flex flex-wrap gap-2">
                 {lastResult.status === "unknown" ? (
-                  <>
-                    <Button
-                      type="button"
-                      size="sm"
-                      onClick={() => void handleResolveUnknown(false)}
-                    >
-                      查询最终结果
-                    </Button>
-                    {DEV_SIMULATION_ENABLED ? (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => void handleResolveUnknown(true)}
-                      >
-                        模拟结算并确认（仅开发环境）
-                      </Button>
-                    ) : null}
-                  </>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void handleResolveUnknown()}
+                  >
+                    查询最终结果
+                  </Button>
                 ) : null}
                 {lastResult.outcome?.kind === "POSTED" &&
                 lastResult.outcome.acceptanceRequired ? (
@@ -1092,9 +1008,9 @@ export function FulfillmentOperationsPage() {
             <SequentialProcessBar
               current={context?.position ?? currentIndex + 1}
               total={context?.total ?? tasks.length}
-              leaseStatus={role.canExecute ? leaseStatus : "active"}
+              leaseStatus={canExecute ? leaseStatus : "active"}
               leaseStatusLabel={leaseLabel}
-              showProcess={role.canExecute}
+              showProcess={canExecute}
               processLabel={OPERATION_ACTION_LABEL[task.operationType]}
               // 没有独立的「并下一项」路径：两个 handler 同义，第二个按钮名不副实
               showProcessNext={false}
@@ -1220,7 +1136,7 @@ export function FulfillmentOperationsPage() {
             >
               {shortcutsOpen
                 ? `快捷键：J / K 上下条${
-                    role.canExecute
+                    canExecute
                       ? " · Ctrl+S 保存 · Ctrl+Enter 确认"
                       : ""
                   } · 再按 ? 收起`
@@ -1330,7 +1246,7 @@ export function FulfillmentOperationsPage() {
                   onChange={updateDraft}
                   disabled={
                     formalPending ||
-                    !role.canExecute ||
+                    !canExecute ||
                     lastResult?.status === "unknown"
                   }
                 />
@@ -1346,7 +1262,7 @@ export function FulfillmentOperationsPage() {
                   <p className="text-xs text-muted-foreground">{saveMessage}</p>
                 ) : null}
 
-                {role.canExecute ? (
+                {canExecute ? (
                   <div className="sticky bottom-0 flex flex-wrap justify-end gap-2 border-t border-border bg-card/95 py-3 backdrop-blur">
                     <Button
                       type="button"
@@ -1418,7 +1334,7 @@ export function FulfillmentOperationsPage() {
         <BusinessEmptyState
           kind="no-scope"
           title="你没有这类任务的权限"
-          description={`${role.label}能处理的是：${visibleTypes
+          description={`${context?.roleLabel ?? FULFILLMENT_ROLES[roleValue].label}能处理的是：${visibleTypes
             .map((t) => OPERATION_TYPE_SHORT[t])
             .join("、")}。`}
           action={

@@ -125,9 +125,6 @@ function parseAvailability(raw: string | null): InventoryAvailability {
   return "all"
 }
 
-/** 演示控件（强制结果不确定 / 直接结算）只在非生产环境出现。 */
-const DEV_SIMULATION_ENABLED = process.env.NODE_ENV !== "production"
-
 const MOVEMENT_TYPE_OPTIONS = [
   { value: "PURCHASE_RECEIPT", label: "采购入库" },
   { value: "WAREHOUSE_DISPATCH", label: "仓库发出" },
@@ -272,7 +269,7 @@ export function InventoryLedgerPage() {
   const [previewBalanceId, setPreviewBalanceId] = React.useState<string | null>(
     balanceIdParam ?? null
   )
-  const [adjustBalanceId, setAdjustBalanceId] = React.useState<string | null>(
+  const [, setAdjustBalanceId] = React.useState<string | null>(
     null
   )
   const [adjustDraftId, setAdjustDraftId] = React.useState<string | null>(null)
@@ -293,7 +290,6 @@ export function InventoryLedgerPage() {
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
   const [exportJob, setExportJob] = React.useState<InventoryExportJob | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
-  const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const [pendingPayload, setPendingPayload] = React.useState<{
     stockAdjustmentId: string
     expectedBalanceLockVersion: number
@@ -570,9 +566,7 @@ export function InventoryLedgerPage() {
       note: values.note.trim(),
       occurredAt: values.occurredAt,
       idempotencyKey: idempotencyRef.current,
-      forceUnknown: forceUnknownOnce,
     }
-    setForceUnknownOnce(false)
     setPendingPayload(payload)
     setActionError(null)
     const result = await submitMutation.mutateAsync(payload)
@@ -612,7 +606,6 @@ export function InventoryLedgerPage() {
     adjustLockVersion,
     adjustSeedLock,
     form.state.values,
-    forceUnknownOnce,
     submitMutation,
     closeAdjustment,
   ])
@@ -1214,6 +1207,9 @@ export function InventoryLedgerPage() {
                     void resolveUnknownMutation
                       .mutateAsync({
                         idempotencyKey: lastResult.pendingIdempotencyKey!,
+                        stockAdjustmentId: pendingPayload?.stockAdjustmentId,
+                        expectedBalanceLockVersion:
+                          pendingPayload?.expectedBalanceLockVersion,
                       })
                       .then((r) => {
                         if (r.status === "succeeded") {
@@ -1240,34 +1236,6 @@ export function InventoryLedgerPage() {
                 >
                   查询最终结果
                 </Button>
-                {DEV_SIMULATION_ENABLED ? (
-                  <Button
-                    type="button"
-                    size="sm"
-                    onClick={() => {
-                      if (!pendingPayload) return
-                      void resolveUnknownMutation
-                        .mutateAsync({
-                          idempotencyKey: lastResult.pendingIdempotencyKey!,
-                          settle: true,
-                          settlePayload: pendingPayload,
-                        })
-                        .then((r) => {
-                          if (r.status === "succeeded") {
-                            setLastResult({
-                              status: "succeeded",
-                              title: "调整已提交待复核",
-                              description: `单号 ${r.outcome.adjustmentNo}。下一责任方：${r.outcome.nextResponsible}。`,
-                              reference: r.outcome.reference,
-                            })
-                            closeAdjustment()
-                          }
-                        })
-                    }}
-                  >
-                    完成并确认结果（仅演示）
-                  </Button>
-                ) : null}
               </div>
             ) : undefined
           }
@@ -2186,36 +2154,6 @@ export function InventoryLedgerPage() {
                     </li>
                   </ul>
                 </div>
-
-                <details className="rounded-lg border border-dashed border-border p-2">
-                  <summary className="cursor-pointer list-none text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
-                    演示模式（仅演示）
-                  </summary>
-                  <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <label className="flex items-center gap-2 text-xs text-muted-foreground">
-                      <input
-                        type="checkbox"
-                        checked={forceUnknownOnce}
-                        onChange={(e) => setForceUnknownOnce(e.target.checked)}
-                      />
-                      演示：强制结果不确定（仅演示）
-                    </label>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => {
-                        if (!adjustBalanceId) return
-                        // 演示：并发冲突需后端乐观锁；本地不再改 mock 锁版本
-                        setActionError(
-                          `演示：请在另一会话修改同一余额后重试提交，以触发服务端并发冲突。`
-                        )
-                      }}
-                    >
-                      演示：模拟余额并发变更（仅演示）
-                    </Button>
-                  </div>
-                </details>
 
                 <DialogFooter className="gap-2 sm:justify-between">
                   <Button

@@ -62,7 +62,6 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { listMallOptions } from "@/features/history-backfill/api"
 import {
   useHistoryBackfillCommandMutation,
-  useHistoryBackfillDemoControls,
   useHistoryBackfillDetailQuery,
   useHistoryBackfillListQuery,
 } from "@/features/history-backfill/queries"
@@ -80,7 +79,6 @@ import type {
   ItemResult,
   JobSection,
   MallOrderFactType,
-  ViewerRoleDemo,
 } from "@/features/history-backfill/types"
 import {
   COST_BASIS_LABEL,
@@ -96,7 +94,6 @@ import {
   PROCESSING_STATUS_TONE,
   REPORT_REVIEW_STATUS_LABEL,
   REPORT_REVIEW_STATUS_TONE,
-  ROLE_LABEL,
   VIEW_LABEL,
 } from "@/features/history-backfill/types"
 import {
@@ -105,9 +102,6 @@ import {
   type HistoryBackfillUrlState,
 } from "@/features/history-backfill/url-state"
 import { formatDateTime } from "@/lib/datetime"
-import { createRoleOptions } from "@/lib/demo-roles"
-import { RoleDemoBar } from "@/components/business/role-demo-bar"
-import type { ComboboxOption } from "@/components/business/option-combobox"
 
 const SECTION_TABS: { id: JobSection; label: string }[] = [
   { id: "overview", label: "概览" },
@@ -200,8 +194,6 @@ function FormalResultBanner({
   )
 }
 
-const HISTORY_ROLE_OPTIONS: ComboboxOption[] = createRoleOptions(ROLE_LABEL)
-
 function Fact({
   label,
   value,
@@ -235,7 +227,6 @@ export function HistoryBackfillPage({
   )
 
   const jobId = routeJobId ?? urlState.jobId
-  const role: ViewerRoleDemo = urlState.role ?? "SYSTEM_ADMIN"
 
   const listPath = "/governance/history-backfill"
 
@@ -275,7 +266,6 @@ export function HistoryBackfillPage({
       <JobDetailView
         jobId={jobId}
         urlState={urlState}
-        role={role}
         patchUrl={patchUrl}
         onBack={() => {
           replaceListUrl({ ...urlState, jobId: undefined, section: "overview" })
@@ -298,7 +288,6 @@ export function HistoryBackfillPage({
   return (
     <JobListView
       urlState={urlState}
-      role={role}
       patchUrl={patchUrl}
       onOpenJob={(id) =>
         replaceDetailUrl(id, {
@@ -318,12 +307,10 @@ export function HistoryBackfillPage({
 
 function JobListView({
   urlState,
-  role,
   patchUrl,
   onOpenJob,
 }: {
   urlState: HistoryBackfillUrlState
-  role: ViewerRoleDemo
   patchUrl: (patch: Partial<HistoryBackfillUrlState>) => void
   onOpenJob: (id: string) => void
   pathname: string
@@ -333,7 +320,6 @@ function JobListView({
   const [scopeAlertDismissed, setScopeAlertDismissed] = React.useState(false)
   const [actionResult, setActionResult] =
     React.useState<HistoryBackfillCommandResult | null>(null)
-  const demo = useHistoryBackfillDemoControls()
   const commandMutation = useHistoryBackfillCommandMutation()
 
   const listQuery = useHistoryBackfillListQuery({
@@ -346,7 +332,6 @@ function JobListView({
     q: urlState.q,
     page: urlState.page,
     pageSize: 20,
-    role,
   })
 
   const data = listQuery.data
@@ -479,22 +464,6 @@ function JobListView({
     }))
   }, [urlState.page])
 
-  if (role === "NO_MODULE") {
-    return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <PageHeader
-          title="历史消费回填"
-          description="管理范围起点至截止时点间的历史回填任务。"
-        />
-        <BusinessEmptyState
-          kind="no-scope"
-          title="无模块权限"
-          description="当前角色看不到历史消费回填入口数据。"
-        />
-      </div>
-    )
-  }
-
   return (
     <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
       <PageHeader
@@ -530,31 +499,6 @@ function JobListView({
       />
 
       <div className="flex flex-wrap items-center gap-2">
-        <RoleDemoBar
-          title="演示角色"
-          role={role}
-          onRole={(r) =>
-            patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
-          }
-          roleOptions={HISTORY_ROLE_OPTIONS}
-          roleClassName="w-[12rem]"
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => void demo.setCreateContextMode("ok")}
-        >
-          演示·覆盖完整
-        </Button>
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => void demo.setCreateContextMode("gap")}
-        >
-          演示·覆盖缺口
-        </Button>
         <Button
           type="button"
           size="sm"
@@ -820,7 +764,6 @@ function JobListView({
         onOpenChange={setCreateOpen}
         context={data?.createContext}
         pending={commandMutation.isPending}
-        role={role}
         result={actionResult}
         onSubmit={async () => {
           const ctx = data?.createContext
@@ -834,7 +777,6 @@ function JobListView({
             rangeEnd: ctx.rangeEnd,
             operationId,
             idempotencyKey,
-            role,
           })
           setActionResult(result)
           if (result.status === "COMMITTED" && result.jobId) {
@@ -852,7 +794,6 @@ function CreateBackfillSheet({
   onOpenChange,
   context,
   pending,
-  role,
   result,
   onSubmit,
 }: {
@@ -860,11 +801,10 @@ function CreateBackfillSheet({
   onOpenChange: (open: boolean) => void
   context?: CreateBackfillContext
   pending: boolean
-  role: ViewerRoleDemo
   result: HistoryBackfillCommandResult | null
   onSubmit: () => Promise<void>
 }) {
-  const blocked = !context?.canCreateDraft || role !== "SYSTEM_ADMIN"
+  const blocked = !context?.canCreateDraft
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" size="detail" className="overflow-y-auto">
@@ -913,16 +853,9 @@ function CreateBackfillSheet({
             {blocked ? (
               <Alert variant="destructive">
                 <TriangleAlertIcon />
-                <AlertTitle>
-                  {role !== "SYSTEM_ADMIN"
-                    ? "仅系统管理员可创建回填任务"
-                    : "当前无法创建回填任务"}
-                </AlertTitle>
+                <AlertTitle>当前无法创建回填任务</AlertTitle>
                 <AlertDescription>
-                  {role !== "SYSTEM_ADMIN"
-                    ? "当前演示角色只能查看。创建草稿并启动回填需由系统管理员操作。"
-                    : (context.blockReasons.join("；") ||
-                        "前置条件尚未满足")}
+                  {context.blockReasons.join("；") || "前置条件尚未满足"}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -1007,13 +940,11 @@ function CreateBackfillSheet({
 function JobDetailView({
   jobId,
   urlState,
-  role,
   patchUrl,
   onBack,
 }: {
   jobId: string
   urlState: HistoryBackfillUrlState
-  role: ViewerRoleDemo
   patchUrl: (patch: Partial<HistoryBackfillUrlState>) => void
   onBack: () => void
   onOpenJob: (id: string) => void
@@ -1026,7 +957,6 @@ function JobDetailView({
   const [reattributeItemId, setReattributeItemId] = React.useState<string | null>(null)
   const [confirmReportOpen, setConfirmReportOpen] = React.useState(false)
   const [downloadNote, setDownloadNote] = React.useState<string | null>(null)
-  const demo = useHistoryBackfillDemoControls()
   const commandMutation = useHistoryBackfillCommandMutation()
 
   const section = urlState.section
@@ -1051,7 +981,6 @@ function JobDetailView({
     q: urlState.q,
     page: Math.max(1, urlState.page),
     pageSize: 20,
-    role,
     section,
   })
 
@@ -1073,16 +1002,8 @@ function JobDetailView({
       <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
         <BusinessEmptyState
           kind="no-data"
-          title={
-            role === "NO_MODULE"
-              ? "无模块权限"
-              : "无法打开该任务"
-          }
-          description={
-            role === "NO_MODULE"
-              ? "当前演示角色看不到历史消费回填数据。"
-              : "任务可能已结束或链接失效；也可返回任务列表重新选择。"
-          }
+          title="无法打开该任务"
+          description="任务可能已结束或链接失效；也可返回任务列表重新选择。"
           action={
             <div className="flex flex-wrap gap-2">
               <Button
@@ -1166,7 +1087,6 @@ function JobDetailView({
       idempotencyKey,
       itemIds,
       reportVersion: report?.reportVersion,
-      role,
     })
     setActionResult(result)
     if (action === "START") setStartOpen(false)
@@ -1218,36 +1138,6 @@ function JobDetailView({
           </div>
         }
       />
-
-      <div className="flex flex-wrap items-center gap-2">
-        <RoleDemoBar
-          title="演示角色"
-          role={role}
-          onRole={(r) =>
-            patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
-          }
-          roleOptions={HISTORY_ROLE_OPTIONS}
-          roleClassName="w-[12rem]"
-        />
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          onClick={() => demo.setForceUnknown(true)}
-        >
-          演示：模拟结果未知
-        </Button>
-      </div>
-
-      {role !== "SYSTEM_ADMIN" ? (
-        <Alert>
-          <ShieldAlertIcon />
-          <AlertTitle>当前角色只能查看</AlertTitle>
-          <AlertDescription>
-            校验来源、开始回填、续跑与报告确认需由系统管理员（或报告确认角色）操作。
-          </AlertDescription>
-        </Alert>
-      ) : null}
 
       <DocumentHeader
         density="compact"

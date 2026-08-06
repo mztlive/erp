@@ -51,8 +51,6 @@ export type EmptyReason =
   | "NO_SCOPE"
   | "NO_PERMISSION"
 
-export type ListDemoFlag = "no-permission" | "no-scope" | "empty"
-
 export const FULFILLMENT_CHAIN_LABEL: Record<FulfillmentChain, string> = {
   LEGACY_MANUAL: "原人工履约",
   ERP_AUTOMATED: "ERP 自动履约",
@@ -176,7 +174,6 @@ export type MallConsumptionOrderListQuery = {
   sort?: string
   page?: number
   pageSize?: number
-  demoFlag?: ListDemoFlag
 }
 
 /** W05 卡券销售单只读协同摘要；不参与销售单关闭条件。 */

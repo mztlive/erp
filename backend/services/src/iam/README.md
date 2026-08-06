@@ -15,3 +15,4 @@
 - 业务 Service 只编排账号生命周期，并调用 `RbacService` 更新绑定。
 - 权限规则使用 `entities::Permission`，持久化格式为 `resource:action`。
 - ERP 操作人员账号能力放在 `services::iam::account`。
+- 启动时：`ensure_root_role` 保证超级管理员角色；`ensure_predefined_roles` 幂等写入业务岗位角色（见 `predefined_roles.rs`）。

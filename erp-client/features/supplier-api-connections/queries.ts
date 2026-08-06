@@ -16,14 +16,13 @@ import {
   updateCapabilities,
   type ListQueryInput,
 } from "@/features/supplier-api-connections/api"
-import type { DemoRole } from "@/features/supplier-api-connections/types"
 
 export const supplierConnectionKeys = {
   all: ["supplier-api-connections"] as const,
   list: (input: ListQueryInput) =>
     [...supplierConnectionKeys.all, "list", input] as const,
-  center: (connectionId: string, role: DemoRole) =>
-    [...supplierConnectionKeys.all, "center", connectionId, role] as const,
+  center: (connectionId: string) =>
+    [...supplierConnectionKeys.all, "center", connectionId] as const,
 }
 
 export function useConnectionListQuery(input: ListQueryInput) {
@@ -33,14 +32,10 @@ export function useConnectionListQuery(input: ListQueryInput) {
   })
 }
 
-export function useConnectionCenterQuery(
-  connectionId: string | undefined,
-  role: DemoRole
-) {
+export function useConnectionCenterQuery(connectionId: string | undefined) {
   return useQuery({
-    queryKey: supplierConnectionKeys.center(connectionId ?? "", role),
-    queryFn: () =>
-      fetchConnectionCenter({ connectionId: connectionId!, role }),
+    queryKey: supplierConnectionKeys.center(connectionId ?? ""),
+    queryFn: () => fetchConnectionCenter({ connectionId: connectionId! }),
     enabled: Boolean(connectionId),
   })
 }

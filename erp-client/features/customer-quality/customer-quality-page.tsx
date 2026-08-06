@@ -1967,7 +1967,7 @@ export function CustomerQualityPage() {
               。{exportJob.amountBasisNote}
               {exportJob.downloadLabel ? (
                 <span className="mt-1 block font-medium">
-                  可下载（演示保留 7 天）：{exportJob.downloadLabel}
+                  可下载（保留 7 天）：{exportJob.downloadLabel}
                   {exportJob.expiresAt
                     ? ` · 失效 ${formatDateTime(exportJob.expiresAt, "full", "passthrough")}`
                     : ""}

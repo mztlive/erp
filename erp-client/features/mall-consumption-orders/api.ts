@@ -686,42 +686,6 @@ export async function fetchConsumptionOrderList(
   const pageSize = Math.max(1, query.pageSize ?? 8)
   const page = Math.max(1, query.page ?? 1)
 
-  // 演示权限/空态旗标：真实权限由后端 403 表达；保留 demoFlag 兼容页面契约
-  if (query.demoFlag === "no-permission") {
-    return {
-      rows: [],
-      pageInfo: { page: 1, pageSize, total: 0 },
-      metrics: emptyMetrics(),
-      malls: [],
-      filterSummary: "无模块权限",
-      emptyReason: "NO_PERMISSION",
-      hasModulePermission: false,
-      hasDataScope: false,
-      permissionVersion: "server",
-      dataScopeVersion: "server",
-      factWatermark: queriedAt,
-      queriedAt,
-      boundaryNotice: BOUNDARY_NOTICE,
-    }
-  }
-  if (query.demoFlag === "no-scope") {
-    return {
-      rows: [],
-      pageInfo: { page: 1, pageSize, total: 0 },
-      metrics: emptyMetrics(),
-      malls: [],
-      filterSummary: "无数据范围",
-      emptyReason: "NO_SCOPE",
-      hasModulePermission: true,
-      hasDataScope: false,
-      permissionVersion: "server",
-      dataScopeVersion: "server",
-      factWatermark: queriedAt,
-      queriedAt,
-      boundaryNotice: BOUNDARY_NOTICE,
-    }
-  }
-
   // 期间门禁：未选完整起止时不请求全量（与 W25 一致）
   if (!query.occurredFrom || !query.occurredTo) {
     return {

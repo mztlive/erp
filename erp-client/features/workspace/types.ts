@@ -98,8 +98,6 @@ export type TodayWorkspaceQuery = Readonly<{
   due?: WorkspaceDueFilter
   family?: WorkspaceFamilyFilter
   timezone: string
-  /** QA 场景；真后端无对应参数时忽略 */
-  scenario?: "forbidden" | "no_scope" | "empty"
 }>
 
 export type TodayWorkspaceView = Readonly<{

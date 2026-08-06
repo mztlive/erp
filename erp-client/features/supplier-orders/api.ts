@@ -1,7 +1,7 @@
 /**
  * W26 供应商订单 · 真实 HTTP API
  * 路径：/admin/supplier-fulfillment-orders、/admin/work-items、/admin/background-jobs
- * 后端视图较前端 mock 精简：缺失字段以安全默认值适配并登记 backend_gap。
+ * 后端视图较精简：缺失字段以安全默认值适配并登记 backend_gap。
  */
 
 import { apiGet, apiPost, type Page } from "@/lib/api"
@@ -11,7 +11,6 @@ import type {
   CancelStatus,
   DeferTaskInput,
   DeferTaskResult,
-  DemoRole,
   ExportCommand,
   ExportJobResult,
   FormalActionResponse,
@@ -33,7 +32,6 @@ import type {
 import {
   CANCEL_STATUS_LABEL,
   CANCEL_STATUS_TONE,
-  COST_MASK,
   FULFILLMENT_STATUS_LABEL,
   FULFILLMENT_STATUS_TONE,
   REFUND_STATUS_LABEL,
@@ -196,7 +194,7 @@ function priorityOf(status: SupplierFulfillmentStatus): number {
   }
 }
 
-function mapListRow(o: BackendOrder, role: DemoRole): SupplierOrderListRow {
+function mapListRow(o: BackendOrder): SupplierOrderListRow {
   const fulfillment = asFulfillment(o.fulfillment_status)
   const cancel = asCancel(o.cancel_status)
   const refund = asRefund(o.refund_status)
@@ -226,7 +224,6 @@ function mapListRow(o: BackendOrder, role: DemoRole): SupplierOrderListRow {
     paidAt: tsToIso(o.created_at),
     updatedAt: lastBusinessAt,
     lastBusinessAt,
-    costGross: role === "cs" || role === "ops" ? null : undefined,
     itemCount: 0,
     allowedActions: ["OPEN_CENTER", "NOTE"],
     actionBlockers: [],
@@ -284,14 +281,11 @@ function filterSummary(query: SupplierOrderListQuery, total: number): string {
 
 function mapDetail(
   d: BackendDetail,
-  role: DemoRole
 ): SupplierOrderDetailView {
   const o = d.order
   const fulfillment = asFulfillment(o.fulfillment_status)
   const cancel = asCancel(o.cancel_status)
   const refund = asRefund(o.refund_status)
-  const costVisible =
-    role === "procurement" || role === "finance" || role === "admin"
   const placeAction =
     d.actions?.find((a) => a.action_type === "PLACE") ?? d.actions?.[0]
 
@@ -334,11 +328,9 @@ function mapDetail(
       supplierProductName: it.supplier_catalog_sku_id,
       publicationVersion: "",
       supplyVersion: it.supplier_offering_revision_id,
-      unitCostGross: costVisible
-        ? String(it.unit_cost_snapshot_gross)
-        : null,
+      unitCostGross: String(it.unit_cost_snapshot_gross),
       unitCostNet: null,
-      inputTaxRate: costVisible ? String(it.input_tax_rate) : null,
+      inputTaxRate: String(it.input_tax_rate),
       snapshotImmutable: true as const,
     })),
     logistics: {
@@ -359,12 +351,9 @@ function mapDetail(
     })),
     afterSales: [],
     costs: {
-      costMasked: !costVisible,
-      cumulativeCostGross: costVisible
-        ? String(
-            d.items?.[0]?.cost_snapshot_total_gross ?? null
-          )
-        : null,
+      cumulativeCostGross: String(
+        d.items?.[0]?.cost_snapshot_total_gross ?? null
+      ),
       cumulativeCostNet: null,
       costSource: "下单成本快照",
       costVariance: null,
@@ -381,18 +370,13 @@ function mapDetail(
         ? `…${a.external_request_id.slice(-6)}`
         : "—",
       attemptCount: a.attempt_count,
-      techSummary:
-        role === "admin"
-          ? [a.request_summary, a.response_summary].filter(Boolean).join(" · ") ||
-            undefined
-          : undefined,
       operationId: a.id,
     })),
     address: {
       masked: "—",
       phoneMasked: "—",
       recipientMasked: "—",
-      canReveal: role === "procurement" || role === "cs" || role === "admin",
+      canReveal: true,
     },
     placeActionId: placeAction?.id ?? "",
     allowedActions: ["OPEN_CENTER", "NOTE"],
@@ -401,7 +385,6 @@ function mapDetail(
       updatedAt: tsToIso(o.created_at),
       state: "fresh",
     },
-    role,
   }
 }
 
@@ -429,7 +412,7 @@ export async function fetchSupplierOrders(
     }
   )
 
-  let rows = (pageRes.items ?? []).map((o) => mapListRow(o, query.role))
+  let rows = (pageRes.items ?? []).map((o) => mapListRow(o))
 
   // 客户端视图投影（后端未提供 view/actionable 筛选）
   if (query.view === "actionable") {
@@ -468,13 +451,12 @@ export async function fetchSupplierOrders(
 
 export async function fetchSupplierOrderDetail(input: {
   orderId: string
-  role?: DemoRole
 }): Promise<SupplierOrderDetailView | null> {
   try {
     const detail = await apiGet<BackendDetail>(
       `/admin/supplier-fulfillment-orders/${encodeURIComponent(input.orderId)}`
     )
-    return mapDetail(detail, input.role ?? "procurement")
+    return mapDetail(detail)
   } catch (err) {
     const status =
       err && typeof err === "object" && "status" in err
@@ -645,17 +627,4 @@ export async function createSupplierOrderExportJob(
     downloadLabel: `供应商订单_${job.job_no ?? job.id}.csv`,
     status: job.status === "completed" ? "succeeded" : "queued",
   }
-}
-
-export function formatCostDisplay(
-  value: string | null | undefined,
-  masked: boolean
-): string {
-  if (masked || value == null) return COST_MASK
-  return value
-}
-
-/** test helper retained for type-compat; no session state */
-export function __resetSupplierOrderSessions() {
-  // no-op
 }

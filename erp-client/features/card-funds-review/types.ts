@@ -1,4 +1,4 @@
-/** W13 卡券票款复核 · 客户端契约类型（对齐工作面文档 §5/§8，session-mock 语义）。 */
+/** W13 卡券票款复核 · 客户端契约类型（对齐工作面文档 §5/§8）。 */
 
 export type ReviewType = "OPENING" | "SYNC_DELTA"
 

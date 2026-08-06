@@ -64,12 +64,6 @@ export type JobSection =
   | "failures"
   | "report"
 
-export type ViewerRoleDemo =
-  | "SYSTEM_ADMIN"
-  | "FINANCE"
-  | "OPERATIONS"
-  | "NO_MODULE"
-
 export type FormalCommandAction =
   | "CREATE_DRAFT"
   | "VALIDATE_SOURCE"
@@ -209,13 +203,6 @@ export const VIEW_LABEL: Record<HistoryBackfillView, string> = {
   processing_completed: "技术处理完成",
   report_pending: "报告待确认",
   all: "全部",
-}
-
-export const ROLE_LABEL: Record<ViewerRoleDemo, string> = {
-  SYSTEM_ADMIN: "系统管理员",
-  FINANCE: "财务",
-  OPERATIONS: "运营",
-  NO_MODULE: "无模块权限",
 }
 
 export const ACTIVE_PROCESSING: HistoryBackfillProcessingStatus[] = [
@@ -441,7 +428,6 @@ export type HistoryBackfillListQuery = {
   q?: string
   page: number
   pageSize: number
-  role?: ViewerRoleDemo
 }
 
 export type HistoryBackfillDetailQuery = {
@@ -452,7 +438,6 @@ export type HistoryBackfillDetailQuery = {
   q?: string
   page: number
   pageSize: number
-  role?: ViewerRoleDemo
   section?: JobSection
 }
 
@@ -466,7 +451,6 @@ export type HistoryBackfillCommandInput = {
   operationId: string
   idempotencyKey: string
   itemIds?: string[]
-  role?: ViewerRoleDemo
   reportVersion?: number
 }
 

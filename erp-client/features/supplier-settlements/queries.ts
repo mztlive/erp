@@ -19,33 +19,27 @@ import {
   submitSettlementReview,
   type ListQueryInput,
 } from "@/features/supplier-settlements/api"
-import type { DemoRole } from "@/features/supplier-settlements/types"
 
 export const settlementKeys = {
   all: ["supplier-settlements"] as const,
   list: (input: ListQueryInput) =>
     [...settlementKeys.all, "list", input] as const,
-  detail: (statementId: string, role: DemoRole) =>
-    [...settlementKeys.all, "detail", statementId, role] as const,
+  detail: (statementId: string) =>
+    [...settlementKeys.all, "detail", statementId] as const,
 }
 
 export function useSettlementListQuery(input: ListQueryInput) {
   return useQuery({
     queryKey: settlementKeys.list(input),
     queryFn: () => fetchSettlementList(input),
-    // 切换演示角色/筛选时保留旧列表，避免整页退回骨架
     placeholderData: keepPreviousData,
   })
 }
 
-export function useSettlementDetailQuery(
-  statementId: string | undefined,
-  role: DemoRole
-) {
+export function useSettlementDetailQuery(statementId: string | undefined) {
   return useQuery({
-    queryKey: settlementKeys.detail(statementId ?? "", role),
-    queryFn: () =>
-      fetchSettlementDetail({ statementId: statementId!, role }),
+    queryKey: settlementKeys.detail(statementId ?? ""),
+    queryFn: () => fetchSettlementDetail({ statementId: statementId! }),
     enabled: Boolean(statementId),
     placeholderData: keepPreviousData,
   })

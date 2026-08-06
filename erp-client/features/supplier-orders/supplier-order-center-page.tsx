@@ -79,7 +79,6 @@ import {
   useSupplierOrderDetailQuery,
 } from "@/features/supplier-orders/queries"
 import type {
-  DemoRole,
   OrderSection,
 } from "@/features/supplier-orders/types"
 import {
@@ -118,7 +117,6 @@ export function SupplierOrderCenterPage({
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const role = (searchParams.get("role") as DemoRole) || "procurement"
   const from = searchParams.get("from")
   const sourceId = searchParams.get("sourceId")
   const workItemId = searchParams.get("workItemId") ?? undefined
@@ -129,7 +127,6 @@ export function SupplierOrderCenterPage({
 
   const query = useSupplierOrderDetailQuery({
     orderId: supplierOrderId,
-    role,
   })
   const queryResultMutation = useQueryResultMutation()
   const replayMutation = useReplayOrderMutation()
@@ -196,7 +193,7 @@ export function SupplierOrderCenterPage({
         expectedSubjectHash: detail.workItem.subjectHash,
         reasonCode: value.reasonCode,
         comment: value.comment || undefined,
-        queueContextId: "queue-w26-demo",
+        queueContextId: "queue-w26",
         idempotencyKey: `defer-${detail.workItem.workItemId}-${Date.now()}`,
       })
       setDeferOpen(false)
@@ -545,7 +542,6 @@ export function SupplierOrderCenterPage({
     0
   )
   const totalCostGross =
-    detail.costs.costMasked ||
     detail.items.every((item) => item.unitCostGross == null)
       ? null
       : detail.items
@@ -1152,7 +1148,6 @@ export function SupplierOrderCenterPage({
                         status={as.mallRefund.statusLabel}
                         amount={as.mallRefund.amount}
                         gap={as.mallRefund.gapNote}
-                        costMasked={detail.costs.costMasked}
                       />
                       <FactGap
                         title="余额/卡券恢复"
@@ -1164,7 +1159,6 @@ export function SupplierOrderCenterPage({
                         status={as.supplierRefund.statusLabel}
                         amount={as.supplierRefund.amount}
                         gap={as.supplierRefund.gapNote}
-                        costMasked={detail.costs.costMasked}
                       />
                     </div>
                     <div className="flex flex-wrap gap-2">
@@ -1232,15 +1226,14 @@ export function SupplierOrderCenterPage({
       {activeSection === "costs" ? (
         <DocumentSection
           title="成本与结算"
-          description="金额按含税/不含税分别标注；无字段权限时打码"
+          description="金额按含税/不含税分别标注"
         >
           <DescriptionList className="gap-y-3">
             <Item
               label="累计成本（含税）"
               value={
-                detail.costs.costMasked ||
                 detail.costs.cumulativeCostGross == null ? (
-                  <span className="text-muted-foreground">•••</span>
+                  <span className="text-muted-foreground">—</span>
                 ) : (
                   <MoneyValue
                     value={detail.costs.cumulativeCostGross}
@@ -1252,9 +1245,8 @@ export function SupplierOrderCenterPage({
             <Item
               label="累计成本（不含税）"
               value={
-                detail.costs.costMasked ||
                 detail.costs.cumulativeCostNet == null ? (
-                  <span className="text-muted-foreground">•••</span>
+                  <span className="text-muted-foreground">—</span>
                 ) : (
                   <MoneyValue
                     value={detail.costs.cumulativeCostNet}
@@ -1267,8 +1259,8 @@ export function SupplierOrderCenterPage({
             <Item
               label="成本差额"
               value={
-                detail.costs.costMasked || detail.costs.costVariance == null ? (
-                  "•••"
+                detail.costs.costVariance == null ? (
+                  "—"
                 ) : (
                   <MoneyValue value={detail.costs.costVariance} />
                 )
@@ -1277,9 +1269,8 @@ export function SupplierOrderCenterPage({
             <Item
               label="差额参照"
               value={
-                detail.costs.costMasked ||
                 detail.costs.cumulativeCostGross == null
-                  ? "•••"
+                  ? "—"
                   : `对比累计成本（含税）${detail.costs.cumulativeCostGross}`
               }
             />
@@ -1345,11 +1336,6 @@ export function SupplierOrderCenterPage({
                 <TableRow key={a.actionId}>
                   <TableCell>
                     <div>{a.actionLabel}</div>
-                    {a.techSummary ? (
-                      <div className="text-[11px] text-muted-foreground">
-                        摘要：{a.techSummary}
-                      </div>
-                    ) : null}
                   </TableCell>
                   <TableCell>
                     <BusinessStatusBadge
@@ -1568,13 +1554,11 @@ function FactGap({
   status,
   amount,
   gap,
-  costMasked,
 }: {
   title: string
   status: string
   amount?: string | null
   gap?: string
-  costMasked?: boolean
 }) {
   return (
     <div className="rounded-lg border border-border bg-card p-3 text-xs">
@@ -1582,7 +1566,7 @@ function FactGap({
       <div className="mt-1">{status}</div>
       {amount != null && amount !== "" ? (
         <div className="mt-1 num text-muted-foreground">
-          {costMasked ? "•••" : amount}
+          {amount}
         </div>
       ) : null}
       {gap ? (

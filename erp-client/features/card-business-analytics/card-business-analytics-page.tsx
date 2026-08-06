@@ -47,7 +47,6 @@ import {
   SalesOrderCombobox,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
-import type { FreshnessDemoState } from "@/lib/freshness"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
 import { useSalesOrdersQuery } from "@/features/sales-orders/queries"
@@ -254,15 +253,25 @@ function parseCostBasis(raw: string | null): CostBasisCode[] | undefined {
   return parts.length > 0 ? parts : undefined
 }
 
-/** periodPreset → 明确 from/to（演示固定锚定 2026-08-01） */
+/** periodPreset → 相对当前日期计算 from/to。 */
 function resolvePeriod(preset: PeriodPreset): { from: string; to: string } {
+  const today = new Date()
+  const iso = (d: Date): string => {
+    const y = d.getFullYear()
+    const m = `${d.getMonth() + 1}`.padStart(2, "0")
+    const day = `${d.getDate()}`.padStart(2, "0")
+    return `${y}-${m}-${day}`
+  }
   if (preset === "last-month") {
-    return { from: "2026-07-01", to: "2026-07-31" }
+    const last = new Date(today.getFullYear(), today.getMonth(), 0)
+    const first = new Date(last.getFullYear(), last.getMonth(), 1)
+    return { from: iso(first), to: iso(last) }
   }
   if (preset === "quarter-to-date") {
-    return { from: "2026-07-01", to: "2026-08-01" }
+    const qStart = new Date(today.getFullYear(), Math.floor(today.getMonth() / 3) * 3, 1)
+    return { from: iso(qStart), to: iso(today) }
   }
-  return { from: "2026-08-01", to: "2026-08-01" }
+  return { from: iso(today), to: iso(today) }
 }
 
 function mapFreshnessUi(
@@ -333,16 +342,6 @@ export function CardBusinessAnalyticsPage() {
   const expiryState = parseExpiry(searchParams.get("expiryState"))
   const coverage = parseCoverage(searchParams.get("coverage"))
   const sort = searchParams.get("sort") ?? "consumption:desc"
-  const basisConfigScenario =
-    searchParams.get("basisConfig") === "missing" ? "missing" : "default"
-  const freshnessDemo = (searchParams.get("freshness") as
-    | FreshnessDemoState
-    | null) ?? undefined
-  const fieldHideRaw = searchParams.get("fieldHide")
-  const fieldHide =
-    fieldHideRaw === "cost" || fieldHideRaw === "profit"
-      ? fieldHideRaw
-      : "none"
 
   const [explicitFrom, setExplicitFrom] = React.useState(
     from || resolvedDefault.from
@@ -401,9 +400,7 @@ export function CardBusinessAnalyticsPage() {
     [salesOrdersQuery.data?.items]
   )
 
-  const basisQuery = useDateBasisConfigQuery({
-    scenario: basisConfigScenario,
-  })
+  const basisQuery = useDateBasisConfigQuery()
   const basisConfig = basisQuery.data
 
   // 服务端已配置默认 dateBasis 且 URL 缺省时写入（非静默猜口径）
@@ -466,13 +463,6 @@ export function CardBusinessAnalyticsPage() {
         sort,
         page: pagination.pageIndex + 1,
         pageSize: pagination.pageSize,
-        freshnessDemo:
-          freshnessDemo === "stale" ||
-          freshnessDemo === "rebuilding" ||
-          freshnessDemo === "failed"
-            ? freshnessDemo
-            : undefined,
-        fieldHide,
       }
     : null
 

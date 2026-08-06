@@ -20,7 +20,6 @@ import type {
   ImportObjectCode,
   ImportPipelineStage,
   IssueRowStatus,
-  ViewerRoleDemo,
 } from "@/features/import-opening/types"
 import {
   BATCH_STATUS_LABEL,
@@ -192,15 +191,6 @@ function mapConfirmResult(
   }
 }
 
-function roleMatchesScope(
-  role: ViewerRoleDemo,
-  scope: ImportConfirmationView["scope"]
-): boolean {
-  if (role === "WAREHOUSE_CONFIRMER") return scope === "WAREHOUSE"
-  if (role === "FINANCE_CONFIRMER") return scope === "FINANCE"
-  return false
-}
-
 function mapIssueCode(code?: string | null): ImportIssueCode {
   if (!code) return "MAPPING_CONFLICT"
   const u = code.toUpperCase()
@@ -269,7 +259,6 @@ function toListItem(
 function buildBatchView(
   batch: BackendBatchDetail,
   confirmations: BackendConfirmation[],
-  role: ViewerRoleDemo,
   env: ImportEnvironment
 ): ImportBatchView {
   const { status, stage } = mapBatchStatus(batch.status)
@@ -284,22 +273,9 @@ function buildBatchView(
       confirmedAt: c.decided_at != null ? instantToIso(c.decided_at) : undefined,
       trialVersion: String(c.trial_version),
       comment: c.comment ?? undefined,
-      inViewerResponsibility: roleMatchesScope(role, scope),
+      inViewerResponsibility: false,
     }
   })
-
-  const actionBlockers: Array<{
-    action: string
-    code: string
-    message: string
-  }> = []
-  if (role === "SYSTEM_ADMIN") {
-    actionBlockers.push({
-      action: "CONFIRM_SCOPE",
-      code: "ADMIN_CANNOT_CONFIRM",
-      message: "系统管理员只负责技术编排，不能代替责任部门作业务确认。",
-    })
-  }
 
   return {
     batchId: batch.id,
@@ -365,7 +341,7 @@ function buildBatchView(
     },
     openingPolicyHints: [],
     allowedActions: [],
-    actionBlockers,
+    actionBlockers: [],
     version: String(batch.version),
     updatedAt: instantToIso(batch.created_at),
     initiatorLabel: "—",
@@ -380,7 +356,7 @@ function environmentFromQuery(env: ImportEnvironment): ImportEnvironment {
 // ─── API ─────────────────────────────────────────────────────────────────────
 
 export async function fetchImportBatchList(
-  query: ImportBatchListQuery & { role?: ViewerRoleDemo }
+  query: ImportBatchListQuery
 ): Promise<ImportBatchListView> {
   const env = environmentFromQuery(query.environment)
   const backendStatus = toBackendStatusFilter(query.status)
@@ -434,9 +410,7 @@ export async function fetchImportBatchList(
 
 export async function fetchImportBatchDetail(input: {
   batchId: string
-  role?: ViewerRoleDemo
 }): Promise<ImportBatchView | null> {
-  const role = input.role ?? "SYSTEM_ADMIN"
   let batch: BackendBatchDetail
   try {
     batch = await apiGet<BackendBatchDetail>(
@@ -456,7 +430,7 @@ export async function fetchImportBatchDetail(input: {
   )
 
   // environment 后端无字段 — 默认 PRODUCTION 展示（缺口见 evidence）
-  return buildBatchView(batch, confPage.items, role, "PRODUCTION")
+  return buildBatchView(batch, confPage.items, "PRODUCTION")
 }
 
 export async function fetchImportIssues(
@@ -512,32 +486,6 @@ export async function fetchImportIssues(
     totalCount: rows.length,
     issueVersion: `issv-${query.batchId}-${page.page}`,
     queriedAt: asOf,
-  }
-}
-
-/** 演示：规则变化使旧确认失效 — 后端无专用接口 */
-export async function invalidateTrialByRuleChange(input: {
-  batchId: string
-  idempotencyKey: string
-}): Promise<FormalActionResponse> {
-  void input
-  return {
-    status: "failed",
-    code: "BACKEND_GAP_INVALIDATE_TRIAL",
-    message: "后端尚未提供试算/规则失效专用接口。",
-  }
-}
-
-/** 演示：创建修复批次 — 后端无专用接口 */
-export async function openRepairBatch(input: {
-  batchId: string
-  idempotencyKey: string
-}): Promise<FormalActionResponse & { repairBatchId?: string }> {
-  void input
-  return {
-    status: "failed",
-    code: "BACKEND_GAP_REPAIR_BATCH",
-    message: "后端尚未提供修复批次入口接口。",
   }
 }
 

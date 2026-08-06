@@ -565,13 +565,3 @@ export async function clearCustomerAcceptanceDraft(salesOrderId: string) {
   // 后端无「清除草稿」接口；草稿保留在服务端，客户端无操作。
   void salesOrderId
 }
-
-/** 演示：权限收回（P4 后无 session mock，保留 no-op 以兼容 UI 调试入口）。 */
-export function demoRevokeAcceptancePermission() {
-  // no-op：权限由后端 RBAC 判定
-}
-
-/** 演示：恢复权限（P4 后 no-op）。 */
-export function demoRestoreAcceptancePermission() {
-  // no-op
-}

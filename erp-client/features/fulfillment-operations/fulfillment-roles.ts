@@ -1,20 +1,14 @@
 /**
- * W09 演示角色。
+ * W09 岗位角色：仓储经办 / 采购经办。
  *
- * 沿用本仓库既有的 `demoRole` URL 参数模式（见 supplier-catalog / supplier-settlements）：
- * 接真实登录后只需把 `resolveRole` 的取值来源从 URL 换成会话身份，下游不用动。
- *
- * 类型可见性由 mock api 按角色过滤（不是前端拿到全量再隐藏），对齐工作面文档 §2.2。
+ * 角色取值来自岗位通道（lane），不做 URL 角色切换；可见作业类型由角色在
+ * `api.ts` 收敛（见工作面文档 §2.2），队列视图的 roleLabel / viewerLabel /
+ * canExecute 以接口返回为准。
  */
 
 import type { FulfillmentOperationType } from "@/features/fulfillment-operations/types"
-import { parseDemoRole } from "@/lib/demo-roles"
 
-export type FulfillmentRole =
-  | "warehouse"
-  | "procurement"
-  | "sales"
-  | "finance"
+export type FulfillmentRole = "warehouse" | "procurement"
 
 export type FulfillmentRoleDef = {
   value: FulfillmentRole
@@ -35,48 +29,19 @@ export const FULFILLMENT_ROLES: Record<FulfillmentRole, FulfillmentRoleDef> = {
   warehouse: {
     value: "warehouse",
     label: "仓储经办",
-    userLabel: "仓储 · 周航",
     types: ["RECEIPT", "WAREHOUSE_SHIP"],
     canExecute: true,
   },
   procurement: {
     value: "procurement",
     label: "采购经办",
-    userLabel: "采购 · 李采",
     types: ["SUPPLIER_DIRECT", "ELECTRONIC", "SERVICE"],
     canExecute: true,
-  },
-  sales: {
-    value: "sales",
-    label: "销售（只读）",
-    types: ["RECEIPT", "WAREHOUSE_SHIP", "SUPPLIER_DIRECT", "ELECTRONIC", "SERVICE"],
-    canExecute: false,
-  },
-  finance: {
-    value: "finance",
-    label: "财务（只读）",
-    types: ["RECEIPT", "WAREHOUSE_SHIP", "SUPPLIER_DIRECT", "ELECTRONIC", "SERVICE"],
-    canExecute: false,
   },
 }
 
 export const DEFAULT_FULFILLMENT_ROLE: FulfillmentRole = "warehouse"
 
-const FULFILLMENT_ROLE_KEYS = Object.keys(FULFILLMENT_ROLES) as FulfillmentRole[]
-
-export function resolveRole(raw: string | null): FulfillmentRoleDef {
-  const value = parseDemoRole(raw, FULFILLMENT_ROLE_KEYS)
-  return FULFILLMENT_ROLES[value ?? DEFAULT_FULFILLMENT_ROLE]
-}
-
-export const ROLE_OPTIONS = (
-  Object.keys(FULFILLMENT_ROLES) as FulfillmentRole[]
-).map((value) => ({ value, label: FULFILLMENT_ROLES[value].label }))
-
-/** 角色能不能看这个类型 */
-export function roleCanSee(
-  role: FulfillmentRoleDef,
-  type: FulfillmentOperationType
-): boolean {
-  return role.types.includes(type)
+export function resolveRole(raw: FulfillmentRole): FulfillmentRoleDef {
+  return FULFILLMENT_ROLES[raw]
 }

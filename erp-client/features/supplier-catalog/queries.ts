@@ -19,7 +19,6 @@ import {
 import type {
   CreateCompanyProductFromSupplierSkuInput,
   CreateSupplierCatalogItemInput,
-  DemoRole,
   PromoteSupplierProductInput,
   ReviseSupplierCatalogProductInput,
   SupplierCatalogQueueQuery,
@@ -29,8 +28,8 @@ export const supplierCatalogKeys = {
   all: ["supplier-catalog"] as const,
   queue: (query: SupplierCatalogQueueQuery) =>
     [...supplierCatalogKeys.all, "queue", query] as const,
-  center: (id: string, section: string, role: DemoRole, mask: boolean) =>
-    [...supplierCatalogKeys.all, "center", id, section, role, mask] as const,
+  center: (id: string, section: string) =>
+    [...supplierCatalogKeys.all, "center", id, section] as const,
   companySkuOptions: () => [...supplierCatalogKeys.all, "company-skus"] as const,
 }
 
@@ -95,25 +94,17 @@ export function useCreateCompanyProductFromSupplierSkuMutation() {
 export function useSupplierCatalogCenterQuery(input: {
   supplierProductId: string
   section?: string
-  demoRole?: DemoRole
-  maskCost?: boolean
   enabled?: boolean
 }) {
-  const role = input.demoRole ?? "procurement"
-  const mask = Boolean(input.maskCost)
   return useQuery({
     queryKey: supplierCatalogKeys.center(
       input.supplierProductId,
-      input.section ?? "overview",
-      role,
-      mask
+      input.section ?? "overview"
     ),
     queryFn: () =>
       fetchSupplierCatalogCenter({
         supplierProductId: input.supplierProductId,
         section: input.section,
-        demoRole: input.demoRole,
-        maskCost: input.maskCost,
       }),
     enabled: input.enabled !== false && Boolean(input.supplierProductId),
   })

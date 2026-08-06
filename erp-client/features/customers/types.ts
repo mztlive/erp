@@ -196,8 +196,6 @@ export type SaveCustomerRevisionInput = Readonly<{
   unifiedCreditCode?: string
   changeReason: string
   idempotencyKey: string
-  /** Demo: force conflict / unknown outcome. */
-  simulate?: "ok" | "conflict" | "unknown"
 }>
 
 export type SaveCustomerDetailsInput = Readonly<{
@@ -212,8 +210,6 @@ export type SaveCustomerDetailsInput = Readonly<{
   addresses: readonly CreateCustomerAddressInput[]
   bankAccounts: readonly CreateCustomerBankAccountInput[]
   idempotencyKey: string
-  /** Demo: force conflict / unknown outcome. */
-  simulate?: "ok" | "conflict" | "unknown"
 }>
 
 export type CreateCustomerContactInput = Readonly<{
@@ -248,7 +244,6 @@ export type CreateCustomerInput = Readonly<{
   addresses?: readonly CreateCustomerAddressInput[]
   bankAccounts?: readonly CreateCustomerBankAccountInput[]
   idempotencyKey: string
-  simulate?: "ok" | "conflict" | "unknown"
 }>
 
 export type CustomerMutationResult =

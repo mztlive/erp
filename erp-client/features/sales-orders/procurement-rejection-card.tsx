@@ -342,7 +342,7 @@ export function ProcurementRejectionCard({
             </p>
             <div className="rounded-lg border border-dashed border-border p-3">
               <p className="mb-2 text-xs font-medium text-muted-foreground">
-                演示模式（模拟领导决策）
+                领导决策
               </p>
               <div className="flex flex-wrap gap-2">
                 <Button
@@ -364,7 +364,7 @@ export function ProcurementRejectionCard({
                     })
                   }}
                 >
-                  领导通过（演示）
+                  领导通过
                 </Button>
                 <Button
                   type="button"
@@ -387,7 +387,7 @@ export function ProcurementRejectionCard({
                     })
                   }}
                 >
-                  领导驳回（演示）
+                  领导驳回
                 </Button>
               </div>
             </div>

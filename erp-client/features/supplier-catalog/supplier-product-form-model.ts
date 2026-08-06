@@ -5,7 +5,6 @@
  * 来源供给字段属于 supplier_catalog_sku_revision。
  */
 
-import { BASE_UNIT_DICTIONARY } from "@/features/master-data/resource-fields"
 import type {
   SupplierCatalogAttributeView,
   SupplierCatalogMediaUsage,
@@ -309,9 +308,11 @@ export function hydrateSupplierProductForm(input: {
   catalogSkus?: readonly CatalogSkuSeed[]
   categoryOptions?: readonly { categoryId: string; categoryName: string }[]
   brandOptions?: readonly { brandId: string; brandName: string }[]
+  /** 计量单位选项（来自 /admin/unit-of-measures）；缺省时按名称/代码匹配 */
+  unitOptions?: readonly { id: string; code: string; label: string }[]
 }): SupplierProductFormFields {
   const media = mediaFromRevision(input.revision.media)
-  const unit = BASE_UNIT_DICTIONARY.find(
+  const unit = input.unitOptions?.find(
     (candidate) =>
       candidate.label === input.revision.baseUnit ||
       candidate.code === input.revision.baseUnit,

@@ -10,17 +10,6 @@ export const MASTER_DATA_RESOURCES = [
   { key: "warehouses", label: "仓库" },
 ] as const
 
-/** W14 角色默认落地资源（对齐 docs/ui-workspaces/w14-basic-data.md §2）。 */
-export const MASTER_DATA_ROLE_DEFAULT: Readonly<
-  Record<string, MasterDataResource>
-> = {
-  procurement: "sellable-items",
-  operations: "voucher-categories",
-  warehouse: "warehouses",
-  finance: "suppliers",
-  sales: "sellable-items",
-}
-
 export type MasterDataResource =
   (typeof MASTER_DATA_RESOURCES)[number]["key"]
 
@@ -144,18 +133,6 @@ export type MasterDataListResult = Readonly<{
     value: number
     detail?: string
   }[]
-  /** Demo: module/resource/field/action permission snapshot. */
-  permissionDemo: PermissionDemoSnapshot
-}>
-
-export type PermissionDemoSnapshot = Readonly<{
-  hasModuleAccess: boolean
-  resourceAccess: Record<MasterDataResource, boolean>
-  canExport: boolean
-  /** Role label for demos (采购 / 运营 / 仓储 / 销售 / 财务). */
-  roleLabel: string
-  /** Field-level: whether sensitive fields may be revealed. */
-  canRevealSensitive: boolean
 }>
 
 export type RevisionTimelineEntry = Readonly<{
@@ -327,7 +304,7 @@ export type ProductDetailView = Readonly<{
 }>
 
 /**
- * mock 落库的 `sku_revision` 记录：公司 SKU 修订。
+ * `sku_revision` 记录：公司 SKU 修订。
  * `salesVisiblePriceGross` 是公司对销售可见的含税价；供应商成本、供给模式等
  * 归 W21 `supplier_offering_revision`，绝不写入 SKU 修订。
  */
@@ -374,7 +351,7 @@ export type CategoryFields = Readonly<{
 /** 品牌字典：稳定代码 + 名称（name 在通用字段）+ 可选 Logo。 */
 export type BrandFields = Readonly<{
   code: string
-  /** 品牌 Logo 文件名（演示）；正式为 file_asset 引用。 */
+  /** 品牌 Logo 文件名；正式为 file_asset 引用。 */
   logo?: string
 }>
 
@@ -432,7 +409,6 @@ export type CreateMasterDataInput = Readonly<{
   changeReason: string
   fields: MasterDataResourceFields[MasterDataResource]
   idempotencyKey: string
-  simulate?: "ok" | "overlap" | "base_unit" | "warehouse_stock"
 }>
 
 export type CreateRevisionInput = Readonly<{
@@ -446,7 +422,6 @@ export type CreateRevisionInput = Readonly<{
   changeReason: string
   fields: MasterDataResourceFields[MasterDataResource]
   idempotencyKey: string
-  simulate?: "ok" | "overlap" | "base_unit" | "conflict"
 }>
 
 export type DisableMasterDataInput = Readonly<{
@@ -457,7 +432,6 @@ export type DisableMasterDataInput = Readonly<{
   changeReason: string
   effectiveFrom: string
   idempotencyKey: string
-  simulate?: "ok" | "warehouse_stock" | "conflict"
 }>
 
 export type MasterDataMutationResult =

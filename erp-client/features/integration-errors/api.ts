@@ -635,9 +635,7 @@ export async function applyIntegrationTaskAction(
   const version = Number(input.expectedWorkItemVersion) || 1
 
   if (input.kind === "QUERY_ORIGINAL_RESULT") {
-    const outcome = input.forceUnknown
-      ? "result_unknown"
-      : "no_result_confirmed"
+    const outcome = "no_result_confirmed"
     await apiPost(
       `/admin/integration/error-tasks/${encodeURIComponent(input.itemId)}/query`,
       {
@@ -647,18 +645,12 @@ export async function applyIntegrationTaskAction(
       }
     )
     return {
-      status: outcome === "result_unknown" ? "unknown" : "succeeded",
-      title:
-        outcome === "result_unknown"
-          ? "查询后仍结果未知"
-          : "查询原结果：明确无结果",
+      status: "succeeded",
+      title: "查询原结果：明确无结果",
       description:
-        outcome === "result_unknown"
-          ? "不得按成功处理，不得自动下一项；可再次查询或转交。"
-          : "已确认无结果；可按原任务号开放重新提交（若服务端允许）。",
+        "已确认无结果；可按原任务号开放重新提交（若服务端允许）。",
       reference: input.operationId,
-      outcome:
-        outcome === "result_unknown" ? "RESULT_UNKNOWN" : "NO_RESULT_CONFIRMED",
+      outcome: "NO_RESULT_CONFIRMED",
       workItemStatus: "IN_PROGRESS",
       stayOnItem: true,
       terminal: false,

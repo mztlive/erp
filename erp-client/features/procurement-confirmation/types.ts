@@ -1,4 +1,4 @@
-/** W07 采购二次确认 · 客户端契约类型（对齐工作面文档 §8，mock 语义）。 */
+/** W07 采购二次确认 · 客户端契约类型（对齐工作面文档 §8）。 */
 
 export type FulfillmentMode =
   | "WAREHOUSE"

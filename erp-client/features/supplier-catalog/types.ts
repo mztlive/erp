@@ -7,10 +7,6 @@ import type { ProductKind } from "@/features/master-data/types"
 
 export type ChangeType = "NEW" | "CHANGED" | "STOPPED" | "ERROR" | "UNCHANGED"
 
-export type DemoRole = "procurement" | "operations" | "admin" | "ops_tech"
-
-export type CostFieldVisibility = "visible" | "masked"
-
 export type SupplierCatalogSourceType = "EXCEL" | "API" | "MANUAL"
 
 export type SupplierCatalogMediaUsage =
@@ -61,9 +57,7 @@ export type SupplierProductRevisionView = Readonly<{
   barcode?: string
   attributes?: readonly SupplierCatalogAttributeView[]
   media?: readonly SupplierCatalogMediaView[]
-  /**
-   * 一件代发底价（含税运）；无成本权时 API 可返回 null 并由 UI 掩码。
-   */
+  /** 一件代发底价（含税运） */
   dropshipFloorPriceGross: string | null
   /** 集采底价（含税） */
   bulkFloorPriceGross: string | null
@@ -289,7 +283,6 @@ export type SupplierCatalogItemBase = {
     message: string
     destinationWorkspaceId?: string
   }>
-  costFieldVisibility: CostFieldVisibility
 }
 
 export type SupplierCatalogItemView =
@@ -327,10 +320,6 @@ export type SupplierCatalogQueueQuery = {
   currentWorkItemId?: string
   pageSize?: number
   sort?: string
-  /** demo 角色切换 */
-  demoRole?: DemoRole
-  /** demo：无成本字段权限 */
-  maskCost?: boolean
   status?: "pending" | "held"
 }
 
@@ -376,15 +365,11 @@ export type SupplierCatalogQueueView = Readonly<{
   items: readonly SupplierCatalogItemView[]
   current?: SupplierCatalogItemView
   emptyReason?: "NO_TASKS" | "FILTER_NO_RESULT" | "NO_DATA_SCOPE"
-  role: DemoRole
-  costFieldVisibility: CostFieldVisibility
 }>
 
 export type SupplierCatalogCenterView = Readonly<{
   item: SupplierCatalogItemView
   section: string
-  role: DemoRole
-  costFieldVisibility: CostFieldVisibility
   related: {
     publications: readonly {
       id: string
@@ -674,13 +659,6 @@ export const CHANGE_TYPE_LABEL: Record<ChangeType, string> = {
   UNCHANGED: "无变化",
 }
 
-export const DEMO_ROLE_LABEL: Record<DemoRole, string> = {
-  procurement: "采购",
-  operations: "运营",
-  admin: "系统管理员",
-  ops_tech: "研发运维",
-}
-
 export const HOLD_REASON_OPTIONS = [
   { value: "NEED_CLARIFICATION", label: "需澄清规格/映射" },
   { value: "WAITING_SOURCE", label: "等待来源修复" },
@@ -700,5 +678,3 @@ export const REGISTRATION_BLOCKER_MESSAGE =
 
 export const RECOVERY_BLOCKER_MESSAGE =
   "替代供给选定人与恢复发布责任链尚未确认。系统按保守策略处理：可准备候选证据，但不得选定替代供给或从供应商商品库发起商品发布恢复。"
-
-export const COST_MASK = "***"

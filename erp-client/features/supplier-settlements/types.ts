@@ -5,12 +5,6 @@
 
 import type { StatusTone } from "@/components/ui/status-badge"
 
-export type DemoRole =
-  | "finance_prep"
-  | "finance_review"
-  | "procurement"
-  | "manager"
-
 export type SettlementView =
   | "pending"
   | "prepared_by_me"
@@ -92,23 +86,6 @@ export type ActorView = {
   displayName: string
 }
 
-export type PeriodPolicyView =
-  | {
-      state: "CONFIGURED"
-      policyId: string
-      policyVersion: string
-      timezone: string
-      selectablePeriods: Array<{
-        periodStart: string
-        periodEnd: string
-        label: string
-      }>
-    }
-  | {
-      state: "UNCONFIGURED"
-      blocker: ActionBlocker
-    }
-
 export type SettlementListRow = {
   statementId: string
   statementNo: string
@@ -154,14 +131,10 @@ export type SettlementListView = {
     pendingReview: number
     confirmedAmount: string
   }
-  periodPolicy: PeriodPolicyView
   suppliers: Array<{ supplierId: string; supplierName: string }>
   emptyReason?: EmptyReason
   hasModulePermission: boolean
   hasDataScope: boolean
-  viewerRole: DemoRole
-  viewerRoleLabel: string
-  viewerUserId: string
   permissionVersion: string
   sourceAsOf: string
   queriedAt: string
@@ -316,7 +289,6 @@ export type SettlementDetailView = {
     subjectHash: string
     claimedBy?: ActorView
   }
-  periodPolicy: PeriodPolicyView
   auditEvents: AuditEventView[]
   allowedActions: string[]
   actionBlockers: ActionBlocker[]
@@ -326,9 +298,6 @@ export type SettlementDetailView = {
     w26ProjectionUpdatedAt?: string
     queriedAt: string
   }
-  viewerRole: DemoRole
-  viewerRoleLabel: string
-  viewerUserId: string
   canEditBillOrOrder: false
 }
 
@@ -354,9 +323,6 @@ export type CreateDraftInput = {
   supplierId: string
   periodStart: string
   periodEnd: string
-  periodPolicyId: string
-  expectedPeriodPolicyVersion: string
-  role: DemoRole
   requestId: string
   idempotencyKey: string
 }
@@ -365,7 +331,6 @@ export type RefreshDraftInput = {
   statementId: string
   expectedLockVersion: number
   expectedSourceSnapshotHash: string
-  role: DemoRole
   requestId: string
   idempotencyKey: string
 }
@@ -376,7 +341,6 @@ export type AppendEvidenceInput = {
   expectedDifferenceVersion: number
   opinionCode?: string
   comment?: string
-  role: DemoRole
   requestId: string
   idempotencyKey: string
 }
@@ -388,7 +352,6 @@ export type ResolveDifferenceInput = {
   expectedDifferenceVersion: number
   resolution: DifferenceResolution
   reasonCode: string
-  role: DemoRole
   operationId: string
   idempotencyKey: string
 }
@@ -397,7 +360,6 @@ export type SubmitReviewInput = {
   statementId: string
   expectedLockVersion: number
   subjectHash: string
-  role: DemoRole
   operationId: string
   idempotencyKey: string
   comment?: string
@@ -409,19 +371,11 @@ export type ReviewDecisionInput = {
   expectedSubjectVersion: string
   expectedLockVersion: number
   action: "REJECT" | "CONFIRM"
-  role: DemoRole
   operationId: string
   idempotencyKey: string
   reasonCode?: string
   comment?: string
   forceUnknown?: boolean
-}
-
-export const DEMO_ROLE_LABEL: Record<DemoRole, string> = {
-  finance_prep: "财务经办",
-  finance_review: "财务复核",
-  procurement: "采购",
-  manager: "管理层（只读）",
 }
 
 export const STATUS_LABEL: Record<SettlementStatus, string> = {
@@ -510,37 +464,4 @@ export const REASON_CODE_LABEL: Record<string, string> = {
   ACCEPT_BILL: "接受供应商账单",
   NO_BUSINESS_IMPACT: "无需业务调整",
   COMPENSATED_ELSEWHERE: "已另行补偿",
-}
-
-export const ACTORS = {
-  prep: { userId: "u_finance_prep", displayName: "李经办" },
-  review: { userId: "u_finance_review", displayName: "王复核" },
-  procurement: { userId: "u_procurement", displayName: "赵采购" },
-  manager: { userId: "u_manager", displayName: "陈总" },
-} as const
-
-export function roleToUserId(role: DemoRole): string {
-  switch (role) {
-    case "finance_prep":
-      return ACTORS.prep.userId
-    case "finance_review":
-      return ACTORS.review.userId
-    case "procurement":
-      return ACTORS.procurement.userId
-    case "manager":
-      return ACTORS.manager.userId
-  }
-}
-
-export function roleToActor(role: DemoRole): ActorView {
-  switch (role) {
-    case "finance_prep":
-      return { ...ACTORS.prep }
-    case "finance_review":
-      return { ...ACTORS.review }
-    case "procurement":
-      return { ...ACTORS.procurement }
-    case "manager":
-      return { ...ACTORS.manager }
-  }
 }

@@ -34,8 +34,6 @@ export type RefundStatus =
 
 export type ListView = "actionable" | "all" | "recent_completed"
 
-export type DemoRole = "procurement" | "cs" | "ops" | "finance" | "admin"
-
 export type OrderSection =
   | "overview"
   | "items"
@@ -124,14 +122,6 @@ export const VIEW_LABEL: Record<ListView, string> = {
   actionable: "可操作",
   all: "全部",
   recent_completed: "最近完成",
-}
-
-export const DEMO_ROLE_LABEL: Record<DemoRole, string> = {
-  procurement: "采购",
-  cs: "客服",
-  ops: "运营",
-  finance: "财务",
-  admin: "管理员",
 }
 
 export const SECTION_LABEL: Record<OrderSection, string> = {
@@ -233,7 +223,6 @@ export type SupplierOrderListQuery = {
   paidTo?: string
   page: number
   pageSize: number
-  role: DemoRole
   /** 售后待处理快捷筛选（与指标口径一致：取消/退款异常态任一命中） */
   aftersalePending?: boolean
   sortBy?: "orderNo" | "mallOrderNo" | "externalOrderNo" | "lastBusinessAt"
@@ -261,8 +250,6 @@ export type SupplierOrderListRow = {
   updatedAt: string
   lastBusinessAt: string
   errorSummary?: string
-  /** 下单成本合计（含税）；无成本字段权限时为 null */
-  costGross?: string | null
   /** 商品明细行数 */
   itemCount: number
   allowedActions: string[]
@@ -381,7 +368,6 @@ export type AfterSalesTrackView = {
 }
 
 export type CostView = {
-  costMasked: boolean
   cumulativeCostGross: string | null
   cumulativeCostNet: string | null
   costSource: string
@@ -495,7 +481,6 @@ export type SupplierOrderDetailView = {
   allowedActions: string[]
   actionBlockers: ActionBlocker[]
   freshness: { updatedAt: string; state: "fresh" | "stale" }
-  role: DemoRole
 }
 
 export type FormalActionResponse<T = unknown> = {
@@ -516,7 +501,6 @@ export type QueryResultInput = {
   workItemId?: string
   expectedSubjectVersion?: string
   expectedSubjectHash?: string
-  simulateUnknown?: boolean
 }
 
 export type QueryResultData = {
@@ -609,5 +593,3 @@ export const DEFER_REASON_OPTIONS = [
   { value: "NEED_CLARIFICATION", label: "需业务澄清" },
   { value: "OTHER", label: "其他" },
 ] as const
-
-export const COST_MASK = "•••"

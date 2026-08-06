@@ -18,7 +18,6 @@ import {
   submitAfterSalesAction,
 } from "@/features/supplier-orders/api"
 import type {
-  DemoRole,
   ExportCommand,
   SupplierOrderListQuery,
 } from "@/features/supplier-orders/types"
@@ -27,12 +26,11 @@ export const supplierOrderKeys = {
   all: ["supplier-orders"] as const,
   list: (query: SupplierOrderListQuery) =>
     [...supplierOrderKeys.all, "list", query] as const,
-  detail: (orderId: string, role: DemoRole) =>
+  detail: (orderId: string) =>
     [
       ...supplierOrderKeys.all,
       "detail",
       orderId,
-      role,
     ] as const,
 }
 
@@ -45,16 +43,13 @@ export function useSupplierOrdersQuery(query: SupplierOrderListQuery) {
 
 export function useSupplierOrderDetailQuery(input: {
   orderId: string
-  role?: DemoRole
   enabled?: boolean
 }) {
-  const role = input.role ?? "procurement"
   return useQuery({
-    queryKey: supplierOrderKeys.detail(input.orderId, role),
+    queryKey: supplierOrderKeys.detail(input.orderId),
     queryFn: () =>
       fetchSupplierOrderDetail({
         orderId: input.orderId,
-        role,
       }),
     enabled: input.enabled !== false && Boolean(input.orderId),
   })

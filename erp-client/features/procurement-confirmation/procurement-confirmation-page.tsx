@@ -29,8 +29,8 @@ import {
   SupplierCombobox,
   ValidationSummary,
 } from "@/components/business"
-import { PROCUREMENT_SUPPLIER_OPTIONS } from "@/lib/business-options"
 import { formatDateTime } from "@/lib/datetime"
+import { useSupplierOptionsQuery } from "@/hooks/use-options"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -140,7 +140,7 @@ export function ProcurementConfirmationPage() {
     searchParams.get("from") === "W02" && Boolean(currentWorkItemId)
   const queueContextId =
     searchParams.get("queueContextId") ??
-    `queue:procurement-confirmation:demo:${scope}`
+    `queue:procurement-confirmation:${scope}`
 
   // autoNext：显式 URL 优先；否则会话默认 true；不写 localStorage
   const autoNextExplicit = searchParams.get("autoNext")
@@ -169,6 +169,7 @@ export function ProcurementConfirmationPage() {
   const saveMutation = useSaveProcurementConfirmationMutation()
   const completeMutation = useCompleteProcurementMutation()
   const deferMutation = useDeferProcurementMutation()
+  const { data: supplierOptions } = useSupplierOptionsQuery()
 
   const view = queueQuery.data
   const tasks = React.useMemo(() => view?.tasks ?? [], [view?.tasks])
@@ -1265,12 +1266,12 @@ export function ProcurementConfirmationPage() {
                                       key={line.lineKey}
                                       className="border-b border-border last:border-0"
                                     >
-                                      <td className="px-3 py-2">
+                                       <td className="px-3 py-2">
                                         <SupplierCombobox
                                           value={line.supplierId || undefined}
                                           onValueChange={(id) => {
                                             const next =
-                                              PROCUREMENT_SUPPLIER_OPTIONS.find(
+                                              supplierOptions?.find(
                                                 (s) => s.supplierId === id
                                               )
                                             updateLine(line.lineKey, {
@@ -1282,7 +1283,7 @@ export function ProcurementConfirmationPage() {
                                                 line.capabilitySummary,
                                             })
                                           }}
-                                          suppliers={PROCUREMENT_SUPPLIER_OPTIONS}
+                                          suppliers={supplierOptions ?? []}
                                           disabled={formalPending}
                                           placeholder="选择供应商"
                                           className="min-w-[12rem]"

@@ -5,8 +5,6 @@
 
 import type { StatusTone } from "@/components/ui/status-badge"
 
-export type DemoRole = "procurement" | "ops" | "admin"
-
 export type ConnectionEnvironment = "DEVELOPMENT" | "STAGING" | "PRODUCTION"
 
 export type ConnectionStatus = "ENABLED" | "DISABLED" | "FAULTED" | "PENDING_CONFIG"
@@ -225,8 +223,6 @@ export type ConnectionListView = {
   page: number
   pageSize: number
   emptyReason?: EmptyReason
-  viewerRole: DemoRole
-  viewerRoleLabel: string
   hasModulePermission: boolean
   hasDataScope: boolean
   projectedAt: string
@@ -277,12 +273,6 @@ export type FormalOutcome =
       jobId: string
       jobNo: string
     }
-
-export const DEMO_ROLE_LABEL: Record<DemoRole, string> = {
-  procurement: "采购",
-  ops: "研发运维",
-  admin: "系统管理员",
-}
 
 export const ENVIRONMENT_LABEL: Record<ConnectionEnvironment, string> = {
   DEVELOPMENT: "开发",

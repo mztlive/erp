@@ -87,7 +87,6 @@ import {
   useSubmitReviewMutation,
 } from "@/features/supplier-settlements/queries"
 import type {
-  DemoRole,
   DifferenceResolution,
   FormalOutcome,
   SettlementDifferenceView,
@@ -96,7 +95,6 @@ import type {
 } from "@/features/supplier-settlements/types"
 import {
   AUDIT_ACTION_LABEL,
-  DEMO_ROLE_LABEL,
   DIFF_TYPE_LABEL,
   REASON_CODE_LABEL,
   RESOLUTION_LABEL,
@@ -112,8 +110,6 @@ import {
 } from "@/features/supplier-settlements/url-state"
 import { openWorkspaceLabel } from "@/lib/ui-text"
 import { type ResultState } from "@/components/business/feedback"
-import { RoleDemoBar } from "@/components/business/role-demo-bar"
-import type { ComboboxOption } from "@/components/business/option-combobox"
 
 function outcomeToResult(outcome: FormalOutcome): ResultState {
   const w12Href = outcome.payableNo
@@ -188,8 +184,6 @@ export function SupplierSettlementsPage() {
         const base = `/supplier-api/settlements/${pathStatementId}`
         const params = new URLSearchParams()
         if (next.section !== "overview") params.set("section", next.section)
-        if (next.role !== "finance_prep") params.set("role", next.role)
-        if (next.demoFlag) params.set("demoFlag", next.demoFlag)
         if (next.returnTo) params.set("returnTo", next.returnTo)
         const qs = params.toString()
         router.replace(qs ? `${base}?${qs}` : base, { scroll: false })
@@ -254,33 +248,6 @@ function CrossEntryBanner({ returnTo }: { returnTo: string }) {
   )
 }
 
-const SETTLEMENT_ROLE_OPTIONS: ComboboxOption[] = [
-  { value: "finance_prep", label: "财务经办" },
-  { value: "finance_review", label: "财务复核" },
-  { value: "procurement", label: "采购" },
-  { value: "manager", label: "管理层只读" },
-]
-
-const SETTLEMENT_FLAG_OPTIONS: ComboboxOption[] = [
-  { value: "normal", label: "正常权限" },
-  { value: "no-permission", label: "无模块权限" },
-  { value: "no-scope", label: "无数据范围" },
-  { value: "policy-missing", label: "期间策略缺失" },
-]
-
-const settlementRoleHint = (role: DemoRole) => (
-  <>
-    当前：{DEMO_ROLE_LABEL[role]}
-    {role === "procurement"
-      ? " · 仅证据，不可结论/确认"
-      : role === "finance_prep"
-        ? " · 经办结论与提交复核，不可自审"
-        : role === "finance_review"
-          ? " · 另一人确认/驳回"
-          : " · 只读进度"}
-  </>
-)
-
 function SettlementList({
   urlState,
   patchUrl,
@@ -315,8 +282,6 @@ function SettlementList({
     q: urlState.q,
     page: urlState.page,
     pageSize: 50,
-    role: urlState.role,
-    demoFlag: urlState.demoFlag,
   })
 
   const data = listQuery.data
@@ -515,52 +480,27 @@ function SettlementList({
     [onOpen, patchUrl]
   )
 
-  const policy = data?.periodPolicy
   const canCreate =
-    urlState.role === "finance_prep" &&
-    policy?.state === "CONFIGURED" &&
-    data?.hasModulePermission &&
-    data?.hasDataScope
+    data?.hasModulePermission && data?.hasDataScope
 
   const createSchema = z.object({
     supplierId: z.string().min(1, "请选择供应商"),
-    periodKey: z.string().min(1, "请选择策略返回的完整期间"),
+    periodStart: z.string().min(1, "请选择期间起"),
+    periodEnd: z.string().min(1, "请选择期间止"),
   })
 
   const form = useAppForm({
     defaultValues: {
       supplierId: "",
-      periodKey: "",
+      periodStart: "",
+      periodEnd: "",
     },
     validators: { onChange: createSchema },
     onSubmit: async ({ value }) => {
-      if (!policy || policy.state !== "CONFIGURED") {
-        setResult({
-          status: "blocked",
-          title: "期间策略未配置",
-          description:
-            "结算期间策略未配置，暂不能新建草稿。请先完成供应商结算期间策略配置。",
-        })
-        return
-      }
-      const period = policy.selectablePeriods.find(
-        (p) => `${p.periodStart}|${p.periodEnd}` === value.periodKey
-      )
-      if (!period) {
-        setResult({
-          status: "blocked",
-          title: "期间无效",
-          description: "必须选择策略返回的完整周期",
-        })
-        return
-      }
       const outcome = await createMutation.mutateAsync({
         supplierId: value.supplierId,
-        periodStart: period.periodStart,
-        periodEnd: period.periodEnd,
-        periodPolicyId: policy.policyId,
-        expectedPeriodPolicyVersion: policy.policyVersion,
-        role: urlState.role,
+        periodStart: value.periodStart,
+        periodEnd: value.periodEnd,
         requestId: newKey("req"),
         idempotencyKey: newKey("create"),
       })
@@ -632,13 +572,9 @@ function SettlementList({
                 size="sm"
                 disabled={!canCreate}
                 reason={
-                  !canCreate
-                    ? urlState.role !== "finance_prep"
-                      ? "仅财务经办可新建结算草稿"
-                      : policy?.state === "UNCONFIGURED"
-                        ? "结算期间策略未配置，暂不能新建"
-                        : undefined
-                    : undefined
+                  canCreate
+                    ? undefined
+                    : "当前账号无模块权限或数据范围"
                 }
                 onClick={() => setCreateOpen(true)}
               >
@@ -651,28 +587,6 @@ function SettlementList({
       />
 
       {returnTo ? <CrossEntryBanner returnTo={returnTo} /> : null}
-
-      <RoleDemoBar
-        role={urlState.role}
-        demoFlag={urlState.demoFlag}
-        onRole={(r) => patchUrl({ role: r })}
-        onFlag={(f) => patchUrl({ demoFlag: f })}
-        roleOptions={SETTLEMENT_ROLE_OPTIONS}
-        roleClassName="w-[10rem]"
-        flagOptions={SETTLEMENT_FLAG_OPTIONS}
-        flagClassName="w-[12rem]"
-        hintFor={settlementRoleHint}
-      />
-
-      {policy?.state === "UNCONFIGURED" ? (
-        <Alert variant="warning">
-          <AlertTitle>期间策略未配置</AlertTitle>
-          <AlertDescription>
-            {policy.blocker.message}
-            列表仍可显式查询历史结算单，但新建草稿入口已关闭。
-          </AlertDescription>
-        </Alert>
-      ) : null}
 
       {result ? (
         <FormalActionResult
@@ -927,19 +841,7 @@ function SettlementList({
         table={
           empty ? (
             <div className="p-6">
-              {empty === "NO_PERMISSION" ? (
-                <BusinessEmptyState
-                  kind="no-scope"
-                  title="无模块权限"
-                  description="当前账号没有 API 供应商结算模块权限，入口应隐藏；此处为演示空态，不以 0 单据伪装。"
-                />
-              ) : empty === "NO_SCOPE" ? (
-                <BusinessEmptyState
-                  kind="no-scope"
-                  title="无数据范围"
-                  description="已授权模块但当前组织/供应商范围为空。请申请数据范围后重查，不以 0 条结算单伪装。"
-                />
-              ) : empty === "FILTER_NO_RESULT" ? (
+              {empty === "FILTER_NO_RESULT" ? (
                 <BusinessEmptyState
                   kind="filter"
                   title="当前筛选无结果"
@@ -969,11 +871,7 @@ function SettlementList({
                 <BusinessEmptyState
                   kind="no-data"
                   title="当前范围没有结算单"
-                  description={
-                    policy?.state === "CONFIGURED"
-                      ? "期间策略已配置，可由财务经办新建结算草稿。"
-                      : "策略缺失时仅可查询历史；请先完成期间策略配置。"
-                  }
+                  description="可选择供应商与期间后重查，或新建结算草稿。"
                   action={
                     canCreate ? (
                       <Button type="button" onClick={() => setCreateOpen(true)}>
@@ -1124,74 +1022,73 @@ function SettlementList({
           <DialogHeader>
             <DialogTitle>新建结算草稿</DialogTitle>
             <DialogDescription>
-              必须引用系统当前供应商结算期间策略及版本，并选择其返回的完整周期；策略缺失或版本过期时将拒绝创建。
+              选择供应商与结算期间，创建后进入待对账。
             </DialogDescription>
           </DialogHeader>
-          {policy?.state !== "CONFIGURED" ? (
-            <Alert variant="destructive">
-              <AlertTitle>无法创建</AlertTitle>
-              <AlertDescription>
-                结算期间策略未配置，暂不能新建草稿。
-              </AlertDescription>
-            </Alert>
-          ) : (
-            <form
-              className="space-y-3"
-              onSubmit={(e) => {
-                e.preventDefault()
-                void form.handleSubmit()
-              }}
-            >
-              <form.AppField
-                name="supplierId"
-                children={(field) => (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="supplierId">供应商</Label>
-                    <SupplierCombobox
-                      value={field.state.value || undefined}
-                      onValueChange={(id) => field.handleChange(id ?? "")}
-                      suppliers={data?.suppliers ?? []}
-                      placeholder="请选择供应商"
-                    />
-                  </div>
-                )}
-              />
-              <form.AppField
-                name="periodKey"
-                children={(field) => (
-                  <div className="space-y-1.5">
-                    <Label htmlFor="periodKey">结算期间（策略周期）</Label>
-                    <OptionCombobox
-                      id="periodKey"
-                      value={field.state.value || null}
-                      onValueChange={(v) => field.handleChange(v ?? "")}
-                      options={[
-                        { value: "", label: "请选择" },
-                        ...policy.selectablePeriods.map((p) => ({
-                          value: `${p.periodStart}|${p.periodEnd}`,
-                          label: p.label,
-                        })),
-                      ]}
-                      placeholder="请选择"
-                      allowClear={false}
-                    />
-                  </div>
-                )}
-              />
-              <DialogFooter>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setCreateOpen(false)}
-                >
-                  取消
-                </Button>
-                <form.AppForm>
-                  <form.SubmitButton label="确认创建草稿" />
-                </form.AppForm>
-              </DialogFooter>
-            </form>
-          )}
+          <form
+            className="space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault()
+              void form.handleSubmit()
+            }}
+          >
+            <form.AppField
+              name="supplierId"
+              children={(field) => (
+                <div className="space-y-1.5">
+                  <Label htmlFor="supplierId">供应商</Label>
+                  <SupplierCombobox
+                    value={field.state.value || undefined}
+                    onValueChange={(id) => field.handleChange(id ?? "")}
+                    suppliers={data?.suppliers ?? []}
+                    placeholder="请选择供应商"
+                  />
+                </div>
+              )}
+            />
+            <form.AppField
+              name="periodStart"
+              children={(field) => (
+                <div className="space-y-1.5">
+                  <Label htmlFor="periodStart">期间起</Label>
+                  <DatePicker
+                    className="w-full"
+                    value={field.state.value || undefined}
+                    onValueChange={(next) =>
+                      field.handleChange(next ?? "")
+                    }
+                  />
+                </div>
+              )}
+            />
+            <form.AppField
+              name="periodEnd"
+              children={(field) => (
+                <div className="space-y-1.5">
+                  <Label htmlFor="periodEnd">期间止</Label>
+                  <DatePicker
+                    className="w-full"
+                    value={field.state.value || undefined}
+                    onValueChange={(next) =>
+                      field.handleChange(next ?? "")
+                    }
+                  />
+                </div>
+              )}
+            />
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setCreateOpen(false)}
+              >
+                取消
+              </Button>
+              <form.AppForm>
+                <form.SubmitButton label="确认创建草稿" />
+              </form.AppForm>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </div>
@@ -1211,7 +1108,7 @@ function SettlementCenter({
   returnTo?: string
   onBack: () => void
 }) {
-  const detailQuery = useSettlementDetailQuery(statementId, urlState.role)
+  const detailQuery = useSettlementDetailQuery(statementId)
   const refreshMutation = useRefreshTrialMutation()
   const resolveMutation = useResolveDifferenceMutation()
   const evidenceMutation = useAppendEvidenceMutation()
@@ -1331,7 +1228,6 @@ function SettlementCenter({
         statementId: st.id,
         expectedLockVersion: st.lockVersion,
         expectedSourceSnapshotHash: st.sourceSnapshotHash,
-        role: urlState.role,
         requestId: newKey("req"),
         idempotencyKey: newKey("refresh"),
       })
@@ -1356,7 +1252,6 @@ function SettlementCenter({
         expectedDifferenceVersion: activeDiff.version,
         resolution,
         reasonCode,
-        role: urlState.role,
         operationId: newKey("op"),
         idempotencyKey: newKey("resolve"),
       })
@@ -1381,7 +1276,6 @@ function SettlementCenter({
         expectedDifferenceVersion: activeDiff.version,
         opinionCode: "PROCUREMENT_NOTE",
         comment: evidenceComment,
-        role: urlState.role,
         requestId: newKey("req"),
         idempotencyKey: newKey("ev"),
       })
@@ -1405,7 +1299,6 @@ function SettlementCenter({
       statementId: st.id,
       expectedLockVersion: st.lockVersion,
       subjectHash: st.subjectHash ?? `sh_${st.id}`,
-      role: urlState.role,
       operationId: newKey("op"),
       idempotencyKey: newKey("submit"),
     })
@@ -1431,7 +1324,6 @@ function SettlementCenter({
       expectedSubjectVersion: detail.workItem.subjectVersion,
       expectedLockVersion: st.lockVersion,
       action: "CONFIRM",
-      role: urlState.role,
       operationId: newKey("op"),
       idempotencyKey: newKey("confirm"),
     })
@@ -1450,7 +1342,6 @@ function SettlementCenter({
       expectedSubjectVersion: detail.workItem.subjectVersion,
       expectedLockVersion: st.lockVersion,
       action: "REJECT",
-      role: urlState.role,
       operationId: newKey("op"),
       idempotencyKey: newKey("reject"),
       reasonCode: rejectReason || "NEEDS_MORE_EVIDENCE",
@@ -1491,14 +1382,6 @@ function SettlementCenter({
       />
 
       {returnTo ? <CrossEntryBanner returnTo={returnTo} /> : null}
-
-      <RoleDemoBar
-        role={urlState.role}
-        onRole={(r) => patchUrl({ role: r })}
-        roleOptions={SETTLEMENT_ROLE_OPTIONS}
-        roleClassName="w-[10rem]"
-        hintFor={settlementRoleHint}
-      />
 
       <DocumentHeader
         density="compact"
@@ -1802,61 +1685,45 @@ function SettlementCenter({
       </p>
 
       {section === "overview" ? (
-        <div className="grid gap-4 lg:grid-cols-2">
-          <Card size="sm">
-            <CardHeader className="border-b py-3">
-              <CardTitle className="text-base">概览</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 pt-4 text-sm">
-              <p>
-                供应商：{st.supplierName}（记录时，不受后续更名影响）
-              </p>
-              <p className="num">
-                期间：{st.periodStart} ~ {st.periodEnd}
-              </p>
-              <p>状态：{st.statusLabel}</p>
-              <p>
-                未决阻断差异：{detail.differenceSummary.blocking} / 差异合计{" "}
-                {detail.differenceSummary.total}
-              </p>
-              <p className="text-muted-foreground">
-                账单/订单/成本原值只读，不可在本页改写以消差。
-              </p>
-              <div className="flex flex-wrap gap-2 pt-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => patchUrl({ section: "differences" })}
-                >
-                  打开差异处理
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={() => patchUrl({ section: "items" })}
-                >
-                  查看结算明细
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-          <Card size="sm">
-            <CardHeader className="border-b py-3">
-              <CardTitle className="text-base">岗位与权限</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 pt-4 text-sm">
-              <p>当前角色：{detail.viewerRoleLabel}</p>
-              <p>采购：仅追加证据，不能结论/确认</p>
-              <p>财务经办：差异结论与提交复核</p>
-              <p>财务复核：须为不同人，确认后形成应付</p>
-              <p className="text-muted-foreground">
-                系统将按岗位权限最终校验
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        <Card size="sm">
+          <CardHeader className="border-b py-3">
+            <CardTitle className="text-base">概览</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 pt-4 text-sm">
+            <p>
+              供应商：{st.supplierName}（记录时，不受后续更名影响）
+            </p>
+            <p className="num">
+              期间：{st.periodStart} ~ {st.periodEnd}
+            </p>
+            <p>状态：{st.statusLabel}</p>
+            <p>
+              未决阻断差异：{detail.differenceSummary.blocking} / 差异合计{" "}
+              {detail.differenceSummary.total}
+            </p>
+            <p className="text-muted-foreground">
+              账单/订单/成本原值只读，不可在本页改写以消差。
+            </p>
+            <div className="flex flex-wrap gap-2 pt-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="secondary"
+                onClick={() => patchUrl({ section: "differences" })}
+              >
+                打开差异处理
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => patchUrl({ section: "items" })}
+              >
+                查看结算明细
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       ) : null}
 
       {section === "items" ? (
@@ -1972,7 +1839,6 @@ function SettlementCenter({
           differences={detail.differences}
           activeDiff={activeDiff}
           onSelect={(id) => patchUrl({ diff: id })}
-          role={urlState.role}
           allowed={allowed}
           onResolve={() => setResolveOpen(true)}
           onEvidence={() => setEvidenceOpen(true)}
@@ -2012,7 +1878,6 @@ function SettlementCenter({
                           workItemId: detail.workItem!.workItemId,
                           expectedSubjectVersion:
                             detail.workItem!.subjectVersion,
-                          role: urlState.role,
                           idempotencyKey: newKey("claim"),
                         })
                         setResult(outcomeToResult(outcome))
@@ -2324,7 +2189,6 @@ function DifferencesWorkspace({
   differences,
   activeDiff,
   onSelect,
-  role,
   allowed,
   onResolve,
   onEvidence,
@@ -2332,7 +2196,6 @@ function DifferencesWorkspace({
   differences: SettlementDifferenceView[]
   activeDiff: SettlementDifferenceView | null
   onSelect: (id: string) => void
-  role: DemoRole
   allowed: Set<string>
   onResolve: () => void
   onEvidence: () => void
@@ -2501,21 +2364,20 @@ function DifferencesWorkspace({
 
               <Separator />
               <div className="flex flex-wrap gap-2">
-                {role === "procurement" && allowed.has("APPEND_EVIDENCE") ? (
+                {allowed.has("APPEND_EVIDENCE") ? (
                   <Button type="button" size="sm" onClick={onEvidence}>
                     追加采购证据
                   </Button>
                 ) : null}
-                {role === "finance_prep" &&
-                allowed.has("RESOLVE_DIFFERENCE") &&
+                {allowed.has("RESOLVE_DIFFERENCE") &&
                 activeDiff.status === "PENDING" ? (
                   <Button type="button" size="sm" onClick={onResolve}>
                     登记结论
                   </Button>
                 ) : null}
-                {role === "procurement" && !allowed.has("RESOLVE_DIFFERENCE") ? (
+                {!allowed.has("RESOLVE_DIFFERENCE") ? (
                   <span className="text-xs text-muted-foreground">
-                    采购不可选择差异结论
+                    当前不可登记差异结论
                   </span>
                 ) : null}
               </div>

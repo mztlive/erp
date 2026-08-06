@@ -1,6 +1,6 @@
 /**
  * W09 队列筛选的 URL ↔ 值互转。
- * 只保留服务端（mock api）真正参与过滤的维度，避免 URL 里出现界面改不动、查询也不认的隐形状态。
+ * 只保留服务端真正参与过滤的维度，避免 URL 里出现界面改不动、查询也不认的隐形状态。
  */
 
 import type { FulfillmentOperationType } from "@/features/fulfillment-operations/types"

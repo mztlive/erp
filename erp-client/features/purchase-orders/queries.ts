@@ -19,14 +19,13 @@ import {
   submitPurchaseOrderForReview,
 } from "@/features/purchase-orders/api"
 import type { PurchaseOrderListQuery } from "@/features/purchase-orders/api"
-import type { ViewerRole } from "@/features/purchase-orders/types"
 
 export const purchaseOrderKeys = {
   all: ["purchase-orders"] as const,
   list: (query: PurchaseOrderListQuery) =>
     [...purchaseOrderKeys.all, "list", query] as const,
-  detail: (id: string, role: ViewerRole) =>
-    [...purchaseOrderKeys.all, "detail", id, role] as const,
+  detail: (id: string) =>
+    [...purchaseOrderKeys.all, "detail", id] as const,
   bases: () => [...purchaseOrderKeys.all, "creation-bases"] as const,
   exportData: (query: PurchaseOrderListQuery) =>
     [...purchaseOrderKeys.all, "export", query] as const,
@@ -50,12 +49,11 @@ export function usePurchaseOrderExportDataQuery(
 }
 
 export function usePurchaseOrderCenterQuery(
-  purchaseOrderId: string,
-  role: ViewerRole = "procurement"
+  purchaseOrderId: string
 ) {
   return useQuery({
-    queryKey: purchaseOrderKeys.detail(purchaseOrderId, role),
-    queryFn: () => fetchPurchaseOrderCenter(purchaseOrderId, role),
+    queryKey: purchaseOrderKeys.detail(purchaseOrderId),
+    queryFn: () => fetchPurchaseOrderCenter(purchaseOrderId),
     enabled: Boolean(purchaseOrderId),
   })
 }

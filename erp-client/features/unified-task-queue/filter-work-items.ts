@@ -14,7 +14,7 @@ function isToday(item: QueueWorkItemView): boolean {
 }
 
 /**
- * Client-side filter for session-mock queue.
+ * Client-side filter for the unified task queue.
  * Sort: overdue → priority asc (1=urgent) → dueAt → createdAt (enteredDateTime).
  */
 export function filterAndSortWorkItems(

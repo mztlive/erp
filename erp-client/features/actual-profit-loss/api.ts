@@ -306,7 +306,7 @@ export async function markSourceCorrectionPending(): Promise<{
 }
 
 export async function clearSourceCorrectionPending(): Promise<void> {
-  // 无会话态；真后端无对应「清除演示 pending」接口 — 空操作保留签名
+  // 真后端无对应清除接口 — 空操作保留签名
   return
 }
 

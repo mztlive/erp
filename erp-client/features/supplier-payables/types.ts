@@ -279,9 +279,6 @@ export type PostPaymentInput = {
   explicitSelection: boolean
   existingPaymentId?: string
   idempotencyKey: string
-  forceUnknown?: boolean
-  forceDuplicateInvoice?: boolean
-  forceVersionConflict?: boolean
 }
 
 export type PostInvoiceInput = {
@@ -301,9 +298,6 @@ export type PostInvoiceInput = {
   explicitSelection: boolean
   existingInvoiceId?: string
   idempotencyKey: string
-  forceUnknown?: boolean
-  forceDuplicateInvoice?: boolean
-  forceVersionConflict?: boolean
 }
 
 export type ReversePaymentInput = {

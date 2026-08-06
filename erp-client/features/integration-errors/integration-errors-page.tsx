@@ -285,7 +285,6 @@ export function IntegrationErrorsPage({
   const [lastResult, setLastResult] =
     React.useState<IntegrationFormalResult | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
-  const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
   const [replacementTaskId, setReplacementTaskId] = React.useState("")
   const [transferRole, setTransferRole] = React.useState("研发运维")
@@ -445,7 +444,6 @@ export function IntegrationErrorsPage({
     setActionError(null)
     setComment("")
     setReplacementTaskId("")
-    setForceUnknownOnce(false)
     if (firstReasonId) {
       setReconReasonId(firstReasonId)
     }
@@ -582,7 +580,6 @@ export function IntegrationErrorsPage({
         expectedWorkItemVersion: item.workItem.workItemVersion,
         kind,
         operationId: newKey("op"),
-        forceUnknown: kind === "QUERY_ORIGINAL_RESULT" ? forceUnknownOnce : false,
         comment: comment || undefined,
         evidenceRefs:
           kind === "ADD_EVIDENCE" || kind === "LINK_COMPENSATION"
@@ -601,7 +598,6 @@ export function IntegrationErrorsPage({
               ]
             : undefined,
       })
-      if (kind === "QUERY_ORIGINAL_RESULT") setForceUnknownOnce(false)
       if (kind === "DEFER") {
         leaseRef.current = null
         setActiveLease(null)
@@ -808,7 +804,7 @@ export function IntegrationErrorsPage({
               recordId: newKey("pol"),
               label: EVIDENCE_KIND_LABEL[k],
             }))
-      // ensure all required kinds present for mock resolve attempt
+      // ensure all required kinds present for resolve attempt
       const kinds = new Set(evidence.map((e) => e.kind))
       for (const k of item.resolutionEvidencePolicy.requiredEvidenceKinds) {
         if (!kinds.has(k)) {
@@ -1143,16 +1139,6 @@ export function IntegrationErrorsPage({
           筛选：{view?.context.filterSummary}
         </p>
       ) : null}
-
-      <label className="flex items-center gap-2 rounded-xl border border-dashed bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
-        <input
-          type="checkbox"
-          className="size-3.5"
-          checked={forceUnknownOnce}
-          onChange={(e) => setForceUnknownOnce(e.target.checked)}
-        />
-        演示控制：下次「查询原结果」模拟仍未知（结果仍未知 · 不自动下一项）
-      </label>
 
       {lastResult ? (
         <div ref={resultRef} tabIndex={-1} className="outline-none">

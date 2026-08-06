@@ -46,7 +46,7 @@ export type ContractAttachmentView = {
   revisionNo?: number
   uploadedBy: string
   uploadedAt: string
-  /** 安全检查状态：仅 done 允许下载演示 */
+  /** 安全检查状态：仅 done 允许下载 */
   securityState: "processing" | "done" | "quarantined"
   canDownload: boolean
 }

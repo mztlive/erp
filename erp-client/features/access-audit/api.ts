@@ -100,26 +100,6 @@ type BackendAuditEvent = {
   created_at: number
 }
 
-// ─── Demo flag no-ops（后端无策略配置资源） ──────────────────────────────────
-
-let demoEmptyReason: AccessEmptyReason | null = null
-
-export function setW19DemoEmptyReason(reason: AccessEmptyReason | null) {
-  demoEmptyReason = reason
-}
-
-export function setW19UserRoleTimePolicyConfigured(value: boolean) {
-  void value
-}
-
-export function setW19FieldGranularityConfigured(value: boolean) {
-  void value
-}
-
-export function setW19AuditAccessPolicyConfigured(value: boolean) {
-  void value
-}
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function instantToIso(secs: number | null | undefined): string | undefined {
@@ -287,13 +267,6 @@ export async function fetchAccessList(
   const gp = governancePolicies()
   const permissionVersion = `pv-live`
 
-  if (demoEmptyReason === "NO_MODULE_PERMISSION") {
-    return emptyListView(query, gp, permissionVersion, "NO_MODULE_PERMISSION")
-  }
-  if (demoEmptyReason === "NO_DATA_SCOPE") {
-    return emptyListView(query, gp, permissionVersion, "NO_DATA_SCOPE")
-  }
-
   const [roles, admins, scopesPage, auditPage, permsPage] = await Promise.all([
     apiGet<BackendRole[]>("/admin/roles"),
     apiGet<BackendAdmin[]>("/admin/admins"),
@@ -403,11 +376,7 @@ export async function fetchAccessList(
             : auditEvents
 
   let emptyReason: AccessEmptyReason | undefined
-  if (demoEmptyReason === "NO_RECORDS_IN_SCOPE") {
-    emptyReason = "NO_RECORDS_IN_SCOPE"
-  } else if (demoEmptyReason === "FIELD_MASKED") {
-    emptyReason = "FIELD_MASKED"
-  } else if (rowsForView.length === 0) {
+  if (rowsForView.length === 0) {
     emptyReason =
       query.q || query.status || query.risk || query.actorId || query.action
         ? "FILTER_NO_RESULT"
@@ -472,48 +441,6 @@ export async function fetchAccessList(
       "EMERGENCY_REVOKE_USER_ROLE",
     ],
     actionBlockers,
-    workItemSupport: "DISABLED_Q1",
-  }
-}
-
-function emptyListView(
-  query: AccessListQuery,
-  gp: AccessGovernancePolicyView,
-  permissionVersion: string,
-  emptyReason: AccessEmptyReason
-): AccessListView {
-  const now = instantToIso(Math.floor(Date.now() / 1000)) ?? ""
-  return {
-    view: query.view,
-    permissionVersion,
-    watermark: `w19-${emptyReason}`,
-    calculatedAt: now,
-    metrics: {
-      roleCount: 0,
-      userCount: 0,
-      scopeCount: 0,
-      fieldPolicyCount: 0,
-      auditEventCount: 0,
-    },
-    governancePolicies: gp,
-    emptyReason,
-    roles: [],
-    users: [],
-    scopes: [],
-    fieldPolicies: [],
-    auditEvents: [],
-    allowedActions:
-      emptyReason === "NO_DATA_SCOPE" ? ["VIEW_MANAGEMENT_SCOPE"] : [],
-    actionBlockers: [
-      {
-        action: emptyReason === "NO_MODULE_PERMISSION" ? "OPEN_W19" : "LIST_SUBJECTS",
-        code: emptyReason,
-        message:
-          emptyReason === "NO_MODULE_PERMISSION"
-            ? "当前账号无「权限与审计」模块权限。"
-            : "可进入本页，但当前管理范围内无任何可配置主体。",
-      },
-    ],
     workItemSupport: "DISABLED_Q1",
   }
 }
@@ -864,25 +791,4 @@ export async function resolveAccessChangeUnknown(
   // 后端无幂等查询端点 — 返回 null（未知仍未知）
   void idempotencyKey
   return null
-}
-
-export async function setAccessDemoFlags(input: {
-  emptyReason?: AccessEmptyReason | null
-  userRoleTimePolicyConfigured?: boolean
-  fieldGranularityConfigured?: boolean
-  auditAccessPolicyConfigured?: boolean
-}): Promise<{ ok: true }> {
-  if ("emptyReason" in input) {
-    setW19DemoEmptyReason(input.emptyReason ?? null)
-  }
-  if (typeof input.userRoleTimePolicyConfigured === "boolean") {
-    setW19UserRoleTimePolicyConfigured(input.userRoleTimePolicyConfigured)
-  }
-  if (typeof input.fieldGranularityConfigured === "boolean") {
-    setW19FieldGranularityConfigured(input.fieldGranularityConfigured)
-  }
-  if (typeof input.auditAccessPolicyConfigured === "boolean") {
-    setW19AuditAccessPolicyConfigured(input.auditAccessPolicyConfigured)
-  }
-  return { ok: true }
 }

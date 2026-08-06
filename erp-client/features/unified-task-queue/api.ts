@@ -204,10 +204,10 @@ const STATUS_UI: Record<
 }
 
 /**
- * 与历史 mock 兼容的错误类型；页面 `instanceof` 与 code 分支保持不变。
- * 由 ApiError（409/403 等）映射而来，不再使用 session mock。
+ * 真实后端错误映射类型；页面 `instanceof` 与 code 分支保持不变。
+ * 由 ApiError（409/403 等）映射而来。
  */
-export class WorkItemMockError extends Error {
+export class WorkItemApiError extends Error {
   code:
     | "LEASE_LOST"
     | "VERSION_CONFLICT"
@@ -216,9 +216,9 @@ export class WorkItemMockError extends Error {
     | "ALREADY_TERMINAL"
     | "NOT_FOUND"
 
-  constructor(code: WorkItemMockError["code"], message: string) {
+  constructor(code: WorkItemApiError["code"], message: string) {
     super(message)
-    this.name = "WorkItemMockError"
+    this.name = "WorkItemApiError"
     this.code = code
   }
 }
@@ -235,27 +235,27 @@ function isApiError(err: unknown): err is ApiError {
 function mapApiError(err: unknown): never {
   if (isApiError(err)) {
     if (err.status === 403) {
-      throw new WorkItemMockError(
+      throw new WorkItemApiError(
         "PERMISSION_REVOKED",
         err.message || "当前权限已收回，不能执行该操作。"
       )
     }
     if (err.status === 404) {
-      throw new WorkItemMockError("NOT_FOUND", err.message || "任务不存在。")
+      throw new WorkItemApiError("NOT_FOUND", err.message || "任务不存在。")
     }
     if (err.status === 409) {
-      throw new WorkItemMockError(
+      throw new WorkItemApiError(
         "VERSION_CONFLICT",
         err.message || "数据已变更，请刷新后重试"
       )
     }
     if (err.kind === "Validation") {
-      throw new WorkItemMockError(
+      throw new WorkItemApiError(
         "ACTION_NOT_ALLOWED",
         err.message || "操作不被允许。"
       )
     }
-    throw new WorkItemMockError(
+    throw new WorkItemApiError(
       "ACTION_NOT_ALLOWED",
       err.message || "操作失败。"
     )
@@ -385,7 +385,7 @@ export function mapWorkItemDto(dto: WorkItemDto): QueueWorkItemView {
 function parseLockVersion(subjectVersion?: string): number {
   const n = Number(subjectVersion)
   if (!Number.isFinite(n) || n < 1) {
-    throw new WorkItemMockError(
+    throw new WorkItemApiError(
       "VERSION_CONFLICT",
       "缺少有效的数据版本，请刷新后重试。"
     )
@@ -624,12 +624,12 @@ export async function applyWorkItemAction(input: {
       }
     }
     // SAVE_EVIDENCE / QUERY_RESULT：后端无独立任务内动作接口（backend_gap）
-    throw new WorkItemMockError(
+    throw new WorkItemApiError(
       "ACTION_NOT_ALLOWED",
       "当前后端未提供该任务内动作接口，请在专业工作台完成。"
     )
   } catch (err) {
-    if (err instanceof WorkItemMockError) throw err
+    if (err instanceof WorkItemApiError) throw err
     mapApiError(err)
   }
 }
@@ -678,7 +678,7 @@ export async function closeWorkItem(input: {
   }
 }): Promise<CloseSessionResult> {
   if (!input.closeAllowed) {
-    throw new WorkItemMockError(
+    throw new WorkItemApiError(
       "ACTION_NOT_ALLOWED",
       "审批、确认、结果未知和补偿任务不允许人工关闭。"
     )
@@ -712,7 +712,7 @@ export async function transferWorkItem(input: {
 }): Promise<TransferSessionResult> {
   try {
     const version = parseLockVersion(input.expectedSubjectVersion)
-    // 后端要求 owner_role + owner_user_id；页面仅传展示名 → 用目标作为 user_id，角色占位
+    // 后端要求 owner_role + owner_user_id；targetUserId 即账号 userId，角色占位
     const view = await apiPost<WorkItemDto>(
       `/admin/work-items/${encodeURIComponent(input.workItemId)}/transfer`,
       {

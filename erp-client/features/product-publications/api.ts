@@ -15,7 +15,6 @@ import type {
   PublicationStatus,
   PublishRevisionCommand,
   PublishRevisionResult,
-  ResolvePublishUnknownCommand,
   RetryDeliveryCommand,
   RetryDeliveryResult,
   SaleStatus,
@@ -678,14 +677,6 @@ export async function fetchPublicationDetail(
 export async function publishRevision(
   command: PublishRevisionCommand
 ): Promise<PublishRevisionResult> {
-  if (command.forceUnknown) {
-    return {
-      status: "unknown",
-      requestId: command.requestId,
-      message: "发布结果未知；请按原请求号查询，勿重复提交新内容。",
-    }
-  }
-
   const content = command.content
   const revision = await apiPost<BackendRevision>(
     `/admin/product-publications/${encodeURIComponent(command.publicationId)}/revisions`,
@@ -732,18 +723,6 @@ export async function publishRevision(
     deliveryId: delivery.delivery_id,
     deliveryStatus: "PENDING_SEND",
     committedAt: secsToIso(revision.created_at),
-  }
-}
-
-export async function resolvePublishUnknown(
-  command: ResolvePublishUnknownCommand
-): Promise<PublishRevisionResult> {
-  // 后端无独立「查询未知发布结果」端点；通过投递列表按 inbox 间接查询不可行。
-  return {
-    status: "unknown",
-    requestId: command.requestId,
-    message:
-      "结果查询接口尚未提供独立端点；请在接口错误中心按原任务号查询最终结果。",
   }
 }
 

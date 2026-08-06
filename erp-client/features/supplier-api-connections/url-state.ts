@@ -1,7 +1,6 @@
 import type {
   ConnectionEnvironment,
   ConnectionSection,
-  DemoRole,
   HealthResult,
 } from "@/features/supplier-api-connections/types"
 import { SECTIONS } from "@/features/supplier-api-connections/types"
@@ -19,14 +18,9 @@ export type ConnectionsUrlState = {
   pageSize: number
   connectionId?: string
   section: ConnectionSection
-  role: DemoRole
-  /** 演示：无模块权限 / 无数据范围 */
-  demoFlag?: "no-permission" | "no-scope"
 }
 
 const ENV_VALUES = ["DEVELOPMENT", "STAGING", "PRODUCTION", "ALL"] as const
-const ROLE_VALUES = ["procurement", "ops", "admin"] as const
-const FLAG_VALUES = ["no-permission", "no-scope"] as const
 
 const codec = createUrlStateCodec<ConnectionsUrlState>([
   {
@@ -53,14 +47,6 @@ const codec = createUrlStateCodec<ConnectionsUrlState>([
     buildWhen: (value, state) =>
       value !== "overview" && Boolean(state.connectionId),
   },
-  {
-    key: "role",
-    type: "enum",
-    values: ROLE_VALUES,
-    defaultValue: "admin",
-    aliases: ["demoRole"],
-  },
-  { key: "demoFlag", type: "enum", values: FLAG_VALUES },
 ])
 
 export const parseConnectionsSearchParams = codec.parse

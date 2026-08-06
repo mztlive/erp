@@ -69,7 +69,6 @@ import {
   toCategoryComboboxItems,
 } from "@/features/master-data/category-tree-model"
 import {
-  BASE_UNIT_DICTIONARY,
   defaultImmediateEffectiveFrom,
 } from "@/features/master-data/resource-fields"
 import {
@@ -98,6 +97,7 @@ import {
 } from "@/features/master-data/types"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/datetime"
+import { useUnitOptionsQuery } from "@/hooks/use-options"
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -486,6 +486,7 @@ export function ProductDetailPage({
     () => toBrandComboboxItems(brandListQuery.data?.rows ?? []),
     [brandListQuery.data?.rows],
   )
+  const unitOptionsQuery = useUnitOptionsQuery()
   const createMutation = useCreateMasterDataMutation()
   const reviseMutation = useCreateRevisionMutation()
   const supplierCatalogQuery = useSupplierCatalogQueueQuery({
@@ -501,9 +502,6 @@ export function ProductDetailPage({
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null,
   )
-  const [simulate, setSimulate] = React.useState<
-    "ok" | "overlap" | "base_unit"
-  >("ok")
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey(isCreate ? "create-product" : "revise-product"),
   )
@@ -554,7 +552,6 @@ export function ProductDetailPage({
           changeReason: value.changeReason.trim(),
           fields: nextFields,
           idempotencyKey,
-          simulate,
         })
         setResult(response)
         if (response.outcome === "succeeded") {
@@ -573,7 +570,6 @@ export function ProductDetailPage({
         changeReason: value.changeReason.trim(),
         fields: nextFields,
         idempotencyKey,
-        simulate: simulate === "base_unit" ? "ok" : simulate,
       })
       setResult(response)
       if (response.outcome === "succeeded") {
@@ -1298,7 +1294,9 @@ export function ProductDetailPage({
                         <OptionCombobox
                           value={fields.baseUnitId || null}
                           onValueChange={(id) => {
-                            const unit = BASE_UNIT_DICTIONARY.find((item) => item.id === id)
+                            const unit = unitOptionsQuery.data?.find(
+                              (item) => item.id === id,
+                            )
                             setFields((prev) => ({
                               ...prev,
                               baseUnitId: unit?.id ?? "",
@@ -1310,7 +1308,7 @@ export function ProductDetailPage({
                               })),
                             }))
                           }}
-                          options={BASE_UNIT_DICTIONARY.map((unit) => ({
+                          options={(unitOptionsQuery.data ?? []).map((unit) => ({
                             value: unit.id,
                             label: `${unit.label} · ${unit.code}`,
                           }))}
@@ -2050,32 +2048,6 @@ export function ProductDetailPage({
                               ? "新建原因"
                               : "说明本次修改内容，保存后形成新版本"
                           }
-                        />
-                      </div>
-                      <div className="space-y-1.5 sm:col-span-2">
-                        <Label>{masterDataCopy.demoSimulateLabel}</Label>
-                        <OptionCombobox
-                          value={simulate}
-                          onValueChange={(v) =>
-                            setSimulate((v ?? "ok") as typeof simulate)
-                          }
-                          options={[
-                            { value: "ok", label: masterDataCopy.demoOk },
-                            {
-                              value: "overlap",
-                              label: masterDataCopy.demoOverlap,
-                            },
-                            ...(!isCreate
-                              ? [
-                                  {
-                                    value: "base_unit" as const,
-                                    label: masterDataCopy.demoBaseUnit,
-                                  },
-                                ]
-                              : []),
-                          ]}
-                          allowClear={false}
-                          className="w-full max-w-md"
                         />
                       </div>
                     </div>

@@ -7,7 +7,6 @@ import { apiGet, apiPost, type Page } from "@/lib/api"
 import type {
   AppendEvidenceInput,
   CreateDraftInput,
-  DemoRole,
   DifferenceType,
   FormalOutcome,
   RefreshDraftInput,
@@ -21,14 +20,12 @@ import type {
   SubmitReviewInput,
 } from "@/features/supplier-settlements/types"
 import {
-  DEMO_ROLE_LABEL,
   DIFF_STATUS_LABEL,
   DIFF_TYPE_LABEL,
   RESOLUTION_TO_STATUS,
   STATUS_LABEL,
   STATUS_TONE,
   VIEW_LABEL,
-  roleToUserId,
 } from "@/features/supplier-settlements/types"
 
 // ---------------------------------------------------------------------------
@@ -98,8 +95,6 @@ export type ListQueryInput = {
   q?: string
   page: number
   pageSize?: number
-  role: DemoRole
-  demoFlag?: "no-permission" | "no-scope" | "policy-missing"
 }
 
 // ---------------------------------------------------------------------------
@@ -133,36 +128,13 @@ function directionLabel(diff?: string): string | undefined {
   return "ERP 高于供应商账单"
 }
 
-function periodPolicy(demoFlag?: ListQueryInput["demoFlag"]) {
-  if (demoFlag === "policy-missing") {
-    return {
-      state: "UNCONFIGURED" as const,
-      blocker: {
-        action: "CREATE_DRAFT",
-        code: "PERIOD_POLICY_UNCONFIGURED",
-        message:
-          "供应商结算期间策略未配置或已过期；列表可查历史，但不得新建草稿",
-      },
-    }
-  }
-  // 后端未返回 period policy → 标记未配置（fail-closed）
-  return {
-    state: "UNCONFIGURED" as const,
-    blocker: {
-      action: "CREATE_DRAFT",
-      code: "PERIOD_POLICY_UNCONFIGURED",
-      message: "期间策略接口未交付；列表可查，新建草稿已阻断",
-    },
-  }
-}
-
-function toListRow(s: BackendStatement, role: DemoRole): SettlementListRow {
+function toListRow(s: BackendStatement): SettlementListRow {
   const status = asStatus(s.status)
   const allowed = ["OPEN_CENTER", "VIEW", "OPEN_PREVIEW"]
-  if (role === "finance_prep" && status !== "CONFIRMED" && status !== "VOIDED") {
+  if (status !== "CONFIRMED" && status !== "VOIDED") {
     allowed.push("RESOLVE_DIFFERENCE", "SUBMIT_REVIEW")
   }
-  if (role === "finance_review" && status === "PENDING_REVIEW") {
+  if (status === "PENDING_REVIEW") {
     allowed.push("CONFIRM", "REJECT")
   }
   return {
@@ -195,7 +167,7 @@ function toListRow(s: BackendStatement, role: DemoRole): SettlementListRow {
   }
 }
 
-function toDetail(d: BackendDetail, role: DemoRole): SettlementDetailView {
+function toDetail(d: BackendDetail): SettlementDetailView {
   const s = d.statement
   const status = asStatus(s.status)
   const diffs = (d.differences ?? []).map((diff) => {
@@ -232,12 +204,10 @@ function toDetail(d: BackendDetail, role: DemoRole): SettlementDetailView {
   const resolved = diffs.length - open
   const now = new Date().toISOString()
   const allowed = ["OPEN_CENTER", "VIEW"]
-  if (role === "finance_prep") {
-    if (status === "DRAFT" || status === "PENDING_RECONCILE" || status === "HAS_DIFFERENCE") {
-      allowed.push("RESOLVE_DIFFERENCE", "SUBMIT_REVIEW")
-    }
+  if (status === "DRAFT" || status === "PENDING_RECONCILE" || status === "HAS_DIFFERENCE") {
+    allowed.push("RESOLVE_DIFFERENCE", "SUBMIT_REVIEW")
   }
-  if (role === "finance_review" && status === "PENDING_REVIEW") {
+  if (status === "PENDING_REVIEW") {
     allowed.push("CONFIRM", "REJECT")
   }
 
@@ -315,7 +285,6 @@ function toDetail(d: BackendDetail, role: DemoRole): SettlementDetailView {
           w12Href: `/finance/supplier-accounts?view=payable&q=${encodeURIComponent(s.payable_account_id)}`,
         }
       : undefined,
-    periodPolicy: periodPolicy(),
     auditEvents: [],
     allowedActions: allowed,
     actionBlockers: [],
@@ -323,9 +292,6 @@ function toDetail(d: BackendDetail, role: DemoRole): SettlementDetailView {
       immutableFactsAsOf: tsToIso(s.created_at),
       queriedAt: now,
     },
-    viewerRole: role,
-    viewerRoleLabel: DEMO_ROLE_LABEL[role],
-    viewerUserId: roleToUserId(role),
     canEditBillOrOrder: false,
   }
 }
@@ -357,33 +323,13 @@ export async function fetchSettlementList(
       pendingReview: 0,
       confirmedAmount: "0.00",
     },
-    periodPolicy: periodPolicy(input.demoFlag),
     suppliers: [],
-    viewerRole: input.role,
-    viewerRoleLabel: DEMO_ROLE_LABEL[input.role],
-    viewerUserId: roleToUserId(input.role),
     permissionVersion: "server",
     sourceAsOf: queriedAt,
     queriedAt,
     filterSummary: "",
     hasModulePermission: true,
     hasDataScope: true,
-  }
-
-  if (input.demoFlag === "no-permission") {
-    return {
-      ...emptyBase,
-      emptyReason: "NO_PERMISSION",
-      hasModulePermission: false,
-      hasDataScope: false,
-    }
-  }
-  if (input.demoFlag === "no-scope") {
-    return {
-      ...emptyBase,
-      emptyReason: "NO_SCOPE",
-      hasDataScope: false,
-    }
   }
 
   // Map view → status filter when possible
@@ -419,15 +365,6 @@ export async function fetchSettlementList(
         st === "PENDING_REVIEW"
       )
     })
-  } else if (input.view === "prepared_by_me") {
-    const uid = roleToUserId(input.role)
-    statements = statements.filter((s) => s.prepared_by === uid)
-  } else if (input.view === "review_by_me") {
-    const uid = roleToUserId(input.role)
-    statements = statements.filter(
-      (s) =>
-        asStatus(s.status) === "PENDING_REVIEW" || s.reviewed_by === uid
-    )
   }
 
   if (input.periodFrom) {
@@ -437,7 +374,7 @@ export async function fetchSettlementList(
     statements = statements.filter((s) => s.period_end <= input.periodTo!)
   }
 
-  const rows = statements.map((s) => toListRow(s, input.role))
+  const rows = statements.map(toListRow)
   const total = pageRes.total ?? rows.length
   const suppliersMap = new Map<string, string>()
   for (const s of statements) suppliersMap.set(s.supplier_id, s.supplier_id)
@@ -459,16 +396,12 @@ export async function fetchSettlementList(
     total,
     totals: emptyBase.totals,
     metrics: emptyBase.metrics,
-    periodPolicy: periodPolicy(input.demoFlag),
     suppliers: Array.from(suppliersMap.entries()).map(
       ([supplierId, supplierName]) => ({ supplierId, supplierName })
     ),
     emptyReason: total === 0 ? "NO_STATEMENTS" : undefined,
     hasModulePermission: true,
     hasDataScope: true,
-    viewerRole: input.role,
-    viewerRoleLabel: DEMO_ROLE_LABEL[input.role],
-    viewerUserId: roleToUserId(input.role),
     permissionVersion: "server",
     sourceAsOf: queriedAt,
     queriedAt,
@@ -480,13 +413,12 @@ export async function fetchSettlementList(
 
 export async function fetchSettlementDetail(input: {
   statementId: string
-  role: DemoRole
 }): Promise<SettlementDetailView | null> {
   try {
     const detail = await apiGet<BackendDetail>(
       `/admin/supplier-settlement-statements/${encodeURIComponent(input.statementId)}`
     )
-    return toDetail(detail, input.role)
+    return toDetail(detail)
   } catch (err) {
     const status =
       err && typeof err === "object" && "status" in err
@@ -500,15 +432,6 @@ export async function fetchSettlementDetail(input: {
 export async function createSettlementDraft(
   input: CreateDraftInput
 ): Promise<FormalOutcome> {
-  if (input.role !== "finance_prep") {
-    return {
-      status: "blocked",
-      code: "FORBIDDEN",
-      title: "无权新建草稿",
-      message: "仅财务经办可在期间策略已配置时新建结算草稿",
-    }
-  }
-
   // Backend requires statement_no + items; frontend CreateDraftInput lacks items
   // → create with empty-items will 422. Document gap and call with minimal shape.
   try {
@@ -590,15 +513,6 @@ export async function appendDifferenceEvidence(
 export async function resolveDifference(
   input: ResolveDifferenceInput
 ): Promise<FormalOutcome> {
-  if (input.role !== "finance_prep") {
-    return {
-      status: "blocked",
-      code: "ROLE_NOT_PREP",
-      title: "仅财务经办可登记结论",
-      message: "采购证据不能自行改变差异状态或成本基线",
-    }
-  }
-
   const status = RESOLUTION_TO_STATUS[input.resolution]
   await apiPost(
     `/admin/supplier-settlement-differences/${encodeURIComponent(input.differenceId)}/resolve`,
@@ -606,7 +520,6 @@ export async function resolveDifference(
       version: input.expectedDifferenceVersion,
       status,
       resolution: input.reasonCode,
-      resolved_by: roleToUserId(input.role),
       resolved_at: Math.floor(Date.now() / 1000),
     }
   )
@@ -649,7 +562,6 @@ export async function submitSettlementReview(
 export async function claimSettlementReview(input: {
   statementId: string
   workItemId: string
-  role: DemoRole
   expectedSubjectVersion?: string
   idempotencyKey?: string
 }): Promise<FormalOutcome> {
@@ -671,7 +583,6 @@ export async function decideSettlementReview(
       `/admin/supplier-settlement-statements/${encodeURIComponent(input.statementId)}/confirm`,
       {
         version: input.expectedLockVersion,
-        reviewed_by: roleToUserId(input.role),
       }
     )
     return {

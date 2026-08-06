@@ -1,7 +1,6 @@
 /** W16 实际经营盈亏 · 客户端契约类型（与 docs/ui-workspaces/w16 §8 对齐） */
 
 import type { StatusTone } from "@/components/ui/status-badge"
-import type { FreshnessDemoState } from "@/lib/freshness"
 
 export type ProfitLossCoverage = "covered" | "uncovered" | "all"
 
@@ -53,10 +52,6 @@ export type ProfitLossQuery = Readonly<{
   q?: string
   sort: string
   pageSize: number
-  /** Mock QA: 强制水位态 */
-  freshnessDemo?: FreshnessDemoState
-  /** Mock QA: 字段隐藏演示 cost | profit */
-  fieldHide?: "none" | "cost" | "profit"
 }>
 
 export type CoverageBlocker = Readonly<{

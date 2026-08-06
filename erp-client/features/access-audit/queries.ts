@@ -8,7 +8,6 @@ import {
   fetchEffectiveAccess,
   previewAccessChange,
   resolveAccessChangeUnknown,
-  setAccessDemoFlags,
   submitAccessChange,
 } from "@/features/access-audit/api"
 import type {
@@ -82,16 +81,6 @@ export function useResolveAccessUnknownMutation() {
       if (result?.outcome === "CONFIRMED") {
         await queryClient.invalidateQueries({ queryKey: accessAuditKeys.all })
       }
-    },
-  })
-}
-
-export function useSetAccessDemoFlagsMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: setAccessDemoFlags,
-    onSuccess: async () => {
-      await queryClient.invalidateQueries({ queryKey: accessAuditKeys.all })
     },
   })
 }

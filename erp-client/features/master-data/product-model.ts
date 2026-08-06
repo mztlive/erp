@@ -54,7 +54,7 @@ export function formatSpecLabel(
 }
 
 /**
- * 计算规范化规格签名（`specification_signature` 的演示简化版）。
+ * 计算规范化规格签名（`specification_signature`）。
  * 取有值规格的「规格名=取值」对，按规格名排序后拼接，与输入顺序无关；
  * 无规格时返回固定空签名（同一 SPU 最多一个无规格 SKU）。
  * 数据模型按属性代码 / 属性值代码排序的规范化序列计算，此处以规格名 /

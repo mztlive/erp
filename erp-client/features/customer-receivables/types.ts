@@ -295,10 +295,6 @@ export type PostAllocationInput = {
   draftSessionId: string
   editVersion: number
   idempotencyKey: string
-  /** 演示：强制结果不确定 */
-  forceUnknown?: boolean
-  /** 演示：强制跨主体拒绝 */
-  forceCrossParty?: boolean
 }
 
 export type PostAllocationResult =

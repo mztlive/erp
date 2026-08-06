@@ -9,7 +9,6 @@ import type { Page } from "@/lib/api/paging"
 import type {
   ConfirmMappingResult,
   DeferMappingResult,
-  DemoRole,
   MallSnapshotRow,
   MallSyncJobRow,
   MallSyncMetric,
@@ -28,7 +27,6 @@ import type {
   TriggerMallSyncResult,
 } from "@/features/mall-sync/types"
 import {
-  DEMO_ROLE_LABEL,
   DIRECTION_LABEL,
   JOB_TYPE_LABEL,
   MAPPING_TYPE_LABEL,
@@ -164,8 +162,6 @@ type WorkItemView = {
 
 export type MallSyncQueryInput = {
   view: MallSyncViewName
-  demoRole: DemoRole
-  demoStage?: OwnershipStage
   policy?: "missing" | "configured"
   sourceUnavailable?: boolean
   q?: string
@@ -177,19 +173,6 @@ export type MallSyncQueryInput = {
   queueContextId?: string
   owner?: "mine" | "all"
   mappingType?: string
-}
-
-/** 演示开关：后端无对应策略 API，保留空实现以稳定 queries 导出签名 */
-export function setMallSyncDemoStage(stage: OwnershipStage) {
-  void stage
-}
-
-export function setMallSyncPolicyConfigured(configured: boolean) {
-  void configured
-}
-
-export function setMallSyncSourceUnavailable(unavailable: boolean) {
-  void unavailable
 }
 
 export function getMallSyncStageLabels() {
@@ -740,7 +723,6 @@ export async function fetchMallSyncPage(
       : undefined
 
   const stage: OwnershipStage = "FIRST_PHASE_MALL_OWNED"
-  const role = input.demoRole
   const sourceUnavailable = !source
 
   const metrics = buildMetrics(jobRows, mappingTasks, recon, lagSeconds)
@@ -821,8 +803,6 @@ export async function fetchMallSyncPage(
       sourceUnavailableMessage: sourceUnavailable
         ? "未找到启用的商城来源系统；请先在来源系统中登记 MALL 类型来源。"
         : undefined,
-      viewerRole: role,
-      viewerRoleLabel: DEMO_ROLE_LABEL[role],
       hasSourceScope: Boolean(source),
       scheduledIncrementalNote:
         "系统定时增量按调度契约独立运行；人工立即增量需治理策略与权限。",
@@ -844,17 +824,9 @@ export async function fetchMallSyncPage(
 
 export async function triggerManualIncremental(input: {
   reason: string
-  demoRole: DemoRole
   policyConfigured?: boolean
   stage?: OwnershipStage
 }): Promise<TriggerMallSyncResult> {
-  if (input.demoRole !== "admin") {
-    return {
-      status: "failed",
-      code: "FORBIDDEN",
-      message: "仅系统管理员可触发立即增量",
-    }
-  }
   if (!input.reason.trim() || input.reason.trim().length < 4) {
     return {
       status: "failed",
@@ -885,17 +857,9 @@ export async function triggerManualIncremental(input: {
 export async function triggerSingleOrderPull(input: {
   externalOrderNo: string
   reason: string
-  demoRole: DemoRole
   policyConfigured?: boolean
   stage?: OwnershipStage
 }): Promise<TriggerMallSyncResult> {
-  if (input.demoRole !== "admin") {
-    return {
-      status: "failed",
-      code: "FORBIDDEN",
-      message: "仅系统管理员可按单补拉",
-    }
-  }
   if (!input.externalOrderNo.trim()) {
     return {
       status: "failed",
@@ -927,12 +891,8 @@ export async function triggerSingleOrderPull(input: {
 export async function retryFailedJob(input: {
   jobId: string
   reason: string
-  demoRole: DemoRole
   stage?: OwnershipStage
 }): Promise<TriggerMallSyncResult> {
-  if (input.demoRole !== "admin") {
-    return { status: "failed", code: "FORBIDDEN", message: "仅管理员可重试" }
-  }
   const original = await apiGet<BackendJob>(
     `/admin/mall-sales-sync-jobs/${input.jobId}`
   )
@@ -987,16 +947,8 @@ export async function confirmMapping(input: {
   targetObjectId: string
   targetLabel: string
   evidenceNote: string
-  demoRole: DemoRole
   stage?: OwnershipStage
 }): Promise<ConfirmMappingResult> {
-  if (input.demoRole === "admin") {
-    return {
-      status: "failed",
-      code: "ADMIN_CANNOT_CONFIRM_MAPPING",
-      message: "系统管理员不能替业务角色确认映射",
-    }
-  }
   if (!input.evidenceNote.trim() || input.evidenceNote.trim().length < 4) {
     return {
       status: "failed",
@@ -1045,15 +997,7 @@ export async function deferMapping(input: {
   reasonCode: string
   note?: string
   queueContextId: string
-  demoRole: DemoRole
 }): Promise<DeferMappingResult> {
-  if (input.demoRole === "admin") {
-    return {
-      status: "failed",
-      code: "ADMIN_DEFER_N_A",
-      message: "管理员请使用指派；跳过由业务责任人操作",
-    }
-  }
   if (!input.reasonCode) {
     return {
       status: "failed",
@@ -1080,7 +1024,6 @@ export async function deferMapping(input: {
 export async function reapplyMallSnapshot(input: {
   mappingTaskId: string
   sourceSnapshotId: string
-  demoRole: DemoRole
   stage?: OwnershipStage
 }): Promise<ReapplyResult> {
   void input
@@ -1106,25 +1049,24 @@ export async function resolveUnknownReapply(input: {
 }
 
 export async function assignMappingTask(input: {
-  mappingTaskId: string
+  workItemId: string
+  expectedSubjectVersion: string
   targetOwnerRole: "SALES" | "OPERATIONS" | "FINANCE"
   reason: string
-  demoRole: DemoRole
 }): Promise<{ status: "succeeded" | "failed"; message: string; code?: string }> {
-  if (input.demoRole !== "admin") {
-    return {
-      status: "failed",
-      code: "FORBIDDEN",
-      message: "仅管理员可指派映射任务",
+  const version = Number(input.expectedSubjectVersion)
+  await apiPost<WorkItemView>(
+    `/admin/work-items/${encodeURIComponent(input.workItemId)}/transfer`,
+    {
+      version: Number.isFinite(version) && version > 0 ? version : 1,
+      owner_role: input.targetOwnerRole,
+      owner_user_id: "unassigned",
+      comment: input.reason,
     }
-  }
-  void input.mappingTaskId
-  void input.reason
-  // backend_gap: master_mapping_task 无 assign 端点；仅有 create 时指定 owner_role
+  )
   return {
-    status: "failed",
-    code: "BACKEND_GAP_ASSIGN",
-    message: `后端映射任务无指派接口，无法切换到 ${OWNER_ROLE_LABEL[input.targetOwnerRole]}。`,
+    status: "succeeded",
+    message: `已指派给 ${OWNER_ROLE_LABEL[input.targetOwnerRole]} 处理。`,
   }
 }
 

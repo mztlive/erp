@@ -23,7 +23,6 @@ import {
 } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Dialog,
   DialogContent,
@@ -88,8 +87,6 @@ export function AllocationSessionPanel({
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [result, setResult] = React.useState<ResultState>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
-  const [forceUnknown, setForceUnknown] = React.useState(false)
-  const [forceCrossParty, setForceCrossParty] = React.useState(false)
   const [draftSavedAt, setDraftSavedAt] = React.useState(session.savedAt)
   const [postedLocally, setPostedLocally] = React.useState(false)
   const [leaveConfirmOpen, setLeaveConfirmOpen] = React.useState(false)
@@ -343,8 +340,6 @@ export function AllocationSessionPanel({
         draftSessionId: session.draftSessionId,
         editVersion: saved.editVersion,
         idempotencyKey: idempotencyRef.current,
-        forceUnknown,
-        forceCrossParty,
       })
       applyPostResult(res)
     } catch (err) {
@@ -354,8 +349,6 @@ export function AllocationSessionPanel({
   }
 
   function applyPostResult(res: PostAllocationResult) {
-    setForceUnknown(false)
-    setForceCrossParty(false)
     if (res.status === "succeeded") {
       setPostedLocally(true)
       setResult({
@@ -787,28 +780,6 @@ export function AllocationSessionPanel({
           </>
         }
       />
-
-      <details className="rounded-xl border border-dashed p-3 text-xs text-muted-foreground">
-        <summary className="cursor-pointer">
-          演示选项（仅演示环境）
-        </summary>
-        <div className="mt-2 flex flex-wrap items-center gap-4">
-          <label className="flex items-center gap-2">
-            <Checkbox
-              checked={forceUnknown}
-              onCheckedChange={(v) => setForceUnknown(v === true)}
-            />
-            模拟结果不确定
-          </label>
-          <label className="flex items-center gap-2">
-            <Checkbox
-              checked={forceCrossParty}
-              onCheckedChange={(v) => setForceCrossParty(v === true)}
-            />
-            模拟跨主体提交拒绝
-          </label>
-        </div>
-      </details>
 
       {/* 离开前未保存草稿确认 */}
       <DiscardConfirmDialog

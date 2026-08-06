@@ -160,9 +160,6 @@ export function AllocationSession({
   const [selected, setSelected] = React.useState<Set<string>>(new Set())
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [result, setResult] = React.useState<FormalSubmitResult | null>(null)
-  const [forceUnknown, setForceUnknown] = React.useState(false)
-  const [forceDup, setForceDup] = React.useState(false)
-  const [forceConflict, setForceConflict] = React.useState(false)
   const [draftHint, setDraftHint] = React.useState<string | null>(null)
   const idempotencyRef = React.useRef<string | null>(null)
 
@@ -403,8 +400,6 @@ export function AllocationSession({
         explicitSelection,
         existingPaymentId: session.existingPaymentId,
         idempotencyKey: idempotencyRef.current,
-        forceUnknown,
-        forceVersionConflict: forceConflict,
       })
     } else {
       const v = invoiceForm.state.values
@@ -426,9 +421,6 @@ export function AllocationSession({
         explicitSelection,
         existingInvoiceId: session.existingInvoiceId,
         idempotencyKey: idempotencyRef.current,
-        forceUnknown,
-        forceDuplicateInvoice: forceDup,
-        forceVersionConflict: forceConflict,
       })
     }
 
@@ -878,37 +870,6 @@ export function AllocationSession({
                 ) : null}
 
                 <ValidationSummary issues={issues} />
-
-                <details className="text-xs text-muted-foreground">
-                  <summary className="cursor-pointer">
-                    演示选项（仅演示环境）
-                  </summary>
-                  <div className="mt-2 flex flex-col gap-1">
-                    <label className="flex items-center gap-2">
-                      <Checkbox
-                        checked={forceUnknown}
-                        onCheckedChange={(v) => setForceUnknown(Boolean(v))}
-                      />
-                      模拟结果不确定
-                    </label>
-                    {track === "purchase_invoice" ? (
-                      <label className="flex items-center gap-2">
-                        <Checkbox
-                          checked={forceDup}
-                          onCheckedChange={(v) => setForceDup(Boolean(v))}
-                        />
-                        模拟重复发票
-                      </label>
-                    ) : null}
-                    <label className="flex items-center gap-2">
-                      <Checkbox
-                        checked={forceConflict}
-                        onCheckedChange={(v) => setForceConflict(Boolean(v))}
-                      />
-                      模拟并发版本冲突
-                    </label>
-                  </div>
-                </details>
               </CardContent>
               <CardFooter className="justify-end gap-2 border-t border-border">
                 <Button type="button" variant="outline" onClick={onClose}>

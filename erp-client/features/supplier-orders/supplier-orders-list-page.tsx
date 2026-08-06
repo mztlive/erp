@@ -27,7 +27,6 @@ import {
   ListToolbar,
   MetricFilterItem,
   MetricStrip,
-  MoneyValue,
   MultiOptionCombobox,
   OptionCombobox,
   PageHeader,
@@ -54,7 +53,6 @@ import {
 import { SupplierOrderPreviewPanel } from "@/features/supplier-orders/supplier-order-preview-panel"
 import type {
   CancelStatus,
-  DemoRole,
   ExportCommand,
   ListView,
   RefundStatus,
@@ -110,7 +108,6 @@ export function SupplierOrdersListPage() {
       paidTo: url.paidTo,
       page: url.page,
       pageSize: url.pageSize,
-      role: url.role,
       sortBy: url.sort ? SORT_COLUMN_TO_FIELD[url.sort] : undefined,
       sortDir: url.dir,
     }),
@@ -120,7 +117,6 @@ export function SupplierOrdersListPage() {
   const listQuery = useSupplierOrdersQuery(listQueryInput)
   const previewQuery = useSupplierOrderDetailQuery({
     orderId: url.preview ?? "",
-    role: url.role,
     enabled: Boolean(url.preview),
   })
   const queryResultMutation = useQueryResultMutation()
@@ -308,7 +304,6 @@ export function SupplierOrdersListPage() {
     )
     const detail = await fetchSupplierOrderDetail({
       orderId: row.orderId,
-      role: url.role,
     })
     if (!detail) {
       setActionResult({
@@ -465,23 +460,6 @@ export function SupplierOrdersListPage() {
         ),
       },
       {
-        id: "cost",
-        accessorFn: (row) => row.costGross ?? "",
-        header: "成本（含税）",
-        meta: {
-          label: "成本（含税）",
-          width: "amount",
-          align: "end",
-          numeric: true,
-        },
-        cell: ({ row }) =>
-          row.original.costGross != null ? (
-            <MoneyValue value={row.original.costGross} />
-          ) : (
-            <span className="text-xs text-muted-foreground">•••</span>
-          ),
-      },
-      {
         id: "itemCount",
         accessorFn: (row) => row.itemCount,
         header: "商品数",
@@ -609,24 +587,6 @@ export function SupplierOrdersListPage() {
               dateTime={listQuery.data?.queriedAt}
               state={listQuery.isFetching ? "syncing" : "fresh"}
               label="列表数据"
-            />
-            <OptionCombobox
-              value={url.role}
-              onValueChange={(v) =>
-                pushUrl({ role: (v ?? url.role) as DemoRole, page: 1 })
-              }
-              options={[
-                { value: "procurement", label: "采购" },
-                { value: "cs", label: "客服" },
-                { value: "ops", label: "运营" },
-                { value: "finance", label: "财务" },
-                { value: "admin", label: "管理员" },
-              ]}
-              aria-label="演示角色"
-              className="w-[7.5rem]"
-              size="sm"
-              allowClear={false}
-              placeholder="演示角色"
             />
             <Button
               type="button"

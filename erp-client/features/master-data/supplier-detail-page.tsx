@@ -339,9 +339,6 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null
   )
-  const [simulate, setSimulate] = React.useState<
-    "ok" | "overlap" | "conflict"
-  >("ok")
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey(isCreate ? "create-supplier" : "revise-supplier")
   )
@@ -387,7 +384,6 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
           changeReason: value.changeReason.trim(),
           fields,
           idempotencyKey,
-          simulate,
         })
         setResult(response)
         if (response.outcome === "succeeded") {
@@ -406,7 +402,6 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
         changeReason: value.changeReason.trim(),
         fields,
         idempotencyKey,
-        simulate: simulate === "conflict" ? "ok" : simulate,
       })
       setResult(response)
       if (response.outcome === "succeeded") {
@@ -1259,32 +1254,6 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                             : "说明本次修改内容，保存后形成新版本"
                         }
                         disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label>{masterDataCopy.demoSimulateLabel}</Label>
-                      <OptionCombobox
-                        value={simulate}
-                        onValueChange={(v) =>
-                          setSimulate((v ?? "ok") as typeof simulate)
-                        }
-                        options={[
-                          { value: "ok", label: masterDataCopy.demoOk },
-                          {
-                            value: "overlap",
-                            label: masterDataCopy.demoOverlap,
-                          },
-                          ...(!isCreate
-                            ? [
-                                {
-                                  value: "conflict" as const,
-                                  label: masterDataCopy.demoConflict,
-                                },
-                              ]
-                            : []),
-                        ]}
-                        allowClear={false}
-                        className="w-full max-w-md"
                       />
                     </div>
                   </div>

@@ -62,7 +62,6 @@ import {
   useManualPauseMutation,
   usePublicationDetailQuery,
   usePublishRevisionMutation,
-  useResolvePublishUnknownMutation,
   useRetryDeliveryMutation,
 } from "@/features/product-publications/queries"
 import { SafetyPausePanel } from "@/features/product-publications/safety-pause-panel"
@@ -372,7 +371,6 @@ export function PublicationCenterPage({
 
   const detailQuery = usePublicationDetailQuery(publicationId, revisionParam)
   const publishMutation = usePublishRevisionMutation()
-  const resolveUnknownMutation = useResolvePublishUnknownMutation()
   const pauseMutation = useManualPauseMutation()
   const retryMutation = useRetryDeliveryMutation()
 
@@ -382,7 +380,6 @@ export function PublicationCenterPage({
   const [pauseReasonOpen, setPauseReasonOpen] = React.useState(false)
   const [pauseReason, setPauseReason] = React.useState("")
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
-  const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const requestIdRef = React.useRef<string | null>(null)
 
   const data = detailQuery.data
@@ -570,7 +567,6 @@ export function PublicationCenterPage({
       expectedObjectVersion: data.objectVersion,
       expectedPublishGateVersion: data.publishGate.gateVersion,
       requestId: requestIdRef.current,
-      forceUnknown: forceUnknownOnce,
       content: {
         skuRevisionId: values.skuRevisionId.trim(),
         supplierOfferingRevisionId: values.supplierOfferingRevisionId.trim(),
@@ -601,7 +597,6 @@ export function PublicationCenterPage({
         })),
       },
     }
-    setForceUnknownOnce(false)
     const result = await publishMutation.mutateAsync(command)
     setConfirmOpen(false)
     if (result.status === "succeeded") {
@@ -628,7 +623,6 @@ export function PublicationCenterPage({
         title: "发布结果未知",
         description: result.message,
         reference: result.requestId,
-        pendingRequestId: result.requestId,
       })
       return
     }
@@ -667,7 +661,6 @@ export function PublicationCenterPage({
         status: "unknown",
         title: "暂停结果未知",
         description: result.message,
-        pendingRequestId: result.requestId,
       })
       return
     }
@@ -817,74 +810,6 @@ export function PublicationCenterPage({
           description={lastResult.description}
           reference={lastResult.reference}
           facts={lastResult.facts}
-          actions={
-            lastResult.pendingRequestId ? (
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  onClick={async () => {
-                    const r = await resolveUnknownMutation.mutateAsync({
-                      requestId: lastResult.pendingRequestId!,
-                    })
-                    if (r.status === "succeeded") {
-                      setLastResult({
-                        status: "succeeded",
-                        title: "查询到发布已成功",
-                        description: "原请求已形成发布修订，等待商城确认。",
-                        facts: [
-                          { label: "发布版本", value: `r${r.revisionNo}` },
-                          { label: "发送编号", value: r.deliveryId },
-                        ],
-                      })
-                      setSessionEdit(null)
-                    } else if (r.status === "blocked") {
-                      setLastResult({
-                        status: "blocked",
-                        title: "发布被阻断",
-                        description: r.message,
-                      })
-                    } else {
-                      setLastResult({
-                        status: "unknown",
-                        title: "结果仍未知",
-                        description: r.message,
-                        pendingRequestId: r.requestId,
-                      })
-                    }
-                  }}
-                >
-                  按原任务号查询
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={async () => {
-                    const r = await resolveUnknownMutation.mutateAsync({
-                      requestId: lastResult.pendingRequestId!,
-                      settle: true,
-                    })
-                    if (r.status === "succeeded") {
-                      setLastResult({
-                        status: "succeeded",
-                        title: "发布修订已提交，等待商城确认",
-                        description:
-                          "演示结算：原任务号已形成修订。商城确认前不显示商城已生效。",
-                        facts: [
-                          { label: "发布版本", value: `r${r.revisionNo}` },
-                          { label: "发送编号", value: r.deliveryId },
-                        ],
-                      })
-                      setSessionEdit(null)
-                    }
-                  }}
-                >
-                  演示结算成功
-                </Button>
-              </div>
-            ) : undefined
-          }
         />
       ) : null}
 
@@ -1271,14 +1196,6 @@ export function PublicationCenterPage({
                       {publishBlocker?.message ?? "当前状态不允许提交发布。"}
                     </span>
                   ) : null}
-                  <span className="flex items-center gap-2 rounded-md border border-dashed border-border px-2 py-1 text-xs text-muted-foreground">
-                    <input
-                      type="checkbox"
-                      checked={forceUnknownOnce}
-                      onChange={(e) => setForceUnknownOnce(e.target.checked)}
-                    />
-                    演示：强制结果未知一次（仅演示环境，误勾选会让本次提交无法确认）
-                  </span>
                 </div>
               </form>
             ) : (

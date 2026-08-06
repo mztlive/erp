@@ -11,7 +11,6 @@ import type {
   ConnectionListItem,
   ConnectionListView,
   ConnectionStatus,
-  DemoRole,
   FormalOutcome,
   HealthResult,
   ReferenceState,
@@ -19,7 +18,6 @@ import type {
 import {
   CAPABILITY_LABEL,
   CATALOG_LABEL,
-  DEMO_ROLE_LABEL,
   ENVIRONMENT_LABEL,
   HEALTH_LABEL,
   HEALTH_TONE,
@@ -155,101 +153,6 @@ function toBackendCapabilityCode(code: CapabilityCode): string {
   return table[code]
 }
 
-function roleActions(
-  role: DemoRole,
-  status: ConnectionStatus,
-  hasCaps: boolean
-): { allowed: string[]; blockers: ConnectionCenterView["actionBlockers"] } {
-  const allowed: string[] = ["OPEN_CENTER", "VIEW"]
-  const blockers: ConnectionCenterView["actionBlockers"] = []
-
-  if (role === "procurement") {
-    allowed.push("CONFIRM_CAPABILITY_REQUIREMENT", "OPEN_W21")
-    blockers.push(
-      {
-        action: "BIND_CREDENTIAL_REFERENCE",
-        code: "ROLE_PROCUREMENT",
-        message: "采购不可绑定/轮换密钥引用；请联系研发运维",
-      },
-      {
-        action: "UPDATE_CAPABILITIES",
-        code: "ROLE_PROCUREMENT",
-        message: "采购只能确认业务能力需求，不能写能力启停状态",
-      },
-      {
-        action: "ENABLE",
-        code: "ROLE_PROCUREMENT",
-        message: "启用连接由系统管理员执行",
-      },
-      {
-        action: "DISABLE",
-        code: "ROLE_PROCUREMENT",
-        message: "停用连接由系统管理员执行",
-      },
-      {
-        action: "RUN_HEALTH_CHECK",
-        code: "ROLE_PROCUREMENT",
-        message: "健康检查由研发运维执行",
-      }
-    )
-  } else if (role === "ops") {
-    allowed.push(
-      "BIND_ENDPOINT_REFERENCE",
-      "BIND_CREDENTIAL_REFERENCE",
-      "RUN_HEALTH_CHECK",
-      "OPEN_W29",
-      "OPEN_W21"
-    )
-    if (hasCaps && status === "ENABLED") {
-      allowed.push("START_CATALOG_SYNC")
-    }
-    blockers.push(
-      {
-        action: "CONFIRM_CAPABILITY_REQUIREMENT",
-        code: "ROLE_OPS",
-        message: "研发运维不能代替采购确认业务能力需求",
-      },
-      {
-        action: "UPDATE_CAPABILITIES",
-        code: "ROLE_OPS",
-        message: "能力启停仅系统管理员可配置",
-      },
-      {
-        action: "ENABLE",
-        code: "ROLE_OPS",
-        message: "启用连接由系统管理员执行（需采购与运维前置完成）",
-      },
-      {
-        action: "DISABLE",
-        code: "ROLE_OPS",
-        message: "停用连接由系统管理员执行",
-      }
-    )
-  } else {
-    allowed.push(
-      "CREATE_CONNECTION",
-      "UPDATE_CAPABILITIES",
-      "ENABLE",
-      "DISABLE",
-      "RUN_HEALTH_CHECK",
-      "BIND_ENDPOINT_REFERENCE",
-      "BIND_CREDENTIAL_REFERENCE",
-      "START_CATALOG_SYNC",
-      "OPEN_W21",
-      "OPEN_W29",
-      "OPEN_W19"
-    )
-    blockers.push({
-      action: "CONFIRM_CAPABILITY_REQUIREMENT",
-      code: "ROLE_ADMIN",
-      message:
-        "系统管理员不能代替采购确认业务能力需求；采购确认与能力配置无共用写入口",
-    })
-  }
-
-  return { allowed: [...new Set(allowed)], blockers }
-}
-
 function mapCapability(c: BackendCapability) {
   const code = mapCapabilityCode(c.capability_code)
   const enabled = c.status === "active"
@@ -271,7 +174,6 @@ function mapCapability(c: BackendCapability) {
 function toListItem(
   conn: BackendConnection,
   caps: BackendCapability[],
-  role: DemoRole,
   supplierName?: string
 ): ConnectionListItem {
   const status = mapStatus(conn.status)
@@ -284,7 +186,6 @@ function toListItem(
       : enabledCaps
           .map((c) => CAPABILITY_LABEL[mapCapabilityCode(c.capability_code)])
           .join("、")
-  const { allowed, blockers } = roleActions(role, status, enabledCaps.length > 0)
 
   return {
     connectionId: conn.id,
@@ -303,29 +204,25 @@ function toListItem(
     catalogState: "NEVER",
     catalogLabel: CATALOG_LABEL.NEVER,
     nextStep: status === "ENABLED" ? "连接已启用" : "完成配置与健康检查",
-    allowedActions: allowed,
-    actionBlockers: blockers,
+    allowedActions: [],
+    actionBlockers: [],
   }
 }
 
 function toCenter(
   detail: BackendConnectionDetail,
-  role: DemoRole,
   supplierName?: string
 ): ConnectionCenterView {
   const status = mapStatus(detail.status)
   const env = mapEnvironment(detail.environment)
   const health = mapHealth(detail.last_health_result)
   const caps = detail.capabilities ?? []
-  const enabledCaps = caps.filter((c) => c.status === "active")
-  const { allowed, blockers } = roleActions(role, status, enabledCaps.length > 0)
-  const adapterVisible = role === "ops" || role === "admin"
   const healthAt = secsToIso(detail.last_health_at)
 
   // 密钥引用永不回显（后端契约）；前端仅展示「未绑定」占位。
   const missingRef = {
     state: "MISSING" as ReferenceState,
-    visible: adapterVisible,
+    visible: true,
   }
 
   return {
@@ -340,9 +237,7 @@ function toCenter(
     status,
     statusLabel: STATUS_LABEL[status],
     statusTone: STATUS_TONE[status],
-    adapter: adapterVisible
-      ? { code: "default", version: "1", visible: true }
-      : undefined,
+    adapter: { code: "default", version: "1", visible: true },
     version: String(detail.version),
     updatedAt: secsToIso(detail.created_at) ?? new Date(0).toISOString(),
     safeReferences: {
@@ -380,8 +275,8 @@ function toCenter(
       activeSyncJobs: 0,
     },
     auditEvents: [],
-    allowedActions: allowed,
-    actionBlockers: blockers,
+    allowedActions: [],
+    actionBlockers: [],
     alerts: [],
     nextStep:
       status === "ENABLED"
@@ -413,61 +308,11 @@ export type ListQueryInput = {
   q?: string
   page: number
   pageSize?: number
-  role: DemoRole
-  demoFlag?: "no-permission" | "no-scope"
 }
 
 export async function fetchConnectionList(
   input: ListQueryInput
 ): Promise<ConnectionListView> {
-  if (input.demoFlag === "no-permission") {
-    return {
-      metrics: {
-        enabled: 0,
-        faulted: 0,
-        pendingConfig: 0,
-        healthAbnormal: 0,
-        catalogStale: 0,
-      },
-      items: [],
-      total: 0,
-      page: 1,
-      pageSize: input.pageSize ?? 20,
-      emptyReason: "NO_PERMISSION",
-      viewerRole: input.role,
-      viewerRoleLabel: DEMO_ROLE_LABEL[input.role],
-      hasModulePermission: false,
-      hasDataScope: false,
-      projectedAt: new Date(0).toISOString(),
-      credentialOpaqueOptions: [],
-      endpointOpaqueOptions: [],
-    }
-  }
-
-  if (input.demoFlag === "no-scope") {
-    return {
-      metrics: {
-        enabled: 0,
-        faulted: 0,
-        pendingConfig: 0,
-        healthAbnormal: 0,
-        catalogStale: 0,
-      },
-      items: [],
-      total: 0,
-      page: 1,
-      pageSize: input.pageSize ?? 20,
-      emptyReason: "NO_SCOPE",
-      viewerRole: input.role,
-      viewerRoleLabel: DEMO_ROLE_LABEL[input.role],
-      hasModulePermission: true,
-      hasDataScope: false,
-      projectedAt: new Date(0).toISOString(),
-      credentialOpaqueOptions: [],
-      endpointOpaqueOptions: [],
-    }
-  }
-
   const page = Math.max(1, input.page)
   const pageSize = input.pageSize ?? 20
   const env = input.environment.toUpperCase()
@@ -519,12 +364,7 @@ export async function fetchConnectionList(
   )
 
   let items = pageResult.items.map((c) =>
-    toListItem(
-      c,
-      capsByConn.get(c.id) ?? [],
-      input.role,
-      supplierNames.get(c.supplier_id)
-    )
+    toListItem(c, capsByConn.get(c.id) ?? [], supplierNames.get(c.supplier_id))
   )
 
   // 客户端补筛：后端未提供 health / capability / catalog 筛选
@@ -566,8 +406,6 @@ export async function fetchConnectionList(
     page: pageResult.page,
     pageSize: pageResult.page_size,
     emptyReason,
-    viewerRole: input.role,
-    viewerRoleLabel: DEMO_ROLE_LABEL[input.role],
     hasModulePermission: true,
     hasDataScope: true,
     projectedAt: secsToIso(
@@ -580,14 +418,13 @@ export async function fetchConnectionList(
 
 export async function fetchConnectionCenter(input: {
   connectionId: string
-  role: DemoRole
 }): Promise<ConnectionCenterView | null> {
   try {
     const detail = await apiGet<BackendConnectionDetail>(
       `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}`
     )
     const supplierName = await resolveSupplierName(detail.supplier_id)
-    return toCenter(detail, input.role, supplierName)
+    return toCenter(detail, supplierName)
   } catch (err) {
     const e = err as { kind?: string; status?: number }
     if (e?.kind === "Http" && e.status === 404) return null
@@ -600,17 +437,8 @@ export async function createConnection(input: {
   supplierId: string
   supplierName: string
   environment: ConnectionEnvironment
-  role: DemoRole
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  if (input.role !== "admin") {
-    return {
-      status: "blocked",
-      code: "FORBIDDEN",
-      title: "无权创建连接",
-      message: "仅系统管理员可创建连接身份",
-    }
-  }
   const code = input.connectionCode.trim().toUpperCase()
   if (!code) {
     return {
@@ -656,18 +484,9 @@ export async function bindCredentialReference(input: {
   connectionId: string
   opaqueReferenceId: string
   expectedVersion: string
-  role: DemoRole
   idempotencyKey: string
   forceUnknown?: boolean
 }): Promise<FormalOutcome> {
-  if (input.role !== "ops" && input.role !== "admin") {
-    return {
-      status: "blocked",
-      code: "FORBIDDEN",
-      title: "无权轮换密钥引用",
-      message: "仅研发运维或系统管理员可绑定密钥管理系统引用",
-    }
-  }
   if (input.forceUnknown) {
     return {
       status: "unknown",
@@ -704,18 +523,8 @@ export async function bindEndpointReference(input: {
   connectionId: string
   opaqueReferenceId: string
   expectedVersion: string
-  role: DemoRole
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  if (input.role !== "ops" && input.role !== "admin") {
-    return {
-      status: "blocked",
-      code: "FORBIDDEN",
-      title: "无权绑定地址引用",
-      message: "地址配置引用由研发运维或系统管理员绑定",
-    }
-  }
-
   const updated = await apiPut<BackendConnection>(
     `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}`,
     {
@@ -744,19 +553,9 @@ export async function confirmCapabilityRequirement(input: {
   reasonCode: string
   expectedConnectionVersion: string
   expectedCapabilityVersion: string
-  role: DemoRole
   operationId: string
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  if (input.role !== "procurement") {
-    return {
-      status: "blocked",
-      code: "ROLE_NOT_PROCUREMENT",
-      title: "仅采购可确认业务能力需求",
-      message:
-        "确认业务能力需求是采购追加式业务确认，不改变能力启停，不创建任务",
-    }
-  }
   // 后端无独立「业务能力需求确认」端点 — 登记 backend_gap；
   // 不调用 UPDATE_CAPABILITIES（会改启停），仅返回成功占位并提示审计缺口。
   return {
@@ -775,20 +574,9 @@ export async function updateCapabilities(input: {
   expectedConnectionVersion: string
   expectedCapabilityVersions: Record<string, string>
   reasonCode: string
-  role: DemoRole
   operationId: string
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  if (input.role !== "admin") {
-    return {
-      status: "blocked",
-      code: "UPDATE_CAPABILITIES_FORBIDDEN",
-      title: "无权配置能力",
-      message:
-        "仅系统管理员有 UPDATE_CAPABILITIES；与采购业务确认无共用写入口",
-    }
-  }
-
   // 后端为整表替换；先读详情再合并
   const detail = await apiGet<BackendConnectionDetail>(
     `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}`
@@ -848,18 +636,9 @@ export async function updateCapabilities(input: {
 export async function runHealthCheck(input: {
   connectionId: string
   expectedVersion: string
-  role: DemoRole
   idempotencyKey: string
   forceUnknown?: boolean
 }): Promise<FormalOutcome> {
-  if (input.role !== "ops" && input.role !== "admin") {
-    return {
-      status: "blocked",
-      code: "FORBIDDEN",
-      title: "无权执行健康检查",
-      message: "健康检查由研发运维执行",
-    }
-  }
   if (input.forceUnknown) {
     return {
       status: "unknown",
@@ -897,17 +676,8 @@ export async function runHealthCheck(input: {
 
 export async function startCatalogSync(input: {
   connectionId: string
-  role: DemoRole
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  if (input.role === "procurement") {
-    return {
-      status: "blocked",
-      code: "FORBIDDEN",
-      title: "无权触发目录同步",
-      message: "目录同步由运维或管理员在能力启用且健康时触发",
-    }
-  }
   // 后端本域无目录同步触发端点（同步由 supplier_catalog intake 承接）
   return {
     status: "blocked",
@@ -922,19 +692,9 @@ export async function startCatalogSync(input: {
 export async function disableConnection(input: {
   connectionId: string
   expectedVersion: string
-  role: DemoRole
   reasonCode: string
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  if (input.role !== "admin") {
-    return {
-      status: "blocked",
-      code: "FORBIDDEN",
-      title: "无权停用连接",
-      message: "停用连接仅系统管理员可执行",
-    }
-  }
-
   const updated = await apiPut<BackendConnection>(
     `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}`,
     {
@@ -956,18 +716,8 @@ export async function disableConnection(input: {
 export async function enableConnection(input: {
   connectionId: string
   expectedVersion: string
-  role: DemoRole
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  if (input.role !== "admin") {
-    return {
-      status: "blocked",
-      code: "FORBIDDEN",
-      title: "无权启用连接",
-      message: "启用由系统管理员执行",
-    }
-  }
-
   const updated = await apiPut<BackendConnection>(
     `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}`,
     {

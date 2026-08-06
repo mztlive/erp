@@ -6,9 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 import {
   ArrowLeftIcon,
-  BanIcon,
   ExternalLinkIcon,
-  RefreshCwIcon,
   ShieldAlertIcon,
   TriangleAlertIcon,
 } from "lucide-react"
@@ -52,19 +50,13 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { formatObjectSet } from "@/features/import-opening/api"
 import { formatDateTime } from "@/lib/datetime"
-import { RoleDemoBar } from "@/components/business/role-demo-bar"
-import type { ComboboxOption } from "@/components/business/option-combobox"
 import {
-  useAcknowledgeUploadMutation,
   useImportBatchDetailQuery,
   useImportBatchListQuery,
   useImportIssuesQuery,
-  useInvalidateTrialMutation,
-  useOpenRepairBatchMutation,
 } from "@/features/import-opening/queries"
 import type {
   BatchSection,
-  FormalActionResponse,
   ImportBatchListItem,
   ImportBatchStatus,
   ImportBatchView,
@@ -73,7 +65,6 @@ import type {
   ImportObjectCode,
   ImportPipelineStage,
   IssueRowStatus,
-  ViewerRoleDemo,
 } from "@/features/import-opening/types"
 import {
   BATCH_STATUS_LABEL,
@@ -149,12 +140,6 @@ function formatBytes(n: number) {
   return `${(n / (1024 * 1024)).toFixed(2)} MB`
 }
 
-function roleLabel(role: ViewerRoleDemo) {
-  if (role === "WAREHOUSE_CONFIRMER") return "仓储确认人"
-  if (role === "FINANCE_CONFIRMER") return "财务确认人"
-  return "系统管理员"
-}
-
 export function ImportOpeningPage() {
   const router = useRouter()
   const pathname = usePathname()
@@ -164,8 +149,6 @@ export function ImportOpeningPage() {
     () => parseImportOpeningSearchParams(searchParams),
     [searchParams]
   )
-
-  const role: ViewerRoleDemo = urlState.role ?? "SYSTEM_ADMIN"
 
   const replaceUrl = React.useCallback(
     (next: ImportOpeningUrlState) => {
@@ -187,7 +170,6 @@ export function ImportOpeningPage() {
       <BatchDetailView
         batchId={urlState.batchId}
         urlState={urlState}
-        role={role}
         patchUrl={patchUrl}
         replaceUrl={replaceUrl}
       />
@@ -197,34 +179,16 @@ export function ImportOpeningPage() {
   return (
     <BatchListView
       urlState={urlState}
-      role={role}
       patchUrl={patchUrl}
     />
   )
 }
 
-const IMPORT_ROLE_OPTIONS: ComboboxOption[] = [
-  { value: "SYSTEM_ADMIN", label: "系统管理员" },
-  { value: "WAREHOUSE_CONFIRMER", label: "仓储确认人" },
-  { value: "FINANCE_CONFIRMER", label: "财务确认人" },
-]
-
-const importRoleHint = (role: ViewerRoleDemo) => (
-  <>
-    当前：{roleLabel(role)}
-    {role === "SYSTEM_ADMIN"
-      ? " · 不可代替业务确认"
-      : " · 仅本人责任范围可写（任务类型登记后）"}
-  </>
-)
-
 function BatchListView({
   urlState,
-  role,
   patchUrl,
 }: {
   urlState: ImportOpeningUrlState
-  role: ViewerRoleDemo
   patchUrl: (patch: Partial<ImportOpeningUrlState>) => void
 }) {
   const [qDraft, setQDraft] = React.useState(urlState.q ?? "")
@@ -235,7 +199,6 @@ function BatchListView({
     q: urlState.q,
     page: urlState.page,
     pageSize: 20,
-    role,
   })
 
   const columns = React.useMemo<ColumnDef<ImportBatchListItem>[]>(
@@ -377,16 +340,6 @@ function BatchListView({
             label="导入批次"
           />
         }
-      />
-
-      <RoleDemoBar
-        role={role}
-        onRole={(r) =>
-          patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
-        }
-        roleOptions={IMPORT_ROLE_OPTIONS}
-        roleClassName="w-[11rem]"
-        hintFor={importRoleHint}
       />
 
       <div className="flex flex-wrap items-center gap-3">
@@ -561,17 +514,15 @@ function BatchListView({
 function BatchDetailView({
   batchId,
   urlState,
-  role,
   patchUrl,
   replaceUrl,
 }: {
   batchId: string
   urlState: ImportOpeningUrlState
-  role: ViewerRoleDemo
   patchUrl: (patch: Partial<ImportOpeningUrlState>) => void
   replaceUrl: (next: ImportOpeningUrlState) => void
 }) {
-  const detailQuery = useImportBatchDetailQuery(batchId, role)
+  const detailQuery = useImportBatchDetailQuery(batchId)
   const issueQuery = useImportIssuesQuery(
     {
       batchId,
@@ -583,12 +534,6 @@ function BatchDetailView({
     },
     Boolean(batchId)
   )
-  const invalidateMutation = useInvalidateTrialMutation()
-  const repairMutation = useOpenRepairBatchMutation()
-  const uploadAckMutation = useAcknowledgeUploadMutation()
-
-  const [demoResult, setDemoResult] =
-    React.useState<FormalActionResponse | null>(null)
 
   const batch = detailQuery.data
   const section = urlState.section
@@ -682,16 +627,6 @@ function BatchDetailView({
         }
       />
 
-      <RoleDemoBar
-        role={role}
-        onRole={(r) =>
-          patchUrl({ role: r === "SYSTEM_ADMIN" ? undefined : r })
-        }
-        roleOptions={IMPORT_ROLE_OPTIONS}
-        roleClassName="w-[11rem]"
-        hintFor={importRoleHint}
-      />
-
       <DocumentHeader
         density="compact"
         title={batch.sourceSystem.name}
@@ -741,40 +676,6 @@ function BatchDetailView({
             },
           },
         ]}
-        secondaryActions={
-          <>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={uploadAckMutation.isPending}
-              onClick={() =>
-                void uploadAckMutation
-                  .mutateAsync({ batchId: batch.batchId })
-                  .then(setDemoResult)
-              }
-            >
-              模拟：标记已上传（仅演示）
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={invalidateMutation.isPending}
-              onClick={() =>
-                void invalidateMutation
-                  .mutateAsync({
-                    batchId: batch.batchId,
-                    idempotencyKey: `inv-${batch.batchId}-${Date.now()}`,
-                  })
-                  .then(setDemoResult)
-              }
-            >
-              <RefreshCwIcon className="size-4" />
-              模拟：规则变化后确认失效（仅演示）
-            </Button>
-          </>
-        }
       />
 
       {/* 批次身份摘要：对象集、试算版本、来源系统等（环境/基准日/规则版本见页头） */}
@@ -810,24 +711,6 @@ function BatchDetailView({
         aria-label="导入六段流水线"
       />
 
-      {demoResult ? (
-        <FormalActionResult
-          status={
-            demoResult.status === "succeeded"
-              ? "succeeded"
-              : demoResult.status === "blocked"
-                ? "blocked"
-                : "rejected"
-          }
-          title={
-            demoResult.status === "succeeded"
-              ? "演示操作已完成"
-              : "演示操作未完成"
-          }
-          description={demoResult.message}
-        />
-      ) : null}
-
       <Tabs
         value={section}
         onValueChange={(v) => {
@@ -862,7 +745,6 @@ function BatchDetailView({
       {section === "confirm" ? (
         <ConfirmSection
           batch={batch}
-          role={role}
           workItemTypeMissing={workItemTypeMissing}
           confirmBlocked={confirmBlocked}
         />
@@ -873,7 +755,6 @@ function BatchDetailView({
       {section === "result" ? (
         <ResultSection
           batch={batch}
-          repairMutation={repairMutation}
           onOpenRepair={(id) =>
             patchUrl({ batchId: id, section: "progress", page: 1 })
           }
@@ -1165,7 +1046,7 @@ function FilesSection({ batch }: { batch: ImportBatchView }) {
                 </Button>
                 {previewAsset === a.fileName ? (
                   <p className="mt-2 text-xs text-muted-foreground">
-                    示例：演示环境不展示文件正文，仅保留元数据与保留策略。
+                    示例：文件正文不在此处展示，仅保留元数据与保留策略。
                   </p>
                 ) : null}
               </div>
@@ -1356,12 +1237,10 @@ function TrialSection({
 
 function ConfirmSection({
   batch,
-  role,
   workItemTypeMissing,
   confirmBlocked,
 }: {
   batch: ImportBatchView
-  role: ViewerRoleDemo
   workItemTypeMissing: boolean
   confirmBlocked: ImportBatchView["actionBlockers"]
 }) {
@@ -1383,16 +1262,6 @@ function ConfirmSection({
             },
           ]}
         />
-      ) : null}
-
-      {role === "SYSTEM_ADMIN" ? (
-        <Alert variant="warning">
-          <BanIcon />
-          <AlertTitle>系统管理员不能代替业务确认</AlertTitle>
-          <AlertDescription>
-            系统管理员只负责技术编排（创建批次、上传、启动校验、提交应用）。销售、采购、运营、仓储和财务确认必须由责任范围本人完成。
-          </AlertDescription>
-        </Alert>
       ) : null}
 
       <div className="grid gap-3 md:grid-cols-2">
@@ -1479,9 +1348,7 @@ function ConfirmSection({
                     {workItemTypeMissing
                       ? "确认与退回任务尚未配置，入口暂不可用"
                       : !c.inViewerResponsibility
-                        ? role === "SYSTEM_ADMIN"
-                          ? "管理员不可代替确认"
-                          : "非本人责任范围，只读"
+                        ? "非本人责任范围，只读"
                         : c.result !== "PENDING"
                           ? "本范围已有结论或已失效"
                           : "当前不可操作"}
@@ -1547,11 +1414,9 @@ function ProgressSection({ batch }: { batch: ImportBatchView }) {
 
 function ResultSection({
   batch,
-  repairMutation,
   onOpenRepair,
 }: {
   batch: ImportBatchView
-  repairMutation: ReturnType<typeof useOpenRepairBatchMutation>
   onOpenRepair: (batchId: string) => void
 }) {
   const partitions = batch.applyPartitions
@@ -1590,29 +1455,11 @@ function ResultSection({
             code: i.code,
           }))}
           retryAction={
-            batch.repairBatchId || batch.status === "PARTIAL_SUCCESS" ? (
+            batch.repairBatchId ? (
               <Button
                 type="button"
                 size="sm"
-                disabled={repairMutation.isPending}
-                onClick={() => {
-                  void repairMutation
-                    .mutateAsync({
-                      batchId: batch.batchId,
-                      idempotencyKey: `repair-${batch.batchId}`,
-                    })
-                    .then((res) => {
-                      if (
-                        res.status === "succeeded" &&
-                        "repairBatchId" in res &&
-                        res.repairBatchId
-                      ) {
-                        onOpenRepair(res.repairBatchId)
-                      } else if (batch.repairBatchId) {
-                        onOpenRepair(batch.repairBatchId)
-                      }
-                    })
-                }}
+                onClick={() => onOpenRepair(batch.repairBatchId!)}
               >
                 打开修复批次
                 {batch.repairBatchNo ? ` ${batch.repairBatchNo}` : ""}

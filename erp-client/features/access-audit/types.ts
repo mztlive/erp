@@ -275,7 +275,7 @@ export type AccessListView = Readonly<{
   metrics: AccessListMetrics
   governancePolicies: AccessGovernancePolicyView
   emptyReason?: AccessEmptyReason
-  /** 字段掩码演示：列保留、值显示掩码文案 */
+  /** 字段掩码：列保留、值显示掩码文案 */
   fieldMaskNote?: string
   roles: readonly RoleRow[]
   users: readonly UserRow[]

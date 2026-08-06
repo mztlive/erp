@@ -85,7 +85,6 @@ import {
   useCardFundsReviewQueueQuery,
   useClaimCardFundsMutation,
   useCompleteCardFundsMutation,
-  useDemoDriftHashMutation,
   useHoldCardFundsMutation,
   useRegisterInvoiceMutation,
   useRegisterReceiptMutation,
@@ -185,7 +184,6 @@ export function CardFundsReviewPage() {
   const registerReceiptMutation = useRegisterReceiptMutation()
   const registerInvoiceMutation = useRegisterInvoiceMutation()
   const saveEvidenceMutation = useSaveCardFundsEvidenceMutation()
-  const driftMutation = useDemoDriftHashMutation()
 
   const view = queueQuery.data
   const tasks = React.useMemo(() => view?.tasks ?? [], [view?.tasks])
@@ -205,7 +203,6 @@ export function CardFundsReviewPage() {
   const [confirmMode, setConfirmMode] = React.useState<ConfirmMode>(null)
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
-  const [simulateHashDrift, setSimulateHashDrift] = React.useState(false)
   const [allocationMode, setAllocationMode] = React.useState<
     null | "receipt" | "invoice"
   >(null)
@@ -489,10 +486,8 @@ export function CardFundsReviewPage() {
       const response = await completeMutation.mutateAsync({
         workItemId: task.workItem.workItemId,
         expectedSubjectVersion: lease.subjectVersion,
-        simulateHashDrift,
         decision,
       })
-      setSimulateHashDrift(false)
       setConfirmMode(null)
 
       if (response.status !== "succeeded") {
@@ -528,7 +523,6 @@ export function CardFundsReviewPage() {
       buildDecisionBase,
       completeMutation,
       ensureLease,
-      simulateHashDrift,
       task,
     ]
   )
@@ -1802,33 +1796,6 @@ export function CardFundsReviewPage() {
               </Card>
             </aside>
           </div>
-
-          <details className="rounded-2xl border border-dashed px-3 py-2 text-xs text-muted-foreground">
-            <summary className="cursor-pointer">演示选项（仅演示环境）</summary>
-            <div className="mt-2 flex flex-wrap items-center gap-4">
-              <label className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  className="size-3.5"
-                  checked={simulateHashDrift}
-                  onChange={(e) => setSimulateHashDrift(e.target.checked)}
-                />
-                演示：完成前模拟数据变更阻断
-              </label>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                disabled={formalPending || !task}
-                onClick={() => {
-                  if (!task) return
-                  void driftMutation.mutateAsync(task.workItem.workItemId)
-                }}
-              >
-                演示：模拟外部数据版本变更
-              </Button>
-            </div>
-          </details>
         </>
       ) : (
         <BusinessEmptyState

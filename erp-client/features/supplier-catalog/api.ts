@@ -8,7 +8,6 @@ import { apiGet, apiPost, type Page } from "@/lib/api"
 import type {
   CreateCompanyProductFromSupplierSkuInput,
   CreateSupplierCatalogItemInput,
-  DemoRole,
   FormalActionResponse,
   PromoteSupplierProductInput,
   ReviseSupplierCatalogProductInput,
@@ -25,11 +24,8 @@ import type {
   SupplierProductMappingView,
   SupplierProductRevisionView,
   WorkItemLease,
-  CostFieldVisibility,
 } from "@/features/supplier-catalog/types"
 import {
-  COST_MASK,
-  DEMO_ROLE_LABEL,
   REGISTRATION_BLOCKER_MESSAGE,
 } from "@/features/supplier-catalog/types"
 
@@ -189,24 +185,6 @@ function secsToIso(secs?: number | null): string {
   return new Date(secs * 1000).toISOString()
 }
 
-function resolveRole(q?: DemoRole): DemoRole {
-  return q ?? "procurement"
-}
-
-function costVisibility(
-  role: DemoRole,
-  forceMask?: boolean
-): CostFieldVisibility {
-  if (forceMask) return "masked"
-  if (role === "operations" || role === "ops_tech") return "masked"
-  return "visible"
-}
-
-function maskCost(v: string | null | undefined, mask: boolean): string | null {
-  if (v == null) return null
-  return mask ? COST_MASK : v
-}
-
 function sourceTypeLabel(t: string): string {
   if (t === "EXCEL") return "Excel"
   if (t === "API") return "API"
@@ -255,7 +233,6 @@ function mapSkuRevision(
   productName: string,
   category: string,
   brand: string | undefined,
-  mask: boolean
 ): SupplierProductRevisionView {
   const r = rev
   return {
@@ -267,15 +244,15 @@ function mapSkuRevision(
     category,
     brand,
     barcode: r?.barcode ?? undefined,
-    dropshipFloorPriceGross: maskCost(r?.dropship_floor_price_gross, mask),
-    bulkFloorPriceGross: maskCost(r?.bulk_floor_price_gross, mask),
+    dropshipFloorPriceGross: r?.dropship_floor_price_gross ?? null,
+    bulkFloorPriceGross: r?.bulk_floor_price_gross ?? null,
     bulkMinimumOrderQuantity: r?.bulk_minimum_order_quantity ?? null,
     availableQuantity: r?.available_quantity ?? "0",
     availabilityStatus: mapAvailability(r?.availability_status),
   }
 }
 
-function mapOffering(o: BackendOffering, mask: boolean): SupplierOfferingRevisionView {
+function mapOffering(o: BackendOffering): SupplierOfferingRevisionView {
   return {
     offeringId: o.id,
     offeringRevisionId: o.current_revision_id ?? o.id,
@@ -286,18 +263,14 @@ function mapOffering(o: BackendOffering, mask: boolean): SupplierOfferingRevisio
         : o.status === "STOPPED"
           ? "STOPPED"
           : "ACTIVE",
-    supplyPriceGross: maskCost(
-      o.dropship_supply_price_gross ?? o.bulk_supply_price_gross,
-      mask
-    ),
-    supplyPriceNet: maskCost(
-      o.dropship_supply_price_net ?? o.bulk_supply_price_net,
-      mask
-    ),
+    supplyPriceGross:
+      o.dropship_supply_price_gross ?? o.bulk_supply_price_gross ?? null,
+    supplyPriceNet:
+      o.dropship_supply_price_net ?? o.bulk_supply_price_net ?? null,
     floorPriceGross: null,
-    dropshipSupplyPriceGross: maskCost(o.dropship_supply_price_gross, mask),
-    bulkSupplyPriceGross: maskCost(o.bulk_supply_price_gross, mask),
-    inputTaxRate: maskCost(o.input_tax_rate, mask),
+    dropshipSupplyPriceGross: o.dropship_supply_price_gross ?? null,
+    bulkSupplyPriceGross: o.bulk_supply_price_gross ?? null,
+    inputTaxRate: o.input_tax_rate ?? null,
     freightAmount: null,
     serviceFeeAmount: null,
     minimumOrderQuantity: o.bulk_minimum_order_quantity ?? "1",
@@ -349,8 +322,6 @@ function projectProductToItem(
   mappings: BackendMapping[],
   offerings: BackendOffering[],
   supplierName: string,
-  role: DemoRole,
-  mask: boolean
 ): SupplierCatalogItemView {
   const primarySku = skus[0]
   const primaryRev = primarySku
@@ -362,8 +333,7 @@ function projectProductToItem(
     primaryRev,
     product.name ?? product.supplier_spu_code,
     category,
-    brand,
-    mask
+    brand
   )
 
   const catalogSkus: SupplierCatalogSkuView[] = skus.map((s) => ({
@@ -386,8 +356,7 @@ function projectProductToItem(
         } as BackendSkuRevision),
       product.name ?? s.supplier_sku_code,
       category,
-      brand,
-      mask
+      brand
     ),
   }))
 
@@ -416,8 +385,8 @@ function projectProductToItem(
     offering: offering
       ? {
           stableId: offering.id,
-          currentRevision: mapOffering(offering, mask),
-          revisionHistory: [mapOffering(offering, mask)],
+          currentRevision: mapOffering(offering),
+          revisionHistory: [mapOffering(offering)],
         }
       : undefined,
     publicationImpact: emptyPublicationImpact(),
@@ -439,7 +408,6 @@ function projectProductToItem(
       message: string
       destinationWorkspaceId?: string
     }>,
-    costFieldVisibility: (mask ? "masked" : "visible") as CostFieldVisibility,
   }
 
   if (changeType === "ERROR" || changeType === "STOPPED") {
@@ -490,9 +458,7 @@ function projectProductToItem(
 }
 
 async function loadQueueItems(
-  query: SupplierCatalogQueueQuery,
-  role: DemoRole,
-  mask: boolean
+  query: SupplierCatalogQueueQuery
 ): Promise<SupplierCatalogItemView[]> {
   const pageSize = query.pageSize ?? 50
   const productPage = await apiGet<Page<BackendProduct>>(
@@ -568,9 +534,7 @@ async function loadQueueItems(
       skuRevisions,
       mappingPage.items,
       offeringPage.items,
-      supplierName,
-      role,
-      mask
+      supplierName
     )
     items.push(item)
   }
@@ -613,13 +577,11 @@ async function loadQueueItems(
 export async function fetchSupplierCatalogQueue(
   query: SupplierCatalogQueueQuery
 ): Promise<SupplierCatalogQueueView> {
-  const role = resolveRole(query.demoRole)
-  const mask = costVisibility(role, query.maskCost) === "masked"
-  const items = await loadQueueItems(query, role, mask)
+  const items = await loadQueueItems(query)
 
   const queueContextId =
     query.queueContextId ??
-    `queue:W21:${role}:${query.changeType ?? "actionable"}:${query.skuId ?? "all"}`
+    `queue:W21:${query.changeType ?? "actionable"}:${query.skuId ?? "all"}`
 
   let position = 0
   let current = items[0]
@@ -709,8 +671,6 @@ export async function fetchSupplierCatalogQueue(
     items,
     current,
     emptyReason,
-    role,
-    costFieldVisibility: mask ? "masked" : "visible",
   }
 }
 
@@ -753,11 +713,7 @@ export async function fetchCompanySkuOptions() {
 export async function fetchSupplierCatalogCenter(input: {
   supplierProductId: string
   section?: string
-  demoRole?: DemoRole
-  maskCost?: boolean
 }): Promise<SupplierCatalogCenterView | null> {
-  const role = resolveRole(input.demoRole)
-  const mask = costVisibility(role, input.maskCost) === "masked"
 
   let detail: BackendProductDetail
   try {
@@ -798,16 +754,12 @@ export async function fetchSupplierCatalogCenter(input: {
     skuRevisions,
     detail.mappings,
     offeringPage.items,
-    supplierName,
-    role,
-    mask
+    supplierName
   )
 
   return {
     item,
     section: input.section ?? "overview",
-    role,
-    costFieldVisibility: mask ? "masked" : "visible",
     related: {
       publications: [],
       historyOrders: [],
@@ -860,7 +812,7 @@ export async function claimSupplierCatalogWorkItem(
   if (workItemId.startsWith("wi_catalog_")) {
     return {
       workItemId,
-      claimedByLabel: DEMO_ROLE_LABEL.procurement,
+      claimedByLabel: "当前用户",
     }
   }
   const detail = await apiGet<BackendWorkItem>(

@@ -23,7 +23,7 @@ function MallSyncFallback() {
 
 /**
  * SPA 壳：URL 由客户端恢复 view / jobId / snapshotId / mappingTaskId /
- * workItemId / queueContextId / demoRole / demoStage / policy 等。
+ * workItemId / queueContextId 等。
  * 业务数据不在服务端 fetch。
  */
 export default function Page() {

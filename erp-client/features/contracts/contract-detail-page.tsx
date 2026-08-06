@@ -36,7 +36,6 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ContractPaperDialog } from "@/features/contracts/contract-paper-dialog"
-import { buildDemoContractPdfBlob } from "@/features/contracts/pdf"
 import { useContractCenterQuery } from "@/features/contracts/queries"
 import {
   CONTRACT_AUDIT_ACTION_LABEL,
@@ -497,26 +496,9 @@ export function ContractDetailPage({
                 file.securityState === "quarantined"
                   ? "安全检查未通过，已隔离，不可下载或作为生效依据。"
                   : undefined,
-              onOpen: file.canDownload
-                ? () => {
-                    // 演示环境：下载为演示占位文件；生产环境应为鉴权短时签名 URL。
-                    const blob = buildDemoContractPdfBlob(contract.contractNo)
-                    const url = URL.createObjectURL(blob)
-                    const anchor = document.createElement("a")
-                    anchor.href = url
-                    anchor.download = file.name
-                    anchor.rel = "noopener"
-                    document.body.appendChild(anchor)
-                    anchor.click()
-                    anchor.remove()
-                    URL.revokeObjectURL(url)
-                  }
-                : undefined,
+              onOpen: undefined,
             }))}
           />
-          <p className="text-xs text-muted-foreground">
-            演示环境：下载得到的是占位演示文件，不代表正式合同扫描件。
-          </p>
         </div>
       ) : null}
 

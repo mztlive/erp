@@ -4,7 +4,6 @@ import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
-  ArrowRightIcon,
   CircleCheckIcon,
   ExternalLinkIcon,
   ImageIcon,
@@ -88,13 +87,6 @@ import {
 } from "@/features/supplier-catalog/supply-relationship-list-view"
 import { cn } from "@/lib/utils"
 import { compareDecimal } from "@/lib/fixed-decimal"
-import { parseDemoRole } from "@/lib/demo-roles"
-
-const SUPPLIER_CATALOG_DEMO_ROLES = [
-  "operations",
-  "admin",
-  "ops_tech",
-] as const
 
 type SessionLease = {
   workItemId: string
@@ -268,11 +260,6 @@ export function SupplierCatalogPage() {
   const status: "pending" | "held" =
     statusParam === "held" ? "held" : "pending"
 
-  const demoRole =
-    parseDemoRole(searchParams.get("demoRole"), SUPPLIER_CATALOG_DEMO_ROLES) ??
-    "procurement"
-
-  const maskCost = searchParams.get("maskCost") === "1"
   const q = searchParams.get("q") ?? undefined
   const sourceTypeParam = searchParams.get("sourceType")
   const sourceType: SupplierCatalogSourceType | "all" =
@@ -287,7 +274,7 @@ export function SupplierCatalogPage() {
     searchParams.get("currentWorkItemId") ?? undefined
   const queueContextId =
     searchParams.get("queueContextId") ??
-    `queue:W21:${demoRole}:${changeType}:${skuId ?? "all"}`
+    `queue:W21:${changeType}:${skuId ?? "all"}`
 
   const autoNextExplicit = searchParams.get("autoNext")
   const [sessionAutoNext, setSessionAutoNext] = React.useState(true)
@@ -304,8 +291,6 @@ export function SupplierCatalogPage() {
       skuId,
       changeType,
       status,
-      demoRole,
-      maskCost,
       q,
       sourceType,
       currentSupplierProductId,
@@ -317,8 +302,6 @@ export function SupplierCatalogPage() {
       skuId,
       changeType,
       status,
-      demoRole,
-      maskCost,
       q,
       sourceType,
       currentSupplierProductId,
@@ -514,7 +497,6 @@ export function SupplierCatalogPage() {
   React.useEffect(() => {
     if (mode === "list") return
     if (!item || !isExceptionItem(item)) return
-    if (demoRole === "operations") return
     if (leaseRef.current?.workItemId === item.workItem.workItemId) return
     if (claimMutation.isPending) return
     let cancelled = false
@@ -538,7 +520,6 @@ export function SupplierCatalogPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅任务切换时领取
   }, [
     currentExceptionWorkItemId,
-    demoRole,
     mode,
   ])
 
@@ -646,7 +627,7 @@ export function SupplierCatalogPage() {
       : ("unclaimed" as const)
 
   const canProcureWrite =
-    demoRole === "procurement" && Boolean(workItemId) && leaseActive
+    Boolean(workItemId) && leaseActive
 
   const isRegistered = item ? isExceptionItem(item) : false
   const hasRegistrationBlocker =
@@ -807,20 +788,13 @@ export function SupplierCatalogPage() {
   const w14Href = item
     ? `/master-data/products?from=W21&supplierProductId=${encodeURIComponent(item.supplierProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}&queueContextId=${encodeURIComponent(queueContextId)}`
     : "/master-data"
-  const w22Href = item?.mapping?.skuId && item.offering?.currentRevision
-    ? `/commerce/publications?from=W21&skuId=${encodeURIComponent(item.mapping.skuId)}&supplierOfferingRevisionId=${encodeURIComponent(item.offering.currentRevision.offeringRevisionId)}&supplierProductId=${encodeURIComponent(item.supplierProduct.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}&queueContextId=${encodeURIComponent(queueContextId)}`
-    : "/commerce/publications"
   const w20Href = item?.supplierProduct.source.connection
     ? `/supplier-api/connections?connectionId=${encodeURIComponent(item.supplierProduct.source.connection.id)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
     : "/supplier-api/connections"
-  const w29Href = item
-    ? `/governance/integration-errors?from=W21&supplierCatalogSkuId=${encodeURIComponent(item.supplierProduct.catalogSkus?.[0]?.id ?? `${item.supplierProduct.id}_sku`)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
-    : "/governance/integration-errors"
   const centerHref = item
-    ? `/procurement/supplier-catalog/${item.supplierProduct.id}?section=overview&demoRole=${demoRole}&maskCost=${maskCost ? 1 : 0}&queueContextId=${encodeURIComponent(queueContextId)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
+    ? `/procurement/supplier-catalog/${item.supplierProduct.id}?section=overview&queueContextId=${encodeURIComponent(queueContextId)}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
     : "#"
 
-  const costMasked = view?.costFieldVisibility === "masked" || maskCost
   const displayedSourceRevision = item
     ? item.supplierProduct.incomingRevision ??
       item.supplierProduct.currentRevision
@@ -875,10 +849,7 @@ export function SupplierCatalogPage() {
           returnTo={safeReturnTo}
           returnHref={buildQueueReturnHref(searchParams)}
           updatedAt={context?.queueContextUpdatedAt}
-          costMasked={costMasked}
           emptyReason={view?.emptyReason}
-          demoRole={demoRole}
-          maskCost={maskCost}
           sort={searchParams.get("sort") ?? undefined}
           onSortChange={(next) =>
             replaceUrl({
@@ -888,7 +859,7 @@ export function SupplierCatalogPage() {
           }
           onOpenItem={(target) =>
             router.push(
-              `/procurement/supplier-catalog/${target.supplierProduct.id}?section=overview&demoRole=${demoRole}&maskCost=${maskCost ? 1 : 0}&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
+              `/procurement/supplier-catalog/${target.supplierProduct.id}?section=overview&returnTo=${encodeURIComponent(buildQueueReturnHref(searchParams))}`
             )
           }
           searchInput={searchInput}
@@ -1278,8 +1249,7 @@ export function SupplierCatalogPage() {
             processDisabled={
               formalPending ||
               !isRegistered ||
-              !canProcureWrite ||
-              demoRole !== "procurement"
+              !canProcureWrite
             }
             pending={formalPending}
             onBack={() => router.push("/workspace")}
@@ -1357,9 +1327,6 @@ export function SupplierCatalogPage() {
                       label="稍后处理"
                       tone="warning"
                     />
-                  ) : null}
-                  {costMasked ? (
-                    <Badge variant="outline">成本字段已隐藏</Badge>
                   ) : null}
                 </div>
                 <p className="text-sm text-muted-foreground">
@@ -1637,22 +1604,6 @@ export function SupplierCatalogPage() {
                       {publicationPauseStatusLabel(p.status)}
                     </div>
                   ))}
-                  {demoRole === "operations" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      className="mt-2"
-                      render={<Link href={w22Href} />}
-                      disabled={
-                        item.publicationImpact.safetyPauseTriggered ||
-                        !item.mapping?.skuId
-                      }
-                    >
-                      去商品发布
-                      <ArrowRightIcon className="size-3.5" />
-                    </Button>
-                  ) : null}
                   <div className="space-y-1">
                     <Button
                       type="button"
@@ -1880,10 +1831,7 @@ export function SupplierCatalogPage() {
                       </offeringForm.AppField>
                       <div className="flex flex-wrap gap-2">
                         <offeringForm.AppForm>
-                          <offeringForm.SubmitButton
-                            label="保存草稿"
-                            disabled={demoRole !== "procurement"}
-                          />
+                          <offeringForm.SubmitButton label="保存草稿" />
                         </offeringForm.AppForm>
                         <div className="space-y-1">
                           <Button
@@ -1966,7 +1914,7 @@ export function SupplierCatalogPage() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="flex flex-wrap gap-2 pt-4">
-                  {isRegistered && demoRole === "procurement" ? (
+                  {isRegistered ? (
                     <>
                       <Button
                         type="button"
@@ -2007,17 +1955,6 @@ export function SupplierCatalogPage() {
                           : "确认停供记录"}
                       </Button>
                     </>
-                  ) : null}
-                  {(demoRole === "admin" || demoRole === "ops_tech") &&
-                  item.changeType === "ERROR" ? (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      render={<Link href={w29Href} />}
-                    >
-                      进入接口错误中心（技术异常）
-                    </Button>
                   ) : null}
                   {w20Href ? (
                     <Button

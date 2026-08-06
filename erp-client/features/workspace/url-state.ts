@@ -15,14 +15,11 @@ const FAMILY_VALUES = [
   "exception",
   "procurement",
 ] as const
-const SCENARIO_VALUES = ["forbidden", "no_scope", "empty"] as const
 
 export type WorkspaceUrlState = {
   scope: "mine" | "role_pool"
   due?: WorkspaceDueFilter
   family?: WorkspaceFamilyFilter
-  /** Mock-only QA override; not part of shareable filter UX. */
-  scenario?: "forbidden" | "no_scope" | "empty"
 }
 
 const codec = createUrlStateCodec<WorkspaceUrlState>([
@@ -30,7 +27,6 @@ const codec = createUrlStateCodec<WorkspaceUrlState>([
   { key: "scope", type: "enum", values: ["mine", "role_pool"], defaultValue: "mine" },
   { key: "due", type: "enum", values: DUE_VALUES },
   { key: "family", type: "enum", values: FAMILY_VALUES },
-  { key: "scenario", type: "enum", values: SCENARIO_VALUES },
 ])
 
 export const parseWorkspaceSearchParams = codec.parse
@@ -87,7 +83,6 @@ export function toTodayWorkspaceQuery(
     due: state.due,
     family: state.family,
     timezone,
-    scenario: state.scenario,
   }
 }
 

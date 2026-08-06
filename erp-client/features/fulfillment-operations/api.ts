@@ -1021,17 +1021,7 @@ export async function postFulfillmentOperation(input: {
   expectedEditVersion: number
   draft: FulfillmentDraft
   nextWorkItemId?: string
-  forceUnknown?: boolean
 }): Promise<FormalActionResponse> {
-  if (input.forceUnknown) {
-    return {
-      status: "unknown",
-      message:
-        "这次提交没收到结果。先别当成已经做完 —— 库存和留货都还没动。留在这一条，点「查询最终结果」按原任务号查一下。",
-      idempotencyKey: `post_${input.workItemId}_${Date.now().toString(36)}`,
-    }
-  }
-
   const draft = input.draft
 
   try {
@@ -1461,13 +1451,7 @@ export async function deferFulfillmentOperation(input: {
 
 export async function resolveUnknownFulfillmentResult(input: {
   workItemId: string
-  settle?: boolean
-  settlePayload?: Parameters<typeof postFulfillmentOperation>[0]
 }): Promise<FormalActionResponse> {
-  if (input.settle && input.settlePayload) {
-    return postFulfillmentOperation(input.settlePayload)
-  }
-
   // Probe document status for posted outcomes
   const probes: Array<() => Promise<FormalActionResponse | null>> = [
     async () => {

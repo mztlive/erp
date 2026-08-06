@@ -6,15 +6,6 @@ import type {
   MasterDataListItem,
   MasterDataResource,
 } from "@/features/master-data/types"
-import { MASTER_DATA_ROLE_DEFAULT } from "@/features/master-data/types"
-
-/** 按演示角色解析默认落地资源；未知或缺失回落到采购默认。 */
-export function resolveMasterDataRoleDefault(
-  role?: string | null
-): MasterDataResource {
-  const resource = role ? MASTER_DATA_ROLE_DEFAULT[role] : undefined
-  return resource ?? "sellable-items"
-}
 
 /** Warehouse write always fail-closed while write ownership unconfirmed. */
 export const WAREHOUSE_WRITE_CODE = "WAREHOUSE_WRITE_OWNER_UNCONFIRMED"

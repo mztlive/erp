@@ -1,6 +1,6 @@
 /**
  * W18 导入与期初 · 客户端契约类型
- * 对齐 docs/ui-workspaces/w18-import-opening.md §5/§8（session-mock 语义）。
+ * 对齐 docs/ui-workspaces/w18-import-opening.md §5/§8。
  */
 
 import type { ImportStageKey } from "@/components/business"
@@ -71,8 +71,6 @@ export type ImportIssueCode =
   | "STOCK_QTY_INVALID"
 
 export type RetentionClass = "SUCCESS_AUDIT" | "FAILURE_DIAG" | "EXPORT_TEMP"
-
-export type ViewerRoleDemo = "SYSTEM_ADMIN" | "WAREHOUSE_CONFIRMER" | "FINANCE_CONFIRMER"
 
 export type BatchSection =
   | "overview"
@@ -214,7 +212,6 @@ export type ImportConfirmationView = Readonly<{
   confirmedAt?: string
   trialVersion: string
   comment?: string
-  /** 该范围是否属于当前演示角色责任 */
   inViewerResponsibility: boolean
 }>
 
