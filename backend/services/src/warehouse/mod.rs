@@ -687,11 +687,18 @@ mod tests {
         let to_a = BusinessDate::from_ymd(2026, 3, 1).unwrap();
         let from_b = BusinessDate::from_ymd(2026, 2, 1).unwrap();
         let to_b = BusinessDate::from_ymd(2026, 4, 1).unwrap();
+        // [2026-01-01, 2026-03-01) ∩ [2026-02-01, 2026-04-01) 有交集。
         assert!(intervals_overlap(from_a, Some(to_a), from_b, Some(to_b)));
 
-        // 相邻区间（前一个结束日 = 后一个开始日）不重叠（半开区间）。
-        let to_b = BusinessDate::from_ymd(2026, 3, 1).unwrap();
-        assert!(!intervals_overlap(from_a, Some(to_a), from_b, Some(to_b)));
+        // 相邻半开区间：前一段结束日 = 后一段开始日，不重叠。
+        let adj_from = BusinessDate::from_ymd(2026, 3, 1).unwrap();
+        let adj_to = BusinessDate::from_ymd(2026, 5, 1).unwrap();
+        assert!(!intervals_overlap(
+            from_a,
+            Some(to_a),
+            adj_from,
+            Some(adj_to)
+        ));
 
         // 无限期与有限区间重叠。
         assert!(intervals_overlap(from_a, None, from_b, Some(to_b)));

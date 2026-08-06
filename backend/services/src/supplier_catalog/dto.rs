@@ -807,6 +807,8 @@ mod tests {
             "supplier_id": "sup-1",
             "supplier_spu_code": "  ",
             "name": "空白编码",
+            "structured_attributes": [],
+            "media": [],
             "skus": [{
                 "supplier_sku_code": "S1",
                 "name": "n",

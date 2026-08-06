@@ -164,8 +164,9 @@ HTTP 传输契约（信封/错误码/分页/时间与数值/权限生成物）�
 | P5 | 投影实现 + 治理脚本 | 相关 C | P5 合并门禁 | E3 可运行投影、E4 脚本化治理；跨域/并发 IT 见 P6 |
 | P6 | `database/tests/*`、`web-api/tests/*` | 对应 C（及 E3） | **发布前置** | 域内仓储/HTTP IT + 跨域不变量 + 并发/故障 + 投影 IT |
 
-**策略**：P2/P3 优先并行交付实现；需真实 MongoDB 的集成测试集中在 **P6 收口**，
-避免前期拖慢进度。P0 仍须提供 `test-support` 与 D01 样板 IT，供 P6 复制。
+**策略**：P2/P3 优先并行交付实现；需真实 MongoDB 的**域级**集成测试集中在 **P6 从零编写**，
+避免前期拖慢进度与实现/测试漂移。`database/tests/`、`web-api/tests/` 在 P6 前仅 README 占位。
+P0 提供 `test-support` 与 `dev-mongo.sh` 夹具；禁止在 P2/P3 PR 中提交域级 IT。
 
 ### 7.2 集成测试执行
 

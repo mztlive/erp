@@ -147,12 +147,12 @@ core/routes/admin.rs       ← 一次性 .merge(<domain>::routes(&rbac_service))
 
 ## 3. 任务 P0-3：测试夹具
 
-当前后端**没有任何 `tests/` 目录**。P2/P3 实现阶段**不强制**跑真实 Mongo IT；
-但 P0 必须先把夹具与样板 IT 建好，供最后阶段 [P6](./P6-integration-tests.md) 批量复制。
+P2/P3 实现阶段**不强制**、也不提交域级真实 Mongo IT（避免漂移；见 [P6](./P6-integration-tests.md)）。
+P0 只建**夹具与基础设施**，业务域用例一律在 P6 从零编写。
 
 1. `backend/scripts/dev-mongo.sh`：启动单节点副本集容器（`--replSet rs0` + 自动 `rs.initiate()`），
    输出连接串；`docker-compose.yml` 增加对应 profile。
-2. `backend/crates/test-support`（新 crate，dev-dependency）：
+2. `backend/crates/test-support`（workspace crate；P6 的 database/web-api 测试再声明为 dev-dependency）：
    - `TestDb`：按随机库名连接、创建、`Drop` 时清理；
    - `require_mongo!()` 宏：读 `ERP_TEST_MONGO_URI`，缺失时跳过并打印原因；
    - `seed_*` 辅助：最小账号/角色/权限种子，供 HTTP 集成测试鉴权；
@@ -160,11 +160,13 @@ core/routes/admin.rs       ← 一次性 .merge(<domain>::routes(&rbac_service))
    - HTTP 测试客户端：启动 `web-api` Router，带 JWT 发请求。
 3. `#[ignore]` 门控约定与 CI 两段式执行（见 conventions 7.2）：
    - 日常/P1–P5：`cargo test --workspace`；
-   - P0 样板 + P6 / 发布：`cargo test --workspace -- --include-ignored`。
+   - P6 / 发布：`cargo test --workspace -- --include-ignored`。
+4. `database/tests/`、`web-api/tests/` 仅保留 README 占位，**不放域级用例**。
 
 **验收**：`cargo test --workspace` 在无数据库环境全绿；
-`ERP_TEST_MONGO_URI=... cargo test --workspace -- --include-ignored` 在有库环境全绿
-（至少覆盖 D01 样板 IT 与既有 IAM 相关测试）。
+`test-support` 烟雾与 `id-generator` 等基础设施 IT 在有库时可
+`ERP_TEST_MONGO_URI=... cargo test --workspace -- --include-ignored` 通过。
+域级 repository/HTTP IT **不在 P0 验收范围**。
 
 ---
 
@@ -206,13 +208,14 @@ lib/api/feature-source.ts 按 feature 切换 mock / 真实实现的开关
 | 层 | 产物 | 作为样板演示的点 |
 | --- | --- | --- |
 | 实体 | `entities/src/source_registry/` | ids 用法、StableBase、状态机 trait、内联单测 |
-| 仓储 | `repository/source_registry.rs`、`indexes/source_registry.rs`、`extensions/source_registry.rs` | Executor 传参、投影查询、唯一索引、乐观锁；**含**样板仓储 IT 写法供 P6 复制 |
+| 仓储 | `repository/source_registry.rs`、`indexes/source_registry.rs`、`extensions/source_registry.rs` | Executor 传参、投影查询、唯一索引、乐观锁（**不含**仓储 IT） |
 | 服务 | `services/src/source_registry/{mod.rs,dto.rs}` | 事务模板、审计事务、DTO 定义、错误映射 |
-| 接口 | `handler/source_registry/`、`routes/source_registry.rs` | 权限宏、路由挂载、`ApiResponse`；**含**样板 HTTP IT 写法供 P6 复制 |
+| 接口 | `handler/source_registry/`、`routes/source_registry.rs` | 权限宏、路由挂载、`ApiResponse`（**不含** HTTP IT） |
 | 前端 | `erp-client/features/mall-sync` 中来源相关取数 | `api.ts` 替换姿势、开关用法、错误提示 |
 
-**验收**：外部身份映射的建立/查询接口可鉴权调用；D01 样板 IT 覆盖 happy path、403、400、409（乐观锁）
-（后续域的同类 IT 在 P6 批量补齐，不阻塞 P2/P3）；前端能取到真实数据。
+**验收**：外部身份映射的建立/查询接口可手工或联调鉴权调用；实现可被后续层复制。
+域级 IT（含 D01）统一在 **P6 从零编写**，本任务不提交 `*_repository.rs` / `*_api.rs` 用例。
+前端能取到真实数据。
 
 ---
 
@@ -220,7 +223,7 @@ lib/api/feature-source.ts 按 feature 切换 mock / 真实实现的开关
 
 1. 在 `backend/AGENTS.md` 追加一节"分阶段并行开发约束"，指向本目录，并写明冻结文件清单。
 2. CI 两段：默认 `cargo test --workspace`；集成段（Mongo service）
-   `cargo test --workspace -- --include-ignored`（P0 样板 + 后续 P6 全量）。
+   `cargo test --workspace -- --include-ignored`（基础设施 IT；域级用例在 P6 补齐后纳入）。
    另含权限生成物漂移校验、`erp-client` 的 `npm run lint` 与 `tsc --noEmit`。
 3. 在 `docs/dev-plan/_meta.json` 校验分支名与 owns 前缀无重叠（可用一次性脚本）。
 
@@ -235,9 +238,9 @@ lib/api/feature-source.ts 按 feature 切换 mock / 真实实现的开关
 - [ ] `Amount`/`UnitPrice`/`Quantity`/`Rate` 与唯一舍入实现落地，Decimal128 往返测试通过
 - [ ] `StableBase`/`RevisionBase`/`FactBase`/`SourceType`/状态机 trait 落地
 - [ ] 四处共享文件已改造为聚合器 + 34 域预声明，且全部冻结
-- [ ] `test-support` crate 与 `dev-mongo.sh` 可用，两段式测试全绿
+- [ ] `test-support` crate 与 `dev-mongo.sh` 可用；无库 `cargo test --workspace` 全绿
 - [ ] `erp-client/lib/api/` 基座可用，样板域前端取数成功
-- [ ] D01 端到端跑通，四层各有可复制骨架
+- [ ] D01 实现层端到端可联调，四层各有可复制骨架（**不含**域级 IT 文件）
 - [ ] 权限生成物落到 `erp-client` 且 CI 校验无漂移
 - [ ] `cargo fmt --all -- --check`、`cargo check --workspace`、
       `cargo clippy --workspace --all-targets --all-features -- -D warnings`、

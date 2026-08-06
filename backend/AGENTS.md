@@ -1095,16 +1095,19 @@ erp-client/lib/query-client.ts
 | 层 | owns |
 | --- | --- |
 | P1 实体 | `backend/entities/src/<domain>/**` |
-| P2 仓储 | `backend/database/src/repository/<domain>.rs`、`repository/extensions/<domain>.rs`、`indexes/<domain>.rs`、`database/tests/<domain>_repository.rs` |
-| P3 服务与接口 | `backend/services/src/<domain>/**`、`core/handler/<domain>/**`、`core/routes/<domain>.rs`、`web-api/tests/<domain>_api.rs` |
+| P2 仓储 | `backend/database/src/repository/<domain>.rs`、`repository/extensions/<domain>.rs`、`indexes/<domain>.rs`（**不含** IT） |
+| P3 服务与接口 | `backend/services/src/<domain>/**`、`core/handler/<domain>/**`、`core/routes/<domain>.rs`（**不含** IT） |
 | P4 前端 | `erp-client/features/<feature>/**` 与该批次页面路由目录 |
+| P6 后端集成测试 | `database/tests/<domain>_repository.rs`、`web-api/tests/<domain>_api.rs` 及 `invariants/**`、`concurrency/**` 等 |
 
 ### 两段式测试约定
 
+- **域级仓储/HTTP 集成测试只在 P6 编写**，P2/P3 实现阶段不提交，避免与实现漂移。
+  目录占位说明见 `database/tests/README.md`、`apps/web-api/tests/README.md`。
 - 需要真实 MongoDB（事务需要单节点副本集）的测试统一
   `#[ignore]` + `require_mongo!()`（`ERP_TEST_MONGO_URI` 门控，由
   `backend/crates/test-support` 提供），无数据库环境 `cargo test --workspace`
-  必须全绿；CI 与验收执行 `cargo test --workspace -- --include-ignored`。
+  必须全绿；P6 / 发布验收执行 `cargo test --workspace -- --include-ignored`。
 - 每个测试使用独立随机数据库名并在结束 drop，禁止共享固定库名。
 - 本地启动 MongoDB：`backend/scripts/dev-mongo.sh` 或
   `docker compose --profile test up -d mongo`。
@@ -1112,9 +1115,10 @@ erp-client/lib/query-client.ts
 ### worktree 与分支命名
 
 - 分支命名以 `docs/dev-plan/_meta.json` 的 stages 为准：
-  - 阶段 ID 由 `P1/A-G1/B-G1/C-G1/F1/E1` 组成；
+  - 阶段 ID 由 `P1/A-G1/B-G1/C-G1/F1/E3/I-G1` 等组成；
   - P1–P3 分支 `feat/erp-<letter>-<batch>-<slug>`（如 `feat/erp-a-g1-platform`）；
-  - P4 分支 `feat/erp-f<序号>-<slug>`；P5 分支 `feat/erp-e<序号>-<slug>`。
+  - P4 分支 `feat/erp-f<序号>-<slug>`；P5 分支 `feat/erp-e3-projection` 等；
+  - P6 分支 `feat/erp-i-g1-platform` / `feat/erp-i-x1-invariants` 等。
 - 一个子阶段一个分支一个 PR；合并前必须 rebase 到最新 `main` 并重跑全部门禁
   （conventions.md 第 9 节）。
 
