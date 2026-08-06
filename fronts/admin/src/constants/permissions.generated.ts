@@ -192,4 +192,494 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "单据注册",
+        description: "跨域单据稳定注册表与工作流动作",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/business-documents",
+                description: "查询单据注册列表",
+                permission: {
+                    resource: "business_document",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/business-documents",
+                description: "注册业务单据（幂等）",
+                permission: {
+                    resource: "business_document",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/business-documents/{id}",
+                description: "查询单据注册详情",
+                permission: {
+                    resource: "business_document",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/workflow-actions",
+                description: "查询工作流动作列表",
+                permission: {
+                    resource: "workflow_action",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/workflow-actions",
+                description: "追加工作流动作",
+                permission: {
+                    resource: "workflow_action",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/documents/{id}/relations",
+                description: "查询单据关系列表",
+                permission: {
+                    resource: "document_relation",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/document-relations",
+                description: "建立单据关系",
+                permission: {
+                    resource: "document_relation",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/document-participants",
+                description: "查询单据参与人列表",
+                permission: {
+                    resource: "document_participant",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/document-participants",
+                description: "登记单据参与人",
+                permission: {
+                    resource: "document_participant",
+                    action: "create",
+                },
+            },
+        ],
+    },
+    {
+        name: "统一待办",
+        description: "正式待办队列与处理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/work-items",
+                description: "查询待办列表",
+                permission: {
+                    resource: "work_item",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items",
+                description: "派发待办",
+                permission: {
+                    resource: "work_item",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/work-items/{id}",
+                description: "查询待办详情",
+                permission: {
+                    resource: "work_item",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items/{id}/claim",
+                description: "领取待办",
+                permission: {
+                    resource: "work_item",
+                    action: "claim",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items/{id}/defer",
+                description: "暂挂待办",
+                permission: {
+                    resource: "work_item",
+                    action: "defer",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items/{id}/transfer",
+                description: "转交待办",
+                permission: {
+                    resource: "work_item",
+                    action: "transfer",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items/{id}/complete",
+                description: "完成任务",
+                permission: {
+                    resource: "work_item",
+                    action: "complete",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/work-items/{id}/close",
+                description: "关闭待办",
+                permission: {
+                    resource: "work_item",
+                    action: "close",
+                },
+            },
+        ],
+    },
+    {
+        name: "批量任务",
+        description: "批量选择快照与后台任务中心",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/bulk-selection-snapshots",
+                description: "查询选择快照列表",
+                permission: {
+                    resource: "bulk_selection_snapshot",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/bulk-selection-snapshots",
+                description: "创建选择快照",
+                permission: {
+                    resource: "bulk_selection_snapshot",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/bulk-selection-snapshots/{id}/confirm",
+                description: "确认选择快照",
+                permission: {
+                    resource: "bulk_selection_snapshot",
+                    action: "confirm",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/bulk-selection-snapshots/{id}/expire",
+                description: "失效选择快照",
+                permission: {
+                    resource: "bulk_selection_snapshot",
+                    action: "expire",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/bulk-selection-snapshots/{id}/items",
+                description: "查询选择快照逐项结果",
+                permission: {
+                    resource: "bulk_selection_item",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/background-jobs",
+                description: "查询后台任务列表",
+                permission: {
+                    resource: "background_job",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/background-jobs",
+                description: "创建后台任务",
+                permission: {
+                    resource: "background_job",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/background-jobs/{id}",
+                description: "查询后台任务详情",
+                permission: {
+                    resource: "background_job",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/background-jobs/{id}/cancel",
+                description: "取消后台任务",
+                permission: {
+                    resource: "background_job",
+                    action: "cancel",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/background-jobs/{id}/items",
+                description: "查询后台任务逐项结果",
+                permission: {
+                    resource: "background_job_item",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "文件资产",
+        description: "文件元数据、单据附件与安全检查",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/file-assets",
+                description: "查询文件资产列表",
+                permission: {
+                    resource: "file_asset",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/file-assets/upload",
+                description: "上传并登记文件资产",
+                permission: {
+                    resource: "file_asset",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/file-assets/register",
+                description: "登记文件资产",
+                permission: {
+                    resource: "file_asset",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/file-assets/{id}",
+                description: "查询文件资产详情",
+                permission: {
+                    resource: "file_asset",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/file-assets/{id}/scan-result",
+                description: "记录安全检查结果",
+                permission: {
+                    resource: "file_asset",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/file-assets/{id}/destroy",
+                description: "销毁文件资产",
+                permission: {
+                    resource: "file_asset",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/document-attachments",
+                description: "建立单据附件关联",
+                permission: {
+                    resource: "document_attachment",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/documents/{id}/attachments",
+                description: "查询单据附件列表",
+                permission: {
+                    resource: "document_attachment",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "权限与审计",
+        description: "权限目录、数据范围、用户授权与审计查询",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/permissions",
+                description: "查询权限定义列表",
+                permission: {
+                    resource: "permission",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/permissions",
+                description: "创建权限定义",
+                permission: {
+                    resource: "permission",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/permissions/{id}",
+                description: "更新权限定义",
+                permission: {
+                    resource: "permission",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/permissions/{id}",
+                description: "删除权限定义",
+                permission: {
+                    resource: "permission",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/data-scopes",
+                description: "查询数据范围列表",
+                permission: {
+                    resource: "data_scope",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/data-scopes",
+                description: "创建数据范围",
+                permission: {
+                    resource: "data_scope",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/data-scopes/{id}",
+                description: "删除数据范围",
+                permission: {
+                    resource: "data_scope",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/user-roles",
+                description: "查询用户角色绑定",
+                permission: {
+                    resource: "user_role",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/user-roles",
+                description: "分配用户角色",
+                permission: {
+                    resource: "user_role",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/user-roles/{id}/revoke",
+                description: "撤权用户角色",
+                permission: {
+                    resource: "user_role",
+                    action: "revoke",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/audit-events",
+                description: "查询审计事件列表",
+                permission: {
+                    resource: "audit_event",
+                    action: "list",
+                },
+            },
+        ],
+    },
 ];
