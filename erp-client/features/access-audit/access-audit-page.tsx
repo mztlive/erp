@@ -3,16 +3,19 @@
 import * as React from "react"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
+  ChevronDownIcon,
   DownloadIcon,
   EyeIcon,
+  FilterIcon,
   LockIcon,
-  PencilIcon,
+  MoreHorizontalIcon,
   PlusIcon,
   SearchIcon,
   ShieldAlertIcon,
   ShieldOffIcon,
   Trash2Icon,
   TriangleAlertIcon,
+  XIcon,
 } from "lucide-react"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 import { z } from "zod"
@@ -29,7 +32,6 @@ import {
   FormalActionResult,
   ListToolbar,
   OptionCombobox,
-  PageActions,
   PageHeader,
   QuickPreviewSheet,
 } from "@/components/business"
@@ -45,6 +47,11 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -53,12 +60,24 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
@@ -126,6 +145,10 @@ const changeReasonSchema = z.object({
   comment: z.string().trim().max(200),
 })
 
+function policyStatusLabel(state: "MISSING" | "CONFIGURED") {
+  return state === "MISSING" ? "未配置" : "已配置"
+}
+
 function PolicyBanner({
   policies,
   view,
@@ -136,68 +159,119 @@ function PolicyBanner({
   const time = policies.userRoleTimePolicy
   const field = policies.fieldPolicyGranularity
   const audit = policies.auditAccessPolicy
+  const hasMissing =
+    time.state === "MISSING" ||
+    field.state === "MISSING" ||
+    audit.state === "MISSING"
+
+  const summaryItems: { key: string; label: string; missing: boolean }[] = []
+  if (view === "users" || view === "roles") {
+    summaryItems.push({
+      key: "time",
+      label: `角色时间 · ${policyStatusLabel(time.state)}`,
+      missing: time.state === "MISSING",
+    })
+  }
+  if (view === "fields" || view === "roles") {
+    summaryItems.push({
+      key: "field",
+      label: `字段粒度 · ${policyStatusLabel(field.state)}`,
+      missing: field.state === "MISSING",
+    })
+  }
+  if (view === "audit" || view === "roles" || view === "users") {
+    summaryItems.push({
+      key: "audit",
+      label: `审计导出 · ${policyStatusLabel(audit.state)}`,
+      missing: audit.state === "MISSING",
+    })
+  }
 
   return (
-    <Alert
-      className="py-2"
+    <Collapsible
       data-slot="policy-banner"
-      variant={
-        time.state === "MISSING" ||
-        field.state === "MISSING" ||
-        audit.state === "MISSING"
-          ? "warning"
-          : "info"
-      }
+      className="rounded-xl border border-border bg-card"
     >
-      <ShieldAlertIcon aria-hidden="true" />
-      <AlertTitle className="flex flex-wrap items-center gap-2">
-        治理策略
-        <Badge variant="outline">本期不支持任务流</Badge>
-      </AlertTitle>
-      <AlertDescription className="grid gap-x-4 gap-y-1 text-xs lg:grid-cols-2 [&_p:not(:last-child)]:mb-0">
-        {(view === "users" || view === "roles") && (
-          <p>
-            <strong className="text-foreground">用户角色时间：</strong>
-            {time.state === "MISSING" ? (
-              <>用户角色时间策略未配置 · 按保守策略：仅允许立即紧急撤权</>
-            ) : (
-              <>
-                预约 {time.schedulingAllowed ? "允许" : "禁用"} · 到期
-                {time.expirationAllowed ? "允许" : "禁用"}
-              </>
-            )}
+      <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted/40">
+        <ShieldAlertIcon
+          className={
+            hasMissing
+              ? "size-4 shrink-0 text-warning"
+              : "size-4 shrink-0 text-muted-foreground"
+          }
+          aria-hidden="true"
+        />
+        <span className="min-w-0 flex-1">
+          <span className="font-medium text-foreground">治理策略</span>
+          <span className="ml-2 inline-flex flex-wrap items-center gap-1.5 align-middle">
+            {summaryItems.map((item) => (
+              <Badge
+                key={item.key}
+                variant={item.missing ? "warning" : "outline"}
+              >
+                {item.label}
+              </Badge>
+            ))}
+            <Badge variant="outline">本期无任务流</Badge>
+          </span>
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground group-aria-expanded:hidden">
+          详情
+        </span>
+        <ChevronDownIcon
+          aria-hidden="true"
+          className="size-4 shrink-0 text-muted-foreground transition-transform group-aria-expanded:rotate-180"
+        />
+      </CollapsibleTrigger>
+      <CollapsibleContent className="border-t border-border px-3 py-2 text-xs text-muted-foreground">
+        <div className="grid gap-x-4 gap-y-1.5 sm:grid-cols-2">
+          {(view === "users" || view === "roles") && (
+            <p>
+              <strong className="text-foreground">用户角色时间：</strong>
+              {time.state === "MISSING" ? (
+                <>未配置 · 仅允许立即紧急撤权</>
+              ) : (
+                <>
+                  预约 {time.schedulingAllowed ? "允许" : "禁用"} · 到期
+                  {time.expirationAllowed ? "允许" : "禁用"}
+                </>
+              )}
+            </p>
+          )}
+          {(view === "fields" || view === "roles") && (
+            <p>
+              <strong className="text-foreground">字段粒度：</strong>
+              {field.state === "MISSING" ? (
+                <>未配置 · 只读，不可自由输入字段名</>
+              ) : (
+                <>{field.editableTargets.map((t) => t.label).join("、")}</>
+              )}
+            </p>
+          )}
+          {(view === "audit" || view === "roles" || view === "users") && (
+            <p>
+              <strong className="text-foreground">审计 / 导出：</strong>
+              {audit.state === "MISSING" ? (
+                <>
+                  未配置 · 保守窗口{" "}
+                  {formatDateTime(audit.fallbackFrom, "full")} ~{" "}
+                  {formatDateTime(audit.fallbackTo, "full")}，导出禁用
+                </>
+              ) : (
+                <>
+                  最长可查{" "}
+                  {Math.round(audit.maxOnlineWindowSeconds / 3600)} 小时
+                </>
+              )}
+            </p>
+          )}
+          <p className="sm:col-span-2">
+            {ACCESS_LAYER_HELP.map((item) => item.title).join(" · ")}
+            。命中复核要求的动作，在复核策略确定前将被阻断。
           </p>
-        )}
-        {(view === "fields" || view === "roles") && (
-          <p>
-            <strong className="text-foreground">字段粒度：</strong>
-            {field.state === "MISSING" ? (
-              <>字段粒度策略未配置 · 只读，不自由输入字段名</>
-            ) : (
-              <>{field.editableTargets.map((target) => target.label).join("、")}</>
-            )}
-          </p>
-        )}
-        {(view === "audit" || view === "roles" || view === "users") && (
-          <p>
-            <strong className="text-foreground">审计 / 导出：</strong>
-            {audit.state === "MISSING" ? (
-              <>
-                审计策略未配置 · 保守短窗口{" "}
-                {formatDateTime(audit.fallbackFrom, "full")} ~{" "}
-                {formatDateTime(audit.fallbackTo, "full")}，导出禁用
-              </>
-            ) : (
-              <>最长可查窗口 {Math.round(audit.maxOnlineWindowSeconds / 3600)} 小时</>
-            )}
-          </p>
-        )}
-        <p className="lg:col-span-2">
-          <TriangleAlertIcon className="mr-1 inline size-3" aria-hidden="true" />
-          {ACCESS_LAYER_HELP.map((item) => item.title).join(" · ")}；命中复核要求的动作，在复核策略确定前将被阻断。
-        </p>
-      </AlertDescription>
-    </Alert>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   )
 }
 
@@ -679,6 +753,8 @@ export function AccessAuditPage() {
       to: null,
     })
     setSearchInput("")
+    setDebouncedFilters({})
+    lastPatchedFilters.current = ""
     setPagination((p) => ({ ...p, pageIndex: 0 }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, pathname, view])
@@ -763,130 +839,139 @@ export function AccessAuditPage() {
       {
         id: "actions",
         header: "操作",
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              ref={(el) => {
-                rowFocusRef.current.set(row.original.id, el)
-              }}
-              onClick={() => openExplain("ROLE", row.original.id)}
-            >
-              <EyeIcon data-icon="inline-start" aria-hidden="true" />
-              有效权限
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                router.push(`/system/roles/${row.original.id}/edit`)
-              }
-            >
-              <PencilIcon data-icon="inline-start" aria-hidden="true" />
-              编辑
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="text-destructive hover:text-destructive"
-              onClick={() =>
-                setDeletingRole({
-                  id: row.original.id,
-                  name: row.original.name,
-                })
-              }
-            >
-              <Trash2Icon data-icon="inline-start" aria-hidden="true" />
-              删除
-            </Button>
-            {row.original.status === "enabled" &&
-            !row.original.riskFlags.includes("HIGH_PRIVILEGE") ? (
+        cell: ({ row }) => {
+          const role = row.original
+          const version =
+            data?.permissionVersion ?? role.permissionVersion
+          const canAdjust =
+            role.status === "enabled" &&
+            !role.riskFlags.includes("HIGH_PRIVILEGE")
+          const canExpand = role.riskFlags.includes("HIGH_PRIVILEGE")
+          const canDisable =
+            role.status === "enabled" &&
+            role.riskFlags.includes("PENDING_DISABLE")
+
+          return (
+            <div className="flex items-center justify-end gap-1">
               <Button
                 type="button"
-                size="sm"
+                size="xs"
+                variant="ghost"
+                ref={(el) => {
+                  rowFocusRef.current.set(role.id, el)
+                }}
+                onClick={() => openExplain("ROLE", role.id)}
+              >
+                <EyeIcon data-icon="inline-start" aria-hidden="true" />
+                有效权限
+              </Button>
+              <Button
+                type="button"
+                size="xs"
                 variant="outline"
-                onClick={() =>
-                  void startChange({
-                    subjectType: "ROLE",
-                    subjectId: row.original.id,
-                    action: "UPDATE_ROLE_PERMISSIONS",
-                    expectedPermissionVersion:
-                      data?.permissionVersion ?? row.original.permissionVersion,
-                    reasonCode: "SECURITY_OPS",
-                    idempotencyKey: "pending",
-                    changeSet: [
-                      {
-                        targetReference: "W22.publish",
-                        operation: "REMOVE",
-                      },
-                    ],
-                  })
-                }
+                onClick={() => router.push(`/system/roles/${role.id}/edit`)}
               >
-                调整权限
+                编辑
               </Button>
-            ) : null}
-            {row.original.riskFlags.includes("HIGH_PRIVILEGE") ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                onClick={() =>
-                  void startChange({
-                    subjectType: "ROLE",
-                    subjectId: row.original.id,
-                    action: "UPDATE_ROLE_PERMISSIONS",
-                    expectedPermissionVersion:
-                      data?.permissionVersion ?? row.original.permissionVersion,
-                    reasonCode: "SECURITY_OPS",
-                    idempotencyKey: "pending",
-                    changeSet: [
-                      {
-                        targetReference: "sensitive.field.expand",
-                        operation: "ADD",
-                        valueReference: "FULL_COMPANY",
-                      },
-                    ],
-                  })
-                }
-              >
-                扩权（将阻断）
-              </Button>
-            ) : null}
-            {row.original.status === "enabled" &&
-            row.original.riskFlags.includes("PENDING_DISABLE") ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="destructive"
-                onClick={() =>
-                  void startChange({
-                    subjectType: "ROLE",
-                    subjectId: row.original.id,
-                    action: "DISABLE_ROLE",
-                    expectedPermissionVersion:
-                      data?.permissionVersion ?? row.original.permissionVersion,
-                    reasonCode: "SECURITY_OPS",
-                    idempotencyKey: "pending",
-                    changeSet: [
-                      {
-                        targetReference: "status",
-                        operation: "REPLACE",
-                        valueReference: "disabled",
-                      },
-                    ],
-                  })
-                }
-              >
-                停用
-              </Button>
-            ) : null}
-          </div>
-        ),
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      aria-label={`${role.name} 更多操作`}
+                    />
+                  }
+                >
+                  <MoreHorizontalIcon aria-hidden="true" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-40">
+                  {canAdjust ? (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        void startChange({
+                          subjectType: "ROLE",
+                          subjectId: role.id,
+                          action: "UPDATE_ROLE_PERMISSIONS",
+                          expectedPermissionVersion: version,
+                          reasonCode: "SECURITY_OPS",
+                          idempotencyKey: "pending",
+                          changeSet: [
+                            {
+                              targetReference: "W22.publish",
+                              operation: "REMOVE",
+                            },
+                          ],
+                        })
+                      }
+                    >
+                      调整权限
+                    </DropdownMenuItem>
+                  ) : null}
+                  {canExpand ? (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        void startChange({
+                          subjectType: "ROLE",
+                          subjectId: role.id,
+                          action: "UPDATE_ROLE_PERMISSIONS",
+                          expectedPermissionVersion: version,
+                          reasonCode: "SECURITY_OPS",
+                          idempotencyKey: "pending",
+                          changeSet: [
+                            {
+                              targetReference: "sensitive.field.expand",
+                              operation: "ADD",
+                              valueReference: "FULL_COMPANY",
+                            },
+                          ],
+                        })
+                      }
+                    >
+                      扩权（将阻断）
+                    </DropdownMenuItem>
+                  ) : null}
+                  {canDisable ? (
+                    <DropdownMenuItem
+                      onClick={() =>
+                        void startChange({
+                          subjectType: "ROLE",
+                          subjectId: role.id,
+                          action: "DISABLE_ROLE",
+                          expectedPermissionVersion: version,
+                          reasonCode: "SECURITY_OPS",
+                          idempotencyKey: "pending",
+                          changeSet: [
+                            {
+                              targetReference: "status",
+                              operation: "REPLACE",
+                              valueReference: "disabled",
+                            },
+                          ],
+                        })
+                      }
+                    >
+                      停用
+                    </DropdownMenuItem>
+                  ) : null}
+                  {(canAdjust || canExpand || canDisable) && (
+                    <DropdownMenuSeparator />
+                  )}
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() =>
+                      setDeletingRole({ id: role.id, name: role.name })
+                    }
+                  >
+                    <Trash2Icon aria-hidden="true" />
+                    删除
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )
+        },
       },
     ],
     [openExplain, startChange, router, data?.permissionVersion]
@@ -913,16 +998,17 @@ export function AccessAuditPage() {
       },
       {
         id: "period",
-        header: "已记录有效期间",
+        header: "有效期间",
         cell: ({ row }) => (
-          <span className="text-xs text-muted-foreground">
+          <span
+            className="num text-xs text-muted-foreground"
+            title="只读记录；策略未配置时不可编辑预约/到期"
+          >
             {formatDateTime(row.original.effectiveFrom, "full")}
+            {" ~ "}
             {row.original.effectiveTo
-              ? ` ~ ${formatDateTime(row.original.effectiveTo, "full")}`
-              : " ~ 长期"}
-            <span className="mt-0.5 block text-[11px]">
-              （只读记录；策略未配置时不可编辑预约/到期）
-            </span>
+              ? formatDateTime(row.original.effectiveTo, "full")
+              : "长期"}
           </span>
         ),
       },
@@ -960,78 +1046,95 @@ export function AccessAuditPage() {
       {
         id: "actions",
         header: "操作",
-        cell: ({ row }) => (
-          <div className="flex flex-wrap gap-1">
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              ref={(el) => {
-                rowFocusRef.current.set(row.original.id, el)
-              }}
-              onClick={() => openExplain("USER", row.original.userId)}
-            >
-              <EyeIcon data-icon="inline-start" aria-hidden="true" />
-              有效权限
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                setAccountForm({
-                  mode: "edit",
-                  account: {
-                    id: row.original.userId,
-                    account: row.original.accountName,
-                    name: row.original.displayName,
-                    role_ids: [...row.original.roleIds],
-                  },
-                })
-              }
-            >
-              <PencilIcon data-icon="inline-start" aria-hidden="true" />
-              编辑
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              className="text-destructive hover:text-destructive"
-              onClick={() =>
-                setDeletingAccount({
-                  id: row.original.userId,
-                  account: row.original.accountName,
-                })
-              }
-            >
-              <Trash2Icon data-icon="inline-start" aria-hidden="true" />
-              删除
-            </Button>
-            {row.original.roleAssignmentId ? (
+        cell: ({ row }) => {
+          const user = row.original
+          return (
+            <div className="flex items-center justify-end gap-1">
               <Button
                 type="button"
-                size="sm"
-                variant="destructive"
+                size="xs"
+                variant="ghost"
+                ref={(el) => {
+                  rowFocusRef.current.set(user.id, el)
+                }}
+                onClick={() => openExplain("USER", user.userId)}
+              >
+                <EyeIcon data-icon="inline-start" aria-hidden="true" />
+                有效权限
+              </Button>
+              <Button
+                type="button"
+                size="xs"
+                variant="outline"
                 onClick={() =>
-                  void startChange({
-                    subjectType: "USER",
-                    subjectId: row.original.userId,
-                    action: "EMERGENCY_REVOKE_USER_ROLE",
-                    roleAssignmentId: row.original.roleAssignmentId!,
-                    expectedPermissionVersion:
-                      data?.permissionVersion ?? row.original.permissionVersion,
-                    reasonCode: "EMERGENCY_STOP_LOSS",
-                    idempotencyKey: "pending",
+                  setAccountForm({
+                    mode: "edit",
+                    account: {
+                      id: user.userId,
+                      account: user.accountName,
+                      name: user.displayName,
+                      role_ids: [...user.roleIds],
+                    },
                   })
                 }
               >
-                <ShieldOffIcon data-icon="inline-start" aria-hidden="true" />
-                紧急撤权
+                编辑
               </Button>
-            ) : null}
-          </div>
-        ),
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={
+                    <Button
+                      type="button"
+                      size="icon-xs"
+                      variant="ghost"
+                      aria-label={`${user.displayName} 更多操作`}
+                    />
+                  }
+                >
+                  <MoreHorizontalIcon aria-hidden="true" />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-40">
+                  {user.roleAssignmentId ? (
+                    <>
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={() =>
+                          void startChange({
+                            subjectType: "USER",
+                            subjectId: user.userId,
+                            action: "EMERGENCY_REVOKE_USER_ROLE",
+                            roleAssignmentId: user.roleAssignmentId!,
+                            expectedPermissionVersion:
+                              data?.permissionVersion ??
+                              user.permissionVersion,
+                            reasonCode: "EMERGENCY_STOP_LOSS",
+                            idempotencyKey: "pending",
+                          })
+                        }
+                      >
+                        <ShieldOffIcon aria-hidden="true" />
+                        紧急撤权
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                    </>
+                  ) : null}
+                  <DropdownMenuItem
+                    variant="destructive"
+                    onClick={() =>
+                      setDeletingAccount({
+                        id: user.userId,
+                        account: user.accountName,
+                      })
+                    }
+                  >
+                    <Trash2Icon aria-hidden="true" />
+                    删除
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          )
+        },
       },
     ],
     [openExplain, startChange, data?.permissionVersion]
@@ -1073,19 +1176,22 @@ export function AccessAuditPage() {
         id: "actions",
         header: "操作",
         cell: ({ row }) => (
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            ref={(el) => {
-              rowFocusRef.current.set(row.original.id, el)
-            }}
-            onClick={() =>
-              openExplain(row.original.subjectType, row.original.subjectId)
-            }
-          >
-            有效权限
-          </Button>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="xs"
+              variant="ghost"
+              ref={(el) => {
+                rowFocusRef.current.set(row.original.id, el)
+              }}
+              onClick={() =>
+                openExplain(row.original.subjectType, row.original.subjectId)
+              }
+            >
+              <EyeIcon data-icon="inline-start" aria-hidden="true" />
+              有效权限
+            </Button>
+          </div>
         ),
       },
     ],
@@ -1180,18 +1286,22 @@ export function AccessAuditPage() {
         id: "actor",
         header: "操作者",
         cell: ({ row }) => (
-          <div className="flex items-center gap-1.5">
-            <span className="font-medium">{row.original.actorLabel}</span>
-            <span className="font-mono text-xs text-muted-foreground">
+          <div className="min-w-[7rem]">
+            <div className="font-medium">{row.original.actorLabel}</div>
+            <div className="font-mono text-xs text-muted-foreground">
               {row.original.actorId}
-            </span>
+            </div>
           </div>
         ),
       },
       {
         id: "role",
         header: "责任角色",
-        cell: ({ row }) => row.original.actorRole,
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.actorRole}
+          </span>
+        ),
       },
       {
         id: "action",
@@ -1235,17 +1345,19 @@ export function AccessAuditPage() {
         id: "actions",
         header: "查看",
         cell: ({ row }) => (
-          <Button
-            type="button"
-            size="xs"
-            variant="ghost"
-            ref={(el) => {
-              rowFocusRef.current.set(row.original.auditEventId, el)
-            }}
-            onClick={() => openEvent(row.original.auditEventId)}
-          >
-            详情
-          </Button>
+          <div className="flex justify-end">
+            <Button
+              type="button"
+              size="xs"
+              variant="outline"
+              ref={(el) => {
+                rowFocusRef.current.set(row.original.auditEventId, el)
+              }}
+              onClick={() => openEvent(row.original.auditEventId)}
+            >
+              详情
+            </Button>
+          </div>
         ),
       },
     ],
@@ -1254,18 +1366,18 @@ export function AccessAuditPage() {
 
   if (pageQuery.isPending) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
-        <div className="h-10 w-48 animate-pulse rounded-lg bg-muted" />
-        <div className="h-12 animate-pulse rounded-xl bg-muted" />
-        <div className="h-24 animate-pulse rounded-xl bg-muted" />
-        <div className="h-[28rem] animate-pulse rounded-2xl bg-muted" />
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
+        <div className="h-9 w-40 animate-pulse rounded-lg bg-muted" />
+        <div className="h-9 animate-pulse rounded-lg bg-muted" />
+        <div className="h-10 animate-pulse rounded-xl bg-muted" />
+        <div className="h-[32rem] animate-pulse rounded-2xl bg-muted" />
       </div>
     )
   }
 
   if (pageQuery.isError || !data) {
     return (
-      <div className="mx-auto flex w-full max-w-shell flex-col gap-4 p-4 md:p-5">
+      <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
         <PageHeader title="权限与审计" />
         <BusinessFailureState
           kind="system"
@@ -1297,21 +1409,384 @@ export function AccessAuditPage() {
     pagination.pageIndex * pagination.pageSize + pagination.pageSize
   )
 
-  return (
-    <div className="mx-auto flex w-full max-w-shell flex-col gap-2 p-3 md:p-4">
-      <PageHeader
-        title={isAudit ? "审计查询" : "权限与数据范围"}
-        metadata={
-          <DataFreshness
-            label={isAudit ? "审计更新时间" : "权限配置更新时间"}
-            state="fresh"
-            updatedAt={formatDateTime(data.calculatedAt, "full")}
-            dateTime={data.calculatedAt}
+  const switchView = (next: AccessView) => {
+    if (next === view) return
+    setPagination({ pageIndex: 0, pageSize: 20 })
+    setExplainSubject(null)
+    setEventOpenId(null)
+    // 切换视图时保留 q，清空主体/事件与审计专属筛选
+    patchUrl({
+      view: next,
+      subjectId: null,
+      subjectType: null,
+      eventId: null,
+      ...(next === "audit"
+        ? {}
+        : {
+            actorId: null,
+            action: null,
+            objectType: null,
+            objectId: null,
+            result: null,
+            traceId: null,
+            from: null,
+            to: null,
+          }),
+    })
+  }
+
+  const advancedAuditActive = Boolean(
+    actorId || traceId || objectType || objectId
+  )
+  const hasActiveFilters = isAudit
+    ? Boolean(
+        qParam ||
+          action ||
+          resultFilter ||
+          fromParam ||
+          toParam ||
+          advancedAuditActive
+      )
+    : Boolean(qParam || status || risk || org)
+
+  const handleExport = () => {
+    if (exportBlocked) {
+      setActionError(
+        exportBlocker?.message ?? "导出策略未配置，导出已禁用。"
+      )
+      return
+    }
+    setLastResult({
+      status: "blocked",
+      title: "导出功能待接入",
+      description:
+        "导出尚未接入后端；正式环境将按权限策略生成导出文件。",
+    })
+  }
+
+  const listToolbar = (
+    <ListToolbar
+      search={
+        <InputGroup>
+          <InputGroupAddon>
+            <SearchIcon aria-hidden="true" />
+          </InputGroupAddon>
+          <InputGroupInput
+            ref={searchInputRef}
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder={
+              isAudit
+                ? "操作者、动作、对象、追踪号"
+                : "角色代码/名称、用户账号"
+            }
+            aria-label="搜索"
           />
+        </InputGroup>
+      }
+      filters={
+        <>
+          {!isAudit ? (
+            <>
+              <OptionCombobox
+                value={status ?? "all"}
+                onValueChange={(v) =>
+                  patchFilterUrl({
+                    status: (v ?? "all") === "all" ? null : (v ?? "all"),
+                  })
+                }
+                options={[
+                  { value: "all", label: "全部状态" },
+                  { value: "enabled", label: "启用" },
+                  { value: "disabled", label: "停用" },
+                ]}
+                className="w-[8rem]"
+                size="sm"
+                allowClear={false}
+                aria-label="状态"
+                placeholder="全部状态"
+              />
+              <OptionCombobox
+                value={risk ?? "all"}
+                onValueChange={(v) =>
+                  patchFilterUrl({
+                    risk: (v ?? "all") === "all" ? null : (v ?? "all"),
+                  })
+                }
+                options={[
+                  { value: "all", label: "全部风险" },
+                  { value: "HIGH_PRIVILEGE", label: "高权限" },
+                  { value: "EMPTY_SCOPE", label: "空数据范围" },
+                  { value: "EXPIRING_SOON", label: "即将过期" },
+                  { value: "ACCESS_ADMIN", label: "权限管理" },
+                ]}
+                className="w-[9rem]"
+                size="sm"
+                allowClear={false}
+                aria-label="权限风险"
+                placeholder="全部风险"
+              />
+            </>
+          ) : (
+            <>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                起始
+                <Input
+                  type="date"
+                  className="h-8 w-36"
+                  value={fromParam ?? ""}
+                  onChange={(e) =>
+                    patchFilterUrl({
+                      from: e.target.value || null,
+                    })
+                  }
+                  aria-label="审计起始日期"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                截止
+                <Input
+                  type="date"
+                  className="h-8 w-36"
+                  value={toParam ?? ""}
+                  min={fromParam}
+                  onChange={(e) =>
+                    patchFilterUrl({
+                      to: e.target.value || null,
+                    })
+                  }
+                  aria-label="审计截止日期"
+                />
+              </label>
+              <OptionCombobox
+                value={action ?? "all"}
+                onValueChange={(v) =>
+                  patchFilterUrl({
+                    action: (v ?? "all") === "all" ? null : (v ?? "all"),
+                  })
+                }
+                options={[
+                  { value: "all", label: "全部动作" },
+                  {
+                    value: "UPDATE_ROLE_PERMISSIONS",
+                    label: "修改模块权限",
+                  },
+                  {
+                    value: "EMERGENCY_REVOKE_USER_ROLE",
+                    label: "紧急撤权",
+                  },
+                  {
+                    value: "UPDATE_FIELD_POLICY",
+                    label: "修改字段策略",
+                  },
+                  {
+                    value: "MANAGE_DATA_SCOPE",
+                    label: "修改数据范围",
+                  },
+                  { value: "QUERY_AUDIT", label: "查询审计" },
+                  { value: "OPEN_SUPPLIER", label: "打开供应商" },
+                  { value: "EXPORT_RECEIVABLE", label: "导出应收明细" },
+                  { value: "CREATE_ADJUSTMENT", label: "创建库存调整" },
+                  {
+                    value: "VIEW_CUSTOMER_SENSITIVE",
+                    label: "短时揭示敏感字段",
+                  },
+                  {
+                    value: "PERMISSION_VERSION_BUMP",
+                    label: "权限版本推进",
+                  },
+                ]}
+                className="w-[10rem]"
+                size="sm"
+                allowClear={false}
+                aria-label="动作"
+                placeholder="全部动作"
+              />
+              <OptionCombobox
+                value={resultFilter ?? "all"}
+                onValueChange={(v) =>
+                  patchFilterUrl({
+                    result: (v ?? "all") === "all" ? null : (v ?? "all"),
+                  })
+                }
+                options={[
+                  { value: "all", label: "全部结果" },
+                  { value: "SUCCESS", label: "成功" },
+                  { value: "DENIED", label: "拒绝" },
+                  { value: "FAILED", label: "失败" },
+                  { value: "UNKNOWN", label: "未知" },
+                ]}
+                className="w-[8rem]"
+                size="sm"
+                allowClear={false}
+                aria-label="结果"
+                placeholder="全部结果"
+              />
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <Button type="button" variant="outline" size="sm" />
+                  }
+                >
+                  <FilterIcon data-icon="inline-start" aria-hidden="true" />
+                  高级筛选
+                  {advancedAuditActive ? (
+                    <Badge variant="info">已启用</Badge>
+                  ) : null}
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80 space-y-3">
+                  <div>
+                    <div className="font-medium">高级筛选</div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      操作者、对象与请求追踪号。
+                    </p>
+                  </div>
+                  <label className="grid gap-1.5 text-sm">
+                    <span>操作者</span>
+                    <InputGroup>
+                      <InputGroupInput
+                        value={debouncedFilters.actorId ?? actorId ?? ""}
+                        onChange={(e) =>
+                          setDebouncedFilters((prev) => ({
+                            ...prev,
+                            actorId: e.target.value,
+                          }))
+                        }
+                        placeholder="操作者姓名或 ID"
+                        aria-label="操作者"
+                      />
+                    </InputGroup>
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span>请求追踪号</span>
+                    <InputGroup>
+                      <InputGroupInput
+                        value={debouncedFilters.traceId ?? traceId ?? ""}
+                        onChange={(e) =>
+                          setDebouncedFilters((prev) => ({
+                            ...prev,
+                            traceId: e.target.value,
+                          }))
+                        }
+                        placeholder="精确匹配"
+                        aria-label="请求追踪号"
+                      />
+                    </InputGroup>
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span>对象类型</span>
+                    <InputGroup>
+                      <InputGroupInput
+                        value={
+                          debouncedFilters.objectType ?? objectType ?? ""
+                        }
+                        onChange={(e) =>
+                          setDebouncedFilters((prev) => ({
+                            ...prev,
+                            objectType: e.target.value,
+                          }))
+                        }
+                        placeholder="如 role / sales_order"
+                        aria-label="对象类型"
+                      />
+                    </InputGroup>
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span>对象编号</span>
+                    <InputGroup>
+                      <InputGroupInput
+                        value={debouncedFilters.objectId ?? objectId ?? ""}
+                        onChange={(e) =>
+                          setDebouncedFilters((prev) => ({
+                            ...prev,
+                            objectId: e.target.value,
+                          }))
+                        }
+                        placeholder="对象名称或编号"
+                        aria-label="对象名称或编号"
+                      />
+                    </InputGroup>
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={!advancedAuditActive}
+                    onClick={() => {
+                      setDebouncedFilters({})
+                      patchFilterUrl({
+                        actorId: null,
+                        traceId: null,
+                        objectType: null,
+                        objectId: null,
+                      })
+                    }}
+                  >
+                    清除高级筛选
+                  </Button>
+                </PopoverContent>
+              </Popover>
+            </>
+          )}
+          {hasActiveFilters ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              onClick={clearFilters}
+            >
+              <XIcon data-icon="inline-start" aria-hidden="true" />
+              清除筛选
+            </Button>
+          ) : null}
+        </>
+      }
+      actions={
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={exportBlocked}
+          title={exportBlocker?.message}
+          onClick={handleExport}
+        >
+          <DownloadIcon data-icon="inline-start" aria-hidden="true" />
+          {isAudit ? "导出审计" : "导出配置"}
+        </Button>
+      }
+    />
+  )
+
+  return (
+    <div className="mx-auto flex w-full max-w-shell flex-col gap-3 p-3 md:p-4">
+      <PageHeader
+        title="权限与审计"
+        description={
+          isAudit
+            ? "查询追加式审计事件；无记录不等于动作未发生。"
+            : "配置角色、用户授权与数据范围，并查看有效权限来源。"
+        }
+        metadata={
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <DataFreshness
+              label={isAudit ? "审计更新时间" : "权限配置更新时间"}
+              state={pageQuery.isFetching ? "syncing" : "fresh"}
+              updatedAt={formatDateTime(data.calculatedAt, "full")}
+              dateTime={data.calculatedAt}
+            />
+            {!isAudit ? (
+              <span className="text-xs text-muted-foreground" aria-live="polite">
+                配置版本{" "}
+                <span className="num">
+                  v{data.permissionVersion.split("-").at(-1)}
+                </span>
+              </span>
+            ) : null}
+          </div>
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {!isAudit && view === "roles" ? (
+            {view === "roles" ? (
               <Button
                 type="button"
                 size="sm"
@@ -1321,7 +1796,7 @@ export function AccessAuditPage() {
                 新建角色
               </Button>
             ) : null}
-            {!isAudit && view === "users" ? (
+            {view === "users" ? (
               <Button
                 type="button"
                 size="sm"
@@ -1333,34 +1808,6 @@ export function AccessAuditPage() {
                 新建账号
               </Button>
             ) : null}
-            <PageActions
-              actions={[
-                {
-                  actionKey: "export",
-                  label: isAudit ? "导出审计" : "导出配置",
-                  icon: DownloadIcon,
-                  variant: "outline",
-                  mobileVisibility: "hide",
-                  disabled: exportBlocked,
-                  title: exportBlocker?.message,
-                  onClick: () => {
-                    if (exportBlocked) {
-                      setActionError(
-                        exportBlocker?.message ??
-                          "导出策略未配置，导出已禁用。"
-                      )
-                      return
-                    }
-                    setLastResult({
-                      status: "blocked",
-                      title: "导出功能待接入",
-                      description:
-                        "导出尚未接入后端；正式环境将按权限策略生成导出文件。",
-                    })
-                  },
-                },
-              ]}
-            />
           </div>
         }
       />
@@ -1368,40 +1815,25 @@ export function AccessAuditPage() {
       <nav aria-label="权限与审计二级导航">
         <Tabs
           value={view}
-          onValueChange={(v) => {
-            const next = parseView(v)
-            setPagination({ pageIndex: 0, pageSize: 20 })
-            setExplainSubject(null)
-            setEventOpenId(null)
-            // 切换视图时保留 q，清空主体/事件与审计专属筛选
-            patchUrl({
-              view: next,
-              subjectId: null,
-              subjectType: null,
-              eventId: null,
-              ...(next === "audit"
-                ? {}
-                : {
-                    actorId: null,
-                    action: null,
-                    objectType: null,
-                    objectId: null,
-                    result: null,
-                    traceId: null,
-                    from: null,
-                    to: null,
-                  }),
-            })
-          }}
+          onValueChange={(v) => switchView(parseView(v))}
         >
-          <TabsList variant="line" className="h-auto flex-wrap">
-            {(
-              ["roles", "users", "scopes", "audit"] as AccessView[]
-            ).map((v) => (
-              <TabsTrigger key={v} value={v}>
-                {ACCESS_VIEW_LABEL[v]}
-              </TabsTrigger>
-            ))}
+          <TabsList variant="line" className="h-auto w-full flex-wrap justify-start">
+            {(["roles", "users", "scopes", "audit"] as AccessView[]).map(
+              (v) => (
+                <TabsTrigger key={v} value={v}>
+                  {ACCESS_VIEW_LABEL[v]}
+                  <span className="ml-1.5 text-xs text-muted-foreground tabular-nums">
+                    {v === "roles"
+                      ? data.metrics.roleCount
+                      : v === "users"
+                        ? data.metrics.userCount
+                        : v === "scopes"
+                          ? data.metrics.scopeCount
+                          : data.metrics.auditEventCount}
+                  </span>
+                </TabsTrigger>
+              )
+            )}
           </TabsList>
         </Tabs>
       </nav>
@@ -1436,239 +1868,6 @@ export function AccessAuditPage() {
         />
       ) : null}
 
-      <ListToolbar
-        search={
-          <InputGroup className="max-w-sm">
-            <InputGroupAddon>
-              <SearchIcon aria-hidden="true" />
-            </InputGroupAddon>
-            <InputGroupInput
-              ref={searchInputRef}
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder={
-                isAudit
-                  ? "操作者、动作、对象、追踪号"
-                  : "角色代码/名称、用户账号"
-              }
-              aria-label="搜索"
-            />
-          </InputGroup>
-        }
-        filters={
-          <>
-            {!isAudit ? (
-              <>
-                <OptionCombobox
-                  value={status ?? "all"}
-                  onValueChange={(v) =>
-                    patchFilterUrl({
-                      status: (v ?? "all") === "all" ? null : (v ?? "all"),
-                    })
-                  }
-                  options={[
-                    { value: "all", label: "全部状态" },
-                    { value: "enabled", label: "启用" },
-                    { value: "disabled", label: "停用" },
-                  ]}
-                  className="w-[8rem]"
-                  size="sm"
-                  allowClear={false}
-                  aria-label="状态"
-                  placeholder="全部状态"
-                />
-                <OptionCombobox
-                  value={risk ?? "all"}
-                  onValueChange={(v) =>
-                    patchFilterUrl({
-                      risk: (v ?? "all") === "all" ? null : (v ?? "all"),
-                    })
-                  }
-                  options={[
-                    { value: "all", label: "全部风险" },
-                    { value: "HIGH_PRIVILEGE", label: "高权限" },
-                    { value: "EMPTY_SCOPE", label: "空数据范围" },
-                    { value: "EXPIRING_SOON", label: "即将过期" },
-                    { value: "ACCESS_ADMIN", label: "权限管理" },
-                  ]}
-                  className="w-[9rem]"
-                  size="sm"
-                  allowClear={false}
-                  aria-label="权限风险"
-                  placeholder="全部风险"
-                />
-              </>
-            ) : (
-              <>
-                <InputGroup className="w-auto max-w-[10rem]">
-                  <InputGroupInput
-                    value={debouncedFilters.actorId ?? actorId ?? ""}
-                    onChange={(e) =>
-                      setDebouncedFilters((prev) => ({
-                        ...prev,
-                        actorId: e.target.value,
-                      }))
-                    }
-                    placeholder="操作者姓名"
-                    aria-label="操作者"
-                  />
-                </InputGroup>
-                <OptionCombobox
-                  value={action ?? "all"}
-                  onValueChange={(v) =>
-                    patchFilterUrl({
-                      action: (v ?? "all") === "all" ? null : (v ?? "all"),
-                    })
-                  }
-                  options={[
-                    { value: "all", label: "全部动作" },
-                    {
-                      value: "UPDATE_ROLE_PERMISSIONS",
-                      label: "修改模块权限",
-                    },
-                    {
-                      value: "EMERGENCY_REVOKE_USER_ROLE",
-                      label: "紧急撤权",
-                    },
-                    {
-                      value: "UPDATE_FIELD_POLICY",
-                      label: "修改字段策略",
-                    },
-                    {
-                      value: "MANAGE_DATA_SCOPE",
-                      label: "修改数据范围",
-                    },
-                    { value: "QUERY_AUDIT", label: "查询审计" },
-                    { value: "OPEN_SUPPLIER", label: "打开供应商" },
-                    { value: "EXPORT_RECEIVABLE", label: "导出应收明细" },
-                    { value: "CREATE_ADJUSTMENT", label: "创建库存调整" },
-                    {
-                      value: "VIEW_CUSTOMER_SENSITIVE",
-                      label: "短时揭示敏感字段",
-                    },
-                    { value: "PERMISSION_VERSION_BUMP", label: "权限版本推进" },
-                  ]}
-                  className="w-[10rem]"
-                  size="sm"
-                  allowClear={false}
-                  aria-label="动作"
-                  placeholder="全部动作"
-                />
-                <OptionCombobox
-                  value={resultFilter ?? "all"}
-                  onValueChange={(v) =>
-                    patchFilterUrl({
-                      result: (v ?? "all") === "all" ? null : (v ?? "all"),
-                    })
-                  }
-                  options={[
-                    { value: "all", label: "全部结果" },
-                    { value: "SUCCESS", label: "成功" },
-                    { value: "DENIED", label: "拒绝" },
-                    { value: "FAILED", label: "失败" },
-                    { value: "UNKNOWN", label: "未知" },
-                  ]}
-                  className="w-[8rem]"
-                  size="sm"
-                  allowClear={false}
-                  aria-label="结果"
-                  placeholder="全部结果"
-                />
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  起始
-                  <Input
-                    type="date"
-                    className="h-8 w-36"
-                    value={fromParam ?? ""}
-                    onChange={(e) =>
-                      patchFilterUrl({
-                        from: e.target.value || null,
-                      })
-                    }
-                    aria-label="审计起始日期"
-                  />
-                </label>
-                <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                  截止
-                  <Input
-                    type="date"
-                    className="h-8 w-36"
-                    value={toParam ?? ""}
-                    min={fromParam}
-                    onChange={(e) =>
-                      patchFilterUrl({
-                        to: e.target.value || null,
-                      })
-                    }
-                    aria-label="审计截止日期"
-                  />
-                </label>
-                <details className="group relative">
-                  <summary className="flex h-8 cursor-pointer list-none items-center rounded-lg border px-3 text-sm [&::-webkit-details-marker]:hidden">
-                    高级筛选
-                  </summary>
-                  <div className="absolute right-0 z-30 mt-2 grid w-80 gap-2 rounded-xl border bg-popover p-3 shadow-lg">
-                    <InputGroup>
-                      <InputGroupInput
-                        value={debouncedFilters.traceId ?? traceId ?? ""}
-                        onChange={(e) =>
-                          setDebouncedFilters((prev) => ({
-                            ...prev,
-                            traceId: e.target.value,
-                          }))
-                        }
-                        placeholder="请求追踪号"
-                        aria-label="请求追踪号"
-                      />
-                    </InputGroup>
-                    <InputGroup>
-                      <InputGroupInput
-                        value={debouncedFilters.objectType ?? objectType ?? ""}
-                        onChange={(e) =>
-                          setDebouncedFilters((prev) => ({
-                            ...prev,
-                            objectType: e.target.value,
-                          }))
-                        }
-                        placeholder="对象类型"
-                        aria-label="对象类型"
-                      />
-                    </InputGroup>
-                    <InputGroup>
-                      <InputGroupInput
-                        value={debouncedFilters.objectId ?? objectId ?? ""}
-                        onChange={(e) =>
-                          setDebouncedFilters((prev) => ({
-                            ...prev,
-                            objectId: e.target.value,
-                          }))
-                        }
-                        placeholder="对象名称或编号"
-                        aria-label="对象名称或编号"
-                      />
-                    </InputGroup>
-                  </div>
-                </details>
-              </>
-            )}
-          </>
-        }
-        actions={<span />}
-      />
-
-      {!isAudit ? (
-        <p className="text-xs text-muted-foreground" aria-live="polite">
-          配置版本{" "}
-          <span className="num">
-            v{data.permissionVersion.split("-").at(-1)}
-          </span>{" "}
-          · 任务流：
-          {data.workItemSupport === "DISABLED_Q1"
-            ? "策略确定前关闭"
-            : "已开启"}
-        </p>
-      ) : null}
-
       {data.fieldMaskNote ? (
         <Alert variant="info">
           <LockIcon aria-hidden="true" />
@@ -1678,22 +1877,26 @@ export function AccessAuditPage() {
       ) : null}
 
       {data.emptyReason && data.emptyReason !== "FIELD_MASKED" ? (
-        <EmptyByReason
-          reason={data.emptyReason}
-          onClearFilters={
-            data.emptyReason === "FILTER_NO_RESULT"
-              ? clearFilters
-              : undefined
-          }
-        />
+        <>
+          {listToolbar}
+          <EmptyByReason
+            reason={data.emptyReason}
+            onClearFilters={
+              data.emptyReason === "FILTER_NO_RESULT"
+                ? clearFilters
+                : undefined
+            }
+          />
+        </>
       ) : (
         <BusinessTableFrame
           title={ACCESS_VIEW_LABEL[view]}
           description={
             isAudit && data.auditCoverageFrom && data.auditCoverageTo
-              ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(data.auditCoverageFrom, "full")} ~ ${formatDateTime(data.auditCoverageTo, "full")} · 无记录不等于动作未发生 · 数据更新于 ${formatDateTime(data.calculatedAt, "full")}`
+              ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(data.auditCoverageFrom, "full")} ~ ${formatDateTime(data.auditCoverageTo, "full")} · 无记录不等于动作未发生`
               : `共 ${rows.length} 条`
           }
+          toolbar={listToolbar}
           table={
             view === "roles" ? (
               <DataTable
