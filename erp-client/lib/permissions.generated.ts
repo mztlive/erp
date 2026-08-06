@@ -201,4 +201,190 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "集成治理",
+        description: "入站消息、错误任务与对账差异（W29）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/integration/inbox-messages",
+                description: "查询入站消息列表",
+                permission: {
+                    resource: "inbox_message",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/inbox-messages",
+                description: "登记入站消息",
+                permission: {
+                    resource: "inbox_message",
+                    action: "register",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/integration/inbox-messages/{id}",
+                description: "查询入站消息详情",
+                permission: {
+                    resource: "inbox_message",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/inbox-messages/{id}/result",
+                description: "回写入站消息处理结果",
+                permission: {
+                    resource: "inbox_message",
+                    action: "writeback",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/integration/error-tasks",
+                description: "查询集成错误任务列表",
+                permission: {
+                    resource: "integration_error_task",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/error-tasks",
+                description: "登记集成错误任务",
+                permission: {
+                    resource: "integration_error_task",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/integration/error-tasks/{id}",
+                description: "查询集成错误任务详情",
+                permission: {
+                    resource: "integration_error_task",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/error-tasks/{id}/query",
+                description: "查询原结果",
+                permission: {
+                    resource: "integration_error_task",
+                    action: "query",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/error-tasks/{id}/replay",
+                description: "重放原动作",
+                permission: {
+                    resource: "integration_error_task",
+                    action: "replay",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/error-tasks/{id}/hold",
+                description: "暂挂或跳过当前任务",
+                permission: {
+                    resource: "integration_error_task",
+                    action: "hold",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/error-tasks/{id}/transfer",
+                description: "转交集成错误任务",
+                permission: {
+                    resource: "integration_error_task",
+                    action: "transfer",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/error-tasks/{id}/resolve",
+                description: "解决集成错误任务",
+                permission: {
+                    resource: "integration_error_task",
+                    action: "resolve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/error-tasks/{id}/close",
+                description: "关闭集成错误任务",
+                permission: {
+                    resource: "integration_error_task",
+                    action: "close",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/integration/differences",
+                description: "查询对账差异列表",
+                permission: {
+                    resource: "reconciliation_difference",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/differences",
+                description: "登记对账差异",
+                permission: {
+                    resource: "reconciliation_difference",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/integration/differences/{id}",
+                description: "查询对账差异详情",
+                permission: {
+                    resource: "reconciliation_difference",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/differences/{id}/process",
+                description: "人工处理对账差异",
+                permission: {
+                    resource: "reconciliation_difference",
+                    action: "process",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/integration/differences/{id}/resolve",
+                description: "解决对账差异",
+                permission: {
+                    resource: "reconciliation_difference",
+                    action: "resolve",
+                },
+            },
+        ],
+    },
 ];
