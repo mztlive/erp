@@ -192,4 +192,262 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "卡券消费台账",
+        description: "商城消费回流切换、卡实例基线与余额快照管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/consumption-cutovers",
+                description: "查询商城切换记录列表",
+                permission: {
+                    resource: "mall_consumption_cutover",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/consumption-cutovers",
+                description: "创建商城切换记录",
+                permission: {
+                    resource: "mall_consumption_cutover",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/consumption-cutovers/{id}",
+                description: "查询商城切换记录详情",
+                permission: {
+                    resource: "mall_consumption_cutover",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/consumption-cutovers/{id}/enable",
+                description: "启用商城切换（登记唯一 T）",
+                permission: {
+                    resource: "mall_consumption_cutover",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/card-instances",
+                description: "查询卡实例列表",
+                permission: {
+                    resource: "mall_card_instance",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/card-instances",
+                description: "建立卡实例基线",
+                permission: {
+                    resource: "mall_card_instance",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/card-instances/{id}",
+                description: "查询卡实例详情",
+                permission: {
+                    resource: "mall_card_instance",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/card-instances/{id}/balance-snapshots",
+                description: "查询卡实例余额快照列表",
+                permission: {
+                    resource: "mall_balance_snapshot",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/card-instances/{id}/balance-snapshots",
+                description: "追加卡实例余额快照",
+                permission: {
+                    resource: "mall_balance_snapshot",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/card-instances/{id}/corrections",
+                description: "查询卡实例纠错列表",
+                permission: {
+                    resource: "mall_card_instance_correction",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "商城消费订单",
+        description: "商城消费订单追溯与关键事实接收",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-orders",
+                description: "查询商城消费订单列表",
+                permission: {
+                    resource: "mall_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-orders/{id}",
+                description: "查询商城消费订单详情",
+                permission: {
+                    resource: "mall_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-order-facts",
+                description: "查询商城关键事实列表",
+                permission: {
+                    resource: "mall_order_fact",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-order-facts",
+                description: "接收商城支付/取消/完成关键事实",
+                permission: {
+                    resource: "mall_order_fact",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-refunds",
+                description: "接收商城退款成功事实",
+                permission: {
+                    resource: "mall_refund",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-refunds",
+                description: "查询商城退款列表",
+                permission: {
+                    resource: "mall_refund",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-balance-restorations",
+                description: "接收卡券余额恢复事实",
+                permission: {
+                    resource: "mall_balance_restoration",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-balance-restorations",
+                description: "查询卡券余额恢复列表",
+                permission: {
+                    resource: "mall_balance_restoration",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-after-sales-requests",
+                description: "查询商城售后请求列表",
+                permission: {
+                    resource: "mall_after_sales_request",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "历史消费回填",
+        description: "历史消费回填任务管理与执行",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-consumption-backfill-jobs",
+                description: "查询历史消费回填任务列表",
+                permission: {
+                    resource: "mall_consumption_backfill_job",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-consumption-backfill-jobs",
+                description: "创建历史消费回填任务",
+                permission: {
+                    resource: "mall_consumption_backfill_job",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-consumption-backfill-jobs/{id}",
+                description: "查询历史消费回填任务详情",
+                permission: {
+                    resource: "mall_consumption_backfill_job",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/mall-consumption-backfill-jobs/{id}/commands",
+                description: "执行历史消费回填命令",
+                permission: {
+                    resource: "mall_consumption_backfill_job",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/mall-consumption-backfill-items",
+                description: "查询历史消费回填明细列表",
+                permission: {
+                    resource: "mall_consumption_backfill_item",
+                    action: "list",
+                },
+            },
+        ],
+    },
 ];
