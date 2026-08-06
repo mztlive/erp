@@ -116,7 +116,7 @@ function MasterDataCenterBody({
     if (!data) return
     const el = document.getElementById(`md-section-${activeSection}`)
     if (el) el.scrollIntoView({ block: "start", behavior: "smooth" })
-  }, [activeSection, data?.stableId])
+  }, [activeSection, data])
 
   if (query.isPending) {
     return (

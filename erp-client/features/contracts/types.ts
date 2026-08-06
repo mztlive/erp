@@ -11,7 +11,7 @@ export type ContractAction =
   | "PRINT"
   | "CREATE_SALES_ORDER"
   | "EXPORT"
-  /** 预留能力：演示数据不下发该动作（见 mock/contracts.ts），避免「可做却无入口」。 */
+  /** 预留能力：后端未下发该动作时前端不展示入口。 */
   | "TERMINATE"
 
 export type ActionBlocker = {

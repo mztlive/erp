@@ -239,7 +239,10 @@ export function CategoryTreePage({
     revisionTiming: "all",
   })
 
-  const rows = listQuery.data?.rows ?? []
+  const rows = React.useMemo(
+    () => listQuery.data?.rows ?? [],
+    [listQuery.data?.rows]
+  )
   const forest = React.useMemo(() => buildCategoryForest(rows), [rows])
   const flat = React.useMemo(() => flattenCategoryForest(forest), [forest])
 

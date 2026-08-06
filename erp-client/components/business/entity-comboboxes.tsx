@@ -7,10 +7,6 @@ import {
   type BusinessObjectComboboxProps,
   type BusinessObjectOption,
 } from "@/components/business/selectors"
-import {
-  OptionCombobox,
-  type OptionComboboxProps,
-} from "@/components/business/option-combobox"
 import type { StatusTone } from "@/components/ui/status-badge"
 
 type EntityComboboxBaseProps = Omit<

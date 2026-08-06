@@ -125,7 +125,10 @@ export function SalesOrdersListPage() {
 
   const ordersQuery = useSalesOrdersQuery(query)
   const exportMutation = useCreateSalesOrderExportJobMutation()
-  const items = ordersQuery.data?.items ?? []
+  const items = React.useMemo(
+    () => ordersQuery.data?.items ?? [],
+    [ordersQuery.data?.items]
+  )
   const total = ordersQuery.data?.total ?? 0
   const metrics = ordersQuery.data?.metrics ?? EMPTY_METRICS
 

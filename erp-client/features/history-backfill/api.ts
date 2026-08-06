@@ -362,11 +362,13 @@ function emptyCreateContext(): CreateBackfillContext {
 // Demo controls (no mock state; keep signatures for queries.ts)
 // ---------------------------------------------------------------------------
 
-export function setHistoryBackfillCreateContextMode(_mode: "ok" | "gap") {
+export function setHistoryBackfillCreateContextMode(mode: "ok" | "gap") {
+  void mode
   // no-op: real backend owns create context
 }
 
-export function setHistoryBackfillForceUnknown(_next: boolean) {
+export function setHistoryBackfillForceUnknown(next: boolean) {
+  void next
   // no-op
 }
 

@@ -188,7 +188,7 @@ export function CardFundsReviewPage() {
   const driftMutation = useDemoDriftHashMutation()
 
   const view = queueQuery.data
-  const tasks = view?.tasks ?? []
+  const tasks = React.useMemo(() => view?.tasks ?? [], [view?.tasks])
   const context = view?.context
   const task =
     tasks.find((t) => t.workItem.workItemId === currentWorkItemId) ??
@@ -262,7 +262,7 @@ export function CardFundsReviewPage() {
     setAllocLines([])
     setEvidenceSavedAt(null)
     setEvidenceDirty(false)
-  }, [task?.workItem.workItemId, task?.fundsFactVersion])
+  }, [task])
 
   // 搜索输入（q）与 URL 对齐
   React.useEffect(() => {
@@ -346,7 +346,7 @@ export function CardFundsReviewPage() {
     } else if (task) {
       headingRef.current?.focus()
     }
-  }, [task?.workItem.workItemId, lastResult?.status])
+  }, [task, lastResult])
 
   const replaceUrl = React.useCallback(
     (patch: Record<string, string | null | undefined>) => {

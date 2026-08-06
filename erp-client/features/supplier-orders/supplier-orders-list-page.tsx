@@ -190,7 +190,10 @@ export function SupplierOrdersListPage() {
     [pathname, router, url, returnTo]
   )
 
-  const rows = listQuery.data?.rows ?? []
+  const rows = React.useMemo(
+    () => listQuery.data?.rows ?? [],
+    [listQuery.data?.rows]
+  )
   const metrics = listQuery.data?.metrics ?? []
   const total = listQuery.data?.pageInfo.total ?? 0
 

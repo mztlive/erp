@@ -55,16 +55,6 @@ type BackendWorkItem = {
   created_at: number
 }
 
-type BackendConfirmationListItem = {
-  id: string
-  sales_order_id: string
-  submission_id: string
-  status: "PENDING" | "APPROVED" | "REJECTED" | string
-  handled_by?: string | null
-  handled_at?: number | null
-  created_at: number
-}
-
 type BackendConfirmationLine = {
   id: string
   line_no: number
@@ -720,8 +710,7 @@ export async function deferProcurementConfirmation(input: {
 }
 
 /** 终局结果查询：后端无按 workItem 反查业务 outcome 的独立接口。 */
-export function getTerminalOutcome(
-  _workItemId: string
-): FormalOutcome | null {
+export function getTerminalOutcome(workItemId: string): FormalOutcome | null {
+  void workItemId
   return null
 }

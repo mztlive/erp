@@ -2282,8 +2282,9 @@ export async function disableMasterDataObject(
  * 返回 null 让 UI 走「结果未知」重试路径，不伪造成功。
  */
 export async function queryMasterDataIdempotency(
-  _idempotencyKey: string
+  idempotencyKey: string
 ): Promise<MasterDataMutationResult | null> {
+  void idempotencyKey
   return null
 }
 
@@ -2292,8 +2293,9 @@ export async function queryMasterDataIdempotency(
  * 失败以 ApiError 形态抛出，供 mutation 进入 error 态。
  */
 export async function revealMasterDataSensitive(
-  _revealToken: string
+  revealToken: string
 ): Promise<string> {
+  void revealToken
   const error: ApiError = {
     kind: "Validation",
     message: "无权查看或权限已失效；敏感字段揭示接口尚未提供",

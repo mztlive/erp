@@ -171,7 +171,7 @@ export function ProcurementConfirmationPage() {
   const deferMutation = useDeferProcurementMutation()
 
   const view = queueQuery.data
-  const tasks = view?.tasks ?? []
+  const tasks = React.useMemo(() => view?.tasks ?? [], [view?.tasks])
   const context = view?.context
   const task =
     tasks.find((t) => t.workItemId === currentWorkItemId) ??
@@ -214,7 +214,7 @@ export function ProcurementConfirmationPage() {
     setDirty(false)
     setActionError(null)
     setSaveMessage(null)
-  }, [task?.workItemId, task?.confirmation.editVersion])
+  }, [task])
 
   // 默认 URL：scope / currentWorkItemId / queueContextId（不写 autoNext 除非用户切换）
   React.useEffect(() => {
@@ -289,7 +289,7 @@ export function ProcurementConfirmationPage() {
     } else if (task) {
       headingRef.current?.focus()
     }
-  }, [task?.workItemId, lastResult?.status])
+  }, [task, lastResult])
 
   const replaceUrl = React.useCallback(
     (patch: Record<string, string | null | undefined>) => {

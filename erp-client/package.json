@@ -6,11 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
-    "test:filter-orders": "node scripts/test-filter-orders.mjs",
-    "test:contract-pdf": "node scripts/test-contract-pdf.mjs",
-    "test:product-supply-links": "node scripts/test-product-supply-links.mjs",
-    "test:inventory-pricing-contracts": "node scripts/test-inventory-pricing-contracts.mjs"
+    "lint": "eslint"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

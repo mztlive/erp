@@ -217,7 +217,7 @@ export function IntegrationErrorsPage({
   const directMutation = useDirectReconciliationMutation()
 
   const view = queueQuery.data
-  const queueItems = view?.items ?? []
+  const queueItems = React.useMemo(() => view?.items ?? [], [view?.items])
   const metrics = view?.metrics
 
   const detailItemQuery = useIntegrationItemQuery({
@@ -256,10 +256,10 @@ export function IntegrationErrorsPage({
     currentDifferenceId,
   ])
 
-  const items =
-    focusMode && item
-      ? [item]
-      : queueItems
+  const items = React.useMemo(
+    () => (focusMode && item ? [item] : queueItems),
+    [focusMode, item, queueItems]
+  )
 
   const currentIndex = item
     ? Math.max(
@@ -488,7 +488,7 @@ export function IntegrationErrorsPage({
   React.useEffect(() => {
     if (lastResult) resultRef.current?.focus()
     else if (item) headingRef.current?.focus()
-  }, [item?.identity.id, lastResult?.status])
+  }, [item, lastResult])
 
   const goToItem = React.useCallback(
     (next: IntegrationResolutionItemView | null | undefined) => {

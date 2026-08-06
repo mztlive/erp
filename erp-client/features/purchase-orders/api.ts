@@ -1064,7 +1064,8 @@ export async function createPurchaseOrderFromBasis(
 
 /** 幂等结果查询：后端无独立查询接口；返回 null 让调用方走正常重试路径。 */
 export async function queryPurchaseOrderActionResult(
-  _idempotencyKey: string
+  idempotencyKey: string
 ): Promise<unknown | null> {
+  void idempotencyKey
   return null
 }

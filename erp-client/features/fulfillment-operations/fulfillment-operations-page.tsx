@@ -19,8 +19,6 @@ import {
   DataFreshness,
   FormalActionConfirmDialog,
   FormalActionResult,
-  MetricFilterItem,
-  MetricStrip,
   PageHeader,
   PrepaymentGate,
   SequentialProcessBar,
@@ -198,10 +196,9 @@ export function FulfillmentOperationsPage() {
   const resolveUnknownMutation = useResolveUnknownFulfillmentMutation()
 
   const view = queueQuery.data
-  const tasks = view?.tasks ?? []
+  const tasks = React.useMemo(() => view?.tasks ?? [], [view?.tasks])
   const context = view?.context
   const visibleTypes = context?.visibleTypes ?? role.types
-  const metrics = view?.metrics ?? []
   const task =
     tasks.find((t) => t.workItemId === currentWorkItemId) ??
     view?.current ??
@@ -238,7 +235,7 @@ export function FulfillmentOperationsPage() {
     setDirty(false)
     setActionError(null)
     setSaveMessage(null)
-  }, [task?.workItemId, task?.editVersion])
+  }, [task])
 
   React.useEffect(() => {
     if (queueQuery.isPending || !view) return
@@ -323,7 +320,7 @@ export function FulfillmentOperationsPage() {
       }
     }
     headingRef.current?.focus()
-  }, [task?.workItemId, task?.operationType, lastResult?.status, role.canExecute])
+  }, [task, lastResult, role.canExecute])
 
   const replaceUrl = React.useCallback(
     (patch: Record<string, string | null | undefined>) => {

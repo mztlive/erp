@@ -248,7 +248,10 @@ function MasterDataListWorkspace({
     metricKey,
   })
 
-  const rows = listQuery.data?.rows ?? []
+  const rows = React.useMemo(
+    () => listQuery.data?.rows ?? [],
+    [listQuery.data?.rows]
+  )
   const permissionDemo = listQuery.data?.permissionDemo
 
   const previewDetailQuery = useMasterDataCenterQuery(
