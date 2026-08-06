@@ -1,1 +1,0 @@
-//! 域 D13 `sales_order`：sales_order(+_line)、sales_order_working_copy、sales_order_submission、sales_order_revision、goods_service_line_revision、voucher_line_revision（页面：W05）。P0 预声明空模块；P2 填充仓储（Executor 传参、投影、乐观锁）。
