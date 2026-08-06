@@ -192,4 +192,380 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "商品与仓库",
+        description: "公司商品池、商品、类目、供应商与仓库基础资料",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-categories",
+                description: "查询商品分类列表",
+                permission: {
+                    resource: "product_category",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-categories",
+                description: "创建商品分类",
+                permission: {
+                    resource: "product_category",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/product-categories/{id}",
+                description: "更新商品分类",
+                permission: {
+                    resource: "product_category",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/product-categories/{id}/parent",
+                description: "移动商品分类",
+                permission: {
+                    resource: "product_category",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/product-categories/{id}",
+                description: "删除商品分类",
+                permission: {
+                    resource: "product_category",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-brands",
+                description: "查询商品品牌列表",
+                permission: {
+                    resource: "product_brand",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-brands",
+                description: "创建商品品牌",
+                permission: {
+                    resource: "product_brand",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/product-brands/{id}",
+                description: "更新商品品牌",
+                permission: {
+                    resource: "product_brand",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/product-brands/{id}",
+                description: "删除商品品牌",
+                permission: {
+                    resource: "product_brand",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/unit-of-measures",
+                description: "查询计量单位列表",
+                permission: {
+                    resource: "unit_of_measure",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/unit-of-measures",
+                description: "创建计量单位",
+                permission: {
+                    resource: "unit_of_measure",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/unit-of-measures/{id}",
+                description: "更新计量单位",
+                permission: {
+                    resource: "unit_of_measure",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/unit-of-measures/{id}",
+                description: "删除计量单位",
+                permission: {
+                    resource: "unit_of_measure",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sku-attributes",
+                description: "查询规格属性列表",
+                permission: {
+                    resource: "sku_attribute",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sku-attributes",
+                description: "创建规格属性",
+                permission: {
+                    resource: "sku_attribute",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/sku-attributes/{id}",
+                description: "更新规格属性",
+                permission: {
+                    resource: "sku_attribute",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/sku-attributes/{id}",
+                description: "删除规格属性",
+                permission: {
+                    resource: "sku_attribute",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sku-attribute-values",
+                description: "查询规格属性值列表",
+                permission: {
+                    resource: "sku_attribute_value",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sku-attribute-values",
+                description: "创建规格属性值",
+                permission: {
+                    resource: "sku_attribute_value",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/sku-attribute-values/{id}",
+                description: "更新规格属性值",
+                permission: {
+                    resource: "sku_attribute_value",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/sku-attribute-values/{id}",
+                description: "删除规格属性值",
+                permission: {
+                    resource: "sku_attribute_value",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/products",
+                description: "查询商品列表",
+                permission: {
+                    resource: "product",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/products",
+                description: "创建商品",
+                permission: {
+                    resource: "product",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/products/{id}",
+                description: "规格编辑商品",
+                permission: {
+                    resource: "product",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-revisions",
+                description: "查询商品修订列表",
+                permission: {
+                    resource: "product_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/skus",
+                description: "查询SKU列表",
+                permission: {
+                    resource: "sku",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sku-revisions",
+                description: "查询SKU修订列表",
+                permission: {
+                    resource: "sku_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/voucher-category-profiles",
+                description: "查询卡券类目列表",
+                permission: {
+                    resource: "voucher_category_profile",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/voucher-category-profiles",
+                description: "创建卡券类目",
+                permission: {
+                    resource: "voucher_category_profile",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/warehouses",
+                description: "查询仓库列表",
+                permission: {
+                    resource: "warehouse",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/warehouses",
+                description: "创建仓库",
+                permission: {
+                    resource: "warehouse",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/warehouses/{id}",
+                description: "更新仓库",
+                permission: {
+                    resource: "warehouse",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/warehouse-revisions",
+                description: "查询仓库修订列表",
+                permission: {
+                    resource: "warehouse_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/warehouse-sku-policies",
+                description: "查询仓库SKU预警策略列表",
+                permission: {
+                    resource: "warehouse_sku_policy",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/warehouse-sku-policies",
+                description: "创建仓库SKU预警策略",
+                permission: {
+                    resource: "warehouse_sku_policy",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/warehouse-sku-policies/{id}",
+                description: "更新仓库SKU预警策略",
+                permission: {
+                    resource: "warehouse_sku_policy",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/warehouse-sku-policies/{id}",
+                description: "删除仓库SKU预警策略",
+                permission: {
+                    resource: "warehouse_sku_policy",
+                    action: "delete",
+                },
+            },
+        ],
+    },
 ];
