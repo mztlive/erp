@@ -89,7 +89,7 @@ import {
   decodeInventoryCursor,
   encodeInventoryCursor,
 } from "@/features/inventory/cursor"
-import { bumpInventoryBalanceLock, type W10ExportJob } from "@/mock/session-state"
+import type { InventoryExportJob } from "@/features/inventory/api"
 import { compareDecimal, parseDecimal } from "@/lib/fixed-decimal"
 import { resultText, workspaceLabel } from "@/lib/ui-text"
 import type { WorkspaceId } from "@/lib/workspace-registry"
@@ -291,7 +291,7 @@ export function InventoryLedgerPage() {
   } | null>(null)
   const [confirmOpen, setConfirmOpen] = React.useState(false)
   const [lastResult, setLastResult] = React.useState<ResultState>(null)
-  const [exportJob, setExportJob] = React.useState<W10ExportJob | null>(null)
+  const [exportJob, setExportJob] = React.useState<InventoryExportJob | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [forceUnknownOnce, setForceUnknownOnce] = React.useState(false)
   const [pendingPayload, setPendingPayload] = React.useState<{
@@ -2206,12 +2206,9 @@ export function InventoryLedgerPage() {
                       variant="ghost"
                       onClick={() => {
                         if (!adjustBalanceId) return
-                        bumpInventoryBalanceLock(
-                          adjustBalanceId,
-                          adjustSeedLock
-                        )
+                        // 演示：并发冲突需后端乐观锁；本地不再改 mock 锁版本
                         setActionError(
-                          `已模拟他人同时修改库存，本次提交将发生冲突（仅演示）。`
+                          `演示：请在另一会话修改同一余额后重试提交，以触发服务端并发冲突。`
                         )
                       }}
                     >
