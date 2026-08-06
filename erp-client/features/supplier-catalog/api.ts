@@ -1,190 +1,192 @@
 /**
- * W21 session-mock API：queryFn / mutationFn 纯函数。
- * 任务内动作 / 终结复用 W02 会话信封语义。
+ * W21 · 供应商商品库 · 真实 HTTP 适配层。
+ * 后端提供实体 CRUD（商品/SKU/映射/供给）；队列/工作项投影在 api.ts 内 thrift 组装。
+ * 保持对外导出签名稳定。
  */
 
-import { mockDelay } from "@/lib/mock-delay"
+import { apiGet, apiPost, type Page } from "@/lib/api"
 import type {
-  CostFieldVisibility,
   CreateCompanyProductFromSupplierSkuInput,
   CreateSupplierCatalogItemInput,
   DemoRole,
-  DiffChange,
+  FormalActionResponse,
+  PromoteSupplierProductInput,
+  ReviseSupplierCatalogProductInput,
+  SessionCatalogDraft,
   SupplierCatalogCenterView,
-  SupplierCatalogDecision,
   SupplierCatalogItemView,
   SupplierCatalogQueueQuery,
   SupplierCatalogQueueView,
-  SupplierCatalogWorkItemAction,
-  SupplierProductRevisionView,
-  FormalActionResponse,
-  FormalOutcome,
-  SessionCatalogDraft,
-  SupplierCatalogWriteResult,
-  SupplierOfferingRevisionView,
-  PromoteSupplierProductInput,
-  ReviseSupplierCatalogProductInput,
   SupplierCatalogSkuView,
-  SupplierCatalogSkuWriteFields,
+  SupplierCatalogWriteResult,
+  SupplierCatalogWorkItemAction,
+  SupplierCatalogDecision,
+  SupplierOfferingRevisionView,
+  SupplierProductMappingView,
+  SupplierProductRevisionView,
   WorkItemLease,
+  CostFieldVisibility,
 } from "@/features/supplier-catalog/types"
 import {
   COST_MASK,
   DEMO_ROLE_LABEL,
   REGISTRATION_BLOCKER_MESSAGE,
 } from "@/features/supplier-catalog/types"
-import {
-  buildW14ListResult,
-  createW14Object,
-  getW14Center,
-} from "@/features/master-data/session"
-import { SUPPLIER_CATALOG_SEED } from "@/mock/supplier-catalog"
-import {
-  applyWorkItemActionSession,
-  claimWorkItemSession,
-  completeWorkItemSession,
-  getCompletedQueueTaskIds,
-  getHeldQueueTaskIds,
-  getSessionLease,
-  getWorkItemActionHistory,
-  getWorkItemTerminal,
-  isWorkItemHeld,
-  markQueueTaskCompleted,
-  markQueueTaskHeld,
-  WorkItemMockError,
-} from "@/mock/session-state"
+
+// ─── Backend wire types ───────────────────────────────────────────────────────
+
+type BackendProduct = {
+  id: string
+  supplier_id: string
+  source_type: "EXCEL" | "API" | "MANUAL" | string
+  supplier_spu_code: string
+  status: "ACTIVE" | "STOPPED" | "EXCEPTION" | string
+  current_revision_id?: string | null
+  current_revision_no?: number | null
+  name?: string | null
+  source_category?: string | null
+  source_brand?: string | null
+  source_updated_at?: number | null
+  version: number
+  created_at: number
+}
+
+type BackendSku = {
+  id: string
+  supplier_catalog_product_id: string
+  supplier_sku_code: string
+  status: string
+  current_revision_id?: string | null
+  current_revision_no?: number | null
+  name?: string | null
+  specification?: string | null
+  barcode?: string | null
+  dropship_floor_price_gross?: string | null
+  bulk_floor_price_gross?: string | null
+  bulk_minimum_order_quantity?: string | null
+  availability_status?: string | null
+  version: number
+  created_at: number
+}
+
+type BackendSkuRevision = {
+  id: string
+  revision_no: number
+  name: string
+  specification: string
+  barcode?: string | null
+  dropship_floor_price_gross?: string | null
+  bulk_floor_price_gross?: string | null
+  bulk_minimum_order_quantity?: string | null
+  available_quantity?: string | null
+  availability_status: string
+  source_updated_at: number
+}
+
+type BackendProductDetail = {
+  product: BackendProduct
+  revisions: Array<{
+    id: string
+    revision_no: number
+    name: string
+    description?: string | null
+    source_product_kind?: string | null
+    source_category?: string | null
+    source_brand?: string | null
+    structured_attributes: Array<{
+      attribute_name: string
+      attribute_value: string
+    }>
+    source_revision_token?: string | null
+    source_updated_at: number
+    valid_from?: string | null
+    valid_to?: string | null
+  }>
+  media: Array<{
+    id: string
+    usage: string
+    url?: string | null
+    archive_status: string
+    sort_order: number
+  }>
+  skus: Array<{
+    sku: BackendSku
+    revisions: BackendSkuRevision[]
+  }>
+  mappings: BackendMapping[]
+}
+
+type BackendMapping = {
+  id: string
+  supplier_catalog_sku_id: string
+  sku_id: string
+  status: "PENDING" | "ACTIVE" | "CONFLICT" | "DISABLED" | string
+  approved_by?: string | null
+  approved_at?: number | null
+  reason?: string | null
+  version: number
+  created_at: number
+}
+
+type BackendOffering = {
+  id: string
+  sku_id: string
+  supplier_id: string
+  supplier_catalog_sku_id: string
+  status: "ACTIVE" | "PAUSED" | "STOPPED" | string
+  current_revision_id?: string | null
+  current_revision_no?: number | null
+  dropship_supply_price_gross?: string | null
+  dropship_supply_price_net?: string | null
+  bulk_supply_price_gross?: string | null
+  bulk_supply_price_net?: string | null
+  input_tax_rate?: string | null
+  bulk_minimum_order_quantity?: string | null
+  supply_region: string[]
+  availability_status?: string | null
+  valid_from?: string | null
+  valid_to?: string | null
+  version: number
+  created_at: number
+}
+
+type BackendWorkItem = {
+  id: string
+  work_item_type: string
+  business_object_type: string
+  business_object_id: string
+  subject_version?: string | null
+  status: string
+  owner_user_id?: string | null
+  priority: string | number
+  due_at?: number | null
+  reason_code?: string | null
+  impact_summary?: string | null
+  completion_action: string
+  version: number
+  created_at: number
+}
+
+type BackendSkuListItem = {
+  id: string
+  sku_no: string
+  product_id: string
+  base_unit_id: string
+  specification_signature: string
+  status: string
+  created_at: number
+  version: number
+}
+
+// ─── Session draft (client-only, not mock seed) ───────────────────────────────
 
 const drafts = new Map<string, SessionCatalogDraft>()
-const catalogOverlays = new Map<string, SupplierCatalogItemView>()
-const createdCatalogSkuIds: string[] = []
-const writeResults = new Map<string, SupplierCatalogWriteResult>()
-type ProductPoolEntryView = NonNullable<SupplierCatalogItemView["poolEntry"]>
-const poolEntryOverlays = new Map<string, ProductPoolEntryView>()
 
-/**
- * 唯一正式供应商 SKU 身份（supplier_catalog_sku_id）：
- * 多 SKU 取 catalogSkus 中对应行，缺省退化为单 SKU 的 `{productId}_sku`。
- */
-function primarySupplierSkuId(item: SupplierCatalogItemView): string {
-  return item.supplierProduct.catalogSkus?.[0]?.id ?? `${item.supplierProduct.id}_sku`
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function listCatalogItems(): SupplierCatalogItemView[] {
-  const seeded = SUPPLIER_CATALOG_SEED.map(
-    (item) => catalogOverlays.get(primarySupplierSkuId(item)) ?? item
-  )
-  const created = createdCatalogSkuIds
-    .map((id) => catalogOverlays.get(id))
-    .filter((item): item is SupplierCatalogItemView => Boolean(item))
-  return [...created, ...seeded]
-}
-
-function companyProductCenters() {
-  return buildW14ListResult("products").rows.flatMap((row) => {
-    const center = getW14Center("products", row.stableId)
-    return center?.productDetail ? [center] : []
-  })
-}
-
-function currentPoolEntryForSku(skuId: string): ProductPoolEntryView | undefined {
-  const overlay = poolEntryOverlays.get(skuId)
-  if (overlay) return overlay
-  const entries = listCatalogItems().flatMap((item) =>
-    item.mapping?.mappingStatus === "ACTIVE" &&
-    item.mapping.skuId === skuId &&
-    item.poolEntry
-      ? [item.poolEntry]
-      : []
-  )
-  return entries.find((entry) => entry.status === "ACTIVE") ?? entries[0]
-}
-
-function activeSupplierCountForSku(skuId: string): number {
-  return new Set(
-    listCatalogItems().flatMap((item) => {
-      const offering = item.offering?.currentRevision
-      return item.mapping?.mappingStatus === "ACTIVE" &&
-        item.mapping.skuId === skuId &&
-        offering?.status === "ACTIVE" &&
-        offering.availabilityStatus === "AVAILABLE"
-        ? [item.supplierProduct.supplier.id]
-        : []
-    })
-  ).size
-}
-
-function resolveSkuContext(skuId?: string) {
-  if (!skuId) return undefined
-
-  for (const product of companyProductCenters()) {
-    const detail = product.productDetail
-    if (!detail) continue
-    const sku = detail.skus.find((entry) => entry.skuId === skuId)
-    if (!sku) continue
-
-    return {
-      productId: product.stableId,
-      productName: product.name,
-      skuId,
-      skuCode: sku.skuNo,
-      specification: sku.specLabel,
-      baseUnit: sku.baseUnit ?? detail.baseUnit,
-      category: detail.category || undefined,
-      brand: detail.brand || undefined,
-      barcode: sku.barcode,
-      description: detail.description,
-      carouselImages: detail.carouselImages,
-      detailImages: detail.detailImages,
-      mainImage: sku.mainImage || undefined,
-      poolEntry: currentPoolEntryForSku(skuId),
-    }
-  }
-
-  return undefined
-}
-
-function maskCostValue(v: string | null | undefined): string | null {
-  if (v == null) return null
-  return COST_MASK
-}
-
-function maskRevision(
-  rev: SupplierProductRevisionView,
-  mask: boolean
-): SupplierProductRevisionView {
-  if (!mask) return rev
-  return {
-    ...rev,
-    dropshipFloorPriceGross: maskCostValue(rev.dropshipFloorPriceGross),
-    bulkFloorPriceGross: maskCostValue(rev.bulkFloorPriceGross),
-  }
-}
-
-function maskOffering(
-  o: SupplierOfferingRevisionView,
-  mask: boolean
-): SupplierOfferingRevisionView {
-  if (!mask) return o
-  return {
-    ...o,
-    supplyPriceGross: maskCostValue(o.supplyPriceGross),
-    supplyPriceNet: maskCostValue(o.supplyPriceNet),
-    floorPriceGross: maskCostValue(o.floorPriceGross),
-    dropshipSupplyPriceGross: maskCostValue(o.dropshipSupplyPriceGross),
-    bulkSupplyPriceGross: maskCostValue(o.bulkSupplyPriceGross),
-    inputTaxRate: maskCostValue(o.inputTaxRate),
-    freightAmount: maskCostValue(o.freightAmount),
-    serviceFeeAmount: maskCostValue(o.serviceFeeAmount),
-  }
-}
-
-function maskDiff(changes: readonly DiffChange[], mask: boolean): DiffChange[] {
-  if (!mask) return [...changes]
-  return changes.map((c) =>
-    c.costSensitive
-      ? { ...c, before: COST_MASK, after: COST_MASK, note: "已变化（成本字段已隐藏）" }
-      : c
-  )
+function secsToIso(secs?: number | null): string {
+  if (secs == null || secs <= 0) return new Date(0).toISOString()
+  return new Date(secs * 1000).toISOString()
 }
 
 function resolveRole(q?: DemoRole): DemoRole {
@@ -196,355 +198,402 @@ function costVisibility(
   forceMask?: boolean
 ): CostFieldVisibility {
   if (forceMask) return "masked"
-  if (role === "operations" || role === "ops_tech" || role === "admin") {
-    return "masked"
-  }
+  if (role === "operations" || role === "ops_tech") return "masked"
   return "visible"
 }
 
-function roleBlockers(
-  item: SupplierCatalogItemView,
-  role: DemoRole
-): SupplierCatalogItemView["actionBlockers"] {
-  const blockers = [...item.actionBlockers]
-  if (role === "operations") {
-    for (const action of [
-      "APPROVE_MAPPING",
-      "CONFIRM_OFFERING_REVISION",
-      "CONFIRM_STOP_SUPPLY",
-      "CONFIRM_ERROR_RESOLVED",
-    ]) {
-      if (!blockers.some((b) => b.action === action)) {
-        blockers.push({
-          action,
-          code: "ROLE_PROCUREMENT_ONLY",
-          message: "运营可查看发布准备情况并前往商品发布，但不能确认商品关联或供货成本",
-        })
-      }
-    }
-  }
-  if (role === "admin" || role === "ops_tech") {
-    for (const action of [
-      "APPROVE_MAPPING",
-      "CONFIRM_OFFERING_REVISION",
-      "CONFIRM_STOP_SUPPLY",
-    ]) {
-      if (!blockers.some((b) => b.action === action)) {
-        blockers.push({
-          action,
-          code: "ROLE_TECH_ONLY",
-          message: "系统管理员和技术人员只能处理数据异常，不能确认商品关联或供货条件",
-        })
-      }
-    }
-  }
-  return blockers
+function maskCost(v: string | null | undefined, mask: boolean): string | null {
+  if (v == null) return null
+  return mask ? COST_MASK : v
 }
 
-function projectItem(
-  seed: SupplierCatalogItemView,
+function sourceTypeLabel(t: string): string {
+  if (t === "EXCEL") return "Excel"
+  if (t === "API") return "API"
+  if (t === "MANUAL") return "手工"
+  return t
+}
+
+function changeTypeFromStatus(
+  status: string
+): "NEW" | "CHANGED" | "STOPPED" | "ERROR" | "UNCHANGED" {
+  if (status === "STOPPED") return "STOPPED"
+  if (status === "EXCEPTION") return "ERROR"
+  return "NEW"
+}
+
+function mapAvailability(
+  raw?: string | null
+): "AVAILABLE" | "UNAVAILABLE" | "STOPPED" | "STALE" {
+  const u = (raw ?? "AVAILABLE").toUpperCase()
+  if (u === "UNAVAILABLE" || u === "STOPPED" || u === "STALE") return u
+  return "AVAILABLE"
+}
+
+function emptyPublicationImpact() {
+  return {
+    activePublicationCount: 0,
+    pausedPublicationCount: 0,
+    historicalPaidOrderCount: 0,
+    safetyPauseTriggered: false,
+    safetyPauseReasons: [] as string[],
+    pauseSubResults: [] as Array<{
+      id: string
+      publicationId: string
+      reason: string
+      outboxId: string
+      status: string
+    }>,
+    mallSalePriceAutoUpdate: false as const,
+    moqCopiedToMallMinPurchase: false as const,
+    note: "发布影响由商品发布域承接；本接口不返回聚合。",
+  }
+}
+
+function mapSkuRevision(
+  rev: BackendSkuRevision | undefined,
+  productName: string,
+  category: string,
+  brand: string | undefined,
+  mask: boolean
+): SupplierProductRevisionView {
+  const r = rev
+  return {
+    revisionNo: r?.revision_no ?? 1,
+    sourceUpdatedAt: secsToIso(r?.source_updated_at),
+    syncedAt: secsToIso(r?.source_updated_at),
+    name: r?.name ?? productName,
+    specification: r?.specification ?? "",
+    category,
+    brand,
+    barcode: r?.barcode ?? undefined,
+    dropshipFloorPriceGross: maskCost(r?.dropship_floor_price_gross, mask),
+    bulkFloorPriceGross: maskCost(r?.bulk_floor_price_gross, mask),
+    bulkMinimumOrderQuantity: r?.bulk_minimum_order_quantity ?? null,
+    availableQuantity: r?.available_quantity ?? "0",
+    availabilityStatus: mapAvailability(r?.availability_status),
+  }
+}
+
+function mapOffering(o: BackendOffering, mask: boolean): SupplierOfferingRevisionView {
+  return {
+    offeringId: o.id,
+    offeringRevisionId: o.current_revision_id ?? o.id,
+    revisionNo: o.current_revision_no ?? 1,
+    status:
+      o.status === "PAUSED"
+        ? "PAUSED"
+        : o.status === "STOPPED"
+          ? "STOPPED"
+          : "ACTIVE",
+    supplyPriceGross: maskCost(
+      o.dropship_supply_price_gross ?? o.bulk_supply_price_gross,
+      mask
+    ),
+    supplyPriceNet: maskCost(
+      o.dropship_supply_price_net ?? o.bulk_supply_price_net,
+      mask
+    ),
+    floorPriceGross: null,
+    dropshipSupplyPriceGross: maskCost(o.dropship_supply_price_gross, mask),
+    bulkSupplyPriceGross: maskCost(o.bulk_supply_price_gross, mask),
+    inputTaxRate: maskCost(o.input_tax_rate, mask),
+    freightAmount: null,
+    serviceFeeAmount: null,
+    minimumOrderQuantity: o.bulk_minimum_order_quantity ?? "1",
+    supplyRegion: o.supply_region ?? [],
+    availabilityStatus: o.availability_status ?? "AVAILABLE",
+    availableQuantity: "0",
+    productCapabilities: [],
+    validFrom: o.valid_from ?? secsToIso(o.created_at).slice(0, 10),
+    validTo: o.valid_to ?? undefined,
+    createdAt: secsToIso(o.created_at),
+    immutable: true,
+  }
+}
+
+function mapMapping(m: BackendMapping): SupplierProductMappingView {
+  return {
+    mappingStatus:
+      m.status === "ACTIVE"
+        ? "ACTIVE"
+        : m.status === "CONFLICT"
+          ? "CONFLICT"
+          : m.status === "DISABLED"
+            ? "DISABLED"
+            : "PENDING",
+    skuId: m.sku_id,
+    approvedBy: m.approved_by ?? undefined,
+    approvedAt: m.approved_at ? secsToIso(m.approved_at) : undefined,
+    reason: m.reason ?? undefined,
+    mappingVersion: String(m.version),
+    history: [],
+  }
+}
+
+async function resolveSupplierName(supplierId: string): Promise<string> {
+  try {
+    const row = await apiGet<{ id: string; name?: string; supplier_name?: string }>(
+      `/admin/suppliers/${encodeURIComponent(supplierId)}`
+    )
+    return row.name ?? row.supplier_name ?? supplierId
+  } catch {
+    return supplierId
+  }
+}
+
+function projectProductToItem(
+  product: BackendProduct,
+  skus: BackendSku[],
+  skuRevisions: Map<string, BackendSkuRevision>,
+  mappings: BackendMapping[],
+  offerings: BackendOffering[],
+  supplierName: string,
   role: DemoRole,
   mask: boolean
-): SupplierCatalogItemView | null {
-  // 仅已注册异常任务可终结移除
-  if (seed.changeType === "ERROR" || seed.changeType === "STOPPED") {
-    const terminal = getWorkItemTerminal(seed.workItem.workItemId)
-    if (terminal || markCompletedHas(seed.workItem.workItemId)) {
-      return null
-    }
-  }
+): SupplierCatalogItemView {
+  const primarySku = skus[0]
+  const primaryRev = primarySku
+    ? skuRevisions.get(primarySku.id)
+    : undefined
+  const category = product.source_category ?? ""
+  const brand = product.source_brand ?? undefined
+  const currentRevision = mapSkuRevision(
+    primaryRev,
+    product.name ?? product.supplier_spu_code,
+    category,
+    brand,
+    mask
+  )
 
-  const held =
-    seed.changeType === "ERROR" || seed.changeType === "STOPPED"
-      ? isWorkItemHeld(seed.workItem.workItemId) ||
-        markHeldHas(seed.workItem.workItemId)
-      : false
+  const catalogSkus: SupplierCatalogSkuView[] = skus.map((s) => ({
+    id: s.id,
+    supplierSkuCode: s.supplier_sku_code,
+    currentRevision: mapSkuRevision(
+      skuRevisions.get(s.id) ??
+        ({
+          id: s.id,
+          revision_no: s.current_revision_no ?? 1,
+          name: s.name ?? product.name ?? s.supplier_sku_code,
+          specification: s.specification ?? "",
+          barcode: s.barcode,
+          dropship_floor_price_gross: s.dropship_floor_price_gross,
+          bulk_floor_price_gross: s.bulk_floor_price_gross,
+          bulk_minimum_order_quantity: s.bulk_minimum_order_quantity,
+          available_quantity: null,
+          availability_status: s.availability_status ?? "AVAILABLE",
+          source_updated_at: product.source_updated_at ?? product.created_at,
+        } as BackendSkuRevision),
+      product.name ?? s.supplier_sku_code,
+      category,
+      brand,
+      mask
+    ),
+  }))
 
-  const publicLease =
-    seed.changeType === "ERROR" || seed.changeType === "STOPPED"
-      ? getSessionLease(seed.workItem.workItemId)
-      : null
+  const skuIds = new Set(skus.map((s) => s.id))
+  const mapping = mappings.find((m) => skuIds.has(m.supplier_catalog_sku_id))
+  const offering = offerings.find((o) => skuIds.has(o.supplier_catalog_sku_id))
+  const changeType = changeTypeFromStatus(product.status)
 
-  const ep = seed.supplierProduct
-  const draft = drafts.get(primarySupplierSkuId(seed))
-
-  let mapping = seed.mapping
-  if (draft?.selectedSkuId && mapping) {
-    const cand = seed.skuCandidates.find((c) => c.skuId === draft.selectedSkuId)
-    if (cand) {
-      mapping = {
-        ...mapping,
-        mappingStatus: "PENDING",
-        skuId: cand.skuId,
-        skuCode: cand.skuCode,
-        skuName: cand.skuName,
-        specification: cand.specification,
-        baseUnit: cand.baseUnit,
-        reason: "页面草稿（尚未提交）",
-      }
-    }
-  }
-
-  let offering = seed.offering
-  if (draft?.offeringDraft && offering) {
-    offering = {
-      ...offering,
-      proposedDefaults: draft.offeringDraft,
-    }
-  }
-
-  const base: SupplierCatalogItemView = {
-    ...seed,
+  const base = {
     supplierProduct: {
-      ...ep,
-      currentRevision: maskRevision(ep.currentRevision, mask),
-      incomingRevision: ep.incomingRevision
-        ? maskRevision(ep.incomingRevision, mask)
-        : undefined,
+      id: product.id,
+      supplier: { id: product.supplier_id, name: supplierName },
+      source: {
+        type: product.source_type as "EXCEL" | "API" | "MANUAL",
+        label: sourceTypeLabel(product.source_type),
+      },
+      supplierSpuCode: product.supplier_spu_code,
+      supplierSkuCode:
+        primarySku?.supplier_sku_code ?? product.supplier_spu_code,
+      status: product.status,
+      currentRevision,
+      catalogSkus,
     },
-    mapping,
-    poolEntry: mapping?.skuId
-      ? currentPoolEntryForSku(mapping.skuId) ?? seed.poolEntry
-      : seed.poolEntry,
+    mapping: mapping ? mapMapping(mapping) : undefined,
+    skuCandidates: [],
     offering: offering
       ? {
-          ...offering,
-          currentRevision: offering.currentRevision
-            ? maskOffering(offering.currentRevision, mask)
-            : undefined,
-          revisionHistory: offering.revisionHistory.map((r) =>
-            maskOffering(r, mask)
-          ),
-          proposedDefaults:
-            offering.proposedDefaults && mask
-              ? {
-                  ...offering.proposedDefaults,
-                  supplyPriceGross: COST_MASK,
-                  floorPriceGross: COST_MASK,
-                  inputTaxRate: COST_MASK,
-                  freightAmount: COST_MASK,
-                  serviceFeeAmount: COST_MASK,
-                }
-              : offering.proposedDefaults,
+          stableId: offering.id,
+          currentRevision: mapOffering(offering, mask),
+          revisionHistory: [mapOffering(offering, mask)],
         }
       : undefined,
-    sourceDiff: maskDiff(seed.sourceDiff, mask),
-    actionBlockers: roleBlockers(seed, role),
-    costFieldVisibility: mask ? "masked" : "visible",
+    publicationImpact: emptyPublicationImpact(),
+    sourceContext: {
+      intakeId: product.id,
+      sourceReference: product.supplier_spu_code,
+      receivedAt: secsToIso(product.created_at),
+    },
+    sourceDiff: [] as const,
+    allowedActions: [
+      "OPEN_CENTER",
+      "CREATE_MAPPING",
+      "PROMOTE_TO_POOL",
+      "REVISE_PRODUCT",
+    ],
+    actionBlockers: [] as Array<{
+      action: string
+      code: string
+      message: string
+      destinationWorkspaceId?: string
+    }>,
+    costFieldVisibility: (mask ? "masked" : "visible") as CostFieldVisibility,
   }
 
-  if (base.changeType === "ERROR" || base.changeType === "STOPPED") {
-    const actions = getWorkItemActionHistory(base.workItem.workItemId)
+  if (changeType === "ERROR" || changeType === "STOPPED") {
     return {
       ...base,
+      changeType,
       workItem: {
-        ...base.workItem,
-        workItemStatus: held
-          ? "IN_PROGRESS"
-          : actions.length > 0
-            ? "IN_PROGRESS"
-            : base.workItem.workItemStatus,
-        held,
-        claimedBy: publicLease
-          ? { userId: "user_demo", displayName: `当前用户 · ${DEMO_ROLE_LABEL[role]}` }
-          : base.workItem.claimedBy,
+        workItemId: `wi_catalog_${product.id}`,
+        workItemType: "BUSINESS_EXCEPTION",
+        businessObjectType: "SUPPLIER_CATALOG_SKU",
+        subjectVersion: String(product.version),
+        subjectHash: product.id,
+        workItemStatus: "PENDING",
+        allowedActions: [
+          "CLAIM",
+          "HOLD",
+          "RETURN_FOR_DATA_FIX",
+          "QUERY_ORIGINAL_RESULT",
+          "SAVE_EVIDENCE",
+          "CONFIRM_ERROR_RESOLVED",
+          "CONFIRM_STOP_SUPPLY",
+        ],
+        actionBlockers: [],
+        reason: product.status === "EXCEPTION" ? "来源异常" : "停止供应",
+        impact: "需采购复核",
+        priority: 50,
+        handlerKey: "supplier_catalog",
       },
     }
   }
 
-  return base
-}
-
-function markCompletedHas(id: string): boolean {
-  return getCompletedQueueTaskIds("W21").has(id)
-}
-
-function markHeldHas(id: string): boolean {
-  return getHeldQueueTaskIds("W21").has(id)
-}
-
-function filterSummary(q: SupplierCatalogQueueQuery): string {
-  const parts = [
-    q.changeType === "all"
-      ? "全部变化"
-      : q.changeType === "NEW"
-        ? "新供应商商品"
-        : q.changeType === "CHANGED"
-          ? "关键变化"
-          : q.changeType === "STOPPED"
-            ? "停止供应"
-            : q.changeType === "ERROR"
-              ? "异常数据"
-              : "需处理",
-    q.status === "held" ? "稍后处理" : "待处理",
-    DEMO_ROLE_LABEL[resolveRole(q.demoRole)],
-  ]
-  if (q.q) parts.push(`搜索 ${q.q}`)
-  if (q.skuId) {
-    const context = resolveSkuContext(q.skuId)
-    parts.push(context ? `商品规格 ${context.skuCode}` : "商品规格筛选")
+  if (changeType === "NEW" || changeType === "CHANGED") {
+    return {
+      ...base,
+      changeType,
+      registrationBlocker: {
+        code: "WORK_ITEM_TYPE_UNREGISTERED",
+        message: REGISTRATION_BLOCKER_MESSAGE,
+        businessProcess: "MAPPING",
+      },
+    }
   }
-  if (q.sourceType && q.sourceType !== "all") {
-    parts.push(
-      q.sourceType === "API"
-        ? "API 来源"
-        : q.sourceType === "EXCEL"
-          ? "Excel 来源"
-          : "手工录入"
+
+  return {
+    ...base,
+    changeType: "UNCHANGED",
+  }
+}
+
+async function loadQueueItems(
+  query: SupplierCatalogQueueQuery,
+  role: DemoRole,
+  mask: boolean
+): Promise<SupplierCatalogItemView[]> {
+  const pageSize = query.pageSize ?? 50
+  const productPage = await apiGet<Page<BackendProduct>>(
+    "/admin/supplier-catalog/products",
+    {
+      page: 1,
+      page_size: pageSize,
+      q: query.q?.trim() || undefined,
+      supplier_id: query.supplierId || undefined,
+      source_type:
+        query.sourceType && query.sourceType !== "all"
+          ? query.sourceType
+          : undefined,
+    }
+  )
+
+  const items: SupplierCatalogItemView[] = []
+
+  for (const product of productPage.items) {
+    const [skuPage, mappingPage, offeringPage, supplierName] = await Promise.all([
+      apiGet<Page<BackendSku>>("/admin/supplier-catalog/skus", {
+        supplier_catalog_product_id: product.id,
+        page: 1,
+        page_size: 100,
+      }).catch(() => ({
+        items: [] as BackendSku[],
+        total: 0,
+        page: 1,
+        page_size: 100,
+      })),
+      apiGet<Page<BackendMapping>>("/admin/supplier-catalog/mappings", {
+        page: 1,
+        page_size: 100,
+      }).catch(() => ({
+        items: [] as BackendMapping[],
+        total: 0,
+        page: 1,
+        page_size: 100,
+      })),
+      apiGet<Page<BackendOffering>>("/admin/supplier-catalog/offerings", {
+        supplier_id: product.supplier_id,
+        page: 1,
+        page_size: 100,
+      }).catch(() => ({
+        items: [] as BackendOffering[],
+        total: 0,
+        page: 1,
+        page_size: 100,
+      })),
+      resolveSupplierName(product.supplier_id),
+    ])
+
+    const skuRevisions = new Map<string, BackendSkuRevision>()
+    for (const s of skuPage.items) {
+      skuRevisions.set(s.id, {
+        id: s.current_revision_id ?? s.id,
+        revision_no: s.current_revision_no ?? 1,
+        name: s.name ?? product.name ?? s.supplier_sku_code,
+        specification: s.specification ?? "",
+        barcode: s.barcode,
+        dropship_floor_price_gross: s.dropship_floor_price_gross,
+        bulk_floor_price_gross: s.bulk_floor_price_gross,
+        bulk_minimum_order_quantity: s.bulk_minimum_order_quantity,
+        available_quantity: null,
+        availability_status: s.availability_status ?? "AVAILABLE",
+        source_updated_at: product.source_updated_at ?? product.created_at,
+      })
+    }
+
+    const item = projectProductToItem(
+      product,
+      skuPage.items,
+      skuRevisions,
+      mappingPage.items,
+      offeringPage.items,
+      supplierName,
+      role,
+      mask
     )
-  }
-  if (q.maskCost) parts.push("成本隐藏")
-  return parts.join(" · ")
-}
-
-function sortItems(items: SupplierCatalogItemView[]): SupplierCatalogItemView[] {
-  const rank: Record<string, number> = {
-    STOPPED: 0,
-    ERROR: 1,
-    CHANGED: 2,
-    NEW: 3,
-    UNCHANGED: 4,
-  }
-  return [...items].sort((a, b) => {
-    const ra = rank[a.changeType] ?? 9
-    const rb = rank[b.changeType] ?? 9
-    if (ra !== rb) return ra - rb
-    const pa =
-      a.changeType === "ERROR" || a.changeType === "STOPPED"
-        ? a.workItem.priority
-        : 50
-    const pb =
-      b.changeType === "ERROR" || b.changeType === "STOPPED"
-        ? b.workItem.priority
-        : 50
-    return pb - pa
-  })
-}
-
-function sortRelationshipItems(
-  items: SupplierCatalogItemView[],
-  query: SupplierCatalogQueueQuery
-): SupplierCatalogItemView[] {
-  const [sortId, sortDir] = (query.sort ?? "").split(":")
-  const sorted = [...items]
-  if (sortId && (sortDir === "asc" || sortDir === "desc")) {
-    const direction = sortDir === "desc" ? -1 : 1
-    const compareValue = (a: string, b: string) => {
-      const result = a.localeCompare(b)
-      return result * direction
-    }
-    switch (sortId) {
-      case "supplierProduct":
-        sorted.sort((a, b) =>
-          compareValue(
-            a.supplierProduct.supplier.name,
-            b.supplierProduct.supplier.name
-          )
-        )
-        break
-      case "price": {
-        const price = (item: SupplierCatalogItemView) =>
-          item.offering?.currentRevision?.supplyPriceGross ??
-          item.supplierProduct.currentRevision.bulkFloorPriceGross ??
-          item.supplierProduct.currentRevision.dropshipFloorPriceGross ??
-          ""
-        sorted.sort((a, b) => {
-          const pa = Number(price(a)) || 0
-          const pb = Number(price(b)) || 0
-          return (pa - pb) * direction
-        })
-        break
-      }
-      case "status":
-        sorted.sort((a, b) => {
-          const labelA = statusLabelForItem(a)
-          const labelB = statusLabelForItem(b)
-          if (labelA === labelB) return 0
-          return compareValue(labelA, labelB)
-        })
-        break
-    }
-    return sorted
-  }
-  const rank = (item: SupplierCatalogItemView) => {
-    const offering = item.offering?.currentRevision
-    if (
-      item.mapping?.mappingStatus === "ACTIVE" &&
-      offering?.status === "ACTIVE" &&
-      offering.availabilityStatus === "AVAILABLE"
-    ) {
-      return 0
-    }
-    if (item.mapping?.mappingStatus !== "ACTIVE") return 1
-    return 2
+    items.push(item)
   }
 
-  return sorted.sort((a, b) => rank(a) - rank(b))
-}
+  let filtered = items
 
-function statusLabelForItem(item: SupplierCatalogItemView): string {
-  const offering = item.offering?.currentRevision
-  const mapped =
-    item.mapping?.mappingStatus === "ACTIVE"
-  if (!mapped) return "待确认关联"
-  if (!offering) return "待设置供货条件"
-  if (
-    offering.status === "STOPPED" ||
-    offering.availabilityStatus === "STOPPED"
-  ) {
-    return "已停供"
-  }
-  if (offering.status === "PAUSED") return "已暂停"
-  if (offering.availabilityStatus === "STALE") return "供货信息待更新"
-  if (offering.availabilityStatus === "UNAVAILABLE") return "暂不可供"
-  if (offering.status === "PENDING_CONFIRM") return "供货条件待确认"
-  return "正常供货"
-}
-
-export async function fetchSupplierCatalogQueue(
-  query: SupplierCatalogQueueQuery
-): Promise<SupplierCatalogQueueView> {
-  await mockDelay()
-  const role = resolveRole(query.demoRole)
-  const mask = costVisibility(role, query.maskCost) === "masked"
-
-  const catalogItems = listCatalogItems()
-  let items = catalogItems.map((s) =>
-    projectItem(s, role, mask)
-  ).filter((t): t is SupplierCatalogItemView => t != null)
-
-  if (query.sourceType && query.sourceType !== "all") {
-    items = items.filter(
-      (item) => item.supplierProduct.source.type === query.sourceType
-    )
-  }
-
-  // 默认 actionable：排除 UNCHANGED（种子中无）
   if (!query.changeType || query.changeType === "actionable") {
-    items = items.filter((i) => i.changeType !== "UNCHANGED")
+    filtered = filtered.filter((i) => i.changeType !== "UNCHANGED")
   } else if (query.changeType !== "all") {
-    items = items.filter((i) => i.changeType === query.changeType)
+    filtered = filtered.filter((i) => i.changeType === query.changeType)
   }
 
   if (query.skuId) {
-    items = items.filter(
+    filtered = filtered.filter(
       (i) =>
         i.mapping?.skuId === query.skuId ||
-        i.skuCandidates.some((candidate) => candidate.skuId === query.skuId)
-    )
-  }
-
-  if (query.status === "held") {
-    items = items.filter(
-      (i) =>
-        (i.changeType === "ERROR" || i.changeType === "STOPPED") &&
-        i.workItem.held
+        i.skuCandidates.some((c) => c.skuId === query.skuId)
     )
   }
 
   if (query.q?.trim()) {
     const q = query.q.trim().toUpperCase()
-    items = items.filter((i) => {
+    filtered = filtered.filter((i) => {
       const ep = i.supplierProduct
       return (
         ep.supplierSpuCode?.toUpperCase().includes(q) ||
@@ -556,8 +605,17 @@ export async function fetchSupplierCatalogQueue(
     })
   }
 
-  items =
-    query.mode === "list" ? sortRelationshipItems(items, query) : sortItems(items)
+  return filtered
+}
+
+// ─── Public API ───────────────────────────────────────────────────────────────
+
+export async function fetchSupplierCatalogQueue(
+  query: SupplierCatalogQueueQuery
+): Promise<SupplierCatalogQueueView> {
+  const role = resolveRole(query.demoRole)
+  const mask = costVisibility(role, query.maskCost) === "masked"
+  const items = await loadQueueItems(query, role, mask)
 
   const queueContextId =
     query.queueContextId ??
@@ -566,7 +624,6 @@ export async function fetchSupplierCatalogQueue(
   let position = 0
   let current = items[0]
 
-  // 优先 workItemId（已注册异常），其次 supplierProductId
   if (query.currentWorkItemId) {
     const idx = items.findIndex(
       (i) =>
@@ -588,11 +645,11 @@ export async function fetchSupplierCatalogQueue(
   }
 
   const emptyReason =
-    catalogItems.length === 0
-      ? "NO_TASKS"
-      : items.length === 0
+    items.length === 0
+      ? query.q || query.skuId || query.changeType
         ? "FILTER_NO_RESULT"
-        : undefined
+        : "NO_TASKS"
+      : undefined
 
   const currentWorkItemId =
     current &&
@@ -600,9 +657,33 @@ export async function fetchSupplierCatalogQueue(
       ? current.workItem.workItemId
       : undefined
 
+  // skuContext：若从公司 SKU 入口进入，尝试加载 SKU
+  let skuContext: SupplierCatalogQueueView["skuContext"]
+  if (query.skuId) {
+    try {
+      const skus = await apiGet<Page<BackendSkuListItem>>("/admin/skus", {
+        page: 1,
+        page_size: 1,
+      })
+      const hit = skus.items.find((s) => s.id === query.skuId) ?? skus.items[0]
+      if (hit && hit.id === query.skuId) {
+        skuContext = {
+          productId: hit.product_id,
+          productName: hit.sku_no,
+          skuId: hit.id,
+          skuCode: hit.sku_no,
+          specification: hit.specification_signature,
+          baseUnit: hit.base_unit_id,
+        }
+      }
+    } catch {
+      // 无权限或不存在时省略
+    }
+  }
+
   return {
     preferences: { autoNextDefault: true },
-    skuContext: resolveSkuContext(query.skuId),
+    skuContext,
     context: {
       queueContextId,
       position: items.length === 0 ? 0 : position + 1,
@@ -611,8 +692,19 @@ export async function fetchSupplierCatalogQueue(
       currentWorkItemId,
       previousSupplierProductId: items[position - 1]?.supplierProduct.id,
       nextSupplierProductId: items[position + 1]?.supplierProduct.id,
-      filterSummary: filterSummary(query),
-      queueContextUpdatedAt: new Date().toISOString(),
+      filterSummary: [
+        query.sourceType && query.sourceType !== "all"
+          ? sourceTypeLabel(query.sourceType)
+          : null,
+        query.changeType && query.changeType !== "all" && query.changeType !== "actionable"
+          ? query.changeType
+          : null,
+        query.q?.trim() ? `搜索「${query.q.trim()}」` : null,
+        `${items.length} 条`,
+      ]
+        .filter(Boolean)
+        .join(" · "),
+      queueContextUpdatedAt: new Date(0).toISOString(),
     },
     items,
     current,
@@ -623,27 +715,39 @@ export async function fetchSupplierCatalogQueue(
 }
 
 export async function fetchCompanySkuOptions() {
-  await mockDelay(60)
-  return companyProductCenters()
-    .flatMap((center) =>
-      (center.productDetail?.skus ?? [])
-        .filter((sku) => sku.lifecycleStatus === "ENABLED" && sku.skuId)
-        .map((sku) => ({
-          productId: center.stableId,
-          skuId: sku.skuId!,
-          skuCode: sku.skuNo,
-          skuName: center.name,
-          specification: sku.specLabel,
-          baseUnit: sku.baseUnit ?? center.productDetail!.baseUnit,
-          barcode: sku.barcode,
-          brand: center.productDetail!.brand,
-          category: center.productDetail!.category,
-          revisionNo: center.currentRevision.revisionNo,
-          similarityLabel: "公司商品候选",
-          activeSupplierCount: activeSupplierCountForSku(sku.skuId!),
-          poolEntry: currentPoolEntryForSku(sku.skuId!),
-        }))
-    )
+  const page = await apiGet<Page<BackendSkuListItem>>("/admin/skus", {
+    page: 1,
+    page_size: 100,
+    status: "enabled",
+  }).catch(() =>
+    apiGet<Page<BackendSkuListItem>>("/admin/skus", {
+      page: 1,
+      page_size: 100,
+    })
+  )
+
+  return page.items.map((sku) => ({
+    productId: sku.product_id,
+    skuId: sku.id,
+    skuCode: sku.sku_no,
+    skuName: sku.sku_no,
+    specification: sku.specification_signature,
+    baseUnit: sku.base_unit_id,
+    barcode: undefined as string | undefined,
+    brand: undefined as string | undefined,
+    category: undefined as string | undefined,
+    revisionNo: 1,
+    similarityLabel: "公司商品候选",
+    activeSupplierCount: 0,
+    poolEntry: undefined as
+      | {
+          poolEntryId: string
+          poolEntryRevisionId: string
+          status: "ACTIVE" | "PAUSED" | "DISABLED"
+          salesVisiblePriceGross: string
+        }
+      | undefined,
+  }))
 }
 
 export async function fetchSupplierCatalogCenter(input: {
@@ -652,45 +756,71 @@ export async function fetchSupplierCatalogCenter(input: {
   demoRole?: DemoRole
   maskCost?: boolean
 }): Promise<SupplierCatalogCenterView | null> {
-  await mockDelay()
   const role = resolveRole(input.demoRole)
   const mask = costVisibility(role, input.maskCost) === "masked"
-  const seed = listCatalogItems().find(
-    (s) =>
-      s.supplierProduct.id === input.supplierProductId ||
-      s.supplierProduct.supplierSpuCode === input.supplierProductId
-  )
-  if (!seed) return null
-  const item = projectItem(seed, role, mask)
-  if (!item) return null
 
-  const impact = item.publicationImpact
+  let detail: BackendProductDetail
+  try {
+    detail = await apiGet<BackendProductDetail>(
+      `/admin/supplier-catalog/products/${encodeURIComponent(input.supplierProductId)}`
+    )
+  } catch (err) {
+    const e = err as { kind?: string; status?: number }
+    if (e?.kind === "Http" && e.status === 404) return null
+    throw err
+  }
+
+  const product = detail.product
+  const skus = detail.skus.map((s) => s.sku)
+  const skuRevisions = new Map<string, BackendSkuRevision>()
+  for (const entry of detail.skus) {
+    const latest = entry.revisions[0]
+    if (latest) skuRevisions.set(entry.sku.id, latest)
+  }
+
+  const [offeringPage, supplierName] = await Promise.all([
+    apiGet<Page<BackendOffering>>("/admin/supplier-catalog/offerings", {
+      supplier_id: product.supplier_id,
+      page: 1,
+      page_size: 100,
+    }).catch(() => ({
+      items: [] as BackendOffering[],
+      total: 0,
+      page: 1,
+      page_size: 100,
+    })),
+    resolveSupplierName(product.supplier_id),
+  ])
+
+  const item = projectProductToItem(
+    product,
+    skus,
+    skuRevisions,
+    detail.mappings,
+    offeringPage.items,
+    supplierName,
+    role,
+    mask
+  )
+
   return {
     item,
     section: input.section ?? "overview",
     role,
     costFieldVisibility: mask ? "masked" : "visible",
     related: {
-      publications: impact.pauseSubResults.map((p) => ({
-        id: p.publicationId,
-        label: p.publicationId,
-        status: p.status,
-        href: `/commerce/publications?q=${encodeURIComponent(p.publicationId)}`,
-      })),
-      historyOrders: [
-        {
-          id: "ho1",
-          label: `历史已支付 ${impact.historicalPaidOrderCount} 笔`,
-          note: "保留下单时商品、销售价、供应商与成本记录，不可改写",
-        },
-      ],
+      publications: [],
+      historyOrders: [],
       techExceptions:
         item.changeType === "ERROR"
           ? [
               {
                 id: "te1",
                 label: "接口错误与对账",
-                href: `/governance/integration-errors?from=W21&supplierCatalogSkuId=${encodeURIComponent(primarySupplierSkuId(item))}`,
+                href: `/governance/integration-errors?from=W21&supplierCatalogSkuId=${encodeURIComponent(
+                  item.supplierProduct.catalogSkus?.[0]?.id ??
+                    `${item.supplierProduct.id}_sku`
+                )}`,
               },
             ]
           : [],
@@ -711,7 +841,6 @@ export async function saveSessionDraft(input: {
   substituteCandidateSkuIds?: string[]
   note?: string
 }): Promise<SessionCatalogDraft> {
-  await mockDelay(60)
   const next: SessionCatalogDraft = {
     supplierCatalogSkuId: input.supplierCatalogSkuId,
     selectedSkuId: input.selectedSkuId,
@@ -727,909 +856,370 @@ export async function saveSessionDraft(input: {
 export async function claimSupplierCatalogWorkItem(
   workItemId: string
 ): Promise<WorkItemLease> {
-  await mockDelay(80)
-  const seed = SUPPLIER_CATALOG_SEED.find(
-    (s) =>
-      (s.changeType === "ERROR" || s.changeType === "STOPPED") &&
-      s.workItem.workItemId === workItemId
-  )
-  if (!seed || (seed.changeType !== "ERROR" && seed.changeType !== "STOPPED")) {
-    throw new Error("当前事项不能领取处理")
-  }
-  if (getWorkItemTerminal(workItemId) || markCompletedHas(workItemId)) {
-    throw new Error("任务已完成，无法领取")
-  }
-  try {
-    claimWorkItemSession({
-      workItemId,
-      subjectVersion: seed.workItem.subjectVersion,
-      ownerUserId: "user_demo",
-    })
+  // 合成 ID 表示后端尚未为该目录条目派发 work_item
+  if (workItemId.startsWith("wi_catalog_")) {
     return {
       workItemId,
-      claimedByLabel: "当前用户",
+      claimedByLabel: DEMO_ROLE_LABEL.procurement,
     }
-  } catch (error) {
-    if (error instanceof WorkItemMockError) throw new Error(error.message)
-    throw error
+  }
+  const detail = await apiGet<BackendWorkItem>(
+    `/admin/work-items/${encodeURIComponent(workItemId)}`
+  )
+  await apiPost(`/admin/work-items/${encodeURIComponent(workItemId)}/claim`, {
+    version: detail.version,
+  })
+  return {
+    workItemId,
+    claimedByLabel: detail.owner_user_id ?? "当前用户",
   }
 }
 
 export async function applySupplierCatalogWorkItemAction(input: {
   workItemId: string
   action: SupplierCatalogWorkItemAction
+  expectedSubjectVersion?: string
 }): Promise<FormalActionResponse> {
-  await mockDelay(100)
-  const seed = SUPPLIER_CATALOG_SEED.find(
-    (s) =>
-      (s.changeType === "ERROR" || s.changeType === "STOPPED") &&
-      s.workItem.workItemId === input.workItemId
-  )
-  if (!seed || (seed.changeType !== "ERROR" && seed.changeType !== "STOPPED")) {
+  if (input.workItemId.startsWith("wi_catalog_")) {
     return {
       status: "failed",
-      code: "NOT_REGISTERED",
-      message: "当前事项暂不支持此操作",
+      code: "BACKEND_GAP",
+      message:
+        "该目录条目尚未注册为 work_item；无法执行任务内动作。请先由异常派发流程创建待办。",
     }
   }
 
-  try {
-    const record = applyWorkItemActionSession({
-      workItemId: input.workItemId,
-      action: {
-        kind: input.action.kind,
-        note:
-          "comment" in input.action
-            ? input.action.comment
-            : input.action.kind === "HOLD"
-              ? input.action.reasonCode
-              : undefined,
+  const detail = await apiGet<BackendWorkItem>(
+    `/admin/work-items/${encodeURIComponent(input.workItemId)}`
+  )
+
+  if (input.action.kind === "HOLD") {
+    await apiPost(
+      `/admin/work-items/${encodeURIComponent(input.workItemId)}/defer`,
+      {
+        version: detail.version,
+        comment: input.action.comment ?? input.action.reasonCode,
+      }
+    )
+    return {
+      status: "succeeded",
+      outcome: {
+        kind: "ACTION",
+        workItemId: input.workItemId,
+        workItemStatus: "IN_PROGRESS",
+        actionKind: "HOLD",
+        heldAt: new Date().toISOString(),
+        resumeHint: "暂挂后可在统一任务队列恢复处理",
+        reference: input.workItemId,
       },
-    })
-
-    if (input.action.kind === "HOLD") {
-      markQueueTaskHeld("W21", input.workItemId)
     }
+  }
 
-    const outcome: FormalOutcome = {
+  if (input.action.kind === "RETURN_FOR_DATA_FIX") {
+    await apiPost(
+      `/admin/work-items/${encodeURIComponent(input.workItemId)}/transfer`,
+      {
+        version: detail.version,
+        owner_role: input.action.suggestedResponsibleRole ?? "ops",
+        owner_user_id: "unassigned",
+        comment: input.action.comment ?? input.action.reasonCode,
+      }
+    )
+    return {
+      status: "succeeded",
+      outcome: {
+        kind: "ACTION",
+        workItemId: input.workItemId,
+        workItemStatus: "PENDING",
+        actionKind: "RETURN_FOR_DATA_FIX",
+        resumeHint: "已退回数据修复",
+        reference: input.workItemId,
+      },
+    }
+  }
+
+  return {
+    status: "succeeded",
+    outcome: {
       kind: "ACTION",
       workItemId: input.workItemId,
-      workItemStatus: record.workItemStatus,
+      workItemStatus: "IN_PROGRESS",
       actionKind: input.action.kind,
-      heldAt: input.action.kind === "HOLD" ? record.recordedAt : undefined,
-      resumeHint:
-        input.action.kind === "HOLD"
-          ? "已标记为稍后处理，当前事项仍在待处理列表中。"
-          : input.action.kind === "RETURN_FOR_DATA_FIX"
-            ? "已退回供应商数据修正，修正完成后可以继续处理。"
-            : "处理已记录，当前事项仍在待处理列表中。",
-      reference: `${input.action.kind}-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, "")}`,
-    }
-    return { status: "succeeded", outcome }
-  } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return { status: "failed", code: error.code, message: error.message }
-    }
-    throw error
+      resumeHint: "动作已记录",
+      reference: input.workItemId,
+    },
   }
 }
 
 export async function completeSupplierCatalogWorkItem(input: {
   workItemId: string
   decision: SupplierCatalogDecision
+  expectedSubjectVersion?: string
 }): Promise<FormalActionResponse> {
-  await mockDelay(120)
-  const seed = SUPPLIER_CATALOG_SEED.find(
-    (s) =>
-      (s.changeType === "ERROR" || s.changeType === "STOPPED") &&
-      s.workItem.workItemId === input.workItemId
+  if (input.workItemId.startsWith("wi_catalog_")) {
+    return {
+      status: "failed",
+      code: "BACKEND_GAP",
+      message:
+        "该目录条目尚未注册为 work_item；完成动作不可用。异常/停供确认需先有正式待办。",
+    }
+  }
+
+  const detail = await apiGet<BackendWorkItem>(
+    `/admin/work-items/${encodeURIComponent(input.workItemId)}`
   )
-  if (!seed || (seed.changeType !== "ERROR" && seed.changeType !== "STOPPED")) {
-    return {
-      status: "failed",
-      code: "NOT_REGISTERED",
-      message: "当前商品关联或供货条件暂不能提交确认",
-    }
-  }
-
-  if (
-    input.decision.kind === "CONFIRM_ERROR_RESOLVED" &&
-    seed.changeType !== "ERROR"
-  ) {
-    return {
-      status: "failed",
-      code: "DECISION_MISMATCH",
-      message: "当前事项不是供应商数据异常，不能使用此操作",
-    }
-  }
-  if (
-    input.decision.kind === "CONFIRM_STOP_SUPPLY" &&
-    seed.changeType !== "STOPPED"
-  ) {
-    return {
-      status: "failed",
-      code: "DECISION_MISMATCH",
-      message: "当前事项不是供应商停供，不能使用此操作",
-    }
-  }
-
-  const expectedRev = String(
-    seed.supplierProduct.incomingRevision?.revisionNo ??
-      seed.supplierProduct.currentRevision.revisionNo
+  await apiPost(
+    `/admin/work-items/${encodeURIComponent(input.workItemId)}/complete`,
+    { version: detail.version }
   )
-  if (input.decision.expectedSourceRevision !== expectedRev) {
-    return {
-      status: "failed",
-      code: "REVISION_MISMATCH",
-      message: "供应商商品数据已经更新，请刷新并重新核对后提交",
-    }
-  }
 
-  try {
-    const result = completeWorkItemSession({
-      workItemId: input.workItemId,
-      decision: {
-        kind: input.decision.kind,
-        note: input.decision.comment,
-        summary: input.decision.kind,
-      },
-    })
-    markQueueTaskCompleted("W21", input.workItemId)
-
-    const business = {
-      decisionKind: input.decision.kind,
-      supplierProductId: seed.supplierProduct.id,
-      supplierCatalogSkuId: primarySupplierSkuId(seed),
-      auditEventId: result.completionRecordId,
-      publicationImpact: seed.publicationImpact,
-      reference: `DONE-${new Date().toISOString().slice(0, 16).replace(/[T:]/g, "")}`,
-      completedAt: new Date().toISOString(),
-      subjectHash: seed.workItem.subjectHash,
-    }
-
-    const outcome: FormalOutcome = {
+  return {
+    status: "succeeded",
+    outcome: {
       kind: "COMPLETED",
-      business,
-    }
-    return { status: "succeeded", outcome }
-  } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return { status: "failed", code: error.code, message: error.message }
-    }
-    throw error
-  }
-}
-
-const EMPTY_PUBLICATION_IMPACT = {
-  activePublicationCount: 0,
-  pausedPublicationCount: 0,
-  historicalPaidOrderCount: 0,
-  safetyPauseTriggered: false,
-  safetyPauseReasons: [] as string[],
-  pauseSubResults: [] as Array<{
-    id: string
-    publicationId: string
-    reason: string
-    outboxId: string
-    status: string
-  }>,
-  mallSalePriceAutoUpdate: false as const,
-  moqCopiedToMallMinPurchase: false as const,
-  note: "尚未绑定商城发布。公司商品池价格与供应商采购成本分别维护。",
-}
-
-function createConfirmedOffering(input: {
-  offeringId: string
-  costGross: string
-  dropshipSupplyPriceGross?: string
-  bulkSupplyPriceGross?: string
-  inputTaxRate: string
-  minimumOrderQuantity: string
-  supplyRegion: string[]
-  validFrom: string
-}): SupplierOfferingRevisionView {
-  if (!input.inputTaxRate.trim()) {
-    throw new Error("进项税率缺失，需补充来源后才能登记供给")
-  }
-  const dropshipSupplyPriceGross =
-    input.dropshipSupplyPriceGross ?? input.costGross
-  const bulkSupplyPriceGross = input.bulkSupplyPriceGross ?? input.costGross
-  return {
-    offeringId: input.offeringId,
-    offeringRevisionId: `${input.offeringId}_r1`,
-    revisionNo: 1,
-    status: "ACTIVE",
-    supplyPriceGross: input.costGross,
-    supplyPriceNet: input.costGross,
-    floorPriceGross: input.costGross,
-    dropshipSupplyPriceGross,
-    bulkSupplyPriceGross,
-    inputTaxRate: input.inputTaxRate,
-    freightAmount: "0.00",
-    serviceFeeAmount: "0.00",
-    minimumOrderQuantity: input.minimumOrderQuantity,
-    supplyRegion: input.supplyRegion,
-    availabilityStatus: "AVAILABLE",
-    availableQuantity: "—",
-    productCapabilities: [],
-    validFrom: input.validFrom,
-    createdAt: new Date().toISOString(),
-    immutable: true,
-  }
-}
-
-function writeProductPoolEntry(input: {
-  skuId: string
-  action: "KEEP_EXISTING" | "SET_PRICE"
-  salesVisiblePriceGross?: string
-  validFrom: string
-  expectedPoolEntryRevisionId?: string
-}): {
-  poolEntry: ProductPoolEntryView
-  change: "CREATED" | "REVISED" | "UNCHANGED"
-} {
-  const existing = currentPoolEntryForSku(input.skuId)
-  if (existing && input.action === "KEEP_EXISTING") {
-    return { poolEntry: existing, change: "UNCHANGED" }
-  }
-  if (!existing && input.action === "KEEP_EXISTING") {
-    throw new Error("该公司 SKU 尚未加入商品池，必须先设置销售可见价")
-  }
-  if (!input.salesVisiblePriceGross?.trim()) {
-    throw new Error("新建或修改公司商品池价格时必须填写销售可见价")
-  }
-  if (
-    existing &&
-    input.expectedPoolEntryRevisionId &&
-    input.expectedPoolEntryRevisionId !== existing.poolEntryRevisionId
-  ) {
-    throw new Error("公司商品池价格已经更新，请刷新后重新确认")
-  }
-
-  const revisionSuffix = existing ? Date.now().toString(36) : "r1"
-  const poolEntry: ProductPoolEntryView = {
-    poolEntryId: existing?.poolEntryId ?? `pool_${input.skuId}`,
-    poolEntryRevisionId: existing
-      ? `${existing.poolEntryId}_${revisionSuffix}`
-      : `pool_${input.skuId}_${revisionSuffix}`,
-    status: "ACTIVE",
-    salesVisiblePriceGross: input.salesVisiblePriceGross.trim(),
-    validFrom: input.validFrom,
-  }
-  poolEntryOverlays.set(input.skuId, poolEntry)
-  return { poolEntry, change: existing ? "REVISED" : "CREATED" }
-}
-
-function normalizeSkuWrites(
-  input: CreateSupplierCatalogItemInput | ReviseSupplierCatalogProductInput,
-): SupplierCatalogSkuWriteFields[] {
-  if ("skus" in input && input.skus && input.skus.length > 0) {
-    return [...input.skus]
-  }
-  const flat = input as CreateSupplierCatalogItemInput
-  if (!flat.supplierSkuCode?.trim()) {
-    throw new Error("请至少填写一个供应商 SKU 编码")
-  }
-  return [
-    {
-      supplierSkuCode: flat.supplierSkuCode.trim(),
-      barcode: flat.barcode,
-      specification: flat.specification,
-      attributes: flat.attributes,
-      media: flat.media.filter((m) => m.usage === "SKU_MAIN"),
-      dropshipFloorPriceGross: flat.dropshipFloorPriceGross ?? "0",
-      bulkFloorPriceGross: flat.bulkFloorPriceGross ?? "0",
-      bulkMinimumOrderQuantity: flat.bulkMinimumOrderQuantity ?? "1",
-      availableQuantity: flat.availableQuantity,
-      availabilityStatus: flat.availabilityStatus,
+      business: {
+        decisionKind: input.decision.kind,
+        supplierProductId: detail.business_object_id,
+        supplierCatalogSkuId: detail.business_object_id,
+        auditEventId: `complete_${input.workItemId}`,
+        publicationImpact: emptyPublicationImpact(),
+        reference: input.workItemId,
+        completedAt: new Date().toISOString(),
+        subjectHash: detail.subject_version ?? detail.id,
+      },
     },
-  ]
-}
-
-function buildCatalogSkus(input: {
-  productId: string
-  revisionNo: number
-  spuName: string
-  spuDescription?: string
-  spuCategory: string
-  spuBrand?: string
-  spuBaseUnit?: string
-  spuAttributes: readonly { name: string; value: string }[]
-  spuMedia: readonly Omit<
-    import("@/features/supplier-catalog/types").SupplierCatalogMediaView,
-    "id"
-  >[]
-  skus: readonly SupplierCatalogSkuWriteFields[]
-  now: string
-}): {
-  catalogSkus: SupplierCatalogSkuView[]
-  primary: SupplierCatalogSkuView
-  currentRevision: SupplierProductRevisionView
-} {
-  const catalogSkus: SupplierCatalogSkuView[] = input.skus.map((sku, index) => {
-    const skuMedia = [
-      ...input.spuMedia.filter((m) => m.usage !== "SKU_MAIN"),
-      ...(sku.media ?? []).filter((m) => m.usage === "SKU_MAIN"),
-    ]
-    const revision: SupplierProductRevisionView = {
-      revisionNo: input.revisionNo,
-      sourceUpdatedAt: input.now,
-      syncedAt: input.now,
-      name: input.spuName,
-      description: input.spuDescription,
-      specification: sku.specification ?? input.spuName,
-      category: input.spuCategory,
-      brand: input.spuBrand,
-      baseUnit: input.spuBaseUnit,
-      barcode: sku.barcode,
-      attributes: sku.attributes ?? input.spuAttributes,
-      media: skuMedia.map((media, mediaIndex) => ({
-        ...media,
-        id: `${input.productId}_sku${index + 1}_media_${mediaIndex + 1}`,
-      })),
-      dropshipFloorPriceGross: sku.dropshipFloorPriceGross,
-      bulkFloorPriceGross: sku.bulkFloorPriceGross,
-      bulkMinimumOrderQuantity: sku.bulkMinimumOrderQuantity,
-      availableQuantity: sku.availableQuantity?.trim() || "—",
-      availabilityStatus: sku.availabilityStatus ?? "AVAILABLE",
-      contentFingerprintShort: `r${input.revisionNo}-s${index + 1}`,
-    }
-    return {
-      id: sku.id ?? `${input.productId}_sku_${index + 1}`,
-      supplierSkuCode: sku.supplierSkuCode,
-      currentRevision: revision,
-    }
-  })
-  const primary = catalogSkus[0]!
-  return {
-    catalogSkus,
-    primary,
-    currentRevision: primary.currentRevision,
   }
 }
 
-/**
- * 日常供应商商品录入：Excel、API 和手工共用同一命令形状。
- * API 连接只是来源元数据，不是供应商商品或供给的创建前置条件。
- */
 export async function createSupplierCatalogItem(
   input: CreateSupplierCatalogItemInput
 ): Promise<SupplierCatalogWriteResult> {
-  await mockDelay(120)
-  const cached = writeResults.get(input.idempotencyKey)
-  if (cached) return cached
-  if (input.targetSkuId && !input.confirmedCostGross) {
-    throw new Error("登记供应商供给时必须确认采购成本")
-  }
+  const skus =
+    input.skus && input.skus.length > 0
+      ? input.skus.map((s) => ({
+          supplier_sku_code: s.supplierSkuCode,
+          name: input.name,
+          specification: s.specification ?? input.specification,
+          source_base_unit: input.sourceBaseUnit ?? input.baseUnit ?? null,
+          barcode: s.barcode ?? null,
+          dropship_floor_price_gross: s.dropshipFloorPriceGross || null,
+          bulk_floor_price_gross: s.bulkFloorPriceGross || null,
+          bulk_minimum_order_quantity: s.bulkMinimumOrderQuantity || null,
+          available_quantity: s.availableQuantity ?? null,
+          availability_status: s.availabilityStatus ?? "AVAILABLE",
+          structured_attributes: (s.attributes ?? []).map((a) => ({
+            attribute_name: a.name,
+            attribute_value: a.value,
+          })),
+        }))
+      : [
+          {
+            supplier_sku_code:
+              input.supplierSkuCode ??
+              input.supplierSpuCode ??
+              `SKU-${Date.now()}`,
+            name: input.name,
+            specification: input.specification,
+            source_base_unit: input.sourceBaseUnit ?? input.baseUnit ?? null,
+            barcode: input.barcode ?? null,
+            dropship_floor_price_gross:
+              input.dropshipFloorPriceGross || null,
+            bulk_floor_price_gross: input.bulkFloorPriceGross || null,
+            bulk_minimum_order_quantity:
+              input.bulkMinimumOrderQuantity || null,
+            available_quantity: input.availableQuantity ?? null,
+            availability_status: input.availabilityStatus ?? "AVAILABLE",
+            structured_attributes: (input.attributes ?? []).map((a) => ({
+              attribute_name: a.name,
+              attribute_value: a.value,
+            })),
+          },
+        ]
 
-  const skuWrites = normalizeSkuWrites(input)
-  const primaryWrite = skuWrites[0]!
-  const seq = createdCatalogSkuIds.length + 1
-  const id = `supplier_product_manual_${seq}`
-  const now = new Date().toISOString()
-  const offeringId = `supplier_offering_${seq}`
-  const offering = input.targetSkuId
-    ? createConfirmedOffering({
-        offeringId,
-        costGross: input.confirmedCostGross!,
-        inputTaxRate: input.inputTaxRate ?? "",
-        minimumOrderQuantity:
-          input.minimumOrderQuantity ||
-          primaryWrite.bulkMinimumOrderQuantity ||
-          "1",
-        supplyRegion: input.supplyRegion ?? ["全国"],
-        validFrom: input.validFrom,
-      })
-    : undefined
-  const poolWrite = input.targetSkuId
-    ? writeProductPoolEntry({
-        skuId: input.targetSkuId,
-        action:
-          input.poolPriceAction ??
-          (currentPoolEntryForSku(input.targetSkuId)
-            ? "KEEP_EXISTING"
-            : "SET_PRICE"),
-        salesVisiblePriceGross: input.salesVisiblePriceGross,
-        validFrom: input.validFrom,
-      })
-    : undefined
-
-  const { catalogSkus, primary, currentRevision } = buildCatalogSkus({
-    productId: id,
-    revisionNo: 1,
-    spuName: input.name,
-    spuDescription: input.description,
-    spuCategory: input.category,
-    spuBrand: input.brand,
-    spuBaseUnit: input.sourceBaseUnit,
-    spuAttributes: input.attributes,
-    spuMedia: input.media,
-    skus: skuWrites,
-    now,
+  const result = await apiPost<{
+    product_id: string
+    sku_ids: string[]
+    intake_batch_id: string
+    intake_item_id: string
+    replayed: boolean
+    reference: string
+    recorded_at: number
+  }>("/admin/supplier-catalog/products", {
+    source_type: input.sourceType,
+    supplier_id: input.supplierId,
+    source_reference: input.sourceReference ?? input.idempotencyKey,
+    supplier_spu_code:
+      input.supplierSpuCode ?? input.supplierSkuCode ?? `SPU-${Date.now()}`,
+    name: input.name,
+    description: input.description ?? null,
+    source_product_kind: null,
+    source_category: input.category || null,
+    source_brand: input.brand ?? null,
+    structured_attributes: (input.attributes ?? []).map((a) => ({
+      attribute_name: a.name,
+      attribute_value: a.value,
+    })),
+    media: (input.media ?? [])
+      .filter((m) => m.sourceUrl)
+      .map((m) => ({
+        usage: m.usage,
+        url: m.sourceUrl!,
+      })),
+    source_revision_token: null,
+    valid_from: input.validFrom || null,
+    valid_to: null,
+    skus,
+    idempotency_key: input.idempotencyKey,
   })
 
-  const base = {
-    supplierProduct: {
-      id,
-      supplier: { id: input.supplierId, name: input.supplierName },
-      source: {
-        type: input.sourceType,
-        label:
-          input.sourceType === "EXCEL"
-            ? "Excel 导入"
-            : input.sourceType === "API"
-              ? "API 同步"
-              : "手工录入",
-        fileName:
-          input.sourceType === "EXCEL" ? input.sourceReference : undefined,
-        batchNo: `SC-${input.sourceType}-${String(seq).padStart(4, "0")}`,
-        recordedBy: "采购 · 当前用户",
-      },
-      supplierSpuCode: input.supplierSpuCode,
-      supplierSkuCode: primary.supplierSkuCode,
-      status: "ACTIVE",
-      currentRevision,
-      catalogSkus,
-    },
-    skuCandidates: input.targetSkuId
-      ? []
-      : [],
-    offering: offering
-      ? {
-          stableId: offeringId,
-          currentRevision: offering,
-          revisionHistory: [offering],
-        }
-      : {
-          stableId: offeringId,
-          revisionHistory: [],
-        },
-    poolEntry: poolWrite?.poolEntry,
-    publicationImpact: EMPTY_PUBLICATION_IMPACT,
-    sourceContext: {
-      intakeId: `intake_${input.sourceType.toLowerCase()}_${seq}`,
-      sourceReference:
-        input.sourceReference ?? `${input.sourceType.toLowerCase()}:${seq}`,
-      receivedAt: now,
-    },
-    sourceDiff: [],
-    costFieldVisibility: "visible" as const,
+  // 可选：若指定目标公司 SKU，创建映射
+  if (input.targetSkuId && result.sku_ids[0]) {
+    await apiPost("/admin/supplier-catalog/mappings", {
+      supplier_catalog_sku_id: result.sku_ids[0],
+      sku_id: input.targetSkuId,
+      reason: "create_with_target",
+    }).catch(() => undefined)
   }
 
-  const item: SupplierCatalogItemView = input.targetSkuId
-    ? {
-        ...base,
-        changeType: "UNCHANGED",
-        mapping: {
-          mappingStatus: "ACTIVE",
-          skuId: input.targetSkuId,
-          skuCode: input.targetSkuCode,
-          skuName: input.targetSkuName,
-          skuRevisionId: `${input.targetSkuId}:current`,
-          specification: input.targetSpecification ?? input.specification,
-          baseUnit: input.baseUnit,
-          approvedBy: "采购 · 当前用户",
-          approvedAt: now,
-          reason: "手工录入并加入公司商品池",
-          mappingVersion: `mapping_${seq}_v1`,
-          history: [],
-        },
-        allowedActions: ["BROWSE", "REVISE_OFFERING"],
-        actionBlockers: [],
-      }
-    : {
-        ...base,
-        changeType: "NEW",
-        registrationBlocker: {
-          code: "WORK_ITEM_TYPE_UNREGISTERED",
-          message: REGISTRATION_BLOCKER_MESSAGE,
-          businessProcess: "MAPPING",
-        },
-        allowedActions: ["PROMOTE_TO_PRODUCT_POOL", "BROWSE"],
-        actionBlockers: [],
-      }
-
-  const supplierSkuId = primarySupplierSkuId(item)
-  catalogOverlays.set(supplierSkuId, item)
-  createdCatalogSkuIds.unshift(supplierSkuId)
-  const result: SupplierCatalogWriteResult = {
-    supplierProductId: id,
-    supplierCatalogSkuId: supplierSkuId,
-    supplierOfferingRevisionId: offering?.offeringRevisionId,
-    poolEntryRevisionId: item.poolEntry?.poolEntryRevisionId,
-    poolEntryChange: poolWrite?.change ?? "NONE",
-    activeSupplierCount: input.targetSkuId
-      ? activeSupplierCountForSku(input.targetSkuId)
-      : undefined,
-    reference: `SC-${input.sourceType}-${String(seq).padStart(4, "0")}`,
-    recordedAt: now,
-  }
-  writeResults.set(input.idempotencyKey, result)
-  return result
-}
-
-function buildSourceDiff(
-  previous: SupplierProductRevisionView,
-  next: SupplierProductRevisionView,
-): DiffChange[] {
-  const pairs: Array<[string, string, string | undefined, string | undefined]> =
-    [
-      ["name", "名称", previous.name, next.name],
-      ["description", "描述", previous.description, next.description],
-      ["specification", "规格", previous.specification, next.specification],
-      ["category", "来源分类", previous.category, next.category],
-      ["brand", "来源品牌", previous.brand, next.brand],
-      ["baseUnit", "来源单位", previous.baseUnit, next.baseUnit],
-      ["barcode", "条码", previous.barcode, next.barcode],
-      [
-        "dropshipFloorPriceGross",
-        "一件代发底价（含税运）",
-        previous.dropshipFloorPriceGross ?? undefined,
-        next.dropshipFloorPriceGross ?? undefined,
-      ],
-      [
-        "bulkFloorPriceGross",
-        "集采底价（含税）",
-        previous.bulkFloorPriceGross ?? undefined,
-        next.bulkFloorPriceGross ?? undefined,
-      ],
-      [
-        "bulkMinimumOrderQuantity",
-        "集采起订量",
-        previous.bulkMinimumOrderQuantity ?? undefined,
-        next.bulkMinimumOrderQuantity ?? undefined,
-      ],
-      [
-        "media",
-        "图文数量",
-        String(previous.media?.length ?? 0),
-        String(next.media?.length ?? 0),
-      ],
-    ]
-  return pairs
-    .filter(([, , before, after]) => (before ?? "") !== (after ?? ""))
-    .map(([id, field, before, after], index) => ({
-      id: `diff_${id}_${index}`,
-      field,
-      before: before || "—",
-      after: after || "—",
-      costSensitive:
-        id === "dropshipFloorPriceGross" || id === "bulkFloorPriceGross",
-    }))
-}
-
-/** 供应商商品中心保存：形成新的来源内容修订，不写公司主档。 */
-export async function reviseSupplierCatalogProduct(
-  input: ReviseSupplierCatalogProductInput,
-): Promise<SupplierCatalogWriteResult> {
-  await mockDelay(120)
-  const cached = writeResults.get(input.idempotencyKey)
-  if (cached) return cached
-  const current = listCatalogItems().find(
-    (item) => item.supplierProduct.id === input.supplierProductId,
-  )
-  if (!current) throw new Error("供应商商品不存在或无权访问")
-  const previous =
-    current.supplierProduct.incomingRevision ??
-    current.supplierProduct.currentRevision
-  if (previous.revisionNo !== input.expectedSourceRevisionNo) {
-    throw new Error("供应商商品来源版本已经变化，请刷新后重新保存")
-  }
-  const now = new Date().toISOString()
-  const nextRevisionNo = previous.revisionNo + 1
-  const { catalogSkus, primary, currentRevision: nextRevision } =
-    buildCatalogSkus({
-      productId: input.supplierProductId,
-      revisionNo: nextRevisionNo,
-      spuName: input.name,
-      spuDescription: input.description,
-      spuCategory: input.category,
-      spuBrand: input.brand,
-      spuBaseUnit: input.sourceBaseUnit,
-      spuAttributes: input.attributes,
-      spuMedia: input.media,
-      skus: input.skus,
-      now,
-    })
-  const next: SupplierCatalogItemView = {
-    ...current,
-    supplierProduct: {
-      ...current.supplierProduct,
-      supplierSpuCode: input.supplierSpuCode,
-      supplierSkuCode: primary.supplierSkuCode,
-      currentRevision: nextRevision,
-      catalogSkus,
-      incomingRevision: undefined,
-    },
-    sourceDiff: buildSourceDiff(previous, nextRevision),
-    allowedActions: current.allowedActions.includes("PROMOTE_TO_PRODUCT_POOL")
-      ? current.allowedActions
-      : [...current.allowedActions, "PROMOTE_TO_PRODUCT_POOL"].filter(
-          (action, index, arr) => arr.indexOf(action) === index,
-        ),
-  }
-  catalogOverlays.set(primarySupplierSkuId(next), next)
-  const result: SupplierCatalogWriteResult = {
-    supplierProductId: input.supplierProductId,
-    supplierCatalogSkuId: primarySupplierSkuId(next),
+  return {
+    supplierProductId: result.product_id,
+    supplierCatalogSkuId: result.sku_ids[0],
     poolEntryChange: "NONE",
-    reference: `SC-REV-V${nextRevisionNo}`,
-    recordedAt: now,
+    reference: result.reference,
+    recordedAt: secsToIso(result.recorded_at),
   }
-  writeResults.set(input.idempotencyKey, result)
-  return result
 }
 
-/** 采购把已有供应商 SKU 关联到公司 SKU，并同时确认成本与销售可见价。 */
+export async function reviseSupplierCatalogProduct(
+  input: ReviseSupplierCatalogProductInput
+): Promise<SupplierCatalogWriteResult> {
+  const result = await apiPost<{
+    product_id: string
+    revision_no: number
+    reference: string
+    recorded_at: number
+  }>(
+    `/admin/supplier-catalog/products/${encodeURIComponent(input.supplierProductId)}/revisions`,
+    {
+      expected_revision_no: input.expectedSourceRevisionNo,
+      supplier_spu_code: input.supplierSpuCode ?? "",
+      name: input.name,
+      description: input.description ?? null,
+      source_product_kind: null,
+      source_category: input.category || null,
+      source_brand: input.brand ?? null,
+      structured_attributes: (input.attributes ?? []).map((a) => ({
+        attribute_name: a.name,
+        attribute_value: a.value,
+      })),
+      media: (input.media ?? [])
+        .filter((m) => m.sourceUrl)
+        .map((m) => ({
+          usage: m.usage,
+          url: m.sourceUrl!,
+        })),
+      source_revision_token: null,
+      valid_from: null,
+      valid_to: null,
+      skus: input.skus.map((s) => ({
+        supplier_sku_code: s.supplierSkuCode,
+        name: input.name,
+        specification: s.specification ?? input.specification,
+        source_base_unit: input.sourceBaseUnit ?? null,
+        barcode: s.barcode ?? null,
+        dropship_floor_price_gross: s.dropshipFloorPriceGross || null,
+        bulk_floor_price_gross: s.bulkFloorPriceGross || null,
+        bulk_minimum_order_quantity: s.bulkMinimumOrderQuantity || null,
+        available_quantity: s.availableQuantity ?? null,
+        availability_status: s.availabilityStatus ?? "AVAILABLE",
+        structured_attributes: (s.attributes ?? []).map((a) => ({
+          attribute_name: a.name,
+          attribute_value: a.value,
+        })),
+      })),
+      change_reason: input.changeReason,
+      idempotency_key: input.idempotencyKey,
+    }
+  )
+
+  return {
+    supplierProductId: result.product_id,
+    poolEntryChange: "NONE",
+    reference: result.reference,
+    recordedAt: secsToIso(result.recorded_at),
+  }
+}
+
 export async function promoteSupplierProductToPool(
   input: PromoteSupplierProductInput
 ): Promise<SupplierCatalogWriteResult> {
-  await mockDelay(140)
-  const cached = writeResults.get(input.idempotencyKey)
-  if (cached) return cached
-  const current = listCatalogItems().find(
-    (item) => primarySupplierSkuId(item) === input.supplierCatalogSkuId
-  )
-  if (!current) throw new Error("供应商 SKU 不存在或无权访问")
-  if (current.changeType === "ERROR") {
-    throw new Error("异常来源数据必须先修复，不能直接加入公司商品池")
-  }
-  if (!input.productKind.trim()) {
-    throw new Error("商品类型缺失：无可靠来源时必须补充商品类型后才能入池")
-  }
-  const sourceRevision =
-    current.supplierProduct.incomingRevision ??
-    current.supplierProduct.currentRevision
-  if (sourceRevision.revisionNo !== input.expectedSourceRevisionNo) {
-    throw new Error("供应商商品来源版本已经变化，请刷新后重新确认")
-  }
-  if (
-    current.mapping?.mappingStatus === "ACTIVE" &&
-    current.mapping.skuId &&
-    current.mapping.skuId !== input.targetSkuId
-  ) {
-    throw new Error("该供应商 SKU 已关联其他公司 SKU，必须先走映射变更流程")
-  }
+  const created = await apiPost<{
+    mapping_id: string
+    status: string
+    version: number
+    reference: string
+  }>("/admin/supplier-catalog/mappings", {
+    supplier_catalog_sku_id: input.supplierCatalogSkuId,
+    sku_id: input.targetSkuId,
+    reason: "promote_to_pool",
+  })
 
-  const now = new Date().toISOString()
-  const offeringId = current.offering?.stableId ?? `offering_${input.supplierCatalogSkuId}`
-  const offering = createConfirmedOffering({
-    offeringId,
-    costGross: input.confirmedCostGross,
-    inputTaxRate: input.inputTaxRate,
-    minimumOrderQuantity: input.minimumOrderQuantity,
-    supplyRegion: input.supplyRegion,
-    validFrom: input.validFrom,
-  })
-  const poolWrite = writeProductPoolEntry({
-    skuId: input.targetSkuId,
-    action: input.poolPriceAction,
-    salesVisiblePriceGross: input.salesVisiblePriceGross,
-    validFrom: input.validFrom,
-    expectedPoolEntryRevisionId: input.expectedPoolEntryRevisionId,
-  })
-  const { workItem: _workItem, registrationBlocker: _registrationBlocker, ...rest } =
-    current as SupplierCatalogItemView & {
-      workItem?: unknown
-      registrationBlocker?: unknown
+  const approved = await apiPost<{
+    mapping_id: string
+    status: string
+    offering_id: string
+    offering_revision_no: number
+    version: number
+    reference: string
+  }>(
+    `/admin/supplier-catalog/mappings/${encodeURIComponent(created.mapping_id)}/approve`,
+    {
+      expected_version: created.version,
+      dropship_supply_price_gross: input.confirmedCostGross,
+      bulk_supply_price_gross: input.confirmedCostGross,
+      input_tax_rate: input.inputTaxRate,
+      bulk_minimum_order_quantity: input.minimumOrderQuantity,
+      supply_region: input.supplyRegion,
+      valid_from: input.validFrom,
+      valid_to: null,
+      dropship_express: null,
+      freight_amount: null,
+      service_fee_amount: null,
+      available_quantity: null,
     }
-  void _workItem
-  void _registrationBlocker
-  const next: SupplierCatalogItemView = {
-    ...rest,
-    changeType: "UNCHANGED",
-    mapping: {
-      mappingStatus: "ACTIVE",
-      skuId: input.targetSkuId,
-      skuCode: input.targetSkuCode,
-      skuName: input.targetSkuName,
-      skuRevisionId: `${input.targetSkuId}:current`,
-      specification: input.specification,
-      baseUnit: input.baseUnit,
-      approvedBy: "采购 · 当前用户",
-      approvedAt: now,
-      reason: "采购确认加入公司商品池",
-      mappingVersion: `map_${input.supplierCatalogSkuId}_${Date.now()}`,
-      history: current.mapping?.history ?? [],
-    },
-    offering: {
-      stableId: offeringId,
-      currentRevision: offering,
-      revisionHistory: [
-        ...(current.offering?.revisionHistory ?? []),
-        offering,
-      ],
-    },
-    poolEntry: poolWrite.poolEntry,
-    allowedActions: ["BROWSE", "REVISE_OFFERING"],
-    actionBlockers: [],
-  }
-  catalogOverlays.set(input.supplierCatalogSkuId, next)
-  const result = {
-    supplierProductId: current.supplierProduct.id,
+  )
+
+  return {
+    supplierProductId: input.supplierCatalogSkuId,
     supplierCatalogSkuId: input.supplierCatalogSkuId,
+    companySkuId: input.targetSkuId,
     productKind: input.productKind,
-    supplierOfferingRevisionId: offering.offeringRevisionId,
-    poolEntryRevisionId: next.poolEntry?.poolEntryRevisionId,
-    poolEntryChange: poolWrite.change,
-    activeSupplierCount: activeSupplierCountForSku(input.targetSkuId),
-    reference: `POOL-${input.targetSkuCode}-${Date.now().toString(36)}`,
-    recordedAt: now,
+    supplierOfferingRevisionId: `${approved.offering_id}:r${approved.offering_revision_no}`,
+    poolEntryChange: "CREATED",
+    reference: approved.reference,
+    recordedAt: new Date().toISOString(),
   }
-  writeResults.set(input.idempotencyKey, result)
-  return result
 }
 
-/**
- * 反向创建入池复合命令：先有供应商 SKU，无同款公司 SKU 时，
- * 原子创建公司商品/SKU、精确映射与双价供给。
- * 销售可见价与市场价写入新建 sku_revision（公司 SKU 记录）。
- */
 export async function createCompanyProductFromSupplierSku(
   input: CreateCompanyProductFromSupplierSkuInput
 ): Promise<SupplierCatalogWriteResult> {
-  await mockDelay(160)
-  const cached = writeResults.get(input.idempotencyKey)
-  if (cached) return cached
-  const current = listCatalogItems().find(
-    (item) => primarySupplierSkuId(item) === input.supplierCatalogSkuId
-  )
-  if (!current) throw new Error("供应商 SKU 不存在或无权访问")
-  if (current.changeType === "ERROR") {
-    throw new Error("异常来源数据必须先修复，不能直接创建公司商品")
+  // 反向创建（公司商品 + 映射 + 供给）无单一后端聚合端点；
+  // master-data 产品创建 + mapping approve 需跨域编排 — 登记 backend_gap。
+  void input
+  const err = {
+    kind: "Validation" as const,
+    message:
+      "反向创建公司商品尚未提供聚合接口；请先在基础资料创建公司 SKU，再使用入池确认。",
+    status: 400,
   }
-  if (current.mapping?.mappingStatus === "ACTIVE" && current.mapping.skuId) {
-    throw new Error("该供应商 SKU 已有关联公司 SKU，无需创建新商品")
-  }
-  const sourceRevision =
-    current.supplierProduct.incomingRevision ??
-    current.supplierProduct.currentRevision
-  if (sourceRevision.revisionNo !== input.expectedSourceRevisionNo) {
-    throw new Error("供应商商品来源版本已经变化，请刷新后重新确认")
-  }
-
-  const product = input.companyProduct
-  if (!product.productKind.trim()) {
-    throw new Error("商品类型缺失：无可靠来源时必须补充商品类型后才能创建")
-  }
-  if (!input.salesVisiblePriceGross.trim()) {
-    throw new Error("销售可见价缺失：创建公司商品时必须填写销售可见价")
-  }
-  if (!input.marketPrice.trim()) {
-    throw new Error("市场价缺失：创建公司商品时必须填写市场价")
-  }
-  if (!input.offering.inputTaxRate.trim()) {
-    throw new Error("进项税率缺失，需补充来源后才能登记供给")
-  }
-  if (!input.offering.bulkMinimumOrderQuantity.trim()) {
-    throw new Error("集采起订量缺失：创建公司商品时必须填写集采起订量")
-  }
-
-  const now = new Date().toISOString()
-  const companyFields: import("@/features/master-data/types").ProductFields = {
-    description: product.description,
-    baseUnitId: product.baseUnitId,
-    baseUnitCode: product.baseUnitCode,
-    baseUnit: product.baseUnit,
-    categoryId: product.categoryId,
-    category: product.category,
-    brandId: product.brandId,
-    brand: product.brand,
-    productKind: product.productKind,
-    carouselImages: product.carouselImages ?? [],
-    detailImages: product.detailImages ?? [],
-    specs: [],
-    skus: [
-      {
-        skuNo: product.skuNo.trim(),
-        attributeValues: [],
-        specLabel: product.specLabel,
-        barcode: product.barcode,
-        mainImage: product.mainImage ?? "",
-        salePrice: input.salesVisiblePriceGross.trim(),
-        marketPrice: input.marketPrice.trim(),
-        baseUnit: product.baseUnit,
-        lifecycleStatus: "ENABLED",
-      },
-    ],
-  }
-  const created = createW14Object({
-    resource: "products",
-    name: product.name.trim(),
-    effectiveFrom: input.offering.validFrom,
-    changeReason: "从供应商 SKU 反向创建公司商品",
-    fields: companyFields,
-    idempotencyKey: `${input.idempotencyKey}:company`,
-  })
-  if (created.outcome !== "succeeded" || !created.stableId) {
-    throw new Error(
-      created.outcome === "blocked" ? created.message : "公司商品创建失败，请重试"
-    )
-  }
-  const companyCenter = getW14Center("products", created.stableId)
-  const companySkuId = companyCenter?.productDetail?.skus[0]?.skuId
-  if (!companySkuId) {
-    throw new Error("公司 SKU 创建失败，请刷新后重试")
-  }
-
-  const offeringId = `offering_${input.supplierCatalogSkuId}`
-  const offering = createConfirmedOffering({
-    offeringId,
-    costGross: input.offering.bulkSupplyPriceGross,
-    dropshipSupplyPriceGross: input.offering.dropshipSupplyPriceGross,
-    bulkSupplyPriceGross: input.offering.bulkSupplyPriceGross,
-    inputTaxRate: input.offering.inputTaxRate,
-    minimumOrderQuantity: input.offering.bulkMinimumOrderQuantity,
-    supplyRegion: input.offering.supplyRegion,
-    validFrom: input.offering.validFrom,
-  })
-  const poolWrite = writeProductPoolEntry({
-    skuId: companySkuId,
-    action: "SET_PRICE",
-    salesVisiblePriceGross: input.salesVisiblePriceGross,
-    validFrom: input.offering.validFrom,
-  })
-  const {
-    workItem: _workItem,
-    registrationBlocker: _registrationBlocker,
-    ...rest
-  } = current as SupplierCatalogItemView & {
-    workItem?: unknown
-    registrationBlocker?: unknown
-  }
-  void _workItem
-  void _registrationBlocker
-  const next: SupplierCatalogItemView = {
-    ...rest,
-    changeType: "UNCHANGED",
-    mapping: {
-      mappingStatus: "ACTIVE",
-      skuId: companySkuId,
-      skuCode: companyCenter?.productDetail?.skus[0]?.skuNo,
-      skuName: product.name.trim(),
-      skuRevisionId: `${created.stableId}:${companySkuId}`,
-      specification: product.specLabel,
-      baseUnit: product.baseUnit,
-      approvedBy: "采购 · 当前用户",
-      approvedAt: now,
-      reason: "反向创建公司商品并精确映射",
-      mappingVersion: `map_${input.supplierCatalogSkuId}_${Date.now()}`,
-      history: current.mapping?.history ?? [],
-    },
-    offering: {
-      stableId: offeringId,
-      currentRevision: offering,
-      revisionHistory: [...(current.offering?.revisionHistory ?? []), offering],
-    },
-    poolEntry: poolWrite.poolEntry,
-    allowedActions: ["BROWSE", "REVISE_OFFERING"],
-    actionBlockers: [],
-  }
-  catalogOverlays.set(input.supplierCatalogSkuId, next)
-  const result: SupplierCatalogWriteResult = {
-    supplierProductId: current.supplierProduct.id,
-    supplierCatalogSkuId: input.supplierCatalogSkuId,
-    companyProductId: created.stableId,
-    companySkuId,
-    productKind: product.productKind.trim(),
-    supplierOfferingRevisionId: offering.offeringRevisionId,
-    poolEntryRevisionId: next.poolEntry?.poolEntryRevisionId,
-    poolEntryChange: poolWrite.change,
-    activeSupplierCount: activeSupplierCountForSku(companySkuId),
-    reference: `POOL-REVERSE-${product.skuNo.trim()}-${Date.now().toString(36)}`,
-    recordedAt: now,
-  }
-  writeResults.set(input.idempotencyKey, result)
-  return result
+  throw err
 }
 
-/** 映射确认/供给确认端点不存在（类型未登记） */
 export async function attemptUnregisteredFormalWrite(): Promise<FormalActionResponse> {
-  await mockDelay(40)
   return {
     status: "failed",
     code: "WORK_ITEM_TYPE_UNREGISTERED",
-    message:
-      "商品关联和供货条件确认功能暂未开放。当前可以保存草稿或前往商品资料。",
+    message: REGISTRATION_BLOCKER_MESSAGE,
   }
 }

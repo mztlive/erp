@@ -1,14 +1,14 @@
 /**
- * W20 session-mock API
- * - 密钥永不返回正文
- * - 角色分离：采购确认需求 vs 运维配置引用 vs 管理员启停/能力
- * - 健康检查 / 目录同步返回后台任务
+ * W20 · API 供应商连接 · 真实 HTTP 适配层。
+ * 保持对外导出签名稳定；后端 Page/DTO 在此映射为 feature 视图类型。
  */
 
-import { mockDelay } from "@/lib/mock-delay"
+import { apiGet, apiPost, apiPut, type Page } from "@/lib/api"
 import type {
   CapabilityCode,
   ConnectionCenterView,
+  ConnectionEnvironment,
+  ConnectionListItem,
   ConnectionListView,
   ConnectionStatus,
   DemoRole,
@@ -27,100 +27,144 @@ import {
   STATUS_LABEL,
   STATUS_TONE,
 } from "@/features/supplier-api-connections/types"
-import {
-  CREDENTIAL_OPAQUE_OPTIONS,
-  ENDPOINT_OPAQUE_OPTIONS,
-  SEED_CONNECTIONS,
-  seedToListItem,
-  type SeedConnection,
-} from "@/mock/supplier-api-connections"
 
-const WORKSPACE = "W20"
+// ─── Backend wire types ───────────────────────────────────────────────────────
 
-type SessionOverlay = {
-  status?: ConnectionStatus
-  version: string
-  endpoint?: SeedConnection["endpoint"]
-  credential?: SeedConnection["credential"]
-  capabilities?: SeedConnection["capabilities"]
-  lastHealth?: SeedConnection["lastHealth"]
-  healthRecords?: SeedConnection["healthRecords"]
-  catalog?: SeedConnection["catalog"]
-  alerts?: SeedConnection["alerts"]
-  nextStep?: string
-  auditEvents?: SeedConnection["auditEvents"]
+type BackendConnection = {
+  id: string
+  supplier_id: string
+  connection_code: string
+  environment: "production" | "testing" | string
+  status: "active" | "disabled" | "fault" | string
+  rate_limit_policy?: { max_requests: number; window_secs: number } | null
+  last_health_at?: number | null
+  last_health_result?: "healthy" | "failed" | string | null
+  version: number
+  created_at: number
 }
 
-const overlays = new Map<string, SessionOverlay>()
-const createdConnections: SeedConnection[] = []
-const activeJobs = new Map<
-  string,
-  {
-    jobId: string
-    jobNo: string
-    kind: "HEALTH" | "CATALOG"
-    connectionId: string
-    status: "queued" | "running" | "succeeded" | "partial" | "failed"
-    total: number
-    completed: number
-    succeeded: number
-    failed: number
-    createdAt: string
+type BackendCapability = {
+  id: string
+  connection_id: string
+  capability_code: string
+  status: "active" | "disabled" | string
+  version: number
+  created_at: number
+}
+
+type BackendConnectionDetail = BackendConnection & {
+  capabilities: BackendCapability[]
+}
+
+type BackendHealthCheck = {
+  checked_at: number
+  result: "healthy" | "failed" | string
+  inbox_message_id: string
+  error_task_id?: string | null
+  version: number
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function secsToIso(secs?: number | null): string | undefined {
+  if (secs == null || secs <= 0) return undefined
+  return new Date(secs * 1000).toISOString()
+}
+
+function mapEnvironment(raw: string): ConnectionEnvironment {
+  if (raw === "production") return "PRODUCTION"
+  if (raw === "testing") return "STAGING"
+  const upper = raw.toUpperCase()
+  if (upper === "DEVELOPMENT" || upper === "STAGING" || upper === "PRODUCTION") {
+    return upper as ConnectionEnvironment
   }
->()
-
-function getOverlay(id: string): SessionOverlay | undefined {
-  return overlays.get(id)
+  return "STAGING"
 }
 
-function bumpVersion(current: string): string {
-  const n = Number(current)
-  return Number.isFinite(n) ? String(n + 1) : `${current}.1`
+function toBackendEnvironment(
+  env: ConnectionEnvironment
+): "production" | "testing" {
+  return env === "PRODUCTION" ? "production" : "testing"
 }
 
-function mergeSeed(seed: SeedConnection): SeedConnection {
-  const o = getOverlay(seed.connectionId)
-  if (!o) return seed
-  return {
-    ...seed,
-    status: o.status ?? seed.status,
-    version: o.version || seed.version,
-    endpoint: o.endpoint ?? seed.endpoint,
-    credential: o.credential ?? seed.credential,
-    capabilities: o.capabilities ?? seed.capabilities,
-    lastHealth: o.lastHealth ?? seed.lastHealth,
-    healthRecords: o.healthRecords ?? seed.healthRecords,
-    catalog: o.catalog ?? seed.catalog,
-    alerts: o.alerts ?? seed.alerts,
-    nextStep: o.nextStep ?? seed.nextStep,
-    auditEvents: o.auditEvents ?? seed.auditEvents,
+function mapStatus(raw: string): ConnectionStatus {
+  switch (raw) {
+    case "active":
+      return "ENABLED"
+    case "disabled":
+      return "DISABLED"
+    case "fault":
+      return "FAULTED"
+    default:
+      return "PENDING_CONFIG"
   }
 }
 
-function allSeeds(): SeedConnection[] {
-  return [...createdConnections, ...SEED_CONNECTIONS].map(mergeSeed)
+function toBackendStatus(
+  status: ConnectionStatus
+): "active" | "disabled" | "fault" {
+  switch (status) {
+    case "ENABLED":
+      return "active"
+    case "DISABLED":
+      return "disabled"
+    case "FAULTED":
+      return "fault"
+    default:
+      return "active"
+  }
 }
 
-function findSeed(connectionId: string): SeedConnection | undefined {
-  return allSeeds().find((s) => s.connectionId === connectionId)
+function mapHealth(raw?: string | null): HealthResult {
+  if (!raw) return "UNCHECKED"
+  if (raw === "healthy") return "SUCCESS"
+  if (raw === "failed") return "FAILED"
+  return "UNCHECKED"
+}
+
+function mapCapabilityCode(raw: string): CapabilityCode {
+  const table: Record<string, CapabilityCode> = {
+    product: "CATALOG",
+    price: "PRICE",
+    stock: "STOCK",
+    order: "ORDER",
+    query: "QUERY",
+    cancel: "CANCEL",
+    refund: "REFUND",
+    logistics: "LOGISTICS",
+    callback: "CALLBACK",
+    settlement: "SETTLEMENT",
+    catalog: "CATALOG",
+  }
+  return table[raw.toLowerCase()] ?? "CATALOG"
+}
+
+function toBackendCapabilityCode(code: CapabilityCode): string {
+  const table: Record<CapabilityCode, string> = {
+    CATALOG: "product",
+    PRICE: "price",
+    STOCK: "stock",
+    ORDER: "order",
+    QUERY: "query",
+    CANCEL: "cancel",
+    REFUND: "refund",
+    LOGISTICS: "logistics",
+    CALLBACK: "callback",
+    SETTLEMENT: "settlement",
+  }
+  return table[code]
 }
 
 function roleActions(
   role: DemoRole,
-  seed: SeedConnection
+  status: ConnectionStatus,
+  hasCaps: boolean
 ): { allowed: string[]; blockers: ConnectionCenterView["actionBlockers"] } {
   const allowed: string[] = ["OPEN_CENTER", "VIEW"]
   const blockers: ConnectionCenterView["actionBlockers"] = []
 
-  const refsReady =
-    seed.endpoint.state !== "MISSING" && seed.credential.state !== "MISSING"
-  const hasEnabledCap = seed.capabilities.some((c) => c.status === "ENABLED")
-
   if (role === "procurement") {
-    allowed.push("CONFIRM_CAPABILITY_REQUIREMENT")
-    if (seed.catalog.state !== "NEVER") {
-      allowed.push("OPEN_W21")
-    }
+    allowed.push("CONFIRM_CAPABILITY_REQUIREMENT", "OPEN_W21")
     blockers.push(
       {
         action: "BIND_CREDENTIAL_REFERENCE",
@@ -153,10 +197,11 @@ function roleActions(
       "BIND_ENDPOINT_REFERENCE",
       "BIND_CREDENTIAL_REFERENCE",
       "RUN_HEALTH_CHECK",
-      "OPEN_W29"
+      "OPEN_W29",
+      "OPEN_W21"
     )
-    if (hasEnabledCap && seed.status === "ENABLED") {
-      allowed.push("START_CATALOG_SYNC", "OPEN_W21")
+    if (hasCaps && status === "ENABLED") {
+      allowed.push("START_CATALOG_SYNC")
     }
     blockers.push(
       {
@@ -180,16 +225,7 @@ function roleActions(
         message: "停用连接由系统管理员执行",
       }
     )
-    if (!refsReady) {
-      blockers.push({
-        action: "RUN_HEALTH_CHECK",
-        code: "REFS_NOT_READY",
-        message: "地址或密钥引用未就绪，无法执行健康检查",
-      })
-      allowed.splice(allowed.indexOf("RUN_HEALTH_CHECK"), 1)
-    }
   } else {
-    // admin
     allowed.push(
       "CREATE_CONNECTION",
       "UPDATE_CAPABILITIES",
@@ -209,114 +245,163 @@ function roleActions(
       message:
         "系统管理员不能代替采购确认业务能力需求；采购确认与能力配置无共用写入口",
     })
-    if (!refsReady || !hasEnabledCap) {
-      if (seed.status !== "ENABLED") {
-        blockers.push({
-          action: "ENABLE",
-          code: "PRECONDITIONS",
-          message: "启用前需完成引用绑定、能力配置与健康验证",
-        })
-      }
-    }
-    if (seed.status === "ENABLED" && seed.relatedImpact.openSupplierOrders > 0) {
-      // still allow disable but impact preview will show
-    }
-  }
-
-  if (seed.lastHealth?.result === "AUTH_FAILED") {
-    blockers.push({
-      action: "START_CATALOG_SYNC",
-      code: "AUTH_FAILED",
-      message: "鉴权失败期间禁止触发目录同步；请先轮换引用并健康验证",
-    })
-  }
-
-  if (seed.lastHealth?.result === "UNKNOWN") {
-    blockers.push({
-      action: "RUN_HEALTH_CHECK",
-      code: "PRIOR_UNKNOWN",
-      message: "存在结果未知的健康任务，请先按任务号查询，勿盲目重复发起",
-    })
   }
 
   return { allowed: [...new Set(allowed)], blockers }
 }
 
-function projectSafeRefs(
-  seed: SeedConnection,
-  role: DemoRole
-): ConnectionCenterView["safeReferences"] {
-  const tech = role === "ops" || role === "admin"
-  const mapRef = (r: SeedConnection["endpoint"]) => ({
-    state: r.state,
-    alias: tech ? r.alias : undefined,
-    version: tech ? r.version : undefined,
-    visible: tech,
-  })
+function mapCapability(c: BackendCapability) {
+  const code = mapCapabilityCode(c.capability_code)
+  const enabled = c.status === "active"
   return {
-    endpoint: mapRef(seed.endpoint),
-    credential: mapRef(seed.credential),
+    capabilityCode: code,
+    capabilityLabel: CAPABILITY_LABEL[code],
+    status: (enabled ? "ENABLED" : "DISABLED") as "ENABLED" | "DISABLED",
+    statusLabel: enabled ? "启用" : "停用",
+    verification: "UNVERIFIED" as const,
+    verificationLabel: "未验证",
+    businessRequirement: "UNCONFIRMED" as const,
+    businessRequirementLabel: "未确认",
+    version: String(c.version),
+    productLevelNote:
+      "连接级能力声明 ≠ 每个商品可用；商品/供给/发布级能力见供应商商品库 / 商品发布",
+  }
+}
+
+function toListItem(
+  conn: BackendConnection,
+  caps: BackendCapability[],
+  role: DemoRole,
+  supplierName?: string
+): ConnectionListItem {
+  const status = mapStatus(conn.status)
+  const env = mapEnvironment(conn.environment)
+  const health = mapHealth(conn.last_health_result)
+  const enabledCaps = caps.filter((c) => c.status === "active")
+  const capabilitySummary =
+    enabledCaps.length === 0
+      ? "未配置能力"
+      : enabledCaps
+          .map((c) => CAPABILITY_LABEL[mapCapabilityCode(c.capability_code)])
+          .join("、")
+  const { allowed, blockers } = roleActions(role, status, enabledCaps.length > 0)
+
+  return {
+    connectionId: conn.id,
+    connectionCode: conn.connection_code,
+    supplier: { id: conn.supplier_id, name: supplierName ?? conn.supplier_id },
+    environment: env,
+    environmentLabel: ENVIRONMENT_LABEL[env],
+    status,
+    statusLabel: STATUS_LABEL[status],
+    statusTone: STATUS_TONE[status],
+    capabilitySummary,
+    healthResult: health,
+    healthLabel: HEALTH_LABEL[health],
+    healthTone: HEALTH_TONE[health],
+    lastHealthAt: secsToIso(conn.last_health_at),
+    catalogState: "NEVER",
+    catalogLabel: CATALOG_LABEL.NEVER,
+    nextStep: status === "ENABLED" ? "连接已启用" : "完成配置与健康检查",
+    allowedActions: allowed,
+    actionBlockers: blockers,
   }
 }
 
 function toCenter(
-  seed: SeedConnection,
-  role: DemoRole
+  detail: BackendConnectionDetail,
+  role: DemoRole,
+  supplierName?: string
 ): ConnectionCenterView {
-  const { allowed, blockers } = roleActions(role, seed)
+  const status = mapStatus(detail.status)
+  const env = mapEnvironment(detail.environment)
+  const health = mapHealth(detail.last_health_result)
+  const caps = detail.capabilities ?? []
+  const enabledCaps = caps.filter((c) => c.status === "active")
+  const { allowed, blockers } = roleActions(role, status, enabledCaps.length > 0)
   const adapterVisible = role === "ops" || role === "admin"
+  const healthAt = secsToIso(detail.last_health_at)
+
+  // 密钥引用永不回显（后端契约）；前端仅展示「未绑定」占位。
+  const missingRef = {
+    state: "MISSING" as ReferenceState,
+    visible: adapterVisible,
+  }
+
   return {
-    connectionId: seed.connectionId,
-    connectionCode: seed.connectionCode,
-    supplier: seed.supplier,
-    environment: seed.environment,
-    environmentLabel: ENVIRONMENT_LABEL[seed.environment],
-    status: seed.status,
-    statusLabel: STATUS_LABEL[seed.status],
-    statusTone: STATUS_TONE[seed.status],
-    businessOwner: seed.businessOwner,
-    technicalOwner: seed.technicalOwner,
-    adapter: seed.adapter
-      ? { ...seed.adapter, visible: adapterVisible }
+    connectionId: detail.id,
+    connectionCode: detail.connection_code,
+    supplier: {
+      id: detail.supplier_id,
+      name: supplierName ?? detail.supplier_id,
+    },
+    environment: env,
+    environmentLabel: ENVIRONMENT_LABEL[env],
+    status,
+    statusLabel: STATUS_LABEL[status],
+    statusTone: STATUS_TONE[status],
+    adapter: adapterVisible
+      ? { code: "default", version: "1", visible: true }
       : undefined,
-    version: seed.version,
-    updatedAt: seed.updatedAt,
-    safeReferences: projectSafeRefs(seed, role),
-    capabilities: seed.capabilities.map((c) => ({
-      ...c,
-      productLevelNote:
-        "连接级能力声明 ≠ 每个商品可用；商品/供给/发布级能力见供应商商品库 / 商品发布",
-    })),
-    lastHealth:
-      role === "procurement" && seed.lastHealth
-        ? {
-            at: seed.lastHealth.at,
-            result: seed.lastHealth.result,
-            resultLabel: seed.lastHealth.resultLabel,
-            autoRetryStopped: seed.lastHealth.autoRetryStopped,
-            errorSummary: seed.lastHealth.errorSummary
-              ? seed.lastHealth.errorSummary.replace(/密钥|secret|key/gi, "引用")
-              : undefined,
-          }
-        : seed.lastHealth,
-    healthRecords:
-      role === "procurement"
-        ? seed.healthRecords.map((h) => ({
-            ...h,
-            latencyMs: undefined,
-            errorClass: undefined,
-            traceId: undefined,
-          }))
-        : seed.healthRecords,
-    catalog: seed.catalog,
-    relatedImpact: seed.relatedImpact,
-    auditEvents: seed.auditEvents,
+    version: String(detail.version),
+    updatedAt: secsToIso(detail.created_at) ?? new Date(0).toISOString(),
+    safeReferences: {
+      endpoint: missingRef,
+      credential: missingRef,
+    },
+    capabilities: caps.map(mapCapability),
+    lastHealth: healthAt
+      ? {
+          at: healthAt,
+          result: health,
+          resultLabel: HEALTH_LABEL[health],
+        }
+      : undefined,
+    healthRecords: healthAt
+      ? [
+          {
+            recordId: `hr_${detail.id}_${detail.last_health_at}`,
+            at: healthAt,
+            checkType: "健康检查",
+            result: health,
+            resultLabel: HEALTH_LABEL[health],
+            resultTone: HEALTH_TONE[health],
+          },
+        ]
+      : [],
+    catalog: {
+      state: "NEVER",
+      stateLabel: CATALOG_LABEL.NEVER,
+    },
+    relatedImpact: {
+      activeOfferings: 0,
+      activePublications: 0,
+      openSupplierOrders: 0,
+      activeSyncJobs: 0,
+    },
+    auditEvents: [],
     allowedActions: allowed,
     actionBlockers: blockers,
-    alerts: seed.alerts ?? [],
-    nextStep: seed.nextStep,
+    alerts: [],
+    nextStep:
+      status === "ENABLED"
+        ? "连接已启用"
+        : "绑定地址/密钥引用 → 配置能力 → 健康检查",
   }
 }
+
+async function resolveSupplierName(supplierId: string): Promise<string> {
+  try {
+    const row = await apiGet<{ id: string; name?: string; supplier_name?: string }>(
+      `/admin/suppliers/${encodeURIComponent(supplierId)}`
+    )
+    return row.name ?? row.supplier_name ?? supplierId
+  } catch {
+    return supplierId
+  }
+}
+
+// ─── Public API (stable signatures) ───────────────────────────────────────────
 
 export type ListQueryInput = {
   environment: string
@@ -335,8 +420,6 @@ export type ListQueryInput = {
 export async function fetchConnectionList(
   input: ListQueryInput
 ): Promise<ConnectionListView> {
-  await mockDelay()
-
   if (input.demoFlag === "no-permission") {
     return {
       metrics: {
@@ -355,7 +438,7 @@ export async function fetchConnectionList(
       viewerRoleLabel: DEMO_ROLE_LABEL[input.role],
       hasModulePermission: false,
       hasDataScope: false,
-      projectedAt: new Date().toISOString(),
+      projectedAt: new Date(0).toISOString(),
       credentialOpaqueOptions: [],
       endpointOpaqueOptions: [],
     }
@@ -379,138 +462,119 @@ export async function fetchConnectionList(
       viewerRoleLabel: DEMO_ROLE_LABEL[input.role],
       hasModulePermission: true,
       hasDataScope: false,
-      projectedAt: new Date().toISOString(),
+      projectedAt: new Date(0).toISOString(),
       credentialOpaqueOptions: [],
       endpointOpaqueOptions: [],
     }
   }
 
-  let seeds = allSeeds()
+  const page = Math.max(1, input.page)
+  const pageSize = input.pageSize ?? 20
   const env = input.environment.toUpperCase()
+
+  const query: Record<string, unknown> = {
+    page,
+    page_size: pageSize,
+    sort_by: "updated_at",
+    sort_dir: "desc",
+  }
+  if (input.supplierId) query.supplier_id = input.supplierId
+  if (input.q?.trim()) query.connection_code = input.q.trim()
   if (env !== "ALL") {
-    seeds = seeds.filter((s) => s.environment === env)
+    query.environment =
+      env === "PRODUCTION" ? "production" : env === "DEVELOPMENT" ? "testing" : "testing"
   }
-
-  // metrics before status filters that would hide counts? Doc: metrics clickable sync filters.
-  // Compute metrics on env-filtered set.
-  const metricsBase = seeds
-  const metrics = {
-    enabled: metricsBase.filter((s) => s.status === "ENABLED").length,
-    faulted: metricsBase.filter((s) => s.status === "FAULTED").length,
-    pendingConfig: metricsBase.filter((s) => s.status === "PENDING_CONFIG")
-      .length,
-    healthAbnormal: metricsBase.filter((s) => {
-      const r = s.lastHealth?.result
-      return (
-        r === "FAILED" ||
-        r === "AUTH_FAILED" ||
-        r === "PARTIAL" ||
-        r === "UNKNOWN"
-      )
-    }).length,
-    catalogStale: metricsBase.filter(
-      (s) => s.catalog.state === "STALE" || s.catalog.state === "FAILED"
-    ).length,
-  }
-
   if (input.status) {
-    const statuses = input.status.split(",").map((s) => s.trim().toUpperCase())
-    seeds = seeds.filter((s) => statuses.includes(s.status))
-  } else {
-    // default: ENABLED + FAULTED (doc §6)
-    seeds = seeds.filter(
-      (s) =>
-        s.status === "ENABLED" ||
-        s.status === "FAULTED" ||
-        s.status === "PENDING_CONFIG"
-    )
+    const first = input.status.split(",")[0]?.trim().toUpperCase()
+    if (first === "ENABLED") query.status = "active"
+    else if (first === "DISABLED") query.status = "disabled"
+    else if (first === "FAULTED") query.status = "fault"
   }
 
+  const pageResult = await apiGet<Page<BackendConnection>>(
+    "/admin/supplier-api-connections",
+    query
+  )
+
+  // 能力列表：按页批量拉取（后端无连接内嵌能力的列表投影）
+  const capPage = await apiGet<Page<BackendCapability>>(
+    "/admin/supplier-api-capabilities",
+    { page: 1, page_size: 100 }
+  ).catch(() => ({ items: [] as BackendCapability[], total: 0, page: 1, page_size: 100 }))
+
+  const capsByConn = new Map<string, BackendCapability[]>()
+  for (const cap of capPage.items) {
+    const list = capsByConn.get(cap.connection_id) ?? []
+    list.push(cap)
+    capsByConn.set(cap.connection_id, list)
+  }
+
+  const supplierNames = new Map<string, string>()
+  await Promise.all(
+    pageResult.items.map(async (c) => {
+      if (!supplierNames.has(c.supplier_id)) {
+        supplierNames.set(c.supplier_id, await resolveSupplierName(c.supplier_id))
+      }
+    })
+  )
+
+  let items = pageResult.items.map((c) =>
+    toListItem(
+      c,
+      capsByConn.get(c.id) ?? [],
+      input.role,
+      supplierNames.get(c.supplier_id)
+    )
+  )
+
+  // 客户端补筛：后端未提供 health / capability / catalog 筛选
   if (input.health) {
     const hs = input.health.split(",").map((h) => h.trim().toUpperCase())
-    seeds = seeds.filter((s) => {
-      const r = s.lastHealth?.result ?? "UNCHECKED"
-      return hs.includes(r)
-    })
+    items = items.filter((i) => hs.includes(i.healthResult))
   }
-
   if (input.capability) {
-    const code = input.capability.toUpperCase() as CapabilityCode
-    seeds = seeds.filter((s) =>
-      s.capabilities.some(
-        (c) => c.capabilityCode === code && c.status === "ENABLED"
+    const code = input.capability.toUpperCase()
+    items = items.filter((i) =>
+      i.capabilitySummary.includes(
+        CAPABILITY_LABEL[code as CapabilityCode] ?? code
       )
     )
   }
 
-  if (input.catalogFreshness) {
-    const cs = input.catalogFreshness
-      .split(",")
-      .map((c) => c.trim().toUpperCase())
-    seeds = seeds.filter((s) => cs.includes(s.catalog.state))
+  // 指标：仅基于当前页（后端无汇总端点）— 登记为 backend_gap
+  const metrics = {
+    enabled: items.filter((i) => i.status === "ENABLED").length,
+    faulted: items.filter((i) => i.status === "FAULTED").length,
+    pendingConfig: items.filter((i) => i.status === "PENDING_CONFIG").length,
+    healthAbnormal: items.filter((i) =>
+      ["FAILED", "AUTH_FAILED", "PARTIAL", "UNKNOWN"].includes(i.healthResult)
+    ).length,
+    catalogStale: 0,
   }
 
-  if (input.supplierId) {
-    seeds = seeds.filter((s) => s.supplier.id === input.supplierId)
-  }
-
-  if (input.q?.trim()) {
-    const q = input.q.trim().toUpperCase()
-    seeds = seeds.filter(
-      (s) =>
-        s.connectionCode.toUpperCase().includes(q) ||
-        s.supplier.name.toUpperCase().includes(q)
-    )
-  }
-
-  // fault first, then last health desc
-  seeds = [...seeds].sort((a, b) => {
-    const rank = (s: SeedConnection) =>
-      s.status === "FAULTED" ? 0 : s.status === "PENDING_CONFIG" ? 1 : 2
-    const dr = rank(a) - rank(b)
-    if (dr !== 0) return dr
-    return (b.lastHealth?.at ?? "").localeCompare(a.lastHealth?.at ?? "")
-  })
-
-  const pageSize = input.pageSize ?? 20
-  const page = Math.max(1, input.page)
-  const total = seeds.length
-  const start = (page - 1) * pageSize
-  const pageSeeds = seeds.slice(start, start + pageSize)
-
-  const items = pageSeeds.map((seed) => {
-    const item = seedToListItem(seed)
-    const { allowed, blockers } = roleActions(input.role, seed)
-    return {
-      ...item,
-      allowedActions: allowed,
-      actionBlockers: blockers,
-    }
-  })
-
-  let emptyReason: ConnectionListView["emptyReason"]
-  if (total === 0) {
-    const anyInEnv =
-      env === "ALL"
-        ? allSeeds().length > 0
-        : allSeeds().some((s) => s.environment === env)
-    emptyReason = anyInEnv ? "FILTER_NO_RESULT" : "NO_CONNECTIONS"
-  }
+  const emptyReason: ConnectionListView["emptyReason"] =
+    pageResult.total === 0
+      ? items.length === 0
+        ? "NO_CONNECTIONS"
+        : "FILTER_NO_RESULT"
+      : undefined
 
   return {
     metrics,
     items,
-    total,
-    page,
-    pageSize,
+    total: pageResult.total,
+    page: pageResult.page,
+    pageSize: pageResult.page_size,
     emptyReason,
     viewerRole: input.role,
     viewerRoleLabel: DEMO_ROLE_LABEL[input.role],
     hasModulePermission: true,
     hasDataScope: true,
-    projectedAt: new Date().toISOString(),
-    credentialOpaqueOptions: CREDENTIAL_OPAQUE_OPTIONS.map((o) => ({ ...o })),
-    endpointOpaqueOptions: ENDPOINT_OPAQUE_OPTIONS.map((o) => ({ ...o })),
+    projectedAt: secsToIso(
+      Math.max(0, ...pageResult.items.map((c) => c.created_at))
+    ) ?? new Date(0).toISOString(),
+    credentialOpaqueOptions: [],
+    endpointOpaqueOptions: [],
   }
 }
 
@@ -518,30 +582,27 @@ export async function fetchConnectionCenter(input: {
   connectionId: string
   role: DemoRole
 }): Promise<ConnectionCenterView | null> {
-  await mockDelay()
-  const seed = findSeed(input.connectionId)
-  if (!seed) return null
-  return toCenter(seed, input.role)
-}
-
-function ensureOverlay(connectionId: string, seed: SeedConnection): SessionOverlay {
-  let o = overlays.get(connectionId)
-  if (!o) {
-    o = { version: seed.version }
-    overlays.set(connectionId, o)
+  try {
+    const detail = await apiGet<BackendConnectionDetail>(
+      `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}`
+    )
+    const supplierName = await resolveSupplierName(detail.supplier_id)
+    return toCenter(detail, input.role, supplierName)
+  } catch (err) {
+    const e = err as { kind?: string; status?: number }
+    if (e?.kind === "Http" && e.status === 404) return null
+    throw err
   }
-  return o
 }
 
 export async function createConnection(input: {
   connectionCode: string
   supplierId: string
   supplierName: string
-  environment: SeedConnection["environment"]
+  environment: ConnectionEnvironment
   role: DemoRole
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  await mockDelay(120)
   if (input.role !== "admin") {
     return {
       status: "blocked",
@@ -559,68 +620,34 @@ export async function createConnection(input: {
       message: "请填写全局唯一的连接代码，不可与环境组合复用",
     }
   }
-  if (allSeeds().some((s) => s.connectionCode === code)) {
-    return {
-      status: "failed",
-      code: "CODE_DUPLICATE",
-      title: "连接代码已存在",
-      message: `连接代码 ${code} 全局唯一，不可与环境组合复用`,
-    }
-  }
 
-  const connectionId = `conn_new_${Date.now().toString(36)}`
-  const now = new Date().toISOString()
-  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
-  const seed: SeedConnection = {
-    connectionId,
-    connectionCode: code,
-    supplier: { id: input.supplierId, name: input.supplierName },
-    environment: input.environment,
-    status: "PENDING_CONFIG",
-    businessOwner: { id: "u_cur", label: "当前用户" },
-    technicalOwner: { id: "u_ops", label: "运维组" },
-    version: "1",
-    updatedAt: now,
-    endpoint: { state: "MISSING" },
-    credential: { state: "MISSING" },
-    capabilities: [],
-    healthRecords: [],
-    catalog: {
-      state: "NEVER",
-      stateLabel: CATALOG_LABEL.NEVER,
-    },
-    relatedImpact: {
-      activeOfferings: 0,
-      activePublications: 0,
-      openSupplierOrders: 0,
-      activeSyncJobs: 0,
-    },
-    auditEvents: [
-      {
-        eventId: `ae_${connectionId}`,
-        at: now,
-        actor: "系统管理员",
-        action: "CREATE_CONNECTION",
-        summary: `创建连接身份 ${code}`,
-        auditNo,
-      },
-    ],
-    nextStep: "绑定地址/密钥引用 → 配置能力 → 健康检查",
-  }
-  createdConnections.unshift(seed)
+  // 后端 Create 要求 endpoint_reference 非空；占位引用，运维后续 PUT 绑定
+  const created = await apiPost<BackendConnectionDetail>(
+    "/admin/supplier-api-connections",
+    {
+      supplier_id: input.supplierId,
+      connection_code: code,
+      environment: toBackendEnvironment(input.environment),
+      endpoint_reference: `pending:${input.idempotencyKey}`,
+      credential_reference: null,
+      rate_limit_policy: null,
+      status: "disabled",
+      capabilities: [],
+    }
+  )
 
   return {
     status: "succeeded",
     title: "连接身份已创建",
-    message: `已创建 ${code}，状态为待配置。下一步完成技术引用与能力配置。`,
+    message: `已创建 ${code}。下一步完成技术引用与能力配置。`,
     reference: code,
-    connectionId,
-    connectionVersion: "1",
+    connectionId: created.id,
+    connectionVersion: String(created.version),
     facts: [
       { label: "连接代码", value: code },
       { label: "供应商", value: input.supplierName },
       { label: "环境", value: ENVIRONMENT_LABEL[input.environment] },
-      { label: "状态", value: "待配置" },
+      { label: "状态", value: STATUS_LABEL[mapStatus(created.status)] },
     ],
   }
 }
@@ -633,7 +660,6 @@ export async function bindCredentialReference(input: {
   idempotencyKey: string
   forceUnknown?: boolean
 }): Promise<FormalOutcome> {
-  await mockDelay(140)
   if (input.role !== "ops" && input.role !== "admin") {
     return {
       status: "blocked",
@@ -642,83 +668,36 @@ export async function bindCredentialReference(input: {
       message: "仅研发运维或系统管理员可绑定密钥管理系统引用",
     }
   }
-  const seed = findSeed(input.connectionId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "连接不存在",
-      message: "未找到连接",
-    }
-  }
-  if (seed.version !== input.expectedVersion) {
-    return {
-      status: "failed",
-      code: "VERSION_CONFLICT",
-      title: "配置已更新",
-      message: "连接配置已被他人更新，请重新加载后基于最新版本提交",
-    }
-  }
-  const opt = CREDENTIAL_OPAQUE_OPTIONS.find(
-    (o) => o.referenceId === input.opaqueReferenceId
-  )
-  if (!opt) {
-    return {
-      status: "failed",
-      code: "INVALID_REFERENCE",
-      title: "无效引用",
-      message: "只能选择系统提供的密钥引用，不能明文输入",
-    }
-  }
-
   if (input.forceUnknown) {
     return {
       status: "unknown",
       title: "密钥引用绑定结果未知",
       message:
         "不得乐观切换引用显示。请按原任务号查询最终结果；失败时保留旧有效引用。",
-      operationId: `op_cred_${Date.now()}`,
+      operationId: `op_cred_${input.idempotencyKey}`,
       idempotencyKey: input.idempotencyKey,
     }
   }
 
-  const o = ensureOverlay(input.connectionId, seed)
-  o.version = bumpVersion(seed.version)
-  o.credential = {
-    state: "BOUND",
-    alias: opt.alias,
-    version: opt.version,
-  }
-  const now = new Date().toISOString()
-  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
-  o.auditEvents = [
+  const updated = await apiPut<BackendConnection>(
+    `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}`,
     {
-      eventId: `ae_cred_${Date.now()}`,
-      at: now,
-      actor: DEMO_ROLE_LABEL[input.role],
-      action: "BIND_CREDENTIAL_REFERENCE",
-      summary: `密钥引用已绑定 ${opt.alias}（${opt.version}）· 无正文`,
-      auditNo,
-    },
-    ...(seed.auditEvents ?? []),
-  ]
-  o.nextStep = "引用已更新 · 建议执行健康检查验证"
+      version: Number(input.expectedVersion) || 1,
+      credential_reference: input.opaqueReferenceId,
+    }
+  )
 
-  const result: FormalOutcome = {
+  return {
     status: "succeeded",
     title: "密钥引用已绑定",
-    message: `已绑定安全别名 ${opt.alias}（版本 ${opt.version}）。接口永不返回密钥正文。`,
-    reference: auditNo,
-    connectionVersion: o.version,
-    auditEventId: auditNo,
+    message: "已绑定密钥管理系统引用。接口永不返回密钥正文。",
+    reference: updated.connection_code,
+    connectionVersion: String(updated.version),
     facts: [
       { label: "引用状态", value: REFERENCE_STATE_LABEL.BOUND },
-      { label: "安全别名", value: opt.alias },
-      { label: "引用版本", value: opt.version },
-      { label: "配置版本", value: o.version },
+      { label: "配置版本", value: String(updated.version) },
     ],
   }
-  return result
 }
 
 export async function bindEndpointReference(input: {
@@ -728,7 +707,6 @@ export async function bindEndpointReference(input: {
   role: DemoRole
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  await mockDelay(140)
   if (input.role !== "ops" && input.role !== "admin") {
     return {
       status: "blocked",
@@ -737,69 +715,24 @@ export async function bindEndpointReference(input: {
       message: "地址配置引用由研发运维或系统管理员绑定",
     }
   }
-  const seed = findSeed(input.connectionId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "连接不存在",
-      message: "未找到连接",
-    }
-  }
-  if (seed.version !== input.expectedVersion) {
-    return {
-      status: "failed",
-      code: "VERSION_CONFLICT",
-      title: "配置已更新",
-      message: "连接配置已被他人更新，请重新加载后基于最新版本提交",
-    }
-  }
-  const opt = ENDPOINT_OPAQUE_OPTIONS.find(
-    (o) => o.referenceId === input.opaqueReferenceId
-  )
-  if (!opt) {
-    return {
-      status: "failed",
-      code: "INVALID_REFERENCE",
-      title: "无效引用",
-      message: "只能选择系统提供的地址引用，不能自由输入",
-    }
-  }
 
-  const o = ensureOverlay(input.connectionId, seed)
-  o.version = bumpVersion(seed.version)
-  o.endpoint = {
-    state: "BOUND",
-    alias: opt.alias,
-    version: opt.version,
-  }
-  const now = new Date().toISOString()
-  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
-  o.auditEvents = [
+  const updated = await apiPut<BackendConnection>(
+    `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}`,
     {
-      eventId: `ae_ep_${Date.now()}`,
-      at: now,
-      actor: DEMO_ROLE_LABEL[input.role],
-      action: "BIND_ENDPOINT_REFERENCE",
-      summary: `地址引用已绑定 ${opt.alias}（${opt.version}）`,
-      auditNo,
-    },
-    ...(seed.auditEvents ?? []),
-  ]
-  o.nextStep = "引用已更新 · 建议执行健康检查验证"
+      version: Number(input.expectedVersion) || 1,
+      endpoint_reference: input.opaqueReferenceId,
+    }
+  )
 
   return {
     status: "succeeded",
     title: "地址引用已绑定",
-    message: `已绑定地址配置 ${opt.alias}（版本 ${opt.version}）。`,
-    reference: auditNo,
-    connectionVersion: o.version,
-    auditEventId: auditNo,
+    message: "已绑定地址配置引用。",
+    reference: updated.connection_code,
+    connectionVersion: String(updated.version),
     facts: [
       { label: "引用状态", value: REFERENCE_STATE_LABEL.BOUND },
-      { label: "安全别名", value: opt.alias },
-      { label: "引用版本", value: opt.version },
-      { label: "配置版本", value: o.version },
+      { label: "配置版本", value: String(updated.version) },
     ],
   }
 }
@@ -815,7 +748,6 @@ export async function confirmCapabilityRequirement(input: {
   operationId: string
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  await mockDelay(120)
   if (input.role !== "procurement") {
     return {
       status: "blocked",
@@ -825,93 +757,16 @@ export async function confirmCapabilityRequirement(input: {
         "确认业务能力需求是采购追加式业务确认，不改变能力启停，不创建任务",
     }
   }
-  const seed = findSeed(input.connectionId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "连接不存在",
-      message: "未找到连接",
-    }
-  }
-  if (seed.version !== input.expectedConnectionVersion) {
-    return {
-      status: "failed",
-      code: "VERSION_CONFLICT",
-      title: "连接信息已更新",
-      message: "请重新加载后基于最新连接版本确认",
-    }
-  }
-  const cap = seed.capabilities.find(
-    (c) => c.capabilityCode === input.capabilityCode
-  )
-  if (!cap) {
-    return {
-      status: "failed",
-      code: "CAP_NOT_FOUND",
-      title: "能力不存在",
-      message: "该连接上无此能力记录",
-    }
-  }
-  if (cap.version !== input.expectedCapabilityVersion) {
-    return {
-      status: "failed",
-      code: "CAP_VERSION_CONFLICT",
-      title: "能力信息已更新",
-      message: "请重新加载后基于最新能力版本确认",
-    }
-  }
-
-  const o = ensureOverlay(input.connectionId, seed)
-  o.version = bumpVersion(seed.version)
-  o.capabilities = seed.capabilities.map((c) =>
-    c.capabilityCode === input.capabilityCode
-      ? {
-          ...c,
-          businessRequirement: input.requirement,
-          businessRequirementLabel:
-            input.requirement === "REQUIRED"
-              ? "采购确认需要"
-              : "采购确认不需要",
-          // status 不变
-        }
-      : c
-  )
-  const now = new Date().toISOString()
-  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
-  o.auditEvents = [
-    {
-      eventId: `ae_ccr_${Date.now()}`,
-      at: now,
-      actor: "采购",
-      action: "CONFIRM_CAPABILITY_REQUIREMENT",
-      summary: `${CAPABILITY_LABEL[input.capabilityCode]} → ${
-        input.requirement === "REQUIRED" ? "需要" : "不需要"
-      }（能力状态未变）`,
-      auditNo,
-    },
-    ...(seed.auditEvents ?? []),
-  ]
-
-  const result: FormalOutcome = {
-    status: "succeeded",
-    title: "业务能力需求已确认",
+  // 后端无独立「业务能力需求确认」端点 — 登记 backend_gap；
+  // 不调用 UPDATE_CAPABILITIES（会改启停），仅返回成功占位并提示审计缺口。
+  return {
+    status: "blocked",
+    code: "BACKEND_GAP",
+    title: "业务能力需求确认尚未接入",
     message:
-      "已追加采购业务确认与审计记录；能力启停状态未变更，未创建或完成任务。",
-    reference: auditNo,
-    connectionVersion: o.version,
-    auditEventId: auditNo,
-    facts: [
-      { label: "能力", value: CAPABILITY_LABEL[input.capabilityCode] },
-      {
-        label: "需求",
-        value: input.requirement === "REQUIRED" ? "需要" : "不需要",
-      },
-      { label: "能力状态", value: cap.statusLabel },
-      { label: "审计号", value: auditNo },
-    ],
+      "后端暂无采购业务能力需求确认接口；能力启停请由管理员通过能力配置接口处理。",
+    reference: input.operationId,
   }
-  return result
 }
 
 export async function updateCapabilities(input: {
@@ -924,7 +779,6 @@ export async function updateCapabilities(input: {
   operationId: string
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  await mockDelay(130)
   if (input.role !== "admin") {
     return {
       status: "blocked",
@@ -934,70 +788,61 @@ export async function updateCapabilities(input: {
         "仅系统管理员有 UPDATE_CAPABILITIES；与采购业务确认无共用写入口",
     }
   }
-  const seed = findSeed(input.connectionId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "连接不存在",
-      message: "未找到连接",
-    }
-  }
-  if (seed.version !== input.expectedConnectionVersion) {
-    return {
-      status: "failed",
-      code: "VERSION_CONFLICT",
-      title: "连接信息已更新",
-      message: "冲突不覆盖，请重读后提交",
-    }
-  }
 
-  const o = ensureOverlay(input.connectionId, seed)
-  o.version = bumpVersion(seed.version)
+  // 后端为整表替换；先读详情再合并
+  const detail = await apiGet<BackendConnectionDetail>(
+    `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}`
+  )
   const changeMap = new Map(input.changes.map((c) => [c.code, c.enabled]))
-  o.capabilities = seed.capabilities.map((c) => {
-    if (!changeMap.has(c.capabilityCode)) return c
-    const expected = input.expectedCapabilityVersions[c.capabilityCode]
-    if (expected && expected !== c.version) {
-      return c
+  const existing = (detail.capabilities ?? []).map((c) => {
+    const code = mapCapabilityCode(c.capability_code)
+    if (!changeMap.has(code)) {
+      return {
+        capability_code: c.capability_code,
+        status: c.status,
+        constraint_snapshot: null as string | null,
+      }
     }
-    const enabled = changeMap.get(c.capabilityCode)!
+    const enabled = changeMap.get(code)!
     return {
-      ...c,
-      status: enabled ? ("ENABLED" as const) : ("DISABLED" as const),
-      statusLabel: enabled ? "启用" : "停用",
-      verification: "UNVERIFIED" as const,
-      verificationLabel: "未验证",
-      version: bumpVersion(c.version),
+      capability_code: toBackendCapabilityCode(code),
+      status: enabled ? "active" : "disabled",
+      constraint_snapshot: null as string | null,
     }
   })
-  const now = new Date().toISOString()
-  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
-  o.auditEvents = [
-    {
-      eventId: `ae_cap_${Date.now()}`,
-      at: now,
-      actor: "系统管理员",
-      action: "UPDATE_CAPABILITIES",
-      summary: `能力配置变更 ${input.changes.length} 项 · 需重新验证`,
-      auditNo,
-    },
-    ...(seed.auditEvents ?? []),
-  ]
-  o.nextStep = "能力已变更 · 标记为未验证 · 请执行健康检查"
+  // 新增能力
+  for (const ch of input.changes) {
+    if (!existing.some((e) => mapCapabilityCode(e.capability_code) === ch.code)) {
+      existing.push({
+        capability_code: toBackendCapabilityCode(ch.code),
+        status: ch.enabled ? "active" : "disabled",
+        constraint_snapshot: null,
+      })
+    }
+  }
 
-  const result: FormalOutcome = {
+  await apiPut(
+    `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}/capabilities`,
+    {
+      expected_connection_version:
+        Number(input.expectedConnectionVersion) || detail.version,
+      capabilities: existing,
+    }
+  )
+
+  return {
     status: "succeeded",
     title: "能力配置已更新",
-    message: "能力版本已更新并标记为未验证。不直接修改商品/订单/发布数据。",
-    reference: auditNo,
-    connectionVersion: o.version,
+    message: "能力版本已更新。不直接修改商品/订单/发布数据。",
+    reference: input.operationId,
+    connectionVersion: String(
+      (Number(input.expectedConnectionVersion) || detail.version) + 1
+    ),
     facts: input.changes.map((c) => ({
       label: CAPABILITY_LABEL[c.code],
       value: c.enabled ? "启用" : "停用",
     })),
   }
-  return result
 }
 
 export async function runHealthCheck(input: {
@@ -1007,7 +852,6 @@ export async function runHealthCheck(input: {
   idempotencyKey: string
   forceUnknown?: boolean
 }): Promise<FormalOutcome> {
-  await mockDelay(150)
   if (input.role !== "ops" && input.role !== "admin") {
     return {
       status: "blocked",
@@ -1016,144 +860,38 @@ export async function runHealthCheck(input: {
       message: "健康检查由研发运维执行",
     }
   }
-  const seed = findSeed(input.connectionId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "连接不存在",
-      message: "未找到连接",
-    }
-  }
-  if (
-    seed.endpoint.state === "MISSING" ||
-    seed.credential.state === "MISSING"
-  ) {
-    return {
-      status: "blocked",
-      code: "REFS_NOT_READY",
-      title: "引用未就绪",
-      message: "请先绑定地址与密钥引用",
-    }
-  }
-  if (seed.lastHealth?.result === "UNKNOWN" && !input.forceUnknown) {
-    return {
-      status: "blocked",
-      code: "PRIOR_UNKNOWN",
-      title: "存在未知结果",
-      message: "请先按任务号查询上一笔健康检查，勿盲目重复发起",
-    }
-  }
-
-  const jobId = `job_h_${Date.now()}`
-  const jobNo = `HLTH-${seed.connectionCode.replace("CONN-", "")}-${Date.now()
-    .toString()
-    .slice(-4)}`
-  const now = new Date().toISOString()
-
   if (input.forceUnknown) {
-    const o = ensureOverlay(input.connectionId, seed)
-    o.lastHealth = {
-      at: now,
-      result: "UNKNOWN",
-      resultLabel: HEALTH_LABEL.UNKNOWN,
-      errorClass: "RESULT_UNKNOWN",
-      errorSummary: "结果未知 · 按任务号查询",
-    }
     return {
       status: "unknown",
       title: "健康检查结果未知",
-      message: `任务 ${jobNo} 结果不确定。不得按成功/失败处理；用原任务号查询。`,
-      operationId: jobId,
+      message: "结果不确定。不得按成功/失败处理；用原任务号查询。",
+      operationId: `op_health_${input.idempotencyKey}`,
       idempotencyKey: input.idempotencyKey,
     }
   }
 
-  // simulate success unless auth-failed credential rotation due on sf
-  const authRisk =
-    seed.credential.state === "ROTATION_DUE" &&
-    seed.lastHealth?.result === "AUTH_FAILED"
-  const resultHealth: HealthResult = authRisk ? "AUTH_FAILED" : "SUCCESS"
+  const result = await apiPost<BackendHealthCheck>(
+    `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}/health-check`,
+    { idempotency_key: input.idempotencyKey }
+  )
 
-  activeJobs.set(jobId, {
-    jobId,
-    jobNo,
-    kind: "HEALTH",
-    connectionId: input.connectionId,
-    status: resultHealth === "SUCCESS" ? "succeeded" : "failed",
-    total: seed.capabilities.filter((c) => c.status === "ENABLED").length || 1,
-    completed:
-      seed.capabilities.filter((c) => c.status === "ENABLED").length || 1,
-    succeeded: resultHealth === "SUCCESS" ? 1 : 0,
-    failed: resultHealth === "SUCCESS" ? 0 : 1,
-    createdAt: now,
-  })
-
-  const o = ensureOverlay(input.connectionId, seed)
-  o.lastHealth = {
-    at: now,
-    result: resultHealth,
-    resultLabel: HEALTH_LABEL[resultHealth],
-    latencyMs: 160,
-    traceId: `tr_${jobId}`,
-    autoRetryStopped: resultHealth === "AUTH_FAILED",
-    errorClass:
-      resultHealth === "AUTH_FAILED" ? "AUTH_SIGNATURE_FAILURE" : undefined,
-    errorSummary:
-      resultHealth === "AUTH_FAILED"
-        ? "鉴权/签名失败。自动重试已停止。"
-        : undefined,
-  }
-  o.healthRecords = [
-    {
-      recordId: `hr_${jobId}`,
-      at: now,
-      checkType:
-        seed.environment === "PRODUCTION"
-          ? "生产全能力检查（不创建业务订单）"
-          : "全能力健康检查",
-      result: resultHealth,
-      resultLabel: HEALTH_LABEL[resultHealth],
-      resultTone: HEALTH_TONE[resultHealth],
-      latencyMs: 160,
-      autoRetryStopped: resultHealth === "AUTH_FAILED",
-      errorClass: o.lastHealth.errorClass,
-      errorSummary: o.lastHealth.errorSummary,
-      traceId: `tr_${jobId}`,
-      jobId,
-      jobNo,
-    },
-    ...(seed.healthRecords ?? []),
-  ]
-  if (resultHealth === "AUTH_FAILED") {
-    o.status = "FAULTED"
-    o.alerts = [
-      {
-        id: `al_auth_${jobId}`,
-        severity: "destructive",
-        title: "鉴权/签名失败 · 自动重试已停止",
-        description:
-          "高风险故障。请运维轮换密钥引用并复查适配器；本页不展示密钥正文。",
-      },
-    ]
-    o.nextStep = "轮换密钥引用并重新健康检查"
-  } else {
-    o.nextStep = "健康检查通过"
-    if (seed.status === "FAULTED") {
-      // keep faulted until admin enables — don't auto-enable
-    }
-  }
-
+  const health = mapHealth(result.result)
   return {
-    status: "processing",
-    title: "健康检查任务已创建",
-    message: `已创建后台任务 ${jobNo}。请求返回不等于检查完成；请查看任务进度与固定结果。${
-      seed.environment === "PRODUCTION"
-        ? " 生产检查不会创建业务订单。"
-        : ""
-    }`,
-    jobId,
-    jobNo,
+    status: "succeeded",
+    title: "健康检查已完成",
+    message:
+      health === "SUCCESS"
+        ? "健康检查通过。"
+        : "健康检查失败；请查看错误任务与密钥引用。",
+    reference: result.inbox_message_id,
+    connectionVersion: String(result.version),
+    facts: [
+      { label: "结果", value: HEALTH_LABEL[health] },
+      { label: "消息信封", value: result.inbox_message_id },
+      ...(result.error_task_id
+        ? [{ label: "错误任务", value: result.error_task_id }]
+        : []),
+    ],
   }
 }
 
@@ -1162,7 +900,6 @@ export async function startCatalogSync(input: {
   role: DemoRole
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  await mockDelay(140)
   if (input.role === "procurement") {
     return {
       status: "blocked",
@@ -1171,76 +908,14 @@ export async function startCatalogSync(input: {
       message: "目录同步由运维或管理员在能力启用且健康时触发",
     }
   }
-  const seed = findSeed(input.connectionId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "连接不存在",
-      message: "未找到连接",
-    }
-  }
-  const catalogCap = seed.capabilities.find(
-    (c) => c.capabilityCode === "CATALOG" && c.status === "ENABLED"
-  )
-  if (!catalogCap) {
-    return {
-      status: "blocked",
-      code: "CAPABILITY",
-      title: "目录能力未启用",
-      message: "CATALOG 能力未启用，无法触发同步",
-    }
-  }
-  if (seed.lastHealth?.result === "AUTH_FAILED") {
-    return {
-      status: "blocked",
-      code: "AUTH_FAILED",
-      title: "鉴权失败",
-      message: "鉴权失败期间禁止目录同步",
-    }
-  }
-
-  const jobId = `job_cat_${Date.now()}`
-  const jobNo = `CAT-${seed.connectionCode.replace("CONN-", "")}-${Date.now()
-    .toString()
-    .slice(-4)}`
-  const now = new Date().toISOString()
-  activeJobs.set(jobId, {
-    jobId,
-    jobNo,
-    kind: "CATALOG",
-    connectionId: input.connectionId,
-    status: "running",
-    total: 1000,
-    completed: 120,
-    succeeded: 118,
-    failed: 2,
-    createdAt: now,
-  })
-
-  const o = ensureOverlay(input.connectionId, seed)
-  o.catalog = {
-    state: "RUNNING",
-    stateLabel: CATALOG_LABEL.RUNNING,
-    lastSuccessfulAt: seed.catalog.lastSuccessfulAt,
-    activeJobId: jobId,
-    activeJobNo: jobNo,
-    progress: {
-      status: "running",
-      total: 1000,
-      completed: 120,
-      succeeded: 118,
-      failed: 2,
-    },
-  }
-  o.nextStep = `目录同步进行中 · ${jobNo}`
-
+  // 后端本域无目录同步触发端点（同步由 supplier_catalog intake 承接）
   return {
-    status: "processing",
-    title: "目录同步任务已创建",
-    message: `已创建目录同步任务 ${jobNo}。可在本页查看进度或进入供应商商品库。`,
-    jobId,
-    jobNo,
+    status: "blocked",
+    code: "BACKEND_GAP",
+    title: "目录同步尚未接入本页",
+    message:
+      "供应商目录同步不在 supplier-api-connections 域；请到供应商商品库或集成任务中处理。",
+    reference: input.connectionId,
   }
 }
 
@@ -1251,7 +926,6 @@ export async function disableConnection(input: {
   reasonCode: string
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  await mockDelay(130)
   if (input.role !== "admin") {
     return {
       status: "blocked",
@@ -1260,66 +934,23 @@ export async function disableConnection(input: {
       message: "停用连接仅系统管理员可执行",
     }
   }
-  const seed = findSeed(input.connectionId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "连接不存在",
-      message: "未找到连接",
-    }
-  }
-  if (seed.version !== input.expectedVersion) {
-    return {
-      status: "failed",
-      code: "VERSION_CONFLICT",
-      title: "数据已更新",
-      message: "请重新加载后提交",
-    }
-  }
 
-  const o = ensureOverlay(input.connectionId, seed)
-  o.status = "DISABLED"
-  o.version = bumpVersion(seed.version)
-  const now = new Date().toISOString()
-  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
-  o.auditEvents = [
+  const updated = await apiPut<BackendConnection>(
+    `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}`,
     {
-      eventId: `ae_dis_${Date.now()}`,
-      at: now,
-      actor: "系统管理员",
-      action: "DISABLE",
-      summary: "连接已停用；不删除历史版本与业务记录",
-      auditNo,
-    },
-    ...(seed.auditEvents ?? []),
-  ]
-  o.nextStep = "已停用 · 历史保留 · 不删除版本与业务记录"
+      version: Number(input.expectedVersion) || 1,
+      status: "disabled",
+    }
+  )
 
-  const result: FormalOutcome = {
+  return {
     status: "succeeded",
     title: "连接已停用",
     message:
       "连接状态变为停用。不删除连接、版本和历史业务；发布/订单/同步数据保留。",
-    reference: seed.connectionCode,
-    connectionVersion: o.version,
-    facts: [
-      {
-        label: "受影响发布",
-        value: String(seed.relatedImpact.activePublications),
-      },
-      {
-        label: "待处理供应商订单",
-        value: String(seed.relatedImpact.openSupplierOrders),
-      },
-      {
-        label: "进行中同步",
-        value: String(seed.relatedImpact.activeSyncJobs),
-      },
-      { label: "历史", value: "保留" },
-    ],
+    reference: updated.connection_code,
+    connectionVersion: String(updated.version),
   }
-  return result
 }
 
 export async function enableConnection(input: {
@@ -1328,7 +959,6 @@ export async function enableConnection(input: {
   role: DemoRole
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  await mockDelay(130)
   if (input.role !== "admin") {
     return {
       status: "blocked",
@@ -1337,49 +967,29 @@ export async function enableConnection(input: {
       message: "启用由系统管理员执行",
     }
   }
-  const seed = findSeed(input.connectionId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "连接不存在",
-      message: "未找到连接",
-    }
-  }
-  if (
-    seed.endpoint.state === "MISSING" ||
-    seed.credential.state === "MISSING"
-  ) {
-    return {
-      status: "blocked",
-      code: "PRECONDITIONS",
-      title: "前置未满足",
-      message: "地址与密钥引用需就绪",
-    }
-  }
 
-  const o = ensureOverlay(input.connectionId, seed)
-  o.status = "ENABLED"
-  o.version = bumpVersion(seed.version)
-  o.nextStep = "已启用"
-  o.alerts = []
+  const updated = await apiPut<BackendConnection>(
+    `/admin/supplier-api-connections/${encodeURIComponent(input.connectionId)}`,
+    {
+      version: Number(input.expectedVersion) || 1,
+      status: toBackendStatus("ENABLED"),
+    }
+  )
 
   return {
     status: "succeeded",
     title: "连接已启用",
     message: "状态变为启用。不直接修改供应商商品、供给或历史订单。",
-    reference: seed.connectionCode,
-    connectionVersion: o.version,
+    reference: updated.connection_code,
+    connectionVersion: String(updated.version),
   }
 }
 
 export function getActiveJob(jobId: string) {
-  return activeJobs.get(jobId) ?? null
+  void jobId
+  return null
 }
 
 export function referenceStateLabel(state: ReferenceState): string {
   return REFERENCE_STATE_LABEL[state]
 }
-
-// silence unused workspace marker for future session scoping
-void WORKSPACE
