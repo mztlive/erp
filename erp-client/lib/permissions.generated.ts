@@ -201,4 +201,422 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "业务伙伴-主体",
+        description: "企业主体稳定身份与历史名称资料管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties",
+                description: "查询主体列表",
+                permission: {
+                    resource: "party",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/parties",
+                description: "创建主体",
+                permission: {
+                    resource: "party",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}",
+                description: "查询主体详情",
+                permission: {
+                    resource: "party",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/parties/{id}",
+                description: "更新主体并形成新修订",
+                permission: {
+                    resource: "party",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/parties/{id}",
+                description: "删除主体",
+                permission: {
+                    resource: "party",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}/revisions",
+                description: "查询主体修订列表",
+                permission: {
+                    resource: "party_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}/contacts",
+                description: "查询联系人列表",
+                permission: {
+                    resource: "party_contact",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/parties/{id}/contacts",
+                description: "创建联系人",
+                permission: {
+                    resource: "party_contact",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/party-contacts/{id}",
+                description: "更新联系人",
+                permission: {
+                    resource: "party_contact",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}/addresses",
+                description: "查询地址列表",
+                permission: {
+                    resource: "party_address",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/parties/{id}/addresses",
+                description: "创建地址",
+                permission: {
+                    resource: "party_address",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/party-addresses/{id}",
+                description: "更新地址",
+                permission: {
+                    resource: "party_address",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}/tax-profiles",
+                description: "查询税务资料列表",
+                permission: {
+                    resource: "party_tax_profile",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/parties/{id}/tax-profiles",
+                description: "创建税务资料",
+                permission: {
+                    resource: "party_tax_profile",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/party-tax-profiles/{id}",
+                description: "更新税务资料",
+                permission: {
+                    resource: "party_tax_profile",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/parties/{id}/bank-accounts",
+                description: "查询银行账户列表",
+                permission: {
+                    resource: "party_bank_account",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/parties/{id}/bank-accounts",
+                description: "创建银行账户",
+                permission: {
+                    resource: "party_bank_account",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/party-bank-accounts/{id}",
+                description: "更新银行账户",
+                permission: {
+                    resource: "party_bank_account",
+                    action: "update",
+                },
+            },
+        ],
+    },
+    {
+        name: "业务伙伴-客户",
+        description: "客户角色与归属管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customers",
+                description: "查询客户列表",
+                permission: {
+                    resource: "customer",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customers",
+                description: "创建客户",
+                permission: {
+                    resource: "customer",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customers/{id}",
+                description: "查询客户详情",
+                permission: {
+                    resource: "customer",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/customers/{id}",
+                description: "更新客户",
+                permission: {
+                    resource: "customer",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/customers/{id}",
+                description: "删除客户",
+                permission: {
+                    resource: "customer",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customers/{id}/assignments",
+                description: "查询客户归属列表",
+                permission: {
+                    resource: "customer_assignment",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customers/{id}/assignments",
+                description: "调整客户归属",
+                permission: {
+                    resource: "customer_assignment",
+                    action: "create",
+                },
+            },
+        ],
+    },
+    {
+        name: "业务伙伴-供应商",
+        description: "供应商角色、商务结算版本、能力与资质管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers",
+                description: "查询供应商列表",
+                permission: {
+                    resource: "supplier",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers",
+                description: "创建供应商",
+                permission: {
+                    resource: "supplier",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{id}",
+                description: "查询供应商详情",
+                permission: {
+                    resource: "supplier",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/suppliers/{id}",
+                description: "更新供应商",
+                permission: {
+                    resource: "supplier",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "DELETE",
+                path: "/admin/suppliers/{id}",
+                description: "删除供应商",
+                permission: {
+                    resource: "supplier",
+                    action: "delete",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{id}/commercial-profiles",
+                description: "查询商务结算版本列表",
+                permission: {
+                    resource: "supplier_commercial_profile",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers/{id}/commercial-profiles",
+                description: "追加商务结算版本",
+                permission: {
+                    resource: "supplier_commercial_profile",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{id}/capabilities",
+                description: "查询供应商能力列表",
+                permission: {
+                    resource: "supplier_capability",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers/{id}/capabilities",
+                description: "创建供应商能力",
+                permission: {
+                    resource: "supplier_capability",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-capabilities/{id}",
+                description: "更新供应商能力",
+                permission: {
+                    resource: "supplier_capability",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{id}/qualifications",
+                description: "查询供应商资质列表",
+                permission: {
+                    resource: "supplier_qualification",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers/{id}/qualifications",
+                description: "创建供应商资质",
+                permission: {
+                    resource: "supplier_qualification",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-qualifications/{id}",
+                description: "更新供应商资质",
+                permission: {
+                    resource: "supplier_qualification",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/suppliers/{id}/ratings",
+                description: "查询供应商评估版本列表",
+                permission: {
+                    resource: "supplier_rating",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/suppliers/{id}/ratings",
+                description: "创建供应商评估版本",
+                permission: {
+                    resource: "supplier_rating",
+                    action: "create",
+                },
+            },
+        ],
+    },
 ];
