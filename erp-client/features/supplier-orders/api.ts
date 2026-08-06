@@ -1,25 +1,20 @@
 /**
- * W26 session-mock API：queryFn / mutationFn 纯函数。
- * - RESULT_UNKNOWN 主路径仅 QUERY_RESULT；REPLAY 仅在明确无结果 + canSafeRetry
- * - 取消/退款必须引用既有商城售后请求
- * - 查询/重放/暂挂保持任务非终结
- * - 快照字段不可变；敏感地址短时揭示；成本按字段权限掩码
+ * W26 供应商订单 · 真实 HTTP API
+ * 路径：/admin/supplier-fulfillment-orders、/admin/work-items、/admin/background-jobs
+ * 后端视图较前端 mock 精简：缺失字段以安全默认值适配并登记 backend_gap。
  */
 
-import { mockDelay } from "@/lib/mock-delay"
+import { apiGet, apiPost, type Page } from "@/lib/api"
 import type {
-  ActionBlocker,
   AfterSalesActionInput,
   AfterSalesActionResult,
   CancelStatus,
-  CostView,
   DeferTaskInput,
   DeferTaskResult,
   DemoRole,
   ExportCommand,
   ExportJobResult,
   FormalActionResponse,
-  InvestigationEvidenceView,
   NoteInput,
   QueryResultData,
   QueryResultInput,
@@ -34,10 +29,8 @@ import type {
   SupplierOrderListResult,
   SupplierOrderListRow,
   SupplierOrderMetric,
-  WorkItemView,
 } from "@/features/supplier-orders/types"
 import {
-  ACTIONABLE_FULFILLMENT,
   CANCEL_STATUS_LABEL,
   CANCEL_STATUS_TONE,
   COST_MASK,
@@ -46,372 +39,238 @@ import {
   REFUND_STATUS_LABEL,
   REFUND_STATUS_TONE,
 } from "@/features/supplier-orders/types"
-import {
-  PAYMENT_OCCURRED_NOTICE,
-  SUPPLIER_ORDER_SEEDS,
-  toListRow,
-  type SeedOrder,
-} from "@/mock/supplier-orders"
 
-type SessionPatch = {
-  fulfillmentStatus?: SupplierFulfillmentStatus
-  cancelStatus?: CancelStatus
-  refundStatus?: RefundStatus
-  externalOrderNo?: string
-  lockVersion: number
-  lastInvestigation?: InvestigationEvidenceView
-  actionsExtra: SupplierOrderDetailView["actions"]
-  notes: string[]
-  workItemStatus?: WorkItemView["workItemStatus"]
-  workItemHeld?: boolean
-  subjectHash?: string
-  subjectVersion?: string
-  afterSalesPatches?: Record<
-    string,
-    {
-      cancelStatus?: CancelStatus
-      refundStatus?: RefundStatus
-      supplierRefundStatus?: RefundStatus
-    }
-  >
-  /** 已提交售后动作的幂等记录 */
-  aftersaleIdempotency: Map<string, AfterSalesActionResult>
-  placeAttemptCount?: number
+const PAYMENT_OCCURRED_NOTICE =
+  "商城支付已发生。供应商履约结果独立记录，不得用取消/退款折入履约主状态。"
+const PERMISSION_VERSION = "server"
+
+// ---------------------------------------------------------------------------
+// Backend wire types
+// ---------------------------------------------------------------------------
+
+type BackendOrder = {
+  id: string
+  fulfillment_order_no: string
+  mall_order_id: string
+  supplier_id: string
+  connection_id: string
+  split_no: number
+  fulfillment_status: string
+  cancel_status: string
+  refund_status: string
+  external_order_no?: string | null
+  submitted_at?: number | null
+  accepted_at?: number | null
+  completed_at?: number | null
+  version: number
+  created_at: number
 }
 
-const sessions = new Map<string, SessionPatch>()
-const revealSessions = new Map<
-  string,
-  { expiresAt: number; reason: string; auditEventId: string }
->()
-const investigationIdem = new Map<string, FormalActionResponse<QueryResultData | ReplayResultData>>()
-
-function getSession(orderId: string): SessionPatch {
-  let s = sessions.get(orderId)
-  if (!s) {
-    const seed = SUPPLIER_ORDER_SEEDS.find((x) => x.orderId === orderId)
-    s = {
-      lockVersion: seed?.lockVersion ?? 1,
-      actionsExtra: [],
-      notes: [],
-      aftersaleIdempotency: new Map(),
-      placeAttemptCount: 1,
-    }
-    sessions.set(orderId, s)
-  }
-  return s
+type BackendItem = {
+  id: string
+  supplier_fulfillment_order_id: string
+  mall_order_item_id: string
+  supplier_offering_revision_id: string
+  supplier_catalog_sku_id: string
+  quantity: string
+  unit_cost_snapshot_gross: string
+  cost_snapshot_total_gross: string
+  input_tax_rate: string
 }
 
-function findSeed(orderId: string): SeedOrder | undefined {
-  return SUPPLIER_ORDER_SEEDS.find((x) => x.orderId === orderId)
+type BackendStatusHistory = {
+  id: string
+  previous_status: string
+  new_status: string
+  supplier_status_version: string
+  occurred_at: number
+  received_at: number
+  external_event_id: string
+  source_type: string
+  created_at: number
 }
 
-function costVisible(role: DemoRole): boolean {
-  return role === "procurement" || role === "finance" || role === "admin"
+type BackendAction = {
+  id: string
+  supplier_fulfillment_order_id: string
+  action_type: string
+  after_sales_request_id?: string | null
+  status: string
+  external_request_id?: string | null
+  request_summary?: string | null
+  response_summary?: string | null
+  attempt_count: number
+  created_at: number
 }
 
-function sensitiveAllowed(role: DemoRole): boolean {
-  return role === "procurement" || role === "cs" || role === "admin"
+type BackendDetail = {
+  order: BackendOrder
+  items: BackendItem[]
+  status_history: BackendStatusHistory[]
+  actions: BackendAction[]
+  refund_facts: Array<{
+    id: string
+    supplier_fulfillment_order_id: string
+    external_refund_no: string
+    refund_amount: string
+    refunded_at: number
+  }>
 }
 
-function techVisible(role: DemoRole): boolean {
-  return role === "admin"
+type BackendSubmitResult = {
+  action: BackendAction
+  lines: unknown[]
+  order: BackendOrder
 }
 
-function computeAllowedActions(
-  seed: SeedOrder,
-  session: SessionPatch,
-  role: DemoRole
-): { allowed: string[]; blockers: ActionBlocker[] } {
-  const fulfillment =
-    session.fulfillmentStatus ?? seed.fulfillmentStatus
-  const allowed: string[] = ["OPEN_CENTER", "NOTE"]
-  const blockers: ActionBlocker[] = []
-
-  const hasQuery = seed.hasQueryCapability !== false
-  const lastInv = session.lastInvestigation
-
-  if (fulfillment === "RESULT_UNKNOWN") {
-    if (hasQuery) {
-      allowed.push("QUERY_RESULT")
-    } else {
-      blockers.push({
-        action: "QUERY_RESULT",
-        code: "NO_QUERY_CAPABILITY",
-        message: "供应商无查询能力，请进入接口错误与对账处理",
-        destinationWorkspaceId: "W29",
-      })
-      allowed.push("ESCALATE_W29")
-    }
-
-    // REPLAY only after VERIFIED_NO_RESULT + canSafeRetry
-    if (
-      lastInv?.outcome === "VERIFIED_NO_RESULT" &&
-      lastInv.canSafeRetry
-    ) {
-      allowed.push("REPLAY")
-    } else {
-      blockers.push({
-        action: "REPLAY",
-        code: "REPLAY_NOT_SAFE",
-        message:
-          lastInv?.outcome === "VERIFIED_NO_RESULT"
-            ? "已确认无结果，但系统尚未判定可安全重试"
-            : "结果未知时不可直接重发，请先查询原结果",
-      })
-    }
-  }
-
-  // Aftersale actions only with mall request
-  for (const as of seed.afterSales) {
-    const patch = session.afterSalesPatches?.[as.requestId]
-    const cancel = patch?.cancelStatus ?? as.cancelStatus
-    const refund =
-      patch?.supplierRefundStatus ?? as.supplierRefund.status
-    if (
-      as.allowedActions.includes("CANCEL") &&
-      cancel !== "CANCELED" &&
-      cancel !== "CANCEL_PENDING"
-    ) {
-      if (role === "cs" || role === "procurement" || role === "admin") {
-        allowed.push("CANCEL")
-      }
-    }
-    if (
-      as.allowedActions.includes("REFUND") &&
-      refund !== "REFUNDED" &&
-      refund !== "REFUND_PENDING"
-    ) {
-      if (role === "cs" || role === "procurement" || role === "admin") {
-        allowed.push("REFUND")
-      }
-    }
-  }
-
-  if (!asHasMallRequest(seed) && (allowed.includes("CANCEL") || allowed.includes("REFUND"))) {
-    // still require request at submit time
-  }
-
-  if (!asHasMallRequest(seed)) {
-    if (!seed.afterSales.length) {
-      blockers.push({
-        action: "CANCEL",
-        code: "NO_MALL_AFTERSALE",
-        message: "取消必须引用既有商城售后请求，禁止脱离请求任意取消",
-      })
-      blockers.push({
-        action: "REFUND",
-        code: "NO_MALL_AFTERSALE",
-        message: "退款必须引用既有商城售后请求，禁止脱离请求任意退款",
-      })
-    }
-  }
-
-  if (seed.workItem && session.workItemStatus !== "COMPLETED") {
-    for (const a of seed.workItem.allowedTaskActions) {
-      if (!allowed.includes(a)) allowed.push(a)
-    }
-  }
-
-  if (sensitiveAllowed(role)) {
-    allowed.push("REVEAL_ADDRESS")
-  } else {
-    blockers.push({
-      action: "REVEAL_ADDRESS",
-      code: "FIELD_PERMISSION",
-      message: "当前角色无权揭示收货地址",
-    })
-  }
-
-  // Never allow direct re-place as primary for RESULT_UNKNOWN
-  if (fulfillment === "RESULT_UNKNOWN") {
-    const idx = allowed.indexOf("PLACE")
-    if (idx >= 0) allowed.splice(idx, 1)
-  }
-
-  return { allowed: [...new Set(allowed)], blockers }
+type BackendBackgroundJob = {
+  id: string
+  job_no: string
+  status: string
+  result_expires_at?: number | null
 }
 
-function asHasMallRequest(seed: SeedOrder): boolean {
-  return seed.afterSales.some((a) => Boolean(a.mallRequestRef))
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function tsToIso(secs: number | null | undefined): string {
+  if (secs == null || !Number.isFinite(Number(secs)) || Number(secs) <= 0)
+    return ""
+  return new Date(Number(secs) * 1000).toISOString()
 }
 
-function projectListRow(
-  seed: SeedOrder,
-  session: SessionPatch,
-  role: DemoRole
-): SupplierOrderListRow {
-  const fulfillment = session.fulfillmentStatus ?? seed.fulfillmentStatus
-  const cancel = session.cancelStatus ?? seed.cancelStatus
-  const refund = session.refundStatus ?? seed.refundStatus
-  const { allowed, blockers } = computeAllowedActions(seed, session, role)
-  const base = toListRow({
-    ...seed,
-    fulfillmentStatus: fulfillment,
-    cancelStatus: cancel,
-    refundStatus: refund,
-    externalOrderNo: session.externalOrderNo ?? seed.externalOrderNo,
-  })
+function asFulfillment(raw: string): SupplierFulfillmentStatus {
+  const u = raw.toUpperCase() as SupplierFulfillmentStatus
+  const allowed: SupplierFulfillmentStatus[] = [
+    "RECEIVED",
+    "SUBMITTING",
+    "ACCEPTED",
+    "REJECTED",
+    "RESULT_UNKNOWN",
+    "FULFILLING",
+    "SHIPPED",
+    "COMPLETED",
+    "EXCEPTION",
+  ]
+  return allowed.includes(u) ? u : "RECEIVED"
+}
+
+function asCancel(raw: string): CancelStatus {
+  const u = raw.toUpperCase() as CancelStatus
+  const allowed: CancelStatus[] = [
+    "NONE",
+    "CANCEL_PENDING",
+    "CANCELED",
+    "FAILED",
+    "MANUAL",
+  ]
+  return allowed.includes(u) ? u : "NONE"
+}
+
+function asRefund(raw: string): RefundStatus {
+  const u = raw.toUpperCase() as RefundStatus
+  const allowed: RefundStatus[] = [
+    "NONE",
+    "REFUND_PENDING",
+    "PARTIAL",
+    "REFUNDED",
+    "REFUND_FAILED",
+    "MANUAL",
+  ]
+  return allowed.includes(u) ? u : "NONE"
+}
+
+function priorityOf(status: SupplierFulfillmentStatus): number {
+  switch (status) {
+    case "RESULT_UNKNOWN":
+      return 100
+    case "EXCEPTION":
+    case "REJECTED":
+      return 90
+    case "SUBMITTING":
+    case "RECEIVED":
+      return 70
+    default:
+      return 10
+  }
+}
+
+function mapListRow(o: BackendOrder, role: DemoRole): SupplierOrderListRow {
+  const fulfillment = asFulfillment(o.fulfillment_status)
+  const cancel = asCancel(o.cancel_status)
+  const refund = asRefund(o.refund_status)
+  const lastBusinessAt =
+    tsToIso(o.completed_at) ||
+    tsToIso(o.accepted_at) ||
+    tsToIso(o.submitted_at) ||
+    tsToIso(o.created_at)
+
   return {
-    ...base,
-    costGross: costVisible(role) ? seed.costs.cumulativeCostGross : null,
-    itemCount: seed.items.length,
-    allowedActions: allowed,
-    actionBlockers: blockers,
+    orderId: o.id,
+    orderNo: o.fulfillment_order_no,
+    mallOrderId: o.mall_order_id,
+    mallOrderNo: o.mall_order_id,
+    supplierId: o.supplier_id,
+    supplierName: o.supplier_id,
+    externalOrderNo: o.external_order_no ?? undefined,
+    fulfillmentStatus: fulfillment,
+    fulfillmentLabel: FULFILLMENT_STATUS_LABEL[fulfillment],
+    fulfillmentTone: FULFILLMENT_STATUS_TONE[fulfillment],
+    cancelStatus: cancel,
+    cancelLabel: CANCEL_STATUS_LABEL[cancel],
+    cancelTone: CANCEL_STATUS_TONE[cancel],
+    refundStatus: refund,
+    refundLabel: REFUND_STATUS_LABEL[refund],
+    refundTone: REFUND_STATUS_TONE[refund],
+    paidAt: tsToIso(o.created_at),
+    updatedAt: lastBusinessAt,
+    lastBusinessAt,
+    costGross: role === "cs" || role === "ops" ? null : undefined,
+    itemCount: 0,
+    allowedActions: ["OPEN_CENTER", "NOTE"],
+    actionBlockers: [],
+    priority: priorityOf(fulfillment),
   }
 }
 
-function matchesQuery(
-  row: SupplierOrderListRow,
-  seed: SeedOrder,
-  q: SupplierOrderListQuery
-): boolean {
-  if (q.view === "actionable") {
-    const actionableFulfillment = ACTIONABLE_FULFILLMENT.includes(
-      row.fulfillmentStatus
-    )
-    const aftersalePending =
-      row.cancelStatus === "FAILED" ||
-      row.cancelStatus === "MANUAL" ||
-      row.cancelStatus === "CANCEL_PENDING" ||
-      row.refundStatus === "REFUND_FAILED" ||
-      row.refundStatus === "MANUAL" ||
-      row.refundStatus === "REFUND_PENDING" ||
-      seed.afterSales.some(
-        (a) =>
-          a.mallRefund.status === "PENDING" ||
-          a.supplierRefund.status === "REFUND_FAILED" ||
-          a.supplierRefund.status === "NONE" &&
-            a.allowedActions.length > 0
-      )
-    if (!actionableFulfillment && !aftersalePending) return false
-  }
-  if (q.view === "recent_completed") {
-    if (row.fulfillmentStatus !== "COMPLETED") return false
-  }
-
-  if (q.supplierId && row.supplierId !== q.supplierId) return false
-
-  if (q.fulfillmentStatuses?.length) {
-    if (!q.fulfillmentStatuses.includes(row.fulfillmentStatus)) return false
-  }
-  if (q.cancelStatuses?.length) {
-    if (!q.cancelStatuses.includes(row.cancelStatus)) return false
-  }
-  if (q.refundStatuses?.length) {
-    if (!q.refundStatuses.includes(row.refundStatus)) return false
-  }
-
-  if (q.aftersalePending) {
-    const pending =
-      row.cancelStatus === "CANCEL_PENDING" ||
-      row.cancelStatus === "FAILED" ||
-      row.cancelStatus === "MANUAL" ||
-      row.refundStatus === "REFUND_PENDING" ||
-      row.refundStatus === "REFUND_FAILED" ||
-      row.refundStatus === "MANUAL" ||
-      row.refundStatus === "PARTIAL" ||
-      seed.afterSales.some(
-        (a) =>
-          a.mallRefund.status === "PENDING" ||
-          a.supplierRefund.status === "REFUND_FAILED" ||
-          a.supplierRefund.status === "NONE" &&
-            a.allowedActions.length > 0
-      )
-    if (!pending) return false
-  }
-
-  if (q.paidFrom && row.paidAt.slice(0, 10) < q.paidFrom) return false
-  if (q.paidTo && row.paidAt.slice(0, 10) > q.paidTo) return false
-
-  if (q.q?.trim()) {
-    const needle = q.q.trim().toLowerCase()
-    const hay = [
-      row.orderNo,
-      row.mallOrderNo,
-      row.externalOrderNo,
-      row.supplierName,
-    ]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase()
-    if (!hay.includes(needle)) return false
-  }
-
-  return true
-}
-
-function buildMetrics(rows: SupplierOrderListRow[]): SupplierOrderMetric[] {
-  const all = SUPPLIER_ORDER_SEEDS.length
+function emptyMetrics(): SupplierOrderMetric[] {
   return [
     {
       key: "pending_submit",
       label: "待提交",
-      value: rows.filter(
-        (r) =>
-          r.fulfillmentStatus === "RECEIVED" ||
-          r.fulfillmentStatus === "SUBMITTING"
-      ).length,
+      value: 0,
       fulfillmentStatuses: ["RECEIVED", "SUBMITTING"],
     },
     {
       key: "result_unknown",
       label: "结果未知",
-      value: rows.filter((r) => r.fulfillmentStatus === "RESULT_UNKNOWN")
-        .length,
+      value: 0,
       fulfillmentStatus: "RESULT_UNKNOWN",
     },
     {
       key: "exception",
       label: "履约异常",
-      value: rows.filter(
-        (r) =>
-          r.fulfillmentStatus === "EXCEPTION" ||
-          r.fulfillmentStatus === "REJECTED"
-      ).length,
+      value: 0,
       fulfillmentStatuses: ["EXCEPTION", "REJECTED"],
     },
     {
       key: "aftersale",
       label: "售后待处理",
-      value: rows.filter(
-        (r) =>
-          r.cancelStatus === "FAILED" ||
-          r.cancelStatus === "MANUAL" ||
-          r.cancelStatus === "CANCEL_PENDING" ||
-          r.refundStatus === "REFUND_FAILED" ||
-          r.refundStatus === "MANUAL" ||
-          r.refundStatus === "REFUND_PENDING" ||
-          r.refundStatus === "PARTIAL"
-      ).length,
+      value: 0,
       aftersalePending: true,
     },
-    {
-      key: "all",
-      label: "全部订单",
-      value: all,
-      view: "all",
-    },
+    { key: "all", label: "全部订单", value: 0, view: "all" },
   ]
 }
 
-const PERMISSION_VERSION = "pv-w26-1"
-
-function filterSummary(
-  query: SupplierOrderListQuery,
-  total: number
-): string {
+function filterSummary(query: SupplierOrderListQuery, total: number): string {
   const parts: string[] = []
   if (query.view === "actionable") parts.push("可操作")
   else if (query.view === "recent_completed") parts.push("最近完成")
   else parts.push("全部")
   if (query.q?.trim()) parts.push(`搜索「${query.q.trim()}」`)
-  if (query.supplierId) {
-    parts.push(
-      SUPPLIER_ORDER_SEEDS.find((s) => s.supplierId === query.supplierId)
-        ?.supplierName ?? query.supplierId
-    )
-  }
+  if (query.supplierId) parts.push(query.supplierId)
   if (query.fulfillmentStatuses?.length) {
     parts.push(
       query.fulfillmentStatuses
@@ -419,202 +278,39 @@ function filterSummary(
         .join("/")
     )
   }
-  if (query.cancelStatuses?.length) {
-    parts.push(
-      query.cancelStatuses.map((s) => CANCEL_STATUS_LABEL[s]).join("/")
-    )
-  }
-  if (query.refundStatuses?.length) {
-    parts.push(
-      query.refundStatuses.map((s) => REFUND_STATUS_LABEL[s]).join("/")
-    )
-  }
-  if (query.paidFrom) parts.push(`支付自 ${query.paidFrom}`)
-  if (query.paidTo) parts.push(`至 ${query.paidTo}`)
   parts.push(`${total} 条`)
   return parts.join(" · ")
 }
 
-function applySupplierOrderSort(
-  rows: SupplierOrderListRow[],
-  query: SupplierOrderListQuery
-): SupplierOrderListRow[] {
-  const sortBy = query.sortBy
-  if (sortBy) {
-    const direction = query.sortDir === "asc" ? 1 : -1
-    return [...rows].sort((a, b) => {
-      const left = (a[sortBy] ?? "") as string
-      const right = (b[sortBy] ?? "") as string
-      const comparison = left.localeCompare(right)
-      if (comparison !== 0) return comparison * direction
-      return a.orderId.localeCompare(b.orderId)
-    })
-  }
-  return [...rows].sort((a, b) => {
-    if (b.priority !== a.priority) return b.priority - a.priority
-    if (a.lastBusinessAt !== b.lastBusinessAt) {
-      return a.lastBusinessAt.localeCompare(b.lastBusinessAt)
-    }
-    return a.orderId.localeCompare(b.orderId)
-  })
-}
-
-export async function fetchSupplierOrders(
-  query: SupplierOrderListQuery
-): Promise<SupplierOrderListResult> {
-  await mockDelay()
-  const role = query.role
-  const projected = SUPPLIER_ORDER_SEEDS.map((seed) => {
-    const session = getSession(seed.orderId)
-    return { seed, row: projectListRow(seed, session, role) }
-  })
-
-  // Metrics follow non-view filters (供应商/日期/搜索)，与点击后筛选结果保持一致
-  const metricRows = projected
-    .filter((p) => matchesQuery(p.row, p.seed, { ...query, view: "all" }))
-    .map((p) => p.row)
-  const metrics = buildMetrics(metricRows)
-
-  const filtered = projected
-    .filter((p) => matchesQuery(p.row, p.seed, query))
-    .map((p) => p.row)
-
-  const sorted = applySupplierOrderSort(filtered, query)
-
-  const page = query.page
-  const pageSize = query.pageSize
-  const start = (page - 1) * pageSize
-  const rows = sorted.slice(start, start + pageSize)
-  const now = new Date().toISOString()
-
-  return {
-    rows,
-    pageInfo: { page, pageSize, total: filtered.length },
-    metrics,
-    permissionVersion: PERMISSION_VERSION,
-    sourceAsOf: now,
-    queriedAt: now,
-    filterSummary: filterSummary(query, filtered.length),
-  }
-}
-
-function projectCost(seed: SeedOrder, role: DemoRole): CostView {
-  const visible = costVisible(role)
-  if (!visible) {
-    return {
-      costMasked: true,
-      cumulativeCostGross: null,
-      cumulativeCostNet: null,
-      costSource: seed.costs.costSource,
-      costVariance: null,
-      settlementId: seed.costs.settlementId,
-      settlementNo: seed.costs.settlementNo,
-      payableEntryLabel: seed.costs.payableEntryLabel,
-    }
-  }
-  return {
-    costMasked: false,
-    cumulativeCostGross: seed.costs.cumulativeCostGross,
-    cumulativeCostNet: seed.costs.cumulativeCostNet,
-    costSource: seed.costs.costSource,
-    costVariance: seed.costs.costVariance ?? null,
-    settlementId: seed.costs.settlementId,
-    settlementNo: seed.costs.settlementNo,
-    payableEntryLabel: seed.costs.payableEntryLabel,
-  }
-}
-
-function projectDetail(
-  seed: SeedOrder,
+function mapDetail(
+  d: BackendDetail,
   role: DemoRole
 ): SupplierOrderDetailView {
-  const session = getSession(seed.orderId)
-  const fulfillment = session.fulfillmentStatus ?? seed.fulfillmentStatus
-  const cancel = session.cancelStatus ?? seed.cancelStatus
-  const refund = session.refundStatus ?? seed.refundStatus
-  const { allowed, blockers } = computeAllowedActions(seed, session, role)
-  const cost = projectCost(seed, role)
-  const canReveal = sensitiveAllowed(role)
-  const reveal = revealSessions.get(seed.orderId)
-  const revealActive = reveal && reveal.expiresAt > Date.now()
-
-  const items = seed.items.map((item) => ({
-    ...item,
-    unitCostGross: cost.costMasked ? null : item.unitCostGross,
-    unitCostNet: cost.costMasked ? null : item.unitCostNet,
-    inputTaxRate: cost.costMasked ? null : item.inputTaxRate,
-    snapshotImmutable: true as const,
-  }))
-
-  const afterSales = seed.afterSales.map((as) => {
-    const patch = session.afterSalesPatches?.[as.requestId]
-    const cancelStatus = patch?.cancelStatus ?? as.cancelStatus
-    const supplierRefundStatus =
-      patch?.supplierRefundStatus ?? as.supplierRefund.status
-    return {
-      ...as,
-      cancelStatus,
-      cancelLabel: CANCEL_STATUS_LABEL[cancelStatus],
-      supplierRefund: {
-        ...as.supplierRefund,
-        status: supplierRefundStatus,
-        statusLabel: REFUND_STATUS_LABEL[supplierRefundStatus],
-        amount: cost.costMasked ? null : as.supplierRefund.amount,
-      },
-      mallRefund: {
-        ...as.mallRefund,
-        amount: cost.costMasked ? null : as.mallRefund.amount,
-      },
-    }
-  })
-
-  const actions = [
-    ...seed.actions.map((a) => ({
-      ...a,
-      techSummary: techVisible(role) ? a.techSummary : undefined,
-    })),
-    ...session.actionsExtra.map((a) => ({
-      ...a,
-      techSummary: techVisible(role) ? a.techSummary : undefined,
-    })),
-  ].sort((a, b) => b.at.localeCompare(a.at))
-
-  let workItem: WorkItemView | undefined
-  if (seed.workItem) {
-    workItem = {
-      workItemId: seed.workItem.workItemId,
-      workItemType: seed.workItem.workItemType,
-      businessObjectType: "SUPPLIER_FULFILLMENT_ORDER",
-      businessObjectId: seed.orderId,
-      subjectVersion: session.subjectVersion ?? seed.workItem.subjectVersion,
-      subjectHash: session.subjectHash ?? seed.workItem.subjectHash,
-      completionAction: seed.workItem.completionAction,
-      allowedTaskActions: seed.workItem.allowedTaskActions,
-      workItemStatus: session.workItemStatus ?? "PENDING",
-      claimedBy:
-        session.workItemStatus === "IN_PROGRESS"
-          ? { userId: "u-demo", displayName: "当前处理人" }
-          : undefined,
-      held: session.workItemHeld,
-    }
-  }
+  const o = d.order
+  const fulfillment = asFulfillment(o.fulfillment_status)
+  const cancel = asCancel(o.cancel_status)
+  const refund = asRefund(o.refund_status)
+  const costVisible =
+    role === "procurement" || role === "finance" || role === "admin"
+  const placeAction =
+    d.actions?.find((a) => a.action_type === "PLACE") ?? d.actions?.[0]
 
   return {
     order: {
-      id: seed.orderId,
-      orderNo: seed.orderNo,
-      mallOrderId: seed.mallOrderId,
-      mallOrderNo: seed.mallOrderNo,
-      paidAt: seed.paidAt,
-      paymentFactKey: seed.paymentFactKey,
+      id: o.id,
+      orderNo: o.fulfillment_order_no,
+      mallOrderId: o.mall_order_id,
+      mallOrderNo: o.mall_order_id,
+      paidAt: tsToIso(o.created_at),
+      paymentFactKey: "",
       fulfillmentChain: "ERP_AUTOMATED",
-      supplierId: seed.supplierId,
-      supplierName: seed.supplierName,
-      connectionCode: seed.connectionCode,
-      connectionEnvironment: seed.connectionEnvironment,
-      supplyVersion: seed.supplyVersion,
-      publicationVersion: seed.publicationVersion,
-      externalOrderNo: session.externalOrderNo ?? seed.externalOrderNo,
+      supplierId: o.supplier_id,
+      supplierName: o.supplier_id,
+      connectionCode: o.connection_id,
+      connectionEnvironment: "production",
+      supplyVersion: "",
+      publicationVersion: "",
+      externalOrderNo: o.external_order_no ?? undefined,
       fulfillmentStatus: fulfillment,
       fulfillmentLabel: FULFILLMENT_STATUS_LABEL[fulfillment],
       fulfillmentTone: FULFILLMENT_STATUS_TONE[fulfillment],
@@ -624,44 +320,149 @@ function projectDetail(
       refundStatus: refund,
       refundLabel: REFUND_STATUS_LABEL[refund],
       refundTone: REFUND_STATUS_TONE[refund],
-      lockVersion: session.lockVersion,
+      lockVersion: o.version,
       paymentOccurredNotice: PAYMENT_OCCURRED_NOTICE,
-      errorSummary: seed.errorSummary,
     },
-    items,
-    logistics: seed.logistics,
-    statusHistory: seed.statusHistory,
-    afterSales,
-    costs: cost,
-    actions,
+    items: (d.items ?? []).map((it) => ({
+      itemId: it.id,
+      mallLineId: it.mall_order_item_id,
+      productName: it.supplier_catalog_sku_id,
+      skuCode: it.supplier_catalog_sku_id,
+      quantity: String(it.quantity),
+      unit: "件",
+      supplierProductId: it.supplier_catalog_sku_id,
+      supplierProductName: it.supplier_catalog_sku_id,
+      publicationVersion: "",
+      supplyVersion: it.supplier_offering_revision_id,
+      unitCostGross: costVisible
+        ? String(it.unit_cost_snapshot_gross)
+        : null,
+      unitCostNet: null,
+      inputTaxRate: costVisible ? String(it.input_tax_rate) : null,
+      snapshotImmutable: true as const,
+    })),
+    logistics: {
+      acceptedAt: tsToIso(o.accepted_at) || undefined,
+      shippedAt: undefined,
+      completedAt: tsToIso(o.completed_at) || undefined,
+    },
+    statusHistory: (d.status_history ?? []).map((h) => ({
+      id: h.id,
+      at: tsToIso(h.occurred_at),
+      track: "fulfillment" as const,
+      fromLabel:
+        FULFILLMENT_STATUS_LABEL[asFulfillment(h.previous_status)] ??
+        h.previous_status,
+      toLabel:
+        FULFILLMENT_STATUS_LABEL[asFulfillment(h.new_status)] ?? h.new_status,
+      source: h.source_type,
+    })),
+    afterSales: [],
+    costs: {
+      costMasked: !costVisible,
+      cumulativeCostGross: costVisible
+        ? String(
+            d.items?.[0]?.cost_snapshot_total_gross ?? null
+          )
+        : null,
+      cumulativeCostNet: null,
+      costSource: "下单成本快照",
+      costVariance: null,
+    },
+    actions: (d.actions ?? []).map((a) => ({
+      actionId: a.id,
+      actionType: (a.action_type as SupplierOrderDetailView["actions"][number]["actionType"]) || "PLACE",
+      actionLabel: a.action_type,
+      at: tsToIso(a.created_at),
+      actor: "系统",
+      outcomeLabel: a.status,
+      outcomeTone: "neutral" as const,
+      idempotencyKeyTail: a.external_request_id
+        ? `…${a.external_request_id.slice(-6)}`
+        : "—",
+      attemptCount: a.attempt_count,
+      techSummary:
+        role === "admin"
+          ? [a.request_summary, a.response_summary].filter(Boolean).join(" · ") ||
+            undefined
+          : undefined,
+      operationId: a.id,
+    })),
     address: {
-      masked: seed.address.masked,
-      revealed:
-        revealActive && canReveal ? seed.address.full : undefined,
-      phoneMasked: seed.address.phoneMasked,
-      phoneRevealed:
-        revealActive && canReveal ? seed.address.phoneFull : undefined,
-      recipientMasked: seed.address.recipientMasked,
-      recipientRevealed:
-        revealActive && canReveal ? seed.address.recipientFull : undefined,
-      canReveal,
-      revealExpiresAt: revealActive
-        ? new Date(reveal!.expiresAt).toISOString()
-        : undefined,
-      auditNote: revealActive
-        ? `已记录揭示审计（原因：${reveal!.reason}）`
-        : undefined,
+      masked: "—",
+      phoneMasked: "—",
+      recipientMasked: "—",
+      canReveal: role === "procurement" || role === "cs" || role === "admin",
     },
-    workItem,
-    lastInvestigation: session.lastInvestigation,
-    placeActionId: seed.placeActionId,
-    allowedActions: allowed,
-    actionBlockers: blockers,
+    placeActionId: placeAction?.id ?? "",
+    allowedActions: ["OPEN_CENTER", "NOTE"],
+    actionBlockers: [],
     freshness: {
-      updatedAt: seed.updatedAt,
+      updatedAt: tsToIso(o.created_at),
       state: "fresh",
     },
     role,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export async function fetchSupplierOrders(
+  query: SupplierOrderListQuery
+): Promise<SupplierOrderListResult> {
+  const now = new Date().toISOString()
+  const pageRes = await apiGet<Page<BackendOrder>>(
+    "/admin/supplier-fulfillment-orders",
+    {
+      page: query.page,
+      page_size: query.pageSize,
+      supplier_id: query.supplierId,
+      fulfillment_status: query.fulfillmentStatuses?.[0],
+      cancel_status: query.cancelStatuses?.[0],
+      refund_status: query.refundStatuses?.[0],
+      external_order_no: query.q?.trim() || undefined,
+      sort_by:
+        query.sortBy === "lastBusinessAt" ? "created_at" : "created_at",
+      sort_dir: query.sortDir ?? "desc",
+    }
+  )
+
+  let rows = (pageRes.items ?? []).map((o) => mapListRow(o, query.role))
+
+  // 客户端视图投影（后端未提供 view/actionable 筛选）
+  if (query.view === "actionable") {
+    rows = rows.filter(
+      (r) =>
+        r.fulfillmentStatus === "RESULT_UNKNOWN" ||
+        r.fulfillmentStatus === "EXCEPTION" ||
+        r.fulfillmentStatus === "REJECTED" ||
+        r.fulfillmentStatus === "SUBMITTING" ||
+        r.fulfillmentStatus === "RECEIVED" ||
+        r.cancelStatus === "FAILED" ||
+        r.cancelStatus === "MANUAL" ||
+        r.cancelStatus === "CANCEL_PENDING" ||
+        r.refundStatus === "REFUND_FAILED" ||
+        r.refundStatus === "MANUAL" ||
+        r.refundStatus === "REFUND_PENDING"
+    )
+  } else if (query.view === "recent_completed") {
+    rows = rows.filter((r) => r.fulfillmentStatus === "COMPLETED")
+  }
+
+  return {
+    rows,
+    pageInfo: {
+      page: pageRes.page ?? query.page,
+      pageSize: pageRes.page_size ?? query.pageSize,
+      total: pageRes.total ?? rows.length,
+    },
+    metrics: emptyMetrics(),
+    permissionVersion: PERMISSION_VERSION,
+    sourceAsOf: now,
+    queriedAt: now,
+    filterSummary: filterSummary(query, pageRes.total ?? rows.length),
   }
 }
 
@@ -669,290 +470,74 @@ export async function fetchSupplierOrderDetail(input: {
   orderId: string
   role?: DemoRole
 }): Promise<SupplierOrderDetailView | null> {
-  await mockDelay(60)
-  const seed = findSeed(input.orderId)
-  if (!seed) return null
-  return projectDetail(seed, input.role ?? "procurement")
+  try {
+    const detail = await apiGet<BackendDetail>(
+      `/admin/supplier-fulfillment-orders/${encodeURIComponent(input.orderId)}`
+    )
+    return mapDetail(detail, input.role ?? "procurement")
+  } catch (err) {
+    const status =
+      err && typeof err === "object" && "status" in err
+        ? (err as { status?: number }).status
+        : undefined
+    if (status === 404) return null
+    throw err
+  }
 }
 
+/**
+ * 查询原结果：后端集成在 integration_ops 错误任务上；
+ * 履约订单域无独立 QUERY 端点 → 返回 blocked 并指向 W29。
+ */
 export async function querySupplierResult(
   input: QueryResultInput
 ): Promise<FormalActionResponse<QueryResultData>> {
-  await mockDelay(120)
-
-  const existing = investigationIdem.get(input.idempotencyKey)
-  if (existing) return existing as FormalActionResponse<QueryResultData>
-
-  const seed = findSeed(input.orderId)
-  if (!seed) {
-    return { status: "failed", message: "订单不存在" }
+  void input
+  return {
+    status: "blocked",
+    message:
+      "查询原结果请进入接口错误与对账中心（W29）。履约订单域未提供独立查询端点。",
+    reference: "W29",
   }
-  const session = getSession(input.orderId)
-  if (input.expectedLockVersion !== session.lockVersion) {
-    return {
-      status: "blocked",
-      message: "订单版本已变化，请刷新后重试查询",
-    }
-  }
-
-  if (seed.hasQueryCapability === false) {
-    return {
-      status: "blocked",
-      message: "供应商无查询能力，请进入接口错误与对账中心",
-      reference: "W29",
-    }
-  }
-
-  if (input.simulateUnknown) {
-    const res: FormalActionResponse<QueryResultData> = {
-      status: "unknown",
-      message: "查询请求超时，结果未知。请按原任务号查询，勿重复提交。",
-      operationId: input.operationId,
-    }
-    investigationIdem.set(input.idempotencyKey, res)
-    return res
-  }
-
-  const preset = seed.queryPreset ?? "STILL_UNKNOWN"
-  let outcome: InvestigationEvidenceView["outcome"]
-  let canSafeRetry = false
-  let outcomeLabel: string
-  let summary: string
-  let externalOrderNo: string | undefined
-
-  if (preset === "VERIFIED_NO_RESULT") {
-    outcome = "VERIFIED_NO_RESULT"
-    canSafeRetry = Boolean(seed.canSafeRetryAfterNoResult)
-    outcomeLabel = "明确无结果"
-    summary = canSafeRetry
-      ? "供应商确认无对应订单，系统允许沿用原任务号重新提交。"
-      : "供应商确认无对应订单，但当前不可安全重试。"
-  } else if (preset === "VERIFIED_TERMINAL") {
-    outcome = "VERIFIED_TERMINAL"
-    canSafeRetry = false
-    outcomeLabel = "已取得处理结果"
-    externalOrderNo = seed.externalOrderNo ?? "EXT-VERIFIED-001"
-    summary = "已查到供应商侧已有处理结果，不得重发。"
-  } else {
-    outcome = "RESULT_UNKNOWN"
-    canSafeRetry = false
-    outcomeLabel = "仍未知"
-    summary = "查询后仍无法确认供应商侧结果，请继续查询或转人工。"
-  }
-
-  const evidence: InvestigationEvidenceView = {
-    evidenceId: `evq_${input.orderId}_${Date.now()}`,
-    targetSupplierActionId: input.targetSupplierActionId,
-    outcome,
-    outcomeLabel,
-    recordedAt: new Date().toISOString(),
-    canSafeRetry,
-    externalOrderNo,
-    summary,
-  }
-
-  session.lockVersion += 1
-  session.lastInvestigation = evidence
-  session.actionsExtra = [
-    ...session.actionsExtra,
-    {
-      actionId: `act-query-${Date.now()}`,
-      actionType: "QUERY_RESULT",
-      actionLabel: "查询原结果",
-      at: evidence.recordedAt,
-      actor: "当前用户",
-      outcomeLabel,
-      outcomeTone:
-        outcome === "VERIFIED_NO_RESULT"
-          ? "success"
-          : outcome === "VERIFIED_TERMINAL"
-            ? "success"
-            : "warning",
-      idempotencyKeyTail: `…${input.idempotencyKey.slice(-6)}`,
-      attemptCount: 1,
-      operationId: input.operationId,
-    },
-  ]
-
-  // Task stays non-terminal
-  if (input.workItemId && seed.workItem) {
-    session.workItemStatus = "IN_PROGRESS"
-    session.subjectHash = `sh_${seed.orderId}_v${session.lockVersion}`
-    session.subjectVersion = String(session.lockVersion)
-  }
-
-  if (outcome === "VERIFIED_TERMINAL" && externalOrderNo) {
-    session.externalOrderNo = externalOrderNo
-    // do not auto-complete task; do not flip to success unless evidence says so
-    // keep RESULT_UNKNOWN until explicit confirm — mock: stay RESULT_UNKNOWN
-  }
-
-  const { allowed, blockers } = computeAllowedActions(
-    seed,
-    session,
-    "procurement"
-  )
-
-  const data: QueryResultData = {
-    evidence,
-    lockVersion: session.lockVersion,
-    workItemStatus: input.workItemId ? "IN_PROGRESS" : undefined,
-    subjectHash: session.subjectHash,
-    allowedActions: allowed,
-    actionBlockers: blockers,
-  }
-
-  const res: FormalActionResponse<QueryResultData> = {
-    status: "succeeded",
-    message: `查询完成：${outcomeLabel}。任务仍待处理，不会自动下一项。`,
-    reference: `查询记录 QR-${seed.orderNo.slice(-4)}-${Date.now()
-      .toString()
-      .slice(-4)}`,
-    operationId: input.operationId,
-    data,
-  }
-  investigationIdem.set(input.idempotencyKey, res)
-  return res
 }
 
+/**
+ * 安全重发：后端无独立 REPLAY 端点（在 integration_ops error-task replay）。
+ */
 export async function replaySupplierOrder(
   input: ReplayInput
 ): Promise<FormalActionResponse<ReplayResultData>> {
-  await mockDelay(150)
-
-  const existing = investigationIdem.get(input.idempotencyKey)
-  if (existing) return existing as FormalActionResponse<ReplayResultData>
-
-  const seed = findSeed(input.orderId)
-  if (!seed) return { status: "failed", message: "订单不存在" }
-  const session = getSession(input.orderId)
-
-  if (input.expectedLockVersion !== session.lockVersion) {
-    return {
-      status: "blocked",
-      message: "订单版本已变化，请刷新后重试",
-    }
-  }
-
-  const inv = session.lastInvestigation
-  if (!inv || inv.outcome !== "VERIFIED_NO_RESULT" || !inv.canSafeRetry) {
-    return {
-      status: "blocked",
-      message:
-        "仅当确认无结果且系统判定可安全重试时才可重发。请先查询原结果。",
-    }
-  }
-
-  const externalOrderNo = `EXT-REPLAY-${seed.orderNo.slice(-4)}`
-  const now = new Date().toISOString()
-  session.lockVersion += 1
-  session.externalOrderNo = externalOrderNo
-  session.fulfillmentStatus = "ACCEPTED"
-  session.placeAttemptCount = (session.placeAttemptCount ?? 1) + 1
-
-  const evidence: InvestigationEvidenceView = {
-    evidenceId: `evr_${input.orderId}_${Date.now()}`,
-    targetSupplierActionId: input.targetSupplierActionId,
-    outcome: "VERIFIED_TERMINAL",
-    outcomeLabel: "重发已接单",
-    recordedAt: now,
-    canSafeRetry: false,
-    externalOrderNo,
-    summary: "沿用原任务号重新提交成功，已取得外部单号。任务处理结果待确认。",
-  }
-  session.lastInvestigation = evidence
-  session.actionsExtra = [
-    ...session.actionsExtra,
-    {
-      actionId: `act-replay-${Date.now()}`,
-      actionType: "REPLAY",
-      actionLabel: "安全重发",
-      at: now,
-      actor: "当前用户",
-      outcomeLabel: "已接单",
-      outcomeTone: "success",
-      idempotencyKeyTail: `…${input.idempotencyKey.slice(-6)}`,
-      attemptCount: session.placeAttemptCount,
-      operationId: input.operationId,
-      techSummary: "replay with original place idempotency key (server-side)",
-    },
-  ]
-
-  if (input.workItemId) {
-    session.workItemStatus = "IN_PROGRESS"
-    session.subjectHash = `sh_${seed.orderId}_v${session.lockVersion}`
-  }
-
-  const { allowed, blockers } = computeAllowedActions(
-    seed,
-    session,
-    "procurement"
-  )
-
-  const data: ReplayResultData = {
-    evidence,
-    lockVersion: session.lockVersion,
-    workItemStatus: input.workItemId ? "IN_PROGRESS" : undefined,
-    externalOrderNo,
-    fulfillmentStatus: "ACCEPTED",
-    allowedActions: allowed,
-    actionBlockers: blockers,
-  }
-
-  const res: FormalActionResponse<ReplayResultData> = {
-    status: "succeeded",
+  void input
+  return {
+    status: "blocked",
     message:
-      "重发已受理并取得接单结果。任务仍在处理中，需确认处理结果。",
-    reference: `重发记录 RR-${seed.orderNo.slice(-4)}-${Date.now()
-      .toString()
-      .slice(-4)}`,
-    operationId: input.operationId,
-    data,
+      "安全重发请在接口错误中心按原任务号重放。履约订单域未提供独立重发端点。",
+    reference: "W29",
   }
-  investigationIdem.set(input.idempotencyKey, res)
-  return res
 }
 
 export async function deferSupplierOrderTask(
   input: DeferTaskInput
 ): Promise<FormalActionResponse<DeferTaskResult>> {
-  await mockDelay(80)
-  const seed = findSeed(input.orderId)
-  if (!seed?.workItem) {
+  if (!input.workItemId) {
     return { status: "failed", message: "无关联任务，无法跳过" }
   }
-  const session = getSession(input.orderId)
-  session.workItemHeld = true
-  session.workItemStatus = "PENDING"
-  session.notes.push(
-    `跳过：${input.reasonCode}${input.comment ? ` · ${input.comment}` : ""}`
-  )
-  session.actionsExtra = [
-    ...session.actionsExtra,
-    {
-      actionId: `act-defer-${Date.now()}`,
-      actionType: "NOTE",
-      actionLabel: "本轮跳过",
-      at: new Date().toISOString(),
-      actor: "当前用户",
-      outcomeLabel: "任务仍待处理",
-      outcomeTone: "info",
-      idempotencyKeyTail: `…${input.idempotencyKey.slice(-6)}`,
-      attemptCount: 1,
-    },
-  ]
+  // version: try parse from expectedSubjectHash trailing digits, fallback 1
+  const versionMatch = input.expectedSubjectHash?.match(/(\d+)$/)
+  const version = versionMatch ? Number(versionMatch[1]) || 1 : 1
+
+  await apiPost(`/admin/work-items/${encodeURIComponent(input.workItemId)}/defer`, {
+    version,
+    comment: input.comment ?? input.reasonCode,
+  })
 
   return {
     status: "succeeded",
     message: "已记录跳过原因。任务未完成、未转交，仍为待处理。",
-    reference: `跳过记录 DF-${seed.orderNo.slice(-4)}-${Date.now()
-      .toString()
-      .slice(-4)}`,
     data: {
       reasonCode: input.reasonCode,
       queueContextId: input.queueContextId,
       leaseDisposition: "RELEASED",
-      nextQueueCursor: undefined,
       workItemStatus: "PENDING",
     },
   }
@@ -961,189 +546,104 @@ export async function deferSupplierOrderTask(
 export async function submitAfterSalesAction(
   input: AfterSalesActionInput
 ): Promise<FormalActionResponse<AfterSalesActionResult>> {
-  await mockDelay(100)
-  const seed = findSeed(input.orderId)
-  if (!seed) return { status: "failed", message: "订单不存在" }
-  const session = getSession(input.orderId)
+  const path =
+    input.action === "CANCEL"
+      ? `/admin/supplier-fulfillment-orders/${encodeURIComponent(input.orderId)}/cancel`
+      : `/admin/supplier-fulfillment-orders/${encodeURIComponent(input.orderId)}/refund`
 
-  const existing = session.aftersaleIdempotency.get(input.idempotencyKey)
-  if (existing) {
-    return {
-      status: "succeeded",
-      message: "重复提交返回原结果，未再次调用供应商",
-      reference: existing.actionRecordId,
-      data: existing,
-    }
-  }
+  const result = await apiPost<BackendSubmitResult>(path, {
+    after_sales_request_id: input.afterSalesRequestId,
+    lines: [],
+    reason_code: input.reasonCode,
+    comment: input.comment,
+  })
 
-  if (input.expectedLockVersion !== session.lockVersion) {
-    return {
-      status: "blocked",
-      message: "订单版本已变化，请刷新后重试",
-    }
-  }
-
-  const asReq = seed.afterSales.find(
-    (a) => a.requestId === input.afterSalesRequestId
-  )
-  if (!asReq || !asReq.mallRequestRef) {
-    return {
-      status: "blocked",
-      message: "必须引用既有商城售后请求，禁止脱离请求创建取消/退款",
-    }
-  }
-
-  session.lockVersion += 1
-  if (!session.afterSalesPatches) session.afterSalesPatches = {}
-  const patch = session.afterSalesPatches[input.afterSalesRequestId] ?? {}
-
-  let cancelStatus = session.cancelStatus ?? seed.cancelStatus
-  let refundStatus = session.refundStatus ?? seed.refundStatus
-  let note: string
-
-  if (input.action === "CANCEL") {
-    cancelStatus = "CANCEL_PENDING"
-    session.cancelStatus = "CANCEL_PENDING"
-    patch.cancelStatus = "CANCEL_PENDING"
-    note = `已提交取消，引用售后 ${asReq.mallRequestRef}。领域动作不读写任务。`
-  } else {
-    refundStatus = "REFUND_PENDING"
-    session.refundStatus = "REFUND_PENDING"
-    patch.supplierRefundStatus = "REFUND_PENDING"
-    note = `已提交退款，引用售后 ${asReq.mallRequestRef}。领域动作不读写任务。`
-  }
-  session.afterSalesPatches[input.afterSalesRequestId] = patch
-
-  const actionRecordId = `act-as-${Date.now()}`
-  session.actionsExtra = [
-    ...session.actionsExtra,
-    {
-      actionId: actionRecordId,
-      actionType: input.action,
-      actionLabel: input.action === "CANCEL" ? "取消" : "退款",
-      at: new Date().toISOString(),
-      actor: "当前用户",
-      outcomeLabel: "处理中",
-      outcomeTone: "info",
-      idempotencyKeyTail: `…${input.idempotencyKey.slice(-6)}`,
-      attemptCount: 1,
-      operationId: input.operationId,
-    },
-  ]
-
-  const data: AfterSalesActionResult = {
-    lockVersion: session.lockVersion,
-    cancelStatus,
-    refundStatus,
-    actionRecordId,
-    note,
-  }
-  session.aftersaleIdempotency.set(input.idempotencyKey, data)
-
+  const order = result.order
   return {
     status: "succeeded",
-    message: note,
-    reference: `售后处理记录 AS-${seed.orderNo.slice(-4)}-${Date.now()
-      .toString()
-      .slice(-4)}`,
+    message:
+      input.action === "CANCEL"
+        ? "取消动作已提交供应商"
+        : "退款动作已提交供应商",
+    reference: result.action?.id,
     operationId: input.operationId,
-    data,
+    data: {
+      lockVersion: order.version,
+      cancelStatus: asCancel(order.cancel_status),
+      refundStatus: asRefund(order.refund_status),
+      actionRecordId: result.action?.id ?? input.operationId,
+      note: "动作已登记",
+    },
   }
 }
 
+/**
+ * 地址揭示：后端详情不返回明文地址（仅加密快照），无 reveal 端点。
+ */
 export async function revealSupplierOrderAddress(
   input: RevealAddressInput
 ): Promise<FormalActionResponse<RevealAddressResult>> {
-  await mockDelay(40)
-  const seed = findSeed(input.orderId)
-  if (!seed) return { status: "failed", message: "订单不存在" }
-
-  const auditEventId = `aud-reveal-${Date.now()}`
-  const expiresAt = Date.now() + 5 * 60_000
-  revealSessions.set(input.orderId, {
-    expiresAt,
-    reason: input.reason,
-    auditEventId,
-  })
-
-  const detail = projectDetail(seed, "procurement")
+  void input
   return {
-    status: "succeeded",
-    message: "已短时揭示收货信息，并写入审计。离开页面或超时后自动清除。",
-    data: {
-      address: detail.address,
-      auditEventId,
-    },
+    status: "blocked",
+    message: "地址揭示端点尚未交付；详情仅提供脱敏摘要。",
   }
 }
 
 export async function clearAddressReveal(orderId: string): Promise<void> {
-  revealSessions.delete(orderId)
+  void orderId
+  // no server session to clear
 }
 
+/**
+ * 协同说明：后端无 NOTE 端点 → blocked。
+ */
 export async function addCollaborationNote(
   input: NoteInput
 ): Promise<FormalActionResponse<{ lockVersion: number }>> {
-  await mockDelay(50)
-  const seed = findSeed(input.orderId)
-  if (!seed) return { status: "failed", message: "订单不存在" }
-  const session = getSession(input.orderId)
-  if (input.expectedLockVersion !== session.lockVersion) {
-    return {
-      status: "blocked",
-      message: "数据已更新，协同说明未写入。请刷新后重试。",
-    }
-  }
-  session.lockVersion += 1
-  session.notes.push(input.comment)
-  session.actionsExtra = [
-    ...session.actionsExtra,
-    {
-      actionId: `act-note-${Date.now()}`,
-      actionType: "NOTE",
-      actionLabel: "协同说明",
-      at: new Date().toISOString(),
-      actor: "当前用户",
-      outcomeLabel: "已记录",
-      outcomeTone: "neutral",
-      idempotencyKeyTail: `…${input.idempotencyKey.slice(-6)}`,
-      attemptCount: 1,
-    },
-  ]
+  void input
   return {
-    status: "succeeded",
-    message: "已追加协同说明，未改变订单状态。",
-    data: { lockVersion: session.lockVersion },
+    status: "blocked",
+    message: "协同说明写入端点尚未交付。",
   }
 }
 
 export function listSupplierOptions(): { id: string; name: string }[] {
-  const map = new Map<string, string>()
-  for (const s of SUPPLIER_ORDER_SEEDS) {
-    map.set(s.supplierId, s.supplierName)
-  }
-  return [...map.entries()].map(([id, name]) => ({ id, name }))
+  // 供应商主数据由 W14/W20 提供；本域列表无独立 supplier 维表接口
+  return []
 }
 
 export async function createSupplierOrderExportJob(
   command: ExportCommand
 ): Promise<ExportJobResult> {
-  await mockDelay(120)
-  const jobId = `exp-w26-${command.requestId.slice(-8)}`
-  const expiresAt = new Date(
-    Date.now() + 7 * 24 * 60 * 60 * 1000
-  ).toISOString()
+  const job = await apiPost<BackendBackgroundJob>("/admin/background-jobs", {
+    job_no: `EXP-W26-${command.requestId.slice(-12)}`,
+    job_type: "export",
+    domain_job_type: "supplier_fulfillment_order_export",
+    selection_snapshot_id: command.selectionSnapshotId || null,
+    request_id: command.requestId,
+    total_count: Math.max(1, command.rowCount || 1),
+    items: [
+      {
+        object_type: "supplier_fulfillment_order",
+        object_id: command.selectionSnapshotId || command.requestId,
+      },
+    ],
+  })
+
   return {
-    jobId,
+    jobId: job.id,
     requestId: command.requestId,
     rowCount: command.rowCount,
     permissionVersion: PERMISSION_VERSION,
     fieldSetId: command.fieldSetId,
     maskDisclaimer:
-      "导出使用系统筛选快照与字段权限打码：收货地址、手机号不会以明文写入文件，导出默认列不含敏感地址；下载时重新鉴权，结果 7 天内可下载。",
-    expiresAt,
-    downloadLabel: `供应商订单_${new Date().toISOString().slice(0, 10)}.csv`,
-    status: "succeeded",
+      "导出使用系统筛选快照与字段权限打码：收货地址、手机号不会以明文写入文件。",
+    expiresAt: job.result_expires_at
+      ? tsToIso(job.result_expires_at)
+      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    downloadLabel: `供应商订单_${job.job_no ?? job.id}.csv`,
+    status: job.status === "completed" ? "succeeded" : "queued",
   }
 }
 
@@ -1155,9 +655,7 @@ export function formatCostDisplay(
   return value
 }
 
-/** test helper */
+/** test helper retained for type-compat; no session state */
 export function __resetSupplierOrderSessions() {
-  sessions.clear()
-  revealSessions.clear()
-  investigationIdem.clear()
+  // no-op
 }

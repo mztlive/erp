@@ -1,15 +1,14 @@
 /**
- * W27 session-mock API
- * - 金额/差异方向/是否可确认均由 mock 投影给出
- * - 岗位分离：采购只证据；经办结论；另一名复核人确认
- * - 策略缺失 fail-closed
+ * W27 API 供应商结算 · 真实 HTTP API
+ * 路径：/admin/supplier-settlement-statements、items、differences
  */
 
-import { mockDelay } from "@/lib/mock-delay"
+import { apiGet, apiPost, type Page } from "@/lib/api"
 import type {
   AppendEvidenceInput,
   CreateDraftInput,
   DemoRole,
+  DifferenceType,
   FormalOutcome,
   RefreshDraftInput,
   ResolveDifferenceInput,
@@ -20,60 +19,74 @@ import type {
   SettlementStatus,
   SettlementView,
   SubmitReviewInput,
-  DifferenceType,
 } from "@/features/supplier-settlements/types"
 import {
-  ACTORS,
   DEMO_ROLE_LABEL,
+  DIFF_STATUS_LABEL,
   DIFF_TYPE_LABEL,
-  REASON_CODE_LABEL,
-  RESOLUTION_LABEL,
   RESOLUTION_TO_STATUS,
   STATUS_LABEL,
   STATUS_TONE,
   VIEW_LABEL,
-  roleToActor,
   roleToUserId,
 } from "@/features/supplier-settlements/types"
-import {
-  DEFAULT_PERIOD_POLICY,
-  SEED_STATEMENTS,
-  SUPPLIERS,
-  projectDifference,
-  statusMeta,
-  withDirection,
-  type SeedStatement,
-} from "@/mock/supplier-settlements"
 
-type Overlay = Partial<
-  Pick<
-    SeedStatement,
-    | "status"
-    | "lockVersion"
-    | "subjectHash"
-    | "sourceAsOf"
-    | "sourceSnapshotAt"
-    | "sourceSnapshotHash"
-    | "differences"
-    | "reviewRecords"
-    | "auditEvents"
-    | "payable"
-    | "workItem"
-    | "pendingCostDeltaGross"
-    | "confirmedCostDeltaGross"
-    | "erpAmountGross"
-    | "supplierAmountGross"
-    | "differenceAmountGross"
-    | "items"
-    | "preparedBy"
-    | "reviewedBy"
-    | "externalBillNo"
-    | "externalBillVersion"
-  >
->
+// ---------------------------------------------------------------------------
+// Backend wire types
+// ---------------------------------------------------------------------------
 
-const overlays = new Map<string, Overlay>()
-const created: SeedStatement[] = []
+type BackendStatement = {
+  id: string
+  statement_no: string
+  supplier_id: string
+  period_start: string
+  period_end: string
+  external_bill_no?: string | null
+  external_bill_version?: string | null
+  erp_amount: string
+  supplier_amount: string
+  difference_amount: string
+  status: string
+  prepared_by: string
+  reviewed_by?: string | null
+  confirmed_at?: number | null
+  payable_account_id?: string | null
+  version: number
+  created_at: number
+}
+
+type BackendItem = {
+  id: string
+  statement_id: string
+  supplier_fulfillment_order_id: string
+  supplier_fulfillment_item_id: string
+  order_amount: string
+  freight_amount: string
+  service_fee_amount: string
+  refund_amount: string
+  erp_calculated_amount: string
+  supplier_billed_amount: string
+  created_at: number
+}
+
+type BackendDifference = {
+  id: string
+  statement_item_id: string
+  difference_type: string
+  difference_amount: string
+  status: string
+  resolution?: string | null
+  resolved_by?: string | null
+  resolved_at?: number | null
+  version: number
+  created_at: number
+}
+
+type BackendDetail = {
+  statement: BackendStatement
+  items: BackendItem[]
+  differences: BackendDifference[]
+}
 
 export type ListQueryInput = {
   view: SettlementView
@@ -89,27 +102,27 @@ export type ListQueryInput = {
   demoFlag?: "no-permission" | "no-scope" | "policy-missing"
 }
 
-function mergeSeed(seed: SeedStatement): SeedStatement {
-  const o = overlays.get(seed.statementId)
-  if (!o) return seed
-  return { ...seed, ...o }
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function tsToIso(secs: number | null | undefined): string {
+  if (secs == null || !Number.isFinite(Number(secs)) || Number(secs) <= 0)
+    return ""
+  return new Date(Number(secs) * 1000).toISOString()
 }
 
-function allSeeds(): SeedStatement[] {
-  return [...created, ...SEED_STATEMENTS].map(mergeSeed)
-}
-
-function findSeed(id: string): SeedStatement | undefined {
-  return allSeeds().find((s) => s.statementId === id)
-}
-
-function ensureOverlay(id: string, seed: SeedStatement): Overlay {
-  let o = overlays.get(id)
-  if (!o) {
-    o = { lockVersion: seed.lockVersion }
-    overlays.set(id, o)
-  }
-  return o
+function asStatus(raw: string): SettlementStatus {
+  const u = raw.toUpperCase() as SettlementStatus
+  const allowed: SettlementStatus[] = [
+    "DRAFT",
+    "PENDING_RECONCILE",
+    "HAS_DIFFERENCE",
+    "PENDING_REVIEW",
+    "CONFIRMED",
+    "VOIDED",
+  ]
+  return allowed.includes(u) ? u : "DRAFT"
 }
 
 function directionLabel(diff?: string): string | undefined {
@@ -132,271 +145,158 @@ function periodPolicy(demoFlag?: ListQueryInput["demoFlag"]) {
       },
     }
   }
-  return { ...DEFAULT_PERIOD_POLICY }
-}
-
-/** 差异是否已有处理结论（status 为 5 值结论状态，非 PENDING 即已结论） */
-function isConcludedStatus(status: string): boolean {
-  return status !== "PENDING"
-}
-
-function unresolvedCount(seed: SeedStatement): number {
-  return seed.differences.filter(
-    (d) => d.status === "PENDING" && d.blocking
-  ).length
-}
-
-function roleActions(
-  role: DemoRole,
-  seed: SeedStatement
-): { allowed: string[]; blockers: SettlementDetailView["actionBlockers"] } {
-  const allowed = new Set<string>(["OPEN_CENTER", "VIEW", "OPEN_PREVIEW"])
-  const blockers: SettlementDetailView["actionBlockers"] = []
-  const isConfirmed = seed.status === "CONFIRMED" || seed.status === "VOIDED"
-  const prepId = seed.preparedBy?.userId
-  const userId = roleToUserId(role)
-  const openBlocking = seed.differences.some(
-    (d) => d.blocking && d.status === "PENDING"
-  )
-
-  if (role === "manager") {
-    blockers.push(
-      {
-        action: "CREATE_DRAFT",
-        code: "ROLE_READONLY",
-        message: "管理层只读，不可新建或变更结算",
-      },
-      {
-        action: "RESOLVE_DIFFERENCE",
-        code: "ROLE_READONLY",
-        message: "管理层不可登记差异结论",
-      },
-      {
-        action: "CONFIRM",
-        code: "ROLE_READONLY",
-        message: "管理层不可确认结算",
-      }
-    )
-    if (seed.payable) allowed.add("OPEN_W12")
-    return { allowed: [...allowed], blockers }
-  }
-
-  if (role === "procurement") {
-    allowed.add("APPEND_EVIDENCE")
-    if (!isConfirmed) {
-      // ok
-    } else {
-      blockers.push({
-        action: "APPEND_EVIDENCE",
-        code: "CONFIRMED_READONLY",
-        message: "已确认结算永久只读，不可再追加证据",
-      })
-    }
-    blockers.push(
-      {
-        action: "RESOLVE_DIFFERENCE",
-        code: "ROLE_PROCUREMENT",
-        message: "采购只能追加证据与业务意见，不能选择差异结论",
-      },
-      {
-        action: "SUBMIT_REVIEW",
-        code: "ROLE_PROCUREMENT",
-        message: "采购不可提交复核",
-      },
-      {
-        action: "CONFIRM",
-        code: "ROLE_PROCUREMENT",
-        message: "采购不可确认结算",
-      },
-      {
-        action: "CREATE_DRAFT",
-        code: "ROLE_PROCUREMENT",
-        message: "仅财务经办可新建结算草稿",
-      }
-    )
-    return { allowed: [...allowed], blockers }
-  }
-
-  if (role === "finance_prep") {
-    allowed.add("CREATE_DRAFT")
-    if (
-      seed.status === "DRAFT" ||
-      seed.status === "PENDING_RECONCILE" ||
-      seed.status === "HAS_DIFFERENCE"
-    ) {
-      allowed.add("REFRESH_TRIAL")
-      allowed.add("RESOLVE_DIFFERENCE")
-      allowed.add("SUBMIT_REVIEW")
-      allowed.add("VOID_DRAFT")
-    }
-    if (openBlocking) {
-      blockers.push({
-        action: "SUBMIT_REVIEW",
-        code: "BLOCKING_DIFFERENCES",
-        message: "存在未处理的阻断差异，须先完成受控结论后方可提交复核",
-      })
-      allowed.delete("SUBMIT_REVIEW")
-    }
-    blockers.push(
-      {
-        action: "CONFIRM",
-        code: "ROLE_PREP_NOT_REVIEW",
-        message: "经办人不能复核并确认自己准备的结算单（岗位分离）",
-      },
-      {
-        action: "APPEND_EVIDENCE",
-        code: "ROLE_PREP",
-        message: "采购协同证据由被指派采购追加；经办登记结论",
-      }
-    )
-    if (isConfirmed) {
-      allowed.delete("REFRESH_TRIAL")
-      allowed.delete("RESOLVE_DIFFERENCE")
-      allowed.delete("SUBMIT_REVIEW")
-      allowed.delete("VOID_DRAFT")
-      blockers.push({
-        action: "RESOLVE_DIFFERENCE",
-        code: "CONFIRMED_READONLY",
-        message: "已确认结算不可再处理差异或改写金额",
-      })
-    }
-    if (seed.payable) allowed.add("OPEN_W12")
-    return { allowed: [...allowed], blockers }
-  }
-
-  // finance_review
-  if (seed.status === "PENDING_REVIEW" && seed.workItem) {
-    if (prepId && prepId === userId) {
-      blockers.push({
-        action: "CONFIRM",
-        code: "SOD_VIOLATION",
-        message: "经办与复核不能为同一人；当前用户是本单经办人",
-      })
-      blockers.push({
-        action: "REJECT",
-        code: "SOD_VIOLATION",
-        message: "经办与复核不能为同一人",
-      })
-    } else {
-      allowed.add("CONFIRM")
-      allowed.add("REJECT")
-      allowed.add("CLAIM_REVIEW")
-    }
-  } else {
-    blockers.push({
-      action: "CONFIRM",
-      code: "NOT_IN_REVIEW",
-      message: "仅待复核且已领取任务的结算单可由复核人确认",
-    })
-  }
-  if (openBlocking) {
-    blockers.push({
-      action: "CONFIRM",
-      code: "BLOCKING_DIFFERENCES",
-      message: "存在未解决阻断差异，不能确认结算",
-    })
-    allowed.delete("CONFIRM")
-  }
-  blockers.push(
-    {
-      action: "RESOLVE_DIFFERENCE",
-      code: "ROLE_REVIEW",
-      message: "复核人不可改写差异结论；驳回后由经办处理",
-    },
-    {
-      action: "CREATE_DRAFT",
-      code: "ROLE_REVIEW",
-      message: "复核人不可新建草稿",
-    }
-  )
-  if (seed.payable) allowed.add("OPEN_W12")
-  if (isConfirmed && seed.payable) {
-    // read only confirmed
-  }
-  return { allowed: [...allowed], blockers }
-}
-
-function toListRow(seed: SeedStatement, role: DemoRole): SettlementListRow {
-  const { allowed, blockers } = roleActions(role, seed)
-  const meta = statusMeta(seed.status)
-  const dir = withDirection(seed)
+  // 后端未返回 period policy → 标记未配置（fail-closed）
   return {
-    statementId: seed.statementId,
-    statementNo: seed.statementNo,
-    supplierId: seed.supplierId,
-    supplierName: seed.supplierName,
-    periodStart: seed.periodStart,
-    periodEnd: seed.periodEnd,
-    periodLabel: seed.periodLabel,
-    status: seed.status,
-    statusLabel: meta.statusLabel,
-    statusTone: meta.statusTone,
-    erpAmountGross: seed.erpAmountGross,
-    supplierAmountGross: seed.supplierAmountGross,
-    differenceAmountGross: seed.differenceAmountGross,
-    differenceDirectionLabel: dir.differenceDirectionLabel,
-    unresolvedDifferenceCount: unresolvedCount(seed),
-    preparedBy: seed.preparedBy,
-    reviewedBy: seed.reviewedBy,
-    preparedByLabel: seed.preparedBy?.displayName ?? "—",
-    reviewedByLabel: seed.reviewedBy?.displayName ?? "待复核人",
-    updatedAt: seed.sourceSnapshotAt,
-    allowedActions: allowed,
-    actionBlockers: blockers,
+    state: "UNCONFIGURED" as const,
+    blocker: {
+      action: "CREATE_DRAFT",
+      code: "PERIOD_POLICY_UNCONFIGURED",
+      message: "期间策略接口未交付；列表可查，新建草稿已阻断",
+    },
   }
 }
 
-function toDetail(seed: SeedStatement, role: DemoRole): SettlementDetailView {
-  const { allowed, blockers } = roleActions(role, seed)
-  const meta = statusMeta(seed.status)
-  const dir = withDirection(seed)
-  const diffs = seed.differences.map(projectDifference)
-  const open = diffs.filter((d) => d.status === "PENDING").length
-  const blocking = diffs.filter(
-    (d) => d.blocking && d.status === "PENDING"
-  ).length
-  const resolved = diffs.filter((d) => isConcludedStatus(d.status)).length
+function toListRow(s: BackendStatement, role: DemoRole): SettlementListRow {
+  const status = asStatus(s.status)
+  const allowed = ["OPEN_CENTER", "VIEW", "OPEN_PREVIEW"]
+  if (role === "finance_prep" && status !== "CONFIRMED" && status !== "VOIDED") {
+    allowed.push("RESOLVE_DIFFERENCE", "SUBMIT_REVIEW")
+  }
+  if (role === "finance_review" && status === "PENDING_REVIEW") {
+    allowed.push("CONFIRM", "REJECT")
+  }
+  return {
+    statementId: s.id,
+    statementNo: s.statement_no,
+    supplierId: s.supplier_id,
+    supplierName: s.supplier_id,
+    periodStart: s.period_start,
+    periodEnd: s.period_end,
+    periodLabel: s.period_start.slice(0, 7),
+    status,
+    statusLabel: STATUS_LABEL[status],
+    statusTone: STATUS_TONE[status],
+    erpAmountGross: String(s.erp_amount),
+    supplierAmountGross: String(s.supplier_amount),
+    differenceAmountGross: String(s.difference_amount),
+    differenceDirectionLabel: directionLabel(String(s.difference_amount)),
+    unresolvedDifferenceCount: 0,
+    preparedBy: s.prepared_by
+      ? { userId: s.prepared_by, displayName: s.prepared_by }
+      : undefined,
+    reviewedBy: s.reviewed_by
+      ? { userId: s.reviewed_by, displayName: s.reviewed_by }
+      : undefined,
+    preparedByLabel: s.prepared_by || "—",
+    reviewedByLabel: s.reviewed_by || "待复核人",
+    updatedAt: tsToIso(s.created_at),
+    allowedActions: allowed,
+    actionBlockers: [],
+  }
+}
+
+function toDetail(d: BackendDetail, role: DemoRole): SettlementDetailView {
+  const s = d.statement
+  const status = asStatus(s.status)
+  const diffs = (d.differences ?? []).map((diff) => {
+    const diffStatus = (diff.status?.toUpperCase() ||
+      "PENDING") as SettlementDetailView["differences"][number]["status"]
+    const type = (diff.difference_type?.toUpperCase() ||
+      "AMOUNT") as DifferenceType
+    return {
+      differenceId: diff.id,
+      type: DIFF_TYPE_LABEL[type] ? type : ("AMOUNT" as DifferenceType),
+      typeLabel: DIFF_TYPE_LABEL[type] ?? diff.difference_type,
+      status: DIFF_STATUS_LABEL[diffStatus] ? diffStatus : "PENDING",
+      statusLabel: DIFF_STATUS_LABEL[diffStatus] ?? diff.status,
+      statusTone:
+        diffStatus === "PENDING"
+          ? ("warning" as const)
+          : diffStatus === "CLOSED"
+            ? ("success" as const)
+            : ("info" as const),
+      blocking: diffStatus === "PENDING",
+      erpSideLabel: "ERP 试算",
+      supplierSideLabel: "供应商账单",
+      amountDirectionLabel: directionLabel(String(diff.difference_amount)) ?? "—",
+      amountGross: String(diff.difference_amount),
+      version: diff.version,
+      evidence: [],
+      requiresProcurementEvidence: false,
+      leftFields: [],
+    }
+  })
+
+  const open = diffs.filter((x) => x.status === "PENDING").length
+  const blocking = diffs.filter((x) => x.blocking).length
+  const resolved = diffs.length - open
+  const now = new Date().toISOString()
+  const allowed = ["OPEN_CENTER", "VIEW"]
+  if (role === "finance_prep") {
+    if (status === "DRAFT" || status === "PENDING_RECONCILE" || status === "HAS_DIFFERENCE") {
+      allowed.push("RESOLVE_DIFFERENCE", "SUBMIT_REVIEW")
+    }
+  }
+  if (role === "finance_review" && status === "PENDING_REVIEW") {
+    allowed.push("CONFIRM", "REJECT")
+  }
 
   return {
     statement: {
-      id: seed.statementId,
-      statementNo: seed.statementNo,
-      supplierId: seed.supplierId,
-      supplierName: seed.supplierName,
-      periodStart: seed.periodStart,
-      periodEnd: seed.periodEnd,
-      periodLabel: seed.periodLabel,
-      externalBillNo: seed.externalBillNo,
-      externalBillVersion: seed.externalBillVersion,
-      erpAmountGross: seed.erpAmountGross,
-      supplierAmountGross: seed.supplierAmountGross,
-      differenceAmountGross: seed.differenceAmountGross,
-      differenceDirectionLabel: dir.differenceDirectionLabel,
-      status: seed.status,
-      statusLabel: meta.statusLabel,
-      statusTone: meta.statusTone,
-      preparedBy: seed.preparedBy,
-      reviewedBy: seed.reviewedBy,
-      lockVersion: seed.lockVersion,
-      subjectHash: seed.subjectHash,
-      sourceAsOf: seed.sourceAsOf,
-      sourceSnapshotAt: seed.sourceSnapshotAt,
-      sourceSnapshotHash: seed.sourceSnapshotHash,
+      id: s.id,
+      statementNo: s.statement_no,
+      supplierId: s.supplier_id,
+      supplierName: s.supplier_id,
+      periodStart: s.period_start,
+      periodEnd: s.period_end,
+      periodLabel: s.period_start.slice(0, 7),
+      externalBillNo: s.external_bill_no ?? undefined,
+      externalBillVersion: s.external_bill_version ?? undefined,
+      erpAmountGross: String(s.erp_amount),
+      supplierAmountGross: String(s.supplier_amount),
+      differenceAmountGross: String(s.difference_amount),
+      differenceDirectionLabel: directionLabel(String(s.difference_amount)),
+      status,
+      statusLabel: STATUS_LABEL[status],
+      statusTone: STATUS_TONE[status],
+      preparedBy: s.prepared_by
+        ? { userId: s.prepared_by, displayName: s.prepared_by }
+        : undefined,
+      reviewedBy: s.reviewed_by
+        ? { userId: s.reviewed_by, displayName: s.reviewed_by }
+        : undefined,
+      lockVersion: s.version,
+      sourceAsOf: tsToIso(s.created_at),
+      sourceSnapshotAt: tsToIso(s.created_at),
+      sourceSnapshotHash: `v${s.version}`,
     },
     totals: {
-      orderAmountGross: seed.orderAmountGross,
-      freightGross: seed.freightGross,
-      serviceFeeGross: seed.serviceFeeGross,
-      refundGross: seed.refundGross,
-      erpAmountGross: seed.erpAmountGross,
-      supplierAmountGross: seed.supplierAmountGross,
-      differenceAmountGross: seed.differenceAmountGross,
-      differenceDirectionLabel: dir.differenceDirectionLabel,
+      // 金额一律来自结算单头；不在前端汇总明细
+      orderAmountGross: String(s.erp_amount),
+      freightGross: "0.00",
+      serviceFeeGross: "0.00",
+      refundGross: "0.00",
+      erpAmountGross: String(s.erp_amount),
+      supplierAmountGross: String(s.supplier_amount),
+      differenceAmountGross: String(s.difference_amount),
+      differenceDirectionLabel: directionLabel(String(s.difference_amount)),
       taxBasisLabel: "含税",
-      pendingCostDeltaGross: seed.pendingCostDeltaGross,
-      confirmedCostDeltaGross: seed.confirmedCostDeltaGross,
     },
-    items: seed.items,
+    items: (d.items ?? []).map((it) => ({
+      itemId: it.id,
+      supplierOrderNo: it.supplier_fulfillment_order_id,
+      externalOrderNo: it.supplier_fulfillment_order_id,
+      productName: it.supplier_fulfillment_item_id,
+      quantity: "—",
+      factLabel: "履约结算",
+      orderAmountGross: String(it.order_amount),
+      freightGross: String(it.freight_amount),
+      serviceFeeGross: String(it.service_fee_amount),
+      refundGross: String(it.refund_amount),
+      erpAmountGross: String(it.erp_calculated_amount),
+      supplierBillLineGross: String(it.supplier_billed_amount),
+      readOnly: true as const,
+    })),
     differences: diffs,
     differenceSummary: {
       total: diffs.length,
@@ -404,33 +304,24 @@ function toDetail(seed: SeedStatement, role: DemoRole): SettlementDetailView {
       blocking,
       resolved,
     },
-    reviewRecords: seed.reviewRecords,
-    payable: seed.payable
+    reviewRecords: [],
+    payable: s.payable_account_id
       ? {
-          ...seed.payable,
-          w12Href: `/finance/supplier-accounts?view=payable&sourceType=SUPPLIER_SETTLEMENT&q=${encodeURIComponent(seed.payable.payableNo)}`,
-        }
-      : undefined,
-    workItem: seed.workItem
-      ? {
-          workItemId: seed.workItem.workItemId,
-          workItemType: "SUPPLIER_SETTLEMENT_REVIEW",
-          subjectVersion: seed.workItem.subjectVersion,
-          subjectHash: seed.workItem.subjectHash,
-          claimedBy: seed.workItem.claimedBy,
+          payableAccountId: s.payable_account_id,
+          payableNo: s.payable_account_id,
+          grossAmount: String(s.erp_amount),
+          dueDate: "",
+          statusLabel: "已生成",
+          w12Href: `/finance/supplier-accounts?view=payable&q=${encodeURIComponent(s.payable_account_id)}`,
         }
       : undefined,
     periodPolicy: periodPolicy(),
-    auditEvents: seed.auditEvents,
+    auditEvents: [],
     allowedActions: allowed,
-    actionBlockers: blockers,
+    actionBlockers: [],
     freshness: {
-      immutableFactsAsOf: seed.sourceAsOf,
-      externalBillAsOf: seed.externalBillVersion
-        ? seed.sourceAsOf
-        : undefined,
-      w26ProjectionUpdatedAt: "2026-08-01T07:55:00+08:00",
-      queriedAt: new Date().toISOString(),
+      immutableFactsAsOf: tsToIso(s.created_at),
+      queriedAt: now,
     },
     viewerRole: role,
     viewerRoleLabel: DEMO_ROLE_LABEL[role],
@@ -439,17 +330,20 @@ function toDetail(seed: SeedStatement, role: DemoRole): SettlementDetailView {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
 export async function fetchSettlementList(
   input: ListQueryInput
 ): Promise<SettlementListView> {
-  await mockDelay()
   const queriedAt = new Date().toISOString()
-  const sourceAsOf = "2026-08-01T10:00:00+08:00"
-  const emptyBase = {
+  const pageSize = input.pageSize ?? 50
+  const emptyBase: SettlementListView = {
     view: input.view,
-    rows: [] as SettlementListRow[],
+    rows: [],
     page: 1,
-    pageSize: input.pageSize ?? 50,
+    pageSize,
     total: 0,
     totals: {
       pendingReconcile: 0,
@@ -464,14 +358,16 @@ export async function fetchSettlementList(
       confirmedAmount: "0.00",
     },
     periodPolicy: periodPolicy(input.demoFlag),
-    suppliers: SUPPLIERS.map((s) => ({ ...s })),
+    suppliers: [],
     viewerRole: input.role,
     viewerRoleLabel: DEMO_ROLE_LABEL[input.role],
     viewerUserId: roleToUserId(input.role),
-    permissionVersion: "pv_w27_1",
-    sourceAsOf,
+    permissionVersion: "server",
+    sourceAsOf: queriedAt,
     queriedAt,
     filterSummary: "",
+    hasModulePermission: true,
+    hasDataScope: true,
   }
 
   if (input.demoFlag === "no-permission") {
@@ -486,144 +382,71 @@ export async function fetchSettlementList(
     return {
       ...emptyBase,
       emptyReason: "NO_SCOPE",
-      hasModulePermission: true,
       hasDataScope: false,
     }
   }
 
-  let seeds = allSeeds()
-  const metricsBase = seeds
-  const metrics = {
-    pending: metricsBase.filter(
-      (s) =>
-        s.status === "DRAFT" ||
-        s.status === "PENDING_RECONCILE" ||
-        s.status === "HAS_DIFFERENCE" ||
-        s.status === "PENDING_REVIEW"
-    ).length,
-    hasDifference: metricsBase.filter((s) => s.status === "HAS_DIFFERENCE")
-      .length,
-    pendingReview: metricsBase.filter((s) => s.status === "PENDING_REVIEW")
-      .length,
-    confirmedAmount: metricsBase
-      .filter((s) => s.status === "CONFIRMED")
-      .reduce((acc, s) => acc + Number(s.erpAmountGross || 0), 0)
-      .toFixed(2),
-  }
-  const totals = {
-    pendingReconcile: metricsBase.filter(
-      (s) =>
-        s.status === "DRAFT" ||
-        s.status === "PENDING_RECONCILE" ||
-        s.status === "HAS_DIFFERENCE" ||
-        s.status === "PENDING_REVIEW"
-    ).length,
-    hasDifference: metrics.hasDifference,
-    pendingReview: metrics.pendingReview,
-    confirmedAmountThisPeriod: metrics.confirmedAmount,
+  // Map view → status filter when possible
+  let statusFilter = input.status
+  if (!statusFilter) {
+    if (input.view === "confirmed") statusFilter = "CONFIRMED"
+    else if (input.view === "pending") statusFilter = undefined
   }
 
-  // view
+  const pageRes = await apiGet<Page<BackendStatement>>(
+    "/admin/supplier-settlement-statements",
+    {
+      page: input.page,
+      page_size: pageSize,
+      supplier_id: input.supplierId,
+      status: statusFilter?.split(",")[0]?.trim() || undefined,
+      statement_no: input.q?.trim() || undefined,
+      sort_by: "period_end",
+      sort_dir: "asc",
+    }
+  )
+
+  let statements = pageRes.items ?? []
+
+  // Client-side view filters not supported by backend
   if (input.view === "pending") {
-    seeds = seeds.filter(
-      (s) =>
-        s.status === "DRAFT" ||
-        s.status === "PENDING_RECONCILE" ||
-        s.status === "HAS_DIFFERENCE" ||
-        s.status === "PENDING_REVIEW"
-    )
-  } else if (input.view === "confirmed") {
-    seeds = seeds.filter((s) => s.status === "CONFIRMED")
+    statements = statements.filter((s) => {
+      const st = asStatus(s.status)
+      return (
+        st === "DRAFT" ||
+        st === "PENDING_RECONCILE" ||
+        st === "HAS_DIFFERENCE" ||
+        st === "PENDING_REVIEW"
+      )
+    })
   } else if (input.view === "prepared_by_me") {
     const uid = roleToUserId(input.role)
-    seeds = seeds.filter((s) => s.preparedBy?.userId === uid)
+    statements = statements.filter((s) => s.prepared_by === uid)
   } else if (input.view === "review_by_me") {
-    seeds = seeds.filter(
+    const uid = roleToUserId(input.role)
+    statements = statements.filter(
       (s) =>
-        s.status === "PENDING_REVIEW" ||
-        s.reviewedBy?.userId === roleToUserId(input.role)
+        asStatus(s.status) === "PENDING_REVIEW" || s.reviewed_by === uid
     )
   }
 
-  if (input.supplierId) {
-    seeds = seeds.filter((s) => s.supplierId === input.supplierId)
-  }
   if (input.periodFrom) {
-    seeds = seeds.filter((s) => s.periodStart >= input.periodFrom!)
+    statements = statements.filter((s) => s.period_start >= input.periodFrom!)
   }
   if (input.periodTo) {
-    seeds = seeds.filter((s) => s.periodEnd <= input.periodTo!)
-  }
-  if (input.status) {
-    const set = new Set(
-      input.status.split(",").map((x) => x.trim().toUpperCase())
-    )
-    seeds = seeds.filter((s) => set.has(s.status))
-  }
-  if (input.differenceType) {
-    seeds = seeds.filter((s) =>
-      s.differences.some(
-        (d) =>
-          d.type === input.differenceType && d.status === "PENDING"
-      )
-    )
-  }
-  if (input.q?.trim()) {
-    const q = input.q.trim().toUpperCase()
-    seeds = seeds.filter(
-      (s) =>
-        s.statementNo.toUpperCase().includes(q) ||
-        s.supplierName.toUpperCase().includes(q) ||
-        (s.externalBillNo?.toUpperCase().includes(q) ?? false)
-    )
+    statements = statements.filter((s) => s.period_end <= input.periodTo!)
   }
 
-  // sort: HAS_DIFFERENCE first, then period end asc, id
-  seeds = [...seeds].sort((a, b) => {
-    const rank = (s: SeedStatement) =>
-      s.status === "HAS_DIFFERENCE"
-        ? 0
-        : s.status === "PENDING_REVIEW"
-          ? 1
-          : s.status === "PENDING_RECONCILE" || s.status === "DRAFT"
-            ? 2
-            : 3
-    const dr = rank(a) - rank(b)
-    if (dr !== 0) return dr
-    const pe = a.periodEnd.localeCompare(b.periodEnd)
-    if (pe !== 0) return pe
-    return a.statementId.localeCompare(b.statementId)
-  })
-
-  const pageSize = input.pageSize ?? 50
-  const page = Math.max(1, input.page)
-  const total = seeds.length
-  const start = (page - 1) * pageSize
-  const pageSeeds = seeds.slice(start, start + pageSize)
-  const rows = pageSeeds.map((s) => toListRow(s, input.role))
-
-  let emptyReason: SettlementListView["emptyReason"]
-  if (total === 0) {
-    const any = allSeeds().length > 0
-    emptyReason = any ? "FILTER_NO_RESULT" : "NO_STATEMENTS"
-  }
+  const rows = statements.map((s) => toListRow(s, input.role))
+  const total = pageRes.total ?? rows.length
+  const suppliersMap = new Map<string, string>()
+  for (const s of statements) suppliersMap.set(s.supplier_id, s.supplier_id)
 
   const filterParts = [
     input.view !== "pending" ? `视图=${VIEW_LABEL[input.view]}` : null,
-    input.supplierId
-      ? `供应商=${SUPPLIERS.find((s) => s.supplierId === input.supplierId)?.supplierName ?? input.supplierId}`
-      : null,
+    input.supplierId ? `供应商=${input.supplierId}` : null,
     input.periodFrom || input.periodTo
       ? `期间=${input.periodFrom ?? "…"} ~ ${input.periodTo ?? "…"}`
-      : null,
-    input.status
-      ? `状态=${input.status
-          .split(",")
-          .map((s) => STATUS_LABEL[s.trim() as SettlementStatus] ?? s.trim())
-          .join("/")}`
-      : null,
-    input.differenceType
-      ? `差异=${DIFF_TYPE_LABEL[input.differenceType]}`
       : null,
     input.q ? `搜索=${input.q}` : null,
   ].filter(Boolean)
@@ -631,21 +454,23 @@ export async function fetchSettlementList(
   return {
     view: input.view,
     rows,
-    page,
-    pageSize,
+    page: pageRes.page ?? input.page,
+    pageSize: pageRes.page_size ?? pageSize,
     total,
-    totals,
-    metrics,
+    totals: emptyBase.totals,
+    metrics: emptyBase.metrics,
     periodPolicy: periodPolicy(input.demoFlag),
-    suppliers: SUPPLIERS.map((s) => ({ ...s })),
-    emptyReason,
+    suppliers: Array.from(suppliersMap.entries()).map(
+      ([supplierId, supplierName]) => ({ supplierId, supplierName })
+    ),
+    emptyReason: total === 0 ? "NO_STATEMENTS" : undefined,
     hasModulePermission: true,
     hasDataScope: true,
     viewerRole: input.role,
     viewerRoleLabel: DEMO_ROLE_LABEL[input.role],
     viewerUserId: roleToUserId(input.role),
-    permissionVersion: "pv_w27_1",
-    sourceAsOf,
+    permissionVersion: "server",
+    sourceAsOf: queriedAt,
     queriedAt,
     filterSummary: filterParts.length
       ? filterParts.join(" · ")
@@ -657,16 +482,24 @@ export async function fetchSettlementDetail(input: {
   statementId: string
   role: DemoRole
 }): Promise<SettlementDetailView | null> {
-  await mockDelay()
-  const seed = findSeed(input.statementId)
-  if (!seed) return null
-  return toDetail(seed, input.role)
+  try {
+    const detail = await apiGet<BackendDetail>(
+      `/admin/supplier-settlement-statements/${encodeURIComponent(input.statementId)}`
+    )
+    return toDetail(detail, input.role)
+  } catch (err) {
+    const status =
+      err && typeof err === "object" && "status" in err
+        ? (err as { status?: number }).status
+        : undefined
+    if (status === 404) return null
+    throw err
+  }
 }
 
 export async function createSettlementDraft(
   input: CreateDraftInput
 ): Promise<FormalOutcome> {
-  await mockDelay(120)
   if (input.role !== "finance_prep") {
     return {
       status: "blocked",
@@ -675,322 +508,88 @@ export async function createSettlementDraft(
       message: "仅财务经办可在期间策略已配置时新建结算草稿",
     }
   }
-  const policy = periodPolicy()
-  if (policy.state !== "CONFIGURED") {
-    return {
-      status: "blocked",
-      code: "PERIOD_POLICY_UNCONFIGURED",
-      title: "期间策略未配置",
-      message: policy.blocker.message,
-    }
-  }
-  if (
-    input.periodPolicyId !== policy.policyId ||
-    input.expectedPeriodPolicyVersion !== policy.policyVersion
-  ) {
-    return {
-      status: "blocked",
-      code: "PERIOD_POLICY_STALE",
-      title: "期间策略版本过期",
-      message:
-        "当前使用的策略版本已更新，已拒绝创建草稿。请重新加载策略后选择完整周期。",
-    }
-  }
-  const periodOk = policy.selectablePeriods.some(
-    (p) =>
-      p.periodStart === input.periodStart && p.periodEnd === input.periodEnd
-  )
-  if (!periodOk) {
-    return {
-      status: "blocked",
-      code: "PERIOD_NOT_IN_POLICY",
-      title: "期间不在策略内",
-      message: "必须选择策略返回的完整周期，不接受任意自然日拼接",
-    }
-  }
-  const supplier = SUPPLIERS.find((s) => s.supplierId === input.supplierId)
-  if (!supplier) {
-    return {
-      status: "failed",
-      code: "SUPPLIER_NOT_FOUND",
-      title: "供应商不存在",
-      message: "请选择授权范围内的供应商",
-    }
-  }
-  const covered = allSeeds().some(
-    (s) =>
-      s.supplierId === input.supplierId &&
-      s.periodStart === input.periodStart &&
-      s.periodEnd === input.periodEnd &&
-      s.status !== "VOIDED"
-  )
-  if (covered) {
-    return {
-      status: "blocked",
-      code: "PERIOD_ALREADY_COVERED",
-      title: "期间已被覆盖",
-      message: "同一供应商同一结算范围已有有效结算单，不可重复创建",
-    }
-  }
 
-  const now = new Date().toISOString()
-  const statementId = `st_new_${Date.now().toString(36)}`
-  const statementNo = `ST-${input.periodStart.slice(0, 7).replace("-", "")}-${supplier.supplierId.replace("sup_", "").toUpperCase()}`
-  const snapshotHash = `ssh_new_${Date.now().toString(36)}`
-  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
-  const seed: SeedStatement = {
-    statementId,
-    statementNo,
-    supplierId: supplier.supplierId,
-    supplierName: supplier.supplierName,
-    periodStart: input.periodStart,
-    periodEnd: input.periodEnd,
-    periodLabel: input.periodStart.slice(0, 7),
-    status: "DRAFT",
-    orderAmountGross: "0.00",
-    freightGross: "0.00",
-    serviceFeeGross: "0.00",
-    refundGross: "0.00",
-    erpAmountGross: "0.00",
-    preparedBy: roleToActor(input.role),
-    lockVersion: 1,
-    subjectHash: `sh_${statementId}`,
-    sourceAsOf: now,
-    sourceSnapshotAt: now,
-    sourceSnapshotHash: snapshotHash,
-    items: [],
-    differences: [],
-    reviewRecords: [],
-    auditEvents: [
+  // Backend requires statement_no + items; frontend CreateDraftInput lacks items
+  // → create with empty-items will 422. Document gap and call with minimal shape.
+  try {
+    const created = await apiPost<BackendStatement>(
+      "/admin/supplier-settlement-statements",
       {
-        eventId: `ae_${statementId}`,
-        at: now,
-        actor: ACTORS.prep.displayName,
-        action: "CREATE_DRAFT",
-        summary: "按当前结算期间策略创建草稿并冻结来源数据",
-        auditNo,
-      },
-    ],
-  }
-  created.unshift(seed)
-
-  return {
-    status: "succeeded",
-    title: "结算草稿已创建",
-    message: "已按策略周期冻结来源数据并形成明细试算（演示为空明细可刷新）。",
-    reference: statementNo,
-    statementId,
-    sourceSnapshotHash: snapshotHash,
-    lockVersion: 1,
-    facts: [
-      { label: "结算单号", value: statementNo },
-      { label: "供应商", value: supplier.supplierName },
-      {
-        label: "期间",
-        value: `${input.periodStart} ~ ${input.periodEnd}`,
-      },
-      { label: "期间策略", value: "当前自然月策略（已配置）" },
-      { label: "数据版本", value: "v1" },
-    ],
-  }
-}
-
-export async function refreshSettlementTrial(
-  input: RefreshDraftInput
-): Promise<FormalOutcome> {
-  await mockDelay(140)
-  if (input.role !== "finance_prep") {
+        statement_no: `ST-${input.periodStart.replace(/-/g, "").slice(0, 6)}-${input.requestId.slice(-6)}`,
+        supplier_id: input.supplierId,
+        period_start: input.periodStart,
+        period_end: input.periodEnd,
+        items: [],
+      }
+    )
     return {
-      status: "blocked",
-      code: "FORBIDDEN",
-      title: "无权刷新试算",
-      message: "仅财务经办可刷新草稿试算",
-    }
-  }
-  const seed = findSeed(input.statementId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "结算单不存在",
-      message: "未找到结算单",
-    }
-  }
-  if (
-    seed.status !== "DRAFT" &&
-    seed.status !== "PENDING_RECONCILE" &&
-    seed.status !== "HAS_DIFFERENCE"
-  ) {
-    return {
-      status: "blocked",
-      code: "STATUS_NOT_REFRESHABLE",
-      title: "当前状态不可刷新",
-      message: "已提交复核或已确认的结算不可刷新试算",
-    }
-  }
-  if (seed.lockVersion !== input.expectedLockVersion) {
-    return {
-      status: "failed",
-      code: "VERSION_CONFLICT",
-      title: "数据已更新",
-      message: "数据已更新，请刷新后重新加载试算",
-    }
-  }
-  if (seed.sourceSnapshotHash !== input.expectedSourceSnapshotHash) {
-    return {
-      status: "failed",
-      code: "SNAPSHOT_STALE",
-      title: "来源数据已过期",
-      message:
-        "来源数据版本与当前不一致；旧提交已失效，请使用最新数据重试",
-    }
-  }
-
-  const now = new Date().toISOString()
-  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
-  const o = ensureOverlay(input.statementId, seed)
-  o.lockVersion = seed.lockVersion + 1
-  o.sourceAsOf = now
-  o.sourceSnapshotAt = now
-  o.sourceSnapshotHash = `ssh_refreshed_${Date.now().toString(36)}`
-  o.subjectHash = `sh_refreshed_${seed.statementId}_${o.lockVersion}`
-  // keep status; bump bill if draft missing bill
-  if (!seed.supplierAmountGross) {
-    o.supplierAmountGross = seed.erpAmountGross
-    o.differenceAmountGross = "0.00"
-    o.externalBillNo = o.externalBillNo ?? `BILL-MOCK-${seed.periodLabel}`
-    o.externalBillVersion = "v1"
-    if (seed.status === "DRAFT") o.status = "PENDING_RECONCILE"
-  }
-  o.auditEvents = [
-    {
-      eventId: `ae_ref_${Date.now()}`,
-      at: now,
-      actor: ACTORS.prep.displayName,
-      action: "REFRESH_TRIAL",
-      summary: `刷新试算 · 来源时间 ${now} · 数据版本 v${o.lockVersion}`,
-      auditNo,
-    },
-    ...seed.auditEvents,
-  ]
-
-  const result: FormalOutcome = {
-    status: "succeeded",
-    title: "明细试算已刷新",
-    message:
-      "已更新草稿试算版本，不修改原订单或供应商账单原值。",
-    reference: auditNo,
-    statementId: seed.statementId,
-    sourceSnapshotHash: o.sourceSnapshotHash,
-    subjectHash: o.subjectHash,
-    lockVersion: o.lockVersion,
-    facts: [
-      { label: "来源时间", value: now },
-      { label: "数据版本", value: `v${o.lockVersion}` },
-      { label: "版本号", value: String(o.lockVersion) },
-      { label: "审计号", value: auditNo },
-    ],
-  }
-  return result
-}
-
-export async function appendDifferenceEvidence(
-  input: AppendEvidenceInput
-): Promise<FormalOutcome> {
-  await mockDelay(100)
-  if (input.role !== "procurement") {
-    return {
-      status: "blocked",
-      code: "ROLE_NOT_PROCUREMENT",
-      title: "仅采购可追加协同证据",
-      message: "采购证据不改变差异结论、试算金额或成本基线",
-    }
-  }
-  const seed = findSeed(input.statementId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "结算单不存在",
-      message: "未找到结算单",
-    }
-  }
-  if (seed.status === "CONFIRMED") {
-    return {
-      status: "blocked",
-      code: "CONFIRMED_READONLY",
-      title: "已确认只读",
-      message: "已确认结算不可追加证据",
-    }
-  }
-  const diff = seed.differences.find((d) => d.differenceId === input.differenceId)
-  if (!diff) {
-    return {
-      status: "failed",
-      code: "DIFF_NOT_FOUND",
-      title: "差异不存在",
-      message: "未找到差异行",
-    }
-  }
-  if (diff.version !== input.expectedDifferenceVersion) {
-    return {
-      status: "failed",
-      code: "DIFF_VERSION_CONFLICT",
-      title: "差异数据已更新",
-      message: "请刷新后重试",
-    }
-  }
-
-  const now = new Date().toISOString()
-  const o = ensureOverlay(input.statementId, seed)
-  o.differences = seed.differences.map((d) => {
-    if (d.differenceId !== input.differenceId) return d
-    return {
-      ...d,
-      version: d.version + 1,
-      evidence: [
-        ...d.evidence,
+      status: "succeeded",
+      title: "结算草稿已创建",
+      message: "已创建结算草稿。",
+      reference: created.statement_no,
+      statementId: created.id,
+      lockVersion: created.version,
+      facts: [
+        { label: "结算单号", value: created.statement_no },
+        { label: "供应商", value: created.supplier_id },
         {
-          evidenceId: `ev_${Date.now()}`,
-          kind: "PROCUREMENT_OPINION" as const,
-          label: input.opinionCode ?? "采购业务意见",
-          comment: input.comment,
-          by: roleToActor(input.role),
-          at: now,
+          label: "期间",
+          value: `${input.periodStart} ~ ${input.periodEnd}`,
         },
       ],
     }
-  })
-  o.auditEvents = [
-    {
-      eventId: `ae_ev_${Date.now()}`,
-      at: now,
-      actor: ACTORS.procurement.displayName,
-      action: "APPEND_EVIDENCE",
-      summary: `追加采购证据 · ${DIFF_TYPE_LABEL[diff.type]}（结论未变）`,
-      auditNo: `AUD-${Date.now().toString().slice(-6)}`,
-    },
-    ...seed.auditEvents,
-  ]
-
-  const result: FormalOutcome = {
-    status: "succeeded",
-    title: "采购证据已追加",
-    message: "仅追加证据与审计，差异结论、金额与成本基线未改变。",
-    reference: `证据记录 EV-${Date.now().toString().slice(-6)}`,
-    statementId: seed.statementId,
-    facts: [
-      { label: "差异", value: DIFF_TYPE_LABEL[diff.type] },
-      { label: "说明", value: input.comment ?? "—" },
-    ],
+  } catch (err) {
+    const message =
+      err && typeof err === "object" && "message" in err
+        ? String((err as { message: string }).message)
+        : "创建草稿失败"
+    // Backend requires ≥1 item — surface as blocked with gap
+    if (message.includes("至少一行") || message.includes("明细")) {
+      return {
+        status: "blocked",
+        code: "ITEMS_REQUIRED",
+        title: "无法创建空草稿",
+        message:
+          "后端要求结算明细至少一行；前端创建草稿未携带明细行（backend_gap：需试算生成明细接口）。",
+      }
+    }
+    throw err
   }
-  return result
+}
+
+/**
+ * 刷新试算：后端无 refresh 端点。
+ */
+export async function refreshSettlementTrial(
+  input: RefreshDraftInput
+): Promise<FormalOutcome> {
+  void input
+  return {
+    status: "blocked",
+    code: "NOT_IMPLEMENTED",
+    title: "刷新试算未交付",
+    message: "后端尚未提供结算试算刷新接口。",
+  }
+}
+
+/**
+ * 追加采购证据：后端无 evidence 端点。
+ */
+export async function appendDifferenceEvidence(
+  input: AppendEvidenceInput
+): Promise<FormalOutcome> {
+  void input
+  return {
+    status: "blocked",
+    code: "NOT_IMPLEMENTED",
+    title: "追加证据未交付",
+    message: "后端尚未提供差异证据追加接口。",
+  }
 }
 
 export async function resolveDifference(
   input: ResolveDifferenceInput
 ): Promise<FormalOutcome> {
-  await mockDelay(120)
   if (input.role !== "finance_prep") {
     return {
       status: "blocked",
@@ -999,499 +598,102 @@ export async function resolveDifference(
       message: "采购证据不能自行改变差异状态或成本基线",
     }
   }
-  const seed = findSeed(input.statementId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "结算单不存在",
-      message: "未找到结算单",
-    }
-  }
-  if (seed.status === "CONFIRMED" || seed.status === "PENDING_REVIEW") {
-    return {
-      status: "blocked",
-      code: "STATUS_LOCKED",
-      title: "当前状态不可处理差异",
-      message: "待复核或已确认不可改写差异结论",
-    }
-  }
-  if (seed.lockVersion !== input.expectedLockVersion) {
-    return {
-      status: "failed",
-      code: "VERSION_CONFLICT",
-      title: "数据已更新",
-      message: "请刷新后基于最新数据提交",
-    }
-  }
-  const diff = seed.differences.find((d) => d.differenceId === input.differenceId)
-  if (!diff) {
-    return {
-      status: "failed",
-      code: "DIFF_NOT_FOUND",
-      title: "差异不存在",
-      message: "未找到差异行",
-    }
-  }
-  if (diff.version !== input.expectedDifferenceVersion) {
-    return {
-      status: "failed",
-      code: "DIFF_VERSION_CONFLICT",
-      title: "差异数据已更新",
-      message: "请刷新后重试",
-    }
-  }
-  if (
-    diff.requiresProcurementEvidence &&
-    diff.evidence.length === 0 &&
-    input.resolution !== "CLOSED_NO_ADJUSTMENT"
-  ) {
-    return {
-      status: "blocked",
-      code: "EVIDENCE_REQUIRED",
-      title: "缺少采购证据",
-      message: "该差异需采购协同证据齐备后方可登记结论",
-    }
-  }
 
-  const now = new Date().toISOString()
-  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
-  const costImpact =
-    input.resolution === "SUPPLIER_ACCEPTED" ||
-    input.resolution === "COMPENSATED"
-      ? diff.amountGross ?? "0.00"
-      : "0.00"
-
-  const o = ensureOverlay(input.statementId, seed)
-  o.lockVersion = seed.lockVersion + 1
-  o.differences = seed.differences.map((d) => {
-    if (d.differenceId !== input.differenceId) return d
-    return {
-      ...d,
-      version: d.version + 1,
-      status: RESOLUTION_TO_STATUS[input.resolution],
-      blocking: false,
-      resolution: {
-        resolutionId: `res_${input.operationId}`,
-        resolution: input.resolution,
-        resolutionLabel: RESOLUTION_LABEL[input.resolution],
-        reasonCode: input.reasonCode,
-        reasonLabel: REASON_CODE_LABEL[input.reasonCode] ?? input.reasonCode,
-        by: roleToActor(input.role),
-        at: now,
-        costImpactPreview: costImpact,
-      },
-    }
-  })
-  const stillBlocking = o.differences!.some(
-    (d) => d.blocking && d.status === "PENDING"
-  )
-  if (!stillBlocking && seed.status === "HAS_DIFFERENCE") {
-    o.status = "PENDING_RECONCILE"
-  }
-  const pending = o.differences!
-    .filter((d) => d.resolution)
-    .reduce((acc, d) => {
-      const v = Number(d.resolution?.costImpactPreview ?? 0)
-      return acc + (Number.isFinite(v) ? v : 0)
-    }, 0)
-  o.pendingCostDeltaGross = pending.toFixed(2)
-  o.subjectHash = `sh_diff_${seed.statementId}_${o.lockVersion}`
-  o.auditEvents = [
+  const status = RESOLUTION_TO_STATUS[input.resolution]
+  await apiPost(
+    `/admin/supplier-settlement-differences/${encodeURIComponent(input.differenceId)}/resolve`,
     {
-      eventId: `ae_res_${Date.now()}`,
-      at: now,
-      actor: ACTORS.prep.displayName,
-      action: "RESOLVE_DIFFERENCE",
-      summary: `${DIFF_TYPE_LABEL[diff.type]} → ${RESOLUTION_LABEL[input.resolution]} · 成本预览 ${costImpact}`,
-      auditNo,
-    },
-    ...seed.auditEvents,
-  ]
+      version: input.expectedDifferenceVersion,
+      status,
+      resolution: input.reasonCode,
+      resolved_by: roleToUserId(input.role),
+      resolved_at: Math.floor(Date.now() / 1000),
+    }
+  )
 
-  const result: FormalOutcome = {
+  return {
     status: "succeeded",
-    title: "差异处理结论已登记",
-    message:
-      "已追加财务处理记录并刷新待确认成本差额；未改写账单原值或历史订单成本。",
-    reference: auditNo,
-    statementId: seed.statementId,
-    costDeltaGross: costImpact,
-    subjectHash: o.subjectHash,
-    lockVersion: o.lockVersion,
+    title: "差异结论已登记",
+    message: "差异结论已写入，未改写订单原值。",
+    operationId: input.operationId,
+    statementId: input.statementId,
     facts: [
-      { label: "结论", value: RESOLUTION_LABEL[input.resolution] },
-      { label: "原因", value: REASON_CODE_LABEL[input.reasonCode] ?? input.reasonCode },
-      { label: "成本影响预览（含税）", value: costImpact },
-      { label: "差异版本", value: String(diff.version + 1) },
+      { label: "结论", value: status },
+      { label: "原因", value: input.reasonCode },
     ],
   }
-  return result
 }
 
 export async function submitSettlementReview(
   input: SubmitReviewInput
 ): Promise<FormalOutcome> {
-  await mockDelay(130)
-  if (input.role !== "finance_prep") {
-    return {
-      status: "blocked",
-      code: "FORBIDDEN",
-      title: "无权提交复核",
-      message: "仅财务经办可提交复核",
-    }
-  }
-  const seed = findSeed(input.statementId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "结算单不存在",
-      message: "未找到结算单",
-    }
-  }
-  if (seed.lockVersion !== input.expectedLockVersion) {
-    return {
-      status: "failed",
-      code: "VERSION_CONFLICT",
-      title: "数据已更新",
-      message: "版本变化会使旧提交失效",
-    }
-  }
-  if (seed.subjectHash && seed.subjectHash !== input.subjectHash) {
-    return {
-      status: "failed",
-      code: "SUBJECT_HASH_MISMATCH",
-      title: "数据版本不一致",
-      message: "数据版本不一致，请刷新后重试",
-    }
-  }
-  if (
-    seed.differences.some((d) => d.blocking && d.status === "PENDING")
-  ) {
-    return {
-      status: "blocked",
-      code: "BLOCKING_DIFFERENCES",
-      title: "存在阻断差异",
-      message: "全部阻断差异须有允许进入复核的处理结论",
-    }
-  }
-
-  const now = new Date().toISOString()
-  const auditNo = `AUD-${Date.now().toString().slice(-6)}`
-  const o = ensureOverlay(input.statementId, seed)
-  o.lockVersion = seed.lockVersion + 1
-  o.status = "PENDING_REVIEW"
-  o.subjectHash = input.subjectHash || `sh_sub_${seed.statementId}`
-  o.workItem = {
-    workItemId: `wi_${seed.statementId}`,
-    subjectVersion: String(o.lockVersion),
-    subjectHash: o.subjectHash,
-    claimedBy: undefined,
-  }
-  o.reviewRecords = [
+  await apiPost(
+    `/admin/supplier-settlement-statements/${encodeURIComponent(input.statementId)}/submit-review`,
     {
-      recordId: `rr_sub_${Date.now()}`,
-      action: "SUBMIT",
-      actionLabel: "提交复核",
-      by: roleToActor(input.role),
-      at: now,
+      version: input.expectedLockVersion,
       comment: input.comment,
-    },
-    ...seed.reviewRecords,
-  ]
-  o.auditEvents = [
-    {
-      eventId: `ae_sub_${Date.now()}`,
-      at: now,
-      actor: ACTORS.prep.displayName,
-      action: "SUBMIT_REVIEW",
-      summary: "提交复核 · 冻结来源数据与账单版本",
-      auditNo,
-    },
-    ...seed.auditEvents,
-  ]
-
-  const result: FormalOutcome = {
+    }
+  )
+  return {
     status: "succeeded",
     title: "已提交复核",
-    message: "已冻结提交数据并创建复核待办。",
-    reference: auditNo,
-    statementId: seed.statementId,
-    subjectHash: o.subjectHash,
-    lockVersion: o.lockVersion,
-    facts: [
-      { label: "复核待办", value: "已创建" },
-      { label: "数据版本", value: `v${o.lockVersion}` },
-    ],
+    message: "结算单已进入待复核。",
+    operationId: input.operationId,
+    statementId: input.statementId,
   }
-  return result
 }
 
+/**
+ * 领取复核：后端无独立 claim；由 confirm 路径覆盖。
+ */
 export async function claimSettlementReview(input: {
   statementId: string
   workItemId: string
-  expectedSubjectVersion: string
   role: DemoRole
-  idempotencyKey: string
+  expectedSubjectVersion?: string
+  idempotencyKey?: string
 }): Promise<FormalOutcome> {
-  await mockDelay(100)
-  if (input.role !== "finance_review") {
-    return {
-      status: "blocked",
-      code: "FORBIDDEN",
-      title: "无权领取任务",
-      message: "结算复核任务由财务复核领取",
-    }
-  }
-  const seed = findSeed(input.statementId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "结算单不存在",
-      message: "未找到结算单",
-    }
-  }
-  if (!seed.workItem || seed.workItem.workItemId !== input.workItemId) {
-    return {
-      status: "blocked",
-      code: "WORK_ITEM_MISMATCH",
-      title: "任务不匹配",
-      message: "该结算单没有可领取的复核任务",
-    }
-  }
-  if (seed.workItem.subjectVersion !== input.expectedSubjectVersion) {
-    return {
-      status: "failed",
-      code: "SUBJECT_VERSION_MISMATCH",
-      title: "数据已变更",
-      message: "任务数据已变化，请刷新后重试",
-    }
-  }
-  const o = ensureOverlay(input.statementId, seed)
-  o.workItem = {
-    ...seed.workItem,
-    claimedBy: roleToActor(input.role),
-  }
+  void input
   return {
     status: "succeeded",
-    title: "复核任务已领取",
-    message: "已领取该结算单的复核任务，可确认或驳回。",
-    reference: seed.statementNo,
-    statementId: seed.statementId,
-    facts: [
-      { label: "结算单号", value: seed.statementNo },
-      { label: "领取人", value: ACTORS.review.displayName },
-    ],
+    title: "已进入复核",
+    message: "可继续确认或驳回。",
+    statementId: input.statementId,
+    idempotencyKey: input.idempotencyKey,
   }
 }
 
 export async function decideSettlementReview(
   input: ReviewDecisionInput
 ): Promise<FormalOutcome> {
-  await mockDelay(150)
-  if (input.role !== "finance_review") {
-    return {
-      status: "blocked",
-      code: "ROLE_NOT_REVIEW",
-      title: "仅财务复核可决策",
-      message: "确认/驳回须使用完整任务流程，且操作人非经办人",
-    }
-  }
-  const seed = findSeed(input.statementId)
-  if (!seed) {
-    return {
-      status: "failed",
-      code: "NOT_FOUND",
-      title: "结算单不存在",
-      message: "未找到结算单",
-    }
-  }
-  if (seed.preparedBy?.userId === roleToUserId(input.role)) {
-    return {
-      status: "blocked",
-      code: "SOD_VIOLATION",
-      title: "岗位分离冲突",
-      message: "经办与复核不能为同一人",
-    }
-  }
-  if (!seed.workItem || seed.workItem.workItemId !== input.workItemId) {
-    return {
-      status: "blocked",
-      code: "WORK_ITEM_MISMATCH",
-      title: "任务不匹配",
-      message: "请先领取任务后再提交结论",
-    }
-  }
-  if (seed.lockVersion !== input.expectedLockVersion) {
-    return {
-      status: "failed",
-      code: "VERSION_CONFLICT",
-      title: "数据已更新",
-      message: "请刷新任务与结算单后重试",
-    }
-  }
-  if (seed.workItem.subjectVersion !== input.expectedSubjectVersion) {
-    return {
-      status: "failed",
-      code: "SUBJECT_VERSION_MISMATCH",
-      title: "数据已变更",
-      message: "提交数据已变化，不能静默确认过期试算",
-    }
-  }
-  if (
-    seed.differences.some((d) => d.blocking && d.status === "PENDING")
-  ) {
-    return {
-      status: "blocked",
-      code: "BLOCKING_DIFFERENCES",
-      title: "存在阻断差异",
-      message: "未解决阻断差异不能确认结算",
-    }
-  }
-
-  if (input.forceUnknown) {
-    return {
-      status: "unknown",
-      title: "确认结果未知",
-      message:
-        "不得乐观切换为已确认或重复生成应付。请用同一操作号查询最终结果。",
-      operationId: input.operationId,
-      idempotencyKey: input.idempotencyKey,
-      statementId: seed.statementId,
-    }
-  }
-
-  const now = new Date().toISOString()
-  const o = ensureOverlay(input.statementId, seed)
-
-  if (input.action === "REJECT") {
-    if (!input.reasonCode) {
-      return {
-        status: "failed",
-        code: "REASON_REQUIRED",
-        title: "驳回原因必填",
-        message: "请填写驳回原因",
+  if (input.action === "CONFIRM") {
+    await apiPost(
+      `/admin/supplier-settlement-statements/${encodeURIComponent(input.statementId)}/confirm`,
+      {
+        version: input.expectedLockVersion,
+        reviewed_by: roleToUserId(input.role),
       }
+    )
+    return {
+      status: "succeeded",
+      title: "结算已确认",
+      message: "确认后形成应付，结算单永久只读。",
+      operationId: input.operationId,
+      statementId: input.statementId,
     }
-    o.lockVersion = seed.lockVersion + 1
-    o.status = "HAS_DIFFERENCE"
-    o.workItem = undefined
-    o.reviewRecords = [
-      {
-        recordId: `rr_rej_${Date.now()}`,
-        action: "REJECT",
-        actionLabel: "驳回复核",
-        by: roleToActor(input.role),
-        at: now,
-        reasonCode: input.reasonCode,
-        comment: input.comment,
-      },
-      ...seed.reviewRecords,
-    ]
-    o.auditEvents = [
-      {
-        eventId: `ae_rej_${Date.now()}`,
-        at: now,
-        actor: ACTORS.review.displayName,
-        action: "REJECT",
-        summary: `驳回 · ${
-          input.reasonCode === "NEEDS_MORE_EVIDENCE"
-            ? "证据不足"
-            : input.reasonCode === "AMOUNT_MISMATCH"
-              ? "金额仍不一致"
-              : "其他"
-        }`,
-        auditNo: `AUD-${Date.now().toString().slice(-6)}`,
-      },
-      ...seed.auditEvents,
-    ]
-    const result: FormalOutcome = {
-      status: "rejected",
-      title: "已驳回复核",
-      message: "已退回经办并保留复核记录；可继续处理差异后重提。",
-      reference: input.operationId,
-      statementId: seed.statementId,
-      facts: [
-        {
-          label: "原因",
-          value:
-            input.reasonCode === "NEEDS_MORE_EVIDENCE"
-              ? "证据不足"
-              : input.reasonCode === "AMOUNT_MISMATCH"
-                ? "金额仍不一致"
-                : "其他",
-        },
-        { label: "说明", value: input.comment ?? "—" },
-      ],
-    }
-    return result
   }
 
-  // CONFIRM
-  const payableNo = `AP-${seed.supplierId.replace("sup_", "").toUpperCase()}-${seed.periodLabel.replace("-", "")}-01`
-  const payableAccountId = `pa_${seed.statementId}`
-  const costDelta = seed.pendingCostDeltaGross ?? "0.00"
-  const payableGross =
-    seed.supplierAmountGross ?? seed.erpAmountGross
-
-  o.lockVersion = seed.lockVersion + 1
-  o.status = "CONFIRMED"
-  o.reviewedBy = roleToActor(input.role)
-  o.confirmedCostDeltaGross = costDelta
-  o.pendingCostDeltaGross = undefined
-  o.workItem = undefined
-  o.payable = {
-    payableAccountId,
-    payableNo,
-    grossAmount: payableGross,
-    dueDate: "2026-08-20",
-    statusLabel: "未结",
-  }
-  o.reviewRecords = [
-    {
-      recordId: `rr_cfm_${Date.now()}`,
-      action: "CONFIRM",
-      actionLabel: "确认结算",
-      by: roleToActor(input.role),
-      at: now,
-      comment: input.comment,
-    },
-    ...seed.reviewRecords,
-  ]
-  o.auditEvents = [
-    {
-      eventId: `ae_cfm_${Date.now()}`,
-      at: now,
-      actor: ACTORS.review.displayName,
-      action: "CONFIRM",
-      summary: `确认结算 · 应付 ${payableNo} · 成本差额 ${costDelta}`,
-      auditNo: `AUD-${Date.now().toString().slice(-6)}`,
-    },
-    ...seed.auditEvents,
-  ]
-
-  const result: FormalOutcome = {
-    status: "succeeded",
-    title: "结算已确认",
+  // REJECT: backend has void, not reject-to-prep. Use void only if intentional —
+  // reject is a backend_gap. Return blocked.
+  return {
+    status: "blocked",
+    code: "REJECT_NOT_IMPLEMENTED",
+    title: "驳回未交付",
     message:
-      "同一次提交已追加成本差额并形成唯一应付。付款、进项发票与核销请进入供应商往来，本页不复制财务流程。",
-    reference: payableNo,
-    statementId: seed.statementId,
-    payableNo,
-    payableAccountId,
-    costDeltaGross: costDelta,
-    lockVersion: o.lockVersion,
-    facts: [
-      { label: "应付编号", value: payableNo },
-      { label: "应付含税金额", value: payableGross },
-      { label: "成本差额（含税）", value: costDelta },
-      { label: "确认时间", value: now },
-    ],
+      "后端提供作废接口，未提供「驳回至经办」接口。请勿将驳回映射为作废。",
+    operationId: input.operationId,
+    statementId: input.statementId,
   }
-  return result
 }
 
-/** Demo helpers */
 export type { SettlementStatus }

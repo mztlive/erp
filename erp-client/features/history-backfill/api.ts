@@ -1,16 +1,11 @@
 /**
- * W30 session-mock API：queryFn / mutationFn 纯函数。
- * - processingStatus 与 reportReviewStatus 独立
- * - rangeStart 固定 = requiredHistoryStart；覆盖缺口阻断 START
- * - RESUME 复用原 job/范围/原任务标识
- * - 禁止重叠业务批次；报告策略缺失时确认 fail-closed
- * - mock 永不返回卡号/卡密/手机/完整地址/原始报文
+ * W30 历史消费回填 · 真实 HTTP API
+ * 路径：/admin/mall-consumption-backfill-jobs、/admin/mall-consumption-backfill-items
  */
 
-import { mockDelay } from "@/lib/mock-delay"
+import { apiGet, apiPost, type Page } from "@/lib/api"
 import type {
   CreateBackfillContext,
-  FormalCommandAction,
   HistoryBackfillCommandInput,
   HistoryBackfillCommandResult,
   HistoryBackfillDetailQuery,
@@ -21,118 +16,261 @@ import type {
   HistoryBackfillListQuery,
   HistoryBackfillListView,
   HistoryBackfillProcessingStatus,
-  ViewerRoleDemo,
+  HistoryBackfillReportReviewStatus,
+  ItemResult,
+  CostBasis,
 } from "@/features/history-backfill/types"
-import {
-  ACTIVE_PROCESSING,
-  PROCESSING_STATUS_LABEL,
-} from "@/features/history-backfill/types"
-import {
-  CREATE_CONTEXT_GAP,
-  CREATE_CONTEXT_SEED,
-  JOB_SEEDS,
-  ITEM_SEEDS,
-  buildReportForJob,
-} from "@/mock/history-backfill"
+import { PROCESSING_STATUS_LABEL } from "@/features/history-backfill/types"
 
-type JobOverlay = Partial<
-  Pick<
-    HistoryBackfillJobCore,
-    | "processingStatus"
-    | "reportReviewStatus"
-    | "pipelineStage"
-    | "lockVersion"
-    | "progress"
-    | "coverageComplete"
-    | "coverageGaps"
-    | "sourceCoverageStart"
-    | "allowedActions"
-    | "actionBlockers"
-    | "formalDownstreamUnlocked"
-    | "costBasis"
-    | "coverageRate"
-    | "coveragePercent"
-  >
->
+// ---------------------------------------------------------------------------
+// Backend wire types
+// ---------------------------------------------------------------------------
 
-const jobOverlays = new Map<string, JobOverlay>()
-const sessionJobs: HistoryBackfillJobCore[] = []
-let createContextMode: "ok" | "gap" = "ok"
-let forceUnknownNext = false
-
-function nowIso() {
-  return new Date().toISOString()
+type BackendJob = {
+  id: string
+  mall_id: string
+  cutover_id: string
+  range_start: number
+  range_end: number
+  status: string
+  total_count: number
+  total_amount: string
+  deduplicated_count: number
+  actual_count: number
+  standard_count: number
+  none_count: number
+  unattributed_count: number
+  report_file_id?: string | null
+  version: number
+  created_at: number
 }
 
-/** 演示：启动/续跑后模拟进度推进，避免运行中任务长期停在 0% 被误判为卡死 */
-function simulateRunningProgress(
-  job: HistoryBackfillJobCore
-): HistoryBackfillJobCore["progress"] {
-  const total = Math.max(job.progress.totalCount, 1)
-  const base = Math.min(Math.floor(total * 0.32), 60_000)
-  const inserted = Math.floor(base * 0.86)
-  return {
-    ...job.progress,
-    processedCount: Math.max(base, job.progress.processedCount),
-    insertedCount: Math.max(inserted, job.progress.insertedCount),
-    deduplicatedCount: Math.max(
-      Math.floor(base * 0.06),
-      job.progress.deduplicatedCount
-    ),
-    unattributedCount: Math.max(
-      Math.floor(base * 0.02),
-      job.progress.unattributedCount
-    ),
-    failedCount: Math.max(Math.floor(base * 0.01), job.progress.failedCount),
-    lastProgressAt: nowIso(),
-    heartbeatAt: nowIso(),
-  }
+type BackendJobDetail = {
+  job: BackendJob
+  item_total_count: number
 }
 
-function allJobs(): HistoryBackfillJobCore[] {
-  const byId = new Map<string, HistoryBackfillJobCore>()
-  for (const seed of JOB_SEEDS) {
-    byId.set(seed.id, projectJob(seed))
-  }
-  for (const created of sessionJobs) {
-    byId.set(created.id, projectJob(created))
-  }
-  return Array.from(byId.values())
+type BackendItem = {
+  id: string
+  job_id: string
+  business_fact_key: string
+  source_event_reference: string
+  mall_order_fact_id?: string | null
+  result: string
+  cost_basis: string
+  error_code?: string | null
+  error_detail?: string | null
+  created_at: number
 }
 
-function projectJob(seed: HistoryBackfillJobCore): HistoryBackfillJobCore {
-  const overlay = jobOverlays.get(seed.id)
-  const merged: HistoryBackfillJobCore = {
-    ...seed,
-    ...overlay,
-    progress: overlay?.progress ?? seed.progress,
-    coverageGaps: overlay?.coverageGaps ?? seed.coverageGaps,
-    costBasis: overlay?.costBasis ?? seed.costBasis,
-    allowedActions: overlay?.allowedActions ?? seed.allowedActions,
-    actionBlockers: overlay?.actionBlockers ?? seed.actionBlockers,
-  }
-
-  // 策略缺失 + COMPLETED → 强制未解锁
-  if (
-    merged.processingStatus === "COMPLETED" &&
-    (merged.reportReviewStatus === "POLICY_NOT_CONFIGURED" ||
-      merged.reportReviewStatus === "NOT_READY" ||
-      merged.reportReviewStatus === "PENDING" ||
-      merged.reportReviewStatus === "REJECTED")
-  ) {
-    merged.formalDownstreamUnlocked = false
-  }
-  if (merged.reportReviewStatus === "CONFIRMED" && merged.coverageComplete) {
-    merged.formalDownstreamUnlocked = true
-  }
-
-  return merged
+type BackendCommandResult = {
+  status: string
+  job_id: string
+  job_no: string
+  operation_id: string
+  idempotency_key: string
+  next_step: string
 }
 
-function formatRange(start: string, end: string) {
-  const s = start.slice(0, 10)
-  const e = end.slice(0, 10)
+// ---------------------------------------------------------------------------
+// Mapping
+// ---------------------------------------------------------------------------
+
+function tsToIso(secs: number | null | undefined): string {
+  if (secs == null || !Number.isFinite(Number(secs)) || Number(secs) <= 0)
+    return ""
+  return new Date(Number(secs) * 1000).toISOString()
+}
+
+function dateToUnix(value?: string): number | undefined {
+  if (!value) return undefined
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return Math.floor(new Date(`${value}T00:00:00+08:00`).getTime() / 1000)
+  }
+  const t = Math.floor(new Date(value).getTime() / 1000)
+  return Number.isFinite(t) ? t : undefined
+}
+
+function formatRange(startIso: string, endIso: string) {
+  const s = startIso.slice(0, 10) || "—"
+  const e = endIso.slice(0, 10) || "—"
   return `${s} 至 ${e}`
+}
+
+function mapProcessingStatus(raw: string): HistoryBackfillProcessingStatus {
+  switch (raw) {
+    case "pending":
+      return "READY"
+    case "running":
+      return "RUNNING"
+    case "partially_completed":
+      return "PARTIAL"
+    case "completed":
+      return "COMPLETED"
+    case "failed":
+      return "FAILED"
+    default:
+      return "DRAFT"
+  }
+}
+
+function processingToBackend(
+  status?: HistoryBackfillProcessingStatus
+): string | undefined {
+  if (!status) return undefined
+  switch (status) {
+    case "DRAFT":
+    case "VALIDATING":
+    case "READY":
+      return "pending"
+    case "RUNNING":
+      return "running"
+    case "PARTIAL":
+      return "partially_completed"
+    case "COMPLETED":
+      return "completed"
+    case "FAILED":
+      return "failed"
+    default:
+      return undefined
+  }
+}
+
+function mapItemResult(raw: string): ItemResult {
+  switch (raw) {
+    case "new":
+      return "INSERTED"
+    case "duplicate":
+      return "DEDUPLICATED"
+    case "pending_attribution":
+      return "UNATTRIBUTED"
+    case "failed":
+      return "FAILED"
+    default:
+      return "FAILED"
+  }
+}
+
+function itemResultToBackend(r: ItemResult): string {
+  switch (r) {
+    case "INSERTED":
+      return "new"
+    case "DEDUPLICATED":
+      return "duplicate"
+    case "UNATTRIBUTED":
+      return "pending_attribution"
+    case "FAILED":
+      return "failed"
+  }
+}
+
+function mapCostBasis(raw: string): CostBasis {
+  const u = raw.toUpperCase()
+  if (u === "ACTUAL") return "ACTUAL"
+  if (u === "STANDARD") return "STANDARD"
+  return "NONE"
+}
+
+function reportReviewOf(
+  status: HistoryBackfillProcessingStatus
+): HistoryBackfillReportReviewStatus {
+  if (status === "COMPLETED") return "PENDING"
+  return "NOT_READY"
+}
+
+function allowedActionsOf(
+  status: HistoryBackfillProcessingStatus
+): HistoryBackfillJobCore["allowedActions"] {
+  switch (status) {
+    case "DRAFT":
+    case "READY":
+      return ["VALIDATE_SOURCE", "START"]
+    case "PARTIAL":
+    case "FAILED":
+      return ["RESUME"]
+    case "COMPLETED":
+      return ["CONFIRM_REPORT"]
+    default:
+      return []
+  }
+}
+
+function mapJobCore(job: BackendJob): HistoryBackfillJobCore {
+  const processingStatus = mapProcessingStatus(job.status)
+  const rangeStart = tsToIso(job.range_start)
+  const rangeEnd = tsToIso(job.range_end)
+  // processed_count 未交付：完成态展示 total，其它为 0（backend_gap）
+  const processedCount =
+    processingStatus === "COMPLETED" ? job.total_count : 0
+
+  return {
+    id: job.id,
+    jobNo: job.id,
+    mallId: job.mall_id,
+    mallName: job.mall_id,
+    environment: "production",
+    cutoverId: job.cutover_id,
+    requiredHistoryStart: rangeStart,
+    rangeStart,
+    rangeEnd,
+    cutoverAt: rangeEnd,
+    coverageComplete: true,
+    coverageGaps: [],
+    processingStatus,
+    reportReviewStatus: reportReviewOf(processingStatus),
+    pipelineStage:
+      processingStatus === "COMPLETED"
+        ? "DONE"
+        : processingStatus === "RUNNING"
+          ? "INGEST"
+          : processingStatus === "READY"
+            ? "VALIDATE_SOURCE"
+            : "SCOPE",
+    formalDownstreamUnlocked: false,
+    lockVersion: job.version,
+    requestedBy: "—",
+    requestedAt: tsToIso(job.created_at),
+    sourceAsOf: tsToIso(job.created_at),
+    fulfillmentNote: "历史记录追加写入，不覆盖实时记录",
+    scopeNote:
+      "生效范围从范围起点至截止时点（截止时点当天除外）。",
+    legacyManualNote:
+      "截止时点前支付只补台账，履约链固定为历史手工口径，不创建供应商订单。",
+    progress: {
+      totalCount: job.total_count,
+      processedCount,
+      insertedCount: processedCount,
+      deduplicatedCount: job.deduplicated_count,
+      unattributedCount: job.unattributed_count,
+      failedCount: 0,
+      lastProgressAt: tsToIso(job.created_at),
+    },
+    costBasis: [
+      {
+        basis: "ACTUAL",
+        count: job.actual_count,
+        consumptionAmountGross: "—",
+        costAmountNet: "—",
+      },
+      {
+        basis: "STANDARD",
+        count: job.standard_count,
+        consumptionAmountGross: "—",
+        costAmountNet: "—",
+      },
+      {
+        basis: "NONE",
+        count: job.none_count,
+        consumptionAmountGross: "—",
+        costAmountNet: null,
+      },
+    ],
+    coverageRate: null,
+    coveragePercent: 0,
+    allowedActions: allowedActionsOf(processingStatus),
+    actionBlockers: [],
+    idempotencyNamespace: `mall-backfill:${job.id}`,
+  }
 }
 
 function toListItem(job: HistoryBackfillJobCore): HistoryBackfillListItem {
@@ -168,60 +306,79 @@ function toListItem(job: HistoryBackfillJobCore): HistoryBackfillListItem {
   }
 }
 
-function getCreateContext(): CreateBackfillContext {
-  const base =
-    createContextMode === "gap" ? CREATE_CONTEXT_GAP : CREATE_CONTEXT_SEED
-  const overlapping = allJobs().find(
-    (j) =>
-      j.mallId === base.mallId &&
-      j.environment === base.environment &&
-      j.rangeStart === base.requiredHistoryStart &&
-      j.rangeEnd === base.rangeEnd &&
-      j.processingStatus !== "DRAFT" &&
-      ACTIVE_PROCESSING.includes(j.processingStatus)
-  )
-  if (overlapping) {
-    return {
-      ...base,
-      hasOverlappingFormalJob: true,
-      overlappingJobNo: overlapping.jobNo,
-      canCreateDraft: false,
-      blockReasons: [
-        ...base.blockReasons,
-        `已存在回填任务 ${overlapping.jobNo} 覆盖同一范围起点至截止时点的批次，禁止新建重叠批次；请续跑原任务。`,
-      ],
-    }
+function mapItem(it: BackendItem): HistoryBackfillItemView {
+  const result = mapItemResult(it.result)
+  return {
+    itemId: it.id,
+    jobId: it.job_id,
+    factType: "PAYMENT_SUCCEEDED",
+    businessFactKeySummary: it.business_fact_key,
+    mallOrderNo: it.business_fact_key,
+    sourceDocNo: it.source_event_reference,
+    occurredAt: tsToIso(it.created_at),
+    result,
+    costBasis: mapCostBasis(it.cost_basis),
+    costAmountNet: null,
+    failure:
+      result === "FAILED"
+        ? {
+            errorCode: it.error_code ?? "FAILED",
+            stage: "INGEST",
+            retryable: false,
+            summary: it.error_detail ?? it.error_code ?? "处理失败",
+          }
+        : undefined,
+    whitelistFields: [
+      { field: "business_fact_key", label: "业务事实键", value: it.business_fact_key },
+      {
+        field: "source_event_reference",
+        label: "来源引用",
+        value: it.source_event_reference,
+      },
+    ],
   }
-  return { ...base }
 }
 
-export function setHistoryBackfillCreateContextMode(mode: "ok" | "gap") {
-  createContextMode = mode
+function emptyCreateContext(): CreateBackfillContext {
+  return {
+    cutoverId: "",
+    mallId: "",
+    mallName: "",
+    environment: "production",
+    requiredHistoryStart: "",
+    rangeEnd: "",
+    cutoverAt: "",
+    sourceCoverageStart: "",
+    coverageComplete: false,
+    coverageGaps: [],
+    estimatedFactCount: 0,
+    hasOverlappingFormalJob: false,
+    canCreateDraft: false,
+    blockReasons: ["创建上下文接口未交付（backend_gap）"],
+  }
 }
 
-export function setHistoryBackfillForceUnknown(next: boolean) {
-  forceUnknownNext = next
+// ---------------------------------------------------------------------------
+// Demo controls (no mock state; keep signatures for queries.ts)
+// ---------------------------------------------------------------------------
+
+export function setHistoryBackfillCreateContextMode(_mode: "ok" | "gap") {
+  // no-op: real backend owns create context
 }
 
-function roleAllowsModule(role: ViewerRoleDemo) {
-  return role !== "NO_MODULE"
+export function setHistoryBackfillForceUnknown(_next: boolean) {
+  // no-op
 }
 
-function roleCanFormal(role: ViewerRoleDemo) {
-  return role === "SYSTEM_ADMIN"
-}
-
-function roleCanConfirmReport(role: ViewerRoleDemo, job: HistoryBackfillJobCore) {
-  if (!job.reportReviewPolicy) return false
-  return role === "FINANCE" || role === "SYSTEM_ADMIN"
-}
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 export async function fetchHistoryBackfillList(
   query: HistoryBackfillListQuery
 ): Promise<HistoryBackfillListView> {
-  await mockDelay()
-  const role = query.role ?? "SYSTEM_ADMIN"
-  if (!roleAllowsModule(role)) {
+  const queriedAt = new Date().toISOString()
+  if (query.role === "NO_MODULE") {
     return {
       metrics: {
         running: 0,
@@ -232,329 +389,218 @@ export async function fetchHistoryBackfillList(
       },
       rows: [],
       totalCount: 0,
-      queriedAt: nowIso(),
-      createContext: getCreateContext(),
+      queriedAt,
+      createContext: emptyCreateContext(),
     }
   }
 
-  let rows = allJobs()
+  const pageRes = await apiGet<Page<BackendJob>>(
+    "/admin/mall-consumption-backfill-jobs",
+    {
+      page: query.page,
+      page_size: query.pageSize,
+      mall_id: query.mallId,
+      status: processingToBackend(query.processingStatus),
+      sort_by: "created_at",
+      sort_dir: "desc",
+    }
+  )
 
-  if (query.environment) {
-    rows = rows.filter((j) => j.environment === query.environment)
-  }
-  if (query.mallId) {
-    rows = rows.filter((j) => j.mallId === query.mallId)
-  }
-  if (query.processingStatus) {
-    rows = rows.filter((j) => j.processingStatus === query.processingStatus)
-  }
-  if (query.reportReviewStatus) {
-    rows = rows.filter((j) => j.reportReviewStatus === query.reportReviewStatus)
-  }
-  if (query.basis) {
-    const basis = query.basis
-    rows = rows.filter((j) =>
-      j.costBasis.some((c) => c.basis === basis && c.count > 0)
-    )
-  }
-  if (query.q?.trim()) {
-    const q = query.q.trim().toLowerCase()
-    rows = rows.filter(
-      (j) =>
-        j.jobNo.toLowerCase().includes(q) ||
-        j.mallName.toLowerCase().includes(q) ||
-        j.id.toLowerCase().includes(q)
-    )
-  }
+  let jobs = (pageRes.items ?? []).map(mapJobCore)
 
   if (query.view === "active") {
-    rows = rows.filter((j) => ACTIVE_PROCESSING.includes(j.processingStatus))
+    jobs = jobs.filter((j) =>
+      ["DRAFT", "VALIDATING", "READY", "RUNNING", "PARTIAL", "FAILED"].includes(
+        j.processingStatus
+      )
+    )
   } else if (query.view === "processing_completed") {
-    rows = rows.filter((j) => j.processingStatus === "COMPLETED")
+    jobs = jobs.filter((j) => j.processingStatus === "COMPLETED")
   } else if (query.view === "report_pending") {
-    rows = rows.filter(
+    jobs = jobs.filter(
       (j) =>
         j.reportReviewStatus === "PENDING" ||
         j.reportReviewStatus === "POLICY_NOT_CONFIGURED"
     )
   }
 
-  // 运行中优先
-  const rank = (s: HistoryBackfillProcessingStatus) => {
-    const order: HistoryBackfillProcessingStatus[] = [
-      "RUNNING",
-      "PARTIAL",
-      "FAILED",
-      "VALIDATING",
-      "READY",
-      "DRAFT",
-      "COMPLETED",
-    ]
-    return order.indexOf(s)
+  if (query.environment) {
+    jobs = jobs.filter((j) => j.environment === query.environment)
   }
-  rows = [...rows].sort((a, b) => rank(a.processingStatus) - rank(b.processingStatus))
-
-  const all = allJobs()
-  const metrics = {
-    running: all.filter((j) => j.processingStatus === "RUNNING").length,
-    unattributed: all.reduce((n, j) => n + j.progress.unattributedCount, 0),
-    deduplicated: all.reduce((n, j) => n + j.progress.deduplicatedCount, 0),
-    noneConsumption: all.reduce(
-      (n, j) => n + (j.costBasis.find((c) => c.basis === "NONE")?.count ?? 0),
-      0
-    ),
-    failed: all.reduce((n, j) => n + j.progress.failedCount, 0),
+  if (query.q?.trim()) {
+    const q = query.q.trim().toLowerCase()
+    jobs = jobs.filter(
+      (j) =>
+        j.jobNo.toLowerCase().includes(q) ||
+        j.mallName.toLowerCase().includes(q) ||
+        j.id.toLowerCase().includes(q)
+    )
   }
-
-  const start = (query.page - 1) * query.pageSize
-  const pageRows = rows.slice(start, start + query.pageSize)
+  if (query.basis) {
+    const basis = query.basis
+    jobs = jobs.filter((j) =>
+      j.costBasis.some((c) => c.basis === basis && c.count > 0)
+    )
+  }
 
   return {
-    metrics,
-    rows: pageRows.map(toListItem),
-    totalCount: rows.length,
-    queriedAt: nowIso(),
-    createContext: getCreateContext(),
+    metrics: {
+      running: jobs.filter((j) => j.processingStatus === "RUNNING").length,
+      unattributed: 0,
+      deduplicated: 0,
+      noneConsumption: 0,
+      failed: 0,
+    },
+    rows: jobs.map(toListItem),
+    totalCount: pageRes.total ?? jobs.length,
+    queriedAt,
+    createContext: emptyCreateContext(),
   }
 }
 
 export async function fetchHistoryBackfillDetail(
   query: HistoryBackfillDetailQuery
 ): Promise<HistoryBackfillDetailView | null> {
-  await mockDelay()
-  const role = query.role ?? "SYSTEM_ADMIN"
-  if (!roleAllowsModule(role)) return null
+  if (query.role === "NO_MODULE") return null
 
-  const job = allJobs().find((j) => j.id === query.jobId)
-  if (!job) return null
-
-  let items: HistoryBackfillItemView[] = ITEM_SEEDS.filter(
-    (i) => i.jobId === query.jobId
-  )
-
-  // 会话新建任务可能无明细
-  if (items.length === 0 && sessionJobs.some((j) => j.id === query.jobId)) {
-    items = []
-  }
-
-  if (query.results?.length) {
-    const set = new Set(query.results)
-    items = items.filter((i) => set.has(i.result))
-  }
-  if (query.factTypes?.length) {
-    const set = new Set(query.factTypes)
-    items = items.filter((i) => set.has(i.factType))
-  }
-  if (query.costBases?.length) {
-    const set = new Set(query.costBases)
-    items = items.filter(
-      (i) => i.costBasis && i.costBasis !== "N_A" && set.has(i.costBasis)
+  try {
+    const detail = await apiGet<BackendJobDetail>(
+      `/admin/mall-consumption-backfill-jobs/${encodeURIComponent(query.jobId)}`
     )
-  }
-  if (query.q?.trim()) {
-    const q = query.q.trim().toLowerCase()
-    items = items.filter(
-      (i) =>
-        i.mallOrderNo.toLowerCase().includes(q) ||
-        i.businessFactKeySummary.toLowerCase().includes(q) ||
-        (i.sourceDocNo?.toLowerCase().includes(q) ?? false)
-    )
-  }
+    const job = mapJobCore(detail.job)
 
-  const start = (query.page - 1) * query.pageSize
-  const pageItems = items.slice(start, start + query.pageSize)
-  const totalItems = items.length
-
-  // 按角色裁剪确认动作
-  const allowedActions = [...job.allowedActions]
-  const actionBlockers = [...job.actionBlockers]
-  if (
-    job.processingStatus === "COMPLETED" &&
-    job.reportReviewStatus === "POLICY_NOT_CONFIGURED"
-  ) {
-    if (!actionBlockers.some((b) => b.action === "CONFIRM_REPORT")) {
-      actionBlockers.push({
-        action: "CONFIRM_REPORT",
-        code: "REPORT_REVIEW_POLICY_MISSING",
-        message:
-          "报告复核策略未配置：系统不返回确认动作；技术报告可下载但固定标「未确认」。",
-      })
-    }
-  }
-  if (
-    job.reportReviewPolicy &&
-    job.processingStatus === "COMPLETED" &&
-    job.reportReviewStatus === "PENDING" &&
-    roleCanConfirmReport(role, job)
-  ) {
-    if (!allowedActions.includes("CONFIRM_REPORT")) {
-      allowedActions.push("CONFIRM_REPORT")
-    }
-  }
-  if (!roleCanFormal(role)) {
-    for (const a of ["START", "RESUME", "CREATE_DRAFT", "VALIDATE_SOURCE"] as FormalCommandAction[]) {
-      const idx = allowedActions.indexOf(a)
-      if (idx >= 0) allowedActions.splice(idx, 1)
-      if (!actionBlockers.some((b) => b.action === a && b.code === "ROLE_DENIED")) {
-        actionBlockers.push({
-          action: a,
-          code: "ROLE_DENIED",
-          message: "当前演示角色不能执行回填/续跑（仅系统管理员）。",
-        })
+    const itemsPage = await apiGet<Page<BackendItem>>(
+      "/admin/mall-consumption-backfill-items",
+      {
+        page: query.page,
+        page_size: query.pageSize,
+        job_id: query.jobId,
+        result: query.results?.[0]
+          ? itemResultToBackend(query.results[0])
+          : undefined,
+        cost_basis: query.costBases?.[0],
+        sort_by: "created_at",
+        sort_dir: "desc",
       }
-    }
-  }
+    )
 
-  return {
-    job: {
-      ...job,
-      allowedActions,
-      actionBlockers,
-    },
-    items: pageItems,
-    totalItems,
-    report: buildReportForJob(job),
-    queriedAt: nowIso(),
-    permissionVersion: "pv-w30-1",
+    let items = (itemsPage.items ?? []).map(mapItem)
+    if (query.q?.trim()) {
+      const q = query.q.trim().toLowerCase()
+      items = items.filter(
+        (i) =>
+          i.mallOrderNo.toLowerCase().includes(q) ||
+          i.businessFactKeySummary.toLowerCase().includes(q) ||
+          (i.sourceDocNo?.toLowerCase().includes(q) ?? false)
+      )
+    }
+
+    return {
+      job,
+      items,
+      totalItems: itemsPage.total ?? detail.item_total_count ?? items.length,
+      report: detail.job.report_file_id
+        ? {
+            reportId: detail.job.report_file_id,
+            reportVersion: 1,
+            generatedAt: tsToIso(detail.job.created_at),
+            reviewLabel:
+              job.reportReviewStatus === "CONFIRMED"
+                ? "CONFIRMED"
+                : "UNCONFIRMED",
+            downloadLabel: `回填报告_${job.jobNo}`,
+            schemaVersion: "1",
+            ruleVersion: "1",
+            rangeStart: job.rangeStart,
+            rangeEnd: job.rangeEnd,
+            cutoverAt: job.cutoverAt,
+            totalCount: job.progress.totalCount,
+            totalAmount: detail.job.total_amount,
+            insertedCount: job.progress.insertedCount,
+            deduplicatedCount: job.progress.deduplicatedCount,
+            unattributedCount: job.progress.unattributedCount,
+            failedCount: job.progress.failedCount,
+            costBasis: job.costBasis,
+            coverageRate: job.coverageRate,
+            unattributedSummaries: [],
+            failedSummaries: [],
+            operatorLabel: job.requestedBy,
+            processingStatus: job.processingStatus,
+            reportReviewStatus: job.reportReviewStatus,
+            fullHistoryFinalComplete: job.coverageComplete,
+            sensitiveRedactionNote:
+              "报告已脱敏：不含卡号/卡密/手机/完整地址/原始报文。",
+          }
+        : undefined,
+      queriedAt: new Date().toISOString(),
+      permissionVersion: "server",
+    }
+  } catch (err) {
+    const status =
+      err && typeof err === "object" && "status" in err
+        ? (err as { status?: number }).status
+        : undefined
+    if (status === 404) return null
+    throw err
   }
 }
 
 export async function submitHistoryBackfillCommand(
   input: HistoryBackfillCommandInput
 ): Promise<HistoryBackfillCommandResult> {
-  await mockDelay()
-  const role = input.role ?? "SYSTEM_ADMIN"
   const { action, operationId, idempotencyKey } = input
 
-  if (forceUnknownNext) {
-    forceUnknownNext = false
-    return {
-      status: "RESULT_UNKNOWN",
-      title: "结果未知 · 请查询原任务",
-      description:
-        "提交超时或响应丢失。请查询原任务的处理结果，禁止新建第二任务。",
-      operationId,
-      idempotencyKey,
-      jobId: input.jobId,
-      nextStep: "按原任务号查询处理结果",
-    }
-  }
-
   if (action === "CREATE_DRAFT") {
-    if (!roleCanFormal(role)) {
+    if (!input.cutoverId || !input.rangeStart || !input.rangeEnd) {
       return {
         status: "BLOCKED",
-        title: "无权限创建回填任务",
-        description: "仅系统管理员可创建草稿并启动回填。",
-        operationId,
-        idempotencyKey,
-        blockers: ["ROLE_DENIED"],
-      }
-    }
-    const ctx = getCreateContext()
-    if (!ctx.canCreateDraft) {
-      return {
-        status: "BLOCKED",
-        title: "无法创建回填任务",
-        description: ctx.blockReasons.join("；") || "前置条件未满足",
-        operationId,
-        idempotencyKey,
-        blockers: ctx.blockReasons,
-      }
-    }
-    // rangeStart 必须等于 requiredHistoryStart
-    const rangeStart = ctx.requiredHistoryStart
-    if (input.rangeStart && input.rangeStart !== rangeStart) {
-      return {
-        status: "BLOCKED",
-        title: "范围起点非法",
+        title: "缺少创建参数",
         description:
-          "不能选择更晚的起点；范围起点必须等于系统登记的「必须覆盖起点」。",
+          "创建回填任务需要 cutoverId、rangeStart、rangeEnd；创建上下文接口未交付时无法自动填参。",
         operationId,
         idempotencyKey,
-        blockers: ["RANGE_START_FIXED"],
+        blockers: ["CREATE_CONTEXT_MISSING"],
       }
     }
-    if (!ctx.coverageComplete) {
+    const rangeStart = dateToUnix(input.rangeStart)
+    const rangeEnd = dateToUnix(input.rangeEnd)
+    if (!rangeStart || !rangeEnd) {
       return {
         status: "BLOCKED",
-        title: "来源覆盖不足 · 阻断创建执行",
-        description:
-          "来源覆盖起点晚于 requiredHistoryStart 或存在区间缺口时不得创建可执行任务。",
+        title: "范围非法",
+        description: "范围起点/终点无法解析为时间戳。",
         operationId,
         idempotencyKey,
-        blockers: ["COVERAGE_INCOMPLETE"],
+        blockers: ["RANGE_INVALID"],
       }
     }
 
-    const id = `hb_job_session_${Date.now().toString(36)}`
-    const jobNo = `HB-SESS-${Date.now().toString(36).toUpperCase()}`
-    const job: HistoryBackfillJobCore = {
-      id,
-      jobNo,
-      mallId: ctx.mallId,
-      mallName: ctx.mallName,
-      environment: ctx.environment,
-      cutoverId: ctx.cutoverId,
-      requiredHistoryStart: ctx.requiredHistoryStart,
-      rangeStart,
-      rangeEnd: ctx.rangeEnd,
-      cutoverAt: ctx.cutoverAt,
-      sourceCoverageStart: ctx.sourceCoverageStart,
-      coverageComplete: ctx.coverageComplete,
-      coverageGaps: [],
-      processingStatus: "READY",
-      reportReviewStatus: "NOT_READY",
-      pipelineStage: "SCOPE",
-      formalDownstreamUnlocked: false,
-      lockVersion: 1,
-      requestedBy: "系统管理员 · 演示",
-      requestedAt: nowIso(),
-      sourceAsOf: nowIso(),
-      fulfillmentNote: "历史记录追加写入，不覆盖实时记录",
-      scopeNote:
-        "生效范围从范围起点至截止时点（截止时点当天除外）；截止时点当天发生的记录不进入历史回填，按实时/补录规则处理。",
-      legacyManualNote:
-        "截止时点前支付只补台账，履约链固定为历史手工口径，不创建供应商订单。",
-      progress: {
-        totalCount: ctx.estimatedFactCount,
-        processedCount: 0,
-        insertedCount: 0,
-        deduplicatedCount: 0,
-        unattributedCount: 0,
-        failedCount: 0,
-      },
-      costBasis: [
-        { basis: "ACTUAL", count: 0, consumptionAmountGross: "¥0.00", costAmountNet: "¥0.00" },
-        {
-          basis: "STANDARD",
-          count: 0,
-          consumptionAmountGross: "¥0.00",
-          costAmountNet: "¥0.00",
-        },
-        { basis: "NONE", count: 0, consumptionAmountGross: "¥0.00", costAmountNet: null },
-      ],
-      coverageRate: null,
-      coveragePercent: 0,
-      allowedActions: ["VALIDATE_SOURCE", "START"],
-      actionBlockers: [],
-      idempotencyNamespace: `mall-backfill:${jobNo}`,
-    }
-    sessionJobs.unshift(job)
+    const created = await apiPost<BackendJob>(
+      "/admin/mall-consumption-backfill-jobs",
+      {
+        mall_id: "default",
+        cutover_id: input.cutoverId,
+        range_start: rangeStart,
+        range_end: rangeEnd,
+        total_count: 1,
+        total_amount: "0.00",
+      }
+    )
 
-    const result: HistoryBackfillCommandResult = {
+    return {
       status: "COMMITTED",
       title: "已创建回填任务草稿",
-      description: `任务 ${jobNo} 范围固定为 ${formatRange(rangeStart, ctx.rangeEnd)}；截止时点前不下单，只追加缺失记录。`,
-      jobId: id,
-      jobNo,
+      description: `任务 ${created.id} 已创建。`,
+      jobId: created.id,
+      jobNo: created.id,
       operationId,
       idempotencyKey,
       nextStep: "完成来源校验后开始回填",
     }
-    return result
   }
+
   if (action === "VALIDATE_SOURCE") {
+    // Backend has no validate endpoint — treat as client-side pass marker via detail refresh
     if (!input.jobId) {
       return {
         status: "FAILED",
@@ -564,329 +610,74 @@ export async function submitHistoryBackfillCommand(
         idempotencyKey,
       }
     }
-    const job = allJobs().find((j) => j.id === input.jobId)
-    if (!job) {
-      return {
-        status: "FAILED",
-        title: "任务不存在",
-        description: `未找到任务 ${input.jobId}`,
-        operationId,
-        idempotencyKey,
-      }
-    }
-    if (!job.coverageComplete) {
-      return {
-        status: "BLOCKED",
-        title: "来源校验未通过 · 覆盖不足",
-        description: `必须覆盖起点=${job.requiredHistoryStart.slice(0, 10)}，来源覆盖起点=${(job.sourceCoverageStart ?? "—").slice(0, 10)}。请先补齐来源缺口后重新校验，禁止缩晚起点。`,
-        jobId: job.id,
-        jobNo: job.jobNo,
-        operationId,
-        idempotencyKey,
-        blockers: job.coverageGaps.map((g) => g.reasonLabel),
-      }
-    }
-    jobOverlays.set(job.id, {
-      ...jobOverlays.get(job.id),
-      processingStatus: "READY",
-      pipelineStage: "VALIDATE_SOURCE",
-      lockVersion: job.lockVersion + 1,
-      allowedActions: ["START"],
-      actionBlockers: [],
-    })
-    const result: HistoryBackfillCommandResult = {
-      status: "COMMITTED",
-      title: "来源校验通过",
-      description: "五类记录在范围起点至截止时点间连续可取，可开始回填。",
-      jobId: job.id,
-      jobNo: job.jobNo,
+    return {
+      status: "BLOCKED",
+      title: "来源校验接口未交付",
+      description: "后端未提供独立 VALIDATE_SOURCE 命令；可直接 START。",
+      jobId: input.jobId,
       operationId,
       idempotencyKey,
-      nextStep: "确认后开始回填（后台执行）",
+      blockers: ["VALIDATE_SOURCE_NOT_IMPLEMENTED"],
     }
-    return result
   }
-  if (action === "START") {    if (!roleCanFormal(role)) {
-      return {
-        status: "BLOCKED",
-        title: "无权限开始回填",
-        description: "仅系统管理员可启动回填。",
-        operationId,
-        idempotencyKey,
-        blockers: ["ROLE_DENIED"],
-      }
-    }
+
+  if (action === "START" || action === "RESUME") {
     if (!input.jobId) {
       return {
         status: "FAILED",
         title: "缺少任务 ID",
-        description: "START 必须引用既有任务草稿。",
+        description: `${action} 必须引用既有任务。`,
         operationId,
         idempotencyKey,
       }
     }
-    const job = allJobs().find((j) => j.id === input.jobId)
-    if (!job) {
-      return {
-        status: "FAILED",
-        title: "任务不存在",
-        description: `未找到任务 ${input.jobId}`,
-        operationId,
-        idempotencyKey,
+    const version = input.expectedLockVersion ?? 1
+    const result = await apiPost<BackendCommandResult>(
+      `/admin/mall-consumption-backfill-jobs/${encodeURIComponent(input.jobId)}/commands`,
+      {
+        command: action === "START" ? "START" : "RESUME",
+        version,
+        operation_id: operationId,
+        idempotency_key: idempotencyKey,
       }
-    }
-    if (job.rangeStart !== job.requiredHistoryStart) {
-      return {
-        status: "BLOCKED",
-        title: "范围非法",
-        description: "范围起点必须等于必须覆盖起点。",
-        operationId,
-        idempotencyKey,
-        jobId: job.id,
-        jobNo: job.jobNo,
-        blockers: ["RANGE_START_FIXED"],
-      }
-    }
-    if (!job.coverageComplete) {
-      return {
-        status: "BLOCKED",
-        title: "覆盖不足 · 禁止开始",
-        description: "来源覆盖不完整时不得开始，也不能改晚范围起点。",
-        operationId,
-        idempotencyKey,
-        jobId: job.id,
-        jobNo: job.jobNo,
-        blockers: ["COVERAGE_INCOMPLETE"],
-      }
-    }
-    if (
-      job.processingStatus === "RUNNING" ||
-      job.processingStatus === "COMPLETED" ||
-      job.processingStatus === "PARTIAL"
-    ) {
-      return {
-        status: "BLOCKED",
-        title: "禁止新建/重复启动重叠批次",
-        description: `任务 ${job.jobNo} 已处于 ${PROCESSING_STATUS_LABEL[job.processingStatus]}；失败请续跑原任务。`,
-        operationId,
-        idempotencyKey,
-        jobId: job.id,
-        jobNo: job.jobNo,
-        blockers: ["JOB_ALREADY_EXISTS"],
-      }
-    }
-
-    jobOverlays.set(job.id, {
-      ...jobOverlays.get(job.id),
-      processingStatus: "RUNNING",
-      pipelineStage: "INGEST",
-      lockVersion: job.lockVersion + 1,
-      progress: simulateRunningProgress(job),
-      allowedActions: [],
-      actionBlockers: [
-        {
-          action: "START",
-          code: "ALREADY_RUNNING",
-          message: "任务已在后台运行。",
-        },
-      ],
-    })
-
-    const result: HistoryBackfillCommandResult = {
+    )
+    return {
       status: "COMMITTED",
-      title: "回填已提交后台",
-      description: `任务 ${job.jobNo} 已冻结范围 ${formatRange(job.rangeStart, job.rangeEnd)} 并启动后台执行；进度以任务记录为准，不伪装同步完成。`,
-      jobId: job.id,
-      jobNo: job.jobNo,
-      operationId,
-      idempotencyKey,
-      nextStep: "在任务详情查看处理进度",
+      title: action === "START" ? "回填已提交后台" : "已续跑原任务",
+      description: result.next_step || "进度以任务记录为准。",
+      jobId: result.job_id,
+      jobNo: result.job_no,
+      operationId: result.operation_id,
+      idempotencyKey: result.idempotency_key,
+      nextStep: result.next_step,
     }
-    return result
   }
-  if (action === "RESUME") {
-    if (!roleCanFormal(role)) {
-      return {
-        status: "BLOCKED",
-        title: "无权限续跑",
-        description: "仅系统管理员可续跑失败/中断任务。",
-        operationId,
-        idempotencyKey,
-        blockers: ["ROLE_DENIED"],
-      }
-    }
-    if (!input.jobId) {
-      return {
-        status: "FAILED",
-        title: "缺少任务 ID",
-        description: "续跑必须引用原任务。",
-        operationId,
-        idempotencyKey,
-      }
-    }
-    const job = allJobs().find((j) => j.id === input.jobId)
-    if (!job) {
-      return {
-        status: "FAILED",
-        title: "任务不存在",
-        description: `未找到任务 ${input.jobId}`,
-        operationId,
-        idempotencyKey,
-      }
-    }
-    if (job.processingStatus !== "PARTIAL" && job.processingStatus !== "FAILED") {
-      return {
-        status: "BLOCKED",
-        title: "当前状态不可续跑",
-        description: `仅部分完成或失败可续跑；当前为 ${PROCESSING_STATUS_LABEL[job.processingStatus]}。`,
-        operationId,
-        idempotencyKey,
-        jobId: job.id,
-        jobNo: job.jobNo,
-      }
-    }
 
-    // 续跑：同一 job、范围、原任务标识
-    jobOverlays.set(job.id, {
-      ...jobOverlays.get(job.id),
-      processingStatus: "RUNNING",
-      pipelineStage: "INGEST",
-      lockVersion: job.lockVersion + 1,
-      progress: simulateRunningProgress(job),
-      allowedActions: [],
-      actionBlockers: [
-        {
-          action: "RESUME",
-          code: "ALREADY_RUNNING",
-          message: "续跑已提交，沿原记录键处理剩余项。",
-        },
-      ],
-    })
-
-    const result: HistoryBackfillCommandResult = {
-      status: "COMMITTED",
-      title: "已续跑原任务",
-      description: `沿 ${job.jobNo} 原范围 ${formatRange(job.rangeStart, job.rangeEnd)} 与提交身份续跑；已成功记录不回滚。`,
-      jobId: job.id,
-      jobNo: job.jobNo,
-      operationId,
-      idempotencyKey,
-      nextStep: "查看进度与失败明细",
-    }
-    return result
-  }
   if (action === "REATTRIBUTE") {
-    if (!input.jobId) {
-      return {
-        status: "FAILED",
-        title: "缺少任务 ID",
-        description: "重新归集必须引用原任务与原记录。",
-        operationId,
-        idempotencyKey,
-      }
-    }
-    const job = allJobs().find((j) => j.id === input.jobId)
-    if (!job) {
-      return {
-        status: "FAILED",
-        title: "任务不存在",
-        description: `未找到任务 ${input.jobId}`,
-        operationId,
-        idempotencyKey,
-      }
-    }
-    const result: HistoryBackfillCommandResult = {
-      status: "COMMITTED",
-      title: "已提交重新归集",
-      description:
-        "引用原业务记录重新归集并追加成本评估；不复制业务记录、不改写原消费。",
-      jobId: job.id,
-      jobNo: job.jobNo,
+    return {
+      status: "BLOCKED",
+      title: "重新归集未交付",
+      description: "后端尚未提供回填明细重新归集命令。",
+      jobId: input.jobId,
       operationId,
       idempotencyKey,
-      nextStep: "归集完成后刷新未归集清单",
+      blockers: ["REATTRIBUTE_NOT_IMPLEMENTED"],
     }
-    return result
   }
-  if (action === "CONFIRM_REPORT") {
-    if (!input.jobId) {
-      return {
-        status: "FAILED",
-        title: "缺少任务 ID",
-        description: "报告确认必须引用任务与报告版本。",
-        operationId,
-        idempotencyKey,
-      }
-    }
-    const job = allJobs().find((j) => j.id === input.jobId)
-    if (!job) {
-      return {
-        status: "FAILED",
-        title: "任务不存在",
-        description: `未找到任务 ${input.jobId}`,
-        operationId,
-        idempotencyKey,
-      }
-    }
-    if (job.processingStatus !== "COMPLETED") {
-      return {
-        status: "BLOCKED",
-        title: "技术处理未完成",
-        description: "仅处理完成后可进入报告确认。",
-        operationId,
-        idempotencyKey,
-        jobId: job.id,
-        jobNo: job.jobNo,
-      }
-    }
-    if (
-      job.reportReviewStatus === "POLICY_NOT_CONFIGURED" ||
-      !job.reportReviewPolicy
-    ) {
-      return {
-        status: "BLOCKED",
-        title: "报告复核策略未配置 · 已阻断",
-        description:
-          "策略缺失时系统不返回确认动作；技术报告仅可下载并固定标「未确认」，不解锁下游。",
-        operationId,
-        idempotencyKey,
-        jobId: job.id,
-        jobNo: job.jobNo,
-        blockers: ["REPORT_REVIEW_POLICY_MISSING"],
-      }
-    }
-    if (!roleCanConfirmReport(role, job)) {
-      return {
-        status: "BLOCKED",
-        title: "无报告确认权限",
-        description: "当前角色不满足报告复核策略。",
-        operationId,
-        idempotencyKey,
-        blockers: ["ROLE_DENIED"],
-      }
-    }
 
-    jobOverlays.set(job.id, {
-      ...jobOverlays.get(job.id),
-      reportReviewStatus: "CONFIRMED",
-      formalDownstreamUnlocked: job.coverageComplete,
-      lockVersion: job.lockVersion + 1,
-    })
-    const result: HistoryBackfillCommandResult = {
-      status: "COMMITTED",
-      title: "报告已确认",
+  if (action === "CONFIRM_REPORT") {
+    return {
+      status: "BLOCKED",
+      title: "报告确认未交付",
       description:
-        "仅更新报告确认状态；不改写已入库记录或处理状态。",
-      jobId: job.id,
-      jobNo: job.jobNo,
+        "后端 BackfillJobView 仅有 report_file_id，无报告确认状态机接口。",
+      jobId: input.jobId,
       operationId,
       idempotencyKey,
-      nextStep: job.coverageComplete
-        ? "可在门禁通过后进入下游"
-        : "覆盖仍不完整，下游功能保持关闭",
+      blockers: ["CONFIRM_REPORT_NOT_IMPLEMENTED"],
     }
-    return result
   }
+
   return {
     status: "FAILED",
     title: "未知动作",
@@ -897,7 +688,5 @@ export async function submitHistoryBackfillCommand(
 }
 
 export function listMallOptions() {
-  const map = new Map<string, string>()
-  for (const j of JOB_SEEDS) map.set(j.mallId, j.mallName)
-  return Array.from(map.entries()).map(([id, name]) => ({ id, name }))
+  return [] as Array<{ id: string; name: string }>
 }
