@@ -378,7 +378,7 @@ export function SupplierOrdersListPage() {
             >
               {row.original.orderNo}
             </Button>
-            <span className="truncate text-[11px] text-muted-foreground">
+            <span className="truncate text-tiny text-muted-foreground">
               {row.original.supplierName}
             </span>
           </div>
@@ -511,7 +511,7 @@ export function SupplierOrdersListPage() {
                     查询原结果
                   </Button>
                   {!canQuery && queryBlocker ? (
-                    <span className="max-w-[14rem] text-[11px] leading-tight text-muted-foreground">
+                    <span className="max-w-[14rem] text-tiny leading-tight text-muted-foreground">
                       {queryBlocker.message}
                       {queryBlocker.destinationWorkspaceId ? (
                         <>

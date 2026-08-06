@@ -387,7 +387,7 @@ function SkuMainImageField({
         <div className="relative size-14 overflow-hidden rounded-md border border-border bg-surface-sunken">
           <div className="flex size-full flex-col items-center justify-center gap-0.5 p-1 text-center">
             <ImageIcon className="size-4 text-muted-foreground" aria-hidden />
-            <span className="line-clamp-2 w-full break-all text-[10px] leading-tight text-muted-foreground">
+            <span className="line-clamp-2 w-full break-all text-2xs leading-tight text-muted-foreground">
               {value}
             </span>
           </div>
@@ -409,7 +409,7 @@ function SkuMainImageField({
           label={masterDataCopy.fMainImage}
           description="1:1"
           density="compact"
-          className="aspect-square size-14 gap-0.5 p-1 text-[10px] [&_[data-slot=button]]:mt-0"
+          className="aspect-square size-14 gap-0.5 p-1 text-2xs [&_[data-slot=button]]:mt-0"
           onFilesSelected={(files) => {
             if (files[0]) onChange(files[0].name)
           }}
@@ -894,7 +894,7 @@ export function ProductDetailPage({
                             {data.stableNo}
                           </span>
                         </span>
-                        <span className="num rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-foreground">
+                        <span className="num rounded-md bg-muted px-1.5 py-0.5 text-tiny text-foreground">
                           版本 {data.currentRevision.revisionNo}
                         </span>
                         <span className="num">

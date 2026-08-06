@@ -674,7 +674,7 @@ export function InventoryLedgerPage() {
           <div className="flex flex-col items-end gap-0.5">
             {formatQty(row.original.availableQuantity, row.original.baseUnit)}
             {row.original.availableQuantity === "0" ? (
-              <Badge variant="destructive" className="text-[10px]">
+              <Badge variant="destructive" className="text-2xs">
                 零可用
               </Badge>
             ) : null}
@@ -1837,7 +1837,7 @@ export function InventoryLedgerPage() {
                     {detail.balance.baseUnit}
                   </span>
                 </div>
-                <div className="text-[10px] text-muted-foreground">
+                <div className="text-2xs text-muted-foreground">
                   系统计算
                 </div>
               </div>
@@ -2002,7 +2002,7 @@ export function InventoryLedgerPage() {
               </>
             ) : null}
 
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
+            <p className="text-tiny leading-relaxed text-muted-foreground">
               查询于{" "}
               {formatDateTime(detail.queriedAt, "full", "passthrough")}
               。页面不提供编辑库存数量或直接释放预占；纠错须走调整单。

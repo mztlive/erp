@@ -325,7 +325,7 @@ function RevisionContent({
               key={`${m.fileAssetId}-${m.sortNo}`}
               className="flex gap-2 rounded-lg bg-muted/40 p-2 text-sm"
             >
-              <div className="flex size-14 shrink-0 items-center justify-center rounded bg-muted text-[10px] text-muted-foreground">
+              <div className="flex size-14 shrink-0 items-center justify-center rounded bg-muted text-2xs text-muted-foreground">
                 {MEDIA_ROLE_LABEL[m.mediaRole]}
               </div>
               <div className="min-w-0">
@@ -343,7 +343,7 @@ function RevisionContent({
                         ? "secondary"
                         : "destructive"
                     }
-                    className="text-[10px]"
+                    className="text-2xs"
                   >
                     {MEDIA_SCAN_STATUS_LABEL[m.securityScanStatus]}
                   </Badge>

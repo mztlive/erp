@@ -366,7 +366,7 @@ function JobListView({
                   ? "destructive"
                   : "secondary"
               }
-              className="text-[10px]"
+              className="text-2xs"
             >
               {ENVIRONMENT_LABEL[row.original.environment]}
             </Badge>
@@ -1786,7 +1786,7 @@ function ItemsTable({
           <div className="space-y-0.5">
             <div className="font-mono text-xs">{row.original.mallOrderNo}</div>
             {row.original.sourceDocNo ? (
-              <div className="text-[11px] text-muted-foreground">
+              <div className="text-tiny text-muted-foreground">
                 子单 {row.original.sourceDocNo}
               </div>
             ) : null}

@@ -337,7 +337,7 @@ function ConnectionList({
             <div className="truncate text-sm">
               {row.original.capabilitySummary}
             </div>
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-tiny text-muted-foreground">
               连接级 · 非商品级
             </div>
           </div>
@@ -355,7 +355,7 @@ function ConnectionList({
               label={row.original.healthLabel}
               tone={row.original.healthTone}
             />
-            <div className="text-[11px] text-muted-foreground">
+            <div className="text-tiny text-muted-foreground">
               {formatDateTime(row.original.lastHealthAt, "default")}
             </div>
           </div>
@@ -1744,7 +1744,7 @@ function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
           {conn.capabilities.length === 0 ? (
             <span className="text-sm text-muted-foreground">尚未配置能力</span>
           ) : null}
-          <p className="w-full text-[11px] text-muted-foreground">
+          <p className="w-full text-tiny text-muted-foreground">
             图例：✓ 验证成功 · ! 验证失败 · 停 能力停用
           </p>
         </CardContent>
@@ -1958,12 +1958,12 @@ function HealthSection({
               tone={row.original.resultTone}
             />
             {row.original.autoRetryStopped ? (
-              <div className="text-[11px] text-destructive" role="status">
+              <div className="text-tiny text-destructive" role="status">
                 自动重试已停止
               </div>
             ) : null}
             {row.original.result === "UNKNOWN" ? (
-              <div className="text-[11px] text-amber-700" role="status">
+              <div className="text-tiny text-warning-soft-foreground" role="status">
                 结果未知 · 不按失败播报
               </div>
             ) : null}

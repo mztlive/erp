@@ -367,7 +367,7 @@ function MasterDataListWorkspace({
               tone={row.original.lifecycleTone}
             />
             {row.original.scheduledLifecycleLabel ? (
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-tiny text-muted-foreground">
                 {row.original.scheduledLifecycleLabel}
               </span>
             ) : null}

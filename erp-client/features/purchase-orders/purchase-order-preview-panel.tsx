@@ -116,7 +116,7 @@ export function PurchaseOrderPreviewPanel({
 
           <section className="space-y-2" aria-label="拆单维度">
             <SectionTitle>拆单维度（唯一）</SectionTitle>
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
+            <p className="text-tiny leading-relaxed text-muted-foreground">
               一张采购单 = 一张销售单 × 一个供应商 × 一种采购类型 × 一套付款条件
               × 一个履约责任。
             </p>
@@ -261,13 +261,13 @@ export function PurchaseOrderPreviewPanel({
                           </div>
                         ) : null}
                         {line.procurementConfirmationLineId ? (
-                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                          <div className="mt-0.5 text-tiny text-muted-foreground">
                             {line.salesAllocationLabel ??
                               `确认分行 · ${line.itemName}`}
                           </div>
                         ) : null}
                         {line.logisticsFeeReason ? (
-                          <div className="mt-0.5 text-[11px] text-muted-foreground">
+                          <div className="mt-0.5 text-tiny text-muted-foreground">
                             {line.logisticsFeeReason}
                           </div>
                         ) : null}
@@ -313,7 +313,7 @@ export function PurchaseOrderPreviewPanel({
               </Table>
             </div>
             {costMasked ? (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-tiny text-muted-foreground">
                 当前角色无成本字段权限：金额已隐藏。
               </p>
             ) : null}

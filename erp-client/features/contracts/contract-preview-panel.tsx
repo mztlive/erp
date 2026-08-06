@@ -151,7 +151,7 @@ export function ContractPreviewPanel({
             ) : (
               <p className="text-xs text-muted-foreground">附件分区暂不可用</p>
             )}
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-tiny text-muted-foreground">
               附件数 {detail?.attachments.length ?? "—"}
               {rev ? ` · 版本 v${rev.revisionNo}` : null}
             </p>
@@ -195,7 +195,7 @@ export function ContractPreviewPanel({
                 ) : null}
               </DescriptionList>
             )}
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
+            <p className="text-tiny leading-relaxed text-muted-foreground">
               本页不汇总合同金额；金额以各销售单为准。
             </p>
           </section>
@@ -231,7 +231,7 @@ export function ContractPreviewPanel({
                             <div className="num font-medium">
                               {so.documentNumber}
                             </div>
-                            <div className="text-[11px] text-muted-foreground">
+                            <div className="text-tiny text-muted-foreground">
                               履约 {so.fulfillmentLabel} · 回款{" "}
                               {so.collectionLabel} · 开票 {so.invoicingLabel}
                             </div>
@@ -254,7 +254,7 @@ export function ContractPreviewPanel({
                     </TableBody>
                   </Table>
                 </div>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-tiny text-muted-foreground">
                   关联销售单含税金额合计：{" "}
                   <span className="num font-medium">
                     <MoneyValue
@@ -274,7 +274,7 @@ export function ContractPreviewPanel({
               </p>
             )}
             {detail?.relatedSalesOrdersAsOf ? (
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-tiny text-muted-foreground">
                 关联销售统计截至{" "}
                 <span className="num">{formatAsOf(detail.relatedSalesOrdersAsOf)}</span>
                 。

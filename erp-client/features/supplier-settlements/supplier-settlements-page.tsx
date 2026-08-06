@@ -415,12 +415,12 @@ function SettlementList({
               <span className="text-xs text-muted-foreground">—</span>
             )}
             {row.original.differenceDirectionLabel ? (
-              <div className="text-[11px] text-muted-foreground">
+              <div className="text-tiny text-muted-foreground">
                 {row.original.differenceDirectionLabel}
               </div>
             ) : null}
             {row.original.unresolvedDifferenceCount > 0 ? (
-              <Badge variant="outline" className="mt-0.5 text-[10px]">
+              <Badge variant="outline" className="mt-0.5 text-2xs">
                 未决 {row.original.unresolvedDifferenceCount}
               </Badge>
             ) : null}
@@ -2260,7 +2260,7 @@ function DifferencesWorkspace({
                 <span className="mt-0.5">
                   <MoneyValue
                     value={d.amountGross}
-                    className="num text-xs font-semibold text-amber-700"
+                    className="num text-xs font-semibold text-warning-soft-foreground"
                   />
                 </span>
               ) : null}
@@ -2281,7 +2281,7 @@ function DifferencesWorkspace({
                   <CardDescription>
                     {activeDiff.amountDirectionLabel}
                     {activeDiff.amountGross ? (
-                      <span className="mt-1 block text-base font-semibold text-amber-700">
+                      <span className="mt-1 block text-base font-semibold text-warning-soft-foreground">
                         <MoneyValue
                           value={activeDiff.amountGross}
                           taxBasis="gross"

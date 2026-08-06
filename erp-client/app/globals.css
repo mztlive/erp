@@ -125,6 +125,10 @@
   --spacing-detail: 48rem; /* 右侧半屏详情抽屉 768px；读完主事实 */
   --spacing-shell: 90rem; /* 基准工作宽度 1440px */
 
+  /* 辅助标注字号 —— 高密度表格、徽标与预览面板的小字，低于默认 text-xs(12px) */
+  --text-2xs: 0.625rem; /* 10px */
+  --text-tiny: 0.6875rem; /* 11px */
+
   /* 圆角 —— 单一旋钮，整体压在 2~8px，保持单据系统的严谨感
      三档语义：lg/xl = 6px 基线（控件与嵌套项，对齐 antd borderRadius）
                2xl = 7px（按钮/输入框/徽章等交互控件，比基线略圆）

@@ -410,7 +410,7 @@ export function SupplierAccountsPage() {
             />
             {row.original.paymentGateSummary &&
             row.original.paymentGateSummary.state !== "NOT_APPLICABLE" ? (
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-tiny text-muted-foreground">
                 先款条件{" "}
                 {row.original.paymentGateSummary.state === "SATISFIED"
                   ? "已满足"

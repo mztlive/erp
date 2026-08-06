@@ -877,7 +877,7 @@ export function ProcurementConfirmationPage() {
           className={`${surfaceInsetClassName} flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm`}
         >
           <CircleCheckIcon
-            className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400"
+            className="size-4 shrink-0 text-success-soft-foreground"
             aria-hidden="true"
           />
           <span className="font-medium">
@@ -1293,7 +1293,7 @@ export function ProcurementConfirmationPage() {
                                           placeholder="选择供应商"
                                           className="min-w-[12rem]"
                                         />
-                                        <p className="mt-0.5 text-[11px] text-muted-foreground">
+                                        <p className="mt-0.5 text-tiny text-muted-foreground">
                                           {line.capabilitySummary}
                                         </p>
                                       </td>
@@ -1454,7 +1454,7 @@ export function ProcurementConfirmationPage() {
                       {dirty ? " · 之后有未保存修改" : null}
                     </p>
                   ) : dirty ? (
-                    <p className="text-xs text-amber-600 dark:text-amber-400" role="status">
+                    <p className="text-xs text-warning-soft-foreground" role="status">
                       有未保存的确认分行修改（⌘S 保存）
                     </p>
                   ) : null}
@@ -1488,7 +1488,7 @@ export function ProcurementConfirmationPage() {
                           <span
                             className={
                               c.complete
-                              ? "num shrink-0 text-emerald-600 dark:text-emerald-400"
+                              ? "num shrink-0 text-success-soft-foreground"
                               : "num shrink-0 text-destructive"
                           }
                         >
@@ -1531,7 +1531,7 @@ export function ProcurementConfirmationPage() {
                       issues={clientBlocking}
                     />
                   ) : (
-                    <p className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
+                    <p className="flex items-center gap-2 text-sm text-success-soft-foreground">
                       <CircleCheckIcon
                         className="size-4"
                         aria-hidden="true"

@@ -1495,7 +1495,7 @@ function LinesTable({
               <TableCell className="max-w-[16rem] whitespace-normal">
                 <div className="font-medium">{line.itemName}</div>
                 {line.procurementConfirmationLineId ? (
-                  <div className="text-[11px] text-muted-foreground">
+                  <div className="text-tiny text-muted-foreground">
                     {line.salesAllocationLabel ??
                       `确认分行 · ${line.itemName}`}
                   </div>
@@ -1676,7 +1676,7 @@ function EditSurface({
                   <TableRow key={line.lineId}>
                     <TableCell className="whitespace-normal">
                       <div className="font-medium">{line.itemName}</div>
-                      <div className="text-[11px] text-muted-foreground">
+                      <div className="text-tiny text-muted-foreground">
                         {line.lineType === "LOGISTICS_FEE"
                           ? "物流费用"
                           : line.procurementConfirmationLineId
@@ -1710,7 +1710,7 @@ function EditSurface({
                           {!positiveDecimal(
                             lineEdits[line.lineId]?.quantity ?? line.quantity
                           ) ? (
-                            <span className="block text-[11px] text-destructive">
+                            <span className="block text-tiny text-destructive">
                               须为正数
                             </span>
                           ) : null}
@@ -1740,7 +1740,7 @@ function EditSurface({
                           lineEdits[line.lineId]?.unitCostGross ??
                             line.unitCostGross
                         ) ? (
-                          <span className="block text-[11px] text-destructive">
+                          <span className="block text-tiny text-destructive">
                             须为正数
                           </span>
                         ) : null}
@@ -1785,7 +1785,7 @@ function EditSurface({
                           lineEdits[line.lineId]?.inputTaxRate ??
                             line.inputTaxRate
                         ) ? (
-                          <span className="block text-[11px] text-destructive">
+                          <span className="block text-tiny text-destructive">
                             税率须为 0-1 的小数（如 0.13）
                           </span>
                         ) : null}

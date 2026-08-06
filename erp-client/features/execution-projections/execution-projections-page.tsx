@@ -392,11 +392,11 @@ export function ExecutionProjectionsPage() {
               tone={row.original.delivery.statusTone}
             />
             {row.original.latencyBand === "over_sla" ? (
-              <span className="text-[11px] text-warning-foreground">
+              <span className="text-tiny text-warning-foreground">
                 {LATENCY_LABEL.over_sla}
               </span>
             ) : row.original.latencyBand === "near_sla" ? (
-              <span className="text-[11px] text-muted-foreground">
+              <span className="text-tiny text-muted-foreground">
                 {LATENCY_LABEL.near_sla}
               </span>
             ) : null}

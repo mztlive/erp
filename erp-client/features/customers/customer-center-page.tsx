@@ -217,7 +217,7 @@ export function CustomerCenterPage() {
                 {row.original.customerNo}
               </span>
               {row.original.attentionTags?.map((tag) => (
-                <Badge key={tag} variant="outline" className="text-[10px]">
+                <Badge key={tag} variant="outline" className="text-2xs">
                   {tag}
                 </Badge>
               ))}

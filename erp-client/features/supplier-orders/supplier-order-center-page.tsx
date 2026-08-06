@@ -947,7 +947,7 @@ export function SupplierOrderCenterPage({
                     <div className="num text-xs text-muted-foreground">
                       {item.skuCode}
                     </div>
-                    <Badge variant="secondary" className="mt-1 text-[10px]">
+                    <Badge variant="secondary" className="mt-1 text-2xs">
                       下单记录不可变
                     </Badge>
                   </TableCell>
@@ -956,7 +956,7 @@ export function SupplierOrderCenterPage({
                   </TableCell>
                   <TableCell>
                     <div className="text-xs">{item.supplierProductName}</div>
-                    <div className="num text-[11px] text-muted-foreground">
+                    <div className="num text-tiny text-muted-foreground">
                       {item.supplierProductId}
                     </div>
                   </TableCell>
@@ -1224,7 +1224,7 @@ export function SupplierOrderCenterPage({
                         提交退款
                       </GuardedBusinessAction>
                     </div>
-                    <p className="text-[11px] text-muted-foreground">
+                    <p className="text-tiny text-muted-foreground">
                       领域动作引用售后请求 {as.mallRequestRef}
                       ，重复提交返回原结果；不读写任务。
                     </p>
@@ -1585,11 +1585,11 @@ function FactGap({
         </div>
       ) : null}
       {gap ? (
-        <p className="mt-2 text-[11px] text-warning-soft-foreground">
+        <p className="mt-2 text-tiny text-warning-soft-foreground">
           缺口：{gap}
         </p>
       ) : (
-        <p className="mt-2 text-[11px] text-muted-foreground">无可见缺口</p>
+        <p className="mt-2 text-tiny text-muted-foreground">无可见缺口</p>
       )}
     </div>
   )

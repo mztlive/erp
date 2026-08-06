@@ -1307,7 +1307,7 @@ export function MallSyncPage() {
                 {data.selectedJob.actionBlockers.map((b) => (
                   <p
                     key={b.code}
-                    className="text-xs text-amber-700 dark:text-amber-400"
+                    className="text-xs text-warning-soft-foreground"
                   >
                     {b.message}
                   </p>
@@ -1743,7 +1743,7 @@ export function MallSyncPage() {
                     {mappingTask.actionBlockers.map((b) => (
                       <p
                         key={`${b.action}-${b.code}`}
-                        className="text-xs text-amber-700 dark:text-amber-400"
+                        className="text-xs text-warning-soft-foreground"
                       >
                         {b.message}
                       </p>

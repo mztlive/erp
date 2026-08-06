@@ -82,7 +82,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                 },
               ]}
             />
-            <p className="text-[11px] text-muted-foreground">
+                <p className="text-tiny text-muted-foreground">
               部分退款不会影响履约「已完成」状态。
             </p>
           </section>
@@ -199,7 +199,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                       <span>成本 •••</span>
                     )}
                   </div>
-                  <Badge variant="secondary" className="mt-1 text-[10px]">
+                  <Badge variant="secondary" className="mt-1 text-2xs">
                     下单记录不可变
                   </Badge>
                 </li>
@@ -218,7 +218,7 @@ export function SupplierOrderPreviewPanel({ order }: Props) {
                     {lastAction.actor} · {formatDateTime(lastAction.at, "monthDayIntl", "passthrough")}
                   </span>
                 </p>
-                <p className="text-[11px] text-muted-foreground">
+            <p className="text-tiny text-muted-foreground">
                   任务号尾号 {lastAction.idempotencyKeyTail} · 尝试{" "}
                   {lastAction.attemptCount}
                 </p>

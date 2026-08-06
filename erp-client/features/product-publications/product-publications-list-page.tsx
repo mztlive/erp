@@ -223,7 +223,7 @@ export function ProductPublicationsListPage() {
               "—"
             )}
             {row.original.hasPendingConfirmation ? (
-              <Badge variant="outline" className="ml-1 text-[10px]">
+              <Badge variant="outline" className="ml-1 text-2xs">
                 待确认
               </Badge>
             ) : null}
@@ -285,7 +285,7 @@ export function ProductPublicationsListPage() {
                 tone={row.original.latestDelivery.statusTone}
               />
               {row.original.latestDelivery.errorSummary ? (
-                <div className="mt-0.5 max-w-[10rem] truncate text-[11px] text-destructive">
+                <div className="mt-0.5 max-w-[10rem] truncate text-tiny text-destructive">
                   {row.original.latestDelivery.errorSummary}
                 </div>
               ) : null}

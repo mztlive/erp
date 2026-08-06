@@ -174,7 +174,7 @@ function MediaSingleField({
               aria-label={`${label} 预览 1:1`}
             >
               <ImageIcon className="size-8 text-muted-foreground" aria-hidden />
-              <span className="text-[10px] text-muted-foreground">1:1</span>
+              <span className="text-2xs text-muted-foreground">1:1</span>
             </div>
             <div className="min-w-0 flex-1 pt-1">
               <div className="truncate text-sm font-medium">{value}</div>

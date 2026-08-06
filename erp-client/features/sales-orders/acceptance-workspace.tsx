@@ -864,7 +864,7 @@ export function AcceptanceWorkspace({
                       <p className="text-xs text-muted-foreground">
                         销售要求 {line.requiredQuantity} {line.unitCode} ·
                         净已验收 {line.netAcceptedQuantity} {line.unitCode}
-                        <span className="ms-2 text-[0.65rem] uppercase tracking-wide opacity-70">
+                        <span className="ms-2 text-2xs uppercase tracking-wide opacity-70">
                           来源：销售单明细 / 交付记录
                         </span>
                       </p>
@@ -923,7 +923,7 @@ export function AcceptanceWorkspace({
                                       {fact.carrier} {fact.trackingNo}
                                     </div>
                                   ) : null}
-                                  <div className="mt-0.5 text-[0.65rem] uppercase tracking-wide opacity-70">
+                                  <div className="mt-0.5 text-2xs uppercase tracking-wide opacity-70">
                                     来源：履约记录 · 可验收量以系统记录为准
                                   </div>
                                 </div>
@@ -975,7 +975,7 @@ export function AcceptanceWorkspace({
                   <CardDescription>
                     销售单 {view.salesOrder.salesOrderNo} ·{" "}
                     {view.salesOrder.customerLabel}
-                    <span className="ms-2 text-[0.65rem] uppercase tracking-wide opacity-70">
+                    <span className="ms-2 text-2xs uppercase tracking-wide opacity-70">
                       当前销售数据
                     </span>
                   </CardDescription>

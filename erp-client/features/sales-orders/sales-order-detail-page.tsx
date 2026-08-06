@@ -655,7 +655,7 @@ export function SalesOrderDetailPage({
                         ? "warning"
                         : "info"
                     }
-                    className="ml-1 h-5 px-1.5 text-[10px] font-normal"
+                    className="ml-1 h-5 px-1.5 text-2xs font-normal"
                   >
                     待办
                   </Badge>

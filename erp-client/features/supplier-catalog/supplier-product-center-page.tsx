@@ -821,7 +821,7 @@ export function SupplierProductCenterPage({
                       {ep.supplier.name}
                     </span>
                   </span>
-                  <span className="num rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-foreground">
+                  <span className="num rounded-md bg-muted px-1.5 py-0.5 text-tiny text-foreground">
                     来源版本 {rev.revisionNo}
                   </span>
                   <span>
@@ -1555,7 +1555,7 @@ export function SupplierProductCenterPage({
                                         className="size-4 text-muted-foreground"
                                         aria-hidden
                                       />
-                                      <span className="line-clamp-2 w-full break-all text-[10px] leading-tight text-muted-foreground">
+                                      <span className="line-clamp-2 w-full break-all text-2xs leading-tight text-muted-foreground">
                                         {sku.mainImage}
                                       </span>
                                     </div>
@@ -1579,7 +1579,7 @@ export function SupplierProductCenterPage({
                                     label="主图"
                                     description="1:1"
                                     density="compact"
-                                    className="aspect-square size-14 gap-0.5 p-1 text-[10px] [&_[data-slot=button]]:mt-0"
+                                    className="aspect-square size-14 gap-0.5 p-1 text-2xs [&_[data-slot=button]]:mt-0"
                                     onFilesSelected={(files) => {
                                       if (files[0]) {
                                         updateSku(index, {

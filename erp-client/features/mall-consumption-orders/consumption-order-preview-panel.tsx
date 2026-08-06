@@ -242,7 +242,7 @@ export function ConsumptionOrderPreviewPanel({ view }: Props) {
                 ))}
               </ul>
             )}
-            <p className="text-[11px] text-muted-foreground">
+            <p className="text-tiny text-muted-foreground">
               金额核对：{" "}
               {view.conservation.orderTotal.valid ? "有效" : "差异"} · 含税实付{" "}
               <span className="num">{view.conservation.orderTotal.actual}</span>

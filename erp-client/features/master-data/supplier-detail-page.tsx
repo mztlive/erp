@@ -597,7 +597,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                             {data.stableNo}
                           </span>
                         </span>
-                        <span className="num rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-foreground">
+                        <span className="num rounded-md bg-muted px-1.5 py-0.5 text-tiny text-foreground">
                           版本 {data.currentRevision.revisionNo}
                         </span>
                         <span className="num">

@@ -134,7 +134,7 @@ function DocumentHeader({
               <span
                 className={cn(
                   "num rounded-md bg-muted text-foreground",
-                  compact ? "px-1.5 py-0.5 text-[11px]" : "px-2 py-1 text-xs"
+                  compact ? "px-1.5 py-0.5 text-tiny" : "px-2 py-1 text-xs"
                 )}
               >
                 版本 {version}
