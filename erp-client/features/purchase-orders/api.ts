@@ -1,36 +1,35 @@
 /**
- * W08 采购单 session-mock API：queryFn / mutationFn 纯函数。
- * draftEditToken 仅存会话内存，不进入列表查询 View；处理权仅存会话内存。
+ * W08 采购单 · 真实 HTTP API。
+ * 契约形状保持 features/purchase-orders/types.ts 与 queries.ts 不变；
+ * 后端差异在本文件内适配，缺口登记见 docs/dev-plan/p4-evidence/F4.md。
  */
 
-import { mockDelay } from "@/lib/mock-delay"
-import { compareDecimal } from "@/lib/fixed-decimal"
+import { apiGet, apiPost } from "@/lib/api"
+import type { ApiError } from "@/lib/api"
 import type {
   CreatePurchaseOrderFromBasisInput,
   FormalActionResponse,
+  FulfillmentResponsibility,
+  PaymentGateState,
   PurchaseCreationBasis,
   PurchaseOrderCenterView,
   PurchaseOrderListItem,
   PurchaseOrderMetricFilter,
+  PurchaseOrderStatus,
   PurchaseOrderStatusFilter,
+  PurchaseReviewStatus,
+  PurchaseType,
   ReviewPurchaseOrderInput,
   SavePurchaseOrderDraftInput,
   SubmitPurchaseOrderInput,
   ViewerRole,
 } from "@/features/purchase-orders/types"
 import {
-  acquireW08DraftEditToken,
-  createW08FromBasis,
-  getW08PurchaseOrderCenter,
-  listW08CreationBases,
-  listW08PurchaseOrders,
-  queryW08IdempotentResult,
-  reviewW08PurchaseOrder,
-  saveW08PurchaseOrderDraft,
-  startW08PurchaseChange,
-  submitW08PurchaseOrder,
-  WorkItemMockError,
-} from "@/mock/session-state"
+  PAYMENT_TERM_OPTIONS,
+  PO_STATUS_LABEL,
+  PO_STATUS_TONE,
+  REVIEW_STATUS_LABEL,
+} from "@/features/purchase-orders/types"
 
 export type PurchaseOrderListQuery = {
   role?: ViewerRole
@@ -55,202 +54,746 @@ export type PurchaseOrderListResult = {
 const PURCHASE_ORDER_DEFAULT_PAGE_SIZE = 20
 const PURCHASE_ORDER_MAX_PAGE_SIZE = 100
 
-function listDisplayNo(row: PurchaseOrderListItem): string {
-  return row.purchaseNo ?? row.draftLabel ?? "采购单（未编号）"
+// ─── Backend wire types ──────────────────────────────────────────────────────
+
+type BackendPage<T> = {
+  items: T[]
+  total: number
+  page?: number
+  page_size?: number
 }
 
-function matchesListFilter(
-  row: PurchaseOrderListItem,
-  query: PurchaseOrderListQuery
-): boolean {
-  const status = query.status ?? "all"
-  if (status !== "all" && row.status !== status) return false
-  const metric = query.metric ?? "all"
-  if (metric === "draft" && row.status !== "DRAFT") return false
-  if (metric === "review" && row.status !== "PENDING_REVIEW") return false
+type BackendListItem = {
+  id: string
+  purchase_no: string
+  sales_order_id: string
+  supplier_id: string
+  supplier_name: string
+  purchase_type: PurchaseType | string
+  status: string
+  review_status: string
+  gross_amount: string
+  net_amount: string
+  tax_amount: string
+  payment_progress: string
+  invoice_progress: string
+  fulfillment_progress: string
+  current_submission_id?: string | null
+  current_revision_id?: string | null
+  version: number
+  created_at: number
+}
+
+type BackendLine = {
+  line_id: string
+  line_no: number
+  line_type: "ITEM_SERVICE" | "LOGISTICS_FEE" | string
+  procurement_confirmation_line_id?: string | null
+  sku_id?: string | null
+  sku_revision_id?: string | null
+  product_name?: string | null
+  specification?: string | null
+  quantity?: string | null
+  base_unit_code?: string | null
+  unit_cost_gross?: string | null
+  input_tax_rate?: string | null
+  gross_amount: string
+  net_amount: string
+  tax_amount: string
+  expected_delivery_date?: string | null
+  sales_order_submission_line_id?: string | null
+  allocated_quantity?: string | null
+}
+
+type BackendCenter = {
+  id: string
+  purchase_no: string
+  status: string
+  review_status: string
+  version: number
+  sales_order_id: string
+  supplier_id: string
+  supplier_name: string
+  purchase_type: PurchaseType | string
+  payment_term_code: string
+  fulfillment_responsibility: FulfillmentResponsibility | string
+  payment_progress: string
+  invoice_progress: string
+  fulfillment_progress: string
+  current_submission_id?: string | null
+  current_revision_id?: string | null
+  revision_no?: number | null
+  content_source: string
+  lines: BackendLine[]
+  totals: { gross: string; net: string; tax: string }
+  allocations: Array<{
+    id: string
+    purchase_order_revision_line_id: string
+    sales_order_revision_line_id: string
+    allocated_quantity: string
+    allocated_cost_gross: string
+    allocated_cost_net: string
+  }>
+  changes: Array<{
+    change_id: string
+    status: string
+    base_revision_id: string
+    effective_revision_id?: string | null
+    reason: string
+    created_at: number
+  }>
+  created_at: number
+}
+
+type BackendBasisLine = {
+  procurement_confirmation_line_id: string
+  sales_order_submission_line_id: string
+  supplier_id: string
+  confirmed_quantity: string
+  latest_cost_gross: string
+  input_tax_rate: string
+  expected_delivery_date: string
+  product_name?: string | null
+  specification?: string | null
+  gross_amount: string
+}
+
+type BackendBasis = {
+  basis_id: string
+  sales_order_id: string
+  submission_id: string
+  supplier_id: string
+  supplier_name: string
+  payment_term_code: string
+  lines: BackendBasisLine[]
+  estimated_gross: string
+}
+
+type BackendCreateResult = {
+  purchase_order_id: string
+  purchase_no: string
+  lock_version: number
+  replayed?: boolean
+  reference: string
+}
+
+type BackendSaveResult = {
+  lock_version: number
+  totals: { gross: string; net: string; tax: string }
+  reference: string
+}
+
+type BackendSubmitResult = {
+  purchase_order_id: string
+  purchase_no: string
+  submission_id: string
+  submission_no: string
+  work_item_id: string
+  lock_version: number
+  reference: string
+}
+
+type BackendReviewResult = {
+  review_result: string
+  revision_id?: string | null
+  revision_no?: number | null
+  payable_entry_id?: string | null
+  lock_version: number
+  reference: string
+}
+
+type BackendChangeStartResult = {
+  change_id: string
+  base_revision_id: string
+  base_revision_no: number
+  lock_version: number
+  reference: string
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function isApiError(error: unknown): error is ApiError {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "kind" in error &&
+    "message" in error
+  )
+}
+
+function apiErrorMessage(error: unknown): string {
+  if (!isApiError(error)) {
+    return error instanceof Error ? error.message : "请求失败"
+  }
+  const data = error.responseData as { errorMessage?: string } | undefined
   if (
-    metric === "fulfill" &&
-    !(
-      (row.status === "EFFECTIVE" || row.status === "PARTIAL") &&
-      row.fulfillmentProgress !== "完成"
-    )
+    data &&
+    typeof data.errorMessage === "string" &&
+    data.errorMessage &&
+    data.errorMessage !== "OK"
   ) {
-    return false
+    return data.errorMessage
   }
-  if (metric === "gate_blocked" && row.paymentGate !== "BLOCKED") return false
-  const q = query.q?.trim().toLowerCase()
-  if (!q) return true
-  const hay = [
-    row.purchaseNo,
-    row.draftLabel,
-    row.supplierName,
-    row.salesOrderNo,
-    row.ownerName,
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .toLowerCase()
-  return hay.includes(q)
+  return error.message
 }
 
-function listSortComparator(
-  sortBy: string | undefined,
-  sortDir: "asc" | "desc" | undefined
-):
-  | ((a: PurchaseOrderListItem, b: PurchaseOrderListItem) => number)
-  | null {
-  if (!sortBy || !sortDir) return null
-  switch (sortBy) {
-    case "document":
-      return (a, b) => listDisplayNo(a).localeCompare(listDisplayNo(b))
-    case "source":
-      return (a, b) => a.salesOrderNo.localeCompare(b.salesOrderNo)
-    case "amount":
-      return (a, b) =>
-        a.costMasked || b.costMasked
-          ? 0
-          : compareDecimal(a.grossAmount, b.grossAmount, 2)
-    case "owner":
-      return (a, b) => a.ownerName.localeCompare(b.ownerName)
+function apiErrorCode(error: unknown): string {
+  if (!isApiError(error)) return "REQUEST_FAILED"
+  if (error.status === 409) return "CONFLICT"
+  if (error.status === 404) return "NOT_FOUND"
+  if (error.status === 403) return "FORBIDDEN"
+  if (error.status === 422) return "UNPROCESSABLE"
+  if (error.kind === "Validation") return "VALIDATION"
+  return error.kind.toUpperCase()
+}
+
+function secsToIso(secs?: number | null): string {
+  if (secs == null || secs <= 0) return new Date(0).toISOString()
+  return new Date(secs * 1000).toISOString()
+}
+
+/** 前端状态 → 后端状态 */
+function toBackendStatus(
+  status?: PurchaseOrderStatusFilter
+): string | undefined {
+  if (!status || status === "all") return undefined
+  switch (status) {
+    case "PENDING_REVIEW":
+      return "PENDING_FINANCE_REVIEW"
+    case "PARTIAL":
+      return "PARTIALLY_EXECUTED"
+    case "VOID":
+      return "VOIDED"
     default:
-      return null
+      return status
   }
 }
 
-function sortPurchaseOrders(
-  rows: PurchaseOrderListItem[],
-  query: PurchaseOrderListQuery
-): PurchaseOrderListItem[] {
-  const primary = listSortComparator(query.sortBy, query.sortDir)
-  const byUpdatedAt = (a: PurchaseOrderListItem, b: PurchaseOrderListItem) =>
-    b.updatedAt.localeCompare(a.updatedAt)
-  const comparator: (
-    a: PurchaseOrderListItem,
-    b: PurchaseOrderListItem
-  ) => number = primary
-    ? query.sortDir === "desc"
-      ? (a, b) => -primary(a, b)
-      : primary
-    : byUpdatedAt
-  return [...rows].sort((a, b) => {
-    const primaryResult = comparator(a, b)
-    if (primaryResult !== 0) return primaryResult
-    const updatedAtResult = byUpdatedAt(a, b)
-    if (updatedAtResult !== 0) return updatedAtResult
-    return a.purchaseOrderId.localeCompare(b.purchaseOrderId)
-  })
+/** 后端状态 → 前端状态 */
+function fromBackendStatus(status: string): PurchaseOrderStatus {
+  switch (status) {
+    case "PENDING_FINANCE_REVIEW":
+      return "PENDING_REVIEW"
+    case "PARTIALLY_EXECUTED":
+      return "PARTIAL"
+    case "VOIDED":
+      return "VOID"
+    case "DRAFT":
+    case "EFFECTIVE":
+    case "COMPLETED":
+      return status
+    default:
+      return "DRAFT"
+  }
 }
 
-function buildPurchaseOrderMetrics(rows: PurchaseOrderListItem[]) {
+function fromBackendReviewStatus(
+  status: string,
+  orderStatus: PurchaseOrderStatus
+): PurchaseReviewStatus {
+  if (orderStatus === "DRAFT" && status !== "REJECTED") {
+    // 草稿且未进入审核轨时前端展示 NONE
+    if (status === "PENDING" || !status) return "NONE"
+  }
+  if (status === "PENDING") return "PENDING"
+  if (status === "APPROVED") return "APPROVED"
+  if (status === "REJECTED") return "REJECTED"
+  return "NONE"
+}
+
+function progressDisplay(
+  code: string,
+  kind: "payment" | "invoice" | "fulfillment"
+): string {
+  const normalized = (code ?? "NONE").toUpperCase()
+  if (kind === "payment") {
+    if (normalized === "NONE") return "未付"
+    if (normalized === "PARTIAL") return "部分"
+    if (normalized === "COMPLETED") return "已付"
+  }
+  if (kind === "invoice") {
+    if (normalized === "NONE") return "未收"
+    if (normalized === "PARTIAL") return "部分"
+    if (normalized === "COMPLETED") return "完成"
+  }
+  if (kind === "fulfillment") {
+    if (normalized === "NONE") return "未开始"
+    if (normalized === "PARTIAL") return "部分"
+    if (normalized === "COMPLETED") return "完成"
+  }
+  return code || "—"
+}
+
+function paymentTermLabel(code: string): string {
+  return (
+    PAYMENT_TERM_OPTIONS.find((o) => o.value === code)?.label ??
+    (code === "NET-30" ? "货到 30 天" : code || "—")
+  )
+}
+
+function mapPurchaseType(value: string): PurchaseType {
+  if (value === "PHYSICAL" || value === "VIRTUAL" || value === "SERVICE") {
+    return value
+  }
+  return "PHYSICAL"
+}
+
+function mapFulfillment(
+  value: string
+): FulfillmentResponsibility {
+  if (
+    value === "WAREHOUSE" ||
+    value === "SUPPLIER_DIRECT" ||
+    value === "ELECTRONIC" ||
+    value === "SERVICE"
+  ) {
+    return value
+  }
+  return "WAREHOUSE"
+}
+
+function deriveAllowedActions(
+  status: PurchaseOrderStatus,
+  role: ViewerRole
+): string[] {
+  const common = ["OPEN_CENTER", "PRINT"]
+  if (status === "DRAFT") {
+    return role === "finance"
+      ? common
+      : [...common, "EDIT", "SUBMIT", "VOID"]
+  }
+  if (status === "PENDING_REVIEW") {
+    return role === "finance"
+      ? [...common, "REVIEW"]
+      : common
+  }
+  if (status === "EFFECTIVE" || status === "PARTIAL") {
+    return [...common, "FULFILL", "PAY", "START_CHANGE"]
+  }
+  return common
+}
+
+function mapListItem(
+  row: BackendListItem,
+  role: ViewerRole
+): PurchaseOrderListItem {
+  const status = fromBackendStatus(row.status)
+  const reviewStatus = fromBackendReviewStatus(row.review_status, status)
+  return {
+    purchaseOrderId: row.id,
+    purchaseNo: row.purchase_no || undefined,
+    draftLabel: status === "DRAFT" ? `草稿 · ${row.purchase_no || row.id.slice(0, 8)}` : undefined,
+    revisionNo: undefined,
+    status,
+    statusLabel: PO_STATUS_LABEL[status],
+    statusTone: PO_STATUS_TONE[status],
+    reviewStatus,
+    reviewLabel: REVIEW_STATUS_LABEL[reviewStatus],
+    salesOrderId: row.sales_order_id,
+    // 缺口：D15 列表不返回 sales_order_no
+    salesOrderNo: row.sales_order_id,
+    supplierId: row.supplier_id,
+    supplierName: row.supplier_name,
+    purchaseType: mapPurchaseType(String(row.purchase_type)),
+    // 缺口：列表无履约责任
+    fulfillmentResponsibility: "WAREHOUSE",
+    paymentTermCode: "",
+    paymentTermLabel: "—",
+    ownerName: "—",
+    grossAmount: row.gross_amount ?? "0",
+    netAmount: row.net_amount ?? "0",
+    taxAmount: row.tax_amount ?? "0",
+    costMasked: false,
+    paymentProgress: progressDisplay(row.payment_progress, "payment"),
+    invoiceProgress: progressDisplay(row.invoice_progress, "invoice"),
+    fulfillmentProgress: progressDisplay(
+      row.fulfillment_progress,
+      "fulfillment"
+    ),
+    // 缺口：后端列表无先款门禁
+    paymentGate: "NOT_APPLICABLE" as PaymentGateState,
+    expectedDate: undefined,
+    updatedAt: secsToIso(row.created_at),
+    allowedActions: deriveAllowedActions(status, role),
+    actionBlockers: [],
+  }
+}
+
+function mapCenter(
+  center: BackendCenter,
+  role: ViewerRole
+): PurchaseOrderCenterView {
+  const status = fromBackendStatus(center.status)
+  const reviewStatus = fromBackendReviewStatus(
+    center.review_status,
+    status
+  )
+  const contentSource =
+    center.content_source === "SUBMISSION" ||
+    center.content_source === "REVISION"
+      ? center.content_source
+      : "DRAFT"
+
+  const lines = (center.lines ?? []).map((line) => ({
+    lineId: line.line_id,
+    lineType:
+      line.line_type === "LOGISTICS_FEE"
+        ? ("LOGISTICS_FEE" as const)
+        : ("ITEM_SERVICE" as const),
+    procurementConfirmationLineId:
+      line.procurement_confirmation_line_id ?? undefined,
+    itemName: line.product_name ?? (line.line_type === "LOGISTICS_FEE" ? "物流费用" : "采购明细"),
+    itemSku: line.sku_id ?? undefined,
+    quantity: line.quantity ?? undefined,
+    unit: line.base_unit_code ?? undefined,
+    unitCostGross: line.unit_cost_gross ?? "0",
+    inputTaxRate: line.input_tax_rate ?? "0",
+    grossAmount: line.gross_amount ?? "0",
+    netAmount: line.net_amount ?? "0",
+    taxAmount: line.tax_amount ?? "0",
+    expectedDeliveryDate: line.expected_delivery_date ?? undefined,
+    logisticsFeeReason: undefined,
+    salesAllocationLabel: line.sales_order_submission_line_id
+      ? `销售行 ${line.sales_order_submission_line_id.slice(0, 8)}`
+      : undefined,
+  }))
+
+  const fulfillmentLabel = progressDisplay(
+    center.fulfillment_progress,
+    "fulfillment"
+  )
+
+  return {
+    identity: {
+      purchaseOrderId: center.id,
+      purchaseNo: center.purchase_no || undefined,
+      draftLabel:
+        status === "DRAFT"
+          ? `草稿 · ${center.purchase_no || center.id.slice(0, 8)}`
+          : undefined,
+      status,
+      statusLabel: PO_STATUS_LABEL[status],
+      statusTone: PO_STATUS_TONE[status],
+      reviewStatus,
+      reviewLabel: REVIEW_STATUS_LABEL[reviewStatus],
+      lockVersion: center.version,
+      currentSubmissionId: center.current_submission_id ?? undefined,
+      currentRevisionId: center.current_revision_id ?? undefined,
+      revisionNo: center.revision_no ?? undefined,
+      subjectHash: center.current_submission_id ?? undefined,
+    },
+    header: {
+      salesOrderId: center.sales_order_id,
+      salesOrderNo: center.sales_order_id,
+      supplierId: center.supplier_id,
+      supplierSnapshot: center.supplier_name,
+      purchaseType: mapPurchaseType(String(center.purchase_type)),
+      fulfillmentResponsibility: mapFulfillment(
+        String(center.fulfillment_responsibility)
+      ),
+      paymentTermCode: center.payment_term_code,
+      paymentTermLabel: paymentTermLabel(center.payment_term_code),
+      ownerName: "—",
+      submittedBy: undefined,
+      submittedAt: undefined,
+      expectedDate: lines.find((l) => l.expectedDeliveryDate)
+        ?.expectedDeliveryDate,
+      creationBasisId: undefined,
+    },
+    progress: {
+      payment: progressDisplay(center.payment_progress, "payment"),
+      invoice: progressDisplay(center.invoice_progress, "invoice"),
+      fulfillment: fulfillmentLabel,
+      // 缺口：对象中心无 prepayment_gate 投影
+      prepaymentGate: {
+        state: "NOT_APPLICABLE",
+        message: "先款门禁数据未由后端返回",
+        required: "0",
+        allocated: "0",
+        gap: "0",
+        updatedAt: secsToIso(center.created_at),
+      },
+    },
+    currentContent: {
+      source: contentSource,
+      version: center.revision_no ?? center.version,
+      subjectHash: center.current_submission_id ?? undefined,
+      lines,
+      totals: {
+        gross: center.totals?.gross ?? "0",
+        net: center.totals?.net ?? "0",
+        tax: center.totals?.tax ?? "0",
+      },
+      costMasked: false,
+    },
+    allocations: (center.allocations ?? []).map((a) => ({
+      lineId: a.purchase_order_revision_line_id,
+      salesOrderLineLabel: a.sales_order_revision_line_id,
+      allocatedQuantity: a.allocated_quantity,
+    })),
+    payableSummary: undefined,
+    fulfillmentSummary: {
+      progressLabel: fulfillmentLabel,
+      progressTone:
+        center.fulfillment_progress === "COMPLETED"
+          ? "success"
+          : center.fulfillment_progress === "PARTIAL"
+            ? "info"
+            : "neutral",
+      inboundQty: "—",
+      shippedQty: "—",
+      remainingQty: "—",
+    },
+    changes: (center.changes ?? []).map((c) => ({
+      changeId: c.change_id,
+      label: c.reason || c.change_id,
+      statusLabel: c.status,
+      tone: "neutral" as const,
+      baseRevisionNo: undefined,
+    })),
+    workflow: [],
+    allowedActions: deriveAllowedActions(status, role),
+    actionBlockers: [],
+    fieldVisibility: {},
+    reviewWorkItem: undefined,
+  }
+}
+
+function mapBasis(basis: BackendBasis): PurchaseCreationBasis {
+  return {
+    basisId: basis.basis_id,
+    salesOrderId: basis.sales_order_id,
+    // 缺口：依据无 sales_order_no
+    salesOrderNo: basis.sales_order_id,
+    salesSubmissionId: basis.submission_id,
+    salesSubmissionNo: 0,
+    supplierId: basis.supplier_id,
+    supplierName: basis.supplier_name,
+    // 缺口：依据无 purchase_type / fulfillment_responsibility
+    purchaseType: "PHYSICAL",
+    fulfillmentResponsibility: "WAREHOUSE",
+    paymentTermCode: basis.payment_term_code || "POSTPAY_NET30",
+    paymentTermLabel: paymentTermLabel(
+      basis.payment_term_code || "POSTPAY_NET30"
+    ),
+    lines: (basis.lines ?? []).map((line) => ({
+      procurementConfirmationLineId: line.procurement_confirmation_line_id,
+      itemName: line.product_name ?? "确认分行",
+      itemSku: line.specification ?? undefined,
+      quantity: String(line.confirmed_quantity ?? "0"),
+      unit: "",
+      unitCostGross: String(line.latest_cost_gross ?? "0"),
+      inputTaxRate: String(line.input_tax_rate ?? "0"),
+      expectedDeliveryDate: line.expected_delivery_date ?? "",
+      salesAllocationLabel: line.sales_order_submission_line_id,
+    })),
+    estimatedGross: basis.estimated_gross ?? "0",
+    consumed: false,
+  }
+}
+
+function metricStatusParam(
+  metric: PurchaseOrderMetricFilter | undefined
+): string | undefined {
+  switch (metric) {
+    case "draft":
+      return "DRAFT"
+    case "review":
+      return "PENDING_FINANCE_REVIEW"
+    case "fulfill":
+      // 后端无「待履约」复合筛选；用 EFFECTIVE 近似
+      return "EFFECTIVE"
+    case "gate_blocked":
+      // 缺口：无门禁筛选
+      return undefined
+    default:
+      return undefined
+  }
+}
+
+async function countByStatus(status?: string): Promise<number> {
+  const page = await apiGet<BackendPage<BackendListItem>>(
+    "/admin/purchase-orders",
+    {
+      status,
+      page: 1,
+      page_size: 1,
+    }
+  )
+  return page.total ?? 0
+}
+
+async function buildMetrics(
+  basesCount: number
+): Promise<PurchaseOrderListResult["metrics"]> {
+  const [all, draft, review, fulfill] = await Promise.all([
+    countByStatus(undefined),
+    countByStatus("DRAFT"),
+    countByStatus("PENDING_FINANCE_REVIEW"),
+    countByStatus("EFFECTIVE"),
+  ])
   return [
     {
       key: "all",
       label: "全部采购单",
-      count: rows.length,
+      count: all,
       detail: "当前数据范围",
     },
     {
       key: "pending_create",
       label: "可建单依据",
-      count: listW08CreationBases().filter((b) => !b.consumed).length,
+      count: basesCount,
       detail: "采购二次确认固定结果",
     },
     {
       key: "draft",
       label: "草稿",
-      count: rows.filter((r) => r.status === "DRAFT").length,
+      count: draft,
       detail: "可继续编辑",
     },
     {
       key: "review",
       label: "待财务审核",
-      count: rows.filter((r) => r.status === "PENDING_REVIEW").length,
+      count: review,
       detail: "财务闸门",
     },
     {
       key: "fulfill",
       label: "待履约",
-      count: rows.filter(
-        (r) =>
-          (r.status === "EFFECTIVE" || r.status === "PARTIAL") &&
-          r.fulfillmentProgress !== "完成"
-      ).length,
+      count: fulfill,
       detail: "含门禁阻塞",
     },
     {
       key: "gate_blocked",
       label: "先款门禁阻塞",
-      count: rows.filter((r) => r.paymentGate === "BLOCKED").length,
-      detail: "需有效付款",
+      count: 0,
+      detail: "后端未投影门禁指标",
     },
   ]
 }
 
+// ─── Public API ──────────────────────────────────────────────────────────────
+
 export async function fetchPurchaseOrders(
   query: PurchaseOrderListQuery = {}
 ): Promise<PurchaseOrderListResult> {
-  await mockDelay()
-  const all = listW08PurchaseOrders(query.role ?? "procurement")
-  const filtered = sortPurchaseOrders(
-    all.filter((row) => matchesListFilter(row, query)),
-    query
-  )
-  const total = filtered.length
+  const role = query.role ?? "procurement"
   const pageSize = Math.min(
     Math.max(1, query.pageSize ?? PURCHASE_ORDER_DEFAULT_PAGE_SIZE),
     PURCHASE_ORDER_MAX_PAGE_SIZE
   )
-  const maxPage = Math.max(1, Math.ceil(total / pageSize))
-  const page = Math.min(Math.max(1, Math.floor(query.page ?? 1)), maxPage)
-  const start = (page - 1) * pageSize
+  const page = Math.max(1, Math.floor(query.page ?? 1))
+
+  // metric 与 status 叠加：metric 优先映射为 status
+  const statusFromMetric = metricStatusParam(query.metric)
+  const status =
+    statusFromMetric ?? toBackendStatus(query.status)
+
+  // 后端排序白名单仅 created_at / purchase_no；前端 document/amount 等映射
+  let sortBy: string | undefined
+  if (query.sortBy === "document") sortBy = "purchase_no"
+  else if (query.sortBy === "owner" || query.sortBy === "amount" || query.sortBy === "source") {
+    // 缺口：不支持的排序列，回落 created_at
+    sortBy = "created_at"
+  } else if (query.sortBy === "created_at" || query.sortBy === "purchase_no") {
+    sortBy = query.sortBy
+  }
+
+  if (query.metric === "pending_create") {
+    // 列表展示建单依据不是采购单行：返回空列表 + metrics
+    const bases = await fetchCreationBases()
+    const open = bases.filter((b) => !b.consumed)
+    return {
+      rows: [],
+      total: 0,
+      page: 1,
+      pageSize,
+      metrics: await buildMetrics(open.length),
+      freshness: {
+        updatedAt: new Date().toISOString(),
+        state: "fresh",
+      },
+    }
+  }
+
+  const pageData = await apiGet<BackendPage<BackendListItem>>(
+    "/admin/purchase-orders",
+    {
+      q: query.q,
+      status,
+      page,
+      page_size: pageSize,
+      sort_by: sortBy,
+      sort_dir: query.sortDir,
+    }
+  )
+
+  const bases = await fetchCreationBases().catch(() => [] as PurchaseCreationBasis[])
+  const rows = (pageData.items ?? []).map((item) => mapListItem(item, role))
+
   return {
-    rows: filtered.slice(start, start + pageSize),
-    total,
-    page,
-    pageSize,
-    metrics: buildPurchaseOrderMetrics(all),
-    freshness: { updatedAt: new Date().toISOString(), state: "fresh" },
+    rows,
+    total: pageData.total ?? rows.length,
+    page: pageData.page ?? page,
+    pageSize: pageData.page_size ?? pageSize,
+    metrics: await buildMetrics(bases.filter((b) => !b.consumed).length),
+    freshness: {
+      updatedAt: new Date().toISOString(),
+      state: "fresh",
+    },
   }
 }
 
 export async function fetchPurchaseOrderExportData(
   query: PurchaseOrderListQuery = {}
 ): Promise<PurchaseOrderListItem[]> {
-  await mockDelay(60)
-  const all = listW08PurchaseOrders(query.role ?? "procurement")
-  return sortPurchaseOrders(
-    all.filter((row) => matchesListFilter(row, query)),
-    query
-  )
+  // 导出：拉大页聚合（后端无独立导出投影）
+  const result = await fetchPurchaseOrders({
+    ...query,
+    page: 1,
+    pageSize: PURCHASE_ORDER_MAX_PAGE_SIZE,
+  })
+  return result.rows
 }
 
 export async function fetchPurchaseOrderCenter(
   purchaseOrderId: string,
   role: ViewerRole = "procurement"
 ): Promise<PurchaseOrderCenterView | null> {
-  await mockDelay(80)
-  return getW08PurchaseOrderCenter(purchaseOrderId, role)
+  try {
+    const center = await apiGet<BackendCenter>(
+      `/admin/purchase-orders/${encodeURIComponent(purchaseOrderId)}`
+    )
+    return mapCenter(center, role)
+  } catch (error) {
+    if (isApiError(error) && error.status === 404) return null
+    throw error
+  }
 }
 
 export async function fetchCreationBases(): Promise<
   readonly PurchaseCreationBasis[]
 > {
-  await mockDelay(60)
-  return listW08CreationBases()
+  const items = await apiGet<BackendBasis[]>(
+    "/admin/purchase-creation-bases"
+  )
+  return (items ?? []).map(mapBasis)
 }
 
+/**
+ * 草稿编辑令牌：后端无独立 draftEditToken 接口。
+ * 用当前 lock_version 生成会话内令牌，服务端以 expected_lock_version 做乐观锁。
+ */
 export async function acquireDraftEditToken(purchaseOrderId: string): Promise<{
   draftEditToken: string
   lockVersion: number
 }> {
-  await mockDelay(40)
-  try {
-    return acquireW08DraftEditToken(purchaseOrderId)
-  } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      throw new Error(error.message)
-    }
-    throw error
+  const center = await apiGet<BackendCenter>(
+    `/admin/purchase-orders/${encodeURIComponent(purchaseOrderId)}`
+  )
+  return {
+    draftEditToken: `det:${purchaseOrderId}:${center.version}`,
+    lockVersion: center.version,
   }
 }
 
@@ -263,36 +806,80 @@ export async function savePurchaseOrderDraft(
     totals: { gross: string; net: string; tax: string }
   }>
 > {
-  await mockDelay(100)
   try {
-    const data = saveW08PurchaseOrderDraft({
-      purchaseOrderId: input.purchaseOrderId,
-      expectedLockVersion: input.expectedLockVersion,
-      draftEditToken: input.draftEditToken,
-      paymentTermCode: input.paymentTermCode,
-      paymentTermLabel: input.paymentTermLabel,
-      linePatches: input.lines,
-      idempotencyKey: input.idempotencyKey,
-      simulateConflict: input.simulateConflict,
+    // 合并当前中心行字段（后端整表替换；前端仅传补丁）
+    const center = await apiGet<BackendCenter>(
+      `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}`
+    )
+    const patchById = new Map(input.lines.map((l) => [l.lineId, l]))
+
+    const lines = (center.lines ?? []).map((line) => {
+      const patch = patchById.get(line.line_id)
+      const lineType =
+        (patch?.lineType ?? line.line_type) === "LOGISTICS_FEE"
+          ? "LOGISTICS_FEE"
+          : "ITEM_SERVICE"
+      return {
+        line_type: lineType,
+        procurement_confirmation_line_id:
+          line.procurement_confirmation_line_id ?? undefined,
+        sku_id: line.sku_id ?? undefined,
+        sku_revision_id: line.sku_revision_id ?? undefined,
+        product_name: line.product_name ?? undefined,
+        specification: line.specification ?? undefined,
+        quantity: patch?.quantity ?? line.quantity ?? undefined,
+        base_unit_code: line.base_unit_code ?? undefined,
+        unit_cost_gross:
+          patch?.unitCostGross ?? line.unit_cost_gross ?? undefined,
+        input_tax_rate:
+          patch?.inputTaxRate ?? line.input_tax_rate ?? "0",
+        expected_delivery_date: line.expected_delivery_date ?? undefined,
+        sales_order_submission_line_id:
+          line.sales_order_submission_line_id ?? undefined,
+        allocated_quantity: line.allocated_quantity ?? undefined,
+        gross_amount:
+          lineType === "LOGISTICS_FEE"
+            ? (patch?.unitCostGross ?? line.gross_amount)
+            : undefined,
+      }
     })
+
+    const data = await apiPost<BackendSaveResult>(
+      `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/draft`,
+      {
+        expected_lock_version: input.expectedLockVersion,
+        payment_term_code: input.paymentTermCode,
+        lines,
+        idempotency_key: input.idempotencyKey,
+      }
+    )
+
     return {
       status: "succeeded",
       data: {
-        lockVersion: data.lockVersion,
-        draftContentHash: data.draftContentHash,
+        lockVersion: data.lock_version,
+        // 后端无 draft_content_hash：用 reference 占位供前端提交前透传
+        draftContentHash: data.reference || `v${data.lock_version}`,
         totals: data.totals,
       },
-      reference: `SAVED-V${data.lockVersion}`,
+      reference: data.reference || `SAVED-V${data.lock_version}`,
     }
   } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return {
-        status: "failed",
-        message: error.message,
-        code: error.code,
+    if (isApiError(error) && error.status === 500) {
+      const msg = apiErrorMessage(error)
+      if (msg.includes("无法确认") || msg.includes("未知")) {
+        return {
+          status: "unknown",
+          message: msg,
+          idempotencyKey: input.idempotencyKey,
+        }
       }
     }
-    throw error
+    return {
+      status: "failed",
+      message: apiErrorMessage(error),
+      code: apiErrorCode(error),
+    }
   }
 }
 
@@ -308,23 +895,32 @@ export async function submitPurchaseOrderForReview(
     lockVersion: number
   }>
 > {
-  await mockDelay(120)
   try {
-    const data = submitW08PurchaseOrder(input)
+    const data = await apiPost<BackendSubmitResult>(
+      `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/submit`,
+      {
+        expected_lock_version: input.expectedLockVersion,
+        idempotency_key: input.idempotencyKey,
+      }
+    )
     return {
       status: "succeeded",
-      data,
-      reference: `SUB-${data.submissionNo}`,
+      data: {
+        submissionId: data.submission_id,
+        submissionNo: data.submission_no,
+        subjectHash: data.submission_id,
+        workItemId: data.work_item_id,
+        purchaseNo: data.purchase_no,
+        lockVersion: data.lock_version,
+      },
+      reference: data.reference || `SUB-${data.submission_no}`,
     }
   } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return {
-        status: "failed",
-        message: error.message,
-        code: error.code,
-      }
+    return {
+      status: "failed",
+      message: apiErrorMessage(error),
+      code: apiErrorCode(error),
     }
-    throw error
   }
 }
 
@@ -340,32 +936,48 @@ export async function reviewPurchaseOrder(
     reference: string
   }>
 > {
-  await mockDelay(140)
   try {
-    const data = reviewW08PurchaseOrder({
-      purchaseOrderId: input.purchaseOrderId,
-      submissionId: input.submissionId,
-      workItemId: input.workItemId,
-      expectedLockVersion: input.expectedLockVersion,
-      reviewResult: input.reviewResult,
-      reasonCode: input.reasonCode,
-      comment: input.comment,
-      idempotencyKey: input.idempotencyKey,
-    })
+    const path =
+      input.reviewResult === "APPROVED"
+        ? `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/review/approve`
+        : `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/review/reject`
+
+    const body =
+      input.reviewResult === "APPROVED"
+        ? {
+            submission_id: input.submissionId,
+            work_item_id: input.workItemId,
+            expected_lock_version: input.expectedLockVersion,
+            comment: input.comment,
+          }
+        : {
+            submission_id: input.submissionId,
+            work_item_id: input.workItemId,
+            expected_lock_version: input.expectedLockVersion,
+            reason_code: input.reasonCode || "OTHER",
+            comment: input.comment,
+          }
+
+    const data = await apiPost<BackendReviewResult>(path, body)
     return {
       status: "succeeded",
-      data,
-      reference: `REVIEW-V${data.lockVersion}`,
+      data: {
+        reviewResult:
+          data.review_result === "REJECTED" ? "REJECTED" : "APPROVED",
+        revisionId: data.revision_id ?? undefined,
+        revisionNo: data.revision_no ?? undefined,
+        payableOpenAmount: undefined,
+        lockVersion: data.lock_version,
+        reference: data.reference,
+      },
+      reference: data.reference || `REVIEW-V${data.lock_version}`,
     }
   } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return {
-        status: "failed",
-        message: error.message,
-        code: error.code,
-      }
+    return {
+      status: "failed",
+      message: apiErrorMessage(error),
+      code: apiErrorCode(error),
     }
-    throw error
   }
 }
 
@@ -376,23 +988,30 @@ export async function startPurchaseChange(input: {
 }): Promise<
   FormalActionResponse<{ changeId: string; baseRevisionNo: number }>
 > {
-  await mockDelay(100)
   try {
-    const data = startW08PurchaseChange(input)
+    const data = await apiPost<BackendChangeStartResult>(
+      `/admin/purchase-orders/${encodeURIComponent(input.purchaseOrderId)}/changes`,
+      {
+        expected_lock_version: input.expectedLockVersion,
+        // 前端契约未传 reason；后端必填
+        reason: "采购变更",
+        idempotency_key: input.idempotencyKey,
+      }
+    )
     return {
       status: "succeeded",
-      data,
-      reference: `CHANGE-V${data.baseRevisionNo}`,
+      data: {
+        changeId: data.change_id,
+        baseRevisionNo: data.base_revision_no,
+      },
+      reference: data.reference || `CHANGE-V${data.base_revision_no}`,
     }
   } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return {
-        status: "failed",
-        message: error.message,
-        code: error.code,
-      }
+    return {
+      status: "failed",
+      message: apiErrorMessage(error),
+      code: apiErrorCode(error),
     }
-    throw error
   }
 }
 
@@ -405,29 +1024,47 @@ export async function createPurchaseOrderFromBasis(
     lockVersion: number
   }>
 > {
-  await mockDelay(120)
   try {
-    const data = createW08FromBasis(input)
+    const bases = await fetchCreationBases()
+    const basis = bases.find((b) => b.basisId === input.basisId)
+
+    const data = await apiPost<BackendCreateResult>(
+      "/admin/purchase-orders",
+      {
+        basis_id: input.basisId,
+        // 缺口：前端 Create 输入无 purchase_type；依据也未返回，默认 PHYSICAL
+        purchase_type: basis?.purchaseType ?? "PHYSICAL",
+        payment_term_code:
+          basis?.paymentTermCode && basis.paymentTermCode.length > 0
+            ? basis.paymentTermCode
+            : "NET-30",
+        idempotency_key: input.idempotencyKey,
+      }
+    )
+
     return {
       status: "succeeded",
-      data,
-      reference: data.draftLabel,
+      data: {
+        purchaseOrderId: data.purchase_order_id,
+        draftLabel: data.purchase_no
+          ? `草稿 · ${data.purchase_no}`
+          : data.reference,
+        lockVersion: data.lock_version,
+      },
+      reference: data.reference || data.purchase_no,
     }
   } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return {
-        status: "failed",
-        message: error.message,
-        code: error.code,
-      }
+    return {
+      status: "failed",
+      message: apiErrorMessage(error),
+      code: apiErrorCode(error),
     }
-    throw error
   }
 }
 
+/** 幂等结果查询：后端无独立查询接口；返回 null 让调用方走正常重试路径。 */
 export async function queryPurchaseOrderActionResult(
-  idempotencyKey: string
+  _idempotencyKey: string
 ): Promise<unknown | null> {
-  await mockDelay(50)
-  return queryW08IdempotentResult(idempotencyKey)
+  return null
 }
