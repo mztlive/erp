@@ -192,4 +192,252 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "API 供应商连接",
+        description: "供应商 API 连接与能力治理（W20）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-connections",
+                description: "查询供应商 API 连接列表",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections",
+                description: "创建供应商 API 连接",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-connections/{id}",
+                description: "查询供应商 API 连接详情",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-api-connections/{id}",
+                description: "更新供应商 API 连接",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-api-connections/{id}/capabilities",
+                description: "替换供应商 API 连接能力清单",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-api-connections/{id}/health-check",
+                description: "执行连接健康检查",
+                permission: {
+                    resource: "supplier_api_connection",
+                    action: "health_check",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-api-capabilities",
+                description: "查询连接能力列表",
+                permission: {
+                    resource: "supplier_api_capability",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "商品发布",
+        description: "二期商品发布与投递（W22）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-publications",
+                description: "查询商品发布列表",
+                permission: {
+                    resource: "product_publication",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-publications",
+                description: "创建商品发布",
+                permission: {
+                    resource: "product_publication",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-publications/{id}",
+                description: "查询商品发布详情",
+                permission: {
+                    resource: "product_publication",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/product-publications/{id}",
+                description: "更新商品发布",
+                permission: {
+                    resource: "product_publication",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-publications/{id}/revisions",
+                description: "形成发布修订",
+                permission: {
+                    resource: "product_publication_revision",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-publications/{id}/revisions",
+                description: "查询发布修订列表",
+                permission: {
+                    resource: "product_publication_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-publication-revisions/{revision_id}/media",
+                description: "查询发布修订媒体列表",
+                permission: {
+                    resource: "product_publication_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/product-publications/{id}/revisions/{revision_no}/deliver",
+                description: "投递发布修订到目标商城",
+                permission: {
+                    resource: "product_publication_delivery",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/product-publication-deliveries",
+                description: "查询发布投递列表",
+                permission: {
+                    resource: "product_publication_delivery",
+                    action: "list",
+                },
+            },
+        ],
+    },
+    {
+        name: "执行投影",
+        description: "销售单执行投影与下发（W23）",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-order-projections",
+                description: "查询执行投影列表",
+                permission: {
+                    resource: "sales_order_projection",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-projections",
+                description: "建立执行投影",
+                permission: {
+                    resource: "sales_order_projection",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-order-projections/{id}",
+                description: "查询执行投影详情",
+                permission: {
+                    resource: "sales_order_projection",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-projections/{id}/revisions",
+                description: "推进执行投影版本",
+                permission: {
+                    resource: "sales_order_projection_revision",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-order-projections/{id}/revisions",
+                description: "查询投影版本列表",
+                permission: {
+                    resource: "sales_order_projection_revision",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-projections/{id}/revisions/{revision_no}/deliver",
+                description: "下发投影版本到目标商城",
+                permission: {
+                    resource: "sales_order_projection_delivery",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-order-projection-deliveries",
+                description: "查询投影下发记录列表",
+                permission: {
+                    resource: "sales_order_projection_delivery",
+                    action: "list",
+                },
+            },
+        ],
+    },
 ];
