@@ -25,7 +25,7 @@ use crate::{
 };
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "查询主体列表",
     resource = "party",
@@ -48,7 +48,7 @@ pub async fn party_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "创建主体",
     resource = "party",
@@ -73,7 +73,7 @@ pub async fn party_create(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "查询主体详情",
     resource = "party",
@@ -93,7 +93,7 @@ pub async fn party_detail(State(state): State<AppState>, Path(id): Path<String>)
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "更新主体并形成新修订",
     resource = "party",
@@ -122,7 +122,7 @@ pub async fn party_update(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "删除主体",
     resource = "party",
@@ -147,7 +147,7 @@ pub async fn party_delete(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "查询主体修订列表",
     resource = "party_revision",
@@ -174,7 +174,7 @@ pub async fn party_revision_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "查询联系人列表",
     resource = "party_contact",
@@ -201,7 +201,7 @@ pub async fn party_contact_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "创建联系人",
     resource = "party_contact",
@@ -230,7 +230,7 @@ pub async fn party_contact_create(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "更新联系人",
     resource = "party_contact",
@@ -259,7 +259,7 @@ pub async fn party_contact_update(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "查询地址列表",
     resource = "party_address",
@@ -286,7 +286,7 @@ pub async fn party_address_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "创建地址",
     resource = "party_address",
@@ -315,7 +315,7 @@ pub async fn party_address_create(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "更新地址",
     resource = "party_address",
@@ -344,7 +344,7 @@ pub async fn party_address_update(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "查询税务资料列表",
     resource = "party_tax_profile",
@@ -371,7 +371,7 @@ pub async fn party_tax_profile_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "创建税务资料",
     resource = "party_tax_profile",
@@ -400,7 +400,7 @@ pub async fn party_tax_profile_create(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "更新税务资料",
     resource = "party_tax_profile",
@@ -429,7 +429,7 @@ pub async fn party_tax_profile_update(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "查询银行账户列表",
     resource = "party_bank_account",
@@ -456,7 +456,7 @@ pub async fn party_bank_account_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "创建银行账户",
     resource = "party_bank_account",
@@ -485,7 +485,7 @@ pub async fn party_bank_account_create(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-主体",
+    group = "主体",
     group_desc = "企业主体稳定身份与历史名称资料管理",
     desc = "更新银行账户",
     resource = "party_bank_account",

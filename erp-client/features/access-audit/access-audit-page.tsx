@@ -97,11 +97,11 @@ import {
 import { resultText } from "@/lib/ui-text"
 
 function parseView(raw: string | null): AccessView {
+  // 字段策略无后端资源（backend_gap），入口隐藏；旧 URL 回退到 roles
   if (
     raw === "roles" ||
     raw === "users" ||
     raw === "scopes" ||
-    raw === "fields" ||
     raw === "audit"
   ) {
     return raw
@@ -726,17 +726,6 @@ export function AccessAuditPage() {
         cell: ({ row }) => row.original.dataScopeSummary,
       },
       {
-        id: "fields",
-        header: "字段策略",
-        cell: ({ row }) => (
-          <span className="text-sm">
-            {data?.emptyReason === "FIELD_MASKED"
-              ? "****（已打码）"
-              : row.original.fieldPolicySummary}
-          </span>
-        ),
-      },
-      {
         id: "status",
         header: "状态",
         cell: ({ row }) => (
@@ -900,7 +889,7 @@ export function AccessAuditPage() {
         ),
       },
     ],
-    [openExplain, startChange, router, data?.permissionVersion, data?.emptyReason]
+    [openExplain, startChange, router, data?.permissionVersion]
   )
 
   const userColumns = React.useMemo<ColumnDef<UserRow>[]>(
@@ -1407,7 +1396,7 @@ export function AccessAuditPage() {
         >
           <TabsList variant="line" className="h-auto flex-wrap">
             {(
-              ["roles", "users", "scopes", "fields", "audit"] as AccessView[]
+              ["roles", "users", "scopes", "audit"] as AccessView[]
             ).map((v) => (
               <TabsTrigger key={v} value={v}>
                 {ACCESS_VIEW_LABEL[v]}

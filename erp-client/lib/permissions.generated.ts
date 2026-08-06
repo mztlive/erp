@@ -692,7 +692,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
-        name: "业务伙伴-主体",
+        name: "主体",
         description: "企业主体稳定身份与历史名称资料管理",
         permissions: [
             {
@@ -878,7 +878,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
-        name: "业务伙伴-客户",
+        name: "客户",
         description: "客户角色与归属管理",
         permissions: [
             {
@@ -954,7 +954,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
-        name: "业务伙伴-供应商",
+        name: "供应商",
         description: "供应商角色、商务结算版本、能力与资质管理",
         permissions: [
             {

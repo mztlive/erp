@@ -24,7 +24,7 @@ use crate::{
 };
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "查询供应商列表",
     resource = "supplier",
@@ -47,7 +47,7 @@ pub async fn supplier_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "创建供应商",
     resource = "supplier",
@@ -74,7 +74,7 @@ pub async fn supplier_create(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "查询供应商详情",
     resource = "supplier",
@@ -97,7 +97,7 @@ pub async fn supplier_detail(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "更新供应商",
     resource = "supplier",
@@ -126,7 +126,7 @@ pub async fn supplier_update(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "删除供应商",
     resource = "supplier",
@@ -153,7 +153,7 @@ pub async fn supplier_delete(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "查询商务结算版本列表",
     resource = "supplier_commercial_profile",
@@ -180,7 +180,7 @@ pub async fn supplier_commercial_profile_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "追加商务结算版本",
     resource = "supplier_commercial_profile",
@@ -209,7 +209,7 @@ pub async fn supplier_commercial_profile_create(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "查询供应商能力列表",
     resource = "supplier_capability",
@@ -236,7 +236,7 @@ pub async fn supplier_capability_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "创建供应商能力",
     resource = "supplier_capability",
@@ -265,7 +265,7 @@ pub async fn supplier_capability_create(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "更新供应商能力",
     resource = "supplier_capability",
@@ -294,7 +294,7 @@ pub async fn supplier_capability_update(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "查询供应商资质列表",
     resource = "supplier_qualification",
@@ -321,7 +321,7 @@ pub async fn supplier_qualification_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "创建供应商资质",
     resource = "supplier_qualification",
@@ -350,7 +350,7 @@ pub async fn supplier_qualification_create(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "更新供应商资质",
     resource = "supplier_qualification",
@@ -379,7 +379,7 @@ pub async fn supplier_qualification_update(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "查询供应商评估版本列表",
     resource = "supplier_rating",
@@ -406,7 +406,7 @@ pub async fn supplier_rating_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-供应商",
+    group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "创建供应商评估版本",
     resource = "supplier_rating",

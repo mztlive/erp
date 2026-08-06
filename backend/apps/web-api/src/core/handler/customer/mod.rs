@@ -20,7 +20,7 @@ use crate::{
 };
 
 #[permission_macros::permission(
-    group = "业务伙伴-客户",
+    group = "客户",
     group_desc = "客户角色与归属管理",
     desc = "查询客户列表",
     resource = "customer",
@@ -43,7 +43,7 @@ pub async fn customer_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-客户",
+    group = "客户",
     group_desc = "客户角色与归属管理",
     desc = "创建客户",
     resource = "customer",
@@ -70,7 +70,7 @@ pub async fn customer_create(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-客户",
+    group = "客户",
     group_desc = "客户角色与归属管理",
     desc = "查询客户详情",
     resource = "customer",
@@ -93,7 +93,7 @@ pub async fn customer_detail(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-客户",
+    group = "客户",
     group_desc = "客户角色与归属管理",
     desc = "更新客户",
     resource = "customer",
@@ -122,7 +122,7 @@ pub async fn customer_update(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-客户",
+    group = "客户",
     group_desc = "客户角色与归属管理",
     desc = "删除客户",
     resource = "customer",
@@ -149,7 +149,7 @@ pub async fn customer_delete(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-客户",
+    group = "客户",
     group_desc = "客户角色与归属管理",
     desc = "查询客户归属列表",
     resource = "customer_assignment",
@@ -176,7 +176,7 @@ pub async fn customer_assignment_list(
 }
 
 #[permission_macros::permission(
-    group = "业务伙伴-客户",
+    group = "客户",
     group_desc = "客户角色与归属管理",
     desc = "调整客户归属",
     resource = "customer_assignment",
