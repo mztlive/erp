@@ -1,11 +1,13 @@
 /**
- * W13 session-mock API：queryFn / mutationFn 纯函数。
- * 领取返回会话内租约（无令牌）；正式完成使用统一动作命令语义。
+ * W13 卡券票款复核 API：真实 HTTP
+ * (/admin/work-items、/admin/receivable-accounts、/admin/receivable-funds-reviews、
+ * customer-receipts、invoices)。
+ * 队列项由 CARD_FUNDS_REVIEW / CARD_FUNDS_DELTA_REVIEW 任务 + 应收子账详情组装。
  */
 
-import { mockDelay } from "@/lib/mock-delay"
+import { apiGet, apiPost } from "@/lib/api"
+import type { Page } from "@/lib/api"
 import type {
-  AllocationDraftLine,
   CardFundsReviewDecision,
   CardFundsReviewItemView,
   CardFundsReviewQueueQuery,
@@ -19,170 +21,167 @@ import {
   APPROVE_CONCLUSION_LABEL,
   REJECT_FOLLOW_UP_COLLABORATION,
 } from "@/features/card-funds-review/types"
-import { CARD_FUNDS_REVIEW_SEED } from "@/mock/card-funds-review"
-import {
-  applyWorkItemActionSession,
-  appendW13Review,
-  bumpW13SubjectHash,
-  claimWorkItemSession,
-  clearSessionLease,
-  completeWorkItemSession,
-  getSessionLease,
-  getW13AppendedReviews,
-  getW13BusinessOutcome,
-  getW13FundsOverlay,
-  isW13WorkItemHeld,
-  isW13WorkItemTerminal,
-  markQueueTaskCompleted,
-  markQueueTaskHeld,
-  setW13BusinessOutcome,
-  setW13FundsOverlay,
-  WorkItemMockError,
-} from "@/mock/session-state"
-import { versionText } from "@/lib/ui-text"
+// ─── Backend DTOs ──────────────────────────────────────────────────────────
 
-function moneyNum(v: string): number {
-  return Number(v) || 0
+type BackendWorkItem = {
+  id: string
+  work_item_type: string
+  business_object_type: string
+  business_object_id: string
+  subject_version?: string | null
+  status: string
+  owner_role?: string | null
+  owner_user_id?: string | null
+  priority: string | number
+  due_at?: number | null
+  reason_code?: string | null
+  impact_summary?: string | null
+  completion_action: string
+  completed_at?: number | null
+  completed_by?: string | null
+  version: number
+  created_at: number
 }
 
-function moneyStr(n: number): string {
-  return n.toFixed(2)
+type BackendReceivableEntry = {
+  id: string
+  entry_type: string
+  direction: string
+  amount: string
+  due_date: string
+  source_document_id: string
+  posted_at: number
 }
 
-function recomputeHash(parts: {
-  accountId: string
-  fundsFactVersion: string
-  settled: string
-  invoiced: string
-  gross: string
-  revisionId: string
-}): string {
-  // Mock-only normalized fingerprint; real hash is server-side.
-  return `sha256:${parts.accountId}_${parts.revisionId}_${parts.fundsFactVersion}_s${parts.settled}_i${parts.invoiced}_g${parts.gross}`
+type BackendFundsReview = {
+  id: string
+  review_no: number
+  review_type: string
+  review_result: string
+  reviewed_by: string
+  reviewed_at: number
+  evidence_reference?: string | null
 }
 
-function projectItem(
-  seed: CardFundsReviewItemView
-): CardFundsReviewItemView | null {
-  if (isW13WorkItemTerminal(seed.workItem.workItemId)) return null
+type BackendReceivableAccount = {
+  id: string
+  sales_order_id: string
+  account_seq: number
+  customer_id: string
+  counterparty_party_id: string
+  review_status: string
+  gross_total: string
+  settled_total: string
+  open_total: string
+  invoiceable_total: string
+  invoiced_total: string
+  open_invoiceable_total: string
+  status: string
+  version: number
+  created_at: number
+  entries: BackendReceivableEntry[]
+  reviews: BackendFundsReview[]
+}
 
-  const held = isW13WorkItemHeld(seed.workItem.workItemId)
-  const publicLease = getSessionLease(seed.workItem.workItemId)
-  const overlay = getW13FundsOverlay(seed.workItem.workItemId)
-  const appended = getW13AppendedReviews(seed.workItem.workItemId)
+type BackendCustomerReceipt = {
+  id: string
+  receipt_no: string
+  status: string
+  received_at: number
+  amount: string
+  allocated_total: string
+  unallocated_amount: string
+  allocations: Array<{
+    id: string
+    receivable_entry_id: string
+    allocated_amount: string
+    allocation_action: string
+  }>
+}
 
-  const settledTotal = overlay?.settledTotal ?? seed.account.settledTotal
-  const invoicedTotal = overlay?.invoicedTotal ?? seed.account.invoicedTotal
-  const gross = seed.account.grossTotal
-  const openTotal =
-    overlay?.openTotal ??
-    moneyStr(Math.max(0, moneyNum(gross) - moneyNum(settledTotal)))
-  const openInvoiceableTotal =
-    overlay?.openInvoiceableTotal ??
-    moneyStr(Math.max(0, moneyNum(gross) - moneyNum(invoicedTotal)))
-  const fundsFactVersion =
-    overlay?.fundsFactVersion ?? seed.fundsFactVersion
-  const subjectHash = overlay?.subjectHash ?? seed.workItem.subjectHash
-  const receiptFacts = overlay?.receiptFacts ?? seed.receiptFacts
-  const invoiceFacts = overlay?.invoiceFacts ?? seed.invoiceFacts
+type BackendInvoice = {
+  id: string
+  invoice_no: string
+  invoice_kind: "blue" | "red"
+  invoice_date: string
+  gross_amount: string
+  net_amount: string
+  tax_amount: string
+  allocated_total: string
+  status: string
+  allocations: Array<{
+    id: string
+    receivable_account_id?: string
+    allocated_gross_amount: string
+    allocation_action: string
+  }>
+}
 
-  const settled = moneyNum(settledTotal)
-  const invoiced = moneyNum(invoicedTotal)
-  const canConfirmZero =
-    seed.reviewType === "OPENING" && settled === 0 && invoiced === 0
+// ─── Helpers ───────────────────────────────────────────────────────────────
 
-  const blockers = [...seed.workItem.actionBlockers]
-  if (!canConfirmZero) {
-    if (!blockers.some((b) => b.action === "CONFIRM_ZERO")) {
-      blockers.push({
-        action: "CONFIRM_ZERO",
-        code:
-          seed.reviewType !== "OPENING"
-            ? "NOT_OPENING"
-            : "SETTLED_OR_INVOICED_NOT_ZERO",
-        message:
-          seed.reviewType !== "OPENING"
-            ? "「从 0 起」仅适用于期初复核任务"
-            : "净已收或净已开不为 0，不能使用「从 0 起」结论",
-      })
-    }
+function instantToIso(secs: number | undefined | null): string {
+  if (secs == null || !Number.isFinite(Number(secs))) return ""
+  return new Date(Number(secs) * 1000).toISOString()
+}
+
+function mapWorkItemStatus(
+  s: string
+): CardFundsReviewItemView["workItem"]["workItemStatus"] {
+  if (s === "COMPLETED" || s === "completed") return "COMPLETED"
+  if (s === "IN_PROGRESS" || s === "in_progress") return "IN_PROGRESS"
+  // UNCLAIMED / CLOSED / other → PENDING for queue display
+  return "PENDING"
+}
+
+function mapPriority(p: string | number): number {
+  if (typeof p === "number") return p
+  switch (p) {
+    case "urgent":
+      return 100
+    case "high":
+      return 80
+    case "low":
+      return 20
+    default:
+      return 50
   }
+}
 
-  const chainItems = [
-    ...seed.reviewChain.items,
-    ...appended.map((a) => ({
-      ...a,
-      conclusion: a.conclusion as CardFundsReviewItemView["reviewChain"]["items"][number]["conclusion"],
-      readOnly: true as const,
-    })),
-  ]
-
-  const fundsChanged = Boolean(overlay)
-  const fingerprintStatus = overlay?.forceHashDriftOnComplete
-    ? {
-        label: versionText.versionChanged,
-        tone: "destructive" as const,
-        detail: "外部记录变化：完成时须使用最新数据版本，旧期望将阻断",
-      }
-    : fundsChanged
-      ? {
-          label: "票款已更新",
-          tone: "warning" as const,
-          detail: "登记后已重算金额；请核对后再完成",
-        }
-      : seed.fingerprintStatus
-
-  return {
-    ...seed,
-    workItem: {
-      ...seed.workItem,
-      subjectHash,
-      subjectVersion:
-        publicLease?.subjectVersion ?? seed.workItem.subjectVersion,
-      workItemStatus: held ? "IN_PROGRESS" : seed.workItem.workItemStatus,
-      held,
-      claimedBy: publicLease
-        ? { userId: "user_finance", displayName: "当前用户 · 王敏" }
-        : seed.workItem.claimedBy,
-      actionBlockers: blockers,
-      allowedActions: canConfirmZero
-        ? seed.workItem.allowedActions.includes("CONFIRM_ZERO")
-          ? seed.workItem.allowedActions
-          : [...seed.workItem.allowedActions, "CONFIRM_ZERO"]
-        : seed.workItem.allowedActions.filter((a) => a !== "CONFIRM_ZERO"),
-    },
-    account: {
-      ...seed.account,
-      settledTotal,
-      invoicedTotal,
-      openTotal,
-      openInvoiceableTotal,
-      fundsReliability: held
-        ? seed.account.fundsReliability
-        : seed.account.fundsReliability,
-      reliabilityNote: seed.account.reliabilityNote,
-    },
-    fundsFactVersion,
-    receiptFacts,
-    invoiceFacts,
-    reviewChain: {
-      ...seed.reviewChain,
-      items: chainItems,
-      nextReviewNo: seed.reviewChain.nextReviewNo + appended.length,
-      tailReviewId:
-        chainItems.length > 0
-          ? chainItems[chainItems.length - 1]!.reviewId
-          : seed.reviewChain.tailReviewId,
-    },
-    fingerprintStatus,
-    currentEvidence: {
-      evidenceDocumentIds:
-        overlay?.evidenceDocumentIds ?? seed.currentEvidence.evidenceDocumentIds,
-      evidenceReferences:
-        overlay?.evidenceReferences ?? seed.currentEvidence.evidenceReferences,
-      comment: overlay?.comment ?? seed.currentEvidence.comment,
-    },
+function reviewTypeFromWorkItem(
+  workItemType: string
+): CardFundsReviewItemView["reviewType"] {
+  if (
+    workItemType === "CARD_FUNDS_DELTA_REVIEW" ||
+    workItemType === "card_funds_delta_review"
+  ) {
+    return "SYNC_DELTA"
   }
+  return "OPENING"
+}
+
+function mapFundsReviewType(
+  t: CardFundsReviewItemView["reviewType"]
+): "opening" | "sync_delta" {
+  return t === "SYNC_DELTA" ? "sync_delta" : "opening"
+}
+
+function mapReviewResultBackend(
+  r: "APPROVED" | "REJECTED"
+): "passed" | "rejected" {
+  return r === "APPROVED" ? "passed" : "rejected"
+}
+
+function mapReviewResultFrontend(
+  r: string
+): "APPROVED" | "REJECTED" {
+  return r === "passed" || r === "APPROVED" ? "APPROVED" : "REJECTED"
+}
+
+function mapReviewTypeFrontend(
+  t: string
+): CardFundsReviewItemView["reviewType"] {
+  if (t === "sync_delta" || t === "SYNC_DELTA") return "SYNC_DELTA"
+  return "OPENING"
 }
 
 function filterSummary(q: CardFundsReviewQueueQuery): string {
@@ -200,25 +199,212 @@ function filterSummary(q: CardFundsReviewQueueQuery): string {
   return parts.join(" · ")
 }
 
+async function loadWorkItems(
+  workItemType: string
+): Promise<BackendWorkItem[]> {
+  const page = await apiGet<Page<BackendWorkItem>>("/admin/work-items", {
+    work_item_type: workItemType,
+    page: 1,
+    page_size: 100,
+    sort_by: "created_at",
+    sort_dir: "desc",
+  })
+  return page.items ?? []
+}
+
+async function loadAccount(
+  id: string
+): Promise<BackendReceivableAccount | null> {
+  try {
+    return await apiGet<BackendReceivableAccount>(
+      `/admin/receivable-accounts/${encodeURIComponent(id)}`
+    )
+  } catch {
+    return null
+  }
+}
+
+async function projectItem(
+  wi: BackendWorkItem
+): Promise<CardFundsReviewItemView | null> {
+  if (wi.status === "COMPLETED" || wi.status === "CLOSED") return null
+
+  const accountId = wi.business_object_id
+  const account = await loadAccount(accountId)
+  if (!account) return null
+
+  const reviewType = reviewTypeFromWorkItem(wi.work_item_type)
+  const workItemType =
+    reviewType === "SYNC_DELTA"
+      ? ("CARD_FUNDS_DELTA_REVIEW" as const)
+      : ("CARD_FUNDS_REVIEW" as const)
+
+  const settled = account.settled_total
+  const invoiced = account.invoiced_total
+  const canConfirmZero =
+    reviewType === "OPENING" &&
+    (settled === "0" || settled === "0.00") &&
+    (invoiced === "0" || invoiced === "0.00")
+
+  const status = mapWorkItemStatus(wi.status)
+  const held = false
+
+  const allowedActions: Array<
+    CardFundsReviewItemView["workItem"]["allowedActions"][number]
+  > = [
+    "CLAIM",
+    "APPROVE",
+    "REJECT",
+    "HOLD",
+    "REGISTER_RECEIPT",
+    "REGISTER_INVOICE",
+  ]
+  if (canConfirmZero) {
+    allowedActions.push("CONFIRM_ZERO")
+  }
+
+  const actionBlockers: Array<{
+    action: string
+    code: string
+    message: string
+  }> = []
+  if (!canConfirmZero) {
+    actionBlockers.push({
+      action: "CONFIRM_ZERO",
+      code:
+        reviewType !== "OPENING"
+          ? "NOT_OPENING"
+          : "SETTLED_OR_INVOICED_NOT_ZERO",
+      message:
+        reviewType !== "OPENING"
+          ? "「从 0 起」仅适用于期初复核任务"
+          : "净已收或净已开不为 0，不能使用「从 0 起」结论",
+    })
+  }
+
+  const chainItems = (account.reviews ?? []).map((r) => ({
+    reviewId: r.id,
+    reviewNo: r.review_no,
+    reviewType: mapReviewTypeFrontend(r.review_type),
+    reviewResult: mapReviewResultFrontend(r.review_result),
+    conclusion:
+      mapReviewResultFrontend(r.review_result) === "REJECTED"
+        ? ("REJECTED" as const)
+        : ("RECORDED_FACTS_RECONCILED" as const),
+    reviewerLabel: r.reviewed_by,
+    completedAt: instantToIso(r.reviewed_at),
+    subjectHashAtReview: wi.subject_version ?? String(account.version),
+    readOnly: true as const,
+  }))
+
+  const subjectHash =
+    wi.subject_version ?? `acct:${account.id}:v${account.version}`
+  const fundsFactVersion = `ffv:${account.id}:v${account.version}`
+
+  // receipt/invoice facts: not linked by work-item; leave empty unless we can filter by party (gap)
+  const receiptFacts: CardFundsReviewItemView["receiptFacts"] = []
+  const invoiceFacts: CardFundsReviewItemView["invoiceFacts"] = []
+
+  return {
+    workItem: {
+      workItemId: wi.id,
+      workItemType,
+      completionAction: wi.completion_action,
+      subjectVersion: String(wi.version),
+      subjectHash,
+      workItemStatus: status,
+      dueAt: wi.due_at ? instantToIso(wi.due_at) : undefined,
+      claimedBy: wi.owner_user_id
+        ? { userId: wi.owner_user_id, displayName: wi.owner_user_id }
+        : undefined,
+      allowedActions,
+      actionBlockers,
+      held,
+      reason: wi.reason_code ?? "卡券票款复核",
+      impact: wi.impact_summary ?? "",
+      priority: mapPriority(wi.priority),
+    },
+    salesOrder: {
+      id: account.sales_order_id,
+      orderNo: account.sales_order_id,
+      revisionNo: 1,
+      snapshotAt: instantToIso(account.created_at),
+    },
+    account: {
+      id: account.id,
+      accountSeq: account.account_seq,
+      domainVersion: String(account.version),
+      customerId: account.customer_id,
+      customerName: account.customer_id,
+      counterpartyPartyId: account.counterparty_party_id,
+      counterpartyPartyName: account.counterparty_party_id,
+      mallName: "",
+      reviewStatus: account.review_status,
+      grossTotal: account.gross_total,
+      settledTotal: account.settled_total,
+      openTotal: account.open_total,
+      invoicedTotal: account.invoiced_total,
+      openInvoiceableTotal: account.open_invoiceable_total,
+      syncedGrossAmount: account.gross_total,
+      fundsReliability:
+        account.review_status === "reviewed"
+          ? "VERIFIED"
+          : "UNRELIABLE_PENDING_REVIEW",
+      reliabilityNote:
+        account.review_status === "reviewed"
+          ? "卡券票款复核已通过"
+          : "卡券票款待复核，指标暂不可靠",
+    },
+    reviewChain: {
+      tailReviewId:
+        chainItems.length > 0
+          ? chainItems[chainItems.length - 1]!.reviewId
+          : undefined,
+      chainVersion: `cv:${chainItems.length}`,
+      nextReviewNo:
+        chainItems.length > 0
+          ? chainItems[chainItems.length - 1]!.reviewNo + 1
+          : 1,
+      items: chainItems,
+    },
+    currentSalesOrderRevisionId: account.sales_order_id,
+    fundsFactVersion,
+    receiptFacts,
+    invoiceFacts,
+    reviewType,
+    fingerprintStatus: {
+      label: "数据版本",
+      tone: "neutral",
+      detail: `subject=${subjectHash}`,
+    },
+    currentEvidence: {
+      evidenceDocumentIds: [],
+      evidenceReferences: [],
+      comment: undefined,
+    },
+  }
+}
+
+// ─── Public API ────────────────────────────────────────────────────────────
+
 export async function fetchCardFundsReviewQueue(
   query: CardFundsReviewQueueQuery
 ): Promise<CardFundsReviewQueueView> {
-  await mockDelay()
-  let tasks = CARD_FUNDS_REVIEW_SEED.map(projectItem).filter(
-    (t): t is CardFundsReviewItemView => t != null
-  )
+  const types: string[] = []
+  if (query.type === "opening") types.push("CARD_FUNDS_REVIEW")
+  else if (query.type === "delta") types.push("CARD_FUNDS_DELTA_REVIEW")
+  else types.push("CARD_FUNDS_REVIEW", "CARD_FUNDS_DELTA_REVIEW")
 
-  if (query.type === "opening") {
-    tasks = tasks.filter((t) => t.reviewType === "OPENING")
-  } else if (query.type === "delta") {
-    tasks = tasks.filter((t) => t.reviewType === "SYNC_DELTA")
-  }
+  const allItems = (
+    await Promise.all(types.map((t) => loadWorkItems(t)))
+  ).flat()
+
+  let tasks = (
+    await Promise.all(allItems.map((wi) => projectItem(wi)))
+  ).filter((t): t is CardFundsReviewItemView => t != null)
 
   if (query.status === "held") {
     tasks = tasks.filter((t) => t.workItem.held)
-  } else {
-    // 正常有效队列含 PENDING/IN_PROGRESS（含已暂挂）；不混入已完成
-    // 已暂挂仍出现在 pending 中，另可切 held 子集
   }
 
   if (query.q?.trim()) {
@@ -227,10 +413,12 @@ export async function fetchCardFundsReviewQueue(
       (t) =>
         t.salesOrder.orderNo.toUpperCase().includes(q) ||
         t.account.customerName.toUpperCase().includes(q) ||
-        t.account.counterpartyPartyName.toUpperCase().includes(q)
+        t.account.counterpartyPartyName.toUpperCase().includes(q) ||
+        t.account.id.toUpperCase().includes(q)
     )
   }
 
+  // due filters require client clock for "overdue"/"today" — use server due_at only when present
   if (query.due === "overdue") {
     const now = Date.now()
     tasks = tasks.filter(
@@ -258,14 +446,6 @@ export async function fetchCardFundsReviewQueue(
     }
   }
 
-  const emptyReason = CARD_FUNDS_REVIEW_SEED.every((t) =>
-    isW13WorkItemTerminal(t.workItem.workItemId)
-  )
-    ? "NO_TASKS"
-    : tasks.length === 0
-      ? "FILTER_NO_RESULT"
-      : undefined
-
   return {
     preferences: { autoNextDefault: true },
     context: {
@@ -280,37 +460,24 @@ export async function fetchCardFundsReviewQueue(
     },
     tasks,
     current,
-    emptyReason,
+    emptyReason: tasks.length === 0 ? "NO_TASKS" : undefined,
   }
 }
 
 export async function claimCardFundsReviewWorkItem(
   workItemId: string
 ): Promise<WorkItemLease> {
-  await mockDelay(80)
-  const seed = CARD_FUNDS_REVIEW_SEED.find(
-    (t) => t.workItem.workItemId === workItemId
+  const detail = await apiGet<BackendWorkItem>(
+    `/admin/work-items/${encodeURIComponent(workItemId)}`
   )
-  if (!seed) throw new Error("任务不存在")
-  if (isW13WorkItemTerminal(workItemId)) {
-    throw new Error("任务已完成，无法领取")
-  }
-  const projected = projectItem(seed)
-  try {
-    const lease = claimWorkItemSession({
-      workItemId,
-      subjectVersion:
-        projected?.workItem.subjectVersion ?? seed.workItem.subjectVersion,
-      ownerUserId: "user_finance",
-    })
-    return {
-      workItemId,
-      claimedByLabel: "当前用户 · 王敏",
-      subjectVersion: lease.subjectVersion ?? seed.workItem.subjectVersion,
-    }
-  } catch (error) {
-    if (error instanceof WorkItemMockError) throw new Error(error.message)
-    throw error
+  const claimed = await apiPost<BackendWorkItem>(
+    `/admin/work-items/${encodeURIComponent(workItemId)}/claim`,
+    { version: detail.version }
+  )
+  return {
+    workItemId,
+    claimedByLabel: claimed.owner_user_id ?? "当前用户",
+    subjectVersion: String(claimed.version),
   }
 }
 
@@ -321,310 +488,200 @@ export async function holdCardFundsReview(input: {
   note?: string
   nextWorkItemId?: string
 }): Promise<FormalActionResponse> {
-  await mockDelay(100)
-  const seed = CARD_FUNDS_REVIEW_SEED.find(
-    (t) => t.workItem.workItemId === input.workItemId
-  )
-  if (!seed) {
-    return { status: "failed", code: "NOT_FOUND", message: "任务不存在" }
-  }
-  const projected = projectItem(seed)
   try {
-    applyWorkItemActionSession({
-      workItemId: input.workItemId,
-      expectedSubjectVersion:
-        projected?.workItem.subjectVersion ?? seed.workItem.subjectVersion,
-      action: {
-        kind: "HOLD",
-        note: input.note ?? input.reasonCode,
-      },
-    })
-    markQueueTaskHeld("W13", input.workItemId)
-    clearSessionLease(input.workItemId)
+    const detail = await apiGet<BackendWorkItem>(
+      `/admin/work-items/${encodeURIComponent(input.workItemId)}`
+    )
+    const version = Number(input.expectedSubjectVersion) || detail.version
+    await apiPost(
+      `/admin/work-items/${encodeURIComponent(input.workItemId)}/defer`,
+      {
+        version,
+        comment: input.note ?? input.reasonCode,
+      }
+    )
     const outcome: FormalOutcome = {
       kind: "HELD",
       workItemId: input.workItemId,
       workItemStatus: "IN_PROGRESS",
       heldAt: new Date().toISOString(),
       resumeHint:
-        "任务仍在待处理列表，跳过标记已保留；可在「已跳过」范围查看并手动恢复。未形成复核记录。",
+        "任务已暂挂。未形成复核记录。可在队列中重新领取处理。",
       reference: `W13-HOLD-${input.workItemId.toUpperCase()}`,
       nextWorkItemId: input.nextWorkItemId,
     }
     return { status: "succeeded", outcome }
-  } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return { status: "failed", code: error.code, message: error.message }
-    }
-    throw error
+  } catch (err) {
+    const message =
+      err && typeof err === "object" && "message" in err
+        ? String((err as { message: unknown }).message)
+        : "暂挂失败"
+    const code =
+      err && typeof err === "object" && "status" in err
+        ? String((err as { status?: number }).status ?? "HTTP_ERROR")
+        : "HTTP_ERROR"
+    return { status: "failed", code, message }
   }
-}
-
-function validateDecisionAgainstItem(
-  item: CardFundsReviewItemView,
-  decision: CardFundsReviewDecision
-): { ok: true } | { ok: false; code: string; message: string } {
-  if (decision.expectedSubjectHash !== item.workItem.subjectHash) {
-    return {
-      ok: false,
-      code: "SUBJECT_HASH_MISMATCH",
-      message:
-        "复核对象数据已变更（任务/记录/提交不一致），已阻断静默通过。请刷新后重新核对。",
-    }
-  }
-  if (decision.expectedFundsFactVersion !== item.fundsFactVersion) {
-    return {
-      ok: false,
-      code: "FUNDS_VERSION_MISMATCH",
-      message: "票款记录版本已变化，请刷新后重审",
-    }
-  }
-  if (
-    decision.expectedAccountDomainVersion !== item.account.domainVersion ||
-    decision.receivableAccountId !== item.account.id
-  ) {
-    return {
-      ok: false,
-      code: "ACCOUNT_VERSION_MISMATCH",
-      message: "应收账户版本或身份不匹配",
-    }
-  }
-  if (decision.reviewType !== item.reviewType) {
-    return {
-      ok: false,
-      code: "REVIEW_TYPE_MISMATCH",
-      message: "复核类型与当前任务不一致，禁止覆盖期初/差额类型",
-    }
-  }
-  if (
-    decision.evidenceDocumentIds.length === 0 &&
-    decision.evidenceReferences.length === 0
-  ) {
-    return {
-      ok: false,
-      code: "EVIDENCE_REQUIRED",
-      message: "完成复核时证据不能为空",
-    }
-  }
-  if (decision.reviewResult === "APPROVED") {
-    if (decision.conclusion === "NO_HISTORY_FROM_ZERO") {
-      if (item.reviewType !== "OPENING") {
-        return {
-          ok: false,
-          code: "ZERO_ONLY_OPENING",
-          message: "「从 0 起」仅允许 OPENING + APPROVED",
-        }
-      }
-      if (
-        moneyNum(item.account.settledTotal) !== 0 ||
-        moneyNum(item.account.invoicedTotal) !== 0
-      ) {
-        return {
-          ok: false,
-          code: "ZERO_REQUIRES_ZERO_BALANCES",
-          message: "净已收/净已开不为 0，不能从 0 起；且不会创建 0 元回款/发票",
-        }
-      }
-    }
-  }
-  if (decision.reviewResult === "REJECTED" && !decision.comment?.trim()) {
-    return {
-      ok: false,
-      code: "REJECT_COMMENT_REQUIRED",
-      message: "驳回原因与说明必填",
-    }
-  }
-  return { ok: true }
 }
 
 export async function completeCardFundsReview(input: {
   workItemId: string
   expectedSubjectVersion: string
-  /** Demo: force server hash drift before validate */
   simulateHashDrift?: boolean
   decision: CardFundsReviewDecision
 }): Promise<FormalActionResponse> {
-  await mockDelay(150)
-
-  const cachedBiz = getW13BusinessOutcome(input.workItemId)
-  if (cachedBiz) {
-    const outcome: FormalOutcome =
-      cachedBiz.reviewResult === "APPROVED"
-        ? {
-            kind: "APPROVED",
-            business: {
-              ...cachedBiz,
-              conclusion: cachedBiz.conclusion as
-                | "NO_HISTORY_FROM_ZERO"
-                | "RECORDED_FACTS_RECONCILED",
-            },
-          }
-        : {
-            kind: "REJECTED",
-            business: {
-              ...cachedBiz,
-              conclusion: "REJECTED",
-            },
-          }
-    return { status: "succeeded", outcome }
-  }
-
   if (input.simulateHashDrift) {
-    bumpW13SubjectHash(
-      input.workItemId,
-      `sha256:drift_${input.workItemId}_${Date.now()}`
-    )
-  }
-
-  const seed = CARD_FUNDS_REVIEW_SEED.find(
-    (t) => t.workItem.workItemId === input.workItemId
-  )
-  if (!seed) {
-    return { status: "failed", code: "NOT_FOUND", message: "任务不存在" }
-  }
-  const item = projectItem(seed)
-  if (!item) {
-    return { status: "failed", code: "ALREADY_DONE", message: "任务已完成" }
-  }
-
-  // 完成前重新取得当前记录并校验 decision 中的期望指纹
-  const validation = validateDecisionAgainstItem(item, input.decision)
-  if (!validation.ok) {
-    return {
-      status: "failed",
-      code: validation.code,
-      message: validation.message,
-    }
-  }
-
-  // 信封层 subject 与当前记录一致
-  if (input.expectedSubjectVersion !== item.workItem.subjectVersion) {
     return {
       status: "failed",
       code: "SUBJECT_HASH_MISMATCH",
       message:
-        "任务数据版本与当前记录不一致，已阻断。请刷新后重审。",
+        "复核对象数据已变更（演示漂移），已阻断静默通过。请刷新后重新核对。",
     }
-  }
-
-  const reviewNo = item.reviewChain.nextReviewNo
-  const reviewId = `rfr_${input.workItemId}_${reviewNo}`
-  const completedAt = new Date().toISOString()
-  const operationId = `op_w13_${input.workItemId.slice(0, 12)}`
-  const workflowActionId = `wa_w13_${input.workItemId}_${reviewNo}`
-
-  if (input.decision.reviewResult === "APPROVED") {
-    const business = {
-      receivableFundsReviewId: reviewId,
-      receivableAccountId: item.account.id,
-      reviewNo,
-      accountReviewStatus:
-        item.reviewType === "OPENING" ? "OPENING_APPROVED" : "DELTA_APPROVED",
-      workflowActionId,
-      operationId,
-      completedAt,
-      reviewResult: "APPROVED" as const,
-      conclusion: input.decision.conclusion,
-      subjectHash: item.workItem.subjectHash,
-      reference: `W13-OK-${String(reviewNo).padStart(4, "0")}`,
-    }
-    try {
-      completeWorkItemSession({
-        workItemId: input.workItemId,
-        expectedSubjectVersion: input.expectedSubjectVersion,
-        decision: {
-          kind: "CARD_FUNDS_APPROVED",
-          summary: `复核号 ${reviewNo} · ${APPROVE_CONCLUSION_LABEL[input.decision.conclusion]}`,
-        },
-      })
-      appendW13Review(input.workItemId, {
-        reviewId,
-        reviewNo,
-        reviewType: item.reviewType,
-        reviewResult: "APPROVED",
-        conclusion: input.decision.conclusion,
-        reviewerLabel: "当前用户 · 王敏",
-        completedAt,
-        subjectHashAtReview: item.workItem.subjectHash,
-        predecessorReviewId: item.reviewChain.tailReviewId,
-      })
-      setW13BusinessOutcome(input.workItemId, business)
-      markQueueTaskCompleted("W13", input.workItemId)
-      return { status: "succeeded", outcome: { kind: "APPROVED", business } }
-    } catch (error) {
-      if (error instanceof WorkItemMockError) {
-        if (error.code === "VERSION_CONFLICT") {
-          return {
-            status: "failed",
-            code: "SUBJECT_HASH_MISMATCH",
-            message: error.message,
-          }
-        }
-        return { status: "failed", code: error.code, message: error.message }
-      }
-      throw error
-    }
-  }
-
-  // REJECTED — 只形成驳回复核记录并完成当前任务；固定 blocker，不建后继
-  const business = {
-    receivableFundsReviewId: reviewId,
-    receivableAccountId: item.account.id,
-    reviewNo,
-    accountReviewStatus: "REJECTED",
-    workflowActionId,
-    operationId,
-    completedAt,
-    reviewResult: "REJECTED" as const,
-    conclusion: "REJECTED" as const,
-    subjectHash: item.workItem.subjectHash,
-    reference: `W13-REJ-${String(reviewNo).padStart(4, "0")}`,
-    followUpConfiguration: {
-      status: "BLOCKED" as const,
-      blockerCode: "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED" as const,
-      collaborationMessage: REJECT_FOLLOW_UP_COLLABORATION,
-      requiredRegistration: [
-        "WORK_ITEM_TYPE" as const,
-        "OWNER_POOL" as const,
-        "HANDLER_KEY" as const,
-      ],
-    },
   }
 
   try {
-    completeWorkItemSession({
-      workItemId: input.workItemId,
-      expectedSubjectVersion: input.expectedSubjectVersion,
-      decision: {
-        kind: "CARD_FUNDS_REJECTED",
-        summary: `复核号 ${reviewNo} · 驳回 · 后继未配置`,
-      },
-    })
-    appendW13Review(input.workItemId, {
-      reviewId,
-      reviewNo,
-      reviewType: item.reviewType,
-      reviewResult: "REJECTED",
-      conclusion: "REJECTED",
-      reviewerLabel: "当前用户 · 王敏",
-      completedAt,
-      subjectHashAtReview: item.workItem.subjectHash,
-      predecessorReviewId: item.reviewChain.tailReviewId,
-    })
-    setW13BusinessOutcome(input.workItemId, business)
-    markQueueTaskCompleted("W13", input.workItemId)
-    return { status: "succeeded", outcome: { kind: "REJECTED", business } }
-  } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return { status: "failed", code: error.code, message: error.message }
+    const detail = await apiGet<BackendWorkItem>(
+      `/admin/work-items/${encodeURIComponent(input.workItemId)}`
+    )
+    const account = await loadAccount(input.decision.receivableAccountId)
+    if (!account) {
+      return {
+        status: "failed",
+        code: "NOT_FOUND",
+        message: "应收往来子账不存在",
+      }
     }
-    throw error
+
+    if (
+      input.decision.evidenceDocumentIds.length === 0 &&
+      input.decision.evidenceReferences.length === 0
+    ) {
+      return {
+        status: "failed",
+        code: "EVIDENCE_REQUIRED",
+        message: "完成复核时证据不能为空",
+      }
+    }
+
+    if (
+      input.decision.reviewResult === "APPROVED" &&
+      input.decision.conclusion === "NO_HISTORY_FROM_ZERO"
+    ) {
+      if (input.decision.reviewType !== "OPENING") {
+        return {
+          status: "failed",
+          code: "ZERO_ONLY_OPENING",
+          message: "「从 0 起」仅允许 OPENING + APPROVED",
+        }
+      }
+    }
+
+    const nowSecs = Math.floor(Date.now() / 1000)
+    const evidenceRef =
+      input.decision.evidenceReferences[0] ??
+      input.decision.evidenceDocumentIds[0] ??
+      ""
+
+    const review = await apiPost<{
+      id: string
+      review_no: number
+      review_type: string
+      review_result: string
+      reviewed_by: string
+      reviewed_at: number
+    }>("/admin/receivable-funds-reviews", {
+      receivable_account_id: input.decision.receivableAccountId,
+      work_item_id: input.workItemId,
+      review_type: mapFundsReviewType(input.decision.reviewType),
+      review_result: mapReviewResultBackend(input.decision.reviewResult),
+      evidence_reference: evidenceRef || undefined,
+      reviewed_by: "finance_reviewer",
+      reviewed_at: nowSecs,
+    })
+
+    const version = Number(input.expectedSubjectVersion) || detail.version
+    await apiPost(
+      `/admin/work-items/${encodeURIComponent(input.workItemId)}/complete`,
+      { version }
+    )
+
+    const completedAt = new Date().toISOString()
+    const operationId = `op_w13_${input.workItemId.slice(0, 12)}`
+    const workflowActionId = `wa_w13_${input.workItemId}_${review.review_no}`
+
+    if (input.decision.reviewResult === "APPROVED") {
+      const business = {
+        receivableFundsReviewId: review.id,
+        receivableAccountId: input.decision.receivableAccountId,
+        reviewNo: review.review_no,
+        accountReviewStatus:
+          input.decision.reviewType === "OPENING"
+            ? "OPENING_APPROVED"
+            : "DELTA_APPROVED",
+        workflowActionId,
+        operationId,
+        completedAt,
+        reviewResult: "APPROVED" as const,
+        conclusion: input.decision.conclusion,
+        subjectHash:
+          detail.subject_version ??
+          `acct:${account.id}:v${account.version}`,
+        reference: `W13-OK-${String(review.review_no).padStart(4, "0")}`,
+      }
+      return {
+        status: "succeeded",
+        outcome: { kind: "APPROVED", business },
+      }
+    }
+
+    const business = {
+      receivableFundsReviewId: review.id,
+      receivableAccountId: input.decision.receivableAccountId,
+      reviewNo: review.review_no,
+      accountReviewStatus: "REJECTED",
+      workflowActionId,
+      operationId,
+      completedAt,
+      reviewResult: "REJECTED" as const,
+      conclusion: "REJECTED" as const,
+      subjectHash:
+        detail.subject_version ?? `acct:${account.id}:v${account.version}`,
+      reference: `W13-REJ-${String(review.review_no).padStart(4, "0")}`,
+      followUpConfiguration: {
+        status: "BLOCKED" as const,
+        blockerCode: "REJECT_FOLLOW_UP_WORK_ITEM_NOT_REGISTERED" as const,
+        collaborationMessage: REJECT_FOLLOW_UP_COLLABORATION,
+        requiredRegistration: [
+          "WORK_ITEM_TYPE" as const,
+          "OWNER_POOL" as const,
+          "HANDLER_KEY" as const,
+        ],
+      },
+    }
+    return {
+      status: "succeeded",
+      outcome: { kind: "REJECTED", business },
+    }
+  } catch (err) {
+    const message =
+      err && typeof err === "object" && "message" in err
+        ? String((err as { message: unknown }).message)
+        : "完成复核失败"
+    const status =
+      err && typeof err === "object" && "status" in err
+        ? (err as { status?: number }).status
+        : undefined
+    return {
+      status: "failed",
+      code:
+        status === 409 ? "SUBJECT_HASH_MISMATCH" : String(status ?? "HTTP_ERROR"),
+      message,
+    }
   }
 }
 
 /**
- * 登记历史回款：形成回款记录 + 多对多分配，不写累计覆盖字段。
- * 不创建 0 元回款。返回后刷新金额与 subject_hash。
+ * 登记历史回款：create + post customer receipt with entry allocations.
  */
 export async function registerHistoricalReceipt(input: {
   workItemId: string
@@ -632,115 +689,90 @@ export async function registerHistoricalReceipt(input: {
   receiptNo: string
   receivedAt: string
   grossAmount: string
-  allocations: readonly AllocationDraftLine[]
+  allocations: readonly {
+    lineId: string
+    targetAccountId: string
+    targetLabel: string
+    amount: string
+  }[]
   evidenceReference: string
 }): Promise<RegisterFundsResult> {
-  await mockDelay(120)
-  const seed = CARD_FUNDS_REVIEW_SEED.find(
-    (t) => t.workItem.workItemId === input.workItemId
-  )
-  if (!seed) throw new Error("任务不存在")
-  if (moneyNum(input.grossAmount) <= 0) {
-    throw new Error("禁止创建 0 元或负金额回款；无历史票款请使用「从 0 起」")
-  }
-  const item = projectItem(seed)
-  if (!item) throw new Error("任务已完成")
-
-  const allocated = input.allocations.reduce(
-    (s, a) => s + moneyNum(a.amount),
-    0
-  )
-  if (Math.abs(allocated - moneyNum(input.grossAmount)) > 0.001) {
-    throw new Error("分配合计须等于回款含税金额（多对多核销，禁止覆盖汇总字段）")
-  }
-
-  try {
-    applyWorkItemActionSession({
-      workItemId: input.workItemId,
-      expectedSubjectVersion: item.workItem.subjectVersion,
-      action: { kind: "REGISTER_RECEIPT", note: input.receiptNo },
-    })
-  } catch (error) {
-    if (error instanceof WorkItemMockError) throw new Error(error.message)
-    throw error
-  }
-
-  const toAccount = input.allocations
-    .filter((a) => a.targetAccountId === item.account.id)
-    .reduce((s, a) => s + moneyNum(a.amount), 0)
-
-  const newReceipt = {
-    receiptId: `rcpt_${input.workItemId}_${Date.now().toString(36)}`,
-    receiptNo: input.receiptNo,
-    receivedAt: input.receivedAt,
-    grossAmount: moneyStr(moneyNum(input.grossAmount)),
-    allocatedToAccount: moneyStr(toAccount),
-    otherAllocationSummary:
-      allocated > toAccount
-        ? `同主体其它分配 ${moneyStr(allocated - toAccount)}`
-        : "同主体其它应收 0",
-    reversed: false,
-  }
-
-  const receiptFacts = [...item.receiptFacts, newReceipt]
-  const settledTotal = moneyStr(
-    receiptFacts
-      .filter((r) => !r.reversed)
-      .reduce((s, r) => s + moneyNum(r.allocatedToAccount), 0)
-  )
-  const invoicedTotal = item.account.invoicedTotal
-  const openTotal = moneyStr(
-    Math.max(0, moneyNum(item.account.grossTotal) - moneyNum(settledTotal))
-  )
-  const openInvoiceableTotal = item.account.openInvoiceableTotal
-  const fundsFactVersion = `ffv_${input.workItemId}_${Date.now().toString(36)}`
-  const subjectHash = recomputeHash({
-    accountId: item.account.id,
-    fundsFactVersion,
-    settled: settledTotal,
-    invoiced: invoicedTotal,
-    gross: item.account.grossTotal,
-    revisionId: item.currentSalesOrderRevisionId,
-  })
-
-  setW13FundsOverlay(input.workItemId, {
-    fundsFactVersion,
-    subjectHash,
-    settledTotal,
-    invoicedTotal,
-    openTotal,
-    openInvoiceableTotal,
-    receiptFacts: [...receiptFacts],
-    invoiceFacts: [...item.invoiceFacts],
-    evidenceDocumentIds: item.currentEvidence.evidenceDocumentIds,
-    evidenceReferences: [
-      ...item.currentEvidence.evidenceReferences,
-      input.evidenceReference,
-    ].filter(Boolean),
-    comment: item.currentEvidence.comment,
-  })
-
-  // 同步会话 subject，使后续 complete 三方校验使用新指纹
-  bumpW13SubjectHash(input.workItemId, subjectHash)
-  // 清除 force drift 标记（登记引起的合法更新）
-  const ov = getW13FundsOverlay(input.workItemId)
-  if (ov) {
-    setW13FundsOverlay(input.workItemId, {
-      ...ov,
-      forceHashDriftOnComplete: false,
-      subjectHash,
+  if (!input.grossAmount || Number(input.grossAmount) <= 0) {
+    return Promise.reject({
+      kind: "Validation",
+      message: "禁止创建 0 元或负金额回款；无历史票款请使用「从 0 起」",
     })
   }
 
+  const wi = await apiGet<BackendWorkItem>(
+    `/admin/work-items/${encodeURIComponent(input.workItemId)}`
+  )
+  const account = await loadAccount(wi.business_object_id)
+  if (!account) {
+    return Promise.reject({
+      kind: "Http",
+      message: "应收往来子账不存在",
+      status: 404,
+    })
+  }
+
+  // Prefer increase entries as allocation targets
+  const increaseEntry = (account.entries ?? []).find(
+    (e) => e.direction === "increase"
+  )
+  const receivedAtSecs = input.receivedAt
+    ? Math.floor(new Date(input.receivedAt).getTime() / 1000)
+    : Math.floor(Date.now() / 1000)
+
+  const created = await apiPost<BackendCustomerReceipt>(
+    "/admin/customer-receipts",
+    {
+      receipt_no: input.receiptNo,
+      counterparty_party_id: account.counterparty_party_id,
+      customer_id: account.customer_id,
+      received_at: receivedAtSecs,
+      amount: input.grossAmount,
+      bank_reference: input.evidenceReference || undefined,
+    }
+  )
+
+  const entryId = increaseEntry?.id
+  let posted = created
+  if (entryId) {
+    posted = await apiPost<BackendCustomerReceipt>(
+      `/admin/customer-receipts/${encodeURIComponent(created.id)}/post`,
+      {
+        allocations: [
+          {
+            receivable_entry_id: entryId,
+            allocated_amount: input.grossAmount,
+          },
+        ],
+      }
+    )
+  }
+
+  const refreshed = await loadAccount(account.id)
+  const subjectHash = `acct:${account.id}:v${refreshed?.version ?? account.version}`
   return {
-    fundsFactVersion,
+    fundsFactVersion: `ffv:${account.id}:v${refreshed?.version ?? account.version}`,
     subjectHash,
-    settledTotal,
-    invoicedTotal,
-    openTotal,
-    openInvoiceableTotal,
-    receiptFacts,
-    invoiceFacts: item.invoiceFacts,
+    settledTotal: refreshed?.settled_total ?? account.settled_total,
+    invoicedTotal: refreshed?.invoiced_total ?? account.invoiced_total,
+    openTotal: refreshed?.open_total ?? account.open_total,
+    openInvoiceableTotal:
+      refreshed?.open_invoiceable_total ?? account.open_invoiceable_total,
+    receiptFacts: [
+      {
+        receiptId: posted.id,
+        receiptNo: posted.receipt_no,
+        receivedAt: instantToIso(posted.received_at),
+        grossAmount: posted.amount,
+        allocatedToAccount: posted.allocated_total,
+        reversed: posted.status === "reversed",
+      },
+    ],
+    invoiceFacts: [],
   }
 }
 
@@ -752,110 +784,82 @@ export async function registerHistoricalInvoice(input: {
   grossAmount: string
   netAmount: string
   taxAmount: string
-  allocations: readonly AllocationDraftLine[]
+  allocations: readonly {
+    lineId: string
+    targetAccountId: string
+    targetLabel: string
+    amount: string
+  }[]
   evidenceReference: string
 }): Promise<RegisterFundsResult> {
-  await mockDelay(120)
-  const seed = CARD_FUNDS_REVIEW_SEED.find(
-    (t) => t.workItem.workItemId === input.workItemId
-  )
-  if (!seed) throw new Error("任务不存在")
-  if (moneyNum(input.grossAmount) <= 0) {
-    throw new Error("禁止创建 0 元或负金额发票；无历史票款请使用「从 0 起」")
-  }
-  const item = projectItem(seed)
-  if (!item) throw new Error("任务已完成")
-
-  const allocated = input.allocations.reduce(
-    (s, a) => s + moneyNum(a.amount),
-    0
-  )
-  if (Math.abs(allocated - moneyNum(input.grossAmount)) > 0.001) {
-    throw new Error("分配合计须等于发票含税金额")
-  }
-
-  try {
-    applyWorkItemActionSession({
-      workItemId: input.workItemId,
-      expectedSubjectVersion: item.workItem.subjectVersion,
-      action: { kind: "REGISTER_INVOICE", note: input.invoiceNo },
-    })
-  } catch (error) {
-    if (error instanceof WorkItemMockError) throw new Error(error.message)
-    throw error
-  }
-
-  const toAccount = input.allocations
-    .filter((a) => a.targetAccountId === item.account.id)
-    .reduce((s, a) => s + moneyNum(a.amount), 0)
-
-  const newInv = {
-    invoiceId: `inv_${input.workItemId}_${Date.now().toString(36)}`,
-    invoiceNo: input.invoiceNo,
-    direction: "BLUE" as const,
-    issuedAt: input.issuedAt,
-    grossAmount: moneyStr(moneyNum(input.grossAmount)),
-    netAmount: moneyStr(moneyNum(input.netAmount)),
-    taxAmount: moneyStr(moneyNum(input.taxAmount)),
-    allocatedToAccount: moneyStr(toAccount),
-    reversed: false,
-  }
-  const invoiceFacts = [...item.invoiceFacts, newInv]
-  const invoicedTotal = moneyStr(
-    invoiceFacts
-      .filter((r) => !r.reversed)
-      .reduce((s, r) => s + moneyNum(r.allocatedToAccount), 0)
-  )
-  const settledTotal = item.account.settledTotal
-  const openTotal = item.account.openTotal
-  const openInvoiceableTotal = moneyStr(
-    Math.max(0, moneyNum(item.account.grossTotal) - moneyNum(invoicedTotal))
-  )
-  const fundsFactVersion = `ffv_${input.workItemId}_${Date.now().toString(36)}`
-  const subjectHash = recomputeHash({
-    accountId: item.account.id,
-    fundsFactVersion,
-    settled: settledTotal,
-    invoiced: invoicedTotal,
-    gross: item.account.grossTotal,
-    revisionId: item.currentSalesOrderRevisionId,
-  })
-
-  setW13FundsOverlay(input.workItemId, {
-    fundsFactVersion,
-    subjectHash,
-    settledTotal,
-    invoicedTotal,
-    openTotal,
-    openInvoiceableTotal,
-    receiptFacts: [...item.receiptFacts],
-    invoiceFacts: [...invoiceFacts],
-    evidenceDocumentIds: item.currentEvidence.evidenceDocumentIds,
-    evidenceReferences: [
-      ...item.currentEvidence.evidenceReferences,
-      input.evidenceReference,
-    ].filter(Boolean),
-    comment: item.currentEvidence.comment,
-  })
-  bumpW13SubjectHash(input.workItemId, subjectHash)
-  const ov = getW13FundsOverlay(input.workItemId)
-  if (ov) {
-    setW13FundsOverlay(input.workItemId, {
-      ...ov,
-      forceHashDriftOnComplete: false,
-      subjectHash,
+  if (!input.grossAmount || Number(input.grossAmount) <= 0) {
+    return Promise.reject({
+      kind: "Validation",
+      message: "禁止创建 0 元或负金额发票；无历史票款请使用「从 0 起」",
     })
   }
 
+  const wi = await apiGet<BackendWorkItem>(
+    `/admin/work-items/${encodeURIComponent(input.workItemId)}`
+  )
+  const account = await loadAccount(wi.business_object_id)
+  if (!account) {
+    return Promise.reject({
+      kind: "Http",
+      message: "应收往来子账不存在",
+      status: 404,
+    })
+  }
+
+  const created = await apiPost<BackendInvoice>("/admin/invoices", {
+    invoice_direction: "sales",
+    invoice_kind: "blue",
+    party_id: account.counterparty_party_id,
+    invoice_no: input.invoiceNo,
+    invoice_date: input.issuedAt.slice(0, 10),
+    gross_amount: input.grossAmount,
+    net_amount: input.netAmount,
+    tax_amount: input.taxAmount,
+  })
+
+  const posted = await apiPost<BackendInvoice>(
+    `/admin/invoices/${encodeURIComponent(created.id)}/post`,
+    {
+      allocations: [
+        {
+          receivable_account_id: account.id,
+          allocated_gross_amount: input.grossAmount,
+          allocated_net_amount: input.netAmount,
+          allocated_tax_amount: input.taxAmount,
+        },
+      ],
+    }
+  )
+
+  const refreshed = await loadAccount(account.id)
+  const subjectHash = `acct:${account.id}:v${refreshed?.version ?? account.version}`
   return {
-    fundsFactVersion,
+    fundsFactVersion: `ffv:${account.id}:v${refreshed?.version ?? account.version}`,
     subjectHash,
-    settledTotal,
-    invoicedTotal,
-    openTotal,
-    openInvoiceableTotal,
-    receiptFacts: item.receiptFacts,
-    invoiceFacts,
+    settledTotal: refreshed?.settled_total ?? account.settled_total,
+    invoicedTotal: refreshed?.invoiced_total ?? account.invoiced_total,
+    openTotal: refreshed?.open_total ?? account.open_total,
+    openInvoiceableTotal:
+      refreshed?.open_invoiceable_total ?? account.open_invoiceable_total,
+    receiptFacts: [],
+    invoiceFacts: [
+      {
+        invoiceId: posted.id,
+        invoiceNo: posted.invoice_no,
+        direction: "BLUE",
+        issuedAt: posted.invoice_date,
+        grossAmount: posted.gross_amount,
+        netAmount: posted.net_amount,
+        taxAmount: posted.tax_amount,
+        allocatedToAccount: posted.allocated_total,
+        reversed: false,
+      },
+    ],
   }
 }
 
@@ -866,80 +870,55 @@ export async function saveCardFundsEvidence(input: {
   evidenceReferences: string[]
   comment?: string
 }): Promise<{ ok: true }> {
-  await mockDelay(60)
-  const seed = CARD_FUNDS_REVIEW_SEED.find(
-    (t) => t.workItem.workItemId === input.workItemId
-  )
-  if (!seed) throw new Error("任务不存在")
-  const item = projectItem(seed)
-  if (!item) throw new Error("任务已完成")
-  try {
-    applyWorkItemActionSession({
-      workItemId: input.workItemId,
-      expectedSubjectVersion: item.workItem.subjectVersion,
-      action: { kind: "SAVE_EVIDENCE", note: "保存复核证据" },
-    })
-  } catch (error) {
-    if (error instanceof WorkItemMockError) throw new Error(error.message)
-    throw error
-  }
-  const existing = getW13FundsOverlay(input.workItemId)
-  setW13FundsOverlay(input.workItemId, {
-    fundsFactVersion: existing?.fundsFactVersion ?? item.fundsFactVersion,
-    subjectHash: existing?.subjectHash ?? item.workItem.subjectHash,
-    settledTotal: existing?.settledTotal ?? item.account.settledTotal,
-    invoicedTotal: existing?.invoicedTotal ?? item.account.invoicedTotal,
-    openTotal: existing?.openTotal ?? item.account.openTotal,
-    openInvoiceableTotal:
-      existing?.openInvoiceableTotal ?? item.account.openInvoiceableTotal,
-    receiptFacts: existing?.receiptFacts
-      ? [...existing.receiptFacts]
-      : [...item.receiptFacts],
-    invoiceFacts: existing?.invoiceFacts
-      ? [...existing.invoiceFacts]
-      : [...item.invoiceFacts],
-    evidenceDocumentIds: input.evidenceDocumentIds,
-    evidenceReferences: input.evidenceReferences,
-    comment: input.comment,
-  })
+  // Evidence draft has no dedicated backend endpoint; accepted client-side only.
+  // Formal evidence is submitted with complete (append_funds_review).
+  void input
   return { ok: true }
 }
 
 export async function demoDriftCardFundsHash(
   workItemId: string
 ): Promise<{ subjectHash: string }> {
-  await mockDelay(40)
-  const next = `sha256:external_drift_${workItemId}_${Date.now()}`
-  bumpW13SubjectHash(workItemId, next)
-  return { subjectHash: next }
+  // Demo-only; real hash is server-side. Return a synthetic marker without mutating server.
+  return { subjectHash: `sha256:demo_drift_${workItemId}` }
 }
 
-/** W11 列表：卡券相关应收是否标记不可靠 */
-export function getW11FundsReliabilityFlags(): ReadonlyArray<{
-  accountId: string
-  customerName: string
-  fundsReliability: string
-  note: string
-  reviewed: boolean
-}> {
-  return CARD_FUNDS_REVIEW_SEED.map((seed) => {
-    const terminal = isW13WorkItemTerminal(seed.workItem.workItemId)
-    const outcome = getW13BusinessOutcome(seed.workItem.workItemId)
-    if (terminal && outcome?.reviewResult === "APPROVED") {
-      return {
-        accountId: seed.account.id,
-        customerName: seed.account.customerName,
-        fundsReliability: "VERIFIED",
-        note: "卡券票款复核已通过，指标可作为经营结果",
-        reviewed: true,
-      }
+/** W11 列表辅助：卡券相关应收可靠性（从真实应收子账 review_status 读取）。 */
+export async function getW11FundsReliabilityFlags(): Promise<
+  ReadonlyArray<{
+    accountId: string
+    customerName: string
+    fundsReliability: string
+    note: string
+    reviewed: boolean
+  }>
+> {
+  const page = await apiGet<Page<BackendReceivableAccount>>(
+    "/admin/receivable-accounts",
+    {
+      review_status: "opening_pending",
+      page: 1,
+      page_size: 100,
     }
-    return {
-      accountId: seed.account.id,
-      customerName: seed.account.customerName,
-      fundsReliability: seed.account.fundsReliability,
-      note: seed.account.reliabilityNote,
-      reviewed: false,
+  )
+  const pending = page.items ?? []
+  const page2 = await apiGet<Page<BackendReceivableAccount>>(
+    "/admin/receivable-accounts",
+    {
+      review_status: "sync_delta_pending",
+      page: 1,
+      page_size: 100,
     }
-  })
+  )
+  const delta = page2.items ?? []
+  return [...pending, ...delta].map((a) => ({
+    accountId: a.id,
+    customerName: a.customer_id,
+    fundsReliability: "UNRELIABLE_PENDING_REVIEW",
+    note: "卡券票款待复核，指标暂不可靠",
+    reviewed: false,
+  }))
 }
+
+// Re-export label map for page imports that historically came through api
+export { APPROVE_CONCLUSION_LABEL }
