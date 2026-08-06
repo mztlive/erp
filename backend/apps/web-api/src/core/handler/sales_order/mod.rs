@@ -1,1 +1,190 @@
-//! 域 D13 `sales_order`：sales_order(+_line)、sales_order_working_copy、sales_order_submission、sales_order_revision、goods_service_line_revision、voucher_line_revision（页面：W05）。P0 骨架占位；P3 填充 handler（协议适配：DTO 复用 + ApiResponse，不得直连数据库）。
+//! 域 D13 `sales_order` 的 HTTP handler。
+//!
+//! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
+//! 直接复用 `services::sales_order` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
+
+use axum::{
+    extract::{Path, Query, State},
+    Extension, Json,
+};
+use services::{
+    audit::AuditActor,
+    sales_order::{
+        CreateSalesOrderRequest, PageView, SalesOrderDetailView, SalesOrderListParams, SalesOrderService,
+        SalesOrderView, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
+        VoidSalesOrderRequest, WorkingCopyView,
+    },
+};
+
+use crate::{
+    app_state::AppState,
+    core::{errors::Result, response::ApiResponse},
+};
+
+#[permission_macros::permission(
+    group = "销售单",
+    group_desc = "销售单（W05）管理",
+    desc = "查询销售单列表",
+    resource = "sales_order",
+    action = "list"
+)]
+/// 查询销售单列表。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `query` - 分页与筛选参数（扁平传递）
+///
+/// # 返回
+/// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
+pub async fn sales_order_list(
+    State(state): State<AppState>,
+    Query(params): Query<SalesOrderListParams>,
+) -> Result<PageView<SalesOrderView>> {
+    let page = SalesOrderService::new(state.db())
+        .sales_order_list(&params)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(page))
+}
+
+#[permission_macros::permission(
+    group = "销售单",
+    group_desc = "销售单（W05）管理",
+    desc = "创建销售单",
+    resource = "sales_order",
+    action = "create"
+)]
+/// 创建销售单（订单 + 稳定明细 + 工作副本原子形成；`intent=SUBMIT` 时立即提交）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 创建请求（含幂等键与意图）
+///
+/// # 返回
+/// 返回销售单详情视图。
+pub async fn sales_order_create(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<CreateSalesOrderRequest>,
+) -> Result<SalesOrderDetailView> {
+    let view = SalesOrderService::new(state.db())
+        .create_sales_order(req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "销售单",
+    group_desc = "销售单（W05）管理",
+    desc = "查询销售单详情",
+    resource = "sales_order",
+    action = "detail"
+)]
+/// 查询销售单详情（订单 + 稳定明细 + 草稿 + 提交历史 + 版本历史）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 销售单 ID
+///
+/// # 返回
+/// 返回详情视图。
+pub async fn sales_order_detail(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<SalesOrderDetailView> {
+    let view = SalesOrderService::new(state.db()).sales_order_detail(&id).await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "销售单",
+    group_desc = "销售单（W05）管理",
+    desc = "保存销售单草稿",
+    resource = "sales_order",
+    action = "update"
+)]
+/// 保存草稿（整表头覆盖 + 明细整批替换，乐观锁）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 销售单 ID
+/// * `req` - 保存请求（含期望版本）
+///
+/// # 返回
+/// 返回保存后的工作副本视图。
+pub async fn sales_order_save_working_copy(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<SaveWorkingCopyRequest>,
+) -> Result<WorkingCopyView> {
+    let view = SalesOrderService::new(state.db())
+        .save_working_copy(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "销售单",
+    group_desc = "销售单（W05）管理",
+    desc = "提交销售单",
+    resource = "sales_order",
+    action = "submit"
+)]
+/// 提交销售单（冻结提交快照并推进审核轨；重复提交幂等返回既有提交）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 销售单 ID
+/// * `req` - 提交请求（含期望版本与幂等键）
+///
+/// # 返回
+/// 返回提交快照视图。
+pub async fn sales_order_submit(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<SubmitSalesOrderRequest>,
+) -> Result<SubmissionView> {
+    let view = SalesOrderService::new(state.db())
+        .submit_sales_order(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "销售单",
+    group_desc = "销售单（W05）管理",
+    desc = "作废销售单草稿",
+    resource = "sales_order",
+    action = "delete"
+)]
+/// 作废销售单草稿（主状态 `DRAFT → VOIDED`，乐观锁）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 销售单 ID
+/// * `req` - 作废请求（含期望版本）
+///
+/// # 返回
+/// 返回作废后的销售单详情视图。
+pub async fn sales_order_void(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<VoidSalesOrderRequest>,
+) -> Result<SalesOrderDetailView> {
+    let view = SalesOrderService::new(state.db())
+        .void_sales_order(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
