@@ -201,4 +201,256 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "采购单",
+        description: "采购单、采购提交与采购变更管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders",
+                description: "查询采购单列表",
+                permission: {
+                    resource: "purchase_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders",
+                description: "依据采购确认创建采购单",
+                permission: {
+                    resource: "purchase_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-orders/{id}",
+                description: "查询采购单对象中心",
+                permission: {
+                    resource: "purchase_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/draft",
+                description: "保存采购草稿",
+                permission: {
+                    resource: "purchase_order",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/submit",
+                description: "提交采购财务审核",
+                permission: {
+                    resource: "purchase_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/review/approve",
+                description: "采购财务审核通过",
+                permission: {
+                    resource: "purchase_order",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/review/reject",
+                description: "采购财务审核驳回",
+                permission: {
+                    resource: "purchase_order",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-creation-bases",
+                description: "查询采购创建依据",
+                permission: {
+                    resource: "purchase_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-orders/{id}/changes",
+                description: "发起采购变更",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-change-orders",
+                description: "查询采购变更单列表",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/purchase-change-orders/{id}",
+                description: "查询采购变更单详情",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-change-orders/{id}/submit",
+                description: "提交采购变更目标内容",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/purchase-change-orders/{id}/effect",
+                description: "采购变更生效",
+                permission: {
+                    resource: "purchase_change_order",
+                    action: "post",
+                },
+            },
+        ],
+    },
+    {
+        name: "供应商商品库",
+        description: "供应商商品、SKU、映射、供给与入库批次管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/products",
+                description: "查询供应商 SPU 列表",
+                permission: {
+                    resource: "supplier_catalog_product",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/products",
+                description: "创建供应商商品（Excel/API/手工入库）",
+                permission: {
+                    resource: "supplier_catalog_product",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/products/{id}",
+                description: "查询供应商 SPU 详情",
+                permission: {
+                    resource: "supplier_catalog_product",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/products/{id}/revisions",
+                description: "保存供应商商品来源修订",
+                permission: {
+                    resource: "supplier_catalog_product",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/skus",
+                description: "查询供应商 SKU 列表",
+                permission: {
+                    resource: "supplier_catalog_sku",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/mappings",
+                description: "查询供应商 SKU 映射列表",
+                permission: {
+                    resource: "supplier_product_mapping",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/mappings",
+                description: "创建供应商 SKU 映射",
+                permission: {
+                    resource: "supplier_product_mapping",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/mappings/{id}/approve",
+                description: "确认映射并登记双价供给",
+                permission: {
+                    resource: "supplier_product_mapping",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/offerings",
+                description: "查询供给列表",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/offerings/{id}/revisions",
+                description: "保存供给修订",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/intake-batches",
+                description: "查询供应商商品入库批次",
+                permission: {
+                    resource: "supplier_catalog_intake_batch",
+                    action: "list",
+                },
+            },
+        ],
+    },
 ];
