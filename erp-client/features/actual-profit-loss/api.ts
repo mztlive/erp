@@ -1,625 +1,225 @@
 /**
- * W16 session-mock API：queryFn / mutationFn 纯函数。
- * 正式金额/覆盖/利润率均来自服务端投影；前端不得浮点重算覆盖 totals。
+ * W16 实际经营盈亏 — 真实 HTTP。
+ * - 主投影视图：`GET /admin/actual-profit-loss`（E3，含 as_of）— 缺则 ApiError
+ * - 期间口径配置：`GET /admin/actual-profit-loss/period-basis`
+ * - 成本明细：`GET /admin/cost-entries/{id}`（D20，已落地）
+ * - 导出：`POST /admin/actual-profit-loss/exports`
+ * 禁止前端重算金额/覆盖率；禁止客户端时钟冒充 as_of。
  */
 
-import { mockDelay } from "@/lib/mock-delay"
-import { filterRowsBySearch } from "@/lib/filter-utils"
-import { applyFieldPermissions } from "@/lib/field-permissions"
-import { resolveFreshness } from "@/lib/freshness"
+import { apiGet, apiPost } from "@/lib/api"
+import type { Page } from "@/lib/api"
+
 import type {
   CostEntryDetail,
+  CostStage,
   ProfitLossExportJob,
   ProfitLossPeriodBasisConfig,
   ProfitLossQuery,
-  ProfitLossRow,
   ProfitLossView,
-} from "@/features/actual-profit-loss/types"
-import {
-  W16_COST_COMPOSITION,
-  W16_COST_ENTRIES,
-  W16_EXCLUDED_NOTE,
-  W16_FORMULA_TEXT,
-  W16_FORMULA_VERSION,
-  W16_PERIOD_BASIS_CONFIGURED,
-  W16_PERIOD_BASIS_UNCONFIGURED,
-  W16_PERMISSION_VERSION,
-  W16_SALES_ORDER_ROWS,
-  W16_SCOPE,
-  W16_STAGE_REFERENCE,
-  W16_TREND,
-  createW16ExportJob,
-  setW16CorrectionPending,
-  w16CorrectionPending,
-} from "@/mock/actual-profit-loss"
-import {
-  COVERAGE_FILTER_LABEL,
-  DIMENSION_LABEL,
-  type ProfitLossDimension,
 } from "@/features/actual-profit-loss/types"
 
 export type PeriodBasisConfigQuery = {
-  /** QA：basisConfig=missing 模拟未配置 */
+  /** QA：basisConfig=missing；真后端无对应参数时忽略 */
   scenario?: "default" | "missing"
 }
 
-function basisLabel(
-  code: string,
-  config: ProfitLossPeriodBasisConfig
-): string {
-  return (
-    config.allowedPeriodBases.find((b) => b.code === code)?.label ?? code
-  )
+/** 后端成本事实 DTO（CostEntryView）。 */
+type CostEntryDto = {
+  id: string
+  cost_type: string
+  cost_stage: string
+  cost_scope: string
+  cost_basis?: string | null
+  supplier_id?: string | null
+  gross_amount: string
+  net_amount: string
+  tax_amount: string
+  tax_inclusion: boolean
+  input_tax_rate: string
+  occurred_at: number
+  source_fact_type: string
+  source_document_id: string
+  source_line_id: string
+  source_version: string
+  created_at: number
+  allocations: Array<{
+    id: string
+    cost_entry_id: string
+    sales_order_id?: string | null
+    sales_order_line_id?: string | null
+    allocated_gross_amount: string
+    allocated_net_amount: string
+    rounding_residual_flag: boolean
+  }>
 }
 
-function filterRows(
-  rows: readonly ProfitLossRow[],
-  query: ProfitLossQuery
-): ProfitLossRow[] {
-  let list = [...rows]
-
-  if (query.coverage === "covered") {
-    list = list.filter((r) => r.coverageState === "COVERED")
-  } else if (query.coverage === "uncovered") {
-    list = list.filter(
-      (r) =>
-        r.coverageState === "UNCOVERED" || r.coverageState === "PARTIAL"
-    )
-  }
-
-  if (query.customerId) {
-    list = list.filter((r) => r.customerId === query.customerId)
-  }
-  if (query.salesOrderId) {
-    list = list.filter((r) => r.objectId === query.salesOrderId)
-  }
-  if (query.benefitScenario) {
-    list = list.filter((r) =>
-      r.benefitScenarios?.includes(query.benefitScenario!)
-    )
-  }
-  if (query.fulfillmentModes && query.fulfillmentModes.length > 0) {
-    list = list.filter((r) =>
-      r.fulfillmentModes?.some((m) => query.fulfillmentModes!.includes(m))
-    )
-  }
-
-  list = filterRowsBySearch(list, query.q, (r) => [
-    r.identityLabel,
-    r.customerLabel,
-    r.customerId,
-    r.objectId,
-  ])
-
-  return list
+type PeriodBasisDto = ProfitLossPeriodBasisConfig & {
+  configured_period_basis?: string
+  configuration_version?: string
+  allowed_period_bases?: ProfitLossPeriodBasisConfig["allowedPeriodBases"]
 }
 
-const COVERAGE_RANK: Record<ProfitLossRow["coverageState"], number> = {
-  COVERED: 0,
-  PARTIAL: 1,
-  UNCOVERED: 2,
+type ProfitLossViewDto = ProfitLossView & {
+  as_of?: string
+  projected_at?: string
 }
 
-function sortValue(row: ProfitLossRow, key: string): string | number | null {
-  switch (key) {
-    case "identityLabel":
-      return row.identityLabel
-    case "benefitScenarios":
-      return row.benefitScenarios?.join("、") ?? ""
-    case "fulfillmentModes":
-      return row.fulfillmentModes?.join("、") ?? ""
-    case "netSalesRevenue":
-      return Number(row.netSalesRevenue)
-    case "actualProcurementCostNet":
-      return row.actualProcurementCostNet == null
-        ? null
-        : Number(row.actualProcurementCostNet)
-    case "actualFulfillmentCostNet":
-      return row.actualFulfillmentCostNet == null
-        ? null
-        : Number(row.actualFulfillmentCostNet)
-    case "reductionsNet":
-      return row.reductionsNet == null ? null : Number(row.reductionsNet)
-    case "actualProfitLossNet":
-      return row.actualProfitLossNet == null
-        ? null
-        : Number(row.actualProfitLossNet)
-    case "marginRate":
-      return row.marginRate == null
-        ? null
-        : Number(String(row.marginRate).replace("%", ""))
-    case "coverageState":
-      return COVERAGE_RANK[row.coverageState]
-    case "latestCostOccurredAt":
-      return row.latestCostOccurredAt == null
-        ? null
-        : Date.parse(row.latestCostOccurredAt)
-    default:
-      return Number(row.actualProfitLossNet ?? Number.NEGATIVE_INFINITY)
-  }
+type ExportJobDto = {
+  job_id?: string
+  jobId?: string
+  id?: string
+  status?: ProfitLossExportJob["status"]
+  total?: number
+  completed?: number
+  created_at?: string
+  createdAt?: string
+  download_label?: string
+  watermark?: ProfitLossExportJob["watermark"]
 }
 
-function sortRows(
-  rows: readonly ProfitLossRow[],
-  sort: string
-): ProfitLossRow[] {
-  // 默认：实际盈亏升序（亏损优先）；未覆盖无利润排最后
-  const [sortKey, sortDir] = sort.split(":")
-  const desc = sortDir === "desc"
-  const list = [...rows]
-  list.sort((a, b) => {
-    const av = sortValue(a, sortKey)
-    const bv = sortValue(b, sortKey)
-    if (av == null && bv == null) return 0
-    if (av == null) return 1
-    if (bv == null) return -1
-    if (typeof av === "string" || typeof bv === "string") {
-      const cmp = String(av).localeCompare(String(bv), "zh-CN")
-      return desc ? -cmp : cmp
-    }
-    return desc ? (bv as number) - (av as number) : (av as number) - (bv as number)
-  })
-  return list
+const COST_STAGE_LABEL: Record<string, string> = {
+  EXPECTED: "预计",
+  CONFIRMED: "确认",
+  ACTUAL: "实际",
+  REDUCTION: "冲减",
 }
 
-const toCents = (s?: string | null): number => {
-  const n = Number(s)
-  return Number.isFinite(n) ? Math.round(n * 100) : 0
-}
-const fromCents = (c: number): string => (c / 100).toFixed(2)
-
-/**
- * 下钻维度服务端分组投影：客户/福利场景/履约方式按行聚合金额；
- * 成本类型按成本记录聚合；销售单保持逐单。聚合行不提供单对象下钻。
- */
-function groupByDimension(
-  rows: readonly ProfitLossRow[],
-  dimension: ProfitLossDimension
-): ProfitLossRow[] {
-  if (dimension === "sales_order") return [...rows]
-
-  if (dimension === "cost_type") {
-    const byType = new Map<string, CostEntryDetail[]>()
-    for (const e of W16_COST_ENTRIES) {
-      const bucket = byType.get(e.costTypeLabel) ?? []
-      bucket.push(e)
-      byType.set(e.costTypeLabel, bucket)
-    }
-    return Array.from(byType.entries()).map(([label, bucket]) => ({
-      rowId: `group:cost_type:${label}`,
-      objectType: "cost_type",
-      identityLabel: label,
-      customerLabel: `${bucket.length} 条成本记录`,
-      netSalesRevenue: "—",
-      actualProcurementCostNet: fromCents(
-        bucket.reduce((acc, e) => acc + toCents(e.amountNet), 0)
-      ),
-      actualFulfillmentCostNet: "—",
-      reductionsNet: "—",
-      actualProfitLossNet: "—",
-      marginUnavailableReason: "成本类型维度不计算利润率",
-      coverageState: "COVERED",
-      coverageBlockers: [],
-      latestCostOccurredAt: bucket.reduce(
-        (max, e) => (e.occurredAt > max ? e.occurredAt : max),
-        ""
-      ),
-      allowedDrilldowns: [],
-      costEntryIds: [],
-    }))
-  }
-
-  const keyOf = (r: ProfitLossRow): string => {
-    if (dimension === "customer") return r.customerId ?? r.customerLabel ?? ""
-    if (dimension === "scenario") return r.benefitScenarios?.[0] ?? ""
-    return r.fulfillmentModes?.[0] ?? ""
-  }
-
-  const groups = new Map<string, ProfitLossRow[]>()
-  for (const r of rows) {
-    const key = keyOf(r)
-    if (!key) continue
-    const bucket = groups.get(key) ?? []
-    bucket.push(r)
-    groups.set(key, bucket)
-  }
-
-  return Array.from(groups.entries()).map(([key, bucket]) => {
-    const revenue = bucket.reduce((acc, r) => acc + toCents(r.netSalesRevenue), 0)
-    const procurement = bucket.reduce(
-      (acc, r) => acc + toCents(r.actualProcurementCostNet),
-      0
-    )
-    const fulfillment = bucket.reduce(
-      (acc, r) => acc + toCents(r.actualFulfillmentCostNet),
-      0
-    )
-    const reductions = bucket.reduce(
-      (acc, r) => acc + toCents(r.reductionsNet),
-      0
-    )
-    const profitList = bucket
-      .map((r) => r.actualProfitLossNet)
-      .filter((v): v is string => v != null)
-    const profit =
-      profitList.length > 0
-        ? profitList.reduce((acc, v) => acc + toCents(v), 0)
-        : undefined
-
-    const stateSet = new Set(bucket.map((r) => r.coverageState))
-    const coverageState = stateSet.has("UNCOVERED")
-      ? ("UNCOVERED" as const)
-      : stateSet.size === 1
-        ? ("COVERED" as const)
-        : ("PARTIAL" as const)
-
-    const marginRate =
-      profit != null && revenue > 0
-        ? `${((profit / revenue) * 100).toFixed(2)}%`
-        : undefined
-
-    const blockers = Array.from(
-      new Set(bucket.flatMap((r) => r.coverageBlockers.map((b) => b.message)))
-    ).map((message) => ({ code: "AGGREGATED", message }))
-
-    const latest = bucket.reduce(
-      (max, r) =>
-        r.latestCostOccurredAt && r.latestCostOccurredAt > max
-          ? r.latestCostOccurredAt
-          : max,
-      ""
-    )
-
-    return {
-      rowId: `group:${dimension}:${key}`,
-      objectType: "aggregate",
-      identityLabel:
-        dimension === "customer"
-          ? (bucket[0].customerLabel ?? key)
-          : key,
-      customerLabel:
-        dimension === "customer"
-          ? `${bucket.length} 单`
-          : `${bucket.length} 单 · 多客户`,
-      netSalesRevenue: fromCents(revenue),
-      actualProcurementCostNet: fromCents(procurement),
-      actualFulfillmentCostNet: fromCents(fulfillment),
-      reductionsNet: fromCents(reductions),
-      actualProfitLossNet: profit != null ? fromCents(profit) : undefined,
-      marginRate,
-      marginUnavailableReason:
-        profit == null ? "成本完全未覆盖，不生成零成本利润" : undefined,
-      coverageState,
-      coverageBlockers: blockers,
-      latestCostOccurredAt: latest || undefined,
-      allowedDrilldowns: [],
-      costEntryIds: [],
-    }
-  })
+const COST_SCOPE_LABEL: Record<string, string> = {
+  NON_VOUCHER_FULFILLMENT: "非卡券履约",
 }
 
-function projectTotalsFromSeed(rows: readonly ProfitLossRow[]): {
-  netSalesRevenue: string
-  actualProcurementCostNet: string
-  actualFulfillmentCostNet: string
-  reductionsNet: string
-  actualProfitLossNet?: string
-  marginRate?: string
-  marginUnavailableReason?: string
-  coveredNetRevenue: string
-  uncoveredNetRevenue: string
-  coverageRate: string
-  coverageState: "complete" | "partial" | "none"
-  reliability: "reliable" | "partial" | "unavailable"
-} {
-  // Mock 服务端：使用十进制字符串加法（分）避免 JS 浮点展示问题
-  const toCents = (s: string | undefined) => {
-    if (s == null || s === "") return null
-    const n = Math.round(Number(s) * 100)
-    return Number.isFinite(n) ? n : null
-  }
-  const fromCents = (c: number) => (c / 100).toFixed(2)
+function unixToIso(secs?: number | null): string {
+  if (secs == null || secs <= 0) return ""
+  return new Date(secs * 1000).toISOString()
+}
 
-  let rev = 0
-  let proc = 0
-  let ful = 0
-  let red = 0
-  let covered = 0
-  let uncovered = 0
-  let hasUncoveredProfit = false
-  let reliableProfitCents = 0
-  let reliableRevCents = 0
-
-  for (const r of rows) {
-    const rRev = toCents(r.netSalesRevenue) ?? 0
-    rev += rRev
-    if (r.coverageState === "COVERED") {
-      covered += rRev
-      const p = toCents(r.actualProcurementCostNet) ?? 0
-      const f = toCents(r.actualFulfillmentCostNet) ?? 0
-      const d = toCents(r.reductionsNet) ?? 0
-      proc += p
-      ful += f
-      red += d
-      const profit = toCents(r.actualProfitLossNet)
-      if (profit != null) {
-        reliableProfitCents += profit
-        reliableRevCents += rRev
-      }
-    } else if (r.coverageState === "PARTIAL") {
-      uncovered += rRev
-      hasUncoveredProfit = true
-      const p = toCents(r.actualProcurementCostNet) ?? 0
-      const f = toCents(r.actualFulfillmentCostNet) ?? 0
-      const d = toCents(r.reductionsNet) ?? 0
-      proc += p
-      ful += f
-      red += d
-      // partial 利润不并入默认可靠合计
-    } else {
-      uncovered += rRev
-      hasUncoveredProfit = true
-      // UNCOVERED：不把缺失成本当 0 并入利润
-    }
-  }
-
-  const coverageState: "complete" | "partial" | "none" =
-    uncovered === 0 && rev > 0
-      ? "complete"
-      : covered === 0 && rev > 0
-        ? "none"
-        : rev === 0
-          ? "none"
-          : "partial"
-
-  const coverageRate =
-    rev === 0 ? "0.00%" : `${((covered / rev) * 100).toFixed(2)}%`
-
-  let actualProfitLossNet: string | undefined
-  let marginRate: string | undefined
-  let marginUnavailableReason: string | undefined
-
-  if (coverageState === "none") {
-    actualProfitLossNet = undefined
-    marginUnavailableReason = "成本完全未覆盖，不生成零成本利润"
-  } else if (hasUncoveredProfit && coverageState === "partial") {
-    // 可靠子集利润（服务端 partial 投影）
-    actualProfitLossNet = fromCents(reliableProfitCents)
-    if (reliableRevCents === 0) {
-      marginRate = undefined
-      marginUnavailableReason = "适用不含税收入为 0，利润率不适用"
-    } else {
-      marginRate = `${((reliableProfitCents / reliableRevCents) * 100).toFixed(2)}%`
-    }
-  } else {
-    actualProfitLossNet = fromCents(reliableProfitCents)
-    if (reliableRevCents === 0) {
-      marginRate = undefined
-      marginUnavailableReason = "适用不含税收入为 0，利润率不适用"
-    } else {
-      marginRate = `${((reliableProfitCents / reliableRevCents) * 100).toFixed(2)}%`
-    }
-  }
-
+function mapCostEntry(dto: CostEntryDto): CostEntryDetail {
+  const primary = dto.allocations[0]
   return {
-    netSalesRevenue: fromCents(rev),
-    actualProcurementCostNet: fromCents(proc),
-    actualFulfillmentCostNet: fromCents(ful),
-    reductionsNet: fromCents(red),
-    actualProfitLossNet,
-    marginRate,
-    marginUnavailableReason,
-    coveredNetRevenue: fromCents(covered),
-    uncoveredNetRevenue: fromCents(uncovered),
-    coverageRate,
-    coverageState,
-    reliability:
-      coverageState === "complete"
-        ? "reliable"
-        : coverageState === "partial"
-          ? "partial"
-          : "unavailable",
+    costEntryId: dto.id,
+    costType: dto.cost_type,
+    costTypeLabel: dto.cost_type,
+    stage: dto.cost_stage as CostStage,
+    stageLabel: COST_STAGE_LABEL[dto.cost_stage] ?? dto.cost_stage,
+    costScope: dto.cost_scope as CostEntryDetail["costScope"],
+    costScopeLabel: COST_SCOPE_LABEL[dto.cost_scope] ?? dto.cost_scope,
+    supplierId: dto.supplier_id ?? undefined,
+    amountGross: String(dto.gross_amount),
+    taxRate: String(dto.input_tax_rate),
+    taxAmount: String(dto.tax_amount),
+    amountNet: String(dto.net_amount),
+    occurredAt: unixToIso(dto.occurred_at),
+    sourceType: dto.source_fact_type,
+    sourceTypeLabel: dto.source_fact_type,
+    sourceDocumentId: dto.source_document_id,
+    sourceDocumentNo: dto.source_document_id,
+    sourceLineId: dto.source_line_id || undefined,
+    sourceVersion: dto.source_version,
+    salesOrderId: primary?.sales_order_id ?? "",
+    salesOrderNo: primary?.sales_order_id ?? "",
+    salesOrderLineId: primary?.sales_order_line_id ?? undefined,
   }
+}
+
+function queryToParams(query: ProfitLossQuery): Record<string, unknown> {
+  return {
+    from: query.from,
+    to: query.to,
+    period_basis: query.periodBasis,
+    scope_id: query.scopeId,
+    coverage: query.coverage,
+    customer_id: query.customerId,
+    sales_order_id: query.salesOrderId,
+    benefit_scenario: query.benefitScenario,
+    fulfillment_modes: query.fulfillmentModes?.join(","),
+    cost_types: query.costTypes?.join(","),
+    dimension: query.dimension,
+    q: query.q,
+    sort: query.sort,
+    page_size: query.pageSize,
+  }
+}
+
+function adaptPeriodBasis(dto: PeriodBasisDto): ProfitLossPeriodBasisConfig {
+  return {
+    configuredPeriodBasis:
+      dto.configuredPeriodBasis ?? dto.configured_period_basis,
+    allowedPeriodBases:
+      dto.allowedPeriodBases ?? dto.allowed_period_bases ?? [],
+    configurationVersion:
+      dto.configurationVersion ?? dto.configuration_version ?? "",
+  }
+}
+
+function adaptProfitLossView(dto: ProfitLossViewDto): ProfitLossView {
+  const asOf = dto.as_of ?? dto.projected_at
+  if (asOf && dto.freshness) {
+    return {
+      ...dto,
+      freshness: {
+        ...dto.freshness,
+        projectedAt: dto.freshness.projectedAt || asOf,
+        sourceWatermark: dto.freshness.sourceWatermark || asOf,
+      },
+    }
+  }
+  return dto
 }
 
 export async function fetchPeriodBasisConfig(
   query: PeriodBasisConfigQuery = {}
 ): Promise<ProfitLossPeriodBasisConfig> {
-  await mockDelay(60)
-  if (query.scenario === "missing") {
-    return W16_PERIOD_BASIS_UNCONFIGURED
-  }
-  return W16_PERIOD_BASIS_CONFIGURED
+  const dto = await apiGet<PeriodBasisDto>(
+    "/admin/actual-profit-loss/period-basis",
+    query.scenario ? { scenario: query.scenario } : undefined
+  )
+  return adaptPeriodBasis(dto)
 }
 
 export async function fetchProfitLossView(
   query: ProfitLossQuery
 ): Promise<ProfitLossView> {
-  await mockDelay(120)
-
-  const config =
-    // 配置版本随 basis 配置一起读取；此处用固定配置做校验
-    W16_PERIOD_BASIS_CONFIGURED
-  const allowed = new Set(
-    config.allowedPeriodBases.map((b) => b.code)
+  const dto = await apiGet<ProfitLossViewDto>(
+    "/admin/actual-profit-loss",
+    queryToParams(query)
   )
-  if (!query.periodBasis || !allowed.has(query.periodBasis)) {
-    throw new Error(
-      "期间归属口径未通过校验；请先选择系统允许的期间归属口径。"
-    )
-  }
-
-  const fieldHide = query.fieldHide ?? "none"
-  const canViewCost = fieldHide !== "cost"
-  const canViewProfit = fieldHide !== "profit"
-  const canViewRevenue = true
-
-  const filtered = filterRows(W16_SALES_ORDER_ROWS, query)
-  const grouped = groupByDimension(filtered, query.dimension)
-  const sorted = sortRows(grouped, query.sort || "actualProfitLossNet:asc")
-
-  const permissionApplied = sorted.map((r) =>
-    applyFieldPermissions(r, fieldHide, {
-      cost: (row) => ({
-        ...row,
-        actualProcurementCostNet: undefined,
-        actualFulfillmentCostNet: undefined,
-        reductionsNet: undefined,
-        costEntryIds: [],
-        allowedDrilldowns: row.allowedDrilldowns.filter(
-          (d) => d !== "cost_entry"
-        ),
-      }),
-      profit: (row) => ({
-        ...row,
-        actualProfitLossNet: undefined,
-        marginRate: undefined,
-        marginUnavailableReason: "无利润字段权限",
-      }),
-    })
-  )
-
-  // 服务端在同一数据范围上投影 totals / 趋势 / 构成 / 明细
-  const seedForTotals = filterRows(W16_SALES_ORDER_ROWS, query)
-  const projected = projectTotalsFromSeed(seedForTotals)
-
-  const projectedAt = "2026-08-01T09:28:00+08:00"
-  const sourceWatermark = "2026-08-01T09:27:12+08:00"
-  const freshness: ProfitLossView["freshness"] = resolveFreshness(
-    query.freshnessDemo,
-    {
-      fresh: { projectedAt, sourceWatermark, state: "fresh" },
-      stale: {
-        projectedAt: "2026-08-01T08:10:00+08:00",
-        sourceWatermark: "2026-08-01T09:25:00+08:00",
-        state: "stale",
-      },
-      rebuilding: { projectedAt, sourceWatermark, state: "rebuilding" },
-      failed: {
-        projectedAt: "2026-08-01T08:55:00+08:00",
-        sourceWatermark: "2026-08-01T08:50:00+08:00",
-        state: "failed",
-      },
-    }
-  )
-
-  const costComposition = canViewCost
-    ? W16_COST_COMPOSITION
-    : W16_COST_COMPOSITION.map((c) => ({
-        costType: c.costType,
-        label: c.label,
-        // 无权：金额与占比均不返回，避免图表比例泄露
-        netAmount: "—",
-        share: undefined,
-      }))
-
-  const trend = canViewProfit
-    ? W16_TREND
-    : W16_TREND.map((t) => ({
-        ...t,
-        actualProfitLossNet: undefined,
-        actualCostNet: canViewCost ? t.actualCostNet : "—",
-      }))
-
-  const filterParts = [
-    `${query.from} ~ ${query.to}`,
-    `归属口径=${basisLabel(query.periodBasis, config)}`,
-    `覆盖=${COVERAGE_FILTER_LABEL[query.coverage]}`,
-    `维度=${DIMENSION_LABEL[query.dimension]}`,
-  ]
-  if (query.customerId) {
-    const label = W16_SALES_ORDER_ROWS.find(
-      (r) => r.customerId === query.customerId
-    )?.customerLabel
-    filterParts.push(`客户=${label ?? query.customerId}`)
-  }
-  if (query.salesOrderId) {
-    const label = W16_SALES_ORDER_ROWS.find(
-      (r) => r.objectId === query.salesOrderId
-    )?.identityLabel
-    filterParts.push(`销售单=${label ?? query.salesOrderId}`)
-  }
-  if (query.q) filterParts.push(`搜索=${query.q}`)
-
-  return {
-    scope: {
-      id: W16_SCOPE.id,
-      label: W16_SCOPE.label,
-      permissionVersion: W16_PERMISSION_VERSION,
-    },
-    period: {
-      from: query.from,
-      to: query.to,
-      basis: query.periodBasis,
-      basisLabel: basisLabel(query.periodBasis, config),
-      timezone: "Asia/Shanghai",
-    },
-    businessType: "GOODS_SERVICE",
-    amountBasis: "NET",
-    amountBasisLabel: "不含税",
-    businessTypeLabel: "非卡券",
-    formulaVersion: W16_FORMULA_VERSION,
-    formulaText: W16_FORMULA_TEXT,
-    freshness,
-    coverage: {
-      coveredNetRevenue: projected.coveredNetRevenue,
-      uncoveredNetRevenue: projected.uncoveredNetRevenue,
-      coverageRate: projected.coverageRate,
-      reliability: projected.reliability,
-      coverageState: projected.coverageState,
-    },
-    totals: {
-      netSalesRevenue: canViewRevenue ? projected.netSalesRevenue : "—",
-      actualProcurementCostNet: canViewCost
-        ? projected.actualProcurementCostNet
-        : undefined,
-      actualFulfillmentCostNet: canViewCost
-        ? projected.actualFulfillmentCostNet
-        : undefined,
-      reductionsNet: canViewCost ? projected.reductionsNet : undefined,
-      actualProfitLossNet: canViewProfit
-        ? projected.actualProfitLossNet
-        : undefined,
-      marginRate: canViewProfit ? projected.marginRate : undefined,
-      marginUnavailableReason: canViewProfit
-        ? projected.marginUnavailableReason
-        : "无利润字段权限",
-    },
-    fieldPermissions: {
-      canViewRevenue,
-      canViewCost,
-      canViewProfit,
-      canExport: true,
-    },
-    trend,
-    costComposition,
-    stageReference: W16_STAGE_REFERENCE,
-    rows: {
-      dimension: query.dimension,
-      items: permissionApplied,
-      total: permissionApplied.length,
-    },
-    filterSummary: filterParts.join(" · "),
-    excludedNote: W16_EXCLUDED_NOTE,
-    correctionPendingNotice: w16CorrectionPending
-      ? "业务记录已更新，经营汇总将在数据追平后刷新。本页不会覆盖系统金额。"
-      : undefined,
-  }
+  return adaptProfitLossView(dto)
 }
 
 export async function fetchCostEntryDetail(
   costEntryId: string
 ): Promise<CostEntryDetail | null> {
-  await mockDelay(80)
-  return W16_COST_ENTRIES.find((e) => e.costEntryId === costEntryId) ?? null
+  try {
+    const dto = await apiGet<CostEntryDto>(
+      `/admin/cost-entries/${encodeURIComponent(costEntryId)}`
+    )
+    return mapCostEntry(dto)
+  } catch (err) {
+    const status =
+      typeof err === "object" && err !== null && "status" in err
+        ? (err as { status?: number }).status
+        : undefined
+    if (status === 404) return null
+    throw err
+  }
 }
 
 export async function fetchCostEntriesForRow(
   costEntryIds: readonly string[]
 ): Promise<CostEntryDetail[]> {
-  await mockDelay(80)
-  const set = new Set(costEntryIds)
-  return W16_COST_ENTRIES.filter((e) => set.has(e.costEntryId))
+  if (costEntryIds.length === 0) return []
+  // 无批量接口时并行详情；失败单项跳过
+  const results = await Promise.all(
+    costEntryIds.map(async (id) => {
+      try {
+        return await fetchCostEntryDetail(id)
+      } catch {
+        return null
+      }
+    })
+  )
+  return results.filter((r): r is CostEntryDetail => r != null)
 }
 
 export async function startProfitLossExport(input: {
@@ -635,37 +235,70 @@ export async function startProfitLossExport(input: {
   >
   coverage: ProfitLossQuery["coverage"]
 }): Promise<ProfitLossExportJob> {
-  await mockDelay(100)
   if (!input.view.fieldPermissions.canExport) {
-    throw new Error("当前权限不允许导出")
+    const err = {
+      kind: "Validation" as const,
+      message: "当前权限不允许导出",
+      status: 403,
+    }
+    throw err
   }
   if (!input.query.periodBasis) {
-    throw new Error("periodBasis 未明确，已阻断导出")
+    const err = {
+      kind: "Validation" as const,
+      message: "periodBasis 未明确，已阻断导出",
+      status: 400,
+    }
+    throw err
   }
-  const job = createW16ExportJob({
-    periodFrom: input.view.period.from,
-    periodTo: input.view.period.to,
-    periodBasis: input.view.period.basis,
-    formulaVersion: input.view.formulaVersion,
+
+  const dto = await apiPost<ExportJobDto>("/admin/actual-profit-loss/exports", {
+    from: input.view.period.from,
+    to: input.view.period.to,
+    period_basis: input.view.period.basis,
     coverage: input.coverage,
-    scopeId: input.view.scope.id,
-    scopeLabel: input.view.scope.label,
-    permissionVersion: input.view.scope.permissionVersion,
-    projectedAt: input.view.freshness.projectedAt,
-    sourceWatermark: input.view.freshness.sourceWatermark,
-    amountBasis: "NET",
-    businessType: "GOODS_SERVICE",
-    rowCount: input.view.rows.total,
+    scope_id: input.view.scope.id,
+    formula_version: input.view.formulaVersion,
+    projection_watermark: input.view.freshness.sourceWatermark,
+    projected_at: input.view.freshness.projectedAt,
+    row_count: input.view.rows.total,
   })
-  return job
+
+  return {
+    jobId: dto.jobId ?? dto.job_id ?? dto.id ?? "",
+    status: dto.status ?? "queued",
+    total: dto.total ?? input.view.rows.total,
+    completed: dto.completed ?? 0,
+    createdAt: dto.createdAt ?? dto.created_at ?? "",
+    downloadLabel: dto.download_label,
+    watermark: dto.watermark ?? {
+      periodFrom: input.view.period.from,
+      periodTo: input.view.period.to,
+      periodBasis: input.view.period.basis,
+      formulaVersion: input.view.formulaVersion,
+      coverage: input.coverage,
+      scopeId: input.view.scope.id,
+      scopeLabel: input.view.scope.label,
+      permissionVersion: input.view.scope.permissionVersion,
+      projectedAt: input.view.freshness.projectedAt,
+      sourceWatermark: input.view.freshness.sourceWatermark,
+      amountBasis: "NET",
+      businessType: "GOODS_SERVICE",
+      rowCount: input.view.rows.total,
+    },
+  }
 }
 
-/** 演示：标记来源纠错后等待投影（不改本地金额） */
+/**
+ * 标记来源纠错待投影刷新。E3 重建入口未落地时登记缺口；调用预期路径。
+ */
 export async function markSourceCorrectionPending(): Promise<{
   notice: string
 }> {
-  await mockDelay(50)
-  setW16CorrectionPending(true)
+  await apiPost<{ notice?: string }>(
+    "/admin/actual-profit-loss/rebuild",
+    { reason: "source_correction" }
+  )
   return {
     notice:
       "业务记录已更新，经营汇总将在数据追平后刷新。本页不会覆盖系统金额。",
@@ -673,6 +306,25 @@ export async function markSourceCorrectionPending(): Promise<{
 }
 
 export async function clearSourceCorrectionPending(): Promise<void> {
-  await mockDelay(20)
-  setW16CorrectionPending(false)
+  // 无会话态；真后端无对应「清除演示 pending」接口 — 空操作保留签名
+  return
+}
+
+/** 可选：按销售单筛选成本列表（辅助下钻，非页面主路径）。 */
+export async function listCostEntries(params?: {
+  page?: number
+  pageSize?: number
+  sourceDocumentId?: string
+}): Promise<Page<CostEntryDetail>> {
+  const page = await apiGet<Page<CostEntryDto>>("/admin/cost-entries", {
+    page: params?.page ?? 1,
+    page_size: params?.pageSize ?? 20,
+    source_document_id: params?.sourceDocumentId,
+  })
+  return {
+    items: page.items.map(mapCostEntry),
+    total: page.total,
+    page: page.page,
+    page_size: page.page_size,
+  }
 }

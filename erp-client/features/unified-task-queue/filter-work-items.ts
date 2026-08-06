@@ -1,4 +1,4 @@
-import { FAMILY_LABELS } from "@/mock/work-items"
+import { FAMILY_LABELS } from "./types"
 import type { QueueWorkItemView, UnifiedQueueFilters } from "./types"
 
 function isOverdue(item: QueueWorkItemView): boolean {
