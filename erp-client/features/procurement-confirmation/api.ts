@@ -1,35 +1,23 @@
 /**
- * W07 session-mock API：queryFn / mutationFn 纯函数。
- * 租约 / 完成 / 暂挂复用 W02 session-state 统一信封语义。
+ * W07 采购二次确认 · 真实 HTTP API。
+ * 契约形状保持 features/procurement-confirmation/types.ts 与 queries.ts 不变；
+ * 后端差异在本文件内适配，缺口登记见 docs/dev-plan/p4-evidence/F4.md。
  */
 
-import { mockDelay } from "@/lib/mock-delay"
+import { apiGet, apiPost, apiPut } from "@/lib/api"
+import type { ApiError } from "@/lib/api"
 import type {
   ConfirmationLineDraft,
   CoverageByLine,
   FormalActionResponse,
   FormalOutcome,
+  FulfillmentMode,
   ProcurementConfirmationTask,
   ProcurementQueueView,
   RejectReasonCode,
+  SubmissionOrigin,
   WorkItemLease,
 } from "@/features/procurement-confirmation/types"
-import { PROCUREMENT_CONFIRMATION_SEED } from "@/mock/procurement-confirmation"
-import {
-  applyWorkItemActionSession,
-  claimWorkItemSession,
-  completeWorkItemSession,
-  getProcurementBusinessOutcome,
-  getProcurementDraft,
-  getSessionLease,
-  isProcurementWorkItemHeld,
-  isProcurementWorkItemTerminal,
-  markQueueTaskCompleted,
-  markQueueTaskHeld,
-  saveProcurementDraft,
-  setProcurementBusinessOutcome,
-  WorkItemMockError,
-} from "@/mock/session-state"
 
 export type QueueFilters = {
   scope: "mine" | "role_pool"
@@ -40,126 +28,193 @@ export type QueueFilters = {
   queueContextId?: string
 }
 
-const QUEUE_CLOCK = new Date("2026-08-01T10:00:00+08:00")
-const QUEUE_DATE = "2026-08-01"
+// ─── Backend DTO shapes (snake_case wire format) ─────────────────────────────
 
-function recomputeCoverage(
-  task: ProcurementConfirmationTask,
-  lines: readonly ConfirmationLineDraft[]
-): {
-  coverageByLine: CoverageByLine[]
-  estimatedPurchaseGross: string
-  estimatedMargin?: string
-  blockingIssues: ProcurementConfirmationTask["decisionSummary"]["blockingIssues"]
-  warnings: ProcurementConfirmationTask["decisionSummary"]["warnings"]
-} {
-  const coverageByLine = task.salesSubmission.lines.map((line) => {
-    const confirmed = lines
-      .filter((c) => c.submissionLineId === line.submissionLineId)
-      .reduce((sum, c) => sum + Number(c.confirmedQuantity || 0), 0)
-    const required = Number(line.committedQuantity)
-    const complete = confirmed + 1e-9 >= required && required > 0
-    const gap = Math.max(0, required - confirmed)
-    return {
-      submissionLineId: line.submissionLineId,
-      itemName: line.itemName,
-      confirmed: confirmed.toFixed(0),
-      required: line.committedQuantity,
-      complete,
-      gap: gap.toFixed(0),
-    }
-  })
-  const incomplete = coverageByLine.filter((c) => !c.complete)
-  const invalidQual = lines.filter((l) => l.qualificationStatus === "INVALID")
-  const blockingIssues = [
-    ...incomplete.map((c) => ({
-      code: "QTY_COVERAGE_INCOMPLETE",
-      message: `「${c.itemName}」已确认 ${c.confirmed}/${c.required}，缺口 ${c.gap}`,
-      lineId: c.submissionLineId,
-    })),
-    ...invalidQual.map((l) => ({
-      code: "QUALIFICATION_INVALID",
-      message: `供应商「${l.supplierName}」资质失效，不得通过`,
-      lineId: l.submissionLineId,
-    })),
-  ]
-  const lateLines = lines.filter((cl) => {
-    const sub = task.salesSubmission.lines.find(
-      (s) => s.submissionLineId === cl.submissionLineId
-    )
-    return sub && cl.expectedDeliveryDate > sub.requestedDeliveryDate
-  })
-  const warnings = lateLines.map((l) => ({
-    code: "DELIVERY_LATER_THAN_COMMITMENT",
-    message: `「${l.supplierName}」预计交期 ${l.expectedDeliveryDate} 晚于客户期望`,
-    lineId: l.submissionLineId,
-  }))
-  const purchase = lines
-    .reduce(
-      (sum, line) =>
-        sum +
-        Number(line.confirmedQuantity || 0) * Number(line.latestCostGross || 0),
-      0
-    )
-    .toFixed(2)
-  const sales = Number(task.salesSubmission.grossAmount)
-  const estimatedMargin =
-    sales > 0
-      ? (((sales - Number(purchase)) / sales) * 100).toFixed(2) + "%"
-      : undefined
-  return {
-    coverageByLine,
-    estimatedPurchaseGross: purchase,
-    estimatedMargin,
-    blockingIssues,
-    warnings,
+type BackendPage<T> = {
+  items: T[]
+  total: number
+  page?: number
+  page_size?: number
+}
+
+type BackendWorkItem = {
+  id: string
+  work_item_type: string
+  business_object_type: string
+  business_object_id: string
+  subject_version?: string | null
+  status: "UNCLAIMED" | "IN_PROGRESS" | "COMPLETED" | "CLOSED" | string
+  owner_role?: string | null
+  owner_user_id?: string | null
+  priority?: "urgent" | "high" | "normal" | "low" | string
+  due_at?: number | null
+  reason_code?: string | null
+  impact_summary?: string | null
+  completion_action?: string
+  version: number
+  created_at: number
+}
+
+type BackendConfirmationListItem = {
+  id: string
+  sales_order_id: string
+  submission_id: string
+  status: "PENDING" | "APPROVED" | "REJECTED" | string
+  handled_by?: string | null
+  handled_at?: number | null
+  created_at: number
+}
+
+type BackendConfirmationLine = {
+  id: string
+  line_no: number
+  sales_order_submission_line_id: string
+  supplier_id: string
+  confirmed_quantity: string
+  latest_cost_gross: string
+  input_tax_rate: string
+  expected_delivery_date: string
+  fulfillment_mode: FulfillmentMode | string
+  supplier_capability_revision_id: string
+}
+
+type BackendConfirmationDetail = {
+  id: string
+  sales_order_id: string
+  submission_id: string
+  status: "PENDING" | "APPROVED" | "REJECTED" | string
+  handled_by?: string | null
+  handled_at?: number | null
+  version: number
+  created_at: number
+  lines: BackendConfirmationLine[]
+}
+
+type BackendDecisionView = {
+  confirmation_id: string
+  sales_order_id: string
+  status: string
+  revision_id?: string | null
+  receivable_account_id?: string | null
+  handled_at: number
+  reference: string
+}
+
+type BackendSalesOrderDetail = {
+  id: string
+  order_no: string
+  customer_id?: string
+  contract_id?: string | null
+  submissions?: Array<{
+    id: string
+    submission_no: number
+    status?: string
+    gross_amount?: string
+    net_amount?: string
+    tax_amount?: string
+    submitted_by?: string
+    submitted_at?: number
+  }>
+  working_copy?: {
+    gross_amount?: string
+    lines?: Array<{
+      id: string
+      sales_order_line_id?: string
+      line_no: number
+      item_name_snapshot?: string
+      unit_snapshot?: string | null
+      quantity?: string | null
+      gross_amount?: string
+    }>
+  } | null
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function isApiError(error: unknown): error is ApiError {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "kind" in error &&
+    "message" in error
+  )
+}
+
+function apiErrorMessage(error: unknown): string {
+  if (!isApiError(error)) {
+    return error instanceof Error ? error.message : "请求失败"
+  }
+  const data = error.responseData as
+    | { errorMessage?: string }
+    | undefined
+  if (
+    data &&
+    typeof data.errorMessage === "string" &&
+    data.errorMessage &&
+    data.errorMessage !== "OK"
+  ) {
+    return data.errorMessage
+  }
+  return error.message
+}
+
+function apiErrorCode(error: unknown): string {
+  if (!isApiError(error)) return "REQUEST_FAILED"
+  if (error.status === 409) return "CONFLICT"
+  if (error.status === 404) return "NOT_FOUND"
+  if (error.status === 403) return "FORBIDDEN"
+  if (error.status === 422) return "UNPROCESSABLE"
+  if (error.kind === "Validation") return "VALIDATION"
+  return error.kind.toUpperCase()
+}
+
+function secsToIso(secs?: number | null): string {
+  if (secs == null || secs <= 0) return ""
+  return new Date(secs * 1000).toISOString()
+}
+
+function priorityToNumber(p?: string | null): number {
+  switch (p) {
+    case "urgent":
+      return 100
+    case "high":
+      return 80
+    case "normal":
+      return 50
+    case "low":
+      return 20
+    default:
+      return 50
   }
 }
 
-function projectTask(
-  seed: ProcurementConfirmationTask
-): ProcurementConfirmationTask | null {
-  if (isProcurementWorkItemTerminal(seed.workItemId)) return null
-  const draft = getProcurementDraft(seed.workItemId)
-  const held = isProcurementWorkItemHeld(seed.workItemId)
-  const publicLease = getSessionLease(seed.workItemId)
-  const lines = (draft?.lines as ConfirmationLineDraft[] | undefined) ??
-    seed.confirmation.lines
-  const editVersion = draft?.editVersion ?? seed.confirmation.editVersion
-  const decision = recomputeCoverage(seed, lines)
-
-  return {
-    ...seed,
-    status: held ? "IN_PROGRESS" : seed.status,
-    held,
-    // 查询 View：仅公开处理人信息
-    lease: publicLease
-      ? {
-          claimedByLabel: "当前用户 · 李采购",
-        }
-      : seed.lease,
-    confirmation: {
-      ...seed.confirmation,
-      editVersion,
-      lines,
-    },
-    decisionSummary: {
-      ...seed.decisionSummary,
-      ...decision,
-    },
-    actionBlockers:
-      decision.blockingIssues.length > 0
-        ? [
-            {
-              action: "APPROVE",
-              code: "QTY_COVERAGE_INCOMPLETE",
-              message: "存在未完整覆盖的销售明细，系统将拒绝通过",
-            },
-          ]
-        : [],
-    riskLabel: held ? "已跳过" : seed.riskLabel,
-    riskTone: held ? "warning" : seed.riskTone,
+function mapRejectReasonToBackend(
+  code: RejectReasonCode
+): string {
+  switch (code) {
+    case "UNFULFILLABLE":
+      return "CANNOT_FULFILL"
+    case "COST_INCREASE":
+      return "COST_INCREASE"
+    case "DELIVERY_UNMET":
+      return "DELIVERY_NOT_MET"
+    case "QUALIFICATION_INVALID":
+      return "QUALIFICATION_EXPIRED"
+    default:
+      return "OTHER"
   }
+}
+
+function mapFulfillmentMode(mode: string): FulfillmentMode {
+  if (
+    mode === "WAREHOUSE" ||
+    mode === "SUPPLIER_DIRECT" ||
+    mode === "ELECTRONIC" ||
+    mode === "SERVICE"
+  ) {
+    return mode
+  }
+  return "WAREHOUSE"
 }
 
 function filterSummary(filters: QueueFilters): string {
@@ -197,33 +252,269 @@ function sortTasks(
   return copy
 }
 
+function emptyCoverageFromLines(
+  lines: readonly ConfirmationLineDraft[],
+  submissionLineIds: readonly { id: string; name: string; required: string }[]
+): {
+  coverageByLine: CoverageByLine[]
+  estimatedPurchaseGross: string
+  blockingIssues: ProcurementConfirmationTask["decisionSummary"]["blockingIssues"]
+  warnings: ProcurementConfirmationTask["decisionSummary"]["warnings"]
+} {
+  // 覆盖/毛利由服务端裁决；此处仅做展示占位，不重算金额（P4 §2.7）。
+  // 缺口：后端详情未返回 decisionSummary / coverageByLine。
+  const coverageByLine: CoverageByLine[] = submissionLineIds.map((s) => {
+    const confirmedLines = lines.filter(
+      (l) => l.submissionLineId === s.id
+    )
+    const confirmed =
+      confirmedLines.length > 0
+        ? confirmedLines
+            .map((l) => l.confirmedQuantity)
+            .join("+") || "0"
+        : "0"
+    return {
+      submissionLineId: s.id,
+      itemName: s.name,
+      confirmed,
+      required: s.required,
+      complete: confirmedLines.length > 0,
+      gap: confirmedLines.length > 0 ? "0" : s.required,
+    }
+  })
+  return {
+    coverageByLine,
+    estimatedPurchaseGross: "—",
+    blockingIssues: [],
+    warnings: [],
+  }
+}
+
+async function fetchWorkItemsForQueue(
+  filters: QueueFilters
+): Promise<BackendWorkItem[]> {
+  // mine ≈ 已领取进行中；role_pool ≈ 待领取。后端无 responsibility_scope 字段。
+  const status =
+    filters.scope === "mine" ? "IN_PROGRESS" : "UNCLAIMED"
+  const page = await apiGet<BackendPage<BackendWorkItem>>(
+    "/admin/work-items",
+    {
+      work_item_type: "PROCUREMENT_CONFIRMATION",
+      status,
+      page: 1,
+      page_size: 100,
+      sort_by: filters.sort === "due_at" ? "due_at" : "created_at",
+      sort_dir: filters.sort === "due_at" ? "asc" : "desc",
+    }
+  )
+  return page.items ?? []
+}
+
+async function fetchConfirmationDetail(
+  confirmationId: string
+): Promise<BackendConfirmationDetail | null> {
+  try {
+    return await apiGet<BackendConfirmationDetail>(
+      `/admin/procurement-confirmations/${encodeURIComponent(confirmationId)}`
+    )
+  } catch (error) {
+    if (isApiError(error) && error.status === 404) return null
+    throw error
+  }
+}
+
+async function fetchSalesOrderDetail(
+  salesOrderId: string
+): Promise<BackendSalesOrderDetail | null> {
+  try {
+    return await apiGet<BackendSalesOrderDetail>(
+      `/admin/sales-orders/${encodeURIComponent(salesOrderId)}`
+    )
+  } catch {
+    // 跨域只读增强；失败时降级为空摘要（登记缺口）
+    return null
+  }
+}
+
+function mapConfirmationLines(
+  lines: BackendConfirmationLine[]
+): ConfirmationLineDraft[] {
+  return lines.map((line) => ({
+    lineKey: line.id,
+    submissionLineId: line.sales_order_submission_line_id,
+    supplierId: line.supplier_id,
+    supplierName: line.supplier_id,
+    confirmedQuantity: String(line.confirmed_quantity ?? "0"),
+    latestCostGross: String(line.latest_cost_gross ?? "0"),
+    inputTaxRate: String(line.input_tax_rate ?? "0"),
+    expectedDeliveryDate: line.expected_delivery_date ?? "",
+    fulfillmentMode: mapFulfillmentMode(String(line.fulfillment_mode)),
+    capabilityRevisionId: line.supplier_capability_revision_id ?? "",
+    capabilitySummary: "",
+    // 后端未返回资质状态
+    qualificationStatus: "VALID" as const,
+  }))
+}
+
+async function projectTask(
+  workItem: BackendWorkItem
+): Promise<ProcurementConfirmationTask | null> {
+  if (
+    workItem.status === "COMPLETED" ||
+    workItem.status === "CLOSED"
+  ) {
+    return null
+  }
+
+  const confirmationId = workItem.business_object_id
+  const detail = await fetchConfirmationDetail(confirmationId)
+  if (!detail) return null
+  if (detail.status === "APPROVED" || detail.status === "REJECTED") {
+    return null
+  }
+
+  const sales = await fetchSalesOrderDetail(detail.sales_order_id)
+  const submission =
+    sales?.submissions?.find((s) => s.id === detail.submission_id) ??
+    sales?.submissions?.[0]
+
+  const confLines = mapConfirmationLines(detail.lines ?? [])
+
+  // 销售提交行：后端 submission 无明细；尽量用 working_copy 行作只读参考（缺口）
+  const submissionLines =
+    sales?.working_copy?.lines?.map((line) => ({
+      submissionLineId: line.id,
+      itemName: line.item_name_snapshot ?? `行 ${line.line_no}`,
+      itemSku: "",
+      committedQuantity: String(line.quantity ?? "0"),
+      unit: line.unit_snapshot ?? "",
+      requestedDeliveryDate: "",
+      salesAmountGross: String(line.gross_amount ?? "0"),
+    })) ??
+    confLines.map((line) => ({
+      submissionLineId: line.submissionLineId,
+      itemName: "销售明细",
+      itemSku: "",
+      committedQuantity: line.confirmedQuantity,
+      unit: "",
+      requestedDeliveryDate: "",
+      salesAmountGross: "0",
+    }))
+
+  const coverage = emptyCoverageFromLines(
+    confLines,
+    submissionLines.map((s) => ({
+      id: s.submissionLineId,
+      name: s.itemName,
+      required: s.committedQuantity,
+    }))
+  )
+
+  const status: ProcurementConfirmationTask["status"] =
+    workItem.status === "IN_PROGRESS" ? "IN_PROGRESS" : "PENDING"
+
+  const origin: SubmissionOrigin = "INITIAL"
+
+  return {
+    workItemId: workItem.id,
+    responsibilityScope:
+      workItem.status === "IN_PROGRESS" ? "mine" : "role_pool",
+    status,
+    priority: priorityToNumber(workItem.priority),
+    dueAt: secsToIso(workItem.due_at) || secsToIso(workItem.created_at),
+    impactSummary: workItem.impact_summary ?? "采购二次确认",
+    subjectVersion:
+      workItem.subject_version ??
+      String(detail.version) ??
+      detail.submission_id,
+    subjectHash: detail.submission_id,
+    held: false,
+    lease:
+      workItem.status === "IN_PROGRESS" && workItem.owner_user_id
+        ? { claimedByLabel: workItem.owner_user_id }
+        : undefined,
+    salesSubmission: {
+      salesOrderId: detail.sales_order_id,
+      salesOrderNo: sales?.order_no ?? detail.sales_order_id,
+      submissionId: detail.submission_id,
+      submissionNo: submission?.submission_no ?? 0,
+      subjectHash: detail.submission_id,
+      subjectHashSummary: (detail.submission_id ?? "").slice(0, 12),
+      submittedAt: secsToIso(submission?.submitted_at) || secsToIso(detail.created_at),
+      submittedByLabel: submission?.submitted_by ?? "—",
+      customerSnapshot: sales?.customer_id ?? "—",
+      contractSnapshot: sales?.contract_id ?? undefined,
+      paymentTermLabel: "—",
+      grossAmount: String(
+        submission?.gross_amount ??
+          sales?.working_copy?.gross_amount ??
+          "0"
+      ),
+      origin,
+      lines: submissionLines,
+    },
+    confirmation: {
+      confirmationId: detail.id,
+      status: "PENDING",
+      editVersion: detail.version,
+      lines: confLines,
+    },
+    decisionSummary: {
+      coverageByLine: coverage.coverageByLine,
+      estimatedPurchaseGross: coverage.estimatedPurchaseGross,
+      estimatedMargin: undefined,
+      marginDelta: undefined,
+      blockingIssues: coverage.blockingIssues,
+      warnings: coverage.warnings,
+    },
+    allowedActions:
+      workItem.status === "IN_PROGRESS"
+        ? ["SAVE", "APPROVE", "REJECT", "DEFER"]
+        : ["CLAIM"],
+    actionBlockers: [],
+    riskLabel: workItem.status === "IN_PROGRESS" ? "处理中" : "待领取",
+    riskTone: workItem.status === "IN_PROGRESS" ? "info" : "warning",
+    riskDescription: workItem.impact_summary ?? "",
+  }
+}
+
+// ─── Public API (stable signatures) ──────────────────────────────────────────
+
 export async function fetchProcurementQueue(
   filters: QueueFilters
 ): Promise<ProcurementQueueView> {
-  await mockDelay()
-  const projected = PROCUREMENT_CONFIRMATION_SEED.map(projectTask).filter(
-    (t): t is ProcurementConfirmationTask => t != null
-  )
+  const workItems = await fetchWorkItemsForQueue(filters)
+
+  const projected = (
+    await Promise.all(workItems.map((wi) => projectTask(wi)))
+  ).filter((t): t is ProcurementConfirmationTask => t != null)
 
   let tasks = projected
-  tasks = tasks.filter((task) => task.responsibilityScope === filters.scope)
+
   if (filters.orderNo) {
     const q = filters.orderNo.trim().toUpperCase()
     tasks = tasks.filter((t) =>
-      t.salesSubmission.salesOrderNo.toUpperCase().startsWith(q)
+      t.salesSubmission.salesOrderNo.toUpperCase().includes(q)
     )
   }
+
+  // due 筛选：后端列表无 due 过滤；在已取页内适配（分页准确性缺口）
+  const now = Date.now()
+  const today = new Date().toISOString().slice(0, 10)
   if (filters.due === "overdue") {
-    tasks = tasks.filter((task) => new Date(task.dueAt) < QUEUE_CLOCK)
+    tasks = tasks.filter((t) => {
+      if (!t.dueAt) return false
+      return new Date(t.dueAt).getTime() < now
+    })
   } else if (filters.due === "today") {
-    tasks = tasks.filter((task) => task.dueAt.slice(0, 10) === QUEUE_DATE)
+    tasks = tasks.filter((t) => t.dueAt.slice(0, 10) === today)
   }
 
   tasks = sortTasks(tasks, filters.sort ?? "due_at")
 
   const queueContextId =
     filters.queueContextId ??
-    `queue:procurement-confirmation:demo:${filters.scope}`
+    `queue:procurement-confirmation:${filters.scope}`
 
   let position = 0
   let current = tasks[0]
@@ -238,18 +529,15 @@ export async function fetchProcurementQueue(
   }
 
   const emptyReason =
-    PROCUREMENT_CONFIRMATION_SEED.every((t) =>
-      isProcurementWorkItemTerminal(t.workItemId)
-    )
-      ? "NO_TASKS"
-      : tasks.length === 0
-        ? "FILTER_NO_RESULT"
-        : undefined
+    tasks.length === 0
+      ? projected.length === 0 && workItems.length === 0
+        ? "NO_TASKS"
+        : "FILTER_NO_RESULT"
+      : undefined
 
   return {
     preferences: {
       autoNextDefault: true,
-      // preferenceScope 未配置 → 前端不得持久化
     },
     context: {
       queueContextId,
@@ -270,27 +558,16 @@ export async function fetchProcurementQueue(
 export async function claimProcurementWorkItem(
   workItemId: string
 ): Promise<WorkItemLease> {
-  await mockDelay(80)
-  const seed = PROCUREMENT_CONFIRMATION_SEED.find(
-    (t) => t.workItemId === workItemId
+  const detail = await apiGet<BackendWorkItem>(
+    `/admin/work-items/${encodeURIComponent(workItemId)}`
   )
-  if (!seed) throw new Error("任务不存在")
-  if (isProcurementWorkItemTerminal(workItemId)) {
-    throw new Error("任务已完成，无法领取")
-  }
-  try {
-    claimWorkItemSession({
-      workItemId,
-      subjectVersion: seed.subjectVersion,
-      ownerUserId: "user_procurement",
-    })
-    return {
-      workItemId,
-      claimedByLabel: "当前用户 · 李采购",
-    }
-  } catch (error) {
-    if (error instanceof WorkItemMockError) throw new Error(error.message)
-    throw error
+  await apiPost<BackendWorkItem>(
+    `/admin/work-items/${encodeURIComponent(workItemId)}/claim`,
+    { version: detail.version }
+  )
+  return {
+    workItemId,
+    claimedByLabel: detail.owner_user_id ?? "当前用户",
   }
 }
 
@@ -301,26 +578,26 @@ export async function saveProcurementConfirmation(input: {
   expectedEditVersion: number
   lines: ConfirmationLineDraft[]
 }): Promise<{ editVersion: number }> {
-  await mockDelay(100)
-  const seed = PROCUREMENT_CONFIRMATION_SEED.find(
-    (t) => t.workItemId === input.workItemId
-  )
-  if (!seed) throw new Error("任务不存在")
-  try {
-    // 统一动作命令 · SAVE — 非终结
-    applyWorkItemActionSession({
-      workItemId: input.workItemId,
-      action: { kind: "SAVE_EVIDENCE", note: "保存采购确认分行" },
-    })
-    return saveProcurementDraft(
-      input.workItemId,
-      input.lines,
-      input.expectedEditVersion
-    )
-  } catch (error) {
-    if (error instanceof WorkItemMockError) throw new Error(error.message)
-    throw error
+  const body = {
+    version: input.expectedEditVersion,
+    lines: input.lines.map((line, index) => ({
+      line_no: index + 1,
+      sales_order_submission_line_id: line.submissionLineId,
+      supplier_id: line.supplierId,
+      confirmed_quantity: line.confirmedQuantity,
+      latest_cost_gross: line.latestCostGross,
+      input_tax_rate: line.inputTaxRate,
+      expected_delivery_date: line.expectedDeliveryDate,
+      fulfillment_mode: line.fulfillmentMode,
+      supplier_capability_revision_id: line.capabilityRevisionId,
+    })),
   }
+
+  const detail = await apiPut<BackendConfirmationDetail>(
+    `/admin/procurement-confirmations/${encodeURIComponent(input.confirmationId)}/lines`,
+    body
+  )
+  return { editVersion: detail.version }
 }
 
 export async function completeProcurementDecision(input: {
@@ -348,105 +625,63 @@ export async function completeProcurementDecision(input: {
         comment: string
       }
 }): Promise<FormalActionResponse> {
-  await mockDelay(150)
-
-  const seed = PROCUREMENT_CONFIRMATION_SEED.find(
-    (t) => t.workItemId === input.workItemId
-  )
-  if (!seed) {
-    return { status: "failed", code: "NOT_FOUND", message: "任务不存在" }
-  }
-
-  if (input.decision.reviewResult === "APPROVED") {
-    const projected = projectTask(seed)
-    if (!projected) {
-      return { status: "failed", code: "ALREADY_DONE", message: "任务已完成" }
-    }
-    if (projected.decisionSummary.blockingIssues.length > 0) {
-      return {
-        status: "failed",
-        code: "VALIDATION_BLOCKED",
-        message: projected.decisionSummary.blockingIssues
-          .map((i) => i.message)
-          .join("；"),
-      }
-    }
-
-    const outcome: FormalOutcome = {
-      kind: "APPROVED_AND_SALES_EFFECTIVE",
-      procurementConfirmationId: input.decision.confirmationId,
-      salesOrderId: input.decision.salesOrderId,
-      salesOrderNo: input.decision.salesOrderNo,
-      submissionId: input.decision.submissionId,
-      subjectHash: input.decision.subjectHash,
-      salesOrderRevisionId: `rev_${input.decision.submissionId}`,
-      receivableAccountId: `recv_${input.decision.salesOrderId}`,
-      procurementCreationBasisId: `pcb_${input.decision.confirmationId}`,
-      reference: `PC-OK-${input.decision.salesOrderNo}`,
-    }
-
-    try {
-      completeWorkItemSession({
-        workItemId: input.workItemId,
-        expectedSubjectVersion: input.expectedSubjectVersion,
-        decision: {
-          kind: "APPROVED_AND_SALES_EFFECTIVE",
-          summary: `采购确认通过；销售 ${input.decision.salesOrderNo} 生效；创建依据 ${outcome.procurementCreationBasisId}`,
-        },
-      })
-      // 业务结果挂到 workItem 映射，供详情查询
-      setProcurementBusinessOutcome(input.workItemId, outcome)
-      markQueueTaskCompleted("W07", input.workItemId)
-      return { status: "succeeded", outcome }
-    } catch (error) {
-      if (error instanceof WorkItemMockError) {
-        return {
-          status: "failed",
-          code: error.code,
-          message: error.message,
-        }
-      }
-      throw error
-    }
-  }
-
-  // REJECTED
-  const outcome: FormalOutcome = {
-    kind: "REJECTED_TO_SALES",
-    procurementConfirmationId: input.decision.confirmationId,
-    salesOrderId: input.decision.salesOrderId,
-    salesOrderNo: input.decision.salesOrderNo,
-    rejectedSubmissionId: input.decision.submissionId,
-    rejectedSubjectHash: input.decision.subjectHash,
-    workflowActionId: `wa_rej_${input.workItemId}`,
-    nextSalesResolutions: [
-      "RESUBMIT_CHANGED_TERMS",
-      "REQUEST_LOW_MARGIN_ACCEPTANCE",
-      "VOID_AFTER_REJECTION",
-    ],
-    reference: `PC-REJ-${input.decision.salesOrderNo}`,
-    rejectReasonCode: input.decision.rejectReasonCode,
-    comment: input.decision.comment,
-  }
-
   try {
-    completeWorkItemSession({
-      workItemId: input.workItemId,
-      expectedSubjectVersion: input.expectedSubjectVersion,
-      decision: {
-        kind: "REJECTED_TO_SALES",
-        summary: `采购确认驳回；无后继任务；销售三路待销售单处理`,
-        note: input.decision.comment,
-      },
-    })
-    setProcurementBusinessOutcome(input.workItemId, outcome)
-    markQueueTaskCompleted("W07", input.workItemId)
+    if (input.decision.reviewResult === "APPROVED") {
+      const data = await apiPost<BackendDecisionView>(
+        `/admin/procurement-confirmations/${encodeURIComponent(input.decision.confirmationId)}/approve`,
+        {
+          idempotency_key: `pc-approve-${input.workItemId}-${input.decision.expectedConfirmationEditVersion}`,
+        }
+      )
+      const outcome: FormalOutcome = {
+        kind: "APPROVED_AND_SALES_EFFECTIVE",
+        procurementConfirmationId: data.confirmation_id,
+        salesOrderId: data.sales_order_id,
+        salesOrderNo: input.decision.salesOrderNo,
+        submissionId: input.decision.submissionId,
+        subjectHash: input.decision.subjectHash,
+        salesOrderRevisionId: data.revision_id ?? "",
+        receivableAccountId: data.receivable_account_id ?? "",
+        procurementCreationBasisId: data.confirmation_id,
+        reference: data.reference,
+      }
+      return { status: "succeeded", outcome }
+    }
+
+    const data = await apiPost<BackendDecisionView>(
+      `/admin/procurement-confirmations/${encodeURIComponent(input.decision.confirmationId)}/reject`,
+      {
+        reject_reason_code: mapRejectReasonToBackend(
+          input.decision.rejectReasonCode
+        ),
+        comment: input.decision.comment,
+        idempotency_key: `pc-reject-${input.workItemId}-${input.decision.expectedConfirmationEditVersion}`,
+      }
+    )
+    const outcome: FormalOutcome = {
+      kind: "REJECTED_TO_SALES",
+      procurementConfirmationId: data.confirmation_id,
+      salesOrderId: data.sales_order_id,
+      salesOrderNo: input.decision.salesOrderNo,
+      rejectedSubmissionId: input.decision.submissionId,
+      rejectedSubjectHash: input.decision.subjectHash,
+      workflowActionId: data.reference,
+      nextSalesResolutions: [
+        "RESUBMIT_CHANGED_TERMS",
+        "REQUEST_LOW_MARGIN_ACCEPTANCE",
+        "VOID_AFTER_REJECTION",
+      ],
+      reference: data.reference,
+      rejectReasonCode: input.decision.rejectReasonCode,
+      comment: input.decision.comment,
+    }
     return { status: "succeeded", outcome }
   } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return { status: "failed", code: error.code, message: error.message }
+    return {
+      status: "failed",
+      message: apiErrorMessage(error),
+      code: apiErrorCode(error),
     }
-    throw error
   }
 }
 
@@ -455,37 +690,38 @@ export async function deferProcurementConfirmation(input: {
   queueContextId: string
   nextWorkItemId?: string
 }): Promise<FormalActionResponse> {
-  await mockDelay(100)
-  const seed = PROCUREMENT_CONFIRMATION_SEED.find(
-    (t) => t.workItemId === input.workItemId
-  )
-  if (!seed) {
-    return { status: "failed", code: "NOT_FOUND", message: "任务不存在" }
-  }
   try {
-    applyWorkItemActionSession({
-      workItemId: input.workItemId,
-      action: { kind: "DEFER", note: "采购确认跳过" },
-    })
-    markQueueTaskHeld("W07", input.workItemId)
+    const detail = await apiGet<BackendWorkItem>(
+      `/admin/work-items/${encodeURIComponent(input.workItemId)}`
+    )
+    await apiPost<BackendWorkItem>(
+      `/admin/work-items/${encodeURIComponent(input.workItemId)}/defer`,
+      {
+        version: detail.version,
+        comment: "采购确认暂挂",
+      }
+    )
     const outcome: FormalOutcome = {
       kind: "DEFERRED",
       workItemId: input.workItemId,
       workItemStatus: "PENDING",
       leaseDisposition: "RELEASED",
       nextWorkItemId: input.nextWorkItemId,
-      reference: `PC-HOLD-${seed.salesSubmission.salesOrderNo}`,
+      reference: `PC-HOLD-${input.workItemId}`,
     }
     return { status: "succeeded", outcome }
   } catch (error) {
-    if (error instanceof WorkItemMockError) {
-      return { status: "failed", code: error.code, message: error.message }
+    return {
+      status: "failed",
+      message: apiErrorMessage(error),
+      code: apiErrorCode(error),
     }
-    throw error
   }
 }
 
-export function getTerminalOutcome(workItemId: string): FormalOutcome | null {
-  const biz = getProcurementBusinessOutcome(workItemId)
-  return (biz as FormalOutcome) ?? null
+/** 终局结果查询：后端无按 workItem 反查业务 outcome 的独立接口。 */
+export function getTerminalOutcome(
+  _workItemId: string
+): FormalOutcome | null {
+  return null
 }
