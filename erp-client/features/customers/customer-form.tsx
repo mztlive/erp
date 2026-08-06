@@ -32,7 +32,6 @@ import {
   AlertTitle,
 } from "@/components/ui/alert"
 import { Label } from "@/components/ui/label"
-import { getW03SensitiveReveal } from "@/features/customers/session"
 import {
   useCreateCustomerMutation,
   useQueryCustomerIdempotencyMutation,
@@ -132,9 +131,14 @@ function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+/**
+ * 编辑态敏感字段：后端不回传明文/reveal token，预填留空，避免把掩码写回。
+ * 有 token 时也仅作占位（reveal 接口未落地）。
+ */
 function editableValue(token: string | undefined, masked: string): string {
-  if (!token) return masked === "—" ? "" : masked
-  return getW03SensitiveReveal(token) ?? masked
+  if (token) return ""
+  if (!masked || masked === "—" || masked.includes("*")) return ""
+  return masked
 }
 
 function buildDefaults(
