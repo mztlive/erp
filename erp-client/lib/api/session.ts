@@ -54,8 +54,11 @@ export const onUnauthorized = (handler: () => void): (() => void) => {
 
 /**
  * 通知所有已注册的 401 回调（由 client.ts 在检测到未授权时调用）。
+ *
+ * 会先清除本地 token，再逐个执行回调（跳转登录页、清空 Query 缓存等）。
  */
 export const notifyUnauthorized = (): void => {
+  clearToken()
   for (const handler of unauthorizedHandlers) {
     handler()
   }

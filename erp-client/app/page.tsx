@@ -1,23 +1,27 @@
-import { redirect } from "next/navigation"
+"use client"
+
+import * as React from "react"
+import { useRouter } from "next/navigation"
+
+import { isAuthenticated } from "@/lib/api/session"
 
 /**
- * 根路由：统一落地到今日工作台。
- *
- * 演示阶段无登录（mock 数据驱动，界面已有「演示环境」标识）；接真实后端后，
- * 这里应先按登录态分流（未登录 → /login，已登录 → /workspace）。
- *
- * `demoRole` 等演示参数原样带过，避免根入口丢失角色上下文。
+ * 根路由：按登录态分流（未登录 → /login，已登录 → /workspace）。
  */
-export default async function HomePage({
-  searchParams,
-}: {
-  searchParams: Promise<Record<string, string | string[] | undefined>>
-}) {
-  const params = await searchParams
-  const query = new URLSearchParams()
-  for (const [key, value] of Object.entries(params)) {
-    if (typeof value === "string") query.set(key, value)
-  }
-  const search = query.toString()
-  redirect(`/workspace${search ? `?${search}` : ""}`)
+export default function HomePage() {
+  const router = useRouter()
+
+  React.useEffect(() => {
+    if (isAuthenticated()) {
+      router.replace("/workspace")
+    } else {
+      router.replace("/login")
+    }
+  }, [router])
+
+  return (
+    <div className="flex min-h-svh items-center justify-center bg-background text-sm text-muted-foreground">
+      正在进入系统…
+    </div>
+  )
 }

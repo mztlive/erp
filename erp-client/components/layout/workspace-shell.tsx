@@ -3,6 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname, useRouter, useSearchParams } from "next/navigation"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   Building2Icon,
   ClipboardCheckIcon,
@@ -36,6 +37,7 @@ import {
   WORKSPACE_NAV_GROUPS,
   type WorkspaceNavBadgeKey,
 } from "@/lib/workspace-registry"
+import { logoutAndRedirect } from "@/components/providers/auth-session-provider"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
 import { useFulfillmentCountQuery } from "@/features/fulfillment-operations/queries"
 import { useProcurementConfirmCountQuery } from "@/features/procurement-confirmation/queries"
@@ -287,6 +289,7 @@ function resolveTaskTab(pathname: string, search: string): string {
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const routeSearchParams = useSearchParams()
   const locationSearch = routeSearchParams.toString()
   const [search, setSearch] = React.useState("")
@@ -487,25 +490,36 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               员工福利 ERP
             </div>
             <div className="truncate text-xs text-sidebar-foreground/70">
-              演示环境
+              内部工作台
             </div>
           </div>
         </div>
       }
       sidebarContent={<AppSidebarNav />}
       sidebarFooter={
-        <div className="flex items-center gap-2 px-2 py-1.5 group-data-[collapsible=icon]:justify-center">
-          <Avatar size="sm">
-            <AvatarFallback>王</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 group-data-[collapsible=icon]:hidden">
-            <div className="truncate text-sm text-sidebar-accent-foreground">
-              王敏
-            </div>
-            <div className="truncate text-xs text-sidebar-foreground/70">
-              销售
+        <div className="flex flex-col gap-2 px-2 py-1.5 group-data-[collapsible=icon]:items-center">
+          <div className="flex items-center gap-2 group-data-[collapsible=icon]:justify-center">
+            <Avatar size="sm">
+              <AvatarFallback>用</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+              <div className="truncate text-sm text-sidebar-accent-foreground">
+                已登录
+              </div>
+              <div className="truncate text-xs text-sidebar-foreground/70">
+                后台账号
+              </div>
             </div>
           </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 justify-start px-2 text-sidebar-foreground group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+            onClick={() => logoutAndRedirect(router, queryClient)}
+          >
+            <span className="group-data-[collapsible=icon]:sr-only">退出登录</span>
+          </Button>
         </div>
       }
       topbar={
@@ -538,9 +552,19 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               },
             ]}
             trailing={
-              <Avatar size="sm">
-                <AvatarFallback>王</AvatarFallback>
-              </Avatar>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => logoutAndRedirect(router, queryClient)}
+                >
+                  退出
+                </Button>
+                <Avatar size="sm">
+                  <AvatarFallback>用</AvatarFallback>
+                </Avatar>
+              </div>
             }
           />
           {searchFocused && search.trim().length >= 2 ? (

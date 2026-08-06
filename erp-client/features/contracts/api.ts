@@ -15,6 +15,7 @@ import {
   apiPost,
   getApiBaseUrl,
   getToken,
+  notifyUnauthorized,
   type ApiError,
   type Page,
 } from "@/lib/api"
@@ -318,6 +319,8 @@ async function uploadFileAsset(file: File): Promise<BackendFileAsset> {
   } | null
 
   if (res.status === 401 || envelope?.status === 401) {
+    // 与 lib/api/client 一致：清 token 并触发跳转登录
+    notifyUnauthorized()
     const err: ApiError = {
       kind: "Auth",
       message: "登录状态已失效，请重新登录",
