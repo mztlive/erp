@@ -192,4 +192,302 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
         ],
     },
+    {
+        name: "合同",
+        description: "合同 PDF 档案管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contracts",
+                description: "查询合同列表",
+                permission: {
+                    resource: "contract",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contracts",
+                description: "首次归档合同 PDF",
+                permission: {
+                    resource: "contract",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/contracts/{id}",
+                description: "查询合同详情",
+                permission: {
+                    resource: "contract",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contracts/{id}/revisions",
+                description: "归档合同新版本",
+                permission: {
+                    resource: "contract",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/contracts/{id}/terminate",
+                description: "终止合同",
+                permission: {
+                    resource: "contract",
+                    action: "update",
+                },
+            },
+        ],
+    },
+    {
+        name: "销售单",
+        description: "销售单（W05）管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-orders",
+                description: "查询销售单列表",
+                permission: {
+                    resource: "sales_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-orders",
+                description: "创建销售单",
+                permission: {
+                    resource: "sales_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-orders/{id}",
+                description: "查询销售单详情",
+                permission: {
+                    resource: "sales_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/sales-orders/{id}/working-copy",
+                description: "保存销售单草稿",
+                permission: {
+                    resource: "sales_order",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-orders/{id}/submit",
+                description: "提交销售单",
+                permission: {
+                    resource: "sales_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-orders/{id}/void",
+                description: "作废销售单草稿",
+                permission: {
+                    resource: "sales_order",
+                    action: "delete",
+                },
+            },
+        ],
+    },
+    {
+        name: "销售复核",
+        description: "销售审批与采购二次确认（W05/W07）管理",
+        permissions: [
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-order-reviews",
+                description: "查询销售审批记录列表",
+                permission: {
+                    resource: "sales_order_review",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-reviews/{id}/approve",
+                description: "通过卡券销售审批",
+                permission: {
+                    resource: "sales_order_review",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-order-reviews/{id}/reject",
+                description: "驳回卡券销售审批",
+                permission: {
+                    resource: "sales_order_review",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-confirmations",
+                description: "查询采购确认队列",
+                permission: {
+                    resource: "procurement_confirmation",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/procurement-confirmations/{id}",
+                description: "查询采购确认详情",
+                permission: {
+                    resource: "procurement_confirmation",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/procurement-confirmations/{id}/lines",
+                description: "保存采购确认分行",
+                permission: {
+                    resource: "procurement_confirmation",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-confirmations/{id}/approve",
+                description: "采购确认通过",
+                permission: {
+                    resource: "procurement_confirmation",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/procurement-confirmations/{id}/reject",
+                description: "采购确认驳回",
+                permission: {
+                    resource: "procurement_confirmation",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-change-orders",
+                description: "查询销售变更单列表",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders",
+                description: "创建销售变更单",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/sales-change-orders/{id}",
+                description: "查询销售变更单详情",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/submit-impact",
+                description: "发起销售变更影响确认",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "submit",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/impact-confirm",
+                description: "通过变更履约影响确认",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/impact-reject",
+                description: "驳回变更履约影响确认",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/finance-confirm",
+                description: "通过变更财务复核",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/finance-reject",
+                description: "驳回变更财务复核",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "reject",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/sales-change-orders/{id}/void",
+                description: "作废销售变更单",
+                permission: {
+                    resource: "sales_change_order",
+                    action: "delete",
+                },
+            },
+        ],
+    },
 ];

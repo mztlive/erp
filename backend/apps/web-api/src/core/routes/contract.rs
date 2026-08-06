@@ -1,10 +1,66 @@
-//! 域 D12 `contract`：contract、contract_revision（页面：W04）。P0 骨架占位；P3 填充路由与权限挂载（管理端路由必须带 #[permission]）。
+//! 域 D12 `contract` 管理端路由。
+//!
+//! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/contracts`；每条路由统一
+//! 走 JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
 
-use axum::Router;
+use axum::{
+    routing::{get, post},
+    Router,
+};
+use services::iam::SharedRbacService;
 
-use crate::app_state::AppState;
+use crate::{
+    app_state::AppState,
+    core::{handler::contract, middleware::with_permission},
+};
 
-/// 返回本域管理端路由集合（P3 填充）。
-pub fn routes(_rbac: &services::iam::SharedRbacService) -> Router<AppState> {
-    Router::<AppState>::new()
+/// 返回本域管理端路由集合。
+///
+/// # 参数
+/// * `rbac` - 共享 Casbin RBAC 服务
+///
+/// # 返回
+/// 返回挂载了权限校验层的路由集合。
+pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
+    Router::new()
+        .route(
+            "/contracts",
+            with_permission(
+                get(contract::contract_list),
+                rbac,
+                contract::contract_list_permission_key(),
+            ),
+        )
+        .route(
+            "/contracts",
+            with_permission(
+                post(contract::contract_create),
+                rbac,
+                contract::contract_create_permission_key(),
+            ),
+        )
+        .route(
+            "/contracts/{id}",
+            with_permission(
+                get(contract::contract_detail),
+                rbac,
+                contract::contract_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/contracts/{id}/revisions",
+            with_permission(
+                post(contract::contract_archive_revision),
+                rbac,
+                contract::contract_archive_revision_permission_key(),
+            ),
+        )
+        .route(
+            "/contracts/{id}/terminate",
+            with_permission(
+                post(contract::contract_terminate),
+                rbac,
+                contract::contract_terminate_permission_key(),
+            ),
+        )
 }
