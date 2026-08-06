@@ -1,5 +1,5 @@
 import type { DataFreshnessState } from "@/components/business/page"
-import type { TodayWorkspaceView } from "@/mock/workspace"
+import type { TodayWorkspaceView } from "@/features/workspace/types"
 
 const STALE_AFTER_MS = 60_000
 

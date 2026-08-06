@@ -41,8 +41,11 @@ import {
 import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { FAMILY_LABELS, type WorkItemFamily } from "@/mock/work-items"
-import type { SessionLease } from "@/mock/session-state"
+import {
+  FAMILY_LABELS,
+  type SessionLease,
+  type WorkItemFamily,
+} from "@/features/unified-task-queue/types"
 
 import {
   actionLabelForWorkItemType,

@@ -71,7 +71,7 @@ import type {
   WorkspaceMetricKey,
   WorkspaceTaskGroup,
   WorkspaceWorkItem,
-} from "@/mock/workspace"
+} from "@/features/workspace/types"
 
 const VIEWER_TIMEZONE = "Asia/Shanghai"
 

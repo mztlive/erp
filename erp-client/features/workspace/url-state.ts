@@ -3,7 +3,7 @@ import type {
   WorkspaceDueFilter,
   WorkspaceFamilyFilter,
   WorkspaceMetricKey,
-} from "@/mock/workspace"
+} from "@/features/workspace/types"
 import { sequentialText } from "@/lib/ui-text"
 import { createUrlStateCodec } from "@/lib/url-state"
 

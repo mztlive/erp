@@ -3,7 +3,7 @@ import {
   type WorkspaceId,
 } from "@/lib/workspace-registry"
 import { writeW02FocusId } from "@/features/unified-task-queue/queue-url"
-import type { WorkspaceWorkItem } from "@/mock/workspace"
+import type { WorkspaceWorkItem } from "@/features/workspace/types"
 
 /**
  * Resolve a safe in-app destination from the local workspace registry.
