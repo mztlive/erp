@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/card"
 import {
   CARD_APPROVAL_TYPE_LABEL,
-} from "@/mock/sales-orders"
+} from "@/features/sales-orders/labels"
 import {
   useClaimCardSalesApprovalMutation,
   useCompleteCardSalesApprovalMutation,

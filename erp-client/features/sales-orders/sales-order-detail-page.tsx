@@ -62,7 +62,7 @@ import type { SalesOrderListItem } from "@/features/sales-orders/types"
 import {
   NATURE_LABEL,
   ORIGIN_LABEL,
-} from "@/mock/sales-orders"
+} from "@/features/sales-orders/labels"
 import { sumFixed } from "@/lib/fixed-decimal"
 import { cn } from "@/lib/utils"
 

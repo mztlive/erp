@@ -12,7 +12,7 @@ import {
 import {
   NATURE_LABEL,
   ORIGIN_LABEL,
-} from "@/mock/sales-orders"
+} from "@/features/sales-orders/labels"
 import type {
   SalesOrderLineItem,
   SalesOrderListItem,

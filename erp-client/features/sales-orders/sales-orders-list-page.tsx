@@ -47,7 +47,7 @@ import {
 import {
   NATURE_LABEL,
   ORIGIN_LABEL,
-} from "@/mock/sales-orders"
+} from "@/features/sales-orders/labels"
 import { downloadOriginalContractPdf } from "@/features/contracts/pdf"
 import { SalesOrderPaperDialog } from "@/features/sales-orders/sales-order-paper-dialog"
 import {
