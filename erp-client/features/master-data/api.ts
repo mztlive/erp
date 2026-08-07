@@ -560,16 +560,21 @@ function mapProductRow(
       lifecycle === "ENABLED" ? "enabled" : "disabled",
       ...(future ? (["pending"] as const) : []),
     ],
-    productKind: productKindLabel(dto.product_kind),
+    // 稳定码（PHYSICAL/VOUCHER…），展示文案仍在 keyFacts「商品类型」
+    productKind: dto.product_kind,
   }
 }
 
 function mapSkuAsSellable(
   sku: SkuDto,
   revision?: SkuRevisionDto,
-  product?: ProductDto
+  product?: ProductDto,
+  baseUnitLabel?: string
 ): MasterDataListItem {
   const lifecycle = asLifecycle(sku.status)
+  // 优先用原始枚举码做筛选（前端 isVoucherKind 兼容中文标签）
+  const kindCode = product?.product_kind?.trim() || undefined
+  const kindLabel = productKindLabel(product?.product_kind)
   return {
     objectType: "sellable-items",
     stableId: sku.id,
@@ -597,6 +602,12 @@ function mapSkuAsSellable(
         label: "商品编号",
         value: product?.product_no ?? sku.product_id,
       },
+      ...(baseUnitLabel
+        ? [{ label: "基础单位", value: baseUnitLabel }]
+        : []),
+      ...(kindLabel
+        ? [{ label: "商品类型", value: kindLabel }]
+        : []),
     ],
     primaryBlocker:
       lifecycle === "DISABLED" ? "已停用：不可进入销售选品" : undefined,
@@ -604,6 +615,8 @@ function mapSkuAsSellable(
     ...commonActions("sellable-items", lifecycle),
     lockVersion: sku.version,
     metricTags: [lifecycle === "ENABLED" ? "enabled" : "disabled"],
+    // 存稳定码，便于销售建单按 VOUCHER 过滤
+    productKind: kindCode || kindLabel || undefined,
   }
 }
 
@@ -826,14 +839,33 @@ async function listSellableItems(
       : query.lifecycleStatus === "disabled"
         ? "disabled"
         : undefined
-  const skus = await fetchAllPages<SkuDto>("/admin/skus", {
+  // 先按状态取；若后端状态字面量不一致导致空结果，回退为全量再客户端过滤
+  let skus = await fetchAllPages<SkuDto>("/admin/skus", {
     status,
     sku_no: query.q || undefined,
-  })
+  }).catch(() => [] as SkuDto[])
+  if (skus.length === 0 && status) {
+    skus = await fetchAllPages<SkuDto>("/admin/skus", {
+      sku_no: query.q || undefined,
+    }).catch(() => [] as SkuDto[])
+    if (query.lifecycleStatus === "enabled") {
+      skus = skus.filter((s) => asLifecycle(s.status) === "ENABLED")
+    } else if (query.lifecycleStatus === "disabled") {
+      skus = skus.filter((s) => asLifecycle(s.status) === "DISABLED")
+    }
+  }
   if (skus.length === 0) return []
 
-  const products = await fetchAllPages<ProductDto>("/admin/products", {})
+  const [products, units] = await Promise.all([
+    fetchAllPages<ProductDto>("/admin/products", {}).catch(
+      () => [] as ProductDto[]
+    ),
+    fetchAllPages<UnitOfMeasureDto>("/admin/unit-of-measures", {}).catch(
+      () => [] as UnitOfMeasureDto[]
+    ),
+  ])
   const productById = new Map(products.map((p) => [p.id, p]))
+  const unitById = new Map(units.map((u) => [u.id, u]))
 
   const rows: MasterDataListItem[] = []
   for (const sku of skus) {
@@ -853,7 +885,16 @@ async function listSellableItems(
     } catch {
       // ignore
     }
-    rows.push(mapSkuAsSellable(sku, revision, productById.get(sku.product_id)))
+    const unit = unitById.get(sku.base_unit_id)
+    const baseUnitLabel = unit?.name ?? unit?.symbol ?? unit?.unit_code
+    rows.push(
+      mapSkuAsSellable(
+        sku,
+        revision,
+        productById.get(sku.product_id),
+        baseUnitLabel
+      )
+    )
   }
   return rows
 }
@@ -867,10 +908,22 @@ async function listVoucherCategories(
       : query.lifecycleStatus === "disabled"
         ? "disabled"
         : undefined
-  const profiles = await fetchAllPages<VoucherCategoryProfileDto>(
+  let profiles = await fetchAllPages<VoucherCategoryProfileDto>(
     "/admin/voucher-category-profiles",
     { status }
-  )
+  ).catch(() => [] as VoucherCategoryProfileDto[])
+  // 状态筛选空结果时回退全量，再按启停客户端过滤
+  if (profiles.length === 0 && status) {
+    profiles = await fetchAllPages<VoucherCategoryProfileDto>(
+      "/admin/voucher-category-profiles",
+      {}
+    ).catch(() => [] as VoucherCategoryProfileDto[])
+    if (query.lifecycleStatus === "enabled") {
+      profiles = profiles.filter((p) => asLifecycle(p.status) === "ENABLED")
+    } else if (query.lifecycleStatus === "disabled") {
+      profiles = profiles.filter((p) => asLifecycle(p.status) === "DISABLED")
+    }
+  }
   if (profiles.length === 0) return []
   // 每个 SKU 只保留最新扩展修订，避免更新后列表出现多行。
   const latestBySku = new Map<string, VoucherCategoryProfileDto>()
@@ -880,7 +933,9 @@ async function listVoucherCategories(
       latestBySku.set(profile.sku_id, profile)
     }
   }
-  const skus = await fetchAllPages<SkuDto>("/admin/skus", {})
+  const skus = await fetchAllPages<SkuDto>("/admin/skus", {}).catch(
+    () => [] as SkuDto[]
+  )
   const skuById = new Map(skus.map((s) => [s.id, s]))
   let rows = Array.from(latestBySku.values()).map((p) =>
     mapVoucherRow(p, skuById.get(p.sku_id))

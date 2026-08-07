@@ -15,6 +15,38 @@ export const PAYMENT_TERM_OPTIONS: readonly ComboboxOption[] = [
   { value: "CONTRACT", label: "按合同约定" },
 ] as const
 
+/**
+ * 福利场景（对齐后端 `WelfareScenario` / 数据模型 §6.4）。
+ * value 为稳定码；展示用 label。
+ */
+export const WELFARE_SCENARIO_OPTIONS: readonly ComboboxOption[] = [
+  {
+    value: "ANNUAL_GIFT_BAG",
+    label: "年节礼包",
+    keywords: "春节 端午 中秋 国庆 节日 礼品",
+  },
+  {
+    value: "MEAL_SUBSIDY",
+    label: "餐补",
+    keywords: "餐饮 饭补 用餐",
+  },
+  {
+    value: "CONDOLENCE_GIFT",
+    label: "慰问品",
+    keywords: "慰问 探访 关怀 困难",
+  },
+  {
+    value: "CONSUMPTION_FUND",
+    label: "消费金",
+    keywords: "积分 额度 商城 卡券额度",
+  },
+  {
+    value: "OTHER",
+    label: "其他",
+    keywords: "自定义 其它",
+  },
+] as const
+
 /** 销售/库存常用单位。 */
 export const UNIT_OPTIONS: readonly ComboboxOption[] = [
   { value: "件", label: "件" },
@@ -59,5 +91,16 @@ export const TRANSFER_ROLE_OPTIONS: readonly ComboboxOption[] = [
 export function paymentTermLabel(code: string): string {
   return (
     PAYMENT_TERM_OPTIONS.find((o) => o.value === code)?.label ?? code
+  )
+}
+
+/** 福利场景码 → 中文；未知值原样返回（兼容历史自由文本）。 */
+export function welfareScenarioLabel(code: string): string {
+  const trimmed = code.trim()
+  if (!trimmed) return ""
+  return (
+    WELFARE_SCENARIO_OPTIONS.find(
+      (o) => o.value === trimmed || o.label === trimmed
+    )?.label ?? trimmed
   )
 }

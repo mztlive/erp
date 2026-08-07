@@ -374,6 +374,28 @@ pub struct WorkingCopyView {
     pub editor_user_id: String,
     /// 业务性质。
     pub business_type: BusinessType,
+    /// 客户名称快照。
+    pub customer_name: String,
+    /// 合同编号快照。
+    pub contract_no: Option<String>,
+    /// 结算主体名称快照。
+    pub settlement_party_name: Option<String>,
+    /// 付款条件代码。
+    pub payment_term_code: String,
+    /// 付款条件名称。
+    pub payment_term_name: String,
+    /// 开票类型。
+    pub invoice_type: String,
+    /// 税点。
+    pub tax_point: String,
+    /// 客户项目名称（前端福利场景）。
+    pub project_name: Option<String>,
+    /// 业务备注。
+    pub business_remark: Option<String>,
+    /// 卡券类目 SKU。
+    pub voucher_category_sku_id: Option<String>,
+    /// 卡券履约期限（秒级时间戳）。
+    pub voucher_expiry_at: Option<u64>,
     /// 草稿行汇总（含税）。
     pub gross_amount: Amount,
     /// 草稿行汇总（不含税）。
@@ -427,7 +449,7 @@ pub struct SalesOrderWorkingCopyLineView {
     pub card_form: Option<CardForm>,
 }
 
-/// 提交历史视图。
+/// 提交历史视图（含表头快照与明细，供提交后详情展示）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct SubmissionView {
     /// 实体主键。
@@ -438,6 +460,28 @@ pub struct SubmissionView {
     pub status: entities::sales_order::SubmissionStatus,
     /// 业务性质。
     pub business_type: BusinessType,
+    /// 客户名称快照。
+    pub customer_name: String,
+    /// 合同编号快照。
+    pub contract_no: Option<String>,
+    /// 结算主体名称快照。
+    pub settlement_party_name: Option<String>,
+    /// 付款条件代码。
+    pub payment_term_code: String,
+    /// 付款条件名称。
+    pub payment_term_name: String,
+    /// 开票类型。
+    pub invoice_type: String,
+    /// 税点。
+    pub tax_point: String,
+    /// 客户项目名称（前端福利场景）。
+    pub project_name: Option<String>,
+    /// 业务备注。
+    pub business_remark: Option<String>,
+    /// 卡券类目 SKU。
+    pub voucher_category_sku_id: Option<String>,
+    /// 卡券履约期限（秒级时间戳）。
+    pub voucher_expiry_at: Option<u64>,
     /// 提交行汇总（含税）。
     pub gross_amount: Amount,
     /// 提交行汇总（不含税）。
@@ -450,6 +494,8 @@ pub struct SubmissionView {
     pub submitted_at: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 提交明细（与工作副本行视图同形，便于前端统一映射）。
+    pub lines: Vec<SalesOrderWorkingCopyLineView>,
 }
 
 /// 销售版本视图。

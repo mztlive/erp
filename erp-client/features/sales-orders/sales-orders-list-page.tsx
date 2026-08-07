@@ -606,15 +606,6 @@ export function SalesOrdersListPage() {
             pushUrl({ summary: "fulfillmentException", status: "all", page: 1 })
           }}
         />
-        <MetricFilterItem
-          label="商城协同"
-          value={metrics.mallCollab}
-          detail="商城开单或票款复核"
-          active={url.summary === "mallCollab"}
-          onClick={() => {
-            pushUrl({ summary: "mallCollab", status: "all", page: 1 })
-          }}
-        />
       </MetricStrip>
 
       <BusinessTableFrame

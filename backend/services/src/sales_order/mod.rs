@@ -273,11 +273,40 @@ impl SalesOrderService {
             Some(copy) => Some(self.working_copy_view(&copy).await?),
             None => None,
         };
-        let submissions = self
+        let mut submissions = self
             .db
             .sales_order_submissions()
             .find_many(mongodb::bson::doc! { "sales_order_id": id }, &mut NoTransaction)
             .await?;
+        // 新提交在前，便于前端取「当前商业内容」
+        submissions.sort_by(|a, b| b.submission_no.cmp(&a.submission_no));
+        let submission_ids = submissions
+            .iter()
+            .map(|s| SalesOrderSubmissionId::new(s.base.id.clone()))
+            .collect::<Vec<_>>();
+        let submission_lines = self
+            .db
+            .sales_order_submission_lines()
+            .list_lines_by_submissions(&submission_ids, &mut NoTransaction)
+            .await?;
+        let mut lines_by_submission: std::collections::HashMap<String, Vec<SalesOrderSubmissionLine>> =
+            std::collections::HashMap::new();
+        for line in submission_lines {
+            lines_by_submission
+                .entry(line.submission_id.to_string())
+                .or_default()
+                .push(line);
+        }
+        let submission_views = submissions
+            .into_iter()
+            .map(|submission| {
+                let mut lines = lines_by_submission
+                    .remove(&submission.base.id)
+                    .unwrap_or_default();
+                lines.sort_by_key(|line| line.line_no);
+                submission_view(submission, lines)
+            })
+            .collect();
         let revisions = self
             .db
             .sales_order_revisions()
@@ -311,7 +340,7 @@ impl SalesOrderService {
                 })
                 .collect(),
             working_copy: working_copy_view,
-            submissions: submissions.into_iter().map(submission_view).collect(),
+            submissions: submission_views,
             revisions: revisions
                 .into_iter()
                 .map(|revision| RevisionView {
@@ -499,7 +528,13 @@ impl SalesOrderService {
             )
             .await?
         {
-            return Ok(submission_view(existing));
+            let existing_id = SalesOrderSubmissionId::new(existing.base.id.clone());
+            let existing_lines = self
+                .db
+                .sales_order_submission_lines()
+                .list_lines_by_submissions(&[existing_id], &mut NoTransaction)
+                .await?;
+            return Ok(submission_view(existing, existing_lines));
         }
 
         let copy_id = SalesOrderWorkingCopyId::new(working_copy.base.id.clone());
@@ -618,7 +653,7 @@ impl SalesOrderService {
             })
             .await?;
 
-        Ok(submission_view(submission))
+        Ok(submission_view(submission, submission_lines))
     }
 
     /// 作废销售单草稿（主状态 `DRAFT → VOIDED`；放弃有效工作副本）。
@@ -708,6 +743,28 @@ impl SalesOrderService {
             content_hash: copy.content_hash.clone(),
             editor_user_id: copy.editor_user_id.clone(),
             business_type: copy.business_type,
+            customer_name: copy.customer_snapshot.customer_name.clone(),
+            contract_no: copy
+                .contract_snapshot
+                .as_ref()
+                .map(|s| s.contract_no.clone()),
+            settlement_party_name: copy
+                .settlement_party_snapshot
+                .as_ref()
+                .map(|s| s.settlement_party_name.clone()),
+            payment_term_code: copy.payment_term_snapshot.payment_term_code.clone(),
+            payment_term_name: copy.payment_term_snapshot.payment_term_name.clone(),
+            invoice_type: copy.invoice_requirement_snapshot.invoice_type.clone(),
+            tax_point: copy.invoice_requirement_snapshot.tax_point.clone(),
+            project_name: copy.project_name.clone(),
+            business_remark: copy.business_remark.clone(),
+            voucher_category_sku_id: copy
+                .voucher_category_sku_id
+                .as_ref()
+                .map(ToString::to_string),
+            voucher_expiry_at: copy
+                .voucher_expiry_at
+                .map(|instant| instant.unix_secs() as u64),
             gross_amount: copy.gross_amount,
             net_amount: copy.net_amount,
             tax_amount: copy.tax_amount,
@@ -839,7 +896,12 @@ fn build_working_copy(
 ) -> Result<(SalesOrderWorkingCopy, Vec<SalesOrderWorkingCopyLine>)> {
     let order_id = SalesOrderId::new(order.base.id.clone());
     let working_copy_id = SalesOrderWorkingCopyId::new(next_id());
-    let lines = build_working_copy_lines(&order_id, &working_copy_id, stable_lines, &draft.lines)?;
+    // 行创建数据同时用于：① 头实体 `validate_line_list` 跨行断言；② 行实体落库。
+    // 此前传空 Vec 会导致「销售单明细不能为空」——头校验与行集合分离的契约要求
+    // 创建数据必须携带完整行摘要（即使行最终分集合存储）。
+    let line_datas =
+        build_working_copy_line_datas(stable_lines, &draft.lines)?;
+    let lines = materialize_working_copy_lines(&working_copy_id, &line_datas)?;
     let (gross, net, tax) = line_totals(&lines);
     let snapshot = header_snapshot(draft)?;
     let working_copy = SalesOrderWorkingCopy::new(
@@ -866,14 +928,77 @@ fn build_working_copy(
             gross_amount: gross,
             net_amount: net,
             tax_amount: tax,
-            lines: Vec::new(),
+            lines: line_datas,
         },
         actor.id(),
     )?;
     Ok((working_copy, lines))
 }
 
-/// 构建工作副本行实体。
+/// 将草稿行请求映射为工作副本行创建数据（稳定行号 → 稳定明细身份）。
+///
+/// # 参数
+/// * `stable_lines` - 稳定明细行（行号与草稿行一一对应）
+/// * `lines` - 草稿行请求
+///
+/// # 返回
+/// 返回工作副本行创建数据清单。
+///
+/// # 错误
+/// 行号无对应稳定明细时返回错误。
+fn build_working_copy_line_datas(
+    stable_lines: &[SalesOrderLine],
+    lines: &[SalesOrderDraftLineRequest],
+) -> Result<Vec<SalesOrderWorkingCopyLineData>> {
+    let mut datas = Vec::with_capacity(lines.len());
+    for line in lines {
+        let stable_id = stable_lines
+            .iter()
+            .find(|stable| stable.line_no == line.line_no)
+            .map(|stable| stable.base.id.clone())
+            .ok_or_else(|| Error::ValidationError(format!("行号 {} 无对应稳定明细", line.line_no)))?;
+        datas.push(SalesOrderWorkingCopyLineData {
+            sales_order_line_id: SalesOrderLineId::new(stable_id),
+            line_no: line.line_no,
+            line_type: line.line_type,
+            sales_tax_rate: line.sales_tax_rate,
+            item_name_snapshot: line.item_name_snapshot.clone(),
+            spec_snapshot: line.spec_snapshot.clone(),
+            unit_snapshot: line.unit_snapshot.clone(),
+            goods: line.goods.clone(),
+            voucher: line.voucher.clone(),
+        });
+    }
+    Ok(datas)
+}
+
+/// 由行创建数据物化工作副本行实体。
+///
+/// # 参数
+/// * `working_copy_id` - 所属工作副本 ID
+/// * `line_datas` - 行创建数据
+///
+/// # 返回
+/// 返回工作副本行实体清单（金额由实体逐行舍入计算）。
+///
+/// # 错误
+/// 行字段组与行类型不一致、金额非法时返回错误。
+fn materialize_working_copy_lines(
+    working_copy_id: &SalesOrderWorkingCopyId,
+    line_datas: &[SalesOrderWorkingCopyLineData],
+) -> Result<Vec<SalesOrderWorkingCopyLine>> {
+    let mut built = Vec::with_capacity(line_datas.len());
+    for data in line_datas {
+        built.push(SalesOrderWorkingCopyLine::new(
+            SalesOrderWorkingCopyLineId::new(next_id()),
+            working_copy_id.clone(),
+            data.clone(),
+        )?);
+    }
+    Ok(built)
+}
+
+/// 构建工作副本行实体（草稿保存路径复用：稳定行 + 草稿请求 → 行实体）。
 ///
 /// # 参数
 /// * `_order_id` - 所属销售单（预留，稳定行 ID 由建单实体产生）
@@ -892,30 +1017,8 @@ fn build_working_copy_lines(
     stable_lines: &[SalesOrderLine],
     lines: &[SalesOrderDraftLineRequest],
 ) -> Result<Vec<SalesOrderWorkingCopyLine>> {
-    let mut built = Vec::with_capacity(lines.len());
-    for line in lines {
-        let stable_id = stable_lines
-            .iter()
-            .find(|stable| stable.line_no == line.line_no)
-            .map(|stable| stable.base.id.clone())
-            .ok_or_else(|| Error::ValidationError(format!("行号 {} 无对应稳定明细", line.line_no)))?;
-        built.push(SalesOrderWorkingCopyLine::new(
-            SalesOrderWorkingCopyLineId::new(next_id()),
-            working_copy_id.clone(),
-            SalesOrderWorkingCopyLineData {
-                sales_order_line_id: SalesOrderLineId::new(stable_id),
-                line_no: line.line_no,
-                line_type: line.line_type,
-                sales_tax_rate: line.sales_tax_rate,
-                item_name_snapshot: line.item_name_snapshot.clone(),
-                spec_snapshot: line.spec_snapshot.clone(),
-                unit_snapshot: line.unit_snapshot.clone(),
-                goods: line.goods.clone(),
-                voucher: line.voucher.clone(),
-            },
-        )?);
-    }
-    Ok(built)
+    let line_datas = build_working_copy_line_datas(stable_lines, lines)?;
+    materialize_working_copy_lines(working_copy_id, &line_datas)
 }
 
 /// 构建表头快照入参。
@@ -969,6 +1072,21 @@ fn build_submission(
     actor: &AuditActor,
 ) -> Result<SalesOrderSubmission> {
     let (gross, net, tax) = line_totals(lines);
+    // 提交头 `validate_line_list` 需要行摘要；行实体另集存储，但创建数据必须非空。
+    let mut line_datas = Vec::with_capacity(lines.len());
+    for line in lines {
+        line_datas.push(SalesOrderSubmissionLineData {
+            sales_order_line_id: line.sales_order_line_id.clone(),
+            line_no: line.line_no,
+            line_type: line.line_type,
+            sales_tax_rate: line.sales_tax_rate,
+            item_name_snapshot: line.item_name_snapshot.clone(),
+            spec_snapshot: line.spec_snapshot.clone(),
+            unit_snapshot: line.unit_snapshot.clone(),
+            goods: working_copy_goods(line)?,
+            voucher: working_copy_voucher(line)?,
+        });
+    }
     SalesOrderSubmission::new(
         SalesOrderSubmissionId::new(next_id()),
         SalesOrderSubmissionData {
@@ -1004,7 +1122,7 @@ fn build_submission(
             tax_amount: tax,
             submitted_at: Instant::now(),
             submitted_by: actor.id().to_string(),
-            lines: Vec::new(),
+            lines: line_datas,
         },
     )
     .map_err(Error::Logic)
@@ -1148,21 +1266,48 @@ fn working_copy_voucher(line: &SalesOrderWorkingCopyLine) -> Result<Option<Vouch
 ///
 /// # 参数
 /// * `submission` - 提交快照实体
+/// * `lines` - 该提交下的明细行
 ///
 /// # 返回
 /// 返回视图。
-fn submission_view(submission: SalesOrderSubmission) -> SubmissionView {
+fn submission_view(
+    submission: SalesOrderSubmission,
+    lines: Vec<SalesOrderSubmissionLine>,
+) -> SubmissionView {
     SubmissionView {
         id: submission.base.id,
         submission_no: submission.submission_no,
         status: submission.stable.status,
         business_type: submission.business_type,
+        customer_name: submission.customer_snapshot.customer_name.clone(),
+        contract_no: submission
+            .contract_snapshot
+            .as_ref()
+            .map(|s| s.contract_no.clone()),
+        settlement_party_name: submission
+            .settlement_party_snapshot
+            .as_ref()
+            .map(|s| s.settlement_party_name.clone()),
+        payment_term_code: submission.payment_term_snapshot.payment_term_code.clone(),
+        payment_term_name: submission.payment_term_snapshot.payment_term_name.clone(),
+        invoice_type: submission.invoice_requirement_snapshot.invoice_type.clone(),
+        tax_point: submission.invoice_requirement_snapshot.tax_point.clone(),
+        project_name: submission.project_name.clone(),
+        business_remark: submission.business_remark.clone(),
+        voucher_category_sku_id: submission
+            .voucher_category_sku_id
+            .as_ref()
+            .map(ToString::to_string),
+        voucher_expiry_at: submission
+            .voucher_expiry_at
+            .map(|instant| instant.unix_secs() as u64),
         gross_amount: submission.gross_amount,
         net_amount: submission.net_amount,
         tax_amount: submission.tax_amount,
         submitted_by: submission.submitted_by,
         submitted_at: submission.submitted_at.unix_secs() as u64,
         created_at: submission.base.created_at,
+        lines: lines.into_iter().map(submission_line_view).collect(),
     }
 }
 
@@ -1174,6 +1319,37 @@ fn submission_view(submission: SalesOrderSubmission) -> SubmissionView {
 /// # 返回
 /// 返回视图。
 fn working_copy_line_view(line: SalesOrderWorkingCopyLine) -> SalesOrderWorkingCopyLineView {
+    SalesOrderWorkingCopyLineView {
+        id: line.base.id,
+        sales_order_line_id: line.sales_order_line_id.to_string(),
+        line_no: line.line_no,
+        line_type: line.line_type,
+        gross_amount: line.gross_amount,
+        net_amount: line.net_amount,
+        tax_amount: line.tax_amount,
+        sales_tax_rate: line.sales_tax_rate,
+        item_name_snapshot: line.item_name_snapshot,
+        spec_snapshot: line.spec_snapshot,
+        unit_snapshot: line.unit_snapshot,
+        sku_id: line.sku_id,
+        quantity: line.quantity,
+        base_unit_code: line.base_unit_code,
+        unit_price_gross: line.unit_price_gross,
+        face_value: line.face_value,
+        card_count: line.card_count,
+        transaction_amount: line.transaction_amount,
+        card_form: line.card_form,
+    }
+}
+
+/// 构造提交明细行视图（与工作副本行视图同形）。
+///
+/// # 参数
+/// * `line` - 提交行实体
+///
+/// # 返回
+/// 返回视图。
+fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopyLineView {
     SalesOrderWorkingCopyLineView {
         id: line.base.id,
         sales_order_line_id: line.sales_order_line_id.to_string(),

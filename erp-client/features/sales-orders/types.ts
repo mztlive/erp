@@ -29,6 +29,9 @@ export type SalesOrderContractInput = {
 export type CreateSalesOrderInput = {
   contract: SalesOrderContractInput
   nature: SalesOrderNature
+  /** 负责销售用户 id（当前登录用户）。 */
+  ownerUserId: string
+  /** 负责销售展示名。 */
   ownerName: string
   welfareScene: string
   paymentTerms: string

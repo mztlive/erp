@@ -10,7 +10,6 @@ import {
   DiscardConfirmDialog,
   EditableLineItemTable,
   MoneyValue,
-  OwnerCombobox,
   PageHeader,
   PageScaffold,
   ProductCombobox,
@@ -26,6 +25,7 @@ import { useSelector } from "@tanstack/react-form"
 import type { StandardSchemaV1Issue } from "@tanstack/react-form"
 import {
   PAYMENT_TERM_OPTIONS,
+  WELFARE_SCENARIO_OPTIONS,
   paymentTermLabel,
 } from "@/lib/business-options"
 import {
@@ -52,15 +52,63 @@ import {
   useContractsForNewSalesOrderQuery,
 } from "@/features/contracts/queries"
 import type { UploadContractPdfResult } from "@/features/contracts/types"
+import type { StatusTone } from "@/components/ui/status-badge"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
+import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 import { useCreateSalesOrderMutation } from "@/features/sales-orders/queries"
-import { useOwnerOptionsQuery } from "@/hooks/use-options"
 import type {
   CreateSalesOrderInput,
   SalesOrderCreateIntent,
   SalesOrderDraftLineInput,
   SalesOrderNature,
 } from "@/features/sales-orders/types"
+
+/**
+ * 配赠由后端公式推导（§6.4）：
+ * gift_amount = face_value × qty − unit_price × qty
+ * gift_rate = gift_amount / transaction_amount
+ * 建单页只读预览，禁止手输。
+ */
+function deriveVoucherGiftPreview(
+  faceValue: string,
+  unitPriceGross: string,
+  quantity: string
+): { giftAmount: string; giftRatePercent: string } | null {
+  try {
+    if (!faceValue.trim() || !unitPriceGross.trim() || !quantity.trim()) {
+      return null
+    }
+    const faceTotal = multiplyFixed(faceValue, quantity, {
+      leftMaxScale: 2,
+      rightMaxScale: 6,
+      outputScale: 2,
+    })
+    const transaction = multiplyFixed(unitPriceGross, quantity, {
+      leftMaxScale: 4,
+      rightMaxScale: 6,
+      outputScale: 2,
+    })
+    if (compareDecimal(transaction, "0", 2) <= 0) return null
+    const giftAmount = sumFixed([faceTotal, `-${transaction}`], {
+      maxScale: 2,
+      outputScale: 2,
+      allowNegative: true,
+    })
+    // 预览用百分数，正式配赠率由服务端按成交金额分母落库
+    const gift = Number(giftAmount)
+    const txn = Number(transaction)
+    if (!Number.isFinite(gift) || !Number.isFinite(txn) || txn === 0) {
+      return null
+    }
+    return {
+      giftAmount,
+      giftRatePercent: ((gift / txn) * 100).toFixed(2),
+    }
+  } catch {
+    return null
+  }
+}
 
 const decimalInput = (
   label: string,
@@ -126,9 +174,16 @@ const createSalesOrderSchema = z
     settlementPartyId: z.string(),
     settlementEntity: z.string(),
     nature: z.enum(["physical_service", "card_voucher"]),
-    ownerUserId: z.string(),
-    ownerName: z.string().trim().min(1, "请选择负责销售"),
-    welfareScene: z.string().trim().min(1, "请输入福利场景"),
+    ownerUserId: z.string().trim().min(1, "负责销售未就绪，请刷新后重试"),
+    ownerName: z.string().trim().min(1, "负责销售未就绪，请刷新后重试"),
+    welfareScene: z
+      .string()
+      .trim()
+      .min(1, "请选择福利场景")
+      .refine(
+        (value) => WELFARE_SCENARIO_OPTIONS.some((o) => o.value === value),
+        "请选择有效的福利场景"
+      ),
     paymentTerms: z.string().trim().min(1, "请选择付款条件"),
     fulfillmentDeadline: z.string().min(1, "请选择履约期限"),
     taxRatePercent: decimalInput("税率", 6).refine(
@@ -176,6 +231,13 @@ const createSalesOrderSchema = z
     }
     value.lineItems.forEach((line, index) => {
       if (value.nature === "card_voucher") {
+        if (!line.sku.trim()) {
+          context.addIssue({
+            code: "custom",
+            path: ["lineItems", index, "sku"],
+            message: "请选择卡券类目",
+          })
+        }
         if (!/^\d+(?:\.\d{1,2})?$/.test(line.faceValue) || !/[1-9]/.test(line.faceValue)) {
           context.addIssue({
             code: "custom",
@@ -191,6 +253,13 @@ const createSalesOrderSchema = z
           })
         }
       } else {
+        if (!line.sku.trim()) {
+          context.addIssue({
+            code: "custom",
+            path: ["lineItems", index, "sku"],
+            message: "请选择商品/SKU",
+          })
+        }
         if (!line.fulfillmentMode.trim()) {
           context.addIssue({
             code: "custom",
@@ -281,7 +350,8 @@ function createEmptyLine(nature: SalesOrderNature): SalesOrderDraftLineInput {
     fulfillmentMode: nature === "physical_service" ? "公司仓发" : "",
     dueDate: "",
     faceValue: "",
-    giftRate: "0.00",
+    /** 配赠只读推导，不作为输入；保留字段供兼容提交快照。 */
+    giftRate: "",
     cardForm: nature === "card_voucher" ? "电子卡" : "",
   }
 }
@@ -297,7 +367,6 @@ function hasMeaningfulLines(
       line.quantity !== "1" ||
       line.unitPriceGross !== "0.00" ||
       line.faceValue !== "" ||
-      line.giftRate !== "0.00" ||
       line.dueDate !== ""
   )
 }
@@ -351,12 +420,17 @@ export function SalesOrderCreatePage({
 }) {
   const router = useRouter()
   const contractsQuery = useContractsForNewSalesOrderQuery()
-  const productsQuery = useMasterDataListQuery({
-    resource: "products",
+  /** 公司商品池（SKU）；按 product_kind 拆分实物与卡券候选。 */
+  const sellableQuery = useMasterDataListQuery({
+    resource: "sellable-items",
+    lifecycleStatus: "enabled",
+  })
+  const voucherCategoriesQuery = useMasterDataListQuery({
+    resource: "voucher-categories",
     lifecycleStatus: "enabled",
   })
   const createMutation = useCreateSalesOrderMutation()
-  const { data: ownerOptions } = useOwnerOptionsQuery()
+  const profileQuery = useAccountProfileQuery()
   const [selectedContractId, setSelectedContractId] =
     React.useState(initialContractId)
   const [uploadOpen, setUploadOpen] = React.useState(false)
@@ -364,23 +438,98 @@ export function SalesOrderCreatePage({
   const submitIntentRef = React.useRef<SalesOrderCreateIntent>("SAVE_DRAFT")
   const contractQuery = useContractCenterQuery(selectedContractId)
 
+  const isVoucherKind = React.useCallback((kind: string | undefined) => {
+    const value = kind?.trim()
+    if (!value) return false
+    return (
+      value === "VOUCHER" ||
+      value === PRODUCT_KIND_LABELS.VOUCHER ||
+      value === "卡券"
+    )
+  }, [])
+
+  const toComboboxItem = React.useCallback(
+    (
+      p: {
+        stableId: string
+        stableNo: string
+        name: string
+        lifecycleStatusLabel: string
+        lifecycleTone: StatusTone
+        keyFacts: ReadonlyArray<{ label: string; value: string }>
+      },
+      options?: { forceUnit?: string }
+    ) => {
+      const baseUnit =
+        options?.forceUnit ??
+        p.keyFacts.find((f) => f.label === "基础单位")?.value ??
+        ""
+      const note =
+        p.keyFacts.find((f) => f.label === "说明")?.value ??
+        p.keyFacts.find((f) => f.label === "商品类型")?.value
+      return {
+        productId: p.stableId,
+        sku: p.stableNo,
+        name: p.name,
+        statusLabel: p.lifecycleStatusLabel,
+        statusTone: p.lifecycleTone,
+        baseUnit,
+        description:
+          [baseUnit ? `单位 ${baseUnit}` : null, note]
+            .filter(Boolean)
+            .join(" · ") || undefined,
+      }
+    },
+    []
+  )
+
+  /** 实物/服务：公司商品池中非卡券 SKU。 */
   const productComboboxItems = React.useMemo(
     () =>
-      (productsQuery.data?.rows ?? []).map((p) => {
-        const baseUnit =
-          p.keyFacts.find((f) => f.label === "基础单位")?.value ?? ""
-        return {
-          productId: p.stableId,
-          sku: p.stableNo,
-          name: p.name,
-          statusLabel: p.lifecycleStatusLabel,
-          statusTone: p.lifecycleTone,
-          baseUnit,
-          description: baseUnit ? `单位 ${baseUnit}` : undefined,
-        }
-      }),
-    [productsQuery.data?.rows]
+      (sellableQuery.data?.rows ?? [])
+        .filter((p) => !isVoucherKind(p.productKind))
+        .map((p) => toComboboxItem(p)),
+    [isVoucherKind, sellableQuery.data?.rows, toComboboxItem]
   )
+
+  /**
+   * 卡券类目：优先正式卡券类目档案；若档案为空，回退公司商品池中的 VOUCHER SKU。
+   * 稳定身份均为 SKU id，供 voucher_category_sku_id / goods.sku_id 使用。
+   */
+  const voucherCategoryComboboxItems = React.useMemo(() => {
+    const fromProfiles = (voucherCategoriesQuery.data?.rows ?? []).map((p) =>
+      toComboboxItem(p, { forceUnit: "张" })
+    )
+    if (fromProfiles.length > 0) return fromProfiles
+    return (sellableQuery.data?.rows ?? [])
+      .filter((p) => isVoucherKind(p.productKind))
+      .map((p) => toComboboxItem(p, { forceUnit: "张" }))
+  }, [
+    isVoucherKind,
+    sellableQuery.data?.rows,
+    toComboboxItem,
+    voucherCategoriesQuery.data?.rows,
+  ])
+
+  const productPickerLoading =
+    sellableQuery.isPending || sellableQuery.isFetching
+  const voucherPickerLoading =
+    voucherCategoriesQuery.isPending ||
+    voucherCategoriesQuery.isFetching ||
+    (voucherCategoriesQuery.isSuccess &&
+      (voucherCategoriesQuery.data?.rows.length ?? 0) === 0 &&
+      sellableQuery.isPending)
+  const productPickerEmptyLabel = sellableQuery.isError
+    ? "商品列表加载失败，请刷新重试"
+    : productComboboxItems.length === 0
+      ? "暂无可用的实物/服务 SKU（已排除卡券）"
+      : "没有符合条件的商品"
+  const voucherPickerEmptyLabel = voucherCategoriesQuery.isError &&
+    sellableQuery.isError
+    ? "卡券类目加载失败，请刷新重试"
+    : voucherCategoryComboboxItems.length === 0
+      ? "暂无可用的卡券类目"
+      : "没有符合条件的卡券类目"
 
   /**
    * 必须稳定：createEmptyLine 每次生成新 rowKey。
@@ -429,6 +578,7 @@ export function SalesOrderCreatePage({
           requestedContractRevisionId: value.requestedContractRevisionId,
         },
         nature: value.nature,
+        ownerUserId: value.ownerUserId,
         ownerName: value.ownerName,
         welfareScene: value.welfareScene,
         paymentTerms: paymentTermLabel(value.paymentTerms) || value.paymentTerms,
@@ -525,18 +675,24 @@ export function SalesOrderCreatePage({
       "settlementEntity",
       contract.currentRevision.settlementParty.displayName
     )
-    const ownerLabel = contract.ownerLabel.split(" · ")[0] ?? ""
-    const ownerMatch = (ownerOptions ?? []).find(
-      (o) => o.displayName === ownerLabel
-    )
-    form.setFieldValue("ownerUserId", ownerMatch?.userId ?? "")
-    form.setFieldValue("ownerName", ownerLabel)
+    // 负责销售固定为当前登录用户，不随合同变更覆盖
     const termLabel = contract.currentRevision.paymentTermSnapshot.label
     const termMatch = PAYMENT_TERM_OPTIONS.find(
       (o) => o.label === termLabel || o.value === termLabel
     )
     form.setFieldValue("paymentTerms", termMatch?.value ?? "CONTRACT")
-  }, [contractQuery.data, form, ownerOptions])
+  }, [contractQuery.data, form])
+
+  /** 负责销售固定为当前登录用户。 */
+  React.useEffect(() => {
+    const profile = profileQuery.data
+    if (!profile) return
+    const userId = profile.userid?.trim()
+    const displayName = (profile.name || profile.account || "").trim()
+    if (!userId || !displayName) return
+    form.setFieldValue("ownerUserId", userId)
+    form.setFieldValue("ownerName", displayName)
+  }, [form, profileQuery.data])
 
   const handleContractChange = React.useCallback(
     (contractId: string) => {
@@ -784,49 +940,43 @@ export function SalesOrderCreatePage({
                       />
                     )}
                   </form.AppField>
-                  <form.AppField
-                    name="ownerUserId"
-                    validators={{
-                      onBlur: z.string().min(1, "请选择负责销售"),
-                    }}
-                  >
-                    {(field) => {
-                      const isInvalid =
-                        field.state.meta.isTouched && !field.state.meta.isValid
-                      const errors = toFieldErrors(field.state.meta.errors)
-                      return (
-                        <Field data-invalid={isInvalid || undefined}>
-                          <FieldLabel htmlFor="ownerUserId">负责销售</FieldLabel>
-                          <OwnerCombobox
-                            value={field.state.value || undefined}
-                            onValueChange={(id) => {
-                              const next = id ?? ""
-                              field.handleChange(next)
-                              form.setFieldValue(
-                                "ownerName",
-                                ownerOptions?.find(
-                                  (o) => o.userId === next
-                                )?.displayName ?? ""
-                              )
-                            }}
-                            owners={ownerOptions ?? []}
-                            placeholder="搜索负责人"
-                          />
-                          {isInvalid ? <FieldError errors={errors} /> : null}
-                        </Field>
-                      )
-                    }}
+                  <form.AppField name="ownerName">
+                    {(field) => (
+                      <field.TextField
+                        label="负责销售"
+                        disabled
+                        placeholder={
+                          profileQuery.isPending
+                            ? "加载当前用户…"
+                            : profileQuery.isError
+                              ? "无法获取登录用户"
+                              : "当前登录用户"
+                        }
+                        description="固定为当前登录用户，不可更改"
+                      />
+                    )}
                   </form.AppField>
                   <form.AppField
                     name="welfareScene"
                     validators={{
-                      onBlur: z.string().trim().min(1, "请输入福利场景"),
+                      onBlur: z
+                        .string()
+                        .trim()
+                        .min(1, "请选择福利场景")
+                        .refine(
+                          (value) =>
+                            WELFARE_SCENARIO_OPTIONS.some(
+                              (o) => o.value === value
+                            ),
+                          "请选择有效的福利场景"
+                        ),
                     }}
                   >
                     {(field) => (
-                      <field.TextField
+                      <field.SelectField
                         label="福利场景"
-                        placeholder="年节礼包、慰问品…"
+                        options={WELFARE_SCENARIO_OPTIONS}
+                        placeholder="选择福利场景"
                       />
                     )}
                   </form.AppField>
@@ -902,73 +1052,67 @@ export function SalesOrderCreatePage({
                         renderValue: ({ item }) => item.name,
                         renderEditor: ({ rowIndex }) =>
                           nature === "card_voucher" ? (
-                            <div className="flex min-w-52 items-start gap-2">
-                              <div className="min-w-0 flex-1">
-                                <form.AppField
-                                  name={`lineItems[${rowIndex}].name`}
-                                >
-                                  {(field) => (
-                                    <field.TextField
-                                      label="销售项目"
-                                      hideLabel
-                                      placeholder="卡券类目"
-                                    />
-                                  )}
-                                </form.AppField>
-                              </div>
-                              <div className="w-24 shrink-0">
-                                <form.AppField
-                                  name={`lineItems[${rowIndex}].sku`}
-                                >
-                                  {(field) => (
-                                    <field.TextField
-                                      label="类目编码"
-                                      hideLabel
-                                      placeholder="编码"
-                                    />
-                                  )}
-                                </form.AppField>
-                              </div>
+                            <div className="min-w-52">
+                              <form.AppField
+                                name={`lineItems[${rowIndex}].sku`}
+                              >
+                                {(field) => (
+                                  <ProductCombobox
+                                    value={field.state.value || undefined}
+                                    onValueChange={(id) => {
+                                      const category =
+                                        voucherCategoryComboboxItems.find(
+                                          (p) => p.productId === id
+                                        )
+                                      // 提交 voucher_category_sku_id 用 SKU 稳定 id
+                                      field.handleChange(id ?? "")
+                                      form.setFieldValue(
+                                        `lineItems[${rowIndex}].name`,
+                                        category?.name ?? ""
+                                      )
+                                      form.setFieldValue(
+                                        `lineItems[${rowIndex}].unit`,
+                                        "张"
+                                      )
+                                    }}
+                                    products={voucherCategoryComboboxItems}
+                                    loading={voucherPickerLoading}
+                                    placeholder="搜索卡券类目"
+                                    emptyLabel={voucherPickerEmptyLabel}
+                                  />
+                                )}
+                              </form.AppField>
                             </div>
                           ) : (
                             <div className="min-w-48">
                               <form.AppField
                                 name={`lineItems[${rowIndex}].sku`}
                               >
-                                {(field) => {
-                                  const productId =
-                                    productComboboxItems.find(
-                                      (p) => p.sku === field.state.value
-                                    )?.productId ??
-                                    productComboboxItems.find(
-                                      (p) =>
-                                        p.name ===
-                                        values.lineItems[rowIndex]?.name
-                                    )?.productId
-                                  return (
-                                    <ProductCombobox
-                                      value={productId}
-                                      onValueChange={(id) => {
-                                        const product =
-                                          productComboboxItems.find(
-                                            (p) => p.productId === id
-                                          )
-                                        field.handleChange(product?.sku ?? "")
-                                        form.setFieldValue(
-                                          `lineItems[${rowIndex}].name`,
-                                          product?.name ?? ""
+                                {(field) => (
+                                  <ProductCombobox
+                                    value={field.state.value || undefined}
+                                    onValueChange={(id) => {
+                                      const product =
+                                        productComboboxItems.find(
+                                          (p) => p.productId === id
                                         )
-                                        form.setFieldValue(
-                                          `lineItems[${rowIndex}].unit`,
-                                          product?.baseUnit ?? ""
-                                        )
-                                      }}
-                                      products={productComboboxItems}
-                                      loading={productsQuery.isPending}
-                                      placeholder="搜索 SKU 或商品名称"
-                                    />
-                                  )
-                                }}
+                                      // 公司商品池稳定身份 = sku_id
+                                      field.handleChange(id ?? "")
+                                      form.setFieldValue(
+                                        `lineItems[${rowIndex}].name`,
+                                        product?.name ?? ""
+                                      )
+                                      form.setFieldValue(
+                                        `lineItems[${rowIndex}].unit`,
+                                        product?.baseUnit ?? ""
+                                      )
+                                    }}
+                                    products={productComboboxItems}
+                                    loading={productPickerLoading}
+                                    placeholder="搜索 SKU 或商品名称"
+                                    emptyLabel={productPickerEmptyLabel}
+                                  />
+                                )}
                               </form.AppField>
                             </div>
                           ),
@@ -1043,17 +1187,17 @@ export function SalesOrderCreatePage({
                           </form.AppField>
                         ),
                       },
-                      nature === "card_voucher"
-                        ? {
-                            id: "voucher",
-                            header: "卡券条件",
-                            renderValue: ({ item }) =>
-                              [item.faceValue, item.giftRate, item.cardForm]
-                                .filter(Boolean)
-                                .join(" · "),
-                            renderEditor: ({ rowIndex }) => (
-                              <div className="flex min-w-56 items-start gap-2">
-                                <div className="w-20 shrink-0">
+                      ...(nature === "card_voucher"
+                        ? ([
+                            {
+                              id: "faceValue",
+                              header: "面值",
+                              numeric: true,
+                              align: "end",
+                              renderValue: ({ item }) =>
+                                item.faceValue || "—",
+                              renderEditor: ({ rowIndex }) => (
+                                <div className="min-w-20">
                                   <form.AppField
                                     name={`lineItems[${rowIndex}].faceValue`}
                                   >
@@ -1062,28 +1206,60 @@ export function SalesOrderCreatePage({
                                         label="面值"
                                         hideLabel
                                         type="number"
-                                        placeholder="面值"
-                                        inputClassName="num"
+                                        placeholder="0.00"
+                                        className="gap-0"
+                                        inputClassName="num min-w-20 text-right"
                                       />
                                     )}
                                   </form.AppField>
                                 </div>
-                                <div className="w-20 shrink-0">
-                                  <form.AppField
-                                    name={`lineItems[${rowIndex}].giftRate`}
+                              ),
+                            },
+                            {
+                              id: "gift",
+                              header: "配赠",
+                              numeric: true,
+                              align: "end",
+                              renderValue: ({ item }) => {
+                                const gift = deriveVoucherGiftPreview(
+                                  item.faceValue,
+                                  item.unitPriceGross,
+                                  item.quantity
+                                )
+                                return gift
+                                  ? `${gift.giftRatePercent}%`
+                                  : "—"
+                              },
+                              renderEditor: ({ rowIndex }) => {
+                                const line = values.lineItems[rowIndex]
+                                const gift = deriveVoucherGiftPreview(
+                                  line?.faceValue ?? "",
+                                  line?.unitPriceGross ?? "",
+                                  line?.quantity ?? ""
+                                )
+                                return (
+                                  <span
+                                    className="num flex h-8 min-w-16 items-center justify-end text-sm tabular-nums text-muted-foreground"
+                                    title={
+                                      gift
+                                        ? `配赠率 ${gift.giftRatePercent}%（金额 ${gift.giftAmount}）。配赠 = 面值小计 − 成交金额，系统计算不可改。`
+                                        : "配赠率 = 配赠金额 / 成交金额；填入面值、单价与数量后自动计算"
+                                    }
                                   >
-                                    {(field) => (
-                                      <field.TextField
-                                        label="配赠率（%）"
-                                        hideLabel
-                                        type="number"
-                                        placeholder="配赠%"
-                                        inputClassName="num"
-                                      />
-                                    )}
-                                  </form.AppField>
-                                </div>
-                                <div className="min-w-20 flex-1">
+                                    {gift
+                                      ? `${gift.giftRatePercent}%`
+                                      : "—"}
+                                  </span>
+                                )
+                              },
+                            },
+                            {
+                              id: "cardForm",
+                              header: "卡形态",
+                              renderValue: ({ item }) =>
+                                item.cardForm || "—",
+                              renderEditor: ({ rowIndex }) => (
+                                <div className="min-w-24">
                                   <form.AppField
                                     name={`lineItems[${rowIndex}].cardForm`}
                                   >
@@ -1092,32 +1268,37 @@ export function SalesOrderCreatePage({
                                         label="卡形态"
                                         hideLabel
                                         options={CARD_FORM_OPTIONS}
+                                        allowClear={false}
+                                        className="gap-0"
+                                        inputClassName="w-full"
                                       />
                                     )}
                                   </form.AppField>
                                 </div>
-                              </div>
-                            ),
-                          }
-                        : {
-                            id: "fulfillment",
-                            header: "交付日期",
-                            renderValue: ({ item }) => item.dueDate || "—",
-                            renderEditor: ({ rowIndex }) => (
-                              <div className="min-w-32">
-                                <form.AppField
-                                  name={`lineItems[${rowIndex}].dueDate`}
-                                >
-                                  {(field) => (
-                                    <field.DateField
-                                      label="交付日期"
-                                      hideLabel
-                                    />
-                                  )}
-                                </form.AppField>
-                              </div>
-                            ),
-                          },
+                              ),
+                            },
+                          ] satisfies EditableLineItemColumn<SalesOrderDraftLineInput>[])
+                        : ([
+                            {
+                              id: "fulfillment",
+                              header: "交付日期",
+                              renderValue: ({ item }) => item.dueDate || "—",
+                              renderEditor: ({ rowIndex }) => (
+                                <div className="min-w-32">
+                                  <form.AppField
+                                    name={`lineItems[${rowIndex}].dueDate`}
+                                  >
+                                    {(field) => (
+                                      <field.DateField
+                                        label="交付日期"
+                                        hideLabel
+                                      />
+                                    )}
+                                  </form.AppField>
+                                </div>
+                              ),
+                            },
+                          ] satisfies EditableLineItemColumn<SalesOrderDraftLineInput>[])),
                       {
                         id: "amount",
                         header: "含税小计",

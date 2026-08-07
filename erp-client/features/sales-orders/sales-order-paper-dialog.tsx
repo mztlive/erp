@@ -9,6 +9,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { welfareScenarioLabel } from "@/lib/business-options"
 import {
   NATURE_LABEL,
   ORIGIN_LABEL,
@@ -135,7 +136,7 @@ function SalesOrderPaperDocument({ order }: { order: SalesOrderListItem }) {
         {
           id: "scene",
           label: "福利场景",
-          value: order.welfareScene,
+          value: welfareScenarioLabel(order.welfareScene),
         },
         {
           id: "origin-system",

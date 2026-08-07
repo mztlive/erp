@@ -9,6 +9,7 @@
 import { apiGet, apiPost, apiPut } from "@/lib/api"
 import type { ApiError } from "@/lib/api/errors"
 import type { StatusTone } from "@/components/ui/status-badge"
+import { welfareScenarioLabel } from "@/lib/business-options"
 import { computeSalesOrderMetrics } from "@/features/sales-orders/filter-orders"
 import type {
   ActionBlocker,
@@ -133,6 +134,17 @@ type BackendWorkingCopy = {
   content_hash: string
   editor_user_id: string
   business_type: string
+  customer_name?: string
+  contract_no?: string | null
+  settlement_party_name?: string | null
+  payment_term_code?: string
+  payment_term_name?: string
+  invoice_type?: string
+  tax_point?: string
+  project_name?: string | null
+  business_remark?: string | null
+  voucher_category_sku_id?: string | null
+  voucher_expiry_at?: number | null
   gross_amount: string
   net_amount: string
   tax_amount: string
@@ -144,12 +156,24 @@ type BackendSubmission = {
   submission_no: number
   status: string
   business_type: string
+  customer_name?: string
+  contract_no?: string | null
+  settlement_party_name?: string | null
+  payment_term_code?: string
+  payment_term_name?: string
+  invoice_type?: string
+  tax_point?: string
+  project_name?: string | null
+  business_remark?: string | null
+  voucher_category_sku_id?: string | null
+  voucher_expiry_at?: number | null
   gross_amount: string
   net_amount: string
   tax_amount: string
   submitted_by: string
   submitted_at: number
   created_at: number
+  lines?: BackendWorkingCopyLine[]
 }
 
 type BackendRevision = {
@@ -362,29 +386,41 @@ function mapPrimaryStatus(
 ): { label: string; tone: StatusTone } {
   if (close === "CLOSED") return { label: "已关闭", tone: "void" }
   if (commercial === "VOIDED") return { label: "已作废", tone: "void" }
-  if (commercial === "DRAFT") return { label: "草稿", tone: "neutral" }
   if (commercial === "EFFECTIVE") {
     if (fulfillment === "PARTIALLY_FULFILLED")
       return { label: "履约中", tone: "info" }
     return { label: "已生效", tone: "success" }
   }
-  // PENDING_REVIEW — 用审核轨细化
-  switch (review) {
-    case "PENDING_PROCUREMENT_CONFIRMATION":
-      return { label: "待二次确认", tone: "warning" }
-    case "PENDING_LOW_MARGIN_SUPERIOR":
-      return { label: "待销售处理", tone: "warning" }
-    case "PENDING_SALES_LEADER":
-      return { label: "待销售领导审批", tone: "warning" }
-    case "PENDING_OPERATIONS":
-      return { label: "待运营审批", tone: "warning" }
-    case "REJECTED":
-      return { label: "待销售处理", tone: "warning" }
-    case "APPROVED":
-      return { label: "已生效", tone: "success" }
-    default:
-      return { label: "审核中", tone: "warning" }
+  // 商业态仍为 DRAFT 时，只要已进入审核轨就按审核态展示（提交后常见组合）
+  if (
+    commercial === "DRAFT" ||
+    commercial === "PENDING_REVIEW" ||
+    commercial === "IN_REVIEW"
+  ) {
+    switch (review) {
+      case "PENDING_PROCUREMENT_CONFIRMATION":
+        return { label: "待二次确认", tone: "warning" }
+      case "PENDING_LOW_MARGIN_SUPERIOR":
+        return { label: "待销售处理", tone: "warning" }
+      case "PENDING_SALES_LEADER":
+        return { label: "待销售领导审批", tone: "warning" }
+      case "PENDING_OPERATIONS":
+        return { label: "待运营审批", tone: "warning" }
+      case "REJECTED":
+        return { label: "待销售处理", tone: "warning" }
+      case "APPROVED":
+        return { label: "已生效", tone: "success" }
+      case "NOT_SUBMITTED":
+      case "":
+        if (commercial === "DRAFT") return { label: "草稿", tone: "neutral" }
+        break
+      default:
+        if (review) return { label: "审核中", tone: "warning" }
+    }
+    if (commercial === "DRAFT") return { label: "草稿", tone: "neutral" }
+    return { label: "审核中", tone: "warning" }
   }
+  return { label: "进行中", tone: "info" }
 }
 
 function mapFulfillment(code: string): ProgressTrack {
@@ -538,6 +574,7 @@ function mapListItemFromBackend(
     ownerName?: string
     paymentTerms?: string
     welfareScene?: string
+    fulfillmentDeadline?: string
     remark?: string
     settlementEntity?: string
     revisions?: SalesOrderRevisionSnapshot[]
@@ -604,7 +641,7 @@ function mapListItemFromBackend(
     settlementEntity: extras?.settlementEntity ?? "",
     sellerEntity: "",
     paymentTerms: extras?.paymentTerms ?? "",
-    fulfillmentDeadline: "",
+    fulfillmentDeadline: extras?.fulfillmentDeadline ?? "",
     lineItems: extras?.lineItems ?? [],
     related: {
       purchaseOrders: 0,
@@ -635,19 +672,102 @@ function mapListItemFromBackend(
   }
 }
 
+function formatEpochDate(secs?: number | null): string {
+  if (secs == null || !Number.isFinite(secs) || secs <= 0) return ""
+  try {
+    const d = new Date(secs * 1000)
+    if (Number.isNaN(d.getTime())) return ""
+    const y = d.getFullYear()
+    const m = String(d.getMonth() + 1).padStart(2, "0")
+    const day = String(d.getDate()).padStart(2, "0")
+    return `${y}-${m}-${day}`
+  } catch {
+    return ""
+  }
+}
+
+/**
+ * 详情商业内容优先：可编辑草稿 → 最新提交快照。
+ * 提交后 working_copy 为空时必须从 submission 回填明细与表头。
+ */
+function pickCommercialContent(detail: BackendSalesOrderDetail): {
+  lines: BackendWorkingCopyLine[]
+  amountGross?: string
+  amountNet?: string
+  taxAmount?: string
+  ownerUserId: string
+  customerName?: string
+  contractNo?: string
+  settlementPartyName?: string
+  paymentTerms: string
+  welfareScene: string
+  fulfillmentDeadline: string
+  remark?: string
+} {
+  const wc = detail.working_copy
+  const submissions = [...(detail.submissions ?? [])].sort(
+    (a, b) => (b.submission_no ?? 0) - (a.submission_no ?? 0)
+  )
+  const latestSubmission = submissions[0]
+
+  if (wc?.lines?.length) {
+    return {
+      lines: wc.lines,
+      amountGross: wc.gross_amount,
+      amountNet: wc.net_amount,
+      taxAmount: wc.tax_amount,
+      ownerUserId: wc.editor_user_id || latestSubmission?.submitted_by || "",
+      customerName: wc.customer_name || undefined,
+      contractNo: wc.contract_no || undefined,
+      settlementPartyName: wc.settlement_party_name || undefined,
+      paymentTerms: wc.payment_term_name || wc.payment_term_code || "",
+      welfareScene: wc.project_name || "",
+      fulfillmentDeadline: formatEpochDate(wc.voucher_expiry_at),
+      remark: wc.business_remark || undefined,
+    }
+  }
+
+  if (latestSubmission) {
+    return {
+      lines: latestSubmission.lines ?? [],
+      amountGross: latestSubmission.gross_amount,
+      amountNet: latestSubmission.net_amount,
+      taxAmount: latestSubmission.tax_amount,
+      ownerUserId: latestSubmission.submitted_by || "",
+      customerName: latestSubmission.customer_name || undefined,
+      contractNo: latestSubmission.contract_no || undefined,
+      settlementPartyName: latestSubmission.settlement_party_name || undefined,
+      paymentTerms:
+        latestSubmission.payment_term_name ||
+        latestSubmission.payment_term_code ||
+        "",
+      welfareScene: latestSubmission.project_name || "",
+      fulfillmentDeadline: formatEpochDate(latestSubmission.voucher_expiry_at),
+      remark: latestSubmission.business_remark || undefined,
+    }
+  }
+
+  return {
+    lines: [],
+    ownerUserId: "",
+    paymentTerms: "",
+    welfareScene: "",
+    fulfillmentDeadline: "",
+  }
+}
+
 function mapDetailToListItem(
   detail: BackendSalesOrderDetail,
   extras?: {
     customerName?: string
     contractNumber?: string
+    ownerName?: string
     procurementRejection?: ProcurementRejectionResolution | null
     activeCardSalesApproval?: CardSalesApproval | null
     activeChangeOrder?: SalesChangeOrderSummary | null
   }
 ): SalesOrderListItem {
-  const wc = detail.working_copy
-  const latestSubmission = detail.submissions?.[0]
-  const amountSource = wc ?? latestSubmission
+  const commercial = pickCommercialContent(detail)
   return mapListItemFromBackend(
     {
       id: detail.id,
@@ -668,18 +788,26 @@ function mapDetailToListItem(
       updated_at: detail.created_at,
     },
     {
-      customerName: extras?.customerName ?? wc?.editor_user_id,
-      contractNumber: extras?.contractNumber,
-      amountGross: amountSource?.gross_amount,
-      amountNet: amountSource?.net_amount,
-      taxAmount: amountSource?.tax_amount,
-      lineItems: mapWorkingCopyLines(wc?.lines),
-      ownerName: wc?.editor_user_id ?? latestSubmission?.submitted_by ?? "",
+      customerName:
+        extras?.customerName ||
+        commercial.customerName ||
+        detail.customer_id,
+      contractNumber: extras?.contractNumber || commercial.contractNo || "",
+      amountGross: commercial.amountGross,
+      amountNet: commercial.amountNet,
+      taxAmount: commercial.taxAmount,
+      lineItems: mapWorkingCopyLines(commercial.lines),
+      ownerName: extras?.ownerName || commercial.ownerUserId || "",
+      paymentTerms: commercial.paymentTerms,
+      welfareScene: commercial.welfareScene,
+      fulfillmentDeadline: commercial.fulfillmentDeadline,
+      remark: commercial.remark,
       revisions: mapRevisions(detail.revisions),
       procurementRejection: extras?.procurementRejection,
       activeCardSalesApproval: extras?.activeCardSalesApproval,
       activeChangeOrder: extras?.activeChangeOrder,
-      settlementEntity: detail.settlement_party_id,
+      settlementEntity:
+        commercial.settlementPartyName || detail.settlement_party_id,
     }
   )
 }
@@ -838,6 +966,32 @@ function mapFulfillmentMode(label: string): string {
 
 function mapCardForm(label: string): string {
   return label.includes("实体") ? "PHYSICAL" : "ELECTRONIC"
+}
+
+/** 福利场景：表单码 / 中文 → 后端 SCREAMING_SNAKE_CASE；无法识别则 null。 */
+function mapWelfareScenarioCode(raw: string): string | null {
+  const value = raw.trim()
+  if (!value) return null
+  switch (value) {
+    case "ANNUAL_GIFT_BAG":
+    case "年节礼包":
+      return "ANNUAL_GIFT_BAG"
+    case "MEAL_SUBSIDY":
+    case "餐补":
+      return "MEAL_SUBSIDY"
+    case "CONDOLENCE_GIFT":
+    case "慰问品":
+      return "CONDOLENCE_GIFT"
+    case "CONSUMPTION_FUND":
+    case "消费金":
+      return "CONSUMPTION_FUND"
+    case "OTHER":
+    case "其他":
+    case "其它":
+      return "OTHER"
+    default:
+      return null
+  }
 }
 
 function percentToRate(percent: string): string {
@@ -1005,9 +1159,26 @@ export async function fetchSalesOrderDetail(
   }
 
   const extras = await loadDetailExtras(id, mapNature(detail.business_type))
+  // 负责人 id → 显示名（账号列表）
+  let ownerName: string | undefined
+  const commercialPreview = pickCommercialContent(detail)
+  const ownerId = commercialPreview.ownerUserId
+  if (ownerId) {
+    try {
+      const admins = await apiGet<Array<{ id: string; name?: string; account?: string }>>(
+        "/admin/admins",
+        {}
+      )
+      const hit = admins.find((a) => a.id === ownerId)
+      ownerName = hit?.name || hit?.account || ownerId
+    } catch {
+      ownerName = ownerId
+    }
+  }
   const order = mapDetailToListItem(detail, {
     customerName,
     contractNumber,
+    ownerName,
     ...extras,
   })
 
@@ -1113,7 +1284,8 @@ export async function createSalesOrder(
         face_value_total: faceTotal,
         transaction_amount: txn,
         gift_amount: gift,
-        gift_rate: line.giftRate ? percentToRate(line.giftRate) : null,
+        // 配赠率由服务端按 gift_amount / transaction_amount 推导，前端不手输
+        gift_rate: null,
         card_form: mapCardForm(line.cardForm || "电子卡"),
       }
     } else {
@@ -1126,7 +1298,7 @@ export async function createSalesOrder(
       base.goods = {
         sku_id: skuId || "unknown-sku",
         sku_revision_id: skuId || "unknown-sku-revision",
-        welfare_scenario: null,
+        welfare_scenario: mapWelfareScenarioCode(input.welfareScene),
         fulfillment_mode: mapFulfillmentMode(line.fulfillmentMode || "公司仓发"),
         fulfillment_due_at: dateToUnixSecs(line.dueDate),
         quantity: line.quantity || "0",
@@ -1147,7 +1319,8 @@ export async function createSalesOrder(
     idempotency_key: input.idempotencyKey,
     intent: input.intent,
     draft: {
-      editor_user_id: input.ownerName.trim() || "unknown",
+      editor_user_id:
+        input.ownerUserId.trim() || input.ownerName.trim() || "unknown",
       customer_name: requested.customer_name,
       contract_no: contract.contract_no,
       settlement_party_name: requested.settlement_party_name,
@@ -1156,7 +1329,8 @@ export async function createSalesOrder(
         input.paymentTerms.trim() || requested.payment_term_name || "合同约定",
       invoice_type: requested.invoice_type || "SPECIAL",
       tax_point: requested.tax_point || input.taxRatePercent || "0",
-      project_name: input.welfareScene.trim() || null,
+      // 表头项目名称存中文快照，便于列表/纸质件直接展示
+      project_name: welfareScenarioLabel(input.welfareScene) || null,
       business_remark: input.remark.trim() || null,
       voucher_category_sku_id:
         input.nature === "card_voucher"

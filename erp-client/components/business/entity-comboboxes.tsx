@@ -301,6 +301,8 @@ export type ProductComboboxItem = Readonly<{
   statusLabel?: string
   statusTone?: StatusTone
   description?: string
+  /** SKU 基础单位名称；选中后由建单页只读带出。 */
+  baseUnit?: string
 }>
 
 export type ProductComboboxProps = EntityComboboxBaseProps & {

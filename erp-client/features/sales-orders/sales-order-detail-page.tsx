@@ -33,6 +33,7 @@ import {
   surfaceInsetClassName,
   surfacePanelClassName,
 } from "@/components/business"
+import { welfareScenarioLabel } from "@/lib/business-options"
 import {
   Alert,
   AlertDescription,
@@ -685,7 +686,7 @@ export function SalesOrderDetailPage({
                 {
                   id: "scene",
                   label: "福利场景",
-                  value: order.welfareScene,
+                  value: welfareScenarioLabel(order.welfareScene),
                 },
                 {
                   id: "payment",
