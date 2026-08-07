@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/dialog"
 import { FileUpload, imagePreviewSource } from "@/components/ui/file-upload"
 import { Label } from "@/components/ui/label"
+import { toast } from "@/components/ui/toast"
 import { uploadFileAssetImage } from "@/features/file-assets/api"
 import { masterDataCopy } from "@/features/master-data/copy"
 import {
@@ -74,6 +75,19 @@ import { cn } from "@/lib/utils"
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** 编辑成功后以 toast 提示结果，不再在 Dialog 内展示结果面板。 */
+function notifySuccess(
+  title: string,
+  result: Extract<MasterDataMutationResult, { outcome: "succeeded" }>
+) {
+  toast.add({
+    title,
+    description: `${masterDataCopy.resultNo} ${result.stableNo} · v${result.revisionNo}`,
+    type: "success",
+    timeout: 4000,
+  })
 }
 
 /** 品牌 Logo 保存前上传：返回回填 asset id / URL 后的品牌字段。 */
@@ -552,6 +566,37 @@ function ResourceFieldsSection({
 
   const fieldExtras = { categoryParentOptions, media: mediaContext }
 
+  // 品牌：名称与品牌代码同行，Logo 独占一行，避免窄对话框里纵向堆叠过长。
+  if (resource === "brands") {
+    const codeDef = defs.find((def) => def.key === "code")
+    const logoDef = defs.find((def) => def.key === "logo")
+    return (
+      <fieldset className="space-y-3 rounded-md border border-border p-3">
+        <legend className="px-1 text-xs text-muted-foreground">
+          {masterDataCopy.fieldResourceSection}
+        </legend>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <form.AppField
+            name="name"
+            children={(field) => <field.TextField label="名称" />}
+          />
+          {codeDef ? (
+            <form.AppField
+              name={codeDef.key}
+              children={(field) => renderStandardField(codeDef, field, fieldExtras)}
+            />
+          ) : null}
+        </div>
+        {logoDef ? (
+          <form.AppField
+            name={logoDef.key}
+            children={(field) => renderStandardField(logoDef, field, fieldExtras)}
+          />
+        ) : null}
+      </fieldset>
+    )
+  }
+
   if (!wide || resource !== "products") {
     return (
       <fieldset className="space-y-3 rounded-md border border-border p-3">
@@ -619,35 +664,6 @@ function ResourceFieldsSection({
       </fieldset>
     </div>
   )
-}
-
-function resultFacts(
-  result: Extract<MasterDataMutationResult, { outcome: "succeeded" }>
-) {
-  return [
-    { label: masterDataCopy.resultNo, value: result.stableNo },
-    { label: masterDataCopy.resultVersion, value: `v${result.revisionNo}` },
-    {
-      label: masterDataCopy.resultVersionState,
-      value:
-        result.revisionState === "FUTURE"
-          ? masterDataCopy.versionStateFuture
-          : masterDataCopy.versionStateCurrent,
-    },
-    {
-      label: masterDataCopy.resultEffective,
-      value: result.effectiveFrom,
-    },
-    {
-      label: masterDataCopy.resultActor,
-      value: result.actor,
-    },
-    {
-      label: masterDataCopy.resultAt,
-      value: result.recordedAt.slice(0, 19).replace("T", " "),
-    },
-    { label: masterDataCopy.resultReason, value: result.changeReason },
-  ]
 }
 
 const disableSchema = z.object({
@@ -771,6 +787,12 @@ export function MasterDataCreateDialog({
         fields,
         idempotencyKey,
       })
+      if (response.outcome === "succeeded") {
+        notifySuccess(masterDataCopy.createSuccessTitle, response)
+        reset()
+        onOpenChange(false)
+        return
+      }
       setResult(response)
     },
   })
@@ -818,16 +840,6 @@ export function MasterDataCreateDialog({
             </Alert>
           ) : null}
 
-          {result?.outcome === "succeeded" ? (
-            <FormalActionResult
-              status="succeeded"
-              title={masterDataCopy.createSuccessTitle}
-              description={masterDataCopy.createSuccessDesc}
-              reference={result.reference}
-              facts={resultFacts(result)}
-            />
-          ) : null}
-
           {result?.outcome === "blocked" ? (
             <FormalActionResult
               status="blocked"
@@ -849,10 +861,12 @@ export function MasterDataCreateDialog({
                 void form.handleSubmit()
               }}
             >
-              <form.AppField
-                name="name"
-                children={(field) => <field.TextField label="名称" />}
-              />
+              {resource !== "brands" ? (
+                <form.AppField
+                  name="name"
+                  children={(field) => <field.TextField label="名称" />}
+                />
+              ) : null}
               <ResourceFieldsSection
                 form={form}
                 resource={resource}
@@ -911,19 +925,7 @@ export function MasterDataCreateDialog({
                 </Button>
               </DialogFooter>
             </form>
-          ) : (
-            <DialogFooter>
-              <Button
-                type="button"
-                onClick={() => {
-                  reset()
-                  onOpenChange(false)
-                }}
-              >
-                完成
-              </Button>
-            </DialogFooter>
-          )}
+          ) : null}
         </DialogScrollBody>
       </DialogContent>
 
@@ -1059,6 +1061,11 @@ export function MasterDataReviseDialog({
         fields,
         idempotencyKey,
       })
+      if (response.outcome === "succeeded") {
+        notifySuccess(masterDataCopy.reviseSuccessTitle, response)
+        onOpenChange(false)
+        return
+      }
       setResult(response)
     },
   })
@@ -1143,16 +1150,6 @@ export function MasterDataReviseDialog({
             </Alert>
           ) : null}
 
-          {result?.outcome === "succeeded" ? (
-            <FormalActionResult
-              status="succeeded"
-              title={masterDataCopy.reviseSuccessTitle}
-              description={masterDataCopy.reviseSuccessDesc}
-              reference={result.reference}
-              facts={resultFacts(result)}
-            />
-          ) : null}
-
           {result?.outcome === "blocked" ? (
             <FormalActionResult
               status="blocked"
@@ -1198,12 +1195,14 @@ export function MasterDataReviseDialog({
                 void form.handleSubmit()
               }}
             >
-              <form.AppField
-                name="name"
-                children={(field) => (
-                  <field.TextField label={masterDataCopy.reviseNameLabel} />
-                )}
-              />
+              {resource !== "brands" ? (
+                <form.AppField
+                  name="name"
+                  children={(field) => (
+                    <field.TextField label={masterDataCopy.reviseNameLabel} />
+                  )}
+                />
+              ) : null}
               <ResourceFieldsSection
                 form={form}
                 resource={resource}
@@ -1259,13 +1258,7 @@ export function MasterDataReviseDialog({
                 </Button>
               </DialogFooter>
             </form>
-          ) : (
-            <DialogFooter>
-              <Button type="button" onClick={() => onOpenChange(false)}>
-                完成
-              </Button>
-            </DialogFooter>
-          )}
+          ) : null}
         </DialogScrollBody>
       </DialogContent>
 
@@ -1333,6 +1326,11 @@ export function MasterDataDisableDialog({
         effectiveFrom: value.effectiveFrom,
         idempotencyKey,
       })
+      if (response.outcome === "succeeded") {
+        notifySuccess(masterDataCopy.disableSuccessTitle, response)
+        onOpenChange(false)
+        return
+      }
       setResult(response)
     },
   })
@@ -1397,16 +1395,6 @@ export function MasterDataDisableDialog({
                 : null}
             </AlertDescription>
           </Alert>
-        ) : null}
-
-        {result?.outcome === "succeeded" ? (
-          <FormalActionResult
-            status="succeeded"
-            title={masterDataCopy.disableSuccessTitle}
-            description={masterDataCopy.disableSuccessDesc}
-            reference={result.reference}
-            facts={resultFacts(result)}
-          />
         ) : null}
 
         {result?.outcome === "blocked" ? (
@@ -1498,13 +1486,7 @@ export function MasterDataDisableDialog({
               </Button>
             </DialogFooter>
           </form>
-        ) : (
-          <DialogFooter>
-            <Button type="button" onClick={() => onOpenChange(false)}>
-              完成
-            </Button>
-          </DialogFooter>
-        )}
+        ) : null}
         </DialogScrollBody>
       </DialogContent>
 

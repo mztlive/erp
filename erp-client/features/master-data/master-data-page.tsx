@@ -206,6 +206,8 @@ function MasterDataListWorkspace({
   const isProductResource = resource === "products"
   /** 供应商走详情页（查看与编辑同一页面），不用侧边 sheet / 编辑弹窗。 */
   const isSupplierResource = resource === "suppliers"
+  /** 品牌走详情页（通用资料中心），不用右侧 sheet 预览。 */
+  const isBrandResource = resource === "brands"
   /** 卡券类目：列表原地 Dialog 新建/编辑，无查看预览、无停用。 */
   const isVoucherCategoryResource = resource === "voucher-categories"
   /** 计量单位：列表 Dialog 更新/停用，无侧边预览、无独立详情入口。 */
@@ -213,6 +215,7 @@ function MasterDataListWorkspace({
   const skipPreviewSheet =
     isProductResource ||
     isSupplierResource ||
+    isBrandResource ||
     isVoucherCategoryResource ||
     isUnitOfMeasureResource
   /** 即时字典（品牌 / 计量单位等）不展示生效期间列。 */
@@ -551,27 +554,10 @@ function MasterDataListWorkspace({
               </div>
             )
           }
-          // 计量单位：仅 Dialog 更新 / 停用，无查看与侧边预览。
-          if (isUnitOfMeasureResource) {
+          // 品牌 / 计量单位：点击行即打开更新 Dialog，仅保留「停用」按钮。
+          if (isBrandResource || isUnitOfMeasureResource) {
             return (
               <div className="flex flex-wrap gap-1">
-                <DisabledActionHint message={reviseBlocker?.message}>
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="ghost"
-                    disabled={!canRevise}
-                    title={reviseBlocker?.message}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      lastFocusedRowId.current = item.stableId
-                      setReviseTarget(item)
-                    }}
-                  >
-                    <HistoryIcon data-icon="inline-start" aria-hidden />
-                    {masterDataCopy.actionUpdate}
-                  </Button>
-                </DisabledActionHint>
                 <DisabledActionHint message={disableBlocker?.message}>
                   <Button
                     type="button"
@@ -598,17 +584,17 @@ function MasterDataListWorkspace({
                 type="button"
                 size="xs"
                 variant="ghost"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  lastFocusedRowId.current = item.stableId
-                  if (isProductResource || isSupplierResource) {
-                    router.push(
-                      `/master-data/${resource}/${item.stableId}?section=overview`
-                    )
-                  } else {
-                    setPreviewId(item.stableId)
-                  }
-                }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    lastFocusedRowId.current = item.stableId
+                    if (isProductResource || isSupplierResource) {
+                      router.push(
+                        `/master-data/${resource}/${item.stableId}?section=overview`
+                      )
+                    } else {
+                      setPreviewId(item.stableId)
+                    }
+                  }}
               >
                 {masterDataCopy.actionView}
               </Button>
@@ -659,6 +645,7 @@ function MasterDataListWorkspace({
     [
       isProductResource,
       isSupplierResource,
+      isBrandResource,
       isUnitOfMeasureResource,
       isVoucherCategoryResource,
       lastFocusedRowId,
@@ -1032,7 +1019,11 @@ function MasterDataListWorkspace({
                 router.push(
                   `/master-data/${resource}/${row.stableId}?section=overview`
                 )
-              } else if (isVoucherCategoryResource || isUnitOfMeasureResource) {
+              } else if (
+                isBrandResource ||
+                isVoucherCategoryResource ||
+                isUnitOfMeasureResource
+              ) {
                 setReviseTarget(row)
               } else {
                 setPreviewId(row.stableId)
@@ -1046,7 +1037,11 @@ function MasterDataListWorkspace({
                 )
                 return
               }
-              if (isVoucherCategoryResource || isUnitOfMeasureResource) {
+              if (
+                isBrandResource ||
+                isVoucherCategoryResource ||
+                isUnitOfMeasureResource
+              ) {
                 setReviseTarget(row)
                 return
               }

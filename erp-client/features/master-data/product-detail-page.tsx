@@ -68,6 +68,7 @@ import { Progress, ProgressLabel } from "@/components/ui/progress"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { toast } from "@/components/ui/toast"
 import { MasterDataDisableDialog } from "@/features/master-data/master-data-action-dialog"
 import {
   RegisterSupplyForSkuDialog,
@@ -786,12 +787,19 @@ export function ProductDetailPage({
             fields: resolvedFields,
             idempotencyKey,
           })
-          setResult(response)
           if (response.outcome === "succeeded") {
+            toast.add({
+              title: masterDataCopy.reviseSuccessTitle,
+              description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
+              type: "success",
+              timeout: 4000,
+            })
             setIdempotencyKey(newIdempotencyKey("revise-product"))
             hydratedKeyRef.current = null
             await detailQuery.refetch()
+            return
           }
+          setResult(response)
           return
         }
 
@@ -804,10 +812,17 @@ export function ProductDetailPage({
           fields: resolvedFields,
           idempotencyKey,
         })
-        setResult(response)
         if (response.outcome === "succeeded") {
+          toast.add({
+            title: masterDataCopy.createSuccessTitle,
+            description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
+            type: "success",
+            timeout: 4000,
+          })
           router.replace(`/master-data/products/${response.stableId}`)
+          return
         }
+        setResult(response)
       } catch (error) {
         setFormError(
           error instanceof Error ? error.message : "保存失败，请稍后重试",
@@ -1245,33 +1260,6 @@ export function ProductDetailPage({
                       {masterDataCopy.centerSpecNote}
                     </p>
                   </div>
-                ) : null}
-
-                {result?.outcome === "succeeded" && !form.state.isDirty ? (
-                  <FormalActionResult
-                    status="succeeded"
-                    title={
-                      isCreate
-                        ? masterDataCopy.createSuccessTitle
-                        : masterDataCopy.reviseSuccessTitle
-                    }
-                    description={
-                      isCreate
-                        ? masterDataCopy.createSuccessDesc
-                        : masterDataCopy.reviseSuccessDesc
-                    }
-                    reference={result.reference}
-                    facts={[
-                      {
-                        label: masterDataCopy.resultNo,
-                        value: result.stableNo,
-                      },
-                      {
-                        label: masterDataCopy.resultVersion,
-                        value: `v${result.revisionNo}`,
-                      },
-                    ]}
-                  />
                 ) : null}
 
                 {result?.outcome === "blocked" ? (

@@ -5,6 +5,7 @@ import "./globals.css"
 import { cn } from "@/lib/utils"
 import { QueryProvider } from "@/components/providers/query-provider"
 import { AuthSessionProvider } from "@/components/providers/auth-session-provider"
+import { Toaster } from "@/components/ui/toast"
 
 const notoSans = Noto_Sans({ subsets: ["latin"], variable: "--font-sans" })
 
@@ -33,6 +34,7 @@ export default function RootLayout({
             <AuthSessionProvider>{children}</AuthSessionProvider>
           </Suspense>
         </QueryProvider>
+        <Toaster />
       </body>
     </html>
   )

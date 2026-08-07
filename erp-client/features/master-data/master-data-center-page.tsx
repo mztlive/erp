@@ -93,6 +93,10 @@ export function MasterDataCenterPage({
   if (resource === "voucher-categories" && stableId === "new") {
     return <VoucherCategoryNewRedirect />
   }
+  // 品牌无详情页：查看 / 更新 / 停用均由列表 Dialog 承担，重定向回列表。
+  if (resource === "brands") {
+    return <BrandListRedirect />
+  }
 
   return (
     <MasterDataCenterBody
@@ -112,6 +116,19 @@ function VoucherCategoryNewRedirect() {
   return (
     <div className="flex min-h-[12rem] items-center justify-center text-sm text-muted-foreground">
       正在打开卡券类目列表…
+    </div>
+  )
+}
+
+/** 品牌详情地址兼容：跳回品牌列表，由列表 Dialog 承担查看 / 更新 / 停用。 */
+function BrandListRedirect() {
+  const router = useRouter()
+  React.useEffect(() => {
+    router.replace("/master-data/brands")
+  }, [router])
+  return (
+    <div className="flex min-h-[12rem] items-center justify-center text-sm text-muted-foreground">
+      正在打开品牌列表…
     </div>
   )
 }

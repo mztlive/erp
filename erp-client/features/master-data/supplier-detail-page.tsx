@@ -49,6 +49,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { toast } from "@/components/ui/toast"
 import { uploadFileAssetImage } from "@/features/file-assets/api"
 import {
   MasterDataDisableDialog,
@@ -580,12 +581,19 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
           fields,
           idempotencyKey,
         })
-        setResult(response)
         if (response.outcome === "succeeded") {
+          toast.add({
+            title: masterDataCopy.reviseSuccessTitle,
+            description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
+            type: "success",
+            timeout: 4000,
+          })
           setIdempotencyKey(newIdempotencyKey("revise-supplier"))
           hydratedKeyRef.current = null
           await detailQuery.refetch()
+          return
         }
+        setResult(response)
         return
       }
 
@@ -597,10 +605,17 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
         fields,
         idempotencyKey,
       })
-      setResult(response)
       if (response.outcome === "succeeded") {
+        toast.add({
+          title: masterDataCopy.createSuccessTitle,
+          description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
+          type: "success",
+          timeout: 4000,
+        })
         router.replace(`/master-data/suppliers/${response.stableId}`)
+        return
       }
+      setResult(response)
     },
   })
 
@@ -897,33 +912,6 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                           : "当前账号没有维护供应商资料的权限；需要修改请联系有权限的同事。"}
                       </AlertDescription>
                     </Alert>
-                  ) : null}
-
-                  {result?.outcome === "succeeded" ? (
-                    <FormalActionResult
-                      status="succeeded"
-                      title={
-                        isCreate
-                          ? masterDataCopy.createSuccessTitle
-                          : masterDataCopy.reviseSuccessTitle
-                      }
-                      description={
-                        isCreate
-                          ? masterDataCopy.createSuccessDesc
-                          : masterDataCopy.reviseSuccessDesc
-                      }
-                      reference={result.reference}
-                      facts={[
-                        {
-                          label: masterDataCopy.resultNo,
-                          value: result.stableNo,
-                        },
-                        {
-                          label: masterDataCopy.resultVersion,
-                          value: `v${result.revisionNo}`,
-                        },
-                      ]}
-                    />
                   ) : null}
 
                   {result?.outcome === "blocked" ? (

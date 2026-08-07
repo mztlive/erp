@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { toast } from "@/components/ui/toast"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { defaultImmediateEffectiveFrom } from "@/features/master-data/resource-fields"
 import {
@@ -111,10 +112,19 @@ export function VoucherCategoryFormDialog({
           fields,
           idempotencyKey,
         })
-        setResult(response)
-        if (response.outcome !== "succeeded") {
-          setIdempotencyKey(newIdempotencyKey("revise-voucher-category"))
+        if (response.outcome === "succeeded") {
+          toast.add({
+            title: masterDataCopy.reviseSuccessTitle,
+            description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
+            type: "success",
+            timeout: 4000,
+          })
+          reset()
+          onOpenChange(false)
+          return
         }
+        setResult(response)
+        setIdempotencyKey(newIdempotencyKey("revise-voucher-category"))
         return
       }
       const response = await createMutation.mutateAsync({
@@ -125,10 +135,19 @@ export function VoucherCategoryFormDialog({
         fields,
         idempotencyKey,
       })
-      setResult(response)
-      if (response.outcome !== "succeeded") {
-        setIdempotencyKey(newIdempotencyKey("create-voucher-category"))
+      if (response.outcome === "succeeded") {
+        toast.add({
+          title: masterDataCopy.createSuccessTitle,
+          description: `${masterDataCopy.resultNo} ${response.stableNo} · v${response.revisionNo}`,
+          type: "success",
+          timeout: 4000,
+        })
+        reset()
+        onOpenChange(false)
+        return
       }
+      setResult(response)
+      setIdempotencyKey(newIdempotencyKey("create-voucher-category"))
     },
   })
 
@@ -179,12 +198,6 @@ export function VoucherCategoryFormDialog({
   const description = isEdit
     ? "修改名称与描述。编号不可改；分类 / 品牌 / 单位沿用创建时默认。"
     : "只需填写编号、名称与描述。分类挂到共用「卡券」根分类，品牌固定「福尚云」，单位固定「张」。"
-  const successTitle = isEdit
-    ? masterDataCopy.reviseSuccessTitle
-    : masterDataCopy.createSuccessTitle
-  const successDesc = isEdit
-    ? masterDataCopy.reviseSuccessDesc
-    : masterDataCopy.createSuccessDesc
   const blockedTitle = isEdit
     ? masterDataCopy.reviseBlockedTitle
     : masterDataCopy.createBlockedTitle
@@ -209,22 +222,6 @@ export function VoucherCategoryFormDialog({
         </DialogHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-          {result?.outcome === "succeeded" ? (
-            <FormalActionResult
-              status="succeeded"
-              title={successTitle}
-              description={successDesc}
-              reference={result.reference}
-              facts={[
-                { label: masterDataCopy.resultNo, value: result.stableNo },
-                {
-                  label: masterDataCopy.resultVersion,
-                  value: `v${result.revisionNo}`,
-                },
-              ]}
-            />
-          ) : null}
-
           {result?.outcome === "blocked" ? (
             <FormalActionResult
               status="blocked"
@@ -295,19 +292,7 @@ export function VoucherCategoryFormDialog({
                 </Button>
               </DialogFooter>
             </form>
-          ) : (
-            <DialogFooter>
-              <Button
-                type="button"
-                onClick={() => {
-                  reset()
-                  onOpenChange(false)
-                }}
-              >
-                完成
-              </Button>
-            </DialogFooter>
-          )}
+          ) : null}
         </div>
       </DialogContent>
 
