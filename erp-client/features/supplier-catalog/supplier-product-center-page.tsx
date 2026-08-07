@@ -618,6 +618,16 @@ export function SupplierProductCenterPage({
     null
   )
   const [uploadingMedia, setUploadingMedia] = React.useState(false)
+  /** 保存时弹窗收集变更原因：打开时暂存本次保存的后续动作（仅保存/保存后入池/保存后离开）。 */
+  const pendingSaveIntentRef = React.useRef<"save" | "promote" | "leave" | null>(
+    null
+  )
+  const [changeReasonDialogOpen, setChangeReasonDialogOpen] =
+    React.useState(false)
+  const [changeReasonDraft, setChangeReasonDraft] = React.useState("")
+  const [changeReasonError, setChangeReasonError] = React.useState<string | null>(
+    null
+  )
   /** 本会话选择但尚未上传的图片文件；保存时按 fileName 上传并回填真实 URL。 */
   const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
   const rememberPendingFiles = React.useCallback((files: File[]) => {
@@ -850,7 +860,7 @@ export function SupplierProductCenterPage({
     setResult(null)
     const validation = validateSupplierProductForm(fields, {
       isCreate,
-      requireChangeReason: !isCreate,
+      requireChangeReason: false,
     })
     if (validation) {
       setFormError(validation)
@@ -868,9 +878,10 @@ export function SupplierProductCenterPage({
     setResult(null)
     const validation = validateSupplierProductForm(fields, {
       isCreate,
-      requireChangeReason: !isCreate,
+      requireChangeReason: false,
     })
     if (validation) {
+      pendingSaveIntentRef.current = null
       setFormError(validation)
       scrollToSection("basic")
       return false
@@ -880,11 +891,31 @@ export function SupplierProductCenterPage({
       // 无内容差异时不形成空修订：先用未解析载荷比对，避免无效上传
       const draftPayload = contentPayload(fields)
       if (!isCreate && JSON.stringify(draftPayload) === baselinePayload) {
+        pendingSaveIntentRef.current = null
         setFormError("未检测到内容变化，无需保存")
         return false
       }
 
-      setUploadingMedia(true)
+      // 变更原因在保存时弹窗收集：先做内容检查，确认有变更后再要求填写
+      if (!isCreate && fields.changeReason.trim().length < 2) {
+        setChangeReasonDraft("")
+        setChangeReasonError(null)
+        setChangeReasonDialogOpen(true)
+        return false
+      }
+      const ok = await performSave()
+      if (ok) pendingSaveIntentRef.current = null
+      return ok
+    } catch (error) {
+      setFormError(saveErrorMessage(error))
+      return false
+    }
+  }
+
+  /** 变更原因弹窗确认后真正执行保存（上传 + 创建/修订）。 */
+  const performSave = async (changeReasonOverride?: string): Promise<boolean> => {
+    setUploadingMedia(true)
+    try {
       const resolved = await resolvePendingUploads(fields)
       const payload = contentPayload(fields, resolved)
       if (isCreate) {
@@ -923,7 +954,7 @@ export function SupplierProductCenterPage({
         expectedSourceRevisionNo: expected,
         supplierSpuCode: fields.supplierSpuCode.trim() || undefined,
         ...payload,
-        changeReason: fields.changeReason.trim(),
+        changeReason: (changeReasonOverride ?? fields.changeReason).trim(),
         idempotencyKey,
       })
       setResult(response)
@@ -939,11 +970,32 @@ export function SupplierProductCenterPage({
     }
   }
 
+  /** 变更原因弹窗确认：回填原因后继续保存，并按暂存的后续动作跳转。 */
+  const confirmChangeReasonAndSave = async () => {
+    const reason = changeReasonDraft.trim()
+    if (reason.length < 2) {
+      setChangeReasonError("请填写本次保存的变更原因")
+      return
+    }
+    const intent = pendingSaveIntentRef.current ?? "save"
+    pendingSaveIntentRef.current = null
+    setChangeReasonDialogOpen(false)
+    const ok = await performSave(reason)
+    if (!ok) return
+    if (intent === "promote") {
+      setPromoteOpen(true)
+    } else if (intent === "leave" && pendingLeaveHref) {
+      setLeaveGuardOpen(false)
+      router.push(pendingLeaveHref)
+    }
+  }
+
   const openPromote = () => {
     if (!editDirty) {
       setPromoteOpen(true)
       return
     }
+    pendingSaveIntentRef.current = "promote"
     void handleSubmit().then((ok) => {
       if (ok) setPromoteOpen(true)
     })
@@ -1659,25 +1711,6 @@ export function SupplierProductCenterPage({
                     SKU
                   </Badge>
                 </div>
-
-                {!isCreate ? (
-                  <div className={cn(surfaceInsetClassName, "space-y-1.5 p-3")}>
-                    <Label htmlFor="sp-reason">变更原因 *</Label>
-                    <Textarea
-                      id="sp-reason"
-                      value={fields.changeReason}
-                      onChange={(event) =>
-                        patchFields((previous) => ({
-                          ...previous,
-                          changeReason: event.target.value,
-                        }))
-                      }
-                      rows={2}
-                      placeholder="说明本次修改内容，保存后形成新的来源资料版本"
-                    />
-                  </div>
-                ) : null}
-
                 <div className="space-y-3">
                   {fields.specDrafts.map((draft, index) => (
                     <div
@@ -2146,6 +2179,53 @@ export function SupplierProductCenterPage({
         />
       ) : null}
 
+      <Dialog
+        open={changeReasonDialogOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setChangeReasonDialogOpen(false)
+            pendingSaveIntentRef.current = null
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>填写变更原因</DialogTitle>
+            <DialogDescription>
+              保存会形成新的来源资料版本，请说明本次修改内容。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="sp-reason-dialog">变更原因 *</Label>
+            <Textarea
+              id="sp-reason-dialog"
+              value={changeReasonDraft}
+              onChange={(event) => {
+                setChangeReasonDraft(event.target.value)
+                if (changeReasonError) setChangeReasonError(null)
+              }}
+              rows={3}
+              placeholder="说明本次修改内容，保存后形成新的来源资料版本"
+            />
+            {changeReasonError ? (
+              <p className="text-sm text-destructive">{changeReasonError}</p>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <DialogClose render={<Button type="button" variant="outline" />}>
+              取消
+            </DialogClose>
+            <Button
+              type="button"
+              disabled={pending}
+              onClick={() => void confirmChangeReasonAndSave()}
+            >
+              {pending ? "正在保存…" : "确认保存"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={leaveGuardOpen} onOpenChange={setLeaveGuardOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -2163,6 +2243,7 @@ export function SupplierProductCenterPage({
               variant="outline"
               disabled={pending}
               onClick={async () => {
+                pendingSaveIntentRef.current = "leave"
                 const ok = await handleSubmit()
                 if (!ok) return
                 setLeaveGuardOpen(false)

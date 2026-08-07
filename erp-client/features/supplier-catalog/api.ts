@@ -64,10 +64,18 @@ type BackendSku = {
   current_revision_no?: number | null
   name?: string | null
   specification?: string | null
+  source_base_unit?: string | null
   barcode?: string | null
+  structured_attributes?: Array<{
+    attribute_name: string
+    attribute_value: string
+  }>
+  source_main_image_url?: string | null
+  source_main_image_asset_id?: string | null
   dropship_floor_price_gross?: string | null
   bulk_floor_price_gross?: string | null
   bulk_minimum_order_quantity?: string | null
+  available_quantity?: string | null
   availability_status?: string | null
   version: number
   created_at: number
@@ -156,6 +164,11 @@ type BackendOffering = {
   bulk_minimum_order_quantity?: string | null
   supply_region: string[]
   availability_status?: string | null
+  available_quantity?: string | null
+  dropship_express?: string | null
+  freight_amount?: string | null
+  service_fee_amount?: string | null
+  product_capabilities?: string[]
   valid_from?: string | null
   valid_to?: string | null
   version: number
@@ -190,6 +203,128 @@ type BackendSkuListItem = {
   version: number
 }
 
+type BackendUnitOfMeasure = {
+  id: string
+  unit_code: string
+  name: string
+  symbol: string
+  quantity_scale: number
+  status: string
+  created_at: number
+  version: number
+}
+
+/** 公司 SKU 最新修订（销售可见价/名称/条码所在）。 */
+type CompanySkuRevisionDto = {
+  id: string
+  sku_id: string
+  revision_no: number
+  name: string
+  barcode: string | null
+  status: string
+  sales_visible_price_gross: string | null
+  effective_from: string
+  created_at: number
+  version: number
+}
+
+/** 公司 SKU 富化信息：编码/名称/规格/单位/商品池价。 */
+type CompanySkuEnrichment = {
+  skuId: string
+  productId: string
+  skuCode: string
+  skuName: string
+  specification: string
+  baseUnit: string
+  barcode?: string
+  salesVisiblePriceGross?: string
+  poolEntryId?: string
+  poolEntryRevisionId?: string
+}
+
+/** 分页拉全后端列表（与 master-data 同款辅助，避免 100 条截断）。 */
+async function fetchAllPages<T>(
+  path: string,
+  query: Record<string, unknown> = {}
+): Promise<T[]> {
+  const items: T[] = []
+  let page = 1
+  let total = Number.POSITIVE_INFINITY
+  while (items.length < total) {
+    const result = await apiGet<Page<T>>(path, {
+      ...query,
+      page,
+      page_size: 100,
+    })
+    items.push(...result.items)
+    total = result.total
+    if (result.items.length === 0) break
+    page += 1
+    if (page > 50) break
+  }
+  return items
+}
+
+/**
+ * 加载公司 SKU 富化信息（编码/名称/规格/单位/商品池价）。
+ * 只对关心的公司 SKU 逐个取最新修订（page_size 1 + revision_no 倒序），
+ * 避免全量 sku-revisions 翻页截断；调用方传空数组时拉全部。
+ */
+async function loadCompanySkuEnrichment(
+  skuIds: string[]
+): Promise<Map<string, CompanySkuEnrichment>> {
+  const [skus, units] = await Promise.all([
+    fetchAllPages<BackendSkuListItem>("/admin/skus", {}).catch(() => []),
+    fetchAllPages<BackendUnitOfMeasure>("/admin/unit-of-measures", {}).catch(
+      () => []
+    ),
+  ])
+  const unitById = new Map(units.map((unit) => [unit.id, unit]))
+  const ids = skuIds.length > 0 ? skuIds : skus.map((sku) => sku.id)
+  const latestBySku = new Map<string, CompanySkuRevisionDto>()
+  await Promise.all(
+    ids.map(async (skuId) => {
+      try {
+        const page = await apiGet<Page<CompanySkuRevisionDto>>(
+          "/admin/sku-revisions",
+          {
+            sku_id: skuId,
+            page: 1,
+            page_size: 1,
+            sort_by: "revision_no",
+            sort_dir: "desc",
+          }
+        )
+        const latest = page.items[0]
+        if (latest) latestBySku.set(skuId, latest)
+      } catch {
+        // 无权限或不存在时省略
+      }
+    })
+  )
+  const byId = new Map<string, CompanySkuEnrichment>()
+  for (const sku of skus) {
+    const latest = latestBySku.get(sku.id)
+    const unit = unitById.get(sku.base_unit_id)
+    byId.set(sku.id, {
+      skuId: sku.id,
+      productId: sku.product_id,
+      skuCode: sku.sku_no,
+      skuName: latest?.name ?? sku.sku_no,
+      specification: sku.specification_signature,
+      baseUnit:
+        unit?.name ?? unit?.symbol ?? unit?.unit_code ?? sku.base_unit_id,
+      barcode: latest?.barcode ?? undefined,
+      salesVisiblePriceGross: latest?.sales_visible_price_gross ?? undefined,
+      poolEntryId:
+        latest?.sales_visible_price_gross != null ? sku.id : undefined,
+      poolEntryRevisionId:
+        latest?.sales_visible_price_gross != null ? latest.id : undefined,
+    })
+  }
+  return byId
+}
+
 // ─── Session draft (client-only, not mock seed) ───────────────────────────────
 
 const drafts = new Map<string, SessionCatalogDraft>()
@@ -199,6 +334,10 @@ const drafts = new Map<string, SessionCatalogDraft>()
 function secsToIso(secs?: number | null): string {
   if (secs == null || secs <= 0) return new Date(0).toISOString()
   return new Date(secs * 1000).toISOString()
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10)
 }
 
 function sourceTypeLabel(t: string): string {
@@ -441,13 +580,14 @@ function mapOffering(o: BackendOffering): SupplierOfferingRevisionView {
     dropshipSupplyPriceGross: o.dropship_supply_price_gross ?? null,
     bulkSupplyPriceGross: o.bulk_supply_price_gross ?? null,
     inputTaxRate: o.input_tax_rate ?? null,
-    freightAmount: null,
-    serviceFeeAmount: null,
+    freightAmount: o.freight_amount ?? null,
+    serviceFeeAmount: o.service_fee_amount ?? null,
     minimumOrderQuantity: o.bulk_minimum_order_quantity ?? "1",
     supplyRegion: o.supply_region ?? [],
     availabilityStatus: o.availability_status ?? "AVAILABLE",
-    availableQuantity: "0",
-    productCapabilities: [],
+    availableQuantity: o.available_quantity ?? "0",
+    productCapabilities: o.product_capabilities ?? [],
+    dropshipExpress: o.dropship_express ?? undefined,
     validFrom: o.valid_from ?? secsToIso(o.created_at).slice(0, 10),
     validTo: o.valid_to ?? undefined,
     createdAt: secsToIso(o.created_at),
@@ -455,7 +595,10 @@ function mapOffering(o: BackendOffering): SupplierOfferingRevisionView {
   }
 }
 
-function mapMapping(m: BackendMapping): SupplierProductMappingView {
+function mapMapping(
+  m: BackendMapping,
+  enrichment?: CompanySkuEnrichment
+): SupplierProductMappingView {
   return {
     mappingStatus:
       m.status === "ACTIVE"
@@ -466,6 +609,11 @@ function mapMapping(m: BackendMapping): SupplierProductMappingView {
             ? "DISABLED"
             : "PENDING",
     skuId: m.sku_id,
+    skuCode: enrichment?.skuCode,
+    skuName: enrichment?.skuName,
+    skuRevisionId: enrichment?.poolEntryRevisionId,
+    specification: enrichment?.specification,
+    baseUnit: enrichment?.baseUnit,
     approvedBy: m.approved_by ?? undefined,
     approvedAt: m.approved_at ? secsToIso(m.approved_at) : undefined,
     reason: m.reason ?? undefined,
@@ -492,6 +640,7 @@ function projectProductToItem(
   mappings: BackendMapping[],
   offerings: BackendOffering[],
   supplierName: string,
+  companySkuById?: Map<string, CompanySkuEnrichment>,
 ): SupplierCatalogItemView {
   const primarySku = skus[0]
   const primaryRev = primarySku
@@ -517,10 +666,14 @@ function projectProductToItem(
           name: s.name ?? product.name ?? s.supplier_sku_code,
           specification: s.specification ?? "",
           barcode: s.barcode,
+          source_base_unit: s.source_base_unit ?? null,
+          structured_attributes: s.structured_attributes ?? [],
+          source_main_image_url: s.source_main_image_url,
+          source_main_image_asset_id: s.source_main_image_asset_id,
           dropship_floor_price_gross: s.dropship_floor_price_gross,
           bulk_floor_price_gross: s.bulk_floor_price_gross,
           bulk_minimum_order_quantity: s.bulk_minimum_order_quantity,
-          available_quantity: null,
+          available_quantity: s.available_quantity ?? null,
           availability_status: s.availability_status ?? "AVAILABLE",
           source_updated_at: product.source_updated_at ?? product.created_at,
         } as BackendSkuRevision),
@@ -534,6 +687,33 @@ function projectProductToItem(
   const mapping = mappings.find((m) => skuIds.has(m.supplier_catalog_sku_id))
   const offering = offerings.find((o) => skuIds.has(o.supplier_catalog_sku_id))
   const changeType = changeTypeFromStatus(product.status)
+
+  const mappingEnrichment = mapping?.sku_id
+    ? companySkuById?.get(mapping.sku_id)
+    : undefined
+  const mappedCandidate = mapping?.sku_id && mappingEnrichment
+    ? {
+        productId: mappingEnrichment.productId,
+        skuId: mappingEnrichment.skuId,
+        skuCode: mappingEnrichment.skuCode,
+        skuName: mappingEnrichment.skuName,
+        specification: mappingEnrichment.specification,
+        baseUnit: mappingEnrichment.baseUnit,
+        barcode: mappingEnrichment.barcode,
+        revisionNo: 1,
+        similarityLabel: "已关联公司 SKU",
+        poolEntry: mappingEnrichment.poolEntryId
+          ? {
+              poolEntryId: mappingEnrichment.poolEntryId,
+              poolEntryRevisionId: mappingEnrichment.poolEntryRevisionId ?? "",
+              status: "ACTIVE" as const,
+              salesVisiblePriceGross:
+                mappingEnrichment.salesVisiblePriceGross ?? "",
+              validFrom: todayIso(),
+            }
+          : undefined,
+      }
+    : undefined
 
   const base = {
     supplierProduct: {
@@ -550,8 +730,9 @@ function projectProductToItem(
       currentRevision,
       catalogSkus,
     },
-    mapping: mapping ? mapMapping(mapping) : undefined,
-    skuCandidates: [],
+    mapping: mapping ? mapMapping(mapping, mappingEnrichment) : undefined,
+    skuCandidates: mappedCandidate ? [mappedCandidate] : [],
+    poolEntry: mappedCandidate?.poolEntry,
     offering: offering
       ? {
           stableId: offering.id,
@@ -647,27 +828,53 @@ async function loadQueueItems(
 
   const items: SupplierCatalogItemView[] = []
 
-  for (const product of productPage.items) {
-    const [skuPage, mappingPage, offeringPage, supplierName] = await Promise.all([
+  // 本页可能存在的公司 SKU 关联：并行拉各 SPU 的 SKU，再按供应商 SKU 精确查映射，
+  // 最后对关联到的公司 SKU 拉取富化信息（编码/名称/单位/商品池价）。
+  const productPages = productPage.items
+  const pageSkuPages: BackendSku[][] = await Promise.all(
+    productPages.map((product) =>
       apiGet<Page<BackendSku>>("/admin/supplier-catalog/skus", {
         supplier_catalog_product_id: product.id,
         page: 1,
         page_size: 100,
-      }).catch(() => ({
-        items: [] as BackendSku[],
-        total: 0,
-        page: 1,
-        page_size: 100,
-      })),
-      apiGet<Page<BackendMapping>>("/admin/supplier-catalog/mappings", {
-        page: 1,
-        page_size: 100,
-      }).catch(() => ({
-        items: [] as BackendMapping[],
-        total: 0,
-        page: 1,
-        page_size: 100,
-      })),
+      })
+        .then((page) => page.items)
+        .catch(() => [] as BackendSku[])
+    )
+  )
+  const pageMappings = await Promise.all(
+    pageSkuPages.flatMap((skus) =>
+      skus.map((sku) =>
+        apiGet<Page<BackendMapping>>("/admin/supplier-catalog/mappings", {
+          supplier_catalog_sku_id: sku.id,
+          page: 1,
+          page_size: 100,
+        }).catch(() => ({
+          items: [] as BackendMapping[],
+          total: 0,
+          page: 1,
+          page_size: 100,
+        }))
+      )
+    )
+  )
+  const mappedSkuIds = new Set<string>()
+  for (const mappingPage of pageMappings) {
+    for (const mapping of mappingPage.items) {
+      if (mapping.sku_id) mappedSkuIds.add(mapping.sku_id)
+    }
+  }
+  const companySkuById = await loadCompanySkuEnrichment(
+    Array.from(mappedSkuIds)
+  )
+
+  for (const [productIndex, product] of productPages.entries()) {
+    const skuPage = pageSkuPages[productIndex] ?? []
+    const skuIds = new Set(skuPage.map((sku) => sku.id))
+    const mappings = pageMappings
+      .flatMap((page) => page.items)
+      .filter((mapping) => skuIds.has(mapping.supplier_catalog_sku_id))
+    const [offeringPage, supplierName] = await Promise.all([
       apiGet<Page<BackendOffering>>("/admin/supplier-catalog/offerings", {
         supplier_id: product.supplier_id,
         page: 1,
@@ -682,17 +889,21 @@ async function loadQueueItems(
     ])
 
     const skuRevisions = new Map<string, BackendSkuRevision>()
-    for (const s of skuPage.items) {
+    for (const s of skuPage) {
       skuRevisions.set(s.id, {
         id: s.current_revision_id ?? s.id,
         revision_no: s.current_revision_no ?? 1,
         name: s.name ?? product.name ?? s.supplier_sku_code,
         specification: s.specification ?? "",
+        source_base_unit: s.source_base_unit ?? null,
         barcode: s.barcode,
+        structured_attributes: s.structured_attributes ?? [],
+        source_main_image_url: s.source_main_image_url,
+        source_main_image_asset_id: s.source_main_image_asset_id,
         dropship_floor_price_gross: s.dropship_floor_price_gross,
         bulk_floor_price_gross: s.bulk_floor_price_gross,
         bulk_minimum_order_quantity: s.bulk_minimum_order_quantity,
-        available_quantity: null,
+        available_quantity: s.available_quantity ?? null,
         availability_status: s.availability_status ?? "AVAILABLE",
         source_updated_at: product.source_updated_at ?? product.created_at,
       })
@@ -700,11 +911,12 @@ async function loadQueueItems(
 
     const item = projectProductToItem(
       product,
-      skuPage.items,
+      skuPage,
       skuRevisions,
-      mappingPage.items,
+      mappings,
       offeringPage.items,
-      supplierName
+      supplierName,
+      companySkuById
     )
     items.push(item)
   }
@@ -845,38 +1057,29 @@ export async function fetchSupplierCatalogQueue(
 }
 
 export async function fetchCompanySkuOptions() {
-  const page = await apiGet<Page<BackendSkuListItem>>("/admin/skus", {
-    page: 1,
-    page_size: 100,
-    status: "enabled",
-  }).catch(() =>
-    apiGet<Page<BackendSkuListItem>>("/admin/skus", {
-      page: 1,
-      page_size: 100,
-    })
-  )
+  const enrichment = await loadCompanySkuEnrichment([])
 
-  return page.items.map((sku) => ({
-    productId: sku.product_id,
-    skuId: sku.id,
-    skuCode: sku.sku_no,
-    skuName: sku.sku_no,
-    specification: sku.specification_signature,
-    baseUnit: sku.base_unit_id,
-    barcode: undefined as string | undefined,
+  return Array.from(enrichment.values()).map((sku) => ({
+    productId: sku.productId,
+    skuId: sku.skuId,
+    skuCode: sku.skuCode,
+    skuName: sku.skuName,
+    specification: sku.specification,
+    baseUnit: sku.baseUnit,
+    barcode: sku.barcode,
     brand: undefined as string | undefined,
     category: undefined as string | undefined,
     revisionNo: 1,
     similarityLabel: "公司商品候选",
     activeSupplierCount: 0,
-    poolEntry: undefined as
-      | {
-          poolEntryId: string
-          poolEntryRevisionId: string
-          status: "ACTIVE" | "PAUSED" | "DISABLED"
-          salesVisiblePriceGross: string
-        }
-      | undefined,
+    poolEntry: sku.poolEntryId
+      ? ({
+          poolEntryId: sku.poolEntryId,
+          poolEntryRevisionId: sku.poolEntryRevisionId ?? "",
+          status: "ACTIVE" as const,
+          salesVisiblePriceGross: sku.salesVisiblePriceGross ?? "",
+        })
+      : undefined,
   }))
 }
 
@@ -904,7 +1107,7 @@ export async function fetchSupplierCatalogCenter(input: {
     if (latest) skuRevisions.set(entry.sku.id, latest)
   }
 
-  const [offeringPage, supplierName] = await Promise.all([
+  const [offeringPage, supplierName, companySkuById] = await Promise.all([
     apiGet<Page<BackendOffering>>("/admin/supplier-catalog/offerings", {
       supplier_id: product.supplier_id,
       page: 1,
@@ -916,6 +1119,11 @@ export async function fetchSupplierCatalogCenter(input: {
       page_size: 100,
     })),
     resolveSupplierName(product.supplier_id),
+    loadCompanySkuEnrichment(
+      detail.mappings
+        .map((mapping) => mapping.sku_id)
+        .filter((id): id is string => Boolean(id))
+    ),
   ])
 
   const projectedItem = projectProductToItem(
@@ -924,7 +1132,8 @@ export async function fetchSupplierCatalogCenter(input: {
     skuRevisions,
     detail.mappings,
     offeringPage.items,
-    supplierName
+    supplierName,
+    companySkuById
   )
 
   const productRevision =

@@ -357,7 +357,21 @@ impl SupplierCatalogService {
                     current_revision_no: current.as_ref().map(|revision| revision.revision.revision_no),
                     name: current.as_ref().map(|revision| revision.name.clone()),
                     specification: current.as_ref().map(|revision| revision.specification.clone()),
+                    source_base_unit: current
+                        .as_ref()
+                        .and_then(|revision| revision.source_base_unit.clone()),
                     barcode: current.as_ref().and_then(|revision| revision.barcode.clone()),
+                    structured_attributes: current
+                        .as_ref()
+                        .map(|revision| revision.structured_attributes.clone())
+                        .unwrap_or_default(),
+                    source_main_image_url: current
+                        .as_ref()
+                        .and_then(|revision| revision.source_main_image_url_snapshot.clone()),
+                    source_main_image_asset_id: current
+                        .as_ref()
+                        .and_then(|revision| revision.source_main_image_asset_id.as_ref())
+                        .map(|id| id.to_string()),
                     dropship_floor_price_gross: current.as_ref().and_then(|revision| {
                         revision.dropship_floor_price_gross.map(|value| value.to_string())
                     }),
@@ -369,6 +383,9 @@ impl SupplierCatalogService {
                             .bulk_minimum_order_quantity
                             .map(|value| value.to_string())
                     }),
+                    available_quantity: current
+                        .as_ref()
+                        .and_then(|revision| revision.available_quantity.map(|value| value.to_string())),
                     availability_status: current.as_ref().map(|revision| revision.availability_status),
                     version: row.version,
                     created_at: row.created_at,
@@ -527,6 +544,22 @@ impl SupplierCatalogService {
                         .map(|revision| revision.supply_region.clone())
                         .unwrap_or_default(),
                     availability_status: current.as_ref().map(|revision| revision.availability_status),
+                    available_quantity: current
+                        .as_ref()
+                        .and_then(|revision| revision.available_quantity.map(|value| value.to_string())),
+                    dropship_express: current
+                        .as_ref()
+                        .and_then(|revision| revision.dropship_express.clone()),
+                    freight_amount: current
+                        .as_ref()
+                        .and_then(|revision| revision.freight_amount.map(|value| value.to_string())),
+                    service_fee_amount: current
+                        .as_ref()
+                        .and_then(|revision| revision.service_fee_amount.map(|value| value.to_string())),
+                    product_capabilities: current
+                        .as_ref()
+                        .map(|revision| revision.product_capabilities.clone())
+                        .unwrap_or_default(),
                     valid_from: current.as_ref().map(|revision| revision.valid_from.to_string()),
                     valid_to: current
                         .as_ref()
@@ -1593,13 +1626,22 @@ fn sku_view(
         current_revision_no: current.map(|revision| revision.revision.revision_no),
         name: current.map(|revision| revision.name.clone()),
         specification: current.map(|revision| revision.specification.clone()),
+        source_base_unit: current.and_then(|revision| revision.source_base_unit.clone()),
         barcode: current.and_then(|revision| revision.barcode.clone()),
+        structured_attributes: current
+            .map(|revision| revision.structured_attributes.clone())
+            .unwrap_or_default(),
+        source_main_image_url: current.and_then(|revision| revision.source_main_image_url_snapshot.clone()),
+        source_main_image_asset_id: current
+            .and_then(|revision| revision.source_main_image_asset_id.as_ref())
+            .map(|id| id.to_string()),
         dropship_floor_price_gross: current
             .and_then(|revision| revision.dropship_floor_price_gross.map(|v| v.to_string())),
         bulk_floor_price_gross: current
             .and_then(|revision| revision.bulk_floor_price_gross.map(|v| v.to_string())),
         bulk_minimum_order_quantity: current
             .and_then(|revision| revision.bulk_minimum_order_quantity.map(|v| v.to_string())),
+        available_quantity: current.and_then(|revision| revision.available_quantity.map(|v| v.to_string())),
         availability_status: current.map(|revision| revision.availability_status),
         version: sku.base.version,
         created_at: sku.base.created_at,

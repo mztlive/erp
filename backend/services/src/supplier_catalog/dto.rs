@@ -195,14 +195,24 @@ pub struct SupplierCatalogSkuView {
     pub name: Option<String>,
     /// 来源规格（当前修订）。
     pub specification: Option<String>,
+    /// 来源单位快照（当前修订）。
+    pub source_base_unit: Option<String>,
     /// 条码（当前修订）。
     pub barcode: Option<String>,
+    /// 已规范化的来源规格属性（当前修订）。
+    pub structured_attributes: Vec<SourceAttribute>,
+    /// 来源 SKU 主图取回地址（当前修订）。
+    pub source_main_image_url: Option<String>,
+    /// 来源 SKU 主图已登记的文件资产（当前修订）。
+    pub source_main_image_asset_id: Option<String>,
     /// 一件代发底价（当前修订）。
     pub dropship_floor_price_gross: Option<String>,
     /// 集采底价（当前修订）。
     pub bulk_floor_price_gross: Option<String>,
     /// 集采起订量（当前修订）。
     pub bulk_minimum_order_quantity: Option<String>,
+    /// 可供数量（当前修订）。
+    pub available_quantity: Option<String>,
     /// 可供状态（当前修订）。
     pub availability_status: Option<AvailabilityStatus>,
     /// 乐观锁版本。
@@ -307,6 +317,16 @@ pub struct SupplierOfferingView {
     pub supply_region: Vec<String>,
     /// 可供状态。
     pub availability_status: Option<AvailabilityStatus>,
+    /// 可供数量（当前修订）。
+    pub available_quantity: Option<String>,
+    /// 一件代发快递说明（当前修订）。
+    pub dropship_express: Option<String>,
+    /// 费用金额（当前修订）。
+    pub freight_amount: Option<String>,
+    /// 服务费金额（当前修订）。
+    pub service_fee_amount: Option<String>,
+    /// 商品级能力（当前修订）。
+    pub product_capabilities: Vec<String>,
     /// 有效期开始。
     pub valid_from: Option<String>,
     /// 有效期结束。

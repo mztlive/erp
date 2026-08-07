@@ -138,8 +138,19 @@ function inferSkuContext(items: SupplierCatalogItemView[], skuId?: string) {
   return undefined
 }
 
-function displayAmount(value: string | null | undefined) {
-  return value ? `¥${value}` : "—"
+function availabilityLabel(value: string) {
+  if (value === "AVAILABLE") return "可供"
+  if (value === "UNAVAILABLE") return "暂不可供"
+  if (value === "STOPPED") return "已停供"
+  if (value === "STALE") return "信息待更新"
+  return value || "—"
+}
+
+function formatDateOnly(iso: string | undefined) {
+  if (!iso) return "—"
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return "—"
+  return date.toLocaleDateString("zh-CN", { hour12: false })
 }
 
 function SupplyRelationshipListView({
@@ -201,14 +212,90 @@ function SupplyRelationshipListView({
   const columns = React.useMemo<ColumnDef<SupplierCatalogItemView, unknown>[]>(
     () => [
       {
+        id: "supplier",
+        accessorFn: (row) => row.supplierProduct.supplier.name,
+        header: "供应商",
+        meta: { label: "供应商", width: "reference" },
+        enableSorting: true,
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <div className="font-medium text-foreground">
+              {row.original.supplierProduct.supplier.name}
+            </div>
+            <Badge variant="outline" className="mt-1">
+              {row.original.supplierProduct.source.label}
+            </Badge>
+          </div>
+        ),
+      },
+      {
+        id: "supplierProduct",
+        accessorFn: (row) =>
+          (row.supplierProduct.incomingRevision ??
+            row.supplierProduct.currentRevision).name,
+        header: "商品",
+        meta: { label: "商品", width: "reference" },
+        enableSorting: true,
+        cell: ({ row }) => {
+          const revision =
+            row.original.supplierProduct.incomingRevision ??
+            row.original.supplierProduct.currentRevision
+          const hasMainImage = (revision.media ?? []).some(
+            (entry) =>
+              entry.usage === "SKU_MAIN" && Boolean(entry.sourceUrl),
+          )
+          return (
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium text-foreground">
+                {revision.name}
+              </div>
+              {hasMainImage ? (
+                <div className="mt-0.5 text-xs text-muted-foreground">
+                  有主图
+                </div>
+              ) : null}
+              <div className="mt-0.5 truncate text-xs text-muted-foreground">
+                {[revision.brand, revision.category]
+                  .filter(Boolean)
+                  .join(" · ") || "—"}
+                {revision.specification
+                  ? ` · ${revision.specification}`
+                  : ""}
+              </div>
+            </div>
+          )
+        },
+      },
+      {
+        id: "skuCode",
+        accessorFn: (row) => row.supplierProduct.supplierSkuCode,
+        header: "SKU 编码",
+        meta: { label: "SKU 编码", width: "status" },
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <div className="truncate text-sm">
+              {row.original.supplierProduct.supplierSkuCode ?? "—"}
+            </div>
+            <div className="mt-0.5 truncate text-xs text-muted-foreground">
+              {row.original.supplierProduct.supplierSpuCode
+                ? `SPU ${row.original.supplierProduct.supplierSpuCode}`
+                : ""}
+            </div>
+          </div>
+        ),
+      },
+      {
         id: "source",
-        accessorFn: (row) => row.supplierProduct.source.label,
+        accessorFn: (row) =>
+          row.supplierProduct.source.fileName ??
+          row.supplierProduct.source.connection?.code ??
+          row.supplierProduct.source.recordedBy ??
+          "",
         header: "来源",
         meta: { label: "来源", width: "status" },
         cell: ({ row }) => (
-          <div>
-            <Badge variant="outline">{row.original.supplierProduct.source.label}</Badge>
-            <div className="mt-1 text-xs text-muted-foreground">
+          <div className="min-w-0">
+            <div className="truncate text-xs text-muted-foreground">
               {row.original.supplierProduct.source.fileName ??
                 row.original.supplierProduct.source.connection?.code ??
                 row.original.supplierProduct.source.recordedBy ??
@@ -218,41 +305,74 @@ function SupplyRelationshipListView({
         ),
       },
       {
-        id: "supplierProduct",
-        accessorFn: (row) => row.supplierProduct.supplier.name,
-        header: "供应商商品",
-        meta: { label: "供应商商品", width: "reference" },
+        id: "price",
+        accessorFn: (row) =>
+          row.offering?.currentRevision?.supplyPriceGross ??
+          row.supplierProduct.currentRevision.bulkFloorPriceGross ??
+          row.supplierProduct.currentRevision.dropshipFloorPriceGross ??
+          "",
+        header: "价格",
+        meta: { align: "end", numeric: true, width: "amount" },
+        enableSorting: true,
         cell: ({ row }) => {
           const revision =
             row.original.supplierProduct.incomingRevision ??
             row.original.supplierProduct.currentRevision
-          const mapping = row.original.mapping
-          const candidate = skuId
-            ? row.original.skuCandidates.find((entry) => entry.skuId === skuId)
-            : undefined
-          const relationTarget =
-            mapping?.skuId && (!skuId || mapping.skuId === skuId)
-              ? mapping.skuCode
-              : candidate?.skuCode
-          const relationPrefix =
-            mapping?.mappingStatus === "ACTIVE" &&
-            (!skuId || mapping.skuId === skuId)
-              ? "关联 SKU"
-              : "候选 SKU"
+          const offering = row.original.offering?.currentRevision
+          const quote =
+            revision.dropshipFloorPriceGross || revision.bulkFloorPriceGross
           return (
-            <div className="min-w-0">
-              <div className="font-medium text-foreground">
-                {row.original.supplierProduct.supplier.name}
-              </div>
-              <div className="truncate text-sm text-muted-foreground">
-                {revision.name}
-              </div>
-              <div className="mt-0.5 text-xs text-muted-foreground">
-                编码 {row.original.supplierProduct.supplierSkuCode ?? row.original.supplierProduct.supplierSpuCode}
-              </div>
-              {relationTarget ? (
-                <div className="mt-1 text-xs font-medium text-foreground">
-                  {relationPrefix}：{relationTarget}
+            <div className="text-right">
+              {quote ? (
+                <div className="text-xs text-muted-foreground">
+                  报价 ¥{quote}
+                </div>
+              ) : null}
+              {offering ? (
+                <>
+                  <div className="num font-medium">
+                    ¥{offering.supplyPriceGross}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    含税
+                    {offering.inputTaxRate
+                      ? ` · ${offering.inputTaxRate}`
+                      : ""}
+                    {offering.minimumOrderQuantity
+                      ? ` · ${offering.minimumOrderQuantity}起订`
+                      : ""}
+                  </div>
+                </>
+              ) : quote ? (
+                <div className="text-xs text-muted-foreground">待确认成本</div>
+              ) : (
+                <div className="text-muted-foreground">—</div>
+              )}
+            </div>
+          )
+        },
+      },
+      {
+        id: "availability",
+        accessorFn: (row) =>
+          row.offering?.currentRevision?.availabilityStatus ??
+          row.supplierProduct.currentRevision.availabilityStatus ??
+          "",
+        header: "可供",
+        meta: { label: "可供", width: "status" },
+        cell: ({ row }) => {
+          const revision =
+            row.original.supplierProduct.incomingRevision ??
+            row.original.supplierProduct.currentRevision
+          const offering = row.original.offering?.currentRevision
+          const status = offering?.availabilityStatus ?? revision.availabilityStatus
+          const quantity = offering?.availableQuantity ?? revision.availableQuantity
+          return (
+            <div>
+              <div>{availabilityLabel(status)}</div>
+              {quantity && quantity !== "0" ? (
+                <div className="num text-xs text-muted-foreground">
+                  可售 {quantity}
                 </div>
               ) : null}
             </div>
@@ -260,114 +380,33 @@ function SupplyRelationshipListView({
         },
       },
       {
-        id: "sourceContent",
+        id: "mapping",
         accessorFn: (row) =>
-          (row.supplierProduct.incomingRevision ??
-            row.supplierProduct.currentRevision).media?.length ?? 0,
-        header: "来源内容",
-        meta: { label: "来源内容", width: "reference" },
+          row.mapping?.mappingStatus === "ACTIVE"
+            ? row.mapping.skuCode ?? ""
+            : "",
+        header: "关联公司 SKU",
+        meta: { label: "关联公司 SKU", width: "reference" },
         cell: ({ row }) => {
-          const revision =
-            row.original.supplierProduct.incomingRevision ??
-            row.original.supplierProduct.currentRevision
-          const media = revision.media ?? []
-          const hasArchivedMain = media.some(
-            (entry) =>
-              entry.usage === "SKU_MAIN" &&
-              entry.archiveStatus === "ARCHIVED",
-          )
-          return (
-            <div>
-              <div className={hasArchivedMain ? "text-foreground" : "text-warning"}>
-                {hasArchivedMain ? "可预填 SKU 主图" : "缺 SKU 主图"}
-              </div>
-              <div className="text-xs text-muted-foreground">
-                {media.length} 个媒体
-                {revision.barcode ? ` · 条码 ${revision.barcode}` : " · 无条码"}
-              </div>
-            </div>
-          )
-        },
-      },
-      {
-        id: "purchaseTerms",
-        accessorFn: (row) =>
-          row.offering?.currentRevision?.minimumOrderQuantity ?? "",
-        header: "采购条件",
-        meta: { label: "采购条件", width: "reference" },
-        cell: ({ row }) => {
-          const offering = row.original.offering?.currentRevision
-          if (!offering) return <span className="text-muted-foreground">—</span>
-          const unit = row.original.mapping?.baseUnit ?? currentSku?.baseUnit ?? "件"
+          const mapping = row.original.mapping
+          const poolEntry = row.original.poolEntry
+          const mapped = mapping?.mappingStatus === "ACTIVE"
           return (
             <div>
               <div>
-                {offering.dropshipSupplyPriceGross
-                  ? `¥${offering.dropshipSupplyPriceGross}`
-                  : "—"}
-                {" / "}
-                {offering.bulkSupplyPriceGross
-                  ? `¥${offering.bulkSupplyPriceGross}`
-                  : "—"}
+                {mapped ? (
+                  <div className="font-medium text-foreground">
+                    {mapping?.skuCode ?? "已映射"}
+                  </div>
+                ) : (
+                  <span className="text-muted-foreground">待确认关联</span>
+                )}
               </div>
-              <div className="text-xs text-muted-foreground">
-                {offering.minimumOrderQuantity} {unit}起订
-              </div>
-            </div>
-          )
-        },
-      },
-      {
-        id: "price",
-        accessorFn: (row) =>
-          row.offering?.currentRevision?.supplyPriceGross ??
-          row.supplierProduct.currentRevision.bulkFloorPriceGross ??
-          row.supplierProduct.currentRevision.dropshipFloorPriceGross ??
-          "",
-        header: "采购确认成本",
-        meta: {
-          align: "end",
-          numeric: true,
-          width: "amount",
-        },
-        cell: ({ row }) => {
-          const confirmedCost =
-            row.original.offering?.currentRevision?.supplyPriceGross
-          if (confirmedCost) {
-            return (
-              <span className="num">
-                {displayAmount(confirmedCost)}
-              </span>
-            )
-          }
-          const quote =
-            row.original.supplierProduct.currentRevision.bulkFloorPriceGross ??
-            row.original.supplierProduct.currentRevision
-              .dropshipFloorPriceGross
-          return (
-            <span className="text-xs text-muted-foreground">
-              {quote
-                ? `报价 ¥${quote} · 待确认`
-                : "待确认"}
-            </span>
-          )
-        },
-      },
-      {
-        id: "coverage",
-        accessorFn: (row) =>
-          row.offering?.currentRevision?.supplyRegion.join("、") ?? "",
-        header: "供货范围",
-        meta: { label: "供货范围", width: "reference" },
-        cell: ({ row }) => {
-          const offering = row.original.offering?.currentRevision
-          if (!offering) return <span className="text-muted-foreground">—</span>
-          return (
-            <div>
-              <div>{offering.supplyRegion.join("、") || "区域待确认"}</div>
-              <div className="num text-xs text-muted-foreground">
-                {offering.validFrom} 至 {offering.validTo ?? "长期"}
-              </div>
+              {poolEntry ? (
+                <div className="text-xs text-muted-foreground">
+                  商品池价 ¥{poolEntry.salesVisiblePriceGross}
+                </div>
+              ) : null}
             </div>
           )
         },
@@ -386,6 +425,24 @@ function SupplyRelationshipListView({
               label={status.label}
               tone={status.tone}
             />
+          )
+        },
+      },
+      {
+        id: "updatedAt",
+        accessorFn: (row) =>
+          row.supplierProduct.incomingRevision?.sourceUpdatedAt ??
+          row.supplierProduct.currentRevision.sourceUpdatedAt,
+        header: "更新时间",
+        meta: { label: "更新时间", width: "status" },
+        cell: ({ row }) => {
+          const updatedAt =
+            row.original.supplierProduct.incomingRevision?.sourceUpdatedAt ??
+            row.original.supplierProduct.currentRevision.sourceUpdatedAt
+          return (
+            <div className="text-xs text-muted-foreground">
+              {formatDateOnly(updatedAt)}
+            </div>
           )
         },
       },
@@ -418,7 +475,7 @@ function SupplyRelationshipListView({
         ),
       },
     ],
-    [currentSku?.baseUnit, detailHrefFor, onPromote, skuId]
+    [detailHrefFor, onPromote, skuId]
   )
 
   const queueHref = `/procurement/supplier-catalog?mode=queue${skuId ? `&skuId=${encodeURIComponent(skuId)}` : ""}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`
@@ -627,7 +684,7 @@ function SupplyRelationshipListView({
                   : undefined
               )
             }}
-            defaultColumnPinning={{ left: ["supplierProduct"], right: ["actions"] }}
+            defaultColumnPinning={{ left: ["supplier", "skuCode"], right: ["actions"] }}
             onRowPreview={onOpenItem ? (row) => onOpenItem(row) : undefined}
             onRowOpen={onOpenItem ? (row) => onOpenItem(row) : undefined}
             emptyState={
