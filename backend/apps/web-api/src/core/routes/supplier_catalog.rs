@@ -89,6 +89,30 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-catalog/reverse-promote",
+            with_permission(
+                post(supplier_catalog::supplier_catalog_reverse_promote),
+                rbac,
+                supplier_catalog::supplier_catalog_reverse_promote_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-catalog/link-promote",
+            with_permission(
+                post(supplier_catalog::supplier_catalog_link_promote),
+                rbac,
+                supplier_catalog::supplier_catalog_link_promote_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-catalog/products/{id}/pool-match",
+            with_permission(
+                get(supplier_catalog::supplier_catalog_product_pool_match),
+                rbac,
+                supplier_catalog::supplier_catalog_product_pool_match_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-catalog/offerings",
             with_permission(
                 get(supplier_catalog::supplier_offering_list),

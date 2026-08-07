@@ -1208,7 +1208,7 @@ export function SupplierProductCenterPage({
                   onClick={openPromote}
                 >
                   <ShoppingBasketIcon data-icon="inline-start" aria-hidden />
-                  加入公司商品池
+                  入池
                 </Button>
               ) : null}
               <Button

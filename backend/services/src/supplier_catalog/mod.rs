@@ -43,19 +43,27 @@ use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 mod dto;
+mod link_promote;
+mod pool_match;
+mod reverse_promote;
 
 use self::dto::SortDir;
 pub use self::dto::{
     ApproveSupplierProductMappingRequest, ApproveSupplierProductMappingResult,
-    CreateSupplierCatalogProductRequest, CreateSupplierCatalogProductResult,
-    CreateSupplierProductMappingRequest, CreateSupplierProductMappingResult, PageView,
-    ReviseSupplierCatalogProductRequest, ReviseSupplierCatalogProductResult, ReviseSupplierOfferingRequest,
-    ReviseSupplierOfferingResult, SupplierCatalogIntakeBatchListParams, SupplierCatalogIntakeBatchView,
-    SupplierCatalogMediaView, SupplierCatalogMediaWrite, SupplierCatalogProductDetailView,
-    SupplierCatalogProductListParams, SupplierCatalogProductRevisionView, SupplierCatalogProductView,
-    SupplierCatalogSkuDetailView, SupplierCatalogSkuListParams, SupplierCatalogSkuRevisionView,
-    SupplierCatalogSkuView, SupplierCatalogSkuWrite, SupplierOfferingListParams, SupplierOfferingView,
-    SupplierProductMappingListParams, SupplierProductMappingView,
+    CompanySkuMatchCandidateView, CreateSupplierCatalogProductRequest,
+    CreateSupplierCatalogProductResult, CreateSupplierProductMappingRequest,
+    CreateSupplierProductMappingResult, LinkPromoteSkuItem, LinkPromoteSkuResult,
+    LinkPromoteToCompanyPoolRequest, LinkPromoteToCompanyPoolResult, PageView, PoolMatchStatus,
+    ReversePromoteSkuItem, ReversePromoteSkuResult, ReversePromoteToCompanyPoolRequest,
+    ReversePromoteToCompanyPoolResult, ReviseSupplierCatalogProductRequest,
+    ReviseSupplierCatalogProductResult, ReviseSupplierOfferingRequest, ReviseSupplierOfferingResult,
+    SupplierCatalogIntakeBatchListParams, SupplierCatalogIntakeBatchView, SupplierCatalogMediaView,
+    SupplierCatalogMediaWrite, SupplierCatalogProductDetailView, SupplierCatalogProductListParams,
+    SupplierCatalogProductRevisionView, SupplierCatalogProductView, SupplierCatalogSkuDetailView,
+    SupplierCatalogSkuListParams, SupplierCatalogSkuRevisionView, SupplierCatalogSkuView,
+    SupplierCatalogSkuWrite, SupplierOfferingListParams, SupplierOfferingView,
+    SupplierProductMappingListParams, SupplierProductMappingView, SupplierProductPoolMatchView,
+    SupplierSkuPoolMatchView,
 };
 
 /// 供应商 SPU 列表筛选条件类型（经 `SupplierCatalogExt` 关联类型跨 crate 可达）。
@@ -1129,9 +1137,14 @@ impl SupplierCatalogService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut offering_mut = offering_for_tx.clone();
-                    offering_mut.stable.current_revision_id = Some(offering_revision_for_tx.base.id.clone());
+                    offering_mut.stable.current_revision_id =
+                        Some(offering_revision_for_tx.base.id.clone());
                     db.supplier_catalog()
-                        .create_offering_with_revision(&mut offering_mut, &offering_revision_for_tx, session)
+                        .create_offering_with_revision(
+                            &offering_mut,
+                            &offering_revision_for_tx,
+                            session,
+                        )
                         .await?;
                     db.supplier_product_mappings()
                         .update(&mut mapping_for_tx.clone(), session)
@@ -1233,7 +1246,7 @@ impl SupplierCatalogService {
                     let mut offering_mut = offering_for_tx.clone();
                     offering_mut.stable.current_revision_id = Some(revision_for_tx.base.id.clone());
                     db.supplier_catalog()
-                        .create_offering_with_revision(&mut offering_mut, &revision_for_tx, session)
+                        .append_offering_revision(&mut offering_mut, &revision_for_tx, session)
                         .await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())

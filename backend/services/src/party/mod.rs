@@ -6,7 +6,7 @@
 //!   `PartyRepository::append_party_revision` 声明「必须收到事务执行器」；
 //! - 软删除主体 / 查询 → 单集合，`&mut NoTransaction`。
 
-use database::{AccessControlExt, NoTransaction, PartyExt, Transactional};
+use database::{AccessControlExt, Executor, NoTransaction, PartyExt, Transactional};
 use entities::common::revision::RevisionBase;
 use entities::field_update::FieldUpdate;
 use entities::party::{
@@ -89,7 +89,7 @@ impl PartyService {
     ///
     /// # 错误
     /// * `ValidationError` - 请求体校验失败
-    /// * `ConflictError` - party_no 或统一社会信用代码与既有主体重复（唯一索引透出）
+    /// * `ConflictError` - party_no 或统一社会信用代码与既有主体重复
     pub async fn create_party(&self, req: CreatePartyRequest, actor: &AuditActor) -> Result<PartyView> {
         req.validate()?;
         let party_id = PartyId::new(next_id());
@@ -104,6 +104,13 @@ impl PartyService {
             },
             actor.id(),
         )?;
+        self.ensure_party_identity_available(
+            &party.party_no,
+            party.unified_credit_code.as_deref(),
+            None,
+            &mut NoTransaction,
+        )
+        .await?;
         let revision = PartyRevision::new(
             revision_id.clone(),
             PartyRevisionData {
@@ -234,7 +241,7 @@ impl PartyService {
     ///
     /// # 错误
     /// * `NotFound` - 主体不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致
+    /// * `ConflictError` - 期望版本与当前版本不一致，或统一社会信用代码冲突
     /// * `ValidationError` - 请求体校验失败
     pub async fn update_party(
         &self,
@@ -248,6 +255,25 @@ impl PartyService {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
+        }
+
+        // 预校验信用代码冲突：与实体规范化规则一致，避免仅依赖唯一索引透出笼统冲突。
+        if let Some(raw_code) = req.unified_credit_code.as_ref() {
+            let mut probe = party.clone();
+            probe.update(
+                PartyUpdate {
+                    unified_credit_code: credit_code_update(Some(raw_code.clone())),
+                    status: None,
+                },
+                actor.id(),
+            )?;
+            self.ensure_party_identity_available(
+                &probe.party_no,
+                probe.unified_credit_code.as_deref(),
+                Some(party.base.id.as_str()),
+                &mut NoTransaction,
+            )
+            .await?;
         }
 
         let audit = actor
@@ -406,6 +432,61 @@ impl PartyService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("主体不存在".to_string()))
+    }
+
+    /// 确保主体编号与统一社会信用代码未被占用。
+    ///
+    /// 全局唯一索引包含软删除记录，因此必须按「含已删除」查询占用状态；
+    /// 并发竞争仍由唯一索引兜底，并映射为字段级冲突提示。
+    ///
+    /// # 参数
+    /// * `party_no` - 已规范化的主体编号
+    /// * `unified_credit_code` - 已规范化的统一社会信用代码；`None` 表示不校验
+    /// * `exclude_party_id` - 更新场景下排除自身 ID
+    /// * `executor` - 数据访问执行器，由调用方决定是否位于事务中
+    ///
+    /// # 返回
+    /// 身份可用时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// * `ConflictError` - 主体编号或统一社会信用代码已被占用
+    async fn ensure_party_identity_available(
+        &self,
+        party_no: &str,
+        unified_credit_code: Option<&str>,
+        exclude_party_id: Option<&str>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if let Some(existing) = self
+            .db
+            .parties()
+            .find_by_party_no_including_deleted(party_no, executor)
+            .await?
+        {
+            if !exclude_party_id.is_some_and(|id| existing.base.id == id) {
+                return Err(Error::ConflictError(format!(
+                    "主体编号「{party_no}」已存在"
+                )));
+            }
+        }
+
+        let Some(credit_code) = unified_credit_code else {
+            return Ok(());
+        };
+        if let Some(existing) = self
+            .db
+            .parties()
+            .find_by_unified_credit_code_including_deleted(credit_code, executor)
+            .await?
+        {
+            if !exclude_party_id.is_some_and(|id| existing.base.id == id) {
+                return Err(Error::ConflictError(format!(
+                    "统一社会信用代码「{credit_code}」已存在"
+                )));
+            }
+        }
+
+        Ok(())
     }
 }
 

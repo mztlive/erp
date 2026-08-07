@@ -13,7 +13,10 @@ use services::{
         ApproveSupplierProductMappingRequest, ApproveSupplierProductMappingResult,
         CreateSupplierCatalogProductRequest, CreateSupplierCatalogProductResult,
         CreateSupplierProductMappingRequest, CreateSupplierProductMappingResult, PageView,
+        LinkPromoteToCompanyPoolRequest, LinkPromoteToCompanyPoolResult,
+        ReversePromoteToCompanyPoolRequest, ReversePromoteToCompanyPoolResult,
         ReviseSupplierCatalogProductRequest, ReviseSupplierCatalogProductResult,
+        SupplierProductPoolMatchView,
         ReviseSupplierOfferingRequest, ReviseSupplierOfferingResult, SupplierCatalogIntakeBatchListParams,
         SupplierCatalogIntakeBatchView, SupplierCatalogProductDetailView, SupplierCatalogProductListParams,
         SupplierCatalogProductView, SupplierCatalogService, SupplierCatalogSkuListParams,
@@ -240,6 +243,88 @@ pub async fn supplier_product_mapping_approve(
 ) -> Result<ApproveSupplierProductMappingResult> {
     let view = SupplierCatalogService::new(state.db())
         .approve_mapping(&id, req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商商品库",
+    group_desc = "供应商商品、SKU、映射、供给与入库批次管理",
+    desc = "反向入池（新建公司商品并登记映射与供给）",
+    resource = "supplier_product_mapping",
+    action = "approve"
+)]
+/// 反向入池：供应商 SPU 同构新建公司商品/SKU，并原子写入映射与双价供给。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 反向入池请求
+///
+/// # 返回
+/// 返回新建公司商品与各 SKU/映射/供给标识。
+pub async fn supplier_catalog_reverse_promote(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<ReversePromoteToCompanyPoolRequest>,
+) -> Result<ReversePromoteToCompanyPoolResult> {
+    let view = SupplierCatalogService::new(state.db())
+        .reverse_promote_to_company_pool(req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商商品库",
+    group_desc = "供应商商品、SKU、映射、供给与入库批次管理",
+    desc = "查询供应商商品池内匹配状态",
+    resource = "supplier_catalog_product",
+    action = "detail"
+)]
+/// 查询供应商商品下各 SKU 的池内状态与公司 SKU 候选。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 供应商商品 ID
+///
+/// # 返回
+/// 返回匹配汇总视图。
+pub async fn supplier_catalog_product_pool_match(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<SupplierProductPoolMatchView> {
+    let view = SupplierCatalogService::new(state.db())
+        .product_pool_match(&id)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商商品库",
+    group_desc = "供应商商品、SKU、映射、供给与入库批次管理",
+    desc = "关联入池（挂已有公司 SKU 并登记供给）",
+    resource = "supplier_product_mapping",
+    action = "approve"
+)]
+/// 关联入池：映射到已有公司 SKU 并原子登记双价供给。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 审计操作人
+/// * `req` - 关联入池请求
+///
+/// # 返回
+/// 返回映射与供给结果。
+pub async fn supplier_catalog_link_promote(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<LinkPromoteToCompanyPoolRequest>,
+) -> Result<LinkPromoteToCompanyPoolResult> {
+    let view = SupplierCatalogService::new(state.db())
+        .link_promote_to_company_pool(req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

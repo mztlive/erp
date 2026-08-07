@@ -7,19 +7,22 @@ import {
   attemptUnregisteredFormalWrite,
   claimSupplierCatalogWorkItem,
   completeSupplierCatalogWorkItem,
-  createCompanyProductFromSupplierSku,
   createSupplierCatalogItem,
   fetchSupplierCatalogCenter,
   fetchCompanySkuOptions,
   fetchSupplierCatalogQueue,
+  fetchSupplierProductPoolMatch,
+  linkPromoteToCompanyPool,
   promoteSupplierProductToPool,
+  reversePromoteToCompanyPool,
   reviseSupplierCatalogProduct,
   saveSessionDraft,
 } from "@/features/supplier-catalog/api"
 import type {
-  CreateCompanyProductFromSupplierSkuInput,
   CreateSupplierCatalogItemInput,
+  LinkPromoteToCompanyPoolInput,
   PromoteSupplierProductInput,
+  ReversePromoteToCompanyPoolInput,
   ReviseSupplierCatalogProductInput,
   SupplierCatalogQueueQuery,
 } from "@/features/supplier-catalog/types"
@@ -31,6 +34,8 @@ export const supplierCatalogKeys = {
   center: (id: string, section: string) =>
     [...supplierCatalogKeys.all, "center", id, section] as const,
   companySkuOptions: () => [...supplierCatalogKeys.all, "company-skus"] as const,
+  poolMatch: (supplierProductId: string) =>
+    [...supplierCatalogKeys.all, "pool-match", supplierProductId] as const,
 }
 
 export function useSupplierCatalogQueueQuery(query: SupplierCatalogQueueQuery) {
@@ -80,15 +85,44 @@ export function usePromoteSupplierProductMutation() {
   })
 }
 
-export function useCreateCompanyProductFromSupplierSkuMutation() {
+export function useSupplierProductPoolMatchQuery(
+  supplierProductId: string | undefined,
+  enabled = true
+) {
+  return useQuery({
+    queryKey: supplierCatalogKeys.poolMatch(supplierProductId ?? ""),
+    queryFn: () => fetchSupplierProductPoolMatch(supplierProductId!),
+    enabled: Boolean(supplierProductId) && enabled,
+  })
+}
+
+export function useReversePromoteToCompanyPoolMutation() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: (input: CreateCompanyProductFromSupplierSkuInput) =>
-      createCompanyProductFromSupplierSku(input),
+    mutationFn: (input: ReversePromoteToCompanyPoolInput) =>
+      reversePromoteToCompanyPool(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: supplierCatalogKeys.all })
+      await queryClient.invalidateQueries({ queryKey: ["master-data"] })
     },
   })
+}
+
+export function useLinkPromoteToCompanyPoolMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: LinkPromoteToCompanyPoolInput) =>
+      linkPromoteToCompanyPool(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: supplierCatalogKeys.all })
+      await queryClient.invalidateQueries({ queryKey: ["master-data"] })
+    },
+  })
+}
+
+/** @deprecated 使用 useReversePromoteToCompanyPoolMutation */
+export function useCreateCompanyProductFromSupplierSkuMutation() {
+  return useReversePromoteToCompanyPoolMutation()
 }
 
 export function useSupplierCatalogCenterQuery(input: {

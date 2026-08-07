@@ -617,6 +617,243 @@ pub struct ApproveSupplierProductMappingResult {
     pub reference: String,
 }
 
+/// 供应商 SKU 相对公司商品池的状态。
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PoolMatchStatus {
+    /// 已有生效映射。
+    Mapped,
+    /// 未映射但有候选公司 SKU。
+    HasCandidates,
+    /// 未映射且无可靠候选。
+    Unmatched,
+}
+
+/// 公司 SKU 匹配候选（供采购人工确认，不自动合并）。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CompanySkuMatchCandidateView {
+    /// 公司 SKU ID。
+    pub sku_id: String,
+    /// 公司 SKU 编号。
+    pub sku_no: String,
+    /// 所属公司商品 ID。
+    pub product_id: String,
+    /// 公司商品编号。
+    pub product_no: String,
+    /// 展示名称（SKU 修订名或商品名）。
+    pub name: String,
+    /// 规格摘要。
+    pub specification: Option<String>,
+    /// 条码。
+    pub barcode: Option<String>,
+    /// 基础单位 ID。
+    pub base_unit_id: String,
+    /// 当前销售可见价。
+    pub sales_visible_price_gross: Option<String>,
+    /// 当前有效供应商供给数。
+    pub active_supplier_count: u32,
+    /// 匹配证据（如「条码一致」）。
+    pub match_signals: Vec<String>,
+    /// 匹配分（越高越优先展示）。
+    pub score: u32,
+}
+
+/// 单个供应商 SKU 的池内状态与候选。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierSkuPoolMatchView {
+    /// 供应商目录 SKU。
+    pub supplier_catalog_sku_id: String,
+    /// 供应商 SKU 编码。
+    pub supplier_sku_code: String,
+    /// 规格摘要。
+    pub specification: Option<String>,
+    /// 条码。
+    pub barcode: Option<String>,
+    /// 池内状态。
+    pub pool_status: PoolMatchStatus,
+    /// 已生效映射的公司 SKU（仅 `MAPPED`）。
+    pub mapped_company_sku_id: Option<String>,
+    /// 已生效映射的公司 SKU 编号。
+    pub mapped_company_sku_no: Option<String>,
+    /// 匹配候选（未映射时填充；已映射可为空）。
+    pub candidates: Vec<CompanySkuMatchCandidateView>,
+}
+
+/// 供应商商品（SPU）下全部 SKU 的池内匹配结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SupplierProductPoolMatchView {
+    /// 供应商商品 ID。
+    pub supplier_product_id: String,
+    /// 当前 SPU 来源修订号。
+    pub source_revision_no: u32,
+    /// 各供应商 SKU 状态。
+    pub items: Vec<SupplierSkuPoolMatchView>,
+}
+
+/// 关联入池：单行（挂已有公司 SKU + 双价供给）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct LinkPromoteSkuItem {
+    /// 供应商目录 SKU。
+    #[validate(custom(function = "non_blank", message = "供应商 SKU 不能为空"))]
+    pub supplier_catalog_sku_id: String,
+    /// 目标公司 SKU。
+    #[validate(custom(function = "non_blank", message = "公司 SKU 不能为空"))]
+    pub company_sku_id: String,
+    /// 一件代发供给价；空则回退目录代发底价。
+    pub dropship_supply_price_gross: Option<String>,
+    /// 集采供给价；空则回退目录集采底价。
+    pub bulk_supply_price_gross: Option<String>,
+}
+
+/// 关联入池请求：已有公司 SKU 时只写映射 Active + 双价供给，不改公司价格。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct LinkPromoteToCompanyPoolRequest {
+    /// 供应商商品（SPU）。
+    #[validate(custom(function = "non_blank", message = "供应商商品不能为空"))]
+    pub supplier_product_id: String,
+    /// 期望 SPU 来源修订号。
+    #[validate(range(min = 1, message = "期望来源修订号必须大于 0"))]
+    pub expected_source_revision_no: u32,
+    /// 进项税率。
+    #[validate(custom(function = "non_blank", message = "进项税率不能为空"))]
+    pub input_tax_rate: String,
+    /// 可供区域。
+    #[validate(length(min = 1, message = "可供区域不能为空"))]
+    pub supply_region: Vec<String>,
+    /// 入选行（至少一行）。
+    #[validate(length(min = 1, message = "至少选择一个供应商 SKU"))]
+    #[validate(nested)]
+    pub items: Vec<LinkPromoteSkuItem>,
+    /// 幂等键。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// 关联入池单行结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct LinkPromoteSkuResult {
+    /// 供应商目录 SKU。
+    pub supplier_catalog_sku_id: String,
+    /// 公司 SKU。
+    pub company_sku_id: String,
+    /// 映射 ID。
+    pub mapping_id: String,
+    /// 供给 ID。
+    pub offering_id: String,
+    /// 供给修订号。
+    pub offering_revision_no: u32,
+}
+
+/// 关联入池结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct LinkPromoteToCompanyPoolResult {
+    /// 供应商商品。
+    pub supplier_product_id: String,
+    /// 各行结果。
+    pub items: Vec<LinkPromoteSkuResult>,
+    /// 业务引用。
+    pub reference: String,
+    /// 记录时间（秒）。
+    pub recorded_at: u64,
+}
+
+/// 反向入池：单个供应商 SKU 行（新建公司 SKU + 映射 + 双价供给）。
+///
+/// 起订量不传：服务端读取供应商 SKU 当前来源修订上的 `bulk_minimum_order_quantity`。
+/// 正式双价可省略：省略时回退目录底价；底价也缺失则校验失败。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ReversePromoteSkuItem {
+    /// 供应商目录 SKU 稳定身份。
+    #[validate(custom(function = "non_blank", message = "供应商 SKU 不能为空"))]
+    pub supplier_catalog_sku_id: String,
+    /// 公司 SKU 编号；缺省时服务端按供应商 SKU 编码生成。
+    pub sku_no: Option<String>,
+    /// 一件代发供给价（含税运）；空则回退目录代发底价。
+    pub dropship_supply_price_gross: Option<String>,
+    /// 集采供给价（含税）；空则回退目录集采底价。
+    pub bulk_supply_price_gross: Option<String>,
+    /// 销售可见价（写入新建公司 `sku_revision`，必填）。
+    #[validate(custom(function = "non_blank", message = "销售可见价不能为空"))]
+    pub sales_visible_price_gross: String,
+    /// 市场价（写入新建公司 `sku_revision`，必填）。
+    #[validate(custom(function = "non_blank", message = "市场价不能为空"))]
+    pub market_price: String,
+}
+
+/// 反向入池请求：以供应商 SPU 为上下文，同构新建公司 Product + 勾选 SKU 行，
+/// 并原子写入映射与双价供给；确认即生效，不接受用户填写的生效日期。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ReversePromoteToCompanyPoolRequest {
+    /// 供应商商品（SPU）稳定身份。
+    #[validate(custom(function = "non_blank", message = "供应商商品不能为空"))]
+    pub supplier_product_id: String,
+    /// 期望的供应商 SPU 来源修订号（并发保护）。
+    #[validate(range(min = 1, message = "期望来源修订号必须大于 0"))]
+    pub expected_source_revision_no: u32,
+    /// 公司商品业务类型（独立稳定属性，创建后不可变）。
+    pub product_kind: entities::catalog::ProductKind,
+    /// 公司商品编号；缺省时服务端生成。
+    pub product_no: Option<String>,
+    /// ERP 分类 ID。
+    #[validate(custom(function = "non_blank", message = "分类不能为空"))]
+    pub category_id: String,
+    /// ERP 品牌 ID。
+    #[validate(custom(function = "non_blank", message = "品牌不能为空"))]
+    pub brand_id: String,
+    /// 公司 SKU 基础单位 ID（本批 SKU 共用；可后续在 W14 调整单行）。
+    #[validate(custom(function = "non_blank", message = "基础单位不能为空"))]
+    pub base_unit_id: String,
+    /// 进项税率（正式供给，目录无此字段）。
+    #[validate(custom(function = "non_blank", message = "进项税率不能为空"))]
+    pub input_tax_rate: String,
+    /// 可供区域（正式供给，目录无此字段）。
+    #[validate(length(min = 1, message = "可供区域不能为空"))]
+    pub supply_region: Vec<String>,
+    /// 入选的供应商 SKU 行（至少一行；未选兄弟 SKU 保持未映射）。
+    #[validate(length(min = 1, message = "至少选择一个供应商 SKU"))]
+    #[validate(nested)]
+    pub items: Vec<ReversePromoteSkuItem>,
+    /// 幂等键。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// 反向入池单行结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ReversePromoteSkuResult {
+    /// 供应商目录 SKU。
+    pub supplier_catalog_sku_id: String,
+    /// 新建公司 SKU。
+    pub company_sku_id: String,
+    /// 新建公司 SKU 修订。
+    pub company_sku_revision_id: String,
+    /// 映射主键。
+    pub mapping_id: String,
+    /// 供给稳定身份。
+    pub offering_id: String,
+    /// 供给修订号。
+    pub offering_revision_no: u32,
+}
+
+/// 反向入池结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ReversePromoteToCompanyPoolResult {
+    /// 供应商商品（SPU）。
+    pub supplier_product_id: String,
+    /// 新建公司商品（SPU）。
+    pub company_product_id: String,
+    /// 公司商品编号。
+    pub product_no: String,
+    /// 公司商品类型。
+    pub product_kind: entities::catalog::ProductKind,
+    /// 各 SKU 行结果。
+    pub items: Vec<ReversePromoteSkuResult>,
+    /// 业务引用。
+    pub reference: String,
+    /// 记录时间（秒级时间戳）。
+    pub recorded_at: u64,
+}
+
 /// 供给修订请求（改价/暂停/停止等，形成新的不可变供给修订）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ReviseSupplierOfferingRequest {

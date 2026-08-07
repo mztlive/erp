@@ -9,7 +9,9 @@ import type {
   CreateCompanyProductFromSupplierSkuInput,
   CreateSupplierCatalogItemInput,
   FormalActionResponse,
+  LinkPromoteToCompanyPoolInput,
   PromoteSupplierProductInput,
+  ReversePromoteToCompanyPoolInput,
   ReviseSupplierCatalogProductInput,
   SessionCatalogDraft,
   SupplierCatalogCenterView,
@@ -22,6 +24,7 @@ import type {
   SupplierCatalogDecision,
   SupplierOfferingRevisionView,
   SupplierProductMappingView,
+  SupplierProductPoolMatchView,
   SupplierProductRevisionView,
   WorkItemLease,
 } from "@/features/supplier-catalog/types"
@@ -648,12 +651,19 @@ function projectProductToItem(
     : undefined
   const category = product.source_category ?? ""
   const brand = product.source_brand ?? undefined
-  const currentRevision = mapSkuRevision(
-    primaryRev,
-    product.name ?? product.supplier_spu_code,
-    category,
-    brand
-  )
+  // 列表投影的 content 多挂在主 SKU 修订上，但「来源版本号」必须以 SPU 当前修订为准：
+  // 反向入池 expected_source_revision_no 校验的是 supplier_catalog_product_revision，
+  // 不可误传 SKU 修订号（常见为 1）。
+  const productSourceRevisionNo = product.current_revision_no ?? 1
+  const currentRevision = {
+    ...mapSkuRevision(
+      primaryRev,
+      product.name ?? product.supplier_spu_code,
+      category,
+      brand
+    ),
+    revisionNo: productSourceRevisionNo,
+  }
 
   const catalogSkus: SupplierCatalogSkuView[] = skus.map((s) => ({
     id: s.id,
@@ -1178,29 +1188,32 @@ export async function fetchSupplierCatalogCenter(input: {
   )
 
   const primarySkuRev = detail.skus[0]?.revisions?.[0]
-  const currentRevision = mapSkuRevision(
-    primarySkuRev,
-    productName,
-    productCategory,
-    productBrand,
-    {
-      description: productRevision?.description,
-      sourceProductKind: productRevision?.source_product_kind,
-      media: productMedia,
-      attributes: productAttributes,
-    },
-  )
+  // 详情页 content 可从主 SKU 补齐，但并发校验 revisionNo 必须是 SPU 来源修订号。
+  const productSourceRevisionNo =
+    productRevision?.revision_no ??
+    product.current_revision_no ??
+    projectedItem.supplierProduct.currentRevision.revisionNo
+  const currentRevision = {
+    ...mapSkuRevision(
+      primarySkuRev,
+      productName,
+      productCategory,
+      productBrand,
+      {
+        description: productRevision?.description,
+        sourceProductKind: productRevision?.source_product_kind,
+        media: productMedia,
+        attributes: productAttributes,
+      },
+    ),
+    revisionNo: productSourceRevisionNo,
+  }
 
   const item: SupplierCatalogItemView = {
     ...projectedItem,
     supplierProduct: {
       ...projectedItem.supplierProduct,
-      currentRevision: {
-        ...currentRevision,
-        // 列表投影里的修订号若更可信则保留；详情优先用产品修订号
-        revisionNo:
-          productRevision?.revision_no ?? currentRevision.revisionNo,
-      },
+      currentRevision,
       catalogSkus:
         catalogSkus.length > 0
           ? catalogSkus
@@ -1620,19 +1633,171 @@ export async function promoteSupplierProductToPool(
   }
 }
 
+export async function fetchSupplierProductPoolMatch(
+  supplierProductId: string
+): Promise<SupplierProductPoolMatchView> {
+  const result = await apiGet<{
+    supplier_product_id: string
+    source_revision_no: number
+    items: Array<{
+      supplier_catalog_sku_id: string
+      supplier_sku_code: string
+      specification?: string | null
+      barcode?: string | null
+      pool_status: "MAPPED" | "HAS_CANDIDATES" | "UNMATCHED"
+      mapped_company_sku_id?: string | null
+      mapped_company_sku_no?: string | null
+      candidates: Array<{
+        sku_id: string
+        sku_no: string
+        product_id: string
+        product_no: string
+        name: string
+        specification?: string | null
+        barcode?: string | null
+        base_unit_id: string
+        sales_visible_price_gross?: string | null
+        active_supplier_count: number
+        match_signals: string[]
+        score: number
+      }>
+    }>
+  }>(
+    `/admin/supplier-catalog/products/${encodeURIComponent(supplierProductId)}/pool-match`
+  )
+
+  return {
+    supplierProductId: result.supplier_product_id,
+    sourceRevisionNo: result.source_revision_no,
+    items: result.items.map((item) => ({
+      supplierCatalogSkuId: item.supplier_catalog_sku_id,
+      supplierSkuCode: item.supplier_sku_code,
+      specification: item.specification ?? undefined,
+      barcode: item.barcode ?? undefined,
+      poolStatus: item.pool_status,
+      mappedCompanySkuId: item.mapped_company_sku_id ?? undefined,
+      mappedCompanySkuNo: item.mapped_company_sku_no ?? undefined,
+      candidates: (item.candidates ?? []).map((c) => ({
+        skuId: c.sku_id,
+        skuNo: c.sku_no,
+        productId: c.product_id,
+        productNo: c.product_no,
+        name: c.name,
+        specification: c.specification ?? undefined,
+        barcode: c.barcode ?? undefined,
+        baseUnitId: c.base_unit_id,
+        salesVisiblePriceGross: c.sales_visible_price_gross ?? undefined,
+        activeSupplierCount: c.active_supplier_count,
+        matchSignals: c.match_signals ?? [],
+        score: c.score,
+      })),
+    })),
+  }
+}
+
+export async function linkPromoteToCompanyPool(
+  input: LinkPromoteToCompanyPoolInput
+): Promise<SupplierCatalogWriteResult> {
+  const result = await apiPost<{
+    supplier_product_id: string
+    items: Array<{
+      supplier_catalog_sku_id: string
+      company_sku_id: string
+      mapping_id: string
+      offering_id: string
+      offering_revision_no: number
+    }>
+    reference: string
+    recorded_at: number
+  }>("/admin/supplier-catalog/link-promote", {
+    supplier_product_id: input.supplierProductId,
+    expected_source_revision_no: input.expectedSourceRevisionNo,
+    input_tax_rate: input.inputTaxRate,
+    supply_region: input.supplyRegion,
+    items: input.items.map((item) => ({
+      supplier_catalog_sku_id: item.supplierCatalogSkuId,
+      company_sku_id: item.companySkuId,
+      dropship_supply_price_gross: item.dropshipSupplyPriceGross ?? null,
+      bulk_supply_price_gross: item.bulkSupplyPriceGross ?? null,
+    })),
+    idempotency_key: input.idempotencyKey,
+  })
+
+  const first = result.items[0]
+  return {
+    supplierProductId: result.supplier_product_id,
+    supplierCatalogSkuId: first?.supplier_catalog_sku_id,
+    companySkuId: first?.company_sku_id,
+    supplierOfferingRevisionId: first
+      ? `${first.offering_id}:r${first.offering_revision_no}`
+      : undefined,
+    poolEntryChange: "UNCHANGED",
+    activeSupplierCount: result.items.length,
+    reference: result.reference,
+    recordedAt: new Date(result.recorded_at * 1000).toISOString(),
+  }
+}
+
+export async function reversePromoteToCompanyPool(
+  input: ReversePromoteToCompanyPoolInput
+): Promise<SupplierCatalogWriteResult> {
+  const result = await apiPost<{
+    supplier_product_id: string
+    company_product_id: string
+    product_no: string
+    product_kind: string
+    items: Array<{
+      supplier_catalog_sku_id: string
+      company_sku_id: string
+      company_sku_revision_id: string
+      mapping_id: string
+      offering_id: string
+      offering_revision_no: number
+    }>
+    reference: string
+    recorded_at: number
+  }>("/admin/supplier-catalog/reverse-promote", {
+    supplier_product_id: input.supplierProductId,
+    expected_source_revision_no: input.expectedSourceRevisionNo,
+    product_kind: input.productKind,
+    product_no: input.productNo ?? null,
+    category_id: input.categoryId,
+    brand_id: input.brandId,
+    base_unit_id: input.baseUnitId,
+    input_tax_rate: input.inputTaxRate,
+    supply_region: input.supplyRegion,
+    items: input.items.map((item) => ({
+      supplier_catalog_sku_id: item.supplierCatalogSkuId,
+      sku_no: item.skuNo ?? null,
+      dropship_supply_price_gross: item.dropshipSupplyPriceGross ?? null,
+      bulk_supply_price_gross: item.bulkSupplyPriceGross ?? null,
+      sales_visible_price_gross: item.salesVisiblePriceGross,
+      market_price: item.marketPrice,
+    })),
+    idempotency_key: input.idempotencyKey,
+  })
+
+  const first = result.items[0]
+  return {
+    supplierProductId: result.supplier_product_id,
+    supplierCatalogSkuId: first?.supplier_catalog_sku_id,
+    companyProductId: result.company_product_id,
+    companySkuId: first?.company_sku_id,
+    productKind: result.product_kind,
+    supplierOfferingRevisionId: first
+      ? `${first.offering_id}:r${first.offering_revision_no}`
+      : undefined,
+    poolEntryChange: "CREATED",
+    reference: result.reference,
+    recordedAt: new Date(result.recorded_at * 1000).toISOString(),
+  }
+}
+
+/** @deprecated 使用 reversePromoteToCompanyPool */
 export async function createCompanyProductFromSupplierSku(
   input: CreateCompanyProductFromSupplierSkuInput
 ): Promise<SupplierCatalogWriteResult> {
-  // 反向创建（公司商品 + 映射 + 供给）无单一后端聚合端点；
-  // master-data 产品创建 + mapping approve 需跨域编排 — 登记 backend_gap。
-  void input
-  const err = {
-    kind: "Validation" as const,
-    message:
-      "反向创建公司商品尚未提供聚合接口；请先在基础资料创建公司 SKU，再使用入池确认。",
-    status: 400,
-  }
-  throw err
+  return reversePromoteToCompanyPool(input)
 }
 
 export async function attemptUnregisteredFormalWrite(): Promise<FormalActionResponse> {

@@ -3053,6 +3053,36 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/reverse-promote",
+                description: "反向入池（新建公司商品并登记映射与供给）",
+                permission: {
+                    resource: "supplier_product_mapping",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-catalog/link-promote",
+                description: "关联入池（挂已有公司 SKU 并登记供给）",
+                permission: {
+                    resource: "supplier_product_mapping",
+                    action: "approve",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-catalog/products/{id}/pool-match",
+                description: "查询供应商商品池内匹配状态",
+                permission: {
+                    resource: "supplier_catalog_product",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/supplier-catalog/offerings",
                 description: "查询供给列表",

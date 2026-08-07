@@ -1154,20 +1154,49 @@ impl<'a> SupplierCatalogRepository<'a> {
 
     /// 创建供给稳定身份及其首个供给修订（跨集合多步骤写入）。
     ///
-    /// 先写入 `supplier_offering_revision`，再乐观锁更新 `supplier_offering`
-    /// （当前修订指针），保证「稳定身份 + 修订」原子可见（§6.14）。
+    /// 先写入 `supplier_offering`（已带当前修订指针），再写入
+    /// `supplier_offering_revision`，保证「稳定身份 + 首个修订」原子可见（§6.14）。
     /// **必须收到事务执行器**：传入 `NoTransaction` 时两笔写入各自自动提交，
-    /// 中途失败会留下只有修订没有指针的半成品。
+    /// 中途失败会留下半成品。
     ///
     /// # 参数
-    /// * `offering` - 已执行内容更新的供给稳定身份（带期望版本）
-    /// * `revision` - 待写入的供给修订
+    /// * `offering` - 新建供给稳定身份（`current_revision_id` 应已指向 `revision`）
+    /// * `revision` - 待写入的首个供给修订（`revision_no = 1`）
     /// * `executor` - 数据访问执行器，必须位于事务中
     ///
     /// # 错误
-    /// 当修订号唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）、稳定表版本
-    /// 冲突（[`crate::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
+    /// 当唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）或 MongoDB 写入失败时返回错误。
     pub async fn create_offering_with_revision(
+        &self,
+        offering: &SupplierOffering,
+        revision: &SupplierOfferingRevision,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        mongo_ops::insert_one(
+            &self.db.collection::<SupplierOffering>(OFFERINGS),
+            offering,
+            executor,
+        )
+        .await?;
+        mongo_ops::insert_one(
+            &self.db.collection::<SupplierOfferingRevision>(OFFERING_REVISIONS),
+            revision,
+            executor,
+        )
+        .await?;
+        Ok(())
+    }
+
+    /// 为已有供给追加新的不可变供给修订，并乐观锁更新稳定表当前修订指针。
+    ///
+    /// # 参数
+    /// * `offering` - 已设置新 `current_revision_id` 与状态的供给稳定身份
+    /// * `revision` - 待写入的新供给修订
+    /// * `executor` - 数据访问执行器，必须位于事务中
+    ///
+    /// # 错误
+    /// 当修订号唯一索引冲突、稳定表版本冲突或 MongoDB 写入失败时返回错误。
+    pub async fn append_offering_revision(
         &self,
         offering: &mut SupplierOffering,
         revision: &SupplierOfferingRevision,

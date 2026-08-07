@@ -158,6 +158,55 @@ impl<'a> Repository<'a, Party> {
     ) -> Result<Option<Party>> {
         self.find_one(doc! { "party_no": party_no }, executor).await
     }
+
+    /// 按主体编号查找主体，包含已软删除记录。
+    ///
+    /// 全局唯一索引包含软删除记录；编号占用校验必须使用本方法，避免
+    /// 仅查未删除记录时误判为可用。
+    ///
+    /// # 参数
+    /// * `party_no` - 主体编号
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的主体（含已软删除）；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_by_party_no_including_deleted(
+        &self,
+        party_no: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Party>> {
+        mongo_ops::find_one(&self.collection(), doc! { "party_no": party_no }, executor).await
+    }
+
+    /// 按统一社会信用代码查找主体，包含已软删除记录。
+    ///
+    /// 部分唯一索引 `uk_parties_credit_code` 仅约束非空代码且包含软删除；
+    /// 信用代码占用校验必须使用本方法。
+    ///
+    /// # 参数
+    /// * `unified_credit_code` - 已规范化的统一社会信用代码
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回匹配的主体（含已软删除）；无匹配时返回 `None`。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询失败时返回错误。
+    pub async fn find_by_unified_credit_code_including_deleted(
+        &self,
+        unified_credit_code: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<Party>> {
+        mongo_ops::find_one(
+            &self.collection(),
+            doc! { "unified_credit_code": unified_credit_code },
+            executor,
+        )
+        .await
+    }
 }
 
 /// 主体修订列表投影行。

@@ -237,6 +237,57 @@ export type SupplierCatalogSkuView = Readonly<{
   currentRevision: SupplierProductRevisionView
 }>
 
+/** 供应商 SKU 相对公司商品池状态。 */
+export type PoolMatchStatus = "MAPPED" | "HAS_CANDIDATES" | "UNMATCHED"
+
+export type CompanySkuMatchCandidate = Readonly<{
+  skuId: string
+  skuNo: string
+  productId: string
+  productNo: string
+  name: string
+  specification?: string
+  barcode?: string
+  baseUnitId: string
+  salesVisiblePriceGross?: string
+  activeSupplierCount: number
+  matchSignals: readonly string[]
+  score: number
+}>
+
+export type SupplierSkuPoolMatch = Readonly<{
+  supplierCatalogSkuId: string
+  supplierSkuCode: string
+  specification?: string
+  barcode?: string
+  poolStatus: PoolMatchStatus
+  mappedCompanySkuId?: string
+  mappedCompanySkuNo?: string
+  candidates: readonly CompanySkuMatchCandidate[]
+}>
+
+export type SupplierProductPoolMatchView = Readonly<{
+  supplierProductId: string
+  sourceRevisionNo: number
+  items: readonly SupplierSkuPoolMatch[]
+}>
+
+export type LinkPromoteSkuItemInput = Readonly<{
+  supplierCatalogSkuId: string
+  companySkuId: string
+  dropshipSupplyPriceGross?: string
+  bulkSupplyPriceGross?: string
+}>
+
+export type LinkPromoteToCompanyPoolInput = Readonly<{
+  supplierProductId: string
+  expectedSourceRevisionNo: number
+  inputTaxRate: string
+  supplyRegion: string[]
+  items: readonly LinkPromoteSkuItemInput[]
+  idempotencyKey: string
+}>
+
 export type SupplierCatalogItemBase = {
   queuePosition?: { current: number; total: number; snapshotId: string }
   supplierProduct: {
@@ -606,54 +657,38 @@ export type SupplierCatalogWriteResult = Readonly<{
   recordedAt: string
 }>
 
-/** 反向创建：公司商品基础字段（W21 来源预填、采购可改）。 */
-export type CompanyProductCreateFields = Readonly<{
-  name: string
-  description?: string
-  categoryId: string
-  category: string
-  brandId: string
-  brand: string
-  baseUnitId: string
-  baseUnitCode: string
-  baseUnit: string
-  carouselImages?: readonly string[]
-  detailImages?: readonly string[]
-  /** 独立必填、不可变；来源类型只可预填，无可靠来源时空白必填。 */
-  productKind: ProductKind
-  /** 新建公司 SKU 编码（sku_no）与展示规格。 */
-  skuNo: string
-  specLabel: string
-  barcode?: string
-  mainImage?: string
-}>
-
-/** 双价供给项：件代发供给价、集采供给价与集采起订量同版保存。 */
-export type ReverseCreateOfferingWrite = Readonly<{
-  dropshipSupplyPriceGross: string
-  bulkSupplyPriceGross: string
-  bulkMinimumOrderQuantity: string
-  inputTaxRate: string
-  supplyRegion: string[]
-  validFrom: string
+/** 反向入池：单行供应商 SKU → 新建公司 SKU + 映射 + 双价供给。 */
+export type ReversePromoteSkuItemInput = Readonly<{
+  supplierCatalogSkuId: string
+  skuNo?: string
+  /** 可空：空则后端回退目录代发底价。 */
+  dropshipSupplyPriceGross?: string
+  /** 可空：空则后端回退目录集采底价。 */
+  bulkSupplyPriceGross?: string
+  salesVisiblePriceGross: string
+  marketPrice: string
 }>
 
 /**
- * 反向创建入池复合命令：先有供应商 SKU，无同款公司 SKU 时，
- * 原子创建公司商品/SKU、精确映射与双价供给；
- * 销售可见价与市场价写入新建 sku_revision。
+ * 反向入池：以供应商 SPU 为上下文，同构新建公司商品 + 勾选 SKU，
+ * 原子写入映射与双价供给；确认即生效，无生效日期字段。
  */
-export type CreateCompanyProductFromSupplierSkuInput = Readonly<{
-  supplierCatalogSkuId: string
+export type ReversePromoteToCompanyPoolInput = Readonly<{
+  supplierProductId: string
   expectedSourceRevisionNo: number
-  companyProduct: CompanyProductCreateFields
-  /** 必填；写入新建 sku_revision.sales_visible_price_gross。 */
-  salesVisiblePriceGross: string
-  /** 必填市场价；写入新建 sku_revision。 */
-  marketPrice: string
-  offering: ReverseCreateOfferingWrite
+  productKind: ProductKind
+  productNo?: string
+  categoryId: string
+  brandId: string
+  baseUnitId: string
+  inputTaxRate: string
+  supplyRegion: string[]
+  items: readonly ReversePromoteSkuItemInput[]
   idempotencyKey: string
 }>
+
+/** @deprecated 使用 ReversePromoteToCompanyPoolInput */
+export type CreateCompanyProductFromSupplierSkuInput = ReversePromoteToCompanyPoolInput
 
 export const CHANGE_TYPE_LABEL: Record<ChangeType, string> = {
   NEW: "新供应商商品",

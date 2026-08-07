@@ -460,7 +460,7 @@ function SupplyRelationshipListView({
                 size="sm"
                 onClick={() => onPromote(row.original)}
               >
-                加入公司商品池
+                入池
               </Button>
             ) : null}
             <Button
