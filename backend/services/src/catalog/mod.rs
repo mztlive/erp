@@ -518,6 +518,7 @@ impl CatalogService {
                 id: row.id,
                 brand_code: row.brand_code,
                 name: row.name,
+                logo_asset_id: row.logo_asset_id,
                 status: row.status,
                 created_at: row.created_at,
                 version: row.version,
@@ -556,6 +557,7 @@ impl CatalogService {
                 brand_code: req.brand_code,
                 name: req.name,
                 status: req.status.unwrap_or(EnableStatus::Active),
+                logo_file_asset_id: req.logo_file_asset_id,
             },
             actor.id(),
         )?;
@@ -596,6 +598,7 @@ impl CatalogService {
             ProductBrandUpdate {
                 name: req.name,
                 status: req.status,
+                logo_file_asset_id: req.logo_file_asset_id,
             },
             actor.id(),
         )?;
@@ -2079,6 +2082,7 @@ impl CatalogService {
                 brand_code: VOUCHER_DEFAULT_BRAND_CODE.to_string(),
                 name: VOUCHER_DEFAULT_BRAND_NAME.to_string(),
                 status: EnableStatus::Active,
+                logo_file_asset_id: None,
             },
             actor.id(),
         )?;

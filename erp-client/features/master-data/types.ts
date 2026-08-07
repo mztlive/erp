@@ -207,6 +207,20 @@ export type MasterDataCenterView = Readonly<{
   productDetail?: ProductDetailView
   /** 公司商品类型（`product.product_kind`）；SPU 稳定身份，创建后不可变。 */
   productKind?: ProductKind
+  /**
+   * 媒体字段的已登记资产回显：字段 key（`logo`/`qualification`/`contractFile`…）
+   * → 文件清单（文件名 + asset id + 可访问 URL）。用于编辑回填与展示链接。
+   */
+  mediaAssets?: Readonly<
+    Record<
+      string,
+      ReadonlyArray<{
+        fileName: string
+        assetId: string
+        url: string
+      }>
+    >
+  >
   allowedActions: readonly string[]
   actionBlockers: readonly ActionBlocker[]
   auditEvents: readonly {
@@ -390,8 +404,12 @@ export type CategoryFields = Readonly<{
 /** 品牌字典：稳定代码 + 名称（name 在通用字段）+ 可选 Logo。 */
 export type BrandFields = Readonly<{
   code: string
-  /** 品牌 Logo 文件名；正式为 file_asset 引用。 */
+  /** 品牌 Logo 展示文件名。 */
   logo?: string
+  /** 品牌 Logo 已登记文件资产（D05）。 */
+  logoAssetId?: string
+  /** 品牌 Logo 可访问 URL（仅回显用）。 */
+  logoPreviewUrl?: string
 }>
 
 /**
@@ -425,6 +443,12 @@ export type SupplierFields = Readonly<{
   authorizationValidTo?: string
   foodLicense?: string
   legalPersonIdCard?: string
+  /** 资质字段 fileName → 已登记文件资产 id（D05）。 */
+  qualificationFileAssetIds?: Readonly<Record<string, string>>
+  contractFileAssetIds?: Readonly<Record<string, string>>
+  authorizationFileAssetIds?: Readonly<Record<string, string>>
+  foodLicenseFileAssetIds?: Readonly<Record<string, string>>
+  legalPersonIdCardFileAssetIds?: Readonly<Record<string, string>>
   taxNo?: string
   bankName?: string
   bankAccount?: string

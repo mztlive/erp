@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::catalog::status::EnableStatus;
 use crate::common::stable::StableBase;
 use crate::errors::Result;
-use crate::ids::ProductBrandId;
+use crate::ids::{FileAssetId, ProductBrandId};
 use crate::validation::normalize_required_text;
 
 /// 品牌代码最大长度。
@@ -24,6 +24,8 @@ pub struct ProductBrandData {
     pub name: String,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 品牌 Logo（已登记受控文件，D05；可空）。
+    pub logo_file_asset_id: Option<FileAssetId>,
 }
 
 /// 商品品牌更新数据。
@@ -33,6 +35,8 @@ pub struct ProductBrandUpdate {
     pub name: Option<String>,
     /// 启停状态；`None` 表示不修改。
     pub status: Option<EnableStatus>,
+    /// 品牌 Logo（已登记受控文件，D05）；`None` 表示不修改。
+    pub logo_file_asset_id: Option<Option<FileAssetId>>,
 }
 
 /// 商品品牌实体（稳定基础资料，数据模型 §6.3）。
@@ -49,6 +53,8 @@ pub struct ProductBrand {
     pub brand_code: String,
     /// 品牌名称。
     pub name: String,
+    /// 品牌 Logo（已登记受控文件，D05）。
+    pub logo_file_asset_id: Option<FileAssetId>,
 }
 
 impl PartialEq for ProductBrand {
@@ -61,6 +67,7 @@ impl PartialEq for ProductBrand {
             && self.stable.updated_by == other.stable.updated_by
             && self.brand_code == other.brand_code
             && self.name == other.name
+            && self.logo_file_asset_id == other.logo_file_asset_id
     }
 }
 
@@ -91,6 +98,7 @@ impl ProductBrand {
             stable: StableBase::new(data.status, created_by),
             brand_code,
             name,
+            logo_file_asset_id: data.logo_file_asset_id,
         })
     }
 
@@ -113,6 +121,9 @@ impl ProductBrand {
         }
         if let Some(status) = update.status {
             self.stable.status = status;
+        }
+        if let Some(logo_file_asset_id) = update.logo_file_asset_id {
+            self.logo_file_asset_id = logo_file_asset_id;
         }
         self.stable.touch(updated_by);
         Ok(())
@@ -138,6 +149,7 @@ mod tests {
             brand_code: " BR-001 ".to_string(),
             name: " 山姆自营 ".to_string(),
             status: EnableStatus::Active,
+            logo_file_asset_id: Some(FileAssetId::new("asset-logo-1")),
         }
     }
 
@@ -149,6 +161,7 @@ mod tests {
         assert_eq!(brand.brand_code, "BR-001");
         assert_eq!(brand.name, "山姆自营");
         assert_eq!(brand.stable.status(), EnableStatus::Active);
+        assert_eq!(brand.logo_file_asset_id, Some(FileAssetId::new("asset-logo-1")));
         assert!(brand.is_active());
     }
 
@@ -178,6 +191,7 @@ mod tests {
                 ProductBrandUpdate {
                     name: Some(" 新品牌 ".to_string()),
                     status: Some(EnableStatus::Disabled),
+                    logo_file_asset_id: Some(None),
                 },
                 "admin-2",
             )
@@ -185,6 +199,7 @@ mod tests {
 
         assert_eq!(brand.name, "新品牌");
         assert!(!brand.is_active());
+        assert_eq!(brand.logo_file_asset_id, None);
         assert_eq!(brand.brand_code, "BR-001");
         assert_eq!(brand.stable.updated_by, "admin-2");
     }

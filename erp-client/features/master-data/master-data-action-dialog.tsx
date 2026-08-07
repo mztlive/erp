@@ -29,8 +29,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { FileUpload } from "@/components/ui/file-upload"
+import { FileUpload, imagePreviewSource } from "@/components/ui/file-upload"
 import { Label } from "@/components/ui/label"
+import { uploadFileAssetImage } from "@/features/file-assets/api"
 import { masterDataCopy } from "@/features/master-data/copy"
 import {
   WAREHOUSE_WRITE_MESSAGE,
@@ -68,10 +69,36 @@ import type {
   MasterDataMutationResult,
   MasterDataResource,
 } from "@/features/master-data/types"
+import type { BrandFields } from "@/features/master-data/types"
 import { cn } from "@/lib/utils"
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+/** 品牌 Logo 保存前上传：返回回填 asset id / URL 后的品牌字段。 */
+async function resolveBrandLogoFields(
+  fields: BrandFields,
+  pendingFile: File | undefined,
+  existingAssetId: string,
+  existingUrl: string,
+): Promise<BrandFields> {
+  if (!fields.logo) {
+    return { ...fields, logoAssetId: undefined, logoPreviewUrl: undefined }
+  }
+  if (pendingFile) {
+    const uploaded = await uploadFileAssetImage(pendingFile)
+    return {
+      ...fields,
+      logoAssetId: uploaded.fileAssetId,
+      logoPreviewUrl: uploaded.url,
+    }
+  }
+  return {
+    ...fields,
+    logoAssetId: existingAssetId || undefined,
+    logoPreviewUrl: existingUrl || undefined,
+  }
 }
 
 type FieldApi = {
@@ -136,6 +163,10 @@ function MediaSingleField({
   selectedHint = "已选择",
   /** 品牌 Logo 等固定为正方形预览与上传区。 */
   aspectRatio,
+  /** 已登记媒体的可访问预览地址（编辑回显）。 */
+  previewUrl,
+  /** 选择文件时透出原始文件（供保存前上传）。 */
+  onFilesSelected,
 }: {
   label: string
   hint?: string
@@ -144,8 +175,23 @@ function MediaSingleField({
   required?: boolean
   selectedHint?: string
   aspectRatio?: "1:1"
+  previewUrl?: string
+  onFilesSelected?: (files: File[]) => void
 }) {
   const isSquare = aspectRatio === "1:1"
+  const [localPreview, setLocalPreview] = React.useState<string | null>(null)
+  const localPreviewRef = React.useRef<string | null>(null)
+  React.useEffect(
+    () => () => {
+      if (localPreviewRef.current) {
+        URL.revokeObjectURL(localPreviewRef.current)
+        localPreviewRef.current = null
+      }
+    },
+    [],
+  )
+  const previewSrc =
+    localPreview ?? previewUrl?.trim() ?? imagePreviewSource(value)
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-2">
@@ -160,7 +206,14 @@ function MediaSingleField({
             type="button"
             variant="ghost"
             size="sm"
-            onClick={() => onChange("")}
+            onClick={() => {
+              if (localPreviewRef.current) {
+                URL.revokeObjectURL(localPreviewRef.current)
+                localPreviewRef.current = null
+              }
+              setLocalPreview(null)
+              onChange("")
+            }}
           >
             {masterDataCopy.mediaRemove}
           </Button>
@@ -170,11 +223,25 @@ function MediaSingleField({
         isSquare ? (
           <div className="flex items-start gap-3">
             <div
-              className="flex size-24 shrink-0 flex-col items-center justify-center gap-1 rounded-lg border border-border bg-surface-sunken aspect-square"
+              className="flex size-24 shrink-0 items-center justify-center gap-1 overflow-hidden rounded-lg border border-border bg-surface-sunken aspect-square"
               aria-label={`${label} 预览 1:1`}
             >
-              <ImageIcon className="size-8 text-muted-foreground" aria-hidden />
-              <span className="text-2xs text-muted-foreground">1:1</span>
+              {previewSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element -- 本地待上传图片使用 blob URL。
+                <img
+                  src={previewSrc}
+                  alt={value}
+                  className="size-full object-cover"
+                />
+              ) : (
+                <>
+                  <ImageIcon
+                    className="size-8 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <span className="text-2xs text-muted-foreground">1:1</span>
+                </>
+              )}
             </div>
             <div className="min-w-0 flex-1 pt-1">
               <div className="truncate text-sm font-medium">{value}</div>
@@ -184,8 +251,20 @@ function MediaSingleField({
           </div>
         ) : (
           <div className="flex items-center gap-3 rounded-md border border-border bg-surface-sunken px-3 py-2">
-            <div className="flex size-10 items-center justify-center rounded-md bg-muted">
-              <ImageIcon className="size-5 text-muted-foreground" aria-hidden />
+            <div className="flex size-10 items-center justify-center overflow-hidden rounded-md bg-muted">
+              {previewSrc ? (
+                // eslint-disable-next-line @next/next/no-img-element -- 本地待上传图片使用 blob URL。
+                <img
+                  src={previewSrc}
+                  alt={value}
+                  className="size-full object-cover"
+                />
+              ) : (
+                <ImageIcon
+                  className="size-5 text-muted-foreground"
+                  aria-hidden
+                />
+              )}
             </div>
             <div className="min-w-0 flex-1">
               <div className="truncate text-sm font-medium">{value}</div>
@@ -199,9 +278,18 @@ function MediaSingleField({
           multiple={false}
           label={label}
           description={hint ?? masterDataCopy.mediaUploadHint}
+          previewSelectedImage
           onFilesSelected={(files) => {
+            onFilesSelected?.(files)
             const file = files[0]
-            if (file) onChange(file.name)
+            if (!file) return
+            if (localPreviewRef.current) {
+              URL.revokeObjectURL(localPreviewRef.current)
+            }
+            const blobUrl = URL.createObjectURL(file)
+            localPreviewRef.current = blobUrl
+            setLocalPreview(blobUrl)
+            onChange(file.name)
           }}
           className={cn(
             "p-4",
@@ -219,6 +307,8 @@ export function MediaListField({
   value,
   onChange,
   accept = "image/jpeg,image/png,image/webp",
+  urlByFileName,
+  onFilesSelected,
 }: {
   label: string
   hint?: string
@@ -226,6 +316,10 @@ export function MediaListField({
   onChange: (next: string) => void
   /** 允许上传的文件类型；默认图片。 */
   accept?: string
+  /** fileName → 可访问 URL（已上传文件回显为链接）。 */
+  urlByFileName?: Readonly<Record<string, string>>
+  /** 选择文件时透出原始文件（供保存前上传）。 */
+  onFilesSelected?: (files: File[]) => void
 }) {
   const items = parseMediaList(value)
   return (
@@ -239,30 +333,44 @@ export function MediaListField({
       </div>
       {items.length > 0 ? (
         <ul className="space-y-1.5">
-          {items.map((name, index) => (
-            <li
-              key={`${name}-${index}`}
-              className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5"
-            >
-              <ImageIcon
-                className="size-4 shrink-0 text-muted-foreground"
-                aria-hidden
-              />
-              <span className="min-w-0 flex-1 truncate text-sm">{name}</span>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                aria-label={`${masterDataCopy.mediaRemove} ${name}`}
-                onClick={() => {
-                  const next = items.filter((_, i) => i !== index)
-                  onChange(joinMediaList(next))
-                }}
+          {items.map((name, index) => {
+            const url = urlByFileName?.[name]?.trim()
+            return (
+              <li
+                key={`${name}-${index}`}
+                className="flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5"
               >
-                <XIcon className="size-3.5" />
-              </Button>
-            </li>
-          ))}
+                <ImageIcon
+                  className="size-4 shrink-0 text-muted-foreground"
+                  aria-hidden
+                />
+                {url ? (
+                  <a
+                    href={url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="min-w-0 flex-1 truncate text-sm text-primary underline-offset-2 hover:underline"
+                  >
+                    {name}
+                  </a>
+                ) : (
+                  <span className="min-w-0 flex-1 truncate text-sm">{name}</span>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`${masterDataCopy.mediaRemove} ${name}`}
+                  onClick={() => {
+                    const next = items.filter((_, i) => i !== index)
+                    onChange(joinMediaList(next))
+                  }}
+                >
+                  <XIcon className="size-3.5" />
+                </Button>
+              </li>
+            )
+          })}
         </ul>
       ) : (
         <p className="text-xs text-muted-foreground">
@@ -275,6 +383,7 @@ export function MediaListField({
         label={`添加${label}`}
         description={masterDataCopy.mediaUploadHint}
         onFilesSelected={(files) => {
+          onFilesSelected?.(files)
           const names = files.map((f) => f.name)
           onChange(joinMediaList([...items, ...names]))
         }}
@@ -289,6 +398,14 @@ function renderStandardField(
   field: FieldApi,
   extras?: {
     categoryParentOptions?: ReturnType<typeof toCategoryComboboxItems>
+    media?: {
+      /** 选择文件时透出原始文件（dialog 暂存供保存前上传）。 */
+      rememberFiles?: (defKey: string, files: File[]) => void
+      /** 已登记媒体的可访问预览地址（如品牌 Logo 回显）。 */
+      previewUrl?: string
+      /** 媒体列表字段 key → fileName → 可访问 URL。 */
+      listUrls?: Readonly<Record<string, Readonly<Record<string, string>>>>
+    }
   }
 ) {
   if (def.kind === "textarea") {
@@ -372,16 +489,25 @@ function renderStandardField(
           def.key === "logo" ? "Logo · 1:1 · 已选择" : "主图 · 已选择"
         }
         aspectRatio={def.key === "logo" ? "1:1" : undefined}
+        previewUrl={def.key === "logo" ? extras?.media?.previewUrl : undefined}
+        onFilesSelected={(files) =>
+          extras?.media?.rememberFiles?.(def.key, files)
+        }
       />
     )
   }
   if (def.kind === "media-list") {
+    const listUrls = extras?.media?.listUrls
     return (
       <MediaListField
         label={def.label}
         hint={def.hint}
         value={field.state.value}
         onChange={(next) => field.handleChange(next)}
+        urlByFileName={listUrls ? listUrls[def.key] : undefined}
+        onFilesSelected={(files) =>
+          extras?.media?.rememberFiles?.(def.key, files)
+        }
       />
     )
   }
@@ -394,12 +520,19 @@ function ResourceFieldsSection({
   resource,
   wide,
   excludeCategoryIds,
+  mediaContext,
 }: {
   form: ResourceFormApp
   resource: MasterDataResource
   wide?: boolean
   /** 更新分类时排除自身与子树，避免成环。 */
   excludeCategoryIds?: ReadonlySet<string>
+  /** 媒体字段上下文（文件暂存 / Logo 回显 / 链接回显）。 */
+  mediaContext?: {
+    rememberFiles?: (defKey: string, files: File[]) => void
+    previewUrl?: string
+    listUrls?: Readonly<Record<string, Readonly<Record<string, string>>>>
+  }
 }) {
   const categoryListQuery = useMasterDataListQuery({
     resource: "categories",
@@ -417,7 +550,7 @@ function ResourceFieldsSection({
   const defs = RESOURCE_FIELDS[resource]
   if (defs.length === 0) return null
 
-  const fieldExtras = { categoryParentOptions }
+  const fieldExtras = { categoryParentOptions, media: mediaContext }
 
   if (!wide || resource !== "products") {
     return (
@@ -578,6 +711,18 @@ export function MasterDataCreateDialog({
   const wide = usesWideDialog(resource)
   const showEffectivePeriod = usesEffectivePeriod(resource)
 
+  /** 本会话选择但尚未上传的文件；key 为 `字段key::文件名`。 */
+  const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
+  const [logoAssetId, setLogoAssetId] = React.useState("")
+  const [logoPreviewUrl, setLogoPreviewUrl] = React.useState("")
+  const rememberFiles = React.useCallback((defKey: string, files: File[]) => {
+    for (const file of files) {
+      pendingFilesRef.current.set(`${defKey}::${file.name}`, file)
+    }
+    // 重新选 Logo 后旧 asset 作废，保存时以上传结果为准
+    if (defKey === "logo") setLogoAssetId("")
+  }, [])
+
   const defaults: ResourceFormValues = {
     name: "",
     effectiveFrom: showEffectivePeriod
@@ -595,6 +740,24 @@ export function MasterDataCreateDialog({
       onChange: buildResourceSchema(resource, RESOURCE_FIELDS[resource]),
     },
     onSubmit: async ({ value }) => {
+      let fields = buildResourceFields(resource, value)
+      if (resource === "brands") {
+        try {
+          fields = await resolveBrandLogoFields(
+            fields as BrandFields,
+            pendingFilesRef.current.get(`logo::${(fields as BrandFields).logo}`),
+            logoAssetId,
+            logoPreviewUrl,
+          )
+        } catch (error) {
+          setResult({
+            outcome: "blocked",
+            code: "MEDIA_UPLOAD_FAILED",
+            message: error instanceof Error ? error.message : "Logo 上传失败",
+          })
+          return
+        }
+      }
       const response = await mutation.mutateAsync({
         resource,
         name: value.name.trim(),
@@ -605,7 +768,7 @@ export function MasterDataCreateDialog({
           ? value.effectiveTo.trim() || undefined
           : undefined,
         changeReason: value.changeReason.trim(),
-        fields: buildResourceFields(resource, value),
+        fields,
         idempotencyKey,
       })
       setResult(response)
@@ -615,6 +778,8 @@ export function MasterDataCreateDialog({
   const reset = () => {
     setResult(null)
     setIdempotencyKey(newIdempotencyKey("create"))
+    setLogoAssetId("")
+    setLogoPreviewUrl("")
     form.reset()
   }
 
@@ -692,6 +857,10 @@ export function MasterDataCreateDialog({
                 form={form}
                 resource={resource}
                 wide={wide}
+                mediaContext={{
+                  rememberFiles,
+                  previewUrl: logoPreviewUrl,
+                }}
               />
               {showEffectivePeriod ? (
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -796,6 +965,18 @@ export function MasterDataReviseDialog({
   )
   const [discardOpen, setDiscardOpen] = React.useState(false)
 
+  /** 本会话选择但尚未上传的文件；key 为 `字段key::文件名`。 */
+  const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
+  const [logoAssetId, setLogoAssetId] = React.useState("")
+  const [logoPreviewUrl, setLogoPreviewUrl] = React.useState("")
+  const rememberFiles = React.useCallback((defKey: string, files: File[]) => {
+    for (const file of files) {
+      pendingFilesRef.current.set(`${defKey}::${file.name}`, file)
+    }
+    // 重新选 Logo 后旧 asset 作废，保存时以上传结果为准
+    if (defKey === "logo") setLogoAssetId("")
+  }, [])
+
   const isWarehouse = resource === "warehouses"
   const wide = usesWideDialog(resource)
   const showEffectivePeriod = usesEffectivePeriod(resource)
@@ -844,6 +1025,24 @@ export function MasterDataReviseDialog({
     },
     onSubmit: async ({ value }) => {
       if (!stableId || !baseRevisionId) return
+      let fields = buildResourceFields(resource, value)
+      if (resource === "brands") {
+        try {
+          fields = await resolveBrandLogoFields(
+            fields as BrandFields,
+            pendingFilesRef.current.get(`logo::${(fields as BrandFields).logo}`),
+            logoAssetId,
+            logoPreviewUrl,
+          )
+        } catch (error) {
+          setResult({
+            outcome: "blocked",
+            code: "MEDIA_UPLOAD_FAILED",
+            message: error instanceof Error ? error.message : "Logo 上传失败",
+          })
+          return
+        }
+      }
       const response = await mutation.mutateAsync({
         resource,
         stableId,
@@ -857,7 +1056,7 @@ export function MasterDataReviseDialog({
           ? value.effectiveTo.trim() || undefined
           : undefined,
         changeReason: value.changeReason.trim(),
-        fields: buildResourceFields(resource, value),
+        fields,
         idempotencyKey,
       })
       setResult(response)
@@ -884,6 +1083,13 @@ export function MasterDataReviseDialog({
       )) {
         form.setFieldValue(key, value)
       }
+      // 品牌 Logo 回显：asset id + URL 由媒体资产映射恢复
+      const logoAsset =
+        target && "mediaAssets" in target
+          ? target.mediaAssets?.logo?.[0]
+          : undefined
+      setLogoAssetId(logoAsset?.assetId ?? "")
+      setLogoPreviewUrl(logoAsset?.url ?? "")
       setResult(null)
       setIdempotencyKey(newIdempotencyKey("revise"))
     }
@@ -1003,6 +1209,10 @@ export function MasterDataReviseDialog({
                 resource={resource}
                 wide={wide}
                 excludeCategoryIds={excludeCategoryIds}
+                mediaContext={{
+                  rememberFiles,
+                  previewUrl: logoPreviewUrl,
+                }}
               />
               {showEffectivePeriod ? (
                 <div className="grid gap-3 sm:grid-cols-2">

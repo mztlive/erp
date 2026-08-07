@@ -627,6 +627,8 @@ export function buildResourceFields(
       return {
         code: pickField(values, "code") ?? "",
         logo: pickField(values, "logo"),
+        logoAssetId: pickField(values, "logoAssetId"),
+        logoPreviewUrl: pickField(values, "logoPreviewUrl"),
       }
     case "unit-of-measures":
       return {

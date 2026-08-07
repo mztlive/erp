@@ -251,6 +251,8 @@ pub struct ProductBrandRow {
     pub brand_code: String,
     /// 品牌名称。
     pub name: String,
+    /// 品牌 Logo（已登记受控文件，D05）。
+    pub logo_asset_id: Option<String>,
     /// 启停状态。
     pub status: EnableStatus,
     /// 乐观锁版本。
@@ -1776,6 +1778,7 @@ fn product_brand_projection() -> Document {
         "id": 1,
         "brand_code": 1,
         "name": 1,
+        "logo_file_asset_id": 1,
         "status": 1,
         "version": 1,
         "created_at": 1,

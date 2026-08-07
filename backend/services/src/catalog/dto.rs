@@ -308,6 +308,8 @@ pub struct CreateProductBrandRequest {
     /// 启停状态；缺省视为启用。
     #[serde(default)]
     pub status: Option<EnableStatus>,
+    /// 品牌 Logo（已登记受控文件，D05；可空）。
+    pub logo_file_asset_id: Option<FileAssetId>,
 }
 
 /// 商品品牌更新请求（携带乐观锁版本）。
@@ -320,6 +322,8 @@ pub struct UpdateProductBrandRequest {
     pub name: Option<String>,
     /// 启停状态；缺省表示不修改。
     pub status: Option<EnableStatus>,
+    /// 品牌 Logo（已登记受控文件，D05）；`null` 表示清除，缺省表示不修改。
+    pub logo_file_asset_id: Option<Option<FileAssetId>>,
 }
 
 /// 商品品牌响应视图。
@@ -331,6 +335,8 @@ pub struct ProductBrandView {
     pub brand_code: String,
     /// 品牌名称。
     pub name: String,
+    /// 品牌 Logo（已登记受控文件，D05）。
+    pub logo_asset_id: Option<String>,
     /// 启停状态。
     pub status: EnableStatus,
     /// 创建时间（秒级时间戳）。
@@ -352,6 +358,7 @@ impl From<ProductBrand> for ProductBrandView {
             id: brand.base.id,
             brand_code: brand.brand_code,
             name: brand.name,
+            logo_asset_id: brand.logo_file_asset_id.map(|id| id.to_string()),
             status: brand.stable.status,
             created_at: brand.base.created_at,
             version: brand.base.version,

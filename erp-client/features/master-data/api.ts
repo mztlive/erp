@@ -38,6 +38,7 @@ import type {
   UnitOfMeasureFields,
   VoucherCategoryFields,
 } from "@/features/master-data/types"
+import { parseMediaList } from "@/features/master-data/resource-fields"
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
 
 // ---------------------------------------------------------------------------
@@ -98,6 +99,7 @@ type ProductBrandDto = {
   id: string
   brand_code: string
   name: string
+  logo_asset_id?: string | null
   status: EnableStatus
   created_at: number
   version: number
@@ -1389,7 +1391,29 @@ async function centerBrand(
   const dto = items.find((b) => b.id === stableId)
   if (!dto) return null
   const row = mapBrandRow(dto)
-  return baseCenter("brands", row)
+  const logoAssetId = dto.logo_asset_id?.trim()
+  const logoAsset = logoAssetId ? await fetchFileAsset(logoAssetId) : null
+  const logoUrl = logoAsset?.public_url?.trim()
+  return baseCenter("brands", row, {
+    resourceFacts: [
+      { label: "品牌代码", value: dto.brand_code },
+      {
+        label: "品牌 Logo",
+        value: logoUrl && logoAsset ? logoAsset.file_name : "—",
+      },
+    ],
+    mediaAssets: logoUrl && logoAsset
+      ? {
+          logo: [
+            {
+              fileName: logoAsset.file_name,
+              assetId: logoAssetId!,
+              url: logoUrl,
+            },
+          ],
+        }
+      : undefined,
+  })
 }
 
 async function centerUnitOfMeasure(
@@ -1762,11 +1786,39 @@ async function centerSupplier(
   const qualByType = (type: string) =>
     qualifications.find((q) => q.qualification_type === type)
 
-  const certificateQual = qualByType("certificate")
+  // 资质附件：解析 asset → 文件清单（fileName/assetId/url），供回显链接与编辑回填
+  const qualGroups = new Map<string, SupplierQualificationDto[]>()
+  for (const q of qualifications) {
+    const list = qualGroups.get(q.qualification_type) ?? []
+    list.push(q)
+    qualGroups.set(q.qualification_type, list)
+  }
+  const qualAssets = await resolveMediaAssets(
+    qualifications
+      .map((q) => q.attachment_id)
+      .filter((id): id is string => Boolean(id?.trim())),
+  )
+  const qualFieldEntries = (
+    type: string,
+  ): { fileName: string; assetId: string; url: string }[] =>
+    (qualGroups.get(type) ?? []).flatMap((q) => {
+      const asset = q.attachment_id ? qualAssets.get(q.attachment_id) : null
+      if (!asset?.public_url) return []
+      return [
+        {
+          fileName: asset.file_name,
+          assetId: asset.id,
+          url: asset.public_url,
+        },
+      ]
+    })
+  const qualFileNames = (type: string): string =>
+    qualFieldEntries(type)
+      .map((entry) => entry.fileName)
+      .join(", ")
+
   const contractQual = qualByType("contract")
   const authQual = qualByType("authorization")
-  const foodQual = qualByType("food_license")
-  const legalIdQual = qualByType("legal_person_id")
 
   // 标签必须与 RESOURCE_FIELDS.suppliers / masterDataCopy 一致，供编辑回填
   const facts = factsOf(
@@ -1782,28 +1834,16 @@ async function centerSupplier(
     fact("公司签约主体", signingEntityName),
     fact("公司付款主体", paymentEntityName),
     // 标签必须与 masterDataCopy / RESOURCE_FIELDS.suppliers 完全一致
-    fact(
-      "资质附件",
-      certificateQual?.attachment_id ?? certificateQual?.certificate_no
-    ),
+    fact("资质附件", qualFileNames("certificate") || null),
     fact("合同编号", contractQual?.certificate_no),
     fact("合同有效期起", contractQual?.valid_from),
     fact("合同有效期止", contractQual?.valid_to),
-    fact("合同文件", contractQual?.attachment_id),
-    fact(
-      "授权书文件",
-      authQual?.attachment_id ?? authQual?.certificate_no
-    ),
+    fact("合同文件", qualFileNames("contract") || null),
+    fact("授权书文件", qualFileNames("authorization") || null),
     fact("授权书有效期起", authQual?.valid_from),
     fact("授权书有效期止", authQual?.valid_to),
-    fact(
-      "食品经营许可证",
-      foodQual?.attachment_id ?? foodQual?.certificate_no
-    ),
-    fact(
-      "供应商法人身份证",
-      legalIdQual?.attachment_id ?? legalIdQual?.certificate_no
-    ),
+    fact("食品经营许可证", qualFileNames("food_license") || null),
+    fact("供应商法人身份证", qualFileNames("legal_person_id") || null),
     fact(
       "税号",
       taxProfile?.tax_no ?? party?.unified_credit_code
@@ -1882,6 +1922,13 @@ async function centerSupplier(
       actor: "—",
       // 编辑回填专用：完整字段 + 真实值（无「—」占位）
       fields: facts,
+    },
+    mediaAssets: {
+      qualification: qualFieldEntries("certificate"),
+      contractFile: qualFieldEntries("contract"),
+      authorizationFile: qualFieldEntries("authorization"),
+      foodLicense: qualFieldEntries("food_license"),
+      legalPersonIdCard: qualFieldEntries("legal_person_id"),
     },
     revisionTimeline:
       timeline.length > 0
@@ -2022,6 +2069,7 @@ async function createBrand(
       brand_code: fields.code,
       name: input.name.trim(),
       status: "active",
+      logo_file_asset_id: fields.logoAssetId || null,
     })
     return {
       outcome: "succeeded",
@@ -2425,73 +2473,96 @@ async function persistSupplierAncillary(params: {
     }
   }
 
-  const existingQualTypes = new Set(
-    existingQuals.map((q) => q.qualification_type)
+  // 资质落库：每文件一条记录（certificate_no = 文件名，attachment = 已上传资产）；
+  // 合同类型保留「合同编号」字段语义（首文件作为附件）。
+  const existingQualKeys = new Set(
+    existingQuals.map((q) => `${q.qualification_type}::${q.certificate_no}`)
   )
   const qualWrites: Array<{
     type: string
     certificateNo: string
+    attachmentId?: string
     validFrom?: string
     validTo?: string
   }> = []
 
-  if (fields.qualification?.trim() && !existingQualTypes.has("certificate")) {
-    qualWrites.push({
-      type: "certificate",
-      certificateNo: fields.qualification.split(",")[0]?.trim() || "QUAL",
-      validFrom,
-    })
-  }
-  if (
-    (fields.contractNo?.trim() || fields.contractFile?.trim()) &&
-    !existingQualTypes.has("contract")
-  ) {
-    qualWrites.push({
-      type: "contract",
-      certificateNo: fields.contractNo?.trim() || "CONTRACT",
-      validFrom: fields.contractValidFrom || validFrom,
-      validTo: fields.contractValidTo,
-    })
-  }
-  if (
-    fields.authorizationFile?.trim() &&
-    !existingQualTypes.has("authorization")
-  ) {
-    qualWrites.push({
-      type: "authorization",
-      certificateNo:
-        fields.authorizationFile.split(",")[0]?.trim() || "AUTH",
-      validFrom: fields.authorizationValidFrom || validFrom,
-      validTo: fields.authorizationValidTo,
-    })
-  }
-  if (fields.foodLicense?.trim() && !existingQualTypes.has("food_license")) {
-    qualWrites.push({
-      type: "food_license",
-      certificateNo: fields.foodLicense.split(",")[0]?.trim() || "FOOD",
-      validFrom,
-    })
-  }
-  if (
-    fields.legalPersonIdCard?.trim() &&
-    !existingQualTypes.has("legal_person_id")
-  ) {
-    qualWrites.push({
-      type: "legal_person_id",
-      certificateNo:
-        fields.legalPersonIdCard.split(",")[0]?.trim() || "IDCARD",
-      validFrom,
-    })
+  const pushQualFiles = (
+    type: string,
+    files: string[],
+    assetIds: Readonly<Record<string, string>> | undefined,
+    validFromOverride?: string,
+    validToOverride?: string,
+    forceSingle = false,
+  ) => {
+    const names = files.map((f) => f.trim()).filter(Boolean)
+    if (names.length === 0) return
+    if (forceSingle) {
+      qualWrites.push({
+        type,
+        certificateNo:
+          (type === "contract"
+            ? fields.contractNo?.trim() || "CONTRACT"
+            : names[0]) || "QUAL",
+        attachmentId: assetIds?.[names[0]]?.trim(),
+        validFrom: validFromOverride,
+        validTo: validToOverride,
+      })
+      return
+    }
+    for (const name of names) {
+      qualWrites.push({
+        type,
+        certificateNo: name,
+        attachmentId: assetIds?.[name]?.trim(),
+        validFrom: validFromOverride,
+        validTo: validToOverride,
+      })
+    }
   }
 
+  pushQualFiles(
+    "certificate",
+    parseMediaList(fields.qualification),
+    fields.qualificationFileAssetIds,
+    validFrom,
+  )
+  pushQualFiles(
+    "contract",
+    parseMediaList(fields.contractFile),
+    fields.contractFileAssetIds,
+    fields.contractValidFrom || validFrom,
+    fields.contractValidTo,
+    true,
+  )
+  pushQualFiles(
+    "authorization",
+    parseMediaList(fields.authorizationFile),
+    fields.authorizationFileAssetIds,
+    fields.authorizationValidFrom || validFrom,
+    fields.authorizationValidTo,
+  )
+  pushQualFiles(
+    "food_license",
+    parseMediaList(fields.foodLicense),
+    fields.foodLicenseFileAssetIds,
+    validFrom,
+  )
+  pushQualFiles(
+    "legal_person_id",
+    parseMediaList(fields.legalPersonIdCard),
+    fields.legalPersonIdCardFileAssetIds,
+    validFrom,
+  )
+
   for (const q of qualWrites) {
+    if (existingQualKeys.has(`${q.type}::${q.certificateNo}`)) continue
     try {
       await apiPost(`/admin/suppliers/${supplierId}/qualifications`, {
         qualification_type: q.type,
         certificate_no: q.certificateNo,
         valid_from: q.validFrom || validFrom,
         valid_to: q.validTo || null,
-        attachment_id: undefined,
+        attachment_id: q.attachmentId ?? undefined,
         capability_ids: [],
         status: "active",
       })
@@ -2770,11 +2841,15 @@ export async function createMasterDataRevision(
         }
       }
       case "brands": {
+        const fields = input.fields as BrandFields
         const updated = await apiPut<ProductBrandDto>(
           `/admin/product-brands/${input.stableId}`,
           {
             version: input.expectedLockVersion,
             name: input.name.trim(),
+            logo_file_asset_id: fields.logo
+              ? fields.logoAssetId || null
+              : null,
           }
         )
         return {

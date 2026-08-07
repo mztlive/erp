@@ -49,6 +49,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
+import { uploadFileAssetImage } from "@/features/file-assets/api"
 import {
   MasterDataDisableDialog,
   MediaListField,
@@ -72,6 +73,7 @@ import {
 import type {
   MasterDataCenterView,
   MasterDataMutationResult,
+  SupplierFields,
 } from "@/features/master-data/types"
 import { formatDateTime } from "@/lib/datetime"
 import { cn } from "@/lib/utils"
@@ -442,6 +444,73 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey(isCreate ? "create-supplier" : "revise-supplier"),
   )
+  /** 已登记资质附件：字段 key → fileName → { assetId, url }（回显链接 + 再次保存不重复上传）。 */
+  const mediaAssetMaps = React.useMemo(() => {
+    const maps: Record<
+      string,
+      Record<string, { assetId: string; url: string }>
+    > = {}
+    for (const [key, entries] of Object.entries(data?.mediaAssets ?? {})) {
+      const map: Record<string, { assetId: string; url: string }> = {}
+      for (const entry of entries) {
+        map[entry.fileName] = { assetId: entry.assetId, url: entry.url }
+      }
+      maps[key] = map
+    }
+    return maps
+  }, [data])
+  /** 本会话选择但尚未上传的资质文件；保存时按文件名上传并回填 asset id。 */
+  const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
+  const rememberMediaFiles = React.useCallback((files: File[]) => {
+    for (const file of files) {
+      pendingFilesRef.current.set(file.name, file)
+    }
+  }, [])
+  const mediaUrlsFor = React.useCallback(
+    (fieldKey: string): Readonly<Record<string, string>> => {
+      const entries = mediaAssetMaps[fieldKey] ?? {}
+      return Object.fromEntries(
+        Object.entries(entries).map(([name, info]) => [name, info.url]),
+      )
+    },
+    [mediaAssetMaps],
+  )
+  /** 上传仍为本地待传的资质文件，返回 fileName → asset id 映射（按字段）。 */
+  const resolvePendingMedia = React.useCallback(
+    async (
+      values: SupplierEditorFormValues,
+    ): Promise<Record<string, Record<string, string>>> => {
+      const mediaFields = [
+        "qualification",
+        "contractFile",
+        "authorizationFile",
+        "foodLicense",
+        "legalPersonIdCard",
+      ] as const
+      const out: Record<string, Record<string, string>> = {}
+      for (const key of mediaFields) {
+        const names = (values[key] ?? "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+        const existing = mediaAssetMaps[key] ?? {}
+        const map: Record<string, string> = {}
+        for (const name of names) {
+          if (existing[name]?.assetId) {
+            map[name] = existing[name].assetId
+            continue
+          }
+          const file = pendingFilesRef.current.get(name)
+          if (!file) continue
+          const uploaded = await uploadFileAssetImage(file, "attachment")
+          map[name] = uploaded.fileAssetId
+        }
+        out[key] = map
+      }
+      return out
+    },
+    [mediaAssetMaps],
+  )
   const [disableOpen, setDisableOpen] = React.useState(false)
   const [discardOpen, setDiscardOpen] = React.useState(false)
   const [saveReasonOpen, setSaveReasonOpen] = React.useState(false)
@@ -480,7 +549,23 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
         return
       }
 
-      const fields = buildResourceFields("suppliers", value)
+      let fields = buildResourceFields("suppliers", value)
+      try {
+        const assetMaps = await resolvePendingMedia(value)
+        fields = {
+          ...fields,
+          qualificationFileAssetIds: assetMaps.qualification,
+          contractFileAssetIds: assetMaps.contractFile,
+          authorizationFileAssetIds: assetMaps.authorizationFile,
+          foodLicenseFileAssetIds: assetMaps.foodLicense,
+          legalPersonIdCardFileAssetIds: assetMaps.legalPersonIdCard,
+        } as SupplierFields
+      } catch (error) {
+        setFormError(
+          error instanceof Error ? error.message : "资质文件上传失败",
+        )
+        return
+      }
 
       if (!isCreate) {
         if (!data || !revisionId || lockVersion == null) return
@@ -1234,6 +1319,8 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                     onChange={(next) =>
                                       setFieldValue("contractFile", next)
                                     }
+                                    urlByFileName={mediaUrlsFor("contractFile")}
+                                    onFilesSelected={rememberMediaFiles}
                                     accept="image/jpeg,image/png,image/webp,application/pdf"
                                   />
                                 </div>
@@ -1294,6 +1381,8 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                     onChange={(next) =>
                                       setFieldValue("authorizationFile", next)
                                     }
+                                    urlByFileName={mediaUrlsFor("authorizationFile")}
+                                    onFilesSelected={rememberMediaFiles}
                                     accept="image/jpeg,image/png,image/webp,application/pdf"
                                   />
                                 </div>
@@ -1315,6 +1404,8 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                     onChange={(next) =>
                                       setFieldValue("qualification", next)
                                     }
+                                    urlByFileName={mediaUrlsFor("qualification")}
+                                    onFilesSelected={rememberMediaFiles}
                                     accept="image/jpeg,image/png,image/webp,application/pdf"
                                   />
                                 </div>
@@ -1328,6 +1419,8 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                     onChange={(next) =>
                                       setFieldValue("foodLicense", next)
                                     }
+                                    urlByFileName={mediaUrlsFor("foodLicense")}
+                                    onFilesSelected={rememberMediaFiles}
                                     accept="image/jpeg,image/png,image/webp,application/pdf"
                                   />
                                 </div>
@@ -1341,6 +1434,8 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                     onChange={(next) =>
                                       setFieldValue("legalPersonIdCard", next)
                                     }
+                                    urlByFileName={mediaUrlsFor("legalPersonIdCard")}
+                                    onFilesSelected={rememberMediaFiles}
                                     accept="image/jpeg,image/png,image/webp,application/pdf"
                                   />
                                 </div>
