@@ -1,14 +1,13 @@
 //! `supplier_commercial_profile_revision`：供应商商务结算版本（§6.2）。
 //!
-//! 不可变修订：同一供应商商务版本有效期不得重叠（跨行约束由 P3 事务
-//! 校验，§6.2）；付款条件按 §2.2 / §4.4 内联为结构化快照字段。
+//! 不可变修订：新版本保存即成为当前版本，没有生效窗口概念；付款条件按
+//! §2.2 / §4.4 内联为结构化快照字段。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::common::revision::RevisionBase;
-use crate::common::time::BusinessDate;
 use crate::errors::{Error, Result};
 use crate::money::Rate;
 use crate::validation::normalize_required_text;
@@ -167,10 +166,6 @@ pub struct SupplierCommercialProfileRevisionData {
     pub signing_entity_party_id: PartyId,
     /// 付款时的公司主体（内部 `party` 引用）。
     pub payment_entity_party_id: PartyId,
-    /// 生效开始日期。
-    pub valid_from: BusinessDate,
-    /// 生效结束日期；`None` 表示长期有效。
-    pub valid_to: Option<BusinessDate>,
     /// 变更原因。
     pub change_reason: String,
 }
@@ -198,10 +193,6 @@ pub struct SupplierCommercialProfileRevision {
     pub signing_entity_party_id: PartyId,
     /// 付款主体。
     pub payment_entity_party_id: PartyId,
-    /// 生效开始日期。
-    pub valid_from: BusinessDate,
-    /// 生效结束日期。
-    pub valid_to: Option<BusinessDate>,
     /// 变更原因。
     pub change_reason: String,
 }
@@ -210,8 +201,7 @@ impl SupplierCommercialProfileRevision {
     /// 创建商务结算版本。
     ///
     /// 完成付款条件快照与变更原因的必填校验与规范化（去首尾空白、
-    /// 长度上限）；发票税点必须是 `[0, 1)` 的定点小数（§4.2 税率约定）；
-    /// 强制 `valid_to` 晚于 `valid_from`。
+    /// 长度上限）；发票税点必须是 `[0, 1)` 的定点小数（§4.2 税率约定）。
     ///
     /// # 参数
     /// * `id` - 实体主键（`entities::ids::SupplierCommercialProfileRevisionId`）
@@ -221,7 +211,7 @@ impl SupplierCommercialProfileRevision {
     /// 返回新建的版本实体。
     ///
     /// # 错误
-    /// 当快照/原因为空或超长、税点越界或生效区间倒挂时返回错误。
+    /// 当快照/原因为空或超长、税点越界时返回错误。
     pub fn new(
         id: SupplierCommercialProfileRevisionId,
         data: SupplierCommercialProfileRevisionData,
@@ -239,7 +229,6 @@ impl SupplierCommercialProfileRevision {
             "变更原因过长",
         )?;
         ensure_tax_rate_valid(data.invoice_tax_rate)?;
-        ensure_window_valid(data.valid_from, data.valid_to)?;
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -252,8 +241,6 @@ impl SupplierCommercialProfileRevision {
             invoice_tax_rate: data.invoice_tax_rate,
             signing_entity_party_id: data.signing_entity_party_id,
             payment_entity_party_id: data.payment_entity_party_id,
-            valid_from: data.valid_from,
-            valid_to: data.valid_to,
             change_reason,
         })
     }
@@ -277,26 +264,6 @@ fn ensure_tax_rate_valid(rate: Rate) -> Result<()> {
     Ok(())
 }
 
-/// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
-///
-/// # 参数
-/// * `valid_from` - 生效开始日期
-/// * `valid_to` - 生效结束日期（可空）
-///
-/// # 返回
-/// 区间合法返回 `Ok(())`。
-///
-/// # 错误
-/// 结束日期不晚于开始日期时返回错误。
-fn ensure_window_valid(valid_from: BusinessDate, valid_to: Option<BusinessDate>) -> Result<()> {
-    if let Some(valid_to) = valid_to {
-        if valid_to <= valid_from {
-            return Err(Error::from("生效结束日期必须晚于生效开始日期"));
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -305,7 +272,6 @@ mod tests {
         InvoiceType, ReconciliationCycle, SettlementMode, SupplierCommercialProfileRevision,
         SupplierCommercialProfileRevisionData,
     };
-    use crate::common::time::BusinessDate;
     use crate::ids::{PartyId, SupplierAccountId, SupplierCommercialProfileRevisionId};
     use crate::money::{line_amounts, Amount, Quantity, Rate, UnitPrice};
 
@@ -320,8 +286,6 @@ mod tests {
             invoice_tax_rate: Rate::from_str("0.13").unwrap(),
             signing_entity_party_id: PartyId::new("party-internal-1"),
             payment_entity_party_id: PartyId::new("party-internal-2"),
-            valid_from: BusinessDate::from_ymd(2026, 1, 1).unwrap(),
-            valid_to: Some(BusinessDate::from_ymd(2026, 12, 31).unwrap()),
             change_reason: " 首次建档 ".to_string(),
         }
     }
@@ -342,7 +306,7 @@ mod tests {
         assert_eq!(profile.revision.revision_no, 1);
     }
 
-    /// 失败路径：快照/原因为空或超长、税点越界、区间倒挂。
+    /// 失败路径：快照/原因为空或超长、税点越界。
     #[test]
     fn new_rejects_invalid_inputs() {
         let blank_snapshot = SupplierCommercialProfileRevisionData {
@@ -372,16 +336,6 @@ mod tests {
         assert!(SupplierCommercialProfileRevision::new(
             SupplierCommercialProfileRevisionId::new("p"),
             bad_rate,
-        )
-        .is_err());
-
-        let reversed = SupplierCommercialProfileRevisionData {
-            valid_to: Some(BusinessDate::from_ymd(2025, 12, 31).unwrap()),
-            ..profile_data()
-        };
-        assert!(SupplierCommercialProfileRevision::new(
-            SupplierCommercialProfileRevisionId::new("p"),
-            reversed,
         )
         .is_err());
     }

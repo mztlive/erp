@@ -1,11 +1,11 @@
 use std::{
     ffi::OsString,
-    path::{Component, Path, PathBuf},
+    path::{Path, PathBuf},
 };
 use tokio::{fs, io::AsyncWriteExt};
 use uuid::Uuid;
 
-use crate::{Error, Result};
+use crate::{path::validate_relative_path, Error, Result};
 
 /// 本地文件存储实现
 pub struct LocalStorage {
@@ -124,26 +124,7 @@ impl LocalStorage {
     /// 如果路径无效，将返回错误
     fn full_path<P: AsRef<Path>>(&self, path: P) -> Result<PathBuf> {
         let path = path.as_ref();
-
-        if path.as_os_str().is_empty() || path.is_absolute() {
-            return Err(Error::PathError("存储路径必须是非空相对路径".to_string()));
-        }
-
-        let mut has_normal_component = false;
-        for component in path.components() {
-            match component {
-                Component::Normal(_) => has_normal_component = true,
-                Component::CurDir => {}
-                Component::ParentDir | Component::RootDir | Component::Prefix(_) => {
-                    return Err(Error::PathError("存储路径不能越过基础目录".to_string()));
-                }
-            }
-        }
-
-        if !has_normal_component {
-            return Err(Error::PathError("存储路径不能为空".to_string()));
-        }
-
+        validate_relative_path(path)?;
         Ok(self.base_path.join(path))
     }
 }

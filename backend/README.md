@@ -42,6 +42,7 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
 2. Key fields:
    - `[app]` `port`, `secret` (JWT key), `upload_path` (a dedicated non-root local or absolute storage directory), `upload_min_free_bytes` (post-write filesystem reserve), `file_base_url` (public prefix for file URLs; defaults to the API’s `/uploads` mount)
    - `[database]` `uri`, `db_name`
+   - Optional `[s3]` `bucket`, `region`, `endpoint`, `access_key_id`, `secret_access_key`, `session_token`, `key_prefix`, `force_path_style`; this validated block supplies `storage::S3Storage` startup parameters and does not switch the existing local upload route by itself.
 3. Optional Nacos configuration updates (database connection changes require a process restart):
    ```bash
    cargo run -p web-api -- \

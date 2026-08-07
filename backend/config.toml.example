@@ -11,3 +11,17 @@ upload_min_free_bytes = 536870912
 # 请修改为你的 MongoDB 连接字符串
 uri = "mongodb://username:password@host:port/database"
 db_name = "rs_project_template"
+
+# 如需使用 S3 或 S3-compatible 对象存储，取消以下配置的注释并替换凭证。
+# [s3]
+# bucket = "erp-assets"
+# region = "cn-south-1"
+# AWS S3 可省略 endpoint；MinIO/云厂商兼容服务必须填写完整 URL。
+# endpoint = "https://s3.example.com"
+# access_key_id = "replace-with-access-key-id"
+# secret_access_key = "replace-with-secret-access-key"
+# 仅临时凭证需要 session_token。
+# session_token = "replace-with-session-token"
+# key_prefix = "erp/uploads"
+# MinIO 等需要 path-style URL 的服务设为 true。
+# force_path_style = false

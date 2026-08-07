@@ -19,6 +19,7 @@ export function resourceLabel(resource: MasterDataResource): string {
       ["products", "商品与 SKU"],
       ["categories", "商品分类"],
       ["brands", "品牌"],
+      ["unit-of-measures", "计量单位"],
       ["voucher-categories", "卡券类目"],
       ["suppliers", "供应商与资质"],
       ["warehouses", "仓库"],

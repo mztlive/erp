@@ -8,7 +8,6 @@
 
 use database::{AccessControlExt, NoTransaction, PartyExt, Transactional};
 use entities::common::revision::RevisionBase;
-use entities::common::time::BusinessDate;
 use entities::field_update::FieldUpdate;
 use entities::party::{
     Party, PartyData, PartyId, PartyKind, PartyRevision, PartyRevisionData, PartyRevisionId, PartyStatus,
@@ -112,8 +111,6 @@ impl PartyService {
                 revision_no: 1,
                 legal_name: req.legal_name,
                 short_name: req.short_name,
-                effective_from: req.effective_from,
-                effective_to: req.effective_to,
                 change_reason: req.change_reason,
             },
         )?;
@@ -224,8 +221,8 @@ impl PartyService {
     /// 更新主体（乐观锁 + 追加修订）。
     ///
     /// 期望版本 `req.version` 与当前版本不一致时直接返回冲突（409）；
-    /// 新修订的生效区间与既有修订不得重叠（§6.2 跨行约束，事务内校验）。
-    /// 仓储层 `append_party_revision` 以 `id + version` CAS 兜底并发竞争。
+    /// 新修订保存即成为当前修订。仓储层 `append_party_revision` 以
+    /// `id + version` CAS 兜底并发竞争。
     ///
     /// # 参数
     /// * `id` - 主体 ID
@@ -237,7 +234,7 @@ impl PartyService {
     ///
     /// # 错误
     /// * `NotFound` - 主体不存在
-    /// * `ConflictError` - 期望版本与当前版本不一致，或修订区间与既有修订重叠
+    /// * `ConflictError` - 期望版本与当前版本不一致
     /// * `ValidationError` - 请求体校验失败
     pub async fn update_party(
         &self,
@@ -258,8 +255,7 @@ impl PartyService {
             .resource_log("party.update", "party", party.base.id.clone())?;
         let updated_by = actor.id().to_string();
 
-        // 事务内重读修订历史：校验新窗口与既有修订不重叠（§6.2），
-        // 并计算下一修订序号。
+        // 事务内重读修订历史：计算下一修订序号。
         let db = self.db.clone();
         let client = db.client().clone();
         let mut party_for_tx = party.clone();
@@ -270,13 +266,9 @@ impl PartyService {
                 revision_no: 0,
                 legal_name: req.legal_name,
                 short_name: req.short_name,
-                effective_from: req.effective_from,
-                effective_to: req.effective_to,
                 change_reason: req.change_reason,
             },
         )?;
-        let effective_from = req.effective_from;
-        let effective_to = req.effective_to;
         let unified_credit_code = req.unified_credit_code;
         let status = req.status;
         let updated = client
@@ -292,7 +284,6 @@ impl PartyService {
                         .max()
                         .unwrap_or(0)
                         + 1;
-                    ensure_no_window_overlap(&history, effective_from, effective_to)?;
                     let revision = PartyRevision {
                         revision: RevisionBase::new(next_no),
                         ..revision_for_tx
@@ -385,8 +376,6 @@ impl PartyService {
                 revision_no: row.revision_no,
                 legal_name: row.legal_name,
                 short_name: row.short_name,
-                effective_from: row.effective_from,
-                effective_to: row.effective_to,
                 change_reason: row.change_reason,
                 version: row.version,
                 created_at: row.created_at,
@@ -453,62 +442,6 @@ fn credit_code_update(value: Option<String>) -> FieldUpdate<String> {
     }
 }
 
-/// 校验新修订窗口与既有修订区间不重叠（§6.2：同一主体生效区间不得重叠）。
-///
-/// 区间判定采用含端点语义：`[from, to]`，`to` 为 `None` 视为长期有效
-/// （无穷远）；两个区间重叠当且仅当 `a.from <= b.to && b.from <= a.to`。
-///
-/// # 参数
-/// * `history` - 既有修订（升序）
-/// * `effective_from` - 新修订生效开始
-/// * `effective_to` - 新修订生效结束（`None` 表示长期有效）
-///
-/// # 返回
-/// 无重叠返回 `Ok(())`。
-///
-/// # 错误
-/// 与任一既有修订区间重叠时返回 `ConflictError`。
-fn ensure_no_window_overlap(
-    history: &[PartyRevision],
-    effective_from: BusinessDate,
-    effective_to: Option<BusinessDate>,
-) -> Result<()> {
-    for existing in history {
-        if windows_overlap(
-            existing.effective_from,
-            existing.effective_to,
-            effective_from,
-            effective_to,
-        ) {
-            return Err(Error::ConflictError(
-                "新修订生效区间与既有修订重叠，请调整生效日期".to_string(),
-            ));
-        }
-    }
-    Ok(())
-}
-
-/// 判断两个生效区间是否重叠（含端点语义；`None` 视为长期有效）。
-///
-/// # 参数
-/// * `a_from` - A 区间开始
-/// * `a_to` - A 区间结束（`None` 表示无穷远）
-/// * `b_from` - B 区间开始
-/// * `b_to` - B 区间结束（`None` 表示无穷远）
-///
-/// # 返回
-/// 重叠返回 `true`。
-fn windows_overlap(
-    a_from: BusinessDate,
-    a_to: Option<BusinessDate>,
-    b_from: BusinessDate,
-    b_to: Option<BusinessDate>,
-) -> bool {
-    let a_covers = |day: BusinessDate| a_to.is_none_or(|end| day <= end);
-    let b_covers = |day: BusinessDate| b_to.is_none_or(|end| day <= end);
-    a_covers(b_from) && b_covers(a_from)
-}
-
 /// 清除同一主体其他行的默认标记（跨行约束，§6.2）。
 ///
 /// 适用于联系人/地址/税务资料/银行账户的「同一主体同一时点最多一个默认
@@ -534,64 +467,3 @@ macro_rules! clear_default_marks {
     }};
 }
 pub(crate) use clear_default_marks;
-
-#[cfg(test)]
-mod tests {
-    use std::str::FromStr;
-
-    use entities::common::time::BusinessDate;
-    use entities::party::PartyRevision;
-
-    use super::{ensure_no_window_overlap, windows_overlap};
-
-    fn revision(from: &str, to: Option<&str>) -> PartyRevision {
-        // 构造最小修订用于窗口判定（仅使用区间字段）。
-        PartyRevision {
-            base: entities::BaseModel::new("rev".to_string()),
-            revision: entities::common::revision::RevisionBase::new(1),
-            party_id: entities::party::PartyId::new("party-1"),
-            legal_name: "测试".to_string(),
-            short_name: None,
-            effective_from: BusinessDate::from_str(from).unwrap(),
-            effective_to: to.map(|value| BusinessDate::from_str(value).unwrap()),
-            change_reason: "测试".to_string(),
-        }
-    }
-
-    #[test]
-    fn windows_overlap_uses_inclusive_endpoints() {
-        let from = |value: &str| BusinessDate::from_str(value).unwrap();
-        assert!(windows_overlap(
-            from("2026-01-01"),
-            None,
-            from("2026-06-01"),
-            Some(from("2026-07-01"))
-        ));
-        assert!(windows_overlap(
-            from("2026-01-01"),
-            Some(from("2026-03-31")),
-            from("2026-03-31"),
-            Some(from("2026-12-31")),
-        ));
-        assert!(!windows_overlap(
-            from("2026-01-01"),
-            Some(from("2026-03-30")),
-            from("2026-03-31"),
-            Some(from("2026-12-31")),
-        ));
-    }
-
-    #[test]
-    fn revision_window_overlap_is_rejected() {
-        let history = vec![revision("2026-01-01", Some("2026-12-31"))];
-        assert!(
-            ensure_no_window_overlap(&history, BusinessDate::from_str("2026-06-01").unwrap(), None,).is_err()
-        );
-        assert!(ensure_no_window_overlap(
-            &history,
-            BusinessDate::from_str("2027-01-01").unwrap(),
-            Some(BusinessDate::from_str("2027-12-31").unwrap()),
-        )
-        .is_ok());
-    }
-}

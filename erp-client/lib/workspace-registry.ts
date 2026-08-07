@@ -16,6 +16,7 @@ import {
   PackageSearchIcon,
   PlugIcon,
   ReceiptIcon,
+  RulerIcon,
   ScaleIcon,
   ShieldCheckIcon,
   ShoppingBagIcon,
@@ -225,6 +226,9 @@ function defaultNavPermissionsFor(
 function masterDataPermissionsForHref(href: string): readonly string[] {
   if (href.includes("/master-data/categories")) return ["product_category:list"]
   if (href.includes("/master-data/brands")) return ["product_brand:list"]
+  if (href.includes("/master-data/unit-of-measures")) {
+    return ["unit_of_measure:list"]
+  }
   if (href.includes("/master-data/voucher-categories")) {
     return ["voucher_category_profile:list"]
   }
@@ -608,6 +612,12 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
         href: "/master-data/brands",
         label: "品牌",
         icon: TagsIcon,
+      },
+      {
+        routeId: "W14",
+        href: "/master-data/unit-of-measures",
+        label: "计量单位",
+        icon: RulerIcon,
       },
       {
         routeId: "W14",

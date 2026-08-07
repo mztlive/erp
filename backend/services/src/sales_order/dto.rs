@@ -558,6 +558,10 @@ pub struct SalesOrderDetailView {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 当前销售单负责人账号。
+    pub owner_user_id: String,
+    /// 当前销售单负责人姓名。
+    pub owner_user_name: Option<String>,
     /// 稳定明细行。
     pub lines: Vec<SalesOrderLineView>,
     /// 有效草稿（首次提交目的）。

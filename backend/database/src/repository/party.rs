@@ -173,10 +173,6 @@ pub struct PartyRevisionRow {
     pub legal_name: String,
     /// 简称。
     pub short_name: Option<String>,
-    /// 生效开始日期。
-    pub effective_from: String,
-    /// 生效结束日期。
-    pub effective_to: Option<String>,
     /// 变更原因。
     pub change_reason: String,
     /// 乐观锁版本。
@@ -235,8 +231,7 @@ impl<'a> Repository<'a, PartyRevision> {
     /// 分页检索主体修订列表（投影查询）。
     ///
     /// 只返回 [`PartyRevisionRow`] 所需的列表字段；排序字段经仓储白名单
-    /// 校验（`created_at`/`revision_no`/`effective_from`/`effective_to`），
-    /// 非法字段回落默认 `created_at`。
+    /// 校验（`created_at`/`revision_no`），非法字段回落默认 `created_at`。
     ///
     /// # 参数
     /// * `filter` - 筛选与分页条件
@@ -256,7 +251,7 @@ impl<'a> Repository<'a, PartyRevision> {
             .sort(sort_doc(
                 filter.sort_by.as_deref(),
                 filter.sort_ascending,
-                &["created_at", "revision_no", "effective_from", "effective_to"],
+                &["created_at", "revision_no"],
             ))
             .skip(filter.skip())
             .limit(filter.limit())
@@ -972,8 +967,6 @@ fn party_revision_projection() -> Document {
         "revision_no": 1,
         "legal_name": 1,
         "short_name": 1,
-        "effective_from": 1,
-        "effective_to": 1,
         "change_reason": 1,
         "version": 1,
         "created_at": 1,

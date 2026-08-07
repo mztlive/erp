@@ -10,17 +10,24 @@
 import * as React from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { BanIcon, CircleAlertIcon, SaveIcon } from "lucide-react"
+import {
+  ArrowLeftIcon,
+  BanIcon,
+  CircleAlertIcon,
+  SaveIcon,
+} from "lucide-react"
 
 import {
   BusinessFailureState,
   DiscardConfirmDialog,
+  DocumentHeader,
   DocumentSection,
   FormalActionResult,
   OptionCombobox,
   PageHeader,
   PageScaffold,
   RevisionTimeline,
+  surfaceInsetClassName,
   surfacePanelClassName,
 } from "@/components/business"
 import { useAppForm } from "@/components/form"
@@ -29,16 +36,24 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { DatePicker } from "@/components/ui/date-picker"
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { StatusBadge } from "@/components/ui/status-badge"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import {
   MasterDataDisableDialog,
   MediaListField,
 } from "@/features/master-data/master-data-action-dialog"
 import { masterDataCopy } from "@/features/master-data/copy"
-import { formatEffectiveRange } from "@/features/master-data/filter"
 import {
   INVOICE_TYPE_OPTIONS,
   SETTLEMENT_MODE_OPTIONS,
@@ -68,8 +83,9 @@ function newIdempotencyKey(prefix: string): string {
 const CAPABILITY_SEPARATOR = "、"
 
 /**
- * 敏感字段：默认打码展示，短时查看（15 秒自动隐藏）后才进入可编辑输入框。
- * 与对象中心 / 预览面板的 SensitiveValue 打码门禁保持一致，编辑页不再默认明文。
+ * 敏感字段：
+ * - 无 revealToken（新建 / 后端未提供门禁）→ 直接可编辑，避免卡死无法输入
+ * - 有 revealToken → 默认打码，短时查看后可编辑（15 秒自动隐藏）
  */
 function SensitiveEditableField({
   label,
@@ -79,6 +95,7 @@ function SensitiveEditableField({
   revealToken,
   onChange,
   disabled,
+  placeholder,
 }: {
   label: string
   id: string
@@ -87,6 +104,7 @@ function SensitiveEditableField({
   revealToken?: string
   onChange: (next: string) => void
   disabled?: boolean
+  placeholder?: string
 }) {
   const [revealed, setRevealed] = React.useState(false)
   const [revealError, setRevealError] = React.useState<string | null>(null)
@@ -97,8 +115,23 @@ function SensitiveEditableField({
     return () => window.clearTimeout(timer)
   }, [revealed])
 
+  // 新建或无揭示令牌时直接可编辑（创建场景必走此分支）
+  if (!revealToken) {
+    return (
+      <div className="space-y-1.5">
+        <Label htmlFor={id}>{label}</Label>
+        <Input
+          id={id}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          disabled={disabled}
+          placeholder={placeholder}
+        />
+      </div>
+    )
+  }
+
   const reveal = async () => {
-    if (!revealToken) return
     try {
       await revealMasterDataSensitive(revealToken)
       setRevealError(null)
@@ -113,14 +146,14 @@ function SensitiveEditableField({
       <div className="space-y-1.5">
         <Label htmlFor={id}>{label}</Label>
         <div className="flex flex-wrap items-center gap-2">
-          <code className="num rounded-md bg-muted px-2 py-1 text-sm">
+          <code className="num rounded-md bg-muted px-2 py-1.5 text-sm">
             {maskedValue || "****"}
           </code>
           <Button
             type="button"
             size="sm"
             variant="outline"
-            disabled={disabled || !revealToken}
+            disabled={disabled}
             onClick={() => void reveal()}
           >
             短时查看
@@ -148,6 +181,7 @@ function SensitiveEditableField({
         onChange={(e) => onChange(e.target.value)}
         onBlur={() => setRevealed(false)}
         disabled={disabled}
+        placeholder={placeholder}
       />
       <p className="text-xs text-muted-foreground">
         已显示明文；离开输入框后自动打码。
@@ -156,16 +190,13 @@ function SensitiveEditableField({
   )
 }
 
-/** 供应商详情页分区导航：与商品详情页的吸顶 Tab 体验对齐。 */
+/** 分区导航：真正的标签切换（每次只挂载一个分区），避免整页长滚动堆叠。 */
 const SUPPLIER_SECTIONS: ReadonlyArray<{ id: string; label: string }> = [
   { id: "basic", label: "基本信息" },
-  { id: "commercial", label: "商务与资质" },
-  { id: "qualification", label: "资质附件" },
-  { id: "contract", label: "合同与授权" },
+  { id: "commercial", label: "商务合作" },
+  { id: "contract", label: "合同资质" },
   { id: "invoice", label: "开票信息" },
-  { id: "evaluation", label: "合作评估" },
-  { id: "effective", label: "生效与原因" },
-  { id: "history", label: "历史与引用" },
+  { id: "history", label: "历史引用" },
 ]
 
 function parseCapabilities(value: string): string[] {
@@ -192,9 +223,12 @@ function CapabilityCheckboxGroup({
     onChange(next.join(CAPABILITY_SEPARATOR))
   }
   return (
-    <div className="grid gap-2 sm:grid-cols-2">
+    <div className="grid grid-cols-2 gap-x-3 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-5">
       {SUPPLIER_CAPABILITY_OPTIONS.map((option) => (
-        <label key={option} className="flex items-center gap-2 text-sm">
+        <label
+          key={option}
+          className="flex items-center gap-2 text-sm leading-none"
+        >
           <Checkbox
             checked={selected.includes(option)}
             disabled={disabled}
@@ -204,6 +238,50 @@ function CapabilityCheckboxGroup({
         </label>
       ))}
     </div>
+  )
+}
+
+function FieldShell({
+  className,
+  children,
+}: {
+  className?: string
+  children: React.ReactNode
+}) {
+  return (
+    <div
+      className={cn(
+        "space-y-2 [&_[data-slot=label]]:text-[13px] [&_[data-slot=label]]:font-medium [&_[data-slot=label]]:text-foreground/80",
+        className,
+      )}
+    >
+      {children}
+    </div>
+  )
+}
+
+/** 分区内容：只在切到该标签时挂载，不再是卡片，直接铺在共享卡片的内容区里。 */
+function SectionPanel({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description?: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="space-y-5">
+      <div className="space-y-1 border-b border-border/60 pb-3">
+        <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+        {description ? (
+          <p className="max-w-3xl text-sm leading-5 text-muted-foreground">
+            {description}
+          </p>
+        ) : null}
+      </div>
+      {children}
+    </section>
   )
 }
 
@@ -236,22 +314,21 @@ type SupplierEditorFormValues = Readonly<{
   initialScore: string
   supplierRating: string
   currentScore: string
-  effectiveFrom: string
-  effectiveTo: string
   changeReason: string
 }>
 
-function validateSupplierEditor(values: SupplierEditorFormValues): string | null {
+/** 保存前字段校验（不含变更原因；原因在右上角保存弹窗中填写）。 */
+function validateSupplierEditorFields(
+  values: SupplierEditorFormValues,
+): string | null {
   if (values.name.trim().length < 2) return "请填写供应商名称"
   if (values.company.trim().length < 1) return "请填写企业主体"
-  if (!values.effectiveFrom) return "请选择生效开始日期"
-  if (values.changeReason.trim().length < 2) {
-    return "请填写本次保存的变更原因"
-  }
   return null
 }
 
-function hydrateFromCenter(data: MasterDataCenterView): SupplierEditorFormValues {
+function hydrateFromCenter(
+  data: MasterDataCenterView,
+): SupplierEditorFormValues {
   const fields = currentResourceFieldValues(data)
   return {
     name: data.name,
@@ -282,8 +359,6 @@ function hydrateFromCenter(data: MasterDataCenterView): SupplierEditorFormValues
     initialScore: fields.initialScore ?? "",
     supplierRating: fields.supplierRating ?? "",
     currentScore: fields.currentScore ?? "",
-    effectiveFrom: data.currentRevision.effectiveFrom,
-    effectiveTo: data.currentRevision.effectiveTo ?? "",
     changeReason: "",
   }
 }
@@ -318,18 +393,18 @@ function createDefaults(isCreate: boolean): SupplierEditorFormValues {
     initialScore: "",
     supplierRating: "",
     currentScore: "",
-    effectiveFrom: defaultImmediateEffectiveFrom(),
-    effectiveTo: "",
     changeReason: isCreate ? "新建供应商" : "",
   }
 }
+
+type SupplierFieldKey = keyof SupplierEditorFormValues
 
 export function SupplierDetailPage({ stableId }: { stableId: string }) {
   const router = useRouter()
   const isCreate = stableId === "new"
   const detailQuery = useMasterDataCenterQuery(
     "suppliers",
-    isCreate ? "" : stableId
+    isCreate ? "" : stableId,
   )
   const createMutation = useCreateMasterDataMutation()
   const reviseMutation = useCreateRevisionMutation()
@@ -339,24 +414,27 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
   const revisionId = data?.currentRevision.revisionId
   const [formError, setFormError] = React.useState<string | null>(null)
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
-    null
+    null,
   )
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
-    newIdempotencyKey(isCreate ? "create-supplier" : "revise-supplier")
+    newIdempotencyKey(isCreate ? "create-supplier" : "revise-supplier"),
   )
   const [disableOpen, setDisableOpen] = React.useState(false)
   const [discardOpen, setDiscardOpen] = React.useState(false)
+  const [saveReasonOpen, setSaveReasonOpen] = React.useState(false)
+  const [reasonDraft, setReasonDraft] = React.useState("")
+  const [reasonError, setReasonError] = React.useState<string | null>(null)
   const [pendingNav, setPendingNav] = React.useState<string | null>(null)
   const [activeSection, setActiveSection] = React.useState("basic")
   const errorRef = React.useRef<HTMLDivElement | null>(null)
   const hydratedKeyRef = React.useRef<string | null>(null)
+  /** 弹窗确认的变更原因；保证 setFieldValue 与 handleSubmit 之间不丢值。 */
+  const pendingChangeReasonRef = React.useRef<string | null>(null)
 
   const initialFormValues = React.useMemo(
     () =>
-      !isCreate && data
-        ? hydrateFromCenter(data)
-        : createDefaults(isCreate),
-    [data, isCreate]
+      !isCreate && data ? hydrateFromCenter(data) : createDefaults(isCreate),
+    [data, isCreate],
   )
 
   const form = useAppForm({
@@ -365,9 +443,17 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
       setFormError(null)
       setResult(null)
 
-      const validation = validateSupplierEditor(value)
+      const validation = validateSupplierEditorFields(value)
       if (validation) {
         setFormError(validation)
+        return
+      }
+      const changeReason = (
+        pendingChangeReasonRef.current ?? value.changeReason
+      ).trim()
+      pendingChangeReasonRef.current = null
+      if (changeReason.length < 2) {
+        setFormError("请填写本次保存的变更原因")
         return
       }
 
@@ -381,9 +467,8 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
           baseRevisionId: revisionId,
           expectedLockVersion: lockVersion,
           name: value.name.trim(),
-          effectiveFrom: value.effectiveFrom,
-          effectiveTo: value.effectiveTo.trim() || undefined,
-          changeReason: value.changeReason.trim(),
+          effectiveFrom: defaultImmediateEffectiveFrom(),
+          changeReason,
           fields,
           idempotencyKey,
         })
@@ -399,9 +484,8 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
       const response = await createMutation.mutateAsync({
         resource: "suppliers",
         name: value.name.trim(),
-        effectiveFrom: value.effectiveFrom,
-        effectiveTo: value.effectiveTo.trim() || undefined,
-        changeReason: value.changeReason.trim(),
+        effectiveFrom: defaultImmediateEffectiveFrom(),
+        changeReason,
         fields,
         idempotencyKey,
       })
@@ -439,6 +523,16 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
     }
   }, [formError])
 
+  // 成功面板不滞留：表单再次变脏后清掉「已保存」结果（禁止在 Subscribe 渲染里 setState）
+  React.useEffect(() => {
+    const subscription = form.store.subscribe(() => {
+      if (form.store.state.isDirty) {
+        setResult((prev) => (prev ? null : prev))
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [form.store])
+
   const navigateAway = React.useCallback(
     (href: string) => {
       if (form.state.isDirty) {
@@ -448,12 +542,15 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
       }
       router.push(href)
     },
-    [form.state.isDirty, router]
+    [form.state.isDirty, router],
   )
 
   /** 敏感字段映射：label → 打码展示 + 揭示令牌 */
   const sensitiveByLabel = React.useMemo(() => {
-    const map = new Map<string, { maskedValue: string; revealToken?: string }>()
+    const map = new Map<
+      string,
+      { maskedValue: string; revealToken?: string }
+    >()
     for (const field of data?.sensitiveFields ?? []) {
       map.set(field.label, {
         maskedValue: field.maskedValue,
@@ -469,15 +566,15 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
     isCreate || (data?.allowedActions.includes("CREATE_REVISION") ?? false)
   const canDisable = data?.allowedActions.includes("DISABLE") ?? false
   const reviseBlocker = data?.actionBlockers.find(
-    (b) => b.action === "CREATE_REVISION"
+    (b) => b.action === "CREATE_REVISION",
   )
   const disableBlocker = data?.actionBlockers.find(
-    (b) => b.action === "DISABLE"
+    (b) => b.action === "DISABLE",
   )
 
   if (!isCreate && detailQuery.isPending) {
     return (
-      <PageScaffold>
+      <PageScaffold density="compact">
         <PageHeader
           title="供应商详情"
           description={masterDataCopy.centerLoading}
@@ -489,7 +586,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
   if (!isCreate && (detailQuery.isError || !data)) {
     return (
-      <PageScaffold>
+      <PageScaffold density="compact">
         <PageHeader title="供应商详情" />
         <BusinessFailureState
           kind="system"
@@ -519,114 +616,140 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
   return (
     <>
-      <form.Subscribe selector={(state) => state.isDirty}>
-        {(isDirty) => {
-          // 成功面板不滞留：修改任何字段后旧的「已保存」结果不再展示
-          if (isDirty && result) {
-            setResult(null)
-          }
-          return null
-        }}
-      </form.Subscribe>
       <form.Subscribe selector={(state) => state.values}>
-      {(values) => {
-        const title = isCreate
-          ? masterDataCopy.supplierCreateTitle
-          : values.name || data?.name || "供应商详情"
-        const setFieldValue = (
-          key:
-            | "name"
-            | "company"
-            | "contactName"
-            | "contactPhone"
-            | "address"
-            | "capability"
-            | "settlement"
-            | "businessCategory"
-            | "signingEntity"
-            | "paymentEntity"
-            | "qualification"
-            | "contractNo"
-            | "contractValidFrom"
-            | "contractValidTo"
-            | "contractFile"
-            | "authorizationFile"
-            | "authorizationValidFrom"
-            | "authorizationValidTo"
-            | "foodLicense"
-            | "legalPersonIdCard"
-            | "taxNo"
-            | "bankName"
-            | "bankAccount"
-            | "invoiceType"
-            | "invoiceTaxRate"
-            | "initialScore"
-            | "supplierRating"
-            | "currentScore"
-            | "effectiveFrom"
-            | "effectiveTo"
-            | "changeReason",
-          next: string
-        ) => form.setFieldValue(key, next)
-        const handleSubmit = (event?: React.FormEvent) => {
-          event?.preventDefault()
-          void form.handleSubmit()
-        }
-        return (
-          <PageScaffold>
-            <form id={formId} onSubmit={handleSubmit}>
-              <header className="sticky top-0 z-30 border-b border-border/30 bg-background/95 py-3 backdrop-blur">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="min-w-0 space-y-1">
-                    <div className="flex min-w-0 flex-wrap items-center gap-2">
-                      <h1 className="truncate text-lg font-semibold tracking-tight">
-                        {title}
-                      </h1>
-                      {!isCreate && data ? (
-                        <StatusBadge
-                          tone={data.lifecycleTone}
-                          label={data.lifecycleStatusLabel}
-                        />
-                      ) : null}
-                    </div>
-                    {!isCreate && data ? (
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                        <span>
-                          单号{" "}
-                          <span className="num text-foreground">
-                            {data.stableNo}
-                          </span>
-                        </span>
-                        <span className="num rounded-md bg-muted px-1.5 py-0.5 text-tiny text-foreground">
-                          版本 {data.currentRevision.revisionNo}
-                        </span>
-                        <span className="num">
-                          {formatEffectiveRange(
-                            data.currentRevision.effectiveFrom,
-                            data.currentRevision.effectiveTo
-                          )}
-                        </span>
-                        <span className="inline-flex items-center gap-1.5">
-                          <span>{masterDataCopy.centerVersionState}</span>
-                          <StatusBadge
-                            tone={
-                              data.revisionTiming === "FUTURE"
-                                ? "warning"
-                                : "info"
-                            }
-                            label={data.revisionTimingLabel}
-                          />
-                        </span>
-                      </div>
-                    ) : (
-                      <p className="text-sm text-muted-foreground">
-                        {masterDataCopy.supplierCreateDesc}
-                      </p>
-                    )}
-                  </div>
+        {(values) => {
+          const title = isCreate
+            ? masterDataCopy.supplierCreateTitle
+            : values.name || data?.name || "供应商详情"
+          const setFieldValue = (key: SupplierFieldKey, next: string) =>
+            form.setFieldValue(key, next)
+          /** 右上角保存：先校验字段，再弹窗填写变更原因。 */
+          const requestSave = (event?: React.FormEvent) => {
+            event?.preventDefault()
+            const validation = validateSupplierEditorFields(values)
+            if (validation) {
+              setFormError(validation)
+              return
+            }
+            setFormError(null)
+            setReasonDraft(
+              isCreate
+                ? values.changeReason.trim() || "新建供应商"
+                : values.changeReason,
+            )
+            setReasonError(null)
+            setSaveReasonOpen(true)
+          }
+          const confirmSaveWithReason = () => {
+            const reason = reasonDraft.trim()
+            if (reason.length < 2) {
+              setReasonError("请填写本次保存的变更原因")
+              return
+            }
+            setReasonError(null)
+            pendingChangeReasonRef.current = reason
+            form.setFieldValue("changeReason", reason)
+            setSaveReasonOpen(false)
+            void form.handleSubmit()
+          }
 
-                  <div className="flex shrink-0 flex-wrap items-center gap-2">
-                    {!isCreate && data ? (
+          const phoneSensitive =
+            sensitiveByLabel.get("联系电话") ?? sensitiveByLabel.get("联系人")
+          const taxSensitive = sensitiveByLabel.get("税号")
+          const bankSensitive = sensitiveByLabel.get("银行账号")
+
+          const summaryRows: Array<{ label: string; value: string }> = [
+            {
+              label: masterDataCopy.fContactName,
+              value: values.contactName.trim() || "—",
+            },
+            {
+              label: masterDataCopy.fSettlement,
+              value: values.settlement || "—",
+            },
+            {
+              label: masterDataCopy.fSupplierRating,
+              value: values.supplierRating || "—",
+            },
+            {
+              label: masterDataCopy.fCapability,
+              value: values.capability || "—",
+            },
+          ]
+
+          return (
+            <PageScaffold density="compact">
+              <PageHeader
+                variant="object-chrome"
+                breadcrumbs={[
+                  {
+                    id: "master-data",
+                    label: "基础资料",
+                    href: "/master-data",
+                  },
+                  {
+                    id: "suppliers",
+                    label: "供应商",
+                    href: listHref,
+                  },
+                  {
+                    id: "detail",
+                    label: isCreate ? "新建供应商" : data?.stableNo || title,
+                    current: true,
+                  },
+                ]}
+                actions={
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => navigateAway(listHref)}
+                  >
+                    <ArrowLeftIcon data-icon="inline-start" aria-hidden />
+                    返回列表
+                  </Button>
+                }
+              />
+
+              <form id={formId} className="space-y-4" onSubmit={requestSave}>
+                <DocumentHeader
+                  density="compact"
+                  title={title}
+                  documentNumber={isCreate ? "待生成" : data?.stableNo || "—"}
+                  primaryStatus={
+                    !isCreate && data
+                      ? {
+                          label: data.lifecycleStatusLabel,
+                          tone: data.lifecycleTone,
+                        }
+                      : { label: "待创建", tone: "neutral" }
+                  }
+                  version={
+                    !isCreate && data
+                      ? data.currentRevision.revisionNo
+                      : undefined
+                  }
+                  meta={
+                    <span className="inline-flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+                      <span>
+                        企业主体{" "}
+                        <span className="font-medium text-foreground">
+                          {values.company.trim() || "待填写"}
+                        </span>
+                      </span>
+                      <span className="text-border" aria-hidden="true">
+                        ·
+                      </span>
+                      <span>
+                        联系人{" "}
+                        <span className="font-medium text-foreground">
+                          {values.contactName.trim() || "待填写"}
+                        </span>
+                      </span>
+                    </span>
+                  }
+                  secondaryActions={
+                    !isCreate && data ? (
                       <Button
                         type="button"
                         size="sm"
@@ -638,15 +761,9 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                         <BanIcon data-icon="inline-start" aria-hidden />
                         {masterDataCopy.actionDisable}
                       </Button>
-                    ) : null}
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      onClick={() => navigateAway(listHref)}
-                    >
-                      返回列表
-                    </Button>
+                    ) : null
+                  }
+                  primaryAction={
                     <Button
                       type="submit"
                       size="sm"
@@ -657,757 +774,810 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                         ? masterDataCopy.createSubmit
                         : masterDataCopy.reviseSubmit}
                     </Button>
-                  </div>
-                </div>
-              </header>
+                  }
+                />
 
-              <div className="space-y-4">
-                {!isCreate && !canRevise ? (
-                  <Alert variant="info">
-                    <AlertTitle>你只能查看</AlertTitle>
-                    <AlertDescription>
-                      {reviseBlocker
-                        ? masterDataCopy.centerUpdateBlocked(
-                            reviseBlocker.message
-                          )
-                        : "当前账号没有维护供应商资料的权限；需要修改请联系有权限的同事。"}
-                    </AlertDescription>
-                  </Alert>
-                ) : null}
-
-                {result?.outcome === "succeeded" ? (
-                  <FormalActionResult
-                    status="succeeded"
-                    title={
-                      isCreate
-                        ? masterDataCopy.createSuccessTitle
-                        : masterDataCopy.reviseSuccessTitle
-                    }
-                    description={
-                      isCreate
-                        ? masterDataCopy.createSuccessDesc
-                        : masterDataCopy.reviseSuccessDesc
-                    }
-                    reference={result.reference}
-                    facts={[
-                      {
-                        label: masterDataCopy.resultNo,
-                        value: result.stableNo,
-                      },
-                      {
-                        label: masterDataCopy.resultVersion,
-                        value: `v${result.revisionNo}`,
-                      },
-                    ]}
-                  />
-                ) : null}
-
-                {result?.outcome === "blocked" ? (
-                  <FormalActionResult
-                    status="blocked"
-                    title={
-                      isCreate
-                        ? masterDataCopy.createBlockedTitle
-                        : masterDataCopy.reviseBlockedTitle
-                    }
-                    description={result.message}
-                    facts={
-                      result.detail
-                        ? [{ label: "说明", value: result.detail }]
-                        : undefined
-                    }
-                  />
-                ) : null}
-
-                {result?.outcome === "conflict" ? (
-                  <FormalActionResult
-                    status="blocked"
-                    title={masterDataCopy.reviseConflictTitle}
-                    description={
-                      result.message || masterDataCopy.reviseConflictHint
-                    }
-                  />
-                ) : null}
-
-                {formError ? (
-                  <div ref={errorRef}>
-                    <Alert variant="destructive">
-                      <CircleAlertIcon aria-hidden />
-                      <AlertTitle>填写不完整</AlertTitle>
-                      <AlertDescription>{formError}</AlertDescription>
+                <div className="space-y-3">
+                  {!isCreate && !canRevise ? (
+                    <Alert variant="info">
+                      <AlertTitle>你只能查看</AlertTitle>
+                      <AlertDescription>
+                        {reviseBlocker
+                          ? masterDataCopy.centerUpdateBlocked(
+                              reviseBlocker.message,
+                            )
+                          : "当前账号没有维护供应商资料的权限；需要修改请联系有权限的同事。"}
+                      </AlertDescription>
                     </Alert>
-                  </div>
-                ) : null}
+                  ) : null}
 
-                <nav
-                  aria-label="供应商编辑分区"
-                  className="sticky top-16 z-10 inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-                >
-                  {SUPPLIER_SECTIONS.filter(
-                    (section) => !isCreate || section.id !== "history"
-                  ).map((section) => {
-                    const active = activeSection === section.id
-                    return (
-                      <Button
-                        key={section.id}
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className={cn(
-                          "h-7 rounded-md px-2.5 text-sm",
-                          active
-                            ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10 hover:bg-card"
-                            : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
-                        )}
-                        aria-current={active ? "location" : undefined}
-                        onClick={() => {
-                          setActiveSection(section.id)
-                          document
-                            .getElementById(`supplier-section-${section.id}`)
-                            ?.scrollIntoView({
-                              block: "start",
-                              behavior: "smooth",
-                            })
-                        }}
-                      >
-                        {section.label}
-                      </Button>
-                    )
-                  })}
-                </nav>
-
-                <section
-                  id="supplier-section-basic"
-                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
-                >
-                  <h2 className="px-1 text-base font-semibold">基本信息</h2>
-                  <p className="px-1 text-xs text-muted-foreground">
-                    名称与企业主体是必填项；保存即生成新版本。
-                  </p>
-                  <div className="grid gap-3 px-1 sm:grid-cols-2">
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label htmlFor="supplier-name">名称 *</Label>
-                      <Input
-                        id="supplier-name"
-                        value={values.name}
-                        onChange={(e) => setFieldValue("name", e.target.value)}
-                        placeholder="供应商名称"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label htmlFor="supplier-company">
-                        {masterDataCopy.fCompany} *
-                      </Label>
-                      <Input
-                        id="supplier-company"
-                        value={values.company}
-                        onChange={(e) =>
-                          setFieldValue("company", e.target.value)
-                        }
-                        placeholder="企业主体全称"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-contact-name">
-                        {masterDataCopy.fContactName}
-                      </Label>
-                      <Input
-                        id="supplier-contact-name"
-                        value={values.contactName}
-                        onChange={(e) =>
-                          setFieldValue("contactName", e.target.value)
-                        }
-                        placeholder="联系人姓名"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <SensitiveEditableField
-                        label={masterDataCopy.fContactPhone}
-                        id="supplier-contact-phone"
-                        value={values.contactPhone}
-                        maskedValue={sensitiveByLabel.get("联系电话")?.maskedValue}
-                        revealToken={sensitiveByLabel.get("联系电话")?.revealToken}
-                        onChange={(next) => setFieldValue("contactPhone", next)}
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label htmlFor="supplier-address">
-                        {masterDataCopy.fAddress}
-                      </Label>
-                      <Input
-                        id="supplier-address"
-                        value={values.address}
-                        onChange={(e) =>
-                          setFieldValue("address", e.target.value)
-                        }
-                        placeholder="供应商注册或经营地址"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                <section
-                  id="supplier-section-commercial"
-                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
-                >
-                  <h2 className="px-1 text-base font-semibold">商务与资质</h2>
-                  <p className="px-1 text-xs text-muted-foreground">
-                    能力为多选；结算方式用于采购选供应商时的校验与提示。
-                  </p>
-                  <div className="space-y-1.5 px-1">
-                    <Label>{masterDataCopy.fCapability}</Label>
-                    <CapabilityCheckboxGroup
-                      value={values.capability}
-                      onChange={(next) => setFieldValue("capability", next)}
-                      disabled={!canEdit}
-                    />
-                  </div>
-                  <div className="space-y-1.5 px-1">
-                    <Label>{masterDataCopy.fSettlement}</Label>
-                    <OptionCombobox
-                      value={values.settlement || null}
-                      onValueChange={(v) =>
-                        setFieldValue("settlement", v ?? "")
+                  {result?.outcome === "succeeded" ? (
+                    <FormalActionResult
+                      status="succeeded"
+                      title={
+                        isCreate
+                          ? masterDataCopy.createSuccessTitle
+                          : masterDataCopy.reviseSuccessTitle
                       }
-                      options={SETTLEMENT_MODE_OPTIONS.map((o) => ({
-                        value: o,
-                        label: o,
-                      }))}
-                      allowClear
-                      placeholder="请选择结算方式"
-                      className="w-full"
-                      disabled={!canEdit}
-                    />
-                  </div>
-                  <div className="grid gap-3 px-1 sm:grid-cols-2">
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label htmlFor="supplier-business-category">
-                        {masterDataCopy.fBusinessCategory}
-                      </Label>
-                      <Input
-                        id="supplier-business-category"
-                        value={values.businessCategory}
-                        onChange={(e) =>
-                          setFieldValue("businessCategory", e.target.value)
-                        }
-                        placeholder="如：礼盒、茶叶、卡券"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-signing-entity">
-                        {masterDataCopy.fSigningEntity}
-                      </Label>
-                      <Input
-                        id="supplier-signing-entity"
-                        value={values.signingEntity}
-                        onChange={(e) =>
-                          setFieldValue("signingEntity", e.target.value)
-                        }
-                        placeholder="与我司签约的公司主体"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-payment-entity">
-                        {masterDataCopy.fPaymentEntity}
-                      </Label>
-                      <Input
-                        id="supplier-payment-entity"
-                        value={values.paymentEntity}
-                        onChange={(e) =>
-                          setFieldValue("paymentEntity", e.target.value)
-                        }
-                        placeholder="付款时的公司主体"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                <section
-                  id="supplier-section-qualification"
-                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
-                >
-                  <h2 className="px-1 text-base font-semibold">资质附件</h2>
-                  <p className="px-1 text-xs text-muted-foreground">
-                    一家供应商可维护多份资质；失效后对应能力不得用于新的采购单。
-                  </p>
-                  <div className="space-y-1.5 px-1">
-                    <MediaListField
-                      label={masterDataCopy.fQualification}
-                      hint={masterDataCopy.supplierQualificationHint}
-                      value={values.qualification}
-                      onChange={(next) =>
-                        setFieldValue("qualification", next)
+                      description={
+                        isCreate
+                          ? masterDataCopy.createSuccessDesc
+                          : masterDataCopy.reviseSuccessDesc
                       }
-                      accept="image/jpeg,image/png,image/webp,application/pdf"
+                      reference={result.reference}
+                      facts={[
+                        {
+                          label: masterDataCopy.resultNo,
+                          value: result.stableNo,
+                        },
+                        {
+                          label: masterDataCopy.resultVersion,
+                          value: `v${result.revisionNo}`,
+                        },
+                      ]}
                     />
-                  </div>
-                </section>
+                  ) : null}
 
-                <section
-                  id="supplier-section-contract"
-                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
-                >
-                  <h2 className="px-1 text-base font-semibold">合同与授权</h2>
-                  <p className="px-1 text-xs text-muted-foreground">
-                    合同与授权书文件支持图片 / PDF；有效期到期后需重新维护。
-                  </p>
-                  <div className="grid gap-3 px-1 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-contract-no">
-                        {masterDataCopy.fContractNo}
-                      </Label>
-                      <Input
-                        id="supplier-contract-no"
-                        value={values.contractNo}
-                        onChange={(e) =>
-                          setFieldValue("contractNo", e.target.value)
-                        }
-                        placeholder="合同编号"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-contract-valid-from">
-                        {masterDataCopy.fContractValidFrom}
-                      </Label>
-                      <DatePicker
-                        value={values.contractValidFrom || undefined}
-                        onValueChange={(next) =>
-                          setFieldValue("contractValidFrom", next ?? "")
-                        }
-                        disabled={!canEdit}
-                        className="w-full"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-contract-valid-to">
-                        {masterDataCopy.fContractValidTo}
-                      </Label>
-                      <DatePicker
-                        value={values.contractValidTo || undefined}
-                        onValueChange={(next) =>
-                          setFieldValue("contractValidTo", next ?? "")
-                        }
-                        disabled={!canEdit}
-                        className="w-full"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <MediaListField
-                        label={masterDataCopy.fContractFile}
-                        hint={masterDataCopy.supplierQualificationHint}
-                        value={values.contractFile}
-                        onChange={(next) =>
-                          setFieldValue("contractFile", next)
-                        }
-                        accept="image/jpeg,image/png,image/webp,application/pdf"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <MediaListField
-                        label={masterDataCopy.fAuthorizationFile}
-                        hint={masterDataCopy.supplierQualificationHint}
-                        value={values.authorizationFile}
-                        onChange={(next) =>
-                          setFieldValue("authorizationFile", next)
-                        }
-                        accept="image/jpeg,image/png,image/webp,application/pdf"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-auth-valid-from">
-                        {masterDataCopy.fAuthorizationValidFrom}
-                      </Label>
-                      <DatePicker
-                        value={values.authorizationValidFrom || undefined}
-                        onValueChange={(next) =>
-                          setFieldValue("authorizationValidFrom", next ?? "")
-                        }
-                        disabled={!canEdit}
-                        className="w-full"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-auth-valid-to">
-                        {masterDataCopy.fAuthorizationValidTo}
-                      </Label>
-                      <DatePicker
-                        value={values.authorizationValidTo || undefined}
-                        onValueChange={(next) =>
-                          setFieldValue("authorizationValidTo", next ?? "")
-                        }
-                        disabled={!canEdit}
-                        className="w-full"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <MediaListField
-                        label={masterDataCopy.fFoodLicense}
-                        hint={masterDataCopy.supplierQualificationHint}
-                        value={values.foodLicense}
-                        onChange={(next) =>
-                          setFieldValue("foodLicense", next)
-                        }
-                        accept="image/jpeg,image/png,image/webp,application/pdf"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <MediaListField
-                        label={masterDataCopy.fLegalPersonIdCard}
-                        hint={masterDataCopy.supplierQualificationHint}
-                        value={values.legalPersonIdCard}
-                        onChange={(next) =>
-                          setFieldValue("legalPersonIdCard", next)
-                        }
-                        accept="image/jpeg,image/png,image/webp,application/pdf"
-                      />
-                    </div>
-                  </div>
-                </section>
+                  {result?.outcome === "blocked" ? (
+                    <FormalActionResult
+                      status="blocked"
+                      title={
+                        isCreate
+                          ? masterDataCopy.createBlockedTitle
+                          : masterDataCopy.reviseBlockedTitle
+                      }
+                      description={result.message}
+                      facts={
+                        result.detail
+                          ? [{ label: "说明", value: result.detail }]
+                          : undefined
+                      }
+                    />
+                  ) : null}
 
-                <section
-                  id="supplier-section-invoice"
-                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
-                >
-                  <h2 className="px-1 text-base font-semibold">开票信息</h2>
-                  <p className="px-1 text-xs text-muted-foreground">
-                    税号与银行信息用于采购开票与付款；可随每次保存的版本修改。
-                  </p>
-                  <div className="grid gap-3 px-1 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <SensitiveEditableField
-                        label={masterDataCopy.fTaxNo}
-                        id="supplier-tax-no"
-                        value={values.taxNo}
-                        maskedValue={sensitiveByLabel.get("税号")?.maskedValue}
-                        revealToken={sensitiveByLabel.get("税号")?.revealToken}
-                        onChange={(next) => setFieldValue("taxNo", next)}
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-bank-name">
-                        {masterDataCopy.fBankName}
-                      </Label>
-                      <Input
-                        id="supplier-bank-name"
-                        value={values.bankName}
-                        onChange={(e) =>
-                          setFieldValue("bankName", e.target.value)
-                        }
-                        placeholder="开户银行"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <SensitiveEditableField
-                        label={masterDataCopy.fBankAccount}
-                        id="supplier-bank-account"
-                        value={values.bankAccount}
-                        maskedValue={sensitiveByLabel.get("银行账号")?.maskedValue}
-                        revealToken={sensitiveByLabel.get("银行账号")?.revealToken}
-                        onChange={(next) => setFieldValue("bankAccount", next)}
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label>{masterDataCopy.fInvoiceType}</Label>
-                      <OptionCombobox
-                        value={values.invoiceType || null}
-                        onValueChange={(v) =>
-                          setFieldValue("invoiceType", v ?? "")
-                        }
-                        options={INVOICE_TYPE_OPTIONS.map((o) => ({
-                          value: o,
-                          label: o,
-                        }))}
-                        allowClear
-                        placeholder="请选择发票类型"
-                        className="w-full"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-invoice-tax-rate">
-                        {masterDataCopy.fInvoiceTaxRate}
-                      </Label>
-                      <Input
-                        id="supplier-invoice-tax-rate"
-                        value={values.invoiceTaxRate}
-                        onChange={(e) =>
-                          setFieldValue("invoiceTaxRate", e.target.value)
-                        }
-                        placeholder="如：13%"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                  </div>
-                </section>
+                  {result?.outcome === "conflict" ? (
+                    <FormalActionResult
+                      status="blocked"
+                      title={masterDataCopy.reviseConflictTitle}
+                      description={
+                        result.message || masterDataCopy.reviseConflictHint
+                      }
+                    />
+                  ) : null}
 
-                <section
-                  id="supplier-section-evaluation"
-                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
-                >
-                  <h2 className="px-1 text-base font-semibold">合作评估</h2>
-                  <p className="px-1 text-xs text-muted-foreground">
-                    期初评分在合作开始时记录；合作中评分随合作过程定期更新。
-                  </p>
-                  <div className="grid gap-3 px-1 sm:grid-cols-3">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-initial-score">
-                        {masterDataCopy.fInitialScore}
-                      </Label>
-                      <Input
-                        id="supplier-initial-score"
-                        value={values.initialScore}
-                        onChange={(e) =>
-                          setFieldValue("initialScore", e.target.value)
-                        }
-                        placeholder="如：85"
-                        disabled={!canEdit}
-                      />
+                  {formError ? (
+                    <div ref={errorRef}>
+                      <Alert variant="destructive">
+                        <CircleAlertIcon aria-hidden />
+                        <AlertTitle>填写不完整</AlertTitle>
+                        <AlertDescription>{formError}</AlertDescription>
+                      </Alert>
                     </div>
-                    <div className="space-y-1.5">
-                      <Label>{masterDataCopy.fSupplierRating}</Label>
-                      <OptionCombobox
-                        value={values.supplierRating || null}
-                        onValueChange={(v) =>
-                          setFieldValue("supplierRating", v ?? "")
-                        }
-                        options={SUPPLIER_RATING_OPTIONS.map((o) => ({
-                          value: o,
-                          label: o,
-                        }))}
-                        allowClear
-                        placeholder="请选择评级"
-                        className="w-full"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="supplier-current-score">
-                        {masterDataCopy.fCurrentScore}
-                      </Label>
-                      <Input
-                        id="supplier-current-score"
-                        value={values.currentScore}
-                        onChange={(e) =>
-                          setFieldValue("currentScore", e.target.value)
-                        }
-                        placeholder="如：88"
-                        disabled={!canEdit}
-                      />
-                    </div>
-                  </div>
-                </section>
+                  ) : null}
 
-                <section
-                  id="supplier-section-effective"
-                  className={cn(surfacePanelClassName, "scroll-mt-40 space-y-3 p-5")}
-                >
-                  <h2 className="px-1 text-base font-semibold">生效与原因</h2>
-                  <div className="grid gap-3 px-1 sm:grid-cols-2">
-                    <div className="space-y-1.5">
-                      <Label htmlFor="ef-from">
-                        {masterDataCopy.fieldEffectiveFrom} *
-                      </Label>
-                      <DatePicker
-                        value={values.effectiveFrom || undefined}
-                        onValueChange={(next) =>
-                          setFieldValue("effectiveFrom", next ?? "")
-                        }
-                        disabled={!canEdit}
-                        className="w-full"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <Label htmlFor="ef-to">
-                        {masterDataCopy.fieldEffectiveTo}
-                      </Label>
-                      <DatePicker
-                        value={values.effectiveTo || undefined}
-                        onValueChange={(next) =>
-                          setFieldValue("effectiveTo", next ?? "")
-                        }
-                        disabled={!canEdit}
-                        className="w-full"
-                      />
-                    </div>
-                    <div className="space-y-1.5 sm:col-span-2">
-                      <Label htmlFor="reason">
-                        {masterDataCopy.fieldChangeReason} *
-                      </Label>
-                      <Textarea
-                        id="reason"
-                        value={values.changeReason}
-                        onChange={(e) =>
-                          setFieldValue("changeReason", e.target.value)
-                        }
-                        rows={2}
-                        placeholder={
-                          isCreate
-                            ? "新建原因"
-                            : "说明本次修改内容，保存后形成新版本"
-                        }
-                        disabled={!canEdit}
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                {!isCreate && data ? (
-                  <section
-                    id="supplier-section-history"
-                    aria-label="历史与引用"
-                    className={cn(surfacePanelClassName, "scroll-mt-40 overflow-hidden px-5")}
+                  {/* 关键信息条：切换标签时始终可见，避免来回跳转确认合作事实。 */}
+                  <dl
+                    className={cn(
+                      surfaceInsetClassName,
+                      "grid grid-cols-2 gap-x-6 gap-y-3 px-4 py-3 sm:grid-cols-4",
+                    )}
                   >
-                    <DocumentSection
-                      title={masterDataCopy.centerVersions}
-                      description={masterDataCopy.centerVersionsDesc}
+                    {summaryRows.map((row) => (
+                      <div key={row.label} className="min-w-0">
+                        <dt className="text-tiny text-muted-foreground">
+                          {row.label}
+                        </dt>
+                        <dd
+                          className="mt-0.5 truncate text-sm font-medium text-foreground"
+                          title={row.value}
+                        >
+                          {row.value}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+
+                  <div className={cn(surfacePanelClassName, "overflow-hidden")}>
+                    <Tabs
+                      value={activeSection}
+                      onValueChange={(value) => {
+                        if (value) setActiveSection(value)
+                      }}
+                      className="gap-0"
                     >
-                      <RevisionTimeline
-                        revisions={data.revisionTimeline.map((rev) => ({
-                          id: rev.id,
-                          version: rev.revisionNo,
-                          source: "erp-change" as const,
-                          actor: rev.actor,
-                          effectiveAt: {
-                            dateTime: rev.effectiveFrom,
-                            label: formatEffectiveRange(
-                              rev.effectiveFrom,
-                              rev.effectiveTo
-                            ),
-                          },
-                          reason: (
-                            <div className="space-y-1">
-                              <div>
-                                {masterDataCopy.centerHistoryName}：
-                                <strong>{rev.nameSnapshot}</strong>
+                      <TabsList
+                        variant="line"
+                        aria-label="供应商编辑分区"
+                        className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-border/40 bg-card/95 px-4 py-2 backdrop-blur supports-backdrop-filter:bg-card/85"
+                      >
+                        {SUPPLIER_SECTIONS.filter(
+                          (section) => !isCreate || section.id !== "history",
+                        ).map((section) => (
+                          <TabsTrigger
+                            key={section.id}
+                            value={section.id}
+                            className="min-h-8 flex-none px-3 text-sm"
+                          >
+                            {section.label}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </Tabs>
+
+                    <div className="p-4 md:p-5">
+                      {activeSection === "basic" && (
+                        <SectionPanel
+                          title="基本信息"
+                          description="名称与企业主体必填；联系方式便于采购对接。"
+                        >
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <FieldShell>
+                              <Label htmlFor="supplier-name">名称 *</Label>
+                              <Input
+                                id="supplier-name"
+                                value={values.name}
+                                onChange={(e) =>
+                                  setFieldValue("name", e.target.value)
+                                }
+                                placeholder="供应商名称"
+                                disabled={!canEdit}
+                              />
+                            </FieldShell>
+                            <FieldShell>
+                              <Label htmlFor="supplier-company">
+                                {masterDataCopy.fCompany} *
+                              </Label>
+                              <Input
+                                id="supplier-company"
+                                value={values.company}
+                                onChange={(e) =>
+                                  setFieldValue("company", e.target.value)
+                                }
+                                placeholder="企业主体全称"
+                                disabled={!canEdit}
+                              />
+                            </FieldShell>
+                            <FieldShell>
+                              <Label htmlFor="supplier-contact-name">
+                                {masterDataCopy.fContactName}
+                              </Label>
+                              <Input
+                                id="supplier-contact-name"
+                                value={values.contactName}
+                                onChange={(e) =>
+                                  setFieldValue("contactName", e.target.value)
+                                }
+                                placeholder="联系人姓名"
+                                disabled={!canEdit}
+                              />
+                            </FieldShell>
+                            <FieldShell>
+                              <SensitiveEditableField
+                                label={masterDataCopy.fContactPhone}
+                                id="supplier-contact-phone"
+                                value={values.contactPhone}
+                                maskedValue={phoneSensitive?.maskedValue}
+                                revealToken={phoneSensitive?.revealToken}
+                                onChange={(next) =>
+                                  setFieldValue("contactPhone", next)
+                                }
+                                disabled={!canEdit}
+                                placeholder="手机号或固定电话"
+                              />
+                            </FieldShell>
+                            <FieldShell className="sm:col-span-2">
+                              <Label htmlFor="supplier-address">
+                                {masterDataCopy.fAddress}
+                              </Label>
+                              <Input
+                                id="supplier-address"
+                                value={values.address}
+                                onChange={(e) =>
+                                  setFieldValue("address", e.target.value)
+                                }
+                                placeholder="注册或经营地址"
+                                disabled={!canEdit}
+                              />
+                            </FieldShell>
+                          </div>
+                        </SectionPanel>
+                      )}
+
+                      {activeSection === "commercial" && (
+                        <SectionPanel
+                          title="商务合作"
+                          description="能力、结算与主体用于采购选用；评估分便于后续优选。"
+                        >
+                          <div className="space-y-4">
+                            <FieldShell>
+                              <Label>{masterDataCopy.fCapability}</Label>
+                              <CapabilityCheckboxGroup
+                                value={values.capability}
+                                onChange={(next) =>
+                                  setFieldValue("capability", next)
+                                }
+                                disabled={!canEdit}
+                              />
+                            </FieldShell>
+
+                            <div className="grid gap-4 sm:grid-cols-2">
+                              <FieldShell>
+                                <Label>{masterDataCopy.fSettlement}</Label>
+                                <OptionCombobox
+                                  value={values.settlement || null}
+                                  onValueChange={(v) =>
+                                    setFieldValue("settlement", v ?? "")
+                                  }
+                                  options={SETTLEMENT_MODE_OPTIONS.map((o) => ({
+                                    value: o,
+                                    label: o,
+                                  }))}
+                                  allowClear
+                                  placeholder="请选择结算方式"
+                                  className="w-full"
+                                  disabled={!canEdit}
+                                />
+                              </FieldShell>
+                              <FieldShell>
+                                <Label htmlFor="supplier-business-category">
+                                  {masterDataCopy.fBusinessCategory}
+                                </Label>
+                                <Input
+                                  id="supplier-business-category"
+                                  value={values.businessCategory}
+                                  onChange={(e) =>
+                                    setFieldValue(
+                                      "businessCategory",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="如：礼盒、茶叶、卡券"
+                                  disabled={!canEdit}
+                                />
+                              </FieldShell>
+                              <FieldShell>
+                                <Label htmlFor="supplier-signing-entity">
+                                  {masterDataCopy.fSigningEntity}
+                                </Label>
+                                <Input
+                                  id="supplier-signing-entity"
+                                  value={values.signingEntity}
+                                  onChange={(e) =>
+                                    setFieldValue(
+                                      "signingEntity",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="与我司签约的公司主体"
+                                  disabled={!canEdit}
+                                />
+                              </FieldShell>
+                              <FieldShell>
+                                <Label htmlFor="supplier-payment-entity">
+                                  {masterDataCopy.fPaymentEntity}
+                                </Label>
+                                <Input
+                                  id="supplier-payment-entity"
+                                  value={values.paymentEntity}
+                                  onChange={(e) =>
+                                    setFieldValue(
+                                      "paymentEntity",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="付款时的公司主体"
+                                  disabled={!canEdit}
+                                />
+                              </FieldShell>
+                            </div>
+
+                            <div
+                              className={cn(
+                                surfaceInsetClassName,
+                                "grid gap-4 p-4 sm:grid-cols-3",
+                              )}
+                            >
+                              <FieldShell>
+                                <Label htmlFor="supplier-initial-score">
+                                  {masterDataCopy.fInitialScore}
+                                </Label>
+                                <Input
+                                  id="supplier-initial-score"
+                                  value={values.initialScore}
+                                  onChange={(e) =>
+                                    setFieldValue(
+                                      "initialScore",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="如：85"
+                                  disabled={!canEdit}
+                                />
+                              </FieldShell>
+                              <FieldShell>
+                                <Label>{masterDataCopy.fSupplierRating}</Label>
+                                <OptionCombobox
+                                  value={values.supplierRating || null}
+                                  onValueChange={(v) =>
+                                    setFieldValue("supplierRating", v ?? "")
+                                  }
+                                  options={SUPPLIER_RATING_OPTIONS.map((o) => ({
+                                    value: o,
+                                    label: o,
+                                  }))}
+                                  allowClear
+                                  placeholder="请选择评级"
+                                  className="w-full"
+                                  disabled={!canEdit}
+                                />
+                              </FieldShell>
+                              <FieldShell>
+                                <Label htmlFor="supplier-current-score">
+                                  {masterDataCopy.fCurrentScore}
+                                </Label>
+                                <Input
+                                  id="supplier-current-score"
+                                  value={values.currentScore}
+                                  onChange={(e) =>
+                                    setFieldValue(
+                                      "currentScore",
+                                      e.target.value,
+                                    )
+                                  }
+                                  placeholder="如：88"
+                                  disabled={!canEdit}
+                                />
+                              </FieldShell>
+                            </div>
+                          </div>
+                        </SectionPanel>
+                      )}
+
+                      {activeSection === "contract" && (
+                        <SectionPanel
+                          title="合同与资质"
+                          description="合同、授权与证照集中维护；有效期到期后需重新上传。"
+                        >
+                          <div className="space-y-4">
+                            <div className="grid gap-4 sm:grid-cols-3">
+                              <FieldShell>
+                                <Label htmlFor="supplier-contract-no">
+                                  {masterDataCopy.fContractNo}
+                                </Label>
+                                <Input
+                                  id="supplier-contract-no"
+                                  value={values.contractNo}
+                                  onChange={(e) =>
+                                    setFieldValue("contractNo", e.target.value)
+                                  }
+                                  placeholder="合同编号"
+                                  disabled={!canEdit}
+                                />
+                              </FieldShell>
+                              <FieldShell>
+                                <Label>
+                                  {masterDataCopy.fContractValidFrom}
+                                </Label>
+                                <DatePicker
+                                  value={values.contractValidFrom || undefined}
+                                  onValueChange={(next) =>
+                                    setFieldValue(
+                                      "contractValidFrom",
+                                      next ?? "",
+                                    )
+                                  }
+                                  disabled={!canEdit}
+                                  className="w-full"
+                                />
+                              </FieldShell>
+                              <FieldShell>
+                                <Label>{masterDataCopy.fContractValidTo}</Label>
+                                <DatePicker
+                                  value={values.contractValidTo || undefined}
+                                  onValueChange={(next) =>
+                                    setFieldValue("contractValidTo", next ?? "")
+                                  }
+                                  disabled={!canEdit}
+                                  className="w-full"
+                                />
+                              </FieldShell>
+                            </div>
+
+                            <div
+                              className={cn(
+                                surfaceInsetClassName,
+                                "space-y-4 p-4",
+                              )}
+                            >
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <MediaListField
+                                  label={masterDataCopy.fContractFile}
+                                  hint={
+                                    masterDataCopy.supplierQualificationHint
+                                  }
+                                  value={values.contractFile}
+                                  onChange={(next) =>
+                                    setFieldValue("contractFile", next)
+                                  }
+                                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                                />
+                                <MediaListField
+                                  label={masterDataCopy.fAuthorizationFile}
+                                  hint={
+                                    masterDataCopy.supplierQualificationHint
+                                  }
+                                  value={values.authorizationFile}
+                                  onChange={(next) =>
+                                    setFieldValue("authorizationFile", next)
+                                  }
+                                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                                />
                               </div>
-                              <div>{rev.changeReason}</div>
-                              <div className="flex flex-wrap gap-2">
-                                <Badge variant="outline">
-                                  {rev.timingLabel}
-                                </Badge>
-                                <Badge variant="secondary">
-                                  {rev.lifecycleAtRevision === "ENABLED"
-                                    ? "启用"
-                                    : "停用"}
-                                </Badge>
+                              <div className="grid gap-4 sm:grid-cols-2">
+                                <FieldShell>
+                                  <Label>
+                                    {masterDataCopy.fAuthorizationValidFrom}
+                                  </Label>
+                                  <DatePicker
+                                    value={
+                                      values.authorizationValidFrom || undefined
+                                    }
+                                    onValueChange={(next) =>
+                                      setFieldValue(
+                                        "authorizationValidFrom",
+                                        next ?? "",
+                                      )
+                                    }
+                                    disabled={!canEdit}
+                                    className="w-full"
+                                  />
+                                </FieldShell>
+                                <FieldShell>
+                                  <Label>
+                                    {masterDataCopy.fAuthorizationValidTo}
+                                  </Label>
+                                  <DatePicker
+                                    value={
+                                      values.authorizationValidTo || undefined
+                                    }
+                                    onValueChange={(next) =>
+                                      setFieldValue(
+                                        "authorizationValidTo",
+                                        next ?? "",
+                                      )
+                                    }
+                                    disabled={!canEdit}
+                                    className="w-full"
+                                  />
+                                </FieldShell>
                               </div>
                             </div>
-                          ),
-                          isCurrent: rev.isCurrent,
-                        }))}
-                      />
-                    </DocumentSection>
 
-                    <DocumentSection
-                      title={masterDataCopy.centerRelations}
-                      description={masterDataCopy.centerRelationsDesc}
-                    >
-                      <p className="text-sm">
-                        {masterDataCopy.centerUsageCount(
-                          data.usageSummary.historicalReferenceCount
-                        )}
-                        {data.usageSummary.note}
-                      </p>
-                      <ul className="mt-3 space-y-2">
-                        {data.selectorEligibility.map((s) => (
-                          <li
-                            key={s.context}
-                            className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-sm"
-                          >
-                            <span>{s.contextLabel}</span>
-                            <Badge
-                              variant={
-                                s.eligible ? "success" : "destructive"
-                              }
-                            >
-                              {s.eligible
-                                ? masterDataCopy.eligible
-                                : masterDataCopy.ineligible}
-                            </Badge>
-                            {s.reason ? (
-                              <span className="text-xs text-muted-foreground">
-                                {s.reason}
-                              </span>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    </DocumentSection>
-
-                    <DocumentSection
-                      title={masterDataCopy.centerAudit}
-                      description={masterDataCopy.centerAuditDesc}
-                    >
-                      {data.auditEvents.length === 0 ? (
-                        <p className="text-sm text-muted-foreground">
-                          {masterDataCopy.centerNoAudit}
-                        </p>
-                      ) : (
-                        <ul className="space-y-2 text-sm">
-                          {data.auditEvents.map((ev) => (
-                            <li
-                              key={ev.id}
-                              className="rounded-md border border-border px-3 py-2"
-                            >
-                              <div className="flex flex-wrap gap-2">
-                                <span className="num text-xs text-muted-foreground">
-                                  {formatDateTime(ev.at, "full", "passthrough")}
-                                </span>
-                                <span>{ev.actor}</span>
-                                <Badge variant="outline">{ev.action}</Badge>
-                              </div>
-                              <div className="mt-1 text-muted-foreground">
-                                {ev.detail}
-                              </div>
-                            </li>
-                          ))}
-                        </ul>
+                            <div className="grid gap-4 sm:grid-cols-3">
+                              <MediaListField
+                                label={masterDataCopy.fQualification}
+                                hint={masterDataCopy.supplierQualificationHint}
+                                value={values.qualification}
+                                onChange={(next) =>
+                                  setFieldValue("qualification", next)
+                                }
+                                accept="image/jpeg,image/png,image/webp,application/pdf"
+                              />
+                              <MediaListField
+                                label={masterDataCopy.fFoodLicense}
+                                hint={masterDataCopy.supplierQualificationHint}
+                                value={values.foodLicense}
+                                onChange={(next) =>
+                                  setFieldValue("foodLicense", next)
+                                }
+                                accept="image/jpeg,image/png,image/webp,application/pdf"
+                              />
+                              <MediaListField
+                                label={masterDataCopy.fLegalPersonIdCard}
+                                hint={masterDataCopy.supplierQualificationHint}
+                                value={values.legalPersonIdCard}
+                                onChange={(next) =>
+                                  setFieldValue("legalPersonIdCard", next)
+                                }
+                                accept="image/jpeg,image/png,image/webp,application/pdf"
+                              />
+                            </div>
+                          </div>
+                        </SectionPanel>
                       )}
-                    </DocumentSection>
-                  </section>
-                ) : null}
-              </div>
-            </form>
 
-            {!isCreate && data ? (
-              <MasterDataDisableDialog
-                open={disableOpen}
-                onOpenChange={setDisableOpen}
-                resource="suppliers"
-                target={data}
+                      {activeSection === "invoice" && (
+                        <SectionPanel
+                          title="开票信息"
+                          description="税号与银行信息用于采购开票与付款。"
+                        >
+                          <div className="grid gap-4 sm:grid-cols-2">
+                            <FieldShell>
+                              <SensitiveEditableField
+                                label={masterDataCopy.fTaxNo}
+                                id="supplier-tax-no"
+                                value={values.taxNo}
+                                maskedValue={taxSensitive?.maskedValue}
+                                revealToken={taxSensitive?.revealToken}
+                                onChange={(next) =>
+                                  setFieldValue("taxNo", next)
+                                }
+                                disabled={!canEdit}
+                                placeholder="纳税人识别号"
+                              />
+                            </FieldShell>
+                            <FieldShell>
+                              <Label htmlFor="supplier-bank-name">
+                                {masterDataCopy.fBankName}
+                              </Label>
+                              <Input
+                                id="supplier-bank-name"
+                                value={values.bankName}
+                                onChange={(e) =>
+                                  setFieldValue("bankName", e.target.value)
+                                }
+                                placeholder="开户银行"
+                                disabled={!canEdit}
+                              />
+                            </FieldShell>
+                            <FieldShell className="sm:col-span-2">
+                              <SensitiveEditableField
+                                label={masterDataCopy.fBankAccount}
+                                id="supplier-bank-account"
+                                value={values.bankAccount}
+                                maskedValue={bankSensitive?.maskedValue}
+                                revealToken={bankSensitive?.revealToken}
+                                onChange={(next) =>
+                                  setFieldValue("bankAccount", next)
+                                }
+                                disabled={!canEdit}
+                                placeholder="银行账号"
+                              />
+                            </FieldShell>
+                            <FieldShell>
+                              <Label>{masterDataCopy.fInvoiceType}</Label>
+                              <OptionCombobox
+                                value={values.invoiceType || null}
+                                onValueChange={(v) =>
+                                  setFieldValue("invoiceType", v ?? "")
+                                }
+                                options={INVOICE_TYPE_OPTIONS.map((o) => ({
+                                  value: o,
+                                  label: o,
+                                }))}
+                                allowClear
+                                placeholder="请选择发票类型"
+                                className="w-full"
+                                disabled={!canEdit}
+                              />
+                            </FieldShell>
+                            <FieldShell>
+                              <Label htmlFor="supplier-invoice-tax-rate">
+                                {masterDataCopy.fInvoiceTaxRate}
+                              </Label>
+                              <Input
+                                id="supplier-invoice-tax-rate"
+                                value={values.invoiceTaxRate}
+                                onChange={(e) =>
+                                  setFieldValue(
+                                    "invoiceTaxRate",
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="如：13%"
+                                disabled={!canEdit}
+                              />
+                            </FieldShell>
+                          </div>
+                        </SectionPanel>
+                      )}
+
+                      {activeSection === "history" && !isCreate && data && (
+                        <div className="-mt-5">
+                          <DocumentSection
+                            title={masterDataCopy.centerVersions}
+                            description={masterDataCopy.centerVersionsDesc}
+                          >
+                            <RevisionTimeline
+                              revisions={data.revisionTimeline.map((rev) => ({
+                                id: rev.id,
+                                version: rev.revisionNo,
+                                source: "erp-change" as const,
+                                actor: rev.actor,
+                                effectiveAt: {
+                                  dateTime: rev.effectiveFrom,
+                                  label: `创建于 ${rev.effectiveFrom}`,
+                                },
+                                reason: (
+                                  <div className="space-y-1">
+                                    <div>
+                                      {masterDataCopy.centerHistoryName}：
+                                      <strong>{rev.nameSnapshot}</strong>
+                                    </div>
+                                    <div>{rev.changeReason}</div>
+                                    <div className="flex flex-wrap gap-2">
+                                      <Badge variant="secondary">
+                                        {rev.lifecycleAtRevision === "ENABLED"
+                                          ? "启用"
+                                          : "停用"}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                ),
+                                isCurrent: rev.isCurrent,
+                              }))}
+                            />
+                          </DocumentSection>
+
+                          <DocumentSection
+                            title={masterDataCopy.centerRelations}
+                            description={masterDataCopy.centerRelationsDesc}
+                          >
+                            <p className="text-sm">
+                              {masterDataCopy.centerUsageCount(
+                                data.usageSummary.historicalReferenceCount,
+                              )}
+                              {data.usageSummary.note}
+                            </p>
+                            <ul className="mt-3 space-y-2">
+                              {data.selectorEligibility.map((s) => (
+                                <li
+                                  key={s.context}
+                                  className="flex flex-wrap items-center gap-2 rounded-md bg-muted/40 px-2 py-1.5 text-sm"
+                                >
+                                  <span>{s.contextLabel}</span>
+                                  <Badge
+                                    variant={
+                                      s.eligible ? "success" : "destructive"
+                                    }
+                                  >
+                                    {s.eligible
+                                      ? masterDataCopy.eligible
+                                      : masterDataCopy.ineligible}
+                                  </Badge>
+                                  {s.reason ? (
+                                    <span className="text-xs text-muted-foreground">
+                                      {s.reason}
+                                    </span>
+                                  ) : null}
+                                </li>
+                              ))}
+                            </ul>
+                          </DocumentSection>
+
+                          <DocumentSection
+                            title={masterDataCopy.centerAudit}
+                            description={masterDataCopy.centerAuditDesc}
+                          >
+                            {data.auditEvents.length === 0 ? (
+                              <p className="text-sm text-muted-foreground">
+                                {masterDataCopy.centerNoAudit}
+                              </p>
+                            ) : (
+                              <ul className="space-y-2 text-sm">
+                                {data.auditEvents.map((ev) => (
+                                  <li
+                                    key={ev.id}
+                                    className="rounded-md border border-border px-3 py-2"
+                                  >
+                                    <div className="flex flex-wrap gap-2">
+                                      <span className="num text-xs text-muted-foreground">
+                                        {formatDateTime(
+                                          ev.at,
+                                          "full",
+                                          "passthrough",
+                                        )}
+                                      </span>
+                                      <span>{ev.actor}</span>
+                                      <Badge variant="outline">
+                                        {ev.action}
+                                      </Badge>
+                                    </div>
+                                    <div className="mt-1 text-muted-foreground">
+                                      {ev.detail}
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </DocumentSection>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </form>
+
+              {!isCreate && data ? (
+                <MasterDataDisableDialog
+                  open={disableOpen}
+                  onOpenChange={setDisableOpen}
+                  resource="suppliers"
+                  target={data}
+                />
+              ) : null}
+
+              <Dialog
+                open={saveReasonOpen}
+                onOpenChange={(open) => {
+                  setSaveReasonOpen(open)
+                  if (!open) setReasonError(null)
+                }}
+              >
+                <DialogContent className="sm:max-w-md">
+                  <DialogHeader>
+                    <DialogTitle>
+                      {isCreate ? "确认创建" : "确认保存"}
+                    </DialogTitle>
+                    <DialogDescription>
+                      {isCreate
+                        ? "创建后生成供应商档案；请填写创建说明。"
+                        : "保存将生成新版本；变更原因必填。"}
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="supplier-save-reason">
+                      {masterDataCopy.fieldChangeReason} *
+                    </Label>
+                    <Textarea
+                      id="supplier-save-reason"
+                      value={reasonDraft}
+                      onChange={(e) => {
+                        setReasonDraft(e.target.value)
+                        if (reasonError) setReasonError(null)
+                      }}
+                      rows={3}
+                      placeholder={
+                        isCreate
+                          ? "新建原因"
+                          : "说明本次修改内容，保存后形成新版本"
+                      }
+                      autoFocus
+                    />
+                    {reasonError ? (
+                      <p className="text-xs text-destructive" role="alert">
+                        {reasonError}
+                      </p>
+                    ) : null}
+                  </div>
+                  <DialogFooter>
+                    <DialogClose
+                      render={<Button type="button" variant="outline" />}
+                    >
+                      取消
+                    </DialogClose>
+                    <Button
+                      type="button"
+                      disabled={pending}
+                      onClick={confirmSaveWithReason}
+                    >
+                      <SaveIcon data-icon="inline-start" aria-hidden />
+                      {isCreate
+                        ? masterDataCopy.createSubmit
+                        : masterDataCopy.reviseSubmit}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <DiscardConfirmDialog
+                open={discardOpen}
+                onOpenChange={setDiscardOpen}
+                title="放弃未保存的更改？"
+                description="本次修改尚未保存，离开后将丢失。"
+                confirmLabel="放弃更改"
+                cancelLabel="继续编辑"
+                onConfirm={() => {
+                  setDiscardOpen(false)
+                  if (pendingNav) {
+                    setPendingNav(null)
+                    router.push(pendingNav)
+                  }
+                }}
               />
-            ) : null}
-
-            <DiscardConfirmDialog
-              open={discardOpen}
-              onOpenChange={setDiscardOpen}
-              title="放弃未保存的更改？"
-              description="本次修改尚未保存，离开后将丢失。"
-              confirmLabel="放弃更改"
-              cancelLabel="继续编辑"
-              onConfirm={() => {
-                setDiscardOpen(false)
-                if (pendingNav) {
-                  setPendingNav(null)
-                  router.push(pendingNav)
-                }
-              }}
-            />
-          </PageScaffold>
-        )
-      }}
+            </PageScaffold>
+          )
+        }}
       </form.Subscribe>
     </>
   )

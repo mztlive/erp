@@ -75,7 +75,7 @@ fn party_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `party_revision` 的版本唯一约束与名称搜索/历史查询索引。
+/// 返回 `party_revision` 的版本唯一约束与名称搜索索引。
 fn party_revision_indexes() -> Vec<IndexModel> {
     vec![
         unique_index(
@@ -85,10 +85,6 @@ fn party_revision_indexes() -> Vec<IndexModel> {
         named_index(
             "idx_party_revisions_names",
             doc! { "legal_name": 1, "short_name": 1 },
-        ),
-        named_index(
-            "idx_party_revisions_history",
-            doc! { "party_id": 1, "effective_from": 1, "effective_to": 1 },
         ),
     ]
 }
@@ -212,7 +208,7 @@ mod tests {
     }
 
     #[test]
-    fn party_revision_indexes_cover_identity_names_and_history() {
+    fn party_revision_indexes_cover_identity_and_names() {
         let indexes = party_revision_indexes();
 
         assert!(indexes.iter().any(|index| {
@@ -223,9 +219,6 @@ mod tests {
         assert!(indexes
             .iter()
             .any(|index| { index.keys == doc! { "legal_name": 1, "short_name": 1 } }));
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "party_id": 1, "effective_from": 1, "effective_to": 1 } }));
     }
 
     #[test]

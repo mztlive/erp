@@ -474,7 +474,7 @@ export function CustomerDetailPage({
                         {
                           id: "revision",
                           label: "基础资料版本",
-                          value: `v${customer.currentRevision.revisionNo} · ${customer.currentRevision.effectiveFrom.slice(0, 10)} 生效`,
+                          value: `v${customer.currentRevision.revisionNo} · ${customer.currentRevision.effectiveFrom.slice(0, 10)} 更新`,
                         },
                         {
                           id: "owner",

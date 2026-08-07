@@ -32,6 +32,8 @@ export function masterDataSearchPlaceholder(
       return "分类代码、名称"
     case "brands":
       return "品牌代码、名称"
+    case "unit-of-measures":
+      return "单位代码、名称、符号"
     case "suppliers":
       return "编号、名称、供应商代码"
     case "warehouses":
@@ -239,6 +241,11 @@ export const masterDataCopy = {
   categoryColParent: "上级",
   categoryColKind: "适用类型",
   brandListHint: "品牌字典供商品与 SKU 下拉选用；停用不删除历史引用。",
+  fUnitCode: "单位代码",
+  fUnitSymbol: "单位符号",
+  fQuantityScale: "数量小数位",
+  unitListHint:
+    "计量单位供商品、供应商商品等表单选择基础单位；停用后业务页默认不可选，历史引用保留。单位代码创建后不可修改。",
   fDescription: "类目描述",
   fSalesVisiblePrice: "销售可见价",
   fSupplierCount: "可供供应商数",

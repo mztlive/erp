@@ -19,6 +19,7 @@
 //! 幂等：提交入口按「同一工作副本已形成提交」去重，重复提交返回既有提交
 //! （AGENTS.md 外部依赖容错）；建单按 `order_no` 唯一索引兜底（409）。
 
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use database::{
@@ -258,46 +259,55 @@ impl SalesOrderService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
+
         let order_id = SalesOrderId::new(order.base.id.clone());
+
         let stable_lines = self
             .db
             .sales_order_lines()
             .list_lines_by_order(&order_id, &mut NoTransaction)
             .await?;
+
         let working_copy = self
             .db
             .sales_order_working_copies()
             .find_active_by_order_and_purpose(&order_id, WorkingPurpose::FirstSubmission, &mut NoTransaction)
             .await?;
+
         let working_copy_view = match working_copy {
             Some(copy) => Some(self.working_copy_view(&copy).await?),
             None => None,
         };
+
         let mut submissions = self
             .db
             .sales_order_submissions()
             .find_many(mongodb::bson::doc! { "sales_order_id": id }, &mut NoTransaction)
             .await?;
+
         // 新提交在前，便于前端取「当前商业内容」
         submissions.sort_by(|a, b| b.submission_no.cmp(&a.submission_no));
         let submission_ids = submissions
             .iter()
             .map(|s| SalesOrderSubmissionId::new(s.base.id.clone()))
             .collect::<Vec<_>>();
+
         let submission_lines = self
             .db
             .sales_order_submission_lines()
             .list_lines_by_submissions(&submission_ids, &mut NoTransaction)
             .await?;
-        let mut lines_by_submission: std::collections::HashMap<String, Vec<SalesOrderSubmissionLine>> =
-            std::collections::HashMap::new();
+
+        let mut lines_by_submission: HashMap<String, Vec<SalesOrderSubmissionLine>> = HashMap::new();
+
         for line in submission_lines {
             lines_by_submission
                 .entry(line.submission_id.to_string())
                 .or_default()
                 .push(line);
         }
-        let submission_views = submissions
+
+        let submission_views: Vec<SubmissionView> = submissions
             .into_iter()
             .map(|submission| {
                 let mut lines = lines_by_submission
@@ -307,11 +317,24 @@ impl SalesOrderService {
                 submission_view(submission, lines)
             })
             .collect();
+
         let revisions = self
             .db
             .sales_order_revisions()
             .list_by_order(&order_id, &mut NoTransaction)
             .await?;
+
+        let owner_user_id = detail_owner_user_id(
+            working_copy_view
+                .as_ref()
+                .map(|copy| copy.editor_user_id.as_str()),
+            submission_views
+                .first()
+                .map(|submission| submission.submitted_by.as_str()),
+            &order.stable.created_by,
+        );
+
+        let owner_user_name = self.account_name(&owner_user_id).await?;
 
         Ok(SalesOrderDetailView {
             id: order.base.id.clone(),
@@ -331,6 +354,8 @@ impl SalesOrderService {
             effective_at: order.effective_at.map(|instant| instant.unix_secs() as u64),
             version: order.base.version,
             created_at: order.base.created_at,
+            owner_user_id,
+            owner_user_name,
             lines: stable_lines
                 .into_iter()
                 .map(|line| SalesOrderLineView {
@@ -744,10 +769,7 @@ impl SalesOrderService {
             editor_user_id: copy.editor_user_id.clone(),
             business_type: copy.business_type,
             customer_name: copy.customer_snapshot.customer_name.clone(),
-            contract_no: copy
-                .contract_snapshot
-                .as_ref()
-                .map(|s| s.contract_no.clone()),
+            contract_no: copy.contract_snapshot.as_ref().map(|s| s.contract_no.clone()),
             settlement_party_name: copy
                 .settlement_party_snapshot
                 .as_ref()
@@ -758,19 +780,45 @@ impl SalesOrderService {
             tax_point: copy.invoice_requirement_snapshot.tax_point.clone(),
             project_name: copy.project_name.clone(),
             business_remark: copy.business_remark.clone(),
-            voucher_category_sku_id: copy
-                .voucher_category_sku_id
-                .as_ref()
-                .map(ToString::to_string),
-            voucher_expiry_at: copy
-                .voucher_expiry_at
-                .map(|instant| instant.unix_secs() as u64),
+            voucher_category_sku_id: copy.voucher_category_sku_id.as_ref().map(ToString::to_string),
+            voucher_expiry_at: copy.voucher_expiry_at.map(|instant| instant.unix_secs() as u64),
             gross_amount: copy.gross_amount,
             net_amount: copy.net_amount,
             tax_amount: copy.tax_amount,
             lines: lines.into_iter().map(working_copy_line_view).collect(),
         })
     }
+
+    /// 查询销售单负责人账号姓名。
+    ///
+    /// # 参数
+    /// * `user_id` - 负责人账号 ID
+    ///
+    /// # 返回
+    /// 返回账号姓名；账号已不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    async fn account_name(&self, user_id: &str) -> Result<Option<String>> {
+        Ok(self
+            .db
+            .accounts()
+            .find_by_id(user_id, &mut NoTransaction)
+            .await?
+            .map(|account| account.name))
+    }
+}
+
+/// 按“有效草稿负责人 → 最新提交人 → 建单人”确定销售单详情负责人。
+fn detail_owner_user_id(
+    working_copy_editor: Option<&str>,
+    latest_submitter: Option<&str>,
+    created_by: &str,
+) -> String {
+    working_copy_editor
+        .or(latest_submitter)
+        .unwrap_or(created_by)
+        .to_string()
 }
 
 /// 汇总已舍入的行金额三元组（§4.2 铁律 2：表头只汇总已舍入的行金额）。
@@ -899,8 +947,7 @@ fn build_working_copy(
     // 行创建数据同时用于：① 头实体 `validate_line_list` 跨行断言；② 行实体落库。
     // 此前传空 Vec 会导致「销售单明细不能为空」——头校验与行集合分离的契约要求
     // 创建数据必须携带完整行摘要（即使行最终分集合存储）。
-    let line_datas =
-        build_working_copy_line_datas(stable_lines, &draft.lines)?;
+    let line_datas = build_working_copy_line_datas(stable_lines, &draft.lines)?;
     let lines = materialize_working_copy_lines(&working_copy_id, &line_datas)?;
     let (gross, net, tax) = line_totals(&lines);
     let snapshot = header_snapshot(draft)?;
@@ -1270,10 +1317,7 @@ fn working_copy_voucher(line: &SalesOrderWorkingCopyLine) -> Result<Option<Vouch
 ///
 /// # 返回
 /// 返回视图。
-fn submission_view(
-    submission: SalesOrderSubmission,
-    lines: Vec<SalesOrderSubmissionLine>,
-) -> SubmissionView {
+fn submission_view(submission: SalesOrderSubmission, lines: Vec<SalesOrderSubmissionLine>) -> SubmissionView {
     SubmissionView {
         id: submission.base.id,
         submission_no: submission.submission_no,
@@ -1370,5 +1414,23 @@ fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopy
         card_count: line.card_count,
         transaction_amount: line.transaction_amount,
         card_form: line.card_form,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::detail_owner_user_id;
+
+    #[test]
+    fn detail_owner_prefers_working_copy_then_latest_submission_then_creator() {
+        assert_eq!(
+            detail_owner_user_id(Some("editor"), Some("submitter"), "creator"),
+            "editor"
+        );
+        assert_eq!(
+            detail_owner_user_id(None, Some("submitter"), "creator"),
+            "submitter"
+        );
+        assert_eq!(detail_owner_user_id(None, None, "creator"), "creator");
     }
 }

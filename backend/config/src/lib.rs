@@ -41,13 +41,17 @@
 //! * `Config`: 顶层配置容器
 //! * `AppConfig`: 应用程序特定设置
 //! * `DatabaseConfig`: 数据库连接设置
+//! * `S3Config`: 可选 S3 对象存储启动参数
 
 use clap::Parser;
 use command::Args;
 use nacos::NacosConfig;
 use nacos_watch::NacosConfigWatcher;
 use serde::Deserialize;
-use std::path::{Component, Path};
+use std::{
+    fmt,
+    path::{Component, Path},
+};
 use tokio::sync::watch;
 use tracing::info;
 
@@ -74,6 +78,9 @@ pub struct Config {
     pub app: AppConfig,
     /// 数据库特定配置
     pub database: DatabaseConfig,
+    /// 可选 S3 对象存储参数，供存储运行时在启动期构建客户端。
+    #[serde(default)]
+    pub s3: Option<S3Config>,
 }
 
 /// 应用程序特定的配置设置。
@@ -108,6 +115,51 @@ pub struct DatabaseConfig {
     pub uri: String,
     /// 要连接的数据库名称
     pub db_name: String,
+}
+
+/// S3 或 S3-compatible 对象存储的启动配置。
+#[derive(Deserialize, Clone)]
+pub struct S3Config {
+    /// 存放上传对象的 bucket。
+    pub bucket: String,
+    /// AWS region 或兼容服务使用的签名 region。
+    pub region: String,
+    /// 自定义 endpoint；直连 AWS S3 时可以省略。
+    #[serde(default)]
+    pub endpoint: Option<String>,
+    /// S3 访问密钥 ID。
+    pub access_key_id: String,
+    /// S3 访问密钥。
+    pub secret_access_key: String,
+    /// 临时凭证的 session token。
+    #[serde(default)]
+    pub session_token: Option<String>,
+    /// 统一加在所有对象键前的可选前缀。
+    #[serde(default)]
+    pub key_prefix: Option<String>,
+    /// 是否强制 path-style URL，MinIO 等兼容服务通常需要开启。
+    #[serde(default)]
+    pub force_path_style: bool,
+}
+
+impl fmt::Debug for S3Config {
+    /// 输出不包含密钥正文的调试信息。
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("S3Config")
+            .field("bucket", &self.bucket)
+            .field("region", &self.region)
+            .field("endpoint", &self.endpoint)
+            .field("access_key_id", &"<redacted>")
+            .field("secret_access_key", &"<redacted>")
+            .field(
+                "session_token",
+                &self.session_token.as_ref().map(|_| "<redacted>"),
+            )
+            .field("key_prefix", &self.key_prefix)
+            .field("force_path_style", &self.force_path_style)
+            .finish()
+    }
 }
 
 impl Config {
@@ -183,6 +235,9 @@ impl Config {
                 "app.upload_path must name a dedicated non-root directory without '..'".to_string(),
             ));
         }
+        if let Some(s3) = &self.s3 {
+            validate_s3_config(s3)?;
+        }
         Ok(())
     }
 }
@@ -202,6 +257,79 @@ fn is_safe_upload_path(path: &str) -> bool {
         }
     }
     has_directory_name
+}
+
+/// 校验 S3 签名参数、endpoint 与对象键前缀。
+fn validate_s3_config(config: &S3Config) -> Result<()> {
+    for (name, value) in [
+        ("bucket", config.bucket.as_str()),
+        ("region", config.region.as_str()),
+        ("access_key_id", config.access_key_id.as_str()),
+        ("secret_access_key", config.secret_access_key.as_str()),
+    ] {
+        if value.trim().is_empty() || value.trim() != value {
+            return Err(Error::Invalid(format!(
+                "s3.{name} must not be empty or contain surrounding whitespace"
+            )));
+        }
+    }
+
+    if config
+        .endpoint
+        .as_deref()
+        .is_some_and(|endpoint| !is_valid_s3_endpoint(endpoint))
+    {
+        return Err(Error::Invalid(
+            "s3.endpoint must be an absolute http:// or https:// URL".to_string(),
+        ));
+    }
+    if config
+        .session_token
+        .as_ref()
+        .is_some_and(|token| token.trim().is_empty() || token.trim() != token)
+    {
+        return Err(Error::Invalid(
+            "s3.session_token must not be empty or contain surrounding whitespace".to_string(),
+        ));
+    }
+    if config
+        .key_prefix
+        .as_deref()
+        .is_some_and(|prefix| !is_safe_s3_prefix(prefix))
+    {
+        return Err(Error::Invalid(
+            "s3.key_prefix must be a relative object-key prefix without empty, '.' or '..' segments"
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// 判断 S3 endpoint 是否为带主机部分且不含空白的 HTTP(S) 绝对地址。
+fn is_valid_s3_endpoint(endpoint: &str) -> bool {
+    let authority_and_path = endpoint
+        .strip_prefix("https://")
+        .or_else(|| endpoint.strip_prefix("http://"));
+    authority_and_path.is_some_and(|value| {
+        !value.is_empty()
+            && !value.starts_with('/')
+            && value.chars().all(|character| !character.is_whitespace())
+    })
+}
+
+/// 判断 S3 对象键前缀是否可在存储根内安全拼接。
+fn is_safe_s3_prefix(prefix: &str) -> bool {
+    if prefix.is_empty()
+        || prefix.trim() != prefix
+        || prefix.starts_with('/')
+        || prefix.ends_with('/')
+        || prefix.contains('\\')
+    {
+        return false;
+    }
+    prefix
+        .split('/')
+        .all(|segment| !segment.is_empty() && segment != "." && segment != "..")
 }
 
 impl std::str::FromStr for Config {
@@ -368,6 +496,7 @@ db_name = "test"
         assert_eq!(config.upload_path(), "/tmp/uploads");
         assert_eq!(config.app.upload_min_free_bytes, 512 * 1024 * 1024);
         assert_eq!(config.database.db_name, "test");
+        assert!(config.s3.is_none());
     }
 
     #[test]
@@ -430,5 +559,68 @@ db_name = "test"
         let config = Config::from_toml_str(&content).unwrap();
 
         assert_eq!(config.upload_path(), "./uploads");
+    }
+
+    #[test]
+    fn parses_complete_s3_config() {
+        let content = format!(
+            "{MINIMAL_CONFIG}\n[s3]\nbucket = \"erp-assets\"\nregion = \"cn-south-1\"\n\
+             endpoint = \"https://s3.example.com\"\naccess_key_id = \"access-key\"\n\
+             secret_access_key = \"secret-key\"\nsession_token = \"session-token\"\n\
+             key_prefix = \"erp/uploads\"\nforce_path_style = true\n"
+        );
+
+        let config = Config::from_toml_str(&content).unwrap();
+        let s3 = config.s3.unwrap();
+
+        assert_eq!(s3.bucket, "erp-assets");
+        assert_eq!(s3.region, "cn-south-1");
+        assert_eq!(s3.endpoint.as_deref(), Some("https://s3.example.com"));
+        assert_eq!(s3.key_prefix.as_deref(), Some("erp/uploads"));
+        assert!(s3.force_path_style);
+    }
+
+    #[test]
+    fn rejects_unsafe_s3_config() {
+        for invalid_field in [
+            "bucket = \"\"",
+            "endpoint = \"s3.example.com\"",
+            "key_prefix = \"erp/../secret\"",
+        ] {
+            let content = format!(
+                "{MINIMAL_CONFIG}\n[s3]\nbucket = \"erp-assets\"\nregion = \"cn-south-1\"\n\
+                 endpoint = \"https://s3.example.com\"\naccess_key_id = \"access-key\"\n\
+                 secret_access_key = \"secret-key\"\nkey_prefix = \"erp/uploads\"\n"
+            )
+            .replace(
+                match invalid_field.split_once(" = ").unwrap().0 {
+                    "bucket" => "bucket = \"erp-assets\"",
+                    "endpoint" => "endpoint = \"https://s3.example.com\"",
+                    "key_prefix" => "key_prefix = \"erp/uploads\"",
+                    _ => unreachable!(),
+                },
+                invalid_field,
+            );
+
+            assert!(
+                Config::from_toml_str(&content).is_err(),
+                "{invalid_field} must be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn s3_debug_output_redacts_credentials() {
+        let content = format!(
+            "{MINIMAL_CONFIG}\n[s3]\nbucket = \"erp-assets\"\nregion = \"cn-south-1\"\n\
+             access_key_id = \"visible-access-key\"\nsecret_access_key = \"visible-secret-key\"\n\
+             session_token = \"visible-session-token\"\n"
+        );
+
+        let debug = format!("{:?}", Config::from_toml_str(&content).unwrap());
+
+        assert!(!debug.contains("visible-access-key"));
+        assert!(!debug.contains("visible-secret-key"));
+        assert!(!debug.contains("visible-session-token"));
     }
 }

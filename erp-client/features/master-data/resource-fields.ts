@@ -58,6 +58,17 @@ export const PRODUCT_KIND_OPTIONS = [
   "卡券",
 ] as const
 
+/** 计量单位允许的数量小数位（对齐 unit_of_measure.quantity_scale 0–6）。 */
+export const QUANTITY_SCALE_OPTIONS = [
+  "0",
+  "1",
+  "2",
+  "3",
+  "4",
+  "5",
+  "6",
+] as const
+
 export type ResourceFieldKind =
   | "text"
   | "textarea"
@@ -191,6 +202,33 @@ export const RESOURCE_FIELDS: Readonly<
       listFact: true,
       hint: masterDataCopy.brandLogoHint,
       aliases: ["Logo", "品牌 Logo"],
+    },
+  ],
+  "unit-of-measures": [
+    {
+      key: "code",
+      label: masterDataCopy.fUnitCode,
+      kind: "text",
+      required: true,
+      listFact: true,
+      aliases: ["单位代码", "unit_code"],
+    },
+    {
+      key: "symbol",
+      label: masterDataCopy.fUnitSymbol,
+      kind: "text",
+      required: true,
+      listFact: true,
+      aliases: ["符号", "单位符号"],
+    },
+    {
+      key: "quantityScale",
+      label: masterDataCopy.fQuantityScale,
+      kind: "select",
+      options: QUANTITY_SCALE_OPTIONS,
+      required: true,
+      listFact: true,
+      aliases: ["小数位", "数量小数位"],
     },
   ],
   "voucher-categories": [
@@ -366,11 +404,15 @@ export type ResourceFormValues = {
 }
 
 /**
- * 品牌 / 商品分类为即时字典，表单不收集生效期间；
+ * 品牌 / 商品分类 / 计量单位为即时字典，表单不收集生效期间；
  * 提交时由服务端/会话层默认「立即生效」。
  */
 export function usesEffectivePeriod(resource: MasterDataResource): boolean {
-  return resource !== "brands" && resource !== "categories"
+  return (
+    resource !== "brands" &&
+    resource !== "categories" &&
+    resource !== "unit-of-measures"
+  )
 }
 
 const DATE_FORMAT = /^\d{4}-\d{2}-\d{2}$/
@@ -409,9 +451,15 @@ export function buildResourceSchema(
       dynamic[def.key] = z.string()
     }
   }
+  // 计量单位名称常为单字（张/件/个），其余资源仍要求至少 2 字。
+  const nameSchema =
+    resource === "unit-of-measures"
+      ? z.string().trim().min(1, "请填写名称")
+      : z.string().trim().min(2, "请填写名称")
+
   return z
     .object({
-      name: z.string().trim().min(2, "请填写名称"),
+      name: nameSchema,
       effectiveFrom: usesEffectivePeriod(resource)
         ? effectiveDateField("生效开始")
         : z.string(),
@@ -442,9 +490,14 @@ export function defaultImmediateEffectiveFrom(): string {
 export function emptyResourceFieldValues(
   resource: MasterDataResource
 ): Record<string, string> {
-  return Object.fromEntries(
+  const defaults = Object.fromEntries(
     RESOURCE_FIELDS[resource].map((def) => [def.key, ""])
   )
+  // 计量单位默认整数数量（小数位 0），减少新建时必填遗漏。
+  if (resource === "unit-of-measures") {
+    defaults.quantityScale = "0"
+  }
+  return defaults
 }
 
 export type ResourceFieldValues = Record<string, string>
@@ -489,7 +542,18 @@ export function currentResourceFieldValues(
       def.aliases
         ?.map((alias) => byLabel.get(alias))
         .find((value) => value !== undefined && value !== "")
-    if (matched === undefined) continue
+    // 占位符 / 空值不回填，避免表单被「—」「****」污染
+    if (
+      matched === undefined ||
+      matched === "" ||
+      matched === "—" ||
+      matched === "****" ||
+      matched === "（敏感字段，需授权查看）" ||
+      matched === "（请从财务上下文查看）" ||
+      /^\d+\s*项$/.test(matched)
+    ) {
+      continue
+    }
     // 展示事实可能带「（N 张）」摘要后缀，回填表单时去掉
     if (def.kind === "media-list") {
       out[def.key] = matched.replace(/（\d+\s*张）\s*$/, "").trim()
@@ -559,6 +623,12 @@ export function buildResourceFields(
       return {
         code: pickField(values, "code") ?? "",
         logo: pickField(values, "logo"),
+      }
+    case "unit-of-measures":
+      return {
+        code: pickField(values, "code") ?? "",
+        symbol: pickField(values, "symbol") ?? "",
+        quantityScale: pickField(values, "quantityScale") ?? "0",
       }
     case "voucher-categories":
       // 卡券类目创建走 VoucherCategoryFormDialog；此处仅占位满足强类型契约。

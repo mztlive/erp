@@ -208,10 +208,16 @@ function MasterDataListWorkspace({
   const isSupplierResource = resource === "suppliers"
   /** 卡券类目：列表原地 Dialog 新建/编辑，无查看预览、无停用。 */
   const isVoucherCategoryResource = resource === "voucher-categories"
+  /** 计量单位：列表 Dialog 更新/停用，无侧边预览、无独立详情入口。 */
+  const isUnitOfMeasureResource = resource === "unit-of-measures"
   const skipPreviewSheet =
-    isProductResource || isSupplierResource || isVoucherCategoryResource
-  /** 品牌 / 分类字典不展示生效期间列。 */
-  const showEffectiveColumn = resource !== "brands"
+    isProductResource ||
+    isSupplierResource ||
+    isVoucherCategoryResource ||
+    isUnitOfMeasureResource
+  /** 即时字典（品牌 / 计量单位等）不展示生效期间列。 */
+  const showEffectiveColumn =
+    resource !== "brands" && resource !== "unit-of-measures"
 
   // ── 筛选与分页唯一事实源 = URL（刷新/后退/分享一致） ──
   const q = searchParams.get("q") ?? ""
@@ -545,6 +551,47 @@ function MasterDataListWorkspace({
               </div>
             )
           }
+          // 计量单位：仅 Dialog 更新 / 停用，无查看与侧边预览。
+          if (isUnitOfMeasureResource) {
+            return (
+              <div className="flex flex-wrap gap-1">
+                <DisabledActionHint message={reviseBlocker?.message}>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    disabled={!canRevise}
+                    title={reviseBlocker?.message}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      lastFocusedRowId.current = item.stableId
+                      setReviseTarget(item)
+                    }}
+                  >
+                    <HistoryIcon data-icon="inline-start" aria-hidden />
+                    {masterDataCopy.actionUpdate}
+                  </Button>
+                </DisabledActionHint>
+                <DisabledActionHint message={disableBlocker?.message}>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    disabled={!canDisable}
+                    title={disableBlocker?.message}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      lastFocusedRowId.current = item.stableId
+                      setDisableTarget(item)
+                    }}
+                  >
+                    <BanIcon data-icon="inline-start" aria-hidden />
+                    {masterDataCopy.actionDisable}
+                  </Button>
+                </DisabledActionHint>
+              </div>
+            )
+          }
           return (
             <div className="flex flex-wrap gap-1">
               <Button
@@ -612,6 +659,7 @@ function MasterDataListWorkspace({
     [
       isProductResource,
       isSupplierResource,
+      isUnitOfMeasureResource,
       isVoucherCategoryResource,
       lastFocusedRowId,
       resource,
@@ -734,6 +782,12 @@ function MasterDataListWorkspace({
       {resource === "brands" ? (
         <p className="text-sm text-muted-foreground">
           {masterDataCopy.brandListHint}
+        </p>
+      ) : null}
+
+      {resource === "unit-of-measures" ? (
+        <p className="text-sm text-muted-foreground">
+          {masterDataCopy.unitListHint}
         </p>
       ) : null}
 
@@ -978,7 +1032,7 @@ function MasterDataListWorkspace({
                 router.push(
                   `/master-data/${resource}/${row.stableId}?section=overview`
                 )
-              } else if (isVoucherCategoryResource) {
+              } else if (isVoucherCategoryResource || isUnitOfMeasureResource) {
                 setReviseTarget(row)
               } else {
                 setPreviewId(row.stableId)
@@ -992,7 +1046,7 @@ function MasterDataListWorkspace({
                 )
                 return
               }
-              if (isVoucherCategoryResource) {
+              if (isVoucherCategoryResource || isUnitOfMeasureResource) {
                 setReviseTarget(row)
                 return
               }

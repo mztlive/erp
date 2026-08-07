@@ -18,8 +18,7 @@ use crate::query::{normalized_text, page_or_default, page_size_or_default};
 /// 主体列表允许的排序字段白名单（api-contract §4：Service 层校验，禁止任意字段透传）。
 pub(crate) const PARTY_SORT_FIELDS: &[&str] = &["created_at", "party_no", "status"];
 /// 主体修订列表允许的排序字段白名单。
-pub(crate) const PARTY_REVISION_SORT_FIELDS: &[&str] =
-    &["created_at", "revision_no", "effective_from", "effective_to"];
+pub(crate) const PARTY_REVISION_SORT_FIELDS: &[&str] = &["created_at", "revision_no"];
 /// 联系人列表允许的排序字段白名单。
 pub(crate) const PARTY_CONTACT_SORT_FIELDS: &[&str] = &["created_at", "contact_name", "valid_from"];
 /// 地址列表允许的排序字段白名单。
@@ -131,10 +130,6 @@ pub struct CreatePartyRequest {
     pub legal_name: String,
     /// 简称（首版修订快照）。
     pub short_name: Option<String>,
-    /// 生效开始日期。
-    pub effective_from: BusinessDate,
-    /// 生效结束日期；`None` 表示长期有效。
-    pub effective_to: Option<BusinessDate>,
     /// 变更原因。
     #[validate(custom(function = "non_blank", message = "变更原因不能为空"))]
     pub change_reason: String,
@@ -160,10 +155,6 @@ pub struct UpdatePartyRequest {
     pub legal_name: String,
     /// 简称（新修订快照）；`None` 表示不修改。
     pub short_name: Option<String>,
-    /// 生效开始日期。
-    pub effective_from: BusinessDate,
-    /// 生效结束日期。
-    pub effective_to: Option<BusinessDate>,
     /// 变更原因。
     #[validate(custom(function = "non_blank", message = "变更原因不能为空"))]
     pub change_reason: String,
@@ -217,10 +208,6 @@ pub struct PartyRevisionView {
     pub legal_name: String,
     /// 简称。
     pub short_name: Option<String>,
-    /// 生效开始日期。
-    pub effective_from: String,
-    /// 生效结束日期。
-    pub effective_to: Option<String>,
     /// 变更原因。
     pub change_reason: String,
     /// 乐观锁版本。
@@ -237,8 +224,6 @@ impl From<PartyRevision> for PartyRevisionView {
             revision_no: revision.revision.revision_no,
             legal_name: revision.legal_name,
             short_name: revision.short_name,
-            effective_from: revision.effective_from.to_string(),
-            effective_to: revision.effective_to.map(|date| date.to_string()),
             change_reason: revision.change_reason,
             version: revision.base.version,
             created_at: revision.base.created_at,
@@ -791,7 +776,6 @@ mod tests {
         let request: super::CreatePartyRequest = serde_json::from_value(json!({
             "party_no": "P-2026-001",
             "legal_name": "上海示例科技有限公司",
-            "effective_from": "2026-01-01",
             "change_reason": "首次建档",
         }))
         .unwrap();

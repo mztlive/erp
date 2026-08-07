@@ -98,18 +98,12 @@ fn supplier_account_indexes() -> Vec<IndexModel> {
     ]
 }
 
-/// 返回 `supplier_commercial_profile_revision` 的版本唯一约束与历史查询索引。
+/// 返回 `supplier_commercial_profile_revision` 的版本唯一约束索引。
 fn commercial_profile_indexes() -> Vec<IndexModel> {
-    vec![
-        unique_index(
-            "uk_supplier_commercial_profile_revisions_supplier_revision",
-            doc! { "supplier_id": 1, "revision_no": 1 },
-        ),
-        named_index(
-            "idx_supplier_commercial_profiles_history",
-            doc! { "supplier_id": 1, "valid_from": 1, "valid_to": 1 },
-        ),
-    ]
+    vec![unique_index(
+        "uk_supplier_commercial_profile_revisions_supplier_revision",
+        doc! { "supplier_id": 1, "revision_no": 1 },
+    )]
 }
 
 /// 返回 `supplier_capability` 的身份约束与选品/到期预警索引。
@@ -237,7 +231,7 @@ mod tests {
     }
 
     #[test]
-    fn commercial_profile_indexes_cover_revision_identity_and_history() {
+    fn commercial_profile_indexes_cover_revision_identity() {
         let indexes = commercial_profile_indexes();
 
         assert!(indexes.iter().any(|index| {
@@ -246,9 +240,6 @@ mod tests {
                 && index.keys == doc! { "supplier_id": 1, "revision_no": 1 }
                 && index.options.as_ref().and_then(|options| options.unique) == Some(true)
         }));
-        assert!(indexes
-            .iter()
-            .any(|index| { index.keys == doc! { "supplier_id": 1, "valid_from": 1, "valid_to": 1 } }));
     }
 
     #[test]

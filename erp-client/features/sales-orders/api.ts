@@ -206,6 +206,8 @@ type BackendSalesOrderDetail = {
   effective_at?: number | null
   version: number
   created_at: number
+  owner_user_id: string
+  owner_user_name?: string | null
   lines: Array<{ id: string; line_no: number; line_status: string }>
   working_copy?: BackendWorkingCopy | null
   submissions: BackendSubmission[]
@@ -235,6 +237,20 @@ type BackendContractDetail = {
     signed_at: string
     created_at: number
   }>
+}
+
+type BackendCustomerDetail = {
+  id: string
+  party_id: string
+  customer_no: string
+  legal_name?: string | null
+}
+
+type BackendPartyContact = {
+  id: string
+  contact_name: string
+  is_default: boolean
+  status: string
 }
 
 type BackendSalesOrderReview = {
@@ -581,6 +597,7 @@ function mapListItemFromBackend(
     procurementRejection?: ProcurementRejectionResolution | null
     activeCardSalesApproval?: CardSalesApproval | null
     activeChangeOrder?: SalesChangeOrderSummary | null
+    customerContact?: string
   }
 ): SalesOrderListItem {
   const nature = mapNature(row.business_type)
@@ -642,6 +659,7 @@ function mapListItemFromBackend(
     sellerEntity: "",
     paymentTerms: extras?.paymentTerms ?? "",
     fulfillmentDeadline: extras?.fulfillmentDeadline ?? "",
+    customerContact: extras?.customerContact,
     lineItems: extras?.lineItems ?? [],
     related: {
       purchaseOrders: 0,
@@ -765,6 +783,7 @@ function mapDetailToListItem(
     procurementRejection?: ProcurementRejectionResolution | null
     activeCardSalesApproval?: CardSalesApproval | null
     activeChangeOrder?: SalesChangeOrderSummary | null
+    customerContact?: string
   }
 ): SalesOrderListItem {
   const commercial = pickCommercialContent(detail)
@@ -798,6 +817,7 @@ function mapDetailToListItem(
       taxAmount: commercial.taxAmount,
       lineItems: mapWorkingCopyLines(commercial.lines),
       ownerName: extras?.ownerName || commercial.ownerUserId || "",
+      customerContact: extras?.customerContact,
       paymentTerms: commercial.paymentTerms,
       welfareScene: commercial.welfareScene,
       fulfillmentDeadline: commercial.fulfillmentDeadline,
@@ -1129,6 +1149,36 @@ async function loadDetailExtras(salesOrderId: string, nature: SalesOrderNature) 
   }
 }
 
+async function loadCustomerDisplay(customerId: string): Promise<{
+  customerName?: string
+  customerContact?: string
+}> {
+  try {
+    const customer = await apiGet<BackendCustomerDetail>(
+      `/admin/customers/${customerId}`
+    )
+    const contacts = await apiGet<PageView<BackendPartyContact>>(
+      `/admin/parties/${customer.party_id}/contacts`,
+      {
+        status: "active",
+        page: 1,
+        page_size: 100,
+        sort_by: "created_at",
+        sort_dir: "desc",
+      }
+    ).catch(() => null)
+    const contact =
+      contacts?.items.find((item) => item.is_default) ?? contacts?.items[0]
+
+    return {
+      customerName: customer.legal_name || customer.customer_no,
+      customerContact: contact?.contact_name,
+    }
+  } catch {
+    return {}
+  }
+}
+
 export async function fetchSalesOrderDetail(
   id: string
 ): Promise<SalesOrderDetailView | null> {
@@ -1141,8 +1191,9 @@ export async function fetchSalesOrderDetail(
     throw err
   }
 
+  const customerDisplay = await loadCustomerDisplay(detail.customer_id)
   let contractNumber = ""
-  let customerName = detail.customer_id
+  let customerName = customerDisplay.customerName || detail.customer_id
   if (detail.contract_id) {
     try {
       const contract = await apiGet<BackendContractDetail>(
@@ -1159,26 +1210,11 @@ export async function fetchSalesOrderDetail(
   }
 
   const extras = await loadDetailExtras(id, mapNature(detail.business_type))
-  // 负责人 id → 显示名（账号列表）
-  let ownerName: string | undefined
-  const commercialPreview = pickCommercialContent(detail)
-  const ownerId = commercialPreview.ownerUserId
-  if (ownerId) {
-    try {
-      const admins = await apiGet<Array<{ id: string; name?: string; account?: string }>>(
-        "/admin/admins",
-        {}
-      )
-      const hit = admins.find((a) => a.id === ownerId)
-      ownerName = hit?.name || hit?.account || ownerId
-    } catch {
-      ownerName = ownerId
-    }
-  }
   const order = mapDetailToListItem(detail, {
     customerName,
     contractNumber,
-    ownerName,
+    ownerName: detail.owner_user_name || "—",
+    customerContact: customerDisplay.customerContact,
     ...extras,
   })
 

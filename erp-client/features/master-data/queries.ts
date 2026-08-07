@@ -22,6 +22,7 @@ import type {
   MasterDataListQuery,
   MasterDataResource,
 } from "@/features/master-data/types"
+import { optionKeys } from "@/hooks/use-options"
 
 export {
   buildMasterDataExportCsv,
@@ -55,18 +56,26 @@ export function useMasterDataCenterQuery(
   })
 }
 
+/** 主数据变更后同步失效相关缓存（含计量单位下拉）。 */
+async function invalidateMasterDataCaches(
+  queryClient: ReturnType<typeof useQueryClient>
+) {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: masterDataKeys.all }),
+    queryClient.invalidateQueries({
+      queryKey: ["supplier-catalog", "company-skus"],
+    }),
+    queryClient.invalidateQueries({ queryKey: optionKeys.units }),
+  ])
+}
+
 export function useCreateMasterDataMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: CreateMasterDataInput) => createMasterDataObject(input),
     onSuccess: async (result) => {
       if (result.outcome === "succeeded") {
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: masterDataKeys.all }),
-          queryClient.invalidateQueries({
-            queryKey: ["supplier-catalog", "company-skus"],
-          }),
-        ])
+        await invalidateMasterDataCaches(queryClient)
       }
     },
   })
@@ -79,12 +88,7 @@ export function useCreateRevisionMutation() {
     onSuccess: async (result) => {
       // 冲突时也刷新详情与列表，让 lockVersion 回到最新，避免「关闭-重填-再冲突」死循环。
       if (result.outcome === "succeeded" || result.outcome === "conflict") {
-        await Promise.all([
-          queryClient.invalidateQueries({ queryKey: masterDataKeys.all }),
-          queryClient.invalidateQueries({
-            queryKey: ["supplier-catalog", "company-skus"],
-          }),
-        ])
+        await invalidateMasterDataCaches(queryClient)
       }
     },
   })
@@ -97,7 +101,7 @@ export function useDisableMasterDataMutation() {
       disableMasterDataObject(input),
     onSuccess: async (result) => {
       if (result.outcome === "succeeded" || result.outcome === "conflict") {
-        await queryClient.invalidateQueries({ queryKey: masterDataKeys.all })
+        await invalidateMasterDataCaches(queryClient)
       }
     },
   })

@@ -35,6 +35,7 @@ import type {
   RevisionTimelineEntry,
   SellableItemFields,
   SupplierFields,
+  UnitOfMeasureFields,
   VoucherCategoryFields,
 } from "@/features/master-data/types"
 import { PRODUCT_KIND_LABELS } from "@/features/master-data/types"
@@ -178,8 +179,6 @@ type CommercialProfileDto = {
   invoice_tax_rate: string | null
   signing_entity_party_id: string | null
   payment_entity_party_id: string | null
-  valid_from: string
-  valid_to: string | null
   change_reason: string
   version: number
   created_at: number
@@ -206,8 +205,6 @@ type PartyRevisionDto = {
   revision_no: number
   legal_name: string
   short_name: string | null
-  effective_from: string
-  effective_to: string | null
   change_reason: string
   version: number
   created_at: number
@@ -251,6 +248,50 @@ type SupplierRatingDto = {
   valid_from: string
   valid_to: string | null
   change_reason: string
+  version: number
+  created_at: number
+}
+
+/** 主体联系人（列表不含 mobile 明文，可用 telephone 回显）。 */
+type PartyContactDto = {
+  id: string
+  party_id: string
+  contact_name: string
+  title: string | null
+  telephone: string | null
+  email: string | null
+  valid_from: string
+  valid_to: string | null
+  is_default: boolean
+  status: string
+  version: number
+  created_at: number
+}
+
+/** 银行账户（列表不含账号明文）。 */
+type PartyBankAccountDto = {
+  id: string
+  bank_account_no: string
+  party_id: string
+  account_name: string
+  bank_name: string
+  bank_branch_name: string | null
+  valid_from: string
+  valid_to: string | null
+  is_default: boolean
+  status: string
+  version: number
+  created_at: number
+}
+
+type PartyTaxProfileDto = {
+  id: string
+  party_id: string
+  tax_no: string
+  valid_from: string
+  valid_to: string | null
+  is_default: boolean
+  status: string
   version: number
   created_at: number
 }
@@ -357,6 +398,96 @@ const invoiceToBackend = (label: string | undefined): string => {
   }
 }
 
+/** 后端 capability_code → 表单多选中文标签。 */
+const capabilityLabel = (code: string | undefined): string => {
+  switch (code) {
+    case "physical":
+      return "实物商品"
+    case "virtual":
+      return "虚拟商品"
+    case "offline_service":
+      return "线下服务"
+    case "api":
+      return "API"
+    case "printing":
+      return "印刷"
+    default:
+      return code ?? ""
+  }
+}
+
+const capabilityToBackend = (label: string): string | null => {
+  switch (label.trim()) {
+    case "实物商品":
+      return "physical"
+    case "虚拟商品":
+      return "virtual"
+    case "线下服务":
+      return "offline_service"
+    case "API":
+      return "api"
+    case "印刷":
+      return "printing"
+    default:
+      return null
+  }
+}
+
+/** 后端评级代码（A/B/C/D 或已是「A 级」）→ 表单选项。 */
+const ratingLabel = (rating: string | undefined): string => {
+  if (!rating) return ""
+  const trimmed = rating.trim()
+  if (/^[ABCD]$/i.test(trimmed)) return `${trimmed.toUpperCase()} 级`
+  if (/^[ABCD]\s*级$/i.test(trimmed)) {
+    return `${trimmed.charAt(0).toUpperCase()} 级`
+  }
+  return trimmed
+}
+
+const ratingToBackend = (label: string | undefined): string => {
+  if (!label) return "C"
+  const m = label.trim().match(/^([ABCD])/i)
+  return m ? m[1].toUpperCase() : "C"
+}
+
+const pickDefaultOrFirst = <T extends { is_default?: boolean }>(
+  items: readonly T[]
+): T | undefined => items.find((item) => item.is_default) ?? items[0]
+
+async function resolvePartyLegalName(
+  partyId: string | null | undefined
+): Promise<string> {
+  if (!partyId) return ""
+  try {
+    const revPage = await apiGet<BackendPage<PartyRevisionDto>>(
+      `/admin/parties/${partyId}/revisions`,
+      { page: 1, page_size: 1, sort_by: "revision_no", sort_dir: "desc" }
+    )
+    return revPage.items[0]?.legal_name ?? ""
+  } catch {
+    return ""
+  }
+}
+
+/** 事实行：空值不写入，避免编辑回填被「—」占位污染。 */
+function fact(
+  label: string,
+  value: string | number | null | undefined
+): { label: string; value: string } | null {
+  if (value === null || value === undefined) return null
+  const text = String(value).trim()
+  if (!text || text === "—") return null
+  return { label, value: text }
+}
+
+function factsOf(
+  ...rows: Array<{ label: string; value: string } | null>
+): Array<{ label: string; value: string }> {
+  return rows.filter(
+    (row): row is { label: string; value: string } => row !== null
+  )
+}
+
 const commonActions = (
   resource: MasterDataResource,
   lifecycle: LifecycleStatus
@@ -405,6 +536,27 @@ const commonActions = (
         },
       ],
     }
+  }
+  // 计量单位：列表 Dialog 更新 / 停用，无侧边预览与独立详情。
+  if (resource === "unit-of-measures") {
+    const allowed: string[] = ["CREATE_REVISION", "EXPORT_ROW"]
+    const blockers: Array<{ action: string; code: string; message: string }> = [
+      {
+        action: "VIEW",
+        code: "UNIT_NO_SIDE_PREVIEW",
+        message: "计量单位在列表 Dialog 维护，不提供侧边预览。",
+      },
+    ]
+    if (lifecycle === "ENABLED") {
+      allowed.push("DISABLE")
+    } else {
+      blockers.push({
+        action: "DISABLE",
+        code: "ALREADY_DISABLED",
+        message: "资料已停用；不是删除，历史记录仍可查看。",
+      })
+    }
+    return { allowedActions: allowed, actionBlockers: blockers }
   }
   const allowed: string[] = ["VIEW", "EXPORT_ROW"]
   const blockers: Array<{ action: string; code: string; message: string }> = []
@@ -523,6 +675,35 @@ function mapBrandRow(dto: ProductBrandDto): MasterDataListItem {
     keyFacts: [{ label: "品牌代码", value: dto.brand_code }],
     selectorEligibility: [],
     ...commonActions("brands", lifecycle),
+    lockVersion: dto.version,
+    metricTags: [lifecycle === "ENABLED" ? "enabled" : "disabled"],
+  }
+}
+
+function mapUnitOfMeasureRow(dto: UnitOfMeasureDto): MasterDataListItem {
+  const lifecycle = asLifecycle(dto.status)
+  return {
+    objectType: "unit-of-measures",
+    stableId: dto.id,
+    stableNo: dto.unit_code,
+    name: dto.name,
+    dictionaryCode: dto.unit_code,
+    lifecycleStatus: lifecycle,
+    lifecycleStatusLabel: lifecycleLabel(lifecycle),
+    lifecycleTone: lifecycleTone(lifecycle),
+    revisionTiming: "CURRENT",
+    revisionTimingLabel: "当前生效",
+    currentRevisionId: dto.id,
+    displayedRevisionId: dto.id,
+    revisionNo: dto.version,
+    effectiveFrom: tsToIso(dto.created_at).slice(0, 10),
+    keyFacts: [
+      { label: "单位代码", value: dto.unit_code },
+      { label: "单位符号", value: dto.symbol },
+      { label: "数量小数位", value: String(dto.quantity_scale) },
+    ],
+    selectorEligibility: [],
+    ...commonActions("unit-of-measures", lifecycle),
     lockVersion: dto.version,
     metricTags: [lifecycle === "ENABLED" ? "enabled" : "disabled"],
   }
@@ -711,9 +892,9 @@ function mapSupplierRow(
     displayedRevisionId:
       supplier.current_commercial_profile_revision_id ?? supplier.id,
     revisionNo: profile?.revision_no ?? supplier.version,
-    effectiveFrom:
-      profile?.valid_from ?? tsToIso(supplier.created_at).slice(0, 10),
-    effectiveTo: profile?.valid_to ?? undefined,
+    effectiveFrom: tsToIso(
+      profile?.created_at ?? supplier.created_at
+    ).slice(0, 10),
     keyFacts: [
       {
         label: "结算方式",
@@ -788,6 +969,31 @@ async function listBrands(
     name: query.q || undefined,
   })
   return items.map(mapBrandRow)
+}
+
+async function listUnitOfMeasures(
+  query: MasterDataListQuery
+): Promise<MasterDataListItem[]> {
+  const status =
+    query.lifecycleStatus === "enabled"
+      ? "active"
+      : query.lifecycleStatus === "disabled"
+        ? "disabled"
+        : undefined
+  // 仅按 status 拉全量（字典体量小）；代码/名称/符号在本地模糊匹配
+  const items = await fetchAllPages<UnitOfMeasureDto>(
+    "/admin/unit-of-measures",
+    { status }
+  )
+  const rows = items.map(mapUnitOfMeasureRow)
+  const q = query.q?.trim().toLowerCase()
+  if (!q) return rows
+  return rows.filter((row) => {
+    const hay = [row.stableNo, row.name, ...row.keyFacts.map((f) => f.value)]
+      .join(" ")
+      .toLowerCase()
+    return hay.includes(q)
+  })
 }
 
 async function listProducts(
@@ -1143,6 +1349,19 @@ async function centerBrand(
   return baseCenter("brands", row)
 }
 
+async function centerUnitOfMeasure(
+  stableId: string
+): Promise<MasterDataCenterView | null> {
+  const items = await fetchAllPages<UnitOfMeasureDto>(
+    "/admin/unit-of-measures",
+    {}
+  )
+  const dto = items.find((u) => u.id === stableId)
+  if (!dto) return null
+  const row = mapUnitOfMeasureRow(dto)
+  return baseCenter("unit-of-measures", row)
+}
+
 async function centerProduct(
   stableId: string
 ): Promise<MasterDataCenterView | null> {
@@ -1383,21 +1602,40 @@ async function centerSupplier(
     throw error
   }
 
-  let partyName = detail.party_no ?? detail.supplier_no
-  try {
-    const revPage = await apiGet<BackendPage<PartyRevisionDto>>(
-      `/admin/parties/${detail.party_id}/revisions`,
+  const partyId = detail.party_id
+  const profile = detail.current_profile
+
+  const [
+    party,
+    partyRevisions,
+    contacts,
+    banks,
+    taxProfiles,
+    capabilities,
+    qualifications,
+    ratings,
+    profiles,
+    signingEntityName,
+    paymentEntityName,
+  ] = await Promise.all([
+    apiGet<PartyDto>(`/admin/parties/${partyId}`).catch(() => null),
+    apiGet<BackendPage<PartyRevisionDto>>(
+      `/admin/parties/${partyId}/revisions`,
       { page: 1, page_size: 1, sort_by: "revision_no", sort_dir: "desc" }
     )
-    if (revPage.items[0]?.legal_name) partyName = revPage.items[0].legal_name
-  } catch {
-    // ignore
-  }
-
-  const profile = detail.current_profile
-  const row = mapSupplierRow(detail, partyName, profile)
-
-  const [capabilities, qualifications, ratings, profiles] = await Promise.all([
+      .then((page) => page.items)
+      .catch(() => [] as PartyRevisionDto[]),
+    fetchAllPages<PartyContactDto>(`/admin/parties/${partyId}/contacts`, {}).catch(
+      () => [] as PartyContactDto[]
+    ),
+    fetchAllPages<PartyBankAccountDto>(
+      `/admin/parties/${partyId}/bank-accounts`,
+      {}
+    ).catch(() => [] as PartyBankAccountDto[]),
+    fetchAllPages<PartyTaxProfileDto>(
+      `/admin/parties/${partyId}/tax-profiles`,
+      {}
+    ).catch(() => [] as PartyTaxProfileDto[]),
     fetchAllPages<SupplierCapabilityDto>(
       `/admin/suppliers/${stableId}/capabilities`,
       {}
@@ -1414,16 +1652,97 @@ async function centerSupplier(
       `/admin/suppliers/${stableId}/commercial-profiles`,
       {}
     ).catch(() => [] as CommercialProfileDto[]),
+    resolvePartyLegalName(profile?.signing_entity_party_id),
+    resolvePartyLegalName(profile?.payment_entity_party_id),
   ])
 
+  const partyName =
+    partyRevisions[0]?.legal_name ||
+    detail.party_no ||
+    detail.supplier_no
+  const row = mapSupplierRow(detail, partyName, profile)
+
+  const contact = pickDefaultOrFirst(contacts)
+  const bank = pickDefaultOrFirst(banks)
+  const taxProfile = pickDefaultOrFirst(taxProfiles)
+  // 评级按 revision_no 取最新
+  const rating = [...ratings].sort(
+    (a, b) => (b.revision_no ?? 0) - (a.revision_no ?? 0)
+  )[0]
+
   const capabilityLabels = capabilities
-    .map((c) => c.capability_code)
+    .map((c) => capabilityLabel(c.capability_code))
     .filter(Boolean)
     .join("、")
-  const rating = ratings[0]
-  const facts = [
+
+  const qualByType = (type: string) =>
+    qualifications.find((q) => q.qualification_type === type)
+
+  const certificateQual = qualByType("certificate")
+  const contractQual = qualByType("contract")
+  const authQual = qualByType("authorization")
+  const foodQual = qualByType("food_license")
+  const legalIdQual = qualByType("legal_person_id")
+
+  // 标签必须与 RESOURCE_FIELDS.suppliers / masterDataCopy 一致，供编辑回填
+  const facts = factsOf(
+    fact("供应商编号", detail.supplier_no),
+    fact("企业主体", partyName),
+    fact("联系人", contact?.contact_name),
+    // mobile 不在列表契约中；telephone 若创建时同步写入可回显
+    fact("联系电话", contact?.telephone),
+    fact("结算方式", settlementLabel(profile?.settlement_mode)),
+    fact("发票类型", invoiceLabel(profile?.invoice_type)),
+    fact("发票税点", profile?.invoice_tax_rate),
+    fact("能力", capabilityLabels),
+    fact("公司签约主体", signingEntityName),
+    fact("公司付款主体", paymentEntityName),
+    // 标签必须与 masterDataCopy / RESOURCE_FIELDS.suppliers 完全一致
+    fact(
+      "资质附件",
+      certificateQual?.attachment_id ?? certificateQual?.certificate_no
+    ),
+    fact("合同编号", contractQual?.certificate_no),
+    fact("合同有效期起", contractQual?.valid_from),
+    fact("合同有效期止", contractQual?.valid_to),
+    fact("合同文件", contractQual?.attachment_id),
+    fact(
+      "授权书文件",
+      authQual?.attachment_id ?? authQual?.certificate_no
+    ),
+    fact("授权书有效期起", authQual?.valid_from),
+    fact("授权书有效期止", authQual?.valid_to),
+    fact(
+      "食品经营许可证",
+      foodQual?.attachment_id ?? foodQual?.certificate_no
+    ),
+    fact(
+      "供应商法人身份证",
+      legalIdQual?.attachment_id ?? legalIdQual?.certificate_no
+    ),
+    fact(
+      "税号",
+      taxProfile?.tax_no ?? party?.unified_credit_code
+    ),
+    fact("开户银行", bank?.bank_name),
+    // 银行账号明文不在列表契约中，无法回显
+    fact("供应商评级", ratingLabel(rating?.rating)),
+    fact(
+      "合作期初评分",
+      rating?.initial_score != null ? String(rating.initial_score) : null
+    ),
+    fact(
+      "合作中评分",
+      rating?.current_score != null ? String(rating.current_score) : null
+    )
+  )
+
+  // 展示用摘要（含无值占位），与编辑 fields 分离
+  const displayFacts = [
     { label: "供应商编号", value: detail.supplier_no },
-    { label: "企业主体", value: partyName },
+    { label: "企业主体", value: partyName || "—" },
+    { label: "联系人", value: contact?.contact_name || "—" },
+    { label: "联系电话", value: contact?.telephone || "—" },
     {
       label: "结算方式",
       value: settlementLabel(profile?.settlement_mode) || "—",
@@ -1440,14 +1759,17 @@ async function centerSupplier(
     {
       label: "资质",
       value:
-        qualifications.length > 0
-          ? `${qualifications.length} 项`
-          : "—",
+        qualifications.length > 0 ? `${qualifications.length} 项` : "—",
     },
     {
       label: "供应商评级",
-      value: rating?.rating ?? "—",
+      value: ratingLabel(rating?.rating) || "—",
     },
+    {
+      label: "税号",
+      value: taxProfile?.tax_no ?? party?.unified_credit_code ?? "—",
+    },
+    { label: "开户银行", value: bank?.bank_name || "—" },
   ]
 
   const timeline: RevisionTimelineEntry[] = profiles.map((p, index) => ({
@@ -1457,24 +1779,24 @@ async function centerSupplier(
     timingLabel: index === 0 ? "当前生效" : "已结束",
     nameSnapshot: partyName,
     actor: "—",
-    effectiveFrom: p.valid_from,
-    effectiveTo: p.valid_to ?? undefined,
+    effectiveFrom: tsToIso(p.created_at).slice(0, 10),
     changeReason: p.change_reason,
     isCurrent: index === 0,
     lifecycleAtRevision: asLifecycle(detail.status),
   }))
 
   return baseCenter("suppliers", row, {
-    resourceFacts: facts,
+    resourceFacts: displayFacts,
     currentRevision: {
       revisionId: profile?.id ?? detail.id,
       revisionNo: profile?.revision_no ?? detail.version,
       name: partyName,
-      effectiveFrom:
-        profile?.valid_from ?? tsToIso(detail.created_at).slice(0, 10),
-      effectiveTo: profile?.valid_to ?? undefined,
+      effectiveFrom: tsToIso(
+        profile?.created_at ?? detail.created_at
+      ).slice(0, 10),
       changeReason: profile?.change_reason ?? "—",
       actor: "—",
+      // 编辑回填专用：完整字段 + 真实值（无「—」占位）
       fields: facts,
     },
     revisionTimeline:
@@ -1483,14 +1805,25 @@ async function centerSupplier(
         : baseCenter("suppliers", row).revisionTimeline,
     sensitiveFields: [
       {
-        label: "银行账号",
-        maskedValue: "（请从财务上下文查看）",
-        visibility: "masked",
+        label: "联系电话",
+        maskedValue: contact?.telephone
+          ? `${contact.telephone.slice(0, 3)}****`
+          : "****",
+        visibility: "masked" as const,
       },
       {
-        label: "联系人",
-        maskedValue: "（敏感字段，需授权查看）",
-        visibility: "masked",
+        label: "银行账号",
+        maskedValue: bank?.bank_account_no
+          ? `****${bank.bank_account_no.slice(-4)}`
+          : "（请从财务上下文查看）",
+        visibility: "masked" as const,
+      },
+      {
+        label: "税号",
+        maskedValue: taxProfile?.tax_no
+          ? `${taxProfile.tax_no.slice(0, 4)}****`
+          : "****",
+        visibility: "masked" as const,
       },
     ],
   })
@@ -1618,6 +1951,65 @@ async function createBrand(
       actor: "—",
       changeReason: input.changeReason || "新建",
       reference: `MD-CREATE-${created.brand_code}`,
+      nextActions: ["查看详情", "更新资料"],
+    }
+  } catch (error) {
+    return mapMutationError(error)
+  }
+}
+
+function parseQuantityScale(raw: string | undefined): number | null {
+  const value = Number((raw ?? "").trim())
+  if (!Number.isInteger(value) || value < 0 || value > 6) return null
+  return value
+}
+
+async function createUnitOfMeasure(
+  input: CreateMasterDataInput
+): Promise<MasterDataMutationResult> {
+  const fields = input.fields as UnitOfMeasureFields
+  const quantityScale = parseQuantityScale(fields.quantityScale)
+  if (quantityScale === null) {
+    return {
+      outcome: "blocked",
+      code: "UNIT_QUANTITY_SCALE_INVALID",
+      message: "数量小数位必须是 0–6 的整数。",
+    }
+  }
+  if (!fields.code.trim()) {
+    return {
+      outcome: "blocked",
+      code: "UNIT_CODE_REQUIRED",
+      message: "请填写单位代码。",
+    }
+  }
+  if (!fields.symbol.trim()) {
+    return {
+      outcome: "blocked",
+      code: "UNIT_SYMBOL_REQUIRED",
+      message: "请填写单位符号。",
+    }
+  }
+  try {
+    const created = await apiPost<UnitOfMeasureDto>("/admin/unit-of-measures", {
+      unit_code: fields.code.trim(),
+      name: input.name.trim(),
+      symbol: fields.symbol.trim(),
+      quantity_scale: quantityScale,
+      status: "active",
+    })
+    return {
+      outcome: "succeeded",
+      stableId: created.id,
+      stableNo: created.unit_code,
+      revisionId: created.id,
+      revisionNo: created.version,
+      revisionState: "CURRENT",
+      effectiveFrom: input.effectiveFrom,
+      recordedAt: isoNow(),
+      actor: "—",
+      changeReason: input.changeReason || "新建",
+      reference: `MD-CREATE-${created.unit_code}`,
       nextActions: ["查看详情", "更新资料"],
     }
   } catch (error) {
@@ -1769,6 +2161,245 @@ async function createVoucherCategory(
   }
 }
 
+/**
+ * 供应商附属资料（联系人/地址/银行/税务/能力/评级/资质）落库。
+ * 失败不阻断主单；修订时「已有则跳过」避免重复脏数据。
+ * 列表接口不含部分敏感明文，写入时同步 telephone 便于回显。
+ */
+async function persistSupplierAncillary(params: {
+  partyId: string
+  supplierId: string
+  fields: SupplierFields
+  changeReason: string
+  validFrom: string
+  /** 创建场景写评级期初分；修订场景仅在尚无评级时写入。 */
+  isCreate: boolean
+}): Promise<void> {
+  const { partyId, supplierId, fields, changeReason, validFrom, isCreate } =
+    params
+
+  const [
+    existingContacts,
+    existingAddresses,
+    existingBanks,
+    existingTax,
+    existingCapabilities,
+    existingRatings,
+    existingQuals,
+  ] = await Promise.all([
+    fetchAllPages<PartyContactDto>(
+      `/admin/parties/${partyId}/contacts`,
+      {}
+    ).catch(() => [] as PartyContactDto[]),
+    fetchAllPages<{ id: string }>(
+      `/admin/parties/${partyId}/addresses`,
+      {}
+    ).catch(() => [] as { id: string }[]),
+    fetchAllPages<PartyBankAccountDto>(
+      `/admin/parties/${partyId}/bank-accounts`,
+      {}
+    ).catch(() => [] as PartyBankAccountDto[]),
+    fetchAllPages<PartyTaxProfileDto>(
+      `/admin/parties/${partyId}/tax-profiles`,
+      {}
+    ).catch(() => [] as PartyTaxProfileDto[]),
+    fetchAllPages<SupplierCapabilityDto>(
+      `/admin/suppliers/${supplierId}/capabilities`,
+      {}
+    ).catch(() => [] as SupplierCapabilityDto[]),
+    fetchAllPages<SupplierRatingDto>(
+      `/admin/suppliers/${supplierId}/ratings`,
+      {}
+    ).catch(() => [] as SupplierRatingDto[]),
+    fetchAllPages<SupplierQualificationDto>(
+      `/admin/suppliers/${supplierId}/qualifications`,
+      {}
+    ).catch(() => [] as SupplierQualificationDto[]),
+  ])
+
+  // 联系人：无记录时创建；mobile 必填，同步 telephone 便于列表回显
+  if (
+    existingContacts.length === 0 &&
+    fields.contactName?.trim() &&
+    fields.contactPhone?.trim()
+  ) {
+    try {
+      await apiPost(`/admin/parties/${partyId}/contacts`, {
+        contact_name: fields.contactName.trim(),
+        mobile: fields.contactPhone.trim(),
+        telephone: fields.contactPhone.trim(),
+        valid_from: validFrom,
+        is_default: true,
+      })
+    } catch {
+      // ignore
+    }
+  }
+
+  if (existingAddresses.length === 0 && fields.address?.trim()) {
+    try {
+      await apiPost(`/admin/parties/${partyId}/addresses`, {
+        address_type: "operating",
+        contact_name: fields.contactName?.trim() || null,
+        address: fields.address.trim(),
+        valid_from: validFrom,
+        is_default: true,
+      })
+    } catch {
+      // ignore — 地址列表不含明文，编辑无法回显
+    }
+  }
+
+  if (existingTax.length === 0 && fields.taxNo?.trim()) {
+    try {
+      await apiPost(`/admin/parties/${partyId}/tax-profiles`, {
+        tax_no: fields.taxNo.trim(),
+        valid_from: validFrom,
+        is_default: true,
+      })
+    } catch {
+      // ignore
+    }
+  }
+
+  if (
+    existingBanks.length === 0 &&
+    fields.bankName?.trim() &&
+    fields.bankAccount?.trim()
+  ) {
+    try {
+      const suffix = Date.now().toString(36).slice(-6)
+      await apiPost(`/admin/parties/${partyId}/bank-accounts`, {
+        bank_account_no: `BA-${suffix}`,
+        account_name: fields.company || fields.contactName || "供应商",
+        bank_name: fields.bankName.trim(),
+        account_number: fields.bankAccount.trim(),
+        valid_from: validFrom,
+        is_default: true,
+      })
+    } catch {
+      // ignore
+    }
+  }
+
+  const existingCapCodes = new Set(
+    existingCapabilities.map((c) => c.capability_code)
+  )
+  const capabilityCodes = (fields.capability ?? "")
+    .split(/[、,，]/)
+    .map((s) => s.trim())
+    .map(capabilityToBackend)
+    .filter((code): code is string => Boolean(code))
+  for (const code of capabilityCodes) {
+    if (existingCapCodes.has(code)) continue
+    try {
+      await apiPost(`/admin/suppliers/${supplierId}/capabilities`, {
+        capability_code: code,
+        owner_user_id: "system",
+        valid_from: validFrom,
+        status: "active",
+      })
+    } catch {
+      // ignore duplicates
+    }
+  }
+
+  // 评级：创建必写；修订仅当尚无评级记录时补首条，避免每次保存追加版本
+  const shouldWriteRating =
+    (isCreate || existingRatings.length === 0) &&
+    Boolean(fields.supplierRating || fields.currentScore || fields.initialScore)
+  if (shouldWriteRating) {
+    try {
+      const current = Number.parseInt(fields.currentScore ?? "", 10)
+      const initial = Number.parseInt(fields.initialScore ?? "", 10)
+      await apiPost(`/admin/suppliers/${supplierId}/ratings`, {
+        initial_score: Number.isFinite(initial) ? initial : undefined,
+        rating: ratingToBackend(fields.supplierRating),
+        current_score: Number.isFinite(current) ? current : 0,
+        valid_from: validFrom,
+        change_reason: changeReason || "评估",
+      })
+    } catch {
+      // ignore
+    }
+  }
+
+  const existingQualTypes = new Set(
+    existingQuals.map((q) => q.qualification_type)
+  )
+  const qualWrites: Array<{
+    type: string
+    certificateNo: string
+    validFrom?: string
+    validTo?: string
+  }> = []
+
+  if (fields.qualification?.trim() && !existingQualTypes.has("certificate")) {
+    qualWrites.push({
+      type: "certificate",
+      certificateNo: fields.qualification.split(",")[0]?.trim() || "QUAL",
+      validFrom,
+    })
+  }
+  if (
+    (fields.contractNo?.trim() || fields.contractFile?.trim()) &&
+    !existingQualTypes.has("contract")
+  ) {
+    qualWrites.push({
+      type: "contract",
+      certificateNo: fields.contractNo?.trim() || "CONTRACT",
+      validFrom: fields.contractValidFrom || validFrom,
+      validTo: fields.contractValidTo,
+    })
+  }
+  if (
+    fields.authorizationFile?.trim() &&
+    !existingQualTypes.has("authorization")
+  ) {
+    qualWrites.push({
+      type: "authorization",
+      certificateNo:
+        fields.authorizationFile.split(",")[0]?.trim() || "AUTH",
+      validFrom: fields.authorizationValidFrom || validFrom,
+      validTo: fields.authorizationValidTo,
+    })
+  }
+  if (fields.foodLicense?.trim() && !existingQualTypes.has("food_license")) {
+    qualWrites.push({
+      type: "food_license",
+      certificateNo: fields.foodLicense.split(",")[0]?.trim() || "FOOD",
+      validFrom,
+    })
+  }
+  if (
+    fields.legalPersonIdCard?.trim() &&
+    !existingQualTypes.has("legal_person_id")
+  ) {
+    qualWrites.push({
+      type: "legal_person_id",
+      certificateNo:
+        fields.legalPersonIdCard.split(",")[0]?.trim() || "IDCARD",
+      validFrom,
+    })
+  }
+
+  for (const q of qualWrites) {
+    try {
+      await apiPost(`/admin/suppliers/${supplierId}/qualifications`, {
+        qualification_type: q.type,
+        certificate_no: q.certificateNo,
+        valid_from: q.validFrom || validFrom,
+        valid_to: q.validTo || null,
+        attachment_id: undefined,
+        capability_ids: [],
+        status: "active",
+      })
+    } catch {
+      // ignore
+    }
+  }
+}
+
 async function createSupplier(
   input: CreateMasterDataInput
 ): Promise<MasterDataMutationResult> {
@@ -1802,8 +2433,6 @@ async function createSupplier(
         legal_name: fields.company || input.name.trim(),
         short_name: null,
         unified_credit_code: fields.taxNo || null,
-        effective_from: input.effectiveFrom,
-        effective_to: null,
         change_reason: input.changeReason || "供应商主体",
         status: "active",
       })
@@ -1827,11 +2456,19 @@ async function createSupplier(
       invoice_tax_rate: fields.invoiceTaxRate || "0.13",
       signing_entity_party_id: partyId,
       payment_entity_party_id: partyId,
-      valid_from: input.effectiveFrom,
-      valid_to: input.effectiveTo || null,
       change_reason: input.changeReason || "新建",
       status: "active",
     })
+
+    await persistSupplierAncillary({
+      partyId,
+      supplierId: created.id,
+      fields,
+      changeReason: input.changeReason || "新建",
+      validFrom: input.effectiveFrom || todayDateOnly(),
+      isCreate: true,
+    })
+
     return {
       outcome: "succeeded",
       stableId: created.id,
@@ -1880,6 +2517,9 @@ export async function fetchMasterDataList(
       break
     case "brands":
       rows = await listBrands(query)
+      break
+    case "unit-of-measures":
+      rows = await listUnitOfMeasures(query)
       break
     case "products":
       rows = await listProducts(query)
@@ -1931,6 +2571,8 @@ export async function fetchMasterDataCenter(
       return centerCategory(stableId)
     case "brands":
       return centerBrand(stableId)
+    case "unit-of-measures":
+      return centerUnitOfMeasure(stableId)
     case "products":
       return centerProduct(stableId)
     case "sellable-items":
@@ -1955,6 +2597,8 @@ export async function createMasterDataObject(
       return createCategory(input)
     case "brands":
       return createBrand(input)
+    case "unit-of-measures":
+      return createUnitOfMeasure(input)
     case "products":
       return createProduct(input)
     case "voucher-categories":
@@ -2047,6 +2691,47 @@ export async function createMasterDataRevision(
           nextActions: ["查看变更历史", "返回列表"],
         }
       }
+      case "unit-of-measures": {
+        const fields = input.fields as UnitOfMeasureFields
+        const quantityScale = parseQuantityScale(fields.quantityScale)
+        if (quantityScale === null) {
+          return {
+            outcome: "blocked",
+            code: "UNIT_QUANTITY_SCALE_INVALID",
+            message: "数量小数位必须是 0–6 的整数。",
+          }
+        }
+        if (!fields.symbol.trim()) {
+          return {
+            outcome: "blocked",
+            code: "UNIT_SYMBOL_REQUIRED",
+            message: "请填写单位符号。",
+          }
+        }
+        const updated = await apiPut<UnitOfMeasureDto>(
+          `/admin/unit-of-measures/${input.stableId}`,
+          {
+            version: input.expectedLockVersion,
+            name: input.name.trim(),
+            symbol: fields.symbol.trim(),
+            quantity_scale: quantityScale,
+          }
+        )
+        return {
+          outcome: "succeeded",
+          stableId: updated.id,
+          stableNo: updated.unit_code,
+          revisionId: updated.id,
+          revisionNo: updated.version,
+          revisionState: "CURRENT",
+          effectiveFrom: input.effectiveFrom,
+          recordedAt: isoNow(),
+          actor: "—",
+          changeReason: input.changeReason,
+          reference: `MD-REV-${updated.unit_code}-v${updated.version}`,
+          nextActions: ["查看变更历史", "返回列表"],
+        }
+      }
       case "products": {
         const fields = input.fields as ProductFields
         if (!fields.categoryId || !fields.brandId || !fields.baseUnitId) {
@@ -2112,8 +2797,6 @@ export async function createMasterDataRevision(
                 invoice_tax_rate: fields.invoiceTaxRate || "0.13",
                 signing_entity_party_id: updated.party_id,
                 payment_entity_party_id: updated.party_id,
-                valid_from: input.effectiveFrom,
-                valid_to: input.effectiveTo || null,
                 change_reason: input.changeReason,
               }
             )
@@ -2124,6 +2807,15 @@ export async function createMasterDataRevision(
             })
           }
         }
+        // 附属资料 best-effort 同步，保证编辑后再打开可回显
+        await persistSupplierAncillary({
+          partyId: updated.party_id,
+          supplierId: updated.id,
+          fields,
+          changeReason: input.changeReason,
+          validFrom: input.effectiveFrom || todayDateOnly(),
+          isCreate: false,
+        })
         return {
           outcome: "succeeded",
           stableId: updated.id,
@@ -2250,6 +2942,29 @@ export async function disableMasterDataObject(
           actor: "—",
           changeReason: input.changeReason,
           reference: `MD-DIS-${updated.brand_code}`,
+          nextActions: ["返回列表"],
+        }
+      }
+      case "unit-of-measures": {
+        const updated = await apiPut<UnitOfMeasureDto>(
+          `/admin/unit-of-measures/${input.stableId}`,
+          {
+            version: input.expectedLockVersion,
+            status: "disabled",
+          }
+        )
+        return {
+          outcome: "succeeded",
+          stableId: updated.id,
+          stableNo: updated.unit_code,
+          revisionId: updated.id,
+          revisionNo: updated.version,
+          revisionState: "CURRENT",
+          effectiveFrom: input.effectiveFrom,
+          recordedAt: isoNow(),
+          actor: "—",
+          changeReason: input.changeReason,
+          reference: `MD-DIS-${updated.unit_code}`,
           nextActions: ["返回列表"],
         }
       }

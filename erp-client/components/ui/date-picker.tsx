@@ -122,7 +122,8 @@ function DatePicker({
             <Button
               type="button"
               variant="outline"
-              className="min-w-0 flex-1 justify-start"
+              size="lg"
+              className="min-w-0 flex-1 justify-start rounded-lg bg-surface-sunken shadow-xs hover:border-foreground/25 hover:bg-card"
               disabled={disabled}
               aria-invalid={ariaInvalid}
               aria-label={value ? `已选日期 ${value}` : placeholder}
@@ -138,7 +139,7 @@ function DatePicker({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
+            size="icon-lg"
             onClick={() => onValueChange?.(undefined)}
             disabled={disabled}
             aria-label="清除日期"
@@ -198,7 +199,8 @@ function DateRangePicker({
             <Button
               type="button"
               variant="outline"
-              className="min-w-0 flex-1 justify-start"
+              size="lg"
+              className="min-w-0 flex-1 justify-start rounded-lg bg-surface-sunken shadow-xs hover:border-foreground/25 hover:bg-card"
               disabled={disabled}
               aria-label={label}
             />
@@ -213,7 +215,7 @@ function DateRangePicker({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
+            size="icon-lg"
             onClick={() => onValueChange?.(undefined)}
             disabled={disabled}
             aria-label="清除日期范围"
@@ -289,7 +291,8 @@ function DateTimePicker({
             <Button
               type="button"
               variant="outline"
-              className="min-w-0 flex-1 justify-start"
+              size="lg"
+              className="min-w-0 flex-1 justify-start rounded-lg bg-surface-sunken shadow-xs hover:border-foreground/25 hover:bg-card"
               disabled={disabled}
               aria-invalid={ariaInvalid}
               aria-label={label}
@@ -305,7 +308,7 @@ function DateTimePicker({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
+            size="icon-lg"
             onClick={() => onValueChange?.(undefined)}
             disabled={disabled}
             aria-label="清除日期时间"

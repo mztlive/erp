@@ -5,6 +5,7 @@ export const MASTER_DATA_RESOURCES = [
   { key: "products", label: "商品与 SKU" },
   { key: "categories", label: "商品分类" },
   { key: "brands", label: "品牌" },
+  { key: "unit-of-measures", label: "计量单位" },
   { key: "voucher-categories", label: "卡券类目" },
   { key: "suppliers", label: "供应商与资质" },
   { key: "warehouses", label: "仓库" },
@@ -379,6 +380,17 @@ export type BrandFields = Readonly<{
   logo?: string
 }>
 
+/**
+ * 计量单位字典：稳定代码 + 名称（name 在通用字段）+ 符号 + 数量小数位。
+ * `unit_code` 创建后不可改；更新只改 name / symbol / quantity_scale / status。
+ */
+export type UnitOfMeasureFields = Readonly<{
+  code: string
+  symbol: string
+  /** 允许数量小数位（0–6），表单以字符串承载。 */
+  quantityScale: string
+}>
+
 export type SupplierFields = Readonly<{
   company: string
   contactName?: string
@@ -420,6 +432,7 @@ export type MasterDataResourceFields = {
   products: ProductFields
   categories: CategoryFields
   brands: BrandFields
+  "unit-of-measures": UnitOfMeasureFields
   "voucher-categories": VoucherCategoryFields
   suppliers: SupplierFields
   warehouses: WarehouseFields

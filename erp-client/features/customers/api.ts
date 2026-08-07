@@ -84,8 +84,6 @@ type BackendPartyRevision = {
   revision_no: number
   legal_name: string
   short_name?: string | null
-  effective_from: string
-  effective_to?: string | null
   change_reason: string
   version: number
   created_at: number
@@ -506,8 +504,8 @@ export async function fetchCustomerCenter(
       shortName: currentRev?.short_name ?? undefined,
       unifiedCreditCode: party?.unified_credit_code ?? undefined,
       defaultPaymentTerm: detail.default_payment_term_id ?? undefined,
-      effectiveFrom: currentRev?.effective_from
-        ? `${currentRev.effective_from}T00:00:00.000Z`
+      effectiveFrom: currentRev
+        ? tsToIso(currentRev.created_at)
         : tsToIso(detail.created_at),
     },
     assignments,
@@ -536,9 +534,7 @@ export async function fetchCustomerCenter(
       id: r.id,
       revisionNo: r.revision_no,
       actor: "—",
-      effectiveAt: r.effective_from
-        ? `${r.effective_from}T00:00:00.000Z`
-        : tsToIso(r.created_at),
+      effectiveAt: tsToIso(r.created_at),
       reason: r.change_reason,
       isCurrent: Boolean(
         party?.current_revision_id
@@ -673,7 +669,6 @@ export async function createCustomer(
       legal_name: input.legalName.trim(),
       short_name: input.shortName?.trim() || undefined,
       unified_credit_code: input.unifiedCreditCode?.trim() || undefined,
-      effective_from: validFrom,
       change_reason: "首版建档",
     })
 
@@ -756,7 +751,6 @@ export async function saveCustomerRevision(
         legal_name: input.legalName.trim(),
         short_name: input.shortName?.trim() || undefined,
         unified_credit_code: input.unifiedCreditCode?.trim() ?? undefined,
-        effective_from: todayBusinessDate(),
         change_reason: input.changeReason.trim(),
       }
     )
@@ -839,7 +833,6 @@ export async function saveCustomerDetails(
       legal_name: input.legalName.trim(),
       short_name: input.shortName?.trim() || undefined,
       unified_credit_code: input.unifiedCreditCode?.trim() ?? undefined,
-      effective_from: todayBusinessDate(),
       change_reason: input.changeReason.trim(),
     })
 

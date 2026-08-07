@@ -26,6 +26,32 @@ db_name = "rs_project_template"
 仓库；本地 `config.toml` 已被忽略。`upload_path` 必须指向专用上传目录，不能使用空路径、
 当前工作目录或文件系统根目录。
 
+S3 配置为可选启动参数。需要构建 `storage::S3Storage` 时必须完整填写以下
+配置；未配置 `[s3]` 时现有本地存储配置继续有效：
+
+```toml
+[s3]
+bucket = "erp-assets"
+region = "cn-south-1"
+# 直连 AWS S3 时可省略 endpoint。
+endpoint = "https://s3.example.com"
+access_key_id = "replace-with-access-key-id"
+secret_access_key = "replace-with-secret-access-key"
+# 仅临时凭证需要 session_token。
+session_token = "replace-with-session-token"
+key_prefix = "erp/uploads"
+# MinIO 等需要 path-style URL 的服务设为 true。
+force_path_style = false
+```
+
+`bucket`、`region`、`access_key_id` 和 `secret_access_key` 为必填字段。`endpoint` 必须是
+`http://` 或 `https://` 绝对地址。`key_prefix` 必须是不含空分段、`.` 或 `..` 的
+相对对象键前缀。真实凭证只能写入已忽略的 `config.toml` 或受控 Nacos 配置，
+不得提交到仓库。
+
+`[s3]` 只提供经校验的启动参数，不自动改变现有 Web API 的本地上传路由。需要将
+上传路由切换到 S3 时，运行时必须在启动期构建并注入单个 `S3Storage` 实例。
+
 ```rust,no_run
 use config::SafeConfig;
 

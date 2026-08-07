@@ -203,10 +203,6 @@ pub struct SupplierCommercialProfileRow {
     pub payment_term_snapshot: String,
     /// 发票类型。
     pub invoice_type: String,
-    /// 生效开始日期。
-    pub valid_from: String,
-    /// 生效结束日期。
-    pub valid_to: Option<String>,
     /// 变更原因。
     pub change_reason: String,
     /// 乐观锁版本。
@@ -259,8 +255,7 @@ impl<'a> Repository<'a, SupplierCommercialProfileRevision> {
     /// 分页检索商务结算版本列表（投影查询，§6.2 历史查询）。
     ///
     /// 只返回 [`SupplierCommercialProfileRow`] 所需的列表字段；排序字段经仓储
-    /// 白名单校验（`created_at`/`revision_no`/`valid_from`/`valid_to`），非法
-    /// 字段回落默认 `created_at`。
+    /// 白名单校验（`created_at`/`revision_no`），非法字段回落默认 `created_at`。
     ///
     /// # 参数
     /// * `filter` - 筛选与分页条件
@@ -280,7 +275,7 @@ impl<'a> Repository<'a, SupplierCommercialProfileRevision> {
             .sort(sort_doc(
                 filter.sort_by.as_deref(),
                 filter.sort_ascending,
-                &["created_at", "revision_no", "valid_from", "valid_to"],
+                &["created_at", "revision_no"],
             ))
             .skip(filter.skip())
             .limit(filter.limit())
@@ -780,8 +775,6 @@ fn commercial_profile_projection() -> Document {
         "reconciliation_cycle": 1,
         "payment_term_snapshot": 1,
         "invoice_type": 1,
-        "valid_from": 1,
-        "valid_to": 1,
         "change_reason": 1,
         "version": 1,
         "created_at": 1,

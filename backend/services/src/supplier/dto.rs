@@ -21,8 +21,7 @@ use crate::query::{normalized_text, page_or_default, page_size_or_default};
 /// 供应商角色列表允许的排序字段白名单（api-contract §4：Service 层校验）。
 pub(crate) const SUPPLIER_SORT_FIELDS: &[&str] = &["created_at", "supplier_no", "status"];
 /// 商务结算版本列表允许的排序字段白名单。
-pub(crate) const COMMERCIAL_PROFILE_SORT_FIELDS: &[&str] =
-    &["created_at", "revision_no", "valid_from", "valid_to"];
+pub(crate) const COMMERCIAL_PROFILE_SORT_FIELDS: &[&str] = &["created_at", "revision_no"];
 /// 能力列表允许的排序字段白名单。
 pub(crate) const CAPABILITY_SORT_FIELDS: &[&str] = &["created_at", "capability_code", "valid_to"];
 /// 资质列表允许的排序字段白名单。
@@ -144,10 +143,6 @@ pub struct CreateSupplierRequest {
     pub signing_entity_party_id: entities::ids::PartyId,
     /// 付款时的公司主体（D07 跨域校验存在）。
     pub payment_entity_party_id: entities::ids::PartyId,
-    /// 生效开始日期。
-    pub valid_from: BusinessDate,
-    /// 生效结束日期；`None` 表示长期有效。
-    pub valid_to: Option<BusinessDate>,
     /// 变更原因。
     #[validate(custom(function = "non_blank", message = "变更原因不能为空"))]
     pub change_reason: String,
@@ -294,10 +289,6 @@ pub struct CreateCommercialProfileRequest {
     pub signing_entity_party_id: entities::ids::PartyId,
     /// 付款时的公司主体（D07 跨域校验存在）。
     pub payment_entity_party_id: entities::ids::PartyId,
-    /// 生效开始日期。
-    pub valid_from: BusinessDate,
-    /// 生效结束日期；`None` 表示长期有效。
-    pub valid_to: Option<BusinessDate>,
     /// 变更原因。
     #[validate(custom(function = "non_blank", message = "变更原因不能为空"))]
     pub change_reason: String,
@@ -330,10 +321,6 @@ pub struct CommercialProfileView {
     pub signing_entity_party_id: Option<String>,
     /// 付款主体（详情返回，列表为 `None`）。
     pub payment_entity_party_id: Option<String>,
-    /// 生效开始日期。
-    pub valid_from: String,
-    /// 生效结束日期。
-    pub valid_to: Option<String>,
     /// 变更原因。
     pub change_reason: String,
     /// 乐观锁版本。
@@ -356,8 +343,6 @@ impl From<SupplierCommercialProfileRevision> for CommercialProfileView {
             invoice_tax_rate: Some(revision.invoice_tax_rate),
             signing_entity_party_id: Some(revision.signing_entity_party_id.to_string()),
             payment_entity_party_id: Some(revision.payment_entity_party_id.to_string()),
-            valid_from: revision.valid_from.to_string(),
-            valid_to: revision.valid_to.map(|date| date.to_string()),
             change_reason: revision.change_reason,
             version: revision.base.version,
             created_at: revision.base.created_at,
@@ -374,7 +359,7 @@ pub struct CommercialProfileListParams {
     /// 单页条数（1–100）。
     #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
     pub page_size: Option<u32>,
-    /// 排序字段（白名单：`created_at`/`revision_no`/`valid_from`/`valid_to`）。
+    /// 排序字段（白名单：`created_at`/`revision_no`）。
     pub sort_by: Option<String>,
     /// 排序方向（`asc`/`desc`）。
     pub sort_dir: Option<String>,

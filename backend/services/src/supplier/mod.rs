@@ -14,7 +14,6 @@
 
 use database::{AccessControlExt, NoTransaction, PartyExt, SupplierExt, Transactional};
 use entities::common::revision::RevisionBase;
-use entities::common::time::BusinessDate;
 use entities::field_update::FieldUpdate;
 use entities::ids::PartyId;
 use entities::supplier::{
@@ -121,8 +120,6 @@ impl SupplierService {
                 invoice_tax_rate: req.invoice_tax_rate,
                 signing_entity_party_id: req.signing_entity_party_id,
                 payment_entity_party_id: req.payment_entity_party_id,
-                valid_from: req.valid_from,
-                valid_to: req.valid_to,
                 change_reason: req.change_reason,
             },
         )?;
@@ -360,8 +357,6 @@ impl SupplierService {
                 invoice_tax_rate: None,
                 signing_entity_party_id: None,
                 payment_entity_party_id: None,
-                valid_from: row.valid_from,
-                valid_to: row.valid_to,
                 change_reason: row.change_reason,
                 version: row.version,
                 created_at: row.created_at,
@@ -378,7 +373,7 @@ impl SupplierService {
 
     /// 追加商务结算版本（跨集合事务：新版本 + 推进生效指针 + 审计原子写入）。
     ///
-    /// 同一供应商商务版本有效期不得重叠（§6.2 跨行约束，事务内校验）。
+    /// 新版本保存即成为当前商务版本。
     ///
     /// # 参数
     /// * `supplier_id` - 供应商角色 ID
@@ -390,7 +385,6 @@ impl SupplierService {
     ///
     /// # 错误
     /// * `NotFound` - 供应商或签约/付款主体不存在
-    /// * `ConflictError` - 版本区间与既有版本重叠
     /// * `ValidationError` - 请求体校验失败
     pub async fn create_commercial_profile(
         &self,
@@ -409,7 +403,7 @@ impl SupplierService {
         )?;
         let updated_by = actor.id().to_string();
 
-        // 事务内重读版本历史：校验新窗口不重叠并计算下一版本号。
+        // 事务内重读版本历史：计算下一版本号。
         let db = self.db.clone();
         let client = db.client().clone();
         let mut supplier_for_tx = supplier.clone();
@@ -426,13 +420,9 @@ impl SupplierService {
                 invoice_tax_rate: req.invoice_tax_rate,
                 signing_entity_party_id: req.signing_entity_party_id,
                 payment_entity_party_id: req.payment_entity_party_id,
-                valid_from: req.valid_from,
-                valid_to: req.valid_to,
                 change_reason: req.change_reason,
             },
         )?;
-        let effective_from = req.valid_from;
-        let effective_to = req.valid_to;
         let (revision, updated) = client
             .with_transaction(move |session| {
                 Box::pin(async move {
@@ -446,7 +436,6 @@ impl SupplierService {
                         .max()
                         .unwrap_or(0)
                         + 1;
-                    ensure_no_window_overlap(&history, effective_from, effective_to)?;
                     let revision = SupplierCommercialProfileRevision {
                         revision: RevisionBase::new(next_no),
                         ..revision_for_tx
@@ -559,38 +548,6 @@ fn payment_term_update(value: Option<String>) -> FieldUpdate<String> {
     }
 }
 
-/// 校验新版本窗口与既有版本区间不重叠（§6.2：同一供应商商务版本不得重叠）。
-///
-/// # 参数
-/// * `history` - 既有版本（升序）
-/// * `effective_from` - 新版本生效开始
-/// * `effective_to` - 新版本生效结束（`None` 表示长期有效）
-///
-/// # 返回
-/// 无重叠返回 `Ok(())`。
-///
-/// # 错误
-/// 与任一既有版本区间重叠时返回 `ConflictError`。
-fn ensure_no_window_overlap(
-    history: &[SupplierCommercialProfileRevision],
-    effective_from: BusinessDate,
-    effective_to: Option<BusinessDate>,
-) -> Result<()> {
-    for existing in history {
-        if windows_overlap(
-            existing.valid_from,
-            existing.valid_to,
-            effective_from,
-            effective_to,
-        ) {
-            return Err(Error::ConflictError(
-                "新商务版本生效区间与既有版本重叠，请调整生效日期".to_string(),
-            ));
-        }
-    }
-    Ok(())
-}
-
 /// 从稳定代码解析结算方式（投影行字符串形态 → 类型化枚举）。
 ///
 /// 投影行由本系统 serde 写入，未知代码仅可能来自人工改库；按失败安全策略
@@ -645,85 +602,3 @@ fn parse_invoice_type(code: &str) -> InvoiceType {
     }
 }
 
-/// 判断两个生效区间是否重叠（含端点语义；`None` 视为长期有效）。
-///
-/// # 参数
-/// * `a_from` - A 区间开始
-/// * `a_to` - A 区间结束（`None` 表示无穷远）
-/// * `b_from` - B 区间开始
-/// * `b_to` - B 区间结束（`None` 表示无穷远）
-///
-/// # 返回
-/// 重叠返回 `true`。
-fn windows_overlap(
-    a_from: BusinessDate,
-    a_to: Option<BusinessDate>,
-    b_from: BusinessDate,
-    b_to: Option<BusinessDate>,
-) -> bool {
-    let a_covers = |day: BusinessDate| a_to.is_none_or(|end| day <= end);
-    let b_covers = |day: BusinessDate| b_to.is_none_or(|end| day <= end);
-    a_covers(b_from) && b_covers(a_from)
-}
-
-#[cfg(test)]
-mod tests {
-    use entities::common::time::BusinessDate;
-    use entities::ids::SupplierAccountId;
-    use entities::supplier::{
-        InvoiceType, ReconciliationCycle, SettlementMode, SupplierCommercialProfileRevision,
-        SupplierCommercialProfileRevisionData, SupplierCommercialProfileRevisionId,
-    };
-    use std::str::FromStr;
-
-    use super::{ensure_no_window_overlap, windows_overlap};
-
-    fn revision(from: &str, to: Option<&str>) -> SupplierCommercialProfileRevision {
-        SupplierCommercialProfileRevision::new(
-            SupplierCommercialProfileRevisionId::new("rev-1"),
-            SupplierCommercialProfileRevisionData {
-                supplier_id: SupplierAccountId::new("supplier-1"),
-                revision_no: 1,
-                settlement_mode: SettlementMode::Prepayment,
-                reconciliation_cycle: ReconciliationCycle::Monthly,
-                payment_term_snapshot: "PREPAY_30".to_string(),
-                invoice_type: InvoiceType::VatSpecial,
-                invoice_tax_rate: entities::money::Rate::from_str("0.13").unwrap(),
-                signing_entity_party_id: entities::ids::PartyId::new("p-1"),
-                payment_entity_party_id: entities::ids::PartyId::new("p-2"),
-                valid_from: BusinessDate::from_str(from).unwrap(),
-                valid_to: to.map(|value| BusinessDate::from_str(value).unwrap()),
-                change_reason: "测试".to_string(),
-            },
-        )
-        .unwrap()
-    }
-
-    #[test]
-    fn profile_window_overlap_is_rejected() {
-        let history = vec![revision("2026-01-01", Some("2026-12-31"))];
-        assert!(
-            ensure_no_window_overlap(&history, BusinessDate::from_str("2026-06-01").unwrap(), None,).is_err()
-        );
-        assert!(
-            ensure_no_window_overlap(&history, BusinessDate::from_str("2027-01-01").unwrap(), None,).is_ok()
-        );
-    }
-
-    #[test]
-    fn windows_overlap_uses_inclusive_endpoints() {
-        let from = |value: &str| BusinessDate::from_str(value).unwrap();
-        assert!(windows_overlap(
-            from("2026-01-01"),
-            Some(from("2026-03-31")),
-            from("2026-03-31"),
-            None,
-        ));
-        assert!(!windows_overlap(
-            from("2026-01-01"),
-            Some(from("2026-03-30")),
-            from("2026-03-31"),
-            None,
-        ));
-    }
-}
