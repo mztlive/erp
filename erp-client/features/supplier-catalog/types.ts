@@ -50,6 +50,8 @@ export type SupplierProductRevisionView = Readonly<{
   syncedAt: string
   name: string
   description?: string
+  /** 来源商品自身声明的类型；手工来源必填。 */
+  sourceProductKind?: ProductKind
   specification: string
   category: string
   brand?: string
@@ -468,6 +470,8 @@ export type SessionCatalogDraft = Readonly<{
 export type SupplierCatalogSpuContentFields = Readonly<{
   name: string
   description?: string
+  /** 来源商品类型；MANUAL 来源必须显式填写。 */
+  sourceProductKind?: ProductKind
   specification: string
   category: string
   brand?: string

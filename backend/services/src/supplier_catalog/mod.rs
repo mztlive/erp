@@ -772,7 +772,7 @@ impl SupplierCatalogService {
                         .create_intake_batch(&batch_for_tx, &intake_items_for_tx, session)
                         .await?;
                     db.supplier_catalog()
-                        .create_product_with_revision(&mut product_for_tx.clone(), &revision_for_tx, session)
+                        .create_product_with_initial_revision(&product_for_tx, &revision_for_tx, session)
                         .await?;
                     for media in &media_for_tx {
                         db.supplier_catalog_product_revision_media()
@@ -781,7 +781,7 @@ impl SupplierCatalogService {
                     }
                     for (sku, sku_revision) in skus_for_tx.iter().zip(sku_revisions_for_tx.iter()) {
                         db.supplier_catalog()
-                            .create_sku_with_revision(&mut sku.clone(), sku_revision, session)
+                            .create_sku_with_initial_revision(sku, sku_revision, session)
                             .await?;
                     }
                     db.audit_logs().create(&audit, session).await?;
@@ -914,7 +914,7 @@ impl SupplierCatalogService {
                     let mut product_mut = product_for_tx.clone();
                     product_mut.stable.current_revision_id = Some(revision_for_tx.base.id.clone());
                     db.supplier_catalog()
-                        .create_product_with_revision(&mut product_mut, &revision_for_tx, session)
+                        .append_product_revision(&mut product_mut, &revision_for_tx, session)
                         .await?;
                     for media in &media_for_tx {
                         db.supplier_catalog_product_revision_media()
@@ -923,12 +923,12 @@ impl SupplierCatalogService {
                     }
                     for (sku, sku_revision) in &sku_ops_for_tx {
                         db.supplier_catalog()
-                            .create_sku_with_revision(&mut sku.clone(), sku_revision, session)
+                            .append_sku_revision(&mut sku.clone(), sku_revision, session)
                             .await?;
                     }
                     for (sku, sku_revision) in &new_skus_for_tx {
                         db.supplier_catalog()
-                            .create_sku_with_revision(&mut sku.clone(), sku_revision, session)
+                            .create_sku_with_initial_revision(sku, sku_revision, session)
                             .await?;
                     }
                     db.audit_logs().create(&audit, session).await?;

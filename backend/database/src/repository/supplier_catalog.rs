@@ -980,7 +980,43 @@ impl<'a> SupplierCatalogRepository<'a> {
         Self { db }
     }
 
-    /// 创建供应商 SPU 及其首个来源修订（跨集合多步骤写入）。
+    /// 创建供应商 SPU 稳定身份及首个来源修订。
+    ///
+    /// 首次创建先写稳定身份，再写不可变修订；稳定身份在写入前指向该首版。
+    /// 调用方必须传入事务执行器以保证两笔写入原子提交。
+    ///
+    /// # 参数
+    /// * `product` - 尚未持久化的供应商 SPU
+    /// * `revision` - 该 SPU 的首个来源修订
+    /// * `executor` - 事务执行器
+    ///
+    /// # 返回
+    /// 两笔写入均成功时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 唯一索引冲突或底层写入失败时返回错误。
+    pub async fn create_product_with_initial_revision(
+        &self,
+        product: &SupplierCatalogProduct,
+        revision: &SupplierCatalogProductRevision,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let mut product = product.clone();
+        product.stable.current_revision_id = Some(revision.base.id.clone());
+        Repository::new(self.db, PRODUCTS)
+            .create(&product, executor)
+            .await?;
+        mongo_ops::insert_one(
+            &self
+                .db
+                .collection::<SupplierCatalogProductRevision>(PRODUCT_REVISIONS),
+            revision,
+            executor,
+        )
+        .await
+    }
+
+    /// 为既有供应商 SPU 追加来源修订并推进当前修订指针。
     ///
     /// 先写入 `supplier_catalog_product_revision`，再乐观锁更新
     /// `supplier_catalog_product`（当前修订指针等，§6.14「详情即编辑」保存只
@@ -997,7 +1033,7 @@ impl<'a> SupplierCatalogRepository<'a> {
     /// # 错误
     /// 当修订号唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）、稳定表版本
     /// 冲突（[`crate::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
-    pub async fn create_product_with_revision(
+    pub async fn append_product_revision(
         &self,
         product: &mut SupplierCatalogProduct,
         revision: &SupplierCatalogProductRevision,
@@ -1017,7 +1053,39 @@ impl<'a> SupplierCatalogRepository<'a> {
         Ok(())
     }
 
-    /// 创建供应商 SKU 及其首个来源修订（跨集合多步骤写入）。
+    /// 创建供应商 SKU 稳定身份及首个来源修订。
+    ///
+    /// 首次创建插入稳定身份，不能复用追加修订路径对未持久化实体执行乐观锁
+    /// 更新。调用方必须传入事务执行器以保证两笔写入原子提交。
+    ///
+    /// # 参数
+    /// * `sku` - 尚未持久化的供应商 SKU
+    /// * `revision` - 该 SKU 的首个来源修订
+    /// * `executor` - 事务执行器
+    ///
+    /// # 返回
+    /// 两笔写入均成功时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 唯一索引冲突或底层写入失败时返回错误。
+    pub async fn create_sku_with_initial_revision(
+        &self,
+        sku: &SupplierCatalogSku,
+        revision: &SupplierCatalogSkuRevision,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        let mut sku = sku.clone();
+        sku.stable.current_revision_id = Some(revision.base.id.clone());
+        Repository::new(self.db, SKUS).create(&sku, executor).await?;
+        mongo_ops::insert_one(
+            &self.db.collection::<SupplierCatalogSkuRevision>(SKU_REVISIONS),
+            revision,
+            executor,
+        )
+        .await
+    }
+
+    /// 为既有供应商 SKU 追加来源修订并推进当前修订指针。
     ///
     /// 先写入 `supplier_catalog_sku_revision`，再乐观锁更新 `supplier_catalog_sku`
     /// （当前修订指针），保证「稳定身份 + 修订」原子可见。
@@ -1032,7 +1100,7 @@ impl<'a> SupplierCatalogRepository<'a> {
     /// # 错误
     /// 当修订号唯一索引冲突（透出 [`crate::Error::DuplicateKey`]）、稳定表版本
     /// 冲突（[`crate::Error::OptimisticLockingError`]）或 MongoDB 写入失败时返回错误。
-    pub async fn create_sku_with_revision(
+    pub async fn append_sku_revision(
         &self,
         sku: &mut SupplierCatalogSku,
         revision: &SupplierCatalogSkuRevision,

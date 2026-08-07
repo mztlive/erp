@@ -49,7 +49,10 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { FileUpload } from "@/components/ui/file-upload"
+import {
+  FileUpload,
+  imagePreviewSource,
+} from "@/components/ui/file-upload"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
@@ -382,40 +385,28 @@ function SkuMainImageField({
   onChange: (next: string) => void
 }) {
   return (
-    <div className="space-y-1.5">
-      {value ? (
-        <div className="relative size-14 overflow-hidden rounded-md border border-border bg-surface-sunken">
-          <div className="flex size-full flex-col items-center justify-center gap-0.5 p-1 text-center">
-            <ImageIcon className="size-4 text-muted-foreground" aria-hidden />
-            <span className="line-clamp-2 w-full break-all text-2xs leading-tight text-muted-foreground">
-              {value}
-            </span>
-          </div>
-          <Button
-            type="button"
-            variant="secondary"
-            size="icon-xs"
-            className="absolute right-0.5 top-0.5 size-5"
-            onClick={() => onChange("")}
-            aria-label={`移除主图 ${value}`}
-          >
-            <XIcon className="size-3" />
-          </Button>
-        </div>
-      ) : (
-        <FileUpload
-          accept="image/jpeg,image/png,image/webp"
-          multiple={false}
-          label={masterDataCopy.fMainImage}
-          description="1:1"
-          density="compact"
-          className="aspect-square size-14 gap-0.5 p-1 text-2xs [&_[data-slot=button]]:mt-0"
-          onFilesSelected={(files) => {
-            if (files[0]) onChange(files[0].name)
-          }}
-        />
-      )}
-    </div>
+    <FileUpload
+      accept="image/jpeg,image/png,image/webp"
+      multiple={false}
+      label={masterDataCopy.fMainImage}
+      description="1:1"
+      density="tile"
+      className="aspect-square size-14"
+      previewSelectedImage
+      preview={
+        value
+          ? {
+              src: imagePreviewSource(value),
+              name: value,
+              status: "uploaded",
+            }
+          : null
+      }
+      onPreviewRemove={() => onChange("")}
+      onFilesSelected={(files) => {
+        if (files[0]) onChange(files[0].name)
+      }}
+    />
   )
 }
 

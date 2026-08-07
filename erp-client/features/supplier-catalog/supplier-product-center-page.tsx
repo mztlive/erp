@@ -19,6 +19,7 @@ import {
   ClipboardCheckIcon,
   GripVerticalIcon,
   ImageIcon,
+  Maximize2Icon,
   PackageOpenIcon,
   PlusIcon,
   SaveIcon,
@@ -63,7 +64,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { FileUpload } from "@/components/ui/file-upload"
+import {
+  FileUpload,
+  imagePreviewSource,
+} from "@/components/ui/file-upload"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress, ProgressLabel } from "@/components/ui/progress"
@@ -105,11 +109,33 @@ import {
   toCategoryComboboxItems,
 } from "@/features/master-data/category-tree-model"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
+import {
+  PRODUCT_KIND_LABELS,
+  PRODUCT_KIND_VALUES,
+  type ProductKind,
+} from "@/features/master-data/types"
 import { useUnitOptionsQuery } from "@/hooks/use-options"
 import { cn } from "@/lib/utils"
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function saveErrorMessage(error: unknown): string {
+  const candidate = error as
+    | {
+        message?: unknown
+        responseData?: { errorMessage?: unknown }
+      }
+    | undefined
+  const backendMessage = candidate?.responseData?.errorMessage
+  if (typeof backendMessage === "string" && backendMessage.trim()) {
+    return backendMessage
+  }
+  if (typeof candidate?.message === "string" && candidate.message.trim()) {
+    return candidate.message
+  }
+  return "保存失败"
 }
 
 function todayIso(): string {
@@ -235,104 +261,231 @@ function MediaListEditor({
   onChange: (next: string[]) => void
   mode?: "carousel" | "detail"
 }) {
+  const [localPreviewUrls, setLocalPreviewUrls] = React.useState<
+    ReadonlyMap<string, string>
+  >(() => new Map())
+  const localPreviewUrlsRef = React.useRef<ReadonlyMap<string, string>>(
+    new Map(),
+  )
+  const [expandedPreview, setExpandedPreview] = React.useState<{
+    name: string
+    src: string
+  } | null>(null)
+
+  const updateLocalPreviewUrls = React.useCallback(
+    (update: (previous: ReadonlyMap<string, string>) => Map<string, string>) => {
+      setLocalPreviewUrls((previous) => {
+        const next = update(previous)
+        localPreviewUrlsRef.current = next
+        return next
+      })
+    },
+    [],
+  )
+
+  React.useEffect(
+    () => () => {
+      for (const src of localPreviewUrlsRef.current.values()) {
+        URL.revokeObjectURL(src)
+      }
+    },
+    [],
+  )
+
+  React.useEffect(() => {
+    const retainedNames = new Set(value)
+    const removedNames = [...localPreviewUrlsRef.current.keys()].filter(
+      (name) => !retainedNames.has(name),
+    )
+    if (removedNames.length === 0) return
+
+    updateLocalPreviewUrls((previous) => {
+      const next = new Map(previous)
+      for (const name of removedNames) {
+        const src = next.get(name)
+        if (src) URL.revokeObjectURL(src)
+        next.delete(name)
+      }
+      return next
+    })
+  }, [updateLocalPreviewUrls, value])
+
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div>
-          <Label className="text-sm font-medium">{label}</Label>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {hint ?? "支持多选与排序；入池时仅已归档媒体会预填到公司商品"}
-          </p>
-        </div>
-        <Badge variant="secondary">{value.length} 张</Badge>
-      </div>
-      <div
-        className={cn(
-          "grid gap-3",
-          mode === "carousel"
-            ? "grid-cols-2 sm:grid-cols-4"
-            : "grid-cols-2 sm:grid-cols-3",
-        )}
-      >
-        {value.map((name, index) => (
-          <div
-            key={`${name}-${index}`}
-            className="group relative overflow-hidden rounded-lg bg-surface-sunken ring-1 ring-foreground/[0.04]"
-          >
-            <div
-              className={cn(
-                "flex flex-col items-center justify-center gap-2 p-3 text-center",
-                mode === "carousel" ? "aspect-square" : "aspect-[4/5]",
-              )}
-            >
-              <ImageIcon className="size-7 text-muted-foreground" aria-hidden />
-              <span className="line-clamp-2 break-all text-xs text-muted-foreground">
-                {name}
-              </span>
-            </div>
-            <Badge
-              variant="secondary"
-              className="absolute left-2 top-2 tabular-nums"
-            >
-              {index + 1}
-            </Badge>
-            {mode === "carousel" && index === 0 ? (
-              <Badge className="absolute right-2 top-2">首图</Badge>
-            ) : null}
-            <div className="flex items-center justify-center gap-1 border-t border-border/30 bg-background/95 p-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                disabled={index === 0}
-                aria-label={`${name} 上移`}
-                onClick={() => onChange(moveListItem(value, index, index - 1))}
-              >
-                <ArrowUpIcon />
-              </Button>
-              <GripVerticalIcon
-                className="size-3.5 text-muted-foreground"
-                aria-hidden
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                disabled={index === value.length - 1}
-                aria-label={`${name} 下移`}
-                onClick={() => onChange(moveListItem(value, index, index + 1))}
-              >
-                <ArrowDownIcon />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`移除 ${name}`}
-                onClick={() => onChange(value.filter((_, i) => i !== index))}
-              >
-                <XIcon />
-              </Button>
-            </div>
+    <>
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <Label className="text-sm font-medium">{label}</Label>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {hint ?? "支持多选与排序；入池时仅已归档媒体会预填到公司商品"}
+            </p>
           </div>
-        ))}
-        <FileUpload
-          accept="image/jpeg,image/png,image/webp"
-          multiple
-          label={`添加${label}`}
-          description={
-            mode === "carousel" ? "支持多选，首张作为首图" : "支持多选，按顺序展示"
-          }
-          onFilesSelected={(files) => {
-            onChange([...value, ...files.map((file) => file.name)])
-          }}
+          <Badge variant="secondary">{value.length} 张</Badge>
+        </div>
+        <div
           className={cn(
-            "gap-1.5 p-3 [&_[data-slot=button]]:mt-1",
-            mode === "carousel" ? "aspect-square" : "aspect-[4/5]",
+            "grid gap-3",
+            mode === "carousel"
+              ? "grid-cols-2 sm:grid-cols-4"
+              : "grid-cols-2 sm:grid-cols-3",
           )}
-        />
+        >
+          {value.map((name, index) => {
+            const previewSrc =
+              localPreviewUrls.get(name) ?? imagePreviewSource(name)
+
+            return (
+              <div
+                key={`${name}-${index}`}
+                className="group relative overflow-hidden rounded-lg bg-surface-sunken ring-1 ring-foreground/[0.04]"
+              >
+                <button
+                  type="button"
+                  className={cn(
+                    "relative flex w-full flex-col items-center justify-center gap-2 overflow-hidden p-3 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                    mode === "carousel" ? "aspect-square" : "aspect-[4/5]",
+                    previewSrc && "cursor-zoom-in p-0",
+                  )}
+                  aria-label={
+                    previewSrc ? `放大预览 ${name}` : `${name} 暂无预览`
+                  }
+                  onClick={() => {
+                    if (previewSrc) {
+                      setExpandedPreview({ name, src: previewSrc })
+                    }
+                  }}
+                >
+                  {previewSrc ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- 本地待上传图片使用 blob URL。
+                    <img
+                      src={previewSrc}
+                      alt={name}
+                      className="absolute inset-0 size-full object-cover"
+                    />
+                  ) : (
+                    <>
+                      <ImageIcon
+                        className="size-7 text-muted-foreground"
+                        aria-hidden
+                      />
+                      <span className="line-clamp-2 break-all text-xs text-muted-foreground">
+                        {name}
+                      </span>
+                    </>
+                  )}
+                  {previewSrc ? (
+                    <span className="absolute inset-0 flex items-center justify-center bg-overlay/0 text-primary-foreground opacity-0 transition group-hover:bg-overlay/50 group-hover:opacity-100 group-focus-visible:bg-overlay/50 group-focus-visible:opacity-100">
+                      <Maximize2Icon className="size-5" aria-hidden />
+                    </span>
+                  ) : null}
+                </button>
+                <Badge
+                  variant="secondary"
+                  className="absolute left-2 top-2 tabular-nums"
+                >
+                  {index + 1}
+                </Badge>
+                {mode === "carousel" && index === 0 ? (
+                  <Badge className="absolute right-2 top-2">首图</Badge>
+                ) : null}
+                <div className="flex items-center justify-center gap-1 border-t border-border/30 bg-background/95 p-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    disabled={index === 0}
+                    aria-label={`${name} 上移`}
+                    onClick={() =>
+                      onChange(moveListItem(value, index, index - 1))
+                    }
+                  >
+                    <ArrowUpIcon />
+                  </Button>
+                  <GripVerticalIcon
+                    className="size-3.5 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    disabled={index === value.length - 1}
+                    aria-label={`${name} 下移`}
+                    onClick={() =>
+                      onChange(moveListItem(value, index, index + 1))
+                    }
+                  >
+                    <ArrowDownIcon />
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon-xs"
+                    aria-label={`移除 ${name}`}
+                    onClick={() => {
+                      setExpandedPreview((current) =>
+                        current?.name === name ? null : current,
+                      )
+                      onChange(value.filter((_, i) => i !== index))
+                    }}
+                  >
+                    <XIcon />
+                  </Button>
+                </div>
+              </div>
+            )
+          })}
+          <FileUpload
+            accept="image/jpeg,image/png,image/webp"
+            multiple
+            label={`添加${label}`}
+            description={
+              mode === "carousel" ? "支持多选，首张作为首图" : "支持多选，按顺序展示"
+            }
+            onFilesSelected={(files) => {
+              updateLocalPreviewUrls((previous) => {
+                const next = new Map(previous)
+                for (const file of files) {
+                  const previousSrc = next.get(file.name)
+                  if (previousSrc) URL.revokeObjectURL(previousSrc)
+                  next.set(file.name, URL.createObjectURL(file))
+                }
+                return next
+              })
+              onChange([...value, ...files.map((file) => file.name)])
+            }}
+            className={cn(
+              "gap-1.5 p-3 [&_[data-slot=button]]:mt-1",
+              mode === "carousel" ? "aspect-square" : "aspect-[4/5]",
+            )}
+          />
+        </div>
       </div>
-    </div>
+
+      <Dialog
+        open={Boolean(expandedPreview)}
+        onOpenChange={(open) => {
+          if (!open) setExpandedPreview(null)
+        }}
+      >
+        <DialogContent className="gap-4 p-4 sm:max-w-4xl">
+          <DialogHeader className="pr-10">
+            <DialogTitle>{expandedPreview?.name ?? "图片预览"}</DialogTitle>
+            <DialogDescription>待上传图片预览</DialogDescription>
+          </DialogHeader>
+          <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-lg bg-surface-sunken">
+            {expandedPreview ? (
+              // eslint-disable-next-line @next/next/no-img-element -- 本地待上传图片使用 blob URL。
+              <img
+                src={expandedPreview.src}
+                alt={expandedPreview.name}
+                className="max-h-[75dvh] max-w-full object-contain"
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 
@@ -526,6 +679,7 @@ export function SupplierProductCenterPage({
     return {
       name: nextFields.name.trim(),
       description: nextFields.description.trim() || undefined,
+      sourceProductKind: nextFields.sourceProductKind || undefined,
       specification: deriveSpecification(nextFields.specDrafts),
       category: nextFields.category.trim(),
       brand: nextFields.brand.trim() || undefined,
@@ -622,7 +776,7 @@ export function SupplierProductCenterPage({
       await centerQuery.refetch()
       return true
     } catch (error) {
-      setFormError(error instanceof Error ? error.message : "保存失败")
+      setFormError(saveErrorMessage(error))
       return false
     }
   }
@@ -1130,6 +1284,25 @@ export function SupplierProductCenterPage({
                       placeholder="可空；空时由 ERP 生成来源内稳定代码"
                     />
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>来源商品类型 *</Label>
+                    <OptionCombobox
+                      value={fields.sourceProductKind || null}
+                      onValueChange={(value) =>
+                        patchFields((previous) => ({
+                          ...previous,
+                          sourceProductKind: (value ?? "") as ProductKind | "",
+                        }))
+                      }
+                      options={PRODUCT_KIND_VALUES.map((kind) => ({
+                        value: kind,
+                        label: PRODUCT_KIND_LABELS[kind],
+                      }))}
+                      allowClear={fields.sourceType !== "MANUAL"}
+                      placeholder="请选择来源商品类型"
+                      className="w-full"
+                    />
+                  </div>
                   <div className="space-y-1.5 sm:col-span-2">
                     <Label htmlFor="sp-name">名称 *</Label>
                     <Input
@@ -1267,7 +1440,7 @@ export function SupplierProductCenterPage({
                 id="supplier-product-section-sku"
                 className={cn(
                   surfacePanelClassName,
-                  "scroll-mt-[var(--product-section-scroll-margin)] space-y-4 p-5"
+                  "w-full min-w-0 max-w-full scroll-mt-[var(--product-section-scroll-margin)] space-y-4 overflow-hidden p-5"
                 )}
               >
                 <legend className="px-1 text-base font-semibold">
@@ -1471,7 +1644,7 @@ export function SupplierProductCenterPage({
                       规格组合生成 SKU 表；每行维护编码、条码、1:1 主图、代发/集采底价与起订量、可供状态。
                     </p>
                   </div>
-                  <div className="overflow-x-auto rounded-lg ring-1 ring-foreground/[0.04]">
+                  <div className="w-full max-w-full overflow-x-auto rounded-lg ring-1 ring-foreground/[0.04]">
                     <table className="w-full min-w-[72rem] text-sm">
                       <thead className="bg-muted/40 text-left text-xs text-muted-foreground">
                         <tr>
@@ -1548,47 +1721,40 @@ export function SupplierProductCenterPage({
                                 />
                               </td>
                               <td className="px-3 py-3">
-                                {sku.mainImage ? (
-                                  <div className="relative size-14 shrink-0 overflow-hidden rounded-md border border-border bg-surface-sunken">
-                                    <div className="flex size-full flex-col items-center justify-center gap-0.5 p-1 text-center">
-                                      <ImageIcon
-                                        className="size-4 text-muted-foreground"
-                                        aria-hidden
-                                      />
-                                      <span className="line-clamp-2 w-full break-all text-2xs leading-tight text-muted-foreground">
-                                        {sku.mainImage}
-                                      </span>
-                                    </div>
-                                    <Button
-                                      type="button"
-                                      variant="secondary"
-                                      size="icon-xs"
-                                      className="absolute right-0.5 top-0.5 size-5"
-                                      onClick={() =>
-                                        updateSku(index, { mainImage: "" })
-                                      }
-                                      aria-label={`${sku.specLabel} 移除主图`}
-                                    >
-                                      <XIcon className="size-3" />
-                                    </Button>
-                                  </div>
-                                ) : (
-                                  <FileUpload
-                                    accept="image/jpeg,image/png,image/webp"
-                                    multiple={false}
-                                    label="主图"
-                                    description="1:1"
-                                    density="compact"
-                                    className="aspect-square size-14 gap-0.5 p-1 text-2xs [&_[data-slot=button]]:mt-0"
-                                    onFilesSelected={(files) => {
-                                      if (files[0]) {
-                                        updateSku(index, {
-                                          mainImage: files[0].name,
-                                        })
-                                      }
-                                    }}
-                                  />
-                                )}
+                                <FileUpload
+                                  accept="image/jpeg,image/png,image/webp"
+                                  multiple={false}
+                                  label="主图"
+                                  description="1:1"
+                                  density="tile"
+                                  className="aspect-square size-14"
+                                  previewSelectedImage
+                                  preview={
+                                    sku.mainImage
+                                      ? {
+                                          src:
+                                            sku.mainImagePreviewUrl ??
+                                            imagePreviewSource(sku.mainImage),
+                                          name: sku.mainImage,
+                                          status: "uploaded",
+                                        }
+                                      : null
+                                  }
+                                  onPreviewRemove={() =>
+                                    updateSku(index, {
+                                      mainImage: "",
+                                      mainImagePreviewUrl: undefined,
+                                    })
+                                  }
+                                  onFilesSelected={(files) => {
+                                    if (files[0]) {
+                                      updateSku(index, {
+                                        mainImage: files[0].name,
+                                        mainImagePreviewUrl: undefined,
+                                      })
+                                    }
+                                  }}
+                                />
                               </td>
                               <td className="border-l border-border/30 px-3 py-3">
                                 <Input

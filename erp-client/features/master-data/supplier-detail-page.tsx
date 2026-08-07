@@ -285,6 +285,29 @@ function SectionPanel({
   )
 }
 
+/** 合同资质页内的业务对象分组，避免把不同文件与有效期混排。 */
+function CredentialGroup({
+  title,
+  description,
+  children,
+}: {
+  title: string
+  description: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className={cn(surfaceInsetClassName, "overflow-hidden")}>
+      <div className="border-b border-border/60 px-4 py-3">
+        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
+          {description}
+        </p>
+      </div>
+      <div className="p-4">{children}</div>
+    </section>
+  )
+}
+
 type SupplierEditorFormValues = Readonly<{
   name: string
   company: string
@@ -888,7 +911,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                       <TabsList
                         variant="line"
                         aria-label="供应商编辑分区"
-                        className="sticky top-0 z-10 h-auto w-full flex-wrap justify-start gap-1 overflow-x-auto rounded-none border-b border-border/40 bg-card/95 px-4 py-2 backdrop-blur supports-backdrop-filter:bg-card/85"
+                        className="sticky top-0 z-10 h-auto w-full flex-nowrap justify-start gap-0 overflow-x-auto rounded-none border-b border-border/60 bg-card/95 px-4 py-0 backdrop-blur supports-backdrop-filter:bg-card/85"
                       >
                         {SUPPLIER_SECTIONS.filter(
                           (section) => !isCreate || section.id !== "history",
@@ -896,7 +919,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                           <TabsTrigger
                             key={section.id}
                             value={section.id}
-                            className="min-h-8 flex-none px-3 text-sm"
+                            className="h-11 flex-none rounded-none px-4 text-sm after:inset-x-3 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary data-active:font-semibold"
                           >
                             {section.label}
                           </TabsTrigger>
@@ -1138,150 +1161,191 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                           title="合同与资质"
                           description="合同、授权与证照集中维护；有效期到期后需重新上传。"
                         >
-                          <div className="space-y-4">
-                            <div className="grid gap-4 sm:grid-cols-3">
-                              <FieldShell>
-                                <Label htmlFor="supplier-contract-no">
-                                  {masterDataCopy.fContractNo}
-                                </Label>
-                                <Input
-                                  id="supplier-contract-no"
-                                  value={values.contractNo}
-                                  onChange={(e) =>
-                                    setFieldValue("contractNo", e.target.value)
-                                  }
-                                  placeholder="合同编号"
-                                  disabled={!canEdit}
-                                />
-                              </FieldShell>
-                              <FieldShell>
-                                <Label>
-                                  {masterDataCopy.fContractValidFrom}
-                                </Label>
-                                <DatePicker
-                                  value={values.contractValidFrom || undefined}
-                                  onValueChange={(next) =>
-                                    setFieldValue(
-                                      "contractValidFrom",
-                                      next ?? "",
-                                    )
-                                  }
-                                  disabled={!canEdit}
-                                  className="w-full"
-                                />
-                              </FieldShell>
-                              <FieldShell>
-                                <Label>{masterDataCopy.fContractValidTo}</Label>
-                                <DatePicker
-                                  value={values.contractValidTo || undefined}
-                                  onValueChange={(next) =>
-                                    setFieldValue("contractValidTo", next ?? "")
-                                  }
-                                  disabled={!canEdit}
-                                  className="w-full"
-                                />
-                              </FieldShell>
-                            </div>
-
-                            <div
-                              className={cn(
-                                surfaceInsetClassName,
-                                "space-y-4 p-4",
-                              )}
+                          <div className="space-y-5">
+                            <CredentialGroup
+                              title="采购合同"
+                              description="维护当前合作合同的编号、有效期与电子附件。"
                             >
-                              <div className="grid gap-4 sm:grid-cols-2">
-                                <MediaListField
-                                  label={masterDataCopy.fContractFile}
-                                  hint={
-                                    masterDataCopy.supplierQualificationHint
-                                  }
-                                  value={values.contractFile}
-                                  onChange={(next) =>
-                                    setFieldValue("contractFile", next)
-                                  }
-                                  accept="image/jpeg,image/png,image/webp,application/pdf"
-                                />
-                                <MediaListField
-                                  label={masterDataCopy.fAuthorizationFile}
-                                  hint={
-                                    masterDataCopy.supplierQualificationHint
-                                  }
-                                  value={values.authorizationFile}
-                                  onChange={(next) =>
-                                    setFieldValue("authorizationFile", next)
-                                  }
-                                  accept="image/jpeg,image/png,image/webp,application/pdf"
-                                />
-                              </div>
-                              <div className="grid gap-4 sm:grid-cols-2">
-                                <FieldShell>
-                                  <Label>
-                                    {masterDataCopy.fAuthorizationValidFrom}
-                                  </Label>
-                                  <DatePicker
-                                    value={
-                                      values.authorizationValidFrom || undefined
+                              <div className="grid gap-5 lg:grid-cols-2">
+                                <div className="space-y-4">
+                                  <FieldShell>
+                                    <Label htmlFor="supplier-contract-no">
+                                      {masterDataCopy.fContractNo}
+                                    </Label>
+                                    <Input
+                                      id="supplier-contract-no"
+                                      value={values.contractNo}
+                                      onChange={(e) =>
+                                        setFieldValue(
+                                          "contractNo",
+                                          e.target.value,
+                                        )
+                                      }
+                                      placeholder="合同编号"
+                                      disabled={!canEdit}
+                                    />
+                                  </FieldShell>
+                                  <div className="grid gap-4 sm:grid-cols-2">
+                                    <FieldShell>
+                                      <Label>
+                                        {masterDataCopy.fContractValidFrom}
+                                      </Label>
+                                      <DatePicker
+                                        value={
+                                          values.contractValidFrom || undefined
+                                        }
+                                        onValueChange={(next) =>
+                                          setFieldValue(
+                                            "contractValidFrom",
+                                            next ?? "",
+                                          )
+                                        }
+                                        disabled={!canEdit}
+                                        className="w-full"
+                                      />
+                                    </FieldShell>
+                                    <FieldShell>
+                                      <Label>
+                                        {masterDataCopy.fContractValidTo}
+                                      </Label>
+                                      <DatePicker
+                                        value={
+                                          values.contractValidTo || undefined
+                                        }
+                                        onValueChange={(next) =>
+                                          setFieldValue(
+                                            "contractValidTo",
+                                            next ?? "",
+                                          )
+                                        }
+                                        disabled={!canEdit}
+                                        className="w-full"
+                                      />
+                                    </FieldShell>
+                                  </div>
+                                </div>
+                                <div className="border-border/60 lg:border-l lg:pl-5">
+                                  <MediaListField
+                                    label={masterDataCopy.fContractFile}
+                                    hint={
+                                      masterDataCopy.supplierQualificationHint
                                     }
-                                    onValueChange={(next) =>
-                                      setFieldValue(
-                                        "authorizationValidFrom",
-                                        next ?? "",
-                                      )
+                                    value={values.contractFile}
+                                    onChange={(next) =>
+                                      setFieldValue("contractFile", next)
                                     }
-                                    disabled={!canEdit}
-                                    className="w-full"
+                                    accept="image/jpeg,image/png,image/webp,application/pdf"
                                   />
-                                </FieldShell>
-                                <FieldShell>
-                                  <Label>
-                                    {masterDataCopy.fAuthorizationValidTo}
-                                  </Label>
-                                  <DatePicker
-                                    value={
-                                      values.authorizationValidTo || undefined
-                                    }
-                                    onValueChange={(next) =>
-                                      setFieldValue(
-                                        "authorizationValidTo",
-                                        next ?? "",
-                                      )
-                                    }
-                                    disabled={!canEdit}
-                                    className="w-full"
-                                  />
-                                </FieldShell>
+                                </div>
                               </div>
-                            </div>
+                            </CredentialGroup>
 
-                            <div className="grid gap-4 sm:grid-cols-3">
-                              <MediaListField
-                                label={masterDataCopy.fQualification}
-                                hint={masterDataCopy.supplierQualificationHint}
-                                value={values.qualification}
-                                onChange={(next) =>
-                                  setFieldValue("qualification", next)
-                                }
-                                accept="image/jpeg,image/png,image/webp,application/pdf"
-                              />
-                              <MediaListField
-                                label={masterDataCopy.fFoodLicense}
-                                hint={masterDataCopy.supplierQualificationHint}
-                                value={values.foodLicense}
-                                onChange={(next) =>
-                                  setFieldValue("foodLicense", next)
-                                }
-                                accept="image/jpeg,image/png,image/webp,application/pdf"
-                              />
-                              <MediaListField
-                                label={masterDataCopy.fLegalPersonIdCard}
-                                hint={masterDataCopy.supplierQualificationHint}
-                                value={values.legalPersonIdCard}
-                                onChange={(next) =>
-                                  setFieldValue("legalPersonIdCard", next)
-                                }
-                                accept="image/jpeg,image/png,image/webp,application/pdf"
-                              />
-                            </div>
+                            <CredentialGroup
+                              title="品牌与经营授权"
+                              description="授权书有效期与附件成组维护，便于到期前统一核验。"
+                            >
+                              <div className="grid gap-5 lg:grid-cols-2">
+                                <div className="grid content-start gap-4 sm:grid-cols-2">
+                                  <FieldShell>
+                                    <Label>
+                                      {masterDataCopy.fAuthorizationValidFrom}
+                                    </Label>
+                                    <DatePicker
+                                      value={
+                                        values.authorizationValidFrom ||
+                                        undefined
+                                      }
+                                      onValueChange={(next) =>
+                                        setFieldValue(
+                                          "authorizationValidFrom",
+                                          next ?? "",
+                                        )
+                                      }
+                                      disabled={!canEdit}
+                                      className="w-full"
+                                    />
+                                  </FieldShell>
+                                  <FieldShell>
+                                    <Label>
+                                      {masterDataCopy.fAuthorizationValidTo}
+                                    </Label>
+                                    <DatePicker
+                                      value={
+                                        values.authorizationValidTo || undefined
+                                      }
+                                      onValueChange={(next) =>
+                                        setFieldValue(
+                                          "authorizationValidTo",
+                                          next ?? "",
+                                        )
+                                      }
+                                      disabled={!canEdit}
+                                      className="w-full"
+                                    />
+                                  </FieldShell>
+                                </div>
+                                <div className="border-border/60 lg:border-l lg:pl-5">
+                                  <MediaListField
+                                    label={masterDataCopy.fAuthorizationFile}
+                                    hint={
+                                      masterDataCopy.supplierQualificationHint
+                                    }
+                                    value={values.authorizationFile}
+                                    onChange={(next) =>
+                                      setFieldValue("authorizationFile", next)
+                                    }
+                                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                                  />
+                                </div>
+                              </div>
+                            </CredentialGroup>
+
+                            <CredentialGroup
+                              title="企业经营资质"
+                              description="按证照类型分别归档，缺少的材料可后续补充。"
+                            >
+                              <div className="grid gap-4 lg:grid-cols-3">
+                                <div className="rounded-md border border-border/60 bg-background p-4">
+                                  <MediaListField
+                                    label={masterDataCopy.fQualification}
+                                    hint={
+                                      masterDataCopy.supplierQualificationHint
+                                    }
+                                    value={values.qualification}
+                                    onChange={(next) =>
+                                      setFieldValue("qualification", next)
+                                    }
+                                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                                  />
+                                </div>
+                                <div className="rounded-md border border-border/60 bg-background p-4">
+                                  <MediaListField
+                                    label={masterDataCopy.fFoodLicense}
+                                    hint={
+                                      masterDataCopy.supplierQualificationHint
+                                    }
+                                    value={values.foodLicense}
+                                    onChange={(next) =>
+                                      setFieldValue("foodLicense", next)
+                                    }
+                                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                                  />
+                                </div>
+                                <div className="rounded-md border border-border/60 bg-background p-4">
+                                  <MediaListField
+                                    label={masterDataCopy.fLegalPersonIdCard}
+                                    hint={
+                                      masterDataCopy.supplierQualificationHint
+                                    }
+                                    value={values.legalPersonIdCard}
+                                    onChange={(next) =>
+                                      setFieldValue("legalPersonIdCard", next)
+                                    }
+                                    accept="image/jpeg,image/png,image/webp,application/pdf"
+                                  />
+                                </div>
+                              </div>
+                            </CredentialGroup>
                           </div>
                         </SectionPanel>
                       )}

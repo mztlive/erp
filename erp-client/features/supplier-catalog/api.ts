@@ -28,6 +28,10 @@ import type {
 import {
   REGISTRATION_BLOCKER_MESSAGE,
 } from "@/features/supplier-catalog/types"
+import {
+  PRODUCT_KIND_VALUES,
+  type ProductKind,
+} from "@/features/master-data/types"
 
 // ─── Backend wire types ───────────────────────────────────────────────────────
 
@@ -206,6 +210,14 @@ function mapAvailability(
   const u = (raw ?? "AVAILABLE").toUpperCase()
   if (u === "UNAVAILABLE" || u === "STOPPED" || u === "STALE") return u
   return "AVAILABLE"
+}
+
+function mapProductKind(
+  value: string | null | undefined,
+): ProductKind | undefined {
+  return PRODUCT_KIND_VALUES.includes(value as ProductKind)
+    ? (value as ProductKind)
+    : undefined
 }
 
 function emptyPublicationImpact() {
@@ -748,7 +760,7 @@ export async function fetchSupplierCatalogCenter(input: {
     resolveSupplierName(product.supplier_id),
   ])
 
-  const item = projectProductToItem(
+  const projectedItem = projectProductToItem(
     product,
     skus,
     skuRevisions,
@@ -756,6 +768,21 @@ export async function fetchSupplierCatalogCenter(input: {
     offeringPage.items,
     supplierName
   )
+
+  const productRevision =
+    detail.revisions.find(
+      (revision) => revision.revision_no === product.current_revision_no,
+    ) ?? detail.revisions[0]
+  const item: SupplierCatalogItemView = {
+    ...projectedItem,
+    supplierProduct: {
+      ...projectedItem.supplierProduct,
+      currentRevision: {
+        ...projectedItem.supplierProduct.currentRevision,
+        sourceProductKind: mapProductKind(productRevision?.source_product_kind),
+      },
+    },
+  }
 
   return {
     item,
@@ -1004,7 +1031,7 @@ export async function createSupplierCatalogItem(
       input.supplierSpuCode ?? input.supplierSkuCode ?? `SPU-${Date.now()}`,
     name: input.name,
     description: input.description ?? null,
-    source_product_kind: null,
+    source_product_kind: input.sourceProductKind ?? null,
     source_category: input.category || null,
     source_brand: input.brand ?? null,
     structured_attributes: (input.attributes ?? []).map((a) => ({
@@ -1057,7 +1084,7 @@ export async function reviseSupplierCatalogProduct(
       supplier_spu_code: input.supplierSpuCode ?? "",
       name: input.name,
       description: input.description ?? null,
-      source_product_kind: null,
+      source_product_kind: input.sourceProductKind ?? null,
       source_category: input.category || null,
       source_brand: input.brand ?? null,
       structured_attributes: (input.attributes ?? []).map((a) => ({

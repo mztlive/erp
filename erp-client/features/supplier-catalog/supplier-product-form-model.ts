@@ -12,6 +12,10 @@ import type {
   SupplierCatalogSourceType,
   SupplierProductRevisionView,
 } from "@/features/supplier-catalog/types"
+import {
+  PRODUCT_KIND_VALUES,
+  type ProductKind,
+} from "@/features/master-data/types"
 
 export type SupplierProductEditorSectionId =
   | "basic"
@@ -45,6 +49,8 @@ export type SupplierSkuFormRow = Readonly<{
   supplierSkuCode: string
   barcode: string
   mainImage: string
+  /** 已归档或来源图片的可访问地址，仅用于回显，不进入写入载荷。 */
+  mainImagePreviewUrl?: string
   /** 一件代发底价（含税运） */
   dropshipFloorPriceGross: string
   /** 集采底价（含税） */
@@ -64,6 +70,7 @@ export type SupplierProductFormFields = Readonly<{
 
   name: string
   description: string
+  sourceProductKind: ProductKind | ""
   categoryId: string
   category: string
   brandId: string
@@ -92,6 +99,7 @@ export function emptySupplierSkuFormRow(
     supplierSkuCode: partial?.supplierSkuCode ?? "",
     barcode: partial?.barcode ?? "",
     mainImage: partial?.mainImage ?? "",
+    mainImagePreviewUrl: partial?.mainImagePreviewUrl,
     dropshipFloorPriceGross: partial?.dropshipFloorPriceGross ?? "",
     bulkFloorPriceGross: partial?.bulkFloorPriceGross ?? "",
     bulkMinimumOrderQuantity: partial?.bulkMinimumOrderQuantity ?? "1",
@@ -115,6 +123,7 @@ export function emptySupplierProductFormFields(
     supplierSpuCode: "",
     name: "",
     description: "",
+    sourceProductKind: "",
     categoryId: "",
     category: "",
     brandId: "",
@@ -218,6 +227,7 @@ export function mediaFromRevision(
   carouselImages: string[]
   detailImages: string[]
   skuMainImage: string
+  skuMainImagePreviewUrl?: string
 } {
   const list = media ?? []
   const names = (usage: SupplierCatalogMediaUsage) =>
@@ -225,10 +235,14 @@ export function mediaFromRevision(
       .filter((entry) => entry.usage === usage)
       .sort((a, b) => a.sortOrder - b.sortOrder)
       .map((entry) => entry.fileName)
+  const skuMainImage = list
+    .filter((entry) => entry.usage === "SKU_MAIN")
+    .sort((a, b) => a.sortOrder - b.sortOrder)[0]
   return {
     carouselImages: names("SPU_CAROUSEL"),
     detailImages: names("SPU_DETAIL"),
-    skuMainImage: names("SKU_MAIN")[0] ?? "",
+    skuMainImage: skuMainImage?.fileName ?? "",
+    skuMainImagePreviewUrl: skuMainImage?.sourceUrl,
   }
 }
 
@@ -339,8 +353,9 @@ export function hydrateSupplierProductForm(input: {
             const hit = attrs.find((a) => a.name.trim() === dim.name.trim())
             return hit?.value.trim() ?? ""
           })
+          const skuMedia = mediaFromRevision(entry.revision.media)
           const main =
-            mediaFromRevision(entry.revision.media).skuMainImage ||
+            skuMedia.skuMainImage ||
             (index === 0 ? media.skuMainImage : "")
           return emptySupplierSkuFormRow({
             catalogSkuId: entry.id,
@@ -349,6 +364,9 @@ export function hydrateSupplierProductForm(input: {
             supplierSkuCode: entry.supplierSkuCode,
             barcode: entry.revision.barcode ?? "",
             mainImage: main,
+            mainImagePreviewUrl:
+              skuMedia.skuMainImagePreviewUrl ??
+              (index === 0 ? media.skuMainImagePreviewUrl : undefined),
             dropshipFloorPriceGross:
               entry.revision.dropshipFloorPriceGross ?? "",
             bulkFloorPriceGross: entry.revision.bulkFloorPriceGross ?? "",
@@ -381,6 +399,7 @@ export function hydrateSupplierProductForm(input: {
             supplierSkuCode: input.supplierSkuCode,
             barcode: input.revision.barcode ?? "",
             mainImage: media.skuMainImage,
+            mainImagePreviewUrl: media.skuMainImagePreviewUrl,
             dropshipFloorPriceGross:
               input.revision.dropshipFloorPriceGross ?? "",
             bulkFloorPriceGross: input.revision.bulkFloorPriceGross ?? "",
@@ -409,6 +428,11 @@ export function hydrateSupplierProductForm(input: {
     supplierSpuCode: input.supplierSpuCode ?? "",
     name: input.revision.name,
     description: input.revision.description ?? "",
+    sourceProductKind:
+      input.revision.sourceProductKind &&
+      PRODUCT_KIND_VALUES.includes(input.revision.sourceProductKind)
+        ? input.revision.sourceProductKind
+        : "",
     categoryId: category?.categoryId ?? "",
     category: category?.categoryName ?? input.revision.category,
     brandId: brand?.brandId ?? "",
@@ -485,6 +509,9 @@ export function validateSupplierProductForm(
     return "请选择供应商"
   }
   if (fields.name.trim().length < 2) return "请填写商品名称"
+  if (fields.sourceType === "MANUAL" && !fields.sourceProductKind) {
+    return "请选择来源商品类型"
+  }
   if (!fields.categoryId.trim() && !fields.category.trim()) {
     return "请选择分类"
   }

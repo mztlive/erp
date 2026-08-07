@@ -1287,6 +1287,7 @@ dependencies = [
  "mongodb",
  "regex",
  "serde",
+ "test-support",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
