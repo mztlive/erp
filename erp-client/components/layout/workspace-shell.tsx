@@ -19,6 +19,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -33,11 +34,14 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { isNavItemActive } from "@/lib/nav-active"
+import { hasAnyPermission } from "@/lib/permissions"
 import {
+  filterNavGroupsByPermissions,
   WORKSPACE_NAV_GROUPS,
   type WorkspaceNavBadgeKey,
 } from "@/lib/workspace-registry"
 import { logoutAndRedirect } from "@/components/providers/auth-session-provider"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
 import { useFulfillmentCountQuery } from "@/features/fulfillment-operations/queries"
 import { useProcurementConfirmCountQuery } from "@/features/procurement-confirmation/queries"
@@ -66,14 +70,30 @@ function badgeCountFor(
   }
 }
 
+function displayInitial(
+  name: string | undefined,
+  account: string | undefined
+): string {
+  const source = (name || account || "用").trim()
+  return source.slice(0, 1).toUpperCase() || "用"
+}
+
 function AppSidebarNav() {
   const pathname = usePathname()
   // 必须订阅 searchParams：同 path 只改 lane 时 pathname 不变，否则高亮卡死
   const searchParams = useSearchParams()
   const search = searchParams.toString()
-  const allHrefs = WORKSPACE_NAV_GROUPS.flatMap((group) =>
-    group.items.map((item) => item.href)
+  const profileQuery = useAccountProfileQuery()
+  const permissions = profileQuery.data?.permissions
+  const navGroups = React.useMemo(
+    () => filterNavGroupsByPermissions(WORKSPACE_NAV_GROUPS, permissions),
+    [permissions]
   )
+  const allHrefs = React.useMemo(
+    () => navGroups.flatMap((group) => group.items.map((item) => item.href)),
+    [navGroups]
+  )
+
   const todoCountQuery = useUnifiedTaskCountQuery()
   const confirmCountQuery = useProcurementConfirmCountQuery()
   const deliveryCountQuery = useFulfillmentCountQuery("procurement")
@@ -85,9 +105,46 @@ function AppSidebarNav() {
     warehouse: warehouseCountQuery.data?.pending ?? 0,
   }
 
+  if (profileQuery.isPending) {
+    return (
+      <SidebarGroup className="px-1">
+        <SidebarGroupLabel className="sr-only">导航</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <p className="px-2 py-3 text-xs text-muted-foreground">加载菜单…</p>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    )
+  }
+
+  if (profileQuery.isError) {
+    return (
+      <SidebarGroup className="px-1">
+        <SidebarGroupLabel className="sr-only">导航</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <p className="px-2 py-3 text-xs text-muted-foreground">
+            无法加载权限，菜单暂不可用
+          </p>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    )
+  }
+
+  if (navGroups.length === 0) {
+    return (
+      <SidebarGroup className="px-1">
+        <SidebarGroupLabel className="sr-only">导航</SidebarGroupLabel>
+        <SidebarGroupContent>
+          <p className="px-2 py-3 text-xs text-muted-foreground">
+            当前账号暂无可用菜单
+          </p>
+        </SidebarGroupContent>
+      </SidebarGroup>
+    )
+  }
+
   return (
     <>
-      {WORKSPACE_NAV_GROUPS.map((group, index) => (
+      {navGroups.map((group, index) => (
         <SidebarGroup key={group.label} className="px-1">
           {/* 透明侧栏不靠分割线区分分组，仅用组标签与间距 */}
           {index > 0 ? (
@@ -141,22 +198,36 @@ function AppSidebarNav() {
 export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const queryClient = useQueryClient()
+  const profileQuery = useAccountProfileQuery()
+  const permissions = profileQuery.data?.permissions
+  const canSeeTodos = hasAnyPermission(permissions, ["work_item:list"])
+  const canSearchCustomers = hasAnyPermission(permissions, ["customer:list"])
   const [search, setSearch] = React.useState("")
   const [searchFocused, setSearchFocused] = React.useState(false)
-  const customerSearchQuery = useCustomerDirectoryQuery({
-    scope: "team",
-    status: "all",
-    query: search.trim(),
-  })
+  const customerSearchQuery = useCustomerDirectoryQuery(
+    {
+      scope: "team",
+      status: "all",
+      query: search.trim(),
+    },
+    {
+      // 无客户 list 权限或未输入关键字时不请求，避免侧栏壳层无谓 403
+      enabled: canSearchCustomers && search.trim().length >= 2,
+    }
+  )
   const todoCountQuery = useUnifiedTaskCountQuery()
-  const todoCount = todoCountQuery.data?.mine
+  const todoCount = canSeeTodos ? todoCountQuery.data?.mine : undefined
   const customerMatches = React.useMemo(
     () =>
-      search.trim().length >= 2
+      canSearchCustomers && search.trim().length >= 2
         ? customerSearchQuery.data?.items.slice(0, 5) ?? []
         : [],
-    [customerSearchQuery.data?.items, search]
+    [canSearchCustomers, customerSearchQuery.data?.items, search]
   )
+
+  const displayName =
+    profileQuery.data?.name || profileQuery.data?.account || "已登录"
+  const accountLabel = profileQuery.data?.account || "后台账号"
 
   React.useEffect(() => {
     const focusGlobalSearch = (event: KeyboardEvent) => {
@@ -184,9 +255,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
       setSearchFocused(false)
       return
     }
-    router.push(`/sales/orders?search=${encodeURIComponent(query)}`)
+    if (hasAnyPermission(permissions, ["sales_order:list"])) {
+      router.push(`/sales/orders?search=${encodeURIComponent(query)}`)
+    }
     setSearchFocused(false)
-  }, [customerMatches, router, search])
+  }, [customerMatches, permissions, router, search])
 
   const openCustomer = React.useCallback(
     (customer: (typeof customerMatches)[number]) => {
@@ -196,6 +269,21 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
     },
     [router]
   )
+
+  const topbarActions = canSeeTodos
+    ? [
+        {
+          actionKey: "todos",
+          label: "待办",
+          icon: ListTodoIcon,
+          badge:
+            todoCount && todoCount > 0
+              ? { label: String(todoCount), variant: "secondary" as const }
+              : undefined,
+          onClick: () => router.push("/workspace/tasks"),
+        },
+      ]
+    : []
 
   return (
     <ErpAppShell
@@ -238,18 +326,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                 } else if (event.key === "Enter") submitSearch()
               },
             }}
-            actions={[
-              {
-                actionKey: "todos",
-                label: "待办",
-                icon: ListTodoIcon,
-                badge:
-                  todoCount && todoCount > 0
-                    ? { label: String(todoCount), variant: "secondary" }
-                    : undefined,
-                onClick: () => router.push("/workspace/tasks"),
-              },
-            ]}
+            actions={topbarActions}
             trailing={
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -266,21 +343,26 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
                     className="size-9 cursor-pointer shadow-sm ring-2 ring-card"
                   >
                     <AvatarFallback className="bg-primary/10 text-primary">
-                      用
+                      {displayInitial(
+                        profileQuery.data?.name,
+                        profileQuery.data?.account
+                      )}
                     </AvatarFallback>
                   </Avatar>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="min-w-48">
-                  <DropdownMenuLabel>
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-sm font-medium text-foreground">
-                        已登录
-                      </span>
-                      <span className="text-xs font-normal text-muted-foreground">
-                        后台账号
-                      </span>
-                    </div>
-                  </DropdownMenuLabel>
+                  <DropdownMenuGroup>
+                    <DropdownMenuLabel>
+                      <div className="flex flex-col gap-0.5">
+                        <span className="text-sm font-medium text-foreground">
+                          {displayName}
+                        </span>
+                        <span className="text-xs font-normal text-muted-foreground">
+                          {accountLabel}
+                        </span>
+                      </div>
+                    </DropdownMenuLabel>
+                  </DropdownMenuGroup>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     variant="destructive"
@@ -293,7 +375,7 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
               </DropdownMenu>
             }
           />
-          {searchFocused && search.trim().length >= 2 ? (
+          {searchFocused && search.trim().length >= 2 && canSearchCustomers ? (
             <div
               role="listbox"
               aria-label="客户搜索结果"

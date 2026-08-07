@@ -20,6 +20,7 @@ import {
   BusinessTableFrame,
   DataFreshness,
   DataTable,
+  FilterChip,
   FormalActionResult,
   ListToolbar,
   MetricFilterItem,
@@ -134,10 +135,6 @@ export function CustomerReceivablesPage() {
 
   const [searchInput, setSearchInput] = React.useState(qParam)
   const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-  const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 20,
-  })
   const [preview, setPreview] = React.useState<PreviewState>(() =>
     previewKind && previewId
       ? { kind: previewKind, id: previewId }
@@ -169,7 +166,6 @@ export function CustomerReceivablesPage() {
       due,
       status,
       reviewStatus,
-      focusId,
       salesOrderId,
       receivableAccountId,
       returnTo,
@@ -183,12 +179,21 @@ export function CustomerReceivablesPage() {
       due,
       status,
       reviewStatus,
-      focusId,
       salesOrderId,
       receivableAccountId,
       returnTo,
       from,
     ]
+  )
+
+  // 分页从 URL 派生（P6）；筛选变更写 URL 并回第 1 页。
+  const pageFromUrl = React.useMemo(
+    () => Math.max(1, Number.parseInt(searchParams.get("page") ?? "1", 10) || 1),
+    [searchParams]
+  )
+  const pagination = React.useMemo<PaginationState>(
+    () => ({ pageIndex: Math.max(0, pageFromUrl - 1), pageSize: 20 }),
+    [pageFromUrl]
   )
 
   const listQuery = useCustomerAccountsListQuery(query)
@@ -209,6 +214,62 @@ export function CustomerReceivablesPage() {
     patchSearchParams({ router, pathname, searchParams, view }, patch, options)
   }
 
+  /** 客户锁定（customerId）显性化为可移除 chip。 */
+  const lockedCustomerName = React.useMemo(
+    () =>
+      (data?.counterparties ?? []).find((c) => c.customerId === customerId)
+        ?.customerName,
+    [data?.counterparties, customerId]
+  )
+
+  const hasActiveFilters = Boolean(
+    qParam.trim() ||
+      counterpartyPartyId ||
+      customerId ||
+      due ||
+      status ||
+      reviewStatus ||
+      salesOrderId ||
+      receivableAccountId
+  )
+
+  /** P4：清全部筛选参数 + 分页回 1；保留 view/导航上下文。 */
+  const clearFilters = React.useCallback(() => {
+    setSearchInput("")
+    patchUrl(
+      {
+        q: null,
+        counterpartyId: null,
+        customerId: null,
+        due: null,
+        status: null,
+        reviewStatus: null,
+        salesOrderId: null,
+        receivableAccountId: null,
+        focusId: null,
+        previewKind: null,
+        previewId: null,
+        page: null,
+      },
+      { replace: true }
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, pathname, view])
+
+  const handlePaginationChange = React.useCallback(
+    (next: PaginationState) => {
+      patchUrl(
+        {
+          page:
+            next.pageIndex + 1 > 1 ? String(next.pageIndex + 1) : null,
+        },
+        { replace: true }
+      )
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [searchParams, pathname, view]
+  )
+
   React.useEffect(() => {
     setSearchInput(qParam)
   }, [qParam])
@@ -216,8 +277,7 @@ export function CustomerReceivablesPage() {
   React.useEffect(() => {
     const handle = globalThis.setTimeout(() => {
       if (searchInput === qParam) return
-      patchUrl({ q: searchInput.trim() || null }, { replace: true })
-      setPagination((p) => ({ ...p, pageIndex: 0 }))
+      patchUrl({ q: searchInput.trim() || null, page: null }, { replace: true })
     }, 300)
     return () => globalThis.clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -281,9 +341,10 @@ export function CustomerReceivablesPage() {
     (next: PreviewState) => {
       setPreview(next)
       if (next) {
+        // 打开/关闭详情用 push（P2）；旧 focusId 一并清理
         patchUrl(
-          { previewKind: next.kind, previewId: next.id },
-          { replace: true }
+          { previewKind: next.kind, previewId: next.id, focusId: null },
+          { replace: false }
         )
       }
     },
@@ -293,7 +354,14 @@ export function CustomerReceivablesPage() {
 
   const closePreview = React.useCallback(() => {
     setPreview(null)
-    patchUrl({ previewKind: null, previewId: null }, { replace: true })
+    patchUrl(
+      {
+        previewKind: null,
+        previewId: null,
+        focusId: null,
+      },
+      { replace: false }
+    )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, pathname, view])
 
@@ -891,24 +959,6 @@ export function CustomerReceivablesPage() {
         </Alert>
       ) : null}
 
-      {customerId ? (
-        <Alert variant="info">
-          <AlertTitle>客户筛选</AlertTitle>
-          <AlertDescription>
-             已按经营归属客户过滤。核销仍以结算主体为准。
-            <Button
-              type="button"
-              size="sm"
-              variant="link"
-              className="ml-2 h-auto p-0"
-              onClick={() => patchUrl({ customerId: null })}
-            >
-              清除
-            </Button>
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
       {lastResult ? (
         <FormalActionResult
           status={lastResult.status === "failed" ? "blocked" : lastResult.status}
@@ -951,8 +1001,8 @@ export function CustomerReceivablesPage() {
                 }
                 active={view === "receivable"}
                 onClick={() => {
-                  patchUrl({ view: "receivable" })
-                  setPagination((p) => ({ ...p, pageIndex: 0 }))
+                  // 其余指标点击只设 view（P7），回第 1 页
+                  patchUrl({ view: "receivable", page: null }, { replace: true })
                 }}
               />
               <MetricFilterItem
@@ -961,8 +1011,17 @@ export function CustomerReceivablesPage() {
                 detail="需催收"
                 active={view === "receivable" && due === "overdue"}
                 onClick={() => {
-                  patchUrl({ view: "receivable", due: "overdue" })
-                  setPagination((p) => ({ ...p, pageIndex: 0 }))
+                  // view+filter 双重语义；与状态/复核维度重叠时一并重置避免矛盾空结果
+                  patchUrl(
+                    {
+                      view: "receivable",
+                      due: "overdue",
+                      status: null,
+                      reviewStatus: null,
+                      page: null,
+                    },
+                    { replace: true }
+                  )
                 }}
               />
               <MetricFilterItem
@@ -971,8 +1030,16 @@ export function CustomerReceivablesPage() {
                 detail="已到账"
                 active={view === "unallocated"}
                 onClick={() => {
-                  patchUrl({ view: "unallocated", due: null })
-                  setPagination((p) => ({ ...p, pageIndex: 0 }))
+                  patchUrl(
+                    {
+                      view: "unallocated",
+                      due: null,
+                      status: null,
+                      reviewStatus: null,
+                      page: null,
+                    },
+                    { replace: true }
+                  )
                 }}
               />
               <MetricFilterItem
@@ -985,8 +1052,16 @@ export function CustomerReceivablesPage() {
                 }
                 active={view === "sales_invoice"}
                 onClick={() => {
-                  patchUrl({ view: "sales_invoice", due: null })
-                  setPagination((p) => ({ ...p, pageIndex: 0 }))
+                  patchUrl(
+                    {
+                      view: "sales_invoice",
+                      due: null,
+                      status: null,
+                      reviewStatus: null,
+                      page: null,
+                    },
+                    { replace: true }
+                  )
                 }}
               />
             </MetricStrip>
@@ -1004,8 +1079,17 @@ export function CustomerReceivablesPage() {
           <Tabs
             value={view}
             onValueChange={(v) => {
-              patchUrl({ view: v, due: v === "receivable" ? due ?? null : null })
-              setPagination((p) => ({ ...p, pageIndex: 0 }))
+              // 非 receivable 视图隐藏 due/status/reviewStatus，切视图时清除残留
+              const patch: Record<string, string | null | undefined> = {
+                view: v,
+                page: null,
+              }
+              if (v !== "receivable") {
+                patch.due = null
+                patch.status = null
+                patch.reviewStatus = null
+              }
+              patchUrl(patch, { replace: true })
             }}
           >
             <TabsList>
@@ -1049,6 +1133,14 @@ export function CustomerReceivablesPage() {
                       placeholder="往来主体、销售单、回款单、发票号"
                       value={searchInput}
                       onChange={(e) => setSearchInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          patchUrl(
+                            { q: searchInput.trim() || null, page: null },
+                            { replace: true }
+                          )
+                        }
+                      }}
                       aria-label="搜索客户往来"
                     />
                   </InputGroup>
@@ -1062,10 +1154,10 @@ export function CustomerReceivablesPage() {
                       <SettlementPartyCombobox
                         value={counterpartyPartyId || undefined}
                         onValueChange={(id) => {
-                          patchUrl({
-                            counterpartyId: id || null,
-                          })
-                          setPagination((p) => ({ ...p, pageIndex: 0 }))
+                          patchUrl(
+                            { counterpartyId: id || null, page: null },
+                            { replace: true }
+                          )
                         }}
                         parties={counterparties.map((c) => ({
                           partyId: c.counterpartyPartyId,
@@ -1091,15 +1183,20 @@ export function CustomerReceivablesPage() {
                             value={due ?? "all"}
                             onValueChange={(v) => {
                               const next = v ?? "all"
-                              patchUrl({ due: next === "all" ? null : next })
-                              setPagination((p) => ({ ...p, pageIndex: 0 }))
+                              patchUrl(
+                                {
+                                  due: next === "all" ? null : next,
+                                  page: null,
+                                },
+                                { replace: true }
+                              )
                             }}
-                            options={(Object.keys(DUE_LABEL) as DueFilter[]).map(
-                              (k) => ({
-                                value: k,
-                                label: DUE_LABEL[k],
-                              })
-                            )}
+                            options={(
+                              Object.keys(DUE_LABEL) as DueFilter[]
+                            ).map((k) => ({
+                              value: k,
+                              label: DUE_LABEL[k],
+                            }))}
                             className="w-32"
                             size="sm"
                             allowClear={false}
@@ -1114,8 +1211,10 @@ export function CustomerReceivablesPage() {
                           <OptionCombobox
                             value={status ?? ""}
                             onValueChange={(v) => {
-                              patchUrl({ status: v || null })
-                              setPagination((p) => ({ ...p, pageIndex: 0 }))
+                              patchUrl(
+                                { status: v || null, page: null },
+                                { replace: true }
+                              )
                             }}
                             options={[
                               { value: "", label: "全部状态" },
@@ -1130,6 +1229,27 @@ export function CustomerReceivablesPage() {
                             placeholder="状态"
                           />
                         </label>
+                      </>
+                    ) : null}
+                  </>
+                }
+                secondary={
+                  customerId || view === "receivable" ? (
+                    <>
+                      {customerId ? (
+                        <FilterChip
+                          label={
+                            lockedCustomerName
+                              ? `经营客户 ${lockedCustomerName}`
+                              : "经营客户锁定"
+                          }
+                          onClear={() =>
+                            patchUrl({ customerId: null }, { replace: true })
+                          }
+                          clearLabel="清除客户筛选"
+                        />
+                      ) : null}
+                      {view === "receivable" ? (
                         <label className="flex items-center gap-1.5 text-sm">
                           <span className="sr-only sm:not-sr-only sm:text-muted-foreground">
                             复核状态
@@ -1137,12 +1257,17 @@ export function CustomerReceivablesPage() {
                           <OptionCombobox
                             value={reviewStatus ?? ""}
                             onValueChange={(v) => {
-                              patchUrl({ reviewStatus: v || null })
-                              setPagination((p) => ({ ...p, pageIndex: 0 }))
+                              patchUrl(
+                                { reviewStatus: v || null, page: null },
+                                { replace: true }
+                              )
                             }}
                             options={[
                               { value: "", label: "全部复核状态" },
-                              { value: "pending_opening", label: "期初待复核" },
+                              {
+                                value: "pending_opening",
+                                label: "期初待复核",
+                              },
                               { value: "reviewed", label: "已复核" },
                               {
                                 value: "pending_sync_diff",
@@ -1156,21 +1281,39 @@ export function CustomerReceivablesPage() {
                             placeholder="复核状态"
                           />
                         </label>
-                      </>
-                    ) : null}
-                  </>
+                      ) : null}
+                    </>
+                  ) : undefined
                 }
                 actions={
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="text-muted-foreground hover:text-foreground"
-                    onClick={() => void listQuery.refetch()}
-                  >
-                    <RefreshCwIcon data-icon="inline-start" aria-hidden="true" />
-                    刷新
-                  </Button>
+                  <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span aria-live="polite">
+                      共 {(data?.total ?? 0).toLocaleString("zh-CN")} 条
+                    </span>
+                    {hasActiveFilters ? (
+                      <Button
+                        type="button"
+                        size="xs"
+                        variant="ghost"
+                        onClick={clearFilters}
+                      >
+                        清除筛选
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      className="text-muted-foreground hover:text-foreground"
+                      onClick={() => void listQuery.refetch()}
+                    >
+                      <RefreshCwIcon
+                        data-icon="inline-start"
+                        aria-hidden="true"
+                      />
+                      刷新
+                    </Button>
+                  </div>
                 }
               />
             }
@@ -1264,18 +1407,7 @@ export function CustomerReceivablesPage() {
                         type="button"
                         variant="secondary"
                         className="rounded-lg shadow-none"
-                        onClick={() => {
-                          patchUrl({
-                            q: null,
-                            counterpartyId: null,
-                            customerId: null,
-                            due: null,
-                            status: null,
-                            reviewStatus: null,
-                            salesOrderId: null,
-                            receivableAccountId: null,
-                          })
-                        }}
+                        onClick={clearFilters}
                       >
                         清除筛选
                       </Button>
@@ -1296,7 +1428,7 @@ export function CustomerReceivablesPage() {
                   getRowId={(r) => r.accountId}
                   rowCount={data.total}
                   pagination={pagination}
-                  onPaginationChange={setPagination}
+                  onPaginationChange={handlePaginationChange}
                   layout="flush"
                   density="compact"
                   defaultColumnPinning={{
@@ -1311,7 +1443,7 @@ export function CustomerReceivablesPage() {
                   getRowId={(r) => r.receiptId}
                   rowCount={data.total}
                   pagination={pagination}
-                  onPaginationChange={setPagination}
+                  onPaginationChange={handlePaginationChange}
                   layout="flush"
                   density="compact"
                   defaultColumnPinning={{
@@ -1326,7 +1458,7 @@ export function CustomerReceivablesPage() {
                   getRowId={(r) => r.invoiceId}
                   rowCount={data.total}
                   pagination={pagination}
-                  onPaginationChange={setPagination}
+                  onPaginationChange={handlePaginationChange}
                   layout="flush"
                   density="compact"
                   defaultColumnPinning={{

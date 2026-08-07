@@ -7,6 +7,7 @@ import {
   ExternalLinkIcon,
   PauseIcon,
   RefreshCwIcon,
+  SearchIcon,
   ShieldAlertIcon,
   SkipForwardIcon,
 } from "lucide-react"
@@ -19,6 +20,8 @@ import {
   FormalActionConfirmDialog,
   FormalActionResult,
   InterfaceErrorResolutionPanel,
+  ListToolbar,
+  MetricFilterItem,
   MetricItem,
   MetricStrip,
   OptionCombobox,
@@ -47,7 +50,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
@@ -287,6 +294,7 @@ export function IntegrationErrorsPage({
     React.useState<IntegrationFormalResult | null>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [searchDraft, setSearchDraft] = React.useState(urlState.q ?? "")
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null)
   const [replacementTaskId, setReplacementTaskId] = React.useState("")
   const [transferRole, setTransferRole] = React.useState("研发运维")
   const [reconReasonId, setReconReasonId] = React.useState("")
@@ -455,6 +463,47 @@ export function IntegrationErrorsPage({
   React.useEffect(() => {
     setSearchDraft(urlState.q ?? "")
   }, [urlState.q])
+
+  // P3 搜索：300ms 防抖写 URL，Enter 兜底，/ 聚焦
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchDraft.trim() === (urlState.q ?? "")) return
+      replaceUrl({
+        q: searchDraft.trim() || null,
+        taskId: null,
+        differenceId: null,
+      })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- replaceUrl 以当前 URL 快照为准
+  }, [searchDraft])
+
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        event.key !== "/" ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return
+      }
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return
+      }
+      event.preventDefault()
+      searchInputRef.current?.focus()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   // Auto-claim when work_item present
   React.useEffect(() => {
@@ -658,6 +707,27 @@ export function IntegrationErrorsPage({
     if (focusMode) void detailItemQuery.refetch()
     setLastResult(null)
   }
+
+  const hasQueueFilters = Boolean(
+    urlState.mode !== "all" ||
+      urlState.environment !== "production" ||
+      urlState.errorClass ||
+      urlState.owner !== "me" ||
+      urlState.q
+  )
+
+  const clearQueueFilters = React.useCallback(() => {
+    setSearchDraft("")
+    replaceUrl({
+      mode: "all",
+      environment: "production",
+      errorClass: null,
+      owner: "me",
+      q: null,
+      taskId: null,
+      differenceId: null,
+    })
+  }, [replaceUrl])
 
   const focusLoading =
     focusMode && detailItemQuery.isPending && !detailItemQuery.data
@@ -940,9 +1010,10 @@ export function IntegrationErrorsPage({
 
       {metrics ? (
         <MetricStrip>
-          <MetricItem
+          <MetricFilterItem
             label="结果未知"
             value={metrics.resultUnknown}
+            active={urlState.view === "result_unknown"}
             onClick={
               focusMode
                 ? undefined
@@ -955,9 +1026,10 @@ export function IntegrationErrorsPage({
             }
           />
           <MetricItem label="待人工" value={metrics.manualRequired} />
-          <MetricItem
+          <MetricFilterItem
             label="安全故障"
             value={metrics.securityFaults}
+            active={urlState.view === "security"}
             onClick={
               focusMode
                 ? undefined
@@ -969,9 +1041,10 @@ export function IntegrationErrorsPage({
                     })
             }
           />
-          <MetricItem
+          <MetricFilterItem
             label="未解决差异"
             value={metrics.openDifferences}
+            active={urlState.view === "reconciliation"}
             onClick={
               focusMode
                 ? undefined
@@ -988,153 +1061,167 @@ export function IntegrationErrorsPage({
       ) : null}
 
       {!focusMode ? (
-        <div className="flex flex-wrap items-center gap-2">
-          <div
-            role="group"
-            aria-label="保存的视图"
-            className="inline-flex flex-wrap items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-          >
-            {(Object.keys(VIEW_LABEL) as IntegrationView[])
-              .filter((v) => v !== "resolved" && v !== "auto_retry")
-              .map((v) => {
-                const active = urlState.view === v
-                return (
-                  <button
-                    key={v}
+        <div
+          className={cn(
+            surfacePanelClassName,
+            "sticky top-0 z-10 space-y-2.5 px-3 py-2.5"
+          )}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <OptionCombobox
+              value={urlState.view}
+              onValueChange={(v) =>
+                replaceUrl({
+                  view: (v as IntegrationView | null) ?? "mine",
+                  taskId: null,
+                  differenceId: null,
+                })
+              }
+              options={(Object.keys(VIEW_LABEL) as IntegrationView[]).map(
+                (v) => ({ value: v, label: VIEW_LABEL[v] })
+              )}
+              allowClear={false}
+              size="sm"
+              aria-label="队列视图"
+              inputClassName="w-[9.5rem]"
+            />
+          </div>
+          <ListToolbar
+            aria-label="队列筛选"
+            search={
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  replaceUrl({
+                    q: searchDraft.trim() || null,
+                    taskId: null,
+                    differenceId: null,
+                  })
+                }}
+              >
+                <InputGroup>
+                  <InputGroupAddon>
+                    <SearchIcon aria-hidden="true" />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    ref={searchInputRef}
+                    value={searchDraft}
+                    onChange={(e) => setSearchDraft(e.target.value)}
+                    placeholder="任务号 / 业务单号 / 事件摘要"
+                    aria-label="搜索"
+                  />
+                </InputGroup>
+              </form>
+            }
+            filters={
+              <>
+                <OptionCombobox
+                  value={urlState.mode}
+                  onValueChange={(v) =>
+                    replaceUrl({
+                      mode: v ?? "all",
+                      taskId: null,
+                      differenceId: null,
+                    })
+                  }
+                  options={(
+                    Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]
+                  ).map((m) => ({ value: m, label: MODE_LABEL[m] }))}
+                  inputClassName="w-[8rem]"
+                  size="sm"
+                  aria-label="模式"
+                  allowClear={false}
+                />
+                <OptionCombobox
+                  value={urlState.environment}
+                  onValueChange={(v) =>
+                    replaceUrl({
+                      environment: v ?? "production",
+                      taskId: null,
+                      differenceId: null,
+                    })
+                  }
+                  options={(
+                    Object.keys(ENV_LABEL) as (keyof typeof ENV_LABEL)[]
+                  ).map((e) => ({ value: e, label: ENV_LABEL[e] }))}
+                  inputClassName="w-[7rem]"
+                  size="sm"
+                  aria-label="环境"
+                  allowClear={false}
+                />
+                <OptionCombobox
+                  value={urlState.errorClass ?? "all"}
+                  onValueChange={(v) =>
+                    replaceUrl({
+                      errorClass: !v || v === "all" ? null : v,
+                      taskId: null,
+                      differenceId: null,
+                    })
+                  }
+                  options={[
+                    { value: "all", label: "全部类别" },
+                    ...Object.entries(ERROR_CLASS_LABEL).map(([k, label]) => ({
+                      value: k,
+                      label,
+                    })),
+                  ]}
+                  inputClassName="w-[10rem]"
+                  size="sm"
+                  aria-label="错误类别"
+                  placeholder="错误类别"
+                  allowClear={false}
+                />
+              </>
+            }
+            secondary={
+              <OptionCombobox
+                value={urlState.owner}
+                onValueChange={(v) =>
+                  replaceUrl({
+                    owner: v ?? "me",
+                    taskId: null,
+                    differenceId: null,
+                  })
+                }
+                options={(
+                  Object.keys(OWNER_LABEL) as (keyof typeof OWNER_LABEL)[]
+                ).map((o) => ({ value: o, label: OWNER_LABEL[o] }))}
+                inputClassName="w-[8rem]"
+                size="sm"
+                aria-label="责任人"
+                allowClear={false}
+              />
+            }
+            actions={
+              <>
+                {hasQueueFilters ? (
+                  <Button
                     type="button"
-                    aria-pressed={active}
-                    onClick={() =>
-                      replaceUrl({
-                        view: v,
-                        taskId: null,
-                        differenceId: null,
-                      })
-                    }
-                    className={cn(
-                      "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                      active
-                        ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                        : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
-                    )}
+                    size="sm"
+                    variant="ghost"
+                    onClick={clearQueueFilters}
                   >
-                    {VIEW_LABEL[v]}
-                  </button>
-                )
-              })}
-          </div>
-
-          <OptionCombobox
-            value={urlState.mode}
-            onValueChange={(v) =>
-              replaceUrl({
-                mode: v ?? "all",
-                taskId: null,
-                differenceId: null,
-              })
+                    清除筛选
+                  </Button>
+                ) : null}
+                <div className="flex items-center gap-2">
+                  <Label
+                    htmlFor="w29-auto-next"
+                    className="text-xs text-muted-foreground"
+                  >
+                    自动下一项
+                  </Label>
+                  <Switch
+                    id="w29-auto-next"
+                    checked={autoNext}
+                    onCheckedChange={(on) => {
+                      replaceUrl({ autoNext: on ? "1" : "0" })
+                    }}
+                  />
+                </div>
+              </>
             }
-            options={(
-              Object.keys(MODE_LABEL) as (keyof typeof MODE_LABEL)[]
-            ).map((m) => ({ value: m, label: MODE_LABEL[m] }))}
-            className="w-[8rem]"
-            size="sm"
-            aria-label="模式"
-            allowClear={false}
           />
-
-          <OptionCombobox
-            value={urlState.environment}
-            onValueChange={(v) =>
-              replaceUrl({
-                environment: v ?? "production",
-                taskId: null,
-                differenceId: null,
-              })
-            }
-            options={(Object.keys(ENV_LABEL) as (keyof typeof ENV_LABEL)[]).map(
-              (e) => ({ value: e, label: ENV_LABEL[e] })
-            )}
-            className="w-[7rem]"
-            size="sm"
-            aria-label="环境"
-            allowClear={false}
-          />
-
-          <OptionCombobox
-            value={urlState.errorClass ?? "all"}
-            onValueChange={(v) =>
-              replaceUrl({
-                errorClass: !v || v === "all" ? null : v,
-                taskId: null,
-                differenceId: null,
-              })
-            }
-            options={[
-              { value: "all", label: "全部类别" },
-              ...Object.entries(ERROR_CLASS_LABEL).map(([k, label]) => ({
-                value: k,
-                label,
-              })),
-            ]}
-            className="w-[10rem]"
-            size="sm"
-            aria-label="错误类别"
-            placeholder="错误类别"
-            allowClear={false}
-          />
-
-          <OptionCombobox
-            value={urlState.owner}
-            onValueChange={(v) =>
-              replaceUrl({
-                owner: v ?? "me",
-                taskId: null,
-                differenceId: null,
-              })
-            }
-            options={(
-              Object.keys(OWNER_LABEL) as (keyof typeof OWNER_LABEL)[]
-            ).map((o) => ({ value: o, label: OWNER_LABEL[o] }))}
-            className="w-[8rem]"
-            size="sm"
-            aria-label="责任人"
-            allowClear={false}
-          />
-
-          <div className="flex items-center gap-2">
-            <Label htmlFor="w29-auto-next" className="text-xs text-muted-foreground">
-              自动下一项
-            </Label>
-            <Switch
-              id="w29-auto-next"
-              checked={autoNext}
-              onCheckedChange={(on) => {
-                replaceUrl({ autoNext: on ? "1" : "0" })
-              }}
-            />
-          </div>
-
-          <form
-            className="ml-auto flex items-center gap-2"
-            onSubmit={(e) => {
-              e.preventDefault()
-              replaceUrl({
-                q: searchDraft.trim() || null,
-                taskId: null,
-                differenceId: null,
-              })
-            }}
-          >
-            <Input
-              value={searchDraft}
-              onChange={(e) => setSearchDraft(e.target.value)}
-              placeholder="任务号 / 业务单号 / 事件摘要"
-              className="h-8 w-52"
-              aria-label="搜索"
-            />
-            <Button type="submit" size="sm" variant="secondary">
-              搜索
-            </Button>
-          </form>
         </div>
       ) : (
         <div className="flex flex-wrap gap-2">
@@ -1201,10 +1288,21 @@ export function IntegrationErrorsPage({
 
       {items.length === 0 ? (
         <BusinessEmptyState
-          kind="no-tasks"
+          kind="filter"
           title="当前筛选项已处理完"
           description="可切换视图、清除筛选，或返回工作台。"
           className="rounded-lg border-0 bg-transparent shadow-none ring-0"
+          action={
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="rounded-lg shadow-none"
+              onClick={clearQueueFilters}
+            >
+              清除筛选
+            </Button>
+          }
         />
       ) : (
         <div

@@ -366,8 +366,12 @@ export function AccessAuditPage() {
 
   const [searchInput, setSearchInput] = React.useState(qParam)
   const searchInputRef = React.useRef<HTMLInputElement | null>(null)
+  const pageParamRaw = Number(searchParams.get("page"))
+  const pageParamIndex = Number.isFinite(pageParamRaw) && pageParamRaw > 0
+    ? Math.max(0, Math.floor(pageParamRaw) - 1)
+    : 0
   const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
+    pageIndex: pageParamIndex,
     pageSize: 20,
   })
 
@@ -475,14 +479,20 @@ export function AccessAuditPage() {
   const patchFilterUrl = (
     patch: Record<string, string | null | undefined>
   ) => {
-    patchUrl(patch)
+    patchUrl({ ...patch, page: null }, { replace: true })
     setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
   }
 
   React.useEffect(() => {
     const handle = globalThis.setTimeout(() => {
       if (searchInput === qParam) return
-      patchUrl({ q: searchInput.trim() || null }, { replace: true })
+      patchUrl(
+        {
+          q: searchInput.trim() || null,
+          page: null,
+        },
+        { replace: true }
+      )
       setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
     }, 300)
     return () => globalThis.clearTimeout(handle)
@@ -759,6 +769,7 @@ export function AccessAuditPage() {
       traceId: null,
       from: null,
       to: null,
+      page: null,
     })
     setSearchInput("")
     setDebouncedFilters({})
@@ -1422,6 +1433,12 @@ export function AccessAuditPage() {
     pagination.pageIndex * pagination.pageSize + pagination.pageSize
   )
 
+  const handlePaginationChange = (next: PaginationState) => {
+    setPagination(next)
+    const page = next.pageIndex + 1
+    patchUrl({ page: page > 1 ? String(page) : null }, { replace: true })
+  }
+
   const switchView = (next: AccessView) => {
     if (next === view) return
     setPagination({ pageIndex: 0, pageSize: 20 })
@@ -1433,6 +1450,7 @@ export function AccessAuditPage() {
       subjectId: null,
       subjectType: null,
       eventId: null,
+      page: null,
       ...(next === "audit"
         ? {}
         : {
@@ -1477,6 +1495,22 @@ export function AccessAuditPage() {
     })
   }
 
+  // 组织维度选项：取自当前列表的角色/用户组织标签；选中值不在选项时并入，保证可回退
+  const orgOptions = (() => {
+    const seen = new Set<string>()
+    const options: { value: string; label: string }[] = []
+    for (const row of [...(data?.roles ?? []), ...(data?.users ?? [])]) {
+      const label = row.organizationLabel
+      if (!label || seen.has(label)) continue
+      seen.add(label)
+      options.push({ value: label, label })
+    }
+    if (org && !seen.has(org)) {
+      options.unshift({ value: org, label: org })
+    }
+    return options
+  })()
+
   const listToolbar = (
     <ListToolbar
       search={
@@ -1501,6 +1535,23 @@ export function AccessAuditPage() {
         <>
           {!isAudit ? (
             <>
+              <OptionCombobox
+                value={org ?? "all"}
+                onValueChange={(v) =>
+                  patchFilterUrl({
+                    org: (v ?? "all") === "all" ? null : (v ?? "all"),
+                  })
+                }
+                options={[
+                  { value: "all", label: "全部组织" },
+                  ...orgOptions,
+                ]}
+                className="w-[9rem]"
+                size="sm"
+                allowClear={false}
+                aria-label="组织"
+                placeholder="全部组织"
+              />
               <OptionCombobox
                 value={status ?? "all"}
                 onValueChange={(v) =>
@@ -1615,6 +1666,13 @@ export function AccessAuditPage() {
                 aria-label="动作"
                 placeholder="全部动作"
               />
+            </>
+          )}
+        </>
+      }
+      secondary={
+        isAudit ? (
+          <>
               <OptionCombobox
                 value={resultFilter ?? "all"}
                 onValueChange={(v) =>
@@ -1739,8 +1797,11 @@ export function AccessAuditPage() {
                   </Button>
                 </PopoverContent>
               </Popover>
-            </>
-          )}
+          </>
+        ) : undefined
+      }
+      actions={
+        <>
           {hasActiveFilters ? (
             <Button
               type="button"
@@ -1752,20 +1813,18 @@ export function AccessAuditPage() {
               清除筛选
             </Button>
           ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            disabled={exportBlocked}
+            title={exportBlocker?.message}
+            onClick={handleExport}
+          >
+            <DownloadIcon data-icon="inline-start" aria-hidden="true" />
+            {isAudit ? "导出审计" : "导出配置"}
+          </Button>
         </>
-      }
-      actions={
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          disabled={exportBlocked}
-          title={exportBlocker?.message}
-          onClick={handleExport}
-        >
-          <DownloadIcon data-icon="inline-start" aria-hidden="true" />
-          {isAudit ? "导出审计" : "导出配置"}
-        </Button>
       }
     />
   )
@@ -1889,36 +1948,34 @@ export function AccessAuditPage() {
         </Alert>
       ) : null}
 
-      {data.emptyReason && data.emptyReason !== "FIELD_MASKED" ? (
-        <>
-          {listToolbar}
-          <EmptyByReason
-            reason={data.emptyReason}
-            onClearFilters={
-              data.emptyReason === "FILTER_NO_RESULT"
-                ? clearFilters
-                : undefined
-            }
-          />
-        </>
-      ) : (
-        <BusinessTableFrame
-          title={ACCESS_VIEW_LABEL[view]}
-          description={
-            isAudit && data.auditCoverageFrom && data.auditCoverageTo
+      <BusinessTableFrame
+        title={ACCESS_VIEW_LABEL[view]}
+        description={
+          data.emptyReason && data.emptyReason !== "FIELD_MASKED"
+            ? "当前无列表数据，可调整筛选后重试"
+            : isAudit && data.auditCoverageFrom && data.auditCoverageTo
               ? `共 ${rows.length} 条 · 覆盖 ${formatDateTime(data.auditCoverageFrom, "full")} ~ ${formatDateTime(data.auditCoverageTo, "full")} · 无记录不等于动作未发生`
               : `共 ${rows.length} 条`
-          }
-          toolbar={listToolbar}
-          table={
-            view === "roles" ? (
+        }
+        toolbar={listToolbar}
+        table={
+          data.emptyReason && data.emptyReason !== "FIELD_MASKED" ? (
+            <EmptyByReason
+              reason={data.emptyReason}
+              onClearFilters={
+                data.emptyReason === "FILTER_NO_RESULT"
+                  ? clearFilters
+                  : undefined
+              }
+            />
+          ) : view === "roles" ? (
               <DataTable
                 columns={roleColumns}
                 data={pagedRows as RoleRow[]}
                 getRowId={(row) => row.id}
                 rowCount={rows.length}
                 pagination={pagination}
-                onPaginationChange={setPagination}
+                onPaginationChange={handlePaginationChange}
                 layout="flush"
                 density="compact"
                 loading={pageQuery.isFetching && !pageQuery.isPending}
@@ -1935,7 +1992,7 @@ export function AccessAuditPage() {
                 getRowId={(row) => row.id}
                 rowCount={rows.length}
                 pagination={pagination}
-                onPaginationChange={setPagination}
+                onPaginationChange={handlePaginationChange}
                 layout="flush"
                 density="compact"
                 loading={pageQuery.isFetching && !pageQuery.isPending}
@@ -1952,7 +2009,7 @@ export function AccessAuditPage() {
                 getRowId={(row) => row.id}
                 rowCount={rows.length}
                 pagination={pagination}
-                onPaginationChange={setPagination}
+                onPaginationChange={handlePaginationChange}
                 layout="flush"
                 density="compact"
                 loading={pageQuery.isFetching && !pageQuery.isPending}
@@ -1969,7 +2026,7 @@ export function AccessAuditPage() {
                 getRowId={(row) => row.id}
                 rowCount={rows.length}
                 pagination={pagination}
-                onPaginationChange={setPagination}
+                onPaginationChange={handlePaginationChange}
                 layout="flush"
                 density="compact"
                 loading={pageQuery.isFetching && !pageQuery.isPending}
@@ -1986,7 +2043,7 @@ export function AccessAuditPage() {
                 getRowId={(row) => row.auditEventId}
                 rowCount={rows.length}
                 pagination={pagination}
-                onPaginationChange={setPagination}
+                onPaginationChange={handlePaginationChange}
                 layout="flush"
                 density="compact"
                 loading={pageQuery.isFetching && !pageQuery.isPending}
@@ -1997,9 +2054,8 @@ export function AccessAuditPage() {
                 }}
               />
             )
-          }
-        />
-      )}
+        }
+      />
 
       {/* 有效权限解释 Sheet — 服务端投影，前端不合并 */}
       <QuickPreviewSheet

@@ -20,10 +20,15 @@ import {
   surfaceInsetClassName,
   surfacePanelClassName,
 } from "@/components/business"
+import { FilterChip } from "@/components/business/filter-chip"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { cn } from "@/lib/utils"
 import type {
   SupplierCatalogItemView,
@@ -47,6 +52,10 @@ type SupplyRelationshipListViewProps = {
   onSearch: () => void
   sourceType: SupplierCatalogSourceType | "all"
   onSourceTypeChange: (value: SupplierCatalogSourceType | "all") => void
+  /** D8：清除搜索/来源/SKU 锁定等全部筛选（页面级 URL 写入，含来源锁定 chip）。 */
+  onClearFilters: () => void
+  /** D8：仅移除 SKU 来源锁定（深链参数显性化 chip 的 ×）。 */
+  onClearSku: () => void
   onOpenExcelImport: () => void
   /** 从 W14 固定 SKU 进入时仍用对话框一次登记供给；列表自由录入走全页同构表单。 */
   onOpenManualEntry?: () => void
@@ -149,6 +158,8 @@ function SupplyRelationshipListView({
   onSearch,
   sourceType,
   onSourceTypeChange,
+  onClearFilters,
+  onClearSku,
   onOpenExcelImport,
   onOpenManualEntry,
   onPromote,
@@ -521,6 +532,25 @@ function SupplyRelationshipListView({
         description="来源报价先保留为供应商事实；采购确认后，成本写入供给版本，销售可见价写入公司商品池版本。"
         toolbar={
           <ListToolbar
+            search={
+              // P3：list 模式搜索为「防抖即时 + Enter 兜底」，页面级写入 q；
+              // / 聚焦快捷键由页面监听 data-slot="catalog-list-search"。
+              <InputGroup className="w-full max-w-sm">
+                <InputGroupAddon>
+                  <SearchIcon aria-hidden="true" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  data-slot="catalog-list-search"
+                  value={searchInput}
+                  onChange={(event) => onSearchInputChange(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") onSearch()
+                  }}
+                  placeholder="搜索供应商、商品名称或商品编码"
+                  aria-label="搜索供应商供给"
+                />
+              </InputGroup>
+            }
             filters={
               <OptionCombobox
                 value={sourceType}
@@ -537,33 +567,40 @@ function SupplyRelationshipListView({
                 ]}
                 allowClear={false}
                 className="w-40"
+                aria-label="来源类型"
               />
             }
-            search={
-              <form
-                className="flex items-center gap-2"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  onSearch()
-                }}
-              >
-                <div className="relative min-w-0 flex-1">
-                  <SearchIcon
-                    className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                    aria-hidden="true"
-                  />
-                  <Input
-                    value={searchInput}
-                    onChange={(event) => onSearchInputChange(event.target.value)}
-                    placeholder="搜索供应商、商品名称或商品编码"
-                    className="pl-8"
-                    aria-label="搜索供应商供给"
-                  />
-                </div>
-                <Button type="submit" variant="secondary" size="sm">
-                  搜索
-                </Button>
-              </form>
+            secondary={
+              skuId ? (
+                // D8：SKU 来源锁定显性化为可移除 chip（深链参数）
+                <FilterChip
+                  label={`${currentSku?.productName ?? "商品规格"}（${currentSku?.skuCode ?? skuId}）`}
+                  onClear={onClearSku}
+                  clearLabel="清除当前 SKU 锁定"
+                />
+              ) : undefined
+            }
+            actions={
+              <div className="flex items-center gap-2">
+                <span
+                  className="text-xs text-muted-foreground"
+                  aria-live="polite"
+                >
+                  共 {items.length.toLocaleString("zh-CN")} 条
+                </span>
+                {Boolean(searchInput.trim()) ||
+                sourceType !== "all" ||
+                Boolean(skuId) ? (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    onClick={onClearFilters}
+                  >
+                    清除筛选
+                  </Button>
+                ) : null}
+              </div>
             }
           />
         }
@@ -601,19 +638,15 @@ function SupplyRelationshipListView({
                   description="可调整搜索、来源或清除筛选后重试。"
                   className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   action={
-                    onSortChange ? (
-                      <Button
-                        variant="secondary"
-                        type="button"
-                        className="rounded-lg shadow-none"
-                        onClick={() => {
-                          onSearchInputChange("")
-                          onSearch()
-                        }}
-                      >
-                        清除筛选
-                      </Button>
-                    ) : undefined
+                    // D8：清除范围=搜索+来源+SKU 锁定（原实现只清 q，漏 sourceType）
+                    <Button
+                      variant="secondary"
+                      type="button"
+                      className="rounded-lg shadow-none"
+                      onClick={onClearFilters}
+                    >
+                      清除筛选
+                    </Button>
                   }
                 />
               ) : (

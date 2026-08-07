@@ -1611,48 +1611,67 @@ async function createProduct(
   }
 }
 
-async function createVoucher(
+async function createVoucherCategory(
   input: CreateMasterDataInput
 ): Promise<MasterDataMutationResult> {
   const fields = input.fields as VoucherCategoryFields
-  // Backend requires an existing VOUCHER SKU id. Frontend form collects sku code only.
-  // Attempt to resolve sku_no → id.
-  const skus = await fetchAllPages<SkuDto>("/admin/skus", {
-    sku_no: fields.sku,
-  })
-  const sku =
-    skus.find((s) => s.sku_no === fields.sku) ??
-    skus.find((s) => s.sku_no.includes(fields.sku))
-  if (!sku) {
+  if (!fields.categoryId && !fields.newCategoryCode) {
     return {
       outcome: "blocked",
-      code: "VOUCHER_SKU_NOT_FOUND",
-      message: "找不到对应的卡券 SKU，请先创建 VOUCHER 类型商品与 SKU。",
-      detail: `sku=${fields.sku}`,
+      code: "VOUCHER_CATEGORY_REQUIRED",
+      message: "请选择已有分类，或填写新建分类信息。",
+    }
+  }
+  if (!fields.brandId || !fields.baseUnitId) {
+    return {
+      outcome: "blocked",
+      code: "VOUCHER_REQUIRED_REFS",
+      message: "请完整填写品牌与基础单位。",
     }
   }
   try {
     const created = await apiPost<VoucherCategoryProfileDto>(
-      "/admin/voucher-category-profiles",
+      "/admin/voucher-categories",
       {
-        sku_id: sku.id,
-        description: fields.description?.trim() || input.name.trim(),
+        voucher_no: fields.voucherNo,
+        name: input.name.trim(),
+        description: (fields.description || input.name).trim(),
+        specification: fields.specification || null,
+        category_id: fields.categoryId || null,
+        new_category: fields.categoryId
+          ? null
+          : {
+              category_code: fields.newCategoryCode,
+              parent_category_id: fields.newCategoryParentId || null,
+              name: fields.newCategoryName,
+            },
+        brand_id: fields.brandId,
+        sku: {
+          base_unit_id: fields.baseUnitId,
+          barcode: fields.barcode || null,
+          weight_kg: null,
+          volume_m3: null,
+          sales_visible_price_gross: fields.salesVisiblePriceGross || null,
+          market_price: fields.marketPrice || null,
+        },
         status: "active",
+        effective_from: input.effectiveFrom,
+        effective_to: input.effectiveTo || null,
       }
     )
     return {
       outcome: "succeeded",
       stableId: created.id,
-      stableNo: sku.sku_no,
+      stableNo: fields.voucherNo,
       revisionId: created.id,
       revisionNo: created.revision_no,
-      revisionState: "CURRENT",
+      revisionState: isFutureDate(input.effectiveFrom) ? "FUTURE" : "CURRENT",
       effectiveFrom: input.effectiveFrom,
       recordedAt: isoNow(),
       actor: "—",
       changeReason: input.changeReason || "新建",
-      reference: `MD-CREATE-VC-${sku.sku_no}`,
-      nextActions: ["查看详情", "更新资料"],
+      reference: `MD-CREATE-VC-${fields.voucherNo}`,
+      nextActions: ["查看详情"],
     }
   } catch (error) {
     return mapMutationError(error)
@@ -1848,7 +1867,7 @@ export async function createMasterDataObject(
     case "products":
       return createProduct(input)
     case "voucher-categories":
-      return createVoucher(input)
+      return createVoucherCategory(input)
     case "suppliers":
       return createSupplier(input)
     case "sellable-items":
@@ -2040,8 +2059,8 @@ export async function createMasterDataRevision(
         return {
           outcome: "blocked",
           code: "VOUCHER_PROFILE_NO_UPDATE",
-          message: "卡券类目扩展修订暂无更新接口（仅创建）。",
-          detail: "backend: POST /admin/voucher-category-profiles only",
+          message: "卡券类目暂无更新接口（仅创建）。",
+          detail: "backend: POST /admin/voucher-categories only supports create",
         }
       default:
         return {

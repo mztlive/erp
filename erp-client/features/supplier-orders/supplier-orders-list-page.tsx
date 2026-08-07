@@ -44,6 +44,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { cn } from "@/lib/utils"
 import { listSupplierOptions } from "@/features/supplier-orders/api"
 import {
@@ -174,16 +175,25 @@ export function SupplierOrdersListPage() {
     }
   }, [router, searchParams])
 
-  const pushUrl = React.useCallback(
-    (patch: Partial<typeof url>) => {
+  // P2：筛选/分页/搜索变更统一 replace，不膨胀历史。
+  // 原实现整体用 push，意图是「后退可逐步撤销筛选」，与规范冲突已改为 replace；
+  // 仅预览打开/关闭这类详情导航保留 push（openPreview/closePreview 传 "push"）。
+  const updateUrl = React.useCallback(
+    (
+      patch: Partial<typeof url>,
+      navigate: "replace" | "push" = "replace"
+    ) => {
       const next = { ...url, ...patch }
       let qs = buildSupplierOrdersSearchParams(next)
       // URL state codec 不声明 returnTo，筛选/分页变化时手动保留返回上下文
       if (returnTo) {
         qs += `${qs ? "&" : "?"}returnTo=${encodeURIComponent(returnTo)}`
       }
-      // 用 push 保留浏览器后退/前进，可逐步撤销筛选
-      router.push(`${pathname}${qs}`, { scroll: false })
+      if (navigate === "push") {
+        router.push(`${pathname}${qs}`, { scroll: false })
+      } else {
+        router.replace(`${pathname}${qs}`, { scroll: false })
+      }
     },
     [pathname, router, url, returnTo]
   )
@@ -214,14 +224,40 @@ export function SupplierOrdersListPage() {
   const handleSortingChange = React.useCallback(
     (next: SortingState) => {
       const head = next[0]
-      pushUrl({
+      updateUrl({
         sort: head && SORT_COLUMN_TO_FIELD[head.id] ? head.id : undefined,
         dir: head ? (head.desc ? "desc" : "asc") : undefined,
         page: 1,
       })
     },
-    [pushUrl]
+    [updateUrl]
   )
+
+  // P4：清除=清全部筛选参数并回第 1 页；保留 view（视图类）与排序。
+  // 工具栏常驻清除与空态 BusinessEmptyState 共用同一函数（D21）。
+  const hasActiveFilters = Boolean(
+    url.q ||
+      url.supplierId ||
+      url.fulfillmentStatuses?.length ||
+      url.cancelStatuses?.length ||
+      url.refundStatuses?.length ||
+      url.aftersalePending ||
+      url.paidFrom ||
+      url.paidTo
+  )
+  const clearFilters = React.useCallback(() => {
+    updateUrl({
+      fulfillmentStatuses: undefined,
+      cancelStatuses: undefined,
+      refundStatuses: undefined,
+      aftersalePending: false,
+      q: undefined,
+      supplierId: undefined,
+      paidFrom: undefined,
+      paidTo: undefined,
+      page: 1,
+    })
+  }, [updateUrl])
 
   React.useEffect(() => {
     setFocusedIndex(0)
@@ -259,11 +295,11 @@ export function SupplierOrdersListPage() {
       } else if (event.key === "Enter") {
         event.preventDefault()
         const row = rows[focusedIndex]
-        if (row) pushUrl({ preview: row.orderId })
+        if (row) updateUrl({ preview: row.orderId }, "push")
       } else if (event.key === "Escape" && url.preview) {
         event.preventDefault()
         const id = url.preview
-        pushUrl({ preview: undefined })
+        updateUrl({ preview: undefined }, "push")
         requestAnimationFrame(() => {
           rowRefs.current.get(id)?.focus()
         })
@@ -271,22 +307,22 @@ export function SupplierOrdersListPage() {
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [focusedIndex, pushUrl, rows, url.preview])
+  }, [focusedIndex, updateUrl, rows, url.preview])
 
   const openPreview = React.useCallback(
-    (orderId: string) => pushUrl({ preview: orderId }),
-    [pushUrl]
+    (orderId: string) => updateUrl({ preview: orderId }, "push"),
+    [updateUrl]
   )
 
   const closePreview = React.useCallback(() => {
     const id = url.preview
-    pushUrl({ preview: undefined })
+    updateUrl({ preview: undefined }, "push")
     if (id) {
       requestAnimationFrame(() => {
         rowRefs.current.get(id)?.focus()
       })
     }
-  }, [pushUrl, url.preview])
+  }, [updateUrl, url.preview])
 
   const handleQueryFromList = async (row: SupplierOrderListRow) => {
     if (!row.allowedActions.includes("QUERY_RESULT")) {
@@ -630,12 +666,25 @@ export function SupplierOrdersListPage() {
         </div>
       ) : null}
 
+      {/* 互斥规则（D21 记录在案）：履约状态 / 售后待处理 / 视图三组指标互斥——
+          点击任一组都会静默重置其它组（避免组合出矛盾空结果），
+          已通过按钮 title 提示；履约多值（fulfillmentStatuses）与单值
+          （fulfillmentStatus）为同一维度。 */}
       <MetricStrip>
         {metrics.map((m) => (
           <MetricFilterItem
             key={m.key}
             label={m.label}
             value={m.value}
+            title={
+              m.fulfillmentStatuses?.length || m.fulfillmentStatus
+                ? "应用履约状态筛选，会清除「售后待处理」指标"
+                : m.aftersalePending
+                  ? "应用「售后待处理」筛选，会清除履约状态筛选"
+                  : m.view
+                    ? "切换视图，会清除履约与售后筛选"
+                    : undefined
+            }
             active={
               m.fulfillmentStatuses?.length
                 ? (url.fulfillmentStatuses?.length ?? 0) ===
@@ -656,7 +705,7 @@ export function SupplierOrdersListPage() {
             }
             onClick={() => {
               if (m.fulfillmentStatuses?.length) {
-                pushUrl({
+                updateUrl({
                   fulfillmentStatuses: m.fulfillmentStatuses,
                   aftersalePending: false,
                   view: m.fulfillmentStatuses.includes("RESULT_UNKNOWN")
@@ -665,7 +714,7 @@ export function SupplierOrdersListPage() {
                   page: 1,
                 })
               } else if (m.fulfillmentStatus) {
-                pushUrl({
+                updateUrl({
                   fulfillmentStatuses: [m.fulfillmentStatus],
                   aftersalePending: false,
                   view:
@@ -675,14 +724,14 @@ export function SupplierOrdersListPage() {
                   page: 1,
                 })
               } else if (m.aftersalePending) {
-                pushUrl({
+                updateUrl({
                   view: "all",
                   fulfillmentStatuses: undefined,
                   aftersalePending: !url.aftersalePending,
                   page: 1,
                 })
               } else if (m.view) {
-                pushUrl({
+                updateUrl({
                   view: m.view,
                   fulfillmentStatuses: undefined,
                   aftersalePending: false,
@@ -815,12 +864,12 @@ export function SupplierOrdersListPage() {
                   onChange={(e) => setSearchDraft(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
-                      pushUrl({ q: searchDraft || undefined, page: 1 })
+                      updateUrl({ q: searchDraft || undefined, page: 1 })
                     }
                   }}
                   onBlur={() => {
                     if ((url.q ?? "") !== searchDraft) {
-                      pushUrl({ q: searchDraft || undefined, page: 1 })
+                      updateUrl({ q: searchDraft || undefined, page: 1 })
                     }
                   }}
                   placeholder="供应商订单号、商城订单、外部单号"
@@ -829,37 +878,28 @@ export function SupplierOrdersListPage() {
               </InputGroup>
             }
             filters={
-              <div className="flex flex-wrap items-center gap-2">
-                <div
-                  role="group"
+              <>
+                <ToggleGroup
+                  value={[url.view]}
+                  onValueChange={(values) => {
+                    const next = values[0] as ListView | undefined
+                    if (next) updateUrl({ view: next, page: 1 })
+                  }}
+                  variant="outline"
+                  size="sm"
+                  spacing={0}
                   aria-label="列表视图"
-                  className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
                 >
-                  {(Object.keys(VIEW_LABEL) as ListView[]).map((v) => {
-                    const active = url.view === v
-                    return (
-                      <button
-                        key={v}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => pushUrl({ view: v, page: 1 })}
-                        className={cn(
-                          "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                          active
-                            ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                            : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
-                        )}
-                      >
-                        {VIEW_LABEL[v]}
-                      </button>
-                    )
-                  })}
-                </div>
-
+                  {(Object.keys(VIEW_LABEL) as ListView[]).map((v) => (
+                    <ToggleGroupItem key={v} value={v}>
+                      {VIEW_LABEL[v]}
+                    </ToggleGroupItem>
+                  ))}
+                </ToggleGroup>
                 <SupplierCombobox
                   value={url.supplierId || undefined}
                   onValueChange={(id) =>
-                    pushUrl({
+                    updateUrl({
                       supplierId: id || undefined,
                       page: 1,
                     })
@@ -874,11 +914,10 @@ export function SupplierOrdersListPage() {
                   className="w-[12rem]"
                   placeholder="全部供应商"
                 />
-
                 <MultiOptionCombobox
                   value={url.fulfillmentStatuses ?? []}
                   onValueChange={(values) =>
-                    pushUrl({
+                    updateUrl({
                       fulfillmentStatuses:
                         values.length > 0
                           ? (values as SupplierFulfillmentStatus[])
@@ -895,14 +934,15 @@ export function SupplierOrdersListPage() {
                   size="sm"
                   placeholder="履约·全部"
                 />
-
+              </>
+            }
+            secondary={
+              <>
                 <OptionCombobox
                   value={url.cancelStatuses?.[0] ?? ""}
                   onValueChange={(v) =>
-                    pushUrl({
-                      cancelStatuses: v
-                        ? [v as CancelStatus]
-                        : undefined,
+                    updateUrl({
+                      cancelStatuses: v ? [v as CancelStatus] : undefined,
                       page: 1,
                     })
                   }
@@ -919,14 +959,11 @@ export function SupplierOrdersListPage() {
                   allowClear={false}
                   placeholder="取消·全部"
                 />
-
                 <OptionCombobox
                   value={url.refundStatuses?.[0] ?? ""}
                   onValueChange={(v) =>
-                    pushUrl({
-                      refundStatuses: v
-                        ? [v as RefundStatus]
-                        : undefined,
+                    updateUrl({
+                      refundStatuses: v ? [v as RefundStatus] : undefined,
                       page: 1,
                     })
                   }
@@ -943,17 +980,13 @@ export function SupplierOrdersListPage() {
                   allowClear={false}
                   placeholder="退款·全部"
                 />
-
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
                   支付自
                   <DatePicker
                     className="w-[9.5rem]"
                     value={url.paidFrom || undefined}
                     onValueChange={(next) =>
-                      pushUrl({
-                        paidFrom: next || undefined,
-                        page: 1,
-                      })
+                      updateUrl({ paidFrom: next || undefined, page: 1 })
                     }
                   />
                 </label>
@@ -963,46 +996,27 @@ export function SupplierOrdersListPage() {
                     className="w-[9.5rem]"
                     value={url.paidTo || undefined}
                     onValueChange={(next) =>
-                      pushUrl({
-                        paidTo: next || undefined,
-                        page: 1,
-                      })
+                      updateUrl({ paidTo: next || undefined, page: 1 })
                     }
                   />
                 </label>
-              </div>
+              </>
             }
             actions={
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                {(url.fulfillmentStatuses?.length ||
-                  url.cancelStatuses?.length ||
-                  url.refundStatuses?.length ||
-                  url.aftersalePending ||
-                  url.q ||
-                  url.supplierId ||
-                  url.paidFrom ||
-                  url.paidTo) && (
+                <span aria-live="polite">
+                  共 {total.toLocaleString("zh-CN")} 条
+                </span>
+                {hasActiveFilters ? (
                   <Button
                     type="button"
                     size="xs"
                     variant="ghost"
-                    onClick={() =>
-                      pushUrl({
-                        fulfillmentStatuses: undefined,
-                        cancelStatuses: undefined,
-                        refundStatuses: undefined,
-                        aftersalePending: false,
-                        q: undefined,
-                        supplierId: undefined,
-                        paidFrom: undefined,
-                        paidTo: undefined,
-                        page: 1,
-                      })
-                    }
+                    onClick={clearFilters}
                   >
                     清除筛选
                   </Button>
-                )}
+                ) : null}
               </div>
             }
           />
@@ -1040,15 +1054,28 @@ export function SupplierOrdersListPage() {
                   title="当前范围没有供应商订单"
                   description="调整视图、供应商或支付时间，或从商城消费订单钻取。"
                   action={
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      className="rounded-lg shadow-none"
-                      render={<Link href="/commerce/consumption-orders" />}
-                    >
-                      打开商城消费订单
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      {hasActiveFilters ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="secondary"
+                          className="rounded-lg shadow-none"
+                          onClick={clearFilters}
+                        >
+                          清除筛选
+                        </Button>
+                      ) : null}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="rounded-lg shadow-none"
+                        render={<Link href="/commerce/consumption-orders" />}
+                      >
+                        打开商城消费订单
+                      </Button>
+                    </div>
                   }
                 />
               ) : undefined
@@ -1057,7 +1084,7 @@ export function SupplierOrdersListPage() {
             onSortingChange={handleSortingChange}
             pagination={pagination}
             onPaginationChange={(next) => {
-              pushUrl({
+              updateUrl({
                 page: next.pageIndex + 1,
                 pageSize: next.pageSize,
               })

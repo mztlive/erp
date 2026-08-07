@@ -333,9 +333,28 @@ export type SellableItemFields = Readonly<{
   fulfillmentModes?: string
 }>
 
+/**
+ * 卡券类目可写字段：业务上一个卡券类目即一个 VOUCHER 类型的 SKU，
+ * `voucherNo` 同时作为 `product_no` 与 `sku_no`（无需分别填写）。
+ * `categoryId` 与 `newCategoryCode`/`newCategoryName` 二选一。
+ */
 export type VoucherCategoryFields = Readonly<{
-  sku: string
-  description?: string
+  voucherNo: string
+  description: string
+  specification?: string
+  categoryId: string
+  category: string
+  newCategoryCode?: string
+  newCategoryName?: string
+  newCategoryParentId?: string
+  brandId: string
+  brand: string
+  baseUnitId: string
+  baseUnitCode: string
+  baseUnit: string
+  barcode?: string
+  salesVisiblePriceGross?: string
+  marketPrice?: string
 }>
 
 /** 商品分类字典：稳定代码 + 名称（name 在通用字段）+ 可选上级。 */

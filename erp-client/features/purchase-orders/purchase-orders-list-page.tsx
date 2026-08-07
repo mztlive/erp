@@ -49,7 +49,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+
 import { PurchaseOrderPreviewPanel } from "@/features/purchase-orders/purchase-order-preview-panel"
 import {
   useCreateFromBasisMutation,
@@ -79,6 +79,15 @@ import {
 function displayNo(row: PurchaseOrderListItem) {
   return row.purchaseNo ?? row.draftLabel ?? "采购单（未编号）"
 }
+
+/** 状态枚举 ≥5：用 Combobox，禁止长 Toggle 横排（ui-filter-design §3.2） */
+const PO_STATUS_FILTER_OPTIONS = (
+  Object.entries(PO_STATUS_FILTER_LABEL) as Array<
+    [PurchaseOrderStatusFilter, string]
+  >
+)
+  .filter(([value]) => value !== "all")
+  .map(([value, label]) => ({ value, label }))
 
 export function PurchaseOrdersListPage() {
   const router = useRouter()
@@ -119,7 +128,9 @@ export function PurchaseOrdersListPage() {
     return [id, dir] as const
   }, [url.sort])
 
-  // 「可建单依据」是动作卡不是筛选卡：URL 带该值时按全部列表处理
+  // 「可建单依据」是动作卡不是筛选卡：URL 带该值时按全部列表处理。
+  // metric=pending_create 只由建单入口携带，指标条上无对应高亮控件（其它分支的
+  // metricKey 均为有控件的高亮枚举值，按原值消费即可，无需额外分支处理）。
   const effectiveMetric = url.metric === "pending_create" ? "all" : url.metric
 
   const listQueryInput = React.useMemo<PurchaseOrderListQuery>(
@@ -178,6 +189,14 @@ export function PurchaseOrdersListPage() {
         : [],
     [sortBy, sortDir]
   )
+
+  // P4：清除=清搜索/状态/指标筛选并回第 1 页，保留排序与视图参数；
+  // 空态与工具栏常驻清除共用同一函数（D19）。
+  const hasActiveFilters =
+    Boolean(url.q) || statusFilter !== "all" || effectiveMetric !== "all"
+  const clearFilters = React.useCallback(() => {
+    pushUrl({ q: undefined, status: "all", metric: "all", page: 1 })
+  }, [pushUrl])
 
   React.useEffect(() => {
     setSearchDraft(search)
@@ -769,31 +788,37 @@ export function PurchaseOrdersListPage() {
               </InputGroup>
             }
             filters={
-              <ToggleGroup
-                value={[statusFilter]}
-                onValueChange={(values) => {
-                  const next =
-                    (values[0] as PurchaseOrderStatusFilter | undefined) ??
-                    "all"
-                  pushUrl({ status: next, page: 1 })
-                }}
-                variant="outline"
+              <OptionCombobox
+                value={statusFilter === "all" ? null : statusFilter}
+                options={PO_STATUS_FILTER_OPTIONS}
+                placeholder="状态：全部"
                 size="sm"
-                spacing={0}
-              >
-                <ToggleGroupItem value="all">全部</ToggleGroupItem>
-                <ToggleGroupItem value="DRAFT">草稿</ToggleGroupItem>
-                <ToggleGroupItem value="PENDING_REVIEW">待审核</ToggleGroupItem>
-                <ToggleGroupItem value="EFFECTIVE">已生效</ToggleGroupItem>
-                <ToggleGroupItem value="PARTIAL">部分执行</ToggleGroupItem>
-                <ToggleGroupItem value="COMPLETED">已完成</ToggleGroupItem>
-                <ToggleGroupItem value="VOID">已作废</ToggleGroupItem>
-              </ToggleGroup>
+                aria-label="按状态筛选"
+                inputClassName="w-[9.5rem]"
+                onValueChange={(v) => {
+                  pushUrl({
+                    status: (v as PurchaseOrderStatusFilter | null) ?? "all",
+                    page: 1,
+                  })
+                }}
+              />
             }
             actions={
-              <span className="text-xs text-muted-foreground" aria-live="polite">
-                共 {total.toLocaleString("zh-CN")} 条
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground" aria-live="polite">
+                  共 {total.toLocaleString("zh-CN")} 条
+                </span>
+                {hasActiveFilters ? (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    onClick={clearFilters}
+                  >
+                    清除筛选
+                  </Button>
+                ) : null}
+              </div>
             }
           />
         }
@@ -832,31 +857,20 @@ export function PurchaseOrdersListPage() {
               />
             }
             emptyTitle={
-              statusFilter !== "all" ||
-              effectiveMetric !== "all" ||
-              Boolean(url.q)
+              hasActiveFilters
                 ? "没有符合条件的采购单"
                 : undefined
             }
             emptyDescription="当前筛选没有匹配的采购单，可调整或清除筛选后重试。"
             emptyAction={
               <div className="flex flex-wrap gap-2">
-                {statusFilter !== "all" ||
-                effectiveMetric !== "all" ||
-                Boolean(url.q) ? (
+                {hasActiveFilters ? (
                   <Button
                     type="button"
                     variant="secondary"
                     size="sm"
                     className="rounded-lg shadow-none"
-                    onClick={() =>
-                      pushUrl({
-                        q: undefined,
-                        status: "all",
-                        metric: "all",
-                        page: 1,
-                      })
-                    }
+                    onClick={clearFilters}
                   >
                     清除筛选
                   </Button>

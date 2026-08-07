@@ -246,6 +246,23 @@ function ConnectionList({
   })
 
   const data = listQuery.data
+
+  // D7：常驻/空态清除 = 清全部筛选参数并回第 1 页；environment 属视图类参数按 P4 保留，
+  // 语义通过按钮 title/aria 说明。status/health/catalogFreshness 为逗号分隔多值串
+  // （codec array 语义自洽），保持不变。
+  const clearFilters = React.useCallback(() => {
+    setSearchDraft("")
+    patchUrl({
+      q: undefined,
+      status: undefined,
+      health: undefined,
+      catalogFreshness: undefined,
+      capability: undefined,
+      supplierId: undefined,
+      page: 1,
+    })
+  }, [patchUrl])
+
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: Math.max(0, urlState.page - 1),
     pageSize: urlState.pageSize,
@@ -566,117 +583,76 @@ function ConnectionList({
         />
       ) : null}
 
-      {empty === "FILTER_NO_RESULT" ? (
-        <BusinessEmptyState
-          kind="filter"
-          className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-          title="当前筛选无结果"
-          description="没有连接符合当前环境/状态/能力/健康条件，可清除筛选。"
-          action={
-            <Button
-              type="button"
-              variant="secondary"
-              className="rounded-lg shadow-none"
-              onClick={() =>
-                patchUrl({
-                  status: undefined,
-                  health: undefined,
-                  catalogFreshness: undefined,
-                  q: undefined,
-                  page: 1,
-                })
-              }
-            >
-              清除筛选
-            </Button>
+      {/* D7：空态不再隐藏筛选区——MetricStrip 与 ListToolbar 常驻，仅表格区切换空态 */}
+      <MetricStrip columns={5} aria-label="连接指标筛选">
+        <MetricFilterItem
+          label="已启用"
+          value={data?.metrics.enabled ?? 0}
+          active={urlState.status === "ENABLED"}
+          onClick={() =>
+            patchUrl({
+              status: urlState.status === "ENABLED" ? undefined : "ENABLED",
+              page: 1,
+            })
           }
         />
-      ) : empty === "NO_CONNECTIONS" ? (
-        <BusinessEmptyState
-          kind="no-data"
-          className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-          title="尚未接入供应商连接"
-          description="当前环境还没有连接身份。有权限时可新建连接。"
-          action={
-            data?.hasModulePermission ? (
-              <Button
-                type="button"
-                onClick={() => setCreateOpen(true)}
-              >
-                新建连接
-              </Button>
-            ) : null
+        <MetricFilterItem
+          label="故障"
+          value={data?.metrics.faulted ?? 0}
+          active={urlState.status === "FAULTED"}
+          onClick={() =>
+            patchUrl({
+              status: urlState.status === "FAULTED" ? undefined : "FAULTED",
+              page: 1,
+            })
           }
         />
-      ) : (
-        <>
-          <MetricStrip columns={5} aria-label="连接指标筛选">
-            <MetricFilterItem
-              label="已启用"
-              value={data?.metrics.enabled ?? 0}
-              active={urlState.status === "ENABLED"}
-              onClick={() =>
-                patchUrl({
-                  status:
-                    urlState.status === "ENABLED" ? undefined : "ENABLED",
-                  page: 1,
-                })
-              }
-            />
-            <MetricFilterItem
-              label="故障"
-              value={data?.metrics.faulted ?? 0}
-              active={urlState.status === "FAULTED"}
-              onClick={() =>
-                patchUrl({
-                  status:
-                    urlState.status === "FAULTED" ? undefined : "FAULTED",
-                  page: 1,
-                })
-              }
-            />
-            <MetricFilterItem
-              label="待配置"
-              value={data?.metrics.pendingConfig ?? 0}
-              active={urlState.status === "PENDING_CONFIG"}
-              onClick={() =>
-                patchUrl({
-                  status:
-                    urlState.status === "PENDING_CONFIG"
-                      ? undefined
-                      : "PENDING_CONFIG",
-                  page: 1,
-                })
-              }
-            />
-            <MetricFilterItem
-              label="健康异常"
-              value={data?.metrics.healthAbnormal ?? 0}
-              active={Boolean(urlState.health)}
-              onClick={() =>
-                patchUrl({
-                  health: urlState.health
-                    ? undefined
-                    : "FAILED,AUTH_FAILED,PARTIAL,UNKNOWN",
-                  page: 1,
-                })
-              }
-            />
-            <MetricFilterItem
-              label="目录陈旧"
-              value={data?.metrics.catalogStale ?? 0}
-              active={Boolean(urlState.catalogFreshness)}
-              onClick={() =>
-                patchUrl({
-                  catalogFreshness: urlState.catalogFreshness
-                    ? undefined
-                    : "STALE,FAILED",
-                  page: 1,
-                })
-              }
-            />
-          </MetricStrip>
+        <MetricFilterItem
+          label="待配置"
+          value={data?.metrics.pendingConfig ?? 0}
+          active={urlState.status === "PENDING_CONFIG"}
+          onClick={() =>
+            patchUrl({
+              status:
+                urlState.status === "PENDING_CONFIG"
+                  ? undefined
+                  : "PENDING_CONFIG",
+              page: 1,
+            })
+          }
+        />
+        <MetricFilterItem
+          label="健康异常"
+          value={data?.metrics.healthAbnormal ?? 0}
+          active={Boolean(urlState.health)}
+          onClick={() =>
+            patchUrl({
+              health: urlState.health
+                ? undefined
+                : "FAILED,AUTH_FAILED,PARTIAL,UNKNOWN",
+              page: 1,
+            })
+          }
+        />
+        <MetricFilterItem
+          label="目录陈旧"
+          value={data?.metrics.catalogStale ?? 0}
+          active={Boolean(urlState.catalogFreshness)}
+          onClick={() =>
+            patchUrl({
+              catalogFreshness: urlState.catalogFreshness
+                ? undefined
+                : "STALE,FAILED",
+              page: 1,
+            })
+          }
+        />
+      </MetricStrip>
 
+      <BusinessTableFrame
+        title="连接列表"
+        description="一行展示代码、供应商、环境、状态、能力、健康与下一步；身份与操作列固定；默认仅展示生产环境连接，可在工具栏切换。"
+        toolbar={
           <ListToolbar
             search={
               <InputGroup className="max-w-md">
@@ -697,7 +673,7 @@ function ConnectionList({
               </InputGroup>
             }
             filters={
-              <div className="flex flex-wrap items-center gap-2">
+              <>
                 <OptionCombobox
                   value={urlState.environment}
                   onValueChange={(v) => {
@@ -717,6 +693,7 @@ function ConnectionList({
                   size="sm"
                   placeholder="环境"
                   allowClear={false}
+                  aria-label="环境"
                 />
                 <OptionCombobox
                   value={urlState.status ?? "default"}
@@ -744,30 +721,7 @@ function ConnectionList({
                   size="sm"
                   placeholder="状态"
                   allowClear={false}
-                />
-                <OptionCombobox
-                  value={urlState.capability ?? ""}
-                  onValueChange={(v) =>
-                    patchUrl({
-                      capability: v || undefined,
-                      page: 1,
-                    })
-                  }
-                  options={[
-                    { value: "", label: "全部能力" },
-                    ...(
-                      Object.keys(CAPABILITY_LABEL) as Array<
-                        keyof typeof CAPABILITY_LABEL
-                      >
-                    ).map((k) => ({
-                      value: k,
-                      label: CAPABILITY_LABEL[k],
-                    })),
-                  ]}
-                  className="w-[8rem]"
-                  size="sm"
-                  placeholder="能力"
-                  allowClear={false}
+                  aria-label="连接状态"
                 />
                 <SupplierCombobox
                   value={urlState.supplierId || undefined}
@@ -780,63 +734,115 @@ function ConnectionList({
                   suppliers={supplierOptions ?? []}
                   className="w-[12rem]"
                   placeholder="全部供应商"
+                  aria-label="供应商"
                 />
+              </>
+            }
+            secondary={
+              <OptionCombobox
+                value={urlState.capability ?? ""}
+                onValueChange={(v) =>
+                  patchUrl({
+                    capability: v || undefined,
+                    page: 1,
+                  })
+                }
+                options={[
+                  { value: "", label: "全部能力" },
+                  ...(
+                    Object.keys(CAPABILITY_LABEL) as Array<
+                      keyof typeof CAPABILITY_LABEL
+                    >
+                  ).map((k) => ({
+                    value: k,
+                    label: CAPABILITY_LABEL[k],
+                  })),
+                ]}
+                className="w-[8rem]"
+                size="sm"
+                placeholder="能力"
+                allowClear={false}
+                aria-label="能力"
+              />
+            }
+            actions={
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={clearFilters}
+                title="清除筛选，保留当前环境"
+                aria-label="清除筛选（保留当前环境）"
+              >
+                清除筛选
+              </Button>
+            }
+          />
+        }
+        table={
+          empty === "FILTER_NO_RESULT" ? (
+            <BusinessEmptyState
+              kind="filter"
+              className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+              title="当前筛选无结果"
+              description="没有连接符合当前环境/状态/能力/健康条件，可清除筛选。"
+              action={
                 <Button
                   type="button"
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => {
-                    setSearchDraft("")
-                    patchUrl({
-                      q: undefined,
-                      status: undefined,
-                      health: undefined,
-                      catalogFreshness: undefined,
-                      capability: undefined,
-                      supplierId: undefined,
-                      page: 1,
-                    })
-                  }}
+                  variant="secondary"
+                  className="rounded-lg shadow-none"
+                  onClick={clearFilters}
                 >
                   清除筛选
                 </Button>
-              </div>
-            }
-          />
-
-          <BusinessTableFrame
-            title="连接列表"
-            description="一行展示代码、供应商、环境、状态、能力、健康与下一步；身份与操作列固定；默认仅展示生产环境连接，可在工具栏切换。"
-            table={
-              <DataTable
-                data={data?.items ?? []}
-                columns={columns}
-                getRowId={(row) => row.connectionId}
-                rowCount={data?.total ?? 0}
-                rowLabel={(row) => row.connectionCode}
-                caption="API 供应商连接列表"
-                density="compact"
-                layout="flush"
-                enableColumnPinning
-                defaultColumnVisibility={{ owners: false }}
-                defaultColumnPinning={{
-                  left: ["identity"],
-                  right: ["actions"],
-                }}
-                pagination={pagination}
-                onPaginationChange={(next) => {
-                  setPagination(next)
-                  patchUrl({
-                    page: next.pageIndex + 1,
-                    pageSize: next.pageSize,
-                  })
-                }}
-                onRowOpen={(row) => onOpen(row.connectionId)}
-              />
-            }
-          />
-        </>
-      )}
+              }
+            />
+          ) : empty === "NO_CONNECTIONS" ? (
+            <BusinessEmptyState
+              kind="no-data"
+              className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+              title="尚未接入供应商连接"
+              description="当前环境还没有连接身份。有权限时可新建连接。"
+              action={
+                data?.hasModulePermission ? (
+                  <Button
+                    type="button"
+                    onClick={() => setCreateOpen(true)}
+                  >
+                    新建连接
+                  </Button>
+                ) : null
+              }
+            />
+          ) : (
+            <DataTable
+              data={data?.items ?? []}
+              columns={columns}
+              getRowId={(row) => row.connectionId}
+              rowCount={data?.total ?? 0}
+              rowLabel={(row) => row.connectionCode}
+              caption="API 供应商连接列表"
+              density="compact"
+              layout="flush"
+              enableColumnPinning
+              defaultColumnVisibility={{ owners: false }}
+              defaultColumnPinning={{
+                left: ["identity"],
+                right: ["actions"],
+              }}
+              pagination={pagination}
+              onPaginationChange={(next) => {
+                setPagination(next)
+                patchUrl({
+                  page: next.pageIndex + 1,
+                  pageSize: next.pageSize,
+                })
+              }}
+              onRowOpen={(row) => onOpen(row.connectionId)}
+            />
+          )
+        }
+      />
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent>

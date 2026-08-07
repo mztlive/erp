@@ -75,7 +75,7 @@ export function scopeLabel(scope: QueueScopeSlug): string {
     case "mine":
       return "我的待办"
     case "role_pool":
-      return "待领取"
+      return "团队待认领"
     case "team":
       return "团队"
     case "hold":

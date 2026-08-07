@@ -266,9 +266,44 @@ export function ExecutionProjectionsPage() {
   const bulkMutation = useBulkProjectionCommandMutation()
 
   const [searchDraft, setSearchDraft] = React.useState(q)
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null)
   React.useEffect(() => {
+    // URL 回填时保留焦点保护：输入中不被 URL 旧值覆盖草稿
+    const el = searchInputRef.current
+    if (el && document.activeElement === el) return
     setSearchDraft(q)
   }, [q])
+
+  // P3：搜索 300ms 防抖自动写 URL（replace），Enter 兜底，`/` 聚焦
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchDraft.trim() === q) return
+      replaceParams({ q: searchDraft.trim() || null, page: "1" })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- replaceParams 以当前 URL 快照为准
+  }, [searchDraft])
+
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey)
+        return
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return
+      }
+      event.preventDefault()
+      searchInputRef.current?.focus()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   const [rowSelection, setRowSelection] = React.useState<RowSelectionState>({})
   const [result, setResult] = React.useState<ResultState>(null)
@@ -289,6 +324,30 @@ export function ExecutionProjectionsPage() {
     },
     [pathname, router, searchParams]
   )
+
+  const hasActiveFilters = Boolean(
+    q ||
+      mallId !== "all" ||
+      deliveryStatus !== "all" ||
+      source !== "all" ||
+      latency !== "all" ||
+      reconciliation !== "all" ||
+      metric !== "all"
+  )
+
+  // P4：清搜索词 + 全部筛选参数 + 分页回 1（保留视图/排序/导航上下文参数）
+  const clearFilters = React.useCallback(() => {
+    replaceParams({
+      q: null,
+      mall: null,
+      deliveryStatus: null,
+      source: null,
+      latency: null,
+      reconciliation: null,
+      metric: null,
+      page: null,
+    })
+  }, [replaceParams])
 
   const view = listQuery.data
   const rows = view?.rows ?? []
@@ -795,33 +854,38 @@ export function ExecutionProjectionsPage() {
         ))}
       </MetricStrip>
 
-      <ListToolbar
+      {/* D24：ListToolbar 移入 frame 的 toolbar 槽；批量选择条进 selectionBar 槽（表格正上方） */}
+      <BusinessTableFrame
+        title="执行信息列表"
+        description={
+          <span aria-live="polite">
+            销售单身份列与操作列固定；每页条数可在分页条切换。指标与列表数据均受权限范围控制。
+            {view?.filterSummary ? ` 筛选：${view.filterSummary}` : ""}
+          </span>
+        }
+        toolbar={
+          <ListToolbar
         search={
-          <form
-            className="flex min-w-[14rem] flex-1 gap-2"
-            onSubmit={(e) => {
-              e.preventDefault()
-              replaceParams({ q: searchDraft.trim() || null, page: "1" })
-            }}
-          >
-            <InputGroup className="max-w-sm">
-              <InputGroupAddon>
-                <SearchIcon aria-hidden="true" />
-              </InputGroupAddon>
-              <InputGroupInput
-                value={searchDraft}
-                onChange={(e) => setSearchDraft(e.target.value)}
-                placeholder="销售单号、客户"
-                aria-label="搜索执行信息"
-              />
-            </InputGroup>
-            <Button type="submit" size="sm" variant="secondary">
-              搜索
-            </Button>
-          </form>
+          <InputGroup className="max-w-sm">
+            <InputGroupAddon>
+              <SearchIcon aria-hidden="true" />
+            </InputGroupAddon>
+            <InputGroupInput
+              ref={searchInputRef}
+              value={searchDraft}
+              onChange={(e) => setSearchDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  replaceParams({ q: searchDraft.trim() || null, page: "1" })
+                }
+              }}
+              placeholder="销售单号、客户"
+              aria-label="搜索执行信息"
+            />
+          </InputGroup>
         }
         filters={
-          <div className="flex flex-wrap items-center gap-2">
+          <>
             <OptionCombobox
               aria-label="目标商城"
               value={mallId}
@@ -893,6 +957,10 @@ export function ExecutionProjectionsPage() {
               allowClear={false}
               placeholder="等待时长：全部"
             />
+          </>
+        }
+        secondary={
+          <>
             <OptionCombobox
               aria-label="版本差异"
               value={reconciliation}
@@ -928,74 +996,70 @@ export function ExecutionProjectionsPage() {
               allowClear={false}
               placeholder="来源：全部"
             />
-          </div>
+          </>
         }
         actions={
           <span className="text-xs text-muted-foreground">
-            {view?.filterSummary}
-            {" · "}
             <span className="num">{total}</span> 条
           </span>
         }
-      />
-
-      {selectedIds.length > 0 ? (
-        <div
-          role="region"
-          aria-label="批量选择"
-          className={cn(
-            surfaceInsetClassName,
-            "flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
-          )}
-        >
-          <span>
-            已选择{" "}
-            <span className="num font-medium">{selectedIds.length}</span>{" "}
-            项（批量操作仅作用于显式选择，不含当前筛选全部）
-            {bulkOverLimit ? (
-              <span className="ml-2 text-destructive">
-                批量最多 {BULK_SELECTION_LIMIT} 条，超出部分请分批
-              </span>
-            ) : null}
-          </span>
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              onClick={() => setRowSelection({})}
-            >
-              清除选择
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={bulkOverLimit || bulkMutation.isPending}
-              onClick={() =>
-                setPendingAction({ kind: "BULK_QUERY", ids: selectedIds })
-              }
-            >
-              批量查询
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              disabled={bulkOverLimit || bulkMutation.isPending}
-              onClick={() =>
-                setPendingAction({ kind: "BULK_RETRY", ids: selectedIds })
-              }
-            >
-              批量重试
-            </Button>
+        />
+      }
+      selectionBar={
+        selectedIds.length > 0 ? (
+          <div
+            role="region"
+            aria-label="批量选择"
+            className={cn(
+              surfaceInsetClassName,
+              "flex flex-wrap items-center justify-between gap-2 px-3 py-2 text-sm"
+            )}
+          >
+            <span>
+              已选择{" "}
+              <span className="num font-medium">{selectedIds.length}</span>{" "}
+              项（批量操作仅作用于显式选择，不含当前筛选全部）
+              {bulkOverLimit ? (
+                <span className="ml-2 text-destructive">
+                  批量最多 {BULK_SELECTION_LIMIT} 条，超出部分请分批
+                </span>
+              ) : null}
+            </span>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => setRowSelection({})}
+              >
+                清除选择
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={bulkOverLimit || bulkMutation.isPending}
+                onClick={() =>
+                  setPendingAction({ kind: "BULK_QUERY", ids: selectedIds })
+                }
+              >
+                批量查询
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                disabled={bulkOverLimit || bulkMutation.isPending}
+                onClick={() =>
+                  setPendingAction({ kind: "BULK_RETRY", ids: selectedIds })
+                }
+              >
+                批量重试
+              </Button>
+            </div>
           </div>
-        </div>
-      ) : null}
-
-      <BusinessTableFrame
-        title="执行信息列表"
-        description="销售单身份列与操作列固定；每页条数可在分页条切换。指标与列表数据均受权限范围控制。"
-        table={
+        ) : undefined
+      }
+      table={
           <DataTable
             columns={columns}
             data={rows}
@@ -1038,38 +1102,37 @@ export function ExecutionProjectionsPage() {
             }}
             emptyState={
               rows.length === 0 ? (
-                <BusinessEmptyState
-                  kind="filter"
-                  title="没有匹配的执行信息"
-                  description={
-                    view?.filterSummary
-                      ? `当前筛选：${view.filterSummary}`
-                      : "可清除筛选或返回销售单查看协同。"
-                  }
-                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                  action={
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="secondary"
-                      className="rounded-lg shadow-none"
-                      onClick={() =>
-                        replaceParams({
-                          q: null,
-                          mall: null,
-                          deliveryStatus: null,
-                          source: null,
-                          latency: null,
-                          reconciliation: null,
-                          metric: null,
-                          page: null,
-                        })
-                      }
-                    >
-                      清除筛选
-                    </Button>
-                  }
-                />
+                hasActiveFilters ? (
+                  <BusinessEmptyState
+                    kind="filter"
+                    title="没有匹配的执行信息"
+                    description={
+                      view?.filterSummary
+                        ? `当前筛选：${view.filterSummary}`
+                        : "可清除筛选或返回销售单查看协同。"
+                    }
+                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                    action={
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="secondary"
+                        className="rounded-lg shadow-none"
+                        onClick={clearFilters}
+                      >
+                        清除筛选
+                      </Button>
+                    }
+                  />
+                ) : (
+                  // D24：无筛选时空态不引导「清除筛选」，避免误导
+                  <BusinessEmptyState
+                    kind="no-data"
+                    title="当前范围没有执行信息"
+                    description="销售记录尚未形成发送记录；新数据到达后会自动显示。"
+                    className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                  />
+                )
               ) : undefined
             }
           />

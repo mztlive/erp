@@ -169,7 +169,7 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 
 ### 6.1 默认状态
 
-- 默认视图：`scope=mine`、`due=all-active`（`scope=mine` 仅含个人任务；角色池任务仅当 `scope=role_pool` 时展示）。
+- 默认视图：`scope=mine`、`due=all-active`（`scope=mine` 仅含个人任务；角色池任务仅当 `scope=role_pool` 时展示）。scope 控件文案「我的待办 / 团队待认领」。
 - 默认展示全部有权任务族；无任务的组不渲染空容器。
 - 每组首批数量必须使用服务端工作台配置的 `pagePreviewLimit`；超过时必须显示“查看该组全部 N 条”并进入 W02。仅当服务端未返回配置时，前端必须以 5 条作为展示回退，并标记 `previewLimitSource=TEMPORARY_FALLBACK`；该回退值禁止写入正式接口契约，也不得作为验收硬约束数字。
 - W01 禁止无限滚动；跨组浏览和批量治理必须进入 W02。
@@ -190,6 +190,8 @@ TaskTabs 身份固定为 `workspace:today:{userId}`。同一用户重复打开 W
 2. 主区标题和结果数量使用 `aria-live=polite` 播报；
 3. 请求期间保留旧任务并显示轻量刷新状态；
 4. 浏览器后退恢复之前的筛选，而不是重置到首页。
+
+筛选/指标变更一律 `router.replace`，不膨胀历史（P2）。`scope` 计入激活筛选：`scope=role_pool` 无任务时走「当前筛选无结果」空态并提供「清除筛选」。
 
 工作台不提供对象全文搜索；稳定单号和基础资料名称使用应用壳全局搜索，复杂任务查询进入 W02。
 

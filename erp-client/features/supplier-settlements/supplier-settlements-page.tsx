@@ -289,17 +289,39 @@ function SettlementList({
   })
 
   const data = listQuery.data
-  const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: Math.max(0, urlState.page - 1),
-    pageSize: 50,
-  })
-
-  React.useEffect(() => {
-    setPagination((p) => ({
-      ...p,
+  // D22：分页以 URL 为唯一事实源（page），本地不再持有副本，避免双写漂移；
+  // pageSize 固定 50 不入 URL。排序：财务列表不强制加排序（服务端无排序参数），记录在案。
+  const pagination = React.useMemo<PaginationState>(
+    () => ({
       pageIndex: Math.max(0, urlState.page - 1),
-    }))
-  }, [urlState.page])
+      pageSize: 50,
+    }),
+    [urlState.page]
+  )
+
+  // P4：清除=清全部筛选参数、view 回 pending（保持原清除语义）、分页回第 1 页；
+  // 保留 preview/statementId/returnTo 等导航上下文。空态与工具栏常驻清除共用（D22）。
+  const hasActiveFilters = Boolean(
+    urlState.supplierId ||
+      urlState.periodFrom ||
+      urlState.periodTo ||
+      urlState.status ||
+      urlState.differenceType ||
+      urlState.q ||
+      urlState.view !== "pending"
+  )
+  const clearFilters = React.useCallback(() => {
+    patchUrl({
+      view: "pending",
+      supplierId: undefined,
+      status: undefined,
+      differenceType: undefined,
+      q: undefined,
+      periodFrom: undefined,
+      periodTo: undefined,
+      page: 1,
+    })
+  }, [patchUrl])
 
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -619,6 +641,8 @@ function SettlementList({
 
       {data?.hasModulePermission && data.hasDataScope ? (
         <MetricStrip columns={4} aria-label="结算快捷筛选">
+          {/* 指标与「差异类型」下拉为双入口（D22 保留）：指标点击时同步清 differenceType，
+              避免 status 指标与差异类型组合出矛盾空结果；下拉单独选择差异类型不重置指标。 */}
           <MetricFilterItem
             label="待处理"
             value={data.totals.pendingReconcile}
@@ -668,7 +692,12 @@ function SettlementList({
             }
             active={urlState.view === "confirmed"}
             onClick={() =>
-              patchUrl({ view: "confirmed", status: undefined, page: 1 })
+              patchUrl({
+                view: "confirmed",
+                status: undefined,
+                differenceType: undefined,
+                page: 1,
+              })
             }
           />
         </MetricStrip>
@@ -739,7 +768,7 @@ function SettlementList({
               </div>
             }
             filters={
-              <div className="flex flex-wrap items-center gap-2">
+              <>
                 <SupplierCombobox
                   value={urlState.supplierId || undefined}
                   onValueChange={(id) =>
@@ -807,6 +836,10 @@ function SettlementList({
                   aria-label="差异类型"
                   allowClear={false}
                 />
+              </>
+            }
+            secondary={
+              <>
                 <label className="flex items-center gap-1 text-xs text-muted-foreground">
                   期间自
                   <DatePicker
@@ -833,12 +866,24 @@ function SettlementList({
                     }
                   />
                 </label>
-              </div>
+              </>
             }
             actions={
-              <span className="text-xs text-muted-foreground" aria-live="polite">
-                共 {(data?.total ?? 0).toLocaleString("zh-CN")} 条
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground" aria-live="polite">
+                  共 {(data?.total ?? 0).toLocaleString("zh-CN")} 条
+                </span>
+                {hasActiveFilters ? (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    onClick={clearFilters}
+                  >
+                    清除筛选
+                  </Button>
+                ) : null}
+              </div>
             }
           />
         }
@@ -856,18 +901,7 @@ function SettlementList({
                       type="button"
                       variant="secondary"
                       className="rounded-lg shadow-none"
-                      onClick={() =>
-                        patchUrl({
-                          view: "pending",
-                          supplierId: undefined,
-                          status: undefined,
-                          differenceType: undefined,
-                          q: undefined,
-                          periodFrom: undefined,
-                          periodTo: undefined,
-                          page: 1,
-                        })
-                      }
+                      onClick={clearFilters}
                     >
                       清除筛选
                     </Button>
@@ -897,7 +931,7 @@ function SettlementList({
               rowCount={data?.total ?? 0}
               pagination={pagination}
               onPaginationChange={(next) => {
-                setPagination(next)
+                // D22：只写 URL，分页由 URL 派生，消除本地/URL 双写漂移
                 patchUrl({ page: next.pageIndex + 1 })
               }}
               columnPinning={columnPinning}

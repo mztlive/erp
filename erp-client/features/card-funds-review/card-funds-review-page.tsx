@@ -25,6 +25,7 @@ import {
   FormalActionResult,
   MetricItem,
   MetricStrip,
+  ListToolbar,
   OptionCombobox,
   PageHeader,
   PageScaffold,
@@ -269,16 +270,8 @@ export function CardFundsReviewPage() {
     setSearchInput(q ?? "")
   }, [q])
 
-  React.useEffect(() => {
-    const handle = globalThis.setTimeout(() => {
-      if (searchInput.trim() === (q ?? "")) return
-      replaceUrl({ q: searchInput.trim() || null, currentWorkItemId: null })
-    }, 300)
-    return () => globalThis.clearTimeout(handle)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchInput])
-
-  // URL 默认：保留 queueContextId / type / scope / currentWorkItemId
+  // URL 默认：保留 queueContextId / scope / currentWorkItemId；
+  // type 默认「all」不写 URL（默认值省略，D18）
   React.useEffect(() => {
     if (queueQuery.isPending || !view) return
     const hasScope = searchParams.has("scope")
@@ -288,12 +281,13 @@ export function CardFundsReviewPage() {
     if (hasScope && hasType && hasCtx && (hasItem || tasks.length === 0)) return
     const params = new URLSearchParams(searchParams.toString())
     if (!hasScope) params.set("scope", scope)
-    if (!hasType) params.set("type", type)
+    if (!hasType && type !== "all") params.set("type", type)
     if (!hasCtx) params.set("queueContextId", queueContextId)
     if (!hasItem && task) {
       params.set("currentWorkItemId", task.workItem.workItemId)
     }
     const qs = params.toString()
+    if (qs === searchParams.toString()) return
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
   }, [
     queueQuery.isPending,
@@ -365,6 +359,16 @@ export function CardFundsReviewPage() {
     [pathname, queueContextId, router, searchParams]
   )
 
+  // 300ms 防抖写 URL；q/replaceUrl 入依赖保证闭包不陈旧，
+  // 避免防抖期间切换 scope/type 等参数后被旧 URL 快照覆盖（D18 竞态）
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchInput.trim() === (q ?? "")) return
+      replaceUrl({ q: searchInput.trim() || null, currentWorkItemId: null })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+  }, [q, replaceUrl, searchInput])
+
   const goToWorkItem = React.useCallback(
     (workItemId: string | undefined | null) => {
       setLastResult(null)
@@ -376,6 +380,26 @@ export function CardFundsReviewPage() {
     },
     [queueContextId, replaceUrl]
   )
+
+  // 清除筛选：清 type/status/due/q + 焦点，保留 scope/queueContextId（P4）。
+  // type 不写默认值「all」，遵循 URL 最小化（默认值省略语义，D18）
+  const hasActiveQueueFilters = Boolean(
+    q ||
+      status === "held" ||
+      due !== "all" ||
+      type !== "all"
+  )
+
+  const clearFilters = React.useCallback(() => {
+    setSearchInput("")
+    replaceUrl({
+      type: null,
+      status: null,
+      due: null,
+      q: null,
+      currentWorkItemId: null,
+    })
+  }, [replaceUrl])
 
   const neighborId = React.useCallback(
     (delta: number) => {
@@ -895,8 +919,9 @@ export function CardFundsReviewPage() {
       />
 
       <div
-        className={`${surfacePanelClassName} sticky top-0 z-10 flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm`}
+        className={`${surfacePanelClassName} sticky top-0 z-10 space-y-2.5 px-3 py-2.5 text-sm`}
       >
+        <div className="flex flex-wrap items-center gap-3">
         <div
           role="group"
           aria-label="责任范围"
@@ -904,8 +929,8 @@ export function CardFundsReviewPage() {
         >
           {(
             [
-              { value: "mine" as const, label: "仅我的" },
-              { value: "role_pool" as const, label: "团队" },
+              { value: "mine" as const, label: "我的待办" },
+              { value: "role_pool" as const, label: "团队待认领" },
             ] as const
           ).map((opt) => (
             <button
@@ -1025,30 +1050,38 @@ export function CardFundsReviewPage() {
             </button>
           ))}
         </div>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="auto-next" className="text-muted-foreground">
-            自动下一项
-          </Label>
-          <Switch
-            id="auto-next"
-            checked={autoNext}
-            onCheckedChange={(on) => {
-              setSessionAutoNext(on)
-              replaceUrl({ autoNext: on ? "1" : "0" })
-            }}
-          />
-        </div>
-        <InputGroup className="max-w-56">
-          <InputGroupAddon>
-            <SearchIcon className="size-4" aria-hidden="true" />
-          </InputGroupAddon>
-          <InputGroupInput
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="搜索单号 / 客户 / 往来主体"
-            aria-label="搜索复核队列"
-          />
-        </InputGroup>
+      </div>
+        <ListToolbar
+          aria-label="票款复核筛选"
+          search={
+            <InputGroup>
+              <InputGroupAddon>
+                <SearchIcon className="size-4" aria-hidden="true" />
+              </InputGroupAddon>
+              <InputGroupInput
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                placeholder="搜索单号 / 客户 / 往来主体"
+                aria-label="搜索复核队列"
+              />
+            </InputGroup>
+          }
+          actions={
+            <div className="flex items-center gap-2">
+              <Label htmlFor="auto-next" className="text-muted-foreground">
+                自动下一项
+              </Label>
+              <Switch
+                id="auto-next"
+                checked={autoNext}
+                onCheckedChange={(on) => {
+                  setSessionAutoNext(on)
+                  replaceUrl({ autoNext: on ? "1" : "0" })
+                }}
+              />
+            </div>
+          }
+        />
       </div>
 
       {lastResult ? (
@@ -1113,15 +1146,27 @@ export function CardFundsReviewPage() {
         <BusinessEmptyState
           kind="no-tasks"
           title="当前筛选项已处理完"
-          description="卡券票款复核有效队列已清空。可切换类型/跳过范围，或返回工作台。"
+          description="卡券票款复核有效队列已清空。可清除筛选、切换类型/跳过范围，或返回工作台。"
           action={
-            <Button
-              variant="secondary"
-              className="rounded-lg shadow-none"
-              render={<Link href="/workspace" />}
-            >
-              返回今日工作台
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              {hasActiveQueueFilters ? (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="rounded-lg shadow-none"
+                  onClick={clearFilters}
+                >
+                  清除筛选
+                </Button>
+              ) : null}
+              <Button
+                variant="secondary"
+                className="rounded-lg shadow-none"
+                render={<Link href="/workspace" />}
+              >
+                返回今日工作台
+              </Button>
+            </div>
           }
         />
       ) : task ? (
@@ -1884,15 +1929,7 @@ export function CardFundsReviewPage() {
               type="button"
               variant="secondary"
               className="rounded-lg shadow-none"
-              onClick={() =>
-                replaceUrl({
-                  type: "all",
-                  status: null,
-                  due: null,
-                  q: null,
-                  currentWorkItemId: null,
-                })
-              }
+              onClick={clearFilters}
             >
               清除筛选
             </Button>

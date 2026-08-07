@@ -24,6 +24,7 @@ import {
   BusinessStatusBadge,
   DataFreshness,
   FormalActionResult,
+  ListToolbar,
   PageActions,
   PageHeader,
   PageScaffold,
@@ -58,36 +59,6 @@ import {
   type MasterDataListItem,
 } from "@/features/master-data/types"
 
-function ResourceNav({
-  resource,
-  navRef,
-}: {
-  resource: string
-  navRef: React.RefObject<HTMLElement | null>
-}) {
-  return (
-    <nav
-      ref={navRef}
-      aria-label={masterDataCopy.resourceNavAria}
-      className="flex flex-wrap gap-2 border-b border-border/30 pb-3"
-    >
-      {MASTER_DATA_RESOURCES.map((item) => {
-        const selected = item.key === resource
-        return (
-          <Button
-            key={item.key}
-            size="sm"
-            aria-current={selected ? "page" : undefined}
-            variant={selected ? "secondary" : "ghost"}
-            render={<Link href={`/master-data/${item.key}`} />}
-          >
-            {item.label}
-          </Button>
-        )
-      })}
-    </nav>
-  )
-}
 
 function TreeRow({
   node,
@@ -312,7 +283,6 @@ export function CategoryTreePage({
     return (
       <PageScaffold density="compact">
         <PageHeader title={masterDataCopy.pageTitle("商品分类")} />
-        <ResourceNav resource="categories" navRef={navRef} />
         <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
       </PageScaffold>
     )
@@ -322,7 +292,6 @@ export function CategoryTreePage({
     return (
       <PageScaffold density="compact">
         <PageHeader title={masterDataCopy.pageTitle("商品分类")} />
-        <ResourceNav resource="categories" navRef={navRef} />
         <BusinessFailureState
           kind="system"
           description={masterDataCopy.centerLoadFail}
@@ -392,7 +361,6 @@ export function CategoryTreePage({
         }
       />
 
-      <ResourceNav resource="categories" navRef={navRef} />
 
       <p className="text-sm text-muted-foreground">
         {masterDataCopy.categoryTreeDesc(rows.length)}
@@ -405,46 +373,64 @@ export function CategoryTreePage({
         </p>
       ) : null}
 
-      <div className="flex flex-wrap items-center gap-2">
-        <InputGroup className="max-w-xs">
-          <InputGroupAddon>
-            <SearchIcon aria-hidden />
-          </InputGroupAddon>
-          <InputGroupInput
-            ref={searchInputRef}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={masterDataCopy.categoryTreeSearch}
-            aria-label={masterDataCopy.categoryTreeSearch}
-          />
-        </InputGroup>
-        <div className="flex gap-1">
-          {(
-            [
-              ["all", "全部"],
-              ["enabled", "启用"],
-              ["disabled", "停用"],
-            ] as const
-          ).map(([value, label]) => (
-            <Button
-              key={value}
-              type="button"
-              size="sm"
-              variant={lifecycleStatus === value ? "secondary" : "ghost"}
-              onClick={() => setLifecycleStatus(value)}
+      <div className={`${surfacePanelClassName} px-3 py-2.5`}>
+        <ListToolbar
+          aria-label="分类树筛选"
+          search={
+            <InputGroup>
+              <InputGroupAddon>
+                <SearchIcon aria-hidden />
+              </InputGroupAddon>
+              <InputGroupInput
+                ref={searchInputRef}
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={masterDataCopy.categoryTreeSearch}
+                aria-label={masterDataCopy.categoryTreeSearch}
+              />
+            </InputGroup>
+          }
+          filters={
+            <div
+              role="group"
+              aria-label="生命周期"
+              className="inline-flex gap-1"
             >
-              {label}
-            </Button>
-          ))}
-        </div>
-        <div className="ml-auto flex gap-1">
-          <Button type="button" size="sm" variant="ghost" onClick={expandAll}>
-            {masterDataCopy.categoryExpandAll}
-          </Button>
-          <Button type="button" size="sm" variant="ghost" onClick={collapseAll}>
-            {masterDataCopy.categoryCollapseAll}
-          </Button>
-        </div>
+              {(
+                [
+                  ["all", "全部"],
+                  ["enabled", "启用"],
+                  ["disabled", "停用"],
+                ] as const
+              ).map(([value, label]) => (
+                <Button
+                  key={value}
+                  type="button"
+                  size="sm"
+                  variant={lifecycleStatus === value ? "secondary" : "ghost"}
+                  onClick={() => setLifecycleStatus(value)}
+                >
+                  {label}
+                </Button>
+              ))}
+            </div>
+          }
+          actions={
+            <>
+              <Button type="button" size="sm" variant="ghost" onClick={expandAll}>
+                {masterDataCopy.categoryExpandAll}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={collapseAll}
+              >
+                {masterDataCopy.categoryCollapseAll}
+              </Button>
+            </>
+          }
+        />
       </div>
 
       <div className="grid min-h-[28rem] gap-3 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">

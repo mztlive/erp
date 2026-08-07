@@ -31,6 +31,8 @@ import {
   WorkflowIcon,
 } from "lucide-react"
 
+import { hasAnyPermission } from "@/lib/permissions"
+
 /** 页面模式（文档用语；不在 UI 文案中展示代码）。 */
 export type WorkspaceMode =
   | "M1"
@@ -93,6 +95,11 @@ export type WorkspaceNavItem = Readonly<{
   label: string
   icon: LucideIcon
   badge?: WorkspaceNavBadgeKey
+  /**
+   * 进入该入口所需的模块权限（`resource:action`，OR）。
+   * 用户有效权限能覆盖其中任一条时展示；空数组视为无门槛（仅登录态）。
+   */
+  requiredPermissions: readonly string[]
 }>
 
 export type WorkspaceNavGroup = Readonly<{
@@ -119,12 +126,113 @@ type WorkspaceNavItemSpec = Readonly<{
   badge?: WorkspaceNavBadgeKey
   href?: string
   label?: string
+  /**
+   * 覆盖默认模块权限。默认见 `defaultNavPermissionsFor`。
+   * 多资源工作面（如 W14）按具体 href 传入。
+   */
+  requiredPermissions?: readonly string[]
 }>
 
 type WorkspaceNavGroupSpec = Readonly<{
   label: string
   items: readonly WorkspaceNavItemSpec[]
 }>
+
+/**
+ * 工作面默认入口权限（对齐各域 list/入口动作）。
+ * 与预定义角色种子、handler `#[permission(...)]` 一致；前端仅做展示裁剪，鉴权以服务端为准。
+ */
+function defaultNavPermissionsFor(
+  routeId: WorkspaceId,
+  href: string
+): readonly string[] {
+  switch (routeId) {
+    case "W01":
+    case "W02":
+      return ["work_item:list"]
+    case "W03":
+      return ["customer:list"]
+    case "W04":
+      return ["contract:list"]
+    case "W05":
+    case "W06":
+      return ["sales_order:list"]
+    case "W07":
+      return ["procurement_confirmation:list"]
+    case "W08":
+      return ["purchase_order:list"]
+    case "W09":
+      // 仓储 lane 偏收货；采购 lane 偏交付/代发。任一入口动作即可显示对应菜单。
+      if (href.includes("lane=warehouse")) {
+        return ["purchase_receipt:list", "delivery:list"]
+      }
+      return [
+        "delivery:list",
+        "electronic_delivery:list",
+        "service_fulfillment:list",
+        "purchase_receipt:list",
+      ]
+    case "W10":
+      return ["stock_balance:list"]
+    case "W11":
+      return ["receivable_account:list"]
+    case "W12":
+      return ["payable_account:list"]
+    case "W13":
+      return ["receivable_funds_review:create", "receivable_account:list"]
+    case "W14":
+      return masterDataPermissionsForHref(href)
+    case "W15":
+      return ["customer:list"]
+    case "W16":
+      return ["cost_entry:list", "sales_order:list"]
+    case "W17":
+      return [
+        "mall_sales_sync_job:list",
+        "master_mapping_task:list",
+        "source_system:list",
+      ]
+    case "W18":
+      return ["legacy_import_batch:list"]
+    case "W19":
+      return ["role:list", "audit_log:list", "permission:list", "admin:list"]
+    case "W20":
+      return ["supplier_api_connection:list"]
+    case "W21":
+      return ["supplier_catalog_product:list"]
+    case "W22":
+      return ["product_publication:list"]
+    case "W23":
+      return ["sales_order_projection:list"]
+    case "W25":
+      return ["mall_order:list"]
+    case "W26":
+      return ["supplier_fulfillment_order:list"]
+    case "W27":
+      return ["supplier_settlement_statement:list"]
+    case "W28":
+      return ["mall_order:list", "mall_card_instance:list"]
+    case "W29":
+      return ["integration_error_task:list", "reconciliation_difference:list"]
+    case "W30":
+      return ["mall_consumption_backfill_job:list"]
+    default:
+      return []
+  }
+}
+
+/** W14 按资源路径映射入口 list 权限。 */
+function masterDataPermissionsForHref(href: string): readonly string[] {
+  if (href.includes("/master-data/categories")) return ["product_category:list"]
+  if (href.includes("/master-data/brands")) return ["product_brand:list"]
+  if (href.includes("/master-data/voucher-categories")) {
+    return ["voucher_category_profile:list"]
+  }
+  if (href.includes("/master-data/suppliers")) return ["supplier:list"]
+  if (href.includes("/master-data/warehouses")) return ["warehouse:list"]
+  // 公司商品池 / 商品与 SKU
+  return ["product:list", "sku:list"]
+}
 
 function buildWorkspaceNavGroups(
   groups: readonly WorkspaceNavGroupSpec[]
@@ -133,15 +241,39 @@ function buildWorkspaceNavGroups(
     label: group.label,
     items: group.items.map((spec) => {
       const route = getWorkspaceById(spec.routeId)
+      const href = spec.href ?? route.navHref
       return {
         id: spec.routeId,
-        href: spec.href ?? route.navHref,
+        href,
         label: spec.label ?? route.name,
         icon: spec.icon,
+        requiredPermissions:
+          spec.requiredPermissions ?? defaultNavPermissionsFor(spec.routeId, href),
         ...(spec.badge ? { badge: spec.badge } : {}),
       }
     }),
   }))
+}
+
+/**
+ * 按用户有效权限裁剪侧栏分组。
+ * - 无模块权限：不展示入口（erp-ui-design §3.3）
+ * - 分组内无可见项时整组隐藏
+ * - 权限尚未加载时返回空（fail-closed，避免先闪后藏）
+ */
+export function filterNavGroupsByPermissions(
+  groups: readonly WorkspaceNavGroup[],
+  permissions: readonly string[] | undefined | null
+): WorkspaceNavGroup[] {
+  if (!permissions) return []
+  return groups
+    .map((group) => ({
+      label: group.label,
+      items: group.items.filter((item) =>
+        hasAnyPermission(permissions, item.requiredPermissions)
+      ),
+    }))
+    .filter((group) => group.items.length > 0)
 }
 
 /** Full W01–W30 index aligned with docs/ui-workspaces/README.md. */

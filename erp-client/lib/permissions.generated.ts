@@ -1396,7 +1396,7 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/voucher-category-profiles",
+                path: "/admin/voucher-categories",
                 description: "创建卡券类目",
                 permission: {
                     resource: "voucher_category_profile",

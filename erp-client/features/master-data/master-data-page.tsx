@@ -2,7 +2,7 @@
 
 import * as React from "react"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import {
   BanIcon,
   DownloadIcon,
@@ -22,6 +22,7 @@ import {
   FormalActionResult,
   ListToolbar,
   MetricFilterItem,
+  MetricItem,
   MetricStrip,
   OptionCombobox,
   PageActions,
@@ -45,7 +46,6 @@ import {
   masterDataCopy,
   masterDataSearchPlaceholder,
   lifecycleFilterLabel,
-  metricFilterLabel,
   revisionTimingFilterLabel,
 } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
@@ -199,23 +199,41 @@ function MasterDataListWorkspace({
   lastFocusedRowId: React.MutableRefObject<string | null>
 }) {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   /** 商品（SPU）走详情页，不用侧边 sheet。 */
   const isProductResource = resource === "products"
   /** 供应商走详情页（查看与编辑同一页面），不用侧边 sheet / 编辑弹窗。 */
   const isSupplierResource = resource === "suppliers"
+  /** 卡券类目新建走专属页面（原子创建 Product+SKU+类目扩展修订）；查看/更新仍走通用弹窗。 */
+  const isVoucherCategoryResource = resource === "voucher-categories"
   const skipPreviewSheet = isProductResource || isSupplierResource
   /** 品牌 / 分类字典不展示生效期间列。 */
   const showEffectiveColumn = resource !== "brands"
-  const [search, setSearch] = React.useState("")
-  const [lifecycleStatus, setLifecycleStatus] = React.useState<
-    "enabled" | "disabled" | "all"
-  >("all")
-  const [revisionTiming, setRevisionTiming] = React.useState<
-    "current" | "future" | "all"
-  >("all")
-  const [metricKey, setMetricKey] = React.useState("all")
+
+  // ── 筛选与分页唯一事实源 = URL（刷新/后退/分享一致） ──
+  const q = searchParams.get("q") ?? ""
+  const lifecycleStatusParam = searchParams.get("lifecycleStatus")
+  const lifecycleStatus: "enabled" | "disabled" | "all" =
+    lifecycleStatusParam === "enabled" || lifecycleStatusParam === "disabled"
+      ? lifecycleStatusParam
+      : "all"
+  const revisionTimingParam = searchParams.get("revisionTiming")
+  const revisionTiming: "current" | "future" | "all" =
+    revisionTimingParam === "current" || revisionTimingParam === "future"
+      ? revisionTimingParam
+      : "all"
+  /** 指标态保留在 URL：与 lifecycleStatus 同源写入，只做展示不做筛选。 */
+  const metricKey = searchParams.get("metricKey") ?? "all"
+  const pageParamRaw = Number(searchParams.get("page"))
+  const pageParamIndex =
+    Number.isFinite(pageParamRaw) && pageParamRaw > 0
+      ? Math.max(0, Math.floor(pageParamRaw) - 1)
+      : 0
+
+  const [searchDraft, setSearchDraft] = React.useState(q)
   const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
+    pageIndex: pageParamIndex,
     pageSize: 20,
   })
   const [previewId, setPreviewId] = React.useState<string | null>(null)
@@ -230,23 +248,91 @@ function MasterDataListWorkspace({
     filterSnapshotLabel: string
   } | null>(null)
 
-  // 切换资源时重置筛选条件，避免旧分类的搜索/指标残留导致新分类首屏为空且无提示。
+  const patchUrl = React.useCallback(
+    (patch: Record<string, string | null>) => {
+      const next = new URLSearchParams(searchParams.toString())
+      for (const [key, value] of Object.entries(patch)) {
+        if (value == null || value === "") next.delete(key)
+        else next.set(key, value)
+      }
+      const qs = next.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+    },
+    [pathname, router, searchParams]
+  )
+
+  const resetPagination = React.useCallback(() => {
+    setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
+  }, [])
+
+  const changeLifecycle = React.useCallback(
+    (next: "enabled" | "disabled" | "all") => {
+      if (next === lifecycleStatus) return
+      patchUrl({
+        lifecycleStatus: next === "all" ? null : next,
+        metricKey: next === "all" ? null : next,
+        page: null,
+      })
+      resetPagination()
+    },
+    [lifecycleStatus, patchUrl, resetPagination]
+  )
+
+  const changeRevisionTiming = React.useCallback(
+    (next: "current" | "future" | "all") => {
+      if (next === revisionTiming) return
+      patchUrl({ revisionTiming: next === "all" ? null : next, page: null })
+      resetPagination()
+    },
+    [patchUrl, resetPagination, revisionTiming]
+  )
+
+  const clearAllFilters = React.useCallback(() => {
+    setSearchDraft("")
+    patchUrl({
+      q: null,
+      lifecycleStatus: null,
+      metricKey: null,
+      revisionTiming: null,
+      page: null,
+    })
+    resetPagination()
+  }, [patchUrl, resetPagination])
+
+  // URL 回填草稿（后退/前进）；输入中不被覆盖：URL 只在防抖落盘后变化
   React.useEffect(() => {
-    setSearch("")
-    setLifecycleStatus("all")
-    setRevisionTiming("all")
-    setMetricKey("all")
-    setPagination((p) => ({ ...p, pageIndex: 0 }))
+    setSearchDraft(q)
+  }, [q])
+
+  // P3 搜索：300ms 防抖写 URL，Enter 兜底（/ 聚焦在页面级已挂）
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchDraft.trim() === q) return
+      patchUrl({ q: searchDraft.trim() || null, page: null })
+      resetPagination()
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl 以当前 URL 快照为准
+  }, [searchDraft])
+
+  // URL page 回读（后退/前进/分享恢复）
+  React.useEffect(() => {
+    setPagination((p) => ({ ...p, pageIndex: pageParamIndex }))
+  }, [pageParamIndex])
+
+  // 切换资源时重置本地 UI 状态（筛选来自新 URL，天然为空）
+  React.useEffect(() => {
     setPreviewId(null)
     setExportMeta(null)
   }, [resource])
 
   const listQuery = useMasterDataListQuery({
     resource,
-    q: search,
+    q: q.trim() || undefined,
     lifecycleStatus,
     revisionTiming,
-    metricKey,
+    // metricKey 只做展示不做筛选：指标与 ToggleGroup 共用 lifecycleStatus 状态源
+    metricKey: undefined,
   })
 
   const rows = React.useMemo(
@@ -268,10 +354,6 @@ function MasterDataListWorkspace({
     const start = pagination.pageIndex * pagination.pageSize
     return rows.slice(start, start + pagination.pageSize)
   }, [pagination.pageIndex, pagination.pageSize, rows])
-
-  const resetPagination = React.useCallback(() => {
-    setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
-  }, [])
 
   /** 指标与当前搜索/启停/版本筛选同步，避免「全部 3」与表格行数矛盾。 */
   const syncedMetrics = React.useMemo(() => {
@@ -299,11 +381,10 @@ function MasterDataListWorkspace({
       `分类=${resourceLabel(resource)}`,
       `启用状态=${lifecycleFilterLabel(lifecycleStatus)}`,
       `版本状态=${revisionTimingFilterLabel(revisionTiming)}`,
-      `指标=${metricFilterLabel(metricKey)}`,
-      search.trim() ? `搜索=${search.trim()}` : "搜索=空",
+      q.trim() ? `搜索=${q.trim()}` : "搜索=空",
     ]
     return parts.join(" · ")
-  }, [lifecycleStatus, metricKey, resource, revisionTiming, search])
+  }, [lifecycleStatus, q, resource, revisionTiming])
 
   const handleExport = React.useCallback(() => {
     if (!listQuery.data || rows.length === 0) return
@@ -527,10 +608,9 @@ function MasterDataListWorkspace({
 
   const listLoadFailed = listQuery.isError || !listQuery.data
   const hasActiveFilters =
-    search.trim() !== "" ||
+    q.trim() !== "" ||
     lifecycleStatus !== "all" ||
-    revisionTiming !== "all" ||
-    metricKey !== "all"
+    revisionTiming !== "all"
   const metrics = syncedMetrics
   const noDataWithCreate = !listLoadFailed && rows.length === 0
 
@@ -583,7 +663,11 @@ function MasterDataListWorkspace({
                   ? masterDataCopy.warehouseWriteBody
                   : undefined,
                 onClick: () => {
-                  if (isProductResource || isSupplierResource) {
+                  if (
+                    isProductResource ||
+                    isSupplierResource ||
+                    isVoucherCategoryResource
+                  ) {
                     router.push(`/master-data/${resource}/new`)
                   } else {
                     setCreateOpen(true)
@@ -659,19 +743,38 @@ function MasterDataListWorkspace({
           columns={4}
           aria-label={`${resourceLabel(resource)}指标筛选`}
         >
-          {metrics.map((metric) => (
-            <MetricFilterItem
-              key={metric.key}
-              label={metric.label}
-              value={metric.value}
-              detail={metric.detail}
-              active={metricKey === metric.key}
-              onClick={() => {
-                setMetricKey(metric.key)
-                resetPagination()
-              }}
-            />
-          ))}
+          {metrics.map((metric) => {
+            const isLifecycleMetric =
+              metric.key === "all" ||
+              metric.key === "enabled" ||
+              metric.key === "disabled"
+            if (!isLifecycleMetric) {
+              // 待生效更新属于版本状态维度（有独立筛选控件），只读展示
+              return (
+                <MetricItem
+                  key={metric.key}
+                  label={metric.label}
+                  value={metric.value}
+                  detail={metric.detail}
+                />
+              )
+            }
+            return (
+              <MetricFilterItem
+                key={metric.key}
+                label={metric.label}
+                value={metric.value}
+                detail={metric.detail}
+                // metricKey 与 lifecycleStatus 同源写入；指标高亮只做展示，筛选由 lifecycleStatus 承担
+                active={metricKey === metric.key}
+                onClick={() =>
+                  changeLifecycle(
+                    metric.key as "enabled" | "disabled" | "all"
+                  )
+                }
+              />
+            )
+          })}
         </MetricStrip>
       ) : null}
 
@@ -689,21 +792,27 @@ function MasterDataListWorkspace({
         toolbar={
           <ListToolbar
             search={
-              <InputGroup>
-                <InputGroupAddon>
-                  <SearchIcon aria-hidden="true" />
-                </InputGroupAddon>
-                <InputGroupInput
-                  ref={searchInputRef}
-                  value={search}
-                  onChange={(e) => {
-                    setSearch(e.target.value)
-                    resetPagination()
-                  }}
-                  placeholder={masterDataSearchPlaceholder(resource)}
-                  aria-label={masterDataCopy.searchAria}
-                />
-              </InputGroup>
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  if (searchDraft.trim() === q) return
+                  patchUrl({ q: searchDraft.trim() || null, page: null })
+                  resetPagination()
+                }}
+              >
+                <InputGroup>
+                  <InputGroupAddon>
+                    <SearchIcon aria-hidden="true" />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    ref={searchInputRef}
+                    value={searchDraft}
+                    onChange={(e) => setSearchDraft(e.target.value)}
+                    placeholder={masterDataSearchPlaceholder(resource)}
+                    aria-label={masterDataCopy.searchAria}
+                  />
+                </InputGroup>
+              </form>
             }
             filters={
               <>
@@ -713,8 +822,7 @@ function MasterDataListWorkspace({
                     const next =
                       (values[0] as typeof lifecycleStatus | undefined) ??
                       "all"
-                    setLifecycleStatus(next)
-                    resetPagination()
+                    changeLifecycle(next)
                   }}
                   variant="outline"
                   size="sm"
@@ -734,10 +842,9 @@ function MasterDataListWorkspace({
                   value={revisionTiming}
                   aria-label={masterDataCopy.filterVersionAria}
                   onValueChange={(v) => {
-                    setRevisionTiming(
+                    changeRevisionTiming(
                       (v ?? "all") as typeof revisionTiming
                     )
-                    resetPagination()
                   }}
                   options={[
                     { value: "all", label: masterDataCopy.versionAll },
@@ -757,9 +864,24 @@ function MasterDataListWorkspace({
               </>
             }
             actions={
-              <span className="text-xs text-muted-foreground" aria-live="polite">
-                {resourceLabel(resource)} · {rows.length} 条
-              </span>
+              <>
+                <span
+                  className="text-xs text-muted-foreground"
+                  aria-live="polite"
+                >
+                  {resourceLabel(resource)} · {rows.length} 条
+                </span>
+                {hasActiveFilters ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={clearAllFilters}
+                  >
+                    清除筛选
+                  </Button>
+                ) : null}
+              </>
             }
           />
         }
@@ -770,7 +892,11 @@ function MasterDataListWorkspace({
             getRowId={(row) => row.stableId}
             rowCount={rows.length}
             pagination={pagination}
-            onPaginationChange={setPagination}
+            onPaginationChange={(next) => {
+              setPagination(next)
+              const page = next.pageIndex + 1
+              patchUrl({ page: page > 1 ? String(page) : null })
+            }}
             layout="flush"
             density="compact"
             defaultColumnPinning={{
@@ -809,7 +935,11 @@ function MasterDataListWorkspace({
                         size="sm"
                         className="rounded-lg shadow-none"
                         onClick={() => {
-                          if (isProductResource || isSupplierResource) {
+                          if (
+                            isProductResource ||
+                            isSupplierResource ||
+                            isVoucherCategoryResource
+                          ) {
                             router.push(`/master-data/${resource}/new`)
                           } else {
                             setCreateOpen(true)
@@ -964,7 +1094,7 @@ function MasterDataListWorkspace({
         </QuickPreviewSheet>
       ) : null}
 
-      {!isProductResource && !isSupplierResource ? (
+      {!isProductResource && !isSupplierResource && !isVoucherCategoryResource ? (
         <MasterDataCreateDialog
           open={createOpen}
           onOpenChange={setCreateOpen}

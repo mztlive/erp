@@ -20,6 +20,8 @@ import {
   DataFreshness,
   FormalActionConfirmDialog,
   FormalActionResult,
+  ListToolbar,
+  OptionCombobox,
   PageHeader,
   PageScaffold,
   SequentialProcessBar,
@@ -41,9 +43,12 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Separator } from "@/components/ui/separator"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import {
   FAMILY_LABELS,
   type SessionLease,
@@ -755,211 +760,232 @@ export function UnifiedTaskQueuePage() {
         }
       />
 
-      {/* Toolbar: scope · family · due · search，单排排布 */}
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <div
-          role="group"
-          aria-label="责任范围"
-          className="inline-flex max-w-full flex-wrap items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-        >
-          {(
-            [
-              ["mine", "我的待办", queueQuery.data?.counts.mine],
-              ["role_pool", "待领取", queueQuery.data?.counts.rolePool],
-              ["team", "团队", queueQuery.data?.counts.team],
-              ["hold", "已跳过", queueQuery.data?.counts.hold],
-            ] as const
-          ).map(([value, label, count]) => {
-            const active = scope === value
-            return (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={active}
-                onClick={() => {
-                  setLastResult(null)
+      {/* M3 sticky 处理面：第 0 层 scope + 第 1/2 层 ListToolbar（ui-filter-design §2.3） */}
+      <div
+        className={cn(
+          surfacePanelClassName,
+          "sticky top-0 z-10 space-y-2.5 px-3 py-2.5"
+        )}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            role="group"
+            aria-label="责任范围"
+            className="inline-flex max-w-full flex-wrap items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
+          >
+            {(
+              [
+                ["mine", "我的待办", queueQuery.data?.counts.mine],
+                ["role_pool", "团队待认领", queueQuery.data?.counts.rolePool],
+                ["team", "团队", queueQuery.data?.counts.team],
+                ["hold", "已跳过", queueQuery.data?.counts.hold],
+              ] as const
+            ).map(([value, label, count]) => {
+              const active = scope === value
+              return (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={active}
+                  onClick={() => {
+                    setLastResult(null)
+                    replaceQueueUrl({
+                      scope: value,
+                      currentWorkItemId: null,
+                      workItemType: null,
+                      converge: false,
+                    })
+                  }}
+                  className={cn(
+                    "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    active
+                      ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                      : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                  )}
+                >
+                  {label}
+                  {typeof count === "number" ? (
+                    <span
+                      className={cn(
+                        "num",
+                        active
+                          ? "text-muted-foreground"
+                          : "text-muted-foreground/80"
+                      )}
+                    >
+                      {count}
+                    </span>
+                  ) : null}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <ListToolbar
+          aria-label="队列筛选"
+          search={
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                replaceQueueUrl({
+                  q: searchDraft.trim() || null,
+                  currentWorkItemId: null,
+                })
+              }}
+            >
+              <InputGroup>
+                <InputGroupAddon>
+                  <SearchIcon aria-hidden="true" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  value={searchDraft}
+                  onChange={(event) => setSearchDraft(event.target.value)}
+                  onBlur={() => {
+                    const next = searchDraft.trim()
+                    if (next === (q ?? "")) return
+                    replaceQueueUrl({
+                      q: next || null,
+                      currentWorkItemId: null,
+                    })
+                  }}
+                  placeholder="搜单号、对象或往来方"
+                  aria-label="搜索任务"
+                />
+              </InputGroup>
+            </form>
+          }
+          filters={
+            <>
+              <OptionCombobox
+                value={family ?? null}
+                options={(
+                  Object.entries(FAMILY_LABELS) as [WorkItemFamily, string][]
+                ).map(([value, label]) => ({ value, label }))}
+                placeholder="任务族：全部"
+                size="sm"
+                aria-label="任务族"
+                inputClassName="w-[10.5rem]"
+                onValueChange={(v) =>
                   replaceQueueUrl({
-                    scope: value,
+                    family: (v as WorkItemFamily | null) ?? null,
                     currentWorkItemId: null,
                     workItemType: null,
                     converge: false,
                   })
-                }}
-                className={cn(
-                  "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
-                  active
-                    ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                    : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
-                )}
-              >
-                {label}
-                {typeof count === "number" ? (
-                  <span
-                    className={cn(
-                      "num",
-                      active ? "text-muted-foreground" : "text-muted-foreground/80"
-                    )}
+                }
+              />
+              <OptionCombobox
+                value={due ?? null}
+                options={[
+                  {
+                    value: "overdue",
+                    label: queueQuery.data?.counts.overdue
+                      ? `已超期（${queueQuery.data.counts.overdue}）`
+                      : "已超期",
+                  },
+                  { value: "today", label: "今日到期" },
+                ]}
+                placeholder="时限：全部"
+                size="sm"
+                aria-label="到期时限"
+                inputClassName="w-[9rem]"
+                onValueChange={(v) =>
+                  replaceQueueUrl({
+                    due: (v as "today" | "overdue" | null) ?? null,
+                    currentWorkItemId: null,
+                  })
+                }
+              />
+              {task ? (
+                converge || workItemType ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() =>
+                      replaceQueueUrl({
+                        workItemType: null,
+                        converge: false,
+                      })
+                    }
                   >
-                    {count}
-                  </span>
-                ) : null}
-              </button>
-            )
-          })}
-        </div>
-
-        <ToggleGroup
-          value={family ? [family] : []}
-          onValueChange={(values) => {
-            const next = (values[0] as WorkItemFamily | undefined) ?? null
-            replaceQueueUrl({
-              family: next,
-              currentWorkItemId: null,
-              workItemType: null,
-              converge: false,
-            })
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
-          className="w-fit max-w-full flex-wrap"
-        >
-          {(Object.entries(FAMILY_LABELS) as [WorkItemFamily, string][]).map(
-            ([value, label]) => (
-              <ToggleGroupItem key={value} value={value}>
-                {label}
-              </ToggleGroupItem>
-            )
-          )}
-        </ToggleGroup>
-
-        <ToggleGroup
-          value={due ? [due] : []}
-          onValueChange={(values) => {
-            const next = (values[0] as "today" | "overdue" | undefined) ?? null
-            replaceQueueUrl({ due: next, currentWorkItemId: null })
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
-          className="w-fit"
-        >
-          <ToggleGroupItem value="overdue">
-            已超期
-            {queueQuery.data?.counts.overdue ? (
-              <span className="num ml-1 text-destructive">
-                {queueQuery.data.counts.overdue}
-              </span>
-            ) : null}
-          </ToggleGroupItem>
-          <ToggleGroupItem value="today">今日到期</ToggleGroupItem>
-        </ToggleGroup>
-
-        {task ? (
-          converge || workItemType ? (
-            <div className="flex items-center gap-2">
+                    回到全部类型
+                  </Button>
+                ) : (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    title="仅保留与当前任务同类的任务，连续处理无需来回切换"
+                    onClick={() =>
+                      replaceQueueUrl({
+                        workItemType: task.workItemType,
+                        converge: true,
+                        currentWorkItemId: task.id,
+                      })
+                    }
+                  >
+                    收敛到同类
+                  </Button>
+                )
+              ) : null}
+            </>
+          }
+          secondary={
+            converge || workItemType ? (
               <BusinessStatusBadge
                 context="list"
                 label="已筛选为单一类型"
                 tone="info"
               />
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  replaceQueueUrl({
-                    workItemType: null,
-                    converge: false,
-                  })
-                }
-              >
-                回到全部类型
-              </Button>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              title="仅保留与当前任务同类的任务，连续处理无需来回切换"
-              onClick={() =>
-                replaceQueueUrl({
-                  workItemType: task.workItemType,
-                  converge: true,
-                  currentWorkItemId: task.id,
-                })
-              }
-            >
-              收敛到同类连续处理
-            </Button>
-          )
-        ) : null}
-
-        {scope === "role_pool" &&
-        task &&
-        tasks.some(
-          (item) =>
-            item.effectiveStatusCode === "UNCLAIMED" &&
-            !activeLeases.has(item.id)
-        ) ? (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            disabled={
-              batchClaimMutation.isPending || permissionRevoked
-            }
-            onClick={() => void onBatchClaim()}
-          >
-            批量领取
-          </Button>
-        ) : null}
-
-        <form
-          className="flex min-w-0 flex-1 basis-64 items-center gap-2"
-          onSubmit={(event) => {
-            event.preventDefault()
-            replaceQueueUrl({ q: searchDraft, currentWorkItemId: null })
-          }}
-        >
-          <div className="relative min-w-0 flex-1 max-w-md">
-            <SearchIcon
-              className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <Input
-              value={searchDraft}
-              onChange={(event) => setSearchDraft(event.target.value)}
-              placeholder="搜单号、对象或往来方"
-              className="pl-8"
-              aria-label="搜索任务"
-            />
-          </div>
-          <Button type="submit" variant="secondary" size="sm">
-            搜索
-          </Button>
-          {q || family || due || workItemType ? (
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => {
-                setSearchDraft("")
-                replaceQueueUrl({
-                  family: null,
-                  due: null,
-                  q: null,
-                  workItemType: null,
-                  converge: false,
-                  currentWorkItemId: null,
-                })
-              }}
-            >
-              清除筛选
-            </Button>
-          ) : null}
-        </form>
+            ) : undefined
+          }
+          actions={
+            <>
+              <span className="text-xs text-muted-foreground" aria-live="polite">
+                {filterSummary}
+              </span>
+              {scope === "role_pool" &&
+              task &&
+              tasks.some(
+                (item) =>
+                  item.effectiveStatusCode === "UNCLAIMED" &&
+                  !activeLeases.has(item.id)
+              ) ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  disabled={batchClaimMutation.isPending || permissionRevoked}
+                  onClick={() => void onBatchClaim()}
+                >
+                  批量领取
+                </Button>
+              ) : null}
+              {q || family || due || workItemType ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearchDraft("")
+                    replaceQueueUrl({
+                      family: null,
+                      due: null,
+                      q: null,
+                      workItemType: null,
+                      converge: false,
+                      currentWorkItemId: null,
+                    })
+                  }}
+                >
+                  清除筛选
+                </Button>
+              ) : null}
+            </>
+          }
+        />
       </div>
 
       {lastResult ? (

@@ -102,14 +102,33 @@ export function CustomerCenterPage() {
 
   const [searchDraft, setSearchDraft] = React.useState(q)
   const [createOpen, setCreateOpen] = React.useState(false)
-  const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: page - 1,
-    pageSize: 20,
-  })
 
   React.useEffect(() => {
     setSearchDraft(q)
   }, [q])
+
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault()
+        document
+          .querySelector<HTMLInputElement>('[data-slot="customer-search"]')
+          ?.focus()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [])
 
   const directoryQuery = useCustomerDirectoryQuery({
     scope,
@@ -127,6 +146,12 @@ export function CustomerCenterPage() {
   const items = React.useMemo(
     () => data?.items ?? [],
     [data?.items]
+  )
+
+  // 分页从 URL 派生（P6），筛选/搜索变更写 URL 并回第 1 页。
+  const pagination = React.useMemo<PaginationState>(
+    () => ({ pageIndex: Math.max(0, page - 1), pageSize: 20 }),
+    [page]
   )
 
   const pageRows = React.useMemo(() => {
@@ -150,16 +175,25 @@ export function CustomerCenterPage() {
           q: next.q ?? q,
           sort: next.sort ?? sort,
           dir: next.dir ?? dir,
-          page: next.page ?? pagination.pageIndex + 1,
+          page: next.page ?? page,
         })
       )
     },
-    [dir, pagination.pageIndex, pathname, q, router, scope, sort, status]
+    [dir, page, pathname, q, router, scope, sort, status]
   )
+
+  // 防抖即时搜索（300ms）+ Enter 兜底；删除默认回第 1 页。
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchDraft.trim() === q) return
+      pushState({ q: searchDraft.trim(), page: 1 })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pushState 以当前 URL 快照为准
+  }, [searchDraft])
 
   const handlePaginationChange = React.useCallback(
     (next: PaginationState) => {
-      setPagination(next)
       pushState({ page: next.pageIndex + 1 })
     },
     [pushState]
@@ -174,9 +208,6 @@ export function CustomerCenterPage() {
     (next: SortingState) => {
       const head = next[0]
       if (!head || !SORT_COLUMN_TO_FIELD[head.id]) return
-      setPagination((previous) =>
-        previous.pageIndex === 0 ? previous : { ...previous, pageIndex: 0 }
-      )
       pushState({
         sort: head.id,
         dir: head.desc ? "desc" : "asc",
@@ -186,16 +217,23 @@ export function CustomerCenterPage() {
     [pushState]
   )
 
+  /** P4：清 q/status/分页，保留 scope（视图）与 sort/dir（排序）。 */
   const clearFilters = () => {
     setSearchDraft("")
-    setPagination((previous) =>
-      previous.pageIndex === 0 ? previous : { ...previous, pageIndex: 0 }
+    router.replace(
+      writeDirectoryUrl(pathname, {
+        scope,
+        status: "active",
+        q: "",
+        sort,
+        dir,
+        page: 1,
+      })
     )
-    router.replace(pathname)
   }
 
   const hasActiveFilters =
-    scope !== "mine" || status !== "active" || q.trim().length > 0
+    status !== "active" || q.trim().length > 0
 
   const columns = React.useMemo<ColumnDef<CustomerDirectoryItem>[]>(
     () => [
@@ -372,51 +410,25 @@ export function CustomerCenterPage() {
           title="当前角色无客户范围"
           description="当前权限与数据范围内没有客户；不代表系统尚无客户。"
         />
-      ) : data && data.totalInScope === 0 && !q.trim() && status === "active" ? (
-        <BusinessEmptyState
-          kind="no-data"
-          title="当前范围尚无客户"
-          description={`${SCOPE_LABELS[scope]}下还没有客户。有权时可新建客户。`}
-          action={
-            <Button
-              type="button"
-              variant="secondary"
-              className="rounded-lg shadow-none"
-              onClick={() => setCreateOpen(true)}
-            >
-              新建客户
-            </Button>
-          }
-        />
-      ) : items.length === 0 ? (
-        <BusinessEmptyState
-          kind="filter"
-          title="当前筛选无结果"
-          description={`范围「${SCOPE_LABELS[scope]}」${status !== "active" ? ` · 状态 ${status}` : ""}${q ? ` · 关键词「${q}」` : ""} 下没有匹配客户。`}
-          action={
-            hasActiveFilters ? (
-              <Button
-                type="button"
-                variant="secondary"
-                className="rounded-lg shadow-none"
-                onClick={clearFilters}
-              >
-                清除筛选
-              </Button>
-            ) : null
-          }
-        />
-      ) : (
+      ) : data ? (
         <BusinessTableFrame
           title="客户结果"
           description={
-            scope !== "mine" || status !== "active" || q.trim()
-              ? `当前筛选：${SCOPE_LABELS[scope]}${
-                  status !== "active"
-                    ? ` · ${status === "disabled" ? "停用" : "全部状态"}`
-                    : ""
-                }${q.trim() ? ` · “${q.trim()}”` : ""}`
-              : `${SCOPE_LABELS[scope]}下的全部客户；本页用于选择客户并进入其详情。`
+            data.totalInScope === 0 && !q.trim() && status === "active"
+              ? `${SCOPE_LABELS[scope]}下还没有客户。有权时可新建客户。`
+              : items.length === 0
+                ? `当前筛选无结果：${SCOPE_LABELS[scope]}${
+                    status !== "active"
+                      ? ` · ${status === "disabled" ? "停用" : "全部状态"}`
+                      : ""
+                  }${q.trim() ? ` · “${q.trim()}”` : ""}`
+                : scope !== "mine" || status !== "active" || q.trim()
+                  ? `当前筛选：${SCOPE_LABELS[scope]}${
+                      status !== "active"
+                        ? ` · ${status === "disabled" ? "停用" : "全部状态"}`
+                        : ""
+                    }${q.trim() ? ` · “${q.trim()}”` : ""}`
+                  : `${SCOPE_LABELS[scope]}下的全部客户；本页用于选择客户并进入其详情。`
           }
           toolbar={
             <ListToolbar
@@ -426,11 +438,12 @@ export function CustomerCenterPage() {
                     <SearchIcon aria-hidden="true" />
                   </InputGroupAddon>
                   <InputGroupInput
+                    data-slot="customer-search"
                     value={searchDraft}
                     onChange={(e) => setSearchDraft(e.target.value)}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
-                        pushState({ q: searchDraft, page: 1 })
+                        pushState({ q: searchDraft.trim(), page: 1 })
                       }
                     }}
                     placeholder="名称、编码、统一社会信用代码、负责销售"
@@ -486,30 +499,85 @@ export function CustomerCenterPage() {
                   />
                 </div>
               }
+              actions={
+                <>
+                  <span className="text-xs text-muted-foreground" aria-live="polite">
+                    共 {items.length.toLocaleString("zh-CN")} 条
+                  </span>
+                  {hasActiveFilters ? (
+                    <Button
+                      type="button"
+                      size="xs"
+                      variant="ghost"
+                      onClick={clearFilters}
+                    >
+                      清除筛选
+                    </Button>
+                  ) : null}
+                </>
+              }
             />
           }
           table={
-            <DataTable
-              data={pageRows}
-              columns={columns}
-              getRowId={(row) => row.id}
-              rowCount={items.length}
-              sorting={sorting}
-              onSortingChange={handleSortingChange}
-              pagination={pagination}
-              onPaginationChange={handlePaginationChange}
-              layout="flush"
-              density="compact"
-              rowLabel={(row) => row.shortName || row.legalName}
-              defaultColumnPinning={{
-                left: ["customer"],
-              }}
-              onRowPreview={(row) => router.push(`/sales/customers/${row.id}`)}
-              onRowOpen={(row) => router.push(`/sales/customers/${row.id}`)}
-            />
+            data.totalInScope === 0 && !q.trim() && status === "active" ? (
+              <BusinessEmptyState
+                kind="no-data"
+                title="当前范围尚无客户"
+                description={`${SCOPE_LABELS[scope]}下还没有客户。有权时可新建客户。`}
+                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                action={
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="rounded-lg shadow-none"
+                    onClick={() => setCreateOpen(true)}
+                  >
+                    新建客户
+                  </Button>
+                }
+              />
+            ) : items.length === 0 ? (
+              <BusinessEmptyState
+                kind="filter"
+                title="当前筛选无结果"
+                description={`范围“${SCOPE_LABELS[scope]}”${status !== "active" ? ` · 状态 ${status}` : ""}${q ? ` · 关键词“${q}”` : ""} 下没有匹配客户。`}
+                className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                action={
+                  hasActiveFilters ? (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      className="rounded-lg shadow-none"
+                      onClick={clearFilters}
+                    >
+                      清除筛选
+                    </Button>
+                  ) : null
+                }
+              />
+            ) : (
+              <DataTable
+                data={pageRows}
+                columns={columns}
+                getRowId={(row) => row.id}
+                rowCount={items.length}
+                sorting={sorting}
+                onSortingChange={handleSortingChange}
+                pagination={pagination}
+                onPaginationChange={handlePaginationChange}
+                layout="flush"
+                density="compact"
+                rowLabel={(row) => row.shortName || row.legalName}
+                defaultColumnPinning={{
+                  left: ["customer"],
+                }}
+                onRowPreview={(row) => router.push(`/sales/customers/${row.id}`)}
+                onRowOpen={(row) => router.push(`/sales/customers/${row.id}`)}
+              />
+            )
           }
         />
-      )}
+      ) : null}
 
       <CustomerCreateDialog
         open={createOpen}

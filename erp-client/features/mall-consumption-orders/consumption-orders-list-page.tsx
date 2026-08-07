@@ -214,10 +214,21 @@ export function ConsumptionOrdersListPage() {
   const exportMutation = useConsumptionOrderExportMutation()
 
   React.useEffect(() => {
-    // URL is source of truth for search draft
-     
+    // URL is source of truth for search draft；输入中不被 URL 旧值覆盖（焦点保护）
+    const el = searchInputRef.current
+    if (el && document.activeElement === el) return
     setSearchInput(qParam)
   }, [qParam])
+
+  // P3：搜索 300ms 防抖自动写 URL（replace），Enter 兜底，`/` 聚焦
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchInput.trim() === qParam) return
+      replaceParams({ q: searchInput.trim() || undefined })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- replaceParams 以当前 URL 快照为准
+  }, [searchInput])
 
   React.useEffect(() => {
     setPagination((p) =>
@@ -350,6 +361,39 @@ export function ConsumptionOrdersListPage() {
 
   const commitSearch = () => {
     replaceParams({ q: searchInput.trim() || undefined })
+  }
+
+  const hasActiveFilters = Boolean(
+    qParam ||
+      mallId !== "all" ||
+      occurredFrom ||
+      occurredTo ||
+      factTypes.length > 0 ||
+      fulfillmentChain !== "all" ||
+      attributionStatus !== "all" ||
+      supplierStatuses.length > 0 ||
+      paymentSource !== "all" ||
+      costBasis !== "all" ||
+      dataSources.length > 0 ||
+      metric !== "all"
+  )
+
+  // P4：清全部筛选参数 + 分页回 1；预览（导航上下文）与视图参数保留
+  const clearFilters = () => {
+    replaceParams({
+      q: undefined,
+      mall: undefined,
+      occurredFrom: undefined,
+      occurredTo: undefined,
+      factType: undefined,
+      fulfillmentChain: undefined,
+      attributionStatus: undefined,
+      supplierStatus: undefined,
+      paymentSource: undefined,
+      costBasis: undefined,
+      dataSource: undefined,
+      metric: undefined,
+    })
   }
 
   const confirmExport = async () => {
@@ -715,6 +759,8 @@ export function ConsumptionOrdersListPage() {
         />
       ) : (
         <>
+          {/* 指标与普通筛选 AND 共存：指标点击不清理其它筛选（避免隐藏行为）；
+              矛盾组合无结果时由「当前筛选无结果」空态解释并引导清除。 */}
           <MetricStrip columns={5} aria-label="消费订单指标筛选">
             <MetricFilterItem
               label="支付成功"
@@ -849,24 +895,6 @@ export function ConsumptionOrdersListPage() {
                         className="w-56"
                       />
                       <OptionCombobox
-                        value={fulfillmentChain}
-                        onValueChange={(v) =>
-                          replaceParams({
-                            fulfillmentChain: v || undefined,
-                          })
-                        }
-                        options={[
-                          { value: "all", label: "履约链" },
-                          { value: "LEGACY_MANUAL", label: "原人工" },
-                          { value: "ERP_AUTOMATED", label: "ERP 自动" },
-                        ]}
-                        className="w-36"
-                        size="sm"
-                        allowClear={false}
-                        aria-label="履约链"
-                        placeholder="履约链"
-                      />
-                      <OptionCombobox
                         value={attributionStatus}
                         onValueChange={(v) =>
                           replaceParams({
@@ -884,6 +912,28 @@ export function ConsumptionOrdersListPage() {
                         allowClear={false}
                         aria-label="归集状态"
                         placeholder="归集"
+                      />
+                    </>
+                  }
+                  secondary={
+                    <>
+                      <OptionCombobox
+                        value={fulfillmentChain}
+                        onValueChange={(v) =>
+                          replaceParams({
+                            fulfillmentChain: v || undefined,
+                          })
+                        }
+                        options={[
+                          { value: "all", label: "履约链" },
+                          { value: "LEGACY_MANUAL", label: "原人工" },
+                          { value: "ERP_AUTOMATED", label: "ERP 自动" },
+                        ]}
+                        className="w-36"
+                        size="sm"
+                        allowClear={false}
+                        aria-label="履约链"
+                        placeholder="履约链"
                       />
                       <MultiOptionCombobox
                         value={factTypes}
@@ -974,15 +1024,22 @@ export function ConsumptionOrdersListPage() {
                     </>
                   }
                   actions={
-                    <Button type="button" variant="ghost" size="sm" onClick={commitSearch}>
-                      搜索
-                    </Button>
+                    hasActiveFilters ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={clearFilters}
+                      >
+                        清除筛选
+                      </Button>
+                    ) : null
                   }
                 />
 
                 {searchInput.trim() !== qParam ? (
                   <p className="text-xs text-muted-foreground" aria-live="polite">
-                    搜索框内容尚未应用，回车或点「搜索」后生效。
+                    搜索框内容尚未应用，稍候将自动生效；回车可立即搜索。
                   </p>
                 ) : null}
 
@@ -1036,22 +1093,7 @@ export function ConsumptionOrdersListPage() {
                       variant="secondary"
                       size="sm"
                       className="rounded-lg shadow-none"
-                      onClick={() => {
-                        replaceParams({
-                          q: undefined,
-                          mall: undefined,
-                          occurredFrom: undefined,
-                          occurredTo: undefined,
-                          factType: undefined,
-                          fulfillmentChain: undefined,
-                          attributionStatus: undefined,
-                          supplierStatus: undefined,
-                          paymentSource: undefined,
-                          costBasis: undefined,
-                          dataSource: undefined,
-                          metric: undefined,
-                        })
-                      }}
+                      onClick={clearFilters}
                     >
                       清除筛选
                     </Button>

@@ -8,6 +8,7 @@ import {
   ExternalLinkIcon,
   ImageIcon,
   PauseIcon,
+  SearchIcon,
   ShieldAlertIcon,
   TriangleAlertIcon,
   XIcon,
@@ -21,8 +22,10 @@ import {
   BusinessStatusBadge,
   DataFreshness,
   DocumentSummary,
+  FilterChip,
   FormalActionConfirmDialog,
   FormalActionResult,
+  ListToolbar,
   OptionCombobox,
   PageHeader,
   PageScaffold,
@@ -58,9 +61,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+
 import type {
   SupplierCatalogItemView,
   SupplierCatalogQueueQuery,
@@ -288,8 +296,14 @@ export function SupplierCatalogPage() {
         ? true
         : sessionAutoNext
 
-  const filters = React.useMemo<SupplierCatalogQueueQuery>(
-    () => ({
+  const filters = React.useMemo<SupplierCatalogQueueQuery>(() => {
+    if (mode === "list") {
+      // D8：list 模式只传列表维度参数；changeType 固定 all（保留全量含「无变化」），
+      // queue 专属参数（status/currentSupplierProductId/currentWorkItemId/queueContextId）
+      // 不传给 queryFn，避免从 queue 切回 list 时 URL 残留被静默消费。
+      return { mode, skuId, q, sourceType, changeType: "all" }
+    }
+    return {
       mode,
       skuId,
       changeType,
@@ -299,19 +313,18 @@ export function SupplierCatalogPage() {
       currentSupplierProductId,
       currentWorkItemId,
       queueContextId,
-    }),
-    [
-      mode,
-      skuId,
-      changeType,
-      status,
-      q,
-      sourceType,
-      currentSupplierProductId,
-      currentWorkItemId,
-      queueContextId,
-    ]
-  )
+    }
+  }, [
+    mode,
+    skuId,
+    q,
+    sourceType,
+    changeType,
+    status,
+    currentSupplierProductId,
+    currentWorkItemId,
+    queueContextId,
+  ])
 
   const queueQuery = useSupplierCatalogQueueQuery(filters)
   const claimMutation = useClaimSupplierCatalogMutation()
@@ -360,6 +373,50 @@ export function SupplierCatalogPage() {
   React.useEffect(() => {
     setSearchInput(q ?? "")
   }, [q])
+
+  // D8：进入 list 模式时清理 queue 残留参数，避免深链参数滞留且无控件；
+  // queue 模式由「URL defaults」effect 负责补齐，此处互不干扰。
+  React.useEffect(() => {
+    if (mode !== "list") return
+    const staleKeys = [
+      "changeType",
+      "status",
+      "autoNext",
+      "currentSupplierProductId",
+      "currentWorkItemId",
+      "queueContextId",
+    ]
+    if (!staleKeys.some((key) => searchParams.has(key))) return
+    const params = new URLSearchParams(searchParams.toString())
+    for (const key of staleKeys) params.delete(key)
+    const qs = params.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false })
+  }, [mode, pathname, router, searchParams])
+
+  // P3：list 模式提供 / 聚焦搜索快捷键
+  React.useEffect(() => {
+    if (mode !== "list") return
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey)
+        return
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return
+      }
+      event.preventDefault()
+      document
+        .querySelector<HTMLInputElement>('[data-slot="catalog-list-search"]')
+        ?.focus()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [mode])
 
   const headingRef = React.useRef<HTMLHeadingElement>(null)
   const resultRef = React.useRef<HTMLDivElement>(null)
@@ -554,6 +611,18 @@ export function SupplierCatalogPage() {
     },
     [mode, pathname, queueContextId, router, searchParams]
   )
+
+  // P3：list 模式搜索 300ms 防抖即时写 URL（replace）；Enter 提交由视图兜底。
+  // 定义在 replaceUrl 之后（依赖其引用）。
+  React.useEffect(() => {
+    if (mode !== "list") return
+    const handle = globalThis.setTimeout(() => {
+      const next = searchInput.trim()
+      if (next === (q ?? "")) return
+      replaceUrl({ q: next || null })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+  }, [mode, q, replaceUrl, searchInput])
 
   const goToItem = React.useCallback(
     (next: SupplierCatalogItemView | undefined | null) => {
@@ -881,6 +950,24 @@ export function SupplierCatalogPage() {
               currentSupplierProductId: null,
             })
           }
+          onClearFilters={() =>
+            replaceUrl({
+              q: null,
+              sourceType: null,
+              skuId: null,
+              currentSupplierProductId: null,
+              currentWorkItemId: null,
+              queueContextId: null,
+            })
+          }
+          onClearSku={() =>
+            replaceUrl({
+              skuId: null,
+              currentSupplierProductId: null,
+              currentWorkItemId: null,
+              queueContextId: null,
+            })
+          }
           onOpenExcelImport={() => setExcelImportOpen(true)}
           onOpenManualEntry={() => setManualEntryOpen(true)}
           onPromote={setPromotionItem}
@@ -962,164 +1049,146 @@ export function SupplierCatalogPage() {
       />
 
       <div
-        className={`${surfacePanelClassName} sticky top-0 z-10 flex flex-wrap items-center gap-2 px-3 py-2.5 text-sm`}
+        className={cn(
+          surfacePanelClassName,
+          "sticky top-0 z-10 space-y-2.5 px-3 py-2.5 text-sm"
+        )}
       >
-        {skuId ? (
-          <div className={cn(surfaceInsetClassName, "flex items-center gap-2 px-2 py-1")}>
-            <Badge variant="outline">
-              {view?.skuContext
-                ? `${view.skuContext.productName}（${view.skuContext.skuCode}）`
-                : "商品规格筛选"}
-            </Badge>
-            <Button
+        <div className="flex flex-wrap items-center gap-2">
+          <div
+            role="group"
+            aria-label="队列范围"
+            className="inline-flex rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
+          >
+            <button
               type="button"
-              variant="ghost"
-              size="xs"
+              aria-pressed={status === "pending"}
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all",
+                status === "pending"
+                  ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                  : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+              )}
               onClick={() =>
                 replaceUrl({
-                  skuId: null,
+                  status: null,
                   currentSupplierProductId: null,
                   currentWorkItemId: null,
-                  queueContextId: null,
                 })
               }
             >
-              清除 SKU 筛选
-            </Button>
+              待处理
+            </button>
+            <button
+              type="button"
+              aria-pressed={status === "held"}
+              className={cn(
+                "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all",
+                status === "held"
+                  ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                  : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+              )}
+              onClick={() =>
+                replaceUrl({
+                  status: "held",
+                  currentSupplierProductId: null,
+                  currentWorkItemId: null,
+                })
+              }
+            >
+              稍后处理
+            </button>
           </div>
-        ) : null}
-        <ToggleGroup
-          value={[changeType]}
-          onValueChange={(v) => {
-            const next = (v[0] as typeof changeType | undefined) ?? "actionable"
-            replaceUrl({
-              changeType: next === "actionable" ? "actionable" : next,
-              currentSupplierProductId: null,
-              currentWorkItemId: null,
-            })
-          }}
-          variant="outline"
-          size="sm"
-          spacing={0}
-          aria-label="变化类型"
-        >
-          <ToggleGroupItem value="actionable">需处理</ToggleGroupItem>
-          <ToggleGroupItem value="STOPPED">
-            {CHANGE_TYPE_LABEL.STOPPED}
-          </ToggleGroupItem>
-          <ToggleGroupItem value="ERROR">
-            {CHANGE_TYPE_LABEL.ERROR}
-          </ToggleGroupItem>
-          <ToggleGroupItem value="NEW">
-            {CHANGE_TYPE_LABEL.NEW}
-          </ToggleGroupItem>
-          <ToggleGroupItem value="CHANGED">
-            {CHANGE_TYPE_LABEL.CHANGED}
-          </ToggleGroupItem>
-          <ToggleGroupItem value="all">全部</ToggleGroupItem>
-        </ToggleGroup>
-        <div
-          role="group"
-          aria-label="队列范围"
-          className="inline-flex rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
-        >
-          <button
-            type="button"
-            aria-pressed={status === "pending"}
-            className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all",
-              status === "pending"
-                ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
-            )}
-            onClick={() =>
+          <OptionCombobox
+            value={changeType}
+            options={[
+              { value: "actionable", label: "需处理" },
+              { value: "STOPPED", label: CHANGE_TYPE_LABEL.STOPPED },
+              { value: "ERROR", label: CHANGE_TYPE_LABEL.ERROR },
+              { value: "NEW", label: CHANGE_TYPE_LABEL.NEW },
+              { value: "CHANGED", label: CHANGE_TYPE_LABEL.CHANGED },
+              { value: "all", label: "全部" },
+            ]}
+            allowClear={false}
+            size="sm"
+            aria-label="变化类型"
+            inputClassName="w-[8.5rem]"
+            onValueChange={(v) => {
+              const next = (v as typeof changeType | null) ?? "actionable"
               replaceUrl({
-                status: null,
+                changeType: next === "actionable" ? "actionable" : next,
                 currentSupplierProductId: null,
                 currentWorkItemId: null,
               })
-            }
-          >
-            待处理
-          </button>
-          <button
-            type="button"
-            aria-pressed={status === "held"}
-            className={cn(
-              "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all",
-              status === "held"
-                ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
-                : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
-            )}
-            onClick={() =>
-              replaceUrl({
-                status: "held",
-                currentSupplierProductId: null,
-                currentWorkItemId: null,
-              })
-            }
-          >
-            稍后处理
-          </button>
-        </div>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="w21-auto-next" className="text-muted-foreground">
-            完成后显示下一项
-          </Label>
-          <Switch
-            id="w21-auto-next"
-            checked={autoNext}
-            onCheckedChange={(on) => {
-              setSessionAutoNext(on)
-              replaceUrl({ autoNext: on ? "1" : "0" })
             }}
-            aria-describedby="w21-auto-next-hint"
           />
-          <span id="w21-auto-next-hint" className="sr-only">
-            开启后，处理完成的结果面板会提供「下一项」按钮
-          </span>
         </div>
-        <form
-          className="ml-auto flex items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault()
-            replaceUrl({
-              q: searchInput.trim() || null,
-              currentSupplierProductId: null,
-              currentWorkItemId: null,
-            })
-          }}
-        >
-          <div className="relative">
-            <Input
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              placeholder="供应商商品编码 / SKU / 名称"
-              className="h-8 w-48 border-border/40 pr-8"
-              aria-label="搜索"
-            />
-            {searchInput ? (
-              <button
-                type="button"
-                aria-label="清除搜索"
-                className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                onClick={() => {
-                  setSearchInput("")
+        <ListToolbar
+          aria-label="商品库队列筛选"
+          search={
+            <form
+              onSubmit={(e) => {
+                e.preventDefault()
+                replaceUrl({
+                  q: searchInput.trim() || null,
+                  currentSupplierProductId: null,
+                  currentWorkItemId: null,
+                })
+              }}
+            >
+              <InputGroup>
+                <InputGroupAddon>
+                  <SearchIcon aria-hidden="true" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="供应商商品编码 / SKU / 名称"
+                  aria-label="搜索"
+                />
+              </InputGroup>
+            </form>
+          }
+          secondary={
+            skuId ? (
+              <FilterChip
+                label={
+                  view?.skuContext
+                    ? `${view.skuContext.productName}（${view.skuContext.skuCode}）`
+                    : "商品规格筛选"
+                }
+                onClear={() =>
                   replaceUrl({
-                    q: null,
+                    skuId: null,
                     currentSupplierProductId: null,
                     currentWorkItemId: null,
+                    queueContextId: null,
                   })
+                }
+                clearLabel="清除 SKU 筛选"
+              />
+            ) : undefined
+          }
+          actions={
+            <div className="flex items-center gap-2">
+              <Label htmlFor="w21-auto-next" className="text-muted-foreground">
+                完成后显示下一项
+              </Label>
+              <Switch
+                id="w21-auto-next"
+                checked={autoNext}
+                onCheckedChange={(on) => {
+                  setSessionAutoNext(on)
+                  replaceUrl({ autoNext: on ? "1" : "0" })
                 }}
-              >
-                <XIcon className="size-3.5" />
-              </button>
-            ) : null}
-          </div>
-          <Button type="submit" size="sm" variant="ghost">
-            搜索
-          </Button>
-        </form>
+                aria-describedby="w21-auto-next-hint"
+              />
+              <span id="w21-auto-next-hint" className="sr-only">
+                开启后，处理完成的结果面板会提供「下一项」按钮
+              </span>
+            </div>
+          }
+        />
       </div>
 
       {lastResult ? (

@@ -86,7 +86,7 @@ function responsiblePartyLabel(item: WorkspaceWorkItem): string {
   if (item.ownerUserLabel) {
     return `${item.ownerRoleLabel} · ${item.ownerUserLabel}`
   }
-  return `${item.ownerRoleLabel} · 待领取`
+  return `${item.ownerRoleLabel} · 待认领`
 }
 
 function processBlocker(item: WorkspaceWorkItem): string | undefined {
@@ -320,12 +320,16 @@ export function WorkspaceHomePage() {
   >(null)
 
   const activeMetric = metricKeyFromUrlState(urlState)
-  const hasActiveFilter = Boolean(urlState.due || urlState.family)
+  // scope 也是激活筛选：团队待认领无任务时走「当前筛选无结果」空态（D17）
+  const hasActiveFilter = Boolean(
+    urlState.scope === "role_pool" || urlState.due || urlState.family
+  )
 
-  const pushUrl = React.useCallback(
+  // 筛选/指标变更恒 replace，不膨胀历史（P2）；scope 默认值省略，URL 最小化
+  const replaceUrl = React.useCallback(
     (next: WorkspaceUrlState) => {
       const qs = buildWorkspaceSearchParams(next)
-      router.push(`${pathname}${qs}`, { scroll: false })
+      router.replace(`${pathname}${qs}`, { scroll: false })
     },
     [pathname, router]
   )
@@ -334,18 +338,18 @@ export function WorkspaceHomePage() {
     (key: WorkspaceMetricKey) => {
       sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
       setFocusedStableNumber(null)
-      pushUrl(urlStateFromMetricKey(key, urlState))
+      replaceUrl(urlStateFromMetricKey(key, urlState))
     },
-    [pushUrl, urlState]
+    [replaceUrl, urlState]
   )
 
   const clearFilters = React.useCallback(() => {
     sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
     setFocusedStableNumber(null)
-    pushUrl({
+    replaceUrl({
       scope: urlState.scope,
     })
-  }, [pushUrl, urlState.scope])
+  }, [replaceUrl, urlState.scope])
 
   const onOpenTask = React.useCallback(
     (item: WorkspaceWorkItem) => {
@@ -365,9 +369,9 @@ export function WorkspaceHomePage() {
       if (scope === urlState.scope) return
       sessionStorage.removeItem(HOME_FOCUS_SESSION_KEY)
       setFocusedStableNumber(null)
-      pushUrl({ ...urlState, scope })
+      replaceUrl({ ...urlState, scope })
     },
-    [pushUrl, urlState]
+    [replaceUrl, urlState]
   )
 
   // Restore task focus after return from a target page. One-shot: the stored

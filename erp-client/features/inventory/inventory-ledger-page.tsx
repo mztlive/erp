@@ -9,7 +9,6 @@ import {
   RefreshCwIcon,
   SearchIcon,
   SlashIcon,
-  XIcon,
 } from "lucide-react"
 import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 import { z } from "zod"
@@ -35,6 +34,7 @@ import {
   surfaceInsetClassName,
   WarehouseCombobox,
 } from "@/components/business"
+import { FilterChip } from "@/components/business/filter-chip"
 import { useAppForm } from "@/components/form"
 import { formatDateTime } from "@/lib/datetime"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
@@ -171,7 +171,8 @@ function sortOptions(view: InventoryView) {
   ]
 }
 
-/** 深链/隐形筛选参数的可移除标记：URL 参数与界面控件一一对应。 */
+/** 深链/隐形筛选参数的可移除标记：URL 参数与界面控件一一对应。
+ *  复用共享 FilterChip（components/business/filter-chip.tsx），保持跨页形态一致。 */
 function ChipFilter({
   label,
   onClear,
@@ -180,17 +181,7 @@ function ChipFilter({
   onClear: () => void
 }) {
   return (
-    <Badge variant="secondary" className="gap-1 font-normal">
-      {label}
-      <button
-        type="button"
-        onClick={onClear}
-        aria-label={`移除${label}筛选`}
-        className="rounded-sm opacity-70 hover:opacity-100"
-      >
-        <XIcon className="size-3" aria-hidden="true" />
-      </button>
-    </Badge>
+    <FilterChip label={label} onClear={onClear} />
   )
 }
 
@@ -341,7 +332,7 @@ export function InventoryLedgerPage() {
   React.useEffect(() => {
     const handle = globalThis.setTimeout(() => {
       if (searchInput === qParam) return
-      patchUrl({ q: searchInput.trim() || null })
+      patchUrl({ q: searchInput.trim() || null }, { replace: true })
     }, 300)
     return () => globalThis.clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl is stable enough via searchParams
@@ -474,7 +465,8 @@ export function InventoryLedgerPage() {
     (balanceId: string) => {
       restoreFocusIdRef.current = balanceId
       setPreviewBalanceId(balanceId)
-      patchUrl({ balanceId }, { replace: true })
+      // P2：打开详情属导航，用 push（不压缩历史）
+      patchUrl({ balanceId })
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [searchParams, pathname, view]
@@ -482,7 +474,8 @@ export function InventoryLedgerPage() {
 
   const closeDetail = React.useCallback(() => {
     setPreviewBalanceId(null)
-    patchUrl({ balanceId: null }, { replace: true })
+    // P2：关闭详情属导航，用 push
+    patchUrl({ balanceId: null })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl uses the current URL snapshot
   }, [searchParams, pathname, view])
 
@@ -1303,16 +1296,22 @@ export function InventoryLedgerPage() {
       </details>
 
       <MetricStrip columns={4} aria-label="库存台账指标筛选">
+        {/* 指标 = view + availability 组合语义（视图快捷组合，有业务价值）：点击同时写
+            view 与 availability 两个参数；与工具栏「可用状态」下拉共享 availability 参数
+            天然同步；Tabs（view）与指标条同源 URL，保持一致。 */}
         <MetricFilterItem
           label="库存组合"
           value={data.metrics.balanceDimensionCount}
           detail="仓库+SKU 组合数"
           active={metricActive === "combos" && view === "balance"}
           onClick={() => {
-            patchUrl({
-              view: "balance",
-              availability: "all",
-            })
+            patchUrl(
+              {
+                view: "balance",
+                availability: "all",
+              },
+              { replace: true }
+            )
             resetPagination()
           }}
         />
@@ -1322,10 +1321,13 @@ export function InventoryLedgerPage() {
           detail="有有效预占"
           active={metricActive === "reserved"}
           onClick={() => {
-            patchUrl({
-              view: "balance",
-              availability: "reserved",
-            })
+            patchUrl(
+              {
+                view: "balance",
+                availability: "reserved",
+              },
+              { replace: true }
+            )
             resetPagination()
           }}
         />
@@ -1335,10 +1337,13 @@ export function InventoryLedgerPage() {
           detail="可用数量为 0"
           active={metricActive === "zero"}
           onClick={() => {
-            patchUrl({
-              view: "balance",
-              availability: "zero",
-            })
+            patchUrl(
+              {
+                view: "balance",
+                availability: "zero",
+              },
+              { replace: true }
+            )
             resetPagination()
           }}
         />
@@ -1348,10 +1353,13 @@ export function InventoryLedgerPage() {
           detail="处理中"
           active={metricActive === "pending"}
           onClick={() => {
-            patchUrl({
-              view: "adjustment",
-              availability: null,
-            })
+            patchUrl(
+              {
+                view: "adjustment",
+                availability: null,
+              },
+              { replace: true }
+            )
             resetPagination()
           }}
         />
@@ -1369,7 +1377,7 @@ export function InventoryLedgerPage() {
           if (sortValue && !validSorts.includes(sortValue)) {
             patch.sort = null
           }
-          patchUrl(patch)
+          patchUrl(patch, { replace: true })
           resetPagination()
         }}
       >
@@ -1431,9 +1439,12 @@ export function InventoryLedgerPage() {
                     className="w-44"
                     value={warehouseId || undefined}
                     onValueChange={(id) => {
-                      patchUrl({
-                        warehouseId: id || null,
-                      })
+                      patchUrl(
+                        {
+                          warehouseId: id || null,
+                        },
+                        { replace: true }
+                      )
                       resetPagination()
                     }}
                     warehouses={data.warehouses.map((w) => ({
@@ -1456,10 +1467,13 @@ export function InventoryLedgerPage() {
                       className="w-28"
                       value={availability}
                       onValueChange={(v) => {
-                        patchUrl({
-                          availability: (v ??
-                            "all") as InventoryAvailability,
-                        })
+                        patchUrl(
+                          {
+                            availability: (v ??
+                              "all") as InventoryAvailability,
+                          },
+                          { replace: true }
+                        )
                         resetPagination()
                       }}
                       options={(
@@ -1483,10 +1497,13 @@ export function InventoryLedgerPage() {
                         className="w-32"
                         value={movementType[0] ?? "all"}
                         onValueChange={(value) => {
-                          patchUrl({
-                            movementType:
-                              value && value !== "all" ? value : null,
-                          })
+                          patchUrl(
+                            {
+                              movementType:
+                                value && value !== "all" ? value : null,
+                            },
+                            { replace: true }
+                          )
                           resetPagination()
                         }}
                         options={[
@@ -1507,7 +1524,10 @@ export function InventoryLedgerPage() {
                         value={occurredFrom ?? ""}
                         max={occurredTo}
                         onChange={(event) => {
-                          patchUrl({ occurredFrom: event.target.value })
+                          patchUrl(
+                            { occurredFrom: event.target.value },
+                            { replace: true }
+                          )
                           resetPagination()
                         }}
                         aria-label="发生日期起"
@@ -1519,7 +1539,10 @@ export function InventoryLedgerPage() {
                         value={occurredTo ?? ""}
                         min={occurredFrom}
                         onChange={(event) => {
-                          patchUrl({ occurredTo: event.target.value })
+                          patchUrl(
+                            { occurredTo: event.target.value },
+                            { replace: true }
+                          )
                           resetPagination()
                         }}
                         aria-label="发生日期止"
@@ -1527,13 +1550,53 @@ export function InventoryLedgerPage() {
                     </label>
                   </>
                 ) : null}
+              </>
+            }
+            secondary={
+              skuId || salesOrderLineId || adjustmentIdParam ? (
+                <>
+                  {skuId ? (
+                    <ChipFilter
+                      label={`当前 SKU：${chipSkuName ?? "已定位单品"}`}
+                      onClear={() => {
+                        patchUrl({ skuId: null }, { replace: true })
+                        resetPagination()
+                      }}
+                    />
+                  ) : null}
+                  {salesOrderLineId ? (
+                    <ChipFilter
+                      label={`销售单明细：${chipSalesLineLabel ?? "已定位"}`}
+                      onClear={() => {
+                        patchUrl({ salesOrderLineId: null }, { replace: true })
+                        resetPagination()
+                      }}
+                    />
+                  ) : null}
+                  {adjustmentIdParam ? (
+                    <ChipFilter
+                      label={`调整单：${chipAdjustmentNo ?? "已定位"}`}
+                      onClear={() => {
+                        patchUrl({ adjustmentId: null }, { replace: true })
+                        resetPagination()
+                      }}
+                    />
+                  ) : null}
+                </>
+              ) : undefined
+            }
+            actions={
+              <>
                 <label className="flex items-center gap-1.5 text-sm">
                   <span className="sr-only">排序</span>
                   <OptionCombobox
                     className="w-40"
                     value={sortValue}
                     onValueChange={(value) => {
-                      patchUrl({ sort: value ?? defaultSortValue(view) })
+                      patchUrl(
+                        { sort: value ?? defaultSortValue(view) },
+                        { replace: true }
+                      )
                       resetPagination()
                     }}
                     options={sortOptions(view)}
@@ -1543,33 +1606,9 @@ export function InventoryLedgerPage() {
                     placeholder="排序"
                   />
                 </label>
-                {skuId ? (
-                  <ChipFilter
-                    label={`当前 SKU：${chipSkuName ?? "已定位单品"}`}
-                    onClear={() => {
-                      patchUrl({ skuId: null })
-                      resetPagination()
-                    }}
-                  />
-                ) : null}
-                {salesOrderLineId ? (
-                  <ChipFilter
-                    label={`销售单明细：${chipSalesLineLabel ?? "已定位"}`}
-                    onClear={() => {
-                      patchUrl({ salesOrderLineId: null })
-                      resetPagination()
-                    }}
-                  />
-                ) : null}
-                {adjustmentIdParam ? (
-                  <ChipFilter
-                    label={`调整单：${chipAdjustmentNo ?? "已定位"}`}
-                    onClear={() => {
-                      patchUrl({ adjustmentId: null })
-                      resetPagination()
-                    }}
-                  />
-                ) : null}
+                <span className="text-xs text-muted-foreground" aria-live="polite">
+                  共 {data.total.toLocaleString("zh-CN")} 条
+                </span>
                 {(qParam ||
                   warehouseId ||
                   (availability !== "all" && view === "balance") ||
@@ -1578,27 +1617,28 @@ export function InventoryLedgerPage() {
                   adjustmentIdParam ||
                   movementType.length > 0 ||
                   searchParams.has("occurredFrom") ||
-                  searchParams.has("occurredTo") ||
-                  searchParams.has("sort")) && (
+                  searchParams.has("occurredTo")) && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={() => {
                       setSearchInput("")
-                      patchUrl({
-                        q: null,
-                        warehouseId: null,
-                        availability: "all",
-                        skuId: null,
-                        salesOrderLineId: null,
-                        adjustmentId: null,
-                        balanceId: null,
-                        movementType: null,
-                        occurredFrom: null,
-                        occurredTo: null,
-                        sort: null,
-                      })
+                      // P4：清全部筛选参数；保留视图、排序与预览（balanceId 导航上下文）
+                      patchUrl(
+                        {
+                          q: null,
+                          warehouseId: null,
+                          availability: "all",
+                          skuId: null,
+                          salesOrderLineId: null,
+                          adjustmentId: null,
+                          movementType: null,
+                          occurredFrom: null,
+                          occurredTo: null,
+                        },
+                        { replace: true }
+                      )
                       resetPagination()
                     }}
                   >
@@ -1606,11 +1646,6 @@ export function InventoryLedgerPage() {
                   </Button>
                 )}
               </>
-            }
-            actions={
-              <span className="text-xs text-muted-foreground" aria-live="polite">
-                共 {data.total.toLocaleString("zh-CN")} 条
-              </span>
             }
           />
         }
@@ -1630,15 +1665,18 @@ export function InventoryLedgerPage() {
                     className="rounded-lg shadow-none"
                     onClick={() => {
                       setSearchInput("")
-                      patchUrl({
-                        q: null,
-                        warehouseId: null,
-                        availability: "all",
-                        skuId: null,
-                        salesOrderLineId: null,
-                        adjustmentId: null,
-                        view: "balance",
-                      })
+                      // P4：清全部筛选参数；保留当前视图（不强制回 balance）
+                      patchUrl(
+                        {
+                          q: null,
+                          warehouseId: null,
+                          availability: "all",
+                          skuId: null,
+                          salesOrderLineId: null,
+                          adjustmentId: null,
+                        },
+                        { replace: true }
+                      )
                     }}
                   >
                     清除筛选
@@ -1774,12 +1812,15 @@ export function InventoryLedgerPage() {
                 variant="outline"
                 onClick={() => {
                   setPreviewBalanceId(null)
-                  patchUrl({
-                    view: "movement",
-                    balanceId: null,
-                    warehouseId: detail.balance.warehouseId,
-                    skuId: detail.balance.skuId,
-                  })
+                  patchUrl(
+                    {
+                      view: "movement",
+                      balanceId: null,
+                      warehouseId: detail.balance.warehouseId,
+                      skuId: detail.balance.skuId,
+                    },
+                    { replace: true }
+                  )
                   resetPagination()
                 }}
               >

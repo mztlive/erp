@@ -10,6 +10,7 @@ import {
   FileSearchIcon,
   PauseIcon,
   PlusIcon,
+  SearchIcon,
   TriangleAlertIcon,
   XIcon,
 } from "lucide-react"
@@ -23,6 +24,7 @@ import {
   DocumentSummary,
   FormalActionConfirmDialog,
   FormalActionResult,
+  ListToolbar,
   OptionCombobox,
   PageHeader,
   PageScaffold,
@@ -33,6 +35,7 @@ import {
   ValidationSummary,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import { cn } from "@/lib/utils"
 import { useSupplierOptionsQuery } from "@/hooks/use-options"
 import { useAppForm } from "@/components/form"
 import {
@@ -60,6 +63,11 @@ import {
 } from "@/components/ui/dialog"
 import { DatePicker } from "@/components/ui/date-picker"
 import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
@@ -201,6 +209,9 @@ export function ProcurementConfirmationPage() {
   const [finishedResult, setFinishedResult] = React.useState<ResultState>(null)
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [saveMessage, setSaveMessage] = React.useState<string | null>(null)
+  /** 单号搜索草稿：输入过程不打 URL，防抖/回车才提交（P3） */
+  const [orderNoDraft, setOrderNoDraft] = React.useState(orderNo ?? "")
+  const orderNoInputRef = React.useRef<HTMLInputElement>(null)
   const headingRef = React.useRef<HTMLHeadingElement>(null)
   const resultRef = React.useRef<HTMLDivElement>(null)
   /** 会话内存处理权，禁止序列化到 URL / storage */
@@ -219,6 +230,11 @@ export function ProcurementConfirmationPage() {
     setActionError(null)
     setSaveMessage(null)
   }, [task])
+
+  // 单号搜索框与 URL 双向同步：后退/分享后输入框与结果保持一致
+  React.useEffect(() => {
+    setOrderNoDraft(orderNo ?? "")
+  }, [orderNo])
 
   // 默认 URL：scope / currentWorkItemId / queueContextId（不写 autoNext 除非用户切换）
   React.useEffect(() => {
@@ -309,6 +325,37 @@ export function ProcurementConfirmationPage() {
     },
     [pathname, router, searchParams]
   )
+
+  // 单号搜索：300ms 防抖写 URL（replace）；筛选变化时清空焦点（P3）
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (orderNoDraft.trim() === (orderNo ?? "")) return
+      replaceUrl({
+        orderNo: orderNoDraft.trim() || null,
+        currentWorkItemId: null,
+      })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+  }, [orderNo, orderNoDraft, replaceUrl])
+
+  const commitOrderNo = React.useCallback(() => {
+    if (orderNoDraft.trim() === (orderNo ?? "")) return
+    replaceUrl({
+      orderNo: orderNoDraft.trim() || null,
+      currentWorkItemId: null,
+    })
+  }, [orderNo, orderNoDraft, replaceUrl])
+
+  // scope/sort 不算筛选（P4 保留项）；due/orderNo 才算激活筛选
+  const hasActiveFilter = Boolean(
+    orderNo || dueParam === "today" || dueParam === "overdue"
+  )
+
+  // 清除筛选：清 orderNo/due + 焦点，保留 scope/sort/queueContextId（P4）
+  const clearFilters = React.useCallback(() => {
+    setOrderNoDraft("")
+    replaceUrl({ orderNo: null, due: null, currentWorkItemId: null })
+  }, [replaceUrl])
 
   const goToWorkItem = React.useCallback(
     (workItemId: string | undefined | null) => {
@@ -713,6 +760,11 @@ export function ProcurementConfirmationPage() {
         return
       }
       if (inField) return
+      if (event.key === "/") {
+        event.preventDefault()
+        orderNoInputRef.current?.focus()
+        return
+      }
       if (event.key === "j" || event.key === "ArrowDown") {
         event.preventDefault()
         if (dirty) {
@@ -743,6 +795,7 @@ export function ProcurementConfirmationPage() {
     guardTerminalOpen,
     handleSave,
     neighborId,
+    orderNoInputRef,
   ])
 
   const toggleAutoNext = React.useCallback(
@@ -847,28 +900,139 @@ export function ProcurementConfirmationPage() {
       />
 
       <div
-        className={`${surfacePanelClassName} sticky top-0 z-10 flex flex-wrap items-center gap-3 px-3 py-2.5 text-sm`}
+        className={cn(
+          surfacePanelClassName,
+          "sticky top-0 z-10 space-y-2.5 px-3 py-2.5 text-sm"
+        )}
       >
-        <div className="flex items-center gap-2">
-          <Label htmlFor="auto-next" className="text-muted-foreground">
-            自动下一项
-          </Label>
-          <Switch
-            id="auto-next"
-            checked={autoNext}
-            onCheckedChange={toggleAutoNext}
-            aria-describedby="auto-next-hint"
-          />
-          <span id="auto-next-hint" className="sr-only">
-            该偏好仅在本次操作内生效
+        <div className="flex flex-wrap items-center gap-3">
+          <div
+            role="group"
+            aria-label="责任范围"
+            className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
+          >
+            {(
+              [
+                { value: "mine" as const, label: "我的待办" },
+                { value: "role_pool" as const, label: "团队待认领" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                aria-pressed={scope === opt.value}
+                onClick={() =>
+                  replaceUrl({
+                    scope: opt.value === "mine" ? null : opt.value,
+                    queueContextId: null,
+                    currentWorkItemId: null,
+                  })
+                }
+                className={cn(
+                  "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  scope === opt.value
+                    ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                    : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <div
+            role="group"
+            aria-label="到期时限"
+            className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
+          >
+            {(
+              [
+                { value: "all" as const, label: "全部时限" },
+                { value: "today" as const, label: "今日到期" },
+                { value: "overdue" as const, label: "已超期" },
+              ] as const
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                aria-pressed={
+                  opt.value === "all" ? due === "active" : due === opt.value
+                }
+                onClick={() =>
+                  replaceUrl({
+                    due: opt.value === "all" ? null : opt.value,
+                    currentWorkItemId: null,
+                  })
+                }
+                className={cn(
+                  "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  (opt.value === "all" ? due === "active" : due === opt.value)
+                    ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                    : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          <span className="ml-auto hidden text-xs text-muted-foreground md:inline">
+            快捷键：j / k 切换 · ⌘S 保存 · ⌘↵ 通过确认 · / 按单号搜索
           </span>
         </div>
-        <Badge variant="outline" className="font-normal">
-          仅本次会话
-        </Badge>
-        <span className="ml-auto hidden text-xs text-muted-foreground md:inline">
-          快捷键：j / k 切换 · ⌘S 保存 · ⌘↵ 通过确认
-        </span>
+        <ListToolbar
+          aria-label="二次确认筛选"
+          search={
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                commitOrderNo()
+              }}
+            >
+              <InputGroup>
+                <InputGroupAddon>
+                  <SearchIcon className="size-4" aria-hidden="true" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  ref={orderNoInputRef}
+                  value={orderNoDraft}
+                  onChange={(event) => setOrderNoDraft(event.target.value)}
+                  placeholder="按销售单号搜索"
+                  aria-label="按单号搜索队列"
+                />
+              </InputGroup>
+            </form>
+          }
+          actions={
+            <>
+              {hasActiveFilter ? (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={clearFilters}
+                >
+                  清除筛选
+                </Button>
+              ) : null}
+              <div className="flex items-center gap-2">
+                <Label htmlFor="auto-next" className="text-muted-foreground">
+                  自动下一项
+                </Label>
+                <Switch
+                  id="auto-next"
+                  checked={autoNext}
+                  onCheckedChange={toggleAutoNext}
+                  aria-describedby="auto-next-hint"
+                />
+                <span id="auto-next-hint" className="sr-only">
+                  该偏好仅在本次操作内生效
+                </span>
+              </div>
+              <Badge variant="outline" className="font-normal">
+                仅本次会话
+              </Badge>
+            </>
+          }
+        />
       </div>
 
       {finishedResult && !lastResult ? (
@@ -987,9 +1151,7 @@ export function ProcurementConfirmationPage() {
               <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
-                  onClick={() =>
-                    replaceUrl({ orderNo: null, due: null })
-                  }
+                  onClick={clearFilters}
                 >
                   清除筛选
                 </Button>

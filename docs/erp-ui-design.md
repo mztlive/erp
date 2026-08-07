@@ -194,12 +194,13 @@ return (
 | 模式 | 骨架 |
 | --- | --- |
 | M1 工作台 | `PageScaffold` → Header（含分段/刷新）→ Metric → 双栏 surface 卡 |
-| M2 列表 | `PageScaffold` → Header → Metric → **一张** `BusinessTableFrame` |
-| M3 队列 | `PageScaffold` → Header → sticky 处理条（surface）→ 主卡 + 侧卡 |
+| M2 列表 | `PageScaffold` → Header → Metric → **一张** `BusinessTableFrame`（**含** `ListToolbar`，禁止 frame 外平行工具条） |
+| M3 队列 | `PageScaffold` → Header → **一张 sticky 处理面**（surface：范围/类型 + `ListToolbar` + chip + 连续处理条）→ 主卡 + 侧卡 |
 | M4 对象中心 | `PageScaffold` → object-chrome → `DocumentHeader` → Metric → 正文 surface（Tabs 外壳） |
-| M5–M7 | 同：Header 贴画布 + 1～2 主表面 |
+| M5–M7 | 同：Header 贴画布 + 1～2 主表面；分析明细筛选项进明细 frame，期间/口径可单独成条 |
 
-验收：1440 视口下，内容区不应出现「标题裸飘 + 三层不同圆角边框块」；分割线弱于控件边框；切换控件有明确选中块。
+验收：1440 视口下，内容区不应出现「标题裸飘 + 三层不同圆角边框块」；分割线弱于控件边框；切换控件有明确选中块。  
+筛选归属与密度细则见 `docs/ui-filter-design.md`（P10–P12、§2–§3）。
 
 ---
 
@@ -376,15 +377,21 @@ return (
 
 ```
 ┌ PageHeader + 主新建动作
-├ ListToolbar：SavedView | 搜索 | 常驻筛 | 高级筛 | 列设置 | 导出
-├ SelectionScopeBar（有多选时）
-├ StatusMatrix（可选：状态分布一键过滤）
-├ BusinessTableFrame
+├ MetricStrip / StatusMatrix（可选：真筛选指标，含「全部」）
+├ BusinessTableFrame                          ← 唯一主表面
+│   ├ title + 筛选摘要 description
+│   ├ ListToolbar（卡内，禁止画布裸放）
+│   │   第1层：search | 主筛≤3 | actions（计数 + 清除）
+│   │   第2层：高级筛选入口 + FilterChip（有则独立次行）
+│   ├ SelectionScopeBar（有多选时）
 │   └ DataTable（服务端分页/排序/筛；稳定 rowId）
 └ 列表内读主事实（二选一，工作面写死，禁止混用且缺一层）
     · QuickPreviewSheet size=detail（半屏业务核对）
     · 或 PaperDocument 透明宽层（账本版式核对，W05 销售单已用）
 ```
+
+页级「新建 / 导出 / 列设置」优先 `PageHeader` 或 frame `headerActions`，不与主筛抢 `ListToolbar.filters`。  
+密度、分层与控件选型见 `docs/ui-filter-design.md` §3。
 
 交互要点：
 
@@ -465,15 +472,22 @@ detail 预览**不负责**（留给对象中心或队列）：
 
 ### 4.4 M3 连续处理队列（高效率核心）
 
-用于：采购二次确认、采购单财务审核、卡券票款复核、销售领导/运营审批、接口错误处理。
+用于：采购二次确认、采购单财务审核、卡券票款复核、销售领导/运营审批、接口错误处理、交付与代发 / 收货与发货（W09）。
 
 ```
-┌ SequentialProcessBar
-│  第 3/28  · 过滤器摘要  · [上一项] [下一项]  · 可选「通过后自动下一项」
-├ 当前对象只读摘要（或可编辑确认表单区）
-├ 决策区：通过 / 驳回（驳回必填原因） / 暂挂
+┌ sticky 处理面（一张 surface 卡，禁止筛选裸飘画布）─────────────┐
+│  第0层：scope / 类型或 lane 分段（可带计数）                     │
+│  第1层：ListToolbar  search | 主筛≤3 | 计数 · 清除 · 自动下一项 │
+│  第2层：FilterChip（来源销售单/采购单等深链锁定）               │
+│  SequentialProcessBar：第 3/28 · 摘要 · [上一项] [下一项]       │
+└────────────────────────────────────────────────────────────────┘
+┌ 主作业区（surface）
+│  当前对象只读摘要（或可编辑确认表单区）
+│  决策区：通过 / 驳回（驳回必填原因） / 暂挂
 └ 侧栏或折叠：历史记录、附件、关联差异
 ```
+
+队列**不**套 `BusinessTableFrame` 装任务流；与 M2 统一的是「surface + ListToolbar 槽位」，不是组件名。细则见 `docs/ui-filter-design.md` §2.3。
 
 交互要点：
 
@@ -482,7 +496,7 @@ detail 预览**不负责**（留给对象中心或队列）：
 - 用户**无需**返回列表找下一条。  
 - 完成队列：明确空态「本筛选项已处理完」+ 返回工作台。  
 - 与 M4 的关系：队列是「处理模式」；需要深挖时「在中心打开」新开页签，**队列上下文不丢**（页签仍在）。
-- 队列位置、筛选、当前项 ID 和自动下一项偏好写入 URL 或可恢复状态；刷新与从对象中心返回后仍回到原上下文。
+- 队列筛选参数写入 URL；当前项 ID 与自动下一项偏好按工作面约定写入 URL 或可恢复状态；刷新与从对象中心返回后仍回到原上下文。
 - 正式动作提交时携带幂等键并锁定当前项；重复点击、超时重试不得重复推进业务状态。
 - 动作成功后先落固定结果，再移动到下一条；结果不确定时停留当前项并提供「查询最终结果」，不得擅自判成功或跳过。
 - 暂挂、驳回、处理失败都必须说明当前项是否仍在本队列、下一项是否已打开，以及如何恢复。
@@ -584,6 +598,29 @@ M4 **禁止** `PageHeader(title=工作面名)` 再叠 `DocumentHeader(title=对�
 - 问题行：`ImportIssueTable` 可筛选错误码；不把成功行和失败行混成无法扫读的长表。  
 - 映射差异：左右 diff + 指派责任部门动作。  
 - 接口错误：`InterfaceErrorResolutionPanel`（重试 / 查询 / 转人工 / 关闭）在**同一详情**完成，不拆「错误列表页 + 另一套处理页」。
+
+### 4.9 筛选区域统一规范
+
+各列表页/队列页/分析页明细的搜索、筛选、分页、**布局归属与密度**必须统一遵循 `docs/ui-filter-design.md`（D1–D25 与 L1–L6 主路径已落地；新页与分析页例外见该文档 §5.2）：
+
+**交互 / URL**
+
+- 搜索统一为「防抖 300ms 即时 + Enter 兜底 + `/` 聚焦」，URL 参数统一 `q`；  
+- 清除筛选清全部筛选参数并回第 1 页，**保留**视图/scope、排序、期间/口径与导航上下文参数；  
+- 分页写 URL（`page`/`cursor`），筛选变更自动回第 1 页；筛选/分页/搜索变更恒 `router.replace`，打开/关闭详情等导航用 `push`；  
+- 来源深链参数（customerId/salesOrderId/orderNo 等）以可移除的共享 `FilterChip` 显性化（第 2 层次行）；  
+- 空态统一 `BusinessEmptyState`，区分无数据（no-data）/ 筛选无结果（filter，带「清除筛选」）/ 无数据范围（no-scope）；空态**不**卸载筛选区。
+
+**布局归属（P10）**
+
+- **M2**：筛选只在 `BusinessTableFrame.toolbar` 内，禁止 frame 外平行 `ListToolbar`；  
+- **M3**：筛选与类型/范围分段收拢进**一张** sticky 处理面 surface 卡，禁止画布裸放；  
+- 统一的是 surface + 槽位语言，队列不硬套表格 frame。
+
+**密度与分层（P11–P12）**
+
+- 第 0 层视图/范围；第 1 层搜索 + **主筛 ≤3** + 计数/清除；第 2 层高级筛选与 `FilterChip`（独立次行）；  
+- 枚举选项 ≤4 可用分段/`ToggleGroup`；**≥5 必须** `OptionCombobox` 或收入高级筛选，禁止长 Toggle 横排撑满工具条。
 
 ---
 

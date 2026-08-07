@@ -32,12 +32,16 @@ export const customerKeys = {
     [...customerKeys.all, "detail", customerId] as const,
 }
 
-export function useCustomerDirectoryQuery(query: CustomerDirectoryQuery) {
+export function useCustomerDirectoryQuery(
+  query: CustomerDirectoryQuery,
+  options?: { enabled?: boolean }
+) {
   return useQuery({
     queryKey: customerKeys.directory(query),
     queryFn: () => fetchCustomerDirectory(query),
     // 切换筛选时保留上一批结果渲染，避免整卡闪烁（数据表骨架只出现于首载）。
     placeholderData: (previous) => previous,
+    enabled: options?.enabled ?? true,
   })
 }
 

@@ -45,6 +45,7 @@ import {
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
+import { FilterChip } from "@/components/business/filter-chip"
 import {
   Alert,
   AlertDescription,
@@ -280,10 +281,12 @@ export function CustomerQualityPage() {
   const scopeId = "scope:team:sales-east"
 
   const [searchInput, setSearchInput] = React.useState(qParam)
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null)
   const [explicitFrom, setExplicitFrom] = React.useState(fromParam ?? "")
   const [explicitTo, setExplicitTo] = React.useState(toParam ?? "")
+  const pageFromUrl = Math.max(1, Number(searchParams.get("page") ?? "1") || 1)
   const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
+    pageIndex: pageFromUrl - 1,
     pageSize: 20,
   })
   const [tagDialog, setTagDialog] = React.useState<BusinessTag | null>(null)
@@ -293,6 +296,43 @@ export function CustomerQualityPage() {
   const [refreshError, setRefreshError] = React.useState(false)
   const [periodWriteDone, setPeriodWriteDone] = React.useState(false)
   const rowFocusRef = React.useRef<string | null>(focusCustomerId ?? null)
+
+  // P3：URL 回填搜索草稿（输入中不被旧值覆盖）；300ms 防抖自动写 URL；`/` 聚焦；Enter 兜底
+  React.useEffect(() => {
+    const el = searchInputRef.current
+    if (el && document.activeElement === el) return
+    setSearchInput(qParam)
+  }, [qParam])
+
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchInput.trim() === qParam) return
+      patchUrl({ q: searchInput.trim() || null })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl 以当前 URL 快照为准
+  }, [searchInput])
+
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "/" || event.metaKey || event.ctrlKey || event.altKey)
+        return
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return
+      }
+      event.preventDefault()
+      searchInputRef.current?.focus()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   const periodPolicyQuery = useCustomerQualityPeriodPolicyQuery(scenario)
   const periodPolicy = periodPolicyQuery.data
@@ -436,12 +476,37 @@ export function CustomerQualityPage() {
     patch: Record<string, string | null | undefined>,
     options?: { replace?: boolean }
   ) {
-    patchSearchParams({ router, pathname, searchParams }, patch, options)
+    // P1/P2/P6：筛选变更恒 replace；page 入 URL，任何筛选变更回第 1 页（删除 page 即省略）
+    patchSearchParams(
+      { router, pathname, searchParams },
+      { ...patch, page: null },
+      { replace: true, ...options }
+    )
+    setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
   }
 
   const resetPage = React.useCallback(() => {
-    setPagination((p) => ({ ...p, pageIndex: 0 }))
+    setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
   }, [])
+
+  // P6：分页写 URL（page），URL 回读同步本地分页
+  React.useEffect(() => {
+    setPagination((p) =>
+      p.pageIndex === pageFromUrl - 1 ? p : { ...p, pageIndex: pageFromUrl - 1 }
+    )
+  }, [pageFromUrl])
+
+  const handlePaginationChange = React.useCallback(
+    (next: PaginationState) => {
+      setPagination(next)
+      const sp = new URLSearchParams(searchParams.toString())
+      if (next.pageIndex <= 0) sp.delete("page")
+      else sp.set("page", String(next.pageIndex + 1))
+      const qs = sp.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
+    },
+    [pathname, router, searchParams]
+  )
 
   const returnTo = React.useMemo(
     () => buildReturnTo(pathname, new URLSearchParams(searchParams.toString())),
@@ -503,8 +568,24 @@ export function CustomerQualityPage() {
         }
       })
     })
+    // D3：focus 参数用完即清理（replace，不滞留 URL；重新进入/分享时不再无谓定位）
+    const sp = new URLSearchParams(searchParams.toString())
+    if (sp.has("focusCustomerId") || sp.has("focusMetric")) {
+      sp.delete("focusCustomerId")
+      sp.delete("focusMetric")
+      const qs = sp.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
+    }
     return () => window.cancelAnimationFrame(frame)
-  }, [focusCustomerId, focusMetric, data, scrollToTableTop])
+  }, [
+    focusCustomerId,
+    focusMetric,
+    data,
+    scrollToTableTop,
+    pathname,
+    router,
+    searchParams,
+  ])
 
   const columns = React.useMemo<ColumnDef<CustomerQualityRow>[]>(
     () => [
@@ -1022,6 +1103,11 @@ export function CustomerQualityPage() {
 
   const isVoucherOnly = businessType === "VOUCHER"
 
+  // customerId 深链参数的显性名称（在当前页数据中反查客户名）
+  const chipCustomerName = data.customers.items.find(
+    (c) => c.customerId === customerId
+  )?.customerName
+
   return (
     <PageScaffold>
       <PageHeader
@@ -1302,28 +1388,24 @@ export function CustomerQualityPage() {
                 </InputGroupAddon>
                 <InputGroupInput
                   id="cq-q"
+                  ref={searchInputRef}
                   value={searchInput}
-                  placeholder="客户编号 / 名称"
+                  placeholder="客户编号 / 名称（/ 聚焦）"
                   onChange={(e) => setSearchInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       patchUrl({ q: searchInput.trim() || null })
-                      setPagination((p) => ({ ...p, pageIndex: 0 }))
                     }
                   }}
                 />
               </InputGroup>
             </div>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => {
-                patchUrl({ q: searchInput.trim() || null })
-                setPagination((p) => ({ ...p, pageIndex: 0 }))
-              }}
-            >
-              应用
-            </Button>
+            {customerId ? (
+              <FilterChip
+                label={`客户：${chipCustomerName ?? "已定位客户"}`}
+                onClear={() => patchUrl({ customerId: null })}
+              />
+            ) : null}
             {(qParam ||
               scaleTag ||
               profitTag ||
@@ -1338,6 +1420,7 @@ export function CustomerQualityPage() {
                 variant="ghost"
                 onClick={() => {
                   setSearchInput("")
+                  // P4：清除筛选保留排序与期间（分析页维度参数）
                   patchUrl({
                     q: null,
                     scaleTag: null,
@@ -1348,7 +1431,6 @@ export function CustomerQualityPage() {
                     businessType: null,
                     fundsReview: null,
                     customerId: null,
-                    sort: null,
                     focusMetric: null,
                   })
                   resetPage()
@@ -1493,7 +1575,6 @@ export function CustomerQualityPage() {
             {data.metrics
               .filter((m) => m.visible)
               .map((m) => {
-                const active = focusMetric === m.key
                 const detail = metricReliabilityDetail(
                   m.reliability,
                   m.explanation,
@@ -1512,19 +1593,15 @@ export function CustomerQualityPage() {
                   m.key === "actualProfitLossNet" ||
                   m.key === "salesGrossAmount"
                 ) {
+                  // D3：focusMetric 不再作伪筛选写 URL；保留「滚动定位到明细表」交互，
+                  // 用普通按钮语义（不带 active 筛选态），消除「点了只滚动不筛数」的指标
                   return (
                     <MetricFilterItem
                       key={m.key}
                       label={m.label}
                       value={valueNode}
                       detail={detail}
-                      active={active}
-                      onClick={() => {
-                        patchUrl({
-                          focusMetric: active ? null : m.key,
-                        })
-                        if (!active) scrollToTableTop()
-                      }}
+                      onClick={() => scrollToTableTop()}
                     />
                   )
                 }
@@ -1895,6 +1972,7 @@ export function CustomerQualityPage() {
                   variant="secondary"
                   className="rounded-lg shadow-none"
                   onClick={() => {
+                    // P4：清除筛选保留排序与期间（分析页维度参数）
                     patchUrl({
                       q: null,
                       scaleTag: null,
@@ -1905,7 +1983,6 @@ export function CustomerQualityPage() {
                       businessType: null,
                       fundsReview: null,
                       customerId: null,
-                      sort: null,
                       focusMetric: null,
                     })
                     resetPage()
@@ -1932,7 +2009,7 @@ export function CustomerQualityPage() {
                     getRowId={(row) => row.customerId}
                     rowCount={data.customers.filteredTotal}
                     pagination={pagination}
-                    onPaginationChange={setPagination}
+                    onPaginationChange={handlePaginationChange}
                     sorting={tableSorting}
                     onSortingChange={handleTableSortingChange}
                     layout="flush"

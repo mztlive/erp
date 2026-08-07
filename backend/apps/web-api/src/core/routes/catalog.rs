@@ -3,7 +3,8 @@
 //! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/product-categories`、
 //! `/admin/product-brands`、`/admin/unit-of-measures`、`/admin/sku-attributes`、
 //! `/admin/sku-attribute-values`、`/admin/products`、`/admin/product-revisions`、
-//! `/admin/skus`、`/admin/sku-revisions`、`/admin/voucher-category-profiles`；
+//! `/admin/skus`、`/admin/sku-revisions`、`/admin/voucher-category-profiles`（只读列表）、
+//! `/admin/voucher-categories`（原子创建）；
 //! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
 //! `#[permission_macros::permission]`。
 
@@ -252,11 +253,11 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
-            "/voucher-category-profiles",
+            "/voucher-categories",
             with_permission(
-                post(catalog::product::voucher_category_profile_create),
+                post(catalog::product::voucher_category_create),
                 rbac,
-                catalog::product::voucher_category_profile_create_permission_key(),
+                catalog::product::voucher_category_create_permission_key(),
             ),
         )
 }

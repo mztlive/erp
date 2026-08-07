@@ -25,6 +25,7 @@ import {
   PageScaffold,
   QuickPreviewSheet,
 } from "@/components/business"
+import { FilterChip } from "@/components/business/filter-chip"
 import {
   Alert,
   AlertDescription,
@@ -81,7 +82,9 @@ export function ProductPublicationsListPage() {
   const [searchInput, setSearchInput] = React.useState(qParam)
   const searchInputRef = React.useRef<HTMLInputElement | null>(null)
   const pageFromUrl = Math.max(1, Number(searchParams.get("page") ?? "1") || 1)
+  // 本地记录：pageSize 仅影响查询页大小（沿用页面默认 20，不写 URL）
   const [pageSize, setPageSize] = React.useState(20)
+  // 预览 Sheet 由本地 state 管理（导航上下文，不写 URL、不随清除筛选变化）
   const [previewId, setPreviewId] = React.useState<string | null>(null)
   const [columnPinning] = React.useState<ColumnPinningState>({
     left: ["sku"],
@@ -95,6 +98,16 @@ export function ProductPublicationsListPage() {
     if (el && document.activeElement === el) return
     setSearchInput(qParam)
   }, [qParam])
+
+  // P3：搜索 300ms 防抖自动写 URL（replace），Enter 兜底，`/` 聚焦
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchInput.trim() === qParam) return
+      replaceParams({ q: searchInput.trim() || undefined })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- replaceParams 以当前 URL 快照为准
+  }, [searchInput])
 
   React.useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -157,6 +170,26 @@ export function ProductPublicationsListPage() {
   const commitSearch = () => {
     replaceParams({ q: searchInput.trim() || undefined })
   }
+
+  // P4：清搜索词 + 全部筛选参数 + page 回 1；保留排序/视图/导航上下文等（本页无此类参数，语义等价全清）
+  const clearFilters = React.useCallback(() => {
+    setSearchInput("")
+    const sp = new URLSearchParams(searchParams.toString())
+    for (const k of [
+      "q",
+      "skuId",
+      "supplierOfferingRevisionId",
+      "mall",
+      "publicationStatus",
+      "deliveryStatus",
+      "metric",
+      "page",
+    ]) {
+      sp.delete(k)
+    }
+    const qs = sp.toString()
+    router.replace(qs ? `${pathname}?${qs}` : pathname)
+  }, [pathname, router, searchParams])
 
   const handlePaginationChange = React.useCallback(
     (next: PaginationState) => {
@@ -399,6 +432,8 @@ export function ProductPublicationsListPage() {
         </Alert>
       ) : null}
 
+      {/* 指标与「发布状态/发送状态」双向互斥：指标点击清除状态维度、状态变更清除指标。
+          这是有意设计（避免指标×状态矛盾空结果），与通用「指标点击不清其它筛选」不同；保留并注明。 */}
       <MetricStrip>
         <MetricFilterItem
           label="待发布"
@@ -469,170 +504,154 @@ export function ProductPublicationsListPage() {
         title="发布列表"
         description="管理各 SKU 在目标商城的发布版本与发送确认状态。"
         toolbar={
-          <>
-            <ListToolbar
-              search={
-                <InputGroup className="max-w-md">
-                  <InputGroupAddon>
-                    <SearchIcon className="size-4" />
-                  </InputGroupAddon>
-                  <InputGroupInput
-                    ref={searchInputRef}
-                    value={searchInput}
-                    placeholder="发布编号、SKU、商品名（/ 聚焦）"
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") commitSearch()
-                    }}
-                  />
-                </InputGroup>
-              }
-              filters={
-                <div className="flex flex-wrap items-center gap-2">
-                  <OptionCombobox
-                    value={mallId ?? "all"}
-                    onValueChange={(v) => {
-                      const next = v ?? "all"
-                      replaceParams({
-                        mall: next === "all" ? undefined : next,
-                      })
-                    }}
-                    options={[
-                      { value: "all", label: "全部商城" },
-                      ...MALLS.map((m) => ({
-                        value: m.id,
-                        label: m.name,
-                      })),
-                    ]}
-                    className="w-36"
-                    size="sm"
-                    allowClear={false}
-                    aria-label="目标商城"
-                    placeholder="全部商城"
-                  />
-                  <OptionCombobox
-                    value={publicationStatus}
-                    onValueChange={(v) =>
-                      replaceParams({
-                        publicationStatus: v ?? "all",
-                        metric: undefined,
-                      })
-                    }
-                    options={[
-                      { value: "all", label: "有效发布" },
-                      ...(
-                        Object.keys(PUBLICATION_STATUS_LABEL) as Array<
-                          keyof typeof PUBLICATION_STATUS_LABEL
-                        >
-                      ).map((k) => ({
-                        value: k,
-                        label: PUBLICATION_STATUS_LABEL[k],
-                      })),
-                    ]}
-                    className="w-36"
-                    size="sm"
-                    allowClear={false}
-                    aria-label="发布状态"
-                    placeholder="发布状态"
-                  />
-                  <OptionCombobox
-                    value={deliveryStatus}
-                    onValueChange={(v) =>
-                      replaceParams({
-                        deliveryStatus: v ?? "all",
-                        metric: undefined,
-                      })
-                    }
-                    options={[
-                      { value: "all", label: "发送状态" },
-                      { value: "pending_confirm", label: "待商城确认" },
-                      { value: "failed", label: "失败" },
-                      { value: "handoff", label: "转人工" },
-                      { value: "acked", label: "已确认" },
-                    ]}
-                    className="w-40"
-                    size="sm"
-                    allowClear={false}
-                    aria-label="发送状态"
-                    placeholder="发送状态"
-                  />
-                  {(qParam ||
-                    mallId ||
-                    skuId ||
-                    supplierOfferingRevisionId ||
-                    publicationStatus !== "all" ||
-                    deliveryStatus !== "all" ||
-                    metric !== "all") && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => {
-                        setSearchInput("")
-                        router.replace(pathname)
-                      }}
-                    >
-                      清除筛选
-                    </Button>
-                  )}
-                </div>
-              }
-            />
-
-            {(skuId && data?.resolvedFilters.skuCode) ||
-            (supplierOfferingRevisionId &&
-              data?.resolvedFilters.supplierName) ? (
-              <div
-                className="flex flex-wrap items-center gap-2"
-                role="group"
-                aria-label="来源筛选"
-              >
-                {skuId && data?.resolvedFilters.skuCode ? (
-                  <Badge variant="outline" className="gap-1">
-                    已按 SKU：{data.resolvedFilters.skuCode}
-                    <button
-                      type="button"
-                      aria-label={`移除按 ${data.resolvedFilters.skuCode} 筛选`}
-                      className="ml-1 text-muted-foreground hover:text-foreground"
-                      onClick={() =>
+          <ListToolbar
+            search={
+              <InputGroup className="max-w-md">
+                <InputGroupAddon>
+                  <SearchIcon className="size-4" />
+                </InputGroupAddon>
+                <InputGroupInput
+                  ref={searchInputRef}
+                  value={searchInput}
+                  placeholder="发布编号、SKU、商品名（/ 聚焦）"
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") commitSearch()
+                  }}
+                />
+              </InputGroup>
+            }
+            filters={
+              <>
+                <OptionCombobox
+                  value={mallId ?? "all"}
+                  onValueChange={(v) => {
+                    const next = v ?? "all"
+                    replaceParams({
+                      mall: next === "all" ? undefined : next,
+                    })
+                  }}
+                  options={[
+                    { value: "all", label: "全部商城" },
+                    ...MALLS.map((m) => ({
+                      value: m.id,
+                      label: m.name,
+                    })),
+                  ]}
+                  className="w-36"
+                  size="sm"
+                  allowClear={false}
+                  aria-label="目标商城"
+                  placeholder="全部商城"
+                />
+                <OptionCombobox
+                  value={publicationStatus}
+                  onValueChange={(v) =>
+                    replaceParams({
+                      publicationStatus: v ?? "all",
+                      metric: undefined,
+                    })
+                  }
+                  options={[
+                    { value: "all", label: "有效发布" },
+                    ...(
+                      Object.keys(PUBLICATION_STATUS_LABEL) as Array<
+                        keyof typeof PUBLICATION_STATUS_LABEL
+                      >
+                    ).map((k) => ({
+                      value: k,
+                      label: PUBLICATION_STATUS_LABEL[k],
+                    })),
+                  ]}
+                  className="w-36"
+                  size="sm"
+                  allowClear={false}
+                  aria-label="发布状态"
+                  placeholder="发布状态"
+                />
+                <OptionCombobox
+                  value={deliveryStatus}
+                  onValueChange={(v) =>
+                    replaceParams({
+                      deliveryStatus: v ?? "all",
+                      metric: undefined,
+                    })
+                  }
+                  options={[
+                    { value: "all", label: "发送状态" },
+                    { value: "pending_confirm", label: "待商城确认" },
+                    { value: "failed", label: "失败" },
+                    { value: "handoff", label: "转人工" },
+                    { value: "acked", label: "已确认" },
+                  ]}
+                  className="w-40"
+                  size="sm"
+                  allowClear={false}
+                  aria-label="发送状态"
+                  placeholder="发送状态"
+                />
+              </>
+            }
+            secondary={
+              (skuId && data?.resolvedFilters.skuCode) ||
+              (supplierOfferingRevisionId &&
+                data?.resolvedFilters.supplierName) ||
+              data?.filterSummary ? (
+                <>
+                  {skuId && data?.resolvedFilters.skuCode ? (
+                    <FilterChip
+                      label={`已按 SKU：${data.resolvedFilters.skuCode}`}
+                      clearLabel={`移除按 ${data.resolvedFilters.skuCode} 筛选`}
+                      onClear={() =>
                         replaceParams({
                           skuId: undefined,
                           supplierOfferingRevisionId: undefined,
                         })
                       }
-                    >
-                      ×
-                    </button>
-                  </Badge>
-                ) : null}
-                {supplierOfferingRevisionId &&
-                data?.resolvedFilters.supplierName ? (
-                  <Badge variant="outline" className="gap-1">
-                    已按固定供给：{data.resolvedFilters.supplierName}
-                    <button
-                      type="button"
-                      aria-label={`移除按 ${data.resolvedFilters.supplierName} 筛选`}
-                      className="ml-1 text-muted-foreground hover:text-foreground"
-                      onClick={() =>
+                    />
+                  ) : null}
+                  {supplierOfferingRevisionId &&
+                  data?.resolvedFilters.supplierName ? (
+                    <FilterChip
+                      label={`已按固定供给：${data.resolvedFilters.supplierName}`}
+                      clearLabel={`移除按 ${data.resolvedFilters.supplierName} 筛选`}
+                      onClear={() =>
                         replaceParams({
                           skuId: undefined,
                           supplierOfferingRevisionId: undefined,
                         })
                       }
-                    >
-                      ×
-                    </button>
-                  </Badge>
-                ) : null}
-              </div>
-            ) : null}
-
-            {data?.filterSummary ? (
-              <p className="text-xs text-muted-foreground">
-                {data.filterSummary}
-              </p>
-            ) : null}
-          </>
+                    />
+                  ) : null}
+                  {data?.filterSummary ? (
+                    <span className="text-xs text-muted-foreground">
+                      {data.filterSummary}
+                    </span>
+                  ) : null}
+                </>
+              ) : undefined
+            }
+            actions={
+              <>
+                {(qParam ||
+                  mallId ||
+                  skuId ||
+                  supplierOfferingRevisionId ||
+                  publicationStatus !== "all" ||
+                  deliveryStatus !== "all" ||
+                  metric !== "all") && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                  >
+                    清除筛选
+                  </Button>
+                )}
+              </>
+            }
+          />
         }
         table={
           listQuery.isPending ? (
@@ -677,10 +696,7 @@ export function ProductPublicationsListPage() {
                     variant="secondary"
                     size="sm"
                     className="rounded-lg shadow-none"
-                    onClick={() => {
-                      setSearchInput("")
-                      router.replace(pathname)
-                    }}
+                    onClick={clearFilters}
                   >
                     清除筛选
                   </Button>

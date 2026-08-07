@@ -58,7 +58,7 @@ const STATUS_ALIASES: Record<string, SalesOrderStatusValue> = {
 const DIRECTIONS = ["asc", "desc"] as const
 
 const codec = createUrlStateCodec<SalesOrdersUrlState>([
-  { key: "search", type: "string", trim: true },
+  { key: "q", name: "search", type: "string", trim: true, aliases: ["search"] },
   {
     key: "nature",
     type: "enum",

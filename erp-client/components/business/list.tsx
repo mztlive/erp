@@ -35,22 +35,29 @@ type DivProps = React.ComponentPropsWithoutRef<"div">
 interface ListToolbarProps extends Omit<DivProps, "children"> {
   /** 常驻搜索控件。查询值与提交时机由业务层管理。 */
   readonly search?: React.ReactNode
-  /** 状态、时间、责任等筛选控件或高级筛选入口。 */
+  /** 主筛（≤3）：状态、仓库、到期等日常最高频维度。 */
   readonly filters?: React.ReactNode
+  /**
+   * 第 2 层：高级筛选入口、来源锁定 FilterChip 等。
+   * 独立成行，不与主筛挤在同一视觉行（见 docs/ui-filter-design.md §3）。
+   */
+  readonly secondary?: React.ReactNode
   /** 当前视图选择、保存和管理入口。 */
   readonly savedView?: React.ReactNode
-  /** 导出、新建等页面级动作。 */
+  /** 计数、清除筛选、队列「自动下一项」等。 */
   readonly actions?: React.ReactNode
 }
 
 /**
  * 跨业务域列表工具栏。
  *
- * 组件只排列受控搜索、筛选、保存视图和动作插槽，不持有查询或路由状态。
+ * 组件只排列受控搜索、主筛、次要行、保存视图和动作插槽，不持有查询或路由状态。
+ * 布局契约：主行 = search + filters(≤3) + actions；secondary 固定次行。
  */
 function ListToolbar({
   search,
   filters,
+  secondary,
   savedView,
   actions,
   className,
@@ -64,55 +71,66 @@ function ListToolbar({
       role="toolbar"
       aria-label={ariaLabel}
       data-slot="list-toolbar"
-      className={cn(
-        "flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between",
-        className
-      )}
+      className={cn("flex flex-col gap-2", className)}
       {...props}
     >
-      {hasQueryTools ? (
-        <div
-          data-slot="list-toolbar-query-tools"
-          className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
-        >
-          {savedView ? (
-            <div data-slot="list-toolbar-saved-view" className="shrink-0">
-              {savedView}
-            </div>
-          ) : null}
-          {search ? (
+      <div
+        data-slot="list-toolbar-primary"
+        className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between"
+      >
+        {hasQueryTools ? (
+          <div
+            data-slot="list-toolbar-query-tools"
+            className="flex min-w-0 flex-1 flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center"
+          >
+            {savedView ? (
+              <div data-slot="list-toolbar-saved-view" className="shrink-0">
+                {savedView}
+              </div>
+            ) : null}
+            {search ? (
+              <div
+                data-slot="list-toolbar-search"
+                className="min-w-0 flex-1 sm:max-w-sm"
+              >
+                {search}
+              </div>
+            ) : null}
+            {filters ? (
+              <div
+                data-slot="list-toolbar-filters"
+                className="flex flex-wrap items-center gap-2"
+              >
+                {filters}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {actions ? (
+          <div className="flex items-stretch gap-3">
+            {hasQueryTools ? (
+              <Separator
+                orientation="vertical"
+                className="hidden bg-border/30 lg:block"
+              />
+            ) : null}
             <div
-              data-slot="list-toolbar-search"
-              className="min-w-0 flex-1 sm:max-w-sm"
-            >
-              {search}
-            </div>
-          ) : null}
-          {filters ? (
-            <div
-              data-slot="list-toolbar-filters"
+              data-slot="list-toolbar-actions"
               className="flex flex-wrap items-center gap-2"
             >
-              {filters}
+              {actions}
             </div>
-          ) : null}
-        </div>
-      ) : null}
-
-      {actions ? (
-        <div className="flex items-stretch gap-3">
-          {hasQueryTools ? (
-            <Separator
-              orientation="vertical"
-              className="hidden bg-border/30 lg:block"
-            />
-          ) : null}
-          <div
-            data-slot="list-toolbar-actions"
-            className="flex flex-wrap items-center gap-2"
-          >
-            {actions}
           </div>
+        ) : null}
+      </div>
+
+      {secondary ? (
+        <div
+          data-slot="list-toolbar-secondary"
+          className="flex flex-wrap items-center gap-2"
+        >
+          {secondary}
         </div>
       ) : null}
     </div>

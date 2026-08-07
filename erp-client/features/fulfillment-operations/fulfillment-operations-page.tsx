@@ -824,55 +824,101 @@ export function FulfillmentOperationsPage() {
         </div>
       ) : null}
 
+      {/* M3 sticky 处理面：第 0 层范围/类型 + 第 1/2 层 ListToolbar（ui-filter-design §2.3） */}
+      <div
+        className={cn(
+          surfacePanelClassName,
+          "sticky top-0 z-10 space-y-2.5 px-3 py-2.5"
+        )}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          {context?.viewerLabel ? (
+            <div
+              role="group"
+              aria-label="看谁的任务"
+              className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
+            >
+              {(
+                [
+                  { value: "mine" as const, label: "仅我的" },
+                  { value: "role_pool" as const, label: "全组" },
+                ] as const
+              ).map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  aria-pressed={scope === opt.value}
+                  onClick={() =>
+                    handlePatch({
+                      scope: opt.value === "mine" ? null : opt.value,
+                      currentWorkItemId: null,
+                    })
+                  }
+                  className={cn(
+                    "inline-flex h-7 items-center gap-1.5 rounded-md px-2.5 text-sm transition-all outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                    scope === opt.value
+                      ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                      : "font-normal text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                  )}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <ToggleGroup
+            value={[activeTypeSlug === "all" ? "all" : activeTypeSlug]}
+            onValueChange={(values) => {
+              const next = values[0]
+              if (!next) return
+              if (next === "all") setTypeFilter("all")
+              else {
+                const t = SLUG_TO_TYPE[next]
+                if (t) setTypeFilter(t)
+              }
+            }}
+            variant="outline"
+            size="sm"
+            spacing={0}
+            className="w-fit flex-wrap"
+            aria-label="作业类型"
+          >
+            <ToggleGroupItem value="all">全部</ToggleGroupItem>
+            {visibleTypes.map((t) => (
+              <ToggleGroupItem key={t} value={TYPE_SLUG[t]}>
+                {OPERATION_TYPE_SHORT[t]}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+        </div>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <ToggleGroup
-          value={[activeTypeSlug === "all" ? "all" : activeTypeSlug]}
-          onValueChange={(values) => {
-            const next = values[0]
-            if (!next) return
-            if (next === "all") setTypeFilter("all")
-            else {
-              const t = SLUG_TO_TYPE[next]
-              if (t) setTypeFilter(t)
-            }
+        <FulfillmentQueueToolbar
+          q={q}
+          warehouseId={warehouseId}
+          warehouseOptions={context?.warehouseOptions ?? []}
+          due={due}
+          gate={gate}
+          salesOrderId={salesOrderId}
+          purchaseOrderId={purchaseOrderId}
+          salesOrderNo={
+            tasks.find((t) => t.source.salesOrderId === salesOrderId)?.source
+              .salesOrderNo
+          }
+          purchaseNo={
+            tasks.find((t) => t.source.purchaseOrderId === purchaseOrderId)
+              ?.source.purchaseNo
+          }
+          autoNext={autoNext}
+          total={context?.total ?? tasks.length}
+          showAutoNext={canExecute}
+          type={activeTypeSlug}
+          onPatch={handlePatch}
+          onAutoNextChange={(next) => {
+            setSessionAutoNext(next)
+            replaceUrl({ autoNext: next ? "1" : "0" })
           }}
-          variant="outline"
-          size="sm"
-          spacing={0}
-          className="w-fit flex-wrap"
-        >
-          <ToggleGroupItem value="all">全部</ToggleGroupItem>
-          {visibleTypes.map((t) => (
-            <ToggleGroupItem key={t} value={TYPE_SLUG[t]}>
-              {OPERATION_TYPE_SHORT[t]}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
-
+        />
       </div>
-
-      <FulfillmentQueueToolbar
-        q={q}
-        warehouseId={warehouseId}
-        warehouseOptions={context?.warehouseOptions ?? []}
-        due={due}
-        gate={gate}
-        salesOrderId={salesOrderId}
-        purchaseOrderId={purchaseOrderId}
-        salesOrderNo={tasks.find((t) => t.source.salesOrderId === salesOrderId)?.source.salesOrderNo}
-        purchaseNo={tasks.find((t) => t.source.purchaseOrderId === purchaseOrderId)?.source.purchaseNo}
-        autoNext={autoNext}
-        total={context?.total ?? tasks.length}
-        scope={scope}
-        showScope={Boolean(context?.viewerLabel)}
-        showAutoNext={canExecute}
-        onPatch={handlePatch}
-        onAutoNextChange={(next) => {
-          setSessionAutoNext(next)
-          replaceUrl({ autoNext: next ? "1" : "0" })
-        }}
-      />
 
       {lastResult ? (
         <div ref={resultRef} tabIndex={-1} className="outline-none">

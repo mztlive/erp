@@ -1,10 +1,9 @@
 "use client"
 
 import * as React from "react"
-import { SearchIcon, XIcon } from "lucide-react"
+import { SearchIcon } from "lucide-react"
 
-import { ListToolbar, OptionCombobox } from "@/components/business"
-import { Badge } from "@/components/ui/badge"
+import { FilterChip, ListToolbar, OptionCombobox } from "@/components/business"
 import { Button } from "@/components/ui/button"
 import {
   InputGroup,
@@ -22,16 +21,13 @@ import {
 
 export type QueueFilterPatch = Record<string, string | null>
 
-const SCOPE_OPTIONS = [
-  { value: "mine", label: "仅我的" },
-  { value: "role_pool", label: "全组" },
-]
-
 /**
- * W09 队列工具栏。
+ * W09 队列工具栏（第 1 / 2 层）。
  *
- * 只暴露接口真正参与过滤的维度（单号、仓库、到期、门禁），
- * 以及来源页带入的对象筛选 —— 后者做成可移除的标记，避免 URL 里留下界面改不动的隐形状态。
+ * 第 0 层（scope / 类型）由页面 sticky 处理面渲染；本组件只负责：
+ * - 第 1 层：搜索 + 主筛 ≤3（仓库 / 到期 / 门禁）
+ * - 第 2 层：来源锁定 FilterChip
+ * - actions：计数、清除、自动下一项
  */
 export function FulfillmentQueueToolbar({
   q,
@@ -45,9 +41,8 @@ export function FulfillmentQueueToolbar({
   purchaseNo,
   autoNext,
   total,
-  scope,
-  showScope,
   showAutoNext,
+  type,
   onPatch,
   onAutoNextChange,
 }: {
@@ -63,11 +58,10 @@ export function FulfillmentQueueToolbar({
   purchaseNo: string | undefined
   autoNext: boolean
   total: number
-  scope: "mine" | "role_pool"
-  /** 只读角色没有「我的」概念，不显示范围切换 */
-  showScope: boolean
   /** 只读角色不会连续处理，不显示自动下一项 */
   showAutoNext: boolean
+  /** 任务类型筛选（slug，多值逗号分隔）；"all" 视为未激活 */
+  type?: string | null
   onPatch: (patch: QueueFilterPatch) => void
   onAutoNextChange: (next: boolean) => void
 }) {
@@ -84,8 +78,16 @@ export function FulfillmentQueueToolbar({
   }
 
   const hasFilters = Boolean(
-    q || warehouseId || due || gate || salesOrderId || purchaseOrderId
+    q ||
+      (type && type !== "all") ||
+      warehouseId ||
+      due ||
+      gate ||
+      salesOrderId ||
+      purchaseOrderId
   )
+
+  const hasChips = Boolean(salesOrderId || purchaseOrderId)
 
   return (
     <ListToolbar
@@ -113,23 +115,14 @@ export function FulfillmentQueueToolbar({
       }
       filters={
         <>
-          {showScope ? (
-            <OptionCombobox
-              value={scope}
-              options={SCOPE_OPTIONS}
-              allowClear={false}
-              aria-label="看谁的任务"
-              onValueChange={(v) =>
-                onPatch({ scope: v ?? "mine", currentWorkItemId: null })
-              }
-            />
-          ) : null}
           {warehouseOptions.length > 0 ? (
             <OptionCombobox
               value={warehouseId ?? null}
               options={warehouseOptions}
               placeholder="仓库：全部"
+              size="sm"
               aria-label="按仓库筛选（只对入库和发货有效）"
+              inputClassName="w-[9rem]"
               onValueChange={(v) =>
                 onPatch({ warehouseId: v ?? null, currentWorkItemId: null })
               }
@@ -139,7 +132,9 @@ export function FulfillmentQueueToolbar({
             value={due ?? null}
             options={DUE_FILTER_OPTIONS}
             placeholder="到期：全部"
+            size="sm"
             aria-label="按到期筛选"
+            inputClassName="w-[8.5rem]"
             onValueChange={(v) =>
               onPatch({ due: v ?? null, currentWorkItemId: null })
             }
@@ -148,27 +143,42 @@ export function FulfillmentQueueToolbar({
             value={gate ?? null}
             options={GATE_FILTER_OPTIONS}
             placeholder="货款情况：全部"
+            size="sm"
             aria-label="按货款情况筛选"
+            inputClassName="w-[9.5rem]"
             onValueChange={(v) =>
               onPatch({ gate: v ?? null, currentWorkItemId: null })
             }
           />
-          {salesOrderId ? (
-            <ObjectFilterChip
-              label={`销售单 ${salesOrderNo ?? "已定位"}`}
-              onClear={() =>
-                onPatch({ salesOrderId: null, currentWorkItemId: null })
-              }
-            />
-          ) : null}
-          {purchaseOrderId ? (
-            <ObjectFilterChip
-              label={`采购单 ${purchaseNo ?? "已定位"}`}
-              onClear={() =>
-                onPatch({ purchaseOrderId: null, currentWorkItemId: null })
-              }
-            />
-          ) : null}
+        </>
+      }
+      secondary={
+        hasChips ? (
+          <>
+            {salesOrderId ? (
+              <FilterChip
+                label={`销售单 ${salesOrderNo ?? "已定位"}`}
+                onClear={() =>
+                  onPatch({ salesOrderId: null, currentWorkItemId: null })
+                }
+              />
+            ) : null}
+            {purchaseOrderId ? (
+              <FilterChip
+                label={`采购单 ${purchaseNo ?? "已定位"}`}
+                onClear={() =>
+                  onPatch({ purchaseOrderId: null, currentWorkItemId: null })
+                }
+              />
+            ) : null}
+          </>
+        ) : undefined
+      }
+      actions={
+        <>
+          <span className="text-xs text-muted-foreground" aria-live="polite">
+            待处理 {total}
+          </span>
           {hasFilters ? (
             <Button
               type="button"
@@ -190,13 +200,6 @@ export function FulfillmentQueueToolbar({
               清除筛选
             </Button>
           ) : null}
-        </>
-      }
-      actions={
-        <>
-          <span className="text-xs text-muted-foreground" aria-live="polite">
-            待处理 {total}
-          </span>
           {showAutoNext ? (
             <div className="flex items-center gap-2">
               <Label htmlFor="ff-auto-next" className="text-muted-foreground">
@@ -212,27 +215,5 @@ export function FulfillmentQueueToolbar({
         </>
       }
     />
-  )
-}
-
-function ObjectFilterChip({
-  label,
-  onClear,
-}: {
-  label: string
-  onClear: () => void
-}) {
-  return (
-    <Badge variant="secondary" className="gap-1 font-normal">
-      {label}
-      <button
-        type="button"
-        onClick={onClear}
-        aria-label={`清除${label}筛选`}
-        className="rounded-sm opacity-70 hover:opacity-100"
-      >
-        <XIcon className="size-3" aria-hidden="true" />
-      </button>
-    </Badge>
   )
 }

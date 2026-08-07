@@ -10,7 +10,7 @@ use axum::{
 };
 use services::audit::AuditActor;
 use services::catalog::{
-    CatalogService, CreateProductRequest, CreateVoucherCategoryProfileRequest, PageView, ProductListParams,
+    CatalogService, CreateProductRequest, CreateVoucherCategoryRequest, PageView, ProductListParams,
     ProductRevisionListParams, ProductRevisionView, ProductView, SkuListParams, SkuRevisionListParams,
     SkuRevisionView, SkuView, UpdateProductRequest, VoucherCategoryProfileListParams,
     VoucherCategoryProfileView,
@@ -210,22 +210,24 @@ pub async fn voucher_category_profile_list(
     resource = "voucher_category_profile",
     action = "create"
 )]
-/// 追加卡券类目扩展修订（引用 VOUCHER 类型的 SKU 身份）。
+/// 原子创建卡券类目（商品 + 首个修订 + 唯一 SKU + [可选内联新建分类] + 卡券类目
+/// 扩展修订，跨集合事务）。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求（`{ sku_id, description, status? }`）
+/// * `req` - 创建请求（`voucher_no` 同时作为 `product_no`/`sku_no`；
+///   `category_id` 与 `new_category` 二选一）
 ///
 /// # 返回
-/// 返回新建修订的响应视图。
-pub async fn voucher_category_profile_create(
+/// 返回新建卡券类目扩展修订的响应视图。
+pub async fn voucher_category_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Json(req): Json<CreateVoucherCategoryProfileRequest>,
+    Json(req): Json<CreateVoucherCategoryRequest>,
 ) -> Result<VoucherCategoryProfileView> {
     let view = CatalogService::new(state.db())
-        .voucher_category_profile_create(req, &actor)
+        .voucher_category_create(req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

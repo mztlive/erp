@@ -33,6 +33,7 @@ import {
   BusinessTableFrame,
   DataFreshness,
   DataTable,
+  FilterChip,
   ListToolbar,
   MetricItem,
   MetricStrip,
@@ -411,6 +412,7 @@ export function ActualProfitLossPage() {
     const handle = globalThis.setTimeout(() => {
       if (searchInput === qParam) return
       patchUrl({ q: searchInput.trim() || null })
+      setPagination((p) => ({ ...p, pageIndex: 0 }))
     }, 300)
     return () => globalThis.clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -420,7 +422,12 @@ export function ActualProfitLossPage() {
     patch: Record<string, string | null | undefined>,
     options?: { replace?: boolean }
   ) {
-    patchSearchParams({ router, pathname, searchParams }, patch, options)
+    // P2：筛选/分页/搜索变更默认 replace；需要 push 时显式传 options
+    patchSearchParams(
+      { router, pathname, searchParams },
+      patch,
+      { replace: options?.replace ?? true }
+    )
   }
 
   // 表头排序 ↔ URL sort 双向接线：排序作用于服务端全量行（按维度分组后），不只当前页
@@ -458,6 +465,24 @@ export function ActualProfitLossPage() {
   }, [costDetailRow])
 
   const data = viewQuery.data
+
+  /** P4 清除范围：清 q/customerId/salesOrderId/coverage；保留期间/维度/sort。 */
+  const hasFilters = Boolean(
+    qParam.trim() || customerId || salesOrderId || coverage !== "covered"
+  )
+
+  const clearFilters = React.useCallback(() => {
+    setSearchInput("")
+    setPagination((p) => ({ ...p, pageIndex: 0 }))
+    patchUrl({
+      q: null,
+      customerId: null,
+      salesOrderId: null,
+      coverage: null,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, pathname])
+
   const pageRows = React.useMemo(() => {
     if (!data) return []
     const start = pagination.pageIndex * pagination.pageSize
@@ -1581,101 +1606,151 @@ export function ActualProfitLossPage() {
                 </CardContent>
               </Card>
 
-              <ListToolbar
-                aria-label="盈亏明细筛选"
-                search={
-                  <InputGroup className="max-w-sm">
-                    <InputGroupAddon>
-                      <SearchIcon className="size-4" />
-                    </InputGroupAddon>
-                    <InputGroupInput
-                      ref={searchInputRef}
-                      placeholder="搜索销售单号、客户（/）"
-                      value={searchInput}
-                      onChange={(e) => setSearchInput(e.target.value)}
-                      aria-label="搜索销售单或客户"
+              <BusinessTableFrame
+                title={`明细 · ${DIMENSION_LABEL[dimension]}（${SCOPE_LABEL}）`}
+                description={`共 ${data.rows.total} 行 · 明细与指标/汇总同一数据范围（趋势与构成图为固定口径序列）· 点击盈亏下钻销售单 · 点击成本金额打开成本记录详情`}
+                toolbar={
+                  <div className="space-y-2">
+                    <ListToolbar
+                      aria-label="盈亏明细筛选"
+                      search={
+                        <InputGroup className="max-w-sm">
+                          <InputGroupAddon>
+                            <SearchIcon className="size-4" />
+                          </InputGroupAddon>
+                          <InputGroupInput
+                            ref={searchInputRef}
+                            placeholder="搜索销售单号、客户（/）"
+                            value={searchInput}
+                            onChange={(e) => setSearchInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") {
+                                patchUrl({ q: searchInput.trim() || null })
+                                setPagination((p) => ({ ...p, pageIndex: 0 }))
+                              }
+                            }}
+                            aria-label="搜索销售单或客户"
+                          />
+                        </InputGroup>
+                      }
+                      filters={
+                        <>
+                          <Label htmlFor="coverage-filter" className="sr-only">
+                            成本覆盖
+                          </Label>
+                          <OptionCombobox
+                            id="coverage-filter"
+                            value={coverage}
+                            onValueChange={(v) => {
+                              patchUrl({
+                                coverage: (v ?? coverage) as ProfitLossCoverage,
+                              })
+                              setPagination((p) => ({ ...p, pageIndex: 0 }))
+                            }}
+                            options={(
+                              Object.keys(
+                                COVERAGE_FILTER_LABEL
+                              ) as ProfitLossCoverage[]
+                            ).map((key) => ({
+                              value: key,
+                              label: COVERAGE_FILTER_LABEL[key],
+                            }))}
+                            className="w-[10rem]"
+                            size="sm"
+                            allowClear={false}
+                            aria-label="成本覆盖"
+                            placeholder="成本覆盖"
+                          />
+                        </>
+                      }
+                      secondary={
+                        customerId || salesOrderId ? (
+                          <>
+                            {customerId ? (
+                              <FilterChip
+                                label="客户锁定"
+                                onClear={() => {
+                                  patchUrl({ customerId: null })
+                                  setPagination((p) => ({
+                                    ...p,
+                                    pageIndex: 0,
+                                  }))
+                                }}
+                                clearLabel="移除客户锁定"
+                              />
+                            ) : null}
+                            {salesOrderId ? (
+                              <FilterChip
+                                label="销售单锁定"
+                                onClear={() => {
+                                  patchUrl({ salesOrderId: null })
+                                  setPagination((p) => ({
+                                    ...p,
+                                    pageIndex: 0,
+                                  }))
+                                }}
+                                clearLabel="移除销售单锁定"
+                              />
+                            ) : null}
+                          </>
+                        ) : undefined
+                      }
+                      actions={
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                          <span aria-live="polite">
+                            共 {data.rows.total.toLocaleString("zh-CN")} 条
+                          </span>
+                          {hasFilters ? (
+                            <Button
+                              type="button"
+                              size="xs"
+                              variant="ghost"
+                              onClick={clearFilters}
+                            >
+                              清除筛选
+                            </Button>
+                          ) : null}
+                        </div>
+                      }
                     />
-                  </InputGroup>
-                }
-                filters={
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Label htmlFor="coverage-filter" className="sr-only">
-                      成本覆盖
-                    </Label>
-                    <OptionCombobox
-                      id="coverage-filter"
-                      value={coverage}
+                    <Tabs
+                      value={dimension}
                       onValueChange={(v) => {
-                        patchUrl({
-                          coverage: (v ?? coverage) as ProfitLossCoverage,
-                        })
+                        patchUrl({ dimension: v })
                         setPagination((p) => ({ ...p, pageIndex: 0 }))
                       }}
-                      options={(
-                        Object.keys(
-                          COVERAGE_FILTER_LABEL
-                        ) as ProfitLossCoverage[]
-                      ).map((key) => ({
-                        value: key,
-                        label: COVERAGE_FILTER_LABEL[key],
-                      }))}
-                      className="w-[10rem]"
-                      size="sm"
-                      allowClear={false}
-                      aria-label="成本覆盖"
-                      placeholder="成本覆盖"
-                    />
+                    >
+                      <TabsList>
+                        {(
+                          Object.keys(DIMENSION_LABEL) as ProfitLossDimension[]
+                        ).map((key) => (
+                          <TabsTrigger key={key} value={key}>
+                            {DIMENSION_LABEL[key]}
+                          </TabsTrigger>
+                        ))}
+                      </TabsList>
+                    </Tabs>
                   </div>
                 }
-              />
-
-              <Tabs
-                value={dimension}
-                onValueChange={(v) => {
-                  patchUrl({ dimension: v })
-                  setPagination((p) => ({ ...p, pageIndex: 0 }))
-                }}
-              >
-                <TabsList>
-                  {(
-                    Object.keys(DIMENSION_LABEL) as ProfitLossDimension[]
-                  ).map((key) => (
-                    <TabsTrigger key={key} value={key}>
-                      {DIMENSION_LABEL[key]}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-
-              {data.rows.total === 0 ? (
-                <BusinessEmptyState
-                  kind="filter"
-                  title="当前筛选无非卡券经营结果"
-                  description={`范围：${data.filterSummary}。可调整期间、覆盖口径或清除搜索。`}
-                  className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                  action={
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      className="rounded-lg shadow-none"
-                      onClick={() => {
-                        patchUrl({
-                          q: null,
-                          customerId: null,
-                          salesOrderId: null,
-                          coverage: "covered",
-                        })
-                      }}
-                    >
-                      清除筛选
-                    </Button>
-                  }
-                />
-              ) : (
-                <BusinessTableFrame
-                  title={`明细 · ${DIMENSION_LABEL[dimension]}（${SCOPE_LABEL}）`}
-                  description={`共 ${data.rows.total} 行 · 明细与指标/汇总同一数据范围（趋势与构成图为固定口径序列）· 点击盈亏下钻销售单 · 点击成本金额打开成本记录详情`}
-                  table={
+                table={
+                  data.rows.total === 0 ? (
+                    <BusinessEmptyState
+                      kind="filter"
+                      title="当前筛选无非卡券经营结果"
+                      description={`范围：${data.filterSummary}。可调整期间、覆盖口径或清除搜索。`}
+                      className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
+                      action={
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          className="rounded-lg shadow-none"
+                          onClick={clearFilters}
+                        >
+                          清除筛选
+                        </Button>
+                      }
+                    />
+                  ) : (
                     <DataTable
                       data={pageRows}
                       columns={columns}
@@ -1691,9 +1766,9 @@ export function ActualProfitLossPage() {
                       layout="flush"
                       density="compact"
                     />
-                  }
-                />
-              )}
+                  )
+                }
+              />
             </>
           ) : null}
         </>

@@ -1374,17 +1374,73 @@ impl SkuRevisionListParams {
     }
 }
 
-/// 卡券类目扩展修订创建请求（引用 VOUCHER 类型的 SKU 身份）。
+/// 内联新建 VOUCHER 类型分类的输入（与 `category_id` 二选一）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
-pub struct CreateVoucherCategoryProfileRequest {
-    /// 卡券类目使用的 VOUCHER SKU 稳定身份。
-    pub sku_id: SkuId,
+pub struct NewVoucherCategoryInput {
+    /// 稳定分类代码（唯一，创建后不可修改）。
+    #[validate(custom(function = "non_blank", message = "分类代码不能为空"))]
+    pub category_code: String,
+    /// 父分类；空表示根分类。
+    pub parent_category_id: Option<ProductCategoryId>,
+    /// 分类名称。
+    #[validate(custom(function = "non_blank", message = "分类名称不能为空"))]
+    pub name: String,
+}
+
+/// 卡券类目原子创建请求内嵌的 SKU 输入（无需单独填 SKU 编号，复用 `voucher_no`）。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct VoucherSkuInput {
+    /// 唯一基础单位（`unit_of_measure` 启用字典项）。
+    pub base_unit_id: UnitOfMeasureId,
+    /// 条码原值（可空）。
+    pub barcode: Option<String>,
+    /// 重量（千克，非负定点数）。
+    pub weight_kg: Option<Quantity>,
+    /// 体积（立方米，非负定点数）。
+    pub volume_m3: Option<Quantity>,
+    /// 公司对销售可见的含税价（非负定点金额）。
+    pub sales_visible_price_gross: Option<Amount>,
+    /// 市场展示参考价（非负定点金额）。
+    pub market_price: Option<Amount>,
+}
+
+/// 卡券类目原子创建请求（商品 + 首个修订 + 唯一 SKU + 卡券类目扩展修订，
+/// 必要时内联新建所属分类，全部在一个事务内原子写入）。
+///
+/// `voucher_no` 同时作为 `product_no` 与 `sku_no` 落库（业务上一个卡券类目即一个 SKU，
+/// 无需分别填写两个编号）。`category_id` 与 `new_category` 二选一，互斥校验见
+/// `CatalogService::build_voucher_category_draft`。`description` 同时写入
+/// `product_revision.description` 与 `voucher_category_profile_revision.description`。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CreateVoucherCategoryRequest {
+    /// 卡券类目编号（全局唯一，同时作为 `product_no` 与 `sku_no`，创建后不可修改）。
+    #[validate(custom(function = "non_blank", message = "卡券类目编号不能为空"))]
+    pub voucher_no: String,
+    /// 卡券类目名称。
+    #[validate(custom(function = "non_blank", message = "卡券类目名称不能为空"))]
+    pub name: String,
     /// 卡券类目描述。
     #[validate(custom(function = "non_blank", message = "卡券类目描述不能为空"))]
     pub description: String,
+    /// 公司审核后的规格或服务内容。
+    pub specification: Option<String>,
+    /// 引用已有 VOUCHER 类型分类；与 `new_category` 二选一。
+    pub category_id: Option<ProductCategoryId>,
+    /// 内联新建 VOUCHER 类型分类；与 `category_id` 二选一。
+    #[validate(nested)]
+    pub new_category: Option<NewVoucherCategoryInput>,
+    /// ERP 品牌。
+    pub brand_id: ProductBrandId,
+    /// 唯一 SKU 行。
+    #[validate(nested)]
+    pub sku: VoucherSkuInput,
     /// 启停状态；缺省视为启用。
     #[serde(default)]
     pub status: Option<EnableStatus>,
+    /// 生效开始日。
+    pub effective_from: BusinessDate,
+    /// 生效结束日；空表示无限期。
+    pub effective_to: Option<BusinessDate>,
 }
 
 /// 卡券类目扩展修订响应视图。
@@ -1567,5 +1623,53 @@ mod tests {
         }))
         .unwrap();
         assert!(request.validate().is_err(), "空 SKU 列表必须被拒绝");
+    }
+
+    fn voucher_category_request_json() -> serde_json::Value {
+        serde_json::json!({
+            "voucher_no": "VC-1",
+            "name": "满100减20券",
+            "description": "满100元可用",
+            "category_id": "cat-1",
+            "brand_id": "brand-1",
+            "sku": { "base_unit_id": "unit-1" },
+            "effective_from": "2026-01-01",
+        })
+    }
+
+    #[test]
+    fn create_voucher_category_request_rejects_blank_voucher_no() {
+        let mut value = voucher_category_request_json();
+        value["voucher_no"] = serde_json::json!("   ");
+        let request: super::CreateVoucherCategoryRequest = serde_json::from_value(value).unwrap();
+        assert!(request.validate().is_err(), "空白卡券类目编号必须被拒绝");
+    }
+
+    #[test]
+    fn create_voucher_category_request_rejects_blank_name_and_description() {
+        let mut value = voucher_category_request_json();
+        value["name"] = serde_json::json!("");
+        let request: super::CreateVoucherCategoryRequest = serde_json::from_value(value).unwrap();
+        assert!(request.validate().is_err(), "空名称必须被拒绝");
+
+        let mut value = voucher_category_request_json();
+        value["description"] = serde_json::json!("  ");
+        let request: super::CreateVoucherCategoryRequest = serde_json::from_value(value).unwrap();
+        assert!(request.validate().is_err(), "空白描述必须被拒绝");
+    }
+
+    #[test]
+    fn create_voucher_category_request_rejects_blank_new_category_fields() {
+        let mut value = voucher_category_request_json();
+        value.as_object_mut().unwrap().remove("category_id");
+        value["new_category"] = serde_json::json!({ "category_code": "", "name": "卡券分类" });
+        let request: super::CreateVoucherCategoryRequest = serde_json::from_value(value).unwrap();
+        assert!(request.validate().is_err(), "空白分类代码必须被拒绝");
+
+        let mut value = voucher_category_request_json();
+        value.as_object_mut().unwrap().remove("category_id");
+        value["new_category"] = serde_json::json!({ "category_code": "VC-CAT", "name": "  " });
+        let request: super::CreateVoucherCategoryRequest = serde_json::from_value(value).unwrap();
+        assert!(request.validate().is_err(), "空白分类名称必须被拒绝");
     }
 }

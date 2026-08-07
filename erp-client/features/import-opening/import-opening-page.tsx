@@ -7,6 +7,7 @@ import type { ColumnDef, PaginationState } from "@tanstack/react-table"
 import {
   ArrowLeftIcon,
   ExternalLinkIcon,
+  SearchIcon,
   ShieldAlertIcon,
   TriangleAlertIcon,
 } from "lucide-react"
@@ -46,7 +47,11 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -194,6 +199,7 @@ function BatchListView({
   patchUrl: (patch: Partial<ImportOpeningUrlState>) => void
 }) {
   const [qDraft, setQDraft] = React.useState(urlState.q ?? "")
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null)
   const listQuery = useImportBatchListQuery({
     environment: urlState.environment,
     status: urlState.status,
@@ -202,6 +208,47 @@ function BatchListView({
     page: urlState.page,
     pageSize: 20,
   })
+
+  React.useEffect(() => {
+    setQDraft(urlState.q ?? "")
+  }, [urlState.q])
+
+  // P3 搜索：300ms 防抖写 URL，Enter 兜底，/ 聚焦
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (qDraft.trim() === (urlState.q ?? "")) return
+      patchUrl({ q: qDraft.trim() || undefined, page: 1 })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl 以当前 URL 快照为准
+  }, [qDraft])
+
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        event.key !== "/" ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return
+      }
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return
+      }
+      event.preventDefault()
+      searchInputRef.current?.focus()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   const columns = React.useMemo<ColumnDef<ImportBatchListItem>[]>(
     () => [
@@ -324,6 +371,20 @@ function BatchListView({
     }))
   }, [urlState.page])
 
+  const hasListFilters = Boolean(
+    urlState.q || urlState.status || urlState.objectType
+  )
+
+  const clearListFilters = () => {
+    setQDraft("")
+    patchUrl({
+      q: undefined,
+      status: undefined,
+      objectType: undefined,
+      page: 1,
+    })
+  }
+
   return (
     <PageScaffold>
       <PageHeader
@@ -385,86 +446,6 @@ function BatchListView({
         />
       </MetricStrip>
 
-      <ListToolbar
-        filters={
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="space-y-1">
-              <Label className="text-xs">对象集合</Label>
-              <OptionCombobox
-                value={urlState.objectType ?? "all"}
-                onValueChange={(v) => {
-                  if (v == null) return
-                  patchUrl({
-                    objectType:
-                      v === "all" ? undefined : (v as ImportObjectCode),
-                    page: 1,
-                  })
-                }}
-                options={[
-                  { value: "all", label: "全部对象" },
-                  ...(
-                    Object.keys(OBJECT_CODE_LABEL) as ImportObjectCode[]
-                  ).map((code) => ({
-                    value: code,
-                    label: OBJECT_CODE_LABEL[code],
-                  })),
-                ]}
-                className="w-[10rem]"
-                size="sm"
-                placeholder="全部"
-                allowClear={false}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">状态</Label>
-              <OptionCombobox
-                value={urlState.status ?? "all"}
-                onValueChange={(v) => {
-                  if (v == null) return
-                  patchUrl({
-                    status: v === "all" ? undefined : v,
-                    page: 1,
-                  })
-                }}
-                options={[
-                  { value: "all", label: "全部状态" },
-                  ...(
-                    Object.keys(BATCH_STATUS_LABEL) as ImportBatchStatus[]
-                  ).map((s) => ({
-                    value: s,
-                    label: BATCH_STATUS_LABEL[s],
-                  })),
-                ]}
-                className="w-[11rem]"
-                size="sm"
-                placeholder="全部状态"
-                allowClear={false}
-              />
-            </div>
-            <div className="space-y-1">
-              <Label className="text-xs">批次号</Label>
-              <form
-                className="flex gap-1"
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  patchUrl({ q: qDraft || undefined, page: 1 })
-                }}
-              >
-                <Input
-                  className="h-8 w-[12rem]"
-                  value={qDraft}
-                  onChange={(e) => setQDraft(e.target.value)}
-                  placeholder="精确/前缀匹配"
-                />
-                <Button type="submit" size="sm" variant="secondary">
-                  搜索
-                </Button>
-              </form>
-            </div>
-          </div>
-        }
-      />
-
       <Alert>
         <ShieldAlertIcon />
         <AlertTitle>安全边界</AlertTitle>
@@ -473,28 +454,128 @@ function BatchListView({
         </AlertDescription>
       </Alert>
 
-      {listQuery.isError ? (
-        <BusinessEmptyState
-          kind="no-data"
-          title="批次列表加载失败"
-          description="请重试。不会自行补造批次。"
-          className="rounded-lg border-0 bg-transparent shadow-none ring-0"
-          action={
-            <Button
-              type="button"
-              variant="secondary"
-              className="rounded-lg shadow-none"
-              onClick={() => void listQuery.refetch()}
-            >
-              重试
-            </Button>
-          }
-        />
-      ) : (
-        <BusinessTableFrame
-          title="导入批次"
-          description={`${ENVIRONMENT_LABEL[urlState.environment]} · 共 ${data?.totalCount ?? 0} 批`}
-          table={
+      <BusinessTableFrame
+        title="导入批次"
+        description={
+          listQuery.isError
+            ? "列表加载失败，可调整筛选后重试"
+            : `${ENVIRONMENT_LABEL[urlState.environment]} · 共 ${data?.totalCount ?? 0} 批`
+        }
+        toolbar={
+          <ListToolbar
+            search={
+              <form
+                className="flex gap-1"
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  patchUrl({ q: qDraft.trim() || undefined, page: 1 })
+                }}
+              >
+                <InputGroup>
+                  <InputGroupAddon>
+                    <SearchIcon aria-hidden="true" />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    ref={searchInputRef}
+                    value={qDraft}
+                    onChange={(e) => setQDraft(e.target.value)}
+                    placeholder="批次号（精确/前缀匹配）"
+                    aria-label="搜索批次"
+                  />
+                </InputGroup>
+              </form>
+            }
+            filters={
+              <>
+                <OptionCombobox
+                  value={urlState.objectType ?? "all"}
+                  onValueChange={(v) => {
+                    if (v == null) return
+                    patchUrl({
+                      objectType:
+                        v === "all" ? undefined : (v as ImportObjectCode),
+                      page: 1,
+                    })
+                  }}
+                  options={[
+                    { value: "all", label: "全部对象" },
+                    ...(
+                      Object.keys(OBJECT_CODE_LABEL) as ImportObjectCode[]
+                    ).map((code) => ({
+                      value: code,
+                      label: OBJECT_CODE_LABEL[code],
+                    })),
+                  ]}
+                  inputClassName="w-[10rem]"
+                  size="sm"
+                  placeholder="对象：全部"
+                  aria-label="对象集合"
+                  allowClear={false}
+                />
+                <OptionCombobox
+                  value={urlState.status ?? "all"}
+                  onValueChange={(v) => {
+                    if (v == null) return
+                    patchUrl({
+                      status: v === "all" ? undefined : v,
+                      page: 1,
+                    })
+                  }}
+                  options={[
+                    { value: "all", label: "全部状态" },
+                    ...(
+                      Object.keys(BATCH_STATUS_LABEL) as ImportBatchStatus[]
+                    ).map((s) => ({
+                      value: s,
+                      label: BATCH_STATUS_LABEL[s],
+                    })),
+                  ]}
+                  inputClassName="w-[11rem]"
+                  size="sm"
+                  placeholder="状态：全部"
+                  aria-label="批次状态"
+                  allowClear={false}
+                />
+              </>
+            }
+            actions={
+              <>
+                <span className="text-xs text-muted-foreground" aria-live="polite">
+                  共 {(data?.totalCount ?? 0).toLocaleString("zh-CN")} 批
+                </span>
+                {hasListFilters ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={clearListFilters}
+                  >
+                    清除筛选
+                  </Button>
+                ) : null}
+              </>
+            }
+          />
+        }
+        table={
+          listQuery.isError ? (
+            <BusinessEmptyState
+              kind="no-data"
+              title="批次列表加载失败"
+              description="请重试。不会自行补造批次。"
+              className="rounded-lg border-0 bg-transparent shadow-none ring-0"
+              action={
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="rounded-lg shadow-none"
+                  onClick={() => void listQuery.refetch()}
+                >
+                  重试
+                </Button>
+              }
+            />
+          ) : (
             <DataTable
               data={[...(data?.rows ?? [])]}
               columns={columns}
@@ -509,9 +590,9 @@ function BatchListView({
               density="compact"
               loading={listQuery.isPending}
             />
-          }
-        />
-      )}
+          )
+        }
+      />
     </PageScaffold>
   )
 }

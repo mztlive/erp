@@ -26,6 +26,7 @@ import {
 } from "@/features/master-data/master-data-action-dialog"
 import { ProductDetailPage } from "@/features/master-data/product-detail-page"
 import { SupplierDetailPage } from "@/features/master-data/supplier-detail-page"
+import { VoucherCategoryDetailPage } from "@/features/master-data/voucher-category-detail-page"
 import { revealMasterDataSensitive } from "@/features/master-data/queries"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
@@ -88,6 +89,10 @@ export function MasterDataCenterPage({
   }
   if (resource === "suppliers") {
     return <SupplierDetailPage stableId={stableId} />
+  }
+  // 卡券类目新建走专属原子创建页；查看/历史仍走下方通用对象中心（无更新接口）。
+  if (resource === "voucher-categories" && stableId === "new") {
+    return <VoucherCategoryDetailPage />
   }
 
   return (

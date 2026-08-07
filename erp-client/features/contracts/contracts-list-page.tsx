@@ -8,7 +8,6 @@ import {
   FileUpIcon,
   PrinterIcon,
   SearchIcon,
-  XIcon,
 } from "lucide-react"
 import type {
   ColumnDef,
@@ -17,11 +16,13 @@ import type {
 } from "@tanstack/react-table"
 
 import {
+  BusinessEmptyState,
   BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
   DataTable,
+  FilterChip,
   FormalActionResult,
   ListToolbar,
   MetricFilterItem,
@@ -58,6 +59,45 @@ import type {
   UploadContractPdfResult,
 } from "@/features/contracts/types"
 import { contractOwnerLabel } from "@/features/contracts/types"
+import { createUrlStateCodec } from "@/lib/url-state"
+
+/** URL 契约：q（旧 search 别名只读兼容）/metric/page/pageSize/sort/dir/customerId。 */
+const CONTRACT_METRIC_VALUES: ContractMetricFilter[] = [
+  "all",
+  "effective",
+  "expiring_30d",
+  "expired",
+  "terminated",
+]
+
+const CONTRACTS_URL_FIELDS = [
+  { key: "q", type: "string", trim: true, aliases: ["search"] as const },
+  {
+    key: "metric",
+    type: "enum",
+    values: CONTRACT_METRIC_VALUES,
+    defaultValue: "all",
+  },
+  { key: "page", type: "number", defaultValue: 1 },
+  { key: "pageSize", type: "number", defaultValue: 20, min: 1, max: 100 },
+  { key: "sort", type: "string" },
+  { key: "dir", type: "enum", values: ["asc", "desc"] as const },
+  { key: "customerId", type: "string" },
+] as const
+
+type ContractsUrlState = {
+  q?: string
+  metric: ContractMetricFilter
+  page: number
+  pageSize: number
+  sort?: string
+  dir?: "asc" | "desc"
+  customerId?: string
+}
+
+const contractsUrlCodec = createUrlStateCodec<ContractsUrlState>(
+  CONTRACTS_URL_FIELDS
+)
 
 /** 表头排序列 → 全量排序键（对整表排序后再分页，杜绝「当前页伪排序」）。 */
 function sortRows(
@@ -107,19 +147,7 @@ function sortRows(
   })
 }
 
-export function ContractsListPage({
-  initialSearch = "",
-  initialCustomerId = "",
-  initialMetric = "all",
-  initialPage = 1,
-  initialPageSize = 20,
-}: {
-  initialSearch?: string
-  initialCustomerId?: string
-  initialMetric?: ContractMetricFilter
-  initialPage?: number
-  initialPageSize?: number
-}) {
+export function ContractsListPage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -129,17 +157,15 @@ export function ContractsListPage({
     [contractsQuery.data]
   )
 
-  const [search, setSearch] = React.useState(initialSearch)
-  const [metricKey, setMetricKey] =
-    React.useState<ContractMetricFilter>(initialMetric)
-  const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: initialPage - 1,
-    pageSize: initialPageSize,
-  })
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const url = React.useMemo(() => contractsUrlCodec.parse(searchParams), [
+    searchParams,
+  ])
+  const { q, metric, page, pageSize, sort, dir, customerId } = url
+
+  const [searchDraft, setSearchDraft] = React.useState(q ?? "")
   const [previewId, setPreviewId] = React.useState<string | null>(null)
   const [paperId, setPaperId] = React.useState<string | null>(null)
-  const [uploadOpen, setUploadOpen] = React.useState(Boolean(initialCustomerId))
+  const [uploadOpen, setUploadOpen] = React.useState(Boolean(customerId))
   const [exportJob, setExportJob] = React.useState<ContractExportJob | null>(
     null
   )
@@ -153,61 +179,79 @@ export function ContractsListPage({
 
   const exportMutation = useCreateContractExportJobMutation()
 
-  /** 筛选状态回写 URL（q/metric/page/pageSize），刷新与分享不丢视图。 */
-  const writeUrl = React.useCallback(
-    (patch: {
-      q?: string
-      metric?: ContractMetricFilter
-      page?: number
-      pageSize?: number
-    }) => {
-      const params = new URLSearchParams(searchParams.toString())
-      const q = patch.q ?? search
-      if (q.trim()) params.set("q", q.trim())
-      else params.delete("q")
-      const metric = patch.metric ?? metricKey
-      if (metric !== "all") params.set("metric", metric)
-      else params.delete("metric")
-      const page = patch.page ?? pagination.pageIndex + 1
-      if (page > 1) params.set("page", String(page))
-      else params.delete("page")
-      const pageSize = patch.pageSize ?? pagination.pageSize
-      if (pageSize !== 20) params.set("pageSize", String(pageSize))
-      else params.delete("pageSize")
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+  /** URL-first：筛选/分页/排序全部写 URL，浏览器后退与刷新一致。 */
+  const pushUrl = React.useCallback(
+    (patch: Partial<ContractsUrlState>) => {
+      const next = { ...url, ...patch }
+      router.replace(`${pathname}${contractsUrlCodec.build(next)}`, {
+        scroll: false,
+      })
     },
-    [
-      metricKey,
-      pagination.pageIndex,
-      pagination.pageSize,
-      pathname,
-      router,
-      search,
-      searchParams,
-    ]
+    [pathname, router, url]
   )
 
-  const resetPagination = React.useCallback(() => {
-    setPagination((previous) =>
-      previous.pageIndex === 0 ? previous : { ...previous, pageIndex: 0 }
-    )
+  React.useEffect(() => {
+    setSearchDraft(q ?? "")
+  }, [q])
+
+  // 防抖即时搜索（300ms）+ Enter 兜底；写 URL 并回第 1 页。
+  React.useEffect(() => {
+    const handle = globalThis.setTimeout(() => {
+      if (searchDraft.trim() === (q ?? "")) return
+      pushUrl({ q: searchDraft.trim() || undefined, page: 1 })
+    }, 300)
+    return () => globalThis.clearTimeout(handle)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- pushUrl 以当前 URL 快照为准
+  }, [searchDraft])
+
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return
+      }
+      if (event.key === "/" && !event.metaKey && !event.ctrlKey) {
+        event.preventDefault()
+        document
+          .querySelector<HTMLInputElement>('[data-slot="contracts-search"]')
+          ?.focus()
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
   }, [])
 
   const filtered = React.useMemo(() => {
     let rows = filterContracts(allRows, {
-      search,
-      metricKey,
+      search: q ?? "",
+      metricKey: metric,
       statusFilter: "all",
     })
-    if (initialCustomerId) {
-      rows = rows.filter((r) => r.customer.customerId === initialCustomerId)
+    if (customerId) {
+      rows = rows.filter((r) => r.customer.customerId === customerId)
     }
     return rows
-  }, [allRows, initialCustomerId, metricKey, search])
+  }, [allRows, customerId, metric, q])
+
+  const sorting = React.useMemo<SortingState>(
+    () => (sort ? [{ id: sort, desc: dir === "desc" }] : []),
+    [dir, sort]
+  )
 
   const sorted = React.useMemo(
     () => sortRows(filtered, sorting),
     [filtered, sorting]
+  )
+
+  const pagination = React.useMemo<PaginationState>(
+    () => ({ pageIndex: Math.max(0, page - 1), pageSize }),
+    [page, pageSize]
   )
 
   const pageRows = React.useMemo(() => {
@@ -220,14 +264,14 @@ export function ContractsListPage({
     [allRows]
   )
 
-  /** 客户锁定来自 URL customerId：界面给出「当前客户」chip 与清除入口。 */
+  /** 客户锁定来自 URL customerId：界面给出可移除 chip 与清除入口。 */
   const lockedCustomer = React.useMemo(() => {
-    if (!initialCustomerId) return null
+    if (!customerId) return null
     return (
-      allRows.find((r) => r.customer.customerId === initialCustomerId)
-        ?.customer ?? null
+      allRows.find((r) => r.customer.customerId === customerId)?.customer ??
+      null
     )
-  }, [allRows, initialCustomerId])
+  }, [allRows, customerId])
 
   const previewRow = React.useMemo(
     () => allRows.find((item) => item.contractId === previewId) ?? null,
@@ -261,12 +305,12 @@ export function ContractsListPage({
 
   const filterSnapshotLabel = React.useMemo(() => {
     const parts = [
-      `指标=${contractMetricLabel(metricKey)}`,
-      search.trim() ? `搜索=${search.trim()}` : "搜索=空",
+      `指标=${contractMetricLabel(metric)}`,
+      (q ?? "").trim() ? `搜索=${(q ?? "").trim()}` : "搜索=空",
       lockedCustomer ? `客户=${lockedCustomer.displayName}` : null,
     ].filter(Boolean)
     return parts.join(" · ")
-  }, [lockedCustomer, metricKey, search])
+  }, [lockedCustomer, metric, q])
 
   const handleExport = React.useCallback(async () => {
     if (filtered.length === 0) return
@@ -450,41 +494,55 @@ export function ContractsListPage({
 
   const handlePaginationChange = React.useCallback(
     (next: PaginationState) => {
-      setPagination(next)
-      writeUrl({ page: next.pageIndex + 1, pageSize: next.pageSize })
+      pushUrl({ page: next.pageIndex + 1, pageSize: next.pageSize })
     },
-    [writeUrl]
+    [pushUrl]
   )
 
   const handleSearchCommit = React.useCallback(
     (value: string) => {
-      setSearch(value)
-      writeUrl({ q: value, page: 1 })
+      setSearchDraft(value)
+      pushUrl({ q: value.trim() || undefined, page: 1 })
     },
-    [writeUrl]
+    [pushUrl]
   )
 
   const handleMetricChange = React.useCallback(
     (next: ContractMetricFilter) => {
-      setMetricKey(next)
-      writeUrl({ metric: next, page: 1 })
+      pushUrl({ metric: next, page: 1 })
     },
-    [writeUrl]
+    [pushUrl]
+  )
+
+  const handleSortingChange = React.useCallback(
+    (next: SortingState) => {
+      const head = next[0]
+      pushUrl({
+        sort: head?.id,
+        dir: head ? (head.desc ? "desc" : "asc") : undefined,
+        page: 1,
+      })
+    },
+    [pushUrl]
   )
 
   const handleClearCustomerLock = React.useCallback(() => {
-    const params = new URLSearchParams(searchParams.toString())
-    params.delete("customerId")
-    router.replace(`${pathname}?${params.toString()}`)
-  }, [pathname, router, searchParams])
+    pushUrl({ customerId: undefined })
+  }, [pushUrl])
 
+  /** P4：清 q + 全部筛选参数（含 customerId 锁定）+ 分页回 1；保留排序。 */
   const clearAllFilters = React.useCallback(() => {
-    setSearch("")
-    setMetricKey("all")
-    writeUrl({ q: "", metric: "all", page: 1 })
-  }, [writeUrl])
+    setSearchDraft("")
+    pushUrl({
+      q: undefined,
+      metric: "all",
+      customerId: undefined,
+      page: 1,
+    })
+  }, [pushUrl])
 
-  const isFiltered = search.trim() !== "" || metricKey !== "all"
+  const isFiltered =
+    (q ?? "").trim() !== "" || metric !== "all" || Boolean(customerId)
 
   return (
     <PageScaffold density="compact">
@@ -581,35 +639,35 @@ export function ContractsListPage({
           label="全部合同"
           value={metrics.all}
           detail="当前业务范围"
-          active={metricKey === "all"}
+          active={metric === "all"}
           onClick={() => handleMetricChange("all")}
         />
         <MetricFilterItem
           label="有效"
           value={metrics.effective}
           detail="可关联建单"
-          active={metricKey === "effective"}
+          active={metric === "effective"}
           onClick={() => handleMetricChange("effective")}
         />
         <MetricFilterItem
           label="30 天内到期"
           value={metrics.expiring_30d}
           detail="将到期提醒"
-          active={metricKey === "expiring_30d"}
+          active={metric === "expiring_30d"}
           onClick={() => handleMetricChange("expiring_30d")}
         />
         <MetricFilterItem
           label="已到期"
           value={metrics.expired}
           detail="历史可追溯"
-          active={metricKey === "expired"}
+          active={metric === "expired"}
           onClick={() => handleMetricChange("expired")}
         />
         <MetricFilterItem
           label="已终止"
           value={metrics.terminated}
           detail="不再履行"
-          active={metricKey === "terminated"}
+          active={metric === "terminated"}
           onClick={() => handleMetricChange("terminated")}
         />
       </MetricStrip>
@@ -617,10 +675,10 @@ export function ContractsListPage({
       <BusinessTableFrame
         title="合同列表"
         description={
-          metricKey === "all" && !search
+          metric === "all" && !(q ?? "").trim()
             ? "按将到期优先排序展示当前业务范围内的合同。"
-            : `当前筛选：${contractMetricLabel(metricKey)}${
-                search ? ` · “${search}”` : ""
+            : `当前筛选：${contractMetricLabel(metric)}${
+                (q ?? "").trim() ? ` · “${(q ?? "").trim()}”` : ""
               }`
         }
         toolbar={
@@ -631,14 +689,14 @@ export function ContractsListPage({
                   <SearchIcon aria-hidden="true" />
                 </InputGroupAddon>
                 <InputGroupInput
-                  value={search}
+                  data-slot="contracts-search"
+                  value={searchDraft}
                   onChange={(event) => {
-                    setSearch(event.target.value)
-                    resetPagination()
+                    setSearchDraft(event.target.value)
                   }}
                   onKeyDown={(event) => {
                     if (event.key === "Enter") {
-                      handleSearchCommit(search)
+                      handleSearchCommit(searchDraft)
                     }
                   }}
                   placeholder="合同号、客户、结算主体、负责人"
@@ -646,20 +704,31 @@ export function ContractsListPage({
                 />
               </InputGroup>
             }
-            filters={
+            secondary={
               lockedCustomer ? (
-                <span className="inline-flex items-center gap-1.5 rounded-lg bg-muted/40 px-2 py-1 text-xs text-muted-foreground ring-1 ring-border/40">
-                  当前客户：{lockedCustomer.displayName}
-                  <button
-                    type="button"
-                    aria-label="清除客户锁定"
-                    className="inline-flex items-center rounded p-0.5 hover:bg-muted"
-                    onClick={handleClearCustomerLock}
-                  >
-                    <XIcon aria-hidden="true" className="size-3.5" />
-                  </button>
+                <FilterChip
+                  label={`客户：${lockedCustomer.displayName}`}
+                  onClear={handleClearCustomerLock}
+                  clearLabel="清除客户锁定"
+                />
+              ) : undefined
+            }
+            actions={
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span aria-live="polite">
+                  共 {sorted.length.toLocaleString("zh-CN")} 条
                 </span>
-              ) : null
+                {isFiltered ? (
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    onClick={clearAllFilters}
+                  >
+                    清除筛选
+                  </Button>
+                ) : null}
+              </div>
             }
           />
         }
@@ -674,22 +743,20 @@ export function ContractsListPage({
               }}
             />
           ) : pageRows.length === 0 && !contractsQuery.isPending ? (
-            <div className="flex flex-col items-center gap-2 rounded-lg border-0 bg-transparent px-4 py-10 text-center shadow-none ring-0">
-              <p className="text-sm text-muted-foreground">
-                {isFiltered ? "当前筛选没有结果" : "还没有合同"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {isFiltered
+            <BusinessEmptyState
+              kind={isFiltered ? "filter" : "no-data"}
+              title={isFiltered ? undefined : "还没有合同"}
+              description={
+                isFiltered
                   ? "换一个关键词或清除筛选后再试。"
-                  : "上传第一份合同 PDF，即可用于新建销售单。"}
-              </p>
-              <div className="flex flex-wrap justify-center gap-2 pt-1">
-                {isFiltered ? (
+                  : "上传第一份合同 PDF，即可用于新建销售单。"
+              }
+              action={
+                isFiltered ? (
                   <Button
                     type="button"
                     size="sm"
-                    variant="secondary"
-                    className="rounded-lg shadow-none"
+                    variant="outline"
                     onClick={clearAllFilters}
                   >
                     清除筛选
@@ -698,16 +765,15 @@ export function ContractsListPage({
                   <Button
                     type="button"
                     size="sm"
-                    variant="secondary"
-                    className="rounded-lg shadow-none"
+                    variant="outline"
                     onClick={() => setUploadOpen(true)}
                   >
                     <FileUpIcon data-icon="inline-start" aria-hidden="true" />
                     上传合同 PDF
                   </Button>
-                )}
-              </div>
-            </div>
+                )
+              }
+            />
           ) : (
             <DataTable
               data={pageRows}
@@ -715,7 +781,7 @@ export function ContractsListPage({
               getRowId={(row) => row.contractId}
               rowCount={sorted.length}
               sorting={sorting}
-              onSortingChange={setSorting}
+              onSortingChange={handleSortingChange}
               pagination={pagination}
               onPaginationChange={handlePaginationChange}
               loading={contractsQuery.isPending}
@@ -818,7 +884,7 @@ export function ContractsListPage({
       <ContractUploadDialog
         open={uploadOpen}
         onOpenChange={setUploadOpen}
-        initialCustomerId={initialCustomerId}
+        initialCustomerId={customerId ?? ""}
         onSuccess={handleUploadSuccess}
       />
     </PageScaffold>

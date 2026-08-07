@@ -8,6 +8,7 @@ import {
   ExternalLinkIcon,
   PauseIcon,
   RefreshCwIcon,
+  SearchIcon,
   ShieldAlertIcon,
   TriangleAlertIcon,
 } from "lucide-react"
@@ -23,6 +24,7 @@ import {
   FormalActionConfirmDialog,
   FormalActionResult,
   MaintenanceBanner,
+  ListToolbar,
   MetricFilterItem,
   MetricStrip,
   OptionCombobox,
@@ -55,7 +57,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -105,6 +111,25 @@ const VIEWS: MallSyncViewName[] = [
   "reconciliation",
   "history",
 ]
+
+/** 每个视图可携带的对象定位参数；切视图时清理其它视图的残留参数 */
+const VIEW_OBJECT_PARAMS: Record<MallSyncViewName, readonly string[]> = {
+  overview: [],
+  jobs: ["jobId"],
+  snapshots: ["snapshotId"],
+  mapping: ["mappingTaskId", "workItemId", "currentWorkItemId"],
+  reconciliation: ["differenceId"],
+  history: [],
+}
+
+const ALL_OBJECT_PARAMS = [
+  "jobId",
+  "snapshotId",
+  "mappingTaskId",
+  "workItemId",
+  "currentWorkItemId",
+  "differenceId",
+] as const
 
 function parseView(raw: string | null): MallSyncViewName {
   if (raw && (VIEWS as string[]).includes(raw)) return raw as MallSyncViewName
@@ -158,6 +183,7 @@ export function MallSyncPage() {
     searchParams.get("queueContextId") ?? "queue:W17:mall-sync"
 
   const [searchInput, setSearchInput] = React.useState(q)
+  const searchInputRef = React.useRef<HTMLInputElement | null>(null)
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: 0,
     pageSize: 20,
@@ -234,11 +260,39 @@ export function MallSyncPage() {
   React.useEffect(() => {
     const handle = globalThis.setTimeout(() => {
       if (searchInput === q) return
-      patchUrl({ q: searchInput.trim() || null })
+      patchUrl({ q: searchInput.trim() || null }, { replace: true })
     }, 300)
     return () => globalThis.clearTimeout(handle)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput])
+
+  // / 聚焦搜索
+  React.useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (
+        event.key !== "/" ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.altKey
+      ) {
+        return
+      }
+      const target = event.target as HTMLElement | null
+      const tag = target?.tagName
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        target?.isContentEditable
+      ) {
+        return
+      }
+      event.preventDefault()
+      searchInputRef.current?.focus()
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
 
   // 封存后默认引导 history
   React.useEffect(() => {
@@ -266,6 +320,43 @@ export function MallSyncPage() {
     options?: { replace?: boolean }
   ) {
     patchSearchParams({ router, pathname, searchParams, view }, patch, options)
+  }
+
+  const clearObjectParamsForView = React.useCallback(
+    (next: MallSyncViewName) => {
+      const keep = new Set(VIEW_OBJECT_PARAMS[next])
+      const patch: Record<string, null> = {}
+      for (const key of ALL_OBJECT_PARAMS) {
+        if (!keep.has(key)) patch[key] = null
+      }
+      return patch
+    },
+    []
+  )
+
+  const hasActiveFilters = Boolean(
+    q ||
+      jobId ||
+      snapshotId ||
+      mappingTaskId ||
+      workItemId ||
+      differenceId
+  )
+
+  const clearAllFilters = () => {
+    setSearchInput("")
+    patchUrl(
+      {
+        q: null,
+        jobId: null,
+        snapshotId: null,
+        mappingTaskId: null,
+        workItemId: null,
+        currentWorkItemId: null,
+        differenceId: null,
+      },
+      { replace: true }
+    )
   }
 
   const confirmForm = useAppForm({
@@ -1068,6 +1159,7 @@ export function MallSyncPage() {
             onClick={() => {
               patchUrl({
                 view: m.targetView,
+                ...clearObjectParamsForView(m.targetView),
               })
             }}
           />
@@ -1075,7 +1167,7 @@ export function MallSyncPage() {
       </MetricStrip>
 
       <div
-        className={`${surfacePanelClassName} sticky top-0 z-10 flex flex-wrap items-center gap-3 px-3 py-2.5`}
+        className={`${surfacePanelClassName} sticky top-0 z-10 space-y-2.5 px-3 py-2.5`}
       >
         <Tabs
           value={view}
@@ -1083,7 +1175,8 @@ export function MallSyncPage() {
             const next = parseView(v)
             patchUrl({
               view: next,
-              // 保留对象 id 以便后退恢复；切换时不强制清除
+              // 清理跨视图残留的对象定位参数；保留当前视图归属的对象参数
+              ...clearObjectParamsForView(next),
             })
           }}
         >
@@ -1095,35 +1188,41 @@ export function MallSyncPage() {
             ))}
           </TabsList>
         </Tabs>
-      </div>
-
-      <div className="flex flex-wrap items-center gap-2">
-        <Input
-          className="max-w-xs"
-          placeholder={
-            view === "snapshots" || view === "mapping"
-              ? "商城单号 / ERP 单号 / 任务号"
-              : view === "jobs"
-                ? "任务号"
-                : "搜索仅对来源数据、同步任务与映射任务生效"
+        <ListToolbar
+          aria-label="商城同步筛选"
+          search={
+            <InputGroup>
+              <InputGroupAddon>
+                <SearchIcon aria-hidden="true" />
+              </InputGroupAddon>
+              <InputGroupInput
+                ref={searchInputRef}
+                placeholder={
+                  view === "snapshots" || view === "mapping"
+                    ? "商城单号 / ERP 单号 / 任务号"
+                    : view === "jobs"
+                      ? "任务号"
+                      : "搜索仅对来源数据、同步任务与映射任务生效"
+                }
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                aria-label="搜索"
+              />
+            </InputGroup>
           }
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          aria-label="搜索"
+          actions={
+            hasActiveFilters ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={clearAllFilters}
+              >
+                清除筛选
+              </Button>
+            ) : null
+          }
         />
-        {q ? (
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSearchInput("")
-              patchUrl({ q: null })
-            }}
-          >
-            清除筛选
-          </Button>
-        ) : null}
       </div>
 
       {result ? (

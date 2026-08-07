@@ -16,6 +16,7 @@ import type {
 } from "@tanstack/react-table"
 
 import {
+  BusinessEmptyState,
   BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
@@ -560,12 +561,22 @@ export function SalesOrdersListPage() {
 
       <MetricStrip columns={5} aria-label="销售单快速筛选">
         <MetricFilterItem
+          label="全部"
+          value={metrics.total}
+          detail="当前业务范围"
+          active={url.summary === "all"}
+          onClick={() => {
+            pushUrl({ summary: "all", page: 1 })
+          }}
+        />
+        <MetricFilterItem
           label="待处理"
           value={metrics.pending}
           detail="确认 / 审批 / 驳回"
           active={url.summary === "pending"}
           onClick={() => {
-            pushUrl({ summary: "pending", page: 1 })
+            // summary 与主状态维度重叠，点击时重置 status，避免矛盾空结果
+            pushUrl({ summary: "pending", status: "all", page: 1 })
           }}
         />
         <MetricFilterItem
@@ -574,7 +585,7 @@ export function SalesOrdersListPage() {
           detail="履约中 / 已生效"
           active={url.summary === "inProgress"}
           onClick={() => {
-            pushUrl({ summary: "inProgress", page: 1 })
+            pushUrl({ summary: "inProgress", status: "all", page: 1 })
           }}
         />
         <MetricFilterItem
@@ -583,7 +594,7 @@ export function SalesOrdersListPage() {
           detail="未收 / 部分 / 待复核"
           active={url.summary === "pendingCollection"}
           onClick={() => {
-            pushUrl({ summary: "pendingCollection", page: 1 })
+            pushUrl({ summary: "pendingCollection", status: "all", page: 1 })
           }}
         />
         <MetricFilterItem
@@ -592,7 +603,7 @@ export function SalesOrdersListPage() {
           detail="部分履约等"
           active={url.summary === "fulfillmentException"}
           onClick={() => {
-            pushUrl({ summary: "fulfillmentException", page: 1 })
+            pushUrl({ summary: "fulfillmentException", status: "all", page: 1 })
           }}
         />
         <MetricFilterItem
@@ -601,7 +612,7 @@ export function SalesOrdersListPage() {
           detail="商城开单或票款复核"
           active={url.summary === "mallCollab"}
           onClick={() => {
-            pushUrl({ summary: "mallCollab", page: 1 })
+            pushUrl({ summary: "mallCollab", status: "all", page: 1 })
           }}
         />
       </MetricStrip>
@@ -627,7 +638,7 @@ export function SalesOrdersListPage() {
                 url.status !== "all"
                   ? ` · ${salesOrderStatusLabel(url.status)}`
                   : ""
-              }${url.search ? ` · 关键词「${url.search}」` : ""}`
+              }${url.search ? ` · 关键词“${url.search}”` : ""}`
         }
         toolbar={
           <ListToolbar
@@ -656,102 +667,102 @@ export function SalesOrdersListPage() {
               </InputGroup>
             }
             filters={
-              <>
-                <ToggleGroup
-                  value={[url.nature]}
-                  onValueChange={(values) => {
-                    const next = values[0] as
-                      | SalesOrdersUrlState["nature"]
-                      | undefined
-                    pushUrl({ nature: next ?? "all", page: 1 })
-                  }}
-                  variant="outline"
-                  size="sm"
-                  spacing={0}
+              <ToggleGroup
+                value={[url.nature]}
+                onValueChange={(values) => {
+                  const next = values[0] as
+                    | SalesOrdersUrlState["nature"]
+                    | undefined
+                  pushUrl({ nature: next ?? "all", page: 1 })
+                }}
+                variant="outline"
+                size="sm"
+                spacing={0}
+              >
+                <ToggleGroupItem value="all">全部</ToggleGroupItem>
+                <ToggleGroupItem value="physical_service">
+                  实物与服务
+                </ToggleGroupItem>
+                <ToggleGroupItem value="card_voucher">卡券</ToggleGroupItem>
+              </ToggleGroup>
+            }
+            secondary={
+              <Popover>
+                <PopoverTrigger
+                  render={
+                    <Button type="button" variant="outline" size="sm" />
+                  }
                 >
-                  <ToggleGroupItem value="all">全部</ToggleGroupItem>
-                  <ToggleGroupItem value="physical_service">
-                    实物与服务
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="card_voucher">卡券</ToggleGroupItem>
-                </ToggleGroup>
-                <Popover>
-                  <PopoverTrigger
-                    render={
-                      <Button type="button" variant="outline" size="sm" />
-                    }
-                  >
-                    <FilterIcon data-icon="inline-start" aria-hidden="true" />
-                    高级筛选
-                    {advancedActive ? (
-                      <Badge variant="info">已启用</Badge>
-                    ) : null}
-                  </PopoverTrigger>
-                  <PopoverContent align="end" className="w-80">
-                    <div>
-                      <div className="font-medium">高级筛选</div>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        创建来源与主状态筛选。
-                      </p>
-                    </div>
-                    <label className="grid gap-1.5 text-sm">
-                      <span>创建来源</span>
-                      <OptionCombobox
-                        value={url.origin}
-                        onValueChange={(v) => {
-                          pushUrl({
-                            origin:
-                              (v ?? "all") as SalesOrdersUrlState["origin"],
-                            page: 1,
-                          })
-                        }}
-                        options={[
-                          { value: "all", label: "全部来源" },
-                          { value: "erp", label: "创建于 ERP" },
-                          { value: "mall", label: "创建于商城" },
-                        ]}
-                        allowClear={false}
-                        aria-label="创建来源"
-                        placeholder="创建来源"
-                      />
-                    </label>
-                    <label className="grid gap-1.5 text-sm">
-                      <span>主状态</span>
-                      <OptionCombobox
-                        value={url.status}
-                        onValueChange={(v) => {
-                          pushUrl({
-                            status:
-                              (v ?? "all") as SalesOrdersUrlState["status"],
-                            page: 1,
-                          })
-                        }}
-                        options={[
-                          { value: "all", label: "全部状态" },
-                          ...SALES_ORDER_STATUS_OPTIONS.map((option) => ({
-                            value: option.value,
-                            label: option.label,
-                          })),
-                        ]}
-                        allowClear={false}
-                        aria-label="主状态"
-                        placeholder="主状态"
-                      />
-                    </label>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      disabled={!advancedActive}
-                      onClick={() => {
-                        pushUrl({ origin: "all", status: "all", page: 1 })
+                  <FilterIcon data-icon="inline-start" aria-hidden="true" />
+                  高级筛选
+                  {advancedActive ? (
+                    <Badge variant="info">已启用</Badge>
+                  ) : null}
+                </PopoverTrigger>
+                <PopoverContent align="end" className="w-80">
+                  <div>
+                    <div className="font-medium">高级筛选</div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      创建来源与主状态筛选。
+                    </p>
+                  </div>
+                  <label className="grid gap-1.5 text-sm">
+                    <span>创建来源</span>
+                    <OptionCombobox
+                      value={url.origin}
+                      onValueChange={(v) => {
+                        pushUrl({
+                          origin:
+                            (v ?? "all") as SalesOrdersUrlState["origin"],
+                          page: 1,
+                        })
                       }}
-                    >
-                      清除高级筛选
-                    </Button>
-                  </PopoverContent>
-                </Popover>
-              </>
+                      options={[
+                        { value: "all", label: "全部来源" },
+                        { value: "erp", label: "创建于 ERP" },
+                        { value: "mall", label: "创建于商城" },
+                      ]}
+                      allowClear={false}
+                      aria-label="创建来源"
+                      placeholder="创建来源"
+                    />
+                  </label>
+                  <label className="grid gap-1.5 text-sm">
+                    <span>主状态</span>
+                    <OptionCombobox
+                      value={url.status}
+                      onValueChange={(v) => {
+                        pushUrl({
+                          status:
+                            (v ?? "all") as SalesOrdersUrlState["status"],
+                          page: 1,
+                        })
+                      }}
+                      options={[
+                        { value: "all", label: "全部状态" },
+                        ...SALES_ORDER_STATUS_OPTIONS.map((option) => ({
+                          value: option.value,
+                          label: option.label,
+                        })),
+                      ]}
+                      allowClear={false}
+                      aria-label="主状态"
+                      placeholder="主状态"
+                    />
+                  </label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={!advancedActive}
+                    onClick={() => {
+                      pushUrl({ origin: "all", status: "all", page: 1 })
+                    }}
+                  >
+                    清除高级筛选
+                  </Button>
+                </PopoverContent>
+              </Popover>
             }
             actions={
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
@@ -789,17 +800,16 @@ export function SalesOrdersListPage() {
               }}
             />
           ) : items.length === 0 ? (
-            <div className="flex flex-col items-center gap-2 px-4 py-10 text-center">
-              <p className="text-sm text-muted-foreground">
-                {filtersActive ? "当前筛选没有结果" : "还没有销售单"}
-              </p>
-              <p className="text-xs text-muted-foreground">
-                {filtersActive
+            <BusinessEmptyState
+              kind={filtersActive ? "filter" : "no-data"}
+              title={filtersActive ? undefined : "还没有销售单"}
+              description={
+                filtersActive
                   ? "换一个关键词或清除筛选后再试。"
-                  : "当前业务范围内还没有销售单，可新建第一张单。"}
-              </p>
-              <div className="flex flex-wrap justify-center gap-2 pt-1">
-                {filtersActive ? (
+                  : "当前业务范围内还没有销售单，可新建第一张单。"
+              }
+              action={
+                filtersActive ? (
                   <Button
                     type="button"
                     size="sm"
@@ -817,9 +827,9 @@ export function SalesOrdersListPage() {
                     <PlusIcon data-icon="inline-start" aria-hidden="true" />
                     新建销售单
                   </Button>
-                )}
-              </div>
-            </div>
+                )
+              }
+            />
           ) : (
             <DataTable
               data={items}

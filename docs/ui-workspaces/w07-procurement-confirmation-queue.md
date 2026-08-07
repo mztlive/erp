@@ -219,13 +219,15 @@ TaskTabs 身份为 `queue:procurement-confirmation:{userId}:{scopeDigest}`。同
 
 | 能力 | 默认值 | URL 状态 | 行为 |
 | --- | --- | --- | --- |
-| 责任范围 | `mine` | `scope=mine|role_pool` | 角色池任务需先领取；是否开放由权限决定 |
-| 时限 | 有效全部 | `due=active|today|overdue` | 改变队列快照并重新计算位置 |
+| 责任范围 | `mine` | `scope=mine|role_pool` | 工具条分段控件，文案「我的待办 / 团队待认领」；角色池任务需先领取；是否开放由权限决定 |
+| 时限 | 有效全部 | `due=active|today|overdue` | 工具条分段控件，文案「全部时限 / 今日到期 / 已超期」；改变队列快照并重新计算位置 |
 | 履约方式 | 全部 | `mode=warehouse|direct|electronic|service` | 按至少一条确认明细的允许方式过滤 |
 | 供应商 | 全部 | `supplierId` | 仅对当前销售明细存在有效 W21 供给的供应商筛选，不泄露无权供应商 |
-| 销售单号 | 空 | `orderNo` | 精确或前缀搜索，回车定位结果 |
+| 销售单号 | 空 | `orderNo` | 工具条单号搜索，防抖 300ms + Enter 兜底 + `/` 聚焦；保留精确/前缀语义，由服务端定位结果 |
 | 排序 | 截止优先 | `sort=due_at|submitted_at|priority` | 服务端排序，自动下一项沿相同快照 |
 | 自动下一项 | 本次会话默认开 | `autoNext=1|0` | 显式 URL 为本次会话临时值并优先；`preferenceScope` 缺失时禁止写本地存储或服务端用户偏好；仅当服务端返回 `DEVICE` 时写设备本地偏好，返回 `USER` 时经用户偏好接口跨设备保存；显式 URL 始终只作当前会话覆盖 |
+
+工具条末尾提供「清除筛选」：清 `orderNo`/`due` 并重置焦点，**保留** `scope`/`sort`/`queueContextId`（P4）；空态筛选无结果时同样提供。
 
 筛选变化前如当前项有未保存输入，必须让用户保存、放弃或取消切换；不得因为改筛选静默丢失确认分行。
 

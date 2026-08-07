@@ -101,6 +101,7 @@ import type {
   TaxBasis,
 } from "@/features/card-business-analytics/types"
 import {
+  COVERAGE_FILTER_LABEL,
   COVERAGE_STATUS_UI,
   COST_BASIS_LABEL,
   COST_BASIS_ROW_UI,
@@ -352,8 +353,9 @@ export function CardBusinessAnalyticsPage() {
   const [explicitDateBasis, setExplicitDateBasis] = React.useState<DateBasis>(
     dateBasisUrl || "consumption"
   )
+  const pageFromUrl = Math.max(1, Number(searchParams.get("page") ?? "1") || 1)
   const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
+    pageIndex: pageFromUrl - 1,
     pageSize: 50,
   })
   const [exportJob, setExportJob] = React.useState<CardBusinessExportJob | null>(
@@ -475,8 +477,33 @@ export function CardBusinessAnalyticsPage() {
     patch: Record<string, string | null | undefined>,
     options?: { replace?: boolean }
   ) {
-    patchSearchParams({ router, pathname, searchParams }, patch, options)
+    // P1/P2/P6：筛选变更恒 replace；page 入 URL，任何筛选变更回第 1 页（删除 page 即省略）
+    patchSearchParams(
+      { router, pathname, searchParams },
+      { ...patch, page: null },
+      { replace: true, ...options }
+    )
+    setPagination((p) => (p.pageIndex === 0 ? p : { ...p, pageIndex: 0 }))
   }
+
+  // P6：分页写 URL（page），URL 回读同步本地分页
+  React.useEffect(() => {
+    setPagination((p) =>
+      p.pageIndex === pageFromUrl - 1 ? p : { ...p, pageIndex: pageFromUrl - 1 }
+    )
+  }, [pageFromUrl])
+
+  const handlePaginationChange = React.useCallback(
+    (next: PaginationState) => {
+      setPagination(next)
+      const sp = new URLSearchParams(searchParams.toString())
+      if (next.pageIndex <= 0) sp.delete("page")
+      else sp.set("page", String(next.pageIndex + 1))
+      const qs = sp.toString()
+      router.replace(qs ? `${pathname}?${qs}` : pathname)
+    },
+    [pathname, router, searchParams]
+  )
 
   // 表头排序 ↔ URL sort 双向接线：排序作用于服务端全量分组行，不只当前页
   const tableSorting = React.useMemo<SortingState>(() => {
@@ -1157,6 +1184,29 @@ export function CardBusinessAnalyticsPage() {
               allowClear={false}
               aria-label="履约期限"
               placeholder="履约期限"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="w28-coverage">覆盖口径</Label>
+            <OptionCombobox
+              id="w28-coverage"
+              value={coverage}
+              onValueChange={(v) =>
+                patchUrl({ coverage: v && v !== "all" ? v : null })
+              }
+              options={[
+                { value: "all", label: "全部覆盖状态" },
+                {
+                  value: "below_threshold",
+                  label: COVERAGE_FILTER_LABEL.below_threshold,
+                },
+                { value: "none", label: COVERAGE_FILTER_LABEL.none },
+              ]}
+              className="w-[10rem]"
+              size="sm"
+              allowClear={false}
+              aria-label="覆盖口径"
+              placeholder="全部覆盖状态"
             />
           </div>
           <div className="space-y-1.5">
@@ -1896,7 +1946,7 @@ export function CardBusinessAnalyticsPage() {
                   getRowId={(row) => row.rowId}
                   rowCount={data.rows.total}
                   pagination={pagination}
-                  onPaginationChange={setPagination}
+                  onPaginationChange={handlePaginationChange}
                   sorting={tableSorting}
                   onSortingChange={handleTableSortingChange}
                   manualPagination

@@ -109,7 +109,7 @@ export function buildFilterSummary(
     filters.scope === "mine"
       ? "我的待办"
       : filters.scope === "role_pool"
-        ? "待领取"
+        ? "团队待认领"
         : filters.scope === "team"
           ? "团队"
           : "已跳过"

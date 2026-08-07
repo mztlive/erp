@@ -7,7 +7,10 @@
 //!   skus + sku_revisions + 规格属性值 + 审计）→
 //!   `database::Transactional::with_transaction`，保证「SPU 身份 + 修订快照 +
 //!   SKU 身份 + 规格值」原子可见（数据模型 §6.3）；
-//! - 卡券类目扩展修订：单集合追加写入 → `&mut NoTransaction`。
+//! - 卡券类目原子创建：跨集合（[新建分类] + products + product_revisions +
+//!   唯一 SKU + sku_revisions + voucher_category_profile_revisions + 审计）→
+//!   `database::Transactional::with_transaction`，与商品创建同构（数据模型
+//!   §6.3：卡券类目即 VOUCHER 类型的单 SKU 商品，不再要求预先存在 SKU）。
 //!
 //! 业务规则来自 entities（`new()`/`update()` 已完成校验与规范化，
 //! `specification::compute_specification_signature` 计算签名），Service 只编排：
@@ -58,14 +61,14 @@ mod dto;
 
 pub use self::dto::{
     CreateProductBrandRequest, CreateProductCategoryRequest, CreateProductRequest, CreateSkuAttributeRequest,
-    CreateSkuAttributeValueRequest, CreateUnitOfMeasureRequest, CreateVoucherCategoryProfileRequest,
-    MoveProductCategoryRequest, PageView, ProductBrandListParams, ProductBrandView,
+    CreateSkuAttributeValueRequest, CreateUnitOfMeasureRequest, CreateVoucherCategoryRequest,
+    MoveProductCategoryRequest, NewVoucherCategoryInput, PageView, ProductBrandListParams, ProductBrandView,
     ProductCategoryListParams, ProductCategoryView, ProductListParams, ProductMediaInput,
     ProductRevisionListParams, ProductRevisionView, ProductSkuInput, ProductView, SkuAttributeListParams,
     SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView, SkuListParams,
     SkuRevisionListParams, SkuRevisionView, SkuView, SpecEntryInput, UnitOfMeasureListParams,
     UnitOfMeasureView, UpdateProductBrandRequest, UpdateProductCategoryRequest, UpdateProductRequest,
-    UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest, UpdateUnitOfMeasureRequest,
+    UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest, UpdateUnitOfMeasureRequest, VoucherSkuInput,
     VoucherCategoryProfileListParams, VoucherCategoryProfileView,
 };
 
@@ -153,6 +156,20 @@ struct ProductDraft {
     media: Vec<ProductRevisionMedia>,
     /// SKU 行（action 均为 `Create`）。
     sku_items: Vec<SkuEditItem>,
+}
+
+/// 卡券类目原子创建草稿（全部 ID 在事务外预生成，事务内只做写入）。
+struct VoucherCategoryDraft {
+    /// 内联新建的分类（引用已有分类时为 `None`）。
+    new_category: Option<ProductCategory>,
+    /// SPU 稳定身份。
+    product: Product,
+    /// 商品修订快照。
+    revision: ProductRevision,
+    /// 唯一 SKU 行（action 恒为 `Create`）。
+    sku_item: SkuEditItem,
+    /// 卡券类目扩展修订。
+    voucher_revision: VoucherCategoryProfileRevision,
 }
 
 /// 商品规格编辑计划（数据模型 §6.3 全量替换语义）。
@@ -1446,64 +1463,32 @@ impl CatalogService {
         })
     }
 
-    /// 追加卡券类目扩展修订（单集合写入，无事务）。
+    /// 原子创建卡券类目（商品 + 首个修订 + 唯一 SKU + [可选内联新建分类] +
+    /// 卡券类目扩展修订，同一事务写入）。
     ///
-    /// 引用必须存在的 `VOUCHER` 类型 SKU；修订序号取该 SKU 已有修订的最大值 + 1。
+    /// 业务上一个卡券类目即一个 VOUCHER 类型的 SKU：`voucher_no` 同时作为
+    /// `product_no` 与 `sku_no`；`category_id` 与内联新建分类二选一。
     ///
     /// # 参数
     /// * `req` - 创建请求
     /// * `actor` - 已通过鉴权的审计操作人
     ///
     /// # 返回
-    /// 返回新建修订的响应视图。
+    /// 返回新建卡券类目扩展修订的响应视图。
     ///
     /// # 错误
-    /// * `ValidationError` - 请求体校验失败
-    /// * `NotFound` - SKU 不存在
-    /// * `BusinessLogicError` - SKU 不是 VOUCHER 类型
-    pub async fn voucher_category_profile_create(
+    /// * `ValidationError` - 请求体校验失败，或分类未恰好二选一
+    /// * `NotFound` - 引用的分类/品牌/基础单位不存在
+    /// * `BusinessLogicError` - 分类不允许 VOUCHER 类型、父子关系成环、基础单位已停用
+    /// * `ConflictError` - `product_no`/`sku_no`/`category_code`/条码 唯一约束冲突
+    pub async fn voucher_category_create(
         &self,
-        req: CreateVoucherCategoryProfileRequest,
+        req: CreateVoucherCategoryRequest,
         actor: &AuditActor,
     ) -> Result<VoucherCategoryProfileView> {
         req.validate()?;
-        let sku = self
-            .db
-            .skus()
-            .find_by_id(req.sku_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("SKU不存在".to_string()))?;
-        let product = self
-            .db
-            .products()
-            .find_by_id(sku.product_id.as_ref(), &mut NoTransaction)
-            .await?
-            .ok_or_else(|| Error::NotFound("商品不存在".to_string()))?;
-        if product.product_kind != ProductKind::Voucher {
-            return Err(Error::BusinessLogicError(
-                "卡券类目必须引用 VOUCHER 类型的SKU".to_string(),
-            ));
-        }
-        let id = VoucherCategoryProfileRevisionId::new(next_id());
-        let revision = VoucherCategoryProfileRevision::new(
-            id.clone(),
-            VoucherCategoryProfileRevisionData {
-                sku_id: req.sku_id.clone(),
-                revision_no: self.next_voucher_revision_no(&req.sku_id).await?,
-                description: req.description,
-                status: req.status.unwrap_or(EnableStatus::Active),
-            },
-        )?;
-        let audit = actor.clone().resource_log(
-            "voucher_category_profile.create",
-            "voucher_category_profile",
-            id.to_string(),
-        )?;
-        self.db
-            .voucher_category_profile_revisions()
-            .create(&revision, &mut NoTransaction)
-            .await?;
-        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        let draft = self.build_voucher_category_draft(req, actor).await?;
+        let revision = self.write_voucher_category_draft(draft, actor).await?;
         Ok(revision.into())
     }
 
@@ -1726,6 +1711,148 @@ impl CatalogService {
         })
     }
 
+    /// 构造卡券类目原子创建草稿（分类二选一 + 品牌/单位校验 + 商品/SKU/卡券
+    /// 修订预生成，全部 ID 在事务外预生成，事务内只做写入）。
+    ///
+    /// # 参数
+    /// * `req` - 创建请求
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 返回待写入的草稿。
+    ///
+    /// # 错误
+    /// * `ValidationError` - `category_id`/`new_category` 未恰好给一个
+    /// * `NotFound` - 引用的分类/父分类/品牌/基础单位不存在
+    /// * `BusinessLogicError` - 分类不允许 VOUCHER 类型、父子关系成环、基础单位已停用、条码冲突
+    async fn build_voucher_category_draft(
+        &self,
+        req: CreateVoucherCategoryRequest,
+        actor: &AuditActor,
+    ) -> Result<VoucherCategoryDraft> {
+        let CreateVoucherCategoryRequest {
+            voucher_no,
+            name,
+            description,
+            specification,
+            category_id,
+            new_category,
+            brand_id,
+            sku,
+            status,
+            effective_from,
+            effective_to,
+        } = req;
+
+        ensure_category_selection_exclusive(&category_id, &new_category)?;
+        let (category_id, new_category) = match (category_id, new_category) {
+            (Some(category_id), None) => {
+                let category = self.load_category(category_id.as_ref()).await?;
+                if category.product_kind != ProductKind::Voucher {
+                    return Err(Error::BusinessLogicError("所选分类不允许 VOUCHER 类型".to_string()));
+                }
+                (category_id, None)
+            }
+            (None, Some(new_category_input)) => {
+                let new_category_id = ProductCategoryId::new(next_id());
+                self.ensure_parent_chain_ok(
+                    new_category_id.as_ref(),
+                    new_category_input.parent_category_id.as_ref(),
+                )
+                .await?;
+                let category = ProductCategory::new(
+                    new_category_id.clone(),
+                    ProductCategoryData {
+                        category_code: new_category_input.category_code,
+                        parent_category_id: new_category_input.parent_category_id,
+                        name: new_category_input.name,
+                        product_kind: ProductKind::Voucher,
+                        status: EnableStatus::Active,
+                    },
+                    actor.id(),
+                )?;
+                (new_category_id, Some(category))
+            }
+            (Some(_), Some(_)) | (None, None) => {
+                unreachable!("ensure_category_selection_exclusive 已校验恰好给一个")
+            }
+        };
+
+        self.ensure_brand_and_unit_ok(&brand_id, std::iter::once(&sku.base_unit_id))
+            .await?;
+
+        let product_id = ProductId::new(next_id());
+        let revision_id = ProductRevisionId::new(next_id());
+        let product_status = status.unwrap_or(EnableStatus::Active);
+        let mut product = Product::new(
+            product_id.clone(),
+            ProductData {
+                product_no: voucher_no.clone(),
+                product_kind: ProductKind::Voucher,
+                status: product_status,
+            },
+            actor.id(),
+        )?;
+
+        let sku_item = self
+            .build_new_sku_item(
+                NewSkuContext {
+                    product_id: &product_id,
+                    product_name: &name,
+                    category_id: &category_id,
+                    effective_from,
+                    effective_to,
+                    created_by: actor.id(),
+                },
+                ProductSkuInput {
+                    sku_no: voucher_no,
+                    base_unit_id: sku.base_unit_id,
+                    barcode: sku.barcode,
+                    weight_kg: sku.weight_kg,
+                    volume_m3: sku.volume_m3,
+                    sales_visible_price_gross: sku.sales_visible_price_gross,
+                    market_price: sku.market_price,
+                    spec_entries: Vec::new(),
+                },
+            )
+            .await?;
+
+        let revision = ProductRevision::new(
+            revision_id.clone(),
+            ProductRevisionData {
+                product_id,
+                revision_no: 1,
+                name,
+                description: Some(description.clone()),
+                specification,
+                category_id,
+                brand_id,
+                status: product_status,
+                effective_from,
+                effective_to,
+            },
+        )?;
+        product.stable.current_revision_id = Some(revision.base.id.clone());
+
+        let voucher_revision = VoucherCategoryProfileRevision::new(
+            VoucherCategoryProfileRevisionId::new(next_id()),
+            VoucherCategoryProfileRevisionData {
+                sku_id: SkuId::new(sku_item.sku.base.id.clone()),
+                revision_no: 1,
+                description,
+                status: product_status,
+            },
+        )?;
+
+        Ok(VoucherCategoryDraft {
+            new_category,
+            product,
+            revision,
+            sku_item,
+            voucher_revision,
+        })
+    }
+
     /// 校验商品创建/编辑引用的字典（分类/品牌/基础单位）与分类-商品类型兼容性。
     ///
     /// # 参数
@@ -1750,9 +1877,30 @@ impl CatalogService {
         if category.product_kind != product_kind {
             return Err(Error::BusinessLogicError("所选分类不允许该商品类型".to_string()));
         }
+        self.ensure_brand_and_unit_ok(brand_id, skus.iter().map(|sku| &sku.base_unit_id))
+            .await
+    }
+
+    /// 校验品牌存在、每个基础单位存在且启用（不要求分类已落库，供卡券类目
+    /// 原子创建复用——此时分类可能是本次事务内才新建的草稿）。
+    ///
+    /// # 参数
+    /// * `brand_id` - ERP 品牌
+    /// * `base_unit_ids` - 待校验的基础单位 ID 集合
+    ///
+    /// # 返回
+    /// 合法时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 品牌/单位不存在或单位已停用时返回错误。
+    async fn ensure_brand_and_unit_ok<'a>(
+        &self,
+        brand_id: &ProductBrandId,
+        base_unit_ids: impl Iterator<Item = &'a UnitOfMeasureId>,
+    ) -> Result<()> {
         self.load_brand(brand_id.as_ref()).await?;
-        for sku in skus {
-            let unit = self.load_unit(sku.base_unit_id.as_ref()).await?;
+        for unit_id in base_unit_ids {
+            let unit = self.load_unit(unit_id.as_ref()).await?;
             if !unit.is_active() {
                 return Err(Error::BusinessLogicError("基础单位已停用".to_string()));
             }
@@ -2037,30 +2185,6 @@ impl CatalogService {
             + 1)
     }
 
-    /// 计算某卡券 SKU 已有扩展修订的最大序号 + 1。
-    ///
-    /// # 参数
-    /// * `sku_id` - SKU
-    ///
-    /// # 返回
-    /// 返回下一个修订序号。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回错误。
-    async fn next_voucher_revision_no(&self, sku_id: &SkuId) -> Result<u32> {
-        let revisions = self
-            .db
-            .voucher_category_profile_revisions()
-            .find_many(doc! { "sku_id": sku_id.to_string() }, &mut NoTransaction)
-            .await?;
-        Ok(revisions
-            .iter()
-            .map(|revision| revision.revision.revision_no)
-            .max()
-            .unwrap_or(0)
-            + 1)
-    }
-
     /// 在单个事务内写入商品创建草稿并返回 SPU。
     ///
     /// 依次写入 `products`、`product_revisions` + 媒体、每个 SKU 的
@@ -2106,6 +2230,68 @@ impl CatalogService {
                     }
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<Product, crate::errors::Error>(product)
+                })
+            })
+            .await
+    }
+
+    /// 在单个事务内写入卡券类目创建草稿并返回卡券类目扩展修订。
+    ///
+    /// 依次写入 `[新建分类]`、`products`、`product_revisions`（无媒体）、
+    /// 唯一 SKU 的 `skus` + `sku_revisions`、`voucher_category_profile_revisions`，
+    /// 以及审计日志。
+    ///
+    /// # 参数
+    /// * `draft` - 创建草稿
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 返回写入后的卡券类目扩展修订实体。
+    ///
+    /// # 错误
+    /// 唯一索引冲突（409）或事务失败时返回错误并整体回滚。
+    async fn write_voucher_category_draft(
+        &self,
+        draft: VoucherCategoryDraft,
+        actor: &AuditActor,
+    ) -> Result<VoucherCategoryProfileRevision> {
+        let audit = actor.clone().resource_log(
+            "voucher_category.create",
+            "voucher_category_profile",
+            draft.voucher_revision.base.id.clone(),
+        )?;
+        let VoucherCategoryDraft {
+            new_category,
+            product,
+            revision,
+            sku_item,
+            voucher_revision,
+        } = draft;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    if let Some(category) = &new_category {
+                        db.product_categories().create(category, session).await?;
+                    }
+                    db.products().create(&product, session).await?;
+                    db.catalog()
+                        .create_product_revision_with_media(&revision, &[], session)
+                        .await?;
+                    db.catalog()
+                        .create_sku_with_revision(
+                            &sku_item.sku,
+                            &sku_item.revision,
+                            &sku_item.attribute_values,
+                            session,
+                        )
+                        .await?;
+                    db.voucher_category_profile_revisions()
+                        .create(&voucher_revision, session)
+                        .await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<VoucherCategoryProfileRevision, crate::errors::Error>(voucher_revision)
                 })
             })
             .await
@@ -2393,6 +2579,29 @@ impl CatalogService {
 
 // ---------- 自由函数辅助 ----------
 
+/// 校验卡券类目创建请求的分类选择恰好二选一（引用已有分类 xor 内联新建分类）。
+///
+/// # 参数
+/// * `category_id` - 引用已有分类
+/// * `new_category` - 内联新建分类
+///
+/// # 返回
+/// 恰好给一个时返回 `Ok(())`。
+///
+/// # 错误
+/// 两者都给或都不给时返回 `ValidationError`。
+fn ensure_category_selection_exclusive(
+    category_id: &Option<ProductCategoryId>,
+    new_category: &Option<NewVoucherCategoryInput>,
+) -> Result<()> {
+    match (category_id, new_category) {
+        (Some(_), None) | (None, Some(_)) => Ok(()),
+        (Some(_), Some(_)) | (None, None) => Err(Error::ValidationError(
+            "分类只能二选一：引用已有分类或新建分类".to_string(),
+        )),
+    }
+}
+
 /// 校验期望版本与当前版本一致（乐观锁语义）。
 ///
 /// # 参数
@@ -2464,4 +2673,41 @@ fn ensure_unique_sort_orders(values: impl Iterator<Item = i32>, label: &str) -> 
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ensure_category_selection_exclusive, NewVoucherCategoryInput, ProductCategoryId};
+
+    fn new_category_input() -> NewVoucherCategoryInput {
+        NewVoucherCategoryInput {
+            category_code: "VC-CAT".to_string(),
+            parent_category_id: None,
+            name: "卡券分类".to_string(),
+        }
+    }
+
+    #[test]
+    fn ensure_category_selection_exclusive_accepts_exactly_one() {
+        assert!(
+            ensure_category_selection_exclusive(&Some(ProductCategoryId::new("cat-1")), &None).is_ok()
+        );
+        assert!(
+            ensure_category_selection_exclusive(&None, &Some(new_category_input())).is_ok()
+        );
+    }
+
+    #[test]
+    fn ensure_category_selection_exclusive_rejects_both_given() {
+        assert!(ensure_category_selection_exclusive(
+            &Some(ProductCategoryId::new("cat-1")),
+            &Some(new_category_input())
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn ensure_category_selection_exclusive_rejects_neither_given() {
+        assert!(ensure_category_selection_exclusive(&None, &None).is_err());
+    }
 }

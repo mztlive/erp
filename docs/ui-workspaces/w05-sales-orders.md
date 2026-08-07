@@ -246,7 +246,7 @@ W05 列表**不使用** `QuickPreviewSheet` 半屏 detail，也**不提供**「�
 | 能力 | 默认值 | URL 状态 | 行为 |
 | --- | --- | --- | --- |
 | Saved View | 我的进行中 | `view=mine_active` | 只保存偏好，不扩大数据范围 |
-| 搜索 | 空 | `q` | 服务端搜单号、客户编号/名称、合同号；不搜敏感全文 |
+| 搜索 | 空 | `q` | 服务端搜单号、客户编号/名称、合同号；不搜敏感全文；防抖 300ms 即时生效，Enter 兜底，`/` 聚焦 |
 | 业务性质 | 全部 | `businessType` | 卡券/非卡券共享列表 |
 | 创建来源 | 全部 | `originSystem` | 与主状态、进度分开筛选 |
 | 主状态 | 全部 | `status` | 单选，URL 使用稳定枚举码（`awaiting_confirm/awaiting_sales/awaiting_sales_lead/awaiting_ops/fulfilling/effective/closed/draft/voided`），中文映射集中一处（`filter-orders.ts`），旧中文参数自动兼容 |
@@ -257,6 +257,8 @@ W05 列表**不使用** `QuickPreviewSheet` 半屏 detail，也**不提供**「�
 | 排序 | 待处理、最近更新 | `sort` | 服务端稳定排序与游标分页 |
 
 筛选、排序、游标和对象子区可恢复；表单输入不进入 URL。W05 **不**用 `preview=` 保留半屏 Sheet 状态（列表预览为瞬时浮层）。指标与列表使用同一查询更新时间。导出为客户端按当前筛选生成 CSV，界面以业务文案呈现（「导出完成」+ 文件/行数/时间），不展示权限版本、任务号或审计标签等内部标识；CSV 文件名与首行注释均不含内部 ID。待处理指标口径不含草稿（草稿通过主状态单独筛选）。
+
+指标条第一项为「全部」，指标点击可回退到全部（不残留矛盾组合）；指标与普通筛选 AND 共存，点击指标重置重叠维度（如 summary×status）避免空结果。筛选无结果空态使用 `BusinessEmptyState`，区分无数据/筛选无结果（带「清除筛选」）/无数据范围。
 
 ## 7. 操作契约
 

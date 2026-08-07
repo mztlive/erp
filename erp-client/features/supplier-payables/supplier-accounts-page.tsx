@@ -147,10 +147,17 @@ export function SupplierAccountsPage() {
 
   const [searchInput, setSearchInput] = React.useState(qParam)
   const searchInputRef = React.useRef<HTMLInputElement | null>(null)
-  const [pagination, setPagination] = React.useState<PaginationState>({
-    pageIndex: 0,
-    pageSize: 20,
-  })
+  // D23：分页写 URL（page），URL 最小化——第 1 页省略参数；本地不再持有分页副本。
+  // 排序保留本地实现（服务端列表无排序参数，仅应付视图做客户端排序），记录在案。
+  const pageParam = searchParams.get("page")
+  const pageIndex = React.useMemo(() => {
+    const n = pageParam ? Number.parseInt(pageParam, 10) : 1
+    return Number.isFinite(n) && n >= 1 ? n - 1 : 0
+  }, [pageParam])
+  const pagination = React.useMemo<PaginationState>(
+    () => ({ pageIndex, pageSize: 20 }),
+    [pageIndex]
+  )
   const [previewPayableId, setPreviewPayableId] = React.useState<string | null>(
     detailId ?? null
   )
@@ -240,6 +247,42 @@ export function SupplierAccountsPage() {
     options?: { replace?: boolean }
   ) {
     patchSearchParams({ router, pathname, searchParams, view }, patch, options)
+  }
+
+  // P4：清除=清全部筛选参数并回第 1 页；保留 view（视图类参数）/排序/导航上下文
+  // （session/detailId/returnTo/from 等）。语义写进按钮 tooltip（D23）。
+  // 参数命名与其它页不同（detailId 对应 preview、session 为核销会话）属历史约定，
+  // 为向后兼容保留，不做重命名（D23 记录在案）。
+  const hasActiveFilters = Boolean(
+    qParam ||
+      supplierId ||
+      sourceType ||
+      (due && due !== "all") ||
+      (paymentGate && paymentGate !== "all") ||
+      purchaseOrderId ||
+      (trackFilter && trackFilter !== "all")
+  )
+  function clearFilters() {
+    setSearchInput("")
+    patchUrl({
+      q: null,
+      supplierId: null,
+      sourceType: null,
+      status: null,
+      due: null,
+      paymentGate: null,
+      purchaseOrderId: null,
+      track: null,
+      page: null,
+    })
+  }
+
+  // D23：分页变更只写 URL page（第 1 页省略），分页状态由 URL 派生
+  const handlePaginationChange = (next: PaginationState) => {
+    patchUrl(
+      { page: next.pageIndex === 0 ? null : String(next.pageIndex + 1) },
+      { replace: true }
+    )
   }
 
   React.useEffect(() => {
@@ -1025,6 +1068,8 @@ export function SupplierAccountsPage() {
         </div>
       ) : null}
 
+      {/* 指标 toggle 取消语义保留（D23）：再次点击已激活指标即取消该筛选
+          （due/paymentGate 置回 all、view 回 payable）；指标/视图/筛选变更均回第 1 页（P6）。 */}
       <MetricStrip>
         <MetricFilterItem
           label="开放应付"
@@ -1032,8 +1077,7 @@ export function SupplierAccountsPage() {
           detail="系统口径"
           active={view === "payable" && !status}
           onClick={() => {
-            setPagination((p) => ({ ...p, pageIndex: 0 }))
-            patchUrl({ view: "payable", status: null })
+            patchUrl({ view: "payable", status: null, page: null })
           }}
         />
         <MetricFilterItem
@@ -1042,10 +1086,10 @@ export function SupplierAccountsPage() {
           detail="含逾期开放"
           active={due === "overdue"}
           onClick={() => {
-            setPagination((p) => ({ ...p, pageIndex: 0 }))
             patchUrl({
               view: "payable",
               due: due === "overdue" ? null : "overdue",
+              page: null,
             })
           }}
         />
@@ -1055,8 +1099,7 @@ export function SupplierAccountsPage() {
           detail="付款轨道"
           active={view === "unallocated" && trackFilter === "payment"}
           onClick={() => {
-            setPagination((p) => ({ ...p, pageIndex: 0 }))
-            patchUrl({ view: "unallocated", track: "payment" })
+            patchUrl({ view: "unallocated", track: "payment", page: null })
           }}
         />
         <MetricFilterItem
@@ -1065,8 +1108,11 @@ export function SupplierAccountsPage() {
           detail="与付款独立"
           active={view === "unallocated" && trackFilter === "purchase_invoice"}
           onClick={() => {
-            setPagination((p) => ({ ...p, pageIndex: 0 }))
-            patchUrl({ view: "unallocated", track: "purchase_invoice" })
+            patchUrl({
+              view: "unallocated",
+              track: "purchase_invoice",
+              page: null,
+            })
           }}
         />
         <MetricFilterItem
@@ -1075,11 +1121,11 @@ export function SupplierAccountsPage() {
           detail="户/单数"
           active={paymentGate === "unsatisfied"}
           onClick={() => {
-            setPagination((p) => ({ ...p, pageIndex: 0 }))
             patchUrl({
               view: "payable",
               paymentGate:
                 paymentGate === "unsatisfied" ? null : "unsatisfied",
+              page: null,
             })
           }}
         />
@@ -1088,8 +1134,7 @@ export function SupplierAccountsPage() {
       <Tabs
         value={view}
         onValueChange={(v) => {
-          setPagination((p) => ({ ...p, pageIndex: 0 }))
-          patchUrl({ view: v })
+          patchUrl({ view: v, page: null })
         }}
       >
         <TabsList>
@@ -1134,8 +1179,7 @@ export function SupplierAccountsPage() {
                   <SupplierCombobox
                     value={supplierId || undefined}
                     onValueChange={(id) => {
-                      setPagination((p) => ({ ...p, pageIndex: 0 }))
-                      patchUrl({ supplierId: id || null })
+                      patchUrl({ supplierId: id || null, page: null })
                     }}
                     suppliers={data.suppliers.map((s) => ({
                       supplierId: s.supplierId,
@@ -1154,9 +1198,9 @@ export function SupplierAccountsPage() {
                     <OptionCombobox
                       value={trackFilter}
                       onValueChange={(v) => {
-                        setPagination((p) => ({ ...p, pageIndex: 0 }))
                         patchUrl({
                           track: v && v !== "all" ? v : null,
+                          page: null,
                         })
                       }}
                       options={[
@@ -1179,8 +1223,7 @@ export function SupplierAccountsPage() {
                       <OptionCombobox
                         value={sourceType ?? ""}
                         onValueChange={(v) => {
-                          setPagination((p) => ({ ...p, pageIndex: 0 }))
-                          patchUrl({ sourceType: v || null })
+                          patchUrl({ sourceType: v || null, page: null })
                         }}
                         options={[
                           { value: "", label: "全部来源" },
@@ -1202,8 +1245,7 @@ export function SupplierAccountsPage() {
                       <OptionCombobox
                         value={status ?? ""}
                         onValueChange={(v) => {
-                          setPagination((p) => ({ ...p, pageIndex: 0 }))
-                          patchUrl({ status: v || null })
+                          patchUrl({ status: v || null, page: null })
                         }}
                         options={[
                           { value: "", label: "全部状态" },
@@ -1222,6 +1264,19 @@ export function SupplierAccountsPage() {
                 ) : null}
               </div>
             }
+            actions={
+              hasActiveFilters ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  onClick={clearFilters}
+                  title="清除全部筛选条件，保留当前视图与排序"
+                >
+                  清除筛选
+                </Button>
+              ) : null
+            }
           />
         }
         table={
@@ -1237,19 +1292,8 @@ export function SupplierAccountsPage() {
                   variant="secondary"
                   size="sm"
                   className="rounded-lg shadow-none"
-                  onClick={() => {
-                    setSearchInput("")
-                    patchUrl({
-                      q: null,
-                      supplierId: null,
-                      sourceType: null,
-                      status: null,
-                      due: null,
-                      paymentGate: null,
-                      purchaseOrderId: null,
-                      track: null,
-                    })
-                  }}
+                  onClick={clearFilters}
+                  title="清除全部筛选条件，保留当前视图与排序"
                 >
                   清除筛选
                 </Button>
@@ -1270,7 +1314,7 @@ export function SupplierAccountsPage() {
                   data={pageRows as PayableRow[]}
                   getRowId={(r) => r.payableAccountId}
                   pagination={pagination}
-                  onPaginationChange={setPagination}
+                  onPaginationChange={handlePaginationChange}
                   sorting={sorting}
                   onSortingChange={setSorting}
                   rowCount={data.payables.length}
@@ -1284,7 +1328,7 @@ export function SupplierAccountsPage() {
                   data={pageRows as PaymentRow[]}
                   getRowId={(r) => r.paymentId}
                   pagination={pagination}
-                  onPaginationChange={setPagination}
+                  onPaginationChange={handlePaginationChange}
                   rowCount={data.payments.length}
                   layout="flush"
                   density="compact"
@@ -1296,7 +1340,7 @@ export function SupplierAccountsPage() {
                   data={pageRows as PurchaseInvoiceRow[]}
                   getRowId={(r) => r.invoiceId}
                   pagination={pagination}
-                  onPaginationChange={setPagination}
+                  onPaginationChange={handlePaginationChange}
                   rowCount={data.invoices.length}
                   layout="flush"
                   density="compact"
@@ -1308,7 +1352,7 @@ export function SupplierAccountsPage() {
                   data={pageRows as UnallocatedRow[]}
                   getRowId={(r) => r.id}
                   pagination={pagination}
-                  onPaginationChange={setPagination}
+                  onPaginationChange={handlePaginationChange}
                   rowCount={rows.length}
                   layout="flush"
                   density="compact"
