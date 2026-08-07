@@ -4,7 +4,7 @@
 //! `/admin/product-brands`、`/admin/unit-of-measures`、`/admin/sku-attributes`、
 //! `/admin/sku-attribute-values`、`/admin/products`、`/admin/product-revisions`、
 //! `/admin/skus`、`/admin/sku-revisions`、`/admin/voucher-category-profiles`（只读列表）、
-//! `/admin/voucher-categories`（原子创建）；
+//! `/admin/voucher-categories`（原子创建）、`/admin/voucher-categories/{sku_id}`（更新）；
 //! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
 //! `#[permission_macros::permission]`。
 
@@ -258,6 +258,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 post(catalog::product::voucher_category_create),
                 rbac,
                 catalog::product::voucher_category_create_permission_key(),
+            ),
+        )
+        .route(
+            "/voucher-categories/{sku_id}",
+            with_permission(
+                put(catalog::product::voucher_category_update),
+                rbac,
+                catalog::product::voucher_category_update_permission_key(),
             ),
         )
 }

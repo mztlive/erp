@@ -1408,9 +1408,15 @@ pub struct VoucherSkuInput {
 /// 必要时内联新建所属分类，全部在一个事务内原子写入）。
 ///
 /// `voucher_no` 同时作为 `product_no` 与 `sku_no` 落库（业务上一个卡券类目即一个 SKU，
-/// 无需分别填写两个编号）。`category_id` 与 `new_category` 二选一，互斥校验见
-/// `CatalogService::build_voucher_category_draft`。`description` 同时写入
-/// `product_revision.description` 与 `voucher_category_profile_revision.description`。
+/// 无需分别填写两个编号）。
+///
+/// **默认字典**（`category_id`/`new_category`、`brand_id`、`sku` 均可省略）：
+/// - 分类：共用卡券根分类（代码 `VOUCHER` / 名称「卡券」），不存在时自动创建；
+/// - 品牌：固定「福尚云」（代码 `FSY`），不存在时自动创建；
+/// - 基础单位：固定「张」，不存在时自动创建。
+/// 仍可显式传入覆盖默认；`category_id` 与 `new_category` 不可同时给出。
+/// `description` 同时写入 `product_revision.description` 与
+/// `voucher_category_profile_revision.description`。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateVoucherCategoryRequest {
     /// 卡券类目编号（全局唯一，同时作为 `product_no` 与 `sku_no`，创建后不可修改）。
@@ -1423,33 +1429,75 @@ pub struct CreateVoucherCategoryRequest {
     #[validate(custom(function = "non_blank", message = "卡券类目描述不能为空"))]
     pub description: String,
     /// 公司审核后的规格或服务内容。
+    #[serde(default)]
     pub specification: Option<String>,
-    /// 引用已有 VOUCHER 类型分类；与 `new_category` 二选一。
+    /// 引用已有 VOUCHER 类型分类；与 `new_category` 互斥；都缺省则用共用卡券根分类。
+    #[serde(default)]
     pub category_id: Option<ProductCategoryId>,
-    /// 内联新建 VOUCHER 类型分类；与 `category_id` 二选一。
+    /// 内联新建 VOUCHER 类型分类；与 `category_id` 互斥。
+    #[serde(default)]
     #[validate(nested)]
     pub new_category: Option<NewVoucherCategoryInput>,
-    /// ERP 品牌。
-    pub brand_id: ProductBrandId,
-    /// 唯一 SKU 行。
+    /// ERP 品牌；缺省解析为「福尚云」。
+    #[serde(default)]
+    pub brand_id: Option<ProductBrandId>,
+    /// 唯一 SKU 行；缺省基础单位为「张」，其它 SKU 属性为空。
+    #[serde(default)]
     #[validate(nested)]
-    pub sku: VoucherSkuInput,
+    pub sku: Option<VoucherSkuInput>,
     /// 启停状态；缺省视为启用。
     #[serde(default)]
     pub status: Option<EnableStatus>,
-    /// 生效开始日。
-    pub effective_from: BusinessDate,
+    /// 生效开始日；缺省为服务端当天。
+    #[serde(default)]
+    pub effective_from: Option<BusinessDate>,
     /// 生效结束日；空表示无限期。
+    #[serde(default)]
+    pub effective_to: Option<BusinessDate>,
+}
+
+/// 卡券类目更新请求（追加商品修订 + SKU 修订 + 卡券类目扩展修订）。
+///
+/// 编号（`product_no`/`sku_no`）创建后不可改；分类 / 品牌 / 基础单位沿用当前修订，
+/// 不在本接口维护。乐观锁取所属商品 `product.version`。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct UpdateVoucherCategoryRequest {
+    /// 期望的商品乐观锁版本；与当前不一致时拒绝（409）。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub version: u64,
+    /// 卡券类目名称（写入商品修订与 SKU 修订名称快照）。
+    #[validate(custom(function = "non_blank", message = "卡券类目名称不能为空"))]
+    pub name: String,
+    /// 卡券类目描述（写入商品修订与卡券类目扩展修订）。
+    #[validate(custom(function = "non_blank", message = "卡券类目描述不能为空"))]
+    pub description: String,
+    /// 生效开始日；缺省为服务端当天。
+    #[serde(default)]
+    pub effective_from: Option<BusinessDate>,
+    /// 生效结束日；空表示无限期。
+    #[serde(default)]
     pub effective_to: Option<BusinessDate>,
 }
 
 /// 卡券类目扩展修订响应视图。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct VoucherCategoryProfileView {
-    /// 实体主键。
+    /// 实体主键（本条扩展修订 ID）。
     pub id: String,
-    /// 卡券类目使用的 VOUCHER SKU 稳定身份。
+    /// 卡券类目使用的 VOUCHER SKU 稳定身份（列表/更新路径的稳定主键）。
     pub sku_id: String,
+    /// SKU 编号（即卡券类目编号）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sku_no: Option<String>,
+    /// 所属商品 SPU 身份。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub product_id: Option<String>,
+    /// 所属商品当前乐观锁版本（更新时作为 `version` 提交）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub product_version: Option<u64>,
+    /// 展示名称（当前商品/SKU 修订名称；无则回落描述）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
     /// 修订序号。
     pub revision_no: u32,
     /// 卡券类目描述。
@@ -1458,12 +1506,12 @@ pub struct VoucherCategoryProfileView {
     pub status: EnableStatus,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
-    /// 乐观锁版本。
+    /// 本条扩展修订乐观锁版本。
     pub version: u64,
 }
 
 impl From<VoucherCategoryProfileRevision> for VoucherCategoryProfileView {
-    /// 从实体构造响应视图。
+    /// 从实体构造响应视图（关联字段由列表/更新服务后续补齐）。
     ///
     /// # 参数
     /// * `revision` - 卡券类目扩展修订实体
@@ -1474,6 +1522,10 @@ impl From<VoucherCategoryProfileRevision> for VoucherCategoryProfileView {
         Self {
             id: revision.base.id,
             sku_id: revision.sku_id.to_string(),
+            sku_no: None,
+            product_id: None,
+            product_version: None,
+            name: None,
             revision_no: revision.revision.revision_no,
             description: revision.description,
             status: revision.status,
@@ -1671,5 +1723,20 @@ mod tests {
         value["new_category"] = serde_json::json!({ "category_code": "VC-CAT", "name": "  " });
         let request: super::CreateVoucherCategoryRequest = serde_json::from_value(value).unwrap();
         assert!(request.validate().is_err(), "空白分类名称必须被拒绝");
+    }
+
+    #[test]
+    fn create_voucher_category_request_allows_minimal_identity_only() {
+        let value = serde_json::json!({
+            "voucher_no": "VC-MIN",
+            "name": "心意卡",
+            "description": "员工福利卡",
+        });
+        let request: super::CreateVoucherCategoryRequest = serde_json::from_value(value).unwrap();
+        assert!(request.validate().is_ok(), "仅身份字段应通过校验，字典由服务端默认");
+        assert!(request.category_id.is_none());
+        assert!(request.brand_id.is_none());
+        assert!(request.sku.is_none());
+        assert!(request.effective_from.is_none());
     }
 }

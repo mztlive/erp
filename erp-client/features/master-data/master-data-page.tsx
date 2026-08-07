@@ -57,6 +57,7 @@ import {
   MasterDataReviseDialog,
 } from "@/features/master-data/master-data-action-dialog"
 import { MasterDataPreviewPanel } from "@/features/master-data/master-data-preview"
+import { VoucherCategoryFormDialog } from "@/features/master-data/voucher-category-form-dialog"
 import {
   useMasterDataCenterQuery,
   useMasterDataListQuery,
@@ -205,9 +206,10 @@ function MasterDataListWorkspace({
   const isProductResource = resource === "products"
   /** 供应商走详情页（查看与编辑同一页面），不用侧边 sheet / 编辑弹窗。 */
   const isSupplierResource = resource === "suppliers"
-  /** 卡券类目新建走专属页面（原子创建 Product+SKU+类目扩展修订）；查看/更新仍走通用弹窗。 */
+  /** 卡券类目：列表原地 Dialog 新建/编辑，无查看预览、无停用。 */
   const isVoucherCategoryResource = resource === "voucher-categories"
-  const skipPreviewSheet = isProductResource || isSupplierResource
+  const skipPreviewSheet =
+    isProductResource || isSupplierResource || isVoucherCategoryResource
   /** 品牌 / 分类字典不展示生效期间列。 */
   const showEffectiveColumn = resource !== "brands"
 
@@ -519,6 +521,30 @@ function MasterDataListWorkspace({
           const disableBlocker = item.actionBlockers.find(
             (b) => b.action === "DISABLE"
           )
+          // 卡券类目：仅原地编辑。
+          if (isVoucherCategoryResource) {
+            return (
+              <div className="flex flex-wrap gap-1">
+                <DisabledActionHint message={reviseBlocker?.message}>
+                  <Button
+                    type="button"
+                    size="xs"
+                    variant="ghost"
+                    disabled={!canRevise}
+                    title={reviseBlocker?.message}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      lastFocusedRowId.current = item.stableId
+                      setReviseTarget(item)
+                    }}
+                  >
+                    <HistoryIcon data-icon="inline-start" aria-hidden />
+                    {masterDataCopy.actionUpdate}
+                  </Button>
+                </DisabledActionHint>
+              </div>
+            )
+          }
           return (
             <div className="flex flex-wrap gap-1">
               <Button
@@ -586,6 +612,7 @@ function MasterDataListWorkspace({
     [
       isProductResource,
       isSupplierResource,
+      isVoucherCategoryResource,
       lastFocusedRowId,
       resource,
       router,
@@ -663,11 +690,7 @@ function MasterDataListWorkspace({
                   ? masterDataCopy.warehouseWriteBody
                   : undefined,
                 onClick: () => {
-                  if (
-                    isProductResource ||
-                    isSupplierResource ||
-                    isVoucherCategoryResource
-                  ) {
+                  if (isProductResource || isSupplierResource) {
                     router.push(`/master-data/${resource}/new`)
                   } else {
                     setCreateOpen(true)
@@ -738,7 +761,7 @@ function MasterDataListWorkspace({
         />
       ) : null}
 
-      {metrics.length > 0 ? (
+      {!isVoucherCategoryResource && metrics.length > 0 ? (
         <MetricStrip
           columns={4}
           aria-label={`${resourceLabel(resource)}指标筛选`}
@@ -935,11 +958,7 @@ function MasterDataListWorkspace({
                         size="sm"
                         className="rounded-lg shadow-none"
                         onClick={() => {
-                          if (
-                            isProductResource ||
-                            isSupplierResource ||
-                            isVoucherCategoryResource
-                          ) {
+                          if (isProductResource || isSupplierResource) {
                             router.push(`/master-data/${resource}/new`)
                           } else {
                             setCreateOpen(true)
@@ -959,6 +978,8 @@ function MasterDataListWorkspace({
                 router.push(
                   `/master-data/${resource}/${row.stableId}?section=overview`
                 )
+              } else if (isVoucherCategoryResource) {
+                setReviseTarget(row)
               } else {
                 setPreviewId(row.stableId)
               }
@@ -969,6 +990,10 @@ function MasterDataListWorkspace({
                 router.push(
                   `/master-data/${resource}/${row.stableId}?section=overview`
                 )
+                return
+              }
+              if (isVoucherCategoryResource) {
+                setReviseTarget(row)
                 return
               }
               setPreviewId(row.stableId)
@@ -1094,14 +1119,33 @@ function MasterDataListWorkspace({
         </QuickPreviewSheet>
       ) : null}
 
-      {!isProductResource && !isSupplierResource && !isVoucherCategoryResource ? (
+      {!isProductResource &&
+      !isSupplierResource &&
+      !isVoucherCategoryResource ? (
         <MasterDataCreateDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
           resource={resource}
         />
       ) : null}
-      {!isProductResource && !isSupplierResource ? (
+      {isVoucherCategoryResource ? (
+        <>
+          <VoucherCategoryFormDialog
+            open={createOpen}
+            onOpenChange={setCreateOpen}
+          />
+          <VoucherCategoryFormDialog
+            open={reviseTarget != null}
+            onOpenChange={(open) => {
+              if (!open) setReviseTarget(null)
+            }}
+            target={reviseTarget}
+          />
+        </>
+      ) : null}
+      {!isProductResource &&
+      !isSupplierResource &&
+      !isVoucherCategoryResource ? (
         <MasterDataReviseDialog
           open={reviseTarget != null}
           onOpenChange={(open) => {
@@ -1111,14 +1155,16 @@ function MasterDataListWorkspace({
           target={reviseTarget}
         />
       ) : null}
-      <MasterDataDisableDialog
-        open={disableTarget != null}
-        onOpenChange={(open) => {
-          if (!open) setDisableTarget(null)
-        }}
-        resource={resource}
-        target={disableTarget}
-      />
+      {!isVoucherCategoryResource ? (
+        <MasterDataDisableDialog
+          open={disableTarget != null}
+          onOpenChange={(open) => {
+            if (!open) setDisableTarget(null)
+          }}
+          resource={resource}
+          target={disableTarget}
+        />
+      ) : null}
     </PageScaffold>
   )
 }

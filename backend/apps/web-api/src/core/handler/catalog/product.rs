@@ -12,8 +12,8 @@ use services::audit::AuditActor;
 use services::catalog::{
     CatalogService, CreateProductRequest, CreateVoucherCategoryRequest, PageView, ProductListParams,
     ProductRevisionListParams, ProductRevisionView, ProductView, SkuListParams, SkuRevisionListParams,
-    SkuRevisionView, SkuView, UpdateProductRequest, VoucherCategoryProfileListParams,
-    VoucherCategoryProfileView,
+    SkuRevisionView, SkuView, UpdateProductRequest, UpdateVoucherCategoryRequest,
+    VoucherCategoryProfileListParams, VoucherCategoryProfileView,
 };
 
 use crate::{
@@ -228,6 +228,36 @@ pub async fn voucher_category_create(
 ) -> Result<VoucherCategoryProfileView> {
     let view = CatalogService::new(state.db())
         .voucher_category_create(req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "更新卡券类目",
+    resource = "voucher_category_profile",
+    action = "update"
+)]
+/// 更新卡券类目名称与描述（按 SKU 稳定身份定位，追加商品/SKU/扩展修订）。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `sku_id` - 卡券类目对应的 VOUCHER SKU 稳定 ID
+/// * `req` - 更新请求（含商品乐观锁版本）
+///
+/// # 返回
+/// 返回新建卡券类目扩展修订的响应视图。
+pub async fn voucher_category_update(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(sku_id): Path<String>,
+    Json(req): Json<UpdateVoucherCategoryRequest>,
+) -> Result<VoucherCategoryProfileView> {
+    let view = CatalogService::new(state.db())
+        .voucher_category_update(&sku_id, req, &actor)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

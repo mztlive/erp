@@ -1405,6 +1405,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "PUT",
+                path: "/admin/voucher-categories/{sku_id}",
+                description: "更新卡券类目",
+                permission: {
+                    resource: "voucher_category_profile",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/warehouses",
                 description: "查询仓库列表",

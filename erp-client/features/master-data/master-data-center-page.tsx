@@ -26,7 +26,6 @@ import {
 } from "@/features/master-data/master-data-action-dialog"
 import { ProductDetailPage } from "@/features/master-data/product-detail-page"
 import { SupplierDetailPage } from "@/features/master-data/supplier-detail-page"
-import { VoucherCategoryDetailPage } from "@/features/master-data/voucher-category-detail-page"
 import { revealMasterDataSensitive } from "@/features/master-data/queries"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
@@ -90,9 +89,9 @@ export function MasterDataCenterPage({
   if (resource === "suppliers") {
     return <SupplierDetailPage stableId={stableId} />
   }
-  // 卡券类目新建走专属原子创建页；查看/历史仍走下方通用对象中心（无更新接口）。
+  // 兼容旧书签 `/voucher-categories/new`：新建已改列表 Dialog，重定向回列表。
   if (resource === "voucher-categories" && stableId === "new") {
-    return <VoucherCategoryDetailPage />
+    return <VoucherCategoryNewRedirect />
   }
 
   return (
@@ -101,6 +100,19 @@ export function MasterDataCenterPage({
       stableId={stableId}
       section={section}
     />
+  )
+}
+
+/** 卡券类目新建路由兼容：跳回列表，由列表 Dialog 承担创建。 */
+function VoucherCategoryNewRedirect() {
+  const router = useRouter()
+  React.useEffect(() => {
+    router.replace("/master-data/voucher-categories")
+  }, [router])
+  return (
+    <div className="flex min-h-[12rem] items-center justify-center text-sm text-muted-foreground">
+      正在打开卡券类目列表…
+    </div>
   )
 }
 

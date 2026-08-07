@@ -114,6 +114,10 @@ type SkuRevisionDto = {
 type VoucherCategoryProfileDto = {
   id: string
   sku_id: string
+  sku_no?: string | null
+  product_id?: string | null
+  product_version?: number | null
+  name?: string | null
   revision_no: number
   description: string
   status: EnableStatus
@@ -384,6 +388,24 @@ const commonActions = (
       ],
     }
   }
+  // 卡券类目：仅新建 + 编辑；不提供查看详情 / 停用。
+  if (resource === "voucher-categories") {
+    return {
+      allowedActions: ["CREATE_REVISION", "EXPORT_ROW"],
+      actionBlockers: [
+        {
+          action: "VIEW",
+          code: "VOUCHER_NO_DETAIL",
+          message: "卡券类目在列表原地编辑，不提供独立查看。",
+        },
+        {
+          action: "DISABLE",
+          code: "VOUCHER_NO_DISABLE",
+          message: "卡券类目不支持停用。",
+        },
+      ],
+    }
+  }
   const allowed: string[] = ["VIEW", "EXPORT_ROW"]
   const blockers: Array<{ action: string; code: string; message: string }> = []
   if (lifecycle === "ENABLED") {
@@ -590,11 +612,15 @@ function mapVoucherRow(
   sku?: SkuDto
 ): MasterDataListItem {
   const lifecycle = asLifecycle(profile.status)
+  const skuNo =
+    profile.sku_no ?? sku?.sku_no ?? profile.sku_id
+  const displayName = profile.name?.trim() || profile.description
+  // 稳定身份 = SKU（创建后不变）；列表按 SKU 聚合最新扩展修订。
   return {
     objectType: "voucher-categories",
-    stableId: profile.id,
-    stableNo: sku?.sku_no ?? profile.sku_id,
-    name: profile.description,
+    stableId: profile.sku_id,
+    stableNo: skuNo,
+    name: displayName,
     lifecycleStatus: lifecycle,
     lifecycleStatusLabel: lifecycleLabel(lifecycle),
     lifecycleTone: lifecycleTone(lifecycle),
@@ -605,13 +631,13 @@ function mapVoucherRow(
     revisionNo: profile.revision_no,
     effectiveFrom: tsToIso(profile.created_at).slice(0, 10),
     keyFacts: [
-      { label: "卡券 SKU", value: sku?.sku_no ?? profile.sku_id },
+      { label: "卡券 SKU", value: skuNo },
       { label: "说明", value: profile.description },
     ],
     primaryBlocker: lifecycle === "DISABLED" ? "已停用" : undefined,
     selectorEligibility: [],
     ...commonActions("voucher-categories", lifecycle),
-    lockVersion: profile.version,
+    lockVersion: profile.product_version ?? profile.version,
     metricTags: [lifecycle === "ENABLED" ? "enabled" : "disabled"],
   }
 }
@@ -846,9 +872,19 @@ async function listVoucherCategories(
     { status }
   )
   if (profiles.length === 0) return []
+  // 每个 SKU 只保留最新扩展修订，避免更新后列表出现多行。
+  const latestBySku = new Map<string, VoucherCategoryProfileDto>()
+  for (const profile of profiles) {
+    const prev = latestBySku.get(profile.sku_id)
+    if (!prev || profile.revision_no > prev.revision_no) {
+      latestBySku.set(profile.sku_id, profile)
+    }
+  }
   const skus = await fetchAllPages<SkuDto>("/admin/skus", {})
   const skuById = new Map(skus.map((s) => [s.id, s]))
-  let rows = profiles.map((p) => mapVoucherRow(p, skuById.get(p.sku_id)))
+  let rows = Array.from(latestBySku.values()).map((p) =>
+    mapVoucherRow(p, skuById.get(p.sku_id))
+  )
   if (query.q?.trim()) {
     const q = query.q.trim().toLowerCase()
     rows = rows.filter(
@@ -1220,8 +1256,14 @@ async function centerVoucher(
     "/admin/voucher-category-profiles",
     {}
   )
-  const profile = profiles.find((p) => p.id === stableId)
-  if (!profile) return null
+  // stableId 为 SKU 身份；兼容旧链接仍按 profile.id 查找。
+  const matched = profiles.filter(
+    (p) => p.sku_id === stableId || p.id === stableId
+  )
+  if (matched.length === 0) return null
+  const profile = matched.reduce((best, cur) =>
+    cur.revision_no > best.revision_no ? cur : best
+  )
   const skus = await fetchAllPages<SkuDto>("/admin/skus", {})
   const sku = skus.find((s) => s.id === profile.sku_id)
   const row = mapVoucherRow(profile, sku)
@@ -1615,54 +1657,48 @@ async function createVoucherCategory(
   input: CreateMasterDataInput
 ): Promise<MasterDataMutationResult> {
   const fields = input.fields as VoucherCategoryFields
-  if (!fields.categoryId && !fields.newCategoryCode) {
-    return {
-      outcome: "blocked",
-      code: "VOUCHER_CATEGORY_REQUIRED",
-      message: "请选择已有分类，或填写新建分类信息。",
+  // 分类 / 品牌 / 单位均可省略：后端补齐共用卡券根分类、品牌「福尚云」、单位「张」。
+  // 若调用方仍传入 categoryId / newCategory / brandId / baseUnitId，则原样转发覆盖默认。
+  const body: Record<string, unknown> = {
+    voucher_no: fields.voucherNo,
+    name: input.name.trim(),
+    description: (fields.description || input.name).trim(),
+    specification: fields.specification || null,
+    status: "active",
+    effective_from: input.effectiveFrom || null,
+    effective_to: input.effectiveTo || null,
+  }
+  if (fields.categoryId) {
+    body.category_id = fields.categoryId
+  } else if (fields.newCategoryCode && fields.newCategoryName) {
+    body.new_category = {
+      category_code: fields.newCategoryCode,
+      parent_category_id: fields.newCategoryParentId || null,
+      name: fields.newCategoryName,
     }
   }
-  if (!fields.brandId || !fields.baseUnitId) {
-    return {
-      outcome: "blocked",
-      code: "VOUCHER_REQUIRED_REFS",
-      message: "请完整填写品牌与基础单位。",
+  if (fields.brandId) {
+    body.brand_id = fields.brandId
+  }
+  if (fields.baseUnitId) {
+    body.sku = {
+      base_unit_id: fields.baseUnitId,
+      barcode: fields.barcode || null,
+      weight_kg: null,
+      volume_m3: null,
+      sales_visible_price_gross: fields.salesVisiblePriceGross || null,
+      market_price: fields.marketPrice || null,
     }
   }
   try {
     const created = await apiPost<VoucherCategoryProfileDto>(
       "/admin/voucher-categories",
-      {
-        voucher_no: fields.voucherNo,
-        name: input.name.trim(),
-        description: (fields.description || input.name).trim(),
-        specification: fields.specification || null,
-        category_id: fields.categoryId || null,
-        new_category: fields.categoryId
-          ? null
-          : {
-              category_code: fields.newCategoryCode,
-              parent_category_id: fields.newCategoryParentId || null,
-              name: fields.newCategoryName,
-            },
-        brand_id: fields.brandId,
-        sku: {
-          base_unit_id: fields.baseUnitId,
-          barcode: fields.barcode || null,
-          weight_kg: null,
-          volume_m3: null,
-          sales_visible_price_gross: fields.salesVisiblePriceGross || null,
-          market_price: fields.marketPrice || null,
-        },
-        status: "active",
-        effective_from: input.effectiveFrom,
-        effective_to: input.effectiveTo || null,
-      }
+      body
     )
     return {
       outcome: "succeeded",
-      stableId: created.id,
-      stableNo: fields.voucherNo,
+      stableId: created.sku_id,
+      stableNo: created.sku_no ?? fields.voucherNo,
       revisionId: created.id,
       revisionNo: created.revision_no,
       revisionState: isFutureDate(input.effectiveFrom) ? "FUTURE" : "CURRENT",
@@ -1671,7 +1707,7 @@ async function createVoucherCategory(
       actor: "—",
       changeReason: input.changeReason || "新建",
       reference: `MD-CREATE-VC-${fields.voucherNo}`,
-      nextActions: ["查看详情"],
+      nextActions: ["返回列表"],
     }
   } catch (error) {
     return mapMutationError(error)
@@ -2055,13 +2091,45 @@ export async function createMasterDataRevision(
           code: "SELLABLE_NOT_WRITABLE",
           message: "公司商品池是销售可见 SKU 投影，请在「商品与 SKU」中维护。",
         }
-      case "voucher-categories":
-        return {
-          outcome: "blocked",
-          code: "VOUCHER_PROFILE_NO_UPDATE",
-          message: "卡券类目暂无更新接口（仅创建）。",
-          detail: "backend: POST /admin/voucher-categories only supports create",
+      case "voucher-categories": {
+        const fields = input.fields as VoucherCategoryFields
+        try {
+          const updated = await apiPut<VoucherCategoryProfileDto>(
+            `/admin/voucher-categories/${input.stableId}`,
+            {
+              version: input.expectedLockVersion,
+              name: input.name.trim(),
+              description: (
+                fields.description ||
+                input.name
+              ).trim(),
+              effective_from: input.effectiveFrom || null,
+              effective_to: input.effectiveTo || null,
+            }
+          )
+          return {
+            outcome: "succeeded",
+            stableId: updated.sku_id,
+            stableNo: updated.sku_no ?? fields.voucherNo ?? input.stableId,
+            revisionId: updated.id,
+            revisionNo: updated.revision_no,
+            revisionState: isFutureDate(input.effectiveFrom)
+              ? "FUTURE"
+              : "CURRENT",
+            effectiveFrom: input.effectiveFrom,
+            recordedAt: isoNow(),
+            actor: "—",
+            changeReason: input.changeReason || "更新",
+            reference: `MD-REV-VC-${updated.sku_no ?? input.stableId}-v${updated.revision_no}`,
+            nextActions: ["返回列表"],
+          }
+        } catch (error) {
+          return mapMutationError(error, {
+            version: input.expectedLockVersion,
+            revisionNo: 0,
+          })
         }
+      }
       default:
         return {
           outcome: "blocked",
@@ -2216,8 +2284,8 @@ export async function disableMasterDataObject(
       case "voucher-categories":
         return {
           outcome: "blocked",
-          code: "VOUCHER_PROFILE_NO_DISABLE",
-          message: "卡券类目扩展修订暂无停用接口。",
+          code: "VOUCHER_NO_DISABLE",
+          message: "卡券类目不支持停用。",
         }
       case "sellable-items":
         return {

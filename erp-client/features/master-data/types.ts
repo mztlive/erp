@@ -336,22 +336,27 @@ export type SellableItemFields = Readonly<{
 /**
  * 卡券类目可写字段：业务上一个卡券类目即一个 VOUCHER 类型的 SKU，
  * `voucherNo` 同时作为 `product_no` 与 `sku_no`（无需分别填写）。
- * `categoryId` 与 `newCategoryCode`/`newCategoryName` 二选一。
+ *
+ * 分类 / 品牌 / 基础单位由后端默认补齐（共用卡券根分类、品牌「福尚云」、单位「张」），
+ * 前端新建 Dialog 只提交编号与描述；可选字段保留给显式覆盖或兼容旧调用。
  */
 export type VoucherCategoryFields = Readonly<{
   voucherNo: string
   description: string
   specification?: string
-  categoryId: string
-  category: string
+  /** 显式分类 ID；省略则用共用卡券根分类。 */
+  categoryId?: string
+  category?: string
   newCategoryCode?: string
   newCategoryName?: string
   newCategoryParentId?: string
-  brandId: string
-  brand: string
-  baseUnitId: string
-  baseUnitCode: string
-  baseUnit: string
+  /** 显式品牌 ID；省略则用「福尚云」。 */
+  brandId?: string
+  brand?: string
+  /** 显式基础单位 ID；省略则用「张」。 */
+  baseUnitId?: string
+  baseUnitCode?: string
+  baseUnit?: string
   barcode?: string
   salesVisiblePriceGross?: string
   marketPrice?: string

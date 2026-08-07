@@ -68,8 +68,9 @@ pub use self::dto::{
     SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView, SkuListParams,
     SkuRevisionListParams, SkuRevisionView, SkuView, SpecEntryInput, UnitOfMeasureListParams,
     UnitOfMeasureView, UpdateProductBrandRequest, UpdateProductCategoryRequest, UpdateProductRequest,
-    UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest, UpdateUnitOfMeasureRequest, VoucherSkuInput,
-    VoucherCategoryProfileListParams, VoucherCategoryProfileView,
+    UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest, UpdateUnitOfMeasureRequest,
+    UpdateVoucherCategoryRequest, VoucherSkuInput, VoucherCategoryProfileListParams,
+    VoucherCategoryProfileView,
 };
 
 /// 商品分类列表筛选条件类型（经 `CatalogExt` 关联类型跨 crate 可达）。
@@ -172,6 +173,20 @@ struct VoucherCategoryDraft {
     voucher_revision: VoucherCategoryProfileRevision,
 }
 
+/// 卡券类目更新草稿（更新 SPU 指针 + 追加商品/SKU/扩展修订）。
+struct VoucherCategoryUpdateDraft {
+    /// 已更新 `current_revision_id` 的商品。
+    product: Product,
+    /// 新商品修订。
+    product_revision: ProductRevision,
+    /// 已更新 `current_revision_id` 的 SKU。
+    sku: Sku,
+    /// 新 SKU 修订。
+    sku_revision: SkuRevision,
+    /// 新卡券类目扩展修订。
+    voucher_revision: VoucherCategoryProfileRevision,
+}
+
 /// 商品规格编辑计划（数据模型 §6.3 全量替换语义）。
 struct SpecEditPlan {
     /// 修订后的 SPU。
@@ -185,6 +200,17 @@ struct SpecEditPlan {
     /// 移除签名的既有 SKU（转为停用，保留全部历史）。
     disable: Vec<Sku>,
 }
+
+/// 卡券类目共用根分类稳定代码（所有未指定分类的卡券类目挂在此节点下）。
+const VOUCHER_ROOT_CATEGORY_CODE: &str = "VOUCHER";
+/// 卡券类目共用根分类名称。
+const VOUCHER_ROOT_CATEGORY_NAME: &str = "卡券";
+/// 卡券类目默认品牌稳定代码。
+const VOUCHER_DEFAULT_BRAND_CODE: &str = "FSY";
+/// 卡券类目默认品牌名称（业务固定：福尚云）。
+const VOUCHER_DEFAULT_BRAND_NAME: &str = "福尚云";
+/// 卡券类目默认基础单位代码/名称/符号（业务固定：张）。
+const VOUCHER_DEFAULT_UNIT_CODE: &str = "张";
 
 /// 商品域服务。
 ///
@@ -1442,19 +1468,24 @@ impl CatalogService {
             .voucher_category_profile_revisions()
             .search_voucher_category_profile_revisions(&filter, &mut NoTransaction)
             .await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| VoucherCategoryProfileView {
+        let mut items = Vec::with_capacity(page.items.len());
+        for row in page.items {
+            let mut view = VoucherCategoryProfileView {
                 id: row.id,
                 sku_id: row.sku_id,
+                sku_no: None,
+                product_id: None,
+                product_version: None,
+                name: None,
                 revision_no: row.revision_no,
                 description: row.description,
                 status: row.status,
                 created_at: row.created_at,
                 version: row.version,
-            })
-            .collect();
+            };
+            self.enrich_voucher_category_view(&mut view).await?;
+            items.push(view);
+        }
         Ok(PageView {
             items,
             total: page.total,
@@ -1463,11 +1494,47 @@ impl CatalogService {
         })
     }
 
+    /// 更新卡券类目名称与描述（按 SKU 稳定身份定位，追加商品/SKU/扩展修订）。
+    ///
+    /// 分类、品牌、基础单位与编号保持不变；乐观锁使用所属商品 `product.version`。
+    ///
+    /// # 参数
+    /// * `sku_id` - 卡券类目对应的 VOUCHER SKU 稳定 ID
+    /// * `req` - 更新请求
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回新建的卡券类目扩展修订视图（含名称与商品版本）。
+    ///
+    /// # 错误
+    /// * `ValidationError` - 请求体校验失败
+    /// * `NotFound` - SKU/商品/当前修订不存在，或 SKU 非 VOUCHER 商品
+    /// * `ConflictError` - 商品乐观锁冲突或并发写入冲突
+    pub async fn voucher_category_update(
+        &self,
+        sku_id: &str,
+        req: UpdateVoucherCategoryRequest,
+        actor: &AuditActor,
+    ) -> Result<VoucherCategoryProfileView> {
+        req.validate()?;
+        let draft = self
+            .build_voucher_category_update_draft(sku_id, req, actor)
+            .await?;
+        let revision = self.write_voucher_category_update_draft(draft, actor).await?;
+        let mut view = VoucherCategoryProfileView::from(revision);
+        self.enrich_voucher_category_view(&mut view).await?;
+        Ok(view)
+    }
+
     /// 原子创建卡券类目（商品 + 首个修订 + 唯一 SKU + [可选内联新建分类] +
     /// 卡券类目扩展修订，同一事务写入）。
     ///
     /// 业务上一个卡券类目即一个 VOUCHER 类型的 SKU：`voucher_no` 同时作为
-    /// `product_no` 与 `sku_no`；`category_id` 与内联新建分类二选一。
+    /// `product_no` 与 `sku_no`。分类 / 品牌 / 基础单位可省略：
+    /// - 分类：缺省挂到共用卡券根分类（代码 `VOUCHER`）；
+    /// - 品牌：缺省「福尚云」；
+    /// - 基础单位：缺省「张」。
+    /// 上述默认字典不存在时由本方法自动创建（单集合写入，位于事务外）。
     ///
     /// # 参数
     /// * `req` - 创建请求
@@ -1477,8 +1544,8 @@ impl CatalogService {
     /// 返回新建卡券类目扩展修订的响应视图。
     ///
     /// # 错误
-    /// * `ValidationError` - 请求体校验失败，或分类未恰好二选一
-    /// * `NotFound` - 引用的分类/品牌/基础单位不存在
+    /// * `ValidationError` - 请求体校验失败，或分类与内联新建同时给出
+    /// * `NotFound` - 显式引用的分类/品牌/基础单位不存在
     /// * `BusinessLogicError` - 分类不允许 VOUCHER 类型、父子关系成环、基础单位已停用
     /// * `ConflictError` - `product_no`/`sku_no`/`category_code`/条码 唯一约束冲突
     pub async fn voucher_category_create(
@@ -1489,7 +1556,9 @@ impl CatalogService {
         req.validate()?;
         let draft = self.build_voucher_category_draft(req, actor).await?;
         let revision = self.write_voucher_category_draft(draft, actor).await?;
-        Ok(revision.into())
+        let mut view = VoucherCategoryProfileView::from(revision);
+        self.enrich_voucher_category_view(&mut view).await?;
+        Ok(view)
     }
 
     // ---------- 私有加载与写入辅助 ----------
@@ -1722,8 +1791,8 @@ impl CatalogService {
     /// 返回待写入的草稿。
     ///
     /// # 错误
-    /// * `ValidationError` - `category_id`/`new_category` 未恰好给一个
-    /// * `NotFound` - 引用的分类/父分类/品牌/基础单位不存在
+    /// * `ValidationError` - `category_id` 与 `new_category` 同时给出
+    /// * `NotFound` - 显式引用的分类/父分类/品牌/基础单位不存在
     /// * `BusinessLogicError` - 分类不允许 VOUCHER 类型、父子关系成环、基础单位已停用、条码冲突
     async fn build_voucher_category_draft(
         &self,
@@ -1773,14 +1842,39 @@ impl CatalogService {
                 )?;
                 (new_category_id, Some(category))
             }
-            (Some(_), Some(_)) | (None, None) => {
-                unreachable!("ensure_category_selection_exclusive 已校验恰好给一个")
+            (None, None) => {
+                let root_id = self.ensure_voucher_root_category(actor).await?;
+                (root_id, None)
             }
+            (Some(_), Some(_)) => {
+                unreachable!("ensure_category_selection_exclusive 已拒绝同时给出")
+            }
+        };
+
+        let brand_id = match brand_id {
+            Some(brand_id) => {
+                self.load_brand(brand_id.as_ref()).await?;
+                brand_id
+            }
+            None => self.ensure_voucher_default_brand(actor).await?,
+        };
+
+        let sku = match sku {
+            Some(sku) => sku,
+            None => VoucherSkuInput {
+                base_unit_id: self.ensure_voucher_default_unit(actor).await?,
+                barcode: None,
+                weight_kg: None,
+                volume_m3: None,
+                sales_visible_price_gross: None,
+                market_price: None,
+            },
         };
 
         self.ensure_brand_and_unit_ok(&brand_id, std::iter::once(&sku.base_unit_id))
             .await?;
 
+        let effective_from = effective_from.unwrap_or_else(BusinessDate::today);
         let product_id = ProductId::new(next_id());
         let revision_id = ProductRevisionId::new(next_id());
         let product_status = status.unwrap_or(EnableStatus::Active);
@@ -1851,6 +1945,251 @@ impl CatalogService {
             sku_item,
             voucher_revision,
         })
+    }
+
+    /// 确保共用卡券根分类存在（代码 `VOUCHER` / 名称「卡券」/ `product_kind=VOUCHER`）。
+    ///
+    /// 已存在则直接返回其 ID；不存在则创建为根分类。并发创建冲突时重新查询一次。
+    ///
+    /// # 参数
+    /// * `actor` - 审计操作人（仅在需要新建时写入 `created_by`）
+    ///
+    /// # 返回
+    /// 返回卡券根分类稳定 ID。
+    ///
+    /// # 错误
+    /// * `BusinessLogicError` - 已有同代码分类但 `product_kind` 不是 VOUCHER
+    /// * `ConflictError` / `RepositoryError` - 持久化失败
+    async fn ensure_voucher_root_category(&self, actor: &AuditActor) -> Result<ProductCategoryId> {
+        if let Some(existing) = self
+            .db
+            .product_categories()
+            .find_one_by_field(
+                "category_code",
+                VOUCHER_ROOT_CATEGORY_CODE.to_string(),
+                &mut NoTransaction,
+            )
+            .await?
+        {
+            if existing.product_kind != ProductKind::Voucher {
+                return Err(Error::BusinessLogicError(format!(
+                    "系统卡券根分类（代码 {VOUCHER_ROOT_CATEGORY_CODE}）的商品类型不是卡券，请修正后再创建卡券类目"
+                )));
+            }
+            return Ok(ProductCategoryId::new(existing.base.id));
+        }
+
+        let id = ProductCategoryId::new(next_id());
+        let category = ProductCategory::new(
+            id.clone(),
+            ProductCategoryData {
+                category_code: VOUCHER_ROOT_CATEGORY_CODE.to_string(),
+                parent_category_id: None,
+                name: VOUCHER_ROOT_CATEGORY_NAME.to_string(),
+                product_kind: ProductKind::Voucher,
+                status: EnableStatus::Active,
+            },
+            actor.id(),
+        )?;
+        let audit = actor.clone().resource_log(
+            "product_category.create",
+            "product_category",
+            id.to_string(),
+        )?;
+        match self
+            .db
+            .product_categories()
+            .create(&category, &mut NoTransaction)
+            .await
+        {
+            Ok(()) => {
+                self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+                Ok(id)
+            }
+            Err(err) => match Error::from(err) {
+                Error::ConflictError(_) => {
+                    let existing = self
+                        .db
+                        .product_categories()
+                        .find_one_by_field(
+                            "category_code",
+                            VOUCHER_ROOT_CATEGORY_CODE.to_string(),
+                            &mut NoTransaction,
+                        )
+                        .await?
+                        .ok_or_else(|| {
+                            Error::ConflictError(
+                                "卡券根分类并发创建冲突，请重试".to_string(),
+                            )
+                        })?;
+                    Ok(ProductCategoryId::new(existing.base.id))
+                }
+                other => Err(other),
+            },
+        }
+    }
+
+    /// 确保卡券默认品牌「福尚云」存在（代码 `FSY`）。
+    ///
+    /// 优先按 `brand_code=FSY` 查找；若无则按名称「福尚云」查找；仍无则创建。
+    ///
+    /// # 参数
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 返回品牌稳定 ID。
+    ///
+    /// # 错误
+    /// 持久化失败时返回对应错误；并发冲突时重新查询。
+    async fn ensure_voucher_default_brand(&self, actor: &AuditActor) -> Result<ProductBrandId> {
+        if let Some(existing) = self
+            .db
+            .product_brands()
+            .find_one_by_field(
+                "brand_code",
+                VOUCHER_DEFAULT_BRAND_CODE.to_string(),
+                &mut NoTransaction,
+            )
+            .await?
+        {
+            return Ok(ProductBrandId::new(existing.base.id));
+        }
+        if let Some(existing) = self
+            .db
+            .product_brands()
+            .find_one_by_field(
+                "name",
+                VOUCHER_DEFAULT_BRAND_NAME.to_string(),
+                &mut NoTransaction,
+            )
+            .await?
+        {
+            return Ok(ProductBrandId::new(existing.base.id));
+        }
+
+        let id = ProductBrandId::new(next_id());
+        let brand = ProductBrand::new(
+            id.clone(),
+            ProductBrandData {
+                brand_code: VOUCHER_DEFAULT_BRAND_CODE.to_string(),
+                name: VOUCHER_DEFAULT_BRAND_NAME.to_string(),
+                status: EnableStatus::Active,
+            },
+            actor.id(),
+        )?;
+        let audit = actor
+            .clone()
+            .resource_log("product_brand.create", "product_brand", id.to_string())?;
+        match self
+            .db
+            .product_brands()
+            .create(&brand, &mut NoTransaction)
+            .await
+        {
+            Ok(()) => {
+                self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+                Ok(id)
+            }
+            Err(err) => match Error::from(err) {
+                Error::ConflictError(_) => {
+                    let existing = self
+                        .db
+                        .product_brands()
+                        .find_one_by_field(
+                            "brand_code",
+                            VOUCHER_DEFAULT_BRAND_CODE.to_string(),
+                            &mut NoTransaction,
+                        )
+                        .await?
+                        .ok_or_else(|| {
+                            Error::ConflictError(
+                                "默认品牌福尚云并发创建冲突，请重试".to_string(),
+                            )
+                        })?;
+                    Ok(ProductBrandId::new(existing.base.id))
+                }
+                other => Err(other),
+            },
+        }
+    }
+
+    /// 确保卡券默认基础单位「张」存在（代码/名称/符号均为「张」，整数数量）。
+    ///
+    /// # 参数
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 返回计量单位稳定 ID。
+    ///
+    /// # 错误
+    /// 持久化失败时返回对应错误；并发冲突时重新查询。
+    async fn ensure_voucher_default_unit(&self, actor: &AuditActor) -> Result<UnitOfMeasureId> {
+        if let Some(existing) = self
+            .db
+            .unit_of_measures()
+            .find_one_by_field(
+                "unit_code",
+                VOUCHER_DEFAULT_UNIT_CODE.to_string(),
+                &mut NoTransaction,
+            )
+            .await?
+        {
+            if !existing.is_active() {
+                return Err(Error::BusinessLogicError(
+                    "默认单位「张」已停用，请启用后再创建卡券类目".to_string(),
+                ));
+            }
+            return Ok(UnitOfMeasureId::new(existing.base.id));
+        }
+
+        let id = UnitOfMeasureId::new(next_id());
+        let unit = UnitOfMeasure::new(
+            id.clone(),
+            UnitOfMeasureData {
+                unit_code: VOUCHER_DEFAULT_UNIT_CODE.to_string(),
+                name: VOUCHER_DEFAULT_UNIT_CODE.to_string(),
+                symbol: VOUCHER_DEFAULT_UNIT_CODE.to_string(),
+                quantity_scale: 0,
+                status: EnableStatus::Active,
+            },
+            actor.id(),
+        )?;
+        let audit = actor.clone().resource_log(
+            "unit_of_measure.create",
+            "unit_of_measure",
+            id.to_string(),
+        )?;
+        match self
+            .db
+            .unit_of_measures()
+            .create(&unit, &mut NoTransaction)
+            .await
+        {
+            Ok(()) => {
+                self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+                Ok(id)
+            }
+            Err(err) => match Error::from(err) {
+                Error::ConflictError(_) => {
+                    let existing = self
+                        .db
+                        .unit_of_measures()
+                        .find_one_by_field(
+                            "unit_code",
+                            VOUCHER_DEFAULT_UNIT_CODE.to_string(),
+                            &mut NoTransaction,
+                        )
+                        .await?
+                        .ok_or_else(|| {
+                            Error::ConflictError(
+                                "默认单位「张」并发创建冲突，请重试".to_string(),
+                            )
+                        })?;
+                    Ok(UnitOfMeasureId::new(existing.base.id))
+                }
+                other => Err(other),
+            },
+        }
     }
 
     /// 校验商品创建/编辑引用的字典（分类/品牌/基础单位）与分类-商品类型兼容性。
@@ -2297,6 +2636,301 @@ impl CatalogService {
             .await
     }
 
+    /// 构造卡券类目更新草稿：沿用分类/品牌/单位与价格，仅改名称与描述。
+    ///
+    /// # 参数
+    /// * `sku_id` - 卡券类目 SKU 稳定 ID
+    /// * `req` - 更新请求
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 返回待写入的更新草稿。
+    ///
+    /// # 错误
+    /// SKU/商品/当前修订不存在、非 VOUCHER 商品或乐观锁失败时返回错误。
+    async fn build_voucher_category_update_draft(
+        &self,
+        sku_id: &str,
+        req: UpdateVoucherCategoryRequest,
+        actor: &AuditActor,
+    ) -> Result<VoucherCategoryUpdateDraft> {
+        let sku = self
+            .db
+            .skus()
+            .find_by_id(sku_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("卡券类目 SKU 不存在".to_string()))?;
+        let mut product = self.load_product(sku.product_id.as_ref()).await?;
+        if product.product_kind != ProductKind::Voucher {
+            return Err(Error::BusinessLogicError(
+                "目标 SKU 不属于卡券类目商品".to_string(),
+            ));
+        }
+        ensure_version(product.base.version, req.version)?;
+
+        let current_product_revision = self
+            .load_current_product_revision(&product)
+            .await?;
+        let current_sku_revision = self.load_current_sku_revision(sku_id).await?;
+
+        let effective_from = req
+            .effective_from
+            .unwrap_or_else(BusinessDate::today);
+        let effective_to = req.effective_to;
+        let product_status = product.stable.status;
+        let next_product_revision_no = self
+            .next_product_revision_no(product.base.id.as_str())
+            .await?;
+        let next_sku_revision_no = self.next_sku_revision_no(sku_id).await?;
+        let next_voucher_revision_no = self.next_voucher_profile_revision_no(sku_id).await?;
+
+        let product_revision = ProductRevision::new(
+            ProductRevisionId::new(next_id()),
+            ProductRevisionData {
+                product_id: ProductId::new(product.base.id.clone()),
+                revision_no: next_product_revision_no,
+                name: req.name.clone(),
+                description: Some(req.description.clone()),
+                specification: current_product_revision.specification.clone(),
+                category_id: current_product_revision.category_id.clone(),
+                brand_id: current_product_revision.brand_id.clone(),
+                status: product_status,
+                effective_from,
+                effective_to,
+            },
+        )?;
+        product.stable.current_revision_id = Some(product_revision.base.id.clone());
+        product.stable.touch(actor.id());
+
+        let sku_revision = SkuRevision::new(
+            SkuRevisionId::new(next_id()),
+            SkuRevisionData {
+                sku_id: SkuId::new(sku_id.to_string()),
+                revision_no: next_sku_revision_no,
+                name: req.name,
+                description: Some(req.description.clone()),
+                specification: current_sku_revision.specification.clone(),
+                barcode: current_sku_revision.barcode.clone(),
+                weight_kg: current_sku_revision.weight_kg,
+                volume_m3: current_sku_revision.volume_m3,
+                sales_visible_price_gross: current_sku_revision.sales_visible_price_gross,
+                market_price: current_sku_revision.market_price,
+                status: current_sku_revision.status,
+                effective_from,
+                effective_to,
+            },
+        )?;
+        let mut sku = sku;
+        sku.stable.current_revision_id = Some(sku_revision.base.id.clone());
+        sku.stable.touch(actor.id());
+
+        let voucher_revision = VoucherCategoryProfileRevision::new(
+            VoucherCategoryProfileRevisionId::new(next_id()),
+            VoucherCategoryProfileRevisionData {
+                sku_id: SkuId::new(sku_id.to_string()),
+                revision_no: next_voucher_revision_no,
+                description: req.description,
+                status: product_status,
+            },
+        )?;
+
+        Ok(VoucherCategoryUpdateDraft {
+            product,
+            product_revision,
+            sku,
+            sku_revision,
+            voucher_revision,
+        })
+    }
+
+    /// 在事务内写入卡券类目更新草稿。
+    ///
+    /// # 参数
+    /// * `draft` - 更新草稿
+    /// * `actor` - 审计操作人
+    ///
+    /// # 返回
+    /// 返回新建的卡券类目扩展修订。
+    ///
+    /// # 错误
+    /// 乐观锁冲突或事务失败时返回错误并整体回滚。
+    async fn write_voucher_category_update_draft(
+        &self,
+        draft: VoucherCategoryUpdateDraft,
+        actor: &AuditActor,
+    ) -> Result<VoucherCategoryProfileRevision> {
+        let audit = actor.clone().resource_log(
+            "voucher_category.update",
+            "voucher_category_profile",
+            draft.voucher_revision.base.id.clone(),
+        )?;
+        let VoucherCategoryUpdateDraft {
+            mut product,
+            product_revision,
+            mut sku,
+            sku_revision,
+            voucher_revision,
+        } = draft;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.products().update(&mut product, session).await?;
+                    db.catalog()
+                        .create_product_revision_with_media(&product_revision, &[], session)
+                        .await?;
+                    db.skus().update(&mut sku, session).await?;
+                    db.sku_revisions().create(&sku_revision, session).await?;
+                    db.voucher_category_profile_revisions()
+                        .create(&voucher_revision, session)
+                        .await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<VoucherCategoryProfileRevision, crate::errors::Error>(voucher_revision)
+                })
+            })
+            .await
+    }
+
+    /// 为卡券类目视图补齐 SKU 编号、商品版本与展示名称。
+    ///
+    /// # 参数
+    /// * `view` - 待补齐的响应视图（`sku_id` 必须已填）
+    ///
+    /// # 返回
+    /// 成功时返回 `Ok(())`；关联数据缺失时静默跳过补齐字段。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回错误。
+    async fn enrich_voucher_category_view(
+        &self,
+        view: &mut VoucherCategoryProfileView,
+    ) -> Result<()> {
+        let Some(sku) = self
+            .db
+            .skus()
+            .find_by_id(&view.sku_id, &mut NoTransaction)
+            .await?
+        else {
+            return Ok(());
+        };
+        view.sku_no = Some(sku.sku_no.clone());
+        view.product_id = Some(sku.product_id.to_string());
+        if let Ok(product) = self.load_product(sku.product_id.as_ref()).await {
+            view.product_version = Some(product.base.version);
+            if let Ok(revision) = self.load_current_product_revision(&product).await {
+                view.name = Some(revision.name);
+            }
+        }
+        if view.name.is_none() {
+            if let Ok(sku_revision) = self.load_current_sku_revision(&view.sku_id).await {
+                view.name = Some(sku_revision.name);
+            }
+        }
+        if view.name.is_none() {
+            view.name = Some(view.description.clone());
+        }
+        Ok(())
+    }
+
+    /// 加载商品当前修订（优先 `current_revision_id`，否则取最大修订号）。
+    ///
+    /// # 参数
+    /// * `product` - 已加载的商品
+    ///
+    /// # 返回
+    /// 返回当前商品修订。
+    ///
+    /// # 错误
+    /// 不存在任何修订时返回 `NotFound`。
+    async fn load_current_product_revision(&self, product: &Product) -> Result<ProductRevision> {
+        if let Some(revision_id) = product.stable.current_revision_id.as_ref() {
+            if let Some(revision) = self
+                .db
+                .product_revisions()
+                .find_by_id(revision_id, &mut NoTransaction)
+                .await?
+            {
+                return Ok(revision);
+            }
+        }
+        let revisions = self
+            .db
+            .product_revisions()
+            .find_many(
+                doc! { "product_id": product.base.id.clone() },
+                &mut NoTransaction,
+            )
+            .await?;
+        revisions
+            .into_iter()
+            .max_by_key(|revision| revision.revision.revision_no)
+            .ok_or_else(|| Error::NotFound("商品修订不存在".to_string()))
+    }
+
+    /// 加载 SKU 当前修订（优先 `current_revision_id`，否则取最大修订号）。
+    ///
+    /// # 参数
+    /// * `sku_id` - SKU 稳定 ID
+    ///
+    /// # 返回
+    /// 返回当前 SKU 修订。
+    ///
+    /// # 错误
+    /// SKU 或修订不存在时返回 `NotFound`。
+    async fn load_current_sku_revision(&self, sku_id: &str) -> Result<SkuRevision> {
+        if let Some(sku) = self
+            .db
+            .skus()
+            .find_by_id(sku_id, &mut NoTransaction)
+            .await?
+        {
+            if let Some(revision_id) = sku.stable.current_revision_id.as_ref() {
+                if let Some(revision) = self
+                    .db
+                    .sku_revisions()
+                    .find_by_id(revision_id, &mut NoTransaction)
+                    .await?
+                {
+                    return Ok(revision);
+                }
+            }
+        }
+        let revisions = self
+            .db
+            .sku_revisions()
+            .find_many(doc! { "sku_id": sku_id }, &mut NoTransaction)
+            .await?;
+        revisions
+            .into_iter()
+            .max_by_key(|revision| revision.revision.revision_no)
+            .ok_or_else(|| Error::NotFound("SKU 修订不存在".to_string()))
+    }
+
+    /// 计算某卡券类目 SKU 已有扩展修订的最大序号 + 1。
+    ///
+    /// # 参数
+    /// * `sku_id` - 卡券类目 SKU
+    ///
+    /// # 返回
+    /// 返回下一个修订序号。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回错误。
+    async fn next_voucher_profile_revision_no(&self, sku_id: &str) -> Result<u32> {
+        let revisions = self
+            .db
+            .voucher_category_profile_revisions()
+            .find_many(doc! { "sku_id": sku_id }, &mut NoTransaction)
+            .await?;
+        Ok(revisions
+            .iter()
+            .map(|revision| revision.revision.revision_no)
+            .max()
+            .unwrap_or(0)
+            + 1)
+    }
+
     /// 构造规格编辑计划（分类保留/新增/重新启用/移除 + 新商品修订与媒体）。
     ///
     /// # 参数
@@ -2579,26 +3213,27 @@ impl CatalogService {
 
 // ---------- 自由函数辅助 ----------
 
-/// 校验卡券类目创建请求的分类选择恰好二选一（引用已有分类 xor 内联新建分类）。
+/// 校验卡券类目创建请求的分类选择：`category_id` 与 `new_category` 不可同时给出；
+/// 两者都缺省时由服务端解析共用卡券根分类。
 ///
 /// # 参数
 /// * `category_id` - 引用已有分类
 /// * `new_category` - 内联新建分类
 ///
 /// # 返回
-/// 恰好给一个时返回 `Ok(())`。
+/// 合法时返回 `Ok(())`。
 ///
 /// # 错误
-/// 两者都给或都不给时返回 `ValidationError`。
+/// 两者同时给出时返回 `ValidationError`。
 fn ensure_category_selection_exclusive(
     category_id: &Option<ProductCategoryId>,
     new_category: &Option<NewVoucherCategoryInput>,
 ) -> Result<()> {
     match (category_id, new_category) {
-        (Some(_), None) | (None, Some(_)) => Ok(()),
-        (Some(_), Some(_)) | (None, None) => Err(Error::ValidationError(
+        (Some(_), Some(_)) => Err(Error::ValidationError(
             "分类只能二选一：引用已有分类或新建分类".to_string(),
         )),
+        (Some(_), None) | (None, Some(_)) | (None, None) => Ok(()),
     }
 }
 
@@ -2707,7 +3342,10 @@ mod tests {
     }
 
     #[test]
-    fn ensure_category_selection_exclusive_rejects_neither_given() {
-        assert!(ensure_category_selection_exclusive(&None, &None).is_err());
+    fn ensure_category_selection_exclusive_allows_neither_for_default_root() {
+        assert!(
+            ensure_category_selection_exclusive(&None, &None).is_ok(),
+            "两者都缺省时走共用卡券根分类"
+        );
     }
 }

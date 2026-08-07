@@ -561,18 +561,11 @@ export function buildResourceFields(
         logo: pickField(values, "logo"),
       }
     case "voucher-categories":
-      // 卡券类目暂无更新接口（仅创建），本表单值不会被提交使用；
-      // 占位满足强类型契约即可，创建走 VoucherCategoryDetailPage 专属表单。
+      // 卡券类目创建走 VoucherCategoryFormDialog；此处仅占位满足强类型契约。
+      // 分类 / 品牌 / 单位由后端默认（卡券根分类、福尚云、张）。
       return {
         voucherNo: pickField(values, "sku") ?? "",
         description: pickField(values, "description") ?? "",
-        categoryId: "",
-        category: "",
-        brandId: "",
-        brand: "",
-        baseUnitId: "",
-        baseUnitCode: "",
-        baseUnit: "",
       }
     case "suppliers":
       return {
