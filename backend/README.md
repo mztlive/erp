@@ -3,10 +3,10 @@
 Rust template that ships an Axum-based Web API and Mongo-backed repositories. Authentication, RBAC, account management, and file upload are wired end to end.
 
 ## What’s Included
-- **Axum Web API (`apps/web-api`)**: JWT authentication for ERP operators, Casbin RBAC backed by MongoDB, account management, and authenticated image upload with read-only local file serving.
+- **Axum Web API (`apps/web-api`)**: JWT authentication for ERP operators, Casbin RBAC backed by MongoDB, account management, and authenticated image upload to S3-compatible object storage.
 - **Mongo repositories (`database/`)**: Generic `Repository<T>` with soft-delete, paging, and transaction helpers, plus typed accessors via `DatabaseExt`.
 - **Domain/services (`entities/`, `services/`)**: Domain entities and application services for ERP operator accounts, audit logs, and RBAC.
-- **Shared crates (`crates/`)**: coordination-free UUID generation (`id-generator`), local file storage (`storage`), and proc macros for entities and permissions.
+- **Shared crates (`crates/`)**: coordination-free UUID generation (`id-generator`), S3-compatible object storage (`storage`), and proc macros for entities and permissions.
 
 ## Project Layout
 - `apps/web-api/` – Axum entrypoint, routes, authentication/rate-limit middleware, Casbin authorization, and handlers (`core/handler/{admin,auth,upload.rs}`).
@@ -21,7 +21,6 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
 - **Public**
   - `GET /health`
   - `POST /login` – Back-office login, returns JWT.
-  - `GET|HEAD /uploads/{filename}` – Read a generated upload filename; directory indexes and write methods are disabled.
 - **Admin (JWT + RBAC)**
   - `/admin/admins` – List, create; `/admin/admins/{id}` – update/delete; `/admin/admins/{id}/role` – update role.
   - `/admin/roles` – List/create; `/admin/roles/{id}` – update/delete.
@@ -29,7 +28,7 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
 - **Authenticated account**
   - `GET /account/profile` – Current ERP operator profile.
 - **Authenticated back-office upload**
-  - `POST /upload` – Keeps the existing Multipart and `{ url }` response contract, but requires a valid back-office JWT. JPEG/PNG/WebP/GIF files are limited to 5 MiB and checked by extension, declared MIME, and file header. Admission is limited to 10 uploads/subject/minute, 100 uploads/minute globally, and 4 concurrent requests per process. A serialized check rejects writes that would leave less than `upload_min_free_bytes` free (512 MiB by default).
+  - `POST /upload` – Keeps the existing Multipart and `{ url }` response contract, requires a valid back-office JWT, uploads the validated object to S3, and returns its public URL. JPEG/PNG/WebP/GIF files are limited to 5 MiB and checked by extension, declared MIME, and file header. Admission is limited to 10 uploads/subject/minute, 100 uploads/minute globally, and 4 concurrent requests per process.
 - **Response shape**: All handlers return `ApiResponse { status, errorMessage, data, success }`.
 
 ## Configuration
@@ -40,9 +39,9 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
    The sample JWT secret is deliberately invalid. Replace it with at least 32 random bytes before
    starting the API; the process fails fast on short or published placeholder values.
 2. Key fields:
-   - `[app]` `port`, `secret` (JWT key), `upload_path` (a dedicated non-root local or absolute storage directory), `upload_min_free_bytes` (post-write filesystem reserve), `file_base_url` (public prefix for file URLs; defaults to the API’s `/uploads` mount)
+   - `[app]` `port`, `secret` (JWT key)
    - `[database]` `uri`, `db_name`
-   - Optional `[s3]` `bucket`, `region`, `endpoint`, `access_key_id`, `secret_access_key`, `session_token`, `key_prefix`, `force_path_style`; this validated block supplies `storage::S3Storage` startup parameters and does not switch the existing local upload route by itself.
+   - Required `[s3]` `bucket`, `region`, `endpoint`, `access_key_id`, `secret_access_key`, `session_token`, `key_prefix`, `force_path_style`, `public_base_url`. `public_base_url` is the public bucket or CDN root; the API appends `key_prefix` and the generated object key.
 3. Optional Nacos configuration updates (database connection changes require a process restart):
    ```bash
    cargo run -p web-api -- \
@@ -90,4 +89,4 @@ Rust template that ships an Axum-based Web API and Mongo-backed repositories. Au
   older back-office tokens, so operators must sign in again.
 - MongoDB transactions require a replica set or transaction-capable sharded cluster. Startup probes
   the deployment and rejects standalone MongoDB before reporting the API ready.
-- Login and upload rate limits are process-local safeguards, not cluster-wide quotas. Login keys use Axum's TCP peer address; deployments behind a reverse proxy must preserve the real peer through a trusted network topology instead of blindly trusting forwarded headers. The API fails closed at the configured free-space watermark, but the check-and-save lock is also process-local; multiple instances sharing one volume need external quota coordination. The service does not delete old files, so production deployments still need disk monitoring and an upload retention policy. `file_base_url` may point to an external CDN instead of the built-in read-only file service.
+- Login and upload rate limits are process-local safeguards, not cluster-wide quotas. Login keys use Axum's TCP peer address; deployments behind a reverse proxy must preserve the real peer through a trusted network topology instead of blindly trusting forwarded headers. S3 credentials must be scoped to the configured bucket and prefix. Object retention, lifecycle cleanup, public access, and CDN cache policy are deployment responsibilities.

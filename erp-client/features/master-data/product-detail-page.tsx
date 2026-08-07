@@ -55,6 +55,13 @@ import {
 } from "@/components/ui/file-upload"
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card"
 import { DatePicker } from "@/components/ui/date-picker"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Progress, ProgressLabel } from "@/components/ui/progress"
@@ -67,6 +74,7 @@ import {
   type FixedSku,
 } from "@/features/supplier-catalog/catalog-write-dialogs"
 import { useSupplierCatalogQueueQuery } from "@/features/supplier-catalog/queries"
+import { uploadFileAssetImage } from "@/features/file-assets/api"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { formatEffectiveRange } from "@/features/master-data/filter"
 import {
@@ -243,6 +251,10 @@ function productDetailToFields(detail: ProductDetailView): ProductFields {
     productKind: "",
     carouselImages: [...detail.carouselImages],
     detailImages: [...detail.detailImages],
+    carouselPreviewUrls: { ...detail.carouselPreviewUrls },
+    detailPreviewUrls: { ...detail.detailPreviewUrls },
+    carouselFileAssetIds: { ...detail.carouselFileAssetIds },
+    detailFileAssetIds: { ...detail.detailFileAssetIds },
     specs: detail.specs.map((s) => ({
       name: s.name,
       values: [...s.values],
@@ -259,14 +271,70 @@ function MediaListEditor({
   hint,
   value,
   onChange,
+  previewUrls,
+  onPreviewUrlsChange,
+  onFilesSelected,
   mode = "carousel",
 }: {
   label: string
   hint?: string
   value: readonly string[]
   onChange: (next: string[]) => void
+  /** fileName → 可访问预览地址（远程 URL 或本地 blob）。 */
+  previewUrls?: Readonly<Record<string, string>>
+  onPreviewUrlsChange?: (next: Record<string, string>) => void
+  /** 选择文件时透出原始文件（用于保存前上传）。 */
+  onFilesSelected?: (files: File[]) => void
   mode?: "carousel" | "detail"
 }) {
+  const [localPreviewUrls, setLocalPreviewUrls] = React.useState<
+    ReadonlyMap<string, string>
+  >(() => new Map())
+  const localPreviewUrlsRef = React.useRef<ReadonlyMap<string, string>>(
+    new Map(),
+  )
+  const [expandedPreview, setExpandedPreview] = React.useState<{
+    name: string
+    src: string
+  } | null>(null)
+
+  const updateLocalPreviewUrls = React.useCallback(
+    (update: (previous: ReadonlyMap<string, string>) => Map<string, string>) => {
+      setLocalPreviewUrls((previous) => {
+        const next = update(previous)
+        localPreviewUrlsRef.current = next
+        return next
+      })
+    },
+    [],
+  )
+
+  React.useEffect(
+    () => () => {
+      for (const src of localPreviewUrlsRef.current.values()) {
+        URL.revokeObjectURL(src)
+      }
+    },
+    [],
+  )
+
+  React.useEffect(() => {
+    const retainedNames = new Set(value)
+    const removedNames = [...localPreviewUrlsRef.current.keys()].filter(
+      (name) => !retainedNames.has(name),
+    )
+    if (removedNames.length === 0) return
+    updateLocalPreviewUrls((previous) => {
+      const next = new Map(previous)
+      for (const name of removedNames) {
+        const src = next.get(name)
+        if (src) URL.revokeObjectURL(src)
+        next.delete(name)
+      }
+      return next
+    })
+  }, [updateLocalPreviewUrls, value])
+
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -288,68 +356,94 @@ function MediaListEditor({
             : "grid-cols-2 sm:grid-cols-3",
         )}
       >
-        {value.map((name, index) => (
-          <div
-            key={`${name}-${index}`}
-            className="group relative overflow-hidden rounded-xl border border-border bg-surface-sunken"
-          >
+        {value.map((name, index) => {
+          const previewSrc =
+            localPreviewUrls.get(name) ??
+            previewUrls?.[name] ??
+            imagePreviewSource(name)
+          return (
             <div
-              className={cn(
-                "flex flex-col items-center justify-center gap-2 p-3 text-center",
-                mode === "carousel" ? "aspect-square" : "aspect-[4/5]",
-              )}
+              key={`${name}-${index}`}
+              className="group relative overflow-hidden rounded-xl border border-border bg-surface-sunken"
             >
-              <ImageIcon className="size-7 text-muted-foreground" aria-hidden />
-              <span className="line-clamp-2 break-all text-xs text-muted-foreground">
-                {name}
-              </span>
+              <button
+                type="button"
+                className={cn(
+                  "flex w-full flex-col items-center justify-center gap-2 p-3 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                  mode === "carousel" ? "aspect-square" : "aspect-[4/5]",
+                  previewSrc && "cursor-zoom-in p-0",
+                )}
+                aria-label={previewSrc ? `放大预览 ${name}` : name}
+                onClick={() => {
+                  if (previewSrc) setExpandedPreview({ name, src: previewSrc })
+                }}
+              >
+                {previewSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- 本地待上传图片使用 blob URL。
+                  <img
+                    src={previewSrc}
+                    alt={name}
+                    className="absolute inset-0 size-full object-cover"
+                  />
+                ) : (
+                  <>
+                    <ImageIcon
+                      className="size-7 text-muted-foreground"
+                      aria-hidden
+                    />
+                    <span className="line-clamp-2 break-all text-xs text-muted-foreground">
+                      {name}
+                    </span>
+                  </>
+                )}
+              </button>
+              <Badge
+                variant="secondary"
+                className="absolute left-2 top-2 tabular-nums"
+              >
+                {index + 1}
+              </Badge>
+              {mode === "carousel" && index === 0 ? (
+                <Badge className="absolute right-2 top-2">首图</Badge>
+              ) : null}
+              <div className="flex items-center justify-center gap-1 border-t border-border bg-background/95 p-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={index === 0}
+                  aria-label={`${name} 上移`}
+                  onClick={() => onChange(moveListItem(value, index, index - 1))}
+                >
+                  <ArrowUpIcon />
+                </Button>
+                <GripVerticalIcon
+                  className="size-3.5 text-muted-foreground"
+                  aria-hidden
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={index === value.length - 1}
+                  aria-label={`${name} 下移`}
+                  onClick={() => onChange(moveListItem(value, index, index + 1))}
+                >
+                  <ArrowDownIcon />
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-xs"
+                  aria-label={`${masterDataCopy.mediaRemove} ${name}`}
+                  onClick={() => onChange(value.filter((_, i) => i !== index))}
+                >
+                  <XIcon />
+                </Button>
+              </div>
             </div>
-            <Badge
-              variant="secondary"
-              className="absolute left-2 top-2 tabular-nums"
-            >
-              {index + 1}
-            </Badge>
-            {mode === "carousel" && index === 0 ? (
-              <Badge className="absolute right-2 top-2">首图</Badge>
-            ) : null}
-            <div className="flex items-center justify-center gap-1 border-t border-border bg-background/95 p-1">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                disabled={index === 0}
-                aria-label={`${name} 上移`}
-                onClick={() => onChange(moveListItem(value, index, index - 1))}
-              >
-                <ArrowUpIcon />
-              </Button>
-              <GripVerticalIcon
-                className="size-3.5 text-muted-foreground"
-                aria-hidden
-              />
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                disabled={index === value.length - 1}
-                aria-label={`${name} 下移`}
-                onClick={() => onChange(moveListItem(value, index, index + 1))}
-              >
-                <ArrowDownIcon />
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`${masterDataCopy.mediaRemove} ${name}`}
-                onClick={() => onChange(value.filter((_, i) => i !== index))}
-              >
-                <XIcon />
-              </Button>
-            </div>
-          </div>
-        ))}
+          )
+        })}
         <FileUpload
           accept="image/jpeg,image/png,image/webp"
           multiple
@@ -360,6 +454,25 @@ function MediaListEditor({
               : "支持多选，按顺序展示"
           }
           onFilesSelected={(files) => {
+            onFilesSelected?.(files)
+            const addedUrls: Record<string, string> = {}
+            updateLocalPreviewUrls((previous) => {
+              const next = new Map(previous)
+              for (const file of files) {
+                const previousSrc = next.get(file.name)
+                if (previousSrc) URL.revokeObjectURL(previousSrc)
+                const blobUrl = URL.createObjectURL(file)
+                next.set(file.name, blobUrl)
+                addedUrls[file.name] = blobUrl
+              }
+              return next
+            })
+            if (onPreviewUrlsChange) {
+              onPreviewUrlsChange({
+                ...(previewUrls ?? {}),
+                ...addedUrls,
+              })
+            }
             onChange([...value, ...files.map((f) => f.name)])
           }}
           className={cn(
@@ -373,16 +486,46 @@ function MediaListEditor({
           {masterDataCopy.mediaEmpty}（{masterDataCopy.mediaAllowEmpty}）
         </p>
       ) : null}
+
+      <Dialog
+        open={Boolean(expandedPreview)}
+        onOpenChange={(open) => {
+          if (!open) setExpandedPreview(null)
+        }}
+      >
+        <DialogContent className="gap-4 p-4 sm:max-w-4xl">
+          <DialogHeader className="pr-10">
+            <DialogTitle>{expandedPreview?.name ?? "图片预览"}</DialogTitle>
+            <DialogDescription>图片预览</DialogDescription>
+          </DialogHeader>
+          <div className="flex min-h-0 items-center justify-center overflow-hidden rounded-lg bg-surface-sunken">
+            {expandedPreview ? (
+              // eslint-disable-next-line @next/next/no-img-element -- 本地待上传图片使用 blob URL。
+              <img
+                src={expandedPreview.src}
+                alt={expandedPreview.name}
+                className="max-h-[75dvh] max-w-full object-contain"
+              />
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
 
 function SkuMainImageField({
   value,
+  previewUrl,
   onChange,
+  onFilesSelected,
 }: {
   value: string
+  /** 可访问预览地址（远程 URL 或本地 blob）；缺省回退文件名。 */
+  previewUrl?: string
   onChange: (next: string) => void
+  /** 选择文件时透出原始文件（用于保存前上传）。 */
+  onFilesSelected?: (files: File[]) => void
 }) {
   return (
     <FileUpload
@@ -396,7 +539,7 @@ function SkuMainImageField({
       preview={
         value
           ? {
-              src: imagePreviewSource(value),
+              src: previewUrl ?? imagePreviewSource(value),
               name: value,
               status: "uploaded",
             }
@@ -404,6 +547,7 @@ function SkuMainImageField({
       }
       onPreviewRemove={() => onChange("")}
       onFilesSelected={(files) => {
+        onFilesSelected?.(files)
         if (files[0]) onChange(files[0].name)
       }}
     />
@@ -510,6 +654,98 @@ export function ProductDetailPage({
   const stickyHeaderRef = React.useRef<HTMLElement>(null)
   const [stickyHeaderHeight, setStickyHeaderHeight] = React.useState(64)
   const hydratedKeyRef = React.useRef<string | null>(null)
+  const [uploadingMedia, setUploadingMedia] = React.useState(false)
+  /** 本会话选择但尚未上传的图片文件；保存时按 fileName / SKU 行号上传并回填。 */
+  const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
+  const pendingSkuFilesRef = React.useRef<Map<number, File>>(new Map())
+  const rememberPendingFiles = React.useCallback((files: File[]) => {
+    for (const file of files) {
+      pendingFilesRef.current.set(file.name, file)
+    }
+  }, [])
+  const rememberSkuFile = React.useCallback((index: number, file?: File) => {
+    if (file) pendingSkuFilesRef.current.set(index, file)
+  }, [])
+
+  /** 把仍是本地 blob 预览的图片上传为文件资产，返回回填后的字段。 */
+  const resolvePendingUploads = React.useCallback(
+    async (current: ProductFields): Promise<ProductFields> => {
+      const uploadIfPending = async (
+        fileName: string,
+        previewUrl: string | undefined,
+        knownAssetId: string | undefined,
+      ): Promise<{ url: string; assetId?: string } | null> => {
+        const url = previewUrl?.trim()
+        if (!url) return null
+        if (url.startsWith("blob:")) {
+          const file = pendingFilesRef.current.get(fileName)
+          if (!file) {
+            throw new Error(`找不到待上传图片「${fileName}」的文件内容，请重新选择`)
+          }
+          const uploaded = await uploadFileAssetImage(file)
+          return { url: uploaded.url, assetId: uploaded.fileAssetId }
+        }
+        return {
+          url,
+          ...(knownAssetId?.trim() ? { assetId: knownAssetId } : {}),
+        }
+      }
+
+      const carouselPreviewUrls: Record<string, string> = {}
+      const carouselFileAssetIds: Record<string, string> = {}
+      for (const fileName of current.carouselImages) {
+        const resolved = await uploadIfPending(
+          fileName,
+          current.carouselPreviewUrls[fileName],
+          current.carouselFileAssetIds[fileName],
+        )
+        if (resolved) {
+          carouselPreviewUrls[fileName] = resolved.url
+          if (resolved.assetId) carouselFileAssetIds[fileName] = resolved.assetId
+        }
+      }
+      const detailPreviewUrls: Record<string, string> = {}
+      const detailFileAssetIds: Record<string, string> = {}
+      for (const fileName of current.detailImages) {
+        const resolved = await uploadIfPending(
+          fileName,
+          current.detailPreviewUrls[fileName],
+          current.detailFileAssetIds[fileName],
+        )
+        if (resolved) {
+          detailPreviewUrls[fileName] = resolved.url
+          if (resolved.assetId) detailFileAssetIds[fileName] = resolved.assetId
+        }
+      }
+      const skus = [...current.skus]
+      for (let index = 0; index < skus.length; index++) {
+        const sku = skus[index]
+        if (!sku.mainImage) continue
+        const previewUrl = sku.mainImagePreviewUrl?.trim()
+        if (!previewUrl) continue
+        if (!previewUrl.startsWith("blob:")) continue
+        const file = pendingSkuFilesRef.current.get(index)
+        if (!file) {
+          throw new Error(`找不到待上传主图「${sku.mainImage}」的文件内容，请重新选择`)
+        }
+        const uploaded = await uploadFileAssetImage(file)
+        skus[index] = {
+          ...sku,
+          mainImagePreviewUrl: uploaded.url,
+          mainImageAssetId: uploaded.fileAssetId,
+        }
+      }
+      return {
+        ...current,
+        carouselPreviewUrls,
+        carouselFileAssetIds,
+        detailPreviewUrls,
+        detailFileAssetIds,
+        skus,
+      }
+    },
+    [],
+  )
   const initialFormValues = React.useMemo(
     () =>
       !isCreate && data
@@ -532,41 +768,52 @@ export function ProductDetailPage({
         return
       }
 
-      if (!isCreate) {
-        if (!data || !revisionId || lockVersion == null) return
-        const response = await reviseMutation.mutateAsync({
+      try {
+        // 先把仍为本地 blob 的图片上传为文件资产，再携带真实 URL/asset id 保存
+        setUploadingMedia(true)
+        const resolvedFields = await resolvePendingUploads(nextFields)
+        if (!isCreate) {
+          if (!data || !revisionId || lockVersion == null) return
+          const response = await reviseMutation.mutateAsync({
+            resource: "products",
+            stableId: data.stableId,
+            baseRevisionId: revisionId,
+            expectedLockVersion: lockVersion,
+            name: value.name.trim(),
+            effectiveFrom: value.effectiveFrom,
+            effectiveTo: value.effectiveTo.trim() || undefined,
+            changeReason: value.changeReason.trim(),
+            fields: resolvedFields,
+            idempotencyKey,
+          })
+          setResult(response)
+          if (response.outcome === "succeeded") {
+            setIdempotencyKey(newIdempotencyKey("revise-product"))
+            hydratedKeyRef.current = null
+            await detailQuery.refetch()
+          }
+          return
+        }
+
+        const response = await createMutation.mutateAsync({
           resource: "products",
-          stableId: data.stableId,
-          baseRevisionId: revisionId,
-          expectedLockVersion: lockVersion,
           name: value.name.trim(),
           effectiveFrom: value.effectiveFrom,
           effectiveTo: value.effectiveTo.trim() || undefined,
           changeReason: value.changeReason.trim(),
-          fields: nextFields,
+          fields: resolvedFields,
           idempotencyKey,
         })
         setResult(response)
         if (response.outcome === "succeeded") {
-          setIdempotencyKey(newIdempotencyKey("revise-product"))
-          hydratedKeyRef.current = null
-          await detailQuery.refetch()
+          router.replace(`/master-data/products/${response.stableId}`)
         }
-        return
-      }
-
-      const response = await createMutation.mutateAsync({
-        resource: "products",
-        name: value.name.trim(),
-        effectiveFrom: value.effectiveFrom,
-        effectiveTo: value.effectiveTo.trim() || undefined,
-        changeReason: value.changeReason.trim(),
-        fields: nextFields,
-        idempotencyKey,
-      })
-      setResult(response)
-      if (response.outcome === "succeeded") {
-        router.replace(`/master-data/products/${response.stableId}`)
+      } catch (error) {
+        setFormError(
+          error instanceof Error ? error.message : "保存失败，请稍后重试",
+        )
+      } finally {
+        setUploadingMedia(false)
       }
     },
   })
@@ -647,7 +894,8 @@ export function ProductDetailPage({
   const listHref = "/master-data/products"
   const stickyOffsetPx = stickyHeaderHeight
   const sectionScrollMarginPx = stickyHeaderHeight + 56
-  const pending = createMutation.isPending || reviseMutation.isPending
+  const pending =
+    createMutation.isPending || reviseMutation.isPending || uploadingMedia
   const canRevise =
     isCreate || (data?.allowedActions.includes("CREATE_REVISION") ?? false)
   const canDisable = data?.allowedActions.includes("DISABLE") ?? false
@@ -1372,10 +1620,31 @@ export function ProductDetailPage({
                         label={masterDataCopy.fCarouselImages}
                         hint="建议上传 3–5 张，支持排序；首张作为商品首图"
                         value={fields.carouselImages}
+                        previewUrls={fields.carouselPreviewUrls}
+                        onFilesSelected={rememberPendingFiles}
                         onChange={(next) =>
+                          setFields((prev) => {
+                            const retained = new Set(next)
+                            return {
+                              ...prev,
+                              carouselImages: next,
+                              carouselPreviewUrls: Object.fromEntries(
+                                Object.entries(prev.carouselPreviewUrls).filter(
+                                  ([name]) => retained.has(name),
+                                ),
+                              ),
+                              carouselFileAssetIds: Object.fromEntries(
+                                Object.entries(prev.carouselFileAssetIds).filter(
+                                  ([name]) => retained.has(name),
+                                ),
+                              ),
+                            }
+                          })
+                        }
+                        onPreviewUrlsChange={(next) =>
                           setFields((prev) => ({
                             ...prev,
-                            carouselImages: next,
+                            carouselPreviewUrls: next,
                           }))
                         }
                       />
@@ -1386,9 +1655,33 @@ export function ProductDetailPage({
                         label={masterDataCopy.fDetailImages}
                         hint="支持批量上传与顺序调整，保存后详情图随商品版本一起保留"
                         value={fields.detailImages}
+                        previewUrls={fields.detailPreviewUrls}
+                        onFilesSelected={rememberPendingFiles}
                         mode="detail"
                         onChange={(next) =>
-                          setFields((prev) => ({ ...prev, detailImages: next }))
+                          setFields((prev) => {
+                            const retained = new Set(next)
+                            return {
+                              ...prev,
+                              detailImages: next,
+                              detailPreviewUrls: Object.fromEntries(
+                                Object.entries(prev.detailPreviewUrls).filter(
+                                  ([name]) => retained.has(name),
+                                ),
+                              ),
+                              detailFileAssetIds: Object.fromEntries(
+                                Object.entries(prev.detailFileAssetIds).filter(
+                                  ([name]) => retained.has(name),
+                                ),
+                              ),
+                            }
+                          })
+                        }
+                        onPreviewUrlsChange={(next) =>
+                          setFields((prev) => ({
+                            ...prev,
+                            detailPreviewUrls: next,
+                          }))
                         }
                       />
                     </section>
@@ -1812,9 +2105,31 @@ export function ProductDetailPage({
                                 <td className="px-3 py-3">
                                   <SkuMainImageField
                                     value={sku.mainImage}
+                                    previewUrl={sku.mainImagePreviewUrl}
                                     onChange={(mainImage) =>
-                                      updateSku(index, { mainImage })
+                                      updateSku(
+                                        index,
+                                        mainImage
+                                          ? { mainImage }
+                                          : {
+                                              mainImage: "",
+                                              mainImagePreviewUrl: undefined,
+                                              mainImageAssetId: undefined,
+                                            },
+                                      )
                                     }
+                                    onFilesSelected={(files) => {
+                                      const file = files[0]
+                                      rememberSkuFile(index, file)
+                                      if (file) {
+                                        updateSku(index, {
+                                          mainImage: file.name,
+                                          mainImagePreviewUrl:
+                                            URL.createObjectURL(file),
+                                          mainImageAssetId: undefined,
+                                        })
+                                      }
+                                    }}
                                   />
                                 </td>
                                 <td className="border-l border-border px-3 py-3">
@@ -1908,8 +2223,20 @@ export function ProductDetailPage({
                                                     fields.carouselImages,
                                                   detailImages:
                                                     fields.detailImages,
+                                                  carouselFileAssetIds:
+                                                    fields.carouselFileAssetIds,
+                                                  detailFileAssetIds:
+                                                    fields.detailFileAssetIds,
+                                                  carouselPreviewUrls:
+                                                    fields.carouselPreviewUrls,
+                                                  detailPreviewUrls:
+                                                    fields.detailPreviewUrls,
                                                   mainImage:
                                                     sku.mainImage || undefined,
+                                                  mainImageAssetId:
+                                                    sku.mainImageAssetId,
+                                                  mainImagePreviewUrl:
+                                                    sku.mainImagePreviewUrl,
                                                   salesVisiblePriceGross:
                                                     sku.salePrice,
                                                   hasPoolEntry: Boolean(

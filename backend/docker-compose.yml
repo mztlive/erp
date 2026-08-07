@@ -32,7 +32,6 @@ services:
       TZ: ${TZ:-Asia/Shanghai}
     volumes:
       - ${RS_PROJECT_TEMPLATE_CONFIG_FILE:-./config.toml}:/app/config.toml:ro
-      - ./uploads:/app/uploads
     ports:
       - "${RS_PROJECT_TEMPLATE_API_HOST_PORT:-10001}:10001"
     healthcheck:

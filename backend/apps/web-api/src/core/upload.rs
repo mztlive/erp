@@ -1,13 +1,12 @@
 //! Multipart 图片上传的 HTTP 协议适配与输入校验。
 
-use std::{path::Path, sync::Arc, time::Duration};
+use std::{path::Path, time::Duration};
 
 use axum::{
     extract::{multipart::Field, Multipart, Request, State},
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use tokio::sync::Mutex;
 use tracing::{error, warn};
 
 use crate::core::{errors, middleware::RbacSubject, rate_limit::RateLimiter, response::ApiResponse};
@@ -23,9 +22,6 @@ const MAX_GLOBAL_UPLOADS_PER_WINDOW: usize = 100;
 const UPLOAD_WINDOW: Duration = Duration::from_secs(60);
 const MAX_CONCURRENT_UPLOADS: usize = 4;
 
-/// 同一进程内串行覆盖磁盘水位检查与文件保存的锁。
-pub(crate) type WriteLock = Arc<Mutex<()>>;
-
 /// 创建上传路由使用的进程内准入控制器。
 ///
 /// # 返回值
@@ -37,14 +33,6 @@ pub(crate) fn limiter() -> RateLimiter {
         UPLOAD_WINDOW,
         MAX_CONCURRENT_UPLOADS,
     )
-}
-
-/// 创建上传检查与保存共用的进程内锁。
-///
-/// # 返回值
-/// 返回可由所有上传 Handler 共享的异步互斥锁。
-pub(crate) fn write_lock() -> WriteLock {
-    Arc::new(Mutex::new(()))
 }
 
 /// Multipart 上传解析或校验错误。
@@ -76,57 +64,13 @@ pub(crate) enum Error {
 
     #[error("文件真实类型与扩展名或 MIME 类型不匹配")]
     ImageContentMismatch,
-
-    #[error("上传存储空间不足")]
-    InsufficientStorage,
 }
 
 impl From<Error> for errors::Error {
-    /// 将输入校验映射为 400，将磁盘安全水位映射为 507。
+    /// 将上传输入校验错误映射为 400。
     fn from(error: Error) -> Self {
-        match error {
-            Error::InsufficientStorage => Self::InsufficientStorage("上传存储空间不足".to_string()),
-            other => Self::BadRequest(other.to_string()),
-        }
+        Self::BadRequest(error.to_string())
     }
-}
-
-/// 检查本次保存完成后是否仍满足配置的磁盘安全水位。
-///
-/// # 参数
-/// * `path` - 已创建的上传目录
-/// * `file_bytes` - 待保存文件的字节数
-/// * `min_free_bytes` - 保存后必须保留的最小可用字节数
-///
-/// # 错误
-/// 无法读取文件系统可用空间或保存后将低于安全水位时返回错误，并禁止写入。
-pub(crate) fn ensure_storage_headroom(
-    path: &Path,
-    file_bytes: usize,
-    min_free_bytes: u64,
-) -> Result<(), errors::Error> {
-    let available_bytes = fs2::available_space(path).map_err(|inspection_error| {
-        error!(error = %inspection_error, "Failed to inspect upload filesystem capacity");
-        errors::Error::Internal("Failed to inspect upload filesystem capacity".to_string())
-    })?;
-    if preserves_min_free_space(available_bytes, file_bytes, min_free_bytes) {
-        return Ok(());
-    }
-
-    warn!(
-        available_bytes,
-        file_bytes, min_free_bytes, "Upload rejected to preserve filesystem free-space watermark"
-    );
-    Err(Error::InsufficientStorage.into())
-}
-
-fn preserves_min_free_space(available_bytes: u64, file_bytes: usize, min_free_bytes: u64) -> bool {
-    let Ok(file_bytes) = u64::try_from(file_bytes) else {
-        return false;
-    };
-    available_bytes
-        .checked_sub(file_bytes)
-        .is_some_and(|remaining| remaining >= min_free_bytes)
 }
 
 /// 在读取 Multipart 请求体前执行上传配额与并发限制。
@@ -209,6 +153,7 @@ impl FormFile {
         Ok(ValidatedImage {
             content: self.content,
             extension,
+            content_type: expected_mime,
         })
     }
 
@@ -242,12 +187,18 @@ impl FormFile {
 pub(crate) struct ValidatedImage {
     content: Vec<u8>,
     extension: String,
+    content_type: &'static str,
 }
 
 impl ValidatedImage {
     /// 返回图片内容。
     pub(crate) fn content(&self) -> &[u8] {
         &self.content
+    }
+
+    /// 返回与已验证扩展名一致的图片 MIME。
+    pub(crate) fn content_type(&self) -> &'static str {
+        self.content_type
     }
 
     /// 使用已验证扩展名生成唯一文件名。
@@ -273,7 +224,7 @@ pub(crate) async fn extract_file(multipart: &mut Multipart) -> Result<Option<For
     Ok(None)
 }
 
-fn normalized_extension(filename: &str) -> Option<String> {
+pub(crate) fn normalized_extension(filename: &str) -> Option<String> {
     Path::new(filename)
         .extension()
         .and_then(|extension| extension.to_str())
@@ -281,7 +232,7 @@ fn normalized_extension(filename: &str) -> Option<String> {
         .map(str::to_ascii_lowercase)
 }
 
-fn expected_mime(extension: &str) -> Option<&'static str> {
+pub(crate) fn expected_mime(extension: &str) -> Option<&'static str> {
     match extension {
         "jpeg" | "jpg" => Some("image/jpeg"),
         "png" => Some("image/png"),
@@ -322,7 +273,7 @@ mod tests {
 
     use crate::core::{errors, middleware::RbacSubject, rate_limit::Error as RateLimitError};
 
-    use super::{limiter, preserves_min_free_space, upload_subject, Error, FormFile, MAX_UPLOAD_FILE_BYTES};
+    use super::{limiter, upload_subject, Error, FormFile, MAX_UPLOAD_FILE_BYTES};
 
     fn form_file(filename: &str, content_type: Option<&str>, content: &[u8]) -> FormFile {
         FormFile {
@@ -354,6 +305,7 @@ mod tests {
 
             assert_eq!(image.extension, expected_extension);
             assert_eq!(image.content(), content);
+            assert_eq!(image.content_type(), content_type);
         }
     }
 
@@ -439,13 +391,6 @@ mod tests {
         assert!(matches!(error, errors::Error::BadRequest(_)));
     }
 
-    #[test]
-    fn maps_disk_watermark_to_insufficient_storage() {
-        let error: errors::Error = Error::InsufficientStorage.into();
-
-        assert!(matches!(error, errors::Error::InsufficientStorage(_)));
-    }
-
     #[tokio::test]
     async fn generated_name_uses_validated_extension() {
         let image = form_file("avatar.PNG", Some("image/png"), b"\x89PNG\r\n\x1a\n")
@@ -481,12 +426,5 @@ mod tests {
             .extensions_mut()
             .insert(RbacSubject("user:admin:1".to_string()));
         assert_eq!(upload_subject(&request), Some("user:admin:1"));
-    }
-
-    #[test]
-    fn disk_watermark_requires_reserved_space_after_write() {
-        assert!(preserves_min_free_space(1_500, 500, 1_000));
-        assert!(!preserves_min_free_space(1_499, 500, 1_000));
-        assert!(!preserves_min_free_space(100, 101, 0));
     }
 }

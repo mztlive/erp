@@ -22,12 +22,10 @@ Web API 启动。
 
 ## 本地 Compose
 
-先准备真实配置和可写目录：
+先准备真实配置：
 
 ```bash
 cp config.toml.example config.toml
-mkdir -p uploads
-chmod 0770 uploads
 ```
 
 示例中的 JWT secret 会被启动校验故意拒绝；必须改为至少 32 个随机字节。真实
@@ -37,9 +35,8 @@ chmod 0770 uploads
 请使用容器可路由的内网地址；Docker Desktop 可按环境使用
 `host.docker.internal`。
 
-`manage.sh` 会把本地后端容器 UID/GID 映射为当前用户，以便写入 bind mount 的
-`uploads/`。日志默认输出到容器 stdout/stderr 并由 Docker 限额轮转。直接执行
-`docker compose` 时，可通过
+`manage.sh` 会把本地后端容器 UID/GID 映射为当前用户。日志默认输出到容器
+stdout/stderr 并由 Docker 限额轮转。直接执行 `docker compose` 时，可通过
 `RS_PROJECT_TEMPLATE_LOCAL_UID` 和 `RS_PROJECT_TEMPLATE_LOCAL_GID` 显式指定。
 
 验证：
@@ -70,7 +67,7 @@ Pipeline 使用 Git SHA 与 Jenkins build number 标记镜像。推送后读取�
 
 ## 生产主机准备
 
-部署用户默认为 `root`，因为部署脚本需要把敏感配置与可写目录收敛到确定权限。
+部署用户默认为 `root`，因为部署脚本需要把敏感配置收敛到确定权限。
 Jenkins 不传输 `config.toml`；首次部署前必须单独准备：
 
 ```bash
@@ -82,8 +79,7 @@ install -m 0640 /secure/path/config.toml \
 部署脚本会确保：
 
 - `config.toml` 为 `root:root 0640`。
-- `uploads/` 为 `root:root 2770`。
-- 后端以非 root 用户运行，只附加 root group 读取和写入挂载目录。
+- 后端以非 root 用户运行，只附加 root group 读取只读配置挂载。
 - 容器启用 `no-new-privileges`、移除 Linux capabilities。
 - Docker `json-file` 日志限制为 `10m`、保留 `3` 个文件。
 

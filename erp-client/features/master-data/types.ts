@@ -252,8 +252,12 @@ export type ProductSkuFields = Readonly<{
   /** 展示用规格文案，如「颜色：红 / 规格：大」。 */
   specLabel: string
   barcode?: string
-  /** SKU 主图（单张）。 */
+  /** SKU 主图（单张，展示名）。 */
   mainImage: string
+  /** SKU 主图可访问地址（仅回显用）。 */
+  mainImagePreviewUrl?: string
+  /** SKU 主图已登记文件资产（D05）。 */
+  mainImageAssetId?: string
   /** 公司商品池销售可见价；销售可见，采购成本不可见。 */
   salePrice?: string
   /** 市场价（参考展示，非正式发布价）。 */
@@ -284,6 +288,12 @@ export type ProductFields = Readonly<{
   carouselImages: readonly string[]
   /** SPU 详情图（多张，可空）。 */
   detailImages: readonly string[]
+  /** 轮播图 fileName → 可访问预览/来源 URL（回显与再次保存用） */
+  carouselPreviewUrls: Readonly<Record<string, string>>
+  detailPreviewUrls: Readonly<Record<string, string>>
+  /** 轮播图 fileName → 已登记文件资产 id */
+  carouselFileAssetIds: Readonly<Record<string, string>>
+  detailFileAssetIds: Readonly<Record<string, string>>
   specs: readonly ProductSpecDimension[]
   skus: readonly ProductSkuFields[]
 }>
@@ -300,6 +310,10 @@ export type ProductDetailView = Readonly<{
   brand: string
   carouselImages: readonly string[]
   detailImages: readonly string[]
+  carouselPreviewUrls: Readonly<Record<string, string>>
+  detailPreviewUrls: Readonly<Record<string, string>>
+  carouselFileAssetIds: Readonly<Record<string, string>>
+  detailFileAssetIds: Readonly<Record<string, string>>
   specs: readonly ProductSpecDimension[]
   skus: readonly ProductSkuFields[]
 }>

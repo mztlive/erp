@@ -53,7 +53,7 @@
   - 超出 30 行时必须拆分私有 helper，保持单一职责和可测试性。
   - 测试代码、`build.rs`、宏实现不受该条约束。
 - 使用 `tracing` 输出结构化日志并带上下文字段（id、account、request_id 等）。
-- 上传文件必须写入配置的 `upload_path`，使用 `storage::LocalStorage`。
+- 上传文件必须通过 `AppState` 注入的 `storage::S3Storage` 写入配置的 S3 bucket；公开 URL 必须由 `public_base_url`、`key_prefix` 与对象键生成。
 
 ## 类型内聚与下沉编码要求
 - **核心原则**：凡是“不依赖数据库/外部 I/O 的业务规则”，优先封装到 `entities`（实体/值对象）或 DTO 自身，不得长期滞留在 `services` 私有 helper 中。
@@ -96,11 +96,11 @@
 - 多步骤写入的 Repository 与 policy 方法（如角色绑定替换、角色规则删除）必须收到事务执行器，注释中已注明该约束。
 
 ## 构建、运行与工具
-- 初始化配置：`cp config.toml.example config.toml`，填写 `app` 与 `database`。
+- 初始化配置：`cp config.toml.example config.toml`，填写 `app`、`database` 与 `s3`。
 - API：`cargo run -p web-api -- --config-path ./config.toml`（支持 `RUST_LOG=info|debug`、`LOG_FORMAT=json`）。
 - Workspace：`cargo build --workspace`、`cargo test --workspace`。
 - 质量门禁：`cargo fmt --all`、`cargo check --workspace`、`cargo clippy --workspace --all-targets --all-features`、`cargo test --workspace`。
-- Docker：`./manage.sh start|status|logs` 封装 `docker compose`；`config.toml` 与 `./uploads` 按 `docker-compose.yml` 挂载。
+- Docker：`./manage.sh start|status|logs` 封装 `docker compose`；仅按 `docker-compose.yml` 只读挂载 `config.toml`，文件对象写入 S3。
 
 ## 测试期望
 - 单元测试内联（`mod tests`），覆盖新的业务规则与边界。
@@ -120,7 +120,7 @@
 
 ## 安全基线
 - 日志中不得输出明文密码、token、验证码、身份证号等敏感信息。
-- 上传接口必须校验文件大小、扩展名和 MIME；路径必须落在 `upload_path`。
+- 上传接口必须校验文件大小、扩展名和 MIME；对象键必须是安全相对路径，并限制在配置的 `key_prefix` 下。
 - 权限失败和关键数据修改必须记录审计日志。
 - 对高频敏感接口（登录、验证码、上传）应具备限流能力或预留限流扩展点。
 

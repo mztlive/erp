@@ -5,18 +5,15 @@
 //! 每条路由统一走 JWT + RBAC（`with_permission`），handler 标注
 //! `#[permission_macros::permission]`。
 //!
-//! 上传路由（multipart）需要 `upload::WriteLock` 扩展（与 `core/upload` 同款
-//! 进程内串行锁），在本路由集合内单独注入，不触碰冻结的 `routes/mod.rs`。
-
 use axum::{
     routing::{get, post, put},
-    Extension, Router,
+    Router,
 };
 use services::iam::SharedRbacService;
 
 use crate::{
     app_state::AppState,
-    core::{handler::file_asset, middleware::with_permission, upload},
+    core::{handler::file_asset, middleware::with_permission},
 };
 
 /// 返回本域管理端路由集合。
@@ -92,7 +89,4 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 file_asset::document_attachment_list_permission_key(),
             ),
         )
-        // 上传 handler 依赖进程内串行写锁（与 `core/upload` 同款），仅对本域
-        // 路由注入；全局 /upload 已由冻结的 routes/mod.rs 注入同一形态扩展。
-        .layer(Extension(upload::write_lock()))
 }

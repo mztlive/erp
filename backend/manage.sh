@@ -47,8 +47,6 @@ prepare_paths() {
     echo "config.toml is missing; copy config.toml.example and fill real values" >&2
     exit 2
   }
-  mkdir -p uploads
-  chmod 0770 uploads
 }
 
 health() {

@@ -48,6 +48,41 @@ type EnableStatus = "active" | "disabled"
 
 type BackendPage<T> = Page<T>
 
+type BackendFileAsset = {
+  id: string
+  storage_object_key: string
+  public_url?: string | null
+  file_name: string
+  content_type: string
+  byte_size: number
+  security_scan_status: string
+  created_by: string
+  created_at: number
+  version?: number
+}
+
+/** 按文件资产 ID 查询详情（含公开访问地址，供媒体回显）。 */
+async function fetchFileAsset(assetId: string): Promise<BackendFileAsset | null> {
+  try {
+    return await apiGet<BackendFileAsset>(`/admin/file-assets/${encodeURIComponent(assetId)}`)
+  } catch {
+    return null
+  }
+}
+
+/** 批量解析媒体文件资产为 `assetId → 资产详情`（去重，单条失败降级为缺失）。 */
+async function resolveMediaAssets(
+  assetIds: readonly string[],
+): Promise<Map<string, BackendFileAsset>> {
+  const unique = [...new Set(assetIds.filter((id) => id.trim()))]
+  const resolved = new Map<string, BackendFileAsset>()
+  for (const assetId of unique) {
+    const asset = await fetchFileAsset(assetId)
+    if (asset) resolved.set(assetId, asset)
+  }
+  return resolved
+}
+
 type ProductCategoryDto = {
   id: string
   category_code: string
@@ -84,6 +119,13 @@ type ProductRevisionDto = {
   name: string
   status: EnableStatus
   effective_from: string
+  media?: Array<{
+    id: string
+    file_asset_id: string
+    media_role: string
+    sort_order: number
+    alt_text?: string | null
+  }>
   created_at: number
   version: number
 }
@@ -105,6 +147,7 @@ type SkuRevisionDto = {
   revision_no: number
   name: string
   barcode: string | null
+  source_main_image_asset_id?: string | null
   status: EnableStatus
   sales_visible_price_gross: string | null
   effective_from: string
@@ -1387,8 +1430,39 @@ async function centerProduct(
   )
   const brands = await fetchAllPages<ProductBrandDto>("/admin/product-brands", {})
 
-  // Best-effort: current revision does not embed category/brand/media/specs.
-  // SKU rows carry base unit + signature; full SPU media/spec dims are backend gaps.
+  // Best-effort: current revision does not embed category/brand/specs.
+  // SPU 媒体与 SKU 主图按 file_asset 引用解析为可访问地址。
+  const carouselMedia = (currentRev?.media ?? [])
+    .filter((m) => m.media_role === "carousel")
+    .sort((a, b) => a.sort_order - b.sort_order)
+  const detailMedia = (currentRev?.media ?? [])
+    .filter((m) => m.media_role === "detail")
+    .sort((a, b) => a.sort_order - b.sort_order)
+  const resolvedAssets = await resolveMediaAssets([
+    ...carouselMedia.map((m) => m.file_asset_id),
+    ...detailMedia.map((m) => m.file_asset_id),
+  ])
+  const carouselPreviewUrls: Record<string, string> = {}
+  const carouselFileAssetIds: Record<string, string> = {}
+  const detailPreviewUrls: Record<string, string> = {}
+  const detailFileAssetIds: Record<string, string> = {}
+  const carouselImages: string[] = []
+  const detailImages: string[] = []
+  for (const media of carouselMedia) {
+    const asset = resolvedAssets.get(media.file_asset_id)
+    const name = asset?.file_name ?? media.file_asset_id
+    carouselImages.push(name)
+    if (asset?.public_url) carouselPreviewUrls[name] = asset.public_url
+    carouselFileAssetIds[name] = media.file_asset_id
+  }
+  for (const media of detailMedia) {
+    const asset = resolvedAssets.get(media.file_asset_id)
+    const name = asset?.file_name ?? media.file_asset_id
+    detailImages.push(name)
+    if (asset?.public_url) detailPreviewUrls[name] = asset.public_url
+    detailFileAssetIds[name] = media.file_asset_id
+  }
+
   const skuFields: ProductSkuFields[] = []
   for (const sku of skus) {
     let rev: SkuRevisionDto | undefined
@@ -1408,6 +1482,10 @@ async function centerProduct(
       // ignore
     }
     const unit = unitById.get(sku.base_unit_id)
+    const mainImageAssetId = rev?.source_main_image_asset_id?.trim()
+    const mainAsset = mainImageAssetId
+      ? await fetchFileAsset(mainImageAssetId)
+      : null
     skuFields.push({
       skuId: sku.id,
       specificationSignature: sku.specification_signature,
@@ -1415,7 +1493,9 @@ async function centerProduct(
       attributeValues: [],
       specLabel: sku.specification_signature || "（无规格）",
       barcode: rev?.barcode ?? undefined,
-      mainImage: "",
+      mainImage: mainAsset?.file_name ?? "",
+      mainImagePreviewUrl: mainAsset?.public_url ?? undefined,
+      mainImageAssetId: mainAsset?.id ?? undefined,
       salePrice: rev?.sales_visible_price_gross ?? undefined,
       baseUnit: unit?.name ?? unit?.symbol,
       lifecycleStatus: asLifecycle(sku.status),
@@ -1436,8 +1516,12 @@ async function centerProduct(
     category: "",
     brandId: "",
     brand: "",
-    carouselImages: [] as string[],
-    detailImages: [] as string[],
+    carouselImages,
+    detailImages,
+    carouselPreviewUrls,
+    detailPreviewUrls,
+    carouselFileAssetIds,
+    detailFileAssetIds,
     specs: [] as { name: string; values: readonly string[] }[],
     skus: skuFields,
   }
@@ -2017,11 +2101,25 @@ async function createUnitOfMeasure(
   }
 }
 
+/** SPU 媒体写入项：文件资产 + 展示顺序。 */
+function mapProductMedia(
+  names: readonly string[],
+  assetIds: Readonly<Record<string, string>>,
+): Array<{ file_asset_id: string; sort_order: number }> {
+  return names
+    .map((name, index) => ({
+      file_asset_id: assetIds[name]?.trim() ?? "",
+      sort_order: index,
+    }))
+    .filter((entry) => entry.file_asset_id)
+}
+
 function mapProductSkus(fields: ProductFields) {
   return fields.skus.map((sku) => ({
     sku_no: sku.skuNo,
     base_unit_id: fields.baseUnitId,
     barcode: sku.barcode || null,
+    main_image_asset_id: sku.mainImageAssetId || null,
     weight_kg: null,
     volume_m3: null,
     sales_visible_price_gross: sku.salePrice || null,
@@ -2077,8 +2175,11 @@ async function createProduct(
       status: "active",
       effective_from: input.effectiveFrom,
       effective_to: input.effectiveTo || null,
-      carousel_media: [],
-      detail_media: [],
+      carousel_media: mapProductMedia(
+        fields.carouselImages,
+        fields.carouselFileAssetIds,
+      ),
+      detail_media: mapProductMedia(fields.detailImages, fields.detailFileAssetIds),
       skus: mapProductSkus(fields),
     })
     return {
@@ -2753,8 +2854,14 @@ export async function createMasterDataRevision(
             status: "active",
             effective_from: input.effectiveFrom,
             effective_to: input.effectiveTo || null,
-            carousel_media: [],
-            detail_media: [],
+            carousel_media: mapProductMedia(
+              fields.carouselImages,
+              fields.carouselFileAssetIds,
+            ),
+            detail_media: mapProductMedia(
+              fields.detailImages,
+              fields.detailFileAssetIds,
+            ),
             skus: mapProductSkus(fields),
           }
         )

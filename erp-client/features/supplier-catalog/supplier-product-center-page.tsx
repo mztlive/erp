@@ -94,7 +94,9 @@ import {
   useReviseSupplierCatalogProductMutation,
   useSupplierCatalogCenterQuery,
 } from "@/features/supplier-catalog/queries"
+import { uploadCatalogImage } from "@/features/supplier-catalog/api"
 import type {
+  SupplierCatalogMediaView,
   SupplierCatalogWriteResult,
   SupplierOfferingRevisionView,
 } from "@/features/supplier-catalog/types"
@@ -248,6 +250,41 @@ function scrollToSection(id: SupplierProductEditorSectionId) {
   })
 }
 
+/** 保存前解析后的媒体写入结果：fileName / rowKey → 真实 URL 与文件资产 id。 */
+type ResolvedUploads = {
+  urlByFileName: Readonly<Record<string, string>>
+  assetIdByFileName: Readonly<Record<string, string>>
+  skuUrlByRowKey: Readonly<Record<string, string>>
+  skuAssetIdByRowKey: Readonly<Record<string, string>>
+}
+
+/** 用已解析（上传/既有）结果覆盖 SPU 媒体的 fileAssetId 与 sourceUrl。 */
+function applyResolvedMedia(
+  media: Omit<SupplierCatalogMediaView, "id">,
+  resolved: ResolvedUploads | undefined,
+): Omit<SupplierCatalogMediaView, "id"> {
+  if (!resolved) return media
+  return {
+    ...media,
+    fileAssetId: resolved.assetIdByFileName[media.fileName] ?? media.fileAssetId,
+    sourceUrl: resolved.urlByFileName[media.fileName] ?? media.sourceUrl,
+  }
+}
+
+/** 用已解析（上传/既有）结果覆盖 SKU 主图的 fileAssetId 与 sourceUrl。 */
+function applyResolvedSkuMedia(
+  media: Omit<SupplierCatalogMediaView, "id">,
+  rowKey: string,
+  resolved: ResolvedUploads | undefined,
+): Omit<SupplierCatalogMediaView, "id"> {
+  if (!resolved) return media
+  return {
+    ...media,
+    fileAssetId: resolved.skuAssetIdByRowKey[rowKey] ?? media.fileAssetId,
+    sourceUrl: resolved.skuUrlByRowKey[rowKey] ?? media.sourceUrl,
+  }
+}
+
 function MediaListEditor({
   label,
   hint,
@@ -255,6 +292,7 @@ function MediaListEditor({
   onChange,
   previewUrls,
   onPreviewUrlsChange,
+  onFilesSelected,
   mode = "carousel",
 }: {
   label: string
@@ -264,6 +302,8 @@ function MediaListEditor({
   /** 已落库或本地 blob 的预览地址；key 为 fileName。 */
   previewUrls?: Readonly<Record<string, string>>
   onPreviewUrlsChange?: (next: Record<string, string>) => void
+  /** 选择文件时透出原始文件（用于保存前上传）。 */
+  onFilesSelected?: (files: File[]) => void
   mode?: "carousel" | "detail"
 }) {
   const [localPreviewUrls, setLocalPreviewUrls] = React.useState<
@@ -450,6 +490,7 @@ function MediaListEditor({
               mode === "carousel" ? "支持多选，首张作为首图" : "支持多选，按顺序展示"
             }
             onFilesSelected={(files) => {
+              onFilesSelected?.(files)
               const addedUrls: Record<string, string> = {}
               updateLocalPreviewUrls((previous) => {
                 const next = new Map(previous)
@@ -576,6 +617,87 @@ export function SupplierProductCenterPage({
   const [deleteSpecIndex, setDeleteSpecIndex] = React.useState<number | null>(
     null
   )
+  const [uploadingMedia, setUploadingMedia] = React.useState(false)
+  /** 本会话选择但尚未上传的图片文件；保存时按 fileName 上传并回填真实 URL。 */
+  const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
+  const rememberPendingFiles = React.useCallback((files: File[]) => {
+    for (const file of files) {
+      pendingFilesRef.current.set(file.name, file)
+    }
+  }, [])
+
+  /** 把仍是本地 blob 预览的图片上传为文件资产，返回真实 URL 与 asset id 映射。 */
+  const resolvePendingUploads = React.useCallback(
+    async (current: SupplierProductFormFields): Promise<ResolvedUploads> => {
+      const urlByFileName: Record<string, string> = {}
+      const assetIdByFileName: Record<string, string> = {}
+      const uploadIfPending = async (
+        fileName: string,
+        previewUrl: string | undefined,
+        knownAssetId: string | undefined,
+      ) => {
+        const url = previewUrl?.trim()
+        if (!url) return
+        if (url.startsWith("blob:")) {
+          const file = pendingFilesRef.current.get(fileName)
+          if (!file) {
+            throw new Error(`找不到待上传图片「${fileName}」的文件内容，请重新选择`)
+          }
+          const uploaded = await uploadCatalogImage(file)
+          urlByFileName[fileName] = uploaded.url
+          assetIdByFileName[fileName] = uploaded.fileAssetId
+          return
+        }
+        urlByFileName[fileName] = url
+        if (knownAssetId?.trim()) {
+          assetIdByFileName[fileName] = knownAssetId
+        }
+      }
+      for (const fileName of current.carouselImages) {
+        await uploadIfPending(
+          fileName,
+          current.carouselPreviewUrls[fileName],
+          current.carouselFileAssetIds[fileName],
+        )
+      }
+      for (const fileName of current.detailImages) {
+        await uploadIfPending(
+          fileName,
+          current.detailPreviewUrls[fileName],
+          current.detailFileAssetIds[fileName],
+        )
+      }
+      const skuUrlByRowKey: Record<string, string> = {}
+      const skuAssetIdByRowKey: Record<string, string> = {}
+      for (const sku of current.skus) {
+        const previewUrl = sku.mainImagePreviewUrl?.trim()
+        if (!previewUrl) continue
+        if (previewUrl.startsWith("blob:")) {
+          const file = pendingFilesRef.current.get(sku.mainImage)
+          if (!file) {
+            throw new Error(
+              `找不到待上传主图「${sku.mainImage}」的文件内容，请重新选择`,
+            )
+          }
+          const uploaded = await uploadCatalogImage(file)
+          skuUrlByRowKey[sku.rowKey] = uploaded.url
+          skuAssetIdByRowKey[sku.rowKey] = uploaded.fileAssetId
+        } else {
+          skuUrlByRowKey[sku.rowKey] = previewUrl
+          if (sku.mainImageAssetId?.trim()) {
+            skuAssetIdByRowKey[sku.rowKey] = sku.mainImageAssetId
+          }
+        }
+      }
+      return {
+        urlByFileName,
+        assetIdByFileName,
+        skuUrlByRowKey,
+        skuAssetIdByRowKey,
+      }
+    },
+    [],
+  )
   const created = searchParams.get("created") === "1"
 
   React.useEffect(() => {
@@ -650,11 +772,15 @@ export function SupplierProductCenterPage({
     setResult(null)
   }
 
-  const pending = createMutation.isPending || reviseMutation.isPending
+  const pending =
+    createMutation.isPending || reviseMutation.isPending || uploadingMedia
   const item = centerQuery.data?.item
 
   const contentPayload = React.useCallback(
-    (nextFields: SupplierProductFormFields) => {
+    (
+      nextFields: SupplierProductFormFields,
+      resolved?: ResolvedUploads,
+    ) => {
     const attributes = skusToAttributes(
       nextFields.skus,
       nextFields.specDrafts,
@@ -677,9 +803,9 @@ export function SupplierProductCenterPage({
         availableQuantity: "",
         availabilityStatus: "AVAILABLE",
       } satisfies SupplierSkuFormRow)
-    const spuMedia = formToMediaPayload(nextFields, firstSku).filter(
-      (m) => m.usage !== "SKU_MAIN",
-    )
+    const spuMedia = formToMediaPayload(nextFields, firstSku)
+      .filter((m) => m.usage !== "SKU_MAIN")
+      .map((m) => applyResolvedMedia(m, resolved))
 
     const skus = nextFields.skus.map((sku) => ({
       id: sku.catalogSkuId,
@@ -690,9 +816,11 @@ export function SupplierProductCenterPage({
         name: dim.name.trim(),
         value: (sku.attributeValues[index] ?? "").trim(),
       })).filter((a) => a.name && a.value),
-      media: formToMediaPayload(nextFields, sku).filter(
-        (m) => m.usage === "SKU_MAIN",
-      ),
+      media: formToMediaPayload(nextFields, sku)
+        .filter((m) => m.usage === "SKU_MAIN")
+        .map((m) =>
+          applyResolvedSkuMedia(m, sku.rowKey, resolved),
+        ),
       dropshipFloorPriceGross: sku.dropshipFloorPriceGross.trim(),
       bulkFloorPriceGross: sku.bulkFloorPriceGross.trim(),
       bulkMinimumOrderQuantity: sku.bulkMinimumOrderQuantity.trim(),
@@ -749,7 +877,16 @@ export function SupplierProductCenterPage({
     }
 
     try {
-      const payload = contentPayload(fields)
+      // 无内容差异时不形成空修订：先用未解析载荷比对，避免无效上传
+      const draftPayload = contentPayload(fields)
+      if (!isCreate && JSON.stringify(draftPayload) === baselinePayload) {
+        setFormError("未检测到内容变化，无需保存")
+        return false
+      }
+
+      setUploadingMedia(true)
+      const resolved = await resolvePendingUploads(fields)
+      const payload = contentPayload(fields, resolved)
       if (isCreate) {
         const supplier = supplierQuery.data?.rows.find(
           (row) => row.stableId === fields.supplierId,
@@ -778,11 +915,6 @@ export function SupplierProductCenterPage({
       }
 
       if (!item) return false
-      // 无内容差异时不形成空修订
-      if (JSON.stringify(payload) === baselinePayload) {
-        setFormError("未检测到内容变化，无需保存")
-        return false
-      }
       const expected =
         item.supplierProduct.incomingRevision?.revisionNo ??
         item.supplierProduct.currentRevision.revisionNo
@@ -802,6 +934,8 @@ export function SupplierProductCenterPage({
     } catch (error) {
       setFormError(saveErrorMessage(error))
       return false
+    } finally {
+      setUploadingMedia(false)
     }
   }
 
@@ -1440,6 +1574,7 @@ export function SupplierProductCenterPage({
                   label="轮播图"
                   value={fields.carouselImages}
                   previewUrls={fields.carouselPreviewUrls}
+                  onFilesSelected={rememberPendingFiles}
                   onChange={(next) =>
                     patchFields((previous) => {
                       const retained = new Set(next)
@@ -1448,10 +1583,16 @@ export function SupplierProductCenterPage({
                           ([name]) => retained.has(name),
                         ),
                       )
+                      const carouselFileAssetIds = Object.fromEntries(
+                        Object.entries(previous.carouselFileAssetIds).filter(
+                          ([name]) => retained.has(name),
+                        ),
+                      )
                       return {
                         ...previous,
                         carouselImages: next,
                         carouselPreviewUrls,
+                        carouselFileAssetIds,
                       }
                     })
                   }
@@ -1468,6 +1609,7 @@ export function SupplierProductCenterPage({
                   mode="detail"
                   value={fields.detailImages}
                   previewUrls={fields.detailPreviewUrls}
+                  onFilesSelected={rememberPendingFiles}
                   onChange={(next) =>
                     patchFields((previous) => {
                       const retained = new Set(next)
@@ -1476,10 +1618,16 @@ export function SupplierProductCenterPage({
                           ([name]) => retained.has(name),
                         ),
                       )
+                      const detailFileAssetIds = Object.fromEntries(
+                        Object.entries(previous.detailFileAssetIds).filter(
+                          ([name]) => retained.has(name),
+                        ),
+                      )
                       return {
                         ...previous,
                         detailImages: next,
                         detailPreviewUrls,
+                        detailFileAssetIds,
                       }
                     })
                   }
@@ -1800,16 +1948,19 @@ export function SupplierProductCenterPage({
                                     updateSku(index, {
                                       mainImage: "",
                                       mainImagePreviewUrl: undefined,
+                                      mainImageAssetId: undefined,
                                     })
                                   }
                                   onFilesSelected={(files) => {
                                     if (files[0]) {
+                                      rememberPendingFiles(files)
                                       const file = files[0]
-                                      // 本地 blob 仅会话内可预览；写入时以文件名作为来源 url 快照
+                                      // 本地 blob 仅会话内可预览；保存时上传并回填真实 URL 快照
                                       const blobUrl = URL.createObjectURL(file)
                                       updateSku(index, {
                                         mainImage: file.name,
                                         mainImagePreviewUrl: blobUrl,
+                                        mainImageAssetId: undefined,
                                       })
                                     }
                                   }}

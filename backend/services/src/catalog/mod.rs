@@ -64,13 +64,13 @@ pub use self::dto::{
     CreateSkuAttributeValueRequest, CreateUnitOfMeasureRequest, CreateVoucherCategoryRequest,
     MoveProductCategoryRequest, NewVoucherCategoryInput, PageView, ProductBrandListParams, ProductBrandView,
     ProductCategoryListParams, ProductCategoryView, ProductListParams, ProductMediaInput,
-    ProductRevisionListParams, ProductRevisionView, ProductSkuInput, ProductView, SkuAttributeListParams,
-    SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView, SkuListParams,
-    SkuRevisionListParams, SkuRevisionView, SkuView, SpecEntryInput, UnitOfMeasureListParams,
+    ProductRevisionListParams, ProductRevisionMediaView, ProductRevisionView, ProductSkuInput, ProductView,
+    SkuAttributeListParams, SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView,
+    SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView, SpecEntryInput, UnitOfMeasureListParams,
     UnitOfMeasureView, UpdateProductBrandRequest, UpdateProductCategoryRequest, UpdateProductRequest,
     UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest, UpdateUnitOfMeasureRequest,
-    UpdateVoucherCategoryRequest, VoucherSkuInput, VoucherCategoryProfileListParams,
-    VoucherCategoryProfileView,
+    UpdateVoucherCategoryRequest, VoucherCategoryProfileListParams, VoucherCategoryProfileView,
+    VoucherSkuInput,
 };
 
 /// 商品分类列表筛选条件类型（经 `CatalogExt` 关联类型跨 crate 可达）。
@@ -1314,17 +1314,27 @@ impl CatalogService {
             .product_revisions()
             .search_product_revisions(&filter, &mut NoTransaction)
             .await?;
+        let media_by_revision = self
+            .media_by_revision_ids(
+                &page
+                    .items
+                    .iter()
+                    .map(|row| ProductRevisionId::new(row.id.clone()))
+                    .collect::<Vec<_>>(),
+            )
+            .await?;
         // 投影行类型属于仓储私有子树（`repository/mod.rs` 冻结），按字段映射为响应视图。
         let items = page
             .items
             .into_iter()
             .map(|row| ProductRevisionView {
-                id: row.id,
+                id: row.id.clone(),
                 product_id: row.product_id,
                 revision_no: row.revision_no,
                 name: row.name,
                 status: row.status,
                 effective_from: row.effective_from,
+                media: media_by_revision.get(&row.id).cloned().unwrap_or_default(),
                 created_at: row.created_at,
                 version: row.version,
             })
@@ -1422,6 +1432,7 @@ impl CatalogService {
                 revision_no: row.revision_no,
                 name: row.name,
                 barcode: row.barcode,
+                source_main_image_asset_id: row.source_main_image_asset_id,
                 status: row.status,
                 sales_visible_price_gross: row.sales_visible_price_gross,
                 effective_from: row.effective_from,
@@ -1818,7 +1829,9 @@ impl CatalogService {
             (Some(category_id), None) => {
                 let category = self.load_category(category_id.as_ref()).await?;
                 if category.product_kind != ProductKind::Voucher {
-                    return Err(Error::BusinessLogicError("所选分类不允许 VOUCHER 类型".to_string()));
+                    return Err(Error::BusinessLogicError(
+                        "所选分类不允许 VOUCHER 类型".to_string(),
+                    ));
                 }
                 (category_id, None)
             }
@@ -1902,6 +1915,7 @@ impl CatalogService {
                     sku_no: voucher_no,
                     base_unit_id: sku.base_unit_id,
                     barcode: sku.barcode,
+                    main_image_asset_id: None,
                     weight_kg: sku.weight_kg,
                     volume_m3: sku.volume_m3,
                     sales_visible_price_gross: sku.sales_visible_price_gross,
@@ -1991,11 +2005,10 @@ impl CatalogService {
             },
             actor.id(),
         )?;
-        let audit = actor.clone().resource_log(
-            "product_category.create",
-            "product_category",
-            id.to_string(),
-        )?;
+        let audit =
+            actor
+                .clone()
+                .resource_log("product_category.create", "product_category", id.to_string())?;
         match self
             .db
             .product_categories()
@@ -2017,11 +2030,7 @@ impl CatalogService {
                             &mut NoTransaction,
                         )
                         .await?
-                        .ok_or_else(|| {
-                            Error::ConflictError(
-                                "卡券根分类并发创建冲突，请重试".to_string(),
-                            )
-                        })?;
+                        .ok_or_else(|| Error::ConflictError("卡券根分类并发创建冲突，请重试".to_string()))?;
                     Ok(ProductCategoryId::new(existing.base.id))
                 }
                 other => Err(other),
@@ -2057,11 +2066,7 @@ impl CatalogService {
         if let Some(existing) = self
             .db
             .product_brands()
-            .find_one_by_field(
-                "name",
-                VOUCHER_DEFAULT_BRAND_NAME.to_string(),
-                &mut NoTransaction,
-            )
+            .find_one_by_field("name", VOUCHER_DEFAULT_BRAND_NAME.to_string(), &mut NoTransaction)
             .await?
         {
             return Ok(ProductBrandId::new(existing.base.id));
@@ -2080,12 +2085,7 @@ impl CatalogService {
         let audit = actor
             .clone()
             .resource_log("product_brand.create", "product_brand", id.to_string())?;
-        match self
-            .db
-            .product_brands()
-            .create(&brand, &mut NoTransaction)
-            .await
-        {
+        match self.db.product_brands().create(&brand, &mut NoTransaction).await {
             Ok(()) => {
                 self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
                 Ok(id)
@@ -2102,9 +2102,7 @@ impl CatalogService {
                         )
                         .await?
                         .ok_or_else(|| {
-                            Error::ConflictError(
-                                "默认品牌福尚云并发创建冲突，请重试".to_string(),
-                            )
+                            Error::ConflictError("默认品牌福尚云并发创建冲突，请重试".to_string())
                         })?;
                     Ok(ProductBrandId::new(existing.base.id))
                 }
@@ -2154,17 +2152,11 @@ impl CatalogService {
             },
             actor.id(),
         )?;
-        let audit = actor.clone().resource_log(
-            "unit_of_measure.create",
-            "unit_of_measure",
-            id.to_string(),
-        )?;
-        match self
-            .db
-            .unit_of_measures()
-            .create(&unit, &mut NoTransaction)
-            .await
-        {
+        let audit =
+            actor
+                .clone()
+                .resource_log("unit_of_measure.create", "unit_of_measure", id.to_string())?;
+        match self.db.unit_of_measures().create(&unit, &mut NoTransaction).await {
             Ok(()) => {
                 self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
                 Ok(id)
@@ -2181,9 +2173,7 @@ impl CatalogService {
                         )
                         .await?
                         .ok_or_else(|| {
-                            Error::ConflictError(
-                                "默认单位「张」并发创建冲突，请重试".to_string(),
-                            )
+                            Error::ConflictError("默认单位「张」并发创建冲突，请重试".to_string())
                         })?;
                     Ok(UnitOfMeasureId::new(existing.base.id))
                 }
@@ -2292,6 +2282,47 @@ impl CatalogService {
         Ok(rows)
     }
 
+    /// 按修订 ID 批量读取媒体行并映射为响应视图（按修订分组）。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 商品修订 ID 集合
+    ///
+    /// # 返回
+    /// 返回 `修订 ID → 媒体视图列表` 的分组映射。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    async fn media_by_revision_ids(
+        &self,
+        revision_ids: &[ProductRevisionId],
+    ) -> Result<HashMap<String, Vec<ProductRevisionMediaView>>> {
+        if revision_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let rows = self
+            .db
+            .product_revision_medias()
+            .find_media_by_revision_ids(revision_ids, &mut NoTransaction)
+            .await?;
+        let mut by_revision: HashMap<String, Vec<ProductRevisionMediaView>> = HashMap::new();
+        for row in rows {
+            by_revision
+                .entry(row.product_revision_id.to_string())
+                .or_default()
+                .push(ProductRevisionMediaView {
+                    id: row.base.id,
+                    file_asset_id: row.file_asset_id.to_string(),
+                    media_role: row.media_role,
+                    sort_order: row.sort_order,
+                    alt_text: row.alt_text,
+                });
+        }
+        for views in by_revision.values_mut() {
+            views.sort_by_key(|view| view.sort_order);
+        }
+        Ok(by_revision)
+    }
+
     /// 构造新 SKU 行（解析规格 → 计算签名 → 生成 SKU 身份 + 首个修订 + 规格值）。
     ///
     /// # 参数
@@ -2323,6 +2354,7 @@ impl CatalogService {
                 description: None,
                 specification: None,
                 barcode: input.barcode,
+                source_main_image_asset_id: input.main_image_asset_id.clone(),
                 weight_kg: input.weight_kg,
                 volume_m3: input.volume_m3,
                 sales_visible_price_gross: input.sales_visible_price_gross,
@@ -2668,19 +2700,13 @@ impl CatalogService {
         }
         ensure_version(product.base.version, req.version)?;
 
-        let current_product_revision = self
-            .load_current_product_revision(&product)
-            .await?;
+        let current_product_revision = self.load_current_product_revision(&product).await?;
         let current_sku_revision = self.load_current_sku_revision(sku_id).await?;
 
-        let effective_from = req
-            .effective_from
-            .unwrap_or_else(BusinessDate::today);
+        let effective_from = req.effective_from.unwrap_or_else(BusinessDate::today);
         let effective_to = req.effective_to;
         let product_status = product.stable.status;
-        let next_product_revision_no = self
-            .next_product_revision_no(product.base.id.as_str())
-            .await?;
+        let next_product_revision_no = self.next_product_revision_no(product.base.id.as_str()).await?;
         let next_sku_revision_no = self.next_sku_revision_no(sku_id).await?;
         let next_voucher_revision_no = self.next_voucher_profile_revision_no(sku_id).await?;
 
@@ -2711,6 +2737,7 @@ impl CatalogService {
                 description: Some(req.description.clone()),
                 specification: current_sku_revision.specification.clone(),
                 barcode: current_sku_revision.barcode.clone(),
+                source_main_image_asset_id: current_sku_revision.source_main_image_asset_id.clone(),
                 weight_kg: current_sku_revision.weight_kg,
                 volume_m3: current_sku_revision.volume_m3,
                 sales_visible_price_gross: current_sku_revision.sales_visible_price_gross,
@@ -2802,10 +2829,7 @@ impl CatalogService {
     ///
     /// # 错误
     /// 数据库查询失败时返回错误。
-    async fn enrich_voucher_category_view(
-        &self,
-        view: &mut VoucherCategoryProfileView,
-    ) -> Result<()> {
+    async fn enrich_voucher_category_view(&self, view: &mut VoucherCategoryProfileView) -> Result<()> {
         let Some(sku) = self
             .db
             .skus()
@@ -2857,10 +2881,7 @@ impl CatalogService {
         let revisions = self
             .db
             .product_revisions()
-            .find_many(
-                doc! { "product_id": product.base.id.clone() },
-                &mut NoTransaction,
-            )
+            .find_many(doc! { "product_id": product.base.id.clone() }, &mut NoTransaction)
             .await?;
         revisions
             .into_iter()
@@ -2879,12 +2900,7 @@ impl CatalogService {
     /// # 错误
     /// SKU 或修订不存在时返回 `NotFound`。
     async fn load_current_sku_revision(&self, sku_id: &str) -> Result<SkuRevision> {
-        if let Some(sku) = self
-            .db
-            .skus()
-            .find_by_id(sku_id, &mut NoTransaction)
-            .await?
-        {
+        if let Some(sku) = self.db.skus().find_by_id(sku_id, &mut NoTransaction).await? {
             if let Some(revision_id) = sku.stable.current_revision_id.as_ref() {
                 if let Some(revision) = self
                     .db
@@ -3175,6 +3191,7 @@ impl CatalogService {
                 description: None,
                 specification: None,
                 barcode: input.barcode.clone(),
+                source_main_image_asset_id: input.main_image_asset_id.clone(),
                 weight_kg: input.weight_kg,
                 volume_m3: input.volume_m3,
                 sales_visible_price_gross: input.sales_visible_price_gross,
@@ -3324,12 +3341,8 @@ mod tests {
 
     #[test]
     fn ensure_category_selection_exclusive_accepts_exactly_one() {
-        assert!(
-            ensure_category_selection_exclusive(&Some(ProductCategoryId::new("cat-1")), &None).is_ok()
-        );
-        assert!(
-            ensure_category_selection_exclusive(&None, &Some(new_category_input())).is_ok()
-        );
+        assert!(ensure_category_selection_exclusive(&Some(ProductCategoryId::new("cat-1")), &None).is_ok());
+        assert!(ensure_category_selection_exclusive(&None, &Some(new_category_input())).is_ok());
     }
 
     #[test]

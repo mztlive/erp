@@ -1,10 +1,8 @@
 use config::{Config, SafeConfig};
 use mongodb::Database;
 use services::iam::SharedRbacService;
-use std::{
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::sync::Arc;
+use storage::S3Storage;
 use tokio::sync::{watch, RwLock};
 
 #[derive(Clone)]
@@ -13,7 +11,7 @@ pub struct AppState {
     config: SafeConfig,
     jwt_engine: Arc<RwLock<Option<crate::core::auth::JwtEngine>>>,
     rbac: SharedRbacService,
-    upload_path: Arc<PathBuf>,
+    storage: Arc<S3Storage>,
 }
 
 impl AppState {
@@ -22,19 +20,18 @@ impl AppState {
     /// # 参数
     /// * `db` - 应用启动时建立的数据库连接
     /// * `config` - 配置数据
-    /// * `upload_path` - 启动时已创建并规范化的专用上传目录
+    /// * `storage` - 启动时已构建的 S3 存储客户端
     ///
     /// # 返回
     /// 返回创建的实例。
-    pub fn new(db: Database, config: SafeConfig, upload_path: PathBuf) -> Self {
-        let upload_path = Arc::new(upload_path);
+    pub fn new(db: Database, config: SafeConfig, storage: S3Storage) -> Self {
         let rbac = services::iam::shared_rbac_service(db.clone());
         Self {
             db,
             config,
             jwt_engine: Arc::new(RwLock::new(None)),
             rbac,
-            upload_path,
+            storage: Arc::new(storage),
         }
     }
 
@@ -70,12 +67,12 @@ impl AppState {
         Arc::clone(&self.rbac)
     }
 
-    /// 返回启动时固定的上传目录。
+    /// 返回启动时固定的 S3 存储客户端。
     ///
     /// # 返回
-    /// 返回上传写入与只读静态服务共同使用的路径；配置变更需重启后生效。
-    pub fn upload_path(&self) -> &Path {
-        self.upload_path.as_path()
+    /// 返回所有上传 handler 共享的单例客户端；S3 配置变更需重启后生效。
+    pub fn storage(&self) -> &S3Storage {
+        self.storage.as_ref()
     }
 
     /// 使 JWT 引擎缓存失效。

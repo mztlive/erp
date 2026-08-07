@@ -75,7 +75,7 @@ RUN set -eux; \
     groupadd --system --gid 10001 rs-project-template; \
     useradd --system --uid 10001 --gid rs-project-template \
         --home-dir /app --shell /usr/sbin/nologin rs-project-template; \
-    mkdir -p /app/logs /app/uploads; \
+    mkdir -p /app/logs; \
     chown -R rs-project-template:rs-project-template /app
 
 COPY --from=builder /tmp/bin/web-api /usr/local/bin/web-api

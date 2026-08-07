@@ -1,13 +1,13 @@
-use axum::extract::{Extension, Multipart, State};
+use axum::extract::{Multipart, State};
 use serde::Serialize;
-use storage::LocalStorage;
+use tracing::error;
 
 use crate::{
     app_state::AppState,
     core::{
         errors::{Error, Result},
         response::ApiResponse,
-        upload::{ensure_storage_headroom, extract_file, WriteLock},
+        upload::extract_file,
     },
 };
 
@@ -23,7 +23,6 @@ pub struct UploadResponse {
 /// # 参数
 ///
 /// * `state` - 应用状态
-/// * `write_lock` - 串行覆盖磁盘水位检查与保存的进程内锁
 /// * `multipart` - Multipart 表单数据
 ///
 /// # 返回
@@ -32,36 +31,32 @@ pub struct UploadResponse {
 ///
 /// # 错误
 ///
-/// Multipart 无文件、图片超过 5 MiB、文件类型不受支持、保存后低于磁盘安全水位或
-/// 存储失败时返回错误。
+/// Multipart 无文件、图片超过 5 MiB、文件类型不受支持或 S3 存储失败时返回错误。
 pub(crate) async fn upload_file(
     State(state): State<AppState>,
-    Extension(write_lock): Extension<WriteLock>,
     mut multipart: Multipart,
 ) -> Result<UploadResponse> {
-    let config = state.config_snapshot();
-    let storage = LocalStorage::new(state.upload_path())
-        .await
-        .map_err(|error| Error::Internal(format!("Failed to init storage: {error}")))?;
-
     let file = extract_file(&mut multipart)
         .await?
         .ok_or_else(|| Error::BadRequest("未上传文件".to_string()))?
         .validate_image()?;
     let unique_name = file.unique_name();
 
-    let _write_guard = write_lock.lock().await;
-    ensure_storage_headroom(
-        state.upload_path(),
-        file.content().len(),
-        config.app.upload_min_free_bytes,
-    )?;
-    storage
-        .save(&unique_name, file.content())
+    state
+        .storage()
+        .save_with_content_type(&unique_name, file.content(), Some(file.content_type()))
         .await
-        .map_err(|error| Error::Internal(format!("Failed to save file: {error}")))?;
+        .map_err(|storage_error| {
+            error!(error = %storage_error, object_key = %unique_name, "Failed to save upload to S3");
+            Error::Internal("Object storage operation failed".to_string())
+        })?;
+    let url = state
+        .storage()
+        .public_url(&unique_name)
+        .map_err(|storage_error| {
+            error!(error = %storage_error, object_key = %unique_name, "Failed to build S3 public URL");
+            Error::Internal("Object storage URL generation failed".to_string())
+        })?;
 
-    Ok(ApiResponse::ok_with_data(UploadResponse {
-        url: config.file_url(&unique_name),
-    }))
+    Ok(ApiResponse::ok_with_data(UploadResponse { url }))
 }

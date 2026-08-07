@@ -76,15 +76,12 @@ prepare_host_paths() {
     exit 2
   }
   if [[ "$(id -u)" -ne 0 ]]; then
-    echo "deployment must run as root to protect config and writable paths" >&2
+    echo "deployment must run as root to protect config" >&2
     exit 2
   fi
 
   chown root:root "$config_file"
   chmod 0640 "$config_file"
-  mkdir -p "$ROOT_DIR/uploads"
-  chown root:root "$ROOT_DIR/uploads"
-  chmod 2770 "$ROOT_DIR/uploads"
 }
 
 run_compose() {
@@ -149,9 +146,9 @@ deploy() {
   run_compose "$stored_manifest" pull
   if ! run_compose "$stored_manifest" \
     run --rm --no-deps --entrypoint sh web-api \
-    -c 'test -r /app/config.toml && test -w /app/uploads'
+    -c 'test -r /app/config.toml'
   then
-    echo "backend container user cannot access config/log/upload paths" >&2
+    echo "backend container user cannot read config" >&2
     exit 1
   fi
 

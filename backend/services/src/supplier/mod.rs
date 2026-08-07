@@ -601,4 +601,3 @@ fn parse_invoice_type(code: &str) -> InvoiceType {
         _ => InvoiceType::VatSpecial,
     }
 }
-

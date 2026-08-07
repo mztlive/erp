@@ -214,6 +214,7 @@ impl SupplierCatalogService {
                         id: media.base.id,
                         usage: media.media_usage,
                         url: media.source_url_snapshot,
+                        file_asset_id: media.file_asset_id.map(|id| id.to_string()),
                         archive_status: media.archive_status,
                         sort_order: media.sort_order,
                     })
@@ -1413,7 +1414,7 @@ impl SupplierCatalogService {
                     supplier_catalog_product_revision_id:
                         entities::ids::SupplierCatalogProductRevisionId::new(revision_id.to_string()),
                     media_usage: write.usage,
-                    file_asset_id: None,
+                    file_asset_id: write.file_asset_id.clone().map(entities::ids::FileAssetId::new),
                     source_url_snapshot: Some(write.url.clone()),
                     archive_status: ArchiveStatus::PendingImport,
                     sort_order,
@@ -1441,7 +1442,10 @@ impl SupplierCatalogService {
                 source_base_unit: write.source_base_unit.clone(),
                 barcode: write.barcode.clone(),
                 structured_attributes: write.structured_attributes.clone(),
-                source_main_image_asset_id: None,
+                source_main_image_asset_id: write
+                    .source_main_image_asset_id
+                    .clone()
+                    .map(entities::ids::FileAssetId::new),
                 source_main_image_url_snapshot: write
                     .source_main_image_url
                     .as_ref()
@@ -1631,6 +1635,10 @@ fn sku_revision_view(revision: &SupplierCatalogSkuRevision) -> SupplierCatalogSk
         barcode: revision.barcode.clone(),
         structured_attributes: revision.structured_attributes.clone(),
         source_main_image_url: revision.source_main_image_url_snapshot.clone(),
+        source_main_image_asset_id: revision
+            .source_main_image_asset_id
+            .as_ref()
+            .map(|id| id.to_string()),
         dropship_floor_price_gross: revision.dropship_floor_price_gross.map(|value| value.to_string()),
         bulk_floor_price_gross: revision.bulk_floor_price_gross.map(|value| value.to_string()),
         bulk_minimum_order_quantity: revision

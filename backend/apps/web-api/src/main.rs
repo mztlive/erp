@@ -2,16 +2,13 @@ mod app_state;
 mod core;
 
 use app_state::AppState;
-use config::{Config, SafeConfig};
+use config::{Config, S3Config, SafeConfig};
 use core::{
     routes,
     tracing::{init_tracing, TracingConfig},
 };
-use std::{
-    io::{Error as IoError, ErrorKind},
-    net::SocketAddr,
-    path::{Path, PathBuf},
-};
+use std::net::SocketAddr;
+use storage::{S3Storage, S3StorageConfig};
 use tracing::{info, warn};
 
 type Result<T> = std::result::Result<T, Box<dyn std::error::Error + Send + Sync>>;
@@ -84,13 +81,13 @@ fn env_flag(name: &str) -> bool {
 /// 当验证失败或底层操作失败时返回错误。
 async fn start(cfg: SafeConfig) -> Result<()> {
     let config = cfg.snapshot();
-    let upload_path = prepare_upload_directory(&config.app.upload_path).await?;
+    let storage = build_storage(&config.s3)?;
 
     let (_, db) = database::connect(&config.database.uri, &config.database.db_name).await?;
 
     let app_port = config.app.port;
 
-    let state = AppState::new(db, cfg.clone(), upload_path);
+    let state = AppState::new(db, cfg.clone(), storage);
     database::ensure_transaction_support(&state.db()).await?;
     database::ensure_indexes(&state.db()).await?;
     services::iam::ensure_root_role(&state.rbac()).await?;
@@ -100,58 +97,52 @@ async fn start(cfg: SafeConfig) -> Result<()> {
         state.clone(),
         DbConfigKey::from_config(&config),
         config.app.secret.clone(),
-        config.app.upload_path.clone(),
+        config.s3.clone(),
     );
 
     run_app(app_port, state).await
 }
 
-/// 创建并规范化启动期间固定使用的专用上传目录。
+/// 根据已校验的启动配置构建 S3 存储客户端。
 ///
 /// # 参数
-/// * `configured_path` - 已通过配置层词法校验的上传目录
+/// * `config` - S3 连接、凭证、键前缀与公开 URL 配置
 ///
 /// # 返回
-/// 返回创建后的 canonical 目录路径。
+/// 返回可由所有上传 handler 共享的 S3 客户端。
 ///
 /// # 错误
-/// 目录无法创建或解析，最终不是目录，或解析到文件系统根/当前工作目录及其祖先时返回错误。
-async fn prepare_upload_directory(configured_path: &str) -> Result<PathBuf> {
-    tokio::fs::create_dir_all(configured_path).await?;
-    let upload_path = tokio::fs::canonicalize(configured_path).await?;
-    let current_directory = tokio::fs::canonicalize(std::env::current_dir()?).await?;
-    if !is_dedicated_upload_directory(&upload_path, &current_directory).await? {
-        return Err(IoError::new(
-            ErrorKind::InvalidInput,
-            "upload_path must resolve to a dedicated non-root directory",
-        )
-        .into());
-    }
-    Ok(upload_path)
-}
-
-/// 判断 canonical 上传路径是否为根目录以外、且不是当前工作目录或其祖先的真实目录。
-async fn is_dedicated_upload_directory(path: &Path, current_directory: &Path) -> std::io::Result<bool> {
-    let metadata = tokio::fs::metadata(path).await?;
-    Ok(metadata.is_dir() && path.parent().is_some() && !current_directory.starts_with(path))
+/// S3 参数无效时返回存储配置错误。
+fn build_storage(config: &S3Config) -> storage::Result<S3Storage> {
+    S3Storage::new(S3StorageConfig {
+        bucket: config.bucket.clone(),
+        region: config.region.clone(),
+        endpoint: config.endpoint.clone(),
+        access_key_id: config.access_key_id.clone(),
+        secret_access_key: config.secret_access_key.clone(),
+        session_token: config.session_token.clone(),
+        key_prefix: config.key_prefix.clone(),
+        public_base_url: config.public_base_url.clone(),
+        force_path_style: config.force_path_style,
+    })
 }
 
 /// 启动配置监听并刷新可安全热更新的运行时状态。
 ///
 /// 数据库与 RBAC 必须始终指向同一存储，因此数据库连接配置只在进程启动时生效；
-/// 上传写入与只读静态服务也必须共用同一目录，因此 `upload_path` 同样固定为启动值。
+/// S3 客户端固定为启动值，保证单次进程中 bucket、凭证、键前缀与公开 URL 一致。
 /// 监听到这些变化时保留当前运行时，并记录需要重启的结构化日志。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `initial_db` - 初始数据库配置摘要
 /// * `initial_secret` - 初始 JWT 密钥
-/// * `initial_upload_path` - 启动时使用的上传目录
+/// * `initial_storage` - 启动时使用的 S3 配置
 fn spawn_config_watcher(
     state: AppState,
     initial_db: DbConfigKey,
     initial_secret: String,
-    initial_upload_path: String,
+    initial_storage: S3Config,
 ) {
     let mut receiver = state.subscribe_config();
 
@@ -159,8 +150,8 @@ fn spawn_config_watcher(
         let active_db = initial_db.clone();
         let mut observed_db = initial_db;
         let mut current_secret = initial_secret;
-        let active_upload_path = initial_upload_path.clone();
-        let mut observed_upload_path = initial_upload_path;
+        let active_storage = initial_storage.clone();
+        let mut observed_storage = initial_storage;
 
         loop {
             let next_config = receiver.borrow().clone();
@@ -184,19 +175,30 @@ fn spawn_config_watcher(
                 observed_db = next_db;
             }
 
-            if next_config.app.upload_path != observed_upload_path {
-                if upload_path_change_requires_restart(&active_upload_path, &next_config.app.upload_path) {
+            if next_config.s3 != observed_storage {
+                if storage_change_requires_restart(&active_storage, &next_config.s3) {
                     warn!(
                         restart_required = true,
-                        "Upload path change ignored at runtime; restart the application to apply it"
+                        bucket_changed = active_storage.bucket != next_config.s3.bucket,
+                        region_changed = active_storage.region != next_config.s3.region,
+                        endpoint_changed = active_storage.endpoint != next_config.s3.endpoint,
+                        credentials_changed = active_storage.access_key_id != next_config.s3.access_key_id
+                            || active_storage.secret_access_key != next_config.s3.secret_access_key
+                            || active_storage.session_token != next_config.s3.session_token,
+                        key_prefix_changed = active_storage.key_prefix != next_config.s3.key_prefix,
+                        public_base_url_changed =
+                            active_storage.public_base_url != next_config.s3.public_base_url,
+                        force_path_style_changed =
+                            active_storage.force_path_style != next_config.s3.force_path_style,
+                        "S3 configuration change ignored at runtime; restart the application to apply it"
                     );
                 } else {
                     info!(
                         restart_required = false,
-                        "Upload path reverted to the active startup value"
+                        "S3 configuration reverted to the active startup value"
                     );
                 }
-                observed_upload_path = next_config.app.upload_path.clone();
+                observed_storage = next_config.s3.clone();
             }
 
             if jwt_secret_changed(&current_secret, &next_config.app.secret) {
@@ -225,15 +227,15 @@ fn database_change_requires_restart(active: &DbConfigKey, requested: &DbConfigKe
     active != requested
 }
 
-/// 判断上传目录变化是否需要通过重启应用生效。
+/// 判断 S3 配置变化是否需要通过重启应用生效。
 ///
 /// # 参数
-/// * `active` - 启动时固定的上传目录
-/// * `requested` - 配置中心请求的上传目录
+/// * `active` - 启动时固定的 S3 配置
+/// * `requested` - 配置中心请求的 S3 配置
 ///
 /// # 返回
 /// 两者不一致时返回 `true`。
-fn upload_path_change_requires_restart(active: &str, requested: &str) -> bool {
+fn storage_change_requires_restart(active: &S3Config, requested: &S3Config) -> bool {
     active != requested
 }
 
@@ -276,9 +278,10 @@ async fn run_app(app_port: u16, state: AppState) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::{
-        database_change_requires_restart, env_flag, jwt_secret_changed, prepare_upload_directory,
-        upload_path_change_requires_restart, DbConfigKey,
+        database_change_requires_restart, env_flag, jwt_secret_changed, storage_change_requires_restart,
+        DbConfigKey,
     };
+    use config::S3Config;
 
     /// 构造测试使用的数据库配置摘要。
     fn database_key(uri: &str, db_name: &str) -> DbConfigKey {
@@ -312,39 +315,28 @@ mod tests {
     }
 
     #[test]
-    fn upload_path_change_should_require_restart() {
-        assert!(upload_path_change_requires_restart("./uploads", "/mnt/uploads"));
-        assert!(!upload_path_change_requires_restart("./uploads", "./uploads"));
+    fn storage_change_should_require_restart() {
+        let active = storage_config("erp-assets", "https://cdn.example.com");
+        let changed_bucket = storage_config("erp-assets-next", "https://cdn.example.com");
+        let changed_public_url = storage_config("erp-assets", "https://cdn-next.example.com");
+
+        assert!(storage_change_requires_restart(&active, &changed_bucket));
+        assert!(storage_change_requires_restart(&active, &changed_public_url));
+        assert!(!storage_change_requires_restart(&active, &active));
     }
 
-    #[tokio::test]
-    async fn upload_directory_is_created_and_canonicalized() {
-        let base = std::env::temp_dir().join(format!(
-            "rs-project-template-upload-startup-{}",
-            uuid::Uuid::new_v4()
-        ));
-        let configured = base.join("uploads");
-
-        let prepared = prepare_upload_directory(configured.to_str().unwrap())
-            .await
-            .unwrap();
-
-        assert_eq!(prepared, tokio::fs::canonicalize(&configured).await.unwrap());
-        assert!(tokio::fs::metadata(&prepared).await.unwrap().is_dir());
-        tokio::fs::remove_dir_all(base).await.unwrap();
-    }
-
-    #[tokio::test]
-    async fn upload_directory_rejects_filesystem_root_and_current_directory() {
-        let current_directory = std::env::current_dir().unwrap();
-        let current_parent = current_directory.parent().unwrap();
-
-        assert!(prepare_upload_directory("/").await.is_err());
-        assert!(prepare_upload_directory(current_directory.to_str().unwrap())
-            .await
-            .is_err());
-        assert!(prepare_upload_directory(current_parent.to_str().unwrap())
-            .await
-            .is_err());
+    /// 构造用于重启判定的 S3 配置。
+    fn storage_config(bucket: &str, public_base_url: &str) -> S3Config {
+        S3Config {
+            bucket: bucket.to_string(),
+            region: "cn-south-1".to_string(),
+            endpoint: Some("https://s3.example.com".to_string()),
+            access_key_id: "access-key".to_string(),
+            secret_access_key: "secret-key".to_string(),
+            session_token: None,
+            key_prefix: Some("erp/uploads".to_string()),
+            public_base_url: public_base_url.to_string(),
+            force_path_style: false,
+        }
     }
 }

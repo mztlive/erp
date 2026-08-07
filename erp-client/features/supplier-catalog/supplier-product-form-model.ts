@@ -51,6 +51,8 @@ export type SupplierSkuFormRow = Readonly<{
   mainImage: string
   /** 已归档或来源图片的可访问地址，仅用于回显，不进入写入载荷。 */
   mainImagePreviewUrl?: string
+  /** 已登记的文件资产（上传后的受控文件）。 */
+  mainImageAssetId?: string
   /** 一件代发底价（含税运） */
   dropshipFloorPriceGross: string
   /** 集采底价（含税） */
@@ -84,6 +86,9 @@ export type SupplierProductFormFields = Readonly<{
   /** 轮播图 fileName → 可访问预览/来源 URL（回显与再次保存用） */
   carouselPreviewUrls: Readonly<Record<string, string>>
   detailPreviewUrls: Readonly<Record<string, string>>
+  /** 轮播图 fileName → 已登记文件资产 id（上传后落库回显用） */
+  carouselFileAssetIds: Readonly<Record<string, string>>
+  detailFileAssetIds: Readonly<Record<string, string>>
 
   /** 由规格维度组合生成；每行独立来源供给 */
   skus: readonly SupplierSkuFormRow[]
@@ -103,6 +108,7 @@ export function emptySupplierSkuFormRow(
     barcode: partial?.barcode ?? "",
     mainImage: partial?.mainImage ?? "",
     mainImagePreviewUrl: partial?.mainImagePreviewUrl,
+    mainImageAssetId: partial?.mainImageAssetId,
     dropshipFloorPriceGross: partial?.dropshipFloorPriceGross ?? "",
     bulkFloorPriceGross: partial?.bulkFloorPriceGross ?? "",
     bulkMinimumOrderQuantity: partial?.bulkMinimumOrderQuantity ?? "1",
@@ -139,6 +145,8 @@ export function emptySupplierProductFormFields(
     detailImages: [],
     carouselPreviewUrls: {},
     detailPreviewUrls: {},
+    carouselFileAssetIds: {},
+    detailFileAssetIds: {},
     skus: [emptySupplierSkuFormRow({ supplierSkuCode: "SKU-01" })],
     changeReason: "手工录入供应商商品",
     ...partial,
@@ -234,8 +242,12 @@ export function mediaFromRevision(
   /** 轮播图 fileName → 可访问预览地址（远程 URL） */
   carouselPreviewUrls: Record<string, string>
   detailPreviewUrls: Record<string, string>
+  /** 轮播图 fileName → 已登记文件资产 id */
+  carouselFileAssetIds: Record<string, string>
+  detailFileAssetIds: Record<string, string>
   skuMainImage: string
   skuMainImagePreviewUrl?: string
+  skuMainImageAssetId?: string
 } {
   const list = media ?? []
   const byUsage = (usage: SupplierCatalogMediaUsage) =>
@@ -254,14 +266,25 @@ export function mediaFromRevision(
     }
     return map
   }
+  const assetIdMap = (usage: SupplierCatalogMediaUsage) => {
+    const map: Record<string, string> = {}
+    for (const entry of byUsage(usage)) {
+      const assetId = entry.fileAssetId?.trim()
+      if (assetId) map[entry.fileName] = assetId
+    }
+    return map
+  }
   const skuMainImage = byUsage("SKU_MAIN")[0]
   return {
     carouselImages: names("SPU_CAROUSEL"),
     detailImages: names("SPU_DETAIL"),
     carouselPreviewUrls: previewMap("SPU_CAROUSEL"),
     detailPreviewUrls: previewMap("SPU_DETAIL"),
+    carouselFileAssetIds: assetIdMap("SPU_CAROUSEL"),
+    detailFileAssetIds: assetIdMap("SPU_DETAIL"),
     skuMainImage: skuMainImage?.fileName ?? "",
     skuMainImagePreviewUrl: skuMainImage?.sourceUrl,
+    skuMainImageAssetId: skuMainImage?.fileAssetId?.trim() || undefined,
   }
 }
 
@@ -386,6 +409,9 @@ export function hydrateSupplierProductForm(input: {
             mainImagePreviewUrl:
               skuMedia.skuMainImagePreviewUrl ??
               (index === 0 ? media.skuMainImagePreviewUrl : undefined),
+            mainImageAssetId:
+              skuMedia.skuMainImageAssetId ??
+              (index === 0 ? media.skuMainImageAssetId : undefined),
             dropshipFloorPriceGross:
               entry.revision.dropshipFloorPriceGross ?? "",
             bulkFloorPriceGross: entry.revision.bulkFloorPriceGross ?? "",
@@ -419,6 +445,7 @@ export function hydrateSupplierProductForm(input: {
             barcode: input.revision.barcode ?? "",
             mainImage: media.skuMainImage,
             mainImagePreviewUrl: media.skuMainImagePreviewUrl,
+            mainImageAssetId: media.skuMainImageAssetId,
             dropshipFloorPriceGross:
               input.revision.dropshipFloorPriceGross ?? "",
             bulkFloorPriceGross: input.revision.bulkFloorPriceGross ?? "",
@@ -464,6 +491,8 @@ export function hydrateSupplierProductForm(input: {
     detailImages: media.detailImages,
     carouselPreviewUrls: media.carouselPreviewUrls,
     detailPreviewUrls: media.detailPreviewUrls,
+    carouselFileAssetIds: media.carouselFileAssetIds,
+    detailFileAssetIds: media.detailFileAssetIds,
     skus,
     changeReason: "",
   })
@@ -499,7 +528,7 @@ export function formToMediaPayload(
         usage: "SPU_CAROUSEL" as const,
         fileName,
         sortOrder: index,
-        fileAssetId: `asset:${fileName}`,
+        fileAssetId: fields.carouselFileAssetIds[fileName],
         sourceUrl,
         archiveStatus: "PENDING_IMPORT" as const,
       }
@@ -513,7 +542,7 @@ export function formToMediaPayload(
         usage: "SPU_DETAIL" as const,
         fileName,
         sortOrder: index,
-        fileAssetId: `asset:${fileName}`,
+        fileAssetId: fields.detailFileAssetIds[fileName],
         sourceUrl,
         archiveStatus: "PENDING_IMPORT" as const,
       }
@@ -524,7 +553,7 @@ export function formToMediaPayload(
             usage: "SKU_MAIN" as const,
             fileName: sku.mainImage,
             sortOrder: 0,
-            fileAssetId: `asset:${sku.mainImage}`,
+            fileAssetId: sku.mainImageAssetId,
             // 远程 URL 可回写；本地 blob 仅预览，落库用文件名占位
             sourceUrl: persistableMediaUrl(
               sku.mainImagePreviewUrl,

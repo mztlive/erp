@@ -28,9 +28,9 @@ src/
     └── upload.rs         # Multipart 图片解析与真实类型校验
 ```
 
-`AppState` 持有启动时建立的 MongoDB `Database`、`SafeConfig`、共享 `RbacService` 和
-按需构建的 JWT 引擎。Service 在 Handler 中按请求构造，并复用 `state.db()` 与
-`state.rbac()`。
+`AppState` 持有启动时建立的 MongoDB `Database`、`S3Storage`、`SafeConfig`、共享
+`RbacService` 和按需构建的 JWT 引擎。Service 在 Handler 中按请求构造，并复用
+`state.db()` 与 `state.rbac()`。
 
 ## 路由与鉴权
 
@@ -39,7 +39,6 @@ src/
 - 管理端：`/admin/*` 先认证，再通过 `with_permission` 调用 Casbin RBAC。
 - 上传：`POST /upload` 保持原路径，只允许后台 JWT。
   它在读取 Multipart 前执行每主体、全局窗口和并发限制，并设置独立 body limit。
-- 文件读取：公开只读 `GET/HEAD /uploads/{filename}`；不开放目录入口或写方法。
 
 登录入口使用 4 KiB 请求体上限和进程内限制：每个 TCP peer IP 20 次/60 秒、每个“来源 +
 规范化账号”组合 5 次/60 秒、全局应急熔断 600 次/60 秒、并发 4。账号部分复用
@@ -91,7 +90,6 @@ HTTP status 与响应体中的 `status` 一致：
 - 乐观锁或唯一性冲突：`409`
 - 领域/业务规则不满足：`422`
 - 登录或上传限流：`429`，并携带 `Retry-After`
-- 上传后无法保留配置的磁盘安全水位：`507`
 - Repository、配置或内部错误：`500`
 
 内部错误只向客户端返回稳定的“系统内部错误”，底层错误细节留在结构化日志中。
@@ -106,25 +104,20 @@ HTTP 上传逻辑分为三层：
 - `core/upload.rs`：读取 Multipart，限制单文件 5 MiB，校验
   JPEG/PNG/WebP/GIF 扩展名、声明 MIME 与文件头真实类型三者一致，并把认证主体
   交给通用 `rate_limit` 计数。
-- `handler/upload.rs`：生成安全随机文件名，在进程内全局写锁中检查文件系统剩余空间并
-  调用 `storage::LocalStorage` 写入 `upload_path`，然后构造公开 URL。默认要求保存后
-  仍保留 512 MiB（`upload_min_free_bytes = 536870912`）；可用空间读取失败或低于水位时
-  fail closed，返回 `507`。
-- `routes/mod.rs`：通过 `ServeDir` 将同一启动目录只读挂到 `/uploads`，关闭目录
-  `index.html` 入口；默认 `file_base_url` 为 `http://localhost:10001/uploads`。
+- `handler/upload.rs`：生成安全随机对象键，调用注入的 `storage::S3Storage` 上传对象，
+  显式写入已验证的 `Content-Type`；`POST /upload` 保持 `{ url }` 响应。
+- `handler/file_asset/mod.rs`：文件资产上传同样写入 S3，并在返回的 `FileAssetView.public_url`
+  中提供公开 URL；仅登记元数据的接口不上传对象。
+- `storage::S3Storage`：把 `key_prefix` 加到对象键前；公开 URL 按
+  `public_base_url/key_prefix/object_key` 生成，并对路径分段执行 URL 编码。
 
-`storage` 不依赖 Axum 或 Multipart，只负责基础目录内的安全相对路径。新增格式时需要同时
+`storage` 不依赖 Axum 或 Multipart，只负责安全相对对象键与 S3 I/O。新增格式时需要同时
 补充扩展名、MIME、文件头识别和失败路径测试。
 
-`upload_path` 与静态读取目录在启动时固定，Nacos 修改后会记录
-`restart_required = true`，重启后统一生效；`file_base_url` 与
-`upload_min_free_bytes` 可热更新，生产环境可以指向外部 CDN。进程内窗口只抑制突发
-滥用，磁盘水位检查与保存的互斥也只覆盖当前进程；多个实例共享同一卷时仍需外部容量配额
-协调。系统不会自动删除历史文件，生产仍需监控和文件生命周期清理。
-
-启动会创建并 canonicalize `upload_path`；空路径、`.`、根目录、含 `..` 的路径，以及
-最终解析到当前工作目录或其祖先的路径都会被拒绝，避免 `/uploads` 误挂载应用、其他项目
-或文件系统根目录。
+S3 客户端在启动时固定。Nacos 修改数据库或任一 S3 字段后，进程记录
+`restart_required = true` 并继续使用当前客户端，重启后生效。进程内上传限流只抑制
+单实例突发滥用；多实例部署必须在网关或共享限流服务补充集群级配额。对象生命周期、
+公开访问策略和 CDN 缓存策略由部署环境负责。
 
 ## 新增接口
 

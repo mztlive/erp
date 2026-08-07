@@ -7,6 +7,7 @@ use aws_sdk_s3::{
     primitives::ByteStream,
     Client,
 };
+use url::Url;
 
 use crate::{path::object_key_path, Error, Result};
 
@@ -27,6 +28,8 @@ pub struct S3StorageConfig {
     pub session_token: Option<String>,
     /// 所有对象键的可选前缀。
     pub key_prefix: Option<String>,
+    /// 对外返回的 CDN 或 bucket 公开访问基础 URL。
+    pub public_base_url: String,
     /// 是否强制 path-style URL，MinIO 等兼容服务通常需要开启。
     pub force_path_style: bool,
 }
@@ -37,6 +40,7 @@ pub struct S3Storage {
     client: Client,
     bucket: String,
     key_prefix: Option<String>,
+    public_base_url: Url,
 }
 
 impl S3Storage {
@@ -52,6 +56,7 @@ impl S3Storage {
     /// bucket、region、凭证为空，endpoint 格式无效，或对象键前缀不安全时返回错误。
     pub fn new(config: S3StorageConfig) -> Result<Self> {
         validate_config(&config)?;
+        let public_base_url = public_base_url(&config.public_base_url)?;
 
         let credentials = Credentials::new(
             config.access_key_id,
@@ -73,6 +78,7 @@ impl S3Storage {
             client: Client::from_conf(sdk_config.build()),
             bucket: config.bucket,
             key_prefix: normalize_prefix(config.key_prefix)?,
+            public_base_url,
         })
     }
 
@@ -85,16 +91,60 @@ impl S3Storage {
     /// # 错误
     /// 路径无效或 S3 `PutObject` 失败时返回错误。
     pub async fn save<P: AsRef<Path>>(&self, path: P, content: &[u8]) -> Result<()> {
+        self.save_with_content_type(path, content, None).await
+    }
+
+    /// 将文件与已校验的 MIME 类型保存到 S3 对象键。
+    ///
+    /// # 参数
+    /// * `path` - 相对存储路径。
+    /// * `content` - 对象内容。
+    /// * `content_type` - 可选的 HTTP Content-Type。
+    ///
+    /// # 错误
+    /// 路径无效或 S3 `PutObject` 失败时返回错误。
+    pub async fn save_with_content_type<P: AsRef<Path>>(
+        &self,
+        path: P,
+        content: &[u8],
+        content_type: Option<&str>,
+    ) -> Result<()> {
         let key = self.object_key(path.as_ref())?;
-        self.client
+        let mut request = self
+            .client
             .put_object()
             .bucket(&self.bucket)
             .key(key)
-            .body(ByteStream::from(content.to_vec()))
-            .send()
-            .await
-            .map_err(s3_error)?;
+            .body(ByteStream::from(content.to_vec()));
+        if let Some(content_type) = content_type {
+            request = request.content_type(content_type);
+        }
+        request.send().await.map_err(s3_error)?;
         Ok(())
+    }
+
+    /// 生成与实际 bucket 及键前缀一致的公开访问 URL。
+    ///
+    /// # 参数
+    /// * `path` - 传入 `save` 的相对存储路径。
+    ///
+    /// # 返回
+    /// 返回 `public_base_url` 与完整对象键拼接后的 URL。
+    ///
+    /// # 错误
+    /// 对象路径无效时返回错误。
+    pub fn public_url<P: AsRef<Path>>(&self, path: P) -> Result<String> {
+        let key = self.object_key(path.as_ref())?;
+        let mut url = self.public_base_url.clone();
+        let mut segments = url
+            .path_segments_mut()
+            .map_err(|_| Error::InvalidConfig("S3 public_base_url 不能作为分层 URL".to_string()))?;
+        segments.pop_if_empty();
+        for segment in key.split('/') {
+            segments.push(segment);
+        }
+        drop(segments);
+        Ok(url.to_string())
     }
 
     /// 读取 S3 对象的完整内容。
@@ -188,11 +238,17 @@ impl S3Storage {
 
     #[cfg(test)]
     /// 用可控 AWS SDK 客户端构造测试实例。
-    fn from_client(client: Client, bucket: &str, key_prefix: Option<&str>) -> Result<Self> {
+    fn from_client(
+        client: Client,
+        bucket: &str,
+        key_prefix: Option<&str>,
+        public_base_url_value: &str,
+    ) -> Result<Self> {
         Ok(Self {
             client,
             bucket: bucket.to_string(),
             key_prefix: normalize_prefix(key_prefix.map(str::to_owned))?,
+            public_base_url: public_base_url(public_base_url_value)?,
         })
     }
 }
@@ -229,7 +285,27 @@ fn validate_config(config: &S3StorageConfig) -> Result<()> {
         ));
     }
 
+    public_base_url(&config.public_base_url).map(|_| ())?;
+
     normalize_prefix(config.key_prefix.clone()).map(|_| ())
+}
+
+/// 解析并规范公开访问基础 URL，禁止查询与 fragment 污染对象 URL。
+fn public_base_url(value: &str) -> Result<Url> {
+    let mut url = Url::parse(value)
+        .map_err(|_| Error::InvalidConfig("S3 public_base_url 必须是合法 URL".to_string()))?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(Error::InvalidConfig(
+            "S3 public_base_url 必须是不含 query/fragment 的 HTTP(S) URL".to_string(),
+        ));
+    }
+    let path = url.path().trim_end_matches('/').to_string();
+    url.set_path(&path);
+    Ok(url)
 }
 
 /// 判断 endpoint 是否为带主机部分且不含空白的 HTTP(S) 绝对地址。
@@ -314,9 +390,12 @@ mod tests {
             Client::from_conf(sdk_config),
             "erp-assets",
             Some("tenant-a/uploads"),
+            "https://cdn.example.com/assets",
         )?;
 
-        storage.save("images/example.png", b"image-bytes").await?;
+        storage
+            .save_with_content_type("images/example.png", b"image-bytes", Some("image/png"))
+            .await?;
 
         let request = request_receiver.expect_request();
         assert_eq!(request.method(), "PUT");
@@ -325,6 +404,7 @@ mod tests {
             "https://s3.example.com/erp-assets/tenant-a/uploads/images/example.png?x-id=PutObject"
         );
         assert_eq!(request.body().bytes(), Some(b"image-bytes".as_slice()));
+        assert_eq!(request.headers().get("content-type").unwrap(), "image/png");
         Ok(())
     }
 
@@ -344,6 +424,7 @@ mod tests {
             Client::from_conf(sdk_config),
             "erp-assets",
             Some("tenant-a/uploads"),
+            "https://cdn.example.com/assets",
         )?;
 
         let content = storage.read("images/example.png").await?;
@@ -358,6 +439,32 @@ mod tests {
         Ok(())
     }
 
+    /// 公开 URL 必须包含基础路径、键前缀与经编码的对象路径。
+    #[test]
+    fn builds_public_url_from_complete_object_key() -> Result<()> {
+        let (http_client, _) = capture_request(None);
+        let sdk_config = Config::builder()
+            .behavior_version_latest()
+            .credentials_provider(test_credentials())
+            .region(Region::new("us-east-1"))
+            .http_client(http_client)
+            .build();
+        let storage = S3Storage::from_client(
+            Client::from_conf(sdk_config),
+            "erp-assets",
+            Some("tenant-a/uploads"),
+            "https://cdn.example.com/assets/",
+        )?;
+
+        let url = storage.public_url("images/中 文.png")?;
+
+        assert_eq!(
+            url,
+            "https://cdn.example.com/assets/tenant-a/uploads/images/%E4%B8%AD%20%E6%96%87.png"
+        );
+        Ok(())
+    }
+
     /// S3 对象键不得使用父目录分量越过配置前缀。
     #[tokio::test]
     async fn rejects_parent_directory_object_key() -> Result<()> {
@@ -368,7 +475,12 @@ mod tests {
             .region(Region::new("us-east-1"))
             .http_client(http_client)
             .build();
-        let storage = S3Storage::from_client(Client::from_conf(sdk_config), "erp-assets", None)?;
+        let storage = S3Storage::from_client(
+            Client::from_conf(sdk_config),
+            "erp-assets",
+            None,
+            "https://cdn.example.com",
+        )?;
 
         let result = storage.save("../escaped.txt", b"escaped").await;
 
@@ -387,6 +499,7 @@ mod tests {
             secret_access_key: "secret-key".to_string(),
             session_token: None,
             key_prefix: None,
+            public_base_url: "https://cdn.example.com".to_string(),
             force_path_style: false,
         });
 

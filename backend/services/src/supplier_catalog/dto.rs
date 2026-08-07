@@ -367,6 +367,8 @@ pub struct SupplierCatalogMediaWrite {
     /// 来源取回地址（不得作为公司商品长期媒体值）。
     #[validate(custom(function = "non_blank", message = "媒体来源地址不能为空"))]
     pub url: String,
+    /// 已登记的文件资产（上传后的受控文件；缺省为 `None`）。
+    pub file_asset_id: Option<String>,
 }
 
 /// 供应商 SKU 写入项。
@@ -387,6 +389,8 @@ pub struct SupplierCatalogSkuWrite {
     pub barcode: Option<String>,
     /// 来源 SKU 主图取回地址（归档前快照；不得作为公司商品长期媒体值）。
     pub source_main_image_url: Option<String>,
+    /// 来源 SKU 主图已登记的文件资产（上传后的受控文件；缺省为 `None`）。
+    pub source_main_image_asset_id: Option<String>,
     /// 一件代发底价（含税运）。
     pub dropship_floor_price_gross: Option<String>,
     /// 集采底价（含税）。
@@ -705,6 +709,8 @@ pub struct SupplierCatalogMediaView {
     pub usage: MediaUsage,
     /// 来源取回地址。
     pub url: Option<String>,
+    /// 已登记的文件资产（上传后的受控文件）。
+    pub file_asset_id: Option<String>,
     /// 归档状态。
     pub archive_status: ArchiveStatus,
     /// 同用途展示顺序。
@@ -739,6 +745,8 @@ pub struct SupplierCatalogSkuRevisionView {
     pub structured_attributes: Vec<SourceAttribute>,
     /// 来源 SKU 主图取回地址（归档前快照）。
     pub source_main_image_url: Option<String>,
+    /// 来源 SKU 主图已登记的文件资产（上传后的受控文件）。
+    pub source_main_image_asset_id: Option<String>,
     /// 一件代发底价。
     pub dropship_floor_price_gross: Option<String>,
     /// 集采底价。

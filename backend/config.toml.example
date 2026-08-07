@@ -2,26 +2,24 @@
 port = 10001
 # 安全占位值会被启动校验拒绝；请替换为至少 32 个随机字节。
 secret = "replace-with-at-least-32-random-bytes"
-file_base_url = "http://localhost:10001/uploads"
-upload_path = "./uploads"
-# 上传完成后至少保留 512 MiB 可用空间
-upload_min_free_bytes = 536870912
 
 [database]
 # 请修改为你的 MongoDB 连接字符串
 uri = "mongodb://username:password@host:port/database"
 db_name = "rs_project_template"
 
-# 如需使用 S3 或 S3-compatible 对象存储，取消以下配置的注释并替换凭证。
-# [s3]
-# bucket = "erp-assets"
-# region = "cn-south-1"
+# 上传强制使用 S3 或 S3-compatible 对象存储；启动前必须替换凭证与 URL。
+[s3]
+bucket = "erp-assets"
+region = "cn-south-1"
 # AWS S3 可省略 endpoint；MinIO/云厂商兼容服务必须填写完整 URL。
-# endpoint = "https://s3.example.com"
-# access_key_id = "replace-with-access-key-id"
-# secret_access_key = "replace-with-secret-access-key"
+endpoint = "https://s3.example.com"
+access_key_id = "replace-with-access-key-id"
+secret_access_key = "replace-with-secret-access-key"
 # 仅临时凭证需要 session_token。
 # session_token = "replace-with-session-token"
-# key_prefix = "erp/uploads"
+key_prefix = "erp/uploads"
+# CDN 或 bucket 公开访问基础 URL；上传响应使用该值生成文件 URL。
+public_base_url = "https://cdn.example.com"
 # MinIO 等需要 path-style URL 的服务设为 true。
-# force_path_style = false
+force_path_style = false

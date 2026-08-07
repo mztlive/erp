@@ -110,6 +110,8 @@ export function rebuildSkusFromSpecs(input: {
       specLabel: formatSpecLabel(input.specs, attributeValues),
       barcode: matched?.barcode,
       mainImage: matched?.mainImage ?? "",
+      mainImagePreviewUrl: matched?.mainImagePreviewUrl,
+      mainImageAssetId: matched?.mainImageAssetId,
       salePrice: matched?.salePrice,
       marketPrice: matched?.marketPrice,
       baseUnit: matched?.baseUnit ?? input.baseUnit,
@@ -131,6 +133,10 @@ export function emptyProductFields(): ProductFields {
     productKind: "",
     carouselImages: [],
     detailImages: [],
+    carouselPreviewUrls: {},
+    detailPreviewUrls: {},
+    carouselFileAssetIds: {},
+    detailFileAssetIds: {},
     specs: [],
     skus: [
       {

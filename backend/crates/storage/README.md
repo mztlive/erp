@@ -34,9 +34,13 @@ let storage = S3Storage::new(S3StorageConfig {
     secret_access_key: "secret-key".to_string(),
     session_token: None,
     key_prefix: Some("erp/uploads".to_string()),
+    public_base_url: "https://cdn.example.com".to_string(),
     force_path_style: false,
 })?;
-storage.save("images/example.png", image_bytes).await?;
+storage
+    .save_with_content_type("images/example.png", image_bytes, Some("image/png"))
+    .await?;
+let public_url = storage.public_url("images/example.png")?;
 # Ok::<(), storage::Error>(())
 ```
 

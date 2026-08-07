@@ -32,7 +32,7 @@ use entities::catalog::{
     SkuRevisionAttributeValue, UnitOfMeasure, VoucherCategoryProfileRevision,
 };
 use entities::common::time::BusinessDate;
-use entities::ids::{ProductCategoryId, ProductId, SkuAttributeId, SkuId};
+use entities::ids::{ProductCategoryId, ProductId, ProductRevisionId, SkuAttributeId, SkuId};
 use entities::money::Amount;
 
 /// `product_revision` 集合名（单一来源：`CatalogExt` 关联常量）。
@@ -1128,6 +1128,37 @@ impl Pagination for SkuFilter {
     }
 }
 
+impl<'a> Repository<'a, ProductRevisionMedia> {
+    /// 按商品修订 ID 批量读取媒体行。
+    ///
+    /// # 参数
+    /// * `revision_ids` - 商品修订 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回全部匹配的媒体行。
+    ///
+    /// # 错误
+    /// 当 MongoDB 查询或游标读取失败时返回错误。
+    pub async fn find_media_by_revision_ids(
+        &self,
+        revision_ids: &[ProductRevisionId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<ProductRevisionMedia>> {
+        if revision_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            in_filter(
+                "product_revision_id",
+                revision_ids.iter().map(|id| id.to_string()),
+            ),
+            executor,
+        )
+        .await
+    }
+}
+
 impl<'a> Repository<'a, Sku> {
     /// 分页检索 SKU 列表（投影查询）。
     ///
@@ -1209,6 +1240,8 @@ pub struct SkuRevisionRow {
     pub name: String,
     /// 条码原值（规范化精确查询字段）。
     pub barcode: Option<String>,
+    /// 来源 SKU 主图（已归档受控文件，D05）。
+    pub source_main_image_asset_id: Option<String>,
     /// 修订启停状态。
     pub status: EnableStatus,
     /// 公司对销售可见的含税价格（Decimal128 定点金额）。
@@ -1585,6 +1618,19 @@ fn normalized_barcode(barcode: &str) -> &str {
     barcode.trim()
 }
 
+/// 构造 ID 集合批量匹配条件。
+///
+/// # 参数
+/// * `field` - 匹配字段名
+/// * `values` - 待匹配的 ID 字符串集合
+///
+/// # 返回
+/// 返回批量查询条件文档。
+fn in_filter(field: &str, values: impl IntoIterator<Item = String>) -> Document {
+    let values: Vec<Bson> = values.into_iter().map(Bson::String).collect();
+    doc! { field: { "$in": values } }
+}
+
 /// 构建商品分类排序文档（白名单：`created_at`/`category_code`/`name`）。
 ///
 /// # 参数
@@ -1838,6 +1884,7 @@ fn sku_revision_projection() -> Document {
         "revision_no": 1,
         "name": 1,
         "barcode": 1,
+        "source_main_image_asset_id": 1,
         "status": 1,
         "sales_visible_price_gross": 1,
         "effective_from": 1,

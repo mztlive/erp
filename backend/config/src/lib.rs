@@ -41,19 +41,17 @@
 //! * `Config`: 顶层配置容器
 //! * `AppConfig`: 应用程序特定设置
 //! * `DatabaseConfig`: 数据库连接设置
-//! * `S3Config`: 可选 S3 对象存储启动参数
+//! * `S3Config`: 必需的 S3 对象存储启动参数
 
 use clap::Parser;
 use command::Args;
 use nacos::NacosConfig;
 use nacos_watch::NacosConfigWatcher;
 use serde::Deserialize;
-use std::{
-    fmt,
-    path::{Component, Path},
-};
+use std::{fmt, path::Path};
 use tokio::sync::watch;
 use tracing::info;
+use url::Url;
 
 mod command;
 mod errors;
@@ -78,9 +76,8 @@ pub struct Config {
     pub app: AppConfig,
     /// 数据库特定配置
     pub database: DatabaseConfig,
-    /// 可选 S3 对象存储参数，供存储运行时在启动期构建客户端。
-    #[serde(default)]
-    pub s3: Option<S3Config>,
+    /// S3 对象存储参数，供存储运行时在启动期构建客户端。
+    pub s3: S3Config,
 }
 
 /// 应用程序特定的配置设置。
@@ -92,18 +89,6 @@ pub struct AppConfig {
     pub port: u16,
     /// 用于 JWT 令牌生成和验证的密钥
     pub secret: String,
-    /// 上传文件存储的基础路径
-    pub upload_path: String,
-    /// 每次上传完成后必须保留的最小文件系统可用字节数
-    #[serde(default = "default_upload_min_free_bytes")]
-    pub upload_min_free_bytes: u64,
-    /// 上传文件的公开访问基础 URL
-    #[serde(alias = "statistic_host")]
-    pub file_base_url: String,
-}
-
-const fn default_upload_min_free_bytes() -> u64 {
-    512 * 1024 * 1024
 }
 
 /// 数据库连接配置。
@@ -118,7 +103,7 @@ pub struct DatabaseConfig {
 }
 
 /// S3 或 S3-compatible 对象存储的启动配置。
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, PartialEq, Eq)]
 pub struct S3Config {
     /// 存放上传对象的 bucket。
     pub bucket: String,
@@ -137,6 +122,8 @@ pub struct S3Config {
     /// 统一加在所有对象键前的可选前缀。
     #[serde(default)]
     pub key_prefix: Option<String>,
+    /// 对外返回的 CDN 或 bucket 公开访问基础 URL。
+    pub public_base_url: String,
     /// 是否强制 path-style URL，MinIO 等兼容服务通常需要开启。
     #[serde(default)]
     pub force_path_style: bool,
@@ -157,6 +144,7 @@ impl fmt::Debug for S3Config {
                 &self.session_token.as_ref().map(|_| "<redacted>"),
             )
             .field("key_prefix", &self.key_prefix)
+            .field("public_base_url", &self.public_base_url)
             .field("force_path_style", &self.force_path_style)
             .finish()
     }
@@ -177,32 +165,6 @@ impl Config {
         Self::from_toml_str(&content)
     }
 
-    /// 为上传的文件生成完整 URL。
-    ///
-    /// # 参数
-    ///
-    /// * `filename` - 上传文件的名称
-    ///
-    /// # 返回
-    ///
-    /// * `String` - 访问文件的完整 URL
-    pub fn file_url(&self, filename: &str) -> String {
-        format!(
-            "{}/{}",
-            self.app.file_base_url.trim_end_matches('/'),
-            filename.trim_start_matches('/')
-        )
-    }
-
-    /// 获取配置的上传路径。
-    ///
-    /// # 返回
-    ///
-    /// * `&str` - 配置的上传路径
-    pub fn upload_path(&self) -> &str {
-        self.app.upload_path.as_str()
-    }
-
     /// 从 TOML 字符串解析配置。
     ///
     /// # 参数
@@ -221,7 +183,7 @@ impl Config {
     /// 校验会影响运行时安全和可用性的配置不变式。
     ///
     /// # 错误
-    /// JWT 密钥无效，或上传路径为空、仅为当前/根目录、含父目录分量时返回错误。
+    /// JWT 密钥或 S3 启动参数无效时返回错误。
     fn validate(&self) -> Result<()> {
         let secret = self.app.secret.as_bytes();
         if secret.len() < MIN_JWT_SECRET_BYTES || JWT_SECRET_PLACEHOLDERS.contains(&self.app.secret.as_str())
@@ -230,33 +192,9 @@ impl Config {
                 "app.secret must be at least 32 bytes and must not use the example placeholder".to_string(),
             ));
         }
-        if !is_safe_upload_path(&self.app.upload_path) {
-            return Err(Error::Invalid(
-                "app.upload_path must name a dedicated non-root directory without '..'".to_string(),
-            ));
-        }
-        if let Some(s3) = &self.s3 {
-            validate_s3_config(s3)?;
-        }
+        validate_s3_config(&self.s3)?;
         Ok(())
     }
-}
-
-/// 判断配置路径是否明确指向根目录以下的专用目录。
-fn is_safe_upload_path(path: &str) -> bool {
-    if path.is_empty() || path.trim() != path {
-        return false;
-    }
-
-    let mut has_directory_name = false;
-    for component in Path::new(path).components() {
-        match component {
-            Component::Normal(_) => has_directory_name = true,
-            Component::ParentDir => return false,
-            Component::Prefix(_) | Component::RootDir | Component::CurDir => {}
-        }
-    }
-    has_directory_name
 }
 
 /// 校验 S3 签名参数、endpoint 与对象键前缀。
@@ -274,15 +212,10 @@ fn validate_s3_config(config: &S3Config) -> Result<()> {
         }
     }
 
-    if config
-        .endpoint
-        .as_deref()
-        .is_some_and(|endpoint| !is_valid_s3_endpoint(endpoint))
-    {
-        return Err(Error::Invalid(
-            "s3.endpoint must be an absolute http:// or https:// URL".to_string(),
-        ));
+    if let Some(endpoint) = config.endpoint.as_deref() {
+        validate_s3_url("endpoint", endpoint)?;
     }
+    validate_s3_url("public_base_url", &config.public_base_url)?;
     if config
         .session_token
         .as_ref()
@@ -305,16 +238,19 @@ fn validate_s3_config(config: &S3Config) -> Result<()> {
     Ok(())
 }
 
-/// 判断 S3 endpoint 是否为带主机部分且不含空白的 HTTP(S) 绝对地址。
-fn is_valid_s3_endpoint(endpoint: &str) -> bool {
-    let authority_and_path = endpoint
-        .strip_prefix("https://")
-        .or_else(|| endpoint.strip_prefix("http://"));
-    authority_and_path.is_some_and(|value| {
-        !value.is_empty()
-            && !value.starts_with('/')
-            && value.chars().all(|character| !character.is_whitespace())
-    })
+/// 校验 S3 endpoint 或公开基础 URL 为不含 query/fragment 的 HTTP(S) URL。
+fn validate_s3_url(name: &str, value: &str) -> Result<()> {
+    let url = Url::parse(value).map_err(|_| Error::Invalid(format!("s3.{name} must be a valid URL")))?;
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return Err(Error::Invalid(format!(
+            "s3.{name} must be an HTTP(S) URL without query or fragment"
+        )));
+    }
+    Ok(())
 }
 
 /// 判断 S3 对象键前缀是否可在存储根内安全拼接。
@@ -480,23 +416,35 @@ mod tests {
 [app]
 port = 10001
 secret = "test-secret-that-is-at-least-32-bytes"
-upload_path = "/tmp/uploads"
-file_base_url = "http://localhost:10001"
 
 [database]
 uri = "mongodb://localhost:27017"
 db_name = "test"
+
+[s3]
+bucket = "erp-assets"
+region = "cn-south-1"
+endpoint = "https://s3.example.com"
+access_key_id = "access-key"
+secret_access_key = "secret-key"
+session_token = "session-token"
+key_prefix = "erp/uploads"
+public_base_url = "https://cdn.example.com/assets"
+force_path_style = true
 "#;
 
     #[test]
-    fn minimal_config_only_requires_runtime_fields() {
+    fn parses_required_s3_runtime_config() {
         let config = Config::from_toml_str(MINIMAL_CONFIG).unwrap();
 
         assert_eq!(config.app.port, 10001);
-        assert_eq!(config.upload_path(), "/tmp/uploads");
-        assert_eq!(config.app.upload_min_free_bytes, 512 * 1024 * 1024);
         assert_eq!(config.database.db_name, "test");
-        assert!(config.s3.is_none());
+        assert_eq!(config.s3.bucket, "erp-assets");
+        assert_eq!(config.s3.region, "cn-south-1");
+        assert_eq!(config.s3.endpoint.as_deref(), Some("https://s3.example.com"));
+        assert_eq!(config.s3.key_prefix.as_deref(), Some("erp/uploads"));
+        assert_eq!(config.s3.public_base_url, "https://cdn.example.com/assets");
+        assert!(config.s3.force_path_style);
     }
 
     #[test]
@@ -512,24 +460,6 @@ db_name = "test"
     }
 
     #[test]
-    fn file_url_has_exactly_one_path_separator() {
-        let mut config = Config::from_toml_str(MINIMAL_CONFIG).unwrap();
-        config.app.file_base_url.push('/');
-
-        assert_eq!(config.file_url("/image.png"), "http://localhost:10001/image.png");
-    }
-
-    #[test]
-    fn legacy_statistic_host_remains_a_deserialization_alias() {
-        let content = MINIMAL_CONFIG.replace("file_base_url", "statistic_host");
-
-        let config = Config::from_toml_str(&content).unwrap();
-
-        assert_eq!(config.app.file_base_url, "http://localhost:10001");
-        assert_eq!(config.file_url("image.png"), "http://localhost:10001/image.png");
-    }
-
-    #[test]
     fn weak_or_example_jwt_secrets_are_rejected() {
         for secret in [
             "short",
@@ -542,42 +472,10 @@ db_name = "test"
     }
 
     #[test]
-    fn unsafe_upload_paths_are_rejected() {
-        for upload_path in ["", ".", "/", "..", "../uploads", "uploads/..", " uploads"] {
-            let content = MINIMAL_CONFIG.replace("/tmp/uploads", upload_path);
-            assert!(
-                Config::from_toml_str(&content).is_err(),
-                "{upload_path:?} must be rejected"
-            );
-        }
-    }
+    fn missing_s3_config_is_rejected() {
+        let content = MINIMAL_CONFIG.split("[s3]").next().unwrap();
 
-    #[test]
-    fn explicit_relative_upload_directory_is_accepted() {
-        let content = MINIMAL_CONFIG.replace("/tmp/uploads", "./uploads");
-
-        let config = Config::from_toml_str(&content).unwrap();
-
-        assert_eq!(config.upload_path(), "./uploads");
-    }
-
-    #[test]
-    fn parses_complete_s3_config() {
-        let content = format!(
-            "{MINIMAL_CONFIG}\n[s3]\nbucket = \"erp-assets\"\nregion = \"cn-south-1\"\n\
-             endpoint = \"https://s3.example.com\"\naccess_key_id = \"access-key\"\n\
-             secret_access_key = \"secret-key\"\nsession_token = \"session-token\"\n\
-             key_prefix = \"erp/uploads\"\nforce_path_style = true\n"
-        );
-
-        let config = Config::from_toml_str(&content).unwrap();
-        let s3 = config.s3.unwrap();
-
-        assert_eq!(s3.bucket, "erp-assets");
-        assert_eq!(s3.region, "cn-south-1");
-        assert_eq!(s3.endpoint.as_deref(), Some("https://s3.example.com"));
-        assert_eq!(s3.key_prefix.as_deref(), Some("erp/uploads"));
-        assert!(s3.force_path_style);
+        assert!(Config::from_toml_str(content).is_err());
     }
 
     #[test]
@@ -586,17 +484,15 @@ db_name = "test"
             "bucket = \"\"",
             "endpoint = \"s3.example.com\"",
             "key_prefix = \"erp/../secret\"",
+            "public_base_url = \"ftp://cdn.example.com\"",
+            "public_base_url = \"https://cdn.example.com/assets?token=x\"",
         ] {
-            let content = format!(
-                "{MINIMAL_CONFIG}\n[s3]\nbucket = \"erp-assets\"\nregion = \"cn-south-1\"\n\
-                 endpoint = \"https://s3.example.com\"\naccess_key_id = \"access-key\"\n\
-                 secret_access_key = \"secret-key\"\nkey_prefix = \"erp/uploads\"\n"
-            )
-            .replace(
+            let content = MINIMAL_CONFIG.replace(
                 match invalid_field.split_once(" = ").unwrap().0 {
                     "bucket" => "bucket = \"erp-assets\"",
                     "endpoint" => "endpoint = \"https://s3.example.com\"",
                     "key_prefix" => "key_prefix = \"erp/uploads\"",
+                    "public_base_url" => "public_base_url = \"https://cdn.example.com/assets\"",
                     _ => unreachable!(),
                 },
                 invalid_field,
@@ -611,11 +507,10 @@ db_name = "test"
 
     #[test]
     fn s3_debug_output_redacts_credentials() {
-        let content = format!(
-            "{MINIMAL_CONFIG}\n[s3]\nbucket = \"erp-assets\"\nregion = \"cn-south-1\"\n\
-             access_key_id = \"visible-access-key\"\nsecret_access_key = \"visible-secret-key\"\n\
-             session_token = \"visible-session-token\"\n"
-        );
+        let content = MINIMAL_CONFIG
+            .replace("access-key", "visible-access-key")
+            .replace("secret-key", "visible-secret-key")
+            .replace("session-token", "visible-session-token");
 
         let debug = format!("{:?}", Config::from_toml_str(&content).unwrap());
 

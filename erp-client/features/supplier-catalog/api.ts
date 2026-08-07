@@ -28,6 +28,10 @@ import type {
 import {
   REGISTRATION_BLOCKER_MESSAGE,
 } from "@/features/supplier-catalog/types"
+import { uploadFileAssetImage } from "@/features/file-assets/api"
+
+/** 供应商商品图片上传：复用共享文件资产上传（D05）。 */
+export const uploadCatalogImage = uploadFileAssetImage
 import {
   PRODUCT_KIND_VALUES,
   type ProductKind,
@@ -81,6 +85,7 @@ type BackendSkuRevision = {
     attribute_value: string
   }>
   source_main_image_url?: string | null
+  source_main_image_asset_id?: string | null
   dropship_floor_price_gross?: string | null
   bulk_floor_price_gross?: string | null
   bulk_minimum_order_quantity?: string | null
@@ -112,6 +117,7 @@ type BackendProductDetail = {
     id: string
     usage: string
     url?: string | null
+    file_asset_id?: string | null
     archive_status: string
     sort_order: number
   }>
@@ -285,6 +291,7 @@ function mapMediaList(
       fileName,
       sortOrder: entry.sort_order ?? index,
       sourceUrl: url,
+      fileAssetId: entry.file_asset_id?.trim() || undefined,
       archiveStatus: archive,
     }
   })
@@ -306,6 +313,7 @@ function mapStructuredAttributes(
 
 function mapSkuMainMedia(
   url: string | null | undefined,
+  fileAssetId?: string | null,
 ): NonNullable<SupplierProductRevisionView["media"]> {
   const sourceUrl = url?.trim()
   if (!sourceUrl) return []
@@ -316,6 +324,7 @@ function mapSkuMainMedia(
       fileName: fileNameFromMediaUrl(sourceUrl) || "main",
       sortOrder: 0,
       sourceUrl,
+      fileAssetId: fileAssetId?.trim() || undefined,
       archiveStatus: "PENDING_IMPORT" as const,
     },
   ]
@@ -334,7 +343,10 @@ function mapSkuRevision(
   },
 ): SupplierProductRevisionView {
   const r = rev
-  const skuMedia = mapSkuMainMedia(r?.source_main_image_url)
+  const skuMedia = mapSkuMainMedia(
+    r?.source_main_image_url,
+    r?.source_main_image_asset_id,
+  )
   const media = [...(extras?.media ?? []), ...skuMedia]
   return {
     revisionNo: r?.revision_no ?? 1,
@@ -361,29 +373,40 @@ function mapSkuRevision(
   }
 }
 
-/** 写入媒体：后端只接收 usage + 非空 url；文件名可作占位 url 以便回显。 */
+/** 写入媒体：后端只接收 usage + 非空 url；文件资产 id 可选。 */
 function mediaToWritePayload(
   media: readonly {
     usage: string
     sourceUrl?: string
     fileName?: string
+    fileAssetId?: string
   }[],
-): Array<{ usage: string; url: string }> {
+): Array<{ usage: string; url: string; file_asset_id?: string }> {
   return media
     .map((entry) => {
       const usage = entry.usage?.toUpperCase()
       if (usage !== "SPU_CAROUSEL" && usage !== "SPU_DETAIL") return null
       const url = (entry.sourceUrl ?? entry.fileName ?? "").trim()
       if (!url) return null
-      return { usage, url }
+      return {
+        usage,
+        url,
+        ...(entry.fileAssetId?.trim()
+          ? { file_asset_id: entry.fileAssetId.trim() }
+          : {}),
+      }
     })
-    .filter((entry): entry is { usage: string; url: string } => entry != null)
+    .filter(
+      (entry): entry is { usage: string; url: string; file_asset_id?: string } =>
+        entry != null,
+    )
 }
 
-function skuMainImageUrlFromWrite(input: {
-  media?: readonly { usage: string; sourceUrl?: string; fileName?: string }[]
+/** SKU 主图写入信息：来源地址 + 已登记文件资产。 */
+function skuMainImageFromWrite(input: {
+  media?: readonly { usage: string; sourceUrl?: string; fileName?: string; fileAssetId?: string }[]
   mainImage?: string
-}): string | null {
+}): { url: string | null; assetId?: string } {
   const fromMedia = (input.media ?? []).find(
     (entry) => entry.usage?.toUpperCase() === "SKU_MAIN",
   )
@@ -392,7 +415,11 @@ function skuMainImageUrlFromWrite(input: {
     fromMedia?.fileName?.trim() ||
     input.mainImage?.trim() ||
     ""
-  return url || null
+  const assetId = fromMedia?.fileAssetId?.trim()
+  return {
+    url: url || null,
+    ...(assetId ? { assetId } : {}),
+  }
 }
 
 function mapOffering(o: BackendOffering): SupplierOfferingRevisionView {
@@ -1163,23 +1190,29 @@ export async function createSupplierCatalogItem(
 ): Promise<SupplierCatalogWriteResult> {
   const skus =
     input.skus && input.skus.length > 0
-      ? input.skus.map((s) => ({
-          supplier_sku_code: s.supplierSkuCode,
-          name: input.name,
-          specification: s.specification ?? input.specification,
-          source_base_unit: input.sourceBaseUnit ?? input.baseUnit ?? null,
-          barcode: s.barcode ?? null,
-          source_main_image_url: skuMainImageUrlFromWrite(s),
-          dropship_floor_price_gross: s.dropshipFloorPriceGross || null,
-          bulk_floor_price_gross: s.bulkFloorPriceGross || null,
-          bulk_minimum_order_quantity: s.bulkMinimumOrderQuantity || null,
-          available_quantity: s.availableQuantity ?? null,
-          availability_status: s.availabilityStatus ?? "AVAILABLE",
-          structured_attributes: (s.attributes ?? []).map((a) => ({
-            attribute_name: a.name,
-            attribute_value: a.value,
-          })),
-        }))
+      ? input.skus.map((s) => {
+          const mainImage = skuMainImageFromWrite(s)
+          return {
+            supplier_sku_code: s.supplierSkuCode,
+            name: input.name,
+            specification: s.specification ?? input.specification,
+            source_base_unit: input.sourceBaseUnit ?? input.baseUnit ?? null,
+            barcode: s.barcode ?? null,
+            source_main_image_url: mainImage.url,
+            ...(mainImage.assetId
+              ? { source_main_image_asset_id: mainImage.assetId }
+              : {}),
+            dropship_floor_price_gross: s.dropshipFloorPriceGross || null,
+            bulk_floor_price_gross: s.bulkFloorPriceGross || null,
+            bulk_minimum_order_quantity: s.bulkMinimumOrderQuantity || null,
+            available_quantity: s.availableQuantity ?? null,
+            availability_status: s.availabilityStatus ?? "AVAILABLE",
+            structured_attributes: (s.attributes ?? []).map((a) => ({
+              attribute_name: a.name,
+              attribute_value: a.value,
+            })),
+          }
+        })
       : [
           {
             supplier_sku_code:
@@ -1190,10 +1223,18 @@ export async function createSupplierCatalogItem(
             specification: input.specification,
             source_base_unit: input.sourceBaseUnit ?? input.baseUnit ?? null,
             barcode: input.barcode ?? null,
-            source_main_image_url: skuMainImageUrlFromWrite({
-              media: input.media,
-              mainImage: undefined,
-            }),
+            ...(() => {
+              const mainImage = skuMainImageFromWrite({
+                media: input.media,
+                mainImage: undefined,
+              })
+              return {
+                source_main_image_url: mainImage.url,
+                ...(mainImage.assetId
+                  ? { source_main_image_asset_id: mainImage.assetId }
+                  : {}),
+              }
+            })(),
             dropship_floor_price_gross:
               input.dropshipFloorPriceGross || null,
             bulk_floor_price_gross: input.bulkFloorPriceGross || null,
@@ -1283,23 +1324,29 @@ export async function reviseSupplierCatalogProduct(
       source_revision_token: null,
       valid_from: null,
       valid_to: null,
-      skus: input.skus.map((s) => ({
-        supplier_sku_code: s.supplierSkuCode,
-        name: input.name,
-        specification: s.specification ?? input.specification,
-        source_base_unit: input.sourceBaseUnit ?? null,
-        barcode: s.barcode ?? null,
-        source_main_image_url: skuMainImageUrlFromWrite(s),
-        dropship_floor_price_gross: s.dropshipFloorPriceGross || null,
-        bulk_floor_price_gross: s.bulkFloorPriceGross || null,
-        bulk_minimum_order_quantity: s.bulkMinimumOrderQuantity || null,
-        available_quantity: s.availableQuantity ?? null,
-        availability_status: s.availabilityStatus ?? "AVAILABLE",
-        structured_attributes: (s.attributes ?? []).map((a) => ({
-          attribute_name: a.name,
-          attribute_value: a.value,
-        })),
-      })),
+      skus: input.skus.map((s) => {
+        const mainImage = skuMainImageFromWrite(s)
+        return {
+          supplier_sku_code: s.supplierSkuCode,
+          name: input.name,
+          specification: s.specification ?? input.specification,
+          source_base_unit: input.sourceBaseUnit ?? null,
+          barcode: s.barcode ?? null,
+          source_main_image_url: mainImage.url,
+          ...(mainImage.assetId
+            ? { source_main_image_asset_id: mainImage.assetId }
+            : {}),
+          dropship_floor_price_gross: s.dropshipFloorPriceGross || null,
+          bulk_floor_price_gross: s.bulkFloorPriceGross || null,
+          bulk_minimum_order_quantity: s.bulkMinimumOrderQuantity || null,
+          available_quantity: s.availableQuantity ?? null,
+          availability_status: s.availabilityStatus ?? "AVAILABLE",
+          structured_attributes: (s.attributes ?? []).map((a) => ({
+            attribute_name: a.name,
+            attribute_value: a.value,
+          })),
+        }
+      }),
       change_reason: input.changeReason,
       idempotency_key: input.idempotencyKey,
     }

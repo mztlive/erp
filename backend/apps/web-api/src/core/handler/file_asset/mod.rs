@@ -3,8 +3,8 @@
 //! Handler 只做协议适配：`Validate`（DTO 内联）→ Service 调用 → `ApiResponse`，
 //! 直接复用 `services::file_asset` 的 DTO，禁止重复定义同构类型、禁止直连数据库。
 //!
-//! 上传接口参照 `core/upload.rs` 既有模式：文件落盘（`storage::LocalStorage`，
-//! 路径必须落在配置 `upload_path`）在 Service 之外完成，Service 只编排元数据
+//! 上传接口参照 `core/upload.rs` 既有模式：S3 对象写入在 Service 之外完成，
+//! Service 只编排元数据
 //! （TRANSACTIONS.md：事务闭包内禁止文件 I/O）。
 
 use axum::{
@@ -19,6 +19,7 @@ use services::{
         RegisterFileAssetRequest,
     },
 };
+use tracing::error;
 
 use crate::{
     app_state::AppState,
@@ -72,8 +73,8 @@ pub async fn file_asset_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<FileAssetView> {
-    let view = FileAssetService::new(state.db()).file_asset_detail(&id).await?;
-
+    let mut view = FileAssetService::new(state.db()).file_asset_detail(&id).await?;
+    view.public_url = Some(build_public_url(&state, &view.storage_object_key));
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -88,13 +89,12 @@ pub async fn file_asset_detail(
 ///
 /// Multipart 表单：`file` 文件字段 + `sensitivity_class`/`retention_class`/
 /// `expires_at`（可选）/`document_id`（可选，携带时同事务建立附件关联）/
-/// `usage`（可选）。文件保存到配置 `upload_path`（`storage::LocalStorage`），
+/// `usage`（可选）。文件保存到启动时注入的 `storage::S3Storage`，
 /// 内容指纹为带密钥 HMAC-SHA256（密钥取 `app.secret`，见最终报告协调事项）。
 ///
 /// # 参数
 /// * `state` - 应用状态
 /// * `actor` - 已通过鉴权的审计操作人
-/// * `write_lock` - 串行覆盖磁盘水位检查与保存的进程内锁
 /// * `multipart` - Multipart 表单数据
 ///
 /// # 返回
@@ -102,26 +102,20 @@ pub async fn file_asset_detail(
 pub async fn file_asset_upload(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
-    Extension(write_lock): Extension<upload::WriteLock>,
     mut multipart: Multipart,
 ) -> Result<FileAssetView> {
     let file = extract_asset_file(&mut multipart).await?;
     let fields = FileAssetFormFields::from_multipart(&mut multipart).await?;
     let config = state.config_snapshot();
-    let unique_name = id_generator::next_id();
-    let storage = storage::LocalStorage::new(state.upload_path())
+    let unique_name = storage_key_with_extension(id_generator::next_id(), &file.file_name);
+    state
+        .storage()
+        .save_with_content_type(&unique_name, &file.content, Some(file.content_type.as_str()))
         .await
-        .map_err(|error| Error::Internal(format!("Failed to init storage: {error}")))?;
-    let _write_guard = write_lock.lock().await;
-    upload::ensure_storage_headroom(
-        state.upload_path(),
-        file.content.len(),
-        config.app.upload_min_free_bytes,
-    )?;
-    storage
-        .save(&unique_name, &file.content)
-        .await
-        .map_err(|error| Error::Internal(format!("Failed to save file: {error}")))?;
+        .map_err(|storage_error| {
+            error!(error = %storage_error, object_key = %unique_name, "Failed to save file asset to S3");
+            Error::Internal("Object storage operation failed".to_string())
+        })?;
     let content_hmac =
         entities::file_asset::content_fingerprint(&sha256_hex(&file.content), config.app.secret.as_bytes());
     let request = RegisterFileAssetRequest {
@@ -135,7 +129,8 @@ pub async fn file_asset_upload(
         expires_at: fields.expires_at,
     };
     let service = FileAssetService::new(state.db());
-    let asset = service.register_file_asset(request, &actor).await?;
+    let mut asset = service.register_file_asset(request, &actor).await?;
+    asset.public_url = Some(build_public_url(&state, &asset.storage_object_key));
     if let Some(document_id) = fields.document_id {
         service
             .attach_to_document(
@@ -150,6 +145,28 @@ pub async fn file_asset_upload(
     }
 
     Ok(ApiResponse::ok_with_data(asset))
+}
+
+/// 用存储层公开 URL 拼接规则生成对象访问地址。
+///
+/// # 参数
+/// * `state` - 应用状态（提供 S3 存储客户端）
+/// * `storage_object_key` - 对象存储键
+///
+/// # 返回
+/// 返回浏览器可访问的公开 URL。
+fn build_public_url(state: &AppState, storage_object_key: &str) -> String {
+    match state.storage().public_url(storage_object_key) {
+        Ok(url) => url,
+        Err(storage_error) => {
+            error!(
+                error = %storage_error,
+                object_key = %storage_object_key,
+                "Failed to build S3 public URL; fallback to object key"
+            );
+            storage_object_key.to_string()
+        }
+    }
 }
 
 #[permission_macros::permission(
@@ -454,4 +471,50 @@ fn sha256_hex(content: &[u8]) -> String {
         .iter()
         .map(|byte| format!("{byte:02x}"))
         .collect()
+}
+
+/// 生成对象存储键：对受支持图片追加小写扩展名，便于 CDN 和浏览器识别资源类型。
+///
+/// 对象的 `Content-Type` 由 S3 `PutObject` 元数据明确写入；扩展名只作为 URL 可读性与
+/// CDN 兼容性辅助，非图片文件保持原有无扩展名键。
+///
+/// # 参数
+/// * `id` - 不可猜测的唯一对象标识
+/// * `file_name` - 上传文件展示名
+///
+/// # 返回
+/// 返回对象存储键。
+fn storage_key_with_extension(id: String, file_name: &str) -> String {
+    let extension = upload::normalized_extension(file_name)
+        .filter(|extension| upload::expected_mime(extension).is_some());
+    match extension {
+        Some(extension) => format!("{id}.{extension}"),
+        None => id,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::storage_key_with_extension;
+
+    #[test]
+    fn supported_image_names_keep_normalized_extension() {
+        assert_eq!(
+            storage_key_with_extension("id-1".to_string(), "photo.JpG"),
+            "id-1.jpg"
+        );
+        assert_eq!(
+            storage_key_with_extension("id-2".to_string(), "photo.png"),
+            "id-2.png"
+        );
+    }
+
+    #[test]
+    fn unsupported_or_extensionless_names_stay_unchanged() {
+        assert_eq!(
+            storage_key_with_extension("id-3".to_string(), "report.pdf"),
+            "id-3"
+        );
+        assert_eq!(storage_key_with_extension("id-4".to_string(), "photo"), "id-4");
+    }
 }

@@ -14,7 +14,7 @@ use crate::catalog::status::EnableStatus;
 use crate::common::revision::RevisionBase;
 use crate::common::time::BusinessDate;
 use crate::errors::{Error, Result};
-use crate::ids::{SkuId, SkuRevisionId};
+use crate::ids::{FileAssetId, SkuId, SkuRevisionId};
 use crate::money::{Amount, Quantity};
 use crate::validation::{normalize_optional_text, normalize_required_text};
 
@@ -42,6 +42,8 @@ pub struct SkuRevisionData {
     pub specification: Option<String>,
     /// 条码原值（冲突时进入人工差异，不据此自动合并 SKU）。
     pub barcode: Option<String>,
+    /// 来源 SKU 主图（已归档受控文件，D05；缺省为 `None`）。
+    pub source_main_image_asset_id: Option<FileAssetId>,
     /// 重量（千克，定点数，非负）。
     pub weight_kg: Option<Quantity>,
     /// 体积（立方米，定点数，非负）。
@@ -75,6 +77,8 @@ pub struct SkuRevision {
     pub specification: Option<String>,
     /// 条码原值。
     pub barcode: Option<String>,
+    /// 来源 SKU 主图（已归档受控文件，D05）。
+    pub source_main_image_asset_id: Option<FileAssetId>,
     /// 重量（千克，定点数，非负）。
     pub weight_kg: Option<Quantity>,
     /// 体积（立方米，定点数，非负）。
@@ -127,6 +131,7 @@ impl SkuRevision {
             description,
             specification,
             barcode,
+            source_main_image_asset_id: data.source_main_image_asset_id,
             weight_kg: data.weight_kg,
             volume_m3: data.volume_m3,
             sales_visible_price_gross: data.sales_visible_price_gross,
@@ -235,6 +240,7 @@ mod tests {
             description: Some(" 春节款 ".to_string()),
             specification: None,
             barcode: Some(" 6901234567890 ".to_string()),
+            source_main_image_asset_id: Some(FileAssetId::new("asset-main-1")),
             weight_kg: Some(Quantity::from_str("0.500000").unwrap()),
             volume_m3: None,
             sales_visible_price_gross: Some(Amount::from_str("99.90").unwrap()),
@@ -252,6 +258,10 @@ mod tests {
 
         assert_eq!(revision.name, "坚果礼盒 500g");
         assert_eq!(revision.barcode.as_deref(), Some("6901234567890"));
+        assert_eq!(
+            revision.source_main_image_asset_id,
+            Some(FileAssetId::new("asset-main-1"))
+        );
         assert_eq!(revision.weight_kg, Some(Quantity::from_str("0.500000").unwrap()));
         assert_eq!(
             revision.sales_visible_price_gross,

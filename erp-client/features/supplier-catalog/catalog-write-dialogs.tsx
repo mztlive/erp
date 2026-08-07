@@ -54,6 +54,16 @@ type FixedSku = Readonly<{
   carouselImages?: readonly string[]
   detailImages?: readonly string[]
   mainImage?: string
+  /** 轮播图 fileName → 已登记文件资产 id（随媒体快照复用）。 */
+  carouselFileAssetIds?: Readonly<Record<string, string>>
+  detailFileAssetIds?: Readonly<Record<string, string>>
+  /** 轮播图 fileName → 可访问 URL。 */
+  carouselPreviewUrls?: Readonly<Record<string, string>>
+  detailPreviewUrls?: Readonly<Record<string, string>>
+  /** SKU 主图已登记文件资产。 */
+  mainImageAssetId?: string
+  /** SKU 主图可访问 URL。 */
+  mainImagePreviewUrl?: string
   salesVisiblePriceGross?: string
   hasPoolEntry?: boolean
 }>
@@ -606,14 +616,16 @@ export function RegisterSupplyForSkuDialog({
           usage: "SPU_CAROUSEL" as const,
           fileName,
           sortOrder: index,
-          fileAssetId: `asset:${fileName}`,
+          fileAssetId: fixedSku.carouselFileAssetIds?.[fileName],
+          sourceUrl: fixedSku.carouselPreviewUrls?.[fileName],
           archiveStatus: "ARCHIVED" as const,
         })),
         ...(fixedSku.detailImages ?? []).map((fileName, index) => ({
           usage: "SPU_DETAIL" as const,
           fileName,
           sortOrder: index,
-          fileAssetId: `asset:${fileName}`,
+          fileAssetId: fixedSku.detailFileAssetIds?.[fileName],
+          sourceUrl: fixedSku.detailPreviewUrls?.[fileName],
           archiveStatus: "ARCHIVED" as const,
         })),
         ...(fixedSku.mainImage
@@ -621,7 +633,8 @@ export function RegisterSupplyForSkuDialog({
               usage: "SKU_MAIN" as const,
               fileName: fixedSku.mainImage,
               sortOrder: 0,
-              fileAssetId: `asset:${fixedSku.mainImage}`,
+              fileAssetId: fixedSku.mainImageAssetId,
+              sourceUrl: fixedSku.mainImagePreviewUrl,
               archiveStatus: "ARCHIVED" as const,
             }]
           : []),

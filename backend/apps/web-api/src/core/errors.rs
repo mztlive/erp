@@ -28,9 +28,6 @@ pub enum Error {
     #[error("认证失败: {0}")]
     Unauthorized(String),
 
-    #[error("存储空间不足: {0}")]
-    InsufficientStorage(String),
-
     #[error("操作结果暂无法确认，请查询当前状态后再决定是否重试")]
     OutcomeUnknown(#[source] database::Error),
 
@@ -150,10 +147,6 @@ impl IntoResponse for Error {
             Error::Unprocessable(_) | Error::Logic(_) => (StatusCode::UNPROCESSABLE_ENTITY, self.to_string()),
             Error::Forbidden(_) => (StatusCode::FORBIDDEN, self.to_string()),
             Error::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "Unauthorized".to_string()),
-            Error::InsufficientStorage(_) => (
-                StatusCode::INSUFFICIENT_STORAGE,
-                "上传存储空间不足，请稍后重试".to_string(),
-            ),
             Error::RateLimited(error) => match error.retry_after_secs() {
                 Some(_) => (
                     StatusCode::TOO_MANY_REQUESTS,
@@ -241,10 +234,6 @@ mod tests {
             (Error::Unprocessable("x".into()), StatusCode::UNPROCESSABLE_ENTITY),
             (Error::Forbidden("x".into()), StatusCode::FORBIDDEN),
             (Error::Unauthorized("x".into()), StatusCode::UNAUTHORIZED),
-            (
-                Error::InsufficientStorage("x".into()),
-                StatusCode::INSUFFICIENT_STORAGE,
-            ),
             (
                 Error::RateLimited(crate::core::rate_limit::Error::ConcurrencyExceeded),
                 StatusCode::TOO_MANY_REQUESTS,

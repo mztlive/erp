@@ -609,6 +609,10 @@ export function buildResourceFields(
         productKind: "",
         carouselImages: [],
         detailImages: [],
+        carouselPreviewUrls: {},
+        detailPreviewUrls: {},
+        carouselFileAssetIds: {},
+        detailFileAssetIds: {},
         specs: [],
         skus: [],
       }

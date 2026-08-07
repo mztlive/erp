@@ -8,6 +8,7 @@
 //! source_registry 同构；抽取到冻结的 `services/src/query.rs` 属地基修订
 //! 候选（见域报告）。
 
+use entities::catalog::product_revision_media::MediaRole;
 use entities::catalog::{
     EnableStatus, Product, ProductBrand, ProductCategory, ProductKind, ProductRevision, Sku, SkuAttribute,
     SkuAttributeValue, SkuRevision, UnitOfMeasure, VoucherCategoryProfileRevision,
@@ -868,6 +869,8 @@ pub struct ProductSkuInput {
     pub base_unit_id: UnitOfMeasureId,
     /// 条码原值（可空）。
     pub barcode: Option<String>,
+    /// 来源 SKU 主图（已归档受控文件，D05；可空）。
+    pub main_image_asset_id: Option<FileAssetId>,
     /// 重量（千克，非负定点数）。
     pub weight_kg: Option<Quantity>,
     /// 体积（立方米，非负定点数）。
@@ -1058,6 +1061,21 @@ impl ProductListParams {
     }
 }
 
+/// 商品修订媒体响应视图。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProductRevisionMediaView {
+    /// 媒体主键。
+    pub id: String,
+    /// 合规媒体文件（`file_asset`，D05）。
+    pub file_asset_id: String,
+    /// 媒体用途（`carousel`/`detail`/`attachment`）。
+    pub media_role: MediaRole,
+    /// 版本内展示顺序。
+    pub sort_order: i32,
+    /// 无障碍替代文本。
+    pub alt_text: Option<String>,
+}
+
 /// 商品修订响应视图（修订表追加写入，只读）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ProductRevisionView {
@@ -1073,6 +1091,9 @@ pub struct ProductRevisionView {
     pub status: EnableStatus,
     /// 生效开始日。
     pub effective_from: BusinessDate,
+    /// SPU 级媒体行（轮播/详情；由列表 handler 批量装配）。
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub media: Vec<ProductRevisionMediaView>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 乐观锁版本。
@@ -1080,7 +1101,7 @@ pub struct ProductRevisionView {
 }
 
 impl From<ProductRevision> for ProductRevisionView {
-    /// 从实体构造响应视图。
+    /// 从实体构造响应视图（不含媒体行；列表装配见 `product_revision_list`）。
     ///
     /// # 参数
     /// * `revision` - 商品修订实体
@@ -1095,6 +1116,7 @@ impl From<ProductRevision> for ProductRevisionView {
             name: revision.name,
             status: revision.status,
             effective_from: revision.effective_from,
+            media: Vec::new(),
             created_at: revision.base.created_at,
             version: revision.base.version,
         }
@@ -1273,6 +1295,8 @@ pub struct SkuRevisionView {
     pub name: String,
     /// 条码原值。
     pub barcode: Option<String>,
+    /// 来源 SKU 主图（已归档受控文件，D05）。
+    pub source_main_image_asset_id: Option<String>,
     /// 修订启停状态。
     pub status: EnableStatus,
     /// 公司对销售可见的含税价格（字符串形态）。
@@ -1300,6 +1324,10 @@ impl From<SkuRevision> for SkuRevisionView {
             revision_no: revision.revision.revision_no,
             name: revision.name,
             barcode: revision.barcode,
+            source_main_image_asset_id: revision
+                .source_main_image_asset_id
+                .as_ref()
+                .map(|id| id.to_string()),
             status: revision.status,
             sales_visible_price_gross: revision.sales_visible_price_gross,
             effective_from: revision.effective_from,
@@ -1733,7 +1761,10 @@ mod tests {
             "description": "员工福利卡",
         });
         let request: super::CreateVoucherCategoryRequest = serde_json::from_value(value).unwrap();
-        assert!(request.validate().is_ok(), "仅身份字段应通过校验，字典由服务端默认");
+        assert!(
+            request.validate().is_ok(),
+            "仅身份字段应通过校验，字典由服务端默认"
+        );
         assert!(request.category_id.is_none());
         assert!(request.brand_id.is_none());
         assert!(request.sku.is_none());

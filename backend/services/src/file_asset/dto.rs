@@ -133,6 +133,8 @@ pub struct FileAssetView {
     pub id: String,
     /// 加密受控对象存储中的不可猜测对象键。
     pub storage_object_key: String,
+    /// 对象公开访问地址；仅上传/登记等写入路径由存储层拼接，其余查询路径为空。
+    pub public_url: Option<String>,
     /// 展示文件名。
     pub file_name: String,
     /// 内容类型。
@@ -165,6 +167,7 @@ impl From<FileAsset> for FileAssetView {
         Self {
             id: asset.base.id,
             storage_object_key: asset.storage_object_key,
+            public_url: None,
             file_name: asset.file_name,
             content_type: asset.content_type,
             byte_size: asset.byte_size,
