@@ -60,6 +60,7 @@ type BackendConfirmationLine = {
   line_no: number
   sales_order_submission_line_id: string
   supplier_id: string
+  supplier_offering_revision_id?: string | null
   confirmed_quantity: string
   latest_cost_gross: string
   input_tax_rate: string
@@ -95,15 +96,30 @@ type BackendSalesOrderDetail = {
   order_no: string
   customer_id?: string
   contract_id?: string | null
+  owner_user_id?: string
+  owner_user_name?: string | null
   submissions?: Array<{
     id: string
     submission_no: number
     status?: string
+    customer_name: string
+    contract_no?: string | null
+    payment_term_name: string
     gross_amount?: string
     net_amount?: string
     tax_amount?: string
     submitted_by?: string
     submitted_at?: number
+    lines: Array<{
+      id: string
+      sales_order_line_id?: string
+      line_no: number
+      item_name_snapshot?: string
+      sku_id?: string | null
+      unit_snapshot?: string | null
+      quantity?: string | null
+      gross_amount?: string
+    }>
   }>
   working_copy?: {
     gross_amount?: string
@@ -117,6 +133,44 @@ type BackendSalesOrderDetail = {
       gross_amount?: string
     }>
   } | null
+}
+
+type BackendAccountProfile = {
+  userid: string
+  name: string
+}
+
+type BackendSupplierOffering = {
+  sku_id: string
+  supplier_id: string
+  status: string
+  current_revision_id?: string | null
+  current_revision_no?: number | null
+  dropship_supply_price_gross?: string | null
+  bulk_supply_price_gross?: string | null
+  input_tax_rate?: string | null
+}
+
+type BackendSupplierCapability = {
+  supplier_id: string
+  capability_code: string
+  status: string
+  current_revision_id?: string | null
+  valid_from: string
+  valid_to?: string | null
+}
+
+export type ProcurementSupplyOption = {
+  skuId: string
+  supplierId: string
+  offeringRevisionId: string
+  offeringRevisionNo: number
+  costGross: string
+  inputTaxRate: string
+  capabilities: Array<{
+    revisionId: string
+    label: string
+  }>
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -281,16 +335,21 @@ function emptyCoverageFromLines(
 }
 
 async function fetchWorkItemsForQueue(
-  filters: QueueFilters
+  filters: QueueFilters,
+  profile: BackendAccountProfile
 ): Promise<BackendWorkItem[]> {
-  // mine ≈ 已领取进行中；role_pool ≈ 待领取。后端无 responsibility_scope 字段。
   const status =
     filters.scope === "mine" ? "IN_PROGRESS" : "UNCLAIMED"
+  const ownership =
+    filters.scope === "mine"
+      ? { owner_user_id: profile.userid }
+      : { owner_role: "procurement" }
   const page = await apiGet<BackendPage<BackendWorkItem>>(
     "/admin/work-items",
     {
       work_item_type: "PROCUREMENT_CONFIRMATION",
       status,
+      ...ownership,
       page: 1,
       page_size: 100,
       sort_by: filters.sort === "due_at" ? "due_at" : "created_at",
@@ -298,6 +357,10 @@ async function fetchWorkItemsForQueue(
     }
   )
   return page.items ?? []
+}
+
+async function fetchAccountProfile(): Promise<BackendAccountProfile> {
+  return apiGet<BackendAccountProfile>("/account/profile")
 }
 
 async function fetchConfirmationDetail(
@@ -326,6 +389,109 @@ async function fetchSalesOrderDetail(
   }
 }
 
+/** W02 使用的采购确认业务展示摘要，避免把内部对象 ID 直接展示给用户。 */
+export type ProcurementWorkItemPresentation = {
+  salesOrderNo: string
+  customerName: string
+  contractNo?: string
+  paymentTermName: string
+  grossAmount: string
+}
+
+/**
+ * 解析采购确认待办对应的销售提交快照。
+ *
+ * @param confirmationId 采购确认批次 ID。
+ * @returns 可直接用于待办列表的业务摘要；对象不存在时返回 null。
+ */
+export async function fetchProcurementWorkItemPresentation(
+  confirmationId: string
+): Promise<ProcurementWorkItemPresentation | null> {
+  const detail = await fetchConfirmationDetail(confirmationId)
+  if (!detail) return null
+  const sales = await fetchSalesOrderDetail(detail.sales_order_id)
+  if (!sales) return null
+  const submission = sales.submissions?.find(
+    (row) => row.id === detail.submission_id
+  )
+  if (!submission) return null
+  return {
+    salesOrderNo: sales.order_no,
+    customerName: submission.customer_name,
+    contractNo: submission.contract_no ?? undefined,
+    paymentTermName: submission.payment_term_name,
+    grossAmount: String(submission.gross_amount ?? "0"),
+  }
+}
+
+const CAPABILITY_LABEL: Record<string, string> = {
+  physical: "实物商品",
+  virtual: "虚拟商品",
+  offline_service: "线下服务",
+  api: "API",
+  printing: "印刷",
+}
+
+/**
+ * 按销售 SKU 批量读取当前有效供给及供应商能力修订。
+ *
+ * @param skuIds 销售提交行中的公司 SKU 集合。
+ * @returns 可用于采购确认分行选择的不可变版本选项。
+ */
+export const fetchProcurementSupplyOptions = async (
+  skuIds: readonly string[]
+): Promise<ProcurementSupplyOption[]> => {
+  const uniqueSkuIds = [...new Set(skuIds.filter(Boolean))]
+  const offeringPages = await Promise.all(
+    uniqueSkuIds.map((skuId) =>
+      apiGet<BackendPage<BackendSupplierOffering>>(
+        "/admin/supplier-catalog/offerings",
+        { sku_id: skuId, page: 1, page_size: 100 }
+      )
+    )
+  )
+  const offerings = offeringPages
+    .flatMap((page) => page.items)
+    .filter(
+      (offering) =>
+        offering.status === "ACTIVE" && Boolean(offering.current_revision_id)
+    )
+  const supplierIds = [...new Set(offerings.map((row) => row.supplier_id))]
+  const capabilityPages = await Promise.all(
+    supplierIds.map(async (supplierId) => ({
+      supplierId,
+      page: await apiGet<BackendPage<BackendSupplierCapability>>(
+        `/admin/suppliers/${encodeURIComponent(supplierId)}/capabilities`,
+        { status: "active", page: 1, page_size: 100 }
+      ),
+    }))
+  )
+  const capabilitiesBySupplier = new Map(
+    capabilityPages.map(({ supplierId, page }) => [
+      supplierId,
+      page.items
+        .filter((capability) => Boolean(capability.current_revision_id))
+        .map((capability) => ({
+          revisionId: capability.current_revision_id!,
+          label:
+            CAPABILITY_LABEL[capability.capability_code] ?? "供应商能力",
+        })),
+    ])
+  )
+  return offerings.map((offering) => ({
+    skuId: offering.sku_id,
+    supplierId: offering.supplier_id,
+    offeringRevisionId: offering.current_revision_id!,
+    offeringRevisionNo: offering.current_revision_no ?? 1,
+    costGross:
+      offering.bulk_supply_price_gross ??
+      offering.dropship_supply_price_gross ??
+      "",
+    inputTaxRate: offering.input_tax_rate ?? "",
+    capabilities: capabilitiesBySupplier.get(offering.supplier_id) ?? [],
+  }))
+}
+
 function mapConfirmationLines(
   lines: BackendConfirmationLine[]
 ): ConfirmationLineDraft[] {
@@ -334,6 +500,7 @@ function mapConfirmationLines(
     submissionLineId: line.sales_order_submission_line_id,
     supplierId: line.supplier_id,
     supplierName: line.supplier_id,
+    offeringRevisionId: line.supplier_offering_revision_id ?? "",
     confirmedQuantity: String(line.confirmed_quantity ?? "0"),
     latestCostGross: String(line.latest_cost_gross ?? "0"),
     inputTaxRate: String(line.input_tax_rate ?? "0"),
@@ -341,13 +508,15 @@ function mapConfirmationLines(
     fulfillmentMode: mapFulfillmentMode(String(line.fulfillment_mode)),
     capabilityRevisionId: line.supplier_capability_revision_id ?? "",
     capabilitySummary: "",
-    // 后端未返回资质状态
-    qualificationStatus: "VALID" as const,
+    qualificationStatus: line.supplier_capability_revision_id
+      ? ("VALID" as const)
+      : ("INVALID" as const),
   }))
 }
 
 async function projectTask(
-  workItem: BackendWorkItem
+  workItem: BackendWorkItem,
+  profile: BackendAccountProfile
 ): Promise<ProcurementConfirmationTask | null> {
   if (
     workItem.status === "COMPLETED" ||
@@ -370,15 +539,14 @@ async function projectTask(
 
   const confLines = mapConfirmationLines(detail.lines ?? [])
 
-  // 销售提交行：后端 submission 无明细；尽量用 working_copy 行作只读参考（缺口）
   const submissionLines =
-    sales?.working_copy?.lines?.map((line) => ({
+    submission?.lines?.map((line) => ({
       submissionLineId: line.id,
       itemName: line.item_name_snapshot ?? `行 ${line.line_no}`,
-      itemSku: "",
+      itemSku: line.sku_id ?? "",
       committedQuantity: String(line.quantity ?? "0"),
       unit: line.unit_snapshot ?? "",
-      requestedDeliveryDate: "",
+      requestedDeliveryDate: "—",
       salesAmountGross: String(line.gross_amount ?? "0"),
     })) ??
     confLines.map((line) => ({
@@ -420,8 +588,9 @@ async function projectTask(
     subjectHash: detail.submission_id,
     held: false,
     lease:
-      workItem.status === "IN_PROGRESS" && workItem.owner_user_id
-        ? { claimedByLabel: workItem.owner_user_id }
+      workItem.status === "IN_PROGRESS" &&
+      workItem.owner_user_id === profile.userid
+        ? { claimedByLabel: profile.name }
         : undefined,
     salesSubmission: {
       salesOrderId: detail.sales_order_id,
@@ -431,10 +600,13 @@ async function projectTask(
       subjectHash: detail.submission_id,
       subjectHashSummary: (detail.submission_id ?? "").slice(0, 12),
       submittedAt: secsToIso(submission?.submitted_at) || secsToIso(detail.created_at),
-      submittedByLabel: submission?.submitted_by ?? "—",
-      customerSnapshot: sales?.customer_id ?? "—",
-      contractSnapshot: sales?.contract_id ?? undefined,
-      paymentTermLabel: "—",
+      submittedByLabel:
+        submission?.submitted_by === sales?.owner_user_id
+          ? (sales?.owner_user_name ?? "销售提交人")
+          : "销售提交人",
+      customerSnapshot: submission?.customer_name ?? "—",
+      contractSnapshot: submission?.contract_no ?? undefined,
+      paymentTermLabel: submission?.payment_term_name ?? "—",
       grossAmount: String(
         submission?.gross_amount ??
           sales?.working_copy?.gross_amount ??
@@ -473,10 +645,11 @@ async function projectTask(
 export async function fetchProcurementQueue(
   filters: QueueFilters
 ): Promise<ProcurementQueueView> {
-  const workItems = await fetchWorkItemsForQueue(filters)
+  const profile = await fetchAccountProfile()
+  const workItems = await fetchWorkItemsForQueue(filters, profile)
 
   const projected = (
-    await Promise.all(workItems.map((wi) => projectTask(wi)))
+    await Promise.all(workItems.map((wi) => projectTask(wi, profile)))
   ).filter((t): t is ProcurementConfirmationTask => t != null)
 
   let tasks = projected
@@ -548,16 +721,20 @@ export async function fetchProcurementQueue(
 export async function claimProcurementWorkItem(
   workItemId: string
 ): Promise<WorkItemLease> {
-  const detail = await apiGet<BackendWorkItem>(
-    `/admin/work-items/${encodeURIComponent(workItemId)}`
-  )
-  await apiPost<BackendWorkItem>(
+  const [detail, profile] = await Promise.all([
+    apiGet<BackendWorkItem>(
+      `/admin/work-items/${encodeURIComponent(workItemId)}`
+    ),
+    fetchAccountProfile(),
+  ])
+  const claimed = await apiPost<BackendWorkItem>(
     `/admin/work-items/${encodeURIComponent(workItemId)}/claim`,
     { version: detail.version }
   )
   return {
     workItemId,
-    claimedByLabel: detail.owner_user_id ?? "当前用户",
+    claimedByLabel:
+      claimed.owner_user_id === profile.userid ? profile.name : "当前账号",
   }
 }
 
@@ -574,6 +751,7 @@ export async function saveProcurementConfirmation(input: {
       line_no: index + 1,
       sales_order_submission_line_id: line.submissionLineId,
       supplier_id: line.supplierId,
+      supplier_offering_revision_id: line.offeringRevisionId,
       confirmed_quantity: line.confirmedQuantity,
       latest_cost_gross: line.latestCostGross,
       input_tax_rate: line.inputTaxRate,

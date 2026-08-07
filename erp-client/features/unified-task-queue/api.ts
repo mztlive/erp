@@ -7,6 +7,7 @@ import { apiGet, apiPost } from "@/lib/api"
 import type { ApiError, Page } from "@/lib/api"
 
 import { buildFilterSummary } from "./filter-work-items"
+import { fetchProcurementWorkItemPresentation } from "@/features/procurement-confirmation/api"
 import type {
   CloseSessionResult,
   CompleteSessionResult,
@@ -68,7 +69,7 @@ const TYPE_META: Record<
     label: "采购二次确认",
     family: "procurement",
     handlerKey: "procurement_confirmation",
-    handlerHref: "/procurement/confirmation",
+    handlerHref: "/procurement/confirm",
     processorGroup: "procurement",
     closeAllowed: false,
   },
@@ -184,6 +185,16 @@ const TYPE_META: Record<
     processorGroup: "integration",
     closeAllowed: false,
   },
+}
+
+const OWNER_ROLE_LABEL: Record<string, string> = {
+  procurement: "采购组",
+  sales: "销售组",
+  sales_approval: "销售审批组",
+  finance: "财务组",
+  finance_review: "财务复核组",
+  operations: "运营组",
+  warehouse: "仓储组",
 }
 
 const PRIORITY_META: Record<string, { rank: number; label: string }> = {
@@ -302,15 +313,28 @@ function formatEnteredLabel(iso: string): string {
   }
 }
 
-function allowedActionsFor(status: string): WorkItemActionCode[] {
+function allowedActionsFor(
+  status: string,
+  hasHandler: boolean,
+  closeAllowed: boolean
+): WorkItemActionCode[] {
   if (status === "UNCLAIMED") return ["CLAIM"]
   if (status === "IN_PROGRESS") {
-    return ["DEFER", "SAVE_EVIDENCE", "QUERY_RESULT", "TRANSFER", "COMPLETE", "CLOSE"]
+    if (hasHandler) return ["DEFER"]
+    return [
+      "DEFER",
+      "TRANSFER",
+      "COMPLETE",
+      ...(closeAllowed ? (["CLOSE"] as const) : []),
+    ]
   }
   return []
 }
 
-export function mapWorkItemDto(dto: WorkItemDto): QueueWorkItemView {
+export function mapWorkItemDto(
+  dto: WorkItemDto,
+  profile?: AccountProfileDto
+): QueueWorkItemView {
   const meta = TYPE_META[dto.work_item_type] ?? {
     label: dto.work_item_type,
     family: "exception" as WorkItemFamily,
@@ -327,8 +351,24 @@ export function mapWorkItemDto(dto: WorkItemDto): QueueWorkItemView {
   const createdIso = unixToIso(dto.created_at)
   const dueIso = unixToIso(dto.due_at)
   const dueMeta = formatDueLabel(dueIso)
-  const actions = allowedActionsFor(dto.status)
+  const actions = allowedActionsFor(
+    dto.status,
+    Boolean(meta.handlerHref),
+    meta.closeAllowed
+  )
   const closeAllowed = meta.closeAllowed && actions.includes("CLOSE")
+  const ownerRoleLabel = dto.owner_role
+    ? (OWNER_ROLE_LABEL[dto.owner_role] ?? "责任组")
+    : "责任组"
+  const handlerHref =
+    dto.work_item_type === "PROCUREMENT_CONFIRMATION"
+      ? `/procurement/confirm?${new URLSearchParams({
+          scope: dto.status === "UNCLAIMED" ? "role_pool" : "mine",
+          currentWorkItemId: dto.id,
+          from: "W02",
+          queueContextId: "queue:W02",
+        }).toString()}`
+      : meta.handlerHref
 
   const scopeTags: string[] = []
   if (dto.status === "UNCLAIMED") scopeTags.push("待领取")
@@ -341,17 +381,22 @@ export function mapWorkItemDto(dto: WorkItemDto): QueueWorkItemView {
     workItemTypeLabel: meta.label,
     family: meta.family,
     handlerKey: meta.handlerKey,
-    handlerHref: meta.handlerHref,
+    handlerHref,
     completionAction: dto.completion_action,
-    businessObject: `${dto.business_object_type} · ${dto.business_object_id}`,
-    counterparty: dto.business_object_type,
+    businessObject:
+      dto.work_item_type === "PROCUREMENT_CONFIRMATION"
+        ? "待确认销售单"
+        : meta.label,
+    counterparty: ownerRoleLabel,
     enteredAt: formatEnteredLabel(createdIso),
     enteredDateTime: createdIso,
     dueAt: dueMeta.label,
     dueDateTime: dueIso,
     responsibleParty: dto.owner_user_id
-      ? `${dto.owner_role ?? "角色"} · ${dto.owner_user_id}`
-      : `${dto.owner_role ?? "角色"} · 待领取`,
+      ? dto.owner_user_id === profile?.userid
+        ? profile.name
+        : `${ownerRoleLabel}其他处理人`
+      : `${ownerRoleLabel}待领取`,
     reason: dto.reason_code ?? "—",
     impact: dto.impact_summary ?? "—",
     statusCode: statusUi.code,
@@ -368,7 +413,6 @@ export function mapWorkItemDto(dto: WorkItemDto): QueueWorkItemView {
     closeAllowed,
     scopeTags,
     summaryFields: [
-      { label: "业务对象", value: dto.business_object_id },
       { label: "类型", value: meta.label },
       ...(dto.impact_summary
         ? [{ label: "影响", value: dto.impact_summary }]
@@ -379,6 +423,31 @@ export function mapWorkItemDto(dto: WorkItemDto): QueueWorkItemView {
     claimedByLabel: dto.status === "IN_PROGRESS" ? "我" : undefined,
     permissionRevoked: false,
     showClose: closeAllowed,
+  }
+}
+
+/** 为采购确认待办补充销售单号、客户和合同等业务名称。 */
+const enrichProcurementPresentation = async (
+  item: QueueWorkItemView,
+  dto: WorkItemDto
+): Promise<QueueWorkItemView> => {
+  if (dto.work_item_type !== "PROCUREMENT_CONFIRMATION") return item
+  const presentation = await fetchProcurementWorkItemPresentation(
+    dto.business_object_id
+  )
+  if (!presentation) return item
+  return {
+    ...item,
+    businessObject: `销售单 ${presentation.salesOrderNo}`,
+    counterparty: presentation.customerName,
+    reason: "销售单待采购确认",
+    impact: `销售含税 ${presentation.grossAmount}`,
+    summaryFields: [
+      { label: "销售单", value: presentation.salesOrderNo },
+      { label: "客户", value: presentation.customerName },
+      { label: "合同", value: presentation.contractNo ?? "未关联" },
+      { label: "付款条件", value: presentation.paymentTermName },
+    ],
   }
 }
 
@@ -460,7 +529,7 @@ export async function fetchUnifiedTaskQueue(
     })
     const allItems = open.items
       .filter((r) => r.status === "UNCLAIMED" || r.status === "IN_PROGRESS")
-      .map(mapWorkItemDto)
+      .map((row) => mapWorkItemDto(row, profile))
     empty.counts = computeQueueCounts(allItems)
     empty.filterSummary = buildFilterSummary(
       filters,
@@ -489,7 +558,11 @@ export async function fetchUnifiedTaskQueue(
   }
 
   const page = await listWorkItems(listQuery)
-  let items = page.items.map(mapWorkItemDto)
+  let items = await Promise.all(
+    page.items.map(async (row) =>
+      enrichProcurementPresentation(mapWorkItemDto(row, profile), row)
+    )
+  )
 
   if (filters.family) {
     items = items.filter((i) => i.family === filters.family)
@@ -521,7 +594,7 @@ export async function fetchUnifiedTaskQueue(
   })
   const openItems = openPage.items
     .filter((r) => r.status === "UNCLAIMED" || r.status === "IN_PROGRESS")
-    .map(mapWorkItemDto)
+    .map((row) => mapWorkItemDto(row, profile))
 
   const maxCreated = page.items.reduce(
     (m, r) => Math.max(m, r.created_at ?? 0),
@@ -550,6 +623,7 @@ export async function fetchUnifiedTaskQueue(
 export async function fetchUnifiedTaskQueueCounts(): Promise<
   ReturnType<typeof computeQueueCounts> & { total: number }
 > {
+  const profile = await fetchProfile()
   const page = await listWorkItems({
     page: 1,
     page_size: 100,
@@ -558,7 +632,7 @@ export async function fetchUnifiedTaskQueueCounts(): Promise<
   })
   const items = page.items
     .filter((r) => r.status === "UNCLAIMED" || r.status === "IN_PROGRESS")
-    .map(mapWorkItemDto)
+    .map((row) => mapWorkItemDto(row, profile))
   return { ...computeQueueCounts(items), total: items.length }
 }
 

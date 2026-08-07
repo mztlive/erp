@@ -23,7 +23,8 @@
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, NoTransaction, ReceivableExt, SalesOrderExt, SalesReviewExt, Transactional, WorkItemExt,
+    AccessControlExt, NoTransaction, ReceivableExt, SalesOrderExt, SalesReviewExt, SupplierCatalogExt,
+    SupplierExt, Transactional, WorkItemExt,
 };
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
@@ -46,6 +47,8 @@ use entities::sales_review::{
     SalesChangeSubmissionLine, SalesChangeSubmissionLineData, SalesOrderReview, SalesOrderReviewData,
     SalesReviewStage,
 };
+use entities::supplier::CapabilityStatus;
+use entities::supplier_catalog::{OfferingStatus, SupplierOffering};
 use entities::work_item::{WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use id_generator::next_id;
 use mongodb::Database;
@@ -206,7 +209,19 @@ impl SalesReviewService {
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
         }
+        self.owned_active_work_item("procurement_confirmation", id, actor)
+            .await?;
         let lines = build_confirmation_lines(&confirmation, &req.lines)?;
+        let submission_lines = self
+            .db
+            .sales_order_submission_lines()
+            .list_lines_by_submissions(
+                std::slice::from_ref(&confirmation.submission_id),
+                &mut NoTransaction,
+            )
+            .await?;
+        self.ensure_confirmation_sources(&lines, &submission_lines)
+            .await?;
         let old_lines = self
             .db
             .procurement_confirmation_lines()
@@ -307,6 +322,8 @@ impl SalesReviewService {
             .db
             .procurement_confirmation_lines()
             .list_lines_by_confirmation(&confirmation.base.id.clone().into(), &mut NoTransaction)
+            .await?;
+        self.ensure_confirmation_sources(&confirmation_lines, &submission_lines)
             .await?;
         ensure_confirmation_coverage(&submission_lines, &confirmation_lines)?;
         let order = self
@@ -846,16 +863,133 @@ impl SalesReviewService {
         actor: &AuditActor,
         at: Instant,
     ) -> Result<WorkItem> {
+        let mut item = self
+            .owned_active_work_item(business_object_type, business_object_id, actor)
+            .await?;
+        item.complete(actor.id(), at)?;
+        Ok(item)
+    }
+
+    /// 加载业务对象的有效待办并校验当前责任人。
+    ///
+    /// # 参数
+    /// * `business_object_type` - 待办关联的业务对象类型
+    /// * `business_object_id` - 待办关联的业务对象 ID
+    /// * `actor` - 当前已认证操作人
+    ///
+    /// # 返回
+    /// 返回由当前操作人领取的有效待办。
+    ///
+    /// # 错误
+    /// 有效待办不存在时返回 `NotFound`；当前操作人不是责任人时返回 `Forbidden`。
+    async fn owned_active_work_item(
+        &self,
+        business_object_type: &str,
+        business_object_id: &str,
+        actor: &AuditActor,
+    ) -> Result<WorkItem> {
         let mut items = self
             .db
             .work_items()
             .list_active_by_object(business_object_type, business_object_id, &mut NoTransaction)
             .await?;
-        let mut item = items
+        let item = items
             .pop()
             .ok_or_else(|| Error::NotFound("有效待办不存在".to_string()))?;
-        item.complete(actor.id(), at)?;
-        Ok(item)
+        if item.is_owned_by(actor.id()) {
+            return Ok(item);
+        }
+        Err(Error::Forbidden(
+            "该任务未由当前账号领取，或处理权已发生变化，请刷新待办后重试".to_string(),
+        ))
+    }
+
+    /// 重新校验确认行引用的供给修订与能力修订仍是当前有效版本。
+    ///
+    /// # 参数
+    /// * `lines` - 待保存或待审批的采购确认分行
+    ///
+    /// # 返回
+    /// 全部分行来源与供应商匹配且仍有效时返回 `Ok(())`。
+    ///
+    /// # 错误
+    /// 来源缺失、供应商不匹配或版本已更新时返回 `ValidationError`。
+    async fn ensure_confirmation_sources(
+        &self,
+        lines: &[ProcurementConfirmationLine],
+        submission_lines: &[SalesOrderSubmissionLine],
+    ) -> Result<()> {
+        for line in lines {
+            let offering = self.current_confirmation_offering(line).await?;
+            ensure_confirmation_line_sku(line, &offering, submission_lines)?;
+            self.ensure_confirmation_capability(line).await?;
+        }
+        Ok(())
+    }
+
+    /// 加载并校验确认行引用的当前供给。
+    async fn current_confirmation_offering(
+        &self,
+        line: &ProcurementConfirmationLine,
+    ) -> Result<SupplierOffering> {
+        let revision_id = line
+            .supplier_offering_revision_id
+            .as_ref()
+            .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行缺少供给版本", line.line_no)))?;
+        let revision = self
+            .db
+            .supplier_offering_revisions()
+            .find_by_id(revision_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行供给版本不存在", line.line_no)))?;
+        let offering = self
+            .db
+            .supplier_offerings()
+            .find_by_id(&revision.supplier_offering_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行供给不存在", line.line_no)))?;
+        let is_current = offering.stable.current_revision_id.as_deref() == Some(revision_id.as_ref());
+        if offering.supplier_id != line.supplier_id
+            || offering.stable.status != OfferingStatus::Active
+            || !is_current
+        {
+            return Err(Error::ValidationError(format!(
+                "采购确认第 {} 行供给已变化，请重新选择",
+                line.line_no
+            )));
+        }
+        Ok(offering)
+    }
+
+    /// 校验确认行引用的供应商能力仍为当前启用版本。
+    async fn ensure_confirmation_capability(&self, line: &ProcurementConfirmationLine) -> Result<()> {
+        let revision = self
+            .db
+            .supplier_capability_revisions()
+            .find_by_id(&line.supplier_capability_revision_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行能力版本不存在", line.line_no)))?;
+        let capability = self
+            .db
+            .supplier_capabilities()
+            .find_by_supplier_and_code(&line.supplier_id, revision.capability_code, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| {
+                Error::ValidationError(format!("采购确认第 {} 行供应商能力不存在", line.line_no))
+            })?;
+        let is_current = capability.stable.current_revision_id.as_deref()
+            == Some(line.supplier_capability_revision_id.as_ref());
+        if revision.supplier_id != line.supplier_id
+            || revision.status != CapabilityStatus::Active
+            || capability.stable.status != CapabilityStatus::Active
+            || !is_current
+        {
+            return Err(Error::ValidationError(format!(
+                "采购确认第 {} 行能力版本已变化，请重新选择",
+                line.line_no
+            )));
+        }
+        Ok(())
     }
 
     /// 使同一提交的其余待处理审批失效（§6.5：新提交从第一步开始）。
@@ -1685,6 +1819,25 @@ impl SalesReviewService {
 // 聚合构造与校验（纯内存，不依赖仓储）
 // ---------------------------------------------------------------------------
 
+/// 校验确认分行选择的供给属于对应销售提交商品。
+fn ensure_confirmation_line_sku(
+    line: &ProcurementConfirmationLine,
+    offering: &SupplierOffering,
+    submission_lines: &[SalesOrderSubmissionLine],
+) -> Result<()> {
+    let submission_line = submission_lines
+        .iter()
+        .find(|row| row.base.id == line.sales_order_submission_line_id.as_ref())
+        .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行销售明细不存在", line.line_no)))?;
+    if submission_line.sku_id.as_ref() == Some(&offering.sku_id) {
+        return Ok(());
+    }
+    Err(Error::ValidationError(format!(
+        "采购确认第 {} 行供给不属于该销售商品，请重新选择",
+        line.line_no
+    )))
+}
+
 /// 校验采购确认覆盖全部需外采明细（§6.5 跨行断言）。
 ///
 /// # 参数
@@ -1710,6 +1863,12 @@ fn ensure_confirmation_coverage(
         let mut confirmed = Quantity::from_str("0").expect("静态零值必须合法");
         for line in confirmation_lines {
             if line.sales_order_submission_line_id.to_string() == sub_line.base.id {
+                if line.supplier_offering_revision_id.is_none() {
+                    return Err(Error::ValidationError(format!(
+                        "第 {} 行缺少有效供给版本，请重新选择供应商供给",
+                        sub_line.line_no
+                    )));
+                }
                 confirmed = Quantity::try_from(confirmed.to_decimal() + line.confirmed_quantity.to_decimal())
                     .map_err(|error| Error::ValidationError(error.to_string()))?;
             }
@@ -2135,6 +2294,7 @@ fn build_confirmation_lines(
                 line_no: line.line_no,
                 sales_order_submission_line_id: line.sales_order_submission_line_id.clone(),
                 supplier_id: line.supplier_id.clone(),
+                supplier_offering_revision_id: line.supplier_offering_revision_id.clone(),
                 confirmed_quantity: line.confirmed_quantity,
                 latest_cost_gross: line.latest_cost_gross,
                 input_tax_rate: line.input_tax_rate,
@@ -2175,6 +2335,7 @@ fn confirmation_detail_view(
                 line_no: line.line_no,
                 sales_order_submission_line_id: line.sales_order_submission_line_id.to_string(),
                 supplier_id: line.supplier_id.to_string(),
+                supplier_offering_revision_id: line.supplier_offering_revision_id.map(|id| id.to_string()),
                 confirmed_quantity: line.confirmed_quantity,
                 latest_cost_gross: line.latest_cost_gross,
                 input_tax_rate: line.input_tax_rate,

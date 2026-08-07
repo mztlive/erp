@@ -399,36 +399,6 @@ export function UnifiedTaskQueuePage() {
     [clearActiveLeases, dropActiveLease]
   )
 
-  const onSaveEvidence = React.useCallback(async () => {
-    if (!task || permissionRevoked) return
-    const note = decisionForm.state.values.note
-    draftsRef.current.set(task.id, note)
-    try {
-      const lease = await ensureClaimed(task)
-      const record = await actionMutation.mutateAsync({
-        workItemId: task.id,
-        expectedSubjectVersion: lease.subjectVersion,
-        action: { kind: "SAVE_EVIDENCE", note },
-      })
-      // Task stays PENDING/IN_PROGRESS — do NOT auto-advance
-      setLastResult({
-        status: "succeeded",
-        title: "操作结果已记录",
-        description: "已记录本次操作结果，任务仍待处理，未自动打开下一条。",
-        reference: record.actionRecordId,
-      })
-    } catch (error) {
-      handleActionError(error, task)
-    }
-  }, [
-    actionMutation,
-    decisionForm.state.values.note,
-    ensureClaimed,
-    handleActionError,
-    permissionRevoked,
-    task,
-  ])
-
   const onDefer = React.useCallback(async () => {
     if (!task || permissionRevoked) return
     const note = decisionForm.state.values.note
@@ -1196,8 +1166,8 @@ export function UnifiedTaskQueuePage() {
                 leaseStatusLabel={
                   permissionRevoked
                     ? leaseText.permissionRevokedCleared
-                    : activeClaim
-                      ? leaseText.activeDoNotReopen
+                    : leaseStatus === "active"
+                      ? "已领取 · 处理中"
                       : leaseStatus === "lost"
                         ? leaseText.lostRefresh
                         : leaseText.unclaimed
@@ -1252,7 +1222,7 @@ export function UnifiedTaskQueuePage() {
                         title: wasFirstClaim ? "已领取任务" : "已重新领取",
                         description:
                           "已恢复对该任务的处理，可继续提交。",
-                        reference: task.id,
+                        reference: task.businessObject,
                       })
                     })
                     .catch((error) => handleActionError(error, task))
@@ -1392,18 +1362,6 @@ export function UnifiedTaskQueuePage() {
                 </decisionForm.AppForm>
 
                 <div className="flex flex-wrap justify-end gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    disabled={
-                      processDisabled && leaseStatus !== "lost"
-                        ? true
-                        : actionMutation.isPending || permissionRevoked
-                    }
-                    onClick={() => void onSaveEvidence()}
-                  >
-                    保存证据
-                  </Button>
                   <Button
                     type="button"
                     variant="outline"

@@ -370,6 +370,8 @@ pub struct SupplierCapabilityRow {
     pub valid_to: Option<String>,
     /// 启停状态。
     pub status: CapabilityStatus,
+    /// 当前能力修订。
+    pub current_revision_id: Option<String>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -796,6 +798,7 @@ fn supplier_capability_projection() -> Document {
         "valid_from": 1,
         "valid_to": 1,
         "status": 1,
+        "current_revision_id": 1,
         "version": 1,
         "created_at": 1,
     }

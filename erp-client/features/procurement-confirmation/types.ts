@@ -22,6 +22,7 @@ export type ConfirmationLineDraft = Readonly<{
   submissionLineId: string
   supplierId: string
   supplierName: string
+  offeringRevisionId: string
   confirmedQuantity: string
   latestCostGross: string
   inputTaxRate: string

@@ -91,6 +91,7 @@ impl SupplierCapabilityService {
                 valid_from: row.valid_from,
                 valid_to: row.valid_to,
                 status: row.status,
+                current_revision_id: row.current_revision_id,
                 version: row.version,
                 created_at: row.created_at,
             })

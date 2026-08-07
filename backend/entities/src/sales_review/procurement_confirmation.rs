@@ -15,7 +15,7 @@ use crate::common::time::{BusinessDate, Instant};
 use crate::errors::{Error, Result};
 use crate::ids::{
     ProcurementConfirmationId, ProcurementConfirmationLineId, SalesOrderId, SalesOrderSubmissionId,
-    SalesOrderSubmissionLineId, SupplierAccountId, SupplierCapabilityRevisionId,
+    SalesOrderSubmissionLineId, SupplierAccountId, SupplierCapabilityRevisionId, SupplierOfferingRevisionId,
 };
 use crate::money::{Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};
@@ -322,6 +322,8 @@ pub struct ProcurementConfirmationLineData {
     pub sales_order_submission_line_id: SalesOrderSubmissionLineId,
     /// 确认供应商。
     pub supplier_id: SupplierAccountId,
+    /// 采购决策采用的不可变供给修订。
+    pub supplier_offering_revision_id: SupplierOfferingRevisionId,
     /// 确认可供数量。
     pub confirmed_quantity: Quantity,
     /// 最新含税成本。
@@ -350,6 +352,11 @@ pub struct ProcurementConfirmationLine {
     pub sales_order_submission_line_id: SalesOrderSubmissionLineId,
     /// 确认供应商。
     pub supplier_id: SupplierAccountId,
+    /// 采购决策采用的不可变供给修订。
+    ///
+    /// 旧数据可能缺失；新建确认分行强制写入，审批时失败关闭。
+    #[serde(default)]
+    pub supplier_offering_revision_id: Option<SupplierOfferingRevisionId>,
     /// 确认可供数量。
     pub confirmed_quantity: Quantity,
     /// 最新含税成本。
@@ -398,6 +405,7 @@ impl ProcurementConfirmationLine {
             line_no: data.line_no,
             sales_order_submission_line_id: data.sales_order_submission_line_id,
             supplier_id: data.supplier_id,
+            supplier_offering_revision_id: Some(data.supplier_offering_revision_id),
             confirmed_quantity: data.confirmed_quantity,
             latest_cost_gross: data.latest_cost_gross,
             input_tax_rate: data.input_tax_rate,
@@ -517,6 +525,7 @@ mod tests {
             line_no: 1,
             sales_order_submission_line_id: SalesOrderSubmissionLineId::new("sl-1"),
             supplier_id: SupplierAccountId::new("sup-1"),
+            supplier_offering_revision_id: SupplierOfferingRevisionId::new("off-rev-1"),
             confirmed_quantity: Quantity::from_str("10.000000").unwrap(),
             latest_cost_gross: UnitPrice::from_str("8.5000").unwrap(),
             input_tax_rate: Rate::from_str("0.130000").unwrap(),
@@ -531,6 +540,10 @@ mod tests {
         let line = ProcurementConfirmationLine::new(ProcurementConfirmationLineId::new("pcl-1"), line_data())
             .unwrap();
         assert_eq!(line.confirmed_quantity, Quantity::from_str("10.000000").unwrap());
+        assert_eq!(
+            line.supplier_offering_revision_id,
+            Some(SupplierOfferingRevisionId::new("off-rev-1"))
+        );
         assert_eq!(line.expected_delivery_date.to_string(), "2026-09-30");
         assert_eq!(line.fulfillment_mode, FulfillmentMode::SupplierDirect);
     }

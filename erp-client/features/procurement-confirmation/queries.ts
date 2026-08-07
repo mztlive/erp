@@ -8,6 +8,7 @@ import {
   completeProcurementDecision,
   deferProcurementConfirmation,
   fetchProcurementQueue,
+  fetchProcurementSupplyOptions,
   saveProcurementConfirmation,
   type QueueFilters,
 } from "@/features/procurement-confirmation/api"
@@ -17,6 +18,19 @@ export const procurementConfirmKeys = {
   queue: (filters: QueueFilters) =>
     [...procurementConfirmKeys.all, "queue", filters] as const,
   counts: () => [...procurementConfirmKeys.all, "counts"] as const,
+  supplyOptions: (skuIds: readonly string[]) =>
+    [...procurementConfirmKeys.all, "supply-options", [...skuIds].sort()] as const,
+}
+
+/** 当前销售提交行可用的供给修订与能力修订。 */
+export function useProcurementSupplyOptionsQuery(
+  skuIds: readonly string[]
+) {
+  return useQuery({
+    queryKey: procurementConfirmKeys.supplyOptions(skuIds),
+    queryFn: () => fetchProcurementSupplyOptions(skuIds),
+    enabled: skuIds.some(Boolean),
+  })
 }
 
 export function useProcurementConfirmationQuery(filters: QueueFilters) {

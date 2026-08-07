@@ -280,6 +280,8 @@ pub struct ProcurementConfirmationLineRequest {
     pub sales_order_submission_line_id: entities::ids::SalesOrderSubmissionLineId,
     /// 确认供应商。
     pub supplier_id: entities::ids::SupplierAccountId,
+    /// 采用的不可变供给修订。
+    pub supplier_offering_revision_id: entities::ids::SupplierOfferingRevisionId,
     /// 确认可供数量。
     pub confirmed_quantity: Quantity,
     /// 最新含税成本。
@@ -355,6 +357,8 @@ pub struct ProcurementConfirmationLineView {
     pub sales_order_submission_line_id: String,
     /// 确认供应商。
     pub supplier_id: String,
+    /// 采用的不可变供给修订；旧数据缺失时返回空值并阻断审批。
+    pub supplier_offering_revision_id: Option<String>,
     /// 确认可供数量。
     pub confirmed_quantity: Quantity,
     /// 最新含税成本。

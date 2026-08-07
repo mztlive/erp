@@ -424,6 +424,8 @@ pub struct SupplierCapabilityView {
     pub valid_to: Option<String>,
     /// 启停状态。
     pub status: CapabilityStatus,
+    /// 当前不可变能力修订。
+    pub current_revision_id: Option<String>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
@@ -443,6 +445,7 @@ impl From<SupplierCapability> for SupplierCapabilityView {
             valid_from: capability.valid_from.to_string(),
             valid_to: capability.valid_to.map(|date| date.to_string()),
             status: capability.stable.status,
+            current_revision_id: capability.stable.current_revision_id,
             version: capability.base.version,
             created_at: capability.base.created_at,
         }

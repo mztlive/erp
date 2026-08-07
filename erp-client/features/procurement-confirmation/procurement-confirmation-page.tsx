@@ -29,7 +29,6 @@ import {
   PageHeader,
   PageScaffold,
   SequentialProcessBar,
-  SupplierCombobox,
   surfaceInsetClassName,
   surfacePanelClassName,
   ValidationSummary,
@@ -88,6 +87,7 @@ import {
   useCompleteProcurementMutation,
   useDeferProcurementMutation,
   useProcurementConfirmationQuery,
+  useProcurementSupplyOptionsQuery,
   useSaveProcurementConfirmationMutation,
 } from "@/features/procurement-confirmation/queries"
 import { freshnessText } from "@/lib/ui-text"
@@ -189,6 +189,15 @@ export function ProcurementConfirmationPage() {
     tasks.find((t) => t.workItemId === currentWorkItemId) ??
     view?.current ??
     tasks[0]
+  const taskSkuIds = React.useMemo(
+    () => task?.salesSubmission.lines.map((line) => line.itemSku) ?? [],
+    [task]
+  )
+  const supplyOptionsQuery = useProcurementSupplyOptionsQuery(taskSkuIds)
+  const supplyOptions = React.useMemo(
+    () => supplyOptionsQuery.data ?? [],
+    [supplyOptionsQuery.data]
+  )
   const currentIndex = task
     ? Math.max(
         0,
@@ -215,8 +224,8 @@ export function ProcurementConfirmationPage() {
   const headingRef = React.useRef<HTMLHeadingElement>(null)
   const resultRef = React.useRef<HTMLDivElement>(null)
   /** 会话内存处理权，禁止序列化到 URL / storage */
-  const leaseRef = React.useRef<SessionLease | null>(null)
-  const [leaseEpoch, setLeaseEpoch] = React.useState(0)
+  const [sessionLease, setSessionLease] =
+    React.useState<SessionLease | null>(null)
 
   // 同步当前任务分行草稿
   React.useEffect(() => {
@@ -225,11 +234,26 @@ export function ProcurementConfirmationPage() {
       setDirty(false)
       return
     }
-    setLineDrafts(task.confirmation.lines.map((l) => ({ ...l })))
+    setLineDrafts(task.confirmation.lines.map((line) => ({ ...line })))
     setDirty(false)
     setActionError(null)
     setSaveMessage(null)
   }, [task])
+
+  // 选项异步到达时仅回填展示名称，不覆盖用户已编辑的草稿字段。
+  React.useEffect(() => {
+    if (!supplierOptions?.length) return
+    setLineDrafts((current) =>
+      current.map((line) => {
+        const supplier = supplierOptions.find(
+          (option) => option.supplierId === line.supplierId
+        )
+        return supplier && supplier.supplierName !== line.supplierName
+          ? { ...line, supplierName: supplier.supplierName }
+          : line
+      })
+    )
+  }, [supplierOptions])
 
   // 单号搜索框与 URL 双向同步：后退/分享后输入框与结果保持一致
   React.useEffect(() => {
@@ -277,22 +301,22 @@ export function ProcurementConfirmationPage() {
     if (
       !task ||
       !isProcessingEntry ||
-      task.workItemId !== currentWorkItemId
+      task.workItemId !== currentWorkItemId ||
+      task.lease
     ) {
       return
     }
-    if (leaseRef.current?.workItemId === task.workItemId) return
+    if (sessionLease?.workItemId === task.workItemId) return
     if (claimMutation.isPending) return
     let cancelled = false
     void claimMutation
       .mutateAsync(task.workItemId)
       .then((lease) => {
         if (cancelled) return
-        leaseRef.current = {
+        setSessionLease({
           workItemId: lease.workItemId,
           claimedByLabel: lease.claimedByLabel,
-        }
-        setLeaseEpoch((n) => n + 1)
+        })
       })
       .catch(() => {
         setActionError("领取处理权失败，请点击「领取任务」重试")
@@ -301,7 +325,13 @@ export function ProcurementConfirmationPage() {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅在任务切换时领取
-  }, [currentWorkItemId, isProcessingEntry, task?.workItemId])
+  }, [
+    currentWorkItemId,
+    isProcessingEntry,
+    sessionLease?.workItemId,
+    task?.lease,
+    task?.workItemId,
+  ])
 
   React.useEffect(() => {
     if (lastResult) {
@@ -378,12 +408,18 @@ export function ProcurementConfirmationPage() {
     [currentIndex, tasks]
   )
 
-  const activeLease =
-    leaseRef.current?.workItemId === task?.workItemId
-      ? leaseRef.current
-      : null
-  // leaseEpoch 触发重渲染以读 ref
-  void leaseEpoch
+  const activeLease = React.useMemo(() => {
+    if (sessionLease?.workItemId === task?.workItemId) {
+      return sessionLease
+    }
+    if (task?.lease) {
+      return {
+        workItemId: task.workItemId,
+        claimedByLabel: task.lease.claimedByLabel,
+      }
+    }
+    return null
+  }, [sessionLease, task?.lease, task?.workItemId])
 
   const coverage = React.useMemo(() => {
     if (!task) return []
@@ -405,7 +441,23 @@ export function ProcurementConfirmationPage() {
     })
   }, [task, lineDrafts])
 
-  const allCovered = coverage.every((c) => c.complete)
+  const linesValid =
+    lineDrafts.length > 0 &&
+    lineDrafts.every(
+      (line) =>
+        line.supplierId.trim().length > 0 &&
+        line.offeringRevisionId.trim().length > 0 &&
+        line.confirmedQuantity.trim().length > 0 &&
+        Number(line.confirmedQuantity) > 0 &&
+        line.latestCostGross.trim().length > 0 &&
+        Number(line.latestCostGross) >= 0 &&
+        line.inputTaxRate.trim().length > 0 &&
+        Number(line.inputTaxRate) >= 0 &&
+        line.expectedDeliveryDate.trim().length > 0 &&
+        line.capabilityRevisionId.trim().length > 0
+    )
+  const allCovered =
+    coverage.length > 0 && coverage.every((c) => c.complete) && linesValid
   const clientBlocking = coverage
     .filter((c) => !c.complete)
     .map((c) => ({
@@ -434,6 +486,35 @@ export function ProcurementConfirmationPage() {
     []
   )
 
+  const offeringOptionsForSku = React.useCallback(
+    (skuId: string) =>
+      supplyOptions
+        .filter((option) => option.skuId === skuId)
+        .map((option) => {
+          const supplier = supplierOptions?.find(
+            (row) => row.supplierId === option.supplierId
+          )
+          return {
+            value: option.offeringRevisionId,
+            label: `${supplier?.supplierName ?? "供应商"} · 第 ${option.offeringRevisionNo} 版供给`,
+          }
+        }),
+    [supplierOptions, supplyOptions]
+  )
+
+  const capabilityOptionsForOffering = React.useCallback(
+    (offeringRevisionId: string) =>
+      supplyOptions
+        .find(
+          (option) => option.offeringRevisionId === offeringRevisionId
+        )
+        ?.capabilities.map((capability) => ({
+          value: capability.revisionId,
+          label: capability.label,
+        })) ?? [],
+    [supplyOptions]
+  )
+
   const addSplitLine = React.useCallback(
     (submissionLineId: string) => {
       if (!task) return
@@ -447,16 +528,17 @@ export function ProcurementConfirmationPage() {
         {
           lineKey: key,
           submissionLineId,
-          supplierId: "sup_hd",
-          supplierName: "华东优选供应链有限公司",
+          supplierId: "",
+          supplierName: "",
+          offeringRevisionId: "",
           confirmedQuantity: "0",
-          latestCostGross: sub.referenceCost ?? "0.00",
-          inputTaxRate: "0.13",
-          expectedDeliveryDate: sub.requestedDeliveryDate,
+          latestCostGross: "",
+          inputTaxRate: "",
+          expectedDeliveryDate: "",
           fulfillmentMode: "WAREHOUSE",
-          capabilityRevisionId: "cap_hd_v3",
-          capabilitySummary: "新拆分行 · 待核对能力",
-          qualificationStatus: "VALID",
+          capabilityRevisionId: "",
+          capabilitySummary: "请选择供应商并核对供给与能力",
+          qualificationStatus: "INVALID",
         },
       ])
       setDirty(true)
@@ -479,21 +561,30 @@ export function ProcurementConfirmationPage() {
 
   const ensureLease = React.useCallback(async () => {
     if (!task) throw new Error("无当前任务")
-    if (leaseRef.current?.workItemId === task.workItemId) {
-      return leaseRef.current
+    if (task.lease) {
+      return {
+        workItemId: task.workItemId,
+        claimedByLabel: task.lease.claimedByLabel,
+      }
+    }
+    if (sessionLease?.workItemId === task.workItemId) {
+      return sessionLease
     }
     const lease = await claimMutation.mutateAsync(task.workItemId)
     const session: SessionLease = {
       workItemId: lease.workItemId,
       claimedByLabel: lease.claimedByLabel,
     }
-    leaseRef.current = session
-    setLeaseEpoch((n) => n + 1)
+    setSessionLease(session)
     return session
-  }, [claimMutation, task])
+  }, [claimMutation, sessionLease, task])
 
   const handleSave = React.useCallback(async (): Promise<boolean> => {
     if (!task) return false
+    if (!linesValid) {
+      setActionError("请先补齐供应商、数量、成本、税率、交期和有效能力后再保存")
+      return false
+    }
     try {
       await ensureLease()
       const result = await saveMutation.mutateAsync({
@@ -511,7 +602,7 @@ export function ProcurementConfirmationPage() {
       setActionError(error instanceof Error ? error.message : "保存失败")
       return false
     }
-  }, [ensureLease, lineDrafts, saveMutation, task])
+  }, [ensureLease, lineDrafts, linesValid, saveMutation, task])
 
   /** 终局操作打开前：dirty 时先保存，保存失败则中止打开（防止按旧草稿提交） */
   const guardTerminalOpen = React.useCallback(
@@ -534,8 +625,7 @@ export function ProcurementConfirmationPage() {
         ?.workItemId
       if (nextId) {
         // 清空本任务租约引用（任务已终局）
-        leaseRef.current = null
-        setLeaseEpoch((n) => n + 1)
+        setSessionLease(null)
         goToWorkItem(nextId)
       } else {
         replaceUrl({ currentWorkItemId: null })
@@ -576,8 +666,7 @@ export function ProcurementConfirmationPage() {
 
       const outcome = response.outcome
       if (outcome.kind !== "APPROVED_AND_SALES_EFFECTIVE") return
-      leaseRef.current = null
-      setLeaseEpoch((n) => n + 1)
+      setSessionLease(null)
       const approvedResult: ResultState = {
         status: "succeeded",
         title: "采购确认已通过 · 销售单已生效",
@@ -642,8 +731,7 @@ export function ProcurementConfirmationPage() {
         }
         const outcome = response.outcome
         if (outcome.kind !== "REJECTED_TO_SALES") return
-        leaseRef.current = null
-        setLeaseEpoch((n) => n + 1)
+        setSessionLease(null)
         const rejectedResult: ResultState = {
           status: "rejected",
           title: "采购确认已驳回 · 本次提交已结束",
@@ -703,8 +791,7 @@ export function ProcurementConfirmationPage() {
         if (response.status === "failed") setActionError(response.message)
         return
       }
-      leaseRef.current = null
-      setLeaseEpoch((n) => n + 1)
+      setSessionLease(null)
       setLastResult({
         status: "blocked",
         title: "当前项已跳过",
@@ -1336,7 +1423,7 @@ export function ProcurementConfirmationPage() {
                         销售明细与采购确认分行
                       </h3>
                       <span className="text-xs text-muted-foreground">
-                        至少展示两条确认分行；覆盖按明细独立核算
+                      可按供应商拆分确认分行；覆盖按明细独立核算
                       </span>
                     </div>
 
@@ -1360,10 +1447,7 @@ export function ProcurementConfirmationPage() {
                             <div className="flex flex-wrap items-start justify-between gap-2 border-b border-border bg-muted/40 px-3 py-2">
                               <div>
                                 <p className="text-sm font-medium">
-                                  {subLine.itemName}{" "}
-                                  <span className="num text-muted-foreground">
-                                    {subLine.itemSku}
-                                  </span>
+                                  {subLine.itemName}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
                                   承诺{" "}
@@ -1420,7 +1504,7 @@ export function ProcurementConfirmationPage() {
                                       履约方式
                                     </th>
                                     <th className="hidden px-3 py-2 font-medium lg:table-cell">
-                                      资质
+                                      能力版本
                                     </th>
                                     <th className="px-3 py-2 font-medium text-right">
                                       操作
@@ -1434,25 +1518,53 @@ export function ProcurementConfirmationPage() {
                                       className="border-b border-border last:border-0"
                                     >
                                        <td className="px-3 py-2">
-                                        <SupplierCombobox
-                                          value={line.supplierId || undefined}
-                                          onValueChange={(id) => {
-                                            const next =
+                                        <OptionCombobox
+                                          value={
+                                            line.offeringRevisionId || undefined
+                                          }
+                                          onValueChange={(revisionId) => {
+                                            const offering = supplyOptions.find(
+                                              (option) =>
+                                                option.offeringRevisionId ===
+                                                revisionId
+                                            )
+                                            const supplier =
                                               supplierOptions?.find(
-                                                (s) => s.supplierId === id
+                                                (option) =>
+                                                  option.supplierId ===
+                                                  offering?.supplierId
                                               )
+                                            const onlyCapability =
+                                              offering?.capabilities.length === 1
+                                                ? offering.capabilities[0]
+                                                : undefined
                                             updateLine(line.lineKey, {
-                                              supplierId: id ?? "",
+                                              supplierId:
+                                                offering?.supplierId ?? "",
                                               supplierName:
-                                                next?.supplierName ?? "",
+                                                supplier?.supplierName ?? "",
+                                              offeringRevisionId:
+                                                offering?.offeringRevisionId ?? "",
+                                              latestCostGross:
+                                                offering?.costGross ?? "",
+                                              inputTaxRate:
+                                                offering?.inputTaxRate ?? "",
+                                              capabilityRevisionId:
+                                                onlyCapability?.revisionId ?? "",
                                               capabilitySummary:
-                                                next?.description ??
-                                                line.capabilitySummary,
+                                                onlyCapability?.label ??
+                                                "请选择有效能力版本",
+                                              qualificationStatus:
+                                                onlyCapability
+                                                  ? "VALID"
+                                                  : "INVALID",
                                             })
                                           }}
-                                          suppliers={supplierOptions ?? []}
+                                          options={offeringOptionsForSku(
+                                            subLine.itemSku
+                                          )}
                                           disabled={formalPending}
-                                          placeholder="选择供应商"
+                                          placeholder="选择当前供给"
                                           className="min-w-[12rem]"
                                         />
                                         <p className="mt-0.5 text-tiny text-muted-foreground">
@@ -1543,26 +1655,35 @@ export function ProcurementConfirmationPage() {
                                         />
                                       </td>
                                       <td className="hidden px-3 py-2 lg:table-cell">
-                                        <BusinessStatusBadge
-                                          context="list"
-                                          label={
-                                            line.qualificationStatus ===
-                                            "VALID"
-                                              ? "有效"
-                                              : line.qualificationStatus ===
-                                                  "EXPIRING"
-                                                ? "即将到期"
-                                                : "失效"
+                                        <OptionCombobox
+                                          value={
+                                            line.capabilityRevisionId || undefined
                                           }
-                                          tone={
-                                            line.qualificationStatus ===
-                                            "VALID"
-                                              ? "success"
-                                              : line.qualificationStatus ===
-                                                  "EXPIRING"
-                                                ? "warning"
-                                                : "destructive"
-                                          }
+                                          onValueChange={(revisionId) => {
+                                            const capability =
+                                              capabilityOptionsForOffering(
+                                                line.offeringRevisionId
+                                              ).find(
+                                                (option) =>
+                                                  option.value === revisionId
+                                              )
+                                            updateLine(line.lineKey, {
+                                              capabilityRevisionId:
+                                                revisionId ?? "",
+                                              capabilitySummary:
+                                                capability?.label ?? "",
+                                              qualificationStatus: revisionId
+                                                ? "VALID"
+                                                : "INVALID",
+                                            })
+                                          }}
+                                          options={capabilityOptionsForOffering(
+                                            line.offeringRevisionId
+                                          )}
+                                          size="sm"
+                                          disabled={formalPending}
+                                          placeholder="选择能力"
+                                          className="min-w-[8rem]"
                                         />
                                       </td>
                                       <td className="px-3 py-2 text-right">

@@ -254,6 +254,7 @@ impl WorkItemService {
     ) -> Result<WorkItemView> {
         req.validate()?;
         let mut item = self.load_with_version(id, req.version).await?;
+        ensure_current_owner(&item, actor)?;
         item.defer()?;
         self.update_with_audit(item, "work_item.defer", actor).await
     }
@@ -281,6 +282,7 @@ impl WorkItemService {
     ) -> Result<WorkItemView> {
         req.validate()?;
         let mut item = self.load_with_version(id, req.version).await?;
+        ensure_current_owner(&item, actor)?;
         item.transfer(req.owner_role, req.owner_user_id)?;
         self.update_with_audit(item, "work_item.transfer", actor).await
     }
@@ -310,6 +312,12 @@ impl WorkItemService {
     ) -> Result<WorkItemView> {
         req.validate()?;
         let mut item = self.load_with_version(id, req.version).await?;
+        ensure_current_owner(&item, actor)?;
+        if item.work_item_type == entities::work_item::WorkItemType::ProcurementConfirmation {
+            return Err(Error::BusinessLogicError(
+                "采购二次确认必须在采购确认工作台完成，不能直接完成待办".to_string(),
+            ));
+        }
         item.complete(actor.id(), entities::common::time::Instant::now())?;
         self.update_with_audit(item, "work_item.complete", actor).await
     }
@@ -341,6 +349,9 @@ impl WorkItemService {
     ) -> Result<WorkItemView> {
         req.validate()?;
         let mut item = self.load_with_version(id, req.version).await?;
+        if item.owner_user_id.is_some() {
+            ensure_current_owner(&item, actor)?;
+        }
         if !item.work_item_type.is_manually_closable() {
             return Err(Error::BusinessLogicError(
                 "该任务类型不允许人工关闭（审批、确认、结果未知或异常补偿任务）".to_string(),
@@ -435,6 +446,21 @@ impl WorkItemService {
     }
 }
 
+/// 校验当前操作人仍是任务责任人。
+///
+/// 已领取任务的后续写操作必须失败关闭；仅拥有接口权限不能替代任务所有权。
+///
+/// # 错误
+/// 当前操作人不是有效任务责任人时返回 `Forbidden`。
+fn ensure_current_owner(item: &WorkItem, actor: &AuditActor) -> Result<()> {
+    if item.is_owned_by(actor.id()) {
+        return Ok(());
+    }
+    Err(Error::Forbidden(
+        "该任务未由当前账号领取，或处理权已发生变化，请刷新待办后重试".to_string(),
+    ))
+}
+
 /// 判断对象类型代码是否属于业务单据目录（判定来自 entities 的 serde 目录）。
 ///
 /// 业务对象类型是跨域开放目录（§6.1），本服务不复制 `DocumentType` 枚举清单，
@@ -452,4 +478,60 @@ fn is_business_document_type(object_type: &str) -> bool {
     };
     let deserializer: StrDeserializer<SerdeError> = object_type.into_deserializer();
     DocumentType::deserialize(deserializer).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use entities::common::time::Instant;
+    use entities::ids::WorkItemId;
+    use entities::work_item::{WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
+    use entities::AccountKind;
+
+    use super::{ensure_current_owner, AuditActor};
+
+    fn claimed_item(owner: &str) -> WorkItem {
+        let mut item = WorkItem::new(
+            WorkItemId::new("wi-owner-test"),
+            WorkItemData {
+                work_item_type: WorkItemType::ProcurementConfirmation,
+                business_object_type: "procurement_confirmation".to_string(),
+                business_object_id: "pc-1".to_string(),
+                subject_version: Some("1".to_string()),
+                owner_role: Some("procurement".to_string()),
+                owner_user_id: None,
+                priority: WorkItemPriority::Normal,
+                due_at: Some(Instant::from_unix_secs(1_800_000_000)),
+                reason_code: None,
+                impact_summary: None,
+                completion_action: "APPROVE_PROCUREMENT_CONFIRMATION".to_string(),
+            },
+        )
+        .unwrap();
+        item.claim(owner).unwrap();
+        item
+    }
+
+    #[test]
+    fn current_owner_is_allowed_to_mutate_claimed_task() {
+        let item = claimed_item("procurement-1");
+        let actor = AuditActor::new(
+            "procurement-1".to_string(),
+            "buyer".to_string(),
+            AccountKind::Admin,
+        );
+
+        assert!(ensure_current_owner(&item, &actor).is_ok());
+    }
+
+    #[test]
+    fn non_owner_is_forbidden_from_mutating_claimed_task() {
+        let item = claimed_item("procurement-1");
+        let actor = AuditActor::new(
+            "procurement-2".to_string(),
+            "other-buyer".to_string(),
+            AccountKind::Admin,
+        );
+
+        assert!(ensure_current_owner(&item, &actor).is_err());
+    }
 }

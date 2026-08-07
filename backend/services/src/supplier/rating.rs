@@ -5,7 +5,6 @@
 //! 事务内校验）。本集合是纯追加式不可变修订（无表头实体）。
 
 use database::{AccessControlExt, NoTransaction, SupplierExt, Transactional};
-use entities::common::revision::RevisionBase;
 use entities::common::time::BusinessDate;
 use entities::ids::SupplierAccountId;
 use entities::supplier::{SupplierRatingRevision, SupplierRatingRevisionData, SupplierRatingRevisionId};
@@ -124,19 +123,13 @@ impl SupplierRatingService {
         let db = self.db.clone();
         let client = db.client().clone();
         let supplier_id_for_tx = SupplierAccountId::new(supplier_id);
-        let revision_for_tx = SupplierRatingRevision::new(
-            SupplierRatingRevisionId::new(next_id()),
-            SupplierRatingRevisionData {
-                supplier_id: supplier_id_for_tx.clone(),
-                revision_no: 0,
-                initial_score: req.initial_score,
-                rating: req.rating,
-                current_score: req.current_score,
-                valid_from: req.valid_from,
-                valid_to: req.valid_to,
-                change_reason: req.change_reason,
-            },
-        )?;
+        // 版本号在事务内按历史递增后才构造实体：`revision_no` 参与
+        // 「期初评分只在首次版本填写」校验，不得用占位 0 预构。
+        let revision_id = SupplierRatingRevisionId::new(next_id());
+        let initial_score = req.initial_score;
+        let rating = req.rating;
+        let current_score = req.current_score;
+        let change_reason = req.change_reason;
         let effective_from = req.valid_from;
         let effective_to = req.valid_to;
         let revision = client
@@ -153,10 +146,21 @@ impl SupplierRatingService {
                         .unwrap_or(0)
                         + 1;
                     ensure_no_window_overlap(&history, effective_from, effective_to)?;
-                    let revision = SupplierRatingRevision {
-                        revision: RevisionBase::new(next_no),
-                        ..revision_for_tx
-                    };
+                    // 非首次版本丢弃期初评分，避免实体校验失败。
+                    let initial_score = if next_no == 1 { initial_score } else { None };
+                    let revision = SupplierRatingRevision::new(
+                        revision_id,
+                        SupplierRatingRevisionData {
+                            supplier_id: supplier_id_for_tx,
+                            revision_no: next_no,
+                            initial_score,
+                            rating,
+                            current_score,
+                            valid_from: effective_from,
+                            valid_to: effective_to,
+                            change_reason,
+                        },
+                    )?;
                     db.supplier_rating_revisions().create(&revision, session).await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<SupplierRatingRevision, crate::errors::Error>(revision)

@@ -62,7 +62,7 @@ backend/apps/web-api/src/core/routes/<domain>.rs  路由与权限挂载
 | G4 | D13 | `sales_order` | `sales_order`、`sales_order_line`、`sales_order_working_copy`(+`_line`)、`sales_order_submission`(+`_line`)、`sales_order_revision`(+`_line`)、`sales_order_goods_service_line_revision`、`sales_order_voucher_line_revision` | D08、D10、D12、D02 | W05 |
 | G4 | D14 | `sales_review` | `sales_order_review`、`procurement_confirmation`(+`_line`)、`sales_change_order`、`sales_change_submission`(+`_line`)、`sales_change_review` | D13、D03、D18 | W05、W07 |
 | G5 | D15 | `purchase_order` | `purchase_order`、`purchase_order_submission`(+`_line`)、`purchase_order_revision`(+`_line`)、`purchase_line_sales_allocation`、`purchase_change_order`、`purchase_change_submission`(+`_line`) | D09、D14、D24、D19、D20 | W08 |
-| G5 | D24 | `supplier_catalog` | `supplier_catalog_product`(+`_revision`、`_revision_media`)、`supplier_catalog_sku`(+`_revision`)、`supplier_product_mapping`、`supplier_catalog_intake_batch`(+`_item`)、`supplier_offering`(+`_revision`) | D09、D10 | W21 |
+| G5 | D24 | `supplier_catalog` | `supplier_catalog_product`(+`_revision`、`_revision_media`)、`supplier_catalog_sku`(+`_revision`)、`supplier_product_mapping`、`supplier_catalog_intake_batch`(+`_item`)、`supplier_offering`(+`_revision`)；入池读 `GET .../pool-match`，写 `POST .../link-promote` / `.../reverse-promote` | D09、D10 | W21 |
 | G6 | D16 | `fulfillment` | `purchase_receipt`(+`_line`)、`delivery`(+`_line`)、`electronic_delivery`、`service_fulfillment`、`customer_acceptance`(+`_line`)、`acceptance_fulfillment_allocation` | D15、D17、D13 | W06、W09 |
 | G6 | D17 | `inventory` | `stock_movement`、`stock_balance`、`stock_reservation`(+`_entry`)、`stock_adjustment`(+`_line`) | D11、D10 | W10 |
 | G7 | D18 | `receivable` | `receivable_account`、`receivable_entry`、`receivable_funds_review`、`receivable_entry_offset`、`customer_receipt`、`receipt_allocation`、`invoice`、`sales_invoice_allocation` | D13、D08 | W11、W13 |
@@ -122,7 +122,7 @@ backend/apps/web-api/src/core/routes/<domain>.rs  路由与权限挂载
 | W18 | 导入与期初 | `import-opening` | D22、D04 |
 | W19 | 权限与审计 | `access-audit` | D06 |
 | W20 | API 供应商连接 | `supplier-api-connections` | D25 |
-| W21 | 供应商商品库与供给管理 | `supplier-catalog` | D24 |
+| W21 | 供应商商品库与供给管理（入池：池内匹配 + 关联/反向双分支） | `supplier-catalog` | D24 |
 | W22 | 商品发布 | `product-publications` | D26 |
 | W23 | 执行信息 | `execution-projections` | D27 |
 | W25 | 商城消费订单 | `mall-consumption-orders` | D29、D30 |

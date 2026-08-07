@@ -1,10 +1,10 @@
 # W21 · 供应商商品库与供给管理
 
-> 状态：业务规则已定
+> 状态：业务规则已定（入池双分支与池内匹配已落地实现）
 > 页面模式：M2 供应商商品库 + M3 变化/异常队列 + M4 供应商商品中心
 > 主要路由：`/procurement/supplier-catalog`、`/procurement/supplier-catalog/:supplierProductId`
 > 主要角色：采购；运营只看发布准备信息，销售只消费符合资格的公司 SKU（销售查询称公司商品池）
-> 最后更新：2026-08-04
+> 最后更新：2026-08-07
 
 ## 1. 结论
 
@@ -19,11 +19,12 @@ W21 是所有供应商商品进入 ERP 的统一入口；禁止仅作为“API �
 
 - Excel、API、手工录入只是三种来源渠道，进入后都必须形成相同的供应商 SPU/SKU。
 - 供应商商品库必须保存足以支撑首次建品的来源内容快照：名称、描述、可选来源商品类型、来源品牌/类目、结构化规格、条码、单位以及主图/轮播/详情媒体；允许导入来源缺字段，但缺失项必须在公司商品表单补齐。
-- 采购必须先拥有完整的供应商商品库，再从供应商 SPU 页面逐个选择供应商 SKU：有同款时关联
-  已有公司 SKU；没有同款时在“新建/关联公司商品与供给”Dialog 中使用来源同字段预填并创建公司商品/SKU。SPU
-  只作为页面容器和批量选择范围。
-- 一个公司 SKU 可以关联多个供应商 SKU；每个关联必须分别维护一件代发供给价、集采供给价、集采起订量、税率、费用、区域和有效期。系统不设置供给方式字段，每条供给默认同时支持一件代发与集采。
-- 第二家供应商的同款供应商 SKU 必须继续保留独立身份和来源版本，但可映射到同一公司 SKU；不得重复创建公司商品。
+- 采购必须先拥有完整的供应商商品库，再以**供应商 SPU（商品中心）**为作业上下文入池：
+  系统先给出各供应商 SKU 的**池内状态与匹配候选**；有同款时走**关联入池**，无同款时走**反向入池**。
+  SPU 是页面容器；正式映射/供给粒度始终是 `supplier_catalog_sku_id → company_sku_id`。
+- 一个公司 SKU 可以关联多个供应商 SKU；每个关联必须分别维护一件代发供给价、集采供给价、
+  集采起订量、税率、区域等。系统不设置供给方式字段，每条供给默认同时支持一件代发与集采。
+- 第二家供应商的同款必须**关联已有公司 SKU**，不得再次「反向入池」新建重复公司商品。
 - `sales_visible_price_gross` 与 `market_price` 都属于公司 `sku_revision`；前者供销售选品/报价使用，二者都不是供应商成本，也不得从最低成本自动推导。
 - 销售查询、导出和下单只使用符合资格的公司 SKU（业务称为公司商品池），不得读取供应商商品库和采购成本。
 
@@ -36,14 +37,34 @@ W21 是所有供应商商品进入 ERP 的统一入口；禁止仅作为“API �
   供应商商品/SKU。
 - 供应商商品/SKU 独立创建：W21 `/procurement/supplier-catalog/new` 使用完整手工表单创建
   供应商 SPU 及一个或多个供应商 SKU，保存后仍处于待映射状态。
-- 反向创建：先有供应商 SKU；W21“新建/关联公司商品与供给”在没有同款公司 SKU 时必须显示“新建公司
-  商品/SKU”分支。名称、描述、来源商品类型、分类、品牌、单位、规格、条码、已归档主图/图文等语义相同
-  字段自动预填，采购可二次修改；独立 `product_kind`、销售可见价与市场价均必填，并写入新建 `sku_revision`。提交必须原子创建公司商品/SKU、
-  精确映射和双价供给修订，不得创建独立商品池条目或修订。
-- 前端必须同时提供：关联已有公司 SKU 选择器、公司 SKU→供应商 SKU 正向路径，以及供应商
-  SKU→公司 SKU 的反向创建 Dialog。禁止用跳转 W14 空白页代替反向创建 Dialog。禁止将
-  `product_pool_entry`、`sellable-items` 或其 mock 作为独立稳定对象、ID 或写入路径；公司
-  商品池必须仅为公司 Product/SKU 与有效 offering 的查询投影。
+- **入池 Dialog（页头「入池」）**含两个分支，禁止用跳转 W14 空白页代替：
+  - **关联已有**：挂已有公司 SKU，只写映射 `Active` + 双价供给；不改公司销售可见价/市场价。
+  - **反向新建（反向入池）**：公司无同款时，同构新建公司 SPU + 勾选 SKU 行，并原子写映射与供给；
+    名称等预填、采购可改；`product_kind`、销售可见价、市场价必填。
+- 禁止将 `product_pool_entry`、`sellable-items` 或其 mock 作为独立稳定对象、ID 或写入路径；
+  公司商品池必须仅为公司 Product/SKU 与有效 offering 的查询投影。
+
+### 1.2 池内状态与匹配候选（采购如何知道「有没有同款」）
+
+系统在入池前按**供应商 SKU 行**给出状态（证据排序，**不自动合并**；采购最终确认）：
+
+| 状态 | 含义 | 默认动作建议 |
+| --- | --- | --- |
+| `MAPPED` | 已有生效映射 | 改供给 / 查看；禁止重复关联或反向 |
+| `HAS_CANDIDATES` | 未映射但有公司 SKU 候选 | **关联已有** |
+| `UNMATCHED` | 未映射且无可靠候选 | **反向新建** |
+
+匹配证据（由强到弱，可多条并存）：
+
+1. **条码 / GTIN 精确一致**（最高分）
+2. **名称相近**（包含关系，弱）
+3. **规格相近 / 规格线索**（弱）
+4. **包装单位一致**（加分）
+
+「同款」粒度是 **可售单位（SKU）**：颜色/尺寸不同映射同一公司 SPU 下不同 SKU；
+单品与箱装通常是不同公司 SKU。不得仅按商品名称自动合并。
+
+HTTP：`GET /admin/supplier-catalog/products/{id}/pool-match`（权限同商品详情 `supplier_catalog_product:detail`）。
 
 ## 2. 对象所有权
 
@@ -90,28 +111,46 @@ API 连接是可选来源信息。Excel 和手工商品不得伪造 `connection_
 
 Excel 导入仍用批次对话框；API 同步由 W20 触发。三种来源入库后的**展示与编辑形态统一**为供应商商品中心全页。
 
-## 4. 新建/关联公司商品与供给
+## 4. 入池（关联已有 / 反向新建）
 
-采购在供应商商品库选择“新建/关联公司商品与供给”后必须完成：
+采购在供应商商品中心或列表点击 **「入池」** 打开统一 Dialog。打开时请求 `pool-match`，
+展示各供应商 SKU 的池内状态与匹配证据；默认分支：存在 `HAS_CANDIDATES` 时优先「关联已有」，
+全部 `UNMATCHED` 时优先「反向新建」。
 
-1. 选择目标分支：**关联已有公司 SKU**，或在无同款时**新建公司商品/SKU并关联供给**。新建
-   分支固定当前 `supplier_catalog_sku_id`，自动预填同字段，采购可二次修改；独立
-   `product_kind`、销售可见价和市场价必须显式确认，商品类型不能由分类推导，价格不能从
-   来源底价或采购成本推导。
-2. 确认当前供应商的一件代发供给价（含税运）、集采供给价（含税）、集采起订量、进项税率、费用、区域和有效期；不选择供给方式。
-3. 新建分支把销售可见价与市场价写入新建公司的 `sku_revision`；关联已有公司 SKU 的分支不修改其价格。
-4. 已有分支原子写入供应商 SKU 映射和供给修订；新建分支还须在同一数据库事务创建公司商品/SKU及其修订。任一步失败全部回滚，返回各稳定 ID/修订 ID。
+### 4.1 两分支共性
 
-同一公司 SKU 增加第二家供应商时，只新增映射和供给修订；不得借此修改目标 `sku_revision` 的价格。销售可见价或市场价需要变更时，采购必须在 W14 公司商品/SKU 编辑页按该 SKU 的修订规则单独提交。
+1. 作业上下文是**供应商 SPU**；勾选处理的是该 SPU 下**供应商 SKU 行**（未选兄弟 SKU 保持未映射）。
+2. 必须确认本供应商的**一件代发供给价、集采供给价、进项税率、可供区域**；不选供给方式。
+3. **集采起订量**取自供应商目录 SKU 修订，Dialog **不重复填写**；目录缺起订量则该行不可提交并引导回中心页补齐。
+4. **确认即生效**：Dialog **不展示、不采集** 供给 `valid_from` / `valid_to`；服务端用业务日写入修订内部字段即可。
+5. **进项税率 UI** 使用整数百分比（如 `13` + `%` 后缀），提交时换算为小数税率串（`0.13`）再调后端。
+6. 正式双价可参考目录底价预填，可改；不得与销售可见价互相覆盖。
 
-“同款”不能只按名称自动判断：系统按 GTIN/条码、厂家货号、品牌型号、结构化规格和包装单位给出匹配证据，采购确认最终映射。完全相同的可销售单位映射同一公司 SKU；颜色/尺寸等规格不同映射同一公司 SPU 下的不同 SKU；单品与箱装通常是不同公司 SKU，并记录包装换算。
+### 4.2 关联已有（第二家供应商 / 池内已有同款）
 
-供应商来源图文只作目录与匹配参考。映射已有公司 SKU 时不自动覆盖公司图文；采购若选择采用第二供应商更好的图片，必须在 W14 创建公司商品新草稿修订并审核。供应商后续图片变化只产生来源差异，不直接改写公司商品。
+1. 仅对未映射且有候选（或采购选定目标）的 SKU 勾选。
+2. 每行选择目标 **公司 SKU**（候选列表展示 `sku_no`、名称、规格、匹配证据、有效供应商数）。
+3. 原子写入：映射直接 `Active` + 首条双价 `supplier_offering_revision`；**不得**修改目标公司 `sku_revision` 的销售可见价/市场价。
+4. HTTP：`POST /admin/supplier-catalog/link-promote`（权限 `supplier_product_mapping:approve`）。
+
+### 4.3 反向新建 / 反向入池（公司尚无同款）
+
+1. 同构新建 **一个公司 Product** + 勾选的多行 **公司 SKU**（主档字段从来源预填，字典 ID 由采购确认）。
+2. SPU 级必填：`product_kind`（不可由分类推导）、分类/品牌/基础单位。
+3. 每行 SKU 必填：销售可见价、市场价；正式双价（缺省回退目录底价）。
+4. 若勾选行仍带 `HAS_CANDIDATES`，提交前须二次确认，避免误建重复主档。
+5. 单事务：公司 product/revision + 各 sku/revision + 映射 Active + offering 首修订 + 审计；任一步失败整单回滚。
+6. 并发保护使用 **SPU 来源修订号** `expected_source_revision_no`（不得误传 SKU 修订号）。
+7. HTTP：`POST /admin/supplier-catalog/reverse-promote`（权限 `supplier_product_mapping:approve`）。
+
+同一公司 SKU 增加第二家供应商时，只走关联入池；销售可见价或市场价变更必须在 W14 单独修订。
+
+供应商来源图文只作目录与匹配参考。映射已有公司 SKU 时不自动覆盖公司图文；采用第二供应商图片须在 W14 走公司商品修订。
 
 来源报价与采购确认后的两项供给价必须分开：
 
 - `dropship_floor_price_gross` / `bulk_floor_price_gross` / `bulk_minimum_order_quantity` 是供应商目录 SKU 上的代发底价（含税运）、集采底价（含税）与集采起订量。
-- `dropship_supply_price_gross` / `bulk_supply_price_gross` 是关联公司 SKU 时采购确认后生效的两项供给价（可参考对应目录底价，不自动覆盖，也不得合并成单一确认成本）。
+- `dropship_supply_price_gross` / `bulk_supply_price_gross` 是入池时采购确认后生效的两项供给价（可参考对应目录底价，不自动覆盖，也不得合并成单一确认成本）。
 - `sales_visible_price_gross` 与 `market_price` 都是公司 `sku_revision` 字段；前者供销售选品/报价使用。
 
 上述价格事实不能互相覆盖，也不能自动保持相等。
@@ -127,12 +166,10 @@ Excel 导入仍用批次对话框；API 同步由 W20 触发。三种来源入�
 - 来源筛选：全部、Excel、API、手工录入。
 - 供应商、供应商 SPU/SKU、名称/规格、映射状态、供给状态、是否已关联公司 SKU。
 - 来源描述、品牌/类目、结构化属性、条码、单位及主图/轮播/详情媒体完整度。
-- “按 Excel 模板录入”“手工录入”（跳转全页新建）“新建/关联公司商品与供给”“打开商品中心”。
-- “新建/关联公司商品与供给”Dialog 提供“关联已有公司 SKU / 新建公司商品并关联供给”两个分支；已有分支展示匹配
-  证据、当前有效供应商数量、目标 SKU 状态与销售可见价，但不修改目标 SKU 的价格。
-- 新建分支固定当前供应商目录 SKU，把同名语义字段自动预填为公司草稿并允许采购修改；
-  独立 `product_kind`、销售可见价与市场价均必填。公司对象仍遵守 W14 商品类型、字典、
-  规格、主图和版本校验。
+- “按 Excel 模板录入”“手工录入”（跳转全页新建）“**入池**”“打开商品中心”。
+- “入池”Dialog：先展示 `pool-match` 状态表，再选 **关联已有 / 反向新建**；
+  关联分支展示候选与匹配证据、目标公司 SKU 销售可见价摘要，**不修改**目标 SKU 价格；
+  反向分支同构预填公司草稿，独立 `product_kind`、销售可见价与市场价必填。
 - 从 W14 携带 `skuId` 进入时，只显示映射到该 SKU 的供给；即使尚无供给，也必须保留 W14 的 SKU 上下文和「添加供应商并登记成本」对话框入口。
 - 搜索 300ms 防抖 + Enter + `/` 聚焦；「清除筛选」清搜索与来源筛选（list 模式同时清 `skuId` 锁定）。从 W14 带入的 `skuId` 锁定在 list 模式以共享 `FilterChip` 显性展示并可单独移除（queue 模式保留原「清除 SKU 筛选」）。list 模式不消费队列上下文参数（`changeType/status/autoNext`），进入 list 时清理残留。
 
@@ -161,17 +198,14 @@ Excel 导入仍用批次对话框；API 同步由 W20 触发。三种来源入�
 | 基础信息 | 名称、描述、商品类型、分类、品牌、单位 | 供应商、来源类型、供应商 SPU 编码 | 手工录入的来源商品类型必填；Excel/API 可缺失并在反向建品时补齐。分类 / 品牌 / 单位与 W14 使用同类控件；SPU 级不含条码与供给 |
 | 图文信息 | SPU 轮播图、详情图 | 归档状态 | 主图不在此区；主图随 SKU |
 | SKU / 规格与供给 | 规格维度编辑（名称 + 多取值） | **可编辑 SKU 表**：规格组合生成多行；每行可编供应商 SKU 编码、条码、**1:1 主图**、**一件代发底价（含税运）**、**集采底价（含税）**、**集采起订量**、可供数量/状态 | 与 W14 商品 SKU 表同构；主图为 1:1 小方块上传/预览；SKU 价格字段仅为上述三项，**不含**统一含税报价、进项税率、运费、区域、售后、商品能力等 |
-| 映射与公司商品 | 公司商品/SKU 新建草稿、销售可见价、市场价 | 映射状态、映射历史、当前 SKU 价格摘要 | 主动作：**新建/关联公司商品与供给**；可关联已有公司 SKU，或自动预填并新建公司商品/SKU；不展示来源版本差异、供给版本时间线、发布影响 |
+| 映射与公司商品 | 公司商品/SKU 草稿、销售可见价、市场价 | 池内状态、匹配候选、映射历史 | 主动作：**入池**（关联已有 / 反向新建）；不展示来源版本差异、供给版本时间线、发布影响 |
 
-页头主动作（采购）：填写检查、保存供应商商品资料、新建/关联公司商品与供给、返回。保存仅更新供应商商品资料，不自动改写公司商品或商品池价格。
+页头主动作（采购）：填写检查、保存供应商商品资料、**入池**、返回。保存仅更新供应商商品资料，不自动改写公司商品或商品池价格。
 
 成本区仅采购及明确授权的财务角色可见；销售、运营、管理员和技术角色返回掩码。非采购角色只读。
 
-**新建公司商品/SKU 分支**：使用精确 `supplier_catalog_sku_id` 与来源修订作为预填上下文；
-`supplierProductId` 只可辅助恢复 SPU 页面，不能替代 SKU 级身份。所有相同字段自动预填，
-采购可二次修改；公司 `product_kind` 是独立必填稳定属性，来源类型只能预填、不能由分类
-推导；分类必须与采购最终确认的商品类型兼容。分类、品牌、单位必须解析为 W14 稳定字典
-身份，未归档媒体不得直接成为公司长期媒体。销售可见价与市场价必填。
+**反向新建分支**：以供应商 SPU 为上下文，勾选供应商 SKU 行；预填同名字段，采购确认
+`product_kind`、字典身份、销售可见价与市场价。未归档媒体不得直接成为公司长期媒体。
 
 **明确不在中心页展示**（仍可在队列/其他工作面出现）：来源版本差异、供给版本修订时间线、发布影响与恢复入口。
 
@@ -183,10 +217,9 @@ Excel 导入仍用批次对话框；API 同步由 W20 触发。三种来源入�
 - 供给列只显示**供应商数量**，鼠标悬停弹出面板：供应商列表（暂无时给出空态）、「添加供应商」、「查看全部供给」；
 - 库存列只有「查看库存」链接，不展示独立台账徽标。
 
-「添加供应商并登记成本」是**最小对话框**（区别于手工录入全页表单）：固定当前 `sku_id`，名称/商品类型/规格/分类/品牌/单位/条码/图文从公司商品资料正向复用，形成供应商商品来源快照；要求填写供应商、供应商 SKU 编码、一件代发供给价（含税运）、集采供给价（含税）、集采起订量、进项税率、供给区域和生效日期，不收集供给方式。税率、区域和生效日期只有可靠版本化来源时自动预填并显示来源，采购可修改；无可靠来源时空白必填，禁止静默使用 `0.13`、“全国”或浏览器当天。两项供给价分别写入同一供给修订，不再自动择一生成单一采购确认成本。同一业务事务内创建或关联供应商商品及供应商目录 SKU、精确的 `supplier_catalog_sku_id → sku_id` 映射和供给修订；该正向路径不创建独立商品池条目或修订，也不修改当前 `sku_revision` 的销售可见价或市场价。W21 携带 `skuContext` 进入列表页时，页头「添加供应商并登记成本」按钮使用同一对话框。
+「添加供应商并登记成本」是**最小对话框**（区别于手工录入全页表单）：固定当前 `sku_id`，名称/商品类型/规格/分类/品牌/单位/条码/图文从公司商品资料正向复用，形成供应商商品来源快照；要求填写供应商、供应商 SKU 编码、一件代发供给价（含税运）、集采供给价（含税）、集采起订量、进项税率、供给区域；不收集供给方式。税率、区域有可靠版本化来源时预填；无可靠来源时空白必填，禁止静默使用 `0.13`、“全国”。入池类 Dialog 与关联/反向路径**不向用户采集供给生效日**（确认即生效）。两项供给价分别写入同一供给修订。同一业务事务内创建或关联供应商商品及供应商目录 SKU、精确的 `supplier_catalog_sku_id → sku_id` 映射和供给修订；该正向路径不修改当前 `sku_revision` 的销售可见价或市场价。W21 携带 `skuContext` 进入列表页时，页头「添加供应商并登记成本」按钮使用同一对话框。
 
-公司 SKU 可由 W14 独立创建，也可由 W21 反向“新建/关联公司商品与供给”复合命令创建；两种路径都必须由服务端
-分配稳定 `sku_id`。正向添加供应商与反向创建最终都只能引用该稳定 ID，不得由前端临时生成。
+公司 SKU 可由 W14 独立创建，也可由 W21 **反向入池**创建；两种路径都必须由服务端分配稳定 `sku_id`。正向添加供应商与反向/关联入池最终都只能引用该稳定 ID，不得由前端临时生成。
 
 ## 6. 写命令与事务边界
 
@@ -232,110 +265,91 @@ ReviseSupplierCatalogProduct {
 
 仅形成新的 `supplier_catalog_*_revision`；**不得**修改公司 SKU 的 `sku_revision` 或已确认供给成本。并发时 `expected_source_revision_no` 冲突整体失败。
 
-### 6.2 新建/关联公司商品与供给
+### 6.2 池内匹配
 
 ```text
-CreateOrLinkCompanySkuFromSupplierCatalog {
-  supplier_catalog_sku_id
-  expected_supplier_catalog_sku_revision_id
-  target:
-    | { kind: EXISTING_COMPANY_SKU, company_sku_id, expected_company_sku_revision_id }
-    | {
-        kind: CREATE_COMPANY_PRODUCT_AND_SKU
-        company_product {
-          name
-          description?
-          product_kind: PHYSICAL | VIRTUAL | OFFLINE_SERVICE | VOUCHER
-          category_id
-          brand_id
-          carousel_file_asset_ids[]?
-          detail_file_asset_ids[]?
-        }
-        company_sku {
-          sku_no?                 // 仅业务编码；系统生成，可由采购覆盖，不参与身份恢复
-          base_unit_id
-          attribute_values[]      // 服务端派生 specification_signature
-          barcode?
-          main_image_file_asset_id
-          sales_visible_price_gross // 新建分支必填，写入 sku_revision
-          market_price_gross        // 新建分支必填，写入 sku_revision
-        }
-        change_reason
-      }
-  dropship_supply_price_gross
-  bulk_supply_price_gross
-  bulk_minimum_order_quantity
+GET /admin/supplier-catalog/products/{supplier_product_id}/pool-match
+
+SupplierProductPoolMatchView {
+  supplier_product_id
+  source_revision_no          // SPU 当前来源修订号（入池并发键）
+  items[] {
+    supplier_catalog_sku_id
+    supplier_sku_code
+    specification?
+    barcode?
+    pool_status: MAPPED | HAS_CANDIDATES | UNMATCHED
+    mapped_company_sku_id?
+    mapped_company_sku_no?
+    candidates[] {
+      sku_id / sku_no / product_id / product_no
+      name / specification? / barcode?
+      base_unit_id
+      sales_visible_price_gross?
+      active_supplier_count
+      match_signals[]           // 如「条码一致」「名称相近」「规格线索」「单位一致」
+      score
+    }
+  }
+}
+```
+
+### 6.3 关联入池
+
+```text
+POST /admin/supplier-catalog/link-promote
+
+LinkPromoteToCompanyPool {
+  supplier_product_id
+  expected_source_revision_no   // 必须为 SPU 修订号，禁止传 SKU 修订号
+  input_tax_rate                  // 小数串，如 "0.13"（前端由整数百分比换算）
+  supply_region[]
+  items[] {
+    supplier_catalog_sku_id
+    company_sku_id
+    dropship_supply_price_gross?  // 空则回退目录代发底价
+    bulk_supply_price_gross?      // 空则回退目录集采底价
+    // bulk_minimum_order_quantity 不传：服务端读目录 SKU 修订
+  }
+  idempotency_key
+}
+// 无 valid_from：确认即生效；服务端可用业务日写入修订内部字段
+```
+
+单事务：各行映射 `Active` + offering 首修订 + 审计。不创建/不修改公司 product/sku 修订价格。
+
+### 6.4 反向入池
+
+```text
+POST /admin/supplier-catalog/reverse-promote
+
+ReversePromoteToCompanyPool {
+  supplier_product_id
+  expected_source_revision_no
+  product_kind
+  product_no?
+  category_id / brand_id / base_unit_id
   input_tax_rate
-  fees?
-  supply_region
-  valid_from / valid_to?
-  prefill_source_refs? {
-    input_tax_rate?: {
-      kind: SUPPLIER_COMMERCIAL_PROFILE_REVISION | TAX_POLICY_REVISION
-      revision_id
-    }
-    supply_region?: {
-      kind: SUPPLIER_CAPABILITY_REVISION | SUPPLY_REGION_POLICY_REVISION
-      revision_id
-    }
-    valid_from?: {
-      kind: SERVER_BUSINESS_DATE
-      business_date
-      timezone
-      calendar_version?
-    }
+  supply_region[]
+  items[] {
+    supplier_catalog_sku_id
+    sku_no?
+    dropship_supply_price_gross?
+    bulk_supply_price_gross?
+    sales_visible_price_gross   // 必填，写新建 sku_revision
+    market_price                // 必填，写新建 sku_revision
   }
   idempotency_key
 }
 ```
 
-`prefill_source_refs` 按字段记录自动预填依据：只有字段确实由可靠来源预填时，对应引用才
-允许出现且必须提交并进入审计；采购手工填写而未发生预填时不得伪造来源引用。税率可以引用
-供应商商业资料修订或税务策略修订，区域可以引用供应商能力修订或供给区域策略修订，生效
-日期只能引用服务端业务日期快照。写入供给修订的是采购最终确认值，来源引用不替代最终值。
+单事务：1 个公司 Product + N 个公司 SKU/修订 + N 条映射 Active + N 条 offering 首修订 + 审计。
+反向分支不得接收客户端伪造的既有 `company_sku_id` 以“假装新建”；规格签名由服务端按来源属性
+或供应商 SKU 编码派生以保证同行唯一。未选兄弟 SKU 不得隐式入池。
 
-新建分支中，名称、描述、来源商品类型、分类、品牌、单位、规格、条码、主图、轮播/详情图等两侧语义相同
-字段全部由当前供应商商品/SKU 修订自动预填，采购可在提交前二次修改。`product_kind` 必须
-由采购最终确认并写入公司商品稳定身份；来源没有可靠类型时保持空白必填，不得从分类推导。
-分类必须允许最终确认的类型。字典项无法精确匹配、
-媒体未归档或启用 SKU 缺主图时必须补齐；不得伪造字典 ID 或长期媒体地址。新建公司的销售可见价和
-市场价均必填，写入新建 `sku_revision`，且不得由来源底价、正式供给价或彼此自动推导。关联已有公司 SKU 时不传也不修改这两项价格。
-
-新建分支不得接收客户端提供的 `company_sku_id`，也不得按来源 SKU 编码、拟定的公司
-`sku_no`、表格位置或“只有一个规格”猜测并复用既有公司 SKU 身份；服务端按规范化属性
-代码/值代码派生新 `specification_signature` 并分配新 `company_sku_id`。已有分支只引用已选定的
-`company_sku_id + expected_company_sku_revision_id`，且不能借关联命令改变其规格签名。
-
-`CREATE_COMPANY_PRODUCT_AND_SKU` 是单一数据库事务：创建公司 product/SKU 及其包含销售可见价和市场价的 `sku_revision`、精确
-SKU 映射、双价 offering 修订、审计与幂等结果必须一起
-提交；外部媒体归档须在事务前完成或在提交后由投递任务处理，不能用 Saga 留下业务半状态。
-
-单项新建/关联公司商品与供给的正式粒度始终是 `supplier_catalog_sku_id`。供应商 SPU 页面可以多选 SKU，
-但批量提交必须拆成 SKU 级 `items[]`；每项都显式携带来源 SKU 与目标公司 SKU，独立执行
-原子校验和幂等控制，不得生成一条 SPU 级映射或隐式处理未选择的兄弟 SKU。
-
-```text
-CreateOrLinkCompanySkusFromSupplierCatalogBatch {
-  items[]: CreateOrLinkCompanySkuFromSupplierCatalog
-}
-
-CreateOrLinkCompanySkusFromSupplierCatalogBatchResult {
-  items[] {
-    supplier_catalog_sku_id
-    idempotency_key
-    status: SUCCEEDED | FAILED
-    result?: SupplierCatalogWriteResult
-    error?: { code, message, retryable }
-  }
-}
-```
-
-批量仅是传输层分组，不是 SPU 级业务命令，也不承诺跨 SKU 的整体原子性。每个 `items[]`
-元素按自己的幂等键独立成功或失败；重试失败项不得重复执行已成功项。
-
-成功结果至少返回 `supplier_product_id`、`supplier_catalog_sku_id`、`company_product_id`、
-`company_sku_id`、`company_sku_revision_id`、`supplier_product_mapping_id`、`supplier_offering_revision_id`、
-当前有效供应商数量、审计引用和记录时间。单项执行中出现并发冲突、来源修订已变化或价格无效时该项整体失败，不允许只完成映射、供给或新建公司 SKU 中的一部分。
+成功结果至少返回 `supplier_product_id`、`company_product_id`、各行 `company_sku_id` /
+`mapping_id` / `offering_id`、审计引用与记录时间。来源修订冲突、已映射、缺起订量/底价时
+整单失败，不允许半完成状态。
 
 ## 7. 权限与保密
 
@@ -360,29 +374,25 @@ CreateOrLinkCompanySkusFromSupplierCatalogBatchResult {
 
 1. 一期 Excel、手工两种来源都能形成统一供应商 SPU/SKU，且没有虚假 API 连接；二期 API 来源接入后继续写入同一模型。
 2. 一期 Excel/手工入库、二期 API 入库后的商品都默认只在供应商商品库，未关联公司 SKU 前销售不可见。
-3. 采购可把供应商 SKU 关联已有公司 SKU，也可在无同款时选择“新建公司商品/SKU并关联供给”；
-   新建分支同字段自动预填、允许二次修改，独立 `product_kind`、销售可见价与市场价均必填；
-   `product_kind` 不得由分类派生，分类必须与最终确认类型兼容。
-4. 一个公司 SKU 能维护至少两家供应商，分别拥有不同成本、MOQ、区域和有效期。
-5. W14 SKU 供给列显示供应商数量，悬停面板可新增一条带成本的手工供给或查看全部供给。
-6. 新建/关联公司商品与供给的已有分支同时形成映射和供给修订，且不修改目标 `sku_revision`；新建分支还原子
-   形成公司商品/SKU及修订。失败时没有半完成状态。
-7. 采购成本与销售可见价明确分栏，销售和运营请求中成本值为掩码或根本不返回。
-8. 销售查询和导出只依赖符合资格的公司 SKU（公司商品池查询视图）；未关联公司 SKU 的供应商商品不可被下单。
-9. 二期启用后，API 停供/不可供触发安全暂停，且不改写历史订单快照；一期不开启该入口。
-10. 所有写命令有幂等键、期望修订、审计记录和明确的冲突/未知结果处理。
-11. 来源无图时仍可进入供应商商品库；公司商品主图规则仅在 W14 建品/修订时校验。
-12. 第二供应商关联已有公司 SKU 时，不修改该 SKU 修订；销售只看到一份公司商品和一个销售可见价，采购看到逐供应商成本与条件。
-13. 供应商商品中心与 W14 商品详情分区同构（基础 / 图文 / SKU·规格 + 供应商独有来源供给）；手工新建使用全页表单而非简陋对话框。
-14. 分类、品牌、单位使用与公司商品相同的字典控件；规格使用与公司商品相同的规格维度编辑器。
-15. 多规格生成多 SKU 行；每行维护 1:1 主图与价格字段：一件代发底价（含税运）、集采底价（含税）、集采起订量，以及可供数量/状态。
-16. 系统不存在供给方式字段；每条正式供给默认同时支持一件代发与集采，并分别保存两项供给价。供应商商品目录**不包含**：统一含税报价、进项税率、运费、其他费用、可供区域、预计发货、售后说明、商品能力（关联供给确认另有字段，不进目录主档）。
-17. 中心页不展示来源版本差异、供给版本时间线、发布影响。
-18. 供应商商品中心保存只形成来源修订（`ReviseSupplierCatalogProduct`，含 `skus[]`），带期望修订号与幂等键。
-19. 同一供应商 SPU 下的多个供应商 SKU 可以分别映射不同公司 SKU；只选择其中部分 SKU
-    关联公司 SKU 时，未选择的兄弟 SKU 保持未映射，且任何一项都不能覆盖另一项的映射。
-20. 反向新建分支固定精确供应商目录 SKU 与来源修订；同字段自动预填但不自动提交，采购
-    可修改。独立 `product_kind`、销售可见价、市场价、两项供给价及集采起订量缺任一项均
-    fail-closed；商品类型不能由分类派生，分类必须与最终确认类型兼容。
-21. 进项税率、供给区域和生效日期均在 Dialog 可见且可修改；有可靠来源时展示预填值及
-    来源版本，无来源时空白必填。系统不存在 `0.13`、“全国”或浏览器当天的静默正式默认。
+3. 入池 Dialog 提供 **关联已有 / 反向新建**；打开时展示 `pool-match` 状态与候选证据；
+   有候选默认关联，无候选默认反向；第二家同款必须关联，禁止反向重复建档。
+4. 反向新建：同字段预填可改；独立 `product_kind`、销售可见价、市场价必填；
+   `product_kind` 不得由分类派生；起订量取自目录 SKU。
+5. 一个公司 SKU 能维护至少两家供应商，分别拥有不同成本、MOQ、区域。
+6. W14 SKU 供给列显示供应商数量，悬停面板可新增一条带成本的手工供给或查看全部供给。
+7. 关联入池只形成映射与供给修订且不修改目标 `sku_revision`；反向入池还原子形成公司商品/SKU 及修订。失败无半完成状态。
+8. 采购成本与销售可见价明确分栏，销售和运营请求中成本值为掩码或根本不返回。
+9. 销售查询和导出只依赖符合资格的公司 SKU（公司商品池查询视图）；未关联公司 SKU 的供应商商品不可被下单。
+10. 二期启用后，API 停供/不可供触发安全暂停，且不改写历史订单快照；一期不开启该入口。
+11. 写命令有幂等键、`expected_source_revision_no`（**SPU** 修订号）、审计与冲突文案（含期望/当前版本）。
+12. 来源无图时仍可进入供应商商品库；公司商品主图规则仅在 W14 建品/修订时校验。
+13. 第二供应商关联已有公司 SKU 时，不修改该 SKU 修订；销售只看到一份公司商品和一个销售可见价。
+14. 供应商商品中心与 W14 商品详情分区同构；手工新建使用全页表单。
+15. 分类、品牌、单位与公司商品相同字典控件；规格使用相同规格维度编辑器。
+16. 多规格多 SKU 行；目录价仅代发底价/集采底价/集采起订量；不含进项税率、区域等（入池时再确认）。
+17. 系统不存在供给方式字段；每条正式供给默认同时支持一件代发与集采。
+18. 中心页不展示来源版本差异、供给版本时间线、发布影响。
+19. 中心页保存只形成来源修订（含 `skus[]`），带期望修订号与幂等键。
+20. 同一 SPU 下多 SKU 可分别映射不同公司 SKU；未选兄弟 SKU 保持未映射。
+21. 入池 Dialog：**不向用户采集供给生效日**（确认即生效）；进项税率为整数百分比 UI，提交换算小数；
+    税率/区域无可靠来源时空白必填，禁止静默默认 `0.13` /「全国」。

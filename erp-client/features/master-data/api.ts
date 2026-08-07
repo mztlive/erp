@@ -366,6 +366,18 @@ const lifecycleTone = (
 ): MasterDataListItem["lifecycleTone"] =>
   status === "ENABLED" ? "success" : "neutral"
 
+/**
+ * 生成业务编号（前端未暴露编号录入时的临时唯一码）。
+ *
+ * 格式：`{prefix}-{timestamp36}{random36}`，避免把幂等键前缀截断后
+ * 拼成固定编号（例如 `create-supplier-...` → 永远是 `PTY-createsupp`）。
+ */
+function genBusinessCode(prefix: string): string {
+  const stamp = Date.now().toString(36).toUpperCase()
+  const rand = Math.random().toString(36).slice(2, 8).toUpperCase()
+  return `${prefix}-${stamp}${rand}`
+}
+
 const todayDateOnly = (): string => {
   const now = new Date()
   const y = now.getFullYear()
@@ -493,6 +505,43 @@ const ratingToBackend = (label: string | undefined): string => {
   if (!label) return "C"
   const m = label.trim().match(/^([ABCD])/i)
   return m ? m[1].toUpperCase() : "C"
+}
+
+/**
+ * 经营类目暂无独立后端字段；编码进商务版本 `payment_term_snapshot`
+ *（结算方式本身走 `settlement_mode` 枚举，快照仅作展示/回填载体）。
+ * 标记串需稳定，加载时原样解析。
+ */
+const BUSINESS_CATEGORY_MARK = "｜经营类目："
+
+/** 结算文案 + 经营类目 → 付款条件快照（≤64 字）。 */
+const buildPaymentTermSnapshot = (
+  settlement: string | undefined,
+  businessCategory: string | undefined
+): string => {
+  const base = (settlement?.trim() || "默认付款条件").slice(0, 64)
+  const cat = businessCategory?.trim()
+  if (!cat) return base
+  const encoded = `${base}${BUSINESS_CATEGORY_MARK}${cat}`
+  return [...encoded].slice(0, 64).join("")
+}
+
+/** 从付款条件快照解析经营类目（无标记则空）。 */
+const parseBusinessCategoryFromSnapshot = (
+  snapshot: string | null | undefined
+): string => {
+  if (!snapshot) return ""
+  const idx = snapshot.indexOf(BUSINESS_CATEGORY_MARK)
+  if (idx < 0) return ""
+  return snapshot.slice(idx + BUSINESS_CATEGORY_MARK.length).trim()
+}
+
+/** 百分制评分：合法则返回 0–100 整数，否则 undefined。 */
+const parseScore100 = (raw: string | undefined): number | undefined => {
+  if (raw == null || !String(raw).trim()) return undefined
+  const n = Number.parseInt(String(raw).trim(), 10)
+  if (!Number.isFinite(n) || n < 0 || n > 100) return undefined
+  return n
 }
 
 const pickDefaultOrFirst = <T extends { is_default?: boolean }>(
@@ -1783,6 +1832,12 @@ async function centerSupplier(
     .filter(Boolean)
     .join("、")
 
+  // 经营类目：商务快照编码；兼容早期写入 capability.fulfillment_note 的数据
+  const businessCategory =
+    parseBusinessCategoryFromSnapshot(profile?.payment_term_snapshot) ||
+    capabilities.map((c) => c.fulfillment_note?.trim()).find(Boolean) ||
+    ""
+
   const qualByType = (type: string) =>
     qualifications.find((q) => q.qualification_type === type)
 
@@ -1831,6 +1886,7 @@ async function centerSupplier(
     fact("发票类型", invoiceLabel(profile?.invoice_type)),
     fact("发票税点", profile?.invoice_tax_rate),
     fact("能力", capabilityLabels),
+    fact("经营类目", businessCategory || null),
     fact("公司签约主体", signingEntityName),
     fact("公司付款主体", paymentEntityName),
     // 标签必须与 masterDataCopy / RESOURCE_FIELDS.suppliers 完全一致
@@ -2206,10 +2262,10 @@ async function createProduct(
   }
 
   // product_no is required by backend; form does not collect it.
-  // Derive a stable business code from the first SKU no or idempotency key.
+  // Prefer first SKU 前缀；否则生成唯一业务编号（禁止从幂等键前缀截断）。
   const productNo =
-    fields.skus[0]?.skuNo?.replace(/-?\d*$/, "") ||
-    `SPU-${input.idempotencyKey.replace(/[^a-zA-Z0-9]/g, "").slice(0, 12)}`
+    fields.skus[0]?.skuNo?.replace(/-?\d*$/, "").trim() ||
+    genBusinessCode("SPU")
 
   try {
     const created = await apiPost<ProductDto>("/admin/products", {
@@ -2439,12 +2495,14 @@ async function persistSupplierAncillary(params: {
     .map((s) => s.trim())
     .map(capabilityToBackend)
     .filter((code): code is string => Boolean(code))
+  const businessCategoryNote = fields.businessCategory?.trim() || undefined
   for (const code of capabilityCodes) {
     if (existingCapCodes.has(code)) continue
     try {
       await apiPost(`/admin/suppliers/${supplierId}/capabilities`, {
         capability_code: code,
         owner_user_id: "system",
+        fulfillment_note: businessCategoryNote,
         valid_from: validFrom,
         status: "active",
       })
@@ -2452,24 +2510,39 @@ async function persistSupplierAncillary(params: {
       // ignore duplicates
     }
   }
+  // 已有能力：经营类目变更时同步履约说明，便于详情回显
+  if (businessCategoryNote) {
+    for (const cap of existingCapabilities) {
+      if ((cap.fulfillment_note ?? "").trim() === businessCategoryNote) continue
+      try {
+        await apiPut(`/admin/supplier-capabilities/${cap.id}`, {
+          version: cap.version,
+          fulfillment_note: businessCategoryNote,
+        })
+      } catch {
+        // ignore
+      }
+    }
+  }
 
-  // 评级：创建必写；修订仅当尚无评级记录时补首条，避免每次保存追加版本
+  // 评级：创建必写；修订仅当尚无评级记录时补首条，避免与开放区间重叠
   const shouldWriteRating =
     (isCreate || existingRatings.length === 0) &&
     Boolean(fields.supplierRating || fields.currentScore || fields.initialScore)
   if (shouldWriteRating) {
     try {
-      const current = Number.parseInt(fields.currentScore ?? "", 10)
-      const initial = Number.parseInt(fields.initialScore ?? "", 10)
+      const current = parseScore100(fields.currentScore)
+      const initial = parseScore100(fields.initialScore)
       await apiPost(`/admin/suppliers/${supplierId}/ratings`, {
-        initial_score: Number.isFinite(initial) ? initial : undefined,
+        // 期初评分只允许首条评估版本
+        initial_score: initial,
         rating: ratingToBackend(fields.supplierRating),
-        current_score: Number.isFinite(current) ? current : 0,
+        current_score: current ?? 0,
         valid_from: validFrom,
         change_reason: changeReason || "评估",
       })
     } catch {
-      // ignore
+      // ignore — 附属资料失败不阻断主单
     }
   }
 
@@ -2598,10 +2671,10 @@ async function createSupplier(
 
   if (!partyId) {
     // Create party first so supplier can reference it.
+    // party_no 后端必填、表单不采集：前端生成唯一编号，不从幂等键截取（会撞号）。
     try {
-      const partyNo = `PTY-${input.idempotencyKey.replace(/[^a-zA-Z0-9]/g, "").slice(0, 10)}`
       const party = await apiPost<PartyDto>("/admin/parties", {
-        party_no: partyNo,
+        party_no: genBusinessCode("PTY"),
         legal_name: fields.company || input.name.trim(),
         short_name: null,
         unified_credit_code: fields.taxNo || null,
@@ -2615,7 +2688,8 @@ async function createSupplier(
   }
 
   // signing/payment entity: reuse the same party when form leaves them blank.
-  const supplierNo = `SUP-${input.idempotencyKey.replace(/[^a-zA-Z0-9]/g, "").slice(0, 10)}`
+  // supplier_no 同理：必须每次唯一，不能用幂等键前缀截断。
+  const supplierNo = genBusinessCode("SUP")
   try {
     const created = await apiPost<SupplierDto>("/admin/suppliers", {
       party_id: partyId,
@@ -2623,7 +2697,10 @@ async function createSupplier(
       default_payment_term_id: null,
       settlement_mode: settlementToBackend(fields.settlement),
       reconciliation_cycle: "monthly",
-      payment_term_snapshot: fields.settlement || "默认付款条件",
+      payment_term_snapshot: buildPaymentTermSnapshot(
+        fields.settlement,
+        fields.businessCategory
+      ),
       invoice_type: invoiceToBackend(fields.invoiceType),
       invoice_tax_rate: fields.invoiceTaxRate || "0.13",
       signing_entity_party_id: partyId,
@@ -2966,15 +3043,22 @@ export async function createMasterDataRevision(
             default_payment_term_id: null,
           }
         )
-        // Append commercial profile when settlement fields present
-        if (fields.settlement || fields.invoiceType) {
+        // 结算/发票/经营类目任一变更则追加商务版本（经营类目编码进快照）
+        if (
+          fields.settlement ||
+          fields.invoiceType ||
+          fields.businessCategory
+        ) {
           try {
             await apiPost(
               `/admin/suppliers/${input.stableId}/commercial-profiles`,
               {
                 settlement_mode: settlementToBackend(fields.settlement),
                 reconciliation_cycle: "monthly",
-                payment_term_snapshot: fields.settlement || "默认付款条件",
+                payment_term_snapshot: buildPaymentTermSnapshot(
+                  fields.settlement,
+                  fields.businessCategory
+                ),
                 invoice_type: invoiceToBackend(fields.invoiceType),
                 invoice_tax_rate: fields.invoiceTaxRate || "0.13",
                 signing_entity_party_id: updated.party_id,
