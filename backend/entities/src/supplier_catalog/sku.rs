@@ -29,6 +29,8 @@ const SPECIFICATION_MAX_LEN: usize = 512;
 const BASE_UNIT_MAX_LEN: usize = 64;
 /// 条码最大长度。
 const BARCODE_MAX_LEN: usize = 64;
+/// 来源 SKU 主图取回地址最大长度。
+const SOURCE_MAIN_IMAGE_URL_MAX_LEN: usize = 1024;
 /// 来源修订标识最大长度。
 const REVISION_TOKEN_MAX_LEN: usize = 256;
 /// 白名单 HMAC 最大长度。
@@ -190,6 +192,8 @@ pub struct SupplierCatalogSkuRevisionData {
     pub structured_attributes: Vec<SourceAttribute>,
     /// 来源 SKU 主图（已归档受控文件）。
     pub source_main_image_asset_id: Option<FileAssetId>,
+    /// 来源 SKU 主图取回地址（归档前快照；不得作为公司商品长期媒体值）。
+    pub source_main_image_url_snapshot: Option<String>,
     /// 来源 SKU 主图归档状态。
     pub main_image_archive_status: Option<ArchiveStatus>,
     /// 一件代发底价（含税运）；目录观察价，未确认前不是采购成本。
@@ -233,6 +237,8 @@ pub struct SupplierCatalogSkuRevision {
     pub structured_attributes: Vec<SourceAttribute>,
     /// 来源 SKU 主图（已归档受控文件）。
     pub source_main_image_asset_id: Option<FileAssetId>,
+    /// 来源 SKU 主图取回地址（归档前快照；不得作为公司商品长期媒体值）。
+    pub source_main_image_url_snapshot: Option<String>,
     /// 来源 SKU 主图归档状态。
     pub main_image_archive_status: Option<ArchiveStatus>,
     /// 一件代发底价（含税运）。
@@ -278,6 +284,11 @@ impl SupplierCatalogSkuRevision {
         ensure_amount_non_negative(data.bulk_floor_price_gross, "集采底价")?;
         ensure_quantity_non_negative(data.bulk_minimum_order_quantity, "集采起订量")?;
         ensure_quantity_non_negative(data.available_quantity, "可供数量")?;
+        let source_main_image_url_snapshot = normalize_optional_text(
+            data.source_main_image_url_snapshot,
+            "来源主图取回地址",
+            SOURCE_MAIN_IMAGE_URL_MAX_LEN,
+        )?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             revision: RevisionBase::new(data.revision_no),
@@ -289,6 +300,7 @@ impl SupplierCatalogSkuRevision {
             barcode: texts.barcode,
             structured_attributes,
             source_main_image_asset_id: data.source_main_image_asset_id,
+            source_main_image_url_snapshot,
             main_image_archive_status: data.main_image_archive_status,
             dropship_floor_price_gross: data.dropship_floor_price_gross,
             bulk_floor_price_gross: data.bulk_floor_price_gross,
@@ -439,6 +451,7 @@ mod tests {
             barcode: Some("690000000001".to_string()),
             structured_attributes: Vec::new(),
             source_main_image_asset_id: None,
+            source_main_image_url_snapshot: None,
             main_image_archive_status: None,
             dropship_floor_price_gross: Some(Amount::from_str("12.00").unwrap()),
             bulk_floor_price_gross: Some(Amount::from_str("10.00").unwrap()),

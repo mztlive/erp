@@ -1442,7 +1442,17 @@ impl SupplierCatalogService {
                 barcode: write.barcode.clone(),
                 structured_attributes: write.structured_attributes.clone(),
                 source_main_image_asset_id: None,
-                main_image_archive_status: None,
+                source_main_image_url_snapshot: write
+                    .source_main_image_url
+                    .as_ref()
+                    .map(|value| value.trim().to_string())
+                    .filter(|value| !value.is_empty()),
+                main_image_archive_status: write
+                    .source_main_image_url
+                    .as_ref()
+                    .map(|value| value.trim())
+                    .filter(|value| !value.is_empty())
+                    .map(|_| ArchiveStatus::PendingImport),
                 dropship_floor_price_gross: self.parse_amount(write.dropship_floor_price_gross.as_deref())?,
                 bulk_floor_price_gross: self.parse_amount(write.bulk_floor_price_gross.as_deref())?,
                 bulk_minimum_order_quantity: self
@@ -1617,7 +1627,10 @@ fn sku_revision_view(revision: &SupplierCatalogSkuRevision) -> SupplierCatalogSk
         revision_no: revision.revision.revision_no,
         name: revision.name.clone(),
         specification: revision.specification.clone(),
+        source_base_unit: revision.source_base_unit.clone(),
         barcode: revision.barcode.clone(),
+        structured_attributes: revision.structured_attributes.clone(),
+        source_main_image_url: revision.source_main_image_url_snapshot.clone(),
         dropship_floor_price_gross: revision.dropship_floor_price_gross.map(|value| value.to_string()),
         bulk_floor_price_gross: revision.bulk_floor_price_gross.map(|value| value.to_string()),
         bulk_minimum_order_quantity: revision

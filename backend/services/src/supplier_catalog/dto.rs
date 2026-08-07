@@ -385,6 +385,8 @@ pub struct SupplierCatalogSkuWrite {
     pub source_base_unit: Option<String>,
     /// 条码。
     pub barcode: Option<String>,
+    /// 来源 SKU 主图取回地址（归档前快照；不得作为公司商品长期媒体值）。
+    pub source_main_image_url: Option<String>,
     /// 一件代发底价（含税运）。
     pub dropship_floor_price_gross: Option<String>,
     /// 集采底价（含税）。
@@ -729,8 +731,14 @@ pub struct SupplierCatalogSkuRevisionView {
     pub name: String,
     /// 来源规格。
     pub specification: String,
+    /// 来源单位快照。
+    pub source_base_unit: Option<String>,
     /// 条码。
     pub barcode: Option<String>,
+    /// 已规范化的来源规格属性。
+    pub structured_attributes: Vec<SourceAttribute>,
+    /// 来源 SKU 主图取回地址（归档前快照）。
+    pub source_main_image_url: Option<String>,
     /// 一件代发底价。
     pub dropship_floor_price_gross: Option<String>,
     /// 集采底价。

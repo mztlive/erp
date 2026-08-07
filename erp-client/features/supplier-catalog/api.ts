@@ -74,7 +74,13 @@ type BackendSkuRevision = {
   revision_no: number
   name: string
   specification: string
+  source_base_unit?: string | null
   barcode?: string | null
+  structured_attributes?: Array<{
+    attribute_name: string
+    attribute_value: string
+  }>
+  source_main_image_url?: string | null
   dropship_floor_price_gross?: string | null
   bulk_floor_price_gross?: string | null
   bulk_minimum_order_quantity?: string | null
@@ -240,28 +246,153 @@ function emptyPublicationImpact() {
   }
 }
 
+function fileNameFromMediaUrl(url: string | null | undefined): string {
+  const value = (url ?? "").trim()
+  if (!value) return ""
+  try {
+    const parsed = new URL(value)
+    const last = parsed.pathname.split("/").filter(Boolean).pop()
+    if (last) return decodeURIComponent(last)
+  } catch {
+    // not a full URL — fall through
+  }
+  const slash = value.split(/[\\/]/).filter(Boolean).pop()
+  return slash || value
+}
+
+function mapMediaList(
+  media: BackendProductDetail["media"] | undefined,
+): NonNullable<SupplierProductRevisionView["media"]> {
+  return (media ?? []).map((entry, index) => {
+    const url = entry.url?.trim() || undefined
+    const fileName = fileNameFromMediaUrl(url) || `media-${index + 1}`
+    const usageRaw = (entry.usage ?? "").toUpperCase()
+    const usage =
+      usageRaw === "SPU_DETAIL"
+        ? ("SPU_DETAIL" as const)
+        : usageRaw === "SKU_MAIN"
+          ? ("SKU_MAIN" as const)
+          : ("SPU_CAROUSEL" as const)
+    const archive =
+      (entry.archive_status ?? "").toUpperCase() === "ARCHIVED"
+        ? ("ARCHIVED" as const)
+        : (entry.archive_status ?? "").toUpperCase() === "FAILED"
+          ? ("FAILED" as const)
+          : ("PENDING_IMPORT" as const)
+    return {
+      id: entry.id,
+      usage,
+      fileName,
+      sortOrder: entry.sort_order ?? index,
+      sourceUrl: url,
+      archiveStatus: archive,
+    }
+  })
+}
+
+function mapStructuredAttributes(
+  attrs:
+    | Array<{ attribute_name: string; attribute_value: string }>
+    | null
+    | undefined,
+): SupplierProductRevisionView["attributes"] {
+  return (attrs ?? [])
+    .map((attr) => ({
+      name: attr.attribute_name?.trim() ?? "",
+      value: attr.attribute_value?.trim() ?? "",
+    }))
+    .filter((attr) => attr.name && attr.value)
+}
+
+function mapSkuMainMedia(
+  url: string | null | undefined,
+): NonNullable<SupplierProductRevisionView["media"]> {
+  const sourceUrl = url?.trim()
+  if (!sourceUrl) return []
+  return [
+    {
+      id: `sku-main:${sourceUrl}`,
+      usage: "SKU_MAIN" as const,
+      fileName: fileNameFromMediaUrl(sourceUrl) || "main",
+      sortOrder: 0,
+      sourceUrl,
+      archiveStatus: "PENDING_IMPORT" as const,
+    },
+  ]
+}
+
 function mapSkuRevision(
   rev: BackendSkuRevision | undefined,
   productName: string,
   category: string,
   brand: string | undefined,
+  extras?: {
+    description?: string | null
+    sourceProductKind?: string | null
+    media?: NonNullable<SupplierProductRevisionView["media"]>
+    attributes?: NonNullable<SupplierProductRevisionView["attributes"]>
+  },
 ): SupplierProductRevisionView {
   const r = rev
+  const skuMedia = mapSkuMainMedia(r?.source_main_image_url)
+  const media = [...(extras?.media ?? []), ...skuMedia]
   return {
     revisionNo: r?.revision_no ?? 1,
     sourceUpdatedAt: secsToIso(r?.source_updated_at),
     syncedAt: secsToIso(r?.source_updated_at),
     name: r?.name ?? productName,
+    description: extras?.description ?? undefined,
+    sourceProductKind: mapProductKind(extras?.sourceProductKind),
     specification: r?.specification ?? "",
     category,
     brand,
+    baseUnit: r?.source_base_unit ?? undefined,
     barcode: r?.barcode ?? undefined,
+    attributes: (() => {
+      const fromSku = mapStructuredAttributes(r?.structured_attributes)
+      return fromSku && fromSku.length > 0 ? fromSku : extras?.attributes
+    })(),
+    media: media.length > 0 ? media : extras?.media,
     dropshipFloorPriceGross: r?.dropship_floor_price_gross ?? null,
     bulkFloorPriceGross: r?.bulk_floor_price_gross ?? null,
     bulkMinimumOrderQuantity: r?.bulk_minimum_order_quantity ?? null,
     availableQuantity: r?.available_quantity ?? "0",
     availabilityStatus: mapAvailability(r?.availability_status),
   }
+}
+
+/** 写入媒体：后端只接收 usage + 非空 url；文件名可作占位 url 以便回显。 */
+function mediaToWritePayload(
+  media: readonly {
+    usage: string
+    sourceUrl?: string
+    fileName?: string
+  }[],
+): Array<{ usage: string; url: string }> {
+  return media
+    .map((entry) => {
+      const usage = entry.usage?.toUpperCase()
+      if (usage !== "SPU_CAROUSEL" && usage !== "SPU_DETAIL") return null
+      const url = (entry.sourceUrl ?? entry.fileName ?? "").trim()
+      if (!url) return null
+      return { usage, url }
+    })
+    .filter((entry): entry is { usage: string; url: string } => entry != null)
+}
+
+function skuMainImageUrlFromWrite(input: {
+  media?: readonly { usage: string; sourceUrl?: string; fileName?: string }[]
+  mainImage?: string
+}): string | null {
+  const fromMedia = (input.media ?? []).find(
+    (entry) => entry.usage?.toUpperCase() === "SKU_MAIN",
+  )
+  const url =
+    fromMedia?.sourceUrl?.trim() ||
+    fromMedia?.fileName?.trim() ||
+    input.mainImage?.trim() ||
+    ""
+  return url || null
 }
 
 function mapOffering(o: BackendOffering): SupplierOfferingRevisionView {
@@ -773,14 +904,71 @@ export async function fetchSupplierCatalogCenter(input: {
     detail.revisions.find(
       (revision) => revision.revision_no === product.current_revision_no,
     ) ?? detail.revisions[0]
+  const productMedia = mapMediaList(detail.media)
+  const productAttributes = mapStructuredAttributes(
+    productRevision?.structured_attributes,
+  )
+  const productCategory =
+    productRevision?.source_category ?? product.source_category ?? ""
+  const productBrand =
+    productRevision?.source_brand ?? product.source_brand ?? undefined
+  const productName =
+    productRevision?.name ?? product.name ?? product.supplier_spu_code
+
+  const skuDetailById = new Map(
+    detail.skus.map((entry) => [entry.sku.id, entry] as const),
+  )
+  const catalogSkus = (projectedItem.supplierProduct.catalogSkus ?? []).map(
+    (skuView) => {
+      const skuEntry = skuDetailById.get(skuView.id)
+      const latestRev = skuEntry?.revisions?.[0]
+      return {
+        ...skuView,
+        currentRevision: mapSkuRevision(
+          latestRev,
+          productName,
+          productCategory,
+          productBrand,
+          {
+            description: productRevision?.description,
+            sourceProductKind: productRevision?.source_product_kind,
+            // SPU 图文挂在产品修订；SKU 主图由 mapSkuRevision 从 latestRev 补齐
+            media: productMedia,
+            attributes: productAttributes,
+          },
+        ),
+      }
+    },
+  )
+
+  const primarySkuRev = detail.skus[0]?.revisions?.[0]
+  const currentRevision = mapSkuRevision(
+    primarySkuRev,
+    productName,
+    productCategory,
+    productBrand,
+    {
+      description: productRevision?.description,
+      sourceProductKind: productRevision?.source_product_kind,
+      media: productMedia,
+      attributes: productAttributes,
+    },
+  )
+
   const item: SupplierCatalogItemView = {
     ...projectedItem,
     supplierProduct: {
       ...projectedItem.supplierProduct,
       currentRevision: {
-        ...projectedItem.supplierProduct.currentRevision,
-        sourceProductKind: mapProductKind(productRevision?.source_product_kind),
+        ...currentRevision,
+        // 列表投影里的修订号若更可信则保留；详情优先用产品修订号
+        revisionNo:
+          productRevision?.revision_no ?? currentRevision.revisionNo,
       },
+      catalogSkus:
+        catalogSkus.length > 0
+          ? catalogSkus
+          : projectedItem.supplierProduct.catalogSkus,
     },
   }
 
@@ -981,6 +1169,7 @@ export async function createSupplierCatalogItem(
           specification: s.specification ?? input.specification,
           source_base_unit: input.sourceBaseUnit ?? input.baseUnit ?? null,
           barcode: s.barcode ?? null,
+          source_main_image_url: skuMainImageUrlFromWrite(s),
           dropship_floor_price_gross: s.dropshipFloorPriceGross || null,
           bulk_floor_price_gross: s.bulkFloorPriceGross || null,
           bulk_minimum_order_quantity: s.bulkMinimumOrderQuantity || null,
@@ -1001,6 +1190,10 @@ export async function createSupplierCatalogItem(
             specification: input.specification,
             source_base_unit: input.sourceBaseUnit ?? input.baseUnit ?? null,
             barcode: input.barcode ?? null,
+            source_main_image_url: skuMainImageUrlFromWrite({
+              media: input.media,
+              mainImage: undefined,
+            }),
             dropship_floor_price_gross:
               input.dropshipFloorPriceGross || null,
             bulk_floor_price_gross: input.bulkFloorPriceGross || null,
@@ -1038,12 +1231,7 @@ export async function createSupplierCatalogItem(
       attribute_name: a.name,
       attribute_value: a.value,
     })),
-    media: (input.media ?? [])
-      .filter((m) => m.sourceUrl)
-      .map((m) => ({
-        usage: m.usage,
-        url: m.sourceUrl!,
-      })),
+    media: mediaToWritePayload(input.media ?? []),
     source_revision_token: null,
     valid_from: input.validFrom || null,
     valid_to: null,
@@ -1091,12 +1279,7 @@ export async function reviseSupplierCatalogProduct(
         attribute_name: a.name,
         attribute_value: a.value,
       })),
-      media: (input.media ?? [])
-        .filter((m) => m.sourceUrl)
-        .map((m) => ({
-          usage: m.usage,
-          url: m.sourceUrl!,
-        })),
+      media: mediaToWritePayload(input.media ?? []),
       source_revision_token: null,
       valid_from: null,
       valid_to: null,
@@ -1106,6 +1289,7 @@ export async function reviseSupplierCatalogProduct(
         specification: s.specification ?? input.specification,
         source_base_unit: input.sourceBaseUnit ?? null,
         barcode: s.barcode ?? null,
+        source_main_image_url: skuMainImageUrlFromWrite(s),
         dropship_floor_price_gross: s.dropshipFloorPriceGross || null,
         bulk_floor_price_gross: s.bulkFloorPriceGross || null,
         bulk_minimum_order_quantity: s.bulkMinimumOrderQuantity || null,

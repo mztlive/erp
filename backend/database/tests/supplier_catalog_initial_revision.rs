@@ -79,6 +79,7 @@ async fn initial_revisions_create_stable_identities_and_current_pointers() {
                 barcode: None,
                 structured_attributes: Vec::new(),
                 source_main_image_asset_id: None,
+                source_main_image_url_snapshot: None,
                 main_image_archive_status: None,
                 dropship_floor_price_gross: None,
                 bulk_floor_price_gross: None,

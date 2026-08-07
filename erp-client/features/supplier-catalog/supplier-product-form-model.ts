@@ -81,6 +81,9 @@ export type SupplierProductFormFields = Readonly<{
   specDrafts: readonly SupplierSpecDraft[]
   carouselImages: readonly string[]
   detailImages: readonly string[]
+  /** 轮播图 fileName → 可访问预览/来源 URL（回显与再次保存用） */
+  carouselPreviewUrls: Readonly<Record<string, string>>
+  detailPreviewUrls: Readonly<Record<string, string>>
 
   /** 由规格维度组合生成；每行独立来源供给 */
   skus: readonly SupplierSkuFormRow[]
@@ -134,6 +137,8 @@ export function emptySupplierProductFormFields(
     specDrafts: [],
     carouselImages: [],
     detailImages: [],
+    carouselPreviewUrls: {},
+    detailPreviewUrls: {},
     skus: [emptySupplierSkuFormRow({ supplierSkuCode: "SKU-01" })],
     changeReason: "手工录入供应商商品",
     ...partial,
@@ -226,21 +231,35 @@ export function mediaFromRevision(
 ): {
   carouselImages: string[]
   detailImages: string[]
+  /** 轮播图 fileName → 可访问预览地址（远程 URL） */
+  carouselPreviewUrls: Record<string, string>
+  detailPreviewUrls: Record<string, string>
   skuMainImage: string
   skuMainImagePreviewUrl?: string
 } {
   const list = media ?? []
-  const names = (usage: SupplierCatalogMediaUsage) =>
+  const byUsage = (usage: SupplierCatalogMediaUsage) =>
     list
       .filter((entry) => entry.usage === usage)
       .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((entry) => entry.fileName)
-  const skuMainImage = list
-    .filter((entry) => entry.usage === "SKU_MAIN")
-    .sort((a, b) => a.sortOrder - b.sortOrder)[0]
+  const names = (usage: SupplierCatalogMediaUsage) =>
+    byUsage(usage).map((entry) => entry.fileName)
+  const previewMap = (usage: SupplierCatalogMediaUsage) => {
+    const map: Record<string, string> = {}
+    for (const entry of byUsage(usage)) {
+      const url = entry.sourceUrl?.trim()
+      if (url && /^(https?:\/\/|\/|blob:|data:image\/)/i.test(url)) {
+        map[entry.fileName] = url
+      }
+    }
+    return map
+  }
+  const skuMainImage = byUsage("SKU_MAIN")[0]
   return {
     carouselImages: names("SPU_CAROUSEL"),
     detailImages: names("SPU_DETAIL"),
+    carouselPreviewUrls: previewMap("SPU_CAROUSEL"),
+    detailPreviewUrls: previewMap("SPU_DETAIL"),
     skuMainImage: skuMainImage?.fileName ?? "",
     skuMainImagePreviewUrl: skuMainImage?.sourceUrl,
   }
@@ -443,9 +462,27 @@ export function hydrateSupplierProductForm(input: {
     specDrafts,
     carouselImages: media.carouselImages,
     detailImages: media.detailImages,
+    carouselPreviewUrls: media.carouselPreviewUrls,
+    detailPreviewUrls: media.detailPreviewUrls,
     skus,
     changeReason: "",
   })
+}
+
+/** 可跨会话落库的媒体来源地址；blob/data 仅本地预览，不可作为来源快照。 */
+function persistableMediaUrl(
+  candidate: string | undefined,
+  fallbackFileName: string,
+): string {
+  const value = candidate?.trim()
+  if (
+    value &&
+    !value.startsWith("blob:") &&
+    !value.startsWith("data:")
+  ) {
+    return value
+  }
+  return fallbackFileName
 }
 
 export function formToMediaPayload(
@@ -453,20 +490,34 @@ export function formToMediaPayload(
   sku: SupplierSkuFormRow,
 ): readonly Omit<SupplierCatalogMediaView, "id">[] {
   return [
-    ...fields.carouselImages.map((fileName, index) => ({
-      usage: "SPU_CAROUSEL" as const,
-      fileName,
-      sortOrder: index,
-      fileAssetId: `asset:${fileName}`,
-      archiveStatus: "ARCHIVED" as const,
-    })),
-    ...fields.detailImages.map((fileName, index) => ({
-      usage: "SPU_DETAIL" as const,
-      fileName,
-      sortOrder: index,
-      fileAssetId: `asset:${fileName}`,
-      archiveStatus: "ARCHIVED" as const,
-    })),
+    ...fields.carouselImages.map((fileName, index) => {
+      const sourceUrl = persistableMediaUrl(
+        fields.carouselPreviewUrls[fileName],
+        fileName,
+      )
+      return {
+        usage: "SPU_CAROUSEL" as const,
+        fileName,
+        sortOrder: index,
+        fileAssetId: `asset:${fileName}`,
+        sourceUrl,
+        archiveStatus: "PENDING_IMPORT" as const,
+      }
+    }),
+    ...fields.detailImages.map((fileName, index) => {
+      const sourceUrl = persistableMediaUrl(
+        fields.detailPreviewUrls[fileName],
+        fileName,
+      )
+      return {
+        usage: "SPU_DETAIL" as const,
+        fileName,
+        sortOrder: index,
+        fileAssetId: `asset:${fileName}`,
+        sourceUrl,
+        archiveStatus: "PENDING_IMPORT" as const,
+      }
+    }),
     ...(sku.mainImage
       ? [
           {
@@ -474,7 +525,12 @@ export function formToMediaPayload(
             fileName: sku.mainImage,
             sortOrder: 0,
             fileAssetId: `asset:${sku.mainImage}`,
-            archiveStatus: "ARCHIVED" as const,
+            // 远程 URL 可回写；本地 blob 仅预览，落库用文件名占位
+            sourceUrl: persistableMediaUrl(
+              sku.mainImagePreviewUrl,
+              sku.mainImage,
+            ),
+            archiveStatus: "PENDING_IMPORT" as const,
           },
         ]
       : []),

@@ -253,12 +253,17 @@ function MediaListEditor({
   hint,
   value,
   onChange,
+  previewUrls,
+  onPreviewUrlsChange,
   mode = "carousel",
 }: {
   label: string
   hint?: string
   value: readonly string[]
   onChange: (next: string[]) => void
+  /** 已落库或本地 blob 的预览地址；key 为 fileName。 */
+  previewUrls?: Readonly<Record<string, string>>
+  onPreviewUrlsChange?: (next: Record<string, string>) => void
   mode?: "carousel" | "detail"
 }) {
   const [localPreviewUrls, setLocalPreviewUrls] = React.useState<
@@ -332,7 +337,9 @@ function MediaListEditor({
         >
           {value.map((name, index) => {
             const previewSrc =
-              localPreviewUrls.get(name) ?? imagePreviewSource(name)
+              localPreviewUrls.get(name) ??
+              previewUrls?.[name] ??
+              imagePreviewSource(name)
 
             return (
               <div
@@ -443,15 +450,24 @@ function MediaListEditor({
               mode === "carousel" ? "支持多选，首张作为首图" : "支持多选，按顺序展示"
             }
             onFilesSelected={(files) => {
+              const addedUrls: Record<string, string> = {}
               updateLocalPreviewUrls((previous) => {
                 const next = new Map(previous)
                 for (const file of files) {
                   const previousSrc = next.get(file.name)
                   if (previousSrc) URL.revokeObjectURL(previousSrc)
-                  next.set(file.name, URL.createObjectURL(file))
+                  const blobUrl = URL.createObjectURL(file)
+                  next.set(file.name, blobUrl)
+                  addedUrls[file.name] = blobUrl
                 }
                 return next
               })
+              if (onPreviewUrlsChange) {
+                onPreviewUrlsChange({
+                  ...(previewUrls ?? {}),
+                  ...addedUrls,
+                })
+              }
               onChange([...value, ...files.map((file) => file.name)])
             }}
             className={cn(
@@ -564,12 +580,19 @@ export function SupplierProductCenterPage({
 
   React.useEffect(() => {
     if (isCreate || !centerQuery.data) return
-    if (categoryListQuery.isPending || brandListQuery.isPending) return
+    if (
+      categoryListQuery.isPending ||
+      brandListQuery.isPending ||
+      unitOptionsQuery.isPending
+    ) {
+      return
+    }
     const item = centerQuery.data.item
     const revision =
       item.supplierProduct.incomingRevision ??
       item.supplierProduct.currentRevision
-    const key = `${item.supplierProduct.id}:${revision.revisionNo}`
+    // 字典选项就绪后再 hydrate，避免基础单位/分类/品牌只回显文案、丢失 id
+    const key = `${item.supplierProduct.id}:${revision.revisionNo}:u${unitOptions.length}:c${categoryOptions.length}:b${brandOptions.length}`
     if (hydratedKeyRef.current === key) return
     const next = hydrateSupplierProductForm({
       supplierId: item.supplierProduct.supplier.id,
@@ -602,6 +625,7 @@ export function SupplierProductCenterPage({
     centerQuery.data,
     isCreate,
     unitOptions,
+    unitOptionsQuery.isPending,
   ])
 
   React.useLayoutEffect(() => {
@@ -1415,10 +1439,26 @@ export function SupplierProductCenterPage({
                 <MediaListEditor
                   label="轮播图"
                   value={fields.carouselImages}
+                  previewUrls={fields.carouselPreviewUrls}
                   onChange={(next) =>
+                    patchFields((previous) => {
+                      const retained = new Set(next)
+                      const carouselPreviewUrls = Object.fromEntries(
+                        Object.entries(previous.carouselPreviewUrls).filter(
+                          ([name]) => retained.has(name),
+                        ),
+                      )
+                      return {
+                        ...previous,
+                        carouselImages: next,
+                        carouselPreviewUrls,
+                      }
+                    })
+                  }
+                  onPreviewUrlsChange={(next) =>
                     patchFields((previous) => ({
                       ...previous,
-                      carouselImages: next,
+                      carouselPreviewUrls: next,
                     }))
                   }
                 />
@@ -1427,10 +1467,26 @@ export function SupplierProductCenterPage({
                   label="详情图"
                   mode="detail"
                   value={fields.detailImages}
+                  previewUrls={fields.detailPreviewUrls}
                   onChange={(next) =>
+                    patchFields((previous) => {
+                      const retained = new Set(next)
+                      const detailPreviewUrls = Object.fromEntries(
+                        Object.entries(previous.detailPreviewUrls).filter(
+                          ([name]) => retained.has(name),
+                        ),
+                      )
+                      return {
+                        ...previous,
+                        detailImages: next,
+                        detailPreviewUrls,
+                      }
+                    })
+                  }
+                  onPreviewUrlsChange={(next) =>
                     patchFields((previous) => ({
                       ...previous,
-                      detailImages: next,
+                      detailPreviewUrls: next,
                     }))
                   }
                 />
@@ -1748,9 +1804,12 @@ export function SupplierProductCenterPage({
                                   }
                                   onFilesSelected={(files) => {
                                     if (files[0]) {
+                                      const file = files[0]
+                                      // 本地 blob 仅会话内可预览；写入时以文件名作为来源 url 快照
+                                      const blobUrl = URL.createObjectURL(file)
                                       updateSku(index, {
-                                        mainImage: files[0].name,
-                                        mainImagePreviewUrl: undefined,
+                                        mainImage: file.name,
+                                        mainImagePreviewUrl: blobUrl,
                                       })
                                     }
                                   }}
