@@ -38,16 +38,32 @@ export const fromFetchError = (cause: unknown): ApiError => ({
 
 /**
  * HTTP 非 2xx 错误（401 除外，401 归类为 Auth）。
+ *
+ * 若响应体携带后端业务信封（{ errorMessage, success: false }），优先透出
+ * 后端 errorMessage，避免丢失业务信息；400 / 422 归类为 Validation。
  */
 export const fromHttpResponse = (
   status: number,
   responseData?: unknown
-): ApiError => ({
-  kind: "Http",
-  message: `请求失败（HTTP ${status}）`,
-  status,
-  responseData,
-})
+): ApiError => {
+  const envelope = responseData as
+    | { errorMessage?: unknown; success?: unknown }
+    | undefined
+  const backendMessage =
+    envelope && typeof envelope.errorMessage === "string"
+      ? envelope.errorMessage.trim()
+      : ""
+  return {
+    kind: status === 400 || status === 422 ? "Validation" : "Http",
+    message:
+      backendMessage ||
+      (status === 400
+        ? "请求未通过业务校验"
+        : `请求失败（HTTP ${status}）`),
+    status,
+    responseData,
+  }
+}
 
 /**
  * 鉴权失败（HTTP 401 或业务信封 status 401）。

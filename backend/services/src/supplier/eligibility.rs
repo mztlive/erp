@@ -13,10 +13,13 @@ use mongodb::{bson::doc, Database};
 
 use crate::errors::{Error, Result};
 
-/// 校验指定供应商能力版本在业务日仍为当前启用版本，且至少存在一份适用有效资质。
+/// 校验指定供应商能力版本在业务日仍为当前启用版本。
+///
+/// 注意：资质适用性校验（`ensure_linked_qualification`）已被人为刻意临时
+/// 关闭（见下方调用处注释），恢复资质数据后应解除注释恢复校验。
 ///
 /// # Errors
-/// 供应商/能力停用、版本过期或变化、无有效资质、资质附件不可用时返回业务错误。
+/// 供应商/能力停用、版本过期或变化时返回业务错误。
 pub(crate) async fn ensure_capability_qualified(
     db: &Database,
     supplier_id: &SupplierAccountId,
@@ -51,7 +54,14 @@ pub(crate) async fn ensure_capability_qualified(
             "供应商能力已停用、过期或版本已变化".to_string(),
         ));
     }
-    ensure_linked_qualification(db, &capability.base.id, on_date).await
+    // =========================================================================
+    // 【人为刻意临时关闭】资质适用性校验（ensure_linked_qualification）：
+    // 业务原因：当前阶段供应商资质数据尚未完整维护，导致商品入池被误拦截
+    // （422「供应商该项能力没有适用且有效的资质，不能用于供给或采购」）。
+    // 恢复策略：供应商资质数据完善后，移除此注释并恢复下述调用。
+    // =========================================================================
+    // ensure_linked_qualification(db, &capability.base.id, on_date).await
+    Ok(())
 }
 
 /// 加载能力修订。
@@ -66,6 +76,10 @@ async fn load_capability_revision(
 }
 
 /// 校验能力至少关联一份业务日有效且附件可用的资质。
+///
+/// 注意：当前被人为刻意临时关闭（见 `ensure_capability_qualified` 调用处），
+/// 代码保留以供恢复。
+#[allow(dead_code)]
 async fn ensure_linked_qualification(
     db: &Database,
     capability_id: &str,
@@ -98,6 +112,7 @@ async fn ensure_linked_qualification(
 }
 
 /// 无附件的结构化资质可参与门禁；有附件时必须通过扫描且仍在保留期。
+#[allow(dead_code)]
 async fn attachment_usable(
     db: &Database,
     attachment_id: Option<&entities::ids::FileAssetId>,

@@ -241,6 +241,92 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "supplier_payment:detail",
 ];
 
+/// 供应商资料统一前的采购角色默认权限快照。
+///
+/// 该快照用于识别尚未被管理员改写的历史预置角色：它仍包含四项已随供应商资料
+/// 接口收敛而退役的资源权限，且尚未包含采购成本字段权限。禁止随当前默认权限一起
+/// 修改，否则跨版本升级将无法识别旧环境。
+const PROCUREMENT_PERMISSIONS_BEFORE_SUPPLIER_ALIGNMENT: &[&str] = &[
+    "work_item:*",
+    "file_asset:list",
+    "file_asset:create",
+    "file_asset:detail",
+    "file_asset:update",
+    "document_attachment:list",
+    "document_attachment:create",
+    "business_document:list",
+    "business_document:detail",
+    "document_relation:list",
+    "document_participant:list",
+    "product_category:*",
+    "product_brand:*",
+    "unit_of_measure:*",
+    "sku_attribute:*",
+    "sku_attribute_value:*",
+    "product:*",
+    "product_revision:list",
+    "sku:list",
+    "sku_revision:list",
+    "voucher_category_profile:list",
+    "warehouse:list",
+    "warehouse:create",
+    "warehouse:update",
+    "warehouse_revision:list",
+    "warehouse_sku_policy:*",
+    "party:list",
+    "party:detail",
+    "party:create",
+    "party:update",
+    "party_revision:list",
+    "party_contact:*",
+    "party_address:*",
+    "party_tax_profile:*",
+    "party_bank_account:*",
+    "supplier:*",
+    "supplier_commercial_profile:*",
+    "supplier_capability:*",
+    "supplier_qualification:*",
+    "supplier_rating:*",
+    "contract:detail",
+    "sales_order:list",
+    "sales_order:detail",
+    "procurement_confirmation:*",
+    "purchase_order:*",
+    "purchase_change_order:*",
+    "purchase_receipt:*",
+    "delivery:*",
+    "electronic_delivery:*",
+    "service_fulfillment:*",
+    "supplier_catalog_product:*",
+    "supplier_catalog_sku:list",
+    "supplier_product_mapping:*",
+    "supplier_offering:*",
+    "supplier_catalog_intake_batch:list",
+    "supplier_api_connection:list",
+    "supplier_api_connection:create",
+    "supplier_api_connection:detail",
+    "supplier_api_connection:update",
+    "supplier_api_connection:health_check",
+    "supplier_api_capability:list",
+    "supplier_fulfillment_order:*",
+    "supplier_refund_fact:post",
+    "product_publication:*",
+    "product_publication_revision:*",
+    "product_publication_delivery:*",
+    "payable_account:list",
+    "payable_account:detail",
+    "supplier_payment:list",
+    "supplier_payment:detail",
+];
+
+/// 已随供应商资料接口收敛而退役、不再保留在当前采购角色中的旧资源权限。
+const RETIRED_PROCUREMENT_SUPPLIER_PERMISSIONS: &[&str] = &[
+    "supplier_commercial_profile:*",
+    "supplier_capability:*",
+    "supplier_qualification:*",
+    "supplier_rating:*",
+];
+
 /// 运营推荐权限。
 const OPERATIONS_PERMISSIONS: &[&str] = &[
     "work_item:*",
@@ -496,7 +582,7 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     for role in PREDEFINED_ROLES {
         seed_one(rbac, role).await?;
     }
-    upgrade_procurement_contract_read(rbac).await?;
+    upgrade_procurement_permissions(rbac).await?;
     upgrade_customer_role_boundaries(rbac).await?;
     Ok(())
 }
@@ -573,24 +659,36 @@ async fn upgrade_exact(
     Ok(())
 }
 
-/// 为未被管理员改写过的旧采购角色补充合同详情只读权限。
-async fn upgrade_procurement_contract_read(rbac: &SharedRbacService) -> Result<()> {
+/// 构造所有已发布过的采购角色默认权限快照。
+fn procurement_permission_upgrade_sources() -> Result<Vec<Vec<Permission>>> {
+    let before_alignment = parse_permissions(PROCUREMENT_PERMISSIONS_BEFORE_SUPPLIER_ALIGNMENT)?;
+    let before_contract = remove_permissions(&before_alignment, &["contract:detail"]);
+    let aligned_without_cost =
+        remove_permissions(&before_alignment, RETIRED_PROCUREMENT_SUPPLIER_PERMISSIONS);
+    let aligned_without_contract_or_cost = remove_permissions(&aligned_without_cost, &["contract:detail"]);
+    Ok(vec![
+        before_alignment,
+        before_contract,
+        aligned_without_cost,
+        aligned_without_contract_or_cost,
+    ])
+}
+
+/// 将仍等于任一历史默认快照的采购角色升级到当前默认权限。
+async fn upgrade_procurement_permissions(rbac: &SharedRbacService) -> Result<()> {
     let desired = parse_permissions(PROCUREMENT_PERMISSIONS)?;
-    let previous_without_both =
-        remove_permissions(&desired, &["contract:detail", "supplier_catalog_cost:detail"]);
-    let previous_without_cost = remove_permissions(&desired, &["supplier_catalog_cost:detail"]);
-    let upgraded = rbac
-        .upgrade_seeded_role_permissions_if_exact("role-procurement", previous_without_both, desired.clone())
-        .await?
-        || rbac
-            .upgrade_seeded_role_permissions_if_exact("role-procurement", previous_without_cost, desired)
-            .await?;
-    if upgraded {
-        tracing::info!(
-            role_id = "role-procurement",
-            permissions = "contract:detail,supplier_catalog_cost:detail",
-            "predefined role permission upgraded"
-        );
+    for previous in procurement_permission_upgrade_sources()? {
+        if rbac
+            .upgrade_seeded_role_permissions_if_exact("role-procurement", previous, desired.clone())
+            .await?
+        {
+            tracing::info!(
+                role_id = "role-procurement",
+                permissions = "contract:detail,supplier_catalog_cost:detail",
+                "predefined role permission upgraded"
+            );
+            break;
+        }
     }
     Ok(())
 }
@@ -648,8 +746,11 @@ pub(super) fn predefined_role_ids() -> Vec<&'static str> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_permissions, predefined_role_ids, PREDEFINED_ROLES, SALES_PERMISSIONS};
-    use entities::Permission;
+    use super::{
+        parse_permissions, predefined_role_ids, procurement_permission_upgrade_sources, PREDEFINED_ROLES,
+        PROCUREMENT_PERMISSIONS, RETIRED_PROCUREMENT_SUPPLIER_PERMISSIONS, SALES_PERMISSIONS,
+    };
+    use entities::{Permission, PermissionSet};
 
     #[test]
     fn predefined_role_ids_are_unique_and_stable() {
@@ -680,6 +781,44 @@ mod tests {
                 assert!(!permission.resource().is_empty());
                 assert!(!permission.action().is_empty());
             }
+        }
+    }
+
+    #[test]
+    fn procurement_permissions_include_cost_visibility() {
+        let permissions = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
+        let cost = PermissionSet::new([Permission::parse("supplier_catalog_cost:detail").unwrap()]);
+        assert!(permissions.covers(&cost));
+        for retired in RETIRED_PROCUREMENT_SUPPLIER_PERMISSIONS {
+            assert!(!permissions
+                .as_slice()
+                .contains(&Permission::parse(retired).unwrap()));
+        }
+    }
+
+    #[test]
+    fn procurement_upgrade_sources_cover_published_default_snapshots() {
+        let sources = procurement_permission_upgrade_sources()
+            .unwrap()
+            .into_iter()
+            .map(PermissionSet::new)
+            .collect::<Vec<_>>();
+        let sizes = sources
+            .iter()
+            .map(|permissions| permissions.as_slice().len())
+            .collect::<Vec<_>>();
+        assert_eq!(sizes, vec![70, 69, 66, 65]);
+
+        let cost = Permission::parse("supplier_catalog_cost:detail").unwrap();
+        assert!(sources
+            .iter()
+            .all(|permissions| !permissions.as_slice().contains(&cost)));
+        for retired in RETIRED_PROCUREMENT_SUPPLIER_PERMISSIONS {
+            let retired = Permission::parse(retired).unwrap();
+            assert!(sources[0].as_slice().contains(&retired));
+            assert!(sources[1].as_slice().contains(&retired));
+            assert!(!sources[2].as_slice().contains(&retired));
+            assert!(!sources[3].as_slice().contains(&retired));
         }
     }
 
