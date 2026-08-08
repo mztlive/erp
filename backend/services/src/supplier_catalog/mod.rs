@@ -34,6 +34,7 @@ use entities::supplier_catalog::{
     SupplierOfferingRevision, SupplierOfferingRevisionData, SupplierProductMapping,
     SupplierProductMappingData,
 };
+use entities::{catalog::ProductKind, supplier::CapabilityCode};
 use id_generator::next_id;
 use mongodb::Database;
 use validator::Validate;
@@ -1092,11 +1093,12 @@ impl SupplierCatalogService {
         if mapping.status != MappingStatus::Pending {
             return Err(Error::ConflictError("映射已处理，请勿重复确认".to_string()));
         }
+        let supplier_id = self.supplier_of_sku(&mapping.supplier_catalog_sku_id).await?;
         let offering = SupplierOffering::new(
             SupplierOfferingId::new(next_id()),
             SupplierOfferingData {
                 sku_id: mapping.sku_id.clone(),
-                supplier_id: self.supplier_of_sku(&mapping.supplier_catalog_sku_id).await?,
+                supplier_id,
                 supplier_catalog_sku_id: mapping.supplier_catalog_sku_id.clone(),
             },
             actor.id(),
@@ -1117,6 +1119,12 @@ impl SupplierCatalogService {
             req.available_quantity.as_deref(),
             AvailabilityStatus::Available,
         )?;
+        self.ensure_qualified_for_sku(
+            &offering.supplier_id,
+            &offering.sku_id,
+            offering_revision.valid_from,
+        )
+        .await?;
         mapping.update(
             MappingStatus::Active,
             Some(actor.id().to_string()),
@@ -1191,6 +1199,7 @@ impl SupplierCatalogService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供给不存在".to_string()))?;
+        let next_status = req.status.unwrap_or(offering.stable.status);
         let current_no = self
             .db
             .supplier_offering_revisions()
@@ -1227,6 +1236,10 @@ impl SupplierCatalogService {
             req.available_quantity.as_deref(),
             availability,
         )?;
+        if next_status == OfferingStatus::Active {
+            self.ensure_qualified_for_sku(&offering.supplier_id, &offering.sku_id, revision.valid_from)
+                .await?;
+        }
         if let Some(status) = req.status {
             offering.stable.status = status;
         }
@@ -1269,6 +1282,51 @@ impl SupplierCatalogService {
 // ---------------------------------------------------------------------------
 
 impl SupplierCatalogService {
+    /// 校验公司 SKU 对应的供应商能力及适用资质可用于启用供给。
+    async fn ensure_qualified_for_sku(
+        &self,
+        supplier_id: &entities::ids::SupplierAccountId,
+        sku_id: &entities::ids::SkuId,
+        on_date: BusinessDate,
+    ) -> Result<()> {
+        let sku = self
+            .db
+            .skus()
+            .find_by_id(sku_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("公司 SKU 不存在".to_string()))?;
+        let product = self
+            .db
+            .products()
+            .find_by_id(&sku.product_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("公司商品不存在".to_string()))?;
+        let code = match product.product_kind {
+            ProductKind::Physical => CapabilityCode::Physical,
+            ProductKind::Virtual | ProductKind::Voucher => CapabilityCode::Virtual,
+            ProductKind::OfflineService => CapabilityCode::OfflineService,
+        };
+        let capability = self
+            .db
+            .supplier_capabilities()
+            .find_by_supplier_and_code(supplier_id, code, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::BusinessLogicError("供应商未启用该商品类型所需能力".to_string()))?;
+        let revision_id = capability
+            .stable
+            .current_revision_id
+            .as_deref()
+            .map(entities::ids::SupplierCapabilityRevisionId::new)
+            .ok_or_else(|| Error::BusinessLogicError("供应商能力缺少当前版本".to_string()))?;
+        crate::supplier::eligibility::ensure_capability_qualified(
+            &self.db,
+            supplier_id,
+            &revision_id,
+            on_date,
+        )
+        .await
+    }
+
     /// 从供应商 SKU 解析所属供应商。
     async fn supplier_of_sku(
         &self,

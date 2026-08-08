@@ -36,6 +36,9 @@ pub(crate) const SUPPLIER_QUALIFICATION_CAPABILITIES: &str =
 /// `supplier_rating_revision` 集合名。
 pub(crate) const SUPPLIER_RATING_REVISIONS: &str =
     <mongodb::Database as SupplierExt>::SUPPLIER_RATING_REVISIONS;
+/// `supplier_profile_command` 集合名。
+pub(crate) const SUPPLIER_PROFILE_COMMANDS: &str =
+    <mongodb::Database as SupplierExt>::SUPPLIER_PROFILE_COMMANDS;
 
 /// 创建本域集合的幂等命名索引。
 ///
@@ -78,6 +81,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
     )
     .await?;
     create_indexes(db, SUPPLIER_RATING_REVISIONS, rating_revision_indexes()).await?;
+    create_indexes(db, SUPPLIER_PROFILE_COMMANDS, profile_command_indexes()).await?;
     Ok(())
 }
 
@@ -186,6 +190,14 @@ fn rating_revision_indexes() -> Vec<IndexModel> {
             doc! { "supplier_id": 1, "valid_from": 1, "valid_to": 1 },
         ),
     ]
+}
+
+/// 返回根级保存命令的幂等唯一约束。
+fn profile_command_indexes() -> Vec<IndexModel> {
+    vec![unique_index(
+        "uk_supplier_profile_commands_idempotency_key",
+        doc! { "idempotency_key": 1 },
+    )]
 }
 
 /// 构建命名普通索引。

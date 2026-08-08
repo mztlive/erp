@@ -12,6 +12,7 @@ use entities::party::{
 };
 use id_generator::next_id;
 use mongodb::Database;
+use std::sync::Arc;
 use validator::Validate;
 
 use crate::audit::AuditActor;
@@ -21,7 +22,7 @@ use super::dto::{
     normalize_sort, CreatePartyContactRequest, PageView, PartyContactListParams, PartyContactView, SortDir,
     UpdatePartyContactRequest, PARTY_CONTACT_SORT_FIELDS,
 };
-use super::sensitive::FINGERPRINT_KEY;
+use super::sensitive::SensitiveDataCodec;
 use super::{clear_default_marks, normalized_text, page_or_default, page_size_or_default};
 
 /// 联系人列表筛选条件类型（经 `PartyExt` 关联类型跨 crate 可达）。
@@ -30,6 +31,7 @@ type PartyContactFilter = <mongodb::Database as PartyExt>::PartyContactFilter;
 /// 联系人服务。
 pub struct PartyContactService {
     db: Database,
+    sensitive_data: Arc<SensitiveDataCodec>,
 }
 
 impl PartyContactService {
@@ -40,8 +42,8 @@ impl PartyContactService {
     ///
     /// # 返回
     /// 返回服务实例。
-    pub fn new(db: Database) -> Self {
-        Self { db }
+    pub fn new(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
+        Self { db, sensitive_data }
     }
 
     /// 分页查询联系人列表（投影查询，敏感字段不进投影）。
@@ -61,6 +63,7 @@ impl PartyContactService {
         params: &PartyContactListParams,
     ) -> Result<PageView<PartyContactView>> {
         params.validate()?;
+        super::ensure_outside_supplier_profile(&self.db, &PartyId::new(party_id)).await?;
         let (sort_by, sort_dir) =
             normalize_sort(&params.sort_by, &params.sort_dir, PARTY_CONTACT_SORT_FIELDS)?;
         let filter = PartyContactFilter {
@@ -88,6 +91,7 @@ impl PartyContactService {
                 contact_name: row.contact_name,
                 title: row.title,
                 telephone: row.telephone,
+                mobile_masked: super::dto::masked_last4(&row.mobile_last4),
                 email: row.email,
                 valid_from: row.valid_from,
                 valid_to: row.valid_to,
@@ -130,7 +134,9 @@ impl PartyContactService {
     ) -> Result<PartyContactView> {
         req.validate()?;
         self.ensure_party_exists(party_id).await?;
-        let contact = PartyContact::new(
+        super::ensure_outside_supplier_profile(&self.db, &PartyId::new(party_id)).await?;
+        let mobile = req.mobile.clone();
+        let mut contact = PartyContact::new(
             PartyContactId::new(next_id()),
             PartyContactData {
                 party_id: PartyId::new(party_id),
@@ -144,9 +150,10 @@ impl PartyContactService {
                 is_default: req.is_default,
                 status: req.status.unwrap_or(EffectiveRecordStatus::Active),
             },
-            FINGERPRINT_KEY,
+            self.sensitive_data.fingerprint_key(),
             actor.id(),
         )?;
+        contact.mobile_ciphertext = self.sensitive_data.encrypt(&mobile)?;
         let audit =
             actor
                 .clone()
@@ -198,6 +205,7 @@ impl PartyContactService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("联系人不存在".to_string()))?;
+        super::ensure_outside_supplier_profile(&self.db, &contact.party_id).await?;
         if contact.base.version != req.version {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),

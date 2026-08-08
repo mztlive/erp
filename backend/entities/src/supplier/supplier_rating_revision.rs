@@ -144,6 +144,26 @@ impl SupplierRatingRevision {
             change_reason,
         })
     }
+
+    /// 在追加下一评估版本前结束当前开放区间。
+    ///
+    /// # Errors
+    /// 新版本日期不晚于当前版本开始日时返回错误。
+    pub fn close_before(&mut self, next_valid_from: BusinessDate) -> Result<()> {
+        if next_valid_from <= self.valid_from {
+            return Err(Error::from("新评估版本生效日期必须晚于当前版本生效日期"));
+        }
+        let previous = next_valid_from
+            .as_naive_date()
+            .pred_opt()
+            .ok_or_else(|| Error::from("评估版本生效日期无法计算前一日"))?;
+        self.valid_to = BusinessDate::from_ymd(
+            chrono::Datelike::year(&previous),
+            chrono::Datelike::month(&previous),
+            chrono::Datelike::day(&previous),
+        );
+        Ok(())
+    }
 }
 
 /// 校验评分数值与期初评分归属。
@@ -279,6 +299,26 @@ mod tests {
             SupplierRatingRevision::new(SupplierRatingRevisionId::new("rating-rev-2"), data).unwrap();
         assert_eq!(revision.initial_score, None);
         assert_eq!(revision.current_score, 88);
+    }
+
+    /// 追加下一版本前，上一开放区间结束到新版本前一日。
+    #[test]
+    fn close_before_ends_previous_day() {
+        let mut revision = SupplierRatingRevision::new(
+            SupplierRatingRevisionId::new("rating-rev-close"),
+            SupplierRatingRevisionData {
+                valid_to: None,
+                ..rating_data()
+            },
+        )
+        .unwrap();
+        revision
+            .close_before(BusinessDate::from_ymd(2026, 2, 1).unwrap())
+            .unwrap();
+        assert_eq!(revision.valid_to, BusinessDate::from_ymd(2026, 1, 31));
+        assert!(revision
+            .close_before(BusinessDate::from_ymd(2026, 1, 1).unwrap())
+            .is_err());
     }
 
     /// 评级稳定代码与中文标签。

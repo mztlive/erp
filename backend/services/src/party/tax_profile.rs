@@ -60,6 +60,7 @@ impl PartyTaxProfileService {
         params: &PartyTaxProfileListParams,
     ) -> Result<PageView<PartyTaxProfileView>> {
         params.validate()?;
+        super::ensure_outside_supplier_profile(&self.db, &PartyId::new(party_id)).await?;
         let (sort_by, sort_dir) =
             normalize_sort(&params.sort_by, &params.sort_dir, PARTY_TAX_PROFILE_SORT_FIELDS)?;
         let filter = PartyTaxProfileFilter {
@@ -121,6 +122,7 @@ impl PartyTaxProfileService {
     ) -> Result<PartyTaxProfileView> {
         req.validate()?;
         self.ensure_party_exists(party_id).await?;
+        super::ensure_outside_supplier_profile(&self.db, &PartyId::new(party_id)).await?;
         let profile = PartyTaxProfile::new(
             PartyTaxProfileId::new(next_id()),
             PartyTaxProfileData {
@@ -185,6 +187,7 @@ impl PartyTaxProfileService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("税务资料不存在".to_string()))?;
+        super::ensure_outside_supplier_profile(&self.db, &profile.party_id).await?;
         if profile.base.version != req.version {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),

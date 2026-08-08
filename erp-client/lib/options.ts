@@ -24,6 +24,9 @@ type EnableStatus = "active" | "disabled"
 type SupplierDto = {
   id: string
   party_id: string
+  party_no: string | null
+  legal_name: string | null
+  short_name: string | null
   supplier_no: string
   status: EnableStatus
   created_at: number
@@ -119,15 +122,9 @@ export const fetchSupplierOptions = async (): Promise<SupplierComboboxItem[]> =>
   const suppliers = await fetchAllPages<SupplierDto>("/admin/suppliers", {
     status: "active",
   })
-  if (suppliers.length === 0) return []
-  const parties = await fetchAllPages<PartyDto>("/admin/parties", {})
-  const partyName = new Map<string, string>()
-  for (const party of parties) {
-    partyName.set(party.id, await resolvePartyName(party))
-  }
   return suppliers.map((s) => ({
     supplierId: s.id,
-    supplierName: partyName.get(s.party_id) ?? s.supplier_no,
+    supplierName: s.legal_name ?? s.short_name ?? s.party_no ?? s.supplier_no,
     supplierCode: s.supplier_no,
   }))
 }

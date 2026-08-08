@@ -306,6 +306,18 @@ impl PurchaseOrderService {
             ));
         }
         let supplier_id = lines[0].supplier_id.clone();
+        for line in &lines {
+            crate::supplier::eligibility::ensure_capability_qualified(
+                &self.db,
+                &line.supplier_id,
+                &line.supplier_capability_revision_id,
+                entities::common::time::BusinessDate::today(),
+            )
+            .await
+            .map_err(|error| {
+                Error::BusinessLogicError(format!("采购创建依据第 {} 行资质校验失败：{error}", line.line_no))
+            })?;
+        }
         let fulfillment = fulfillment_from_mode(lines[0].fulfillment_mode);
         let sales_order_id = confirmation.sales_order_id.clone();
 

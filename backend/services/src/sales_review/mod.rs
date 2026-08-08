@@ -1073,6 +1073,16 @@ impl SalesReviewService {
                 line.line_no
             )));
         }
+        crate::supplier::eligibility::ensure_capability_qualified(
+            &self.db,
+            &line.supplier_id,
+            &line.supplier_capability_revision_id,
+            today,
+        )
+        .await
+        .map_err(|error| {
+            Error::BusinessLogicError(format!("采购确认第 {} 行资质校验失败：{error}", line.line_no))
+        })?;
         Ok(())
     }
 

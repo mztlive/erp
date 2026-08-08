@@ -17,6 +17,7 @@ pub mod supplier_account;
 pub mod supplier_capability;
 pub mod supplier_capability_revision;
 pub mod supplier_commercial_profile_revision;
+pub mod supplier_profile_command;
 pub mod supplier_qualification;
 pub mod supplier_qualification_capability;
 pub mod supplier_qualification_revision;
@@ -38,6 +39,7 @@ pub use supplier_commercial_profile_revision::{
     InvoiceType, ReconciliationCycle, SettlementMode, SupplierCommercialProfileRevision,
     SupplierCommercialProfileRevisionData,
 };
+pub use supplier_profile_command::{SupplierProfileCommand, SupplierProfileCommandData};
 pub use supplier_qualification::{
     QualificationStatus, QualificationType, SupplierQualification, SupplierQualificationData,
     SupplierQualificationUpdate,

@@ -166,6 +166,9 @@ pub struct SupplierQualificationUpdate {
     /// 附件更新意图。
     #[serde(default, skip_serializing_if = "FieldUpdate::is_unchanged")]
     pub attachment_id: FieldUpdate<FileAssetId>,
+    /// 生效日期；`None` 表示不修改。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub valid_from: Option<BusinessDate>,
     /// 失效日期更新意图（`Set` 时校验晚于 `valid_from`）。
     #[serde(default, skip_serializing_if = "FieldUpdate::is_unchanged")]
     pub valid_to: FieldUpdate<BusinessDate>,
@@ -284,7 +287,7 @@ impl SupplierQualification {
     ) -> Result<()> {
         self.apply_issuer(update.issuer)?;
         self.apply_attachment(update.attachment_id);
-        self.apply_valid_to(update.valid_to)?;
+        self.apply_valid_window(update.valid_from, update.valid_to)?;
         self.apply_status(update.status)?;
         self.stable.touch(updated_by);
         Ok(())
@@ -341,18 +344,28 @@ impl SupplierQualification {
         update.apply_to(&mut self.attachment_id);
     }
 
-    /// 应用失效日期更新。
+    /// 整体应用生效区间更新。
     ///
     /// # 参数
-    /// * `update` - 失效日期更新意图
+    /// * `valid_from` - 可选的新生效日期
+    /// * `valid_to` - 失效日期更新意图
     ///
     /// # 错误
     /// 当失效日期不晚于生效日期时返回错误。
-    fn apply_valid_to(&mut self, update: FieldUpdate<BusinessDate>) -> Result<()> {
-        if let Some(valid_to) = update.into_option() {
-            ensure_window_valid(self.valid_from, Some(valid_to))?;
-            self.valid_to = Some(valid_to);
-        }
+    fn apply_valid_window(
+        &mut self,
+        valid_from: Option<BusinessDate>,
+        valid_to: FieldUpdate<BusinessDate>,
+    ) -> Result<()> {
+        let next_valid_from = valid_from.unwrap_or(self.valid_from);
+        let next_valid_to = match valid_to {
+            FieldUpdate::Unchanged => self.valid_to,
+            FieldUpdate::Clear => None,
+            FieldUpdate::Set(value) => Some(value),
+        };
+        ensure_window_valid(next_valid_from, next_valid_to)?;
+        self.valid_from = next_valid_from;
+        self.valid_to = next_valid_to;
         Ok(())
     }
 
@@ -495,6 +508,7 @@ mod tests {
                 SupplierQualificationUpdate {
                     issuer: FieldUpdate::Unchanged,
                     attachment_id: FieldUpdate::Unchanged,
+                    valid_from: None,
                     valid_to: FieldUpdate::Set(BusinessDate::from_ymd(2027, 12, 31).unwrap()),
                     status: Some(QualificationStatus::Active),
                 },
@@ -518,6 +532,7 @@ mod tests {
                 SupplierQualificationUpdate {
                     issuer: FieldUpdate::Clear,
                     attachment_id: FieldUpdate::Clear,
+                    valid_from: None,
                     valid_to: FieldUpdate::Unchanged,
                     status: Some(QualificationStatus::Disabled),
                 },
@@ -529,6 +544,30 @@ mod tests {
         assert!(!qualification.is_valid());
         assert_eq!(qualification.certificate_no, "HT-2026-001");
         assert_eq!(qualification.supplier_id, SupplierAccountId::new("supplier-1"));
+    }
+
+    /// 有效期起止按同一窗口更新，并支持明确清空结束日期。
+    #[test]
+    fn update_replaces_complete_validity_window() {
+        let mut qualification = SupplierQualification::new(
+            SupplierQualificationId::new("qual-window"),
+            qualification_data(),
+            "admin-1",
+        )
+        .unwrap();
+        let next_from = BusinessDate::from_ymd(2026, 2, 1).unwrap();
+        qualification
+            .update(
+                SupplierQualificationUpdate {
+                    valid_from: Some(next_from),
+                    valid_to: FieldUpdate::Clear,
+                    ..SupplierQualificationUpdate::default()
+                },
+                "admin-2",
+            )
+            .unwrap();
+        assert_eq!(qualification.valid_from, next_from);
+        assert_eq!(qualification.valid_to, None);
     }
 
     /// 实体 BSON 往返。

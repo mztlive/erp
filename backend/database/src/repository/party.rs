@@ -388,6 +388,9 @@ pub struct PartyContactRow {
     pub title: Option<String>,
     /// 电话。
     pub telephone: Option<String>,
+    /// 手机号末四位；不包含可恢复明文。
+    #[serde(default)]
+    pub mobile_last4: String,
     /// 邮箱。
     pub email: Option<String>,
     /// 生效开始日期。
@@ -754,6 +757,9 @@ pub struct PartyBankAccountRow {
     pub account_name: String,
     /// 银行。
     pub bank_name: String,
+    /// 账号末四位；不包含可恢复明文。
+    #[serde(default)]
+    pub account_number_last4: String,
     /// 支行。
     pub bank_branch_name: Option<String>,
     /// 生效开始日期。
@@ -1033,6 +1039,7 @@ fn party_contact_projection() -> Document {
         "contact_name": 1,
         "title": 1,
         "telephone": 1,
+        "mobile_last4": 1,
         "email": 1,
         "valid_from": 1,
         "valid_to": 1,
@@ -1091,6 +1098,7 @@ fn party_bank_account_projection() -> Document {
         "party_id": 1,
         "account_name": 1,
         "bank_name": 1,
+        "account_number_last4": 1,
         "bank_branch_name": 1,
         "valid_from": 1,
         "valid_to": 1,

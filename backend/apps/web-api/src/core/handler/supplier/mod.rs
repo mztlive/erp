@@ -9,19 +9,91 @@ use axum::{
 };
 use services::audit::AuditActor;
 use services::supplier::{
-    capability::SupplierCapabilityService, qualification::SupplierQualificationService,
-    rating::SupplierRatingService, CommercialProfileListParams, CommercialProfileView,
-    CreateCommercialProfileRequest, CreateSupplierCapabilityRequest, CreateSupplierQualificationRequest,
-    CreateSupplierRatingRequest, CreateSupplierRequest, PageView, SupplierCapabilityListParams,
-    SupplierCapabilityView, SupplierDetailView, SupplierListParams, SupplierQualificationListParams,
-    SupplierQualificationView, SupplierRatingListParams, SupplierRatingView, SupplierService, SupplierView,
-    UpdateSupplierCapabilityRequest, UpdateSupplierQualificationRequest, UpdateSupplierRequest,
+    profile::SupplierProfileService, PageView, RevealSupplierSensitiveRequest, SaveSupplierProfileRequest,
+    SupplierDetailView, SupplierListParams, SupplierProfileMutationView, SupplierSensitiveRevealView,
+    SupplierService, SupplierView,
 };
 
 use crate::{
     app_state::AppState,
     core::{errors::Result, response::ApiResponse},
 };
+
+#[permission_macros::permission(
+    group = "供应商",
+    group_desc = "供应商角色、商务结算版本、能力与资质管理",
+    desc = "创建完整供应商资料",
+    resource = "supplier",
+    action = "create"
+)]
+/// 原子创建完整供应商资料。
+pub async fn supplier_profile_create(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<SaveSupplierProfileRequest>,
+) -> Result<SupplierProfileMutationView> {
+    let view = SupplierProfileService::new(state.db(), state.sensitive_data())
+        .create(req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商",
+    group_desc = "供应商角色、商务结算版本、能力与资质管理",
+    desc = "修订完整供应商资料",
+    resource = "supplier",
+    action = "update"
+)]
+/// 原子修订完整供应商资料。
+pub async fn supplier_profile_update(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<SaveSupplierProfileRequest>,
+) -> Result<SupplierProfileMutationView> {
+    let view = SupplierProfileService::new(state.db(), state.sensitive_data())
+        .update(&id, req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商",
+    group_desc = "供应商角色、商务结算版本、能力与资质管理",
+    desc = "查询供应商资料保存结果",
+    resource = "supplier",
+    action = "detail"
+)]
+/// 按幂等键查询已成功的供应商资料命令结果。
+pub async fn supplier_profile_command_detail(
+    State(state): State<AppState>,
+    Path(idempotency_key): Path<String>,
+) -> Result<Option<SupplierProfileMutationView>> {
+    let view = SupplierProfileService::new(state.db(), state.sensitive_data())
+        .command_result(&idempotency_key)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商",
+    group_desc = "供应商角色、商务结算版本、能力与资质管理",
+    desc = "短时查看供应商敏感字段",
+    resource = "supplier_sensitive",
+    action = "reveal"
+)]
+/// 按详情接口签发的短时令牌揭示单个敏感字段。
+pub async fn supplier_sensitive_reveal(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<RevealSupplierSensitiveRequest>,
+) -> Result<SupplierSensitiveRevealView> {
+    let view = SupplierProfileService::new(state.db(), state.sensitive_data())
+        .reveal_sensitive(req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
 
 #[permission_macros::permission(
     group = "供应商",
@@ -49,33 +121,6 @@ pub async fn supplier_list(
 #[permission_macros::permission(
     group = "供应商",
     group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "创建供应商",
-    resource = "supplier",
-    action = "create"
-)]
-/// 创建供应商（同事务建立供应商角色 + 首个商务结算版本）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `req` - 创建请求
-///
-/// # 返回
-/// 返回新建供应商角色的响应视图。
-pub async fn supplier_create(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Json(req): Json<CreateSupplierRequest>,
-) -> Result<SupplierView> {
-    let view = SupplierService::new(state.db())
-        .create_supplier(req, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
     desc = "查询供应商详情",
     resource = "supplier",
     action = "detail"
@@ -92,35 +137,8 @@ pub async fn supplier_detail(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> Result<SupplierDetailView> {
-    let view = SupplierService::new(state.db()).supplier_detail(&id).await?;
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "更新供应商",
-    resource = "supplier",
-    action = "update"
-)]
-/// 更新供应商角色（乐观锁）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供应商角色 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
-/// 返回更新后供应商角色的响应视图。
-pub async fn supplier_update(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<UpdateSupplierRequest>,
-) -> Result<SupplierView> {
-    let view = SupplierService::new(state.db())
-        .update_supplier(&id, req, &actor)
+    let view = SupplierService::with_sensitive_data(state.db(), state.sensitive_data())
+        .supplier_detail(&id)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -150,286 +168,4 @@ pub async fn supplier_delete(
         .delete_supplier(&id, &actor)
         .await?;
     Ok(ApiResponse::ok())
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "查询商务结算版本列表",
-    resource = "supplier_commercial_profile",
-    action = "list"
-)]
-/// 查询商务结算版本列表（版本链历史）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 供应商角色 ID
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
-pub async fn supplier_commercial_profile_list(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Query(params): Query<CommercialProfileListParams>,
-) -> Result<PageView<CommercialProfileView>> {
-    let page = SupplierService::new(state.db())
-        .commercial_profile_list(&id, &params)
-        .await?;
-    Ok(ApiResponse::ok_with_data(page))
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "追加商务结算版本",
-    resource = "supplier_commercial_profile",
-    action = "create"
-)]
-/// 追加商务结算版本（推进当前版本指针）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供应商角色 ID
-/// * `req` - 创建请求
-///
-/// # 返回
-/// 返回新版本与更新后供应商视图对。
-pub async fn supplier_commercial_profile_create(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<CreateCommercialProfileRequest>,
-) -> Result<(CommercialProfileView, SupplierView)> {
-    let views = SupplierService::new(state.db())
-        .create_commercial_profile(&id, req, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(views))
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "查询供应商能力列表",
-    resource = "supplier_capability",
-    action = "list"
-)]
-/// 查询供应商能力列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 供应商角色 ID
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
-pub async fn supplier_capability_list(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Query(params): Query<SupplierCapabilityListParams>,
-) -> Result<PageView<SupplierCapabilityView>> {
-    let page = SupplierCapabilityService::new(state.db())
-        .supplier_capability_list(&id, &params)
-        .await?;
-    Ok(ApiResponse::ok_with_data(page))
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "创建供应商能力",
-    resource = "supplier_capability",
-    action = "create"
-)]
-/// 创建供应商能力（同事务建立能力 + 首版能力修订）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供应商角色 ID
-/// * `req` - 创建请求
-///
-/// # 返回
-/// 返回新建能力的响应视图。
-pub async fn supplier_capability_create(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<CreateSupplierCapabilityRequest>,
-) -> Result<SupplierCapabilityView> {
-    let view = SupplierCapabilityService::new(state.db())
-        .create_supplier_capability(&id, req, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "更新供应商能力",
-    resource = "supplier_capability",
-    action = "update"
-)]
-/// 更新供应商能力（乐观锁 + 追加能力修订）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 能力 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
-/// 返回更新后能力的响应视图。
-pub async fn supplier_capability_update(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<UpdateSupplierCapabilityRequest>,
-) -> Result<SupplierCapabilityView> {
-    let view = SupplierCapabilityService::new(state.db())
-        .update_supplier_capability(&id, req, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "查询供应商资质列表",
-    resource = "supplier_qualification",
-    action = "list"
-)]
-/// 查询供应商资质列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 供应商角色 ID
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
-pub async fn supplier_qualification_list(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Query(params): Query<SupplierQualificationListParams>,
-) -> Result<PageView<SupplierQualificationView>> {
-    let page = SupplierQualificationService::new(state.db())
-        .supplier_qualification_list(&id, &params)
-        .await?;
-    Ok(ApiResponse::ok_with_data(page))
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "创建供应商资质",
-    resource = "supplier_qualification",
-    action = "create"
-)]
-/// 创建供应商资质（同事务建立资质 + 首版修订 + 适用能力关联）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供应商角色 ID
-/// * `req` - 创建请求
-///
-/// # 返回
-/// 返回新建资质的响应视图。
-pub async fn supplier_qualification_create(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<CreateSupplierQualificationRequest>,
-) -> Result<SupplierQualificationView> {
-    let view = SupplierQualificationService::new(state.db())
-        .create_supplier_qualification(&id, req, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "更新供应商资质",
-    resource = "supplier_qualification",
-    action = "update"
-)]
-/// 更新供应商资质（乐观锁 + 追加资质修订）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 资质 ID
-/// * `req` - 更新请求（含期望版本）
-///
-/// # 返回
-/// 返回更新后资质的响应视图。
-pub async fn supplier_qualification_update(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<UpdateSupplierQualificationRequest>,
-) -> Result<SupplierQualificationView> {
-    let view = SupplierQualificationService::new(state.db())
-        .update_supplier_qualification(&id, req, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(view))
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "查询供应商评估版本列表",
-    resource = "supplier_rating",
-    action = "list"
-)]
-/// 查询供应商评估版本列表。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `id` - 供应商角色 ID
-/// * `query` - 分页与筛选参数
-///
-/// # 返回
-/// 返回契约形状的分页视图。
-pub async fn supplier_rating_list(
-    State(state): State<AppState>,
-    Path(id): Path<String>,
-    Query(params): Query<SupplierRatingListParams>,
-) -> Result<PageView<SupplierRatingView>> {
-    let page = SupplierRatingService::new(state.db())
-        .supplier_rating_list(&id, &params)
-        .await?;
-    Ok(ApiResponse::ok_with_data(page))
-}
-
-#[permission_macros::permission(
-    group = "供应商",
-    group_desc = "供应商角色、商务结算版本、能力与资质管理",
-    desc = "创建供应商评估版本",
-    resource = "supplier_rating",
-    action = "create"
-)]
-/// 创建供应商评估版本（期初评分只在首次版本允许填写）。
-///
-/// # 参数
-/// * `state` - 应用状态
-/// * `actor` - 已通过鉴权的审计操作人
-/// * `id` - 供应商角色 ID
-/// * `req` - 创建请求
-///
-/// # 返回
-/// 返回新建评估版本的响应视图。
-pub async fn supplier_rating_create(
-    State(state): State<AppState>,
-    Extension(actor): Extension<AuditActor>,
-    Path(id): Path<String>,
-    Json(req): Json<CreateSupplierRatingRequest>,
-) -> Result<SupplierRatingView> {
-    let view = SupplierRatingService::new(state.db())
-        .create_supplier_rating(&id, req, &actor)
-        .await?;
-    Ok(ApiResponse::ok_with_data(view))
 }

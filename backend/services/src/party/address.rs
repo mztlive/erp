@@ -12,6 +12,7 @@ use entities::party::{
 };
 use id_generator::next_id;
 use mongodb::Database;
+use std::sync::Arc;
 use validator::Validate;
 
 use crate::audit::AuditActor;
@@ -21,7 +22,7 @@ use super::dto::{
     normalize_sort, CreatePartyAddressRequest, PageView, PartyAddressListParams, PartyAddressView, SortDir,
     UpdatePartyAddressRequest, PARTY_ADDRESS_SORT_FIELDS,
 };
-use super::sensitive::FINGERPRINT_KEY;
+use super::sensitive::SensitiveDataCodec;
 use super::{clear_default_marks, page_or_default, page_size_or_default};
 
 /// 地址列表筛选条件类型（经 `PartyExt` 关联类型跨 crate 可达）。
@@ -30,6 +31,7 @@ type PartyAddressFilter = <mongodb::Database as PartyExt>::PartyAddressFilter;
 /// 地址服务。
 pub struct PartyAddressService {
     db: Database,
+    sensitive_data: Arc<SensitiveDataCodec>,
 }
 
 impl PartyAddressService {
@@ -40,8 +42,8 @@ impl PartyAddressService {
     ///
     /// # 返回
     /// 返回服务实例。
-    pub fn new(db: Database) -> Self {
-        Self { db }
+    pub fn new(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
+        Self { db, sensitive_data }
     }
 
     /// 分页查询地址列表（投影查询，敏感字段不进投影）。
@@ -61,6 +63,7 @@ impl PartyAddressService {
         params: &PartyAddressListParams,
     ) -> Result<PageView<PartyAddressView>> {
         params.validate()?;
+        super::ensure_outside_supplier_profile(&self.db, &PartyId::new(party_id)).await?;
         let (sort_by, sort_dir) =
             normalize_sort(&params.sort_by, &params.sort_dir, PARTY_ADDRESS_SORT_FIELDS)?;
         let filter = PartyAddressFilter {
@@ -124,7 +127,9 @@ impl PartyAddressService {
     ) -> Result<PartyAddressView> {
         req.validate()?;
         self.ensure_party_exists(party_id).await?;
-        let address = PartyAddress::new(
+        super::ensure_outside_supplier_profile(&self.db, &PartyId::new(party_id)).await?;
+        let address_plaintext = req.address.clone();
+        let mut address = PartyAddress::new(
             PartyAddressId::new(next_id()),
             PartyAddressData {
                 party_id: PartyId::new(party_id),
@@ -136,9 +141,10 @@ impl PartyAddressService {
                 is_default: req.is_default,
                 status: req.status.unwrap_or(EffectiveRecordStatus::Active),
             },
-            FINGERPRINT_KEY,
+            self.sensitive_data.fingerprint_key(),
             actor.id(),
         )?;
+        address.address_ciphertext = self.sensitive_data.encrypt(&address_plaintext)?;
         let audit =
             actor
                 .clone()
@@ -190,6 +196,7 @@ impl PartyAddressService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("地址不存在".to_string()))?;
+        super::ensure_outside_supplier_profile(&self.db, &address.party_id).await?;
         if address.base.version != req.version {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),

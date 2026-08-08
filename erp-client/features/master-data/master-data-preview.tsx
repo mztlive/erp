@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
   masterDataActionLabel,
   masterDataCopy,
@@ -21,6 +22,7 @@ import type {
   MasterDataCenterView,
   MasterDataListItem,
 } from "@/features/master-data/types"
+import { hasPermission } from "@/lib/permissions"
 
 export function MasterDataPreviewPanel({
   row,
@@ -31,6 +33,12 @@ export function MasterDataPreviewPanel({
   detail: MasterDataCenterView | null | undefined
   detailLoading?: boolean
 }) {
+  const accountQuery = useAccountProfileQuery()
+  const canRevealSensitive = hasPermission(
+    accountQuery.data?.permissions,
+    "supplier_sensitive:reveal"
+  )
+
   return (
     <div className="space-y-4 text-sm">
       <section className="space-y-2">
@@ -151,7 +159,9 @@ export function MasterDataPreviewPanel({
                   className="flex flex-wrap items-center gap-2"
                 >
                   <span className="text-muted-foreground">{field.label}</span>
-                  {field.visibility === "masked" && field.revealToken ? (
+                  {field.visibility === "masked" &&
+                  field.revealToken &&
+                  canRevealSensitive ? (
                     <SensitiveValue
                       label={field.label}
                       maskedValue={field.maskedValue}

@@ -95,6 +95,9 @@ pub struct PartyContact {
     pub mobile_ciphertext: String,
     /// 规范化手机号的带密钥 HMAC 查询指纹（低熵值精确查询，禁止裸摘要）。
     pub mobile_query_hmac: String,
+    /// 手机号末四位，仅用于生成不可逆的列表掩码；历史记录缺省为空。
+    #[serde(default)]
+    pub mobile_last4: String,
     /// 电话。
     pub telephone: Option<String>,
     /// 邮箱。
@@ -202,6 +205,14 @@ impl PartyContact {
         let title = normalize_optional_text(data.title, "职务/用途", TITLE_MAX_LEN)?;
         let mobile = normalize_optional_phone(Some(data.mobile), MOBILE_MAX_LEN)?
             .ok_or_else(|| Error::from("手机号不能为空"))?;
+        let mobile_last4 = mobile
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
         let telephone = normalize_optional_text(data.telephone, "电话", TELEPHONE_MAX_LEN)?;
         let email = normalize_optional_email(data.email, EMAIL_MAX_LEN)?;
         let created_by = created_by.into();
@@ -214,6 +225,7 @@ impl PartyContact {
             title,
             mobile_ciphertext: String::new(),
             mobile_query_hmac: Self::mobile_fingerprint(&mobile, fingerprint_key),
+            mobile_last4,
             telephone,
             email,
             valid_from: data.valid_from,

@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
   MasterDataDisableDialog,
   MasterDataReviseDialog,
@@ -37,6 +38,7 @@ import {
   type MasterDataSectionId,
 } from "@/features/master-data/types"
 import { formatDateTime } from "@/lib/datetime"
+import { hasPermission } from "@/lib/permissions"
 
 const SECTION_NAV: readonly {
   id: MasterDataSectionId
@@ -144,6 +146,7 @@ function MasterDataCenterBody({
 }) {
   const router = useRouter()
   const query = useMasterDataCenterQuery(resource, stableId)
+  const accountQuery = useAccountProfileQuery()
   const activeSection = resolveSection(section)
   const [reviseOpen, setReviseOpen] = React.useState(false)
   const [disableOpen, setDisableOpen] = React.useState(false)
@@ -205,6 +208,10 @@ function MasterDataCenterBody({
   const baseHref = `/master-data/${resource}/${data.stableId}`
   const canRevise = data.allowedActions.includes("CREATE_REVISION")
   const canDisable = data.allowedActions.includes("DISABLE")
+  const canRevealSensitive = hasPermission(
+    accountQuery.data?.permissions,
+    "supplier_sensitive:reveal"
+  )
   const reviseBlocker = data.actionBlockers.find(
     (b) => b.action === "CREATE_REVISION"
   )
@@ -414,7 +421,7 @@ function MasterDataCenterBody({
                   className="flex flex-wrap items-center gap-2 text-sm"
                 >
                   <span className="text-muted-foreground">{field.label}</span>
-                  {field.revealToken ? (
+                  {field.revealToken && canRevealSensitive ? (
                     <SensitiveValue
                       label={field.label}
                       maskedValue={field.maskedValue}

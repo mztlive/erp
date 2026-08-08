@@ -12,10 +12,11 @@
 //! 集合名常量统一从 `SupplierExt` 关联常量导入（唯一权威来源）；筛选/行类型
 //! 定义在本文件，经 `SupplierExt` 的关联类型对外暴露。
 
-use entities::ids::{PartyId, SupplierAccountId};
+use entities::ids::{PartyId, SupplierAccountId, SupplierCapabilityId, SupplierQualificationId};
 use entities::supplier::{
     CapabilityCode, CapabilityStatus, QualificationStatus, QualificationType, SupplierAccount,
-    SupplierAccountStatus, SupplierCapability, SupplierCommercialProfileRevision, SupplierQualification,
+    SupplierAccountStatus, SupplierCapability, SupplierCommercialProfileRevision, SupplierProfileCommand,
+    SupplierQualification, SupplierQualificationCapability,
 };
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -34,6 +35,9 @@ const SUPPLIER_ACCOUNTS: &str = <mongodb::Database as SupplierExt>::SUPPLIER_ACC
 /// `supplier_commercial_profile_revision` 集合名（单一来源：`SupplierExt` 关联常量）。
 const SUPPLIER_COMMERCIAL_PROFILE_REVISIONS: &str =
     <mongodb::Database as SupplierExt>::SUPPLIER_COMMERCIAL_PROFILE_REVISIONS;
+/// 资质适用能力关联集合名。
+const SUPPLIER_QUALIFICATION_CAPABILITIES: &str =
+    <mongodb::Database as SupplierExt>::SUPPLIER_QUALIFICATION_CAPABILITIES;
 
 /// 供应商角色列表投影行（列表接口只取必要字段，禁止返回整文档）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -63,6 +67,8 @@ pub struct SupplierAccountFilter {
     pub keyword: Option<String>,
     /// 共用企业主体 ID（精确匹配）；`None` 表示不筛选。
     pub party_id: Option<PartyId>,
+    /// 共用主体 ID 集合；用于将主体名称命中并入供应商编号搜索。
+    pub party_ids: Option<Vec<PartyId>>,
     /// 启停状态；`None` 表示不筛选。
     pub status: Option<SupplierAccountStatus>,
     /// 页码（1 起）。
@@ -82,9 +88,24 @@ impl QueryFilter for SupplierAccountFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        insert_literal_regex_filter(&mut filter, "supplier_no", self.keyword.as_deref());
         if let Some(party_id) = &self.party_id {
             filter.insert("party_id", party_id.to_string());
+        }
+        match (self.keyword.as_deref(), self.party_ids.as_ref()) {
+            (Some(keyword), Some(party_ids)) if !party_ids.is_empty() => {
+                let ids: Vec<String> = party_ids.iter().map(ToString::to_string).collect();
+                filter.insert(
+                    "$or",
+                    vec![
+                        doc! { "supplier_no": { "$regex": regex::escape(keyword), "$options": "i" } },
+                        doc! { "party_id": { "$in": ids } },
+                    ],
+                );
+            }
+            (Some(keyword), _) => {
+                insert_literal_regex_filter(&mut filter, "supplier_no", Some(keyword));
+            }
+            (None, _) => {}
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
@@ -665,6 +686,53 @@ impl<'a> Repository<'a, SupplierQualification> {
     }
 }
 
+impl<'a> Repository<'a, SupplierQualificationCapability> {
+    /// 批量读取指定资质的适用能力关联。
+    ///
+    /// # Errors
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_by_qualification_ids(
+        &self,
+        qualification_ids: &[SupplierQualificationId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierQualificationCapability>> {
+        if qualification_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let ids: Vec<String> = qualification_ids.iter().map(ToString::to_string).collect();
+        self.find_many(doc! { "qualification_id": { "$in": ids } }, executor)
+            .await
+    }
+
+    /// 读取一项能力关联的全部资质关系。
+    ///
+    /// # Errors
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn list_by_capability_id(
+        &self,
+        capability_id: &SupplierCapabilityId,
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<SupplierQualificationCapability>> {
+        self.find_many(doc! { "capability_id": capability_id.to_string() }, executor)
+            .await
+    }
+}
+
+impl<'a> Repository<'a, SupplierProfileCommand> {
+    /// 按客户端幂等键读取已成功命令结果。
+    ///
+    /// # Errors
+    /// MongoDB 查询失败时返回错误。
+    pub async fn find_by_idempotency_key(
+        &self,
+        idempotency_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierProfileCommand>> {
+        self.find_one(doc! { "idempotency_key": idempotency_key }, executor)
+            .await
+    }
+}
+
 /// D09 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
 ///
 /// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
@@ -721,6 +789,36 @@ impl<'a> SupplierRepository<'a> {
         mongo_ops::insert_one(
             &self.db.collection::<SupplierAccount>(SUPPLIER_ACCOUNTS),
             supplier,
+            executor,
+        )
+        .await
+    }
+
+    /// 在同一事务内整体替换一份资质的适用能力集合。
+    ///
+    /// 调用方必须先校验能力均属于同一供应商，并传入事务执行器。
+    ///
+    /// # Errors
+    /// 删除旧关联或写入新关联失败时返回错误。
+    pub async fn replace_qualification_capabilities(
+        &self,
+        qualification_id: &SupplierQualificationId,
+        links: Vec<SupplierQualificationCapability>,
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        mongo_ops::delete_many(
+            &self
+                .db
+                .collection::<SupplierQualificationCapability>(SUPPLIER_QUALIFICATION_CAPABILITIES),
+            doc! { "qualification_id": qualification_id.to_string() },
+            executor,
+        )
+        .await?;
+        mongo_ops::insert_many(
+            &self
+                .db
+                .collection::<SupplierQualificationCapability>(SUPPLIER_QUALIFICATION_CAPABILITIES),
+            links,
             executor,
         )
         .await

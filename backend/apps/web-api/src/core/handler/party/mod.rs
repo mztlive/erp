@@ -194,7 +194,7 @@ pub async fn party_contact_list(
     Path(id): Path<String>,
     Query(params): Query<PartyContactListParams>,
 ) -> Result<PageView<PartyContactView>> {
-    let page = PartyContactService::new(state.db())
+    let page = PartyContactService::new(state.db(), state.sensitive_data())
         .party_contact_list(&id, &params)
         .await?;
     Ok(ApiResponse::ok_with_data(page))
@@ -223,7 +223,7 @@ pub async fn party_contact_create(
     Path(id): Path<String>,
     Json(req): Json<CreatePartyContactRequest>,
 ) -> Result<PartyContactView> {
-    let view = PartyContactService::new(state.db())
+    let view = PartyContactService::new(state.db(), state.sensitive_data())
         .create_party_contact(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -252,7 +252,7 @@ pub async fn party_contact_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyContactRequest>,
 ) -> Result<PartyContactView> {
-    let view = PartyContactService::new(state.db())
+    let view = PartyContactService::new(state.db(), state.sensitive_data())
         .update_party_contact(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -279,7 +279,7 @@ pub async fn party_address_list(
     Path(id): Path<String>,
     Query(params): Query<PartyAddressListParams>,
 ) -> Result<PageView<PartyAddressView>> {
-    let page = PartyAddressService::new(state.db())
+    let page = PartyAddressService::new(state.db(), state.sensitive_data())
         .party_address_list(&id, &params)
         .await?;
     Ok(ApiResponse::ok_with_data(page))
@@ -308,7 +308,7 @@ pub async fn party_address_create(
     Path(id): Path<String>,
     Json(req): Json<CreatePartyAddressRequest>,
 ) -> Result<PartyAddressView> {
-    let view = PartyAddressService::new(state.db())
+    let view = PartyAddressService::new(state.db(), state.sensitive_data())
         .create_party_address(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -337,7 +337,7 @@ pub async fn party_address_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyAddressRequest>,
 ) -> Result<PartyAddressView> {
-    let view = PartyAddressService::new(state.db())
+    let view = PartyAddressService::new(state.db(), state.sensitive_data())
         .update_party_address(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -449,7 +449,7 @@ pub async fn party_bank_account_list(
     Path(id): Path<String>,
     Query(params): Query<PartyBankAccountListParams>,
 ) -> Result<PageView<PartyBankAccountView>> {
-    let page = PartyBankAccountService::new(state.db())
+    let page = PartyBankAccountService::new(state.db(), state.sensitive_data())
         .party_bank_account_list(&id, &params)
         .await?;
     Ok(ApiResponse::ok_with_data(page))
@@ -478,7 +478,7 @@ pub async fn party_bank_account_create(
     Path(id): Path<String>,
     Json(req): Json<CreatePartyBankAccountRequest>,
 ) -> Result<PartyBankAccountView> {
-    let view = PartyBankAccountService::new(state.db())
+    let view = PartyBankAccountService::new(state.db(), state.sensitive_data())
         .create_party_bank_account(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))
@@ -507,7 +507,7 @@ pub async fn party_bank_account_update(
     Path(id): Path<String>,
     Json(req): Json<UpdatePartyBankAccountRequest>,
 ) -> Result<PartyBankAccountView> {
-    let view = PartyBankAccountService::new(state.db())
+    let view = PartyBankAccountService::new(state.db(), state.sensitive_data())
         .update_party_bank_account(&id, req, &actor)
         .await?;
     Ok(ApiResponse::ok_with_data(view))

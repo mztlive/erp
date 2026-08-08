@@ -959,22 +959,52 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         permissions: [
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/supplier-profiles",
+                description: "创建完整供应商资料",
+                permission: {
+                    resource: "supplier",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/supplier-profiles/{id}",
+                description: "修订完整供应商资料",
+                permission: {
+                    resource: "supplier",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/supplier-profile-commands/{idempotency_key}",
+                description: "查询供应商资料保存结果",
+                permission: {
+                    resource: "supplier",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-sensitive-fields/reveal",
+                description: "短时查看供应商敏感字段",
+                permission: {
+                    resource: "supplier_sensitive",
+                    action: "reveal",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/suppliers",
                 description: "查询供应商列表",
                 permission: {
                     resource: "supplier",
                     action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/suppliers",
-                description: "创建供应商",
-                permission: {
-                    resource: "supplier",
-                    action: "create",
                 },
             },
             {
@@ -989,122 +1019,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
-                method: "PUT",
-                path: "/admin/suppliers/{id}",
-                description: "更新供应商",
-                permission: {
-                    resource: "supplier",
-                    action: "update",
-                },
-            },
-            {
-                module: "admin",
                 method: "DELETE",
                 path: "/admin/suppliers/{id}",
                 description: "删除供应商",
                 permission: {
                     resource: "supplier",
                     action: "delete",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/suppliers/{id}/commercial-profiles",
-                description: "查询商务结算版本列表",
-                permission: {
-                    resource: "supplier_commercial_profile",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/suppliers/{id}/commercial-profiles",
-                description: "追加商务结算版本",
-                permission: {
-                    resource: "supplier_commercial_profile",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/suppliers/{id}/capabilities",
-                description: "查询供应商能力列表",
-                permission: {
-                    resource: "supplier_capability",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/suppliers/{id}/capabilities",
-                description: "创建供应商能力",
-                permission: {
-                    resource: "supplier_capability",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "PUT",
-                path: "/admin/supplier-capabilities/{id}",
-                description: "更新供应商能力",
-                permission: {
-                    resource: "supplier_capability",
-                    action: "update",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/suppliers/{id}/qualifications",
-                description: "查询供应商资质列表",
-                permission: {
-                    resource: "supplier_qualification",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/suppliers/{id}/qualifications",
-                description: "创建供应商资质",
-                permission: {
-                    resource: "supplier_qualification",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "PUT",
-                path: "/admin/supplier-qualifications/{id}",
-                description: "更新供应商资质",
-                permission: {
-                    resource: "supplier_qualification",
-                    action: "update",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/suppliers/{id}/ratings",
-                description: "查询供应商评估版本列表",
-                permission: {
-                    resource: "supplier_rating",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/suppliers/{id}/ratings",
-                description: "创建供应商评估版本",
-                permission: {
-                    resource: "supplier_rating",
-                    action: "create",
                 },
             },
         ],

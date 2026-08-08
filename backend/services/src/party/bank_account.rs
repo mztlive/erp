@@ -14,6 +14,7 @@ use entities::party::{
 };
 use id_generator::next_id;
 use mongodb::Database;
+use std::sync::Arc;
 use validator::Validate;
 
 use crate::audit::AuditActor;
@@ -23,7 +24,7 @@ use super::dto::{
     normalize_sort, CreatePartyBankAccountRequest, PageView, PartyBankAccountListParams,
     PartyBankAccountView, SortDir, UpdatePartyBankAccountRequest, PARTY_BANK_ACCOUNT_SORT_FIELDS,
 };
-use super::sensitive::FINGERPRINT_KEY;
+use super::sensitive::SensitiveDataCodec;
 use super::{clear_default_marks, page_or_default, page_size_or_default};
 
 /// 银行账户列表筛选条件类型（经 `PartyExt` 关联类型跨 crate 可达）。
@@ -32,6 +33,7 @@ type PartyBankAccountFilter = <mongodb::Database as PartyExt>::PartyBankAccountF
 /// 银行账户服务。
 pub struct PartyBankAccountService {
     db: Database,
+    sensitive_data: Arc<SensitiveDataCodec>,
 }
 
 impl PartyBankAccountService {
@@ -42,8 +44,8 @@ impl PartyBankAccountService {
     ///
     /// # 返回
     /// 返回服务实例。
-    pub fn new(db: Database) -> Self {
-        Self { db }
+    pub fn new(db: Database, sensitive_data: Arc<SensitiveDataCodec>) -> Self {
+        Self { db, sensitive_data }
     }
 
     /// 分页查询银行账户列表（投影查询，敏感字段不进投影）。
@@ -63,6 +65,7 @@ impl PartyBankAccountService {
         params: &PartyBankAccountListParams,
     ) -> Result<PageView<PartyBankAccountView>> {
         params.validate()?;
+        super::ensure_outside_supplier_profile(&self.db, &PartyId::new(party_id)).await?;
         let (sort_by, sort_dir) =
             normalize_sort(&params.sort_by, &params.sort_dir, PARTY_BANK_ACCOUNT_SORT_FIELDS)?;
         let filter = PartyBankAccountFilter {
@@ -88,6 +91,7 @@ impl PartyBankAccountService {
                 party_id: row.party_id.to_string(),
                 account_name: row.account_name,
                 bank_name: row.bank_name,
+                account_number_masked: super::dto::masked_last4(&row.account_number_last4),
                 bank_branch_name: row.bank_branch_name,
                 valid_from: row.valid_from,
                 valid_to: row.valid_to,
@@ -131,7 +135,9 @@ impl PartyBankAccountService {
     ) -> Result<PartyBankAccountView> {
         req.validate()?;
         self.ensure_party_exists(party_id).await?;
-        let account = PartyBankAccount::new(
+        super::ensure_outside_supplier_profile(&self.db, &PartyId::new(party_id)).await?;
+        let account_number = req.account_number.clone();
+        let mut account = PartyBankAccount::new(
             PartyBankAccountId::new(next_id()),
             PartyBankAccountData {
                 bank_account_no: req.bank_account_no,
@@ -145,9 +151,10 @@ impl PartyBankAccountService {
                 is_default: req.is_default,
                 status: req.status.unwrap_or(EffectiveRecordStatus::Active),
             },
-            FINGERPRINT_KEY,
+            self.sensitive_data.fingerprint_key(),
             actor.id(),
         )?;
+        account.account_number_ciphertext = self.sensitive_data.encrypt(&account_number)?;
         let audit = actor.clone().resource_log(
             "party_bank_account.create",
             "party_bank_account",
@@ -200,6 +207,7 @@ impl PartyBankAccountService {
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("银行账户不存在".to_string()))?;
+        super::ensure_outside_supplier_profile(&self.db, &account.party_id).await?;
         if account.base.version != req.version {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),

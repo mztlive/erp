@@ -274,6 +274,7 @@ export const masterDataCopy = {
   fFoodLicense: "食品经营许可证",
   fLegalPersonIdCard: "供应商法人身份证",
   fTaxNo: "税号",
+  fCreditCode: "统一社会信用代码",
   fBankName: "开户银行",
   fBankAccount: "银行账号",
   fInvoiceType: "发票类型",

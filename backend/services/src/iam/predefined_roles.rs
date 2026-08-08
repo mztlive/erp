@@ -200,10 +200,6 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "party_tax_profile:*",
     "party_bank_account:*",
     "supplier:*",
-    "supplier_commercial_profile:*",
-    "supplier_capability:*",
-    "supplier_qualification:*",
-    "supplier_rating:*",
     // 确认与采购
     "contract:detail",
     "sales_order:list",

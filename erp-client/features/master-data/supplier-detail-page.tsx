@@ -27,6 +27,7 @@ import {
   PageHeader,
   PageScaffold,
   RevisionTimeline,
+  SettlementPartyCombobox,
   surfaceInsetClassName,
   surfacePanelClassName,
 } from "@/components/business"
@@ -51,6 +52,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { uploadFileAssetImage } from "@/features/file-assets/api"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import {
   MasterDataDisableDialog,
   MediaListField,
@@ -77,6 +79,8 @@ import type {
   SupplierFields,
 } from "@/features/master-data/types"
 import { formatDateTime } from "@/lib/datetime"
+import { usePartyOptionsQuery } from "@/hooks/use-options"
+import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
 
 function newIdempotencyKey(prefix: string): string {
@@ -98,6 +102,7 @@ function SensitiveEditableField({
   revealToken,
   onChange,
   disabled,
+  canReveal = false,
   placeholder,
 }: {
   label: string
@@ -107,14 +112,19 @@ function SensitiveEditableField({
   revealToken?: string
   onChange: (next: string) => void
   disabled?: boolean
+  canReveal?: boolean
   placeholder?: string
 }) {
   const [revealed, setRevealed] = React.useState(false)
+  const [revealedValue, setRevealedValue] = React.useState<string | null>(null)
   const [revealError, setRevealError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     if (!revealed) return
-    const timer = window.setTimeout(() => setRevealed(false), 15000)
+    const timer = window.setTimeout(() => {
+      setRevealed(false)
+      setRevealedValue(null)
+    }, 15000)
     return () => window.clearTimeout(timer)
   }, [revealed])
 
@@ -136,7 +146,8 @@ function SensitiveEditableField({
 
   const reveal = async () => {
     try {
-      await revealMasterDataSensitive(revealToken)
+      const plaintext = value || (await revealMasterDataSensitive(revealToken))
+      setRevealedValue(plaintext)
       setRevealError(null)
       setRevealed(true)
     } catch (error) {
@@ -156,7 +167,7 @@ function SensitiveEditableField({
             type="button"
             size="sm"
             variant="outline"
-            disabled={disabled}
+            disabled={!canReveal}
             onClick={() => void reveal()}
           >
             短时查看
@@ -179,10 +190,16 @@ function SensitiveEditableField({
       <Label htmlFor={id}>{label}</Label>
       <Input
         id={id}
-        value={value}
+        value={revealedValue ?? value}
         autoFocus
-        onChange={(e) => onChange(e.target.value)}
-        onBlur={() => setRevealed(false)}
+        onChange={(e) => {
+          setRevealedValue(e.target.value)
+          onChange(e.target.value)
+        }}
+        onBlur={() => {
+          setRevealed(false)
+          setRevealedValue(null)
+        }}
         disabled={disabled}
         placeholder={placeholder}
       />
@@ -314,6 +331,7 @@ function CredentialGroup({
 type SupplierEditorFormValues = Readonly<{
   name: string
   company: string
+  creditCode: string
   contactName: string
   contactPhone: string
   address: string
@@ -344,11 +362,61 @@ type SupplierEditorFormValues = Readonly<{
 }>
 
 /** 保存前字段校验（不含变更原因；原因在右上角保存弹窗中填写）。 */
+type SupplierValidationContext = Readonly<{
+  hasStoredContactPhone?: boolean
+  originalContactName?: string
+}>
+
 function validateSupplierEditorFields(
   values: SupplierEditorFormValues,
+  context: SupplierValidationContext = {},
 ): string | null {
   if (values.name.trim().length < 2) return "请填写供应商名称"
   if (values.company.trim().length < 1) return "请填写企业主体"
+  if (values.creditCode.trim() && !/^[0-9A-Z]{18}$/i.test(values.creditCode.trim())) {
+    return "统一社会信用代码必须是 18 位字母或数字"
+  }
+  const hasContactName = Boolean(values.contactName.trim())
+  const hasContactPhone = Boolean(values.contactPhone.trim())
+  const preservesStoredContact =
+    hasContactName &&
+    !hasContactPhone &&
+    context.hasStoredContactPhone === true &&
+    values.contactName.trim() === context.originalContactName?.trim()
+  if (hasContactName !== hasContactPhone && !preservesStoredContact) {
+    return "联系人姓名和联系电话必须同时填写；修改联系人姓名前请先短时查看联系电话"
+  }
+  if (!values.signingEntity.trim()) return "请选择公司签约主体"
+  if (!values.paymentEntity.trim()) return "请选择公司付款主体"
+  for (const [label, score] of [
+    ["合作期初评分", values.initialScore],
+    ["合作中评分", values.currentScore],
+  ] as const) {
+    if (score.trim() && !/^(100|[1-9]?\d)$/.test(score.trim())) {
+      return `${label}必须是 0–100 的整数`
+    }
+  }
+  const taxRate = values.invoiceTaxRate.trim().replace(/%$/, "")
+  if (taxRate) {
+    const numeric = Number(taxRate)
+    if (!Number.isFinite(numeric) || numeric < 0 || numeric >= 100) {
+      return "发票税点必须在 0%（含）到 100%（不含）之间"
+    }
+  }
+  if (
+    values.contractValidFrom &&
+    values.contractValidTo &&
+    values.contractValidTo <= values.contractValidFrom
+  ) {
+    return "合同有效期止必须晚于有效期起"
+  }
+  if (
+    values.authorizationValidFrom &&
+    values.authorizationValidTo &&
+    values.authorizationValidTo <= values.authorizationValidFrom
+  ) {
+    return "授权书有效期止必须晚于有效期起"
+  }
   return null
 }
 
@@ -359,6 +427,7 @@ function hydrateFromCenter(
   return {
     name: data.name,
     company: fields.company ?? "",
+    creditCode: fields.creditCode ?? "",
     contactName: fields.contactName ?? "",
     contactPhone: fields.contactPhone ?? "",
     address: fields.address ?? "",
@@ -393,6 +462,7 @@ function createDefaults(isCreate: boolean): SupplierEditorFormValues {
   return {
     name: "",
     company: "",
+    creditCode: "",
     contactName: "",
     contactPhone: "",
     address: "",
@@ -434,6 +504,8 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
   )
   const createMutation = useCreateMasterDataMutation()
   const reviseMutation = useCreateRevisionMutation()
+  const accountQuery = useAccountProfileQuery()
+  const partyOptionsQuery = usePartyOptionsQuery()
 
   const data = detailQuery.data
   const lockVersion = data?.lockVersion
@@ -462,6 +534,12 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
   }, [data])
   /** 本会话选择但尚未上传的资质文件；保存时按文件名上传并回填 asset id。 */
   const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
+  /** 保存失败后保留本会话已上传资产，重试时只复查后台扫描结果，不重复上传。 */
+  const uploadedAssetMapsRef = React.useRef<
+    Record<string, Record<string, { assetId: string; url: string }>>
+  >({})
+  /** 已实际编辑过的敏感字段；用于区分“保留打码值”和“明确清空”。 */
+  const editedSensitiveRef = React.useRef(new Set<"contactPhone" | "address">())
   const rememberMediaFiles = React.useCallback((files: File[]) => {
     for (const file of files) {
       pendingFilesRef.current.set(file.name, file)
@@ -495,16 +573,28 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
           .map((s) => s.trim())
           .filter(Boolean)
         const existing = mediaAssetMaps[key] ?? {}
+        const uploadedInSession = uploadedAssetMapsRef.current[key] ?? {}
         const map: Record<string, string> = {}
         for (const name of names) {
-          if (existing[name]?.assetId) {
-            map[name] = existing[name].assetId
+          const known = existing[name] ?? uploadedInSession[name]
+          if (known?.assetId) {
+            map[name] = known.assetId
             continue
           }
           const file = pendingFilesRef.current.get(name)
           if (!file) continue
-          const uploaded = await uploadFileAssetImage(file, "attachment")
+          const sensitivityClass =
+            key === "legalPersonIdCard" ? "highly_sensitive" : "sensitive"
+          const uploaded = await uploadFileAssetImage(
+            file,
+            "attachment",
+            sensitivityClass,
+          )
           map[name] = uploaded.fileAssetId
+          uploadedAssetMapsRef.current[key] = {
+            ...uploadedAssetMapsRef.current[key],
+            [name]: { assetId: uploaded.fileAssetId, url: uploaded.url },
+          }
         }
         out[key] = map
       }
@@ -536,7 +626,13 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
       setFormError(null)
       setResult(null)
 
-      const validation = validateSupplierEditorFields(value)
+      const hasStoredContactPhone = data?.sensitiveFields.some(
+        (field) => field.label === "联系电话" || field.label === "联系人",
+      )
+      const validation = validateSupplierEditorFields(value, {
+        hasStoredContactPhone,
+        originalContactName: initialFormValues.contactName,
+      })
       if (validation) {
         setFormError(validation)
         return
@@ -555,11 +651,27 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
         const assetMaps = await resolvePendingMedia(value)
         fields = {
           ...fields,
+          clearContact:
+            !isCreate &&
+            !value.contactName.trim() &&
+            !value.contactPhone.trim() &&
+            (Boolean(initialFormValues.contactName.trim()) ||
+              editedSensitiveRef.current.has("contactPhone")),
+          clearAddress:
+            !isCreate &&
+            !value.address.trim() &&
+            editedSensitiveRef.current.has("address"),
+          clearTaxProfile:
+            !isCreate &&
+            Boolean(initialFormValues.taxNo.trim()) &&
+            !value.taxNo.trim(),
           qualificationFileAssetIds: assetMaps.qualification,
           contractFileAssetIds: assetMaps.contractFile,
           authorizationFileAssetIds: assetMaps.authorizationFile,
           foodLicenseFileAssetIds: assetMaps.foodLicense,
           legalPersonIdCardFileAssetIds: assetMaps.legalPersonIdCard,
+          qualificationCapabilityCodes:
+            data?.supplierQualificationCapabilityCodes,
         } as SupplierFields
       } catch (error) {
         setFormError(
@@ -575,6 +687,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
           stableId: data.stableId,
           baseRevisionId: revisionId,
           expectedLockVersion: lockVersion,
+          expectedPartyVersion: data.partyLockVersion,
           name: value.name.trim(),
           effectiveFrom: defaultImmediateEffectiveFrom(),
           changeReason,
@@ -624,6 +737,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
     const key = `${data.stableId}:${data.lockVersion}:${data.currentRevision.revisionId}`
     if (hydratedKeyRef.current === key) return
     form.reset(hydrateFromCenter(data))
+    editedSensitiveRef.current.clear()
     hydratedKeyRef.current = key
   }, [data, form, isCreate])
 
@@ -685,9 +799,17 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
   const listHref = "/master-data/suppliers"
   const pending = createMutation.isPending || reviseMutation.isPending
+  const granted = accountQuery.data?.permissions
+  const canCreate = hasPermission(granted, "supplier:create")
+  const hasUpdatePermission = hasPermission(granted, "supplier:update")
+  const hasDeletePermission = hasPermission(granted, "supplier:delete")
+  const canRevealSensitive = hasPermission(granted, "supplier_sensitive:reveal")
   const canRevise =
-    isCreate || (data?.allowedActions.includes("CREATE_REVISION") ?? false)
-  const canDisable = data?.allowedActions.includes("DISABLE") ?? false
+    !isCreate &&
+    hasUpdatePermission &&
+    (data?.allowedActions.includes("CREATE_REVISION") ?? false)
+  const canDisable =
+    hasDeletePermission && (data?.allowedActions.includes("DISABLE") ?? false)
   const reviseBlocker = data?.actionBlockers.find(
     (b) => b.action === "CREATE_REVISION",
   )
@@ -735,7 +857,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
   }
 
   const formId = "supplier-detail-form"
-  const canEdit = isCreate || canRevise
+  const canEdit = isCreate ? canCreate : canRevise
 
   return (
     <>
@@ -749,7 +871,13 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
           /** 右上角保存：先校验字段，再弹窗填写变更原因。 */
           const requestSave = (event?: React.FormEvent) => {
             event?.preventDefault()
-            const validation = validateSupplierEditorFields(values)
+            const validation = validateSupplierEditorFields(values, {
+              hasStoredContactPhone: data?.sensitiveFields.some(
+                (field) =>
+                  field.label === "联系电话" || field.label === "联系人",
+              ),
+              originalContactName: initialFormValues.contactName,
+            })
             if (validation) {
               setFormError(validation)
               return
@@ -778,7 +906,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
 
           const phoneSensitive =
             sensitiveByLabel.get("联系电话") ?? sensitiveByLabel.get("联系人")
-          const taxSensitive = sensitiveByLabel.get("税号")
+          const addressSensitive = sensitiveByLabel.get("经营地址")
           const bankSensitive = sensitiveByLabel.get("银行账号")
 
           const summaryRows: Array<{ label: string; value: string }> = [
@@ -1048,31 +1176,49 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                               />
                             </FieldShell>
                             <FieldShell>
+                              <Label htmlFor="supplier-credit-code">
+                                {masterDataCopy.fCreditCode}
+                              </Label>
+                              <Input
+                                id="supplier-credit-code"
+                                value={values.creditCode}
+                                onChange={(event) =>
+                                  setFieldValue("creditCode", event.target.value)
+                                }
+                                placeholder="18 位统一社会信用代码"
+                                disabled={!canEdit}
+                              />
+                            </FieldShell>
+                            <FieldShell>
                               <SensitiveEditableField
                                 label={masterDataCopy.fContactPhone}
                                 id="supplier-contact-phone"
                                 value={values.contactPhone}
                                 maskedValue={phoneSensitive?.maskedValue}
                                 revealToken={phoneSensitive?.revealToken}
-                                onChange={(next) =>
+                                onChange={(next) => {
+                                  editedSensitiveRef.current.add("contactPhone")
                                   setFieldValue("contactPhone", next)
-                                }
+                                }}
                                 disabled={!canEdit}
+                                canReveal={canRevealSensitive}
                                 placeholder="手机号或固定电话"
                               />
                             </FieldShell>
                             <FieldShell className="sm:col-span-2">
-                              <Label htmlFor="supplier-address">
-                                {masterDataCopy.fAddress}
-                              </Label>
-                              <Input
+                              <SensitiveEditableField
+                                label={masterDataCopy.fAddress}
                                 id="supplier-address"
                                 value={values.address}
-                                onChange={(e) =>
-                                  setFieldValue("address", e.target.value)
-                                }
+                                maskedValue={addressSensitive?.maskedValue}
+                                revealToken={addressSensitive?.revealToken}
+                                onChange={(next) => {
+                                  editedSensitiveRef.current.add("address")
+                                  setFieldValue("address", next)
+                                }}
                                 placeholder="注册或经营地址"
                                 disabled={!canEdit}
+                                canReveal={canRevealSensitive}
                               />
                             </FieldShell>
                           </div>
@@ -1132,36 +1278,30 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                 />
                               </FieldShell>
                               <FieldShell>
-                                <Label htmlFor="supplier-signing-entity">
+                                <Label>
                                   {masterDataCopy.fSigningEntity}
                                 </Label>
-                                <Input
-                                  id="supplier-signing-entity"
-                                  value={values.signingEntity}
-                                  onChange={(e) =>
-                                    setFieldValue(
-                                      "signingEntity",
-                                      e.target.value,
-                                    )
+                                <SettlementPartyCombobox
+                                  value={values.signingEntity || undefined}
+                                  onValueChange={(value) =>
+                                    setFieldValue("signingEntity", value ?? "")
                                   }
-                                  placeholder="与我司签约的公司主体"
+                                  parties={partyOptionsQuery.data ?? []}
+                                  placeholder="选择与供应商签约的公司主体"
                                   disabled={!canEdit}
                                 />
                               </FieldShell>
                               <FieldShell>
-                                <Label htmlFor="supplier-payment-entity">
+                                <Label>
                                   {masterDataCopy.fPaymentEntity}
                                 </Label>
-                                <Input
-                                  id="supplier-payment-entity"
-                                  value={values.paymentEntity}
-                                  onChange={(e) =>
-                                    setFieldValue(
-                                      "paymentEntity",
-                                      e.target.value,
-                                    )
+                                <SettlementPartyCombobox
+                                  value={values.paymentEntity || undefined}
+                                  onValueChange={(value) =>
+                                    setFieldValue("paymentEntity", value ?? "")
                                   }
-                                  placeholder="付款时的公司主体"
+                                  parties={partyOptionsQuery.data ?? []}
+                                  placeholder="选择向供应商付款的公司主体"
                                   disabled={!canEdit}
                                 />
                               </FieldShell>
@@ -1309,6 +1449,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                     }
                                     urlByFileName={mediaUrlsFor("contractFile")}
                                     onFilesSelected={rememberMediaFiles}
+                                    disabled={!canEdit}
                                     accept="image/jpeg,image/png,image/webp,application/pdf"
                                   />
                                 </div>
@@ -1371,6 +1512,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                     }
                                     urlByFileName={mediaUrlsFor("authorizationFile")}
                                     onFilesSelected={rememberMediaFiles}
+                                    disabled={!canEdit}
                                     accept="image/jpeg,image/png,image/webp,application/pdf"
                                   />
                                 </div>
@@ -1394,6 +1536,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                     }
                                     urlByFileName={mediaUrlsFor("qualification")}
                                     onFilesSelected={rememberMediaFiles}
+                                    disabled={!canEdit}
                                     accept="image/jpeg,image/png,image/webp,application/pdf"
                                   />
                                 </div>
@@ -1409,6 +1552,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                     }
                                     urlByFileName={mediaUrlsFor("foodLicense")}
                                     onFilesSelected={rememberMediaFiles}
+                                    disabled={!canEdit}
                                     accept="image/jpeg,image/png,image/webp,application/pdf"
                                   />
                                 </div>
@@ -1424,6 +1568,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                                     }
                                     urlByFileName={mediaUrlsFor("legalPersonIdCard")}
                                     onFilesSelected={rememberMediaFiles}
+                                    disabled={!canEdit}
                                     accept="image/jpeg,image/png,image/webp,application/pdf"
                                   />
                                 </div>
@@ -1440,46 +1585,31 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
                         >
                           <div className="grid gap-4 sm:grid-cols-2">
                             <FieldShell>
-                              <SensitiveEditableField
-                                label={masterDataCopy.fTaxNo}
+                              <Label htmlFor="supplier-tax-no">
+                                {masterDataCopy.fTaxNo}
+                              </Label>
+                              <Input
                                 id="supplier-tax-no"
                                 value={values.taxNo}
-                                maskedValue={taxSensitive?.maskedValue}
-                                revealToken={taxSensitive?.revealToken}
-                                onChange={(next) =>
-                                  setFieldValue("taxNo", next)
+                                onChange={(event) =>
+                                  setFieldValue("taxNo", event.target.value)
                                 }
                                 disabled={!canEdit}
                                 placeholder="纳税人识别号"
                               />
                             </FieldShell>
-                            <FieldShell>
-                              <Label htmlFor="supplier-bank-name">
-                                {masterDataCopy.fBankName}
-                              </Label>
-                              <Input
-                                id="supplier-bank-name"
-                                value={values.bankName}
-                                onChange={(e) =>
-                                  setFieldValue("bankName", e.target.value)
-                                }
-                                placeholder="开户银行"
-                                disabled={!canEdit}
-                              />
-                            </FieldShell>
                             <FieldShell className="sm:col-span-2">
-                              <SensitiveEditableField
-                                label={masterDataCopy.fBankAccount}
-                                id="supplier-bank-account"
-                                value={values.bankAccount}
-                                maskedValue={bankSensitive?.maskedValue}
-                                revealToken={bankSensitive?.revealToken}
-                                onChange={(next) =>
-                                  setFieldValue("bankAccount", next)
-                                }
-                                disabled={!canEdit}
-                                placeholder="银行账号"
-                              />
+                              <Label>银行账户</Label>
+                              <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                                <span>{values.bankName || "未维护"}</span>
+                                <span className="mx-2 text-muted-foreground">·</span>
+                                <code className="num">
+                                  {bankSensitive?.maskedValue || "请从财务主体资料维护"}
+                                </code>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                银行账户属于财务敏感资料，本页只展示摘要，不在供应商资料命令中修改。
+                              </p>
                             </FieldShell>
                             <FieldShell>
                               <Label>{masterDataCopy.fInvoiceType}</Label>

@@ -1,8 +1,8 @@
 //! 域 D09 `supplier` 管理端路由。
 //!
-//! 经 `admin.rs` 的 `/admin` nest 后，最终路径为 `/admin/suppliers`、
-//! `/admin/supplier-capabilities/{id}` 等；每条路由统一走
-//! JWT + RBAC（`with_permission`），handler 标注 `#[permission_macros::permission]`。
+//! 经 `admin.rs` 的 `/admin` nest 后，供应商资料只通过
+//! `/admin/supplier-profiles` 根级命令维护；列表、详情、停用、幂等查询与敏感
+//! 字段揭示分别使用独立入口。所有路由统一走 JWT + RBAC。
 
 use axum::{
     routing::{delete, get, post, put},
@@ -25,19 +25,43 @@ use crate::{
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
-            "/suppliers",
+            "/supplier-profiles",
             with_permission(
-                get(supplier::supplier_list),
+                post(supplier::supplier_profile_create),
                 rbac,
-                supplier::supplier_list_permission_key(),
+                supplier::supplier_profile_create_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-profiles/{id}",
+            with_permission(
+                put(supplier::supplier_profile_update),
+                rbac,
+                supplier::supplier_profile_update_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-profile-commands/{idempotency_key}",
+            with_permission(
+                get(supplier::supplier_profile_command_detail),
+                rbac,
+                supplier::supplier_profile_command_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/supplier-sensitive-fields/reveal",
+            with_permission(
+                post(supplier::supplier_sensitive_reveal),
+                rbac,
+                supplier::supplier_sensitive_reveal_permission_key(),
             ),
         )
         .route(
             "/suppliers",
             with_permission(
-                post(supplier::supplier_create),
+                get(supplier::supplier_list),
                 rbac,
-                supplier::supplier_create_permission_key(),
+                supplier::supplier_list_permission_key(),
             ),
         )
         .route(
@@ -51,97 +75,9 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
         .route(
             "/suppliers/{id}",
             with_permission(
-                put(supplier::supplier_update),
-                rbac,
-                supplier::supplier_update_permission_key(),
-            ),
-        )
-        .route(
-            "/suppliers/{id}",
-            with_permission(
                 delete(supplier::supplier_delete),
                 rbac,
                 supplier::supplier_delete_permission_key(),
-            ),
-        )
-        .route(
-            "/suppliers/{id}/commercial-profiles",
-            with_permission(
-                get(supplier::supplier_commercial_profile_list),
-                rbac,
-                supplier::supplier_commercial_profile_list_permission_key(),
-            ),
-        )
-        .route(
-            "/suppliers/{id}/commercial-profiles",
-            with_permission(
-                post(supplier::supplier_commercial_profile_create),
-                rbac,
-                supplier::supplier_commercial_profile_create_permission_key(),
-            ),
-        )
-        .route(
-            "/suppliers/{id}/capabilities",
-            with_permission(
-                get(supplier::supplier_capability_list),
-                rbac,
-                supplier::supplier_capability_list_permission_key(),
-            ),
-        )
-        .route(
-            "/suppliers/{id}/capabilities",
-            with_permission(
-                post(supplier::supplier_capability_create),
-                rbac,
-                supplier::supplier_capability_create_permission_key(),
-            ),
-        )
-        .route(
-            "/supplier-capabilities/{id}",
-            with_permission(
-                put(supplier::supplier_capability_update),
-                rbac,
-                supplier::supplier_capability_update_permission_key(),
-            ),
-        )
-        .route(
-            "/suppliers/{id}/qualifications",
-            with_permission(
-                get(supplier::supplier_qualification_list),
-                rbac,
-                supplier::supplier_qualification_list_permission_key(),
-            ),
-        )
-        .route(
-            "/suppliers/{id}/qualifications",
-            with_permission(
-                post(supplier::supplier_qualification_create),
-                rbac,
-                supplier::supplier_qualification_create_permission_key(),
-            ),
-        )
-        .route(
-            "/supplier-qualifications/{id}",
-            with_permission(
-                put(supplier::supplier_qualification_update),
-                rbac,
-                supplier::supplier_qualification_update_permission_key(),
-            ),
-        )
-        .route(
-            "/suppliers/{id}/ratings",
-            with_permission(
-                get(supplier::supplier_rating_list),
-                rbac,
-                supplier::supplier_rating_list_permission_key(),
-            ),
-        )
-        .route(
-            "/suppliers/{id}/ratings",
-            with_permission(
-                post(supplier::supplier_rating_create),
-                rbac,
-                supplier::supplier_rating_create_permission_key(),
             ),
         )
 }

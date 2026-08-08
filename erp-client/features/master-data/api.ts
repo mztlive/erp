@@ -205,12 +205,17 @@ type WarehouseRevisionDto = {
 type SupplierDto = {
   id: string
   party_id: string
+  party_no: string | null
+  legal_name: string | null
+  short_name: string | null
+  party_version: number | null
   supplier_no: string
   default_payment_term_id: string | null
   current_commercial_profile_revision_id: string | null
   status: EnableStatus
   version: number
   created_at: number
+  current_profile: CommercialProfileDto | null
 }
 
 type CommercialProfileDto = {
@@ -223,36 +228,33 @@ type CommercialProfileDto = {
   invoice_type: string
   invoice_tax_rate: string | null
   signing_entity_party_id: string | null
+  signing_entity_name: string | null
   payment_entity_party_id: string | null
+  payment_entity_name: string | null
   change_reason: string
   version: number
   created_at: number
 }
 
 type SupplierDetailDto = SupplierDto & {
-  party_no: string | null
-  current_profile: CommercialProfileDto | null
-}
-
-type PartyDto = {
-  id: string
-  party_no: string
-  party_kind: string
+  party_status: string
   unified_credit_code: string | null
-  status: string
-  current_revision_id: string | null
-  version: number
-  created_at: number
+  contacts: PartyContactDto[]
+  addresses: PartyAddressDto[]
+  tax_profiles: PartyTaxProfileDto[]
+  bank_accounts: PartyBankAccountDto[]
+  capabilities: SupplierCapabilityDto[]
+  qualifications: SupplierQualificationDto[]
+  ratings: SupplierRatingDto[]
+  commercial_profiles: CommercialProfileDto[]
+  sensitive_fields: SupplierSensitiveFieldDto[]
 }
 
-type PartyRevisionDto = {
-  id: string
-  revision_no: number
-  legal_name: string
-  short_name: string | null
-  change_reason: string
-  version: number
-  created_at: number
+type SupplierSensitiveFieldDto = {
+  label: string
+  masked_value: string
+  reveal_token: string
+  expires_at: number
 }
 
 type SupplierCapabilityDto = {
@@ -279,6 +281,7 @@ type SupplierQualificationDto = {
   valid_to: string | null
   attachment_id: string | null
   status: string
+  capability_ids: string[]
   version: number
   created_at: number
 }
@@ -297,6 +300,17 @@ type SupplierRatingDto = {
   created_at: number
 }
 
+type SupplierProfileMutationDto = {
+  supplier_id: string
+  supplier_no: string
+  revision_id: string
+  revision_no: number
+  supplier_version: number
+  effective_from: string
+  recorded_at: number
+  change_reason: string
+}
+
 /** 主体联系人（列表不含 mobile 明文，可用 telephone 回显）。 */
 type PartyContactDto = {
   id: string
@@ -304,6 +318,7 @@ type PartyContactDto = {
   contact_name: string
   title: string | null
   telephone: string | null
+  mobile_masked: string
   email: string | null
   valid_from: string
   valid_to: string | null
@@ -320,7 +335,21 @@ type PartyBankAccountDto = {
   party_id: string
   account_name: string
   bank_name: string
+  account_number_masked: string
   bank_branch_name: string | null
+  valid_from: string
+  valid_to: string | null
+  is_default: boolean
+  status: string
+  version: number
+  created_at: number
+}
+
+type PartyAddressDto = {
+  id: string
+  party_id: string
+  address_type: string
+  contact_name: string | null
   valid_from: string
   valid_to: string | null
   is_default: boolean
@@ -544,24 +573,19 @@ const parseScore100 = (raw: string | undefined): number | undefined => {
   return n
 }
 
+/** 将用户输入的百分数或小数统一为后端 [0, 1) 税率字符串。 */
+const normalizeTaxRate = (raw: string | undefined): string => {
+  const text = (raw ?? "").trim().replace(/%$/, "")
+  if (!text) return "0.13"
+  const value = Number(text)
+  if (!Number.isFinite(value) || value < 0) return "0.13"
+  const decimal = value >= 1 ? value / 100 : value
+  return decimal >= 1 ? "0.13" : String(decimal)
+}
+
 const pickDefaultOrFirst = <T extends { is_default?: boolean }>(
   items: readonly T[]
 ): T | undefined => items.find((item) => item.is_default) ?? items[0]
-
-async function resolvePartyLegalName(
-  partyId: string | null | undefined
-): Promise<string> {
-  if (!partyId) return ""
-  try {
-    const revPage = await apiGet<BackendPage<PartyRevisionDto>>(
-      `/admin/parties/${partyId}/revisions`,
-      { page: 1, page_size: 1, sort_by: "revision_no", sort_dir: "desc" }
-    )
-    return revPage.items[0]?.legal_name ?? ""
-  } catch {
-    return ""
-  }
-}
 
 /** 事实行：空值不写入，避免编辑回填被「—」占位污染。 */
 function fact(
@@ -967,8 +991,8 @@ function mapWarehouseRow(
 
 function mapSupplierRow(
   supplier: SupplierDto,
-  partyName?: string,
-  profile?: CommercialProfileDto | null
+  partyName = supplier.legal_name ?? supplier.short_name ?? undefined,
+  profile: CommercialProfileDto | null = supplier.current_profile
 ): MasterDataListItem {
   const lifecycle = asLifecycle(supplier.status)
   return {
@@ -1300,42 +1324,7 @@ async function listSuppliers(
     status,
     keyword: query.q || undefined,
   })
-  if (suppliers.length === 0) return []
-
-  const parties = await fetchAllPages<PartyDto>("/admin/parties", {})
-  const partyById = new Map(parties.map((p) => [p.id, p]))
-
-  const rows: MasterDataListItem[] = []
-  for (const supplier of suppliers) {
-    let partyName: string | undefined
-    const party = partyById.get(supplier.party_id)
-    if (party?.current_revision_id) {
-      try {
-        const revPage = await apiGet<BackendPage<PartyRevisionDto>>(
-          `/admin/parties/${party.id}/revisions`,
-          { page: 1, page_size: 1, sort_by: "revision_no", sort_dir: "desc" }
-        )
-        partyName = revPage.items[0]?.legal_name
-      } catch {
-        partyName = party.party_no
-      }
-    } else if (party) {
-      partyName = party.party_no
-    }
-
-    let profile: CommercialProfileDto | null = null
-    try {
-      const detail = await apiGet<SupplierDetailDto>(
-        `/admin/suppliers/${supplier.id}`
-      )
-      profile = detail.current_profile
-      if (!partyName && detail.party_no) partyName = detail.party_no
-    } catch {
-      // ignore
-    }
-    rows.push(mapSupplierRow(supplier, partyName, profile))
-  }
-  return rows
+  return suppliers.map((supplier) => mapSupplierRow(supplier))
 }
 
 // ---------------------------------------------------------------------------
@@ -1759,62 +1748,17 @@ async function centerSupplier(
     throw error
   }
 
-  const partyId = detail.party_id
   const profile = detail.current_profile
-
-  const [
-    party,
-    partyRevisions,
-    contacts,
-    banks,
-    taxProfiles,
-    capabilities,
-    qualifications,
-    ratings,
-    profiles,
-    signingEntityName,
-    paymentEntityName,
-  ] = await Promise.all([
-    apiGet<PartyDto>(`/admin/parties/${partyId}`).catch(() => null),
-    apiGet<BackendPage<PartyRevisionDto>>(
-      `/admin/parties/${partyId}/revisions`,
-      { page: 1, page_size: 1, sort_by: "revision_no", sort_dir: "desc" }
-    )
-      .then((page) => page.items)
-      .catch(() => [] as PartyRevisionDto[]),
-    fetchAllPages<PartyContactDto>(`/admin/parties/${partyId}/contacts`, {}).catch(
-      () => [] as PartyContactDto[]
-    ),
-    fetchAllPages<PartyBankAccountDto>(
-      `/admin/parties/${partyId}/bank-accounts`,
-      {}
-    ).catch(() => [] as PartyBankAccountDto[]),
-    fetchAllPages<PartyTaxProfileDto>(
-      `/admin/parties/${partyId}/tax-profiles`,
-      {}
-    ).catch(() => [] as PartyTaxProfileDto[]),
-    fetchAllPages<SupplierCapabilityDto>(
-      `/admin/suppliers/${stableId}/capabilities`,
-      {}
-    ).catch(() => [] as SupplierCapabilityDto[]),
-    fetchAllPages<SupplierQualificationDto>(
-      `/admin/suppliers/${stableId}/qualifications`,
-      {}
-    ).catch(() => [] as SupplierQualificationDto[]),
-    fetchAllPages<SupplierRatingDto>(
-      `/admin/suppliers/${stableId}/ratings`,
-      {}
-    ).catch(() => [] as SupplierRatingDto[]),
-    fetchAllPages<CommercialProfileDto>(
-      `/admin/suppliers/${stableId}/commercial-profiles`,
-      {}
-    ).catch(() => [] as CommercialProfileDto[]),
-    resolvePartyLegalName(profile?.signing_entity_party_id),
-    resolvePartyLegalName(profile?.payment_entity_party_id),
-  ])
-
+  const contacts = detail.contacts
+  const banks = detail.bank_accounts
+  const taxProfiles = detail.tax_profiles
+  const capabilities = detail.capabilities
+  const qualifications = detail.qualifications
+  const ratings = detail.ratings
+  const profiles = detail.commercial_profiles
   const partyName =
-    partyRevisions[0]?.legal_name ||
+    detail.legal_name ||
+    detail.short_name ||
     detail.party_no ||
     detail.supplier_no
   const row = mapSupplierRow(detail, partyName, profile)
@@ -1831,6 +1775,18 @@ async function centerSupplier(
     .map((c) => capabilityLabel(c.capability_code))
     .filter(Boolean)
     .join("、")
+  const capabilityCodeById = new Map(
+    capabilities.map((capability) => [capability.id, capability.capability_code]),
+  )
+  const qualificationCapabilityCodes = Object.fromEntries(
+    qualifications.map((qualification) => [
+        `${qualification.qualification_type}::${qualification.certificate_no}`,
+        qualification.capability_ids.flatMap((id) => {
+          const code = capabilityCodeById.get(id)
+          return code ? [code] : []
+        }),
+      ]),
+  )
 
   // 经营类目：商务快照编码；兼容早期写入 capability.fulfillment_note 的数据
   const businessCategory =
@@ -1858,12 +1814,12 @@ async function centerSupplier(
   ): { fileName: string; assetId: string; url: string }[] =>
     (qualGroups.get(type) ?? []).flatMap((q) => {
       const asset = q.attachment_id ? qualAssets.get(q.attachment_id) : null
-      if (!asset?.public_url) return []
+      if (!q.attachment_id) return []
       return [
         {
-          fileName: asset.file_name,
-          assetId: asset.id,
-          url: asset.public_url,
+          fileName: asset?.file_name ?? q.certificate_no,
+          assetId: q.attachment_id,
+          url: asset?.public_url ?? "",
         },
       ]
     })
@@ -1879,6 +1835,7 @@ async function centerSupplier(
   const facts = factsOf(
     fact("供应商编号", detail.supplier_no),
     fact("企业主体", partyName),
+    fact("统一社会信用代码", detail.unified_credit_code),
     fact("联系人", contact?.contact_name),
     // mobile 不在列表契约中；telephone 若创建时同步写入可回显
     fact("联系电话", contact?.telephone),
@@ -1887,8 +1844,8 @@ async function centerSupplier(
     fact("发票税点", profile?.invoice_tax_rate),
     fact("能力", capabilityLabels),
     fact("经营类目", businessCategory || null),
-    fact("公司签约主体", signingEntityName),
-    fact("公司付款主体", paymentEntityName),
+    fact("公司签约主体", profile?.signing_entity_party_id),
+    fact("公司付款主体", profile?.payment_entity_party_id),
     // 标签必须与 masterDataCopy / RESOURCE_FIELDS.suppliers 完全一致
     fact("资质附件", qualFileNames("certificate") || null),
     fact("合同编号", contractQual?.certificate_no),
@@ -1900,10 +1857,7 @@ async function centerSupplier(
     fact("授权书有效期止", authQual?.valid_to),
     fact("食品经营许可证", qualFileNames("food_license") || null),
     fact("供应商法人身份证", qualFileNames("legal_person_id") || null),
-    fact(
-      "税号",
-      taxProfile?.tax_no ?? party?.unified_credit_code
-    ),
+    fact("税号", taxProfile?.tax_no),
     fact("开户银行", bank?.bank_name),
     // 银行账号明文不在列表契约中，无法回显
     fact("供应商评级", ratingLabel(rating?.rating)),
@@ -1947,7 +1901,7 @@ async function centerSupplier(
     },
     {
       label: "税号",
-      value: taxProfile?.tax_no ?? party?.unified_credit_code ?? "—",
+      value: taxProfile?.tax_no ?? "—",
     },
     { label: "开户银行", value: bank?.bank_name || "—" },
   ]
@@ -1966,6 +1920,8 @@ async function centerSupplier(
   }))
 
   return baseCenter("suppliers", row, {
+    partyLockVersion: detail.party_version ?? undefined,
+    supplierQualificationCapabilityCodes: qualificationCapabilityCodes,
     resourceFacts: displayFacts,
     currentRevision: {
       revisionId: profile?.id ?? detail.id,
@@ -1990,29 +1946,12 @@ async function centerSupplier(
       timeline.length > 0
         ? timeline
         : baseCenter("suppliers", row).revisionTimeline,
-    sensitiveFields: [
-      {
-        label: "联系电话",
-        maskedValue: contact?.telephone
-          ? `${contact.telephone.slice(0, 3)}****`
-          : "****",
-        visibility: "masked" as const,
-      },
-      {
-        label: "银行账号",
-        maskedValue: bank?.bank_account_no
-          ? `****${bank.bank_account_no.slice(-4)}`
-          : "（请从财务上下文查看）",
-        visibility: "masked" as const,
-      },
-      {
-        label: "税号",
-        maskedValue: taxProfile?.tax_no
-          ? `${taxProfile.tax_no.slice(0, 4)}****`
-          : "****",
-        visibility: "masked" as const,
-      },
-    ],
+    sensitiveFields: detail.sensitive_fields.map((field) => ({
+      label: field.label,
+      maskedValue: field.masked_value,
+      revealToken: field.reveal_token,
+      visibility: "masked" as const,
+    })),
   })
 }
 
@@ -2366,369 +2305,177 @@ async function createVoucherCategory(
   }
 }
 
-/**
- * 供应商附属资料（联系人/地址/银行/税务/能力/评级/资质）落库。
- * 失败不阻断主单；修订时「已有则跳过」避免重复脏数据。
- * 列表接口不含部分敏感明文，写入时同步 telephone 便于回显。
- */
-async function persistSupplierAncillary(params: {
-  partyId: string
-  supplierId: string
-  fields: SupplierFields
-  changeReason: string
-  validFrom: string
-  /** 创建场景写评级期初分；修订场景仅在尚无评级时写入。 */
-  isCreate: boolean
-}): Promise<void> {
-  const { partyId, supplierId, fields, changeReason, validFrom, isCreate } =
-    params
+type SupplierProfileQualificationInput = {
+  qualification_type: string
+  certificate_no: string
+  issuer: null
+  valid_from: string
+  valid_to: string | null
+  attachment_id: string | null
+  capability_codes: string[]
+}
 
-  const [
-    existingContacts,
-    existingAddresses,
-    existingBanks,
-    existingTax,
-    existingCapabilities,
-    existingRatings,
-    existingQuals,
-  ] = await Promise.all([
-    fetchAllPages<PartyContactDto>(
-      `/admin/parties/${partyId}/contacts`,
-      {}
-    ).catch(() => [] as PartyContactDto[]),
-    fetchAllPages<{ id: string }>(
-      `/admin/parties/${partyId}/addresses`,
-      {}
-    ).catch(() => [] as { id: string }[]),
-    fetchAllPages<PartyBankAccountDto>(
-      `/admin/parties/${partyId}/bank-accounts`,
-      {}
-    ).catch(() => [] as PartyBankAccountDto[]),
-    fetchAllPages<PartyTaxProfileDto>(
-      `/admin/parties/${partyId}/tax-profiles`,
-      {}
-    ).catch(() => [] as PartyTaxProfileDto[]),
-    fetchAllPages<SupplierCapabilityDto>(
-      `/admin/suppliers/${supplierId}/capabilities`,
-      {}
-    ).catch(() => [] as SupplierCapabilityDto[]),
-    fetchAllPages<SupplierRatingDto>(
-      `/admin/suppliers/${supplierId}/ratings`,
-      {}
-    ).catch(() => [] as SupplierRatingDto[]),
-    fetchAllPages<SupplierQualificationDto>(
-      `/admin/suppliers/${supplierId}/qualifications`,
-      {}
-    ).catch(() => [] as SupplierQualificationDto[]),
-  ])
-
-  // 联系人：无记录时创建；mobile 必填，同步 telephone 便于列表回显
-  if (
-    existingContacts.length === 0 &&
-    fields.contactName?.trim() &&
-    fields.contactPhone?.trim()
-  ) {
-    try {
-      await apiPost(`/admin/parties/${partyId}/contacts`, {
-        contact_name: fields.contactName.trim(),
-        mobile: fields.contactPhone.trim(),
-        telephone: fields.contactPhone.trim(),
-        valid_from: validFrom,
-        is_default: true,
-      })
-    } catch {
-      // ignore
-    }
-  }
-
-  if (existingAddresses.length === 0 && fields.address?.trim()) {
-    try {
-      await apiPost(`/admin/parties/${partyId}/addresses`, {
-        address_type: "operating",
-        contact_name: fields.contactName?.trim() || null,
-        address: fields.address.trim(),
-        valid_from: validFrom,
-        is_default: true,
-      })
-    } catch {
-      // ignore — 地址列表不含明文，编辑无法回显
-    }
-  }
-
-  if (existingTax.length === 0 && fields.taxNo?.trim()) {
-    try {
-      await apiPost(`/admin/parties/${partyId}/tax-profiles`, {
-        tax_no: fields.taxNo.trim(),
-        valid_from: validFrom,
-        is_default: true,
-      })
-    } catch {
-      // ignore
-    }
-  }
-
-  if (
-    existingBanks.length === 0 &&
-    fields.bankName?.trim() &&
-    fields.bankAccount?.trim()
-  ) {
-    try {
-      const suffix = Date.now().toString(36).slice(-6)
-      await apiPost(`/admin/parties/${partyId}/bank-accounts`, {
-        bank_account_no: `BA-${suffix}`,
-        account_name: fields.company || fields.contactName || "供应商",
-        bank_name: fields.bankName.trim(),
-        account_number: fields.bankAccount.trim(),
-        valid_from: validFrom,
-        is_default: true,
-      })
-    } catch {
-      // ignore
-    }
-  }
-
-  const existingCapCodes = new Set(
-    existingCapabilities.map((c) => c.capability_code)
-  )
-  const capabilityCodes = (fields.capability ?? "")
-    .split(/[、,，]/)
-    .map((s) => s.trim())
-    .map(capabilityToBackend)
-    .filter((code): code is string => Boolean(code))
-  const businessCategoryNote = fields.businessCategory?.trim() || undefined
-  for (const code of capabilityCodes) {
-    if (existingCapCodes.has(code)) continue
-    try {
-      await apiPost(`/admin/suppliers/${supplierId}/capabilities`, {
-        capability_code: code,
-        owner_user_id: "system",
-        fulfillment_note: businessCategoryNote,
-        valid_from: validFrom,
-        status: "active",
-      })
-    } catch {
-      // ignore duplicates
-    }
-  }
-  // 已有能力：经营类目变更时同步履约说明，便于详情回显
-  if (businessCategoryNote) {
-    for (const cap of existingCapabilities) {
-      if ((cap.fulfillment_note ?? "").trim() === businessCategoryNote) continue
-      try {
-        await apiPut(`/admin/supplier-capabilities/${cap.id}`, {
-          version: cap.version,
-          fulfillment_note: businessCategoryNote,
-        })
-      } catch {
-        // ignore
-      }
-    }
-  }
-
-  // 评级：创建必写；修订仅当尚无评级记录时补首条，避免与开放区间重叠
-  const shouldWriteRating =
-    (isCreate || existingRatings.length === 0) &&
-    Boolean(fields.supplierRating || fields.currentScore || fields.initialScore)
-  if (shouldWriteRating) {
-    try {
-      const current = parseScore100(fields.currentScore)
-      const initial = parseScore100(fields.initialScore)
-      await apiPost(`/admin/suppliers/${supplierId}/ratings`, {
-        // 期初评分只允许首条评估版本
-        initial_score: initial,
-        rating: ratingToBackend(fields.supplierRating),
-        current_score: current ?? 0,
-        valid_from: validFrom,
-        change_reason: changeReason || "评估",
-      })
-    } catch {
-      // ignore — 附属资料失败不阻断主单
-    }
-  }
-
-  // 资质落库：每文件一条记录（certificate_no = 文件名，attachment = 已上传资产）；
-  // 合同类型保留「合同编号」字段语义（首文件作为附件）。
-  const existingQualKeys = new Set(
-    existingQuals.map((q) => `${q.qualification_type}::${q.certificate_no}`)
-  )
-  const qualWrites: Array<{
-    type: string
-    certificateNo: string
-    attachmentId?: string
-    validFrom?: string
-    validTo?: string
-  }> = []
-
-  const pushQualFiles = (
-    type: string,
-    files: string[],
+/** 将页面文件字段转换为根级供应商资料命令中的结构化资质集合。 */
+const buildSupplierProfileQualifications = (
+  fields: SupplierFields,
+  effectiveFrom: string,
+  capabilityCodes: string[]
+): SupplierProfileQualificationInput[] => {
+  const result: SupplierProfileQualificationInput[] = []
+  const pushFiles = (
+    qualificationType: string,
+    names: string[],
     assetIds: Readonly<Record<string, string>> | undefined,
-    validFromOverride?: string,
-    validToOverride?: string,
-    forceSingle = false,
+    validFrom: string,
+    validTo?: string,
+    certificateNo?: string
   ) => {
-    const names = files.map((f) => f.trim()).filter(Boolean)
-    if (names.length === 0) return
-    if (forceSingle) {
-      qualWrites.push({
-        type,
-        certificateNo:
-          (type === "contract"
-            ? fields.contractNo?.trim() || "CONTRACT"
-            : names[0]) || "QUAL",
-        attachmentId: assetIds?.[names[0]]?.trim(),
-        validFrom: validFromOverride,
-        validTo: validToOverride,
+    names.forEach((name, index) => {
+      const attachmentId = assetIds?.[name]?.trim()
+      if (!attachmentId) return
+      const resolvedCertificateNo =
+        certificateNo && index === 0 ? certificateNo : name
+      const existingCodes =
+        fields.qualificationCapabilityCodes?.[
+          `${qualificationType}::${resolvedCertificateNo}`
+        ]
+      result.push({
+        qualification_type: qualificationType,
+        certificate_no: resolvedCertificateNo,
+        issuer: null,
+        valid_from: validFrom,
+        valid_to: validTo || null,
+        attachment_id: attachmentId,
+        capability_codes: existingCodes
+          ? existingCodes.filter((code) => capabilityCodes.includes(code))
+          : capabilityCodes,
       })
-      return
-    }
-    for (const name of names) {
-      qualWrites.push({
-        type,
-        certificateNo: name,
-        attachmentId: assetIds?.[name]?.trim(),
-        validFrom: validFromOverride,
-        validTo: validToOverride,
-      })
-    }
+    })
   }
-
-  pushQualFiles(
+  pushFiles(
     "certificate",
     parseMediaList(fields.qualification),
     fields.qualificationFileAssetIds,
-    validFrom,
+    effectiveFrom
   )
-  pushQualFiles(
+  pushFiles(
     "contract",
-    parseMediaList(fields.contractFile),
+    parseMediaList(fields.contractFile).slice(0, 1),
     fields.contractFileAssetIds,
-    fields.contractValidFrom || validFrom,
+    fields.contractValidFrom || effectiveFrom,
     fields.contractValidTo,
-    true,
+    fields.contractNo?.trim() || "CONTRACT"
   )
-  pushQualFiles(
+  pushFiles(
     "authorization",
     parseMediaList(fields.authorizationFile),
     fields.authorizationFileAssetIds,
-    fields.authorizationValidFrom || validFrom,
-    fields.authorizationValidTo,
+    fields.authorizationValidFrom || effectiveFrom,
+    fields.authorizationValidTo
   )
-  pushQualFiles(
+  pushFiles(
     "food_license",
     parseMediaList(fields.foodLicense),
     fields.foodLicenseFileAssetIds,
-    validFrom,
+    effectiveFrom
   )
-  pushQualFiles(
+  pushFiles(
     "legal_person_id",
     parseMediaList(fields.legalPersonIdCard),
     fields.legalPersonIdCardFileAssetIds,
-    validFrom,
+    effectiveFrom
   )
-
-  for (const q of qualWrites) {
-    if (existingQualKeys.has(`${q.type}::${q.certificateNo}`)) continue
-    try {
-      await apiPost(`/admin/suppliers/${supplierId}/qualifications`, {
-        qualification_type: q.type,
-        certificate_no: q.certificateNo,
-        valid_from: q.validFrom || validFrom,
-        valid_to: q.validTo || null,
-        attachment_id: q.attachmentId ?? undefined,
-        capability_ids: [],
-        status: "active",
-      })
-    } catch {
-      // ignore
-    }
-  }
+  return result
 }
 
 async function createSupplier(
   input: CreateMasterDataInput
 ): Promise<MasterDataMutationResult> {
   const fields = input.fields as SupplierFields
-  // Backend requires existing party_id + settlement fields.
-  // Attempt to find/create party by company name is not available as search-by-name;
-  // register gap if party cannot be resolved. Prefer matching by party list legal name.
-  const parties = await fetchAllPages<PartyDto>("/admin/parties", {})
-  let partyId: string | undefined
-  for (const party of parties) {
-    try {
-      const revPage = await apiGet<BackendPage<PartyRevisionDto>>(
-        `/admin/parties/${party.id}/revisions`,
-        { page: 1, page_size: 1, sort_by: "revision_no", sort_dir: "desc" }
-      )
-      if (revPage.items[0]?.legal_name === fields.company) {
-        partyId = party.id
-        break
-      }
-    } catch {
-      // continue
+  const capabilityCodes = (fields.capability ?? "")
+    .split(/[、,，]/)
+    .map((value) => capabilityToBackend(value.trim()))
+    .filter((value): value is string => Boolean(value))
+  const effectiveFrom = input.effectiveFrom || todayDateOnly()
+  if (!fields.signingEntity?.trim() || !fields.paymentEntity?.trim()) {
+    return {
+      outcome: "blocked",
+      code: "SUPPLIER_INTERNAL_PARTY_REQUIRED",
+      message: "请选择公司签约主体和公司付款主体。",
     }
   }
-
-  if (!partyId) {
-    // Create party first so supplier can reference it.
-    // party_no 后端必填、表单不采集：前端生成唯一编号，不从幂等键截取（会撞号）。
-    try {
-      const party = await apiPost<PartyDto>("/admin/parties", {
-        party_no: genBusinessCode("PTY"),
-        legal_name: fields.company || input.name.trim(),
-        short_name: null,
-        unified_credit_code: fields.taxNo || null,
-        change_reason: input.changeReason || "供应商主体",
-        status: "active",
-      })
-      partyId = party.id
-    } catch (error) {
-      return mapMutationError(error)
-    }
-  }
-
-  // signing/payment entity: reuse the same party when form leaves them blank.
-  // supplier_no 同理：必须每次唯一，不能用幂等键前缀截断。
-  const supplierNo = genBusinessCode("SUP")
   try {
-    const created = await apiPost<SupplierDto>("/admin/suppliers", {
-      party_id: partyId,
-      supplier_no: supplierNo,
-      default_payment_term_id: null,
-      settlement_mode: settlementToBackend(fields.settlement),
-      reconciliation_cycle: "monthly",
-      payment_term_snapshot: buildPaymentTermSnapshot(
-        fields.settlement,
-        fields.businessCategory
-      ),
-      invoice_type: invoiceToBackend(fields.invoiceType),
-      invoice_tax_rate: fields.invoiceTaxRate || "0.13",
-      signing_entity_party_id: partyId,
-      payment_entity_party_id: partyId,
-      change_reason: input.changeReason || "新建",
-      status: "active",
-    })
-
-    await persistSupplierAncillary({
-      partyId,
-      supplierId: created.id,
-      fields,
-      changeReason: input.changeReason || "新建",
-      validFrom: input.effectiveFrom || todayDateOnly(),
-      isCreate: true,
-    })
+    const created = await apiPost<SupplierProfileMutationDto>(
+      "/admin/supplier-profiles",
+      {
+        idempotency_key: input.idempotencyKey,
+        party_no: genBusinessCode("PTY"),
+        supplier_no: genBusinessCode("SUP"),
+        expected_party_version: null,
+        expected_supplier_version: null,
+        legal_name: fields.company || input.name.trim(),
+        short_name: input.name.trim(),
+        unified_credit_code: fields.creditCode?.trim() || null,
+        contact:
+          fields.contactName?.trim() && fields.contactPhone?.trim()
+            ? {
+                contact_name: fields.contactName.trim(),
+                mobile: fields.contactPhone.trim(),
+                telephone: null,
+                email: null,
+              }
+            : null,
+        clear_contact: false,
+        address: fields.address?.trim()
+          ? {
+              address: fields.address.trim(),
+              contact_name: fields.contactName?.trim() || null,
+            }
+          : null,
+        clear_address: false,
+        tax_no: fields.taxNo?.trim() || null,
+        clear_tax_profile: false,
+        settlement_mode: settlementToBackend(fields.settlement),
+        reconciliation_cycle: "monthly",
+        payment_term_snapshot: buildPaymentTermSnapshot(
+          fields.settlement,
+          fields.businessCategory,
+        ),
+        invoice_type: invoiceToBackend(fields.invoiceType),
+        invoice_tax_rate: normalizeTaxRate(fields.invoiceTaxRate),
+        signing_entity_party_id: fields.signingEntity.trim(),
+        payment_entity_party_id: fields.paymentEntity.trim(),
+        capability_codes: capabilityCodes,
+        qualifications: buildSupplierProfileQualifications(
+          fields,
+          effectiveFrom,
+          capabilityCodes,
+        ),
+        rating:
+          fields.supplierRating || fields.currentScore || fields.initialScore
+            ? {
+                initial_score: parseScore100(fields.initialScore) ?? null,
+                rating: ratingToBackend(fields.supplierRating),
+                current_score: parseScore100(fields.currentScore) ?? 0,
+                valid_from: effectiveFrom,
+              }
+            : null,
+        effective_from: effectiveFrom,
+        change_reason: input.changeReason || "新建",
+      },
+    )
 
     return {
       outcome: "succeeded",
-      stableId: created.id,
+      stableId: created.supplier_id,
       stableNo: created.supplier_no,
-      revisionId: created.current_commercial_profile_revision_id ?? created.id,
-      revisionNo: 1,
+      revisionId: created.revision_id,
+      revisionNo: created.revision_no,
       revisionState: "CURRENT",
-      effectiveFrom: input.effectiveFrom,
-      recordedAt: isoNow(),
+      effectiveFrom: created.effective_from,
+      recordedAt: tsToIso(created.recorded_at),
       actor: "—",
-      changeReason: input.changeReason || "新建",
+      changeReason: created.change_reason,
       reference: `MD-CREATE-${created.supplier_no}`,
       nextActions: ["查看详情", "更新资料"],
     }
@@ -3033,68 +2780,94 @@ export async function createMasterDataRevision(
         }
       }
       case "suppliers": {
-        // Supplier update only allows status / payment term; commercial profile is append.
         const fields = input.fields as SupplierFields
-        const updated = await apiPut<SupplierDto>(
-          `/admin/suppliers/${input.stableId}`,
-          {
-            version: input.expectedLockVersion,
-            status: undefined,
-            default_payment_term_id: null,
-          }
-        )
-        // 结算/发票/经营类目任一变更则追加商务版本（经营类目编码进快照）
+        const capabilityCodes = (fields.capability ?? "")
+          .split(/[、,，]/)
+          .map((value) => capabilityToBackend(value.trim()))
+          .filter((value): value is string => Boolean(value))
+        const effectiveFrom = input.effectiveFrom || todayDateOnly()
         if (
-          fields.settlement ||
-          fields.invoiceType ||
-          fields.businessCategory
+          input.expectedPartyVersion == null ||
+          !fields.signingEntity?.trim() ||
+          !fields.paymentEntity?.trim()
         ) {
-          try {
-            await apiPost(
-              `/admin/suppliers/${input.stableId}/commercial-profiles`,
-              {
-                settlement_mode: settlementToBackend(fields.settlement),
-                reconciliation_cycle: "monthly",
-                payment_term_snapshot: buildPaymentTermSnapshot(
-                  fields.settlement,
-                  fields.businessCategory
-                ),
-                invoice_type: invoiceToBackend(fields.invoiceType),
-                invoice_tax_rate: fields.invoiceTaxRate || "0.13",
-                signing_entity_party_id: updated.party_id,
-                payment_entity_party_id: updated.party_id,
-                change_reason: input.changeReason,
-              }
-            )
-          } catch (error) {
-            return mapMutationError(error, {
-              version: updated.version,
-              revisionNo: updated.version,
-            })
+          return {
+            outcome: "blocked",
+            code: "SUPPLIER_PROFILE_REQUIRED_CONTEXT",
+            message: "供应商版本或签约、付款主体缺失，请刷新后重试。",
           }
         }
-        // 附属资料 best-effort 同步，保证编辑后再打开可回显
-        await persistSupplierAncillary({
-          partyId: updated.party_id,
-          supplierId: updated.id,
-          fields,
-          changeReason: input.changeReason,
-          validFrom: input.effectiveFrom || todayDateOnly(),
-          isCreate: false,
-        })
+        const updated = await apiPut<SupplierProfileMutationDto>(
+          `/admin/supplier-profiles/${input.stableId}`,
+          {
+            idempotency_key: input.idempotencyKey,
+            party_no: null,
+            supplier_no: null,
+            expected_party_version: input.expectedPartyVersion,
+            expected_supplier_version: input.expectedLockVersion,
+            legal_name: fields.company || input.name.trim(),
+            short_name: input.name.trim(),
+            unified_credit_code: fields.creditCode?.trim() || null,
+            contact:
+              fields.contactName?.trim() && fields.contactPhone?.trim()
+                ? {
+                    contact_name: fields.contactName.trim(),
+                    mobile: fields.contactPhone.trim(),
+                    telephone: null,
+                    email: null,
+                  }
+                : null,
+            clear_contact: fields.clearContact === true,
+            address: fields.address?.trim()
+              ? {
+                  address: fields.address.trim(),
+                  contact_name: fields.contactName?.trim() || null,
+                }
+              : null,
+            clear_address: fields.clearAddress === true,
+            tax_no: fields.taxNo?.trim() || null,
+            clear_tax_profile: fields.clearTaxProfile === true,
+            settlement_mode: settlementToBackend(fields.settlement),
+            reconciliation_cycle: "monthly",
+            payment_term_snapshot: buildPaymentTermSnapshot(
+              fields.settlement,
+              fields.businessCategory,
+            ),
+            invoice_type: invoiceToBackend(fields.invoiceType),
+            invoice_tax_rate: normalizeTaxRate(fields.invoiceTaxRate),
+            signing_entity_party_id: fields.signingEntity.trim(),
+            payment_entity_party_id: fields.paymentEntity.trim(),
+            capability_codes: capabilityCodes,
+            qualifications: buildSupplierProfileQualifications(
+              fields,
+              effectiveFrom,
+              capabilityCodes,
+            ),
+            rating:
+              fields.supplierRating || fields.currentScore
+                ? {
+                    initial_score: null,
+                    rating: ratingToBackend(fields.supplierRating),
+                    current_score: parseScore100(fields.currentScore) ?? 0,
+                    valid_from: effectiveFrom,
+                  }
+                : null,
+            effective_from: effectiveFrom,
+            change_reason: input.changeReason,
+          },
+        )
         return {
           outcome: "succeeded",
-          stableId: updated.id,
+          stableId: updated.supplier_id,
           stableNo: updated.supplier_no,
-          revisionId:
-            updated.current_commercial_profile_revision_id ?? updated.id,
-          revisionNo: updated.version,
+          revisionId: updated.revision_id,
+          revisionNo: updated.revision_no,
           revisionState: "CURRENT",
-          effectiveFrom: input.effectiveFrom,
-          recordedAt: isoNow(),
+          effectiveFrom: updated.effective_from,
+          recordedAt: tsToIso(updated.recorded_at),
           actor: "—",
-          changeReason: input.changeReason,
-          reference: `MD-REV-${updated.supplier_no}-v${updated.version}`,
+          changeReason: updated.change_reason,
+          reference: `MD-REV-${updated.supplier_no}-v${updated.revision_no}`,
           nextActions: ["查看变更历史", "返回列表"],
         }
       }
@@ -3344,33 +3117,40 @@ export async function disableMasterDataObject(
   }
 }
 
-/**
- * 幂等查询：后端 master-data 域无统一 idempotency 查询接口。
- * 返回 null 让 UI 走「结果未知」重试路径，不伪造成功。
- */
+/** 查询供应商资料根命令的持久化幂等结果；不存在时返回 null。 */
 export async function queryMasterDataIdempotency(
   idempotencyKey: string
 ): Promise<MasterDataMutationResult | null> {
-  void idempotencyKey
-  return null
+  const result = await apiGet<SupplierProfileMutationDto | null>(
+    `/admin/supplier-profile-commands/${encodeURIComponent(idempotencyKey)}`,
+  )
+  if (!result) return null
+  return {
+    outcome: "succeeded",
+    stableId: result.supplier_id,
+    stableNo: result.supplier_no,
+    revisionId: result.revision_id,
+    revisionNo: result.revision_no,
+    revisionState: "CURRENT",
+    effectiveFrom: result.effective_from,
+    recordedAt: tsToIso(result.recorded_at),
+    actor: "—",
+    changeReason: result.change_reason,
+    reference: `MD-CMD-${result.supplier_no}-v${result.revision_no}`,
+    nextActions: ["查看详情", "返回列表"],
+  }
 }
 
-/**
- * 敏感字段揭示：party/warehouse 敏感明文仅写入指纹，无通用 reveal 接口。
- * 失败以 ApiError 形态抛出，供 mutation 进入 error 态。
- */
+/** 使用短期令牌揭示供应商敏感字段；服务端再次执行权限校验并记录审计。 */
 export async function revealMasterDataSensitive(
   revealToken: string
 ): Promise<string> {
-  void revealToken
-  const error: ApiError = {
-    kind: "Validation",
-    message: "无权查看或权限已失效；敏感字段揭示接口尚未提供",
-    status: 403,
-  }
-  throw error
+  const result = await apiPost<{ value: string }>(
+    "/admin/supplier-sensitive-fields/reveal",
+    { reveal_token: revealToken },
+  )
+  return result.value
 }
 
 // Re-export pure display helpers used by pages (stable import path via queries)
 export { buildMasterDataExportCsv, downloadCsv } from "./export-csv"
-

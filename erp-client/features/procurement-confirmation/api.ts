@@ -229,6 +229,10 @@ type BackendSupplierCapability = {
   valid_to?: string | null
 }
 
+type BackendSupplierDetail = {
+  capabilities: BackendSupplierCapability[]
+}
+
 export type ProcurementSupplyOption = {
   skuId: string
   supplierId: string
@@ -602,21 +606,21 @@ export const fetchProcurementSupplyOptions = async (
           Number(offering.available_quantity) > 0)
     )
   const supplierIds = [...new Set(offerings.map((row) => row.supplier_id))]
-  const capabilityPages = await Promise.all(
+  const supplierDetails = await Promise.all(
     supplierIds.map(async (supplierId) => ({
       supplierId,
-      page: await apiGet<BackendPage<BackendSupplierCapability>>(
-        `/admin/suppliers/${encodeURIComponent(supplierId)}/capabilities`,
-        { status: "active", page: 1, page_size: 100 }
+      detail: await apiGet<BackendSupplierDetail>(
+        `/admin/suppliers/${encodeURIComponent(supplierId)}`
       ),
     }))
   )
   const capabilitiesBySupplier = new Map(
-    capabilityPages.map(({ supplierId, page }) => [
+    supplierDetails.map(({ supplierId, detail }) => [
       supplierId,
-      page.items
+      detail.capabilities
         .filter(
           (capability) =>
+            capability.status === "active" &&
             Boolean(capability.current_revision_id) &&
             capability.valid_from <= today &&
             (!capability.valid_to || today <= capability.valid_to)

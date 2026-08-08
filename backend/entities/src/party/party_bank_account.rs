@@ -98,6 +98,9 @@ pub struct PartyBankAccount {
     pub account_number_ciphertext: String,
     /// 规范化账号的带密钥 HMAC 查询指纹（低熵值精确查询，禁止裸摘要）。
     pub account_number_query_hmac: String,
+    /// 账号末四位，仅用于生成不可逆的列表掩码；历史记录缺省为空。
+    #[serde(default)]
+    pub account_number_last4: String,
     /// 生效开始日期。
     pub valid_from: BusinessDate,
     /// 生效结束日期。
@@ -220,6 +223,15 @@ impl PartyBankAccount {
             ACCOUNT_NUMBER_MAX_LEN,
             "账号过长",
         )?;
+        let normalized_account_number = normalize_account_number(&account_number);
+        let account_number_last4 = normalized_account_number
+            .chars()
+            .rev()
+            .take(4)
+            .collect::<String>()
+            .chars()
+            .rev()
+            .collect();
         let created_by = created_by.into();
         ensure_window_valid(data.valid_from, data.valid_to)?;
 
@@ -232,6 +244,7 @@ impl PartyBankAccount {
             bank_branch_name,
             account_number_ciphertext: String::new(),
             account_number_query_hmac: Self::account_number_fingerprint(&account_number, fingerprint_key),
+            account_number_last4,
             valid_from: data.valid_from,
             valid_to: data.valid_to,
             status: data.status,

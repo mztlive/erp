@@ -1,6 +1,7 @@
 use config::{Config, SafeConfig};
 use mongodb::Database;
 use services::iam::SharedRbacService;
+use services::party::SensitiveDataCodec;
 use std::sync::Arc;
 use storage::S3Storage;
 use tokio::sync::{watch, RwLock};
@@ -12,6 +13,7 @@ pub struct AppState {
     jwt_engine: Arc<RwLock<Option<crate::core::auth::JwtEngine>>>,
     rbac: SharedRbacService,
     storage: Arc<S3Storage>,
+    sensitive_data: Arc<SensitiveDataCodec>,
 }
 
 impl AppState {
@@ -25,6 +27,9 @@ impl AppState {
     /// # 返回
     /// 返回创建的实例。
     pub fn new(db: Database, config: SafeConfig, storage: S3Storage) -> Self {
+        let sensitive_data = Arc::new(SensitiveDataCodec::from_secret(
+            config.snapshot().app.secret.as_bytes(),
+        ));
         let rbac = services::iam::shared_rbac_service(db.clone());
         Self {
             db,
@@ -32,6 +37,7 @@ impl AppState {
             jwt_engine: Arc::new(RwLock::new(None)),
             rbac,
             storage: Arc::new(storage),
+            sensitive_data,
         }
     }
 
@@ -73,6 +79,14 @@ impl AppState {
     /// 返回所有上传 handler 共享的单例客户端；S3 配置变更需重启后生效。
     pub fn storage(&self) -> &S3Storage {
         self.storage.as_ref()
+    }
+
+    /// 返回启动时固定的敏感数据编解码器。
+    ///
+    /// # 返回
+    /// 返回敏感资料 Service 共享的进程内单例；启动密钥变化后必须先迁移既有密文。
+    pub fn sensitive_data(&self) -> Arc<SensitiveDataCodec> {
+        Arc::clone(&self.sensitive_data)
     }
 
     /// 使 JWT 引擎缓存失效。

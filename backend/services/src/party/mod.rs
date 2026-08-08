@@ -6,7 +6,7 @@
 //!   `PartyRepository::append_party_revision` 声明「必须收到事务执行器」；
 //! - 软删除主体 / 查询 → 单集合，`&mut NoTransaction`。
 
-use database::{AccessControlExt, Executor, NoTransaction, PartyExt, Transactional};
+use database::{AccessControlExt, Executor, NoTransaction, PartyExt, SupplierExt, Transactional};
 use entities::common::revision::RevisionBase;
 use entities::field_update::FieldUpdate;
 use entities::party::{
@@ -28,6 +28,8 @@ pub mod contact;
 mod dto;
 pub mod sensitive;
 pub mod tax_profile;
+
+pub use sensitive::{SensitiveDataCodec, SensitiveFieldKind, SensitiveRevealScope};
 
 pub use self::dto::{
     CreatePartyAddressRequest, CreatePartyBankAccountRequest, CreatePartyContactRequest, CreatePartyRequest,
@@ -251,6 +253,7 @@ impl PartyService {
     ) -> Result<PartyView> {
         req.validate()?;
         let party = self.load_party(id).await?;
+        ensure_outside_supplier_profile(&self.db, &PartyId::new(id)).await?;
         if party.base.version != req.version {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),
@@ -350,6 +353,7 @@ impl PartyService {
     /// * `ConflictError` - 主体已被删除（版本冲突透出）
     pub async fn delete_party(&self, id: &str, actor: &AuditActor) -> Result<()> {
         let mut party = self.load_party(id).await?;
+        ensure_outside_supplier_profile(&self.db, &PartyId::new(id)).await?;
         let audit = actor
             .clone()
             .resource_log("party.delete", "party", party.base.id.clone())?;
@@ -464,9 +468,7 @@ impl PartyService {
             .await?
         {
             if !exclude_party_id.is_some_and(|id| existing.base.id == id) {
-                return Err(Error::ConflictError(format!(
-                    "主体编号「{party_no}」已存在"
-                )));
+                return Err(Error::ConflictError(format!("主体编号「{party_no}」已存在")));
             }
         }
 
@@ -488,6 +490,29 @@ impl PartyService {
 
         Ok(())
     }
+}
+
+/// 拒绝通过共享 Party 子资源接口访问已挂供应商角色的主体。
+///
+/// 供应商的主体、联系人、地址、税务等事实必须由供应商资料根级命令统一维护，
+/// 以确保 Party 与 Supplier 双版本及其子事实位于同一事务边界。
+pub(super) async fn ensure_outside_supplier_profile(db: &Database, party_id: &PartyId) -> Result<()> {
+    let has_supplier_role = db
+        .supplier_accounts()
+        .find_by_party(party_id, &mut NoTransaction)
+        .await?
+        .is_some();
+    ensure_supplier_profile_boundary(has_supplier_role)
+}
+
+/// 将仓储查询结果转换为稳定的供应商资料边界错误。
+fn ensure_supplier_profile_boundary(has_supplier_role: bool) -> Result<()> {
+    if has_supplier_role {
+        return Err(Error::BusinessLogicError(
+            "供应商主体资料只能通过供应商资料根级接口维护".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 /// 分页默认值辅助（与 `crate::query` 对齐，供子模块复用）。
@@ -548,3 +573,14 @@ macro_rules! clear_default_marks {
     }};
 }
 pub(crate) use clear_default_marks;
+
+#[cfg(test)]
+mod tests {
+    use super::ensure_supplier_profile_boundary;
+
+    #[test]
+    fn supplier_party_rejects_shared_party_subresource_access() {
+        assert!(ensure_supplier_profile_boundary(true).is_err());
+        assert!(ensure_supplier_profile_boundary(false).is_ok());
+    }
+}

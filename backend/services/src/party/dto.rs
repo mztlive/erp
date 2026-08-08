@@ -362,6 +362,8 @@ pub struct PartyContactView {
     pub title: Option<String>,
     /// 电话。
     pub telephone: Option<String>,
+    /// 手机号掩码；列表与详情均不返回明文。
+    pub mobile_masked: String,
     /// 邮箱。
     pub email: Option<String>,
     /// 生效开始日期。
@@ -387,6 +389,7 @@ impl From<PartyContact> for PartyContactView {
             contact_name: contact.contact_name,
             title: contact.title,
             telephone: contact.telephone,
+            mobile_masked: masked_last4(&contact.mobile_last4),
             email: contact.email,
             valid_from: contact.valid_from.to_string(),
             valid_to: contact.valid_to.map(|date| date.to_string()),
@@ -660,6 +663,8 @@ pub struct PartyBankAccountView {
     pub account_name: String,
     /// 银行名称。
     pub bank_name: String,
+    /// 银行账号掩码；列表与详情均不返回明文。
+    pub account_number_masked: String,
     /// 支行名称。
     pub bank_branch_name: Option<String>,
     /// 生效开始日期。
@@ -685,6 +690,7 @@ impl From<entities::party::PartyBankAccount> for PartyBankAccountView {
             party_id: account.party_id.to_string(),
             account_name: account.account_name,
             bank_name: account.bank_name,
+            account_number_masked: masked_last4(&account.account_number_last4),
             bank_branch_name: account.bank_branch_name,
             valid_from: account.valid_from.to_string(),
             valid_to: account.valid_to.map(|date| date.to_string()),
@@ -713,6 +719,14 @@ pub struct PartyBankAccountListParams {
     pub sort_by: Option<String>,
     /// 排序方向（`asc`/`desc`）。
     pub sort_dir: Option<String>,
+}
+
+/// 将实体持有的末四位转换为稳定掩码；历史数据没有末四位时只返回通用掩码。
+pub(super) fn masked_last4(last4: &str) -> String {
+    if last4.is_empty() {
+        return "****".to_string();
+    }
+    format!("****{last4}")
 }
 
 #[cfg(test)]

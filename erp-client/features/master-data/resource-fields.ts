@@ -263,6 +263,11 @@ export const RESOURCE_FIELDS: Readonly<
       listFact: true,
     },
     {
+      key: "creditCode",
+      label: masterDataCopy.fCreditCode,
+      kind: "text",
+    },
+    {
       key: "contactPhone",
       label: masterDataCopy.fContactPhone,
       kind: "text",
@@ -646,6 +651,7 @@ export function buildResourceFields(
     case "suppliers":
       return {
         company: pickField(values, "company") ?? "",
+        creditCode: pickField(values, "creditCode"),
         contactName: pickField(values, "contactName"),
         contactPhone: pickField(values, "contactPhone"),
         address: pickField(values, "address"),

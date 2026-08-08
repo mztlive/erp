@@ -7,8 +7,8 @@
 
 use entities::supplier::{
     SupplierAccount, SupplierCapability, SupplierCapabilityRevision, SupplierCommercialProfileRevision,
-    SupplierQualification, SupplierQualificationCapability, SupplierQualificationRevision,
-    SupplierRatingRevision,
+    SupplierProfileCommand, SupplierQualification, SupplierQualificationCapability,
+    SupplierQualificationRevision, SupplierRatingRevision,
 };
 use mongodb::Database;
 
@@ -36,6 +36,8 @@ pub trait SupplierExt {
     const SUPPLIER_QUALIFICATION_CAPABILITIES: &'static str = "supplier_qualification_capabilities";
     /// `supplier_rating_revision` 集合名。
     const SUPPLIER_RATING_REVISIONS: &'static str = "supplier_rating_revisions";
+    /// `supplier_profile_command` 根级命令去重结果集合名。
+    const SUPPLIER_PROFILE_COMMANDS: &'static str = "supplier_profile_commands";
 
     /// 供应商角色列表筛选条件类型（定义见 `repository::supplier`）。
     type SupplierAccountFilter;
@@ -94,6 +96,9 @@ pub trait SupplierExt {
     /// 返回 `Repository<'_, entities::supplier::SupplierRatingRevision>`。
     fn supplier_rating_revisions(&self) -> Repository<'_, SupplierRatingRevision>;
 
+    /// 获取供应商资料根级命令去重仓储。
+    fn supplier_profile_commands(&self) -> Repository<'_, SupplierProfileCommand>;
+
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
     /// # 返回
@@ -137,6 +142,10 @@ impl SupplierExt for Database {
 
     fn supplier_rating_revisions(&self) -> Repository<'_, SupplierRatingRevision> {
         Repository::new(self, Self::SUPPLIER_RATING_REVISIONS)
+    }
+
+    fn supplier_profile_commands(&self) -> Repository<'_, SupplierProfileCommand> {
+        Repository::new(self, Self::SUPPLIER_PROFILE_COMMANDS)
     }
 
     fn supplier(&self) -> SupplierRepository<'_> {

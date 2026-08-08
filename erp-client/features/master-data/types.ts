@@ -165,6 +165,12 @@ export type MasterDataCenterView = Readonly<{
   revisionTiming: "CURRENT" | "FUTURE"
   revisionTimingLabel: string
   lockVersion: number
+  /** 供应商关联 Party 的独立乐观锁版本。 */
+  partyLockVersion?: number
+  /** `资质类型::证书编号` → 当前适用能力代码，供原样修订。 */
+  supplierQualificationCapabilityCodes?: Readonly<
+    Record<string, readonly string[]>
+  >
   currentRevision: {
     revisionId: string
     revisionNo: number
@@ -425,9 +431,12 @@ export type UnitOfMeasureFields = Readonly<{
 
 export type SupplierFields = Readonly<{
   company: string
+  creditCode?: string
   contactName?: string
   contactPhone?: string
+  clearContact?: boolean
   address?: string
+  clearAddress?: boolean
   settlement?: string
   capability?: string
   businessCategory?: string
@@ -449,7 +458,10 @@ export type SupplierFields = Readonly<{
   authorizationFileAssetIds?: Readonly<Record<string, string>>
   foodLicenseFileAssetIds?: Readonly<Record<string, string>>
   legalPersonIdCardFileAssetIds?: Readonly<Record<string, string>>
+  /** `资质类型::证书编号` → 适用能力代码；新资质默认适用当前勾选能力。 */
+  qualificationCapabilityCodes?: Readonly<Record<string, readonly string[]>>
   taxNo?: string
+  clearTaxProfile?: boolean
   bankName?: string
   bankAccount?: string
   invoiceType?: string
@@ -491,6 +503,8 @@ export type CreateRevisionInput = Readonly<{
   stableId: string
   baseRevisionId: string
   expectedLockVersion: number
+  /** 聚合跨 Party 修订时的独立乐观锁版本。 */
+  expectedPartyVersion?: number
   name: string
   effectiveFrom: string
   effectiveTo?: string

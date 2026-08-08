@@ -55,6 +55,10 @@ tower-http = { version = "0.6.10", features = ["cors", "timeout"] }
 # 加密和编码
 argon2 = { version = "0.5.3", features = ["std"] }
 md5 = "0.8.0"
+aes-gcm = "0.10.3"
+base64 = "0.22.1"
+hmac = "0.12.1"
+sha2 = "0.10.9"
 
 # 其他工具
 clap = { version = "4.6.1", features = ["derive"] }

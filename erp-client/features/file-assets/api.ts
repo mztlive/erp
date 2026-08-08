@@ -13,6 +13,7 @@ type BackendFileAsset = {
   content_type: string
   byte_size: number
   security_scan_status: string
+  sensitivity_class: "general" | "sensitive" | "highly_sensitive"
   created_by: string
   created_at: number
   version?: number
@@ -35,10 +36,11 @@ function assetUrl(storageObjectKey: string, publicUrl?: string | null): string {
 export async function uploadFileAssetImage(
   file: File,
   usage: "image" | "attachment" | "manifest" = "image",
+  sensitivityClass: "general" | "sensitive" | "highly_sensitive" = "general",
 ): Promise<{ fileAssetId: string; url: string }> {
   const form = new FormData()
   form.append("file", file, file.name)
-  form.append("sensitivity_class", "general")
+  form.append("sensitivity_class", sensitivityClass)
   form.append("retention_class", "long_term")
   form.append("usage", usage)
 
@@ -121,16 +123,19 @@ export async function uploadFileAssetImage(
   }
 
   const data = envelope?.data
-  if (!data?.id || !data.storage_object_key) {
+  if (!data?.id) {
     const err: ApiError = {
       kind: "Parse",
-      message: "上传响应缺少文件资产 ID 或对象键",
+      message: "上传响应缺少文件资产 ID",
       responseData: parsed,
     }
     throw err
   }
   return {
     fileAssetId: data.id,
-    url: assetUrl(data.storage_object_key, data.public_url),
+    url:
+      data.sensitivity_class === "general"
+        ? assetUrl(data.storage_object_key, data.public_url)
+        : "",
   }
 }

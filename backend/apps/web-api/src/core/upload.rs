@@ -250,7 +250,7 @@ fn is_supported_mime(content_type: &str) -> bool {
 }
 
 /// 根据文件头识别受支持的图片 MIME，不信任客户端声明。
-fn detect_image_mime(content: &[u8]) -> Option<&'static str> {
+pub(crate) fn detect_image_mime(content: &[u8]) -> Option<&'static str> {
     if content.starts_with(b"\x89PNG\r\n\x1a\n") {
         return Some("image/png");
     }

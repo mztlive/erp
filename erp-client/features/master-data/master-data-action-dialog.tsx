@@ -323,6 +323,7 @@ export function MediaListField({
   accept = "image/jpeg,image/png,image/webp",
   urlByFileName,
   onFilesSelected,
+  disabled = false,
 }: {
   label: string
   hint?: string
@@ -334,6 +335,8 @@ export function MediaListField({
   urlByFileName?: Readonly<Record<string, string>>
   /** 选择文件时透出原始文件（供保存前上传）。 */
   onFilesSelected?: (files: File[]) => void
+  /** 禁止新增和移除文件；已登记文件仍可查看。 */
+  disabled?: boolean
 }) {
   const items = parseMediaList(value)
   return (
@@ -375,6 +378,7 @@ export function MediaListField({
                   variant="ghost"
                   size="icon-sm"
                   aria-label={`${masterDataCopy.mediaRemove} ${name}`}
+                  disabled={disabled}
                   onClick={() => {
                     const next = items.filter((_, i) => i !== index)
                     onChange(joinMediaList(next))
@@ -394,6 +398,7 @@ export function MediaListField({
       <FileUpload
         accept={accept}
         multiple
+        disabled={disabled}
         label={`添加${label}`}
         description={masterDataCopy.mediaUploadHint}
         onFilesSelected={(files) => {

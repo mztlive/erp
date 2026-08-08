@@ -61,7 +61,7 @@ pub async fn file_asset_list(
     resource = "file_asset",
     action = "detail"
 )]
-/// 查询文件资产详情（含对象存储键，供下载使用）。
+/// 查询文件资产详情；敏感资产不返回对象存储键或公开 URL。
 ///
 /// # 参数
 /// * `state` - 应用状态
@@ -74,7 +74,7 @@ pub async fn file_asset_detail(
     Path(id): Path<String>,
 ) -> Result<FileAssetView> {
     let mut view = FileAssetService::new(state.db()).file_asset_detail(&id).await?;
-    view.public_url = Some(build_public_url(&state, &view.storage_object_key));
+    prepare_asset_response(&state, &mut view);
     Ok(ApiResponse::ok_with_data(view))
 }
 
@@ -130,7 +130,7 @@ pub async fn file_asset_upload(
     };
     let service = FileAssetService::new(state.db());
     let mut asset = service.register_file_asset(request, &actor).await?;
-    asset.public_url = Some(build_public_url(&state, &asset.storage_object_key));
+    prepare_asset_response(&state, &mut asset);
     if let Some(document_id) = fields.document_id {
         service
             .attach_to_document(
@@ -169,6 +169,17 @@ fn build_public_url(state: &AppState, storage_object_key: &str) -> String {
     }
 }
 
+/// 仅普通资产暴露公开访问信息；敏感资产的底层对象键不进入 HTTP 响应。
+fn prepare_asset_response(state: &AppState, view: &mut FileAssetView) {
+    if view.sensitivity_class == entities::file_asset::SensitivityClass::General {
+        view.public_url = Some(build_public_url(state, &view.storage_object_key));
+        return;
+    }
+    view.storage_object_key.clear();
+    view.content_hmac.clear();
+    view.public_url = None;
+}
+
 #[permission_macros::permission(
     group = "文件资产",
     group_desc = "文件元数据、单据附件与安全检查",
@@ -191,9 +202,10 @@ pub async fn file_asset_register(
     Extension(actor): Extension<AuditActor>,
     Json(req): Json<RegisterFileAssetRequest>,
 ) -> Result<FileAssetView> {
-    let view = FileAssetService::new(state.db())
+    let mut view = FileAssetService::new(state.db())
         .register_file_asset(req, &actor)
         .await?;
+    prepare_asset_response(&state, &mut view);
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -275,9 +287,10 @@ pub async fn file_asset_scan_result(
     Path(id): Path<String>,
     Json(req): Json<MarkScanResultRequest>,
 ) -> Result<FileAssetView> {
-    let view = FileAssetService::new(state.db())
+    let mut view = FileAssetService::new(state.db())
         .mark_scan_result(&id, req, &actor)
         .await?;
+    prepare_asset_response(&state, &mut view);
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -305,9 +318,10 @@ pub async fn file_asset_destroy(
     Path(id): Path<String>,
     Json(req): Json<DestroyFileAssetRequest>,
 ) -> Result<FileAssetView> {
-    let view = FileAssetService::new(state.db())
+    let mut view = FileAssetService::new(state.db())
         .destroy_file_asset(&id, req, &actor)
         .await?;
+    prepare_asset_response(&state, &mut view);
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -362,14 +376,40 @@ async fn extract_asset_file(multipart: &mut Multipart) -> std::result::Result<As
             }
             content.extend_from_slice(&chunk);
         }
-        selected = Some(AssetFile {
+        selected = Some(validate_asset_file(AssetFile {
             file_name,
             content_type,
             content,
-        });
+        })?);
         break;
     }
     selected.ok_or_else(|| Error::BadRequest("未上传文件".to_string()))
+}
+
+/// 校验附件扩展名、声明 MIME 与真实文件头一致；支持受控图片和 PDF。
+fn validate_asset_file(file: AssetFile) -> std::result::Result<AssetFile, Error> {
+    if file.content.is_empty() {
+        return Err(Error::BadRequest("上传文件不能为空".to_string()));
+    }
+    let extension = upload::normalized_extension(&file.file_name)
+        .ok_or_else(|| Error::BadRequest("附件缺少受支持的扩展名".to_string()))?;
+    let expected_mime = if extension == "pdf" {
+        "application/pdf"
+    } else {
+        upload::expected_mime(&extension).ok_or_else(|| Error::BadRequest("附件类型不受支持".to_string()))?
+    };
+    if !file.content_type.eq_ignore_ascii_case(expected_mime) {
+        return Err(Error::BadRequest("附件扩展名与 MIME 类型不一致".to_string()));
+    }
+    let content_matches = if extension == "pdf" {
+        file.content.starts_with(b"%PDF-")
+    } else {
+        upload::detect_image_mime(&file.content) == Some(expected_mime)
+    };
+    if !content_matches {
+        return Err(Error::BadRequest("附件真实内容与声明类型不一致".to_string()));
+    }
+    Ok(file)
 }
 
 /// 上传文件资产时解析 Multipart 表单字段。
@@ -495,7 +535,7 @@ fn storage_key_with_extension(id: String, file_name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::storage_key_with_extension;
+    use super::{storage_key_with_extension, validate_asset_file, AssetFile};
 
     #[test]
     fn supported_image_names_keep_normalized_extension() {
@@ -516,5 +556,22 @@ mod tests {
             "id-3"
         );
         assert_eq!(storage_key_with_extension("id-4".to_string(), "photo"), "id-4");
+    }
+
+    #[test]
+    fn asset_file_rejects_spoofed_pdf_and_accepts_valid_header() {
+        let valid = AssetFile {
+            file_name: "contract.pdf".to_string(),
+            content_type: "application/pdf".to_string(),
+            content: b"%PDF-1.7\n".to_vec(),
+        };
+        assert!(validate_asset_file(valid).is_ok());
+
+        let spoofed = AssetFile {
+            file_name: "contract.pdf".to_string(),
+            content_type: "application/pdf".to_string(),
+            content: b"not-a-pdf".to_vec(),
+        };
+        assert!(validate_asset_file(spoofed).is_err());
     }
 }
