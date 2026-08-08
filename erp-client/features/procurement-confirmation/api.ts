@@ -13,6 +13,7 @@ import type {
   FormalOutcome,
   FulfillmentMode,
   ProcurementConfirmationTask,
+  ProcurementRecommendation,
   ProcurementQueueView,
   RejectReasonCode,
   SubmissionOrigin,
@@ -87,6 +88,10 @@ type BackendDecisionView = {
   status: string
   revision_id?: string | null
   receivable_account_id?: string | null
+  purchase_orders?: Array<{
+    purchase_order_id: string
+    purchase_no: string
+  }>
   handled_at: number
   reference: string
 }
@@ -94,6 +99,8 @@ type BackendDecisionView = {
 type BackendSalesOrderDetail = {
   id: string
   order_no: string
+  business_type?: string
+  origin_system?: string
   customer_id?: string
   contract_id?: string | null
   owner_user_id?: string
@@ -104,7 +111,10 @@ type BackendSalesOrderDetail = {
     status?: string
     customer_name: string
     contract_no?: string | null
+    settlement_party_name?: string | null
     payment_term_name: string
+    project_name?: string | null
+    business_remark?: string | null
     gross_amount?: string
     net_amount?: string
     tax_amount?: string
@@ -115,9 +125,15 @@ type BackendSalesOrderDetail = {
       sales_order_line_id?: string
       line_no: number
       item_name_snapshot?: string
+      spec_snapshot?: string | null
       sku_id?: string | null
       unit_snapshot?: string | null
+      base_unit_code?: string | null
       quantity?: string | null
+      unit_price_gross?: string | null
+      sales_tax_rate?: string | null
+      fulfillment_mode?: string | null
+      fulfillment_due_at?: number | null
       gross_amount?: string
     }>
   }>
@@ -149,6 +165,59 @@ type BackendSupplierOffering = {
   dropship_supply_price_gross?: string | null
   bulk_supply_price_gross?: string | null
   input_tax_rate?: string | null
+  bulk_minimum_order_quantity?: string | null
+  availability_status?: string | null
+  available_quantity?: string | null
+  freight_amount?: string | null
+  service_fee_amount?: string | null
+  valid_from?: string | null
+  valid_to?: string | null
+}
+
+type BackendRecommendation = {
+  confirmation_id: string
+  policy_version: string
+  calculated_at: number
+  ready: boolean
+  lines: Array<{
+    line_no: number
+    sales_order_submission_line_id: string
+    item_name: string
+    sku_id: string
+    supplier_id: string
+    supplier_name: string
+    supplier_offering_revision_id: string
+    confirmed_quantity: string
+    latest_cost_gross: string
+    input_tax_rate: string
+    expected_delivery_date: string
+    fulfillment_mode: string
+    supplier_capability_revision_id: string
+    landed_gross: string
+    freight_amount?: string | null
+    service_fee_amount?: string | null
+    recommendation_reason: string
+  }>
+  purchase_orders: Array<{
+    supplier_id: string
+    supplier_name: string
+    fulfillment_mode: string
+    line_count: number
+    estimated_gross: string
+  }>
+  estimated_purchase_gross: string
+  sales_gross: string
+  estimated_gross_margin: string
+  blocking_issues: Array<{
+    code: string
+    message: string
+    sales_order_submission_line_id?: string | null
+  }>
+  warnings: Array<{
+    code: string
+    message: string
+    sales_order_submission_line_id?: string | null
+  }>
 }
 
 type BackendSupplierCapability = {
@@ -166,10 +235,13 @@ export type ProcurementSupplyOption = {
   offeringRevisionId: string
   offeringRevisionNo: number
   costGross: string
+  bulkCostGross: string
+  dropshipCostGross: string
   inputTaxRate: string
   capabilities: Array<{
     revisionId: string
     label: string
+    capabilityCode: string
   }>
 }
 
@@ -250,6 +322,9 @@ function mapRejectReasonToBackend(
 }
 
 function mapFulfillmentMode(mode: string): FulfillmentMode {
+  if (mode === "COMPANY_WAREHOUSE") return "WAREHOUSE"
+  if (mode === "ELECTRONIC_DELIVERY") return "ELECTRONIC"
+  if (mode === "OFFLINE_SERVICE") return "SERVICE"
   if (
     mode === "WAREHOUSE" ||
     mode === "SUPPLIER_DIRECT" ||
@@ -259,6 +334,56 @@ function mapFulfillmentMode(mode: string): FulfillmentMode {
     return mode
   }
   return "WAREHOUSE"
+}
+
+/** 将后端最低成本方案转换为 W07 页面契约。 */
+function mapRecommendation(
+  recommendation: BackendRecommendation
+): ProcurementRecommendation {
+  const mapIssue = (issue: BackendRecommendation["blocking_issues"][number]) => ({
+    code: issue.code,
+    message: issue.message,
+    lineId: issue.sales_order_submission_line_id ?? undefined,
+  })
+  return {
+    confirmationId: recommendation.confirmation_id,
+    policyVersion: recommendation.policy_version,
+    calculatedAt: secsToIso(recommendation.calculated_at),
+    ready: recommendation.ready,
+    lines: recommendation.lines.map((line) => ({
+      lineKey: `recommended-${line.line_no}-${line.supplier_offering_revision_id}`,
+      submissionLineId: line.sales_order_submission_line_id,
+      supplierId: line.supplier_id,
+      supplierName: line.supplier_name,
+      offeringRevisionId: line.supplier_offering_revision_id,
+      confirmedQuantity: line.confirmed_quantity,
+      latestCostGross: line.latest_cost_gross,
+      inputTaxRate: line.input_tax_rate,
+      expectedDeliveryDate: line.expected_delivery_date,
+      fulfillmentMode: mapFulfillmentMode(line.fulfillment_mode),
+      capabilityRevisionId: line.supplier_capability_revision_id,
+      capabilitySummary: "当前有效供应商能力",
+      qualificationStatus: "VALID" as const,
+      itemName: line.item_name,
+      itemSku: line.sku_id,
+      landedGross: line.landed_gross,
+      freightAmount: line.freight_amount ?? undefined,
+      serviceFeeAmount: line.service_fee_amount ?? undefined,
+      recommendationReason: line.recommendation_reason,
+    })),
+    purchaseOrders: recommendation.purchase_orders.map((order) => ({
+      supplierId: order.supplier_id,
+      supplierName: order.supplier_name,
+      fulfillmentMode: mapFulfillmentMode(order.fulfillment_mode),
+      lineCount: order.line_count,
+      estimatedGross: order.estimated_gross,
+    })),
+    estimatedPurchaseGross: recommendation.estimated_purchase_gross,
+    salesGross: recommendation.sales_gross,
+    estimatedGrossMargin: recommendation.estimated_gross_margin,
+    blockingIssues: recommendation.blocking_issues.map(mapIssue),
+    warnings: recommendation.warnings.map(mapIssue),
+  }
 }
 
 function filterSummary(filters: QueueFilters): string {
@@ -376,6 +501,16 @@ async function fetchConfirmationDetail(
   }
 }
 
+/** 读取后端计算的最低可执行成本采购方案。 */
+export async function fetchProcurementRecommendation(
+  confirmationId: string
+): Promise<ProcurementRecommendation> {
+  const recommendation = await apiGet<BackendRecommendation>(
+    `/admin/procurement-confirmations/${encodeURIComponent(confirmationId)}/recommendation`
+  )
+  return mapRecommendation(recommendation)
+}
+
 async function fetchSalesOrderDetail(
   salesOrderId: string
 ): Promise<BackendSalesOrderDetail | null> {
@@ -441,6 +576,7 @@ const CAPABILITY_LABEL: Record<string, string> = {
 export const fetchProcurementSupplyOptions = async (
   skuIds: readonly string[]
 ): Promise<ProcurementSupplyOption[]> => {
+  const today = new Date().toISOString().slice(0, 10)
   const uniqueSkuIds = [...new Set(skuIds.filter(Boolean))]
   const offeringPages = await Promise.all(
     uniqueSkuIds.map((skuId) =>
@@ -454,7 +590,13 @@ export const fetchProcurementSupplyOptions = async (
     .flatMap((page) => page.items)
     .filter(
       (offering) =>
-        offering.status === "ACTIVE" && Boolean(offering.current_revision_id)
+        offering.status === "ACTIVE" &&
+        Boolean(offering.current_revision_id) &&
+        offering.availability_status === "AVAILABLE" &&
+        (!offering.valid_from || offering.valid_from <= today) &&
+        (!offering.valid_to || today <= offering.valid_to) &&
+        (offering.available_quantity == null ||
+          Number(offering.available_quantity) > 0)
     )
   const supplierIds = [...new Set(offerings.map((row) => row.supplier_id))]
   const capabilityPages = await Promise.all(
@@ -470,11 +612,17 @@ export const fetchProcurementSupplyOptions = async (
     capabilityPages.map(({ supplierId, page }) => [
       supplierId,
       page.items
-        .filter((capability) => Boolean(capability.current_revision_id))
+        .filter(
+          (capability) =>
+            Boolean(capability.current_revision_id) &&
+            capability.valid_from <= today &&
+            (!capability.valid_to || today <= capability.valid_to)
+        )
         .map((capability) => ({
           revisionId: capability.current_revision_id!,
           label:
             CAPABILITY_LABEL[capability.capability_code] ?? "供应商能力",
+          capabilityCode: capability.capability_code,
         })),
     ])
   )
@@ -487,6 +635,8 @@ export const fetchProcurementSupplyOptions = async (
       offering.bulk_supply_price_gross ??
       offering.dropship_supply_price_gross ??
       "",
+    bulkCostGross: offering.bulk_supply_price_gross ?? "",
+    dropshipCostGross: offering.dropship_supply_price_gross ?? "",
     inputTaxRate: offering.input_tax_rate ?? "",
     capabilities: capabilitiesBySupplier.get(offering.supplier_id) ?? [],
   }))
@@ -499,7 +649,7 @@ function mapConfirmationLines(
     lineKey: line.id,
     submissionLineId: line.sales_order_submission_line_id,
     supplierId: line.supplier_id,
-    supplierName: line.supplier_id,
+    supplierName: "供应商名称加载中",
     offeringRevisionId: line.supplier_offering_revision_id ?? "",
     confirmedQuantity: String(line.confirmed_quantity ?? "0"),
     latestCostGross: String(line.latest_cost_gross ?? "0"),
@@ -544,9 +694,16 @@ async function projectTask(
       submissionLineId: line.id,
       itemName: line.item_name_snapshot ?? `行 ${line.line_no}`,
       itemSku: line.sku_id ?? "",
+      specification: line.spec_snapshot ?? undefined,
       committedQuantity: String(line.quantity ?? "0"),
-      unit: line.unit_snapshot ?? "",
-      requestedDeliveryDate: "—",
+      unit: line.base_unit_code ?? line.unit_snapshot ?? "",
+      requestedDeliveryDate:
+        secsToIso(line.fulfillment_due_at).slice(0, 10) || "—",
+      unitPriceGross: line.unit_price_gross ?? undefined,
+      fulfillmentMode: line.fulfillment_mode
+        ? mapFulfillmentMode(line.fulfillment_mode)
+        : undefined,
+      salesTaxRate: line.sales_tax_rate ?? undefined,
       salesAmountGross: String(line.gross_amount ?? "0"),
     })) ??
     confLines.map((line) => ({
@@ -594,7 +751,7 @@ async function projectTask(
         : undefined,
     salesSubmission: {
       salesOrderId: detail.sales_order_id,
-      salesOrderNo: sales?.order_no ?? detail.sales_order_id,
+      salesOrderNo: sales?.order_no ?? "销售单号不可用",
       submissionId: detail.submission_id,
       submissionNo: submission?.submission_no ?? 0,
       subjectHash: detail.submission_id,
@@ -605,13 +762,20 @@ async function projectTask(
           ? (sales?.owner_user_name ?? "销售提交人")
           : "销售提交人",
       customerSnapshot: submission?.customer_name ?? "—",
+      contractId: sales?.contract_id ?? undefined,
       contractSnapshot: submission?.contract_no ?? undefined,
+      settlementPartySnapshot:
+        submission?.settlement_party_name ?? undefined,
       paymentTermLabel: submission?.payment_term_name ?? "—",
+      projectName: submission?.project_name ?? undefined,
+      businessRemark: submission?.business_remark ?? undefined,
       grossAmount: String(
         submission?.gross_amount ??
           sales?.working_copy?.gross_amount ??
           "0"
       ),
+      netAmount: submission?.net_amount,
+      taxAmount: submission?.tax_amount,
       origin,
       lines: submissionLines,
     },
@@ -810,7 +974,10 @@ export async function completeProcurementDecision(input: {
         subjectHash: input.decision.subjectHash,
         salesOrderRevisionId: data.revision_id ?? "",
         receivableAccountId: data.receivable_account_id ?? "",
-        procurementCreationBasisId: data.confirmation_id,
+        purchaseOrders: (data.purchase_orders ?? []).map((order) => ({
+          purchaseOrderId: order.purchase_order_id,
+          purchaseNo: order.purchase_no,
+        })),
         reference: data.reference,
       }
       return { status: "succeeded", outcome }

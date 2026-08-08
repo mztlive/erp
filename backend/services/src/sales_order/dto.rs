@@ -11,8 +11,8 @@
 use entities::ids::{ContractId, CustomerAccountId, PartyId, SkuId};
 use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use entities::sales_order::{
-    BusinessType, CardForm, CommercialStatus, GoodsLineFields, LineStatus, LineType, OriginSystem,
-    VoucherLineDraft,
+    BusinessType, CardForm, CommercialStatus, FulfillmentMode, GoodsLineFields, LineStatus, LineType,
+    OriginSystem, VoucherLineDraft, WelfareScenario,
 };
 use serde::{Deserialize, Serialize};
 use validator::Validate;
@@ -433,6 +433,12 @@ pub struct SalesOrderWorkingCopyLineView {
     pub unit_snapshot: Option<String>,
     /// 正式销售项 SKU。
     pub sku_id: Option<SkuId>,
+    /// 福利场景。
+    pub welfare_scenario: Option<WelfareScenario>,
+    /// 销售提交承诺的履约方式。
+    pub fulfillment_mode: Option<FulfillmentMode>,
+    /// 销售提交承诺的履约期限（秒级时间戳）。
+    pub fulfillment_due_at: Option<u64>,
     /// 基础单位数量。
     pub quantity: Option<Quantity>,
     /// 基础单位代码。

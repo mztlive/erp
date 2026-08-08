@@ -205,6 +205,7 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "supplier_qualification:*",
     "supplier_rating:*",
     // 确认与采购
+    "contract:detail",
     "sales_order:list",
     "sales_order:detail",
     "procurement_confirmation:*",
@@ -485,6 +486,28 @@ const SYSADMIN_PERMISSIONS: &[&str] = &[
 pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
     for role in PREDEFINED_ROLES {
         seed_one(rbac, role).await?;
+    }
+    upgrade_procurement_contract_read(rbac).await?;
+    Ok(())
+}
+
+/// 为未被管理员改写过的旧采购角色补充合同详情只读权限。
+async fn upgrade_procurement_contract_read(rbac: &SharedRbacService) -> Result<()> {
+    let desired = parse_permissions(PROCUREMENT_PERMISSIONS)?;
+    let previous = desired
+        .iter()
+        .filter(|permission| permission.to_string() != "contract:detail")
+        .cloned()
+        .collect();
+    if rbac
+        .upgrade_seeded_role_permissions_if_exact("role-procurement", previous, desired)
+        .await?
+    {
+        tracing::info!(
+            role_id = "role-procurement",
+            permission = "contract:detail",
+            "predefined role permission upgraded"
+        );
     }
     Ok(())
 }

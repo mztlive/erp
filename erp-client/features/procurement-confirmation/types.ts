@@ -37,9 +37,13 @@ export type SubmissionLineView = Readonly<{
   submissionLineId: string
   itemName: string
   itemSku: string
+  specification?: string
   committedQuantity: string
   unit: string
   requestedDeliveryDate: string
+  unitPriceGross?: string
+  fulfillmentMode?: FulfillmentMode
+  salesTaxRate?: string
   referenceSupplier?: string
   referenceCost?: string
   salesAmountGross: string
@@ -84,9 +88,15 @@ export type ProcurementConfirmationTask = Readonly<{
     submittedAt: string
     submittedByLabel: string
     customerSnapshot: string
+    contractId?: string
     contractSnapshot?: string
+    settlementPartySnapshot?: string
     paymentTermLabel: string
+    projectName?: string
+    businessRemark?: string
     grossAmount: string
+    netAmount?: string
+    taxAmount?: string
     origin: SubmissionOrigin
     lines: readonly SubmissionLineView[]
     resubmissionContext?: {
@@ -145,6 +155,33 @@ export type WorkItemLease = Readonly<{
   claimedByLabel: string
 }>
 
+export type ProcurementRecommendation = Readonly<{
+  confirmationId: string
+  policyVersion: string
+  calculatedAt: string
+  ready: boolean
+  lines: readonly (ConfirmationLineDraft & {
+    itemName: string
+    itemSku: string
+    landedGross: string
+    freightAmount?: string
+    serviceFeeAmount?: string
+    recommendationReason: string
+  })[]
+  purchaseOrders: readonly {
+    supplierId: string
+    supplierName: string
+    fulfillmentMode: FulfillmentMode
+    lineCount: number
+    estimatedGross: string
+  }[]
+  estimatedPurchaseGross: string
+  salesGross: string
+  estimatedGrossMargin: string
+  blockingIssues: readonly BlockingIssue[]
+  warnings: readonly BlockingIssue[]
+}>
+
 export type FormalOutcome =
   | {
       kind: "APPROVED_AND_SALES_EFFECTIVE"
@@ -155,7 +192,10 @@ export type FormalOutcome =
       subjectHash: string
       salesOrderRevisionId: string
       receivableAccountId: string
-      procurementCreationBasisId: string
+      purchaseOrders: readonly {
+        purchaseOrderId: string
+        purchaseNo: string
+      }[]
       reference: string
     }
   | {

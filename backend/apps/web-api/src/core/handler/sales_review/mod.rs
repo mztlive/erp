@@ -12,10 +12,11 @@ use services::{
     sales_review::{
         ApproveProcurementConfirmationRequest, ChangeReviewDecisionRequest, CreateSalesChangeOrderRequest,
         PageView, ProcurementConfirmationDecisionView, ProcurementConfirmationDetailView,
-        ProcurementConfirmationListParams, ProcurementConfirmationView, RejectProcurementConfirmationRequest,
-        ReviewDecisionRequest, SalesChangeOrderDetailView, SalesChangeOrderListParams, SalesChangeOrderView,
-        SalesOrderReviewListParams, SalesOrderReviewView, SalesReviewService,
-        SaveProcurementConfirmationLinesRequest, SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
+        ProcurementConfirmationListParams, ProcurementConfirmationView, ProcurementRecommendationView,
+        RejectProcurementConfirmationRequest, ReviewDecisionRequest, SalesChangeOrderDetailView,
+        SalesChangeOrderListParams, SalesChangeOrderView, SalesOrderReviewListParams, SalesOrderReviewView,
+        SalesReviewService, SaveProcurementConfirmationLinesRequest, SubmitSalesChangeRequest,
+        VoidSalesChangeOrderRequest,
     },
 };
 
@@ -157,6 +158,32 @@ pub async fn procurement_confirmation_detail(
 ) -> Result<ProcurementConfirmationDetailView> {
     let view = SalesReviewService::new(state.db())
         .procurement_confirmation_detail(&id)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "销售复核",
+    group_desc = "销售审批与采购二次确认（W05/W07）管理",
+    desc = "计算采购推荐方案",
+    resource = "procurement_confirmation",
+    action = "detail"
+)]
+/// 计算采购二次确认的最低可执行成本方案。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `id` - 确认批次 ID
+///
+/// # 返回
+/// 返回按当前供给、能力、数量与起订量计算的推荐分配及采购单草稿分组。
+pub async fn procurement_confirmation_recommendation(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+) -> Result<ProcurementRecommendationView> {
+    let view = SalesReviewService::new(state.db())
+        .procurement_recommendation(&id)
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))

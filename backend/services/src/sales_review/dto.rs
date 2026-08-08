@@ -396,6 +396,107 @@ pub struct ProcurementConfirmationDetailView {
     pub lines: Vec<ProcurementConfirmationLineView>,
 }
 
+/// 采购推荐中的阻断或提醒。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProcurementRecommendationIssueView {
+    /// 稳定问题代码。
+    pub code: String,
+    /// 面向采购人员的说明。
+    pub message: String,
+    /// 对应销售提交行；全单问题为空。
+    pub sales_order_submission_line_id: Option<String>,
+}
+
+/// 推荐方案中的采购分配行。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProcurementRecommendationLineView {
+    /// 建议确认行号。
+    pub line_no: u32,
+    /// 被覆盖的销售提交行。
+    pub sales_order_submission_line_id: String,
+    /// 销售项名称快照。
+    pub item_name: String,
+    /// 公司 SKU。
+    pub sku_id: String,
+    /// 推荐供应商。
+    pub supplier_id: String,
+    /// 供应商名称。
+    pub supplier_name: String,
+    /// 精确供给修订。
+    pub supplier_offering_revision_id: String,
+    /// 分配数量。
+    pub confirmed_quantity: String,
+    /// 对应履约方式的含税供给单价。
+    pub latest_cost_gross: String,
+    /// 进项税率。
+    pub input_tax_rate: String,
+    /// 以销售承诺日期作为采购确认目标日期。
+    pub expected_delivery_date: String,
+    /// 推荐履约方式。
+    pub fulfillment_mode: entities::sales_review::types::FulfillmentMode,
+    /// 精确供应商能力修订。
+    pub supplier_capability_revision_id: String,
+    /// 本分配的商品价、运费与服务费合计。
+    pub landed_gross: String,
+    /// 计入本分配的运费。
+    pub freight_amount: Option<String>,
+    /// 计入本分配的服务费。
+    pub service_fee_amount: Option<String>,
+    /// 推荐原因。
+    pub recommendation_reason: String,
+}
+
+/// 推荐方案预计形成的采购单草稿分组。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProcurementRecommendationOrderView {
+    /// 推荐供应商。
+    pub supplier_id: String,
+    /// 供应商名称。
+    pub supplier_name: String,
+    /// 履约方式。
+    pub fulfillment_mode: entities::sales_review::types::FulfillmentMode,
+    /// 该采购单草稿预计包含的确认分行数。
+    pub line_count: u32,
+    /// 该采购单草稿预计含税落地成本。
+    pub estimated_gross: String,
+}
+
+/// 采购二次确认的后端最低可执行成本推荐。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProcurementRecommendationView {
+    /// 采购确认批次。
+    pub confirmation_id: String,
+    /// 推荐算法及规则版本。
+    pub policy_version: String,
+    /// 计算时间（秒级时间戳）。
+    pub calculated_at: u64,
+    /// 当前供给能否完整覆盖全部销售提交行。
+    pub ready: bool,
+    /// 推荐采购分配行。
+    pub lines: Vec<ProcurementRecommendationLineView>,
+    /// 审批通过后预计生成的采购单草稿。
+    pub purchase_orders: Vec<ProcurementRecommendationOrderView>,
+    /// 预计采购含税落地成本。
+    pub estimated_purchase_gross: String,
+    /// 销售提交含税金额。
+    pub sales_gross: String,
+    /// 销售含税金额减预计采购含税落地成本。
+    pub estimated_gross_margin: String,
+    /// 阻断审批的问题。
+    pub blocking_issues: Vec<ProcurementRecommendationIssueView>,
+    /// 需要采购确认的提醒。
+    pub warnings: Vec<ProcurementRecommendationIssueView>,
+}
+
+/// 采购确认通过时自动生成的采购单草稿。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct GeneratedPurchaseOrderView {
+    /// 采购单主键。
+    pub purchase_order_id: String,
+    /// 面向用户的采购单号。
+    pub purchase_no: String,
+}
+
 /// 采购确认决策结果视图（通过/驳回统一形状）。
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct ProcurementConfirmationDecisionView {
@@ -409,6 +510,8 @@ pub struct ProcurementConfirmationDecisionView {
     pub revision_id: Option<String>,
     /// 应收往来子账（通过时产生）。
     pub receivable_account_id: Option<String>,
+    /// 通过时自动生成的采购单草稿。
+    pub purchase_orders: Vec<GeneratedPurchaseOrderView>,
     /// 处理时间（秒级时间戳）。
     pub handled_at: u64,
     /// 操作号（业务参考）。

@@ -67,6 +67,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/procurement-confirmations/{id}/recommendation",
+            with_permission(
+                get(sales_review::procurement_confirmation_recommendation),
+                rbac,
+                sales_review::procurement_confirmation_recommendation_permission_key(),
+            ),
+        )
+        .route(
             "/procurement-confirmations/{id}/lines",
             with_permission(
                 put(sales_review::procurement_confirmation_save_lines),

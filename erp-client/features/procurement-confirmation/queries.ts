@@ -8,6 +8,7 @@ import {
   completeProcurementDecision,
   deferProcurementConfirmation,
   fetchProcurementQueue,
+  fetchProcurementRecommendation,
   fetchProcurementSupplyOptions,
   saveProcurementConfirmation,
   type QueueFilters,
@@ -20,6 +21,19 @@ export const procurementConfirmKeys = {
   counts: () => [...procurementConfirmKeys.all, "counts"] as const,
   supplyOptions: (skuIds: readonly string[]) =>
     [...procurementConfirmKeys.all, "supply-options", [...skuIds].sort()] as const,
+  recommendation: (confirmationId: string) =>
+    [...procurementConfirmKeys.all, "recommendation", confirmationId] as const,
+}
+
+/** 当前采购确认的后端最低可执行成本方案。 */
+export function useProcurementRecommendationQuery(
+  confirmationId: string
+) {
+  return useQuery({
+    queryKey: procurementConfirmKeys.recommendation(confirmationId),
+    queryFn: () => fetchProcurementRecommendation(confirmationId),
+    enabled: confirmationId.length > 0,
+  })
 }
 
 /** 当前销售提交行可用的供给修订与能力修订。 */

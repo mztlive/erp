@@ -20,11 +20,12 @@
 //! 幂等：通过/提交类入口按「状态机终态 + 业务对象查询」去重（重复通过返回既有
 //! 结果，不重复产生版本/分录/待办）。
 
+use std::collections::HashMap;
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, NoTransaction, ReceivableExt, SalesOrderExt, SalesReviewExt, SupplierCatalogExt,
-    SupplierExt, Transactional, WorkItemExt,
+    AccessControlExt, NoTransaction, PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt,
+    SupplierCatalogExt, SupplierExt, Transactional, WorkItemExt,
 };
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
@@ -47,8 +48,10 @@ use entities::sales_review::{
     SalesChangeSubmissionLine, SalesChangeSubmissionLineData, SalesOrderReview, SalesOrderReviewData,
     SalesReviewStage,
 };
-use entities::supplier::CapabilityStatus;
-use entities::supplier_catalog::{OfferingStatus, SupplierOffering};
+use entities::supplier::{CapabilityCode, CapabilityStatus};
+use entities::supplier_catalog::{
+    AvailabilityStatus, OfferingStatus, SupplierOffering, SupplierOfferingRevision,
+};
 use entities::work_item::{WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use id_generator::next_id;
 use mongodb::Database;
@@ -58,15 +61,17 @@ use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
 mod dto;
+mod sourcing;
 
 pub use self::dto::{
     ApproveProcurementConfirmationRequest, ChangeReviewDecisionRequest, CreateSalesChangeOrderRequest,
-    PageView, ProcurementConfirmationDecisionView, ProcurementConfirmationDetailView,
-    ProcurementConfirmationLineView, ProcurementConfirmationListParams, ProcurementConfirmationView,
-    RejectProcurementConfirmationRequest, ReviewDecisionRequest, SalesChangeDraftRequest,
-    SalesChangeLineRequest, SalesChangeOrderDetailView, SalesChangeOrderListParams, SalesChangeOrderView,
-    SalesOrderReviewListParams, SalesOrderReviewView, SaveProcurementConfirmationLinesRequest,
-    SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
+    GeneratedPurchaseOrderView, PageView, ProcurementConfirmationDecisionView,
+    ProcurementConfirmationDetailView, ProcurementConfirmationLineView, ProcurementConfirmationListParams,
+    ProcurementConfirmationView, ProcurementRecommendationIssueView, ProcurementRecommendationLineView,
+    ProcurementRecommendationOrderView, ProcurementRecommendationView, RejectProcurementConfirmationRequest,
+    ReviewDecisionRequest, SalesChangeDraftRequest, SalesChangeLineRequest, SalesChangeOrderDetailView,
+    SalesChangeOrderListParams, SalesChangeOrderView, SalesOrderReviewListParams, SalesOrderReviewView,
+    SaveProcurementConfirmationLinesRequest, SubmitSalesChangeRequest, VoidSalesChangeOrderRequest,
 };
 
 /// 审批记录列表筛选条件类型（经 `SalesReviewExt` 关联类型跨 crate 可达）。
@@ -268,7 +273,7 @@ impl SalesReviewService {
     /// 校验采购确认覆盖全部需外采明细（§6.5 跨行断言）后，在**单个事务**内：
     /// 锁定提交并形成不可变销售版本与版本行、更新销售单当前版本与状态
     /// （`EFFECTIVE` + 审核轨 `APPROVED`）、形成应收往来子账与原始应收分录、
-    /// 完成采购确认待办、派发采购单创建待办、写审计。重复通过幂等返回既有结果。
+    /// 完成采购确认待办、按供应商与履约方式生成采购单草稿、写审计。重复通过幂等返回既有结果。
     ///
     /// # 参数
     /// * `id` - 确认批次 ID
@@ -333,6 +338,30 @@ impl SalesReviewService {
             .await?
             .ok_or_else(|| Error::NotFound("销售单不存在".to_string()))?;
         ensure_order_awaiting_confirmation(&order)?;
+        let purchase_drafts = crate::purchase_order::draft::build_automatic_purchase_drafts(
+            &self.db,
+            &confirmation.sales_order_id,
+            &confirmation_lines,
+            actor.id(),
+        )
+        .await?;
+        let purchase_order_views = purchase_drafts
+            .iter()
+            .map(|draft| GeneratedPurchaseOrderView {
+                purchase_order_id: draft.order.base.id.clone(),
+                purchase_no: draft.order.purchase_no.clone(),
+            })
+            .collect::<Vec<_>>();
+        let purchase_audits = purchase_drafts
+            .iter()
+            .map(|draft| {
+                actor.clone().resource_log(
+                    "purchase_order.auto_create",
+                    "purchase_order",
+                    draft.order.base.id.clone(),
+                )
+            })
+            .collect::<Result<Vec<_>>>()?;
 
         let now = Instant::now();
         let revision = build_revision(
@@ -354,7 +383,6 @@ impl SalesReviewService {
         let mut work_item = self
             .complete_work_item("procurement_confirmation", id, actor, now)
             .await?;
-        let creation_item = build_purchase_creation_work_item(&confirmation, &submission)?;
 
         let audit = actor.clone().resource_log(
             "procurement_confirmation.approve",
@@ -385,7 +413,18 @@ impl SalesReviewService {
                         .update(&mut confirmation_for_tx, session)
                         .await?;
                     db.work_items().update(&mut work_item, session).await?;
-                    db.work_items().create(&creation_item, session).await?;
+                    for draft in &purchase_drafts {
+                        db.purchase_orders().create(&draft.order, session).await?;
+                        db.purchase_order_submissions()
+                            .create(&draft.submission, session)
+                            .await?;
+                        for line in &draft.lines {
+                            db.purchase_order_submission_lines().create(line, session).await?;
+                        }
+                    }
+                    for purchase_audit in &purchase_audits {
+                        db.audit_logs().create(purchase_audit, session).await?;
+                    }
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })
@@ -398,6 +437,7 @@ impl SalesReviewService {
             status: ProcurementConfirmationStatus::Approved,
             revision_id: Some(revision_id),
             receivable_account_id: Some(account_id),
+            purchase_orders: purchase_order_views,
             handled_at: now.unix_secs() as u64,
             reference: format!("PC-OK-{}", order.order_no),
         })
@@ -490,6 +530,7 @@ impl SalesReviewService {
             status: ProcurementConfirmationStatus::Rejected,
             revision_id: None,
             receivable_account_id: None,
+            purchase_orders: Vec::new(),
             handled_at: now.unix_secs() as u64,
             reference: format!("PC-REJ-{order_no}"),
         })
@@ -528,12 +569,29 @@ impl SalesReviewService {
                 &mut NoTransaction,
             )
             .await?;
+        let purchase_orders = self
+            .db
+            .purchase_orders()
+            .find_many(
+                mongodb::bson::doc! {
+                    "sales_order_id": confirmation.sales_order_id.to_string(),
+                },
+                &mut NoTransaction,
+            )
+            .await?
+            .into_iter()
+            .map(|order| GeneratedPurchaseOrderView {
+                purchase_order_id: order.base.id,
+                purchase_no: order.purchase_no,
+            })
+            .collect();
         Ok(ProcurementConfirmationDecisionView {
             confirmation_id: confirmation.base.id.clone(),
             sales_order_id: confirmation.sales_order_id.to_string(),
             status,
             revision_id,
             receivable_account_id: account.map(|account| account.base.id),
+            purchase_orders,
             handled_at: confirmation
                 .handled_at
                 .map(|instant| instant.unix_secs() as u64)
@@ -919,11 +977,20 @@ impl SalesReviewService {
         lines: &[ProcurementConfirmationLine],
         submission_lines: &[SalesOrderSubmissionLine],
     ) -> Result<()> {
+        let today = BusinessDate::today();
+        let zero = Quantity::from_str("0").expect("静态零值必须合法");
+        let mut quantities_by_revision: HashMap<String, (Option<Quantity>, Quantity)> = HashMap::new();
         for line in lines {
-            let offering = self.current_confirmation_offering(line).await?;
+            let (offering, revision) = self.current_confirmation_offering(line).await?;
             ensure_confirmation_line_sku(line, &offering, submission_lines)?;
-            self.ensure_confirmation_capability(line).await?;
+            ensure_confirmation_line_terms(line, &revision, submission_lines, today)?;
+            self.ensure_confirmation_capability(line, today).await?;
+            let total = quantities_by_revision
+                .entry(revision.base.id.clone())
+                .or_insert((revision.available_quantity, zero));
+            total.1 = Quantity::try_from(total.1.to_decimal() + line.confirmed_quantity.to_decimal())?;
         }
+        ensure_confirmation_capacity(&quantities_by_revision)?;
         Ok(())
     }
 
@@ -931,7 +998,7 @@ impl SalesReviewService {
     async fn current_confirmation_offering(
         &self,
         line: &ProcurementConfirmationLine,
-    ) -> Result<SupplierOffering> {
+    ) -> Result<(SupplierOffering, SupplierOfferingRevision)> {
         let revision_id = line
             .supplier_offering_revision_id
             .as_ref()
@@ -958,11 +1025,15 @@ impl SalesReviewService {
                 line.line_no
             )));
         }
-        Ok(offering)
+        Ok((offering, revision))
     }
 
     /// 校验确认行引用的供应商能力仍为当前启用版本。
-    async fn ensure_confirmation_capability(&self, line: &ProcurementConfirmationLine) -> Result<()> {
+    async fn ensure_confirmation_capability(
+        &self,
+        line: &ProcurementConfirmationLine,
+        today: BusinessDate,
+    ) -> Result<()> {
         let revision = self
             .db
             .supplier_capability_revisions()
@@ -979,9 +1050,14 @@ impl SalesReviewService {
             })?;
         let is_current = capability.stable.current_revision_id.as_deref()
             == Some(line.supplier_capability_revision_id.as_ref());
+        let in_window = revision.valid_from <= today && revision.valid_to.is_none_or(|date| today <= date);
+        let capability_matches_mode =
+            revision.capability_code == capability_code_for_fulfillment(line.fulfillment_mode);
         if revision.supplier_id != line.supplier_id
             || revision.status != CapabilityStatus::Active
             || capability.stable.status != CapabilityStatus::Active
+            || !in_window
+            || !capability_matches_mode
             || !is_current
         {
             return Err(Error::ValidationError(format!(
@@ -1838,6 +1914,86 @@ fn ensure_confirmation_line_sku(
     )))
 }
 
+/// 校验确认行价格、税率、可供状态、有效期、MOQ 与销售承诺交期。
+fn ensure_confirmation_line_terms(
+    line: &ProcurementConfirmationLine,
+    revision: &SupplierOfferingRevision,
+    submission_lines: &[SalesOrderSubmissionLine],
+    today: BusinessDate,
+) -> Result<()> {
+    if revision.availability_status != AvailabilityStatus::Available
+        || revision.valid_from > today
+        || revision.valid_to.is_some_and(|valid_to| valid_to < today)
+    {
+        return Err(Error::ValidationError(format!(
+            "采购确认第 {} 行供给当前不可用，请重新计算方案",
+            line.line_no
+        )));
+    }
+    let expected_price = match line.fulfillment_mode {
+        entities::sales_review::types::FulfillmentMode::CompanyWarehouse => revision.bulk_supply_price_gross,
+        entities::sales_review::types::FulfillmentMode::SupplierDirect
+        | entities::sales_review::types::FulfillmentMode::ElectronicDelivery
+        | entities::sales_review::types::FulfillmentMode::OfflineService => {
+            revision.dropship_supply_price_gross
+        }
+    };
+    if line.latest_cost_gross != expected_price || line.input_tax_rate != revision.input_tax_rate {
+        return Err(Error::ValidationError(format!(
+            "采购确认第 {} 行价格或税率已变化，请重新计算方案",
+            line.line_no
+        )));
+    }
+    if line.fulfillment_mode == entities::sales_review::types::FulfillmentMode::CompanyWarehouse
+        && line.confirmed_quantity < revision.bulk_minimum_order_quantity
+    {
+        return Err(Error::ValidationError(format!(
+            "采购确认第 {} 行未达到集采起订量 {}",
+            line.line_no, revision.bulk_minimum_order_quantity
+        )));
+    }
+    let submission_line = submission_lines
+        .iter()
+        .find(|submission| submission.base.id == line.sales_order_submission_line_id.as_ref())
+        .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行销售明细不存在", line.line_no)))?;
+    let due_at = submission_line
+        .fulfillment_due_at
+        .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行销售承诺交期缺失", line.line_no)))?;
+    let due_date = BusinessDate::from_str(&due_at.as_utc().date_naive().to_string())?;
+    if line.expected_delivery_date > due_date {
+        return Err(Error::ValidationError(format!(
+            "采购确认第 {} 行预计交期晚于销售承诺日期 {}",
+            line.line_no, due_date
+        )));
+    }
+    Ok(())
+}
+
+/// 校验同一供给修订的多条拆分行合计不超过当前可供数量。
+fn ensure_confirmation_capacity(
+    quantities_by_revision: &HashMap<String, (Option<Quantity>, Quantity)>,
+) -> Result<()> {
+    for (revision_id, (available, confirmed)) in quantities_by_revision {
+        if available.is_some_and(|quantity| *confirmed > quantity) {
+            return Err(Error::ValidationError(format!(
+                "供给版本 {} 的确认数量合计超过当前可供数量，请重新计算方案",
+                revision_id
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// 将确认履约方式映射到供应商能力类别。
+fn capability_code_for_fulfillment(mode: entities::sales_review::types::FulfillmentMode) -> CapabilityCode {
+    match mode {
+        entities::sales_review::types::FulfillmentMode::CompanyWarehouse
+        | entities::sales_review::types::FulfillmentMode::SupplierDirect => CapabilityCode::Physical,
+        entities::sales_review::types::FulfillmentMode::ElectronicDelivery => CapabilityCode::Virtual,
+        entities::sales_review::types::FulfillmentMode::OfflineService => CapabilityCode::OfflineService,
+    }
+}
+
 /// 校验采购确认覆盖全部需外采明细（§6.5 跨行断言）。
 ///
 /// # 参数
@@ -2225,43 +2381,6 @@ fn revision_gross(revision: &RevisionAggregate) -> Result<Amount> {
         .lines
         .iter()
         .fold(zero, |acc, line| acc.checked_add(line.gross_amount)))
-}
-
-/// 构建采购单创建待办（§8.1.1「生成后续采购待办」）。
-///
-/// 固定 15 类待办中无「采购单创建」专属类型，沿用 `PurchaseOrderReview` 承载
-/// 采购侧后继动作；业务对象指向确认批次，D15 批次消费。
-///
-/// # 参数
-/// * `confirmation` - 已通过的确认批次
-/// * `submission` - 被确认的销售提交
-///
-/// # 返回
-/// 返回未领取的待办实体。
-///
-/// # 错误
-/// 待办字段校验失败时返回错误。
-fn build_purchase_creation_work_item(
-    confirmation: &ProcurementConfirmation,
-    submission: &SalesOrderSubmission,
-) -> Result<WorkItem> {
-    WorkItem::new(
-        WorkItemId::new(next_id()),
-        WorkItemData {
-            work_item_type: WorkItemType::PurchaseOrderReview,
-            business_object_type: "purchase_order_creation".to_string(),
-            business_object_id: confirmation.base.id.clone(),
-            subject_version: Some(submission.base.id.clone()),
-            owner_role: Some("procurement".to_string()),
-            owner_user_id: None,
-            priority: WorkItemPriority::Normal,
-            due_at: None,
-            reason_code: Some("purchase_order_creation_basis".to_string()),
-            impact_summary: Some("采购确认通过，待创建采购单草稿依据".to_string()),
-            completion_action: "CREATE_PURCHASE_ORDER".to_string(),
-        },
-    )
-    .map_err(Into::into)
 }
 
 /// 构建采购确认分行实体。

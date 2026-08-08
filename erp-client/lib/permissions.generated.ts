@@ -1673,6 +1673,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/procurement-confirmations/{id}/recommendation",
+                description: "计算采购推荐方案",
+                permission: {
+                    resource: "procurement_confirmation",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
                 method: "PUT",
                 path: "/admin/procurement-confirmations/{id}/lines",
                 description: "保存采购确认分行",

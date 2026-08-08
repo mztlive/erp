@@ -978,6 +978,49 @@ impl RbacService {
         }
     }
 
+    /// 仅当预定义角色权限仍与旧种子完全一致时升级到新种子。
+    ///
+    /// 管理员已经增删过权限时保持原样；多实例并发升级产生冲突后会重新读取，若另一
+    /// 实例已完成相同升级则按幂等成功处理。
+    pub(in crate::iam) async fn upgrade_seeded_role_permissions_if_exact(
+        self: &Arc<Self>,
+        role_id: &str,
+        previous: Vec<Permission>,
+        desired: Vec<Permission>,
+    ) -> Result<bool> {
+        if self
+            .db
+            .roles()
+            .find_by_id(role_id, &mut NoTransaction)
+            .await?
+            .is_none()
+        {
+            return Ok(false);
+        }
+        let previous = PermissionSet::new(previous);
+        let desired_set = PermissionSet::new(desired.clone());
+        if self.direct_role_permissions(role_id).await? != previous {
+            return Ok(false);
+        }
+        match self.replace_role_permissions(role_id, desired, None, None).await {
+            Ok(_) => Ok(true),
+            Err(error @ Error::ConflictError(_)) => {
+                if self.direct_role_permissions(role_id).await? == desired_set {
+                    Ok(false)
+                } else {
+                    Err(error)
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    /// 读取角色自身的直接权限，不展开继承关系。
+    async fn direct_role_permissions(&self, role_id: &str) -> Result<PermissionSet> {
+        let enforcer = self.fresh_enforcer().await?.read().await;
+        permissions_for_role(&enforcer, role_id).map(PermissionSet::new)
+    }
+
     /// 在同一事务中更新角色实体并覆盖完整权限规则。
     async fn update_role_with_permissions(
         self: &Arc<Self>,

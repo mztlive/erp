@@ -21,6 +21,7 @@ pub mod sales_change_review;
 pub mod sales_change_submission;
 pub mod sales_order_review;
 pub mod snapshot;
+pub mod sourcing;
 pub mod types;
 
 pub use procurement_confirmation::{
@@ -39,6 +40,9 @@ pub use sales_order_review::{SalesOrderReview, SalesOrderReviewData, SalesReview
 pub use snapshot::{
     ContractSnapshot, CustomerSnapshot, HeaderSnapshotData, HeaderSnapshots, InvoiceRequirementSnapshot,
     PaymentTermSnapshot, SettlementPartySnapshot,
+};
+pub use sourcing::{
+    recommend_sourcing_line, SourcingAllocation, SourcingCandidate, SourcingLine, SourcingLinePlan,
 };
 pub use types::{
     BusinessType, CardForm, FulfillmentMode, GoodsLineFields, LineType, VoucherLineDraft, VoucherLineFields,

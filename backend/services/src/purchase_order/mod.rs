@@ -51,6 +51,7 @@ use validator::Validate;
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
+pub(crate) mod draft;
 mod dto;
 
 pub use self::dto::{
@@ -209,6 +210,19 @@ impl PurchaseOrderService {
 
         let mut views = Vec::with_capacity(page.items.len());
         for row in page.items {
+            let already_created = self
+                .db
+                .purchase_orders()
+                .find_one(
+                    mongodb::bson::doc! {
+                        "sales_order_id": row.sales_order_id.clone(),
+                    },
+                    &mut NoTransaction,
+                )
+                .await?;
+            if already_created.is_some() {
+                continue;
+            }
             let confirmation_id = ProcurementConfirmationId::new(row.id.clone());
             let lines = self
                 .db
@@ -282,6 +296,15 @@ impl PurchaseOrderService {
         if lines.is_empty() {
             return Err(Error::BusinessLogicError("创建依据没有可拆入的分行".to_string()));
         }
+        let split_dimensions = lines
+            .iter()
+            .map(|line| (line.supplier_id.to_string(), line.fulfillment_mode.as_str()))
+            .collect::<std::collections::HashSet<_>>();
+        if split_dimensions.len() != 1 {
+            return Err(Error::ValidationError(
+                "该采购确认包含多个供应商或履约方式，必须由审批动作自动拆分采购单草稿".to_string(),
+            ));
+        }
         let supplier_id = lines[0].supplier_id.clone();
         let fulfillment = fulfillment_from_mode(lines[0].fulfillment_mode);
         let sales_order_id = confirmation.sales_order_id.clone();
@@ -318,7 +341,7 @@ impl PurchaseOrderService {
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
         let order_id = PurchaseOrderId::new(next_id());
         let purchase_no = format!("PO-{}-{}", today_stamp(), &order_id.to_string()[..6]);
-        let order = PurchaseOrder::new(
+        let mut order = PurchaseOrder::new(
             order_id.clone(),
             PurchaseOrderData {
                 purchase_no,
@@ -342,6 +365,7 @@ impl PurchaseOrderService {
                 &lines,
             )
             .await?;
+        order.current_submission_id = Some(submission.base.id.clone());
         let submission_lines = self
             .build_submission_lines_from_basis(&submission.base.id, &lines)
             .await?;
