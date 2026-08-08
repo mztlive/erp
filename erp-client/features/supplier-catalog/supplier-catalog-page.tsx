@@ -80,10 +80,16 @@ import {
   RETURN_REASON_OPTIONS,
 } from "@/features/supplier-catalog/types"
 import {
+  OfferingRevisionDialog,
   PromoteSupplierProductDialog,
   RegisterSupplyForSkuDialog,
   SupplierCatalogIntakeDialog,
 } from "@/features/supplier-catalog/catalog-write-dialogs"
+import {
+  offeringDefaultsFromProposed,
+  offeringDraftSchema,
+  offeringRevisionPayload,
+} from "@/features/supplier-catalog/offering-form-model"
 import {
   useClaimSupplierCatalogMutation,
   useCompleteSupplierCatalogMutation,
@@ -96,7 +102,6 @@ import {
   SupplyRelationshipListView,
 } from "@/features/supplier-catalog/supply-relationship-list-view"
 import { cn } from "@/lib/utils"
-import { compareDecimal } from "@/lib/fixed-decimal"
 
 type SessionLease = {
   workItemId: string
@@ -134,45 +139,6 @@ const returnSchema = z.object({
 
 const completeSchema = z.object({
   comment: z.string().trim().min(4, "请填写至少 4 个字的结论说明"),
-})
-
-const decimalString = (label: string, maxScale: number, positive = false) =>
-  z
-    .string()
-    .trim()
-    .regex(
-      new RegExp(`^\\d+(?:\\.\\d{1,${maxScale}})?$`),
-      `${label}最多保留 ${maxScale} 位小数`
-    )
-    .refine((value) => !positive || /[1-9]/.test(value), `${label}必须大于 0`)
-
-function decimalAtMost(value: string, maximum: string, maxScale: number) {
-  try {
-    return compareDecimal(value, maximum, maxScale) <= 0
-  } catch {
-    return false
-  }
-}
-
-const offeringDraftSchema = z.object({
-  dropshipSupplyPriceGross: decimalString("一件代发供给价", 4, true),
-  bulkSupplyPriceGross: decimalString("集采供给价", 4, true),
-  dropshipExpress: z.string(),
-  inputTaxRate: z.string().refine(
-    (value) =>
-      /^\d+(?:\.\d{1,6})?$/.test(value.trim()) &&
-      decimalAtMost(value, "1", 6),
-    "进项税率必须为 0 到 1 的十进制数"
-  ),
-  freightAmount: decimalString("运费", 2),
-  serviceFeeAmount: decimalString("服务费", 2),
-  minimumOrderQuantity: decimalString("最小起订量", 6, true),
-  supplyRegionText: z.string().trim().min(1, "请填写可供区域"),
-  productCapabilitiesText: z.string(),
-  validFrom: z.string().min(1, "请选择生效日期"),
-  validTo: z.string(),
-  status: z.enum(["ACTIVE", "PAUSED", "STOPPED"]),
-  note: z.string(),
 })
 
 function commandKey(prefix: string) {
@@ -345,6 +311,8 @@ export function SupplierCatalogPage() {
   const [manualEntryOpen, setManualEntryOpen] = React.useState(false)
   const [promotionItem, setPromotionItem] =
     React.useState<SupplierCatalogItemView | undefined>()
+  const [offeringEditItem, setOfferingEditItem] =
+    React.useState<SupplierCatalogItemView | undefined>()
 
   const view = queueQuery.data
   const items = React.useMemo(() => [...(view?.items ?? [])], [view?.items])
@@ -434,51 +402,21 @@ export function SupplierCatalogPage() {
   const [activeLease, setActiveLease] = React.useState<SessionLease | null>(null)
 
   const offeringForm = useAppForm({
-    defaultValues: {
-      dropshipSupplyPriceGross: "",
-      bulkSupplyPriceGross: "",
-      dropshipExpress: "",
-      inputTaxRate: "",
-      freightAmount: "0.00",
-      serviceFeeAmount: "0.00",
-      minimumOrderQuantity: "",
-      supplyRegionText: "",
-      productCapabilitiesText: "",
-      validFrom: "",
-      validTo: "",
-      status: "ACTIVE" as "ACTIVE" | "PAUSED" | "STOPPED",
-      note: "",
-    },
+    defaultValues: offeringDefaultsFromProposed(undefined, undefined),
     validators: { onChange: offeringDraftSchema },
     onSubmit: async ({ value }) => {
       const current = item?.offering?.currentRevision
       if (!item?.offering || !current) return
       try {
-        const response = await reviseOfferingMutation.mutateAsync({
-          offeringId: item.offering.stableId,
-          expectedRevisionNo: current.revisionNo,
-          dropshipSupplyPriceGross: value.dropshipSupplyPriceGross,
-          bulkSupplyPriceGross: value.bulkSupplyPriceGross,
-          dropshipExpress: value.dropshipExpress.trim() || undefined,
-          inputTaxRate: value.inputTaxRate.trim(),
-          freightAmount: value.freightAmount,
-          serviceFeeAmount: value.serviceFeeAmount,
-          bulkMinimumOrderQuantity: value.minimumOrderQuantity,
-          supplyRegion: value.supplyRegionText
-            .split(/[，,]/)
-            .map((entry) => entry.trim())
-            .filter(Boolean),
-          productCapabilities: value.productCapabilitiesText
-            .split(/[，,]/)
-            .map((entry) => entry.trim())
-            .filter(Boolean),
-          validFrom: value.validFrom,
-          validTo: value.validTo || undefined,
-          availableQuantity: current.availableQuantity,
-          status: value.status,
-          changeReason: value.note.trim() || "采购确认供货条件",
-          idempotencyKey: commandKey("revise-offering"),
-        })
+        const response = await reviseOfferingMutation.mutateAsync(
+          offeringRevisionPayload(value, {
+            offeringId: item.offering.stableId,
+            expectedRevisionNo: current.revisionNo,
+            availableQuantity: current.availableQuantity,
+            idempotencyKey: commandKey("revise-offering"),
+            defaultChangeReason: "采购确认供货条件",
+          })
+        )
         setLastResult({
           status: "succeeded",
           title: "供货条件已生效",
@@ -506,24 +444,9 @@ export function SupplierCatalogPage() {
     setSelectedSkuId(
       contextSkuId ?? item.mapping?.skuId ?? item.skuCandidates[0]?.skuId ?? ""
     )
-    offeringForm.reset({
-      dropshipSupplyPriceGross: proposed?.dropshipSupplyPriceGross ?? "",
-      bulkSupplyPriceGross: proposed?.bulkSupplyPriceGross ?? "",
-      dropshipExpress: proposed?.dropshipExpress ?? "",
-      inputTaxRate: proposed?.inputTaxRate ?? "",
-      freightAmount: proposed?.freightAmount ?? "0.00",
-      serviceFeeAmount: proposed?.serviceFeeAmount ?? "0.00",
-      minimumOrderQuantity: proposed?.minimumOrderQuantity ?? "",
-      supplyRegionText: proposed?.supplyRegion.join("、") ?? "",
-      productCapabilitiesText: proposed?.productCapabilities.join("、") ?? "",
-      validFrom: proposed?.validFrom ?? "",
-      validTo: proposed?.validTo ?? "",
-      status:
-        item?.offering?.currentRevision?.status === "PENDING_CONFIRM"
-          ? "ACTIVE"
-          : (item?.offering?.currentRevision?.status ?? "ACTIVE"),
-      note: "",
-    })
+    offeringForm.reset(
+      offeringDefaultsFromProposed(proposed, item.offering?.currentRevision?.status)
+    )
     setSubstituteIds([])
     setActionError(null)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅按供应商商品身份重置草稿
@@ -982,6 +905,7 @@ export function SupplierCatalogPage() {
           onOpenExcelImport={() => setExcelImportOpen(true)}
           onOpenManualEntry={() => setManualEntryOpen(true)}
           onPromote={setPromotionItem}
+          onEditOffering={setOfferingEditItem}
         />
         <SupplierCatalogIntakeDialog
           open={excelImportOpen}
@@ -1022,6 +946,14 @@ export function SupplierCatalogPage() {
           open={Boolean(promotionItem)}
           onOpenChange={(open) => {
             if (!open) setPromotionItem(undefined)
+          }}
+        />
+        <OfferingRevisionDialog
+          key={offeringEditItem?.supplierProduct.id ?? "offering-revision"}
+          item={offeringEditItem}
+          open={Boolean(offeringEditItem)}
+          onOpenChange={(open) => {
+            if (!open) setOfferingEditItem(undefined)
           }}
         />
       </>

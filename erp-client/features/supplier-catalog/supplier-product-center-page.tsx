@@ -14,6 +14,7 @@ import {
   ArrowDownIcon,
   ArrowLeftIcon,
   ArrowUpIcon,
+  BadgeDollarSignIcon,
   CheckCircle2Icon,
   CircleAlertIcon,
   ClipboardCheckIcon,
@@ -73,7 +74,10 @@ import { Label } from "@/components/ui/label"
 import { Progress, ProgressLabel } from "@/components/ui/progress"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Textarea } from "@/components/ui/textarea"
-import { PromoteSupplierProductDialog } from "@/features/supplier-catalog/catalog-write-dialogs"
+import {
+  OfferingRevisionDialog,
+  PromoteSupplierProductDialog,
+} from "@/features/supplier-catalog/catalog-write-dialogs"
 import {
   deriveSpecification,
   emptySupplierProductFormFields,
@@ -601,6 +605,7 @@ export function SupplierProductCenterPage({
     null,
   )
   const [promoteOpen, setPromoteOpen] = React.useState(false)
+  const [offeringEditOpen, setOfferingEditOpen] = React.useState(false)
   const [activeSection, setActiveSection] =
     React.useState<SupplierProductEditorSectionId>("basic")
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
@@ -1200,6 +1205,17 @@ export function SupplierProductCenterPage({
             </div>
 
             <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {!isCreate && item && item.mapping?.mappingStatus === "ACTIVE" && item.offering ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setOfferingEditOpen(true)}
+                >
+                  <BadgeDollarSignIcon data-icon="inline-start" aria-hidden />
+                  改供给价
+                </Button>
+              ) : null}
               {!isCreate && item && item.changeType !== "ERROR" ? (
                 <Button
                   type="button"
@@ -2178,6 +2194,15 @@ export function SupplierProductCenterPage({
           item={item}
           open={promoteOpen}
           onOpenChange={setPromoteOpen}
+        />
+      ) : null}
+
+      {!isCreate && item ? (
+        <OfferingRevisionDialog
+          key={`${item.supplierProduct.id}-offering`}
+          item={item}
+          open={offeringEditOpen}
+          onOpenChange={setOfferingEditOpen}
         />
       ) : null}
 

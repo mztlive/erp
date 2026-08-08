@@ -5,6 +5,7 @@ import Link from "next/link"
 
 import { OptionCombobox } from "@/components/business"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
@@ -41,6 +42,7 @@ import {
   PRODUCT_KIND_LABELS,
   type ProductKind,
 } from "@/features/master-data/types"
+import { cn } from "@/lib/utils"
 
 const PRODUCT_KIND_BY_LABEL: Record<string, string> = Object.fromEntries(
   Object.entries(PRODUCT_KIND_LABELS).map(([code, label]) => [label, code])
@@ -101,39 +103,31 @@ function poolStatusLabel(status: PoolMatchStatus): string {
   }
 }
 
-type EntryMode = "link" | "reverse"
+/** 该行选定的入池方式：关联已有公司 SKU，还是反向新建。 */
+type PoolActionMode = "link" | "create"
 
-type LinkRowState = {
+type PoolEntryRowState = {
   supplierCatalogSkuId: string
-  selected: boolean
   supplierSkuCode: string
   specification: string
   poolStatus: PoolMatchStatus
   mappedCompanySkuNo?: string
-  companySkuId: string
+  moq: string
   dropshipSupply: string
   bulkSupply: string
-  moq: string
   candidateOptions: { value: string; label: string }[]
-  blockedReason?: string
-}
-
-type ReverseRowState = {
-  supplierCatalogSkuId: string
-  selected: boolean
-  supplierSkuCode: string
-  specification: string
-  dropshipSupply: string
-  bulkSupply: string
-  moq: string
+  companySkuId: string
   salesVisiblePriceGross: string
   marketPrice: string
+  selected: boolean
+  mode: PoolActionMode
   blockedReason?: string
 }
 
 /**
- * 入池弹窗：关联已有公司 SKU | 反向新建公司商品。
- * 打开时拉取池内匹配状态，默认分支按候选情况选择。
+ * 入池弹窗：按每个供应商 SKU 各自的池内状态给出默认动作——
+ * 有候选默认关联、可改为新建；未匹配默认新建；已映射的直接标注去处，不参与本次提交。
+ * 打开时拉取池内匹配状态做逐行预填。
  */
 export function PromoteSupplierProductDialog({
   item,
@@ -167,10 +161,7 @@ export function PromoteSupplierProductDialog({
   const reverseMutation = useReversePromoteToCompanyPoolMutation()
   const linkMutation = useLinkPromoteToCompanyPoolMutation()
 
-  const [mode, setMode] = React.useState<EntryMode>("reverse")
-  const [result, setResult] = React.useState<SupplierCatalogWriteResult | null>(
-    null
-  )
+  const [results, setResults] = React.useState<SupplierCatalogWriteResult[]>([])
   const [submitError, setSubmitError] = React.useState<string | null>(null)
   const [productKind, setProductKind] = React.useState("")
   const [categoryId, setCategoryId] = React.useState("")
@@ -178,8 +169,7 @@ export function PromoteSupplierProductDialog({
   const [baseUnitId, setBaseUnitId] = React.useState("")
   const [inputTaxRate, setInputTaxRate] = React.useState("")
   const [supplyRegionText, setSupplyRegionText] = React.useState("")
-  const [linkRows, setLinkRows] = React.useState<LinkRowState[]>([])
-  const [reverseRows, setReverseRows] = React.useState<ReverseRowState[]>([])
+  const [rows, setRows] = React.useState<PoolEntryRowState[]>([])
   const seededMatchKeyRef = React.useRef<string>("")
 
   const sourceRevision =
@@ -197,7 +187,7 @@ export function PromoteSupplierProductDialog({
   React.useEffect(() => {
     if (!open || !item || !sourceRevision) {
       if (!open) {
-        setResult(null)
+        setResults([])
         setSubmitError(null)
         seededMatchKeyRef.current = ""
       }
@@ -235,7 +225,7 @@ export function PromoteSupplierProductDialog({
     setBaseUnitId(matchedUnit?.stableId ?? "")
     setInputTaxRate("")
     setSupplyRegionText("")
-    setResult(null)
+    setResults([])
     setSubmitError(null)
   }, [
     open,
@@ -252,89 +242,56 @@ export function PromoteSupplierProductDialog({
     if (seededMatchKeyRef.current === key) return
     seededMatchKeyRef.current = key
 
-    const matchItems = poolMatchQuery.data.items
-    const hasLinkable = matchItems.some(
-      (row) =>
-        row.poolStatus === "HAS_CANDIDATES" || row.poolStatus === "MAPPED"
-    )
-    // 有候选时默认关联；全部未匹配时默认反向
-    const defaultMode: EntryMode = matchItems.some(
-      (row) => row.poolStatus === "HAS_CANDIDATES"
-    )
-      ? "link"
-      : hasLinkable && !matchItems.some((row) => row.poolStatus === "UNMATCHED")
-        ? "link"
-        : "reverse"
-    setMode(defaultMode)
-
-    const nextLink: LinkRowState[] = catalogSkuRowsFromItem(item).map((sku) => {
-      const match = matchBySku.get(sku.id)
-      const rev = sku.currentRevision
-      const moq = rev.bulkMinimumOrderQuantity?.trim() ?? ""
-      const candidates = match?.candidates ?? []
-      const top = candidates[0]
-      const mapped = match?.poolStatus === "MAPPED"
-      return {
-        supplierCatalogSkuId: sku.id,
-        selected:
-          !mapped &&
-          Boolean(top) &&
-          Boolean(moq || rev.dropshipFloorPriceGross || rev.bulkFloorPriceGross),
-        supplierSkuCode: sku.supplierSkuCode,
-        specification: rev.specification,
-        poolStatus: match?.poolStatus ?? "UNMATCHED",
-        mappedCompanySkuNo: match?.mappedCompanySkuNo,
-        companySkuId: mapped
-          ? (match?.mappedCompanySkuId ?? "")
-          : (top?.skuId ?? ""),
-        dropshipSupply: rev.dropshipFloorPriceGross ?? "",
-        bulkSupply: rev.bulkFloorPriceGross ?? "",
-        moq: moq || "—",
-        candidateOptions: candidates.map((c) => ({
-          value: c.skuId,
-          label: `${c.skuNo} · ${c.name}${c.specification ? ` · ${c.specification}` : ""}${c.matchSignals.length ? ` · ${c.matchSignals.join("/")}` : ""}`,
-        })),
-        blockedReason: mapped
-          ? "已映射，无需重复关联"
-          : !moq
-            ? "缺少集采起订量"
-            : undefined,
-      }
-    })
-    setLinkRows(nextLink)
-
-    const nextReverse: ReverseRowState[] = catalogSkuRowsFromItem(item).map(
+    const nextRows: PoolEntryRowState[] = catalogSkuRowsFromItem(item).map(
       (sku) => {
         const match = matchBySku.get(sku.id)
         const rev = sku.currentRevision
         const moq = rev.bulkMinimumOrderQuantity?.trim() ?? ""
-        const mapped = match?.poolStatus === "MAPPED"
-        const hasCandidates = match?.poolStatus === "HAS_CANDIDATES"
+        const candidates = match?.candidates ?? []
+        const top = candidates[0]
+        const poolStatus = match?.poolStatus ?? "UNMATCHED"
+        const mapped = poolStatus === "MAPPED"
+        const hasCandidates = poolStatus === "HAS_CANDIDATES"
+
         let blockedReason: string | undefined
-        if (mapped) blockedReason = "已映射，请用关联入池或改供给"
-        else if (!moq) blockedReason = "缺少集采起订量，请先在商品中心补齐"
+        if (mapped) {
+          blockedReason = "已映射；如需调整供给价，请在列表或详情页使用「改供给价」"
+        } else if (!moq) {
+          blockedReason = "缺少集采起订量，请先在商品中心补齐"
+        }
+
         return {
           supplierCatalogSkuId: sku.id,
-          selected: !blockedReason && !hasCandidates,
           supplierSkuCode: sku.supplierSkuCode,
           specification: rev.specification,
+          poolStatus,
+          mappedCompanySkuNo: match?.mappedCompanySkuNo,
+          moq: moq || "—",
           dropshipSupply: rev.dropshipFloorPriceGross ?? "",
           bulkSupply: rev.bulkFloorPriceGross ?? "",
-          moq: moq || "—",
+          candidateOptions: candidates.map((c) => ({
+            value: c.skuId,
+            label: `${c.skuNo} · ${c.name}${c.specification ? ` · ${c.specification}` : ""}${c.matchSignals.length ? ` · ${c.matchSignals.join("/")}` : ""}`,
+          })),
+          companySkuId: mapped ? "" : (top?.skuId ?? ""),
           salesVisiblePriceGross: "",
           marketPrice: "",
+          selected: !mapped && Boolean(moq),
+          mode: hasCandidates ? "link" : "create",
           blockedReason,
         }
       }
     )
-    setReverseRows(nextReverse)
-  }, [
-    open,
-    item,
-    poolMatchQuery.data,
-    poolMatchQuery.dataUpdatedAt,
-    matchBySku,
-  ])
+    setRows(nextRows)
+  }, [open, item, poolMatchQuery.data, poolMatchQuery.dataUpdatedAt, matchBySku])
+
+  const updateRow = (id: string, patch: Partial<PoolEntryRowState>) => {
+    setRows((current) =>
+      current.map((row) =>
+        row.supplierCatalogSkuId === id ? { ...row, ...patch } : row
+      )
+    )
+  }
 
   const productKindOptions = React.useMemo(
     () =>
@@ -363,6 +320,11 @@ export function PromoteSupplierProductDialog({
   const expectedRevisionNo =
     poolMatchQuery.data?.sourceRevisionNo ?? sourceRevision?.revisionNo ?? 0
 
+  const selectedRows = rows.filter((row) => row.selected && !row.blockedReason)
+  const linkRows = selectedRows.filter((row) => row.mode === "link")
+  const createRows = selectedRows.filter((row) => row.mode === "create")
+  const allMapped = rows.length > 0 && rows.every((row) => row.poolStatus === "MAPPED")
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     if (!item || !sourceRevision) return
@@ -378,47 +340,23 @@ export function PromoteSupplierProductDialog({
       setSubmitError("请填写可供区域")
       return
     }
+    if (selectedRows.length === 0) {
+      setSubmitError("请至少勾选一个供应商 SKU")
+      return
+    }
 
-    try {
-      if (mode === "link") {
-        const selected = linkRows.filter(
-          (row) => row.selected && !row.blockedReason
-        )
-        if (selected.length === 0) {
-          setSubmitError("请至少勾选一个可关联的供应商 SKU")
-          return
-        }
-        for (const row of selected) {
-          if (!row.companySkuId) {
-            setSubmitError(`SKU ${row.supplierSkuCode}：请选择公司 SKU`)
-            return
-          }
-          const hasDropship = row.dropshipSupply.trim()
-          const hasBulk = row.bulkSupply.trim()
-          if (!hasDropship || !hasBulk) {
-            setSubmitError(
-              `SKU ${row.supplierSkuCode}：请填写代发/集采供给价`
-            )
-            return
-          }
-        }
-        const response = await linkMutation.mutateAsync({
-          supplierProductId: item.supplierProduct.id,
-          expectedSourceRevisionNo: expectedRevisionNo,
-          inputTaxRate: inputTaxRateDecimal,
-          supplyRegion: regions,
-          items: selected.map((row) => ({
-            supplierCatalogSkuId: row.supplierCatalogSkuId,
-            companySkuId: row.companySkuId,
-            dropshipSupplyPriceGross: row.dropshipSupply.trim() || undefined,
-            bulkSupplyPriceGross: row.bulkSupply.trim() || undefined,
-          })),
-          idempotencyKey: idempotencyKey("link-promote"),
-        })
-        setResult(response)
+    for (const row of linkRows) {
+      if (!row.companySkuId) {
+        setSubmitError(`SKU ${row.supplierSkuCode}：请选择公司 SKU`)
         return
       }
+      if (!row.dropshipSupply.trim() || !row.bulkSupply.trim()) {
+        setSubmitError(`SKU ${row.supplierSkuCode}：请填写代发/集采供给价`)
+        return
+      }
+    }
 
+    if (createRows.length > 0) {
       if (!productKind.trim()) {
         setSubmitError("请选择商品类型")
         return
@@ -427,14 +365,7 @@ export function PromoteSupplierProductDialog({
         setSubmitError("请选择公司分类、品牌与基础单位")
         return
       }
-      const selected = reverseRows.filter(
-        (row) => row.selected && !row.blockedReason
-      )
-      if (selected.length === 0) {
-        setSubmitError("请至少勾选一个可反向入池的供应商 SKU")
-        return
-      }
-      for (const row of selected) {
+      for (const row of createRows) {
         if (!money.safeParse(row.salesVisiblePriceGross).success) {
           setSubmitError(`SKU ${row.supplierSkuCode}：请填写合法销售可见价`)
           return
@@ -444,36 +375,57 @@ export function PromoteSupplierProductDialog({
           return
         }
       }
-      const withCandidates = selected.filter((row) => {
-        const match = matchBySku.get(row.supplierCatalogSkuId)
-        return match?.poolStatus === "HAS_CANDIDATES"
-      })
+      const withCandidates = createRows.filter(
+        (row) => row.poolStatus === "HAS_CANDIDATES"
+      )
       if (withCandidates.length > 0) {
         const ok = window.confirm(
-          `有 ${withCandidates.length} 个 SKU 存在公司商品候选，仍要反向新建吗？建议改用「关联已有」。`
+          `有 ${withCandidates.length} 个 SKU 存在公司商品候选，仍要新建吗？建议改为「关联」。`
         )
         if (!ok) return
       }
+    }
 
-      const response = await reverseMutation.mutateAsync({
-        supplierProductId: item.supplierProduct.id,
-        expectedSourceRevisionNo: expectedRevisionNo,
-        productKind: productKind.trim() as ProductKind,
-        categoryId,
-        brandId,
-        baseUnitId,
-        inputTaxRate: inputTaxRateDecimal,
-        supplyRegion: regions,
-        items: selected.map((row) => ({
-          supplierCatalogSkuId: row.supplierCatalogSkuId,
-          dropshipSupplyPriceGross: row.dropshipSupply.trim() || undefined,
-          bulkSupplyPriceGross: row.bulkSupply.trim() || undefined,
-          salesVisiblePriceGross: row.salesVisiblePriceGross.trim(),
-          marketPrice: row.marketPrice.trim(),
-        })),
-        idempotencyKey: idempotencyKey("reverse-promote"),
-      })
-      setResult(response)
+    try {
+      const nextResults: SupplierCatalogWriteResult[] = []
+      if (linkRows.length > 0) {
+        const response = await linkMutation.mutateAsync({
+          supplierProductId: item.supplierProduct.id,
+          expectedSourceRevisionNo: expectedRevisionNo,
+          inputTaxRate: inputTaxRateDecimal,
+          supplyRegion: regions,
+          items: linkRows.map((row) => ({
+            supplierCatalogSkuId: row.supplierCatalogSkuId,
+            companySkuId: row.companySkuId,
+            dropshipSupplyPriceGross: row.dropshipSupply.trim() || undefined,
+            bulkSupplyPriceGross: row.bulkSupply.trim() || undefined,
+          })),
+          idempotencyKey: idempotencyKey("link-promote"),
+        })
+        nextResults.push(response)
+      }
+      if (createRows.length > 0) {
+        const response = await reverseMutation.mutateAsync({
+          supplierProductId: item.supplierProduct.id,
+          expectedSourceRevisionNo: expectedRevisionNo,
+          productKind: productKind.trim() as ProductKind,
+          categoryId,
+          brandId,
+          baseUnitId,
+          inputTaxRate: inputTaxRateDecimal,
+          supplyRegion: regions,
+          items: createRows.map((row) => ({
+            supplierCatalogSkuId: row.supplierCatalogSkuId,
+            dropshipSupplyPriceGross: row.dropshipSupply.trim() || undefined,
+            bulkSupplyPriceGross: row.bulkSupply.trim() || undefined,
+            salesVisiblePriceGross: row.salesVisiblePriceGross.trim(),
+            marketPrice: row.marketPrice.trim(),
+          })),
+          idempotencyKey: idempotencyKey("reverse-promote"),
+        })
+        nextResults.push(response)
+      }
+      setResults(nextResults)
     } catch (error) {
       const message =
         error &&
@@ -488,56 +440,60 @@ export function PromoteSupplierProductDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-5xl">
+      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-4xl">
         <DialogHeader>
           <DialogTitle>入池</DialogTitle>
           <DialogDescription>
-            系统给出池内状态与匹配证据；有同款请关联已有公司 SKU，无同款再反向新建。确认即生效，不填生效日期。
+            系统按每个供应商 SKU 给出建议动作：有候选默认关联、可改为新建；无候选默认新建；已入池的会标注去处。确认即生效，不填生效日期。
           </DialogDescription>
         </DialogHeader>
 
-        {result ? (
-          <Alert>
-            <AlertTitle>
-              {result.companySkuChange === "UNCHANGED"
-                ? "关联入池成功"
-                : "反向入池成功"}
-            </AlertTitle>
-            <AlertDescription>
-              业务记录 {result.reference}
-              {result.companyProductId
-                ? ` · 公司商品 ${result.companyProductId}`
-                : ""}
-            </AlertDescription>
-            <div className="mt-2 flex flex-wrap gap-2">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                render={
-                  <Link
-                    href={`/procurement/supplier-catalog/${result.supplierProductId}`}
-                  />
-                }
-              >
-                查看供应商商品
-              </Button>
-              {result.companyProductId ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  render={
-                    <Link
-                      href={`/master-data/products/${result.companyProductId}`}
-                    />
-                  }
-                >
-                  打开公司商品
-                </Button>
-              ) : null}
-            </div>
-          </Alert>
+        {results.length > 0 ? (
+          <div className="space-y-2">
+            {results.map((result, index) => (
+              <Alert key={`${result.reference}-${index}`}>
+                <AlertTitle>
+                  {result.companySkuChange === "UNCHANGED"
+                    ? "关联入池成功"
+                    : "反向入池成功"}
+                </AlertTitle>
+                <AlertDescription>
+                  业务记录 {result.reference}
+                  {result.companyProductId
+                    ? ` · 公司商品 ${result.companyProductId}`
+                    : ""}
+                </AlertDescription>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    render={
+                      <Link
+                        href={`/procurement/supplier-catalog/${result.supplierProductId}`}
+                      />
+                    }
+                  >
+                    查看供应商商品
+                  </Button>
+                  {result.companyProductId ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      render={
+                        <Link
+                          href={`/master-data/products/${result.companyProductId}`}
+                        />
+                      }
+                    >
+                      打开公司商品
+                    </Button>
+                  ) : null}
+                </div>
+              </Alert>
+            ))}
+          </div>
         ) : null}
 
         <form
@@ -546,79 +502,14 @@ export function PromoteSupplierProductDialog({
             void handleSubmit(event)
           }}
         >
-          <div className="space-y-2">
-            <Label>池内状态</Label>
-            {poolMatchQuery.isLoading ? (
-              <p className="text-sm text-muted-foreground">正在匹配公司商品…</p>
-            ) : poolMatchQuery.isError ? (
-              <Alert variant="destructive">
-                <AlertTitle>匹配失败</AlertTitle>
-                <AlertDescription>
-                  无法加载池内候选，仍可手动选择分支后提交。
-                </AlertDescription>
-              </Alert>
-            ) : (
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full min-w-[640px] text-left text-sm">
-                  <thead className="bg-muted/50 text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-2 py-2">供应商 SKU</th>
-                      <th className="px-2 py-2">规格</th>
-                      <th className="px-2 py-2">状态</th>
-                      <th className="px-2 py-2">匹配证据 / 映射</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(poolMatchQuery.data?.items ?? []).map((row) => (
-                      <tr key={row.supplierCatalogSkuId} className="border-t">
-                        <td className="px-2 py-2 font-medium">
-                          {row.supplierSkuCode}
-                        </td>
-                        <td className="px-2 py-2 text-muted-foreground">
-                          {row.specification || "—"}
-                        </td>
-                        <td className="px-2 py-2">
-                          {poolStatusLabel(row.poolStatus)}
-                        </td>
-                        <td className="px-2 py-2 text-xs text-muted-foreground">
-                          {row.poolStatus === "MAPPED"
-                            ? `已映射 ${row.mappedCompanySkuNo ?? row.mappedCompanySkuId}`
-                            : row.candidates.length
-                              ? row.candidates
-                                  .slice(0, 2)
-                                  .map(
-                                    (c) =>
-                                      `${c.skuNo}（${c.matchSignals.join("、") || "弱匹配"}）`
-                                  )
-                                  .join("；")
-                              : "无可靠候选"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            <Button
-              type="button"
-              size="sm"
-              variant={mode === "link" ? "default" : "outline"}
-              onClick={() => setMode("link")}
-            >
-              关联已有
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant={mode === "reverse" ? "default" : "outline"}
-              onClick={() => setMode("reverse")}
-            >
-              反向新建
-            </Button>
-          </div>
+          {results.length === 0 && allMapped ? (
+            <Alert>
+              <AlertTitle>已全部入池</AlertTitle>
+              <AlertDescription>
+                当前供应商商品的所有 SKU 均已关联公司 SKU；如需调整供给价，请关闭本弹窗，在列表或详情页使用「改供给价」。
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
@@ -651,303 +542,220 @@ export function PromoteSupplierProductDialog({
             </div>
           </div>
 
-          {mode === "link" ? (
-            <div className="space-y-2">
-              <Label>关联公司 SKU</Label>
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full min-w-[900px] text-left text-sm">
-                  <thead className="bg-muted/50 text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-2 py-2">选</th>
-                      <th className="px-2 py-2">供应商 SKU</th>
-                      <th className="px-2 py-2">状态</th>
-                      <th className="px-2 py-2">公司 SKU</th>
-                      <th className="px-2 py-2">代发供给价</th>
-                      <th className="px-2 py-2">集采供给价</th>
-                      <th className="px-2 py-2">起订量</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {linkRows.map((row) => (
-                      <tr
-                        key={row.supplierCatalogSkuId}
-                        className="border-t align-top"
-                      >
-                        <td className="px-2 py-2">
-                          <Checkbox
-                            checked={row.selected && !row.blockedReason}
-                            disabled={Boolean(row.blockedReason)}
-                            onCheckedChange={(checked) =>
-                              setLinkRows((rows) =>
-                                rows.map((r) =>
-                                  r.supplierCatalogSkuId ===
-                                  row.supplierCatalogSkuId
-                                    ? { ...r, selected: checked === true }
-                                    : r
-                                )
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <div className="font-medium">{row.supplierSkuCode}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {row.specification || "—"}
-                          </div>
-                          {row.blockedReason ? (
-                            <p className="text-xs text-destructive">
-                              {row.blockedReason}
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="px-2 py-2">
-                          {poolStatusLabel(row.poolStatus)}
-                          {row.mappedCompanySkuNo
-                            ? ` · ${row.mappedCompanySkuNo}`
-                            : ""}
-                        </td>
-                        <td className="px-2 py-2 min-w-[220px]">
-                          <OptionCombobox
-                            value={row.companySkuId || null}
-                            onValueChange={(value) =>
-                              setLinkRows((rows) =>
-                                rows.map((r) =>
-                                  r.supplierCatalogSkuId ===
-                                  row.supplierCatalogSkuId
-                                    ? { ...r, companySkuId: value ?? "" }
-                                    : r
-                                )
-                              )
-                            }
-                            options={row.candidateOptions}
-                            placeholder={
-                              row.candidateOptions.length
-                                ? "选择候选公司 SKU"
-                                : "无候选（请反向新建或先建公司 SKU）"
-                            }
-                            className="w-full"
-                            disabled={
-                              Boolean(row.blockedReason) ||
-                              row.candidateOptions.length === 0
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <Input
-                            className="h-8"
-                            value={row.dropshipSupply}
-                            onChange={(event) =>
-                              setLinkRows((rows) =>
-                                rows.map((r) =>
-                                  r.supplierCatalogSkuId ===
-                                  row.supplierCatalogSkuId
-                                    ? {
-                                        ...r,
-                                        dropshipSupply: event.target.value,
-                                      }
-                                    : r
-                                )
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <Input
-                            className="h-8"
-                            value={row.bulkSupply}
-                            onChange={(event) =>
-                              setLinkRows((rows) =>
-                                rows.map((r) =>
-                                  r.supplierCatalogSkuId ===
-                                  row.supplierCatalogSkuId
-                                    ? { ...r, bulkSupply: event.target.value }
-                                    : r
-                                )
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-2 num">{row.moq}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+          {createRows.length > 0 || rows.some((row) => row.mode === "create") ? (
+            <div className="grid gap-3 rounded-lg border border-dashed p-3 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label>商品类型 *</Label>
+                <OptionCombobox
+                  value={productKind || null}
+                  onValueChange={(value) => setProductKind(value ?? "")}
+                  options={productKindOptions}
+                  placeholder="选择商品类型"
+                  className="w-full"
+                />
               </div>
-              <p className="text-xs text-muted-foreground">
-                关联不修改公司销售可见价；只追加本供应商映射与供给。
+              <div className="space-y-1.5">
+                <Label>公司分类 *</Label>
+                <OptionCombobox
+                  value={categoryId || null}
+                  onValueChange={(value) => setCategoryId(value ?? "")}
+                  options={categoryOptions}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>公司品牌 *</Label>
+                <OptionCombobox
+                  value={brandId || null}
+                  onValueChange={(value) => setBrandId(value ?? "")}
+                  options={brandOptions}
+                  className="w-full"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>基础单位 *</Label>
+                <OptionCombobox
+                  value={baseUnitId || null}
+                  onValueChange={(value) => setBaseUnitId(value ?? "")}
+                  options={unitOptions}
+                  className="w-full"
+                />
+              </div>
+              <p className="text-xs text-muted-foreground sm:col-span-2">
+                以上四项仅用于下方选择「新建」的 SKU；选择「关联」的 SKU 直接复用公司 SKU 的既有资料。
               </p>
             </div>
-          ) : (
-            <div className="space-y-3">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label>商品类型 *</Label>
-                  <OptionCombobox
-                    value={productKind || null}
-                    onValueChange={(value) => setProductKind(value ?? "")}
-                    options={productKindOptions}
-                    placeholder="选择商品类型"
-                    className="w-full"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>公司分类 *</Label>
-                  <OptionCombobox
-                    value={categoryId || null}
-                    onValueChange={(value) => setCategoryId(value ?? "")}
-                    options={categoryOptions}
-                    className="w-full"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>公司品牌 *</Label>
-                  <OptionCombobox
-                    value={brandId || null}
-                    onValueChange={(value) => setBrandId(value ?? "")}
-                    options={brandOptions}
-                    className="w-full"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>基础单位 *</Label>
-                  <OptionCombobox
-                    value={baseUnitId || null}
-                    onValueChange={(value) => setBaseUnitId(value ?? "")}
-                    options={unitOptions}
-                    className="w-full"
-                  />
-                </div>
-              </div>
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full min-w-[900px] text-left text-sm">
-                  <thead className="bg-muted/50 text-xs text-muted-foreground">
-                    <tr>
-                      <th className="px-2 py-2">选</th>
-                      <th className="px-2 py-2">供应商 SKU</th>
-                      <th className="px-2 py-2">起订量</th>
-                      <th className="px-2 py-2">代发供给价</th>
-                      <th className="px-2 py-2">集采供给价</th>
-                      <th className="px-2 py-2">销售可见价 *</th>
-                      <th className="px-2 py-2">市场价 *</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {reverseRows.map((row) => (
-                      <tr
-                        key={row.supplierCatalogSkuId}
-                        className="border-t align-top"
+          ) : null}
+
+          <div className="space-y-3">
+            {rows.map((row) => (
+              <div
+                key={row.supplierCatalogSkuId}
+                className={cn(
+                  "rounded-lg border p-3",
+                  row.blockedReason && "bg-muted/30"
+                )}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="flex min-w-0 items-start gap-2">
+                    <Checkbox
+                      className="mt-0.5"
+                      checked={row.selected && !row.blockedReason}
+                      disabled={Boolean(row.blockedReason)}
+                      onCheckedChange={(checked) =>
+                        updateRow(row.supplierCatalogSkuId, {
+                          selected: checked === true,
+                        })
+                      }
+                    />
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">
+                          {row.supplierSkuCode}
+                        </span>
+                        <Badge
+                          variant={
+                            row.poolStatus === "MAPPED"
+                              ? "secondary"
+                              : row.poolStatus === "HAS_CANDIDATES"
+                                ? "default"
+                                : "outline"
+                          }
+                        >
+                          {poolStatusLabel(row.poolStatus)}
+                        </Badge>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        {row.specification || "—"} · 起订量 {row.moq}
+                      </p>
+                    </div>
+                  </div>
+
+                  {!row.blockedReason && row.poolStatus === "HAS_CANDIDATES" ? (
+                    <div
+                      role="group"
+                      aria-label={`${row.supplierSkuCode} 入池方式`}
+                      className="inline-flex shrink-0 rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
+                    >
+                      <button
+                        type="button"
+                        aria-pressed={row.mode === "link"}
+                        className={cn(
+                          "inline-flex h-6 items-center rounded-md px-2 text-xs transition-all",
+                          row.mode === "link"
+                            ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                            : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                        )}
+                        onClick={() =>
+                          updateRow(row.supplierCatalogSkuId, { mode: "link" })
+                        }
                       >
-                        <td className="px-2 py-2">
-                          <Checkbox
-                            checked={row.selected && !row.blockedReason}
-                            disabled={Boolean(row.blockedReason)}
-                            onCheckedChange={(checked) =>
-                              setReverseRows((rows) =>
-                                rows.map((r) =>
-                                  r.supplierCatalogSkuId ===
-                                  row.supplierCatalogSkuId
-                                    ? { ...r, selected: checked === true }
-                                    : r
-                                )
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <div className="font-medium">{row.supplierSkuCode}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {row.specification || "—"}
-                          </div>
-                          {row.blockedReason ? (
-                            <p className="text-xs text-destructive">
-                              {row.blockedReason}
-                            </p>
-                          ) : matchBySku.get(row.supplierCatalogSkuId)
-                              ?.poolStatus === "HAS_CANDIDATES" ? (
-                            <p className="text-xs text-amber-700 dark:text-amber-400">
-                              有候选，建议改用关联
-                            </p>
-                          ) : null}
-                        </td>
-                        <td className="px-2 py-2 num">{row.moq}</td>
-                        <td className="px-2 py-2">
-                          <Input
-                            className="h-8"
-                            value={row.dropshipSupply}
-                            onChange={(event) =>
-                              setReverseRows((rows) =>
-                                rows.map((r) =>
-                                  r.supplierCatalogSkuId ===
-                                  row.supplierCatalogSkuId
-                                    ? {
-                                        ...r,
-                                        dropshipSupply: event.target.value,
-                                      }
-                                    : r
-                                )
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-2">
-                          <Input
-                            className="h-8"
-                            value={row.bulkSupply}
-                            onChange={(event) =>
-                              setReverseRows((rows) =>
-                                rows.map((r) =>
-                                  r.supplierCatalogSkuId ===
-                                  row.supplierCatalogSkuId
-                                    ? { ...r, bulkSupply: event.target.value }
-                                    : r
-                                )
-                              )
-                            }
-                          />
-                        </td>
-                        <td className="px-2 py-2">
+                        关联
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={row.mode === "create"}
+                        className={cn(
+                          "inline-flex h-6 items-center rounded-md px-2 text-xs transition-all",
+                          row.mode === "create"
+                            ? "bg-card font-medium text-foreground shadow-sm ring-1 ring-foreground/10"
+                            : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground"
+                        )}
+                        onClick={() =>
+                          updateRow(row.supplierCatalogSkuId, { mode: "create" })
+                        }
+                      >
+                        改为新建
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+
+                {row.blockedReason ? (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {row.blockedReason}
+                    {row.mappedCompanySkuNo ? ` · ${row.mappedCompanySkuNo}` : ""}
+                  </p>
+                ) : (
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label>代发供给价</Label>
+                      <Input
+                        className="h-8"
+                        value={row.dropshipSupply}
+                        onChange={(event) =>
+                          updateRow(row.supplierCatalogSkuId, {
+                            dropshipSupply: event.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>集采供给价</Label>
+                      <Input
+                        className="h-8"
+                        value={row.bulkSupply}
+                        onChange={(event) =>
+                          updateRow(row.supplierCatalogSkuId, {
+                            bulkSupply: event.target.value,
+                          })
+                        }
+                      />
+                    </div>
+
+                    {row.mode === "link" ? (
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>关联公司 SKU</Label>
+                        <OptionCombobox
+                          value={row.companySkuId || null}
+                          onValueChange={(value) =>
+                            updateRow(row.supplierCatalogSkuId, {
+                              companySkuId: value ?? "",
+                            })
+                          }
+                          options={row.candidateOptions}
+                          placeholder={
+                            row.candidateOptions.length
+                              ? "选择候选公司 SKU"
+                              : "无候选，请改为新建"
+                          }
+                          className="w-full"
+                          disabled={row.candidateOptions.length === 0}
+                        />
+                      </div>
+                    ) : (
+                      <>
+                        <div className="space-y-1.5">
+                          <Label>销售可见价 *</Label>
                           <Input
                             className="h-8"
                             value={row.salesVisiblePriceGross}
                             onChange={(event) =>
-                              setReverseRows((rows) =>
-                                rows.map((r) =>
-                                  r.supplierCatalogSkuId ===
-                                  row.supplierCatalogSkuId
-                                    ? {
-                                        ...r,
-                                        salesVisiblePriceGross:
-                                          event.target.value,
-                                      }
-                                    : r
-                                )
-                              )
+                              updateRow(row.supplierCatalogSkuId, {
+                                salesVisiblePriceGross: event.target.value,
+                              })
                             }
                           />
-                        </td>
-                        <td className="px-2 py-2">
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label>市场价 *</Label>
                           <Input
                             className="h-8"
                             value={row.marketPrice}
                             onChange={(event) =>
-                              setReverseRows((rows) =>
-                                rows.map((r) =>
-                                  r.supplierCatalogSkuId ===
-                                  row.supplierCatalogSkuId
-                                    ? { ...r, marketPrice: event.target.value }
-                                    : r
-                                )
-                              )
+                              updateRow(row.supplierCatalogSkuId, {
+                                marketPrice: event.target.value,
+                              })
                             }
                           />
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            ))}
+          </div>
 
           {submitError ? (
             <Alert variant="destructive">
@@ -960,12 +768,13 @@ export function PromoteSupplierProductDialog({
             <DialogClose render={<Button type="button" variant="outline" />}>
               关闭
             </DialogClose>
-            <Button type="submit" disabled={pending || Boolean(result)}>
+            <Button
+              type="submit"
+              disabled={pending || results.length > 0 || selectedRows.length === 0}
+            >
               {pending
                 ? "提交中…"
-                : mode === "link"
-                  ? "确认关联入池"
-                  : "确认反向入池"}
+                : `确认入池（${selectedRows.length} 个 SKU）`}
             </Button>
           </DialogFooter>
         </form>

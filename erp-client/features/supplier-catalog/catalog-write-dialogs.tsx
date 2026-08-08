@@ -40,6 +40,7 @@ import type {
 import { useMasterDataListQuery } from "@/features/master-data/queries"
 
 export { PromoteSupplierProductDialog } from "@/features/supplier-catalog/pool-entry-dialog"
+export { OfferingRevisionDialog } from "@/features/supplier-catalog/offering-revision-dialog"
 
 /**
  * W14 固定 SKU 的「添加供应商并登记成本」上下文。

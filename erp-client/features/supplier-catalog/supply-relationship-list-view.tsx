@@ -60,6 +60,13 @@ type SupplyRelationshipListViewProps = {
   /** 从 W14 固定 SKU 进入时仍用对话框一次登记供给；列表自由录入走全页同构表单。 */
   onOpenManualEntry?: () => void
   onPromote: (item: SupplierCatalogItemView) => void
+  /** 已入池（mapping 生效且有供给条件）的行走这个入口修改供给价，而不是入池弹窗。 */
+  onEditOffering: (item: SupplierCatalogItemView) => void
+}
+
+/** ACTIVE mapping 一定和 offering 原子创建；据此判断该行是「未入池」还是「已入池可改供给价」。 */
+function isAlreadyPooled(item: SupplierCatalogItemView) {
+  return item.mapping?.mappingStatus === "ACTIVE" && Boolean(item.offering)
 }
 
 type RelationshipStatus = {
@@ -174,6 +181,7 @@ function SupplyRelationshipListView({
   onOpenExcelImport,
   onOpenManualEntry,
   onPromote,
+  onEditOffering,
 }: SupplyRelationshipListViewProps) {
   const currentSku = skuContext ?? inferSkuContext(items, skuId)
   const statusSummary = items.map((item) => relationshipStatus(item, skuId))
@@ -453,7 +461,16 @@ function SupplyRelationshipListView({
         enableSorting: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
-            {!row.original.sellableSku && row.original.changeType !== "ERROR" ? (
+            {isAlreadyPooled(row.original) ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onEditOffering(row.original)}
+              >
+                改供给价
+              </Button>
+            ) : row.original.changeType !== "ERROR" ? (
               <Button
                 type="button"
                 variant="secondary"
@@ -475,7 +492,7 @@ function SupplyRelationshipListView({
         ),
       },
     ],
-    [detailHrefFor, onPromote, skuId]
+    [detailHrefFor, onEditOffering, onPromote, skuId]
   )
 
   const queueHref = `/procurement/supplier-catalog?mode=queue${skuId ? `&skuId=${encodeURIComponent(skuId)}` : ""}${returnTo ? `&returnTo=${encodeURIComponent(returnTo)}` : ""}`
