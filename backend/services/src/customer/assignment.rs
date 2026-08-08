@@ -90,6 +90,7 @@ impl CustomerAssignmentService {
             .map(|row| CustomerAssignmentView {
                 id: row.id,
                 customer_id: row.customer_id,
+                user_name: row.user_id.clone(),
                 user_id: row.user_id,
                 assignment_role: row.assignment_role,
                 valid_from: row.valid_from,
@@ -242,7 +243,11 @@ impl CustomerAssignmentService {
         if assignment.customer_id.as_ref() != customer_id {
             return Err(Error::NotFound("归属不属于该客户".to_string()));
         }
-        if assignment.base.version != req.version {
+        ensure_end_allowed(assignment.assignment_role)?;
+        let version = req
+            .version
+            .ok_or_else(|| Error::ValidationError("End 必须携带乐观锁版本".to_string()))?;
+        if assignment.base.version != version {
             return Err(Error::ConflictError(
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
@@ -303,14 +308,31 @@ impl CustomerAssignmentService {
     ///
     /// # 错误
     /// * `NotFound` - 账号不存在
+    /// * `BusinessLogicError` - 账号已停用
     async fn ensure_user_exists(&self, user_id: &str) -> Result<()> {
-        self.db
+        let account = self
+            .db
             .accounts()
             .find_by_id(user_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("销售人员账号不存在".to_string()))?;
+        if !account.status.is_active() {
+            return Err(Error::BusinessLogicError(
+                "销售人员账号已停用，不能建立客户归属".to_string(),
+            ));
+        }
         Ok(())
     }
+}
+
+/// 负责人归属必须通过换任结束，以保持任一时点恰有一位负责人。
+fn ensure_end_allowed(role: AssignmentRole) -> Result<()> {
+    if role == AssignmentRole::Owner {
+        return Err(Error::ValidationError(
+            "负责人不能直接结束，请通过换任建立新的负责人归属".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 /// 结束与 `new_assignment` 重叠的旧归属（§6.2 跨行约束）。
@@ -319,8 +341,8 @@ impl CustomerAssignmentService {
 ///   （换负责人：`new.valid_from` 必须晚于旧归属 `valid_from`）；
 /// - `COLLABORATOR`：同一客户、同一用户、同一角色的重叠区间被结束。
 ///
-/// 结束方式：把旧归属 `valid_to` 置为 `new.valid_from` 的前一天（含端点语义，
-/// 满足实体「结束晚于开始」校验）。**必须收到事务执行器**。
+/// 结束方式：把旧归属 `valid_to` 置为 `new.valid_from`（结束日为开区间，
+/// 新旧归属无空档）。**必须收到事务执行器**。
 ///
 /// # 参数
 /// * `db` - 数据库实例
@@ -348,8 +370,8 @@ async fn end_overlapping(
         if !conflicts(&old, new_assignment) {
             continue;
         }
-        let end_date = previous_day(new_assignment.valid_from);
-        if end_date < old.valid_from {
+        let end_date = new_assignment.valid_from;
+        if end_date <= old.valid_from {
             return Err(Error::ConflictError(
                 "新归属开始日期必须晚于旧归属开始日期，请调整生效日期".to_string(),
             ));
@@ -386,7 +408,7 @@ fn conflicts(old: &CustomerAssignment, new_assignment: &CustomerAssignment) -> b
     )
 }
 
-/// 判断两个生效区间是否重叠（含端点语义；`None` 视为长期有效）。
+/// 判断两个生效区间是否重叠（结束日为开区间；`None` 视为长期有效）。
 ///
 /// # 参数
 /// * `a_from` - A 区间开始
@@ -402,22 +424,9 @@ fn windows_overlap(
     b_from: BusinessDate,
     b_to: Option<BusinessDate>,
 ) -> bool {
-    let a_covers = |day: BusinessDate| a_to.is_none_or(|end| day <= end);
-    let b_covers = |day: BusinessDate| b_to.is_none_or(|end| day <= end);
+    let a_covers = |day: BusinessDate| a_to.is_none_or(|end| day < end);
+    let b_covers = |day: BusinessDate| b_to.is_none_or(|end| day < end);
     a_covers(b_from) && b_covers(a_from)
-}
-
-/// 返回指定日期的前一天（用于「结束旧归属」的端点计算）。
-///
-/// # 参数
-/// * `date` - 基准日期
-///
-/// # 返回
-/// 返回前一天的自然日。
-fn previous_day(date: BusinessDate) -> BusinessDate {
-    use std::str::FromStr;
-    let previous = date.as_naive_date().pred_opt().unwrap_or(date.as_naive_date());
-    BusinessDate::from_str(&previous.to_string()).unwrap_or(date)
 }
 
 /// 校验生效区间：`valid_to` 必须晚于 `valid_from`。
@@ -450,7 +459,7 @@ mod tests {
     use entities::customer::{AssignmentRole, CustomerAssignment, CustomerAssignmentData};
     use entities::ids::{CustomerAccountId, CustomerAssignmentId};
 
-    use super::{conflicts, previous_day, windows_overlap};
+    use super::{conflicts, ensure_end_allowed, windows_overlap};
 
     fn assignment(from: &str, to: Option<&str>, role: AssignmentRole, user: &str) -> CustomerAssignment {
         let from = BusinessDate::from_str(from).unwrap();
@@ -469,17 +478,17 @@ mod tests {
     }
 
     #[test]
-    fn windows_overlap_uses_inclusive_endpoints() {
+    fn windows_overlap_uses_exclusive_end_date() {
         let from = |value: &str| BusinessDate::from_str(value).unwrap();
-        assert!(windows_overlap(
+        assert!(!windows_overlap(
             from("2026-01-01"),
             Some(from("2026-03-31")),
             from("2026-03-31"),
             None,
         ));
-        assert!(!windows_overlap(
+        assert!(windows_overlap(
             from("2026-01-01"),
-            Some(from("2026-03-30")),
+            Some(from("2026-04-01")),
             from("2026-03-31"),
             None,
         ));
@@ -509,10 +518,8 @@ mod tests {
     }
 
     #[test]
-    fn previous_day_handles_month_boundary() {
-        assert_eq!(
-            previous_day(BusinessDate::from_ymd(2026, 3, 1).unwrap()),
-            BusinessDate::from_ymd(2026, 2, 28).unwrap()
-        );
+    fn owner_must_be_replaced_instead_of_ended_directly() {
+        assert!(ensure_end_allowed(AssignmentRole::Owner).is_err());
+        assert!(ensure_end_allowed(AssignmentRole::Collaborator).is_ok());
     }
 }

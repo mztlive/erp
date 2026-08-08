@@ -7,17 +7,22 @@ import type {
 export const SCOPE_LABELS: Record<CustomerScope, string> = {
   mine: "我的客户",
   collaborating: "协作客户",
-  team: "团队客户",
+  assigned: "我参与的客户",
+  all_authorized: "全部有权客户",
 }
 
 export const SCOPE_ORDER: readonly CustomerScope[] = [
   "mine",
   "collaborating",
-  "team",
+  "all_authorized",
 ]
 
 export function parseCustomerScope(value: string | null | undefined): CustomerScope {
-  if (value === "collaborating" || value === "team" || value === "mine") {
+  if (
+    value === "collaborating" ||
+    value === "all_authorized" ||
+    value === "mine"
+  ) {
     return value
   }
   return "mine"
@@ -52,20 +57,8 @@ export function filterCustomerDirectory(
   }
 
   const sorted = [...rows]
-  if (query.sort === "name") {
-    sorted.sort((a, b) => a.legalName.localeCompare(b.legalName, "zh-CN"))
-  } else if (query.sort === "overdue_desc") {
-    sorted.sort(
-      (a, b) =>
-        Number.parseFloat(b.metrics.overdueAmount) -
-        Number.parseFloat(a.metrics.overdueAmount)
-    )
-  } else {
-    sorted.sort((a, b) =>
-      (b.recentBusinessAt ?? "").localeCompare(a.recentBusinessAt ?? "")
-    )
-  }
-  // 表头排序支持升序（默认键均为降序口径：逾期高优先、最近业务优先）。
+  sorted.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  // 表头排序支持升序（默认更新时间为降序）。
   if (query.sortDir === "asc") sorted.reverse()
 
   return sorted

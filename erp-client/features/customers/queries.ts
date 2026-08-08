@@ -7,6 +7,7 @@ import {
 } from "@tanstack/react-query"
 
 import {
+  applyCustomerAssignment,
   createCustomer,
   fetchCustomerCenter,
   fetchCustomerDirectory,
@@ -17,6 +18,7 @@ import {
 } from "@/features/customers/api"
 import type {
   CreateCustomerInput,
+  CustomerAssignmentChangeInput,
   CustomerDirectoryQuery,
   SaveCustomerDetailsInput,
   SaveCustomerRevisionInput,
@@ -102,5 +104,17 @@ export function useRevealCustomerSensitiveMutation() {
   return useMutation({
     mutationFn: (revealToken: string) =>
       revealCustomerSensitiveField(revealToken),
+  })
+}
+
+/** 提交客户责任归属变更并刷新客户对象中心及目录。 */
+export function useApplyCustomerAssignmentMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CustomerAssignmentChangeInput) =>
+      applyCustomerAssignment(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: customerKeys.all })
+    },
   })
 }

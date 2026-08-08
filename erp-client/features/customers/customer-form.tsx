@@ -13,53 +13,79 @@ import {
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
-import {
-  PAYMENT_TERM_OPTIONS,
-  paymentTermLabel,
-} from "@/lib/business-options"
+import { PAYMENT_TERM_OPTIONS } from "@/lib/business-options"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
-import {
-  Field,
-  FieldError,
-  FieldLabel,
-} from "@/components/ui/field"
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert"
+import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import {
   useCreateCustomerMutation,
   useQueryCustomerIdempotencyMutation,
   useSaveCustomerDetailsMutation,
 } from "@/features/customers/queries"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import type {
   CustomerCenterView,
   CustomerMutationResult,
 } from "@/features/customers/types"
 import { useOwnerOptionsQuery } from "@/hooks/use-options"
+import { hasPermission } from "@/lib/permissions"
 
-const contactRowSchema = z.object({
-  name: z.string().trim().min(1, "请填写联系人姓名"),
-  title: z.string(),
-  phone: z.string(),
-  email: z.string(),
-  isDefault: z.boolean(),
-})
+const contactRowSchema = z
+  .object({
+    existingId: z.string().optional(),
+    name: z.string().trim().min(1, "请填写联系人姓名"),
+    title: z.string(),
+    phone: z.string(),
+    telephone: z.string(),
+    email: z.string(),
+    isDefault: z.boolean(),
+  })
+  .superRefine((value, context) => {
+    if (!value.existingId && !value.phone.trim()) {
+      context.addIssue({
+        code: "custom",
+        path: ["phone"],
+        message: "请填写手机号",
+      })
+    }
+  })
 
-const addressRowSchema = z.object({
-  addressType: z.string().trim().min(1, "请选择地址类型"),
-  address: z.string().trim().min(1, "请填写地址"),
-  isDefault: z.boolean(),
-})
+const addressRowSchema = z
+  .object({
+    existingId: z.string().optional(),
+    addressType: z.string().trim().min(1, "请选择地址类型"),
+    contactName: z.string(),
+    address: z.string(),
+    isDefault: z.boolean(),
+  })
+  .superRefine((value, context) => {
+    if (!value.existingId && !value.address.trim()) {
+      context.addIssue({
+        code: "custom",
+        path: ["address"],
+        message: "请填写地址",
+      })
+    }
+  })
 
-const bankAccountRowSchema = z.object({
-  accountName: z.string().trim().min(1, "请填写户名"),
-  bankName: z.string().trim().min(1, "请填写银行 / 支行"),
-  accountNumber: z.string().trim().min(1, "请填写账号"),
-  isDefault: z.boolean(),
-})
+const bankAccountRowSchema = z
+  .object({
+    existingId: z.string().optional(),
+    accountName: z.string().trim().min(1, "请填写户名"),
+    bankName: z.string().trim().min(1, "请填写银行名称"),
+    branchName: z.string(),
+    accountNumber: z.string(),
+    isDefault: z.boolean(),
+  })
+  .superRefine((value, context) => {
+    if (!value.existingId && !value.accountNumber.trim()) {
+      context.addIssue({
+        code: "custom",
+        path: ["accountNumber"],
+        message: "请填写银行账号",
+      })
+    }
+  })
 
 const createSchema = z.object({
   legalName: z.string().trim().min(2, "请填写法定名称"),
@@ -67,6 +93,7 @@ const createSchema = z.object({
   unifiedCreditCode: z.string(),
   ownerUserId: z.string().min(1, "请选择负责销售"),
   defaultPaymentTerm: z.string(),
+  status: z.enum(["active", "disabled"]),
   changeReason: z.string(),
   contacts: z.array(contactRowSchema),
   addresses: z.array(addressRowSchema),
@@ -79,6 +106,7 @@ const editSchema = z.object({
   unifiedCreditCode: z.string(),
   ownerUserId: z.string(),
   defaultPaymentTerm: z.string(),
+  status: z.enum(["active", "disabled"]),
   changeReason: z.string().trim().min(2, "请填写修订原因"),
   contacts: z.array(contactRowSchema),
   addresses: z.array(addressRowSchema),
@@ -86,22 +114,28 @@ const editSchema = z.object({
 })
 
 type ContactRow = {
+  existingId?: string
   name: string
   title: string
   phone: string
+  telephone: string
   email: string
   isDefault: boolean
 }
 
 type AddressRow = {
+  existingId?: string
   addressType: string
+  contactName: string
   address: string
   isDefault: boolean
 }
 
 type BankAccountRow = {
+  existingId?: string
   accountName: string
   bankName: string
+  branchName: string
   accountNumber: string
   isDefault: boolean
 }
@@ -112,6 +146,7 @@ type FormValues = {
   unifiedCreditCode: string
   ownerUserId: string
   defaultPaymentTerm: string
+  status: "active" | "disabled"
   changeReason: string
   contacts: ContactRow[]
   addresses: AddressRow[]
@@ -121,8 +156,7 @@ type FormValues = {
 const ADDRESS_TYPE_OPTIONS = [
   { value: "履约地址", label: "履约地址" },
   { value: "注册地址", label: "注册地址" },
-  { value: "开票地址", label: "开票地址" },
-  { value: "办公地址", label: "办公地址" },
+  { value: "经营地址", label: "经营地址" },
 ] as const
 
 function newIdempotencyKey(prefix: string): string {
@@ -150,6 +184,7 @@ function buildDefaults(
       unifiedCreditCode: "",
       ownerUserId: "",
       defaultPaymentTerm: "POSTPAY_NET30",
+      status: "active",
       changeReason: "",
       contacts: [],
       addresses: [],
@@ -162,22 +197,29 @@ function buildDefaults(
     unifiedCreditCode: customer!.currentRevision.unifiedCreditCode ?? "",
     ownerUserId: "",
     defaultPaymentTerm: customer!.currentRevision.defaultPaymentTerm ?? "",
+    status: customer!.status,
     changeReason: "",
     contacts: customer!.contacts.map((c) => ({
+      existingId: c.id,
       name: c.name,
       title: c.title ?? "",
       phone: editableValue(c.phoneRevealToken, c.phoneMasked),
+      telephone: c.telephone ?? "",
       email: c.email ?? "",
       isDefault: c.isDefault,
     })),
     addresses: customer!.addresses.map((a) => ({
+      existingId: a.id,
       addressType: a.addressType,
+      contactName: a.contactName ?? "",
       address: editableValue(a.addressRevealToken, a.addressMasked),
       isDefault: a.isDefault,
     })),
     bankAccounts: customer!.bankAccounts.map((b) => ({
+      existingId: b.id,
       accountName: b.accountName,
       bankName: b.bankName,
+      branchName: b.branchName ?? "",
       accountNumber: editableValue(b.accountRevealToken, b.accountMasked),
       isDefault: b.isDefault,
     })),
@@ -247,6 +289,30 @@ export function CustomerForm({
   const saveMutation = useSaveCustomerDetailsMutation()
   const queryIdempotency = useQueryCustomerIdempotencyMutation()
   const { data: ownerOptions } = useOwnerOptionsQuery()
+  const accountProfile = useAccountProfileQuery()
+  const canWriteContacts =
+    hasPermission(
+      accountProfile.data?.permissions,
+      mode === "create" ? "party_contact:create" : "party_contact:update"
+    ) &&
+    (mode === "create" ||
+      hasPermission(accountProfile.data?.permissions, "party_contact:detail"))
+  const canWriteAddresses =
+    hasPermission(
+      accountProfile.data?.permissions,
+      mode === "create" ? "party_address:create" : "party_address:update"
+    ) &&
+    (mode === "create" ||
+      hasPermission(accountProfile.data?.permissions, "party_address:detail"))
+  const bankWritePermission =
+    mode === "create" ? "party_bank_account:create" : "party_bank_account:update"
+  const canWriteBanks =
+    hasPermission(accountProfile.data?.permissions, bankWritePermission) &&
+    (mode === "create" ||
+      hasPermission(
+        accountProfile.data?.permissions,
+        "party_bank_account:detail"
+      ))
   const [idempotencyKey, setIdempotencyKey] = React.useState(() =>
     newIdempotencyKey(mode === "create" ? "create" : "revise")
   )
@@ -254,7 +320,6 @@ export function CustomerForm({
     null
   )
   const [conflictOpen, setConflictOpen] = React.useState(false)
-  const [maskedBlocked, setMaskedBlocked] = React.useState(false)
 
   const defaults = React.useMemo<FormValues>(
     () => buildDefaults(mode, customer),
@@ -265,41 +330,37 @@ export function CustomerForm({
     defaultValues: defaults,
     validators: { onChange: mode === "create" ? createSchema : editSchema },
     onSubmit: async ({ value }) => {
-      // 防脱敏值写回：无揭示令牌时预填的是打码文本，保存前必须已揭示。
-      const maskedContacts = value.contacts.filter((row) =>
-        row.phone.includes("*")
-      )
-      const maskedAddresses = value.addresses.filter((row) =>
-        row.address.includes("*")
-      )
-      const maskedAccounts = value.bankAccounts.filter((row) =>
-        row.accountNumber.includes("*")
-      )
-      if (
-        maskedContacts.length > 0 ||
-        maskedAddresses.length > 0 ||
-        maskedAccounts.length > 0
-      ) {
-        setMaskedBlocked(true)
-        return
-      }
-      setMaskedBlocked(false)
       const contacts = value.contacts.map((row) => ({
+        existingId: row.existingId,
         name: row.name.trim(),
         title: row.title.trim() || undefined,
-        phone: row.phone.trim() || undefined,
+        phone:
+          row.existingId && row.phone.includes("*")
+            ? undefined
+            : row.phone.trim() || undefined,
+        telephone: row.telephone.trim() || undefined,
         email: row.email.trim() || undefined,
         isDefault: row.isDefault,
       }))
       const addresses = value.addresses.map((row) => ({
+        existingId: row.existingId,
         addressType: row.addressType.trim(),
-        address: row.address.trim(),
+        contactName: row.contactName.trim() || undefined,
+        address:
+          row.existingId && row.address.includes("*")
+            ? undefined
+            : row.address.trim() || undefined,
         isDefault: row.isDefault,
       }))
       const bankAccounts = value.bankAccounts.map((row) => ({
+        existingId: row.existingId,
         accountName: row.accountName.trim(),
         bankName: row.bankName.trim(),
-        accountNumber: row.accountNumber.trim(),
+        branchName: row.branchName.trim() || undefined,
+        accountNumber:
+          row.existingId && row.accountNumber.includes("*")
+            ? undefined
+            : row.accountNumber.trim() || undefined,
         isDefault: row.isDefault,
       }))
 
@@ -309,29 +370,31 @@ export function CustomerForm({
               legalName: value.legalName.trim(),
               shortName: value.shortName.trim() || undefined,
               unifiedCreditCode: value.unifiedCreditCode.trim() || undefined,
-              defaultPaymentTerm: value.defaultPaymentTerm.trim()
-                ? paymentTermLabel(value.defaultPaymentTerm.trim())
-                : undefined,
+              defaultPaymentTerm: value.defaultPaymentTerm.trim() || undefined,
+              status: value.status,
               ownerUserId: value.ownerUserId,
               ownerName:
                 ownerOptions?.find((o) => o.userId === value.ownerUserId)
                   ?.displayName ?? value.ownerUserId,
-              contacts,
-              addresses,
-              bankAccounts,
+              contacts: canWriteContacts ? contacts : undefined,
+              addresses: canWriteAddresses ? addresses : undefined,
+              bankAccounts: canWriteBanks ? bankAccounts : undefined,
               idempotencyKey,
             })
           : await saveMutation.mutateAsync({
               customerId: customer!.customerId,
               expectedLockVersion: customer!.lockVersion,
+              expectedPartyVersion: customer!.partyLockVersion,
               baseRevisionId: customer!.currentRevision.revisionId,
               legalName: value.legalName.trim(),
-              shortName: value.shortName.trim() || undefined,
-              unifiedCreditCode: value.unifiedCreditCode.trim() || undefined,
+              shortName: value.shortName.trim(),
+              unifiedCreditCode: value.unifiedCreditCode.trim(),
+              defaultPaymentTerm: value.defaultPaymentTerm.trim(),
+              status: value.status,
               changeReason: value.changeReason.trim(),
-              contacts,
-              addresses,
-              bankAccounts,
+              contacts: canWriteContacts ? contacts : undefined,
+              addresses: canWriteAddresses ? addresses : undefined,
+              bankAccounts: canWriteBanks ? bankAccounts : undefined,
               idempotencyKey,
             })
 
@@ -411,6 +474,28 @@ export function CustomerForm({
                 <field.TextField label="统一社会信用代码" />
               )}
             />
+            <form.AppField
+              name="defaultPaymentTerm"
+              children={(field) => (
+                <field.SelectField
+                  label="默认付款条件"
+                  options={PAYMENT_TERM_OPTIONS}
+                  placeholder="请选择付款条件"
+                />
+              )}
+            />
+            <form.AppField
+              name="status"
+              children={(field) => (
+                <field.SelectField
+                  label="客户状态"
+                  options={[
+                    { value: "active", label: "启用" },
+                    { value: "disabled", label: "停用" },
+                  ]}
+                />
+              )}
+            />
             <div className="sm:col-span-2">
               <form.AppField
                 name="changeReason"
@@ -482,11 +567,12 @@ export function CustomerForm({
         </div>
       )}
 
-      <FormSection
-        grouped={grouped}
-        title="联系人"
-        description="可多条；手机在详情页按权限打码展示"
-        action={
+      {canWriteContacts ? (
+        <FormSection
+          grouped={grouped}
+          title="联系人"
+          description="可多条；手机在详情页按权限打码展示"
+          action={
           <form.AppField name="contacts">
             {(field) => (
               <Button
@@ -498,6 +584,7 @@ export function CustomerForm({
                     name: "",
                     title: "",
                     phone: "",
+                    telephone: "",
                     email: "",
                     isDefault: field.state.value.length === 0,
                   })
@@ -508,8 +595,8 @@ export function CustomerForm({
               </Button>
             )}
           </form.AppField>
-        }
-      >
+          }
+        >
         <form.AppField name="contacts">
           {(field) =>
             field.state.value.length === 0 ? (
@@ -537,6 +624,11 @@ export function CustomerForm({
                           label="手机"
                           placeholder="11 位手机号"
                         />
+                      )}
+                    </form.AppField>
+                    <form.AppField name={`contacts[${index}].telephone`}>
+                      {(nested) => (
+                        <nested.TextField label="固定电话" placeholder="可选" />
                       )}
                     </form.AppField>
                     <form.AppField name={`contacts[${index}].email`}>
@@ -573,13 +665,15 @@ export function CustomerForm({
             )
           }
         </form.AppField>
-      </FormSection>
+        </FormSection>
+      ) : null}
 
-      <FormSection
-        grouped={grouped}
-        title="地址"
-        description="履约地址在详情页按权限打码展示"
-        action={
+      {canWriteAddresses ? (
+        <FormSection
+          grouped={grouped}
+          title="地址"
+          description="履约地址在详情页按权限打码展示"
+          action={
           <form.AppField name="addresses">
             {(field) => (
               <Button
@@ -589,6 +683,7 @@ export function CustomerForm({
                 onClick={() =>
                   field.pushValue({
                     addressType: "履约地址",
+                    contactName: "",
                     address: "",
                     isDefault: field.state.value.length === 0,
                   })
@@ -599,8 +694,8 @@ export function CustomerForm({
               </Button>
             )}
           </form.AppField>
-        }
-      >
+          }
+        >
         <form.AppField name="addresses">
           {(field) =>
             field.state.value.length === 0 ? (
@@ -632,6 +727,11 @@ export function CustomerForm({
                         />
                       )}
                     </form.AppField>
+                    <form.AppField name={`addresses[${index}].contactName`}>
+                      {(nested) => (
+                        <nested.TextField label="地址联系人" placeholder="可选" />
+                      )}
+                    </form.AppField>
                   </div>
                   <div className="flex items-center justify-between gap-2">
                     <form.AppField name={`addresses[${index}].isDefault`}>
@@ -661,11 +761,13 @@ export function CustomerForm({
             )
           }
         </form.AppField>
-      </FormSection>
+        </FormSection>
+      ) : null}
 
-      <FormSection
-        grouped={grouped}
-        title="银行账户"
+      {canWriteBanks ? (
+        <FormSection
+          grouped={grouped}
+          title="银行账户"
         description="账号默认只显示末四位；完整显示需授权，操作会留记录"
         action={
           <form.AppField name="bankAccounts">
@@ -678,6 +780,7 @@ export function CustomerForm({
                   field.pushValue({
                     accountName: "",
                     bankName: "",
+                    branchName: "",
                     accountNumber: "",
                     isDefault: field.state.value.length === 0,
                   })
@@ -706,13 +809,36 @@ export function CustomerForm({
                 >
                   <div className="grid gap-2 sm:grid-cols-2">
                     <form.AppField name={`bankAccounts[${index}].accountName`}>
-                      {(nested) => <nested.TextField label="户名" />}
+                      {(nested) => (
+                        <nested.TextField
+                          label="户名"
+                          disabled={Boolean(_row.existingId)}
+                        />
+                      )}
                     </form.AppField>
                     <form.AppField name={`bankAccounts[${index}].bankName`}>
-                      {(nested) => <nested.TextField label="银行 / 支行" />}
+                      {(nested) => (
+                        <nested.TextField
+                          label="银行名称"
+                          disabled={Boolean(_row.existingId)}
+                        />
+                      )}
+                    </form.AppField>
+                    <form.AppField name={`bankAccounts[${index}].branchName`}>
+                      {(nested) => (
+                        <nested.TextField
+                          label="支行名称"
+                          disabled={Boolean(_row.existingId)}
+                        />
+                      )}
                     </form.AppField>
                     <form.AppField name={`bankAccounts[${index}].accountNumber`}>
-                      {(nested) => <nested.TextField label="账号" />}
+                      {(nested) => (
+                        <nested.TextField
+                          label="账号"
+                          disabled={Boolean(_row.existingId)}
+                        />
+                      )}
                     </form.AppField>
                   </div>
                   <div className="flex items-center justify-between gap-2">
@@ -735,7 +861,7 @@ export function CustomerForm({
                       variant="ghost"
                       onClick={() => field.removeValue(index)}
                     >
-                      移除
+                      {_row.existingId ? "结束账户" : "移除"}
                     </Button>
                   </div>
                 </div>
@@ -743,17 +869,7 @@ export function CustomerForm({
             )
           }
         </form.AppField>
-      </FormSection>
-
-      {maskedBlocked ? (
-        <div className="space-y-2">
-          <Alert variant="warning" role="alert">
-            <AlertTitle>有敏感信息尚未揭示，暂不能保存</AlertTitle>
-            <AlertDescription>
-              手机号、地址或银行账号仍以打码文本显示。请先点击「显示」揭示并确认为真实内容后再保存，避免把打码文本写入资料。
-            </AlertDescription>
-          </Alert>
-        </div>
+        </FormSection>
       ) : null}
 
       {result?.outcome === "succeeded" ? (

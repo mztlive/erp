@@ -97,6 +97,7 @@ impl SalesOrderService {
     /// # 错误
     /// * `ValidationError` - 请求体校验失败或行字段组缺失
     /// * `NotFound` - 客户/合同不存在
+    /// * `BusinessLogicError` - 客户已停用
     /// * `ConflictError` - order_no 重复
     pub async fn create_sales_order(
         &self,
@@ -104,17 +105,29 @@ impl SalesOrderService {
         actor: &AuditActor,
     ) -> Result<SalesOrderDetailView> {
         req.validate()?;
-        self.db
+        let customer = self
+            .db
             .customer_accounts()
             .find_by_id(&req.customer_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
+        if !customer.is_active() {
+            return Err(Error::BusinessLogicError(
+                "客户已停用，禁止创建新销售单".to_string(),
+            ));
+        }
         if let Some(contract_id) = &req.contract_id {
-            self.db
+            let contract = self
+                .db
                 .contracts()
                 .find_by_id(contract_id, &mut NoTransaction)
                 .await?
                 .ok_or_else(|| Error::NotFound("合同不存在".to_string()))?;
+            if contract.customer_id != req.customer_id {
+                return Err(Error::ValidationError(
+                    "销售单引用的合同不属于所选客户".to_string(),
+                ));
+            }
         }
 
         let order = SalesOrder::new(
@@ -286,7 +299,7 @@ impl SalesOrderService {
             .await?;
 
         // 新提交在前，便于前端取「当前商业内容」
-        submissions.sort_by(|a, b| b.submission_no.cmp(&a.submission_no));
+        submissions.sort_by_key(|submission| std::cmp::Reverse(submission.submission_no));
         let submission_ids = submissions
             .iter()
             .map(|s| SalesOrderSubmissionId::new(s.base.id.clone()))

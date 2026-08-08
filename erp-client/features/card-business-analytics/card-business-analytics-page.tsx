@@ -51,7 +51,9 @@ import {
 import { formatDateTime } from "@/lib/datetime"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { useSalesOrdersQuery } from "@/features/sales-orders/queries"
+import { hasPermission } from "@/lib/permissions"
 import type { DataFreshnessState } from "@/components/business/page"
 import {
   Alert,
@@ -329,6 +331,11 @@ export function CardBusinessAnalyticsPage() {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const accountProfile = useAccountProfileQuery()
+  const canReadAllCustomers = hasPermission(
+    accountProfile.data?.permissions,
+    "customer_scope:detail"
+  )
 
   const periodPreset = parsePreset(searchParams.get("periodPreset"))
   const periodFromUrl = searchParams.get("from")
@@ -367,8 +374,10 @@ export function CardBusinessAnalyticsPage() {
   const [refreshing, setRefreshing] = React.useState(false)
 
   const customerDirectoryQuery = useCustomerDirectoryQuery({
-    scope: "team",
+    scope: canReadAllCustomers ? "all_authorized" : "assigned",
     status: "all",
+    page: 1,
+    pageSize: 100,
   })
   const salesOrdersQuery = useSalesOrdersQuery({
     page: 1,

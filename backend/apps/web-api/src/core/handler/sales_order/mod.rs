@@ -18,7 +18,10 @@ use services::{
 
 use crate::{
     app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
+    core::{
+        errors::Result, extractor::UserID, handler::customer::ensure_customer_access,
+        middleware::RbacSubject, response::ApiResponse,
+    },
 };
 
 #[permission_macros::permission(
@@ -66,8 +69,11 @@ pub async fn sales_order_list(
 pub async fn sales_order_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
+    Extension(subject): Extension<RbacSubject>,
+    Extension(UserID(user_id)): Extension<UserID>,
     Json(req): Json<CreateSalesOrderRequest>,
 ) -> Result<SalesOrderDetailView> {
+    ensure_customer_access(&state, &subject, &user_id, &req.customer_id).await?;
     let view = SalesOrderService::new(state.db())
         .create_sales_order(req, &actor)
         .await?;

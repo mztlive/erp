@@ -34,7 +34,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { isNavItemActive } from "@/lib/nav-active"
-import { hasAnyPermission } from "@/lib/permissions"
+import { hasAnyPermission, hasPermission } from "@/lib/permissions"
 import {
   filterNavGroupsByPermissions,
   WORKSPACE_NAV_GROUPS,
@@ -202,13 +202,19 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }) {
   const permissions = profileQuery.data?.permissions
   const canSeeTodos = hasAnyPermission(permissions, ["work_item:list"])
   const canSearchCustomers = hasAnyPermission(permissions, ["customer:list"])
+  const canSearchAllCustomers = hasPermission(
+    permissions,
+    "customer_scope:detail"
+  )
   const [search, setSearch] = React.useState("")
   const [searchFocused, setSearchFocused] = React.useState(false)
   const customerSearchQuery = useCustomerDirectoryQuery(
     {
-      scope: "team",
+      scope: canSearchAllCustomers ? "all_authorized" : "assigned",
       status: "all",
       query: search.trim(),
+      page: 1,
+      pageSize: 5,
     },
     {
       // 无客户 list 权限或未输入关键字时不请求，避免侧栏壳层无谓 403

@@ -1,7 +1,11 @@
 import type { StatusTone } from "@/components/ui/status-badge"
 
-/** Directory scope (URL: scope=mine|collaborating|team). */
-export type CustomerScope = "mine" | "collaborating" | "team"
+/** Directory scope (URL and backend contract). */
+export type CustomerScope =
+  | "mine"
+  | "collaborating"
+  | "assigned"
+  | "all_authorized"
 
 export type CustomerStatus = "active" | "disabled"
 
@@ -22,7 +26,21 @@ export type CustomerAssignmentView = Readonly<{
   userName: string
   effectiveFrom: string
   effectiveTo?: string
+  changeReason: string
+  version: number
   isCurrent: boolean
+}>
+
+export type CustomerAssignmentChangeInput = Readonly<{
+  customerId: string
+  action: "assign" | "end"
+  userId?: string
+  role?: "OWNER" | "COLLABORATOR"
+  effectiveFrom?: string
+  effectiveTo?: string
+  assignmentId?: string
+  version?: number
+  changeReason: string
 }>
 
 export type CustomerContactView = Readonly<{
@@ -30,6 +48,7 @@ export type CustomerContactView = Readonly<{
   name: string
   title?: string
   purpose?: string
+  telephone?: string
   phoneMasked: string
   phoneRevealToken?: string
   email?: string
@@ -60,6 +79,7 @@ export type CustomerBankAccountView = Readonly<{
   internalNo: string
   accountName: string
   bankName: string
+  branchName?: string
   accountMasked: string
   accountRevealToken?: string
   isDefault: boolean
@@ -80,11 +100,11 @@ export type RelatedObjectSummary = Readonly<{
 }>
 
 export type CustomerRelationshipMetrics = Readonly<{
-  /** Server-aggregated; do not sum from related lists. */
-  activeContractCount: number
-  inProgressSalesOrderCount: number
-  receivableBalance: string
-  overdueAmount: string
+  /** 来自正式关联接口的完整分页汇总；分区失败时必须返回 null。 */
+  activeContractCount: number | null
+  inProgressSalesOrderCount: number | null
+  receivableBalance: string | null
+  overdueAmount: string | null
   expiringContractCount?: number
 }>
 
@@ -130,6 +150,7 @@ export type CustomerCenterView = Readonly<{
   status: CustomerStatus
   statusLabel: { label: string; tone: StatusTone }
   lockVersion: number
+  partyLockVersion: number
   currentRevision: {
     revisionId: string
     revisionNo: number
@@ -175,8 +196,10 @@ export type CustomerDirectoryQuery = Readonly<{
   scope: CustomerScope
   status: "active" | "disabled" | "all"
   query?: string
-  sort?: "recent_business" | "name" | "overdue_desc"
+  sort?: "updated_at"
   sortDir?: "asc" | "desc"
+  page: number
+  pageSize: number
 }>
 
 export type CustomerDirectoryResult = Readonly<{
@@ -184,16 +207,21 @@ export type CustomerDirectoryResult = Readonly<{
   hasCustomerScope: boolean
   items: readonly CustomerDirectoryItem[]
   totalInScope: number
+  page: number
+  pageSize: number
   queriedAt: string
 }>
 
 export type SaveCustomerRevisionInput = Readonly<{
   customerId: string
   expectedLockVersion: number
+  expectedPartyVersion: number
   baseRevisionId: string
   legalName: string
   shortName?: string
   unifiedCreditCode?: string
+  defaultPaymentTerm?: string
+  status: CustomerStatus
   changeReason: string
   idempotencyKey: string
 }>
@@ -201,35 +229,44 @@ export type SaveCustomerRevisionInput = Readonly<{
 export type SaveCustomerDetailsInput = Readonly<{
   customerId: string
   expectedLockVersion: number
+  expectedPartyVersion: number
   baseRevisionId: string
   legalName: string
   shortName?: string
   unifiedCreditCode?: string
+  defaultPaymentTerm?: string
+  status: CustomerStatus
   changeReason: string
-  contacts: readonly CreateCustomerContactInput[]
-  addresses: readonly CreateCustomerAddressInput[]
-  bankAccounts: readonly CreateCustomerBankAccountInput[]
+  contacts?: readonly CreateCustomerContactInput[]
+  addresses?: readonly CreateCustomerAddressInput[]
+  bankAccounts?: readonly CreateCustomerBankAccountInput[]
   idempotencyKey: string
 }>
 
 export type CreateCustomerContactInput = Readonly<{
+  existingId?: string
   name: string
   title?: string
+  telephone?: string
   phone?: string
   email?: string
   isDefault: boolean
 }>
 
 export type CreateCustomerAddressInput = Readonly<{
+  existingId?: string
   addressType: string
-  address: string
+  contactName?: string
+  address?: string
   isDefault: boolean
 }>
 
 export type CreateCustomerBankAccountInput = Readonly<{
+  existingId?: string
   accountName: string
   bankName: string
-  accountNumber: string
+  branchName?: string
+  accountNumber?: string
   isDefault: boolean
 }>
 
@@ -240,6 +277,7 @@ export type CreateCustomerInput = Readonly<{
   ownerUserId: string
   ownerName: string
   defaultPaymentTerm?: string
+  status?: CustomerStatus
   contacts?: readonly CreateCustomerContactInput[]
   addresses?: readonly CreateCustomerAddressInput[]
   bankAccounts?: readonly CreateCustomerBankAccountInput[]

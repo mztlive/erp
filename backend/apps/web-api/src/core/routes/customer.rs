@@ -25,11 +25,59 @@ use crate::{
 pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
     Router::new()
         .route(
+            "/customer-profiles",
+            with_permission(
+                post(customer::customer_profile_create),
+                rbac,
+                customer::customer_profile_create_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-profiles/{id}",
+            with_permission(
+                get(customer::customer_profile_detail),
+                rbac,
+                customer::customer_profile_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-profiles/{id}",
+            with_permission(
+                put(customer::customer_profile_update),
+                rbac,
+                customer::customer_profile_update_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-profile-commands/{idempotency_key}",
+            with_permission(
+                get(customer::customer_profile_command_detail),
+                rbac,
+                customer::customer_profile_command_detail_permission_key(),
+            ),
+        )
+        .route(
+            "/customer-sensitive-fields/reveal",
+            with_permission(
+                post(customer::customer_sensitive_reveal),
+                rbac,
+                customer::customer_sensitive_reveal_permission_key(),
+            ),
+        )
+        .route(
             "/customers",
             with_permission(
                 get(customer::customer_list),
                 rbac,
                 customer::customer_list_permission_key(),
+            ),
+        )
+        .route(
+            "/customers/all-authorized",
+            with_permission(
+                get(customer::customer_all_authorized_list),
+                rbac,
+                customer::customer_all_authorized_list_permission_key(),
             ),
         )
         .route(

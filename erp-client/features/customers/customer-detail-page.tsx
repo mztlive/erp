@@ -45,13 +45,16 @@ import {
 } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CustomerForm } from "@/features/customers/customer-form"
+import { CustomerAssignmentDialog } from "@/features/customers/customer-assignment-dialog"
 import { useCustomerCenterQuery } from "@/features/customers/queries"
 import { revealCustomerSensitiveField } from "@/features/customers/queries"
 import type {
   CustomerCenterView,
+  CustomerAssignmentView,
   CustomerSectionId,
 } from "@/features/customers/types"
 import { openWorkspaceLabel } from "@/lib/ui-text"
+import { paymentTermLabel } from "@/lib/business-options"
 
 const SECTION_NAV: readonly {
   id: CustomerSectionId
@@ -129,6 +132,9 @@ export function CustomerDetailPage({
     React.useState<CustomerSectionId | null>(null)
   const [savedNotice, setSavedNotice] = React.useState<{
     revisionNo: number
+  } | null>(null)
+  const [assignmentDialog, setAssignmentDialog] = React.useState<{
+    target?: CustomerAssignmentView
   } | null>(null)
 
   const customer = query.data
@@ -327,7 +333,7 @@ export function CustomerDetailPage({
         <MetricItem
           density="compact"
           label="有效合同"
-          value={String(customer.metrics.activeContractCount)}
+          value={String(customer.metrics.activeContractCount ?? "—")}
           detail={
             customer.metrics.expiringContractCount
               ? `${customer.metrics.expiringContractCount} 将到期`
@@ -338,8 +344,8 @@ export function CustomerDetailPage({
         <MetricItem
           density="compact"
           label="进行中销售单"
-          value={String(customer.metrics.inProgressSalesOrderCount)}
-          detail="系统汇总 · 非列表求和"
+          value={String(customer.metrics.inProgressSalesOrderCount ?? "—")}
+          detail="正式关联数据完整分页汇总"
           detailMode="tooltip"
         />
         <MetricItem
@@ -468,8 +474,11 @@ export function CustomerDetailPage({
                           id: "payment",
                           label: "默认付款条件",
                           value:
-                            customer.currentRevision.defaultPaymentTerm ??
-                            "—（仅录单提示）",
+                            customer.currentRevision.defaultPaymentTerm
+                              ? paymentTermLabel(
+                                  customer.currentRevision.defaultPaymentTerm
+                                )
+                              : "—（仅录单提示）",
                         },
                         {
                           id: "revision",
@@ -884,7 +893,22 @@ export function CustomerDetailPage({
 
         <TabsContent value="audit" className="px-3 pb-3 md:px-4 md:pb-4">
           <div className="space-y-4 pt-4">
-            <DocumentSection title="归属与审计" description="每位客户只有一位负责销售；协作销售显示有效期">
+            <DocumentSection
+              title="归属与审计"
+              description="每位客户只有一位负责销售；协作销售显示有效期"
+              action={
+                can(customer, "MANAGE_ASSIGNMENTS") ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setAssignmentDialog({})}
+                  >
+                    调整归属
+                  </Button>
+                ) : undefined
+              }
+            >
               {customer.partitions.audit === "error" ? (
                 <BusinessFailureState
                   kind="system"
@@ -922,10 +946,25 @@ export function CustomerDetailPage({
                               />
                               <span className="ml-2 font-medium">{a.userName}</span>
                             </div>
-                            <span className="text-xs text-muted-foreground">
-                              {a.effectiveFrom}
-                              {a.effectiveTo ? ` ~ ${a.effectiveTo}` : " 起"}
-                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-muted-foreground">
+                                {a.effectiveFrom}
+                                {a.effectiveTo ? ` ~ ${a.effectiveTo}` : " 起"}
+                              </span>
+                              {a.role === "COLLABORATOR" &&
+                              can(customer, "MANAGE_ASSIGNMENTS") ? (
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    setAssignmentDialog({ target: a })
+                                  }
+                                >
+                                  结束协作
+                                </Button>
+                              ) : null}
+                            </div>
                           </div>
                         ))}
                     </CardContent>
@@ -965,6 +1004,15 @@ export function CustomerDetailPage({
         </TabsContent>
       </Tabs>
       </div>
+
+      <CustomerAssignmentDialog
+        customerId={customer.customerId}
+        open={assignmentDialog != null}
+        target={assignmentDialog?.target}
+        onOpenChange={(open) => {
+          if (!open) setAssignmentDialog(null)
+        }}
+      />
 
       <DiscardConfirmDialog
         open={pendingSection != null}

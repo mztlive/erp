@@ -17,7 +17,10 @@ use services::{
 
 use crate::{
     app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
+    core::{
+        errors::Result, extractor::UserID, handler::customer::ensure_customer_access,
+        middleware::RbacSubject, response::ApiResponse,
+    },
 };
 
 #[permission_macros::permission(
@@ -63,8 +66,11 @@ pub async fn contract_list(
 pub async fn contract_create(
     State(state): State<AppState>,
     Extension(actor): Extension<AuditActor>,
+    Extension(subject): Extension<RbacSubject>,
+    Extension(UserID(user_id)): Extension<UserID>,
     Json(req): Json<CreateContractRequest>,
 ) -> Result<ContractView> {
+    ensure_customer_access(&state, &subject, &user_id, &req.customer_id).await?;
     let view = ContractService::new(state.db())
         .create_contract(req, &actor)
         .await?;

@@ -18,6 +18,9 @@ use crate::Result;
 pub(crate) const CUSTOMER_ACCOUNTS: &str = <mongodb::Database as CustomerExt>::CUSTOMER_ACCOUNTS;
 /// `customer_assignment` 集合名。
 pub(crate) const CUSTOMER_ASSIGNMENTS: &str = <mongodb::Database as CustomerExt>::CUSTOMER_ASSIGNMENTS;
+/// `customer_profile_command` 集合名。
+pub(crate) const CUSTOMER_PROFILE_COMMANDS: &str =
+    <mongodb::Database as CustomerExt>::CUSTOMER_PROFILE_COMMANDS;
 
 /// 创建本域集合的幂等命名索引。
 ///
@@ -38,6 +41,7 @@ pub(crate) const CUSTOMER_ASSIGNMENTS: &str = <mongodb::Database as CustomerExt>
 pub(crate) async fn ensure(db: &Database) -> Result<()> {
     create_indexes(db, CUSTOMER_ACCOUNTS, customer_account_indexes()).await?;
     create_indexes(db, CUSTOMER_ASSIGNMENTS, customer_assignment_indexes()).await?;
+    create_indexes(db, CUSTOMER_PROFILE_COMMANDS, customer_profile_command_indexes()).await?;
     Ok(())
 }
 
@@ -81,6 +85,14 @@ fn customer_assignment_indexes() -> Vec<IndexModel> {
     ]
 }
 
+/// 返回客户资料根级保存命令的幂等唯一约束。
+fn customer_profile_command_indexes() -> Vec<IndexModel> {
+    vec![unique_index(
+        "uk_customer_profile_commands_idempotency_key",
+        doc! { "idempotency_key": 1 },
+    )]
+}
+
 /// 构建命名普通索引。
 fn named_index(name: impl Into<String>, keys: Document) -> IndexModel {
     IndexModel::builder()
@@ -101,7 +113,7 @@ fn unique_index(name: impl Into<String>, keys: Document) -> IndexModel {
 mod tests {
     use mongodb::bson::doc;
 
-    use super::{customer_account_indexes, customer_assignment_indexes};
+    use super::{customer_account_indexes, customer_assignment_indexes, customer_profile_command_indexes};
 
     #[test]
     fn customer_account_identity_indexes_are_globally_unique() {
@@ -147,5 +159,13 @@ mod tests {
         assert!(indexes
             .iter()
             .any(|index| index.keys == doc! { "user_id": 1, "valid_to": 1 }));
+    }
+
+    #[test]
+    fn customer_profile_command_key_is_unique() {
+        let indexes = customer_profile_command_indexes();
+        assert_eq!(indexes.len(), 1);
+        assert_eq!(indexes[0].keys, doc! { "idempotency_key": 1 });
+        assert_eq!(indexes[0].options.as_ref().unwrap().unique, Some(true));
     }
 }

@@ -6,6 +6,7 @@
 use entities::common::time::BusinessDate;
 use entities::customer::{AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment};
 use entities::ids::PartyId;
+use entities::party::AddressType;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -13,9 +14,24 @@ use crate::errors::{Error, Result};
 use crate::query::{normalized_text, page_or_default, page_size_or_default};
 
 /// 客户角色列表允许的排序字段白名单（api-contract §4：Service 层校验）。
-pub(crate) const CUSTOMER_SORT_FIELDS: &[&str] = &["created_at", "customer_no", "status"];
+pub(crate) const CUSTOMER_SORT_FIELDS: &[&str] = &["created_at", "updated_at", "customer_no", "status"];
 /// 客户归属列表允许的排序字段白名单。
 pub(crate) const CUSTOMER_ASSIGNMENT_SORT_FIELDS: &[&str] = &["created_at", "valid_from", "valid_to"];
+
+/// 客户目录的数据范围。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CustomerScope {
+    /// 当前用户为负责销售的客户。
+    #[default]
+    Mine,
+    /// 当前用户为协作销售的客户。
+    Collaborating,
+    /// 当前用户以负责或协作身份参与的全部客户。
+    Assigned,
+    /// 当前权限允许读取的全部客户。
+    AllAuthorized,
+}
 
 /// 排序方向。
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -35,6 +51,8 @@ pub(crate) struct CustomerListQuery {
     pub party_id: Option<PartyId>,
     /// 启停状态筛选。
     pub status: Option<CustomerAccountStatus>,
+    /// 服务端执行的数据范围。
+    pub scope: CustomerScope,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -161,16 +179,32 @@ pub struct CustomerView {
     pub id: String,
     /// 共用企业主体 ID。
     pub party_id: String,
+    /// 企业主体编号。
+    pub party_no: Option<String>,
+    /// 当前法定名称。
+    pub legal_name: Option<String>,
+    /// 当前简称。
+    pub short_name: Option<String>,
     /// 客户编号。
     pub customer_no: String,
     /// 默认客户付款条件引用。
     pub default_payment_term_id: Option<String>,
     /// 启停状态。
     pub status: CustomerAccountStatus,
+    /// 当前负责销售账号 ID。
+    pub owner_user_id: Option<String>,
+    /// 当前负责销售展示名。
+    pub owner_user_name: Option<String>,
+    /// 当前协作销售人数。
+    pub collaborator_count: u32,
+    /// 当前结果行命中的服务端范围标签。
+    pub scope_tags: Vec<CustomerScope>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 最后更新时间（秒级时间戳）。
+    pub updated_at: u64,
 }
 
 impl From<CustomerAccount> for CustomerView {
@@ -179,11 +213,19 @@ impl From<CustomerAccount> for CustomerView {
         Self {
             id: account.base.id,
             party_id: account.party_id.to_string(),
+            party_no: None,
+            legal_name: None,
+            short_name: None,
             customer_no: account.customer_no,
             default_payment_term_id: account.default_payment_term_id,
             status: account.stable.status,
+            owner_user_id: None,
+            owner_user_name: None,
+            collaborator_count: 0,
+            scope_tags: Vec::new(),
             version: account.base.version,
             created_at: account.base.created_at,
+            updated_at: account.base.updated_at,
         }
     }
 }
@@ -211,13 +253,16 @@ pub struct CustomerListParams {
     pub party_id: Option<PartyId>,
     /// 启停状态筛选。
     pub status: Option<CustomerAccountStatus>,
+    /// 数据范围；缺省为当前用户负责的客户。
+    #[serde(default)]
+    pub scope: CustomerScope,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
     /// 单页条数（1–100）。
     #[validate(range(min = 1, max = 100, message = "分页大小必须在1-100之间"))]
     pub page_size: Option<u32>,
-    /// 排序字段（白名单：`created_at`/`customer_no`/`status`）。
+    /// 排序字段（白名单：`created_at`/`updated_at`/`customer_no`/`status`）。
     pub sort_by: Option<String>,
     /// 排序方向（`asc`/`desc`）。
     pub sort_dir: Option<String>,
@@ -239,6 +284,7 @@ impl CustomerListParams {
             keyword: normalized_text(self.keyword.as_deref()),
             party_id: self.party_id.clone(),
             status: self.status,
+            scope: self.scope,
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -247,6 +293,202 @@ impl CustomerListParams {
             },
         })
     }
+}
+
+/// 客户资料根命令中的联系人输入。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CustomerProfileContactInput {
+    /// 既有事实行 ID；提供且内容未变化时原样保留。
+    pub existing_id: Option<String>,
+    /// 联系人姓名。
+    #[validate(custom(function = "non_blank", message = "联系人姓名不能为空"))]
+    pub contact_name: String,
+    /// 职务或用途。
+    pub title: Option<String>,
+    /// 手机号明文；只在当前请求内存在。
+    pub mobile: Option<String>,
+    /// 固话。
+    pub telephone: Option<String>,
+    /// 邮箱。
+    pub email: Option<String>,
+    /// 是否默认联系人。
+    pub is_default: bool,
+}
+
+/// 客户资料根命令中的地址输入。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CustomerProfileAddressInput {
+    /// 既有事实行 ID；提供且内容未变化时原样保留。
+    pub existing_id: Option<String>,
+    /// 地址类型。
+    pub address_type: AddressType,
+    /// 地址联系人。
+    pub contact_name: Option<String>,
+    /// 地址明文；只在当前请求内存在。
+    pub address: Option<String>,
+    /// 是否默认地址。
+    pub is_default: bool,
+}
+
+/// 客户资料根命令中的银行账户输入。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CustomerProfileBankAccountInput {
+    /// 既有事实行 ID；提供时保留稳定银行账户，只允许调整默认标记。
+    pub existing_id: Option<String>,
+    /// 户名。
+    #[validate(custom(function = "non_blank", message = "户名不能为空"))]
+    pub account_name: String,
+    /// 银行名称。
+    #[validate(custom(function = "non_blank", message = "银行名称不能为空"))]
+    pub bank_name: String,
+    /// 支行名称。
+    pub bank_branch_name: Option<String>,
+    /// 银行账号明文；只在当前请求内存在。
+    pub account_number: Option<String>,
+    /// 是否默认账户。
+    pub is_default: bool,
+}
+
+/// 创建或修订完整客户资料的根级命令。
+///
+/// 修订时 `contacts`、`addresses`、`bank_accounts` 缺省表示保留；显式空数组
+/// 表示结束该类全部当前事实；非空数组表示结束旧事实后写入新的当前集合。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SaveCustomerProfileRequest {
+    /// 客户端幂等键。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+    /// 修订时必填的 Party 乐观锁版本。
+    pub expected_party_version: Option<u64>,
+    /// 修订时必填的客户乐观锁版本。
+    pub expected_customer_version: Option<u64>,
+    /// 法定名称。
+    #[validate(custom(function = "non_blank", message = "法定名称不能为空"))]
+    pub legal_name: String,
+    /// 简称；修订时空字符串表示清空。
+    pub short_name: Option<String>,
+    /// 统一社会信用代码；修订时空字符串表示清空。
+    pub unified_credit_code: Option<String>,
+    /// 默认付款条件稳定代码；修订时空字符串表示清空。
+    pub default_payment_term_id: Option<String>,
+    /// 客户状态；修订时缺省表示保留。
+    pub status: Option<CustomerAccountStatus>,
+    /// 创建时必填的负责销售；修订时缺省表示保留现有归属。
+    pub owner_user_id: Option<String>,
+    /// 联系人当前集合；缺省表示修订时保留。
+    pub contacts: Option<Vec<CustomerProfileContactInput>>,
+    /// 地址当前集合；缺省表示修订时保留。
+    pub addresses: Option<Vec<CustomerProfileAddressInput>>,
+    /// 银行账户当前集合；缺省表示修订时保留，提交该字段需要银行账户写权限。
+    pub bank_accounts: Option<Vec<CustomerProfileBankAccountInput>>,
+    /// 从属事实生效日期。
+    pub effective_from: BusinessDate,
+    /// 变更原因。
+    #[validate(custom(function = "non_blank", message = "变更原因不能为空"))]
+    pub change_reason: String,
+}
+
+/// 客户资料根命令的稳定结果，也用于幂等查询。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CustomerProfileMutationView {
+    /// 发起命令的账号 ID，仅供服务端授权判断，不进入响应 JSON。
+    #[serde(skip_serializing)]
+    pub initiated_by: String,
+    /// 客户角色 ID。
+    pub customer_id: String,
+    /// 客户编号。
+    pub customer_no: String,
+    /// Party ID。
+    pub party_id: String,
+    /// 当前 Party 修订 ID。
+    pub revision_id: String,
+    /// 当前 Party 修订号。
+    pub revision_no: u32,
+    /// 保存后的客户乐观锁版本。
+    pub customer_version: u64,
+    /// 保存后的 Party 乐观锁版本。
+    pub party_version: u64,
+    /// 从属事实生效日期。
+    pub effective_from: String,
+    /// 命令记录时间（秒级时间戳）。
+    pub recorded_at: u64,
+    /// 变更原因。
+    pub change_reason: String,
+}
+
+/// 客户详情中的单个敏感字段揭示入口。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CustomerSensitiveFieldView {
+    /// 敏感字段类型。
+    pub kind: crate::party::SensitiveFieldKind,
+    /// 事实行 ID。
+    pub record_id: String,
+    /// 掩码展示值。
+    pub masked_value: String,
+    /// 受字段、事实行和客户约束的短时令牌。
+    pub reveal_token: String,
+    /// 令牌过期时间（Unix 秒）。
+    pub expires_at: u64,
+}
+
+/// 敏感字段揭示请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct RevealCustomerSensitiveRequest {
+    /// 详情接口签发的短时令牌。
+    #[validate(custom(function = "non_blank", message = "揭示令牌不能为空"))]
+    pub reveal_token: String,
+}
+
+/// 敏感字段揭示结果。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CustomerSensitiveRevealView {
+    /// 解密后的明文；仅返回给已通过字段权限校验的当前请求。
+    pub value: String,
+}
+
+/// 页面动作阻断原因。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CustomerActionBlockerView {
+    /// 页面动作稳定代码。
+    pub action: String,
+    /// 阻断原因稳定代码。
+    pub code: String,
+    /// 面向操作者的原因与下一步。
+    pub message: String,
+}
+
+/// 客户资料对象中心的完整事实视图。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CustomerProfileDetailView {
+    /// 客户角色。
+    #[serde(flatten)]
+    pub account: CustomerView,
+    /// Party 状态。
+    pub party_status: entities::party::PartyStatus,
+    /// Party 乐观锁版本。
+    pub party_version: u64,
+    /// 统一社会信用代码。
+    pub unified_credit_code: Option<String>,
+    /// 当前名称修订。
+    pub current_revision: crate::party::PartyRevisionView,
+    /// 名称修订历史，按修订号倒序。
+    pub revisions: Vec<crate::party::PartyRevisionView>,
+    /// 归属历史。
+    pub assignments: Vec<CustomerAssignmentView>,
+    /// 当前有效联系人。
+    pub contacts: Vec<crate::party::PartyContactView>,
+    /// 当前有效地址。
+    pub addresses: Vec<crate::party::PartyAddressView>,
+    /// 当前有效税务资料。
+    pub tax_profiles: Vec<crate::party::PartyTaxProfileView>,
+    /// 当前有效银行账户摘要。
+    pub bank_accounts: Vec<crate::party::PartyBankAccountView>,
+    /// 敏感字段短时揭示入口。
+    pub sensitive_fields: Vec<CustomerSensitiveFieldView>,
+    /// 由 HTTP 权限与客户状态共同计算的允许动作。
+    pub allowed_actions: Vec<String>,
+    /// 当前状态导致的动作阻断原因。
+    pub action_blockers: Vec<CustomerActionBlockerView>,
 }
 
 /// 归属变更动作（W03：结束旧归属并建立新归属，不原地修改）。
@@ -283,7 +525,7 @@ pub struct CustomerAssignmentRequest {
     pub change_reason: String,
     /// 期望的乐观锁版本（`End` 必填）。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
-    pub version: u64,
+    pub version: Option<u64>,
 }
 
 /// 归属响应视图（契约形状对齐 `customer_assignment` 投影行）。
@@ -295,6 +537,8 @@ pub struct CustomerAssignmentView {
     pub customer_id: String,
     /// 销售人员。
     pub user_id: String,
+    /// 销售人员展示名。
+    pub user_name: String,
     /// 归属角色。
     pub assignment_role: AssignmentRole,
     /// 生效开始日期。
@@ -312,10 +556,12 @@ pub struct CustomerAssignmentView {
 impl From<CustomerAssignment> for CustomerAssignmentView {
     /// 从实体构造响应视图。
     fn from(assignment: CustomerAssignment) -> Self {
+        let user_name = assignment.user_id.clone();
         Self {
             id: assignment.base.id,
             customer_id: assignment.customer_id.to_string(),
             user_id: assignment.user_id,
+            user_name,
             assignment_role: assignment.assignment_role,
             valid_from: assignment.valid_from.to_string(),
             valid_to: assignment.valid_to.map(|date| date.to_string()),
@@ -369,6 +615,7 @@ mod tests {
             keyword: Some(" C-20 ".to_string()),
             party_id: None,
             status: None,
+            scope: super::CustomerScope::Mine,
             page: None,
             page_size: None,
             sort_by: None,
@@ -394,5 +641,24 @@ mod tests {
         .unwrap();
         assert_eq!(request.customer_no, "C-2026-001");
         assert!(request.status.is_none(), "status 缺省由 Service 按启用处理");
+    }
+
+    #[test]
+    fn assigned_scope_and_assign_action_accept_stable_wire_codes() {
+        let params: CustomerListParams = serde_json::from_value(json!({
+            "scope": "assigned"
+        }))
+        .unwrap();
+        assert_eq!(params.scope, super::CustomerScope::Assigned);
+
+        let request: super::CustomerAssignmentRequest = serde_json::from_value(json!({
+            "action": "assign",
+            "user_id": "admin-2",
+            "assignment_role": "COLLABORATOR",
+            "valid_from": "2026-08-08",
+            "change_reason": "联合跟进"
+        }))
+        .unwrap();
+        assert!(request.version.is_none());
     }
 }

@@ -99,8 +99,11 @@ const SALES_PERMISSIONS: &[&str] = &[
     "party_contact:*",
     "party_address:*",
     "party_tax_profile:*",
-    "party_bank_account:*",
-    "customer:*",
+    "customer:list",
+    "customer:detail",
+    "customer:create",
+    "customer:update",
+    "customer_sensitive:reveal",
     "customer_assignment:list",
     "customer_assignment:create",
     "contract:*",
@@ -138,6 +141,7 @@ const SALES_LEADER_PERMISSIONS: &[&str] = &[
     "business_document:detail",
     "customer:list",
     "customer:detail",
+    "customer_scope:detail",
     "contract:list",
     "contract:detail",
     "sales_order:list",
@@ -334,6 +338,13 @@ const FINANCE_PERMISSIONS: &[&str] = &[
     // 上下文只读
     "customer:list",
     "customer:detail",
+    "customer_scope:detail",
+    "customer_sensitive:reveal",
+    "party_bank_account:list",
+    "party_bank_account:detail",
+    "party_bank_account:create",
+    "party_bank_account:update",
+    "party_bank_account:reveal",
     "supplier:list",
     "supplier:detail",
     "sales_order:list",
@@ -386,6 +397,7 @@ const MANAGEMENT_PERMISSIONS: &[&str] = &[
     "business_document:detail",
     "customer:list",
     "customer:detail",
+    "customer_scope:detail",
     "supplier:list",
     "supplier:detail",
     "contract:list",
@@ -468,8 +480,8 @@ const SYSADMIN_PERMISSIONS: &[&str] = &[
 
 /// 确保全部业务预定义角色已写入数据库。
 ///
-/// 对每个固定角色 ID：若不存在则创建角色实体与 Casbin 权限；已存在（含软删除）则跳过。
-/// 不会修复、覆盖或恢复已有角色，以便管理员后续调整权限后重启不被冲掉。
+/// 对每个固定角色 ID：若不存在则创建角色实体与 Casbin 权限；已有角色仅在权限
+/// 与已知旧种子完全相等时升级。管理员增删过权限的角色不得被启动过程覆盖。
 ///
 /// # 参数
 /// * `rbac` - 共享 RBAC 服务
@@ -484,6 +496,79 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
         seed_one(rbac, role).await?;
     }
     upgrade_procurement_contract_read(rbac).await?;
+    upgrade_customer_role_boundaries(rbac).await?;
+    Ok(())
+}
+
+/// 仅为仍保持旧默认种子的角色收紧客户范围并补齐字段级权限。
+async fn upgrade_customer_role_boundaries(rbac: &SharedRbacService) -> Result<()> {
+    let sales_desired = parse_permissions(SALES_PERMISSIONS)?;
+    let mut sales_previous: Vec<Permission> = sales_desired
+        .iter()
+        .filter(|permission| {
+            !matches!(
+                permission.to_string().as_str(),
+                "customer:list"
+                    | "customer:detail"
+                    | "customer:create"
+                    | "customer:update"
+                    | "customer_sensitive:reveal"
+            )
+        })
+        .cloned()
+        .collect();
+    sales_previous.push(Permission::parse("customer:*")?);
+    sales_previous.push(Permission::parse("party_bank_account:*")?);
+    upgrade_exact(rbac, "role-sales", sales_previous, sales_desired).await?;
+
+    let finance_desired = parse_permissions(FINANCE_PERMISSIONS)?;
+    let finance_previous = remove_permissions(
+        &finance_desired,
+        &[
+            "customer_scope:detail",
+            "customer_sensitive:reveal",
+            "party_bank_account:list",
+            "party_bank_account:detail",
+            "party_bank_account:create",
+            "party_bank_account:update",
+            "party_bank_account:reveal",
+        ],
+    );
+    upgrade_exact(rbac, "role-finance", finance_previous, finance_desired).await?;
+
+    for (role_id, raw) in [
+        ("role-sales-leader", SALES_LEADER_PERMISSIONS),
+        ("role-management", MANAGEMENT_PERMISSIONS),
+    ] {
+        let desired = parse_permissions(raw)?;
+        let previous = remove_permissions(&desired, &["customer_scope:detail"]);
+        upgrade_exact(rbac, role_id, previous, desired).await?;
+    }
+    Ok(())
+}
+
+/// 从预定义权限集合中移除指定稳定权限代码。
+fn remove_permissions(permissions: &[Permission], removed: &[&str]) -> Vec<Permission> {
+    permissions
+        .iter()
+        .filter(|permission| !removed.contains(&permission.to_string().as_str()))
+        .cloned()
+        .collect()
+}
+
+/// 执行一次仅匹配旧种子的安全权限升级。
+async fn upgrade_exact(
+    rbac: &SharedRbacService,
+    role_id: &str,
+    previous: Vec<Permission>,
+    desired: Vec<Permission>,
+) -> Result<()> {
+    if rbac
+        .upgrade_seeded_role_permissions_if_exact(role_id, previous, desired)
+        .await?
+    {
+        tracing::info!(role_id, "predefined customer permissions upgraded");
+    }
     Ok(())
 }
 
@@ -608,6 +693,12 @@ mod tests {
         assert!(permissions
             .iter()
             .any(|p| p.covers(&Permission::parse("contract:create").unwrap())));
+        assert!(!permissions
+            .iter()
+            .any(|p| p.covers(&Permission::parse("party_bank_account:detail").unwrap())));
+        assert!(!permissions
+            .iter()
+            .any(|p| p.covers(&Permission::parse("customer_scope:detail").unwrap())));
         assert!(
             !permissions
                 .iter()

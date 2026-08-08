@@ -883,12 +883,72 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         permissions: [
             {
                 module: "admin",
+                method: "POST",
+                path: "/admin/customer-profiles",
+                description: "创建完整客户资料",
+                permission: {
+                    resource: "customer",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-profiles/{id}",
+                description: "查询完整客户资料",
+                permission: {
+                    resource: "customer",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/customer-profiles/{id}",
+                description: "修订完整客户资料",
+                permission: {
+                    resource: "customer",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customer-profile-commands/{idempotency_key}",
+                description: "查询客户资料保存结果",
+                permission: {
+                    resource: "customer",
+                    action: "detail",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/customer-sensitive-fields/reveal",
+                description: "查看客户敏感字段",
+                permission: {
+                    resource: "customer_sensitive",
+                    action: "reveal",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/customers",
                 description: "查询客户列表",
                 permission: {
                     resource: "customer",
                     action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
+                path: "/admin/customers/all-authorized",
+                description: "查询全部有权客户",
+                permission: {
+                    resource: "customer_scope",
+                    action: "detail",
                 },
             },
             {

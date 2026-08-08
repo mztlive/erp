@@ -42,7 +42,9 @@ import {
   useCustomerCenterQuery,
   useCustomerDirectoryQuery,
 } from "@/features/customers/queries"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { usePartyOptionsQuery } from "@/hooks/use-options"
+import { hasPermission } from "@/lib/permissions"
 
 const uploadSchema = z
   .object({
@@ -98,9 +100,16 @@ export function ContractUploadDialog({
   onSuccess,
 }: ContractUploadDialogProps) {
   const customerQuery = useCustomerCenterQuery(initialCustomerId)
+  const accountProfile = useAccountProfileQuery()
+  const canReadAllCustomers = hasPermission(
+    accountProfile.data?.permissions,
+    "customer_scope:detail"
+  )
   const customerDirectoryQuery = useCustomerDirectoryQuery({
-    scope: "team",
+    scope: canReadAllCustomers ? "all_authorized" : "assigned",
     status: "active",
+    page: 1,
+    pageSize: 100,
   })
   const uploadMutation = useUploadContractPdfMutation()
   const { data: partyOptions } = usePartyOptionsQuery()

@@ -10,7 +10,9 @@
 //! 定义在本文件，经 `CustomerExt` 的关联类型对外暴露。
 
 use entities::common::time::BusinessDate;
-use entities::customer::{AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment};
+use entities::customer::{
+    AssignmentRole, CustomerAccount, CustomerAccountStatus, CustomerAssignment, CustomerProfileCommand,
+};
 use entities::ids::{CustomerAccountId, PartyId};
 use entity_core::NOT_DELETED_TIMESTAMP_BSON;
 use mongodb::bson::{doc, Document};
@@ -44,6 +46,8 @@ pub struct CustomerAccountRow {
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+    /// 最后更新时间（秒级时间戳）。
+    pub updated_at: u64,
 }
 
 /// 客户角色列表筛选条件。
@@ -51,8 +55,14 @@ pub struct CustomerAccountRow {
 pub struct CustomerAccountFilter {
     /// 客户编号模糊匹配（字面量正则，忽略大小写）；`None` 表示不筛选。
     pub keyword: Option<String>,
+    /// 客户关键词命中的主体 ID，用于与客户编号组成同一 OR 条件。
+    pub keyword_party_ids: Option<Vec<String>>,
     /// 共用企业主体 ID（精确匹配）；`None` 表示不筛选。
     pub party_id: Option<PartyId>,
+    /// 允许的 Party ID 集合；`Some(empty)` 表示范围内无客户。
+    pub party_ids: Option<Vec<String>>,
+    /// 允许的客户 ID 集合；`Some(empty)` 表示范围内无客户。
+    pub customer_ids: Option<Vec<String>>,
     /// 启停状态；`None` 表示不筛选。
     pub status: Option<CustomerAccountStatus>,
     /// 页码（1 起）。
@@ -72,9 +82,23 @@ impl QueryFilter for CustomerAccountFilter {
     /// 返回查询条件文档。
     fn to_doc(&self) -> Document {
         let mut filter = doc! { "deleted_at": NOT_DELETED_TIMESTAMP_BSON };
-        insert_literal_regex_filter(&mut filter, "customer_no", self.keyword.as_deref());
+        if let Some(keyword) = self.keyword.as_deref() {
+            let mut customer_no = Document::new();
+            insert_literal_regex_filter(&mut customer_no, "customer_no", Some(keyword));
+            let mut alternatives = vec![customer_no];
+            if let Some(party_ids) = &self.keyword_party_ids {
+                alternatives.push(doc! { "party_id": { "$in": party_ids } });
+            }
+            filter.insert("$or", alternatives);
+        }
         if let Some(party_id) = &self.party_id {
             filter.insert("party_id", party_id.to_string());
+        }
+        if let Some(party_ids) = &self.party_ids {
+            filter.insert("party_id", doc! { "$in": party_ids });
+        }
+        if let Some(customer_ids) = &self.customer_ids {
+            filter.insert("id", doc! { "$in": customer_ids });
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
@@ -97,7 +121,7 @@ impl<'a> Repository<'a, CustomerAccount> {
     /// 分页检索客户角色列表（投影查询）。
     ///
     /// 只返回 [`CustomerAccountRow`] 所需的列表字段，不加载整文档；排序字段
-    /// 经仓储白名单校验（`created_at`/`customer_no`/`status`），非法字段回落
+    /// 经仓储白名单校验（`created_at`/`updated_at`/`customer_no`/`status`），非法字段回落
     /// 默认 `created_at`。
     ///
     /// # 参数
@@ -118,7 +142,7 @@ impl<'a> Repository<'a, CustomerAccount> {
             .sort(sort_doc(
                 filter.sort_by.as_deref(),
                 filter.sort_ascending,
-                &["created_at", "customer_no", "status"],
+                &["created_at", "updated_at", "customer_no", "status"],
             ))
             .skip(filter.skip())
             .limit(filter.limit())
@@ -325,6 +349,28 @@ impl<'a> Repository<'a, CustomerAssignment> {
     }
 }
 
+impl<'a> Repository<'a, CustomerProfileCommand> {
+    /// 按客户端幂等键读取已成功命令结果。
+    ///
+    /// # 参数
+    /// * `idempotency_key` - 客户端生成且重试时保持不变的幂等键
+    /// * `executor` - 数据访问执行器
+    ///
+    /// # 返回
+    /// 返回已提交的稳定命令结果；不存在时返回 `None`。
+    ///
+    /// # 错误
+    /// MongoDB 查询失败时返回错误。
+    pub async fn find_by_idempotency_key(
+        &self,
+        idempotency_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<CustomerProfileCommand>> {
+        self.find_one(doc! { "idempotency_key": idempotency_key }, executor)
+            .await
+    }
+}
+
 /// D08 域专用仓储：跨集合、多步骤且必须位于事务内的聚合写入。
 ///
 /// 单一集合 CRUD 使用 [`Repository`] 基类；本类型只承载依赖事务的
@@ -412,6 +458,7 @@ fn customer_account_projection() -> Document {
         "status": 1,
         "version": 1,
         "created_at": 1,
+        "updated_at": 1,
     }
 }
 
@@ -443,7 +490,10 @@ mod tests {
     fn customer_account_filter_applies_keyword_and_status() {
         let filter = CustomerAccountFilter {
             keyword: Some("C-".to_string()),
+            keyword_party_ids: None,
             party_id: None,
+            party_ids: None,
+            customer_ids: None,
             status: Some(CustomerAccountStatus::Active),
             page: 1,
             page_size: 20,
@@ -454,7 +504,15 @@ mod tests {
         let document = filter.to_doc();
         assert_eq!(document.get_i64("deleted_at").unwrap(), 0);
         assert_eq!(document.get_str("status").unwrap(), "active");
-        let keyword = document.get_document("customer_no").unwrap();
+        let keyword = document
+            .get_array("$or")
+            .unwrap()
+            .first()
+            .unwrap()
+            .as_document()
+            .unwrap()
+            .get_document("customer_no")
+            .unwrap();
         assert_eq!(keyword.get_str("$regex").unwrap(), r"C\-");
     }
 

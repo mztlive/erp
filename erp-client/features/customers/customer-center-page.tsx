@@ -18,7 +18,6 @@ import {
   DataFreshness,
   DataTable,
   ListToolbar,
-  MoneyValue,
   OptionCombobox,
   PageActions,
   PageHeader,
@@ -29,6 +28,7 @@ import { Button } from "@/components/ui/button"
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { cn } from "@/lib/utils"
@@ -39,10 +39,12 @@ import {
   SCOPE_ORDER,
 } from "@/features/customers/filter-customers"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import type {
   CustomerDirectoryItem,
   CustomerScope,
 } from "@/features/customers/types"
+import { hasPermission } from "@/lib/permissions"
 
 type DirectoryStatus = "active" | "disabled" | "all"
 
@@ -68,11 +70,9 @@ function writeDirectoryUrl(
   return qs ? `${pathname}?${qs}` : pathname
 }
 
-/** 表头排序列 → 目录查询排序键（filter-customers 已实现的排序能力）。 */
+/** 表头排序列到服务端目录排序键。 */
 const SORT_COLUMN_TO_FIELD: Record<string, string> = {
-  customer: "name",
-  overdue: "overdue_desc",
-  business: "recent_business",
+  business: "updated_at",
 }
 
 function parsePage(value: string | null): number {
@@ -92,20 +92,38 @@ export function CustomerCenterPage() {
       ? statusParam
       : "active"
   const q = searchParams.get("q") ?? ""
-  const sortParam = searchParams.get("sort")
-  const sort: string =
-    sortParam === "customer" || sortParam === "overdue"
-      ? sortParam
-      : "business"
+  const sort = "business"
   const dir: "asc" | "desc" = searchParams.get("dir") === "asc" ? "asc" : "desc"
   const page = parsePage(searchParams.get("page"))
 
   const [searchDraft, setSearchDraft] = React.useState(q)
   const [createOpen, setCreateOpen] = React.useState(false)
+  const accountProfile = useAccountProfileQuery()
+  const canCreate = hasPermission(
+    accountProfile.data?.permissions,
+    "customer:create"
+  )
+  const canReadAll = hasPermission(
+    accountProfile.data?.permissions,
+    "customer_scope:detail"
+  )
 
   React.useEffect(() => {
     setSearchDraft(q)
   }, [q])
+
+  React.useEffect(() => {
+    if (!accountProfile.isPending && scope === "all_authorized" && !canReadAll) {
+      router.replace(writeDirectoryUrl(pathname, {
+        scope: "mine",
+        status,
+        q,
+        sort,
+        dir,
+        page: 1,
+      }))
+    }
+  }, [accountProfile.isPending, canReadAll, dir, page, pathname, q, router, scope, sort, status])
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -135,11 +153,10 @@ export function CustomerCenterPage() {
     status,
     query: q,
     sort:
-      (SORT_COLUMN_TO_FIELD[sort] as
-        | "recent_business"
-        | "name"
-        | "overdue_desc") ?? "recent_business",
+      (SORT_COLUMN_TO_FIELD[sort] as "updated_at") ?? "updated_at",
     sortDir: dir,
+    page,
+    pageSize: 20,
   })
 
   const data = directoryQuery.data
@@ -153,11 +170,6 @@ export function CustomerCenterPage() {
     () => ({ pageIndex: Math.max(0, page - 1), pageSize: 20 }),
     [page]
   )
-
-  const pageRows = React.useMemo(() => {
-    const start = pagination.pageIndex * pagination.pageSize
-    return items.slice(start, start + pagination.pageSize)
-  }, [items, pagination.pageIndex, pagination.pageSize])
 
   const pushState = React.useCallback(
     (next: {
@@ -181,16 +193,6 @@ export function CustomerCenterPage() {
     },
     [dir, page, pathname, q, router, scope, sort, status]
   )
-
-  // 防抖即时搜索（300ms）+ Enter 兜底；删除默认回第 1 页。
-  React.useEffect(() => {
-    const handle = globalThis.setTimeout(() => {
-      if (searchDraft.trim() === q) return
-      pushState({ q: searchDraft.trim(), page: 1 })
-    }, 300)
-    return () => globalThis.clearTimeout(handle)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- pushState 以当前 URL 快照为准
-  }, [searchDraft])
 
   const handlePaginationChange = React.useCallback(
     (next: PaginationState) => {
@@ -242,6 +244,7 @@ export function CustomerCenterPage() {
         accessorFn: (row) => row.shortName || row.legalName,
         header: "客户",
         meta: { label: "客户", width: "reference" },
+        enableSorting: false,
         cell: ({ row }) => (
           <div className="min-w-0">
             <Link
@@ -291,67 +294,13 @@ export function CustomerCenterPage() {
         ),
       },
       {
-        id: "contracts",
-        accessorFn: (row) => row.metrics.activeContractCount,
-        header: "有效合同",
-        meta: { label: "有效合同", width: "status", numeric: true },
-        enableSorting: false,
-        cell: ({ row }) => (
-          <span className="num text-sm">
-            {row.original.metrics.activeContractCount}
-          </span>
-        ),
-      },
-      {
-        id: "orders",
-        accessorFn: (row) => row.metrics.inProgressSalesOrderCount,
-        header: "进行中销售单",
-        meta: { label: "进行中销售单", width: "status", numeric: true },
-        enableSorting: false,
-        cell: ({ row }) => (
-          <span className="num text-sm">
-            {row.original.metrics.inProgressSalesOrderCount}
-          </span>
-        ),
-      },
-      {
-        id: "receivable",
-        accessorFn: (row) => row.metrics.receivableBalance,
-        header: "未结清",
-        meta: { label: "未结清", width: "amount", numeric: true },
-        enableSorting: false,
-        cell: ({ row }) => (
-          <MoneyValue value={row.original.metrics.receivableBalance} />
-        ),
-      },
-      {
-        id: "overdue",
-        accessorFn: (row) => row.metrics.overdueAmount,
-        header: "逾期",
-        meta: { label: "逾期", width: "amount", numeric: true },
-        cell: ({ row }) => (
-          <span
-            className={
-              Number.parseFloat(row.original.metrics.overdueAmount) > 0
-                ? "text-warning-foreground"
-                : undefined
-            }
-          >
-            <MoneyValue value={row.original.metrics.overdueAmount} />
-          </span>
-        ),
-      },
-      {
         id: "business",
-        accessorFn: (row) => row.recentBusinessAt ?? row.updatedAt,
-        header: "最近业务",
-        meta: { label: "最近业务", width: "default", numeric: true },
+        accessorFn: (row) => row.updatedAt,
+        header: "资料更新",
+        meta: { label: "资料更新", width: "default", numeric: true },
         cell: ({ row }) => (
           <span className="num text-sm text-muted-foreground">
-            {(row.original.recentBusinessAt ?? row.original.updatedAt).slice(
-              0,
-              10
-            )}
+            {row.original.updatedAt.slice(0, 10)}
           </span>
         ),
       },
@@ -378,12 +327,16 @@ export function CustomerCenterPage() {
         actions={
           <PageActions
             actions={[
-              {
-                actionKey: "create",
-                label: "新建客户",
-                icon: PlusIcon,
-                onClick: () => setCreateOpen(true),
-              },
+              ...(canCreate
+                ? [
+                    {
+                      actionKey: "create",
+                      label: "新建客户",
+                      icon: PlusIcon,
+                      onClick: () => setCreateOpen(true),
+                    },
+                  ]
+                : []),
             ]}
           />
         }
@@ -446,9 +399,19 @@ export function CustomerCenterPage() {
                         pushState({ q: searchDraft.trim(), page: 1 })
                       }
                     }}
-                    placeholder="名称、编码、统一社会信用代码、负责销售"
+                    placeholder="客户名称或客户编号"
                     aria-label="搜索客户"
                   />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton
+                      aria-label="执行客户搜索"
+                      onClick={() =>
+                        pushState({ q: searchDraft.trim(), page: 1 })
+                      }
+                    >
+                      搜索
+                    </InputGroupButton>
+                  </InputGroupAddon>
                 </InputGroup>
               }
               filters={
@@ -458,7 +421,9 @@ export function CustomerCenterPage() {
                     aria-label="客户范围"
                     className="inline-flex items-center rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
                   >
-                    {SCOPE_ORDER.map((key) => {
+                    {SCOPE_ORDER.filter(
+                      (key) => key !== "all_authorized" || canReadAll
+                    ).map((key) => {
                       const active = scope === key
                       return (
                         <button
@@ -502,7 +467,7 @@ export function CustomerCenterPage() {
               actions={
                 <>
                   <span className="text-xs text-muted-foreground" aria-live="polite">
-                    共 {items.length.toLocaleString("zh-CN")} 条
+                    共 {data.totalInScope.toLocaleString("zh-CN")} 条
                   </span>
                   {hasActiveFilters ? (
                     <Button
@@ -525,7 +490,7 @@ export function CustomerCenterPage() {
                 title="当前范围尚无客户"
                 description={`${SCOPE_LABELS[scope]}下还没有客户。有权时可新建客户。`}
                 className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
-                action={
+                action={canCreate ? (
                   <Button
                     type="button"
                     variant="secondary"
@@ -534,7 +499,7 @@ export function CustomerCenterPage() {
                   >
                     新建客户
                   </Button>
-                }
+                ) : null}
               />
             ) : items.length === 0 ? (
               <BusinessEmptyState
@@ -557,14 +522,15 @@ export function CustomerCenterPage() {
               />
             ) : (
               <DataTable
-                data={pageRows}
+                data={[...items]}
                 columns={columns}
                 getRowId={(row) => row.id}
-                rowCount={items.length}
+                rowCount={data.totalInScope}
                 sorting={sorting}
                 onSortingChange={handleSortingChange}
                 pagination={pagination}
                 onPaginationChange={handlePaginationChange}
+                pageSizeOptions={[20]}
                 layout="flush"
                 density="compact"
                 rowLabel={(row) => row.shortName || row.legalName}

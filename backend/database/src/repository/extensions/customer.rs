@@ -5,7 +5,7 @@
 //! 子树，模块路径无法互相引用；关联常量随 trait 公开可达，两侧统一取
 //! `<mongodb::Database as CustomerExt>::CUSTOMER_ACCOUNTS` 等值。
 
-use entities::customer::{CustomerAccount, CustomerAssignment};
+use entities::customer::{CustomerAccount, CustomerAssignment, CustomerProfileCommand};
 use mongodb::Database;
 
 use super::super::customer::{CustomerAccountFilter, CustomerAssignmentFilter, CustomerRepository};
@@ -17,6 +17,8 @@ pub trait CustomerExt {
     const CUSTOMER_ACCOUNTS: &'static str = "customer_accounts";
     /// `customer_assignment` 集合名。
     const CUSTOMER_ASSIGNMENTS: &'static str = "customer_assignments";
+    /// `customer_profile_command` 根级命令去重结果集合名。
+    const CUSTOMER_PROFILE_COMMANDS: &'static str = "customer_profile_commands";
 
     /// 客户角色列表筛选条件类型（定义见 `repository::customer`）。
     type CustomerAccountFilter;
@@ -35,6 +37,12 @@ pub trait CustomerExt {
     /// 返回 `Repository<'_, entities::customer::CustomerAssignment>`。
     fn customer_assignments(&self) -> Repository<'_, CustomerAssignment>;
 
+    /// 获取客户资料根级命令去重仓储。
+    ///
+    /// # 返回
+    /// 返回 `Repository<'_, CustomerProfileCommand>`。
+    fn customer_profile_commands(&self) -> Repository<'_, CustomerProfileCommand>;
+
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
     /// # 返回
@@ -52,6 +60,10 @@ impl CustomerExt for Database {
 
     fn customer_assignments(&self) -> Repository<'_, CustomerAssignment> {
         Repository::new(self, Self::CUSTOMER_ASSIGNMENTS)
+    }
+
+    fn customer_profile_commands(&self) -> Repository<'_, CustomerProfileCommand> {
+        Repository::new(self, Self::CUSTOMER_PROFILE_COMMANDS)
     }
 
     fn customer(&self) -> CustomerRepository<'_> {

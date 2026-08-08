@@ -1,12 +1,8 @@
 /**
- * W03 客户中心 — 真实 HTTP 适配层。
- * 保持 queries.ts 消费的导出签名与返回类型稳定；后端 Page/DTO 仅在此映射。
+ * 客户资料 HTTP 适配层。
  *
- * 后端路由：
- * - GET/POST /admin/customers
- * - GET/PUT/DELETE /admin/customers/{id}
- * - GET/POST /admin/customers/{id}/assignments
- * - /admin/parties*（主体与联系人/地址/银行账户）
+ * 客户创建和修订只允许通过 customer-profiles 根命令提交，避免 Party、客户角色、
+ * 归属和从属事实出现部分成功。Wire DTO 只在本文件存在，页面消费 camelCase 视图。
  */
 
 import { apiGet, apiPost, apiPut } from "@/lib/api"
@@ -16,6 +12,7 @@ import type {
   CreateCustomerBankAccountInput,
   CreateCustomerContactInput,
   CreateCustomerInput,
+  CustomerAssignmentChangeInput,
   CustomerAddressView,
   CustomerAssignmentView,
   CustomerBankAccountView,
@@ -35,48 +32,39 @@ import {
   CONTRACT_STATUS_TONE,
   type ContractStatus,
 } from "@/features/contracts/types"
-
-// ─── Backend DTO shapes (wire) ───────────────────────────────────────────────
+import {
+  fetchCustomerQuality,
+  fetchCustomerQualityPeriodPolicy,
+} from "@/features/customer-quality/api"
+import { compareDecimal, formatScaled, normalizeFixed } from "@/lib/fixed-decimal"
 
 type BackendCustomerStatus = "active" | "disabled"
+type BackendCustomerScope =
+  | "mine"
+  | "collaborating"
+  | "assigned"
+  | "all_authorized"
+type BackendSensitiveKind =
+  | "contact_mobile"
+  | "address"
+  | "bank_account_number"
 
 type BackendCustomerView = {
   id: string
   party_id: string
+  party_no?: string | null
+  legal_name?: string | null
+  short_name?: string | null
   customer_no: string
   default_payment_term_id?: string | null
   status: BackendCustomerStatus
-  version: number
-  created_at: number
-}
-
-type BackendCustomerDetail = BackendCustomerView & {
-  party_no?: string | null
-  legal_name?: string | null
   owner_user_id?: string | null
-}
-
-type BackendAssignment = {
-  id: string
-  customer_id: string
-  user_id: string
-  assignment_role: "OWNER" | "COLLABORATOR"
-  valid_from: string
-  valid_to?: string | null
-  change_reason: string
+  owner_user_name?: string | null
+  collaborator_count: number
+  scope_tags: BackendCustomerScope[]
   version: number
   created_at: number
-}
-
-type BackendPartyView = {
-  id: string
-  party_no: string
-  party_kind: string
-  unified_credit_code?: string | null
-  status: string
-  current_revision_id?: string | null
-  version: number
-  created_at: number
+  updated_at: number
 }
 
 type BackendPartyRevision = {
@@ -89,62 +77,137 @@ type BackendPartyRevision = {
   created_at: number
 }
 
-type BackendContact = {
+type BackendAssignment = {
   id: string
-  party_id: string
-  contact_name: string
-  title?: string | null
-  telephone?: string | null
-  email?: string | null
+  customer_id: string
+  user_id: string
+  user_name: string
+  assignment_role: "OWNER" | "COLLABORATOR"
   valid_from: string
   valid_to?: string | null
-  is_default: boolean
-  status: string
+  change_reason: string
   version: number
   created_at: number
 }
 
+type BackendContact = {
+  id: string
+  contact_name: string
+  title?: string | null
+  telephone?: string | null
+  mobile_masked: string
+  email?: string | null
+  valid_from: string
+  valid_to?: string | null
+  is_default: boolean
+}
+
 type BackendAddress = {
   id: string
-  party_id: string
-  address_type: "registered" | "operating" | "fulfillment" | string
+  address_type: "registered" | "operating" | "fulfillment"
   contact_name?: string | null
   valid_from: string
   valid_to?: string | null
   is_default: boolean
-  status: string
-  version: number
-  created_at: number
 }
 
 type BackendBankAccount = {
   id: string
   bank_account_no: string
-  party_id: string
   account_name: string
   bank_name: string
+  account_number_masked: string
   bank_branch_name?: string | null
   valid_from: string
   valid_to?: string | null
   is_default: boolean
-  status: string
-  version: number
-  created_at: number
+}
+
+type BackendSensitiveField = {
+  kind: BackendSensitiveKind
+  record_id: string
+  masked_value: string
+  reveal_token: string
+  expires_at: number
+}
+
+type BackendCustomerProfile = BackendCustomerView & {
+  party_status: string
+  party_version: number
+  unified_credit_code?: string | null
+  current_revision: BackendPartyRevision
+  revisions: BackendPartyRevision[]
+  assignments: BackendAssignment[]
+  contacts: BackendContact[]
+  addresses: BackendAddress[]
+  bank_accounts: BackendBankAccount[]
+  sensitive_fields: BackendSensitiveField[]
+  allowed_actions: string[]
+  action_blockers: { action: string; code: string; message: string }[]
+}
+
+type BackendProfileMutation = {
+  customer_id: string
+  customer_no: string
+  party_id: string
+  revision_id: string
+  revision_no: number
+  customer_version: number
+  party_version: number
+  effective_from: string
+  recorded_at: number
+  change_reason: string
 }
 
 type BackendContractListRow = {
   id: string
   contract_no: string
   customer_id: string
-  settlement_party_id: string
   status: ContractStatus | string
-  current_revision_id?: string | null
-  created_at: number
-  version: number
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+type BackendSalesOrderListRow = {
+  id: string
+  order_no: string
+  customer_id: string
+  commercial_status: string
+  close_status: string
+  created_at: number
+}
 
+type BackendReceivableEntry = {
+  direction: "increase" | "decrease"
+  amount: string
+  offset_total: string
+  due_date: string
+}
+
+type BackendReceivableAccount = {
+  open_total: string
+  gross_total: string
+  settled_total: string
+  open_invoiceable_total: string
+  entries: BackendReceivableEntry[]
+}
+
+type BackendProfileRequest = {
+  idempotency_key: string
+  expected_party_version?: number
+  expected_customer_version?: number
+  legal_name: string
+  short_name?: string
+  unified_credit_code?: string
+  default_payment_term_id?: string
+  status?: CustomerStatus
+  owner_user_id?: string
+  contacts?: ReturnType<typeof mapContactInput>[]
+  addresses?: ReturnType<typeof mapAddressInput>[]
+  bank_accounts?: ReturnType<typeof mapBankInput>[]
+  effective_from: string
+  change_reason: string
+}
+
+/** 判断未知异常是否为统一 API 错误。 */
 function isApiError(error: unknown): error is ApiError {
   return (
     typeof error === "object" &&
@@ -154,164 +217,137 @@ function isApiError(error: unknown): error is ApiError {
   )
 }
 
+/** 提取服务端稳定错误消息。 */
 function apiErrorMessage(error: ApiError): string {
   const data = error.responseData as { errorMessage?: string } | undefined
-  if (data?.errorMessage && data.errorMessage !== "OK") {
-    return data.errorMessage
-  }
-  return error.message
+  return data?.errorMessage && data.errorMessage !== "OK"
+    ? data.errorMessage
+    : error.message
 }
 
+/** 返回本地业务日期。 */
 function todayBusinessDate(): string {
-  const d = new Date()
-  const pad = (n: number) => String(n).padStart(2, "0")
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  const date = new Date()
+  const pad = (value: number) => String(value).padStart(2, "0")
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`
 }
 
+/** 秒级时间戳转 ISO 时间。 */
 function tsToIso(seconds: number | undefined | null): string {
-  if (seconds == null || !Number.isFinite(seconds)) {
-    return new Date().toISOString()
-  }
-  return new Date(seconds * 1000).toISOString()
+  return seconds == null || !Number.isFinite(seconds)
+    ? new Date().toISOString()
+    : new Date(seconds * 1000).toISOString()
 }
 
-function tsToDate(seconds: number | undefined | null): string {
-  return tsToIso(seconds).slice(0, 10)
-}
-
+/** 映射客户状态及其展示语义。 */
 function mapCustomerStatus(status: BackendCustomerStatus | string): {
   status: CustomerStatus
   statusLabel: { label: string; tone: "success" | "neutral" }
 } {
-  if (status === "disabled") {
-    return { status: "disabled", statusLabel: { label: "停用", tone: "neutral" } }
-  }
-  return { status: "active", statusLabel: { label: "启用", tone: "success" } }
+  return status === "disabled"
+    ? { status: "disabled", statusLabel: { label: "停用", tone: "neutral" } }
+    : { status: "active", statusLabel: { label: "启用", tone: "success" } }
 }
 
-function mapAddressTypeToBackend(label: string): string {
-  const t = label.trim()
-  if (t === "注册地址" || t === "registered") return "registered"
-  if (t === "履约地址" || t === "fulfillment") return "fulfillment"
-  if (t === "经营地址" || t === "operating") return "operating"
-  // 开票地址 / 办公地址等前端历史选项 → 经营地址
-  return "operating"
+/** 后端地址代码转中文展示值。 */
+function mapAddressTypeFromBackend(code: BackendAddress["address_type"]): string {
+  if (code === "registered") return "注册地址"
+  if (code === "fulfillment") return "履约地址"
+  return "经营地址"
 }
 
-function mapAddressTypeFromBackend(code: string): string {
-  switch (code) {
-    case "registered":
-      return "注册地址"
-    case "fulfillment":
-      return "履约地址"
-    case "operating":
-      return "经营地址"
-    default:
-      return code
-  }
+/** 前端地址展示值转后端稳定代码。 */
+function mapAddressTypeToBackend(
+  label: string
+): BackendAddress["address_type"] {
+  if (label === "注册地址" || label === "registered") return "registered"
+  if (label === "经营地址" || label === "operating") return "operating"
+  return "fulfillment"
 }
 
+/** 返回后端尚未提供聚合投影时的显式不可用值。 */
 function emptyMetrics() {
   return {
-    activeContractCount: 0,
-    inProgressSalesOrderCount: 0,
-    receivableBalance: "0.00",
-    overdueAmount: "0.00",
+    activeContractCount: null,
+    inProgressSalesOrderCount: null,
+    receivableBalance: null,
+    overdueAmount: null,
   }
 }
 
-function genCode(prefix: string): string {
-  const stamp = Date.now().toString(36).toUpperCase()
-  const rand = Math.random().toString(36).slice(2, 6).toUpperCase()
-  return `${prefix}-${stamp}${rand}`
-}
-
-async function safePage<T>(
+/** 按服务端 total 读取完整小型关联集合，避免只汇总第一页。 */
+async function loadAllPages<T>(
   path: string,
-  query?: Record<string, unknown>
+  query: Record<string, unknown>
 ): Promise<Page<T>> {
-  try {
-    return await apiGet<Page<T>>(path, query)
-  } catch (error) {
-    if (isApiError(error) && (error.status === 403 || error.status === 404)) {
-      return { items: [], total: 0, page: 1, page_size: 20 }
-    }
-    throw error
+  const first = await apiGet<Page<T>>(path, {
+    ...query,
+    page: 1,
+    page_size: 100,
+  })
+  const pages = Math.ceil(first.total / 100)
+  if (pages <= 1) return first
+  const rest = await Promise.all(
+    Array.from({ length: pages - 1 }, (_, index) =>
+      apiGet<Page<T>>(path, {
+        ...query,
+        page: index + 2,
+        page_size: 100,
+      })
+    )
+  )
+  return {
+    ...first,
+    items: [...first.items, ...rest.flatMap((page) => page.items)],
   }
 }
 
-// ─── Directory ───────────────────────────────────────────────────────────────
-
-function mapDirectoryItem(
-  row: BackendCustomerView,
-  detail: BackendCustomerDetail | null
-): CustomerDirectoryItem {
+/** 映射目录行；目录接口已批量补齐主体与归属，不再逐行请求详情。 */
+function mapDirectoryItem(row: BackendCustomerView): CustomerDirectoryItem {
   const { status, statusLabel } = mapCustomerStatus(row.status)
-  const legalName =
-    detail?.legal_name?.trim() ||
-    detail?.party_no?.trim() ||
-    row.customer_no
   return {
     id: row.id,
     partyId: row.party_id,
     customerNo: row.customer_no,
-    legalName,
-    shortName: undefined,
+    legalName: row.legal_name?.trim() || row.party_no?.trim() || row.customer_no,
+    shortName: row.short_name ?? undefined,
     status,
     statusLabel,
-    ownerName: detail?.owner_user_id ?? "—",
-    collaboratorCount: 0,
-    // 后端列表无 mine/collaborating/team 范围；统一标记 team 供 UI 筛选不致空窗
-    scopeTags: ["team", "mine", "collaborating"],
+    ownerName: row.owner_user_name ?? row.owner_user_id ?? "—",
+    collaboratorCount: row.collaborator_count,
+    scopeTags: row.scope_tags,
     metrics: emptyMetrics(),
-    updatedAt: tsToDate(row.created_at),
-    recentBusinessAt: tsToIso(row.created_at),
+    updatedAt: tsToIso(row.updated_at),
   }
 }
 
 /**
- * 客户目录：服务端 keyword + status + 分页；scope/sort 中后端不支持的部分见证据表。
+ * 查询客户目录。范围、过滤、排序和分页均由服务端执行。
  */
 export async function fetchCustomerDirectory(
   query: CustomerDirectoryQuery
 ): Promise<CustomerDirectoryResult> {
-  const statusParam =
-    query.status === "all" ? undefined : query.status === "disabled" ? "disabled" : "active"
-
-  // 后端排序白名单：created_at / customer_no / status
-  const sort_by = query.sort === "name" ? "customer_no" : "created_at"
-  const sort_dir: "asc" | "desc" = query.sortDir === "asc" ? "asc" : "desc"
-
+  const status = query.status === "all" ? undefined : query.status
+  const path =
+    query.scope === "all_authorized"
+      ? "/admin/customers/all-authorized"
+      : "/admin/customers"
   try {
-    const page = await apiGet<Page<BackendCustomerView>>("/admin/customers", {
+    const page = await apiGet<Page<BackendCustomerView>>(path, {
+      scope: query.scope,
       keyword: query.query?.trim() || undefined,
-      status: statusParam,
-      page: 1,
-      page_size: 100,
-      sort_by,
-      sort_dir,
+      status,
+      page: query.page,
+      page_size: query.pageSize,
+      sort_by: "updated_at",
+      sort_dir: query.sortDir === "asc" ? "asc" : "desc",
     })
-
-    const items = await Promise.all(
-      page.items.map(async (row) => {
-        try {
-          const detail = await apiGet<BackendCustomerDetail>(
-            `/admin/customers/${row.id}`
-          )
-          return mapDirectoryItem(row, detail)
-        } catch {
-          return mapDirectoryItem(row, null)
-        }
-      })
-    )
-
-    // scope 后端无实现：前端保留标签过滤语义（全部条目已打全 scopeTags）
-    const scoped = items.filter((item) => item.scopeTags.includes(query.scope))
-
     return {
       hasCustomerScope: true,
-      items: scoped,
+      items: page.items.map(mapDirectoryItem),
       totalInScope: page.total,
+      page: page.page,
+      pageSize: page.page_size,
       queriedAt: new Date().toISOString(),
     }
   } catch (error) {
@@ -320,6 +356,8 @@ export async function fetchCustomerDirectory(
         hasCustomerScope: false,
         items: [],
         totalInScope: 0,
+        page: query.page,
+        pageSize: query.pageSize,
         queriedAt: new Date().toISOString(),
       }
     }
@@ -327,374 +365,473 @@ export async function fetchCustomerDirectory(
   }
 }
 
-// ─── Detail / center ─────────────────────────────────────────────────────────
+/** 以字段类型和事实 ID 索引敏感字段令牌。 */
+function sensitiveIndex(fields: BackendSensitiveField[]) {
+  return new Map(fields.map((field) => [`${field.kind}:${field.record_id}`, field]))
+}
 
-function mapContact(c: BackendContact): CustomerContactView {
+/** 映射联系人当前事实。 */
+function mapContact(
+  contact: BackendContact,
+  fields: Map<string, BackendSensitiveField>
+): CustomerContactView {
+  const sensitive = fields.get(`contact_mobile:${contact.id}`)
   return {
-    id: c.id,
-    name: c.contact_name,
-    title: c.title ?? undefined,
-    purpose: undefined,
-    // 后端不返回手机号明文/掩码（仅指纹）；展示占位
-    phoneMasked: "****",
-    phoneRevealToken: undefined,
-    email: c.email ?? undefined,
-    isDefault: c.is_default,
-    effectiveFrom: c.valid_from,
-    effectiveTo: c.valid_to ?? undefined,
+    id: contact.id,
+    name: contact.contact_name,
+    title: contact.title ?? undefined,
+    telephone: contact.telephone ?? undefined,
+    phoneMasked: sensitive?.masked_value ?? contact.mobile_masked,
+    phoneRevealToken: sensitive?.reveal_token,
+    email: contact.email ?? undefined,
+    isDefault: contact.is_default,
+    effectiveFrom: contact.valid_from,
+    effectiveTo: contact.valid_to ?? undefined,
     fieldVisibility: { phone: "masked" },
   }
 }
 
-function mapAddress(a: BackendAddress): CustomerAddressView {
+/** 映射地址当前事实。 */
+function mapAddress(
+  address: BackendAddress,
+  fields: Map<string, BackendSensitiveField>
+): CustomerAddressView {
+  const sensitive = fields.get(`address:${address.id}`)
   return {
-    id: a.id,
-    addressType: mapAddressTypeFromBackend(a.address_type),
-    addressMasked: "****",
-    addressRevealToken: undefined,
-    contactName: a.contact_name ?? undefined,
-    isDefault: a.is_default,
-    effectiveFrom: a.valid_from,
-    effectiveTo: a.valid_to ?? undefined,
+    id: address.id,
+    addressType: mapAddressTypeFromBackend(address.address_type),
+    addressMasked: sensitive?.masked_value ?? "********",
+    addressRevealToken: sensitive?.reveal_token,
+    contactName: address.contact_name ?? undefined,
+    isDefault: address.is_default,
+    effectiveFrom: address.valid_from,
+    effectiveTo: address.valid_to ?? undefined,
     fieldVisibility: { address: "masked" },
   }
 }
 
-function mapBank(b: BackendBankAccount): CustomerBankAccountView {
+/** 映射银行账户当前事实。 */
+function mapBank(
+  account: BackendBankAccount,
+  fields: Map<string, BackendSensitiveField>
+): CustomerBankAccountView {
+  const sensitive = fields.get(`bank_account_number:${account.id}`)
   return {
-    id: b.id,
-    internalNo: b.bank_account_no,
-    accountName: b.account_name,
-    bankName: b.bank_name,
-    accountMasked: "****",
-    accountRevealToken: undefined,
-    isDefault: b.is_default,
-    effectiveFrom: b.valid_from,
-    effectiveTo: b.valid_to ?? undefined,
+    id: account.id,
+    internalNo: account.bank_account_no,
+    accountName: account.account_name,
+    bankName: account.bank_name,
+    branchName: account.bank_branch_name ?? undefined,
+    accountMasked: sensitive?.masked_value ?? account.account_number_masked,
+    accountRevealToken: sensitive?.reveal_token,
+    isDefault: account.is_default,
+    effectiveFrom: account.valid_from,
+    effectiveTo: account.valid_to ?? undefined,
     fieldVisibility: { accountNumber: "masked" },
   }
 }
 
-function mapAssignment(a: BackendAssignment): CustomerAssignmentView {
+/** 映射客户归属历史。 */
+function mapAssignment(assignment: BackendAssignment): CustomerAssignmentView {
+  const today = todayBusinessDate()
   return {
-    id: a.id,
-    role: a.assignment_role,
-    userId: a.user_id,
-    userName: a.user_id,
-    effectiveFrom: a.valid_from,
-    effectiveTo: a.valid_to ?? undefined,
-    isCurrent: !a.valid_to || a.valid_to >= todayBusinessDate(),
+    id: assignment.id,
+    role: assignment.assignment_role,
+    userId: assignment.user_id,
+    userName: assignment.user_name || assignment.user_id,
+    effectiveFrom: assignment.valid_from,
+    effectiveTo: assignment.valid_to ?? undefined,
+    changeReason: assignment.change_reason,
+    version: assignment.version,
+    isCurrent:
+      assignment.valid_from <= today &&
+      (!assignment.valid_to || assignment.valid_to > today),
   }
 }
 
-function mapContractSummary(c: BackendContractListRow): RelatedObjectSummary {
-  const status = (c.status as ContractStatus) || "EFFECTIVE"
+/** 建立、换任或结束客户责任归属。 */
+export async function applyCustomerAssignment(
+  input: CustomerAssignmentChangeInput
+): Promise<CustomerAssignmentView[]> {
+  const rows = await apiPost<BackendAssignment[]>(
+    `/admin/customers/${input.customerId}/assignments`,
+    {
+      action: input.action,
+      user_id: input.userId,
+      assignment_role: input.role,
+      valid_from: input.effectiveFrom,
+      valid_to: input.effectiveTo,
+      assignment_id: input.assignmentId,
+      change_reason: input.changeReason.trim(),
+      version: input.version,
+    }
+  )
+  return rows.map(mapAssignment)
+}
+
+/** 映射合同摘要。 */
+function mapContractSummary(contract: BackendContractListRow): RelatedObjectSummary {
+  const status = contract.status as ContractStatus
   return {
-    id: c.id,
-    number: c.contract_no,
-    title: c.contract_no,
+    id: contract.id,
+    number: contract.contract_no,
+    title: contract.contract_no,
     status: {
-      label: CONTRACT_STATUS_LABEL[status] ?? String(c.status),
+      label: CONTRACT_STATUS_LABEL[status] ?? String(contract.status),
       tone: CONTRACT_STATUS_TONE[status] ?? "neutral",
     },
-    href: `/sales/contracts/${c.id}`,
+    href: `/sales/contracts/${contract.id}`,
   }
 }
 
-/**
- * 客户对象中心：组合 customer detail + party 子资源 + 合同列表。
- * 应收/经营质量/销售单关联等投影字段后端本批未提供，填安全空值并在证据中登记。
- */
+/** 映射销售单摘要。 */
+function mapSalesOrderSummary(order: BackendSalesOrderListRow): RelatedObjectSummary {
+  const status = order.commercial_status
+  const meta =
+    status === "EFFECTIVE"
+      ? { label: "已生效", tone: "success" as const }
+      : status === "PENDING_REVIEW"
+        ? { label: "审核中", tone: "warning" as const }
+        : status === "VOIDED"
+          ? { label: "已作废", tone: "neutral" as const }
+          : { label: "草稿", tone: "neutral" as const }
+  return {
+    id: order.id,
+    number: order.order_no,
+    title: order.order_no,
+    status: meta,
+    href: `/sales/orders/${order.id}`,
+  }
+}
+
+/** 把金额字符串转换为分，禁止经过 JavaScript number。 */
+function moneyCents(value: string): bigint {
+  return BigInt(
+    normalizeFixed(value, {
+      maxScale: 2,
+      outputScale: 2,
+      allowNegative: true,
+    }).replace(".", "")
+  )
+}
+
+/** 汇总客户应收当前余额与已逾期未核销分录。 */
+function receivableProjection(accounts: BackendReceivableAccount[]) {
+  const today = todayBusinessDate()
+  const receivableCents = accounts.reduce(
+    (total, account) => total + moneyCents(account.open_total),
+    BigInt(0)
+  )
+  let overdueCents = BigInt(0)
+  const overdueDates: string[] = []
+  for (const account of accounts) {
+    for (const entry of account.entries ?? []) {
+      if (
+        entry.direction !== "increase" ||
+        !entry.due_date ||
+        entry.due_date >= today ||
+        compareDecimal(entry.amount, entry.offset_total, 2) <= 0
+      ) {
+        continue
+      }
+      overdueCents += moneyCents(entry.amount) - moneyCents(entry.offset_total)
+      overdueDates.push(entry.due_date)
+    }
+  }
+  const openInvoiceCents = accounts.reduce(
+    (total, account) => total + moneyCents(account.open_invoiceable_total),
+    BigInt(0)
+  )
+  return {
+    receivableBalance: formatScaled(receivableCents, 2),
+    overdueAmount: formatScaled(overdueCents, 2),
+    earliestOverdueDate: overdueDates.sort()[0],
+    collectionProgressLabel:
+      receivableCents === BigInt(0) ? "已结清" : "存在未结清余额",
+    invoicingProgressLabel:
+      openInvoiceCents === BigInt(0) ? "已完成" : "存在可开票余额",
+  }
+}
+
+/** 查询指定客户的当前经营质量投影摘要。 */
+async function loadCustomerQualitySummary(customerId: string) {
+  const policy = await fetchCustomerQualityPeriodPolicy()
+  if (!policy.hasDefault || !policy.from || !policy.to || !policy.periodBasis) {
+    return undefined
+  }
+  const view = await fetchCustomerQuality({
+    from: policy.from,
+    to: policy.to,
+    periodBasis: policy.periodBasis,
+    periodSelectionSource: policy.selectionSource ?? "SERVER_DEFAULT",
+    customerQualityPeriodPolicyId: policy.customerQualityPeriodPolicyId,
+    customerQualityPeriodPolicyVersion:
+      policy.customerQualityPeriodPolicyVersion,
+    scopeId: `customer:${customerId}`,
+    fundsReview: "all",
+    sort: "salesGrossAmount:desc",
+    page: 1,
+    pageSize: 1,
+    customerId,
+  })
+  const row = view.customers.items[0]
+  if (!row) return undefined
+  return {
+    scaleLabel: row.tags.find((tag) => tag.type === "scale")?.label ?? "未分层",
+    profitContributionLabel:
+      row.tags.find((tag) => tag.type === "profit")?.label ?? "未分层",
+    collectionRiskLabel:
+      row.tags.find((tag) => tag.type === "risk")?.label ?? "未分层",
+    lastBusinessAt: row.latestBusinessAt,
+    projectionAt: view.freshness.projectedAt,
+    isStale: view.freshness.state !== "fresh",
+  }
+}
+
+/** 查询客户对象中心；客户正式资料只来自统一 profile 读模型。 */
 export async function fetchCustomerCenter(
   customerId: string
 ): Promise<CustomerCenterView | null> {
   if (!customerId) return null
-
-  let detail: BackendCustomerDetail
+  let profile: BackendCustomerProfile
   try {
-    detail = await apiGet<BackendCustomerDetail>(`/admin/customers/${customerId}`)
+    profile = await apiGet<BackendCustomerProfile>(
+      `/admin/customer-profiles/${customerId}`
+    )
   } catch (error) {
-    if (isApiError(error) && (error.status === 404 || error.status === 403)) {
+    if (isApiError(error) && (error.status === 403 || error.status === 404)) {
       return null
     }
     throw error
   }
 
-  const partyId = detail.party_id
-  const [
-    party,
-    revisionsPage,
-    contactsPage,
-    addressesPage,
-    banksPage,
-    assignmentsPage,
-    contractsPage,
-  ] = await Promise.all([
-    apiGet<BackendPartyView>(`/admin/parties/${partyId}`).catch(() => null),
-    safePage<BackendPartyRevision>(`/admin/parties/${partyId}/revisions`, {
-      page: 1,
-      page_size: 50,
-      sort_by: "revision_no",
-      sort_dir: "desc",
-    }),
-    safePage<BackendContact>(`/admin/parties/${partyId}/contacts`, {
-      page: 1,
-      page_size: 100,
-    }),
-    safePage<BackendAddress>(`/admin/parties/${partyId}/addresses`, {
-      page: 1,
-      page_size: 100,
-    }),
-    safePage<BackendBankAccount>(`/admin/parties/${partyId}/bank-accounts`, {
-      page: 1,
-      page_size: 100,
-    }),
-    safePage<BackendAssignment>(`/admin/customers/${customerId}/assignments`, {
-      page: 1,
-      page_size: 100,
-    }),
-    safePage<BackendContractListRow>("/admin/contracts", {
-      customer_id: customerId,
-      page: 1,
-      page_size: 100,
-    }),
-  ])
+  const [contractsResult, salesOrdersResult, receivablesResult, qualityResult] =
+    await Promise.allSettled([
+      loadAllPages<BackendContractListRow>("/admin/contracts", {
+        customer_id: customerId,
+      }),
+      loadAllPages<BackendSalesOrderListRow>("/admin/sales-orders", {
+        customer_id: customerId,
+        sort_by: "created_at",
+        sort_dir: "desc",
+      }),
+      loadAllPages<BackendReceivableAccount>("/admin/receivable-accounts", {
+        customer_id: customerId,
+        sort_by: "created_at",
+        sort_dir: "desc",
+      }),
+      loadCustomerQualitySummary(customerId),
+    ])
 
-  const currentRev =
-    revisionsPage.items.find(
-      (r) => party?.current_revision_id && r.id === party.current_revision_id
-    ) ?? revisionsPage.items[0]
-
-  const { status, statusLabel } = mapCustomerStatus(detail.status)
-  const legalName =
-    currentRev?.legal_name ?? detail.legal_name ?? detail.customer_no
-  const nowIso = new Date().toISOString()
-  const contracts = contractsPage.items.map(mapContractSummary)
-  const activeContractCount = contractsPage.items.filter(
-    (c) => c.status === "EFFECTIVE"
-  ).length
-
-  const assignments = assignmentsPage.items.map(mapAssignment)
-  // 若归属列表为空但 detail 有 owner，补一条展示
-  if (
-    assignments.length === 0 &&
-    detail.owner_user_id
-  ) {
-    assignments.push({
-      id: `owner_${customerId}`,
-      role: "OWNER",
-      userId: detail.owner_user_id,
-      userName: detail.owner_user_id,
-      effectiveFrom: tsToDate(detail.created_at),
-      isCurrent: true,
-    })
-  }
-
+  const fields = sensitiveIndex(profile.sensitive_fields)
+  const contractRows =
+    contractsResult.status === "fulfilled" ? contractsResult.value.items : []
+  const salesOrderRows =
+    salesOrdersResult.status === "fulfilled"
+      ? salesOrdersResult.value.items
+      : []
+  const contracts = contractRows.map(mapContractSummary)
+  const salesOrders = salesOrderRows.map(mapSalesOrderSummary)
+  const receivableSummary =
+    receivablesResult.status === "fulfilled"
+      ? receivableProjection(receivablesResult.value.items)
+      : undefined
+  const qualitySummary =
+    qualityResult.status === "fulfilled" ? qualityResult.value : undefined
+  const { status, statusLabel } = mapCustomerStatus(profile.status)
   return {
-    customerId: detail.id,
-    partyId,
-    customerNo: detail.customer_no,
+    customerId: profile.id,
+    partyId: profile.party_id,
+    customerNo: profile.customer_no,
     status,
     statusLabel,
-    lockVersion: detail.version,
+    lockVersion: profile.version,
+    partyLockVersion: profile.party_version,
     currentRevision: {
-      revisionId: currentRev?.id ?? party?.current_revision_id ?? `rev_${customerId}`,
-      revisionNo: currentRev?.revision_no ?? 1,
-      legalName,
-      shortName: currentRev?.short_name ?? undefined,
-      unifiedCreditCode: party?.unified_credit_code ?? undefined,
-      defaultPaymentTerm: detail.default_payment_term_id ?? undefined,
-      effectiveFrom: currentRev
-        ? tsToIso(currentRev.created_at)
-        : tsToIso(detail.created_at),
+      revisionId: profile.current_revision.id,
+      revisionNo: profile.current_revision.revision_no,
+      legalName: profile.current_revision.legal_name,
+      shortName: profile.current_revision.short_name ?? undefined,
+      unifiedCreditCode: profile.unified_credit_code ?? undefined,
+      defaultPaymentTerm: profile.default_payment_term_id ?? undefined,
+      effectiveFrom: tsToIso(profile.current_revision.created_at),
     },
-    assignments,
-    contacts: contactsPage.items.map(mapContact),
-    addresses: addressesPage.items.map(mapAddress),
-    bankAccounts: banksPage.items.map(mapBank),
+    assignments: profile.assignments.map(mapAssignment),
+    contacts: profile.contacts.map((contact) => mapContact(contact, fields)),
+    addresses: profile.addresses.map((address) => mapAddress(address, fields)),
+    bankAccounts: profile.bank_accounts.map((account) => mapBank(account, fields)),
     metrics: {
-      ...emptyMetrics(),
-      activeContractCount,
+      activeContractCount:
+        contractsResult.status === "fulfilled"
+          ? contractRows.filter((contract) => contract.status === "EFFECTIVE")
+              .length
+          : null,
+      inProgressSalesOrderCount:
+        salesOrdersResult.status === "fulfilled"
+          ? salesOrderRows.filter(
+              (order) =>
+                order.commercial_status !== "VOIDED" &&
+                order.close_status !== "CLOSED"
+            ).length
+          : null,
+      receivableBalance: receivableSummary?.receivableBalance ?? null,
+      overdueAmount: receivableSummary?.overdueAmount ?? null,
     },
     contracts,
-    salesOrders: [],
-    receivableSummary: {
-      receivableBalance: "0.00",
-      overdueAmount: "0.00",
+    salesOrders,
+    receivableSummary,
+    qualitySummary,
+    freshness: {
+      formalFactsAt: tsToIso(profile.updated_at),
+      qualityProjectionAt: qualitySummary?.projectionAt,
     },
-    freshness: { formalFactsAt: nowIso },
-    allowedActions: [
-      "EDIT_CUSTOMER",
-      "UPLOAD_CONTRACT_PDF",
-      "CREATE_SALES_ORDER",
-      "OPEN_RECEIVABLE",
-    ],
-    actionBlockers: [],
-    revisionTimeline: revisionsPage.items.map((r) => ({
-      id: r.id,
-      revisionNo: r.revision_no,
+    allowedActions: profile.allowed_actions,
+    actionBlockers: profile.action_blockers,
+    revisionTimeline: profile.revisions.map((revision) => ({
+      id: revision.id,
+      revisionNo: revision.revision_no,
       actor: "—",
-      effectiveAt: tsToIso(r.created_at),
-      reason: r.change_reason,
-      isCurrent: Boolean(
-        party?.current_revision_id
-          ? r.id === party.current_revision_id
-          : r === revisionsPage.items[0]
-      ),
+      effectiveAt: tsToIso(revision.created_at),
+      reason: revision.change_reason,
+      isCurrent: revision.id === profile.current_revision.id,
     })),
     partitions: {
       identity: "ok",
       contacts: "ok",
-      related: "ok",
-      settlement: "ok",
-      quality: "ok",
+      related:
+        contractsResult.status === "fulfilled" &&
+        salesOrdersResult.status === "fulfilled"
+          ? "ok"
+          : "error",
+      settlement: receivablesResult.status === "fulfilled" ? "ok" : "error",
+      quality: qualityResult.status === "fulfilled" ? "ok" : "error",
       audit: "ok",
     },
   }
 }
 
-// ─── Mutations ───────────────────────────────────────────────────────────────
-
-async function createPartyContacts(
-  partyId: string,
-  contacts: readonly CreateCustomerContactInput[],
-  validFrom: string
-): Promise<void> {
-  for (const c of contacts) {
-    if (!c.name.trim()) continue
-    if (!c.phone?.trim()) continue
-    await apiPost(`/admin/parties/${partyId}/contacts`, {
-      contact_name: c.name.trim(),
-      title: c.title?.trim() || undefined,
-      mobile: c.phone.trim(),
-      email: c.email?.trim() || undefined,
-      valid_from: validFrom,
-      is_default: c.isDefault,
-    })
-  }
-}
-
-async function createPartyAddresses(
-  partyId: string,
-  addresses: readonly CreateCustomerAddressInput[],
-  validFrom: string
-): Promise<void> {
-  for (const a of addresses) {
-    if (!a.address.trim()) continue
-    await apiPost(`/admin/parties/${partyId}/addresses`, {
-      address_type: mapAddressTypeToBackend(a.addressType),
-      address: a.address.trim(),
-      valid_from: validFrom,
-      is_default: a.isDefault,
-    })
-  }
-}
-
-async function createPartyBanks(
-  partyId: string,
-  banks: readonly CreateCustomerBankAccountInput[],
-  validFrom: string
-): Promise<void> {
-  for (const [index, b] of banks.entries()) {
-    if (!b.accountNumber.trim()) continue
-    await apiPost(`/admin/parties/${partyId}/bank-accounts`, {
-      bank_account_no: genCode(`BA${index + 1}`),
-      account_name: b.accountName.trim(),
-      bank_name: b.bankName.trim(),
-      account_number: b.accountNumber.trim(),
-      valid_from: validFrom,
-      is_default: b.isDefault,
-    })
-  }
-}
-
-function conflictFromError(
-  error: ApiError,
-  fallback: {
-    serverLockVersion: number
-    serverRevisionNo: number
-    serverLegalName: string
-    serverShortName?: string
-    serverUnifiedCreditCode?: string
-  }
-): CustomerMutationResult {
+/** 映射联系人根命令输入。 */
+function mapContactInput(input: CreateCustomerContactInput) {
   return {
-    outcome: "conflict",
-    message:
-      apiErrorMessage(error) ||
-      "基础资料版本已变化，禁止静默覆盖。请查看系统最新版本后重做。",
-    serverLockVersion: fallback.serverLockVersion,
-    serverRevisionNo: fallback.serverRevisionNo,
-    serverLegalName: fallback.serverLegalName,
-    serverShortName: fallback.serverShortName,
-    serverUnifiedCreditCode: fallback.serverUnifiedCreditCode,
-    actor: "系统",
-    changedAt: new Date().toISOString(),
+    existing_id: input.existingId,
+    contact_name: input.name.trim(),
+    title: input.title?.trim() || undefined,
+    mobile: input.phone?.trim() || undefined,
+    telephone: input.telephone?.trim() || undefined,
+    email: input.email?.trim() || undefined,
+    is_default: input.isDefault,
   }
 }
 
+/** 映射地址根命令输入。 */
+function mapAddressInput(input: CreateCustomerAddressInput) {
+  return {
+    existing_id: input.existingId,
+    address_type: mapAddressTypeToBackend(input.addressType),
+    contact_name: input.contactName?.trim() || undefined,
+    address: input.address?.trim() || undefined,
+    is_default: input.isDefault,
+  }
+}
+
+/** 映射银行账户根命令输入。 */
+function mapBankInput(input: CreateCustomerBankAccountInput) {
+  return {
+    existing_id: input.existingId,
+    account_name: input.accountName.trim(),
+    bank_name: input.bankName.trim(),
+    bank_branch_name: input.branchName?.trim() || undefined,
+    account_number: input.accountNumber?.trim() || undefined,
+    is_default: input.isDefault,
+  }
+}
+
+/** 映射稳定成功结果。 */
+function mapMutationResult(result: BackendProfileMutation): CustomerMutationResult {
+  return {
+    outcome: "succeeded",
+    customerId: result.customer_id,
+    customerNo: result.customer_no,
+    revisionNo: result.revision_no,
+    lockVersion: result.customer_version,
+    occurredAt: tsToIso(result.recorded_at),
+    reference: `${result.customer_no}-R${result.revision_no}`,
+  }
+}
+
+/** 判断提交错误是否属于结果未知。 */
 function unknownFromError(
   error: ApiError,
   idempotencyKey: string
 ): CustomerMutationResult | null {
-  const msg = apiErrorMessage(error)
-  if (
-    error.status === 500 &&
-    (msg.includes("无法确认") || msg.includes("未知") || msg.includes("OutcomeUnknown"))
-  ) {
-    return {
-      outcome: "unknown",
-      message:
-        msg ||
-        "提交结果不确定：未确认系统是否已生成新版本。请查询最终结果后再决定是否重试（同一任务号）。",
-      idempotencyKey,
-    }
+  const message = apiErrorMessage(error)
+  if (error.kind === "Network" || (error.status != null && error.status >= 500)) {
+    return { outcome: "unknown", message, idempotencyKey }
   }
   return null
 }
 
-/**
- * 创建客户：先建 party，再建 customer_account（含 OWNER），再写联系人/地址/银行账户。
- */
+/** 从服务端当前资料构造乐观锁冲突结果。 */
+async function conflictResult(
+  error: ApiError,
+  customerId: string,
+  fallback: Pick<
+    SaveCustomerDetailsInput,
+    "expectedLockVersion" | "legalName" | "shortName" | "unifiedCreditCode"
+  >
+): Promise<CustomerMutationResult> {
+  try {
+    const current = await apiGet<BackendCustomerProfile>(
+      `/admin/customer-profiles/${customerId}`
+    )
+    return {
+      outcome: "conflict",
+      message: apiErrorMessage(error),
+      serverLockVersion: current.version,
+      serverRevisionNo: current.current_revision.revision_no,
+      serverLegalName: current.current_revision.legal_name,
+      serverShortName: current.current_revision.short_name ?? undefined,
+      serverUnifiedCreditCode: current.unified_credit_code ?? undefined,
+      actor: "系统",
+      changedAt: tsToIso(current.updated_at),
+    }
+  } catch {
+    return {
+      outcome: "conflict",
+      message: apiErrorMessage(error),
+      serverLockVersion: fallback.expectedLockVersion,
+      serverRevisionNo: 0,
+      serverLegalName: fallback.legalName,
+      serverShortName: fallback.shortName,
+      serverUnifiedCreditCode: fallback.unifiedCreditCode,
+      actor: "系统",
+      changedAt: new Date().toISOString(),
+    }
+  }
+}
+
+/** 原子创建完整客户资料。 */
 export async function createCustomer(
   input: CreateCustomerInput
 ): Promise<CustomerMutationResult> {
-  const validFrom = todayBusinessDate()
-  const partyNo = genCode("P")
-  const customerNo = genCode("KH")
-
+  const request: BackendProfileRequest = {
+    idempotency_key: input.idempotencyKey,
+    legal_name: input.legalName.trim(),
+    short_name: input.shortName?.trim() || undefined,
+    unified_credit_code: input.unifiedCreditCode?.trim() || undefined,
+    default_payment_term_id: input.defaultPaymentTerm?.trim() || undefined,
+    status: input.status ?? "active",
+    owner_user_id: input.ownerUserId,
+    contacts: input.contacts?.map(mapContactInput),
+    addresses: input.addresses?.map(mapAddressInput),
+    bank_accounts: input.bankAccounts?.map(mapBankInput),
+    effective_from: todayBusinessDate(),
+    change_reason: "首版建档",
+  }
   try {
-    const party = await apiPost<BackendPartyView>("/admin/parties", {
-      party_no: partyNo,
-      legal_name: input.legalName.trim(),
-      short_name: input.shortName?.trim() || undefined,
-      unified_credit_code: input.unifiedCreditCode?.trim() || undefined,
-      change_reason: "首版建档",
-    })
-
-    const customer = await apiPost<BackendCustomerView>("/admin/customers", {
-      party_id: party.id,
-      customer_no: customerNo,
-      default_payment_term_id: input.defaultPaymentTerm || undefined,
-      owner_user_id: input.ownerUserId,
-      valid_from: validFrom,
-      change_reason: "首版建档",
-      status: "active",
-    })
-
-    await createPartyContacts(party.id, input.contacts ?? [], validFrom)
-    await createPartyAddresses(party.id, input.addresses ?? [], validFrom)
-    await createPartyBanks(party.id, input.bankAccounts ?? [], validFrom)
-
-    return {
-      outcome: "succeeded",
-      customerId: customer.id,
-      customerNo: customer.customer_no,
-      revisionNo: 1,
-      lockVersion: customer.version,
-      occurredAt: tsToIso(customer.created_at),
-      reference: `CUST-NEW-${customer.customer_no}`,
-    }
+    return mapMutationResult(
+      await apiPost<BackendProfileMutation>("/admin/customer-profiles", request)
+    )
   } catch (error) {
     if (isApiError(error)) {
       const unknown = unknownFromError(error, input.idempotencyKey)
@@ -702,9 +839,7 @@ export async function createCustomer(
       if (error.status === 409) {
         return {
           outcome: "conflict",
-          message:
-            apiErrorMessage(error) ||
-            "存在相似主体候选或编号冲突，未自动合并。请选择既有客户或修改后重试。",
+          message: apiErrorMessage(error),
           serverLockVersion: 0,
           serverRevisionNo: 0,
           serverLegalName: input.legalName,
@@ -717,197 +852,71 @@ export async function createCustomer(
   }
 }
 
-/**
- * 仅修订主体身份（法定名称等）→ PUT /admin/parties/{id} 形成新修订。
- */
-export async function saveCustomerRevision(
-  input: SaveCustomerRevisionInput
-): Promise<CustomerMutationResult> {
-  try {
-    const detail = await apiGet<BackendCustomerDetail>(
-      `/admin/customers/${input.customerId}`
-    )
-    const party = await apiGet<BackendPartyView>(
-      `/admin/parties/${detail.party_id}`
-    )
-
-    if (input.expectedLockVersion !== detail.version) {
-      return {
-        outcome: "conflict",
-        message: "基础资料版本已变化，禁止静默覆盖。请查看系统最新版本后重做。",
-        serverLockVersion: detail.version,
-        serverRevisionNo: 0,
-        serverLegalName: detail.legal_name ?? detail.customer_no,
-        serverUnifiedCreditCode: party.unified_credit_code ?? undefined,
-        actor: "系统",
-        changedAt: new Date().toISOString(),
-      }
-    }
-
-    const updated = await apiPut<BackendPartyView>(
-      `/admin/parties/${detail.party_id}`,
-      {
-        version: party.version,
-        legal_name: input.legalName.trim(),
-        short_name: input.shortName?.trim() || undefined,
-        unified_credit_code: input.unifiedCreditCode?.trim() ?? undefined,
-        change_reason: input.changeReason.trim(),
-      }
-    )
-
-    // 客户乐观锁可能未变（仅改 party）；返回最新 customer version
-    const refreshed = await apiGet<BackendCustomerDetail>(
-      `/admin/customers/${input.customerId}`
-    )
-    const revs = await safePage<BackendPartyRevision>(
-      `/admin/parties/${detail.party_id}/revisions`,
-      { page: 1, page_size: 1, sort_by: "revision_no", sort_dir: "desc" }
-    )
-    const revNo = revs.items[0]?.revision_no ?? 1
-
-    return {
-      outcome: "succeeded",
-      customerId: input.customerId,
-      customerNo: refreshed.customer_no,
-      revisionNo: revNo,
-      lockVersion: refreshed.version,
-      occurredAt: new Date().toISOString(),
-      reference: `CUST-REV-${revNo}-${updated.version}`,
-    }
-  } catch (error) {
-    if (isApiError(error)) {
-      const unknown = unknownFromError(error, input.idempotencyKey)
-      if (unknown) return unknown
-      if (error.status === 409) {
-        try {
-          const detail = await apiGet<BackendCustomerDetail>(
-            `/admin/customers/${input.customerId}`
-          )
-          return conflictFromError(error, {
-            serverLockVersion: detail.version,
-            serverRevisionNo: 0,
-            serverLegalName: detail.legal_name ?? detail.customer_no,
-          })
-        } catch {
-          return conflictFromError(error, {
-            serverLockVersion: input.expectedLockVersion,
-            serverRevisionNo: 0,
-            serverLegalName: input.legalName,
-          })
-        }
-      }
-    }
-    throw error
-  }
-}
-
-/**
- * 保存身份 + 追加联系人/地址/银行账户（后端子资源为追加模型，非整表替换）。
- */
+/** 原子保存客户身份、客户角色和显式提交的从属事实集合。 */
 export async function saveCustomerDetails(
   input: SaveCustomerDetailsInput
 ): Promise<CustomerMutationResult> {
+  const request: BackendProfileRequest = {
+    idempotency_key: input.idempotencyKey,
+    expected_party_version: input.expectedPartyVersion,
+    expected_customer_version: input.expectedLockVersion,
+    legal_name: input.legalName.trim(),
+    short_name: input.shortName,
+    unified_credit_code: input.unifiedCreditCode,
+    default_payment_term_id: input.defaultPaymentTerm,
+    status: input.status,
+    contacts: input.contacts?.map(mapContactInput),
+    addresses: input.addresses?.map(mapAddressInput),
+    bank_accounts: input.bankAccounts?.map(mapBankInput),
+    effective_from: todayBusinessDate(),
+    change_reason: input.changeReason.trim(),
+  }
   try {
-    const detail = await apiGet<BackendCustomerDetail>(
-      `/admin/customers/${input.customerId}`
+    return mapMutationResult(
+      await apiPut<BackendProfileMutation>(
+        `/admin/customer-profiles/${input.customerId}`,
+        request
+      )
     )
-    const party = await apiGet<BackendPartyView>(
-      `/admin/parties/${detail.party_id}`
-    )
-
-    if (input.expectedLockVersion !== detail.version) {
-      return {
-        outcome: "conflict",
-        message: "基础资料版本已变化，禁止静默覆盖。请查看系统最新版本后重做。",
-        serverLockVersion: detail.version,
-        serverRevisionNo: 0,
-        serverLegalName: detail.legal_name ?? detail.customer_no,
-        serverUnifiedCreditCode: party.unified_credit_code ?? undefined,
-        actor: "系统",
-        changedAt: new Date().toISOString(),
-      }
-    }
-
-    await apiPut<BackendPartyView>(`/admin/parties/${detail.party_id}`, {
-      version: party.version,
-      legal_name: input.legalName.trim(),
-      short_name: input.shortName?.trim() || undefined,
-      unified_credit_code: input.unifiedCreditCode?.trim() ?? undefined,
-      change_reason: input.changeReason.trim(),
-    })
-
-    const validFrom = todayBusinessDate()
-    await createPartyContacts(detail.party_id, input.contacts, validFrom)
-    await createPartyAddresses(detail.party_id, input.addresses, validFrom)
-    await createPartyBanks(detail.party_id, input.bankAccounts, validFrom)
-
-    const refreshed = await apiGet<BackendCustomerDetail>(
-      `/admin/customers/${input.customerId}`
-    )
-    const revs = await safePage<BackendPartyRevision>(
-      `/admin/parties/${detail.party_id}/revisions`,
-      { page: 1, page_size: 1, sort_by: "revision_no", sort_dir: "desc" }
-    )
-    const revNo = revs.items[0]?.revision_no ?? 1
-
-    return {
-      outcome: "succeeded",
-      customerId: input.customerId,
-      customerNo: refreshed.customer_no,
-      revisionNo: revNo,
-      lockVersion: refreshed.version,
-      occurredAt: new Date().toISOString(),
-      reference: `CUST-REV-${revNo}-${Date.now().toString(36).toUpperCase()}`,
-    }
   } catch (error) {
     if (isApiError(error)) {
       const unknown = unknownFromError(error, input.idempotencyKey)
       if (unknown) return unknown
       if (error.status === 409) {
-        try {
-          const detail = await apiGet<BackendCustomerDetail>(
-            `/admin/customers/${input.customerId}`
-          )
-          return conflictFromError(error, {
-            serverLockVersion: detail.version,
-            serverRevisionNo: 0,
-            serverLegalName: detail.legal_name ?? detail.customer_no,
-          })
-        } catch {
-          return conflictFromError(error, {
-            serverLockVersion: input.expectedLockVersion,
-            serverRevisionNo: 0,
-            serverLegalName: input.legalName,
-          })
-        }
+        return conflictResult(error, input.customerId, input)
       }
     }
     throw error
   }
 }
 
-/**
- * 幂等查询：本批后端无客户域幂等查询接口，返回 null（前端可提示用户刷新）。
- */
+/** 仅修订客户主体身份；内部仍复用同一根命令。 */
+export async function saveCustomerRevision(
+  input: SaveCustomerRevisionInput
+): Promise<CustomerMutationResult> {
+  return saveCustomerDetails({
+    ...input,
+    expectedPartyVersion: input.expectedPartyVersion,
+  })
+}
+
+/** 按原幂等键查询已经提交成功的最终结果。 */
 export async function queryCustomerMutationByIdempotency(
   idempotencyKey: string
 ): Promise<CustomerMutationResult | null> {
-  void idempotencyKey
-  return null
+  const result = await apiGet<BackendProfileMutation | null>(
+    `/admin/customer-profile-commands/${encodeURIComponent(idempotencyKey)}`
+  )
+  return result ? mapMutationResult(result) : null
 }
 
-/**
- * 敏感字段揭示：后端未提供 reveal token 接口（实体仅存指纹）。
- * 抛 ApiError 供 mutation 进入 error 态。
- */
+/** 使用短时字段令牌揭示单个敏感值。 */
 export async function revealCustomerSensitiveField(
   revealToken: string
 ): Promise<string> {
-  void revealToken
-  const error: ApiError = {
-    kind: "Http",
-    status: 501,
-    message: "敏感字段揭示接口尚未提供，无法查看明文",
-  }
-  throw error
+  const result = await apiPost<{ value: string }>(
+    "/admin/customer-sensitive-fields/reveal",
+    { reveal_token: revealToken }
+  )
+  return result.value
 }

@@ -9,6 +9,8 @@
 //! - D07 `party`：创建客户前校验主体存在、详情补充主体编号/当前法定名称；
 //! - D06 `access_control`：负责销售账号存在性校验（`AccessControlExt::accounts`）。
 
+use std::collections::HashMap;
+
 use database::{AccessControlExt, CustomerExt, NoTransaction, PartyExt, Transactional};
 use entities::common::time::BusinessDate;
 use entities::customer::{
@@ -27,11 +29,15 @@ use crate::errors::{Error, Result};
 
 pub mod assignment;
 mod dto;
+pub mod profile;
 
 pub use self::dto::{
-    AssignmentAction, CreateCustomerRequest, CustomerAssignmentListParams, CustomerAssignmentRequest,
-    CustomerAssignmentView, CustomerDetailView, CustomerListParams, CustomerView, PageView,
-    UpdateCustomerRequest,
+    AssignmentAction, CreateCustomerRequest, CustomerActionBlockerView, CustomerAssignmentListParams,
+    CustomerAssignmentRequest, CustomerAssignmentView, CustomerDetailView, CustomerListParams,
+    CustomerProfileAddressInput, CustomerProfileBankAccountInput, CustomerProfileContactInput,
+    CustomerProfileDetailView, CustomerProfileMutationView, CustomerScope, CustomerSensitiveFieldView,
+    CustomerSensitiveRevealView, CustomerView, PageView, RevealCustomerSensitiveRequest,
+    SaveCustomerProfileRequest, UpdateCustomerRequest,
 };
 
 use self::dto::SortDir;
@@ -136,18 +142,31 @@ impl CustomerService {
     ///
     /// # 参数
     /// * `params` - 查询参数
+    /// * `actor_user_id` - 当前登录用户 ID，用于执行客户归属范围过滤
     ///
     /// # 返回
     /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。
     ///
     /// # 错误
     /// * `ValidationError` - 分页参数非法或排序字段不在白名单
-    pub async fn customer_list(&self, params: &CustomerListParams) -> Result<PageView<CustomerView>> {
+    pub async fn customer_list(
+        &self,
+        params: &CustomerListParams,
+        actor_user_id: &str,
+    ) -> Result<PageView<CustomerView>> {
         params.validate()?;
         let query = params.normalized()?;
+        let customer_ids = self.customer_ids_for_scope(query.scope, actor_user_id).await?;
+        let keyword_party_ids = match query.keyword.as_deref() {
+            Some(keyword) => Some(self.matching_party_ids(keyword).await?),
+            None => None,
+        };
         let filter = CustomerAccountFilter {
             keyword: query.keyword,
+            keyword_party_ids,
             party_id: query.party_id,
+            party_ids: None,
+            customer_ids,
             status: query.status,
             page: query.paging.page,
             page_size: query.paging.page_size,
@@ -159,19 +178,9 @@ impl CustomerService {
             .customer_accounts()
             .search_customer_accounts(&filter, &mut NoTransaction)
             .await?;
-        let items = page
-            .items
-            .into_iter()
-            .map(|row| CustomerView {
-                id: row.id,
-                party_id: row.party_id,
-                customer_no: row.customer_no,
-                default_payment_term_id: row.default_payment_term_id,
-                status: row.status,
-                version: row.version,
-                created_at: row.created_at,
-            })
-            .collect();
+        let items = self
+            .hydrate_customer_rows(page.items, actor_user_id, query.scope)
+            .await?;
 
         Ok(PageView {
             items,
@@ -179,6 +188,152 @@ impl CustomerService {
             page: filter.page,
             page_size: filter.page_size,
         })
+    }
+
+    /// 判断当前用户是否在指定客户的当前 OWNER 或 COLLABORATOR 归属中。
+    ///
+    /// # 参数
+    /// * `customer_id` - 客户角色 ID
+    /// * `user_id` - 当前登录用户 ID
+    ///
+    /// # 返回
+    /// 命中当前有效归属返回 `true`，否则返回 `false`。
+    pub async fn customer_is_assigned_to(&self, customer_id: &str, user_id: &str) -> Result<bool> {
+        let assignments = self
+            .db
+            .customer_assignments()
+            .find_active_assignments_for_user(user_id, BusinessDate::today(), &mut NoTransaction)
+            .await?;
+        Ok(assignments
+            .iter()
+            .any(|assignment| assignment.customer_id.as_ref() == customer_id))
+    }
+
+    /// 按服务端数据范围解析允许返回的客户 ID。
+    async fn customer_ids_for_scope(
+        &self,
+        scope: CustomerScope,
+        actor_user_id: &str,
+    ) -> Result<Option<Vec<String>>> {
+        if scope == CustomerScope::AllAuthorized {
+            return Ok(None);
+        }
+        let expected_role = match scope {
+            CustomerScope::Mine => Some(AssignmentRole::Owner),
+            CustomerScope::Collaborating => Some(AssignmentRole::Collaborator),
+            CustomerScope::Assigned => None,
+            CustomerScope::AllAuthorized => unreachable!(),
+        };
+        let assignments = self
+            .db
+            .customer_assignments()
+            .find_active_assignments_for_user(actor_user_id, BusinessDate::today(), &mut NoTransaction)
+            .await?;
+        Ok(Some(
+            assignments
+                .into_iter()
+                .filter(|assignment| expected_role.is_none_or(|role| assignment.assignment_role == role))
+                .map(|assignment| assignment.customer_id.to_string())
+                .collect(),
+        ))
+    }
+
+    /// 查找法定名称或简称命中的主体 ID，供客户编号与名称统一关键词搜索。
+    async fn matching_party_ids(&self, keyword: &str) -> Result<Vec<String>> {
+        let escaped = regex::escape(keyword);
+        let revisions = self
+            .db
+            .party_revisions()
+            .find_many(
+                doc! {
+                    "$or": [
+                        { "legal_name": { "$regex": &escaped, "$options": "i" } },
+                        { "short_name": { "$regex": &escaped, "$options": "i" } },
+                    ]
+                },
+                &mut NoTransaction,
+            )
+            .await?;
+        let revision_ids: Vec<String> = revisions.into_iter().map(|revision| revision.base.id).collect();
+        let mut ids: Vec<String> = self
+            .db
+            .parties()
+            .find_many(
+                doc! { "current_revision_id": { "$in": revision_ids } },
+                &mut NoTransaction,
+            )
+            .await?
+            .into_iter()
+            .map(|party| party.base.id)
+            .collect();
+        ids.sort();
+        ids.dedup();
+        Ok(ids)
+    }
+
+    /// 批量补齐客户当前主体身份与归属，避免列表逐行查询。
+    async fn hydrate_customer_rows(
+        &self,
+        rows: Vec<database::repository::CustomerAccountRow>,
+        actor_user_id: &str,
+        requested_scope: CustomerScope,
+    ) -> Result<Vec<CustomerView>> {
+        if rows.is_empty() {
+            return Ok(Vec::new());
+        }
+        let party_ids: Vec<String> = rows.iter().map(|row| row.party_id.clone()).collect();
+        let parties = self
+            .db
+            .parties()
+            .find_many(doc! { "id": { "$in": party_ids } }, &mut NoTransaction)
+            .await?;
+        let revision_ids: Vec<String> = parties
+            .iter()
+            .filter_map(|party| party.stable.current_revision_id.clone())
+            .collect();
+        let revisions = self
+            .db
+            .party_revisions()
+            .find_many(doc! { "id": { "$in": revision_ids } }, &mut NoTransaction)
+            .await?;
+        let customer_ids: Vec<String> = rows.iter().map(|row| row.id.clone()).collect();
+        let today = BusinessDate::today().to_string();
+        let assignments = self
+            .db
+            .customer_assignments()
+            .find_many(
+                doc! {
+                    "customer_id": { "$in": customer_ids },
+                    "valid_from": { "$lte": &today },
+                    "$or": [
+                        { "valid_to": null },
+                        { "valid_to": { "$gt": &today } },
+                    ],
+                },
+                &mut NoTransaction,
+            )
+            .await?;
+        let account_ids: Vec<String> = assignments
+            .iter()
+            .map(|assignment| assignment.user_id.clone())
+            .collect();
+        let account_names: HashMap<String, String> = self
+            .db
+            .accounts()
+            .find_many(doc! { "id": { "$in": account_ids } }, &mut NoTransaction)
+            .await?
+            .into_iter()
+            .map(|account| (account.base.id, account.name))
+            .collect();
+        Ok(assemble_customer_views(
+            rows,
+            parties,
+            revisions,
+            assignments,
+            actor_user_id,
+            requested_scope,
+            account_names,
+        ))
     }
 
     /// 查询客户角色详情（客户 + 主体身份 + 当前生效 OWNER）。
@@ -331,12 +486,19 @@ impl CustomerService {
     ///
     /// # 错误
     /// * `NotFound` - 账号不存在
+    /// * `BusinessLogicError` - 账号已停用
     async fn ensure_user_exists(&self, user_id: &str) -> Result<()> {
-        self.db
+        let account = self
+            .db
             .accounts()
             .find_by_id(user_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("负责销售账号不存在".to_string()))?;
+        if !account.status.is_active() {
+            return Err(Error::BusinessLogicError(
+                "负责销售账号已停用，不能建立客户归属".to_string(),
+            ));
+        }
         Ok(())
     }
 
@@ -393,6 +555,88 @@ impl CustomerService {
             .await?;
         Ok(assignments.first().map(|assignment| assignment.user_id.clone()))
     }
+}
+
+/// 将批量读取结果按稳定 ID 装配为客户列表视图。
+fn assemble_customer_views(
+    rows: Vec<database::repository::CustomerAccountRow>,
+    parties: Vec<entities::party::Party>,
+    revisions: Vec<entities::party::PartyRevision>,
+    assignments: Vec<CustomerAssignment>,
+    actor_user_id: &str,
+    requested_scope: CustomerScope,
+    account_names: HashMap<String, String>,
+) -> Vec<CustomerView> {
+    let parties: HashMap<String, entities::party::Party> = parties
+        .into_iter()
+        .map(|party| (party.base.id.clone(), party))
+        .collect();
+    let revisions: HashMap<String, entities::party::PartyRevision> = revisions
+        .into_iter()
+        .map(|revision| (revision.base.id.clone(), revision))
+        .collect();
+    let mut assignments_by_customer: HashMap<String, Vec<CustomerAssignment>> = HashMap::new();
+    for assignment in assignments {
+        assignments_by_customer
+            .entry(assignment.customer_id.to_string())
+            .or_default()
+            .push(assignment);
+    }
+
+    rows.into_iter()
+        .map(|row| {
+            let party = parties.get(&row.party_id);
+            let revision = party
+                .and_then(|party| party.stable.current_revision_id.as_ref())
+                .and_then(|id| revisions.get(id));
+            let assignments = assignments_by_customer
+                .get(&row.id)
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            let owner_user_id = assignments
+                .iter()
+                .find(|assignment| assignment.assignment_role == AssignmentRole::Owner)
+                .map(|assignment| assignment.user_id.clone());
+            let owner_user_name = owner_user_id
+                .as_ref()
+                .and_then(|id| account_names.get(id))
+                .cloned();
+            let collaborator_count = assignments
+                .iter()
+                .filter(|assignment| assignment.assignment_role == AssignmentRole::Collaborator)
+                .count() as u32;
+            let mut scope_tags = Vec::new();
+            if owner_user_id.as_deref() == Some(actor_user_id) {
+                scope_tags.push(CustomerScope::Mine);
+            }
+            if assignments.iter().any(|assignment| {
+                assignment.assignment_role == AssignmentRole::Collaborator
+                    && assignment.user_id == actor_user_id
+            }) {
+                scope_tags.push(CustomerScope::Collaborating);
+            }
+            if !scope_tags.contains(&requested_scope) {
+                scope_tags.push(requested_scope);
+            }
+            CustomerView {
+                id: row.id,
+                party_id: row.party_id,
+                party_no: party.map(|party| party.party_no.clone()),
+                legal_name: revision.map(|revision| revision.legal_name.clone()),
+                short_name: revision.and_then(|revision| revision.short_name.clone()),
+                customer_no: row.customer_no,
+                default_payment_term_id: row.default_payment_term_id,
+                status: row.status,
+                owner_user_id,
+                owner_user_name,
+                collaborator_count,
+                scope_tags,
+                version: row.version,
+                created_at: row.created_at,
+                updated_at: row.updated_at,
+            }
+        })
+        .collect()
 }
 
 /// 分页默认值辅助（与 `crate::query` 对齐，供子模块复用）。

@@ -68,6 +68,7 @@ impl ContractService {
     /// # 错误
     /// * `ValidationError` - 请求体校验失败
     /// * `NotFound` - 客户不存在
+    /// * `BusinessLogicError` - 客户已停用
     /// * `ConflictError` - contract_no 与既有合同重复
     pub async fn create_contract(
         &self,
@@ -75,11 +76,17 @@ impl ContractService {
         actor: &AuditActor,
     ) -> Result<ContractView> {
         req.validate()?;
-        self.db
+        let customer = self
+            .db
             .customer_accounts()
             .find_by_id(&req.customer_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("客户不存在".to_string()))?;
+        if !customer.is_active() {
+            return Err(Error::BusinessLogicError(
+                "客户已停用，禁止归档新合同".to_string(),
+            ));
+        }
 
         let contract = Contract::new(
             ContractId::new(next_id()),
