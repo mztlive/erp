@@ -7,27 +7,32 @@ use axum::{
     extract::{Path, Query, State},
     Extension, Json,
 };
+use entities::Permission;
 use services::{
     audit::AuditActor,
     supplier_catalog::{
         ApproveSupplierProductMappingRequest, ApproveSupplierProductMappingResult,
         CreateSupplierCatalogProductRequest, CreateSupplierCatalogProductResult,
-        CreateSupplierProductMappingRequest, CreateSupplierProductMappingResult, PageView,
-        LinkPromoteToCompanyPoolRequest, LinkPromoteToCompanyPoolResult,
-        ReversePromoteToCompanyPoolRequest, ReversePromoteToCompanyPoolResult,
-        ReviseSupplierCatalogProductRequest, ReviseSupplierCatalogProductResult,
-        SupplierProductPoolMatchView,
-        ReviseSupplierOfferingRequest, ReviseSupplierOfferingResult, SupplierCatalogIntakeBatchListParams,
-        SupplierCatalogIntakeBatchView, SupplierCatalogProductDetailView, SupplierCatalogProductListParams,
-        SupplierCatalogProductView, SupplierCatalogService, SupplierCatalogSkuListParams,
-        SupplierCatalogSkuView, SupplierOfferingListParams, SupplierOfferingView,
-        SupplierProductMappingListParams, SupplierProductMappingView,
+        CreateSupplierProductMappingRequest, CreateSupplierProductMappingResult,
+        ImportSupplierCatalogExcelRequest, ImportSupplierCatalogExcelResult, LinkPromoteToCompanyPoolRequest,
+        LinkPromoteToCompanyPoolResult, PageView, ReversePromoteToCompanyPoolRequest,
+        ReversePromoteToCompanyPoolResult, ReviseSupplierCatalogProductRequest,
+        ReviseSupplierCatalogProductResult, ReviseSupplierOfferingRequest, ReviseSupplierOfferingResult,
+        SupplierCatalogIntakeBatchListParams, SupplierCatalogIntakeBatchView,
+        SupplierCatalogProductDetailView, SupplierCatalogProductListParams, SupplierCatalogProductView,
+        SupplierCatalogService, SupplierCatalogSkuListParams, SupplierCatalogSkuView,
+        SupplierOfferingListParams, SupplierOfferingView, SupplierProductMappingListParams,
+        SupplierProductMappingView, SupplierProductPoolMatchView,
     },
 };
 
 use crate::{
     app_state::AppState,
-    core::{errors::Result, response::ApiResponse},
+    core::{
+        errors::{Error, Result},
+        middleware::RbacSubject,
+        response::ApiResponse,
+    },
 };
 
 #[permission_macros::permission(
@@ -73,11 +78,15 @@ pub async fn supplier_catalog_product_list(
 /// 返回详情视图。
 pub async fn supplier_catalog_product_detail(
     State(state): State<AppState>,
+    Extension(subject): Extension<RbacSubject>,
     Path(id): Path<String>,
 ) -> Result<SupplierCatalogProductDetailView> {
-    let view = SupplierCatalogService::new(state.db())
+    let mut view = SupplierCatalogService::new(state.db())
         .product_detail(&id)
         .await?;
+    if !can_view_costs(&state, &subject).await? {
+        view.redact_costs();
+    }
 
     Ok(ApiResponse::ok_with_data(view))
 }
@@ -108,6 +117,34 @@ pub async fn supplier_catalog_product_create(
         .await?;
 
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "供应商商品库",
+    group_desc = "供应商商品、SKU、映射、供给与入库批次管理",
+    desc = "导入 Excel 供应商商品批次",
+    resource = "supplier_catalog_product",
+    action = "import"
+)]
+/// 导入已预检的 Excel 供应商商品批次。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `req` - 文件资产、合法商品和失败行清单
+///
+/// # 返回
+/// 返回正式批次及成功/失败行计数。
+pub async fn supplier_catalog_excel_import(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Json(req): Json<ImportSupplierCatalogExcelRequest>,
+) -> Result<ImportSupplierCatalogExcelResult> {
+    let result = SupplierCatalogService::new(state.db())
+        .import_excel(req, &actor)
+        .await?;
+
+    Ok(ApiResponse::ok_with_data(result))
 }
 
 #[permission_macros::permission(
@@ -157,9 +194,15 @@ pub async fn supplier_catalog_product_revise(
 /// 返回契约形状的分页视图。
 pub async fn supplier_catalog_sku_list(
     State(state): State<AppState>,
+    Extension(subject): Extension<RbacSubject>,
     Query(params): Query<SupplierCatalogSkuListParams>,
 ) -> Result<PageView<SupplierCatalogSkuView>> {
-    let page = SupplierCatalogService::new(state.db()).sku_list(&params).await?;
+    let mut page = SupplierCatalogService::new(state.db()).sku_list(&params).await?;
+    if !can_view_costs(&state, &subject).await? {
+        for item in &mut page.items {
+            item.redact_costs();
+        }
+    }
 
     Ok(ApiResponse::ok_with_data(page))
 }
@@ -347,13 +390,29 @@ pub async fn supplier_catalog_link_promote(
 /// 返回契约形状的分页视图。
 pub async fn supplier_offering_list(
     State(state): State<AppState>,
+    Extension(subject): Extension<RbacSubject>,
     Query(params): Query<SupplierOfferingListParams>,
 ) -> Result<PageView<SupplierOfferingView>> {
-    let page = SupplierCatalogService::new(state.db())
+    let mut page = SupplierCatalogService::new(state.db())
         .offering_list(&params)
         .await?;
+    if !can_view_costs(&state, &subject).await? {
+        for item in &mut page.items {
+            item.redact_costs();
+        }
+    }
 
     Ok(ApiResponse::ok_with_data(page))
+}
+
+/// 判断当前主体是否拥有供应商采购成本字段权限。
+async fn can_view_costs(state: &AppState, subject: &RbacSubject) -> std::result::Result<bool, Error> {
+    let permission = Permission::parse("supplier_catalog_cost:detail")?;
+    state
+        .rbac()
+        .enforce(&subject.0, &permission)
+        .await
+        .map_err(Into::into)
 }
 
 #[permission_macros::permission(

@@ -19,7 +19,20 @@ import {
 } from "@/components/ui/dialog"
 import { FileUpload } from "@/components/ui/file-upload"
 import { Label } from "@/components/ui/label"
-import { useCreateSupplierCatalogItemMutation } from "@/features/supplier-catalog/queries"
+import {
+  useCreateSupplierCatalogItemMutation,
+  useImportSupplierCatalogExcelMutation,
+} from "@/features/supplier-catalog/queries"
+import {
+  uploadCatalogExcel,
+  uploadCatalogImage,
+} from "@/features/supplier-catalog/api"
+import {
+  parseSupplierCatalogExcel,
+  type SupplierCatalogExcelImportResult,
+  type SupplierCatalogExcelPreview,
+} from "@/features/supplier-catalog/excel-import"
+import type { ProductKind } from "@/features/master-data/types"
 import type {
   SupplierCatalogSourceType,
   SupplierCatalogWriteResult,
@@ -37,6 +50,7 @@ type FixedSku = Readonly<{
   skuId: string
   skuCode: string
   skuName: string
+  productKind: ProductKind
   specification: string
   baseUnit: string
   category?: string
@@ -136,6 +150,12 @@ function splitAttributes(value: string) {
     .filter((item) => item.name && item.value)
 }
 
+function errorMessage(error: unknown, fallback: string) {
+  return error && typeof error === "object" && "message" in error
+    ? String(error.message)
+    : fallback
+}
+
 export function SupplierCatalogIntakeDialog({
   open,
   onOpenChange,
@@ -153,7 +173,24 @@ export function SupplierCatalogIntakeDialog({
     revisionTiming: "current",
   })
   const createMutation = useCreateSupplierCatalogItemMutation()
+  const excelImportMutation = useImportSupplierCatalogExcelMutation()
   const [result, setResult] = React.useState<SupplierCatalogWriteResult | null>(
+    null
+  )
+  const [excelPreview, setExcelPreview] =
+    React.useState<SupplierCatalogExcelPreview | null>(null)
+  const [excelFileAssetId, setExcelFileAssetId] = React.useState("")
+  const [excelSourceReference, setExcelSourceReference] = React.useState("")
+  const [excelCommandKey, setExcelCommandKey] = React.useState("")
+  const [excelResult, setExcelResult] =
+    React.useState<SupplierCatalogExcelImportResult | null>(null)
+  const [excelError, setExcelError] = React.useState<string | null>(null)
+  const [excelPreparing, setExcelPreparing] = React.useState(false)
+  const [uploadedSourceMedia, setUploadedSourceMedia] = React.useState<
+    Record<string, { fileAssetId: string; url: string }>
+  >({})
+  const [sourceMediaUploading, setSourceMediaUploading] = React.useState(false)
+  const [sourceMediaError, setSourceMediaError] = React.useState<string | null>(
     null
   )
   const form = useAppForm({
@@ -207,14 +244,18 @@ export function SupplierCatalogIntakeDialog({
             usage: "SPU_CAROUSEL" as const,
             fileName,
             sortOrder: index,
-            fileAssetId: `asset:${fileName}`,
+            fileAssetId:
+              uploadedSourceMedia[`SPU_CAROUSEL:${fileName}`]?.fileAssetId,
+            sourceUrl: uploadedSourceMedia[`SPU_CAROUSEL:${fileName}`]?.url,
             archiveStatus: "ARCHIVED" as const,
           })),
           ...value.detailImages.map((fileName, index) => ({
             usage: "SPU_DETAIL" as const,
             fileName,
             sortOrder: index,
-            fileAssetId: `asset:${fileName}`,
+            fileAssetId:
+              uploadedSourceMedia[`SPU_DETAIL:${fileName}`]?.fileAssetId,
+            sourceUrl: uploadedSourceMedia[`SPU_DETAIL:${fileName}`]?.url,
             archiveStatus: "ARCHIVED" as const,
           })),
           ...(value.skuMainImage
@@ -222,7 +263,11 @@ export function SupplierCatalogIntakeDialog({
                 usage: "SKU_MAIN" as const,
                 fileName: value.skuMainImage,
                 sortOrder: 0,
-                fileAssetId: `asset:${value.skuMainImage}`,
+                fileAssetId:
+                  uploadedSourceMedia[`SKU_MAIN:${value.skuMainImage}`]
+                    ?.fileAssetId,
+                sourceUrl:
+                  uploadedSourceMedia[`SKU_MAIN:${value.skuMainImage}`]?.url,
                 archiveStatus: "ARCHIVED" as const,
               }]
             : []),
@@ -258,8 +303,96 @@ export function SupplierCatalogIntakeDialog({
     },
   })
 
+  const prepareExcel = async (file: File) => {
+    setExcelPreparing(true)
+    setExcelError(null)
+    setExcelPreview(null)
+    setExcelFileAssetId("")
+    setExcelSourceReference("")
+    setExcelResult(null)
+    try {
+      const preview = await parseSupplierCatalogExcel(file)
+      const asset = await uploadCatalogExcel(file)
+      setExcelPreview(preview)
+      setExcelFileAssetId(asset.fileAssetId)
+      setExcelSourceReference(asset.fileAssetId)
+      setExcelCommandKey(idempotencyKey("supplier-catalog-excel"))
+    } catch (error) {
+      setExcelError(errorMessage(error, "Excel 解析或文件登记失败"))
+    } finally {
+      setExcelPreparing(false)
+    }
+  }
+
+  const uploadSourceFiles = async (
+    usage: "SKU_MAIN" | "SPU_CAROUSEL" | "SPU_DETAIL",
+    files: File[]
+  ) => {
+    setSourceMediaUploading(true)
+    setSourceMediaError(null)
+    try {
+      const uploaded = await Promise.all(
+        files.map(async (file) => ({
+          file,
+          asset: await uploadCatalogImage(file),
+        }))
+      )
+      setUploadedSourceMedia((current) => {
+        const next = { ...current }
+        for (const { file, asset } of uploaded) {
+          next[`${usage}:${file.name}`] = asset
+        }
+        return next
+      })
+      return uploaded.map(({ file }) => file.name)
+    } catch (error) {
+      setSourceMediaError(errorMessage(error, "来源图片上传失败"))
+      return null
+    } finally {
+      setSourceMediaUploading(false)
+    }
+  }
+
+  const submitExcel = async () => {
+    const supplierId = form.state.values.supplierId
+    if (!supplierId) {
+      setExcelError("请选择供应商")
+      return
+    }
+    if (!excelPreview || !excelFileAssetId || !excelSourceReference) {
+      setExcelError("请先选择并完成预检的 Excel 文件")
+      return
+    }
+    setExcelError(null)
+    try {
+      const response = await excelImportMutation.mutateAsync({
+        supplierId,
+        fileAssetId: excelFileAssetId,
+        sourceReference: excelSourceReference,
+        preview: excelPreview,
+        idempotencyKey:
+          excelCommandKey || idempotencyKey("supplier-catalog-excel"),
+      })
+      setExcelResult(response)
+    } catch (error) {
+      setExcelError(errorMessage(error, "Excel 批次导入失败"))
+    }
+  }
+
   React.useEffect(() => {
-    if (!open) setResult(null)
+    if (!open) {
+      setResult(null)
+      setExcelPreview(null)
+      setExcelFileAssetId("")
+      setExcelSourceReference("")
+      setExcelCommandKey("")
+      setExcelResult(null)
+      setExcelError(null)
+      setExcelPreparing(false)
+      setUploadedSourceMedia({})
+      setSourceMediaUploading(false)
+      setSourceMediaError(null)
+    }
   }, [open])
 
   const supplierOptions = (supplierQuery.data?.rows ?? []).map((supplier) => ({
@@ -281,7 +414,14 @@ export function SupplierCatalogIntakeDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {result ? (
+        {excelResult ? (
+          <Alert>
+            <AlertTitle>Excel 批次已导入</AlertTitle>
+            <AlertDescription>
+              业务记录 {excelResult.reference}：成功 {excelResult.importedCount} 行，错误清单 {excelResult.rejectedCount} 行。
+            </AlertDescription>
+          </Alert>
+        ) : result ? (
           <Alert>
             <AlertTitle>供应商商品已保存</AlertTitle>
             <AlertDescription>业务记录 {result.reference} 已形成。</AlertDescription>
@@ -305,26 +445,30 @@ export function SupplierCatalogIntakeDialog({
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault()
-            void form.handleSubmit()
+            if (sourceType === "EXCEL") {
+              void submitExcel()
+            } else {
+              void form.handleSubmit()
+            }
           }}
         >
           {sourceType === "EXCEL" ? (
-            <form.AppField name="sourceReference">
-              {(field) => (
-                <FileUpload
-                  accept=".xlsx,.xls,.csv"
-                  multiple={false}
-                  label="供应商商品表（模板）"
-                  description={
-                    field.state.value ||
-                    "支持 xlsx、xls、csv；当前为模板登记：系统不解析文件内容，选择后仍需按下方字段手工填写并核对"
-                  }
-                  onFilesSelected={(files) => {
-                    if (files[0]) field.handleChange(files[0].name)
-                  }}
-                />
-              )}
-            </form.AppField>
+            <FileUpload
+              accept=".xlsx,.csv"
+              multiple={false}
+              disabled={excelPreparing || excelImportMutation.isPending}
+              label="供应商商品表（模板）"
+              description={
+                excelPreparing
+                  ? "正在解析并登记原始文件…"
+                  : excelPreview
+                    ? `${excelPreview.fileName} · ${excelPreview.totalRows} 行已预检`
+                    : "支持 xlsx、csv；必填列：供应商 SPU 编码、供应商 SKU 编码、商品名称、规格"
+              }
+              onFilesSelected={(files) => {
+                if (files[0]) void prepareExcel(files[0])
+              }}
+            />
           ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -342,6 +486,8 @@ export function SupplierCatalogIntakeDialog({
                 </div>
               )}
             </form.AppField>
+            {sourceType !== "EXCEL" ? (
+              <>
             <form.AppField name="supplierSpuCode">
               {(field) => <field.TextField label="供应商 SPU 编码（可空）" />}
             </form.AppField>
@@ -437,17 +583,63 @@ export function SupplierCatalogIntakeDialog({
                 )}
               </form.AppField>
             ) : null}
+              </>
+            ) : null}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          {sourceType === "EXCEL" && excelPreview ? (
+            <div className="space-y-3 rounded-lg border p-4">
+              <div>
+                <p className="font-medium">批次预检</p>
+                <p className="text-sm text-muted-foreground">
+                  共 {excelPreview.totalRows} 行；可导入{" "}
+                  {excelPreview.products.reduce(
+                    (count, product) => count + product.skus.length,
+                    0
+                  )}{" "}
+                  行 / {excelPreview.products.length} 个 SPU；错误{" "}
+                  {excelPreview.rejectedRows.length} 行。确认后合法行与错误清单一起形成正式批次。
+                </p>
+              </div>
+              {excelPreview.rejectedRows.length > 0 ? (
+                <div className="max-h-40 overflow-y-auto rounded-md bg-muted p-3 text-sm">
+                  {excelPreview.rejectedRows.slice(0, 20).map((row) => (
+                    <p key={row.rowNo}>
+                      第 {row.rowNo} 行{row.supplierSkuCode ? ` · ${row.supplierSkuCode}` : ""}：{row.errorText}
+                    </p>
+                  ))}
+                  {excelPreview.rejectedRows.length > 20 ? (
+                    <p>另有 {excelPreview.rejectedRows.length - 20} 条错误随批次保存。</p>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {excelError ? (
+            <Alert variant="destructive">
+              <AlertTitle>无法导入</AlertTitle>
+              <AlertDescription>{excelError}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {sourceType !== "EXCEL" ? (
+            <div className="grid gap-4 sm:grid-cols-3">
             <form.AppField name="skuMainImage">
               {(field) => (
                 <FileUpload
                   accept="image/jpeg,image/png,image/webp"
                   multiple={false}
+                  disabled={sourceMediaUploading}
                   label="来源 SKU 主图"
                   description={field.state.value || "可空；首次建品时若仍缺主图，必须补齐后才能保存"}
-                  onFilesSelected={(files) => field.handleChange(files[0]?.name ?? "")}
+                  onFilesSelected={(files) => {
+                    void uploadSourceFiles("SKU_MAIN", files.slice(0, 1)).then(
+                      (names) => {
+                        if (names) field.handleChange(names[0] ?? "")
+                      }
+                    )
+                  }}
                 />
               )}
             </form.AppField>
@@ -456,9 +648,16 @@ export function SupplierCatalogIntakeDialog({
                 <FileUpload
                   accept="image/jpeg,image/png,image/webp"
                   multiple
+                  disabled={sourceMediaUploading}
                   label="来源轮播图"
                   description={field.state.value.length ? `${field.state.value.length} 张` : "可上传多张"}
-                  onFilesSelected={(files) => field.handleChange(files.map((file) => file.name))}
+                  onFilesSelected={(files) => {
+                    void uploadSourceFiles("SPU_CAROUSEL", files).then(
+                      (names) => {
+                        if (names) field.handleChange(names)
+                      }
+                    )
+                  }}
                 />
               )}
             </form.AppField>
@@ -467,24 +666,56 @@ export function SupplierCatalogIntakeDialog({
                 <FileUpload
                   accept="image/jpeg,image/png,image/webp"
                   multiple
+                  disabled={sourceMediaUploading}
                   label="来源详情图"
                   description={field.state.value.length ? `${field.state.value.length} 张` : "可上传多张"}
-                  onFilesSelected={(files) => field.handleChange(files.map((file) => file.name))}
+                  onFilesSelected={(files) => {
+                    void uploadSourceFiles("SPU_DETAIL", files).then((names) => {
+                      if (names) field.handleChange(names)
+                    })
+                  }}
                 />
               )}
             </form.AppField>
-          </div>
+            </div>
+          ) : null}
+
+          {sourceMediaError ? (
+            <Alert variant="destructive">
+              <AlertTitle>图片未保存</AlertTitle>
+              <AlertDescription>{sourceMediaError}</AlertDescription>
+            </Alert>
+          ) : null}
 
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>
               关闭
             </DialogClose>
-            <form.AppForm>
-              <form.SubmitButton
-                label={fixedSku ? "保存商品与供给" : "保存到供应商商品库"}
-                disabled={createMutation.isPending || Boolean(result)}
-              />
-            </form.AppForm>
+            {sourceType === "EXCEL" ? (
+              <Button
+                type="submit"
+                disabled={
+                  excelPreparing ||
+                  excelImportMutation.isPending ||
+                  !excelPreview ||
+                  !excelFileAssetId ||
+                  Boolean(excelResult)
+                }
+              >
+                {excelImportMutation.isPending ? "正在导入…" : "确认导入批次"}
+              </Button>
+            ) : (
+              <form.AppForm>
+                <form.SubmitButton
+                  label={fixedSku ? "保存商品与供给" : "保存到供应商商品库"}
+                  disabled={
+                    createMutation.isPending ||
+                    sourceMediaUploading ||
+                    Boolean(result)
+                  }
+                />
+              </form.AppForm>
+            )}
           </DialogFooter>
         </form>
       </DialogContent>
@@ -492,38 +723,31 @@ export function SupplierCatalogIntakeDialog({
   )
 }
 
-function buildRegisterSupplySchema(requireSalesVisiblePrice: boolean) {
+function buildRegisterSupplySchema() {
   return z.object({
     supplierId: z.string().min(1, "请选择供应商"),
     supplierSkuCode: z.string().trim().min(1, "请填写供应商 SKU 编码"),
-    dropshipFloorPriceGross: z.string(),
-    bulkFloorPriceGross: z.string(),
+    dropshipFloorPriceGross: money,
+    bulkFloorPriceGross: money,
     minimumOrderQuantity: z
       .string()
       .trim()
       .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
-    inputTaxRate: z.string(),
-    salesVisiblePriceGross: z.string(),
-  }).superRefine((value, context) => {
-    if (
-      requireSalesVisiblePrice &&
-      !money.safeParse(value.salesVisiblePriceGross.trim()).success
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["salesVisiblePriceGross"],
-        message: "该公司 SKU 尚未进入商品池，请填写销售可见价（最多 4 位小数）",
-      })
-    }
+    inputTaxRate: z
+      .string()
+      .trim()
+      .regex(/^\d{1,3}$/, "请输入 0–100 的整数税率")
+      .refine((value) => Number(value) <= 100, "税率不能超过 100"),
+    supplyRegionText: z.string().trim().min(1, "请填写可供区域"),
   })
 }
 
 /**
  * W14/W21 固定公司 SKU 的「添加供应商并登记成本」最小对话框。
  * 只补录供应商侧独有差异：供应商、供应商 SKU 编码与
- * 双底价（一件代发含税运 / 集采含税）、供给起订量；无商品池条目时追加
- * 首次销售可见价。名称/规格/分类/品牌/单位/条码/媒体从公司 SKU 反向
- * 复用为供应商商品快照；采购确认成本取对应底价（集采优先）。
+ * 双价供给（一件代发含税运 / 集采含税）、供给起订量、税率和区域。
+ * 名称/商品类型/规格/分类/品牌/单位/条码/媒体从公司 SKU 正向复用为
+ * 供应商商品快照；本入口不修改公司 SKU 销售可见价。
  */
 export function RegisterSupplyForSkuDialog({
   open,
@@ -551,14 +775,10 @@ export function RegisterSupplyForSkuDialog({
       bulkFloorPriceGross: "",
       minimumOrderQuantity: "1",
       inputTaxRate: "",
-      salesVisiblePriceGross: fixedSku?.hasPoolEntry
-        ? ""
-        : fixedSku?.salesVisiblePriceGross ?? "",
+      supplyRegionText: "",
     },
     validators: {
-      onSubmit: buildRegisterSupplySchema(Boolean(
-        fixedSku && !fixedSku.hasPoolEntry,
-      )),
+      onSubmit: buildRegisterSupplySchema(),
     },
     onSubmit: async ({ value }) => {
       if (!fixedSku) return
@@ -603,6 +823,7 @@ export function RegisterSupplyForSkuDialog({
         supplierName: supplier.name,
         supplierSkuCode: value.supplierSkuCode.trim(),
         name: fixedSku.skuName,
+        sourceProductKind: fixedSku.productKind,
         description: fixedSku.description,
         specification: fixedSku.specification,
         category: fixedSku.category ?? "",
@@ -615,24 +836,16 @@ export function RegisterSupplyForSkuDialog({
           value.dropshipFloorPriceGross.trim() || undefined,
         bulkFloorPriceGross: value.bulkFloorPriceGross.trim() || undefined,
         bulkMinimumOrderQuantity: value.minimumOrderQuantity.trim(),
-        confirmedCostGross:
-          value.bulkFloorPriceGross.trim() ||
-          value.dropshipFloorPriceGross.trim(),
-        inputTaxRate: value.inputTaxRate.trim(),
-        supplyRegion: ["全国"],
+        inputTaxRate: (Number(value.inputTaxRate.trim()) / 100).toFixed(2),
+        supplyRegion: splitValues(value.supplyRegionText),
         targetSkuId: fixedSku.skuId,
         targetSkuCode: fixedSku.skuCode,
         targetSkuName: fixedSku.skuName,
         targetSpecification: fixedSku.specification,
         baseUnit: fixedSku.baseUnit,
-        salesVisiblePriceGross: fixedSku.hasPoolEntry
-          ? undefined
-          : value.salesVisiblePriceGross.trim() || undefined,
-        poolPriceAction: fixedSku.hasPoolEntry
-          ? "KEEP_EXISTING"
-          : "SET_PRICE",
+        poolPriceAction: "KEEP_EXISTING",
         minimumOrderQuantity: value.minimumOrderQuantity.trim(),
-        validFrom: todayIso(),
+        validFrom: "",
         idempotencyKey: idempotencyKey("register-supply-for-sku"),
       })
       setResult(response)
@@ -693,15 +906,9 @@ export function RegisterSupplyForSkuDialog({
               {fixedSku.category ? ` · ${fixedSku.category}` : ""}
               {fixedSku.brand ? ` · ${fixedSku.brand}` : ""}
             </div>
-            {fixedSku.hasPoolEntry ? (
-              <p className="mt-1 text-xs text-muted-foreground">
-                当前销售可见价 ¥{fixedSku.salesVisiblePriceGross ?? "—"}；本次只新增供应商映射和供给，不形成商品池价格修订。
-              </p>
-            ) : (
-              <p className="mt-1 text-xs text-muted-foreground">
-                该公司 SKU 尚未进入商品池，本次需同时设置首次销售可见价。
-              </p>
-            )}
+            <p className="mt-1 text-xs text-muted-foreground">
+              本次只新增供应商映射和供给，不形成公司 SKU 价格修订。
+            </p>
           </div>
         ) : null}
 
@@ -738,16 +945,16 @@ export function RegisterSupplyForSkuDialog({
             <form.AppField name="dropshipFloorPriceGross">
               {(field) => (
                 <field.TextField
-                  label="一件代发底价（含税运）"
-                  description="供应商商品资料保留双底价"
+                  label="一件代发供给价（含税运）*"
+                  description="同时保存为供应商目录底价和首版正式供给价"
                 />
               )}
             </form.AppField>
             <form.AppField name="bulkFloorPriceGross">
               {(field) => (
                 <field.TextField
-                  label="集采底价（含税）"
-                  description="登记供给时默认用作采购确认成本"
+                  label="集采供给价（含税）*"
+                  description="同时保存为供应商目录底价和首版正式供给价"
                 />
               )}
             </form.AppField>
@@ -762,21 +969,19 @@ export function RegisterSupplyForSkuDialog({
             <form.AppField name="inputTaxRate">
               {(field) => (
                 <field.TextField
-                  label="进项税率"
-                  description="无可靠来源时可留空；提交时会要求补充来源，建议先向供应商确认"
+                  label="进项税率（%）*"
+                  description="填写 0–100 的整数，例如 13"
                 />
               )}
             </form.AppField>
-            {!fixedSku?.hasPoolEntry ? (
-              <form.AppField name="salesVisiblePriceGross">
-                {(field) => (
-                  <field.TextField
-                    label="销售可见价 *"
-                    description={`加入 ${fixedSku?.skuCode ?? ""} 的公司商品池价格；不等于采购成本`}
-                  />
-                )}
-              </form.AppField>
-            ) : null}
+            <form.AppField name="supplyRegionText">
+              {(field) => (
+                <field.TextField
+                  label="可供区域 *"
+                  description="多个区域使用逗号分隔；无可靠来源时必须由采购确认"
+                />
+              )}
+            </form.AppField>
           </div>
 
           <DialogFooter>

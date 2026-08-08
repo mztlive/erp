@@ -13,7 +13,10 @@ use crate::common::revision::RevisionBase;
 use crate::common::stable::StableBase;
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
-use crate::ids::{FileAssetId, SupplierCatalogProductId, SupplierCatalogSkuId, SupplierCatalogSkuRevisionId};
+use crate::ids::{
+    FileAssetId, SupplierAccountId, SupplierCatalogProductId, SupplierCatalogSkuId,
+    SupplierCatalogSkuRevisionId,
+};
 use crate::money::{Amount, Quantity};
 use crate::supplier_catalog::product::ArchiveStatus;
 use crate::supplier_catalog::types::{normalize_attributes, CatalogItemStatus, SourceAttribute};
@@ -41,6 +44,8 @@ const MAX_ATTRIBUTES: usize = 100;
 /// 供应商 SKU 创建数据（不含系统字段）。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct SupplierCatalogSkuData {
+    /// 来源供应商；用于单集合强制 `(supplier_id, supplier_sku_code)` 唯一。
+    pub supplier_id: SupplierAccountId,
     /// 所属供应商 SPU。
     pub supplier_catalog_product_id: SupplierCatalogProductId,
     /// 供应商 SKU 编码（同一供应商内唯一）。
@@ -56,6 +61,9 @@ pub struct SupplierCatalogSku {
     pub base: BaseModel,
     #[serde(flatten)]
     pub stable: StableBase<CatalogItemStatus>,
+    /// 来源供应商。旧文档缺失时反序列化为 `None`，启动索引迁移会按所属 SPU 回填。
+    #[serde(default)]
+    pub supplier_id: Option<SupplierAccountId>,
     /// 所属供应商 SPU。
     pub supplier_catalog_product_id: SupplierCatalogProductId,
     /// 供应商 SKU 编码（创建后不可修改）。
@@ -70,6 +78,7 @@ impl PartialEq for SupplierCatalogSku {
             && self.stable.current_revision_id == other.stable.current_revision_id
             && self.stable.created_by == other.stable.created_by
             && self.stable.updated_by == other.stable.updated_by
+            && self.supplier_id == other.supplier_id
             && self.supplier_catalog_product_id == other.supplier_catalog_product_id
             && self.supplier_sku_code == other.supplier_sku_code
     }
@@ -106,6 +115,7 @@ impl SupplierCatalogSku {
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             stable: StableBase::new(CatalogItemStatus::Active, created_by),
+            supplier_id: Some(data.supplier_id),
             supplier_catalog_product_id: data.supplier_catalog_product_id,
             supplier_sku_code,
         })
@@ -428,13 +438,16 @@ mod tests {
         SupplierCatalogSkuRevisionData,
     };
     use crate::common::time::Instant;
-    use crate::ids::{SupplierCatalogProductId, SupplierCatalogSkuId, SupplierCatalogSkuRevisionId};
+    use crate::ids::{
+        SupplierAccountId, SupplierCatalogProductId, SupplierCatalogSkuId, SupplierCatalogSkuRevisionId,
+    };
     use crate::money::{Amount, Quantity};
     use crate::supplier_catalog::types::CatalogItemStatus;
     use std::str::FromStr;
 
     fn sku_data() -> SupplierCatalogSkuData {
         SupplierCatalogSkuData {
+            supplier_id: SupplierAccountId::new("supplier-1"),
             supplier_catalog_product_id: SupplierCatalogProductId::new("scp-1"),
             supplier_sku_code: " SKU-001 ".to_string(),
         }

@@ -16,6 +16,7 @@
 //! 跨行/跨聚合校验（同修订媒体 `(media_usage, sort_order)` 唯一、同一供应商 SKU
 //! 同时点单一映射、有效供给有效期不重叠等）留给 P3，条目见各文件注释。
 
+mod command;
 mod intake;
 mod mapping;
 mod offering;
@@ -23,6 +24,7 @@ mod product;
 mod sku;
 mod types;
 
+pub use command::{SupplierCatalogCommand, SupplierCatalogCommandData};
 pub use intake::{
     IntakeBatchStatus, IntakeItemClassification, IntakeItemResult, SupplierCatalogIntakeBatch,
     SupplierCatalogIntakeBatchData, SupplierCatalogIntakeItem, SupplierCatalogIntakeItemData,

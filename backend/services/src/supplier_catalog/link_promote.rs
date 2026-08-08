@@ -6,22 +6,20 @@ use std::str::FromStr;
 use database::{AccessControlExt, CatalogExt, NoTransaction, SupplierCatalogExt, Transactional};
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
-    SkuId, SupplierCatalogProductId, SupplierCatalogSkuId, SupplierOfferingId,
-    SupplierProductMappingId,
+    SkuId, SupplierCatalogProductId, SupplierCatalogSkuId, SupplierOfferingId, SupplierProductMappingId,
 };
 use entities::money::Amount;
 use entities::supplier_catalog::{
-    AvailabilityStatus, MappingStatus, SupplierOffering, SupplierOfferingData,
-    SupplierProductMapping, SupplierProductMappingData,
+    AvailabilityStatus, MappingStatus, SupplierOffering, SupplierOfferingData, SupplierProductMapping,
+    SupplierProductMappingData,
 };
 use id_generator::next_id;
 use validator::Validate;
 
 use super::dto::{
-    LinkPromoteSkuItem, LinkPromoteSkuResult, LinkPromoteToCompanyPoolRequest,
-    LinkPromoteToCompanyPoolResult,
+    LinkPromoteSkuItem, LinkPromoteSkuResult, LinkPromoteToCompanyPoolRequest, LinkPromoteToCompanyPoolResult,
 };
-use super::SupplierCatalogService;
+use super::{build_command, command_fingerprint, replay_command, SupplierCatalogService};
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
@@ -49,6 +47,10 @@ impl SupplierCatalogService {
     ) -> Result<LinkPromoteToCompanyPoolResult> {
         req.validate()?;
         ensure_unique_link_items(&req.items)?;
+        let request_fingerprint = command_fingerprint("link_promote", &req)?;
+        if let Some(command) = self.command_record(&req.idempotency_key).await? {
+            return replay_command(command, "link_promote", &request_fingerprint);
+        }
 
         let product_id = SupplierCatalogProductId::new(req.supplier_product_id.clone());
         let supplier_product = self
@@ -58,10 +60,7 @@ impl SupplierCatalogService {
             .await?
             .ok_or_else(|| Error::NotFound("供应商商品不存在".to_string()))?;
 
-        let source_no = self
-            .current_product_revision_no(&product_id)
-            .await?
-            .unwrap_or(0);
+        let source_no = self.current_product_revision_no(&product_id).await?.unwrap_or(0);
         if source_no != req.expected_source_revision_no {
             return Err(Error::ConflictError(format!(
                 "供应商商品来源版本已变化，请刷新后重试（期望 SPU 修订 {}, 当前 {}）",
@@ -83,18 +82,12 @@ impl SupplierCatalogService {
             let supplier_sku = supplier_skus
                 .get(item.supplier_catalog_sku_id.as_str())
                 .ok_or_else(|| {
-                    Error::NotFound(format!(
-                        "供应商 SKU 不存在: {}",
-                        item.supplier_catalog_sku_id
-                    ))
+                    Error::NotFound(format!("供应商 SKU 不存在: {}", item.supplier_catalog_sku_id))
                 })?;
             if self
                 .db
                 .supplier_product_mappings()
-                .find_active_by_supplier_sku(
-                    &supplier_sku.base.id.clone().into(),
-                    &mut NoTransaction,
-                )
+                .find_active_by_supplier_sku(&supplier_sku.base.id.clone().into(), &mut NoTransaction)
                 .await?
                 .is_some()
             {
@@ -110,9 +103,13 @@ impl SupplierCatalogService {
                 .skus()
                 .find_by_id(company_sku_id.as_ref(), &mut NoTransaction)
                 .await?
-                .ok_or_else(|| {
-                    Error::NotFound(format!("公司 SKU 不存在: {}", item.company_sku_id))
-                })?;
+                .ok_or_else(|| Error::NotFound(format!("公司 SKU 不存在: {}", item.company_sku_id)))?;
+            self.ensure_qualified_for_sku(
+                &supplier_product.supplier_id,
+                &company_sku.base.id.clone().into(),
+                effective_from,
+            )
+            .await?;
 
             let source_sku_rev = sku_revisions
                 .get(item.supplier_catalog_sku_id.as_str())
@@ -175,6 +172,7 @@ impl SupplierCatalogService {
                 req.input_tax_rate.as_str(),
                 &moq.to_string(),
                 &req.supply_region,
+                &[],
                 &effective_from.to_string(),
                 None,
                 None,
@@ -200,30 +198,6 @@ impl SupplierCatalogService {
             "supplier_catalog_product",
             supplier_product_id.clone(),
         )?;
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let rows_for_tx = prepared_rows.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    for row in &rows_for_tx {
-                        db.supplier_product_mappings()
-                            .create(&row.mapping, session)
-                            .await?;
-                        db.supplier_catalog()
-                            .create_offering_with_revision(
-                                &row.offering,
-                                &row.offering_revision,
-                                session,
-                            )
-                            .await?;
-                    }
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
-                })
-            })
-            .await?;
-
         let items: Vec<LinkPromoteSkuResult> = prepared_rows
             .iter()
             .map(|row| LinkPromoteSkuResult {
@@ -234,14 +208,53 @@ impl SupplierCatalogService {
                 offering_revision_no: 1,
             })
             .collect();
-
-        let ref_id = supplier_product_id.clone();
-        Ok(LinkPromoteToCompanyPoolResult {
-            supplier_product_id,
+        let result = LinkPromoteToCompanyPoolResult {
+            supplier_product_id: supplier_product_id.clone(),
             items,
-            reference: format!("LPRO-{}", &ref_id[..8.min(ref_id.len())]),
+            reference: format!(
+                "LPRO-{}",
+                &supplier_product_id[..8.min(supplier_product_id.len())]
+            ),
             recorded_at: Instant::now().unix_secs() as u64,
-        })
+        };
+        let command = build_command(
+            &req.idempotency_key,
+            "link_promote",
+            &request_fingerprint,
+            &result,
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let rows_for_tx = prepared_rows.clone();
+        let command_for_tx = command.clone();
+        let transaction_result = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    for row in &rows_for_tx {
+                        db.supplier_product_mappings()
+                            .create(&row.mapping, session)
+                            .await?;
+                        db.supplier_catalog()
+                            .create_offering_with_revision(&row.offering, &row.offering_revision, session)
+                            .await?;
+                    }
+                    db.supplier_catalog_commands()
+                        .create(&command_for_tx, session)
+                        .await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
+            .await;
+
+        self.resolve_command_result(
+            transaction_result,
+            result,
+            &req.idempotency_key,
+            "link_promote",
+            &request_fingerprint,
+        )
+        .await
     }
 }
 
@@ -275,9 +288,7 @@ fn ensure_unique_link_items(items: &[LinkPromoteSkuItem]) -> Result<()> {
     for item in items {
         let id = item.supplier_catalog_sku_id.trim();
         if !seen.insert(id.to_string()) {
-            return Err(Error::ValidationError(format!(
-                "供应商 SKU 重复选择: {id}"
-            )));
+            return Err(Error::ValidationError(format!("供应商 SKU 重复选择: {id}")));
         }
     }
     Ok(())
@@ -303,8 +314,7 @@ fn resolve_price(
     sku_id: &str,
 ) -> Result<String> {
     if let Some(value) = confirmed.map(str::trim).filter(|value| !value.is_empty()) {
-        Amount::from_str(value)
-            .map_err(|_| Error::ValidationError(format!("非法{label}: {value}")))?;
+        Amount::from_str(value).map_err(|_| Error::ValidationError(format!("非法{label}: {value}")))?;
         return Ok(value.to_string());
     }
     floor.map(|value| value.to_string()).ok_or_else(|| {

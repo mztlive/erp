@@ -243,7 +243,40 @@ CreateSupplierCatalogItem {
 }
 ```
 
-只创建供应商商品时不要求公司 SKU。W14 固定 SKU 入口可以在同一业务事务中继续创建映射和供给修订，不创建独立商品池条目或修订。
+`CreateSupplierCatalogItem` 适用于手工单条、API 单条和固定公司 SKU 正向登记。只创建供应商商品时不要求公司 SKU。W14 固定 SKU 入口必须在同一业务事务中创建供应商商品、稳定 SKU 映射和首版供给修订，不创建独立商品池条目或销售价修订。
+
+Excel 文件必须先登记为敏感文件资产，再调用批次命令：
+
+```text
+POST /admin/supplier-catalog/imports/excel
+
+ImportSupplierCatalogExcel {
+  supplier_id
+  source_reference              // 批次唯一来源引用
+  file_asset_id                 // 原始 xlsx/csv 文件资产
+  products[] {
+    supplier_spu_code
+    name / description / source_product_kind? / source_category? / source_brand?
+    structured_attributes[]
+    media[]
+    source_revision_token? / valid_from? / valid_to?
+    skus[] {
+      row_no
+      sku { supplier_sku_code / name / specification / 来源单位、条码、双底价、起订量、可供事实 }
+    }
+  }
+  rejected_rows[] { row_no, supplier_sku_code?, error_text }
+  idempotency_key
+}
+```
+
+执行约束：
+
+1. 浏览器必须完成表头映射、必填字段、金额、数量、日期、枚举、文件内 SPU/SKU 重复预检，并在提交前展示成功行与错误行计数。
+2. 服务端必须重新执行 DTO/领域校验；原始文件、合法商品、失败明细、审计记录和幂等记录必须在同一事务提交。
+3. 合法行按 SPU 分组形成稳定商品与不可变首版修订；失败行必须保存为批次错误明细，不得仅保留在浏览器状态。
+4. `(supplier_id, supplier_sku_code)` 必须由数据库唯一索引强制；历史 SKU 在索引创建前按所属 SPU 回填 `supplier_id`。
+5. Excel 导入不得自动创建公司 SKU、映射、供给或销售价修订。
 
 ### 6.1b 供应商商品中心保存来源内容
 

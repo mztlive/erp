@@ -1484,6 +1484,7 @@ export function SupplierProductCenterPage({
                     <Label htmlFor="spu-code">供应商 SPU 编码</Label>
                     <Input
                       id="spu-code"
+                      disabled={!isCreate}
                       value={fields.supplierSpuCode}
                       onChange={(event) =>
                         patchFields((previous) => ({
@@ -1936,6 +1937,7 @@ export function SupplierProductCenterPage({
                               <td className="border-l border-border/30 px-3 py-3">
                                 <Input
                                   className="h-8"
+                                  disabled={Boolean(sku.catalogSkuId)}
                                   value={sku.supplierSkuCode}
                                   onChange={(event) =>
                                     updateSku(index, {

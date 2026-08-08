@@ -16,7 +16,7 @@ use entities::ids::{
 };
 use entities::supplier_catalog::{
     CatalogItemStatus, CatalogSourceType, IntakeBatchStatus, IntakeItemResult, MappingStatus, OfferingStatus,
-    SupplierCatalogIntakeBatch, SupplierCatalogIntakeItem, SupplierCatalogProduct,
+    SupplierCatalogCommand, SupplierCatalogIntakeBatch, SupplierCatalogIntakeItem, SupplierCatalogProduct,
     SupplierCatalogProductRevision, SupplierCatalogProductRevisionMedia, SupplierCatalogSku,
     SupplierCatalogSkuRevision, SupplierOffering, SupplierOfferingRevision, SupplierProductMapping,
 };
@@ -48,6 +48,21 @@ const INTAKE_ITEMS: &str = <mongodb::Database as SupplierCatalogExt>::SUPPLIER_C
 const OFFERINGS: &str = <mongodb::Database as SupplierCatalogExt>::SUPPLIER_OFFERINGS;
 /// `supplier_offering_revision` 集合名。
 const OFFERING_REVISIONS: &str = <mongodb::Database as SupplierCatalogExt>::SUPPLIER_OFFERING_REVISIONS;
+
+impl<'a> Repository<'a, SupplierCatalogCommand> {
+    /// 按客户端幂等键查询已成功命令。
+    ///
+    /// # Errors
+    /// MongoDB 查询失败时返回仓储错误。
+    pub async fn find_by_idempotency_key(
+        &self,
+        idempotency_key: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierCatalogCommand>> {
+        self.find_one(doc! { "idempotency_key": idempotency_key }, executor)
+            .await
+    }
+}
 
 /// `supplier_catalog_product` 列表允许的排序字段白名单。
 const PRODUCT_SORT_FIELDS: &[&str] = &["created_at", "supplier_spu_code", "status"];
@@ -406,6 +421,29 @@ impl<'a> Repository<'a, SupplierCatalogSku> {
         self.find_one(
             doc! {
                 "supplier_catalog_product_id": supplier_catalog_product_id.to_string(),
+                "supplier_sku_code": supplier_sku_code,
+            },
+            executor,
+        )
+        .await
+    }
+
+    /// 按「供应商 + SKU 编码」查找供应商级唯一 SKU 身份。
+    ///
+    /// 新文档直接使用反规范化的 `supplier_id`；历史文档由索引初始化迁移按所属
+    /// SPU 回填。数据库唯一索引仍是并发下的最终约束，本查询用于批次预检反馈。
+    ///
+    /// # Errors
+    /// MongoDB 查询失败时返回仓储错误。
+    pub async fn find_by_supplier_and_code(
+        &self,
+        supplier_id: &SupplierAccountId,
+        supplier_sku_code: &str,
+        executor: &mut dyn Executor,
+    ) -> Result<Option<SupplierCatalogSku>> {
+        self.find_one(
+            doc! {
+                "supplier_id": supplier_id.to_string(),
                 "supplier_sku_code": supplier_sku_code,
             },
             executor,

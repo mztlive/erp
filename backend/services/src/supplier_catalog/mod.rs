@@ -13,30 +13,35 @@
 //! - D10 `catalog`：公司 SKU 存在性校验（映射入池）；
 //! - D09 `supplier`：供应商角色存在性校验。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{AccessControlExt, CatalogExt, NoTransaction, SupplierCatalogExt, SupplierExt, Transactional};
+use database::{
+    AccessControlExt, CatalogExt, FileAssetExt, NoTransaction, SupplierCatalogExt, SupplierExt, Transactional,
+};
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
-    SupplierCatalogIntakeBatchId, SupplierCatalogIntakeItemId, SupplierCatalogProductId,
+    FileAssetId, SupplierCatalogIntakeBatchId, SupplierCatalogIntakeItemId, SupplierCatalogProductId,
     SupplierCatalogProductRevisionId, SupplierCatalogProductRevisionMediaId, SupplierCatalogSkuId,
     SupplierCatalogSkuRevisionId, SupplierOfferingId, SupplierOfferingRevisionId, SupplierProductMappingId,
 };
 use entities::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
 use entities::supplier_catalog::{
-    ArchiveStatus, AvailabilityStatus, IntakeItemClassification, IntakeItemResult, MappingStatus,
-    OfferingStatus, SupplierCatalogIntakeBatch, SupplierCatalogIntakeBatchData, SupplierCatalogIntakeItem,
-    SupplierCatalogIntakeItemData, SupplierCatalogProduct, SupplierCatalogProductData,
-    SupplierCatalogProductRevision, SupplierCatalogProductRevisionData, SupplierCatalogProductRevisionMedia,
-    SupplierCatalogProductRevisionMediaData, SupplierCatalogSku, SupplierCatalogSkuData,
-    SupplierCatalogSkuRevision, SupplierCatalogSkuRevisionData, SupplierOffering, SupplierOfferingData,
-    SupplierOfferingRevision, SupplierOfferingRevisionData, SupplierProductMapping,
+    ArchiveStatus, AvailabilityStatus, CatalogItemStatus, CatalogSourceType, IntakeBatchStatus,
+    IntakeItemClassification, IntakeItemResult, MappingStatus, OfferingStatus, SupplierCatalogCommand,
+    SupplierCatalogCommandData, SupplierCatalogIntakeBatch, SupplierCatalogIntakeBatchData,
+    SupplierCatalogIntakeItem, SupplierCatalogIntakeItemData, SupplierCatalogProduct,
+    SupplierCatalogProductData, SupplierCatalogProductRevision, SupplierCatalogProductRevisionData,
+    SupplierCatalogProductRevisionMedia, SupplierCatalogProductRevisionMediaData, SupplierCatalogSku,
+    SupplierCatalogSkuData, SupplierCatalogSkuRevision, SupplierCatalogSkuRevisionData, SupplierOffering,
+    SupplierOfferingData, SupplierOfferingRevision, SupplierOfferingRevisionData, SupplierProductMapping,
     SupplierProductMappingData,
 };
 use entities::{catalog::ProductKind, supplier::CapabilityCode};
 use id_generator::next_id;
 use mongodb::Database;
+use serde::{de::DeserializeOwned, Serialize};
+use sha2::{Digest, Sha256};
 use validator::Validate;
 
 use crate::audit::AuditActor;
@@ -50,10 +55,11 @@ mod reverse_promote;
 
 use self::dto::SortDir;
 pub use self::dto::{
-    ApproveSupplierProductMappingRequest, ApproveSupplierProductMappingResult,
-    CompanySkuMatchCandidateView, CreateSupplierCatalogProductRequest,
-    CreateSupplierCatalogProductResult, CreateSupplierProductMappingRequest,
-    CreateSupplierProductMappingResult, LinkPromoteSkuItem, LinkPromoteSkuResult,
+    ApproveSupplierProductMappingRequest, ApproveSupplierProductMappingResult, CompanySkuMatchCandidateView,
+    CreateSupplierCatalogProductRequest, CreateSupplierCatalogProductResult,
+    CreateSupplierProductMappingRequest, CreateSupplierProductMappingResult, CreateTargetSupplyRequest,
+    ExcelImportProductWrite, ExcelImportRejectedRow, ExcelImportSkuRow, ImportSupplierCatalogExcelRequest,
+    ImportSupplierCatalogExcelResult, LinkPromoteSkuItem, LinkPromoteSkuResult,
     LinkPromoteToCompanyPoolRequest, LinkPromoteToCompanyPoolResult, PageView, PoolMatchStatus,
     ReversePromoteSkuItem, ReversePromoteSkuResult, ReversePromoteToCompanyPoolRequest,
     ReversePromoteToCompanyPoolResult, ReviseSupplierCatalogProductRequest,
@@ -84,6 +90,24 @@ type SupplierCatalogIntakeBatchFilter =
 /// 提供供应商 SPU/SKU 来源修订、映射、供给与入库批次的编排。
 pub struct SupplierCatalogService {
     db: Database,
+}
+
+/// 固定公司 SKU 正向登记时与商品创建同事务提交的映射和供给。
+#[derive(Clone)]
+struct PreparedCreateTargetSupply {
+    mapping: SupplierProductMapping,
+    offering: SupplierOffering,
+    offering_revision: SupplierOfferingRevision,
+}
+
+/// Excel 批次中一个待原子写入的 SPU 聚合及其首版来源快照。
+#[derive(Clone)]
+struct PreparedExcelProduct {
+    product: SupplierCatalogProduct,
+    revision: SupplierCatalogProductRevision,
+    media: Vec<SupplierCatalogProductRevisionMedia>,
+    skus: Vec<SupplierCatalogSku>,
+    sku_revisions: Vec<SupplierCatalogSkuRevision>,
 }
 
 impl SupplierCatalogService {
@@ -273,32 +297,26 @@ impl SupplierCatalogService {
         let mappings = self
             .db
             .supplier_product_mappings()
-            .search_supplier_product_mappings(
-                &SupplierProductMappingFilter {
-                    supplier_catalog_sku_id: None,
-                    sku_id: None,
-                    status: None,
-                    page: 1,
-                    page_size: 100,
-                    sort_by: Some("created_at".to_string()),
-                    sort_ascending: false,
+            .find_many(
+                mongodb::bson::doc! {
+                    "supplier_catalog_sku_id": {
+                        "$in": sku_ids.iter().map(ToString::to_string).collect::<Vec<_>>()
+                    }
                 },
                 &mut NoTransaction,
             )
             .await?
-            .items
             .into_iter()
-            .filter(|row| row.supplier_catalog_sku_id.to_string() == product.base.id)
             .map(|row| SupplierProductMappingView {
-                id: row.id,
+                id: row.base.id,
                 supplier_catalog_sku_id: row.supplier_catalog_sku_id.to_string(),
                 sku_id: row.sku_id.to_string(),
                 status: row.status,
                 approved_by: row.approved_by,
                 approved_at: row.approved_at.map(|instant| instant.unix_secs() as u64),
-                reason: None,
-                version: row.version,
-                created_at: row.created_at,
+                reason: row.reason,
+                version: row.base.version,
+                created_at: row.base.created_at,
             })
             .collect();
 
@@ -673,6 +691,10 @@ impl SupplierCatalogService {
         actor: &AuditActor,
     ) -> Result<CreateSupplierCatalogProductResult> {
         req.validate()?;
+        let request_fingerprint = command_fingerprint("create_product", &req)?;
+        if let Some(command) = self.command_record(&req.idempotency_key).await? {
+            return replay_command(command, "create_product", &request_fingerprint);
+        }
         let supplier_id = entities::ids::SupplierAccountId::new(req.supplier_id.trim().to_string());
         let source_reference = req
             .source_reference
@@ -692,37 +714,34 @@ impl SupplierCatalogService {
             )
             .await?
         {
-            let item = self
+            let items = self
                 .db
                 .supplier_catalog_intake_items()
                 .find_items_by_batch_ids(&[batch.base.id.clone().into()], &mut NoTransaction)
-                .await?
-                .into_iter()
-                .next();
-            let (product_id, intake_item_id) = match item {
-                Some(item) => {
-                    let intake_item_id = item.base.id.clone();
-                    let product_id = match &item.supplier_catalog_sku_id {
-                        Some(sku_id) => self
-                            .db
-                            .supplier_catalog_skus()
-                            .find_by_id(sku_id, &mut NoTransaction)
-                            .await
-                            .ok()
-                            .flatten()
-                            .map(|sku| sku.supplier_catalog_product_id.to_string())
-                            .unwrap_or_default(),
-                        None => String::new(),
-                    };
-                    (product_id, intake_item_id)
-                }
-                None => (String::new(), String::new()),
+                .await?;
+            let sku_ids: Vec<String> = items
+                .iter()
+                .filter_map(|item| item.supplier_catalog_sku_id.as_ref().map(ToString::to_string))
+                .collect();
+            let product_id = match sku_ids.first() {
+                Some(sku_id) => self
+                    .db
+                    .supplier_catalog_skus()
+                    .find_by_id(sku_id, &mut NoTransaction)
+                    .await?
+                    .map(|sku| sku.supplier_catalog_product_id.to_string())
+                    .unwrap_or_default(),
+                None => String::new(),
             };
+            let intake_item_id = items.first().map(|item| item.base.id.clone()).unwrap_or_default();
             return Ok(CreateSupplierCatalogProductResult {
                 product_id,
-                sku_ids: Vec::new(),
+                sku_ids,
                 intake_batch_id: batch.base.id,
                 intake_item_id,
+                mapping_id: None,
+                offering_id: None,
+                offering_revision_id: None,
                 replayed: true,
                 reference: format!("SC-{}", source_reference),
                 recorded_at: batch.base.created_at,
@@ -734,6 +753,7 @@ impl SupplierCatalogService {
             .find_by_id(&supplier_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
+        self.ensure_file_assets_exist(&req.media, &req.skus).await?;
 
         let product = SupplierCatalogProduct::new(
             SupplierCatalogProductId::new(next_id()),
@@ -755,6 +775,7 @@ impl SupplierCatalogService {
             let sku = SupplierCatalogSku::new(
                 SupplierCatalogSkuId::new(next_id()),
                 SupplierCatalogSkuData {
+                    supplier_id: supplier_id.clone(),
                     supplier_catalog_product_id: entities::ids::SupplierCatalogProductId::new(
                         product_id.clone(),
                     ),
@@ -767,7 +788,7 @@ impl SupplierCatalogService {
             skus.push(sku);
         }
 
-        let batch = SupplierCatalogIntakeBatch::new(
+        let mut batch = SupplierCatalogIntakeBatch::new(
             SupplierCatalogIntakeBatchId::new(next_id()),
             SupplierCatalogIntakeBatchData {
                 source_type: req.source_type,
@@ -777,6 +798,7 @@ impl SupplierCatalogService {
                 file_asset_id: None,
             },
         )?;
+        batch.update(IntakeBatchStatus::Completed, None)?;
         let mut intake_items = Vec::with_capacity(skus.len());
         for (index, sku) in skus.iter().enumerate() {
             intake_items.push(SupplierCatalogIntakeItem::new(
@@ -789,15 +811,98 @@ impl SupplierCatalogService {
                     classification: IntakeItemClassification::New,
                     result: IntakeItemResult::Success,
                     error_text: None,
-                    supplier_catalog_sku_id: None,
+                    supplier_catalog_sku_id: Some(sku.base.id.clone().into()),
                 },
             )?);
         }
+
+        let target_supply = if let Some(target) = &req.target_supply {
+            if skus.len() != 1 {
+                return Err(Error::ValidationError(
+                    "固定公司 SKU 登记一次只能提交一个供应商 SKU".to_string(),
+                ));
+            }
+            let company_sku_id = entities::ids::SkuId::new(target.sku_id.trim().to_string());
+            let effective_from = BusinessDate::today();
+            self.ensure_qualified_for_sku(&supplier_id, &company_sku_id, effective_from)
+                .await?;
+            let supplier_sku = &skus[0];
+            let sku_write = &req.skus[0];
+            let dropship =
+                required_catalog_value(sku_write.dropship_floor_price_gross.as_deref(), "一件代发供给价")?;
+            let bulk = required_catalog_value(sku_write.bulk_floor_price_gross.as_deref(), "集采供给价")?;
+            let moq = required_catalog_value(sku_write.bulk_minimum_order_quantity.as_deref(), "集采起订量")?;
+            let mapping = SupplierProductMapping::new(
+                SupplierProductMappingId::new(next_id()),
+                SupplierProductMappingData {
+                    supplier_catalog_sku_id: supplier_sku.base.id.clone().into(),
+                    sku_id: company_sku_id.clone(),
+                    status: MappingStatus::Active,
+                    approved_by: Some(actor.id().to_string()),
+                    approved_at: Some(Instant::now()),
+                    reason: Some("register_supply_for_sku".to_string()),
+                },
+            )?;
+            let mut offering = SupplierOffering::new(
+                SupplierOfferingId::new(next_id()),
+                SupplierOfferingData {
+                    sku_id: company_sku_id,
+                    supplier_id: supplier_id.clone(),
+                    supplier_catalog_sku_id: supplier_sku.base.id.clone().into(),
+                },
+                actor.id(),
+            )?;
+            let offering_revision = self.build_offering_revision(
+                &offering,
+                1,
+                dropship,
+                bulk,
+                &target.input_tax_rate,
+                moq,
+                &target.supply_region,
+                &[],
+                &effective_from.to_string(),
+                None,
+                None,
+                None,
+                None,
+                sku_write.available_quantity.as_deref(),
+                sku_write.availability_status,
+            )?;
+            offering.stable.current_revision_id = Some(offering_revision.base.id.clone());
+            Some(PreparedCreateTargetSupply {
+                mapping,
+                offering,
+                offering_revision,
+            })
+        } else {
+            None
+        };
 
         let audit = actor.clone().resource_log(
             "supplier_catalog_product.create",
             "supplier_catalog_product",
             product_id.clone(),
+        )?;
+        let result = CreateSupplierCatalogProductResult {
+            product_id: product_id.clone(),
+            sku_ids: skus.iter().map(|sku| sku.base.id.clone()).collect(),
+            intake_batch_id: batch.base.id.clone(),
+            intake_item_id: intake_items[0].base.id.clone(),
+            mapping_id: target_supply.as_ref().map(|value| value.mapping.base.id.clone()),
+            offering_id: target_supply.as_ref().map(|value| value.offering.base.id.clone()),
+            offering_revision_id: target_supply
+                .as_ref()
+                .map(|value| value.offering_revision.base.id.clone()),
+            replayed: false,
+            reference: format!("SC-{source_reference}"),
+            recorded_at: batch.base.created_at,
+        };
+        let command = build_command(
+            &req.idempotency_key,
+            "create_product",
+            &request_fingerprint,
+            &result,
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
@@ -808,7 +913,9 @@ impl SupplierCatalogService {
         let sku_revisions_for_tx = sku_revisions.clone();
         let intake_items_for_tx = intake_items.clone();
         let media_for_tx = media.clone();
-        client
+        let target_supply_for_tx = target_supply.clone();
+        let command_for_tx = command.clone();
+        let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
                     db.supplier_catalog()
@@ -827,21 +934,395 @@ impl SupplierCatalogService {
                             .create_sku_with_initial_revision(sku, sku_revision, session)
                             .await?;
                     }
+                    if let Some(target) = &target_supply_for_tx {
+                        db.supplier_product_mappings()
+                            .create(&target.mapping, session)
+                            .await?;
+                        db.supplier_catalog()
+                            .create_offering_with_revision(
+                                &target.offering,
+                                &target.offering_revision,
+                                session,
+                            )
+                            .await?;
+                    }
+                    db.supplier_catalog_commands()
+                        .create(&command_for_tx, session)
+                        .await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })
             })
-            .await?;
+            .await;
 
-        Ok(CreateSupplierCatalogProductResult {
-            product_id,
-            sku_ids: skus.iter().map(|sku| sku.base.id.clone()).collect(),
+        self.resolve_command_result(
+            transaction_result,
+            result,
+            &req.idempotency_key,
+            "create_product",
+            &request_fingerprint,
+        )
+        .await
+    }
+
+    /// 导入已完成浏览器预检的 Excel 供应商商品批次。
+    ///
+    /// 原始文件资产、合法 SPU/SKU、失败行清单和命令幂等记录在同一事务中写入；
+    /// 任一数据库写入失败时整批回滚。预检失败行作为 `Failed` 明细保留，合法行
+    /// 形成供应商商品及不可变首版来源修订，但不会自动关联公司 SKU。
+    ///
+    /// # 参数
+    /// * `req` - Excel 批次及预检结果
+    /// * `actor` - 已通过鉴权的审计操作人
+    ///
+    /// # 返回
+    /// 返回批次、商品身份和成功/失败行计数；重复幂等键返回首次结果。
+    ///
+    /// # 错误
+    /// * `ValidationError` - 批次为空、行号重复或请求字段非法
+    /// * `NotFound` - 供应商或原始 Excel 文件资产不存在
+    /// * `ConflictError` - 幂等键被其他请求占用或稳定唯一键冲突
+    pub async fn import_excel(
+        &self,
+        req: ImportSupplierCatalogExcelRequest,
+        actor: &AuditActor,
+    ) -> Result<ImportSupplierCatalogExcelResult> {
+        req.validate()?;
+        if req.products.is_empty() && req.rejected_rows.is_empty() {
+            return Err(Error::ValidationError("Excel 批次至少需要一条数据行".to_string()));
+        }
+        let request_fingerprint = command_fingerprint("import_excel", &req)?;
+        if let Some(command) = self.command_record(&req.idempotency_key).await? {
+            return replay_command(command, "import_excel", &request_fingerprint);
+        }
+
+        let supplier_id = entities::ids::SupplierAccountId::new(req.supplier_id.trim().to_string());
+        let source_reference = req.source_reference.trim().to_string();
+        if let Some(batch) = self
+            .db
+            .supplier_catalog_intake_batches()
+            .find_by_source_key(
+                CatalogSourceType::Excel,
+                &supplier_id,
+                &source_reference,
+                &mut NoTransaction,
+            )
+            .await?
+        {
+            let items = self
+                .db
+                .supplier_catalog_intake_items()
+                .find_items_by_batch_ids(&[batch.base.id.clone().into()], &mut NoTransaction)
+                .await?;
+            let mut product_ids = Vec::new();
+            for item in &items {
+                let Some(sku_id) = &item.supplier_catalog_sku_id else {
+                    continue;
+                };
+                let Some(sku) = self
+                    .db
+                    .supplier_catalog_skus()
+                    .find_by_id(sku_id, &mut NoTransaction)
+                    .await?
+                else {
+                    continue;
+                };
+                let product_id = sku.supplier_catalog_product_id.to_string();
+                if !product_ids.contains(&product_id) {
+                    product_ids.push(product_id);
+                }
+            }
+            return Ok(ImportSupplierCatalogExcelResult {
+                intake_batch_id: batch.base.id,
+                product_ids,
+                imported_count: items
+                    .iter()
+                    .filter(|item| item.result == IntakeItemResult::Success)
+                    .count(),
+                rejected_count: items
+                    .iter()
+                    .filter(|item| item.result == IntakeItemResult::Failed)
+                    .count(),
+                replayed: true,
+                reference: format!("SC-EXCEL-{source_reference}"),
+                recorded_at: batch.base.created_at,
+            });
+        }
+
+        self.db
+            .supplier_accounts()
+            .find_by_id(&supplier_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("供应商不存在".to_string()))?;
+        let file_asset_id = FileAssetId::new(req.file_asset_id.trim().to_string());
+        self.db
+            .file_assets()
+            .find_by_id(&file_asset_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::NotFound("Excel 文件资产不存在".to_string()))?;
+
+        let mut row_numbers = HashSet::new();
+        let mut spu_codes = HashSet::new();
+        for product_write in &req.products {
+            if !spu_codes.insert(product_write.supplier_spu_code.trim().to_string()) {
+                return Err(Error::ValidationError(format!(
+                    "Excel 批次包含重复供应商 SPU 编码: {}",
+                    product_write.supplier_spu_code
+                )));
+            }
+            for row in &product_write.skus {
+                if !row_numbers.insert(row.row_no) {
+                    return Err(Error::ValidationError(format!(
+                        "Excel 批次包含重复行号: {}",
+                        row.row_no
+                    )));
+                }
+            }
+        }
+        for row in &req.rejected_rows {
+            if !row_numbers.insert(row.row_no) {
+                return Err(Error::ValidationError(format!(
+                    "Excel 批次包含重复行号: {}",
+                    row.row_no
+                )));
+            }
+        }
+
+        let mut import_products = Vec::new();
+        let mut rejected_rows = req.rejected_rows.clone();
+        for product_write in &req.products {
+            if self
+                .db
+                .supplier_catalog_products()
+                .find_by_supplier_code(
+                    &supplier_id,
+                    product_write.supplier_spu_code.trim(),
+                    &mut NoTransaction,
+                )
+                .await?
+                .is_some()
+            {
+                rejected_rows.extend(product_write.skus.iter().map(|row| ExcelImportRejectedRow {
+                    row_no: row.row_no,
+                    supplier_sku_code: row.sku.supplier_sku_code.clone(),
+                    error_text: format!(
+                        "供应商 SPU 已存在，请在商品中心形成新来源修订: {}",
+                        product_write.supplier_spu_code
+                    ),
+                }));
+                continue;
+            }
+            let mut accepted = product_write.clone();
+            accepted.skus.clear();
+            for row in &product_write.skus {
+                if self
+                    .db
+                    .supplier_catalog_skus()
+                    .find_by_supplier_and_code(
+                        &supplier_id,
+                        row.sku.supplier_sku_code.trim(),
+                        &mut NoTransaction,
+                    )
+                    .await?
+                    .is_some()
+                {
+                    rejected_rows.push(ExcelImportRejectedRow {
+                        row_no: row.row_no,
+                        supplier_sku_code: row.sku.supplier_sku_code.clone(),
+                        error_text: "供应商 SKU 编码已存在".to_string(),
+                    });
+                } else {
+                    accepted.skus.push(row.clone());
+                }
+            }
+            if !accepted.skus.is_empty() {
+                import_products.push(accepted);
+            }
+        }
+
+        let mut batch = SupplierCatalogIntakeBatch::new(
+            SupplierCatalogIntakeBatchId::new(next_id()),
+            SupplierCatalogIntakeBatchData {
+                source_type: CatalogSourceType::Excel,
+                supplier_id: supplier_id.clone(),
+                source_reference: source_reference.clone(),
+                source_connection_id: None,
+                file_asset_id: Some(file_asset_id),
+            },
+        )?;
+        batch.update(IntakeBatchStatus::Completed, None)?;
+
+        let mut prepared_products = Vec::with_capacity(import_products.len());
+        let mut intake_items = Vec::new();
+        for product_write in &import_products {
+            let create_req = CreateSupplierCatalogProductRequest {
+                source_type: CatalogSourceType::Excel,
+                supplier_id: req.supplier_id.clone(),
+                source_reference: Some(source_reference.clone()),
+                supplier_spu_code: product_write.supplier_spu_code.clone(),
+                name: product_write.name.clone(),
+                description: product_write.description.clone(),
+                source_product_kind: product_write.source_product_kind.clone(),
+                source_category: product_write.source_category.clone(),
+                source_brand: product_write.source_brand.clone(),
+                structured_attributes: product_write.structured_attributes.clone(),
+                media: product_write.media.clone(),
+                source_revision_token: product_write.source_revision_token.clone(),
+                valid_from: product_write.valid_from.clone(),
+                valid_to: product_write.valid_to.clone(),
+                skus: product_write.skus.iter().map(|row| row.sku.clone()).collect(),
+                target_supply: None,
+                idempotency_key: req.idempotency_key.clone(),
+            };
+            self.ensure_file_assets_exist(&create_req.media, &create_req.skus)
+                .await?;
+            let product = SupplierCatalogProduct::new(
+                SupplierCatalogProductId::new(next_id()),
+                SupplierCatalogProductData {
+                    supplier_id: supplier_id.clone(),
+                    source_type: CatalogSourceType::Excel,
+                    source_connection_id: None,
+                    supplier_spu_code: product_write.supplier_spu_code.clone(),
+                },
+                actor.id(),
+            )?;
+            let revision = self.build_product_revision(&product.base.id, &create_req, 1)?;
+            let media = self.build_revision_media(&revision.base.id, &create_req.media)?;
+            let mut skus = Vec::with_capacity(product_write.skus.len());
+            let mut sku_revisions = Vec::with_capacity(product_write.skus.len());
+            for row in &product_write.skus {
+                let sku = SupplierCatalogSku::new(
+                    SupplierCatalogSkuId::new(next_id()),
+                    SupplierCatalogSkuData {
+                        supplier_id: supplier_id.clone(),
+                        supplier_catalog_product_id: product.base.id.clone().into(),
+                        supplier_sku_code: row.sku.supplier_sku_code.clone(),
+                    },
+                    actor.id(),
+                )?;
+                let sku_revision = self.build_sku_revision(&sku, &row.sku, 1)?;
+                intake_items.push(SupplierCatalogIntakeItem::new(
+                    SupplierCatalogIntakeItemId::new(next_id()),
+                    SupplierCatalogIntakeItemData {
+                        supplier_catalog_intake_batch_id: batch.base.id.clone().into(),
+                        row_no: row.row_no,
+                        supplier_sku_code: sku.supplier_sku_code.clone(),
+                        source_revision_token: product_write.source_revision_token.clone(),
+                        classification: IntakeItemClassification::New,
+                        result: IntakeItemResult::Success,
+                        error_text: None,
+                        supplier_catalog_sku_id: Some(sku.base.id.clone().into()),
+                    },
+                )?);
+                skus.push(sku);
+                sku_revisions.push(sku_revision);
+            }
+            prepared_products.push(PreparedExcelProduct {
+                product,
+                revision,
+                media,
+                skus,
+                sku_revisions,
+            });
+        }
+        for row in &rejected_rows {
+            intake_items.push(SupplierCatalogIntakeItem::new(
+                SupplierCatalogIntakeItemId::new(next_id()),
+                SupplierCatalogIntakeItemData {
+                    supplier_catalog_intake_batch_id: batch.base.id.clone().into(),
+                    row_no: row.row_no,
+                    supplier_sku_code: if row.supplier_sku_code.trim().is_empty() {
+                        format!("__ROW_{}__", row.row_no)
+                    } else {
+                        row.supplier_sku_code.clone()
+                    },
+                    source_revision_token: Some(format!("rejected-row-{}", row.row_no)),
+                    classification: IntakeItemClassification::Exception,
+                    result: IntakeItemResult::Failed,
+                    error_text: Some(row.error_text.clone()),
+                    supplier_catalog_sku_id: None,
+                },
+            )?);
+        }
+        intake_items.sort_by_key(|item| item.row_no);
+
+        let result = ImportSupplierCatalogExcelResult {
             intake_batch_id: batch.base.id.clone(),
-            intake_item_id: intake_items[0].base.id.clone(),
+            product_ids: prepared_products
+                .iter()
+                .map(|prepared| prepared.product.base.id.clone())
+                .collect(),
+            imported_count: intake_items
+                .iter()
+                .filter(|item| item.result == IntakeItemResult::Success)
+                .count(),
+            rejected_count: intake_items
+                .iter()
+                .filter(|item| item.result == IntakeItemResult::Failed)
+                .count(),
             replayed: false,
-            reference: format!("SC-{}", source_reference),
-            recorded_at: Instant::now().unix_secs() as u64,
-        })
+            reference: format!("SC-EXCEL-{source_reference}"),
+            recorded_at: batch.base.created_at,
+        };
+        let command = build_command(
+            &req.idempotency_key,
+            "import_excel",
+            &request_fingerprint,
+            &result,
+        )?;
+        let audit = actor.clone().resource_log(
+            "supplier_catalog_excel.import",
+            "supplier_catalog_intake_batch",
+            batch.base.id.clone(),
+        )?;
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let batch_for_tx = batch.clone();
+        let intake_items_for_tx = intake_items.clone();
+        let prepared_for_tx = prepared_products.clone();
+        let command_for_tx = command.clone();
+        let transaction_result = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.supplier_catalog()
+                        .create_intake_batch(&batch_for_tx, &intake_items_for_tx, session)
+                        .await?;
+                    for prepared in &prepared_for_tx {
+                        db.supplier_catalog()
+                            .create_product_with_initial_revision(
+                                &prepared.product,
+                                &prepared.revision,
+                                session,
+                            )
+                            .await?;
+                        for media in &prepared.media {
+                            db.supplier_catalog_product_revision_media()
+                                .create(media, session)
+                                .await?;
+                        }
+                        for (sku, revision) in prepared.skus.iter().zip(prepared.sku_revisions.iter()) {
+                            db.supplier_catalog()
+                                .create_sku_with_initial_revision(sku, revision, session)
+                                .await?;
+                        }
+                    }
+                    db.supplier_catalog_commands()
+                        .create(&command_for_tx, session)
+                        .await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
+            .await;
+
+        self.resolve_command_result(
+            transaction_result,
+            result,
+            &req.idempotency_key,
+            "import_excel",
+            &request_fingerprint,
+        )
+        .await
     }
 
     /// 供应商商品中心保存（形成新的来源修订，§8.4 第 1 条「详情即编辑」）。
@@ -867,12 +1348,22 @@ impl SupplierCatalogService {
         actor: &AuditActor,
     ) -> Result<ReviseSupplierCatalogProductResult> {
         req.validate()?;
+        let request_fingerprint = command_fingerprint("revise_product", &(id, &req))?;
+        if let Some(command) = self.command_record(&req.idempotency_key).await? {
+            return replay_command(command, "revise_product", &request_fingerprint);
+        }
         let product = self
             .db
             .supplier_catalog_products()
             .find_by_id(id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("供应商商品不存在".to_string()))?;
+        if product.supplier_spu_code != req.supplier_spu_code.trim() {
+            return Err(Error::ValidationError(
+                "供应商 SPU 编码是稳定身份，创建后不可修改".to_string(),
+            ));
+        }
+        self.ensure_file_assets_exist(&req.media, &req.skus).await?;
         let current_no = self
             .db
             .supplier_catalog_product_revisions()
@@ -901,12 +1392,27 @@ impl SupplierCatalogService {
             .await?;
         let mut sku_ops: Vec<(SupplierCatalogSku, SupplierCatalogSkuRevision)> = Vec::new();
         let mut new_skus: Vec<(SupplierCatalogSku, SupplierCatalogSkuRevision)> = Vec::new();
+        let mut retained_sku_ids = HashSet::new();
         for sku_write in &req.skus {
-            let existing = skus
-                .iter()
-                .find(|sku| sku.supplier_sku_code == sku_write.supplier_sku_code.trim());
+            let existing = match sku_write.supplier_catalog_sku_id.as_deref() {
+                Some(sku_id) => Some(
+                    skus.iter()
+                        .find(|sku| sku.base.id == sku_id)
+                        .ok_or_else(|| Error::NotFound(format!("供应商 SKU 不属于当前商品: {sku_id}")))?,
+                ),
+                None => skus
+                    .iter()
+                    .find(|sku| sku.supplier_sku_code == sku_write.supplier_sku_code.trim()),
+            };
             match existing {
                 Some(sku) => {
+                    if sku.supplier_sku_code != sku_write.supplier_sku_code.trim() {
+                        return Err(Error::ValidationError(format!(
+                            "供应商 SKU 编码是稳定身份，创建后不可修改: {}",
+                            sku.supplier_sku_code
+                        )));
+                    }
+                    retained_sku_ids.insert(sku.base.id.clone());
                     let current = self
                         .db
                         .supplier_catalog_sku_revisions()
@@ -920,6 +1426,7 @@ impl SupplierCatalogService {
                         .max()
                         .unwrap_or(0);
                     let mut sku_mut = sku.clone();
+                    sku_mut.update(CatalogItemStatus::Active, actor.id())?;
                     let sku_revision = self.build_sku_revision(&sku_mut, sku_write, current + 1)?;
                     sku_mut.stable.current_revision_id = Some(sku_revision.base.id.clone());
                     sku_ops.push((sku_mut, sku_revision));
@@ -928,6 +1435,7 @@ impl SupplierCatalogService {
                     let sku = SupplierCatalogSku::new(
                         SupplierCatalogSkuId::new(next_id()),
                         SupplierCatalogSkuData {
+                            supplier_id: product.supplier_id.clone(),
                             supplier_catalog_product_id: product.base.id.clone().into(),
                             supplier_sku_code: sku_write.supplier_sku_code.clone(),
                         },
@@ -938,11 +1446,67 @@ impl SupplierCatalogService {
                 }
             }
         }
+        let existing_ids: Vec<String> = skus.iter().map(|sku| sku.base.id.clone()).collect();
+        let mapped_sku_ids: HashSet<String> = self
+            .db
+            .supplier_product_mappings()
+            .find_many(
+                mongodb::bson::doc! {
+                    "supplier_catalog_sku_id": { "$in": &existing_ids },
+                    "status": { "$ne": MappingStatus::Disabled.as_str() },
+                },
+                &mut NoTransaction,
+            )
+            .await?
+            .into_iter()
+            .map(|mapping| mapping.supplier_catalog_sku_id.to_string())
+            .collect();
+        let offered_sku_ids: HashSet<String> = self
+            .db
+            .supplier_offerings()
+            .find_many(
+                mongodb::bson::doc! {
+                    "supplier_catalog_sku_id": { "$in": &existing_ids },
+                    "status": { "$ne": OfferingStatus::Stopped.as_str() },
+                },
+                &mut NoTransaction,
+            )
+            .await?
+            .into_iter()
+            .map(|offering| offering.supplier_catalog_sku_id.to_string())
+            .collect();
+        let mut retired_skus = Vec::new();
+        for sku in &skus {
+            if retained_sku_ids.contains(&sku.base.id) {
+                continue;
+            }
+            if mapped_sku_ids.contains(&sku.base.id) || offered_sku_ids.contains(&sku.base.id) {
+                return Err(Error::BusinessLogicError(format!(
+                    "供应商 SKU 仍有关联或有效供给，不能从来源修订中删除，请先停止供给并停用映射: {}",
+                    sku.supplier_sku_code
+                )));
+            }
+            let mut retired = sku.clone();
+            retired.update(CatalogItemStatus::Stopped, actor.id())?;
+            retired_skus.push(retired);
+        }
 
         let audit = actor.clone().resource_log(
             "supplier_catalog_product.update",
             "supplier_catalog_product",
             product.base.id.clone(),
+        )?;
+        let result = ReviseSupplierCatalogProductResult {
+            product_id: product.base.id.clone(),
+            revision_no: next_no,
+            reference: format!("SC-REV-V{next_no}"),
+            recorded_at: Instant::now().unix_secs() as u64,
+        };
+        let command = build_command(
+            &req.idempotency_key,
+            "revise_product",
+            &request_fingerprint,
+            &result,
         )?;
         let db = self.db.clone();
         let client = db.client().clone();
@@ -951,7 +1515,9 @@ impl SupplierCatalogService {
         let media_for_tx = media.clone();
         let sku_ops_for_tx = sku_ops.clone();
         let new_skus_for_tx = new_skus.clone();
-        client
+        let retired_skus_for_tx = retired_skus.clone();
+        let command_for_tx = command.clone();
+        let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut product_mut = product_for_tx.clone();
@@ -974,18 +1540,27 @@ impl SupplierCatalogService {
                             .create_sku_with_initial_revision(sku, sku_revision, session)
                             .await?;
                     }
+                    for sku in &retired_skus_for_tx {
+                        let mut sku_mut = sku.clone();
+                        db.supplier_catalog_skus().update(&mut sku_mut, session).await?;
+                    }
+                    db.supplier_catalog_commands()
+                        .create(&command_for_tx, session)
+                        .await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })
             })
-            .await?;
+            .await;
 
-        Ok(ReviseSupplierCatalogProductResult {
-            product_id: product.base.id.clone(),
-            revision_no: next_no,
-            reference: format!("SC-REV-V{next_no}"),
-            recorded_at: Instant::now().unix_secs() as u64,
-        })
+        self.resolve_command_result(
+            transaction_result,
+            result,
+            &req.idempotency_key,
+            "revise_product",
+            &request_fingerprint,
+        )
+        .await
     }
 
     /// 创建供应商 SKU → 公司 SKU 映射（初始 `PENDING`）。
@@ -1111,6 +1686,7 @@ impl SupplierCatalogService {
             req.input_tax_rate.as_str(),
             req.bulk_minimum_order_quantity.as_str(),
             &req.supply_region,
+            &[],
             req.valid_from.as_str(),
             req.valid_to.as_deref(),
             req.dropship_express.as_deref(),
@@ -1145,14 +1721,9 @@ impl SupplierCatalogService {
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut offering_mut = offering_for_tx.clone();
-                    offering_mut.stable.current_revision_id =
-                        Some(offering_revision_for_tx.base.id.clone());
+                    offering_mut.stable.current_revision_id = Some(offering_revision_for_tx.base.id.clone());
                     db.supplier_catalog()
-                        .create_offering_with_revision(
-                            &offering_mut,
-                            &offering_revision_for_tx,
-                            session,
-                        )
+                        .create_offering_with_revision(&offering_mut, &offering_revision_for_tx, session)
                         .await?;
                     db.supplier_product_mappings()
                         .update(&mut mapping_for_tx.clone(), session)
@@ -1193,6 +1764,10 @@ impl SupplierCatalogService {
         actor: &AuditActor,
     ) -> Result<ReviseSupplierOfferingResult> {
         req.validate()?;
+        let request_fingerprint = command_fingerprint("revise_offering", &(id, &req))?;
+        if let Some(command) = self.command_record(&req.idempotency_key).await? {
+            return replay_command(command, "revise_offering", &request_fingerprint);
+        }
         let mut offering = self
             .db
             .supplier_offerings()
@@ -1215,7 +1790,7 @@ impl SupplierCatalogService {
             ));
         }
         let next_no = current_no + 1;
-        let availability = if req.status == Some(OfferingStatus::Stopped) {
+        let availability = if next_status == OfferingStatus::Stopped {
             AvailabilityStatus::Stopped
         } else {
             AvailabilityStatus::Available
@@ -1228,6 +1803,7 @@ impl SupplierCatalogService {
             req.input_tax_rate.as_str(),
             req.bulk_minimum_order_quantity.as_str(),
             &req.supply_region,
+            &req.product_capabilities,
             req.valid_from.as_str(),
             req.valid_to.as_deref(),
             req.dropship_express.as_deref(),
@@ -1240,20 +1816,32 @@ impl SupplierCatalogService {
             self.ensure_qualified_for_sku(&offering.supplier_id, &offering.sku_id, revision.valid_from)
                 .await?;
         }
-        if let Some(status) = req.status {
-            offering.stable.status = status;
-        }
+        offering.update(next_status, actor.id())?;
 
         let audit = actor.clone().resource_log(
             "supplier_offering.update",
             "supplier_offering",
             offering.base.id.clone(),
         )?;
+        let result = ReviseSupplierOfferingResult {
+            offering_id: offering.base.id.clone(),
+            revision_no: next_no,
+            status: offering.stable.status,
+            version: offering.base.version + 1,
+            reference: format!("OFF-REV-V{next_no}"),
+        };
+        let command = build_command(
+            &req.idempotency_key,
+            "revise_offering",
+            &request_fingerprint,
+            &result,
+        )?;
         let db = self.db.clone();
         let client = db.client().clone();
         let offering_for_tx = offering.clone();
         let revision_for_tx = revision.clone();
-        client
+        let command_for_tx = command.clone();
+        let transaction_result = client
             .with_transaction(move |session| {
                 Box::pin(async move {
                     let mut offering_mut = offering_for_tx.clone();
@@ -1261,19 +1849,23 @@ impl SupplierCatalogService {
                     db.supplier_catalog()
                         .append_offering_revision(&mut offering_mut, &revision_for_tx, session)
                         .await?;
+                    db.supplier_catalog_commands()
+                        .create(&command_for_tx, session)
+                        .await?;
                     db.audit_logs().create(&audit, session).await?;
                     Ok::<(), crate::errors::Error>(())
                 })
             })
-            .await?;
+            .await;
 
-        Ok(ReviseSupplierOfferingResult {
-            offering_id: offering.base.id.clone(),
-            revision_no: next_no,
-            status: offering.stable.status,
-            version: offering.base.version,
-            reference: format!("OFF-REV-V{next_no}"),
-        })
+        self.resolve_command_result(
+            transaction_result,
+            result,
+            &req.idempotency_key,
+            "revise_offering",
+            &request_fingerprint,
+        )
+        .await
     }
 }
 
@@ -1282,6 +1874,36 @@ impl SupplierCatalogService {
 // ---------------------------------------------------------------------------
 
 impl SupplierCatalogService {
+    /// 加载已成功的供应商商品库写命令。
+    async fn command_record(&self, idempotency_key: &str) -> Result<Option<SupplierCatalogCommand>> {
+        self.db
+            .supplier_catalog_commands()
+            .find_by_idempotency_key(idempotency_key, &mut NoTransaction)
+            .await
+            .map_err(Into::into)
+    }
+
+    /// 并发重复请求命中唯一键时返回首次事务已经提交的稳定结果。
+    async fn resolve_command_result<T>(
+        &self,
+        transaction_result: Result<()>,
+        intended_result: T,
+        idempotency_key: &str,
+        operation: &str,
+        request_fingerprint: &str,
+    ) -> Result<T>
+    where
+        T: DeserializeOwned,
+    {
+        match transaction_result {
+            Ok(()) => Ok(intended_result),
+            Err(error) => match self.command_record(idempotency_key).await? {
+                Some(command) => replay_command(command, operation, request_fingerprint),
+                None => Err(error),
+            },
+        }
+    }
+
     /// 校验公司 SKU 对应的供应商能力及适用资质可用于启用供给。
     async fn ensure_qualified_for_sku(
         &self,
@@ -1301,7 +1923,18 @@ impl SupplierCatalogService {
             .find_by_id(&sku.product_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("公司商品不存在".to_string()))?;
-        let code = match product.product_kind {
+        self.ensure_qualified_for_product_kind(supplier_id, product.product_kind, on_date)
+            .await
+    }
+
+    /// 校验供应商能力及资质覆盖指定公司商品类型。
+    async fn ensure_qualified_for_product_kind(
+        &self,
+        supplier_id: &entities::ids::SupplierAccountId,
+        product_kind: ProductKind,
+        on_date: BusinessDate,
+    ) -> Result<()> {
+        let code = match product_kind {
             ProductKind::Physical => CapabilityCode::Physical,
             ProductKind::Virtual | ProductKind::Voucher => CapabilityCode::Virtual,
             ProductKind::OfflineService => CapabilityCode::OfflineService,
@@ -1498,6 +2131,41 @@ impl SupplierCatalogService {
         .map_err(Into::into)
     }
 
+    /// 校验请求引用的受控文件资产都存在。
+    async fn ensure_file_assets_exist(
+        &self,
+        media: &[SupplierCatalogMediaWrite],
+        skus: &[SupplierCatalogSkuWrite],
+    ) -> Result<()> {
+        let mut asset_ids = HashSet::new();
+        for write in media {
+            if let Some(id) = write.file_asset_id.as_deref() {
+                asset_ids.insert(id.trim().to_string());
+            }
+        }
+        for write in skus {
+            if let Some(id) = write.source_main_image_asset_id.as_deref() {
+                asset_ids.insert(id.trim().to_string());
+            }
+        }
+        for id in asset_ids {
+            if id.is_empty() {
+                return Err(Error::ValidationError("文件资产 ID 不能为空".to_string()));
+            }
+            let asset_id = FileAssetId::new(id.clone());
+            if self
+                .db
+                .file_assets()
+                .find_by_id(&asset_id, &mut NoTransaction)
+                .await?
+                .is_none()
+            {
+                return Err(Error::NotFound(format!("文件资产不存在: {id}")));
+            }
+        }
+        Ok(())
+    }
+
     /// 构建来源媒体。
     fn build_revision_media(
         &self,
@@ -1512,15 +2180,21 @@ impl SupplierCatalogService {
                 *counter += 1;
                 *counter
             };
+            let file_asset_id = write.file_asset_id.clone().map(entities::ids::FileAssetId::new);
+            let archive_status = if file_asset_id.is_some() {
+                ArchiveStatus::Archived
+            } else {
+                ArchiveStatus::PendingImport
+            };
             result.push(SupplierCatalogProductRevisionMedia::new(
                 SupplierCatalogProductRevisionMediaId::new(next_id()),
                 SupplierCatalogProductRevisionMediaData {
                     supplier_catalog_product_revision_id:
                         entities::ids::SupplierCatalogProductRevisionId::new(revision_id.to_string()),
                     media_usage: write.usage,
-                    file_asset_id: write.file_asset_id.clone().map(entities::ids::FileAssetId::new),
+                    file_asset_id,
                     source_url_snapshot: Some(write.url.clone()),
-                    archive_status: ArchiveStatus::PendingImport,
+                    archive_status,
                     sort_order,
                 },
             )?);
@@ -1555,12 +2229,16 @@ impl SupplierCatalogService {
                     .as_ref()
                     .map(|value| value.trim().to_string())
                     .filter(|value| !value.is_empty()),
-                main_image_archive_status: write
-                    .source_main_image_url
-                    .as_ref()
-                    .map(|value| value.trim())
-                    .filter(|value| !value.is_empty())
-                    .map(|_| ArchiveStatus::PendingImport),
+                main_image_archive_status: if write.source_main_image_asset_id.is_some() {
+                    Some(ArchiveStatus::Archived)
+                } else {
+                    write
+                        .source_main_image_url
+                        .as_ref()
+                        .map(|value| value.trim())
+                        .filter(|value| !value.is_empty())
+                        .map(|_| ArchiveStatus::PendingImport)
+                },
                 dropship_floor_price_gross: self.parse_amount(write.dropship_floor_price_gross.as_deref())?,
                 bulk_floor_price_gross: self.parse_amount(write.bulk_floor_price_gross.as_deref())?,
                 bulk_minimum_order_quantity: self
@@ -1590,6 +2268,7 @@ impl SupplierCatalogService {
         input_tax_rate: &str,
         bulk_minimum_order_quantity: &str,
         supply_region: &[String],
+        product_capabilities: &[String],
         valid_from: &str,
         valid_to: Option<&str>,
         dropship_express: Option<&str>,
@@ -1625,7 +2304,7 @@ impl SupplierCatalogService {
                 supply_region: supply_region.to_vec(),
                 availability_status,
                 available_quantity: self.parse_quantity(available_quantity)?,
-                product_capabilities: Vec::new(),
+                product_capabilities: product_capabilities.to_vec(),
                 valid_from: parse_business_date(valid_from)?,
                 valid_to: valid_to.map(parse_business_date).transpose()?,
                 prefill_source_refs: entities::supplier_catalog::PrefillSourceRefs::default(),
@@ -1653,6 +2332,57 @@ impl SupplierCatalogService {
             _ => Ok(None),
         }
     }
+}
+
+/// 返回目录字段中的必填非空值。
+fn required_catalog_value<'a>(value: Option<&'a str>, label: &str) -> Result<&'a str> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .ok_or_else(|| Error::ValidationError(format!("{label}不能为空")))
+}
+
+/// 计算包含操作名和完整请求的稳定指纹。
+fn command_fingerprint<T: Serialize>(operation: &str, request: &T) -> Result<String> {
+    let bytes = serde_json::to_vec(&(operation, request))
+        .map_err(|error| Error::Internal(format!("供应商商品命令序列化失败: {error}")))?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
+}
+
+/// 构造与业务写入同事务提交的幂等结果记录。
+fn build_command<T: Serialize>(
+    idempotency_key: &str,
+    operation: &str,
+    request_fingerprint: &str,
+    result: &T,
+) -> Result<SupplierCatalogCommand> {
+    let result_json = serde_json::to_string(result)
+        .map_err(|error| Error::Internal(format!("供应商商品命令结果序列化失败: {error}")))?;
+    SupplierCatalogCommand::new(
+        next_id(),
+        SupplierCatalogCommandData {
+            idempotency_key: idempotency_key.to_string(),
+            operation: operation.to_string(),
+            request_fingerprint: request_fingerprint.to_string(),
+            result_json,
+        },
+    )
+    .map_err(Into::into)
+}
+
+/// 校验幂等键的操作和请求指纹后反序列化首次成功结果。
+fn replay_command<T: DeserializeOwned>(
+    command: SupplierCatalogCommand,
+    operation: &str,
+    request_fingerprint: &str,
+) -> Result<T> {
+    if command.operation != operation || command.request_fingerprint != request_fingerprint {
+        return Err(Error::ConflictError(
+            "幂等键已用于不同的供应商商品请求".to_string(),
+        ));
+    }
+    serde_json::from_str(&command.result_json)
+        .map_err(|error| Error::Internal(format!("供应商商品幂等结果损坏: {error}")))
 }
 
 /// 从 SPU 实体与当前修订构造视图。

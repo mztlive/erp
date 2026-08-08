@@ -12,10 +12,12 @@ import {
   fetchCompanySkuOptions,
   fetchSupplierCatalogQueue,
   fetchSupplierProductPoolMatch,
+  importSupplierCatalogExcel,
   linkPromoteToCompanyPool,
   promoteSupplierProductToPool,
   reversePromoteToCompanyPool,
   reviseSupplierCatalogProduct,
+  reviseSupplierOffering,
   saveSessionDraft,
 } from "@/features/supplier-catalog/api"
 import type {
@@ -24,8 +26,10 @@ import type {
   PromoteSupplierProductInput,
   ReversePromoteToCompanyPoolInput,
   ReviseSupplierCatalogProductInput,
+  ReviseSupplierOfferingInput,
   SupplierCatalogQueueQuery,
 } from "@/features/supplier-catalog/types"
+import type { SupplierCatalogExcelImportInput } from "@/features/supplier-catalog/excel-import"
 
 export const supplierCatalogKeys = {
   all: ["supplier-catalog"] as const,
@@ -63,11 +67,33 @@ export function useCreateSupplierCatalogItemMutation() {
   })
 }
 
+export function useImportSupplierCatalogExcelMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: SupplierCatalogExcelImportInput) =>
+      importSupplierCatalogExcel(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: supplierCatalogKeys.all })
+    },
+  })
+}
+
 export function useReviseSupplierCatalogProductMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: (input: ReviseSupplierCatalogProductInput) =>
       reviseSupplierCatalogProduct(input),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: supplierCatalogKeys.all })
+    },
+  })
+}
+
+export function useReviseSupplierOfferingMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: ReviseSupplierOfferingInput) =>
+      reviseSupplierOffering(input),
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: supplierCatalogKeys.all })
     },

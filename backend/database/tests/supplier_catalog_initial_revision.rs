@@ -61,6 +61,7 @@ async fn initial_revisions_create_stable_identities_and_current_pointers() {
         let sku = SupplierCatalogSku::new(
             sku_id.clone(),
             SupplierCatalogSkuData {
+                supplier_id: SupplierAccountId::new("supplier-1".to_string()),
                 supplier_catalog_product_id: product_id,
                 supplier_sku_code: "SKU-001".to_string(),
             },

@@ -2195,6 +2195,8 @@ export function ProductDetailPage({
                                                   skuId: sku.skuId!,
                                                   skuCode: sku.skuNo,
                                                   skuName: values.name,
+                                                  productKind:
+                                                    fields.productKind as ProductKind,
                                                   specification: sku.specLabel,
                                                   baseUnit:
                                                     sku.baseUnit ??

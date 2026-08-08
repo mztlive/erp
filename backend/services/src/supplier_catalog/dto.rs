@@ -221,6 +221,14 @@ pub struct SupplierCatalogSkuView {
     pub created_at: u64,
 }
 
+impl SupplierCatalogSkuView {
+    /// 移除采购私密的供应商目录底价。
+    pub fn redact_costs(&mut self) {
+        self.dropship_floor_price_gross = None;
+        self.bulk_floor_price_gross = None;
+    }
+}
+
 /// 映射列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierProductMappingListParams {
@@ -337,6 +345,19 @@ pub struct SupplierOfferingView {
     pub created_at: u64,
 }
 
+impl SupplierOfferingView {
+    /// 移除采购成本、税率及费用字段，保留供给范围和状态摘要。
+    pub fn redact_costs(&mut self) {
+        self.dropship_supply_price_gross = None;
+        self.dropship_supply_price_net = None;
+        self.bulk_supply_price_gross = None;
+        self.bulk_supply_price_net = None;
+        self.input_tax_rate = None;
+        self.freight_amount = None;
+        self.service_fee_amount = None;
+    }
+}
+
 /// 入库批次列表查询参数。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierCatalogIntakeBatchListParams {
@@ -394,6 +415,9 @@ pub struct SupplierCatalogMediaWrite {
 /// 供应商 SKU 写入项。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierCatalogSkuWrite {
+    /// 既有供应商 SKU 稳定身份；创建时为空，修订时用于精确保留身份。
+    #[serde(default)]
+    pub supplier_catalog_sku_id: Option<String>,
     /// 供应商 SKU 编码。
     #[validate(custom(function = "non_blank", message = "供应商 SKU 编码不能为空"))]
     pub supplier_sku_code: String,
@@ -425,6 +449,20 @@ pub struct SupplierCatalogSkuWrite {
     pub structured_attributes: Vec<SourceAttribute>,
 }
 
+/// 创建供应商商品时同时登记到固定公司 SKU 的供给条件。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct CreateTargetSupplyRequest {
+    /// 固定公司 SKU。
+    #[validate(custom(function = "non_blank", message = "目标公司 SKU 不能为空"))]
+    pub sku_id: String,
+    /// 采购确认的进项税率（小数串）。
+    #[validate(custom(function = "non_blank", message = "进项税率不能为空"))]
+    pub input_tax_rate: String,
+    /// 采购确认的可供区域。
+    #[validate(length(min = 1, message = "可供区域不能为空"))]
+    pub supply_region: Vec<String>,
+}
+
 /// 创建供应商商品请求（Excel/API/手工共用同一命令形状）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateSupplierCatalogProductRequest {
@@ -451,6 +489,7 @@ pub struct CreateSupplierCatalogProductRequest {
     /// 结构化描述属性。
     pub structured_attributes: Vec<SourceAttribute>,
     /// 来源媒体。
+    #[validate(nested)]
     pub media: Vec<SupplierCatalogMediaWrite>,
     /// 来源修订标识。
     pub source_revision_token: Option<String>,
@@ -460,14 +499,19 @@ pub struct CreateSupplierCatalogProductRequest {
     pub valid_to: Option<String>,
     /// 供应商 SKU 集合（至少一行）。
     #[validate(length(min = 1, message = "至少需要一个供应商 SKU"))]
+    #[validate(nested)]
     pub skus: Vec<SupplierCatalogSkuWrite>,
+    /// 固定公司 SKU 正向登记；存在时与商品、映射及首版供给同事务提交。
+    #[serde(default)]
+    #[validate(nested)]
+    pub target_supply: Option<CreateTargetSupplyRequest>,
     /// 幂等键。
     #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
     pub idempotency_key: String,
 }
 
 /// 创建供应商商品结果。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CreateSupplierCatalogProductResult {
     /// 供应商 SPU 主键。
     pub product_id: String,
@@ -477,7 +521,113 @@ pub struct CreateSupplierCatalogProductResult {
     pub intake_batch_id: String,
     /// 入库明细主键。
     pub intake_item_id: String,
+    /// 固定 SKU 登记形成的 Active 映射。
+    pub mapping_id: Option<String>,
+    /// 固定 SKU 登记形成的供给稳定身份。
+    pub offering_id: Option<String>,
+    /// 固定 SKU 登记形成的首版供给修订。
+    pub offering_revision_id: Option<String>,
     /// 是否幂等重放。
+    pub replayed: bool,
+    /// 业务引用。
+    pub reference: String,
+    /// 记录时间（秒级时间戳）。
+    pub recorded_at: u64,
+}
+
+/// Excel 导入中的一条供应商 SKU 合法行。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ExcelImportSkuRow {
+    /// 原始工作表行号（含表头后的实际行号）。
+    #[validate(range(min = 2, message = "Excel 数据行号必须从 2 开始"))]
+    pub row_no: u32,
+    /// 规范化后的供应商 SKU 数据。
+    #[validate(nested)]
+    pub sku: SupplierCatalogSkuWrite,
+}
+
+/// Excel 导入中的一个供应商 SPU 及其合法 SKU 行。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ExcelImportProductWrite {
+    /// 供应商 SPU 编码。
+    #[validate(custom(function = "non_blank", message = "供应商 SPU 编码不能为空"))]
+    pub supplier_spu_code: String,
+    /// SPU 名称。
+    #[validate(custom(function = "non_blank", message = "供应商商品名称不能为空"))]
+    pub name: String,
+    /// 来源描述。
+    pub description: Option<String>,
+    /// 来源商品类型声明。
+    pub source_product_kind: Option<String>,
+    /// 来源分类。
+    pub source_category: Option<String>,
+    /// 来源品牌。
+    pub source_brand: Option<String>,
+    /// 结构化描述属性。
+    pub structured_attributes: Vec<SourceAttribute>,
+    /// 来源媒体。
+    #[validate(nested)]
+    pub media: Vec<SupplierCatalogMediaWrite>,
+    /// 来源修订标识。
+    pub source_revision_token: Option<String>,
+    /// 有效期开始。
+    pub valid_from: Option<String>,
+    /// 有效期结束。
+    pub valid_to: Option<String>,
+    /// 本 SPU 下通过预检的 SKU 行。
+    #[validate(length(min = 1, message = "每个供应商 SPU 至少需要一条合法 SKU"))]
+    #[validate(nested)]
+    pub skus: Vec<ExcelImportSkuRow>,
+}
+
+/// Excel 导入预检失败行；随正式批次持久化，禁止仅留在浏览器会话中。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ExcelImportRejectedRow {
+    /// 原始工作表行号。
+    #[validate(range(min = 2, message = "Excel 数据行号必须从 2 开始"))]
+    pub row_no: u32,
+    /// 原始供应商 SKU 编码；缺失时可为空，服务端使用行号占位保存错误事实。
+    pub supplier_sku_code: String,
+    /// 预检错误说明。
+    #[validate(custom(function = "non_blank", message = "Excel 错误说明不能为空"))]
+    pub error_text: String,
+}
+
+/// Excel 供应商商品批次导入请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct ImportSupplierCatalogExcelRequest {
+    /// 来源供应商。
+    #[validate(custom(function = "non_blank", message = "供应商不能为空"))]
+    pub supplier_id: String,
+    /// 文件来源引用，参与批次唯一键。
+    #[validate(custom(function = "non_blank", message = "Excel 来源引用不能为空"))]
+    pub source_reference: String,
+    /// 已登记的原始 Excel 文件资产。
+    #[validate(custom(function = "non_blank", message = "Excel 文件资产不能为空"))]
+    pub file_asset_id: String,
+    /// 通过预检、按 SPU 分组后的合法商品。
+    #[validate(nested)]
+    pub products: Vec<ExcelImportProductWrite>,
+    /// 未通过预检的原始行。
+    #[validate(nested)]
+    pub rejected_rows: Vec<ExcelImportRejectedRow>,
+    /// 批次幂等键。
+    #[validate(custom(function = "non_blank", message = "幂等键不能为空"))]
+    pub idempotency_key: String,
+}
+
+/// Excel 供应商商品批次导入结果。
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct ImportSupplierCatalogExcelResult {
+    /// 入库批次主键。
+    pub intake_batch_id: String,
+    /// 已形成的供应商 SPU 稳定身份。
+    pub product_ids: Vec<String>,
+    /// 成功导入的 SKU 行数。
+    pub imported_count: usize,
+    /// 保留在错误清单中的行数。
+    pub rejected_count: usize,
+    /// 是否为幂等重放。
     pub replayed: bool,
     /// 业务引用。
     pub reference: String,
@@ -508,6 +658,7 @@ pub struct ReviseSupplierCatalogProductRequest {
     /// 结构化描述属性。
     pub structured_attributes: Vec<SourceAttribute>,
     /// 来源媒体。
+    #[validate(nested)]
     pub media: Vec<SupplierCatalogMediaWrite>,
     /// 来源修订标识。
     pub source_revision_token: Option<String>,
@@ -516,6 +667,7 @@ pub struct ReviseSupplierCatalogProductRequest {
     /// 有效期结束（`YYYY-MM-DD`）。
     pub valid_to: Option<String>,
     /// 完整 SKU 集合（整表替换）。
+    #[validate(nested)]
     pub skus: Vec<SupplierCatalogSkuWrite>,
     /// 变更原因。
     #[validate(custom(function = "non_blank", message = "变更原因不能为空"))]
@@ -526,7 +678,7 @@ pub struct ReviseSupplierCatalogProductRequest {
 }
 
 /// 供应商商品修订结果。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReviseSupplierCatalogProductResult {
     /// 供应商 SPU 主键。
     pub product_id: String,
@@ -730,7 +882,7 @@ pub struct LinkPromoteToCompanyPoolRequest {
 }
 
 /// 关联入池单行结果。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LinkPromoteSkuResult {
     /// 供应商目录 SKU。
     pub supplier_catalog_sku_id: String,
@@ -745,7 +897,7 @@ pub struct LinkPromoteSkuResult {
 }
 
 /// 关联入池结果。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct LinkPromoteToCompanyPoolResult {
     /// 供应商商品。
     pub supplier_product_id: String,
@@ -819,7 +971,7 @@ pub struct ReversePromoteToCompanyPoolRequest {
 }
 
 /// 反向入池单行结果。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReversePromoteSkuResult {
     /// 供应商目录 SKU。
     pub supplier_catalog_sku_id: String,
@@ -836,7 +988,7 @@ pub struct ReversePromoteSkuResult {
 }
 
 /// 反向入池结果。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReversePromoteToCompanyPoolResult {
     /// 供应商商品（SPU）。
     pub supplier_product_id: String,
@@ -875,6 +1027,9 @@ pub struct ReviseSupplierOfferingRequest {
     /// 可供区域。
     #[validate(length(min = 1, message = "可供区域不能为空"))]
     pub supply_region: Vec<String>,
+    /// 商品级供给能力。
+    #[serde(default)]
+    pub product_capabilities: Vec<String>,
     /// 有效期开始。
     #[validate(custom(function = "non_blank", message = "有效期开始不能为空"))]
     pub valid_from: String,
@@ -899,7 +1054,7 @@ pub struct ReviseSupplierOfferingRequest {
 }
 
 /// 供给修订结果。
-#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ReviseSupplierOfferingResult {
     /// 供给稳定身份。
     pub offering_id: String,
@@ -926,6 +1081,18 @@ pub struct SupplierCatalogProductDetailView {
     pub skus: Vec<SupplierCatalogSkuDetailView>,
     /// 本 SPU 下的映射。
     pub mappings: Vec<SupplierProductMappingView>,
+}
+
+impl SupplierCatalogProductDetailView {
+    /// 移除当前 SKU 与历史来源修订中的采购私密底价。
+    pub fn redact_costs(&mut self) {
+        for sku in &mut self.skus {
+            sku.sku.redact_costs();
+            for revision in &mut sku.revisions {
+                revision.redact_costs();
+            }
+        }
+    }
 }
 
 /// 供应商 SPU 来源修订视图。
@@ -1018,10 +1185,23 @@ pub struct SupplierCatalogSkuRevisionView {
     pub source_updated_at: u64,
 }
 
+impl SupplierCatalogSkuRevisionView {
+    /// 移除历史来源修订中的采购私密底价。
+    pub fn redact_costs(&mut self) {
+        self.dropship_floor_price_gross = None;
+        self.bulk_floor_price_gross = None;
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, SortDir, SupplierCatalogProductListParams};
-    use entities::supplier_catalog::CatalogSourceType;
+    use super::{
+        normalize_sort, ImportSupplierCatalogExcelRequest, SortDir, SupplierCatalogProductListParams,
+        SupplierCatalogSkuView, SupplierOfferingView,
+    };
+    use entities::supplier_catalog::{
+        AvailabilityStatus, CatalogItemStatus, CatalogSourceType, OfferingStatus,
+    };
     use serde_json::json;
     use validator::Validate;
 
@@ -1036,6 +1216,118 @@ mod tests {
         .unwrap();
         assert_eq!(field, "supplier_spu_code");
         assert_eq!(direction, SortDir::Asc);
+    }
+
+    #[test]
+    fn excel_import_validates_nested_sku_rows() {
+        let request: ImportSupplierCatalogExcelRequest = serde_json::from_value(json!({
+            "supplier_id": "supplier-1",
+            "source_reference": "asset-1",
+            "file_asset_id": "asset-1",
+            "products": [{
+                "supplier_spu_code": "SPU-1",
+                "name": "测试商品",
+                "description": null,
+                "source_product_kind": "PHYSICAL",
+                "source_category": null,
+                "source_brand": null,
+                "structured_attributes": [],
+                "media": [],
+                "source_revision_token": null,
+                "valid_from": null,
+                "valid_to": null,
+                "skus": [{
+                    "row_no": 2,
+                    "sku": {
+                        "supplier_catalog_sku_id": null,
+                        "supplier_sku_code": " ",
+                        "name": "测试商品",
+                        "specification": "500g",
+                        "source_base_unit": "件",
+                        "barcode": null,
+                        "source_main_image_url": null,
+                        "source_main_image_asset_id": null,
+                        "dropship_floor_price_gross": null,
+                        "bulk_floor_price_gross": null,
+                        "bulk_minimum_order_quantity": "1",
+                        "available_quantity": null,
+                        "availability_status": "AVAILABLE",
+                        "structured_attributes": []
+                    }
+                }]
+            }],
+            "rejected_rows": [],
+            "idempotency_key": "excel-command-1"
+        }))
+        .unwrap();
+
+        assert!(request.validate().is_err());
+    }
+
+    #[test]
+    fn cost_redaction_clears_catalog_and_offering_prices() {
+        let mut sku = SupplierCatalogSkuView {
+            id: "sku-1".to_string(),
+            supplier_catalog_product_id: "product-1".to_string(),
+            supplier_sku_code: "SUP-SKU-1".to_string(),
+            status: CatalogItemStatus::Active,
+            current_revision_id: Some("revision-1".to_string()),
+            current_revision_no: Some(1),
+            name: Some("商品".to_string()),
+            specification: Some("500g".to_string()),
+            source_base_unit: Some("件".to_string()),
+            barcode: None,
+            structured_attributes: Vec::new(),
+            source_main_image_url: None,
+            source_main_image_asset_id: None,
+            dropship_floor_price_gross: Some("12.00".to_string()),
+            bulk_floor_price_gross: Some("10.00".to_string()),
+            bulk_minimum_order_quantity: Some("5".to_string()),
+            available_quantity: Some("100".to_string()),
+            availability_status: Some(AvailabilityStatus::Available),
+            version: 1,
+            created_at: 1,
+        };
+        let mut offering = SupplierOfferingView {
+            id: "offering-1".to_string(),
+            sku_id: "company-sku-1".to_string(),
+            supplier_id: "supplier-1".to_string(),
+            supplier_catalog_sku_id: "sku-1".to_string(),
+            status: OfferingStatus::Active,
+            current_revision_id: Some("offering-revision-1".to_string()),
+            current_revision_no: Some(1),
+            dropship_supply_price_gross: Some("12.00".to_string()),
+            dropship_supply_price_net: Some("10.62".to_string()),
+            bulk_supply_price_gross: Some("10.00".to_string()),
+            bulk_supply_price_net: Some("8.85".to_string()),
+            input_tax_rate: Some("0.13".to_string()),
+            bulk_minimum_order_quantity: Some("5".to_string()),
+            supply_region: vec!["华东".to_string()],
+            availability_status: Some(AvailabilityStatus::Available),
+            available_quantity: Some("100".to_string()),
+            dropship_express: None,
+            freight_amount: Some("8.00".to_string()),
+            service_fee_amount: Some("1.00".to_string()),
+            product_capabilities: Vec::new(),
+            valid_from: Some("2026-08-08".to_string()),
+            valid_to: None,
+            version: 1,
+            created_at: 1,
+        };
+
+        sku.redact_costs();
+        offering.redact_costs();
+
+        assert_eq!(sku.dropship_floor_price_gross, None);
+        assert_eq!(sku.bulk_floor_price_gross, None);
+        assert_eq!(offering.dropship_supply_price_gross, None);
+        assert_eq!(offering.dropship_supply_price_net, None);
+        assert_eq!(offering.bulk_supply_price_gross, None);
+        assert_eq!(offering.bulk_supply_price_net, None);
+        assert_eq!(offering.input_tax_rate, None);
+        assert_eq!(offering.freight_amount, None);
+        assert_eq!(offering.service_fee_amount, None);
+        assert_eq!(offering.supply_region, vec!["华东"]);
     }
 
     #[test]

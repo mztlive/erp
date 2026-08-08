@@ -144,8 +144,8 @@ export type SupplierOfferingRevisionView = Readonly<{
 }>
 
 export type SafeOfferingDraftView = Readonly<{
-  supplyPriceGross: string
-  floorPriceGross: string
+  dropshipSupplyPriceGross: string
+  bulkSupplyPriceGross: string
   dropshipExpress?: string
   inputTaxRate: string
   freightAmount: string
@@ -159,10 +159,31 @@ export type SafeOfferingDraftView = Readonly<{
   sessionDraftOnly: true
 }>
 
+/** 保存既有供给的新不可变修订。 */
+export type ReviseSupplierOfferingInput = Readonly<{
+  offeringId: string
+  expectedRevisionNo: number
+  dropshipSupplyPriceGross: string
+  bulkSupplyPriceGross: string
+  inputTaxRate: string
+  bulkMinimumOrderQuantity: string
+  supplyRegion: string[]
+  productCapabilities: string[]
+  validFrom: string
+  validTo?: string
+  dropshipExpress?: string
+  freightAmount?: string
+  serviceFeeAmount?: string
+  availableQuantity?: string
+  status: "ACTIVE" | "PAUSED" | "STOPPED"
+  changeReason: string
+  idempotencyKey: string
+}>
+
 export type PublicationImpactView = Readonly<{
-  activePublicationCount: number
-  pausedPublicationCount: number
-  historicalPaidOrderCount: number
+  activePublicationCount: number | null
+  pausedPublicationCount: number | null
+  historicalPaidOrderCount: number | null
   safetyPauseTriggered: boolean
   safetyPauseReasons: readonly string[]
   pauseSubResults: readonly {
@@ -339,11 +360,19 @@ export type SupplierCatalogItemBase = {
 }
 
 export type SupplierCatalogItemView =
-  | (SupplierCatalogItemBase & {
-      changeType: "ERROR" | "STOPPED"
-      workItem: SupplierCatalogExceptionWorkItem
-      registrationBlocker?: never
-    })
+  | (SupplierCatalogItemBase &
+      (
+        | {
+            changeType: "ERROR" | "STOPPED"
+            workItem: SupplierCatalogExceptionWorkItem
+            registrationBlocker?: never
+          }
+        | {
+            changeType: "ERROR" | "STOPPED"
+            workItem?: never
+            registrationBlocker: SupplierCatalogRegistrationBlocker
+          }
+      ))
   | (SupplierCatalogItemBase & {
       changeType: "NEW" | "CHANGED"
       workItem?: never
@@ -386,6 +415,7 @@ export type SupplierCatalogQueueView = Readonly<{
   skuContext?: {
     productId: string
     productName: string
+    productKind: ProductKind
     skuId: string
     skuCode: string
     specification: string

@@ -6,7 +6,7 @@
 //! `<mongodb::Database as SupplierCatalogExt>::SUPPLIER_CATALOG_PRODUCTS` 等值。
 
 use entities::supplier_catalog::{
-    SupplierCatalogIntakeBatch, SupplierCatalogIntakeItem, SupplierCatalogProduct,
+    SupplierCatalogCommand, SupplierCatalogIntakeBatch, SupplierCatalogIntakeItem, SupplierCatalogProduct,
     SupplierCatalogProductRevision, SupplierCatalogProductRevisionMedia, SupplierCatalogSku,
     SupplierCatalogSkuRevision, SupplierOffering, SupplierOfferingRevision, SupplierProductMapping,
 };
@@ -40,6 +40,8 @@ pub trait SupplierCatalogExt: Sized {
     const SUPPLIER_OFFERINGS: &'static str = "supplier_offerings";
     /// `supplier_offering_revision` 集合名。
     const SUPPLIER_OFFERING_REVISIONS: &'static str = "supplier_offering_revisions";
+    /// `supplier_catalog_command` 集合名。
+    const SUPPLIER_CATALOG_COMMANDS: &'static str = "supplier_catalog_commands";
 
     /// 供应商 SPU 列表筛选条件类型（定义见 `repository::supplier_catalog`）。
     type SupplierCatalogProductFilter;
@@ -116,6 +118,12 @@ pub trait SupplierCatalogExt: Sized {
     /// 返回 `Repository<'_, entities::supplier_catalog::SupplierOfferingRevision>`。
     fn supplier_offering_revisions(&self) -> Repository<'_, SupplierOfferingRevision>;
 
+    /// 获取供应商商品库写命令去重记录集合。
+    ///
+    /// # 返回
+    /// 返回 `Repository<'_, entities::supplier_catalog::SupplierCatalogCommand>`。
+    fn supplier_catalog_commands(&self) -> Repository<'_, SupplierCatalogCommand>;
+
     /// 获取承载跨集合事务写入的域专用仓储。
     ///
     /// # 返回
@@ -168,6 +176,10 @@ impl SupplierCatalogExt for Database {
 
     fn supplier_offering_revisions(&self) -> Repository<'_, SupplierOfferingRevision> {
         Repository::new(self, Self::SUPPLIER_OFFERING_REVISIONS)
+    }
+
+    fn supplier_catalog_commands(&self) -> Repository<'_, SupplierCatalogCommand> {
+        Repository::new(self, Self::SUPPLIER_CATALOG_COMMANDS)
     }
 
     fn supplier_catalog(&self) -> SupplierCatalogRepository<'_> {

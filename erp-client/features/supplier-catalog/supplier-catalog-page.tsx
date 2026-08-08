@@ -11,7 +11,6 @@ import {
   SearchIcon,
   ShieldAlertIcon,
   TriangleAlertIcon,
-  XIcon,
 } from "lucide-react"
 import { z } from "zod"
 
@@ -60,7 +59,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
 import {
   InputGroup,
   InputGroupAddon,
@@ -70,6 +68,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 
 import type {
+  SupplierCatalogExceptionWorkItem,
   SupplierCatalogItemView,
   SupplierCatalogQueueQuery,
   SupplierCatalogSourceType,
@@ -90,7 +89,7 @@ import {
   useCompleteSupplierCatalogMutation,
   useSupplierCatalogActionMutation,
   useSupplierCatalogQueueQuery,
-  useSaveSupplierCatalogDraftMutation,
+  useReviseSupplierOfferingMutation,
 } from "@/features/supplier-catalog/queries"
 import {
   offeringStatusLabel,
@@ -156,15 +155,14 @@ function decimalAtMost(value: string, maximum: string, maxScale: number) {
 }
 
 const offeringDraftSchema = z.object({
-  supplyPriceGross: decimalString("含税供货价", 4, true),
-  floorPriceGross: decimalString("含税底价", 4),
+  dropshipSupplyPriceGross: decimalString("一件代发供给价", 4, true),
+  bulkSupplyPriceGross: decimalString("集采供给价", 4, true),
   dropshipExpress: z.string(),
   inputTaxRate: z.string().refine(
     (value) =>
-      !value.trim() ||
-      (/^\d+(?:\.\d{1,6})?$/.test(value.trim()) &&
-        decimalAtMost(value, "1", 6)),
-    "进项税率必须为 0 到 1 的十进制数，或留空待补充来源"
+      /^\d+(?:\.\d{1,6})?$/.test(value.trim()) &&
+      decimalAtMost(value, "1", 6),
+    "进项税率必须为 0 到 1 的十进制数"
   ),
   freightAmount: decimalString("运费", 2),
   serviceFeeAmount: decimalString("服务费", 2),
@@ -173,8 +171,13 @@ const offeringDraftSchema = z.object({
   productCapabilitiesText: z.string(),
   validFrom: z.string().min(1, "请选择生效日期"),
   validTo: z.string(),
+  status: z.enum(["ACTIVE", "PAUSED", "STOPPED"]),
   note: z.string(),
 })
+
+function commandKey(prefix: string) {
+  return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
+}
 
 function decisionLabel(kind: string) {
   if (kind === "CONFIRM_ERROR_RESOLVED") return "供应商数据已恢复"
@@ -223,8 +226,15 @@ function mappingHistoryStatusLabel(status: string) {
 
 function isExceptionItem(
   item: SupplierCatalogItemView
-): item is Extract<SupplierCatalogItemView, { changeType: "ERROR" | "STOPPED" }> {
-  return item.changeType === "ERROR" || item.changeType === "STOPPED"
+): item is SupplierCatalogItemView & {
+  changeType: "ERROR" | "STOPPED"
+  workItem: SupplierCatalogExceptionWorkItem
+} {
+  return (
+    (item.changeType === "ERROR" || item.changeType === "STOPPED") &&
+    "workItem" in item &&
+    item.workItem !== undefined
+  )
 }
 
 function changeTone(
@@ -330,7 +340,7 @@ export function SupplierCatalogPage() {
   const claimMutation = useClaimSupplierCatalogMutation()
   const actionMutation = useSupplierCatalogActionMutation()
   const completeMutation = useCompleteSupplierCatalogMutation()
-  const saveDraftMutation = useSaveSupplierCatalogDraftMutation()
+  const reviseOfferingMutation = useReviseSupplierOfferingMutation()
   const [excelImportOpen, setExcelImportOpen] = React.useState(false)
   const [manualEntryOpen, setManualEntryOpen] = React.useState(false)
   const [promotionItem, setPromotionItem] =
@@ -425,8 +435,8 @@ export function SupplierCatalogPage() {
 
   const offeringForm = useAppForm({
     defaultValues: {
-      supplyPriceGross: "",
-      floorPriceGross: "",
+      dropshipSupplyPriceGross: "",
+      bulkSupplyPriceGross: "",
       dropshipExpress: "",
       inputTaxRate: "",
       freightAmount: "0.00",
@@ -436,51 +446,48 @@ export function SupplierCatalogPage() {
       productCapabilitiesText: "",
       validFrom: "",
       validTo: "",
+      status: "ACTIVE" as "ACTIVE" | "PAUSED" | "STOPPED",
       note: "",
     },
     validators: { onChange: offeringDraftSchema },
     onSubmit: async ({ value }) => {
-      if (!item?.offering?.proposedDefaults) return
+      const current = item?.offering?.currentRevision
+      if (!item?.offering || !current) return
       try {
-        await saveDraftMutation.mutateAsync({
-          supplierCatalogSkuId:
-            item.supplierProduct.catalogSkus?.[0]?.id ??
-            `${item.supplierProduct.id}_sku`,
-          selectedSkuId: selectedSkuId || undefined,
-          offeringDraft: {
-            supplyPriceGross: value.supplyPriceGross,
-            floorPriceGross: value.floorPriceGross,
-            dropshipExpress:
-              value.dropshipExpress.trim() || undefined,
-            inputTaxRate: value.inputTaxRate.trim(),
-            freightAmount: value.freightAmount,
-            serviceFeeAmount: value.serviceFeeAmount,
-            minimumOrderQuantity: value.minimumOrderQuantity,
-            supplyRegion: value.supplyRegionText
-              .split(/[，,]/)
-              .map((entry) => entry.trim())
-              .filter(Boolean),
-            productCapabilities: value.productCapabilitiesText
-              .split(/[，,]/)
-              .map((entry) => entry.trim())
-              .filter(Boolean),
-            validFrom: value.validFrom,
-            validTo: value.validTo || undefined,
-            sessionDraftOnly: true,
-          },
-          substituteCandidateSkuIds: substituteIds,
-          note: value.note.trim() || undefined,
+        const response = await reviseOfferingMutation.mutateAsync({
+          offeringId: item.offering.stableId,
+          expectedRevisionNo: current.revisionNo,
+          dropshipSupplyPriceGross: value.dropshipSupplyPriceGross,
+          bulkSupplyPriceGross: value.bulkSupplyPriceGross,
+          dropshipExpress: value.dropshipExpress.trim() || undefined,
+          inputTaxRate: value.inputTaxRate.trim(),
+          freightAmount: value.freightAmount,
+          serviceFeeAmount: value.serviceFeeAmount,
+          bulkMinimumOrderQuantity: value.minimumOrderQuantity,
+          supplyRegion: value.supplyRegionText
+            .split(/[，,]/)
+            .map((entry) => entry.trim())
+            .filter(Boolean),
+          productCapabilities: value.productCapabilitiesText
+            .split(/[，,]/)
+            .map((entry) => entry.trim())
+            .filter(Boolean),
+          validFrom: value.validFrom,
+          validTo: value.validTo || undefined,
+          availableQuantity: current.availableQuantity,
+          status: value.status,
+          changeReason: value.note.trim() || "采购确认供货条件",
+          idempotencyKey: commandKey("revise-offering"),
         })
         setLastResult({
-          status: "blocked",
-          title: "草稿已保存",
-          description:
-            "草稿仅保存在当前页面，尚未改变 ERP 商品关联、供货条件或商城商品。",
+          status: "succeeded",
+          title: "供货条件已生效",
+          description: `已形成第 ${response.revision_no} 版供给修订，业务记录 ${response.reference}。`,
           stayOnItem: true,
-          terminal: false,
+          terminal: true,
         })
       } catch (error) {
-        setActionError(error instanceof Error ? error.message : "保存草稿失败")
+        setActionError(error instanceof Error ? error.message : "保存供货条件失败")
       }
     },
   })
@@ -500,8 +507,8 @@ export function SupplierCatalogPage() {
       contextSkuId ?? item.mapping?.skuId ?? item.skuCandidates[0]?.skuId ?? ""
     )
     offeringForm.reset({
-      supplyPriceGross: proposed?.supplyPriceGross ?? "",
-      floorPriceGross: proposed?.floorPriceGross ?? "",
+      dropshipSupplyPriceGross: proposed?.dropshipSupplyPriceGross ?? "",
+      bulkSupplyPriceGross: proposed?.bulkSupplyPriceGross ?? "",
       dropshipExpress: proposed?.dropshipExpress ?? "",
       inputTaxRate: proposed?.inputTaxRate ?? "",
       freightAmount: proposed?.freightAmount ?? "0.00",
@@ -511,6 +518,10 @@ export function SupplierCatalogPage() {
       productCapabilitiesText: proposed?.productCapabilities.join("、") ?? "",
       validFrom: proposed?.validFrom ?? "",
       validTo: proposed?.validTo ?? "",
+      status:
+        item?.offering?.currentRevision?.status === "PENDING_CONFIRM"
+          ? "ACTIVE"
+          : (item?.offering?.currentRevision?.status ?? "ACTIVE"),
       note: "",
     })
     setSubstituteIds([])
@@ -986,6 +997,7 @@ export function SupplierCatalogPage() {
               skuId: view.skuContext.skuId,
               skuCode: view.skuContext.skuCode,
               skuName: view.skuContext.productName,
+              productKind: view.skuContext.productKind,
               specification: view.skuContext.specification,
               baseUnit: view.skuContext.baseUnit,
               category: view.skuContext.category,
@@ -1481,9 +1493,9 @@ export function SupplierCatalogPage() {
                   {item.publicationImpact.safetyPauseReasons
                     .map(safetyReasonLabel)
                     .join("、")} ·
-                  已暂停发布 {item.publicationImpact.pausedPublicationCount} ·
+                  已暂停发布 {item.publicationImpact.pausedPublicationCount ?? "未聚合"} ·
                   历史已支付{" "}
-                  {item.publicationImpact.historicalPaidOrderCount} 笔历史记录保留
+                  {item.publicationImpact.historicalPaidOrderCount ?? "未聚合"} 笔历史记录保留
                 </p>
                 {item.publicationImpact.recoveryBlocker ? (
                   <p className="font-medium">
@@ -1706,13 +1718,14 @@ export function SupplierCatalogPage() {
                 <CardContent className="space-y-2 pt-4 text-sm">
                   <ul className="list-inside list-disc space-y-1 text-muted-foreground">
                     <li>
-                      在售 {item.publicationImpact.activePublicationCount} ·
-                      已暂停 {item.publicationImpact.pausedPublicationCount}
+                      在售 {item.publicationImpact.activePublicationCount ?? "未聚合"} ·
+                      已暂停 {item.publicationImpact.pausedPublicationCount ?? "未聚合"}
                     </li>
                     <li>
                       历史已支付订单{" "}
-                      {item.publicationImpact.historicalPaidOrderCount}{" "}
-                      （记录只读）
+                      {item.publicationImpact.historicalPaidOrderCount == null
+                        ? "未聚合"
+                        : `${item.publicationImpact.historicalPaidOrderCount} 笔（记录只读）`}
                     </li>
                   </ul>
                   {item.publicationImpact.pauseSubResults.map((p) => (
@@ -1851,7 +1864,7 @@ export function SupplierCatalogPage() {
                 <CardHeader className="border-b border-border/30 py-3">
                   <CardTitle className="text-base">供货条件</CardTitle>
                   <CardDescription>
-                    可准备价格、起订量、区域和有效期草稿；确认功能暂未开放
+                    修改价格、税率、起订量、区域、有效期或供给状态后形成新修订
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3 pt-4">
@@ -1865,21 +1878,15 @@ export function SupplierCatalogPage() {
                           value: `第 ${item.offering.currentRevision.revisionNo} 版 · ${offeringStatusLabel(item.offering.currentRevision.status)}`,
                         },
                         {
-                          id: "price",
-                          label: "含税价 / 税率",
-                          value: `${item.offering.currentRevision.supplyPriceGross ?? "—"} / ${item.offering.currentRevision.inputTaxRate ?? "—"}`,
-                          numeric: true,
-                        },
-                        {
-                          id: "floor",
-                          label: "含税底价",
-                          value: item.offering.currentRevision.floorPriceGross ?? "—",
-                          numeric: true,
-                        },
-                        {
                           id: "mode",
-                          label: "件代发价 / 集采价 / 快递",
+                          label: "一件代发价 / 集采价 / 快递",
                           value: `${item.offering.currentRevision.dropshipSupplyPriceGross ?? "—"} / ${item.offering.currentRevision.bulkSupplyPriceGross ?? "—"} / ${item.offering.currentRevision.dropshipExpress ?? "—"}`,
+                        },
+                        {
+                          id: "tax",
+                          label: "进项税率",
+                          value: item.offering.currentRevision.inputTaxRate ?? "—",
+                          numeric: true,
                         },
                         {
                           id: "moq",
@@ -1904,20 +1911,20 @@ export function SupplierCatalogPage() {
                       }}
                     >
                       <p className="text-xs font-medium">
-                        供货条件草稿 · 保存后不会立即生效
+                        新供货条件 · 确认后立即形成不可变修订
                       </p>
                       <div className="grid gap-3 sm:grid-cols-2">
-                        <offeringForm.AppField name="supplyPriceGross">
-                          {(field) => <field.TextField label="含税供货价" />}
+                        <offeringForm.AppField name="dropshipSupplyPriceGross">
+                          {(field) => <field.TextField label="一件代发供给价（含税运）" />}
                         </offeringForm.AppField>
-                        <offeringForm.AppField name="floorPriceGross">
-                          {(field) => <field.TextField label="含税底价（控价参考）" />}
+                        <offeringForm.AppField name="bulkSupplyPriceGross">
+                          {(field) => <field.TextField label="集采供给价（含税）" />}
                         </offeringForm.AppField>
                         <offeringForm.AppField name="inputTaxRate">
                           {(field) => (
                             <field.TextField
                               label="进项税率"
-                              description="无可靠来源时可留空；提交时会要求补充来源，建议先向供应商确认"
+                              description="0 到 1 的十进制数，例如 0.13"
                             />
                           )}
                         </offeringForm.AppField>
@@ -1945,28 +1952,38 @@ export function SupplierCatalogPage() {
                         <offeringForm.AppField name="validTo">
                           {(field) => <field.TextField label="失效日期（可空）" />}
                         </offeringForm.AppField>
+                        <offeringForm.AppField name="status">
+                          {(field) => (
+                            <div className="space-y-1.5">
+                              <Label>供给状态</Label>
+                              <OptionCombobox
+                                value={field.state.value}
+                                onValueChange={(value) =>
+                                  field.handleChange(
+                                    (value ?? "ACTIVE") as "ACTIVE" | "PAUSED" | "STOPPED"
+                                  )
+                                }
+                                options={[
+                                  { value: "ACTIVE", label: "启用" },
+                                  { value: "PAUSED", label: "暂停" },
+                                  { value: "STOPPED", label: "停止" },
+                                ]}
+                                className="w-full"
+                              />
+                            </div>
+                          )}
+                        </offeringForm.AppField>
                       </div>
                       <offeringForm.AppField name="note">
-                        {(field) => <field.TextareaField label="草稿备注" rows={2} />}
+                        {(field) => <field.TextareaField label="变更原因" rows={2} />}
                       </offeringForm.AppField>
                       <div className="flex flex-wrap gap-2">
                         <offeringForm.AppForm>
-                          <offeringForm.SubmitButton label="保存草稿" />
+                          <offeringForm.SubmitButton
+                            label="确认供货条件"
+                            disabled={reviseOfferingMutation.isPending}
+                          />
                         </offeringForm.AppForm>
-                        <div className="space-y-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            disabled
-                            tabIndex={-1}
-                            aria-disabled="true"
-                          >
-                            确认供货条件
-                          </Button>
-                          <p className="text-xs text-muted-foreground">
-                            供货条件确认功能暂未开放，可先保存草稿。
-                          </p>
-                        </div>
                       </div>
                     </form>
                   ) : null}

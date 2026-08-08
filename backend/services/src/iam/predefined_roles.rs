@@ -221,6 +221,7 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "supplier_catalog_sku:list",
     "supplier_product_mapping:*",
     "supplier_offering:*",
+    "supplier_catalog_cost:detail",
     "supplier_catalog_intake_batch:list",
     "supplier_api_connection:list",
     "supplier_api_connection:create",
@@ -575,18 +576,19 @@ async fn upgrade_exact(
 /// 为未被管理员改写过的旧采购角色补充合同详情只读权限。
 async fn upgrade_procurement_contract_read(rbac: &SharedRbacService) -> Result<()> {
     let desired = parse_permissions(PROCUREMENT_PERMISSIONS)?;
-    let previous = desired
-        .iter()
-        .filter(|permission| permission.to_string() != "contract:detail")
-        .cloned()
-        .collect();
-    if rbac
-        .upgrade_seeded_role_permissions_if_exact("role-procurement", previous, desired)
+    let previous_without_both =
+        remove_permissions(&desired, &["contract:detail", "supplier_catalog_cost:detail"]);
+    let previous_without_cost = remove_permissions(&desired, &["supplier_catalog_cost:detail"]);
+    let upgraded = rbac
+        .upgrade_seeded_role_permissions_if_exact("role-procurement", previous_without_both, desired.clone())
         .await?
-    {
+        || rbac
+            .upgrade_seeded_role_permissions_if_exact("role-procurement", previous_without_cost, desired)
+            .await?;
+    if upgraded {
         tracing::info!(
             role_id = "role-procurement",
-            permission = "contract:detail",
+            permissions = "contract:detail,supplier_catalog_cost:detail",
             "predefined role permission upgraded"
         );
     }

@@ -12,20 +12,17 @@ use entities::catalog::product_revision::ProductRevisionData;
 use entities::catalog::sku::SkuData;
 use entities::catalog::sku_revision::SkuRevisionData;
 use entities::catalog::specification::{compute_specification_signature, SpecSignatureEntry};
-use entities::catalog::{
-    EnableStatus, Product, ProductKind, ProductRevision, Sku, SkuRevision,
-};
+use entities::catalog::{EnableStatus, Product, ProductKind, ProductRevision, Sku, SkuRevision};
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
-    ProductBrandId, ProductCategoryId, ProductId, ProductRevisionId, SkuId, SkuRevisionId,
-    SupplierAccountId, SupplierCatalogProductId, SupplierCatalogSkuId, SupplierOfferingId,
-    SupplierProductMappingId, UnitOfMeasureId,
+    ProductBrandId, ProductCategoryId, ProductId, ProductRevisionId, SkuId, SkuRevisionId, SupplierAccountId,
+    SupplierCatalogProductId, SupplierCatalogSkuId, SupplierOfferingId, SupplierProductMappingId,
+    UnitOfMeasureId,
 };
 use entities::money::Amount;
 use entities::supplier_catalog::{
-    AvailabilityStatus, MappingStatus, SupplierCatalogSku, SupplierCatalogSkuRevision,
-    SupplierOffering, SupplierOfferingData, SupplierOfferingRevision, SupplierProductMapping,
-    SupplierProductMappingData,
+    AvailabilityStatus, MappingStatus, SupplierCatalogSku, SupplierCatalogSkuRevision, SupplierOffering,
+    SupplierOfferingData, SupplierOfferingRevision, SupplierProductMapping, SupplierProductMappingData,
 };
 use id_generator::next_id;
 use validator::Validate;
@@ -34,7 +31,7 @@ use super::dto::{
     ReversePromoteSkuItem, ReversePromoteSkuResult, ReversePromoteToCompanyPoolRequest,
     ReversePromoteToCompanyPoolResult,
 };
-use super::SupplierCatalogService;
+use super::{build_command, command_fingerprint, replay_command, SupplierCatalogService};
 use crate::audit::AuditActor;
 use crate::errors::{Error, Result};
 
@@ -64,6 +61,10 @@ impl SupplierCatalogService {
     ) -> Result<ReversePromoteToCompanyPoolResult> {
         req.validate()?;
         self.ensure_unique_item_ids(&req.items)?;
+        let request_fingerprint = command_fingerprint("reverse_promote", &req)?;
+        if let Some(command) = self.command_record(&req.idempotency_key).await? {
+            return replay_command(command, "reverse_promote", &request_fingerprint);
+        }
 
         let product_id = SupplierCatalogProductId::new(req.supplier_product_id.clone());
         let supplier_product = self
@@ -91,6 +92,12 @@ impl SupplierCatalogService {
             req.product_kind,
         )
         .await?;
+        self.ensure_qualified_for_product_kind(
+            &supplier_product.supplier_id,
+            req.product_kind,
+            BusinessDate::today(),
+        )
+        .await?;
 
         let sku_ids: Vec<SupplierCatalogSkuId> = req
             .items
@@ -108,9 +115,7 @@ impl SupplierCatalogService {
                 .await?
                 .is_some()
             {
-                return Err(Error::ConflictError(format!(
-                    "供应商 SKU 已有生效映射: {sku_id}"
-                )));
+                return Err(Error::ConflictError(format!("供应商 SKU 已有生效映射: {sku_id}")));
             }
         }
 
@@ -134,41 +139,6 @@ impl SupplierCatalogService {
             supplier_product_id.clone(),
         )?;
 
-        let db = self.db.clone();
-        let client = db.client().clone();
-        let prepared_for_tx = prepared.clone();
-        client
-            .with_transaction(move |session| {
-                Box::pin(async move {
-                    db.products().create(&prepared_for_tx.product, session).await?;
-                    db.catalog()
-                        .create_product_revision_with_media(
-                            &prepared_for_tx.product_revision,
-                            &[],
-                            session,
-                        )
-                        .await?;
-                    for row in &prepared_for_tx.rows {
-                        db.catalog()
-                            .create_sku_with_revision(&row.sku, &row.sku_revision, &[], session)
-                            .await?;
-                        db.supplier_product_mappings()
-                            .create(&row.mapping, session)
-                            .await?;
-                        db.supplier_catalog()
-                            .create_offering_with_revision(
-                                &row.offering,
-                                &row.offering_revision,
-                                session,
-                            )
-                            .await?;
-                    }
-                    db.audit_logs().create(&audit, session).await?;
-                    Ok::<(), crate::errors::Error>(())
-                })
-            })
-            .await?;
-
         let items: Vec<ReversePromoteSkuResult> = prepared
             .rows
             .iter()
@@ -181,14 +151,8 @@ impl SupplierCatalogService {
                 offering_revision_no: 1,
             })
             .collect();
-
-        let ref_id = prepared.product.base.id.clone();
-        let reference = format!(
-            "RPRO-{}",
-            &ref_id[..8.min(ref_id.len())]
-        );
-
-        Ok(ReversePromoteToCompanyPoolResult {
+        let reference = format!("RPRO-{}", &company_product_id[..8.min(company_product_id.len())]);
+        let result = ReversePromoteToCompanyPoolResult {
             supplier_product_id,
             company_product_id,
             product_no,
@@ -196,7 +160,53 @@ impl SupplierCatalogService {
             items,
             reference,
             recorded_at: Instant::now().unix_secs() as u64,
-        })
+        };
+        let command = build_command(
+            &req.idempotency_key,
+            "reverse_promote",
+            &request_fingerprint,
+            &result,
+        )?;
+
+        let db = self.db.clone();
+        let client = db.client().clone();
+        let prepared_for_tx = prepared.clone();
+        let command_for_tx = command.clone();
+        let transaction_result = client
+            .with_transaction(move |session| {
+                Box::pin(async move {
+                    db.products().create(&prepared_for_tx.product, session).await?;
+                    db.catalog()
+                        .create_product_revision_with_media(&prepared_for_tx.product_revision, &[], session)
+                        .await?;
+                    for row in &prepared_for_tx.rows {
+                        db.catalog()
+                            .create_sku_with_revision(&row.sku, &row.sku_revision, &[], session)
+                            .await?;
+                        db.supplier_product_mappings()
+                            .create(&row.mapping, session)
+                            .await?;
+                        db.supplier_catalog()
+                            .create_offering_with_revision(&row.offering, &row.offering_revision, session)
+                            .await?;
+                    }
+                    db.supplier_catalog_commands()
+                        .create(&command_for_tx, session)
+                        .await?;
+                    db.audit_logs().create(&audit, session).await?;
+                    Ok::<(), crate::errors::Error>(())
+                })
+            })
+            .await;
+
+        self.resolve_command_result(
+            transaction_result,
+            result,
+            &req.idempotency_key,
+            "reverse_promote",
+            &request_fingerprint,
+        )
+        .await
     }
 
     /// 校验入选项供应商 SKU ID 不重复。
@@ -214,9 +224,7 @@ impl SupplierCatalogService {
         for item in items {
             let id = item.supplier_catalog_sku_id.trim();
             if !seen.insert(id.to_string()) {
-                return Err(Error::ValidationError(format!(
-                    "供应商 SKU 重复选择: {id}"
-                )));
+                return Err(Error::ValidationError(format!("供应商 SKU 重复选择: {id}")));
             }
         }
         Ok(())
@@ -249,9 +257,7 @@ impl SupplierCatalogService {
             .await?
             .ok_or_else(|| Error::NotFound("分类不存在".to_string()))?;
         if category.product_kind != product_kind {
-            return Err(Error::BusinessLogicError(
-                "所选分类不允许该商品类型".to_string(),
-            ));
+            return Err(Error::BusinessLogicError("所选分类不允许该商品类型".to_string()));
         }
         self.db
             .product_brands()
@@ -402,10 +408,7 @@ impl SupplierCatalogService {
             let supplier_sku = supplier_skus
                 .get(item.supplier_catalog_sku_id.as_str())
                 .ok_or_else(|| {
-                    Error::NotFound(format!(
-                        "供应商 SKU 不存在: {}",
-                        item.supplier_catalog_sku_id
-                    ))
+                    Error::NotFound(format!("供应商 SKU 不存在: {}", item.supplier_catalog_sku_id))
                 })?;
             let source_sku_rev = sku_revisions
                 .get(item.supplier_catalog_sku_id.as_str())
@@ -439,11 +442,8 @@ impl SupplierCatalogService {
             let sales_price = parse_amount_required(&item.sales_visible_price_gross, "销售可见价")?;
             let market_price = parse_amount_required(&item.market_price, "市场价")?;
 
-            let signature = signature_for_supplier_sku(
-                source_sku_rev,
-                &supplier_sku.supplier_sku_code,
-                req.items.len(),
-            )?;
+            let signature =
+                signature_for_supplier_sku(source_sku_rev, &supplier_sku.supplier_sku_code, req.items.len())?;
             if !signatures.insert(signature.clone()) {
                 return Err(Error::ConflictError(format!(
                     "入选 SKU 规格签名冲突: {}",
@@ -531,6 +531,7 @@ impl SupplierCatalogService {
                 req.input_tax_rate.as_str(),
                 &moq.to_string(),
                 &req.supply_region,
+                &[],
                 &effective_from.to_string(),
                 None,
                 None,
@@ -607,8 +608,7 @@ fn resolve_price(
     sku_id: &str,
 ) -> Result<String> {
     if let Some(value) = confirmed.map(str::trim).filter(|value| !value.is_empty()) {
-        Amount::from_str(value)
-            .map_err(|_| Error::ValidationError(format!("非法{label}: {value}")))?;
+        Amount::from_str(value).map_err(|_| Error::ValidationError(format!("非法{label}: {value}")))?;
         return Ok(value.to_string());
     }
     floor.map(|value| value.to_string()).ok_or_else(|| {

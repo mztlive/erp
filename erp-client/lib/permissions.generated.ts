@@ -2974,6 +2974,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
+                path: "/admin/supplier-catalog/imports/excel",
+                description: "导入 Excel 供应商商品批次",
+                permission: {
+                    resource: "supplier_catalog_product",
+                    action: "import",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
                 path: "/admin/supplier-catalog/products",
                 description: "创建供应商商品（Excel/API/手工入库）",
                 permission: {

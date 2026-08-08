@@ -13,8 +13,10 @@ import type {
   PromoteSupplierProductInput,
   ReversePromoteToCompanyPoolInput,
   ReviseSupplierCatalogProductInput,
+  ReviseSupplierOfferingInput,
   SessionCatalogDraft,
   SupplierCatalogCenterView,
+  SupplierCatalogExceptionWorkItem,
   SupplierCatalogItemView,
   SupplierCatalogQueueQuery,
   SupplierCatalogQueueView,
@@ -31,10 +33,17 @@ import type {
 import {
   REGISTRATION_BLOCKER_MESSAGE,
 } from "@/features/supplier-catalog/types"
+import type {
+  SupplierCatalogExcelImportInput,
+  SupplierCatalogExcelImportResult,
+} from "@/features/supplier-catalog/excel-import"
 import { uploadFileAssetImage } from "@/features/file-assets/api"
 
 /** 供应商商品图片上传：复用共享文件资产上传（D05）。 */
 export const uploadCatalogImage = uploadFileAssetImage
+/** Excel 原始文件包含采购成本，按敏感附件登记。 */
+export const uploadCatalogExcel = (file: File) =>
+  uploadFileAssetImage(file, "attachment", "sensitive")
 import {
   PRODUCT_KIND_VALUES,
   type ProductKind,
@@ -195,6 +204,12 @@ type BackendWorkItem = {
   created_at: number
 }
 
+type BackendPublication = {
+  id: string
+  sku_id: string
+  status: string
+}
+
 type BackendSkuListItem = {
   id: string
   sku_no: string
@@ -204,6 +219,11 @@ type BackendSkuListItem = {
   status: string
   created_at: number
   version: number
+}
+
+type BackendCompanyProduct = {
+  id: string
+  product_kind: ProductKind
 }
 
 type BackendUnitOfMeasure = {
@@ -235,6 +255,7 @@ type CompanySkuRevisionDto = {
 type CompanySkuEnrichment = {
   skuId: string
   productId: string
+  productKind: ProductKind
   skuCode: string
   skuName: string
   specification: string
@@ -263,7 +284,6 @@ async function fetchAllPages<T>(
     total = result.total
     if (result.items.length === 0) break
     page += 1
-    if (page > 50) break
   }
   return items
 }
@@ -276,13 +296,15 @@ async function fetchAllPages<T>(
 async function loadCompanySkuEnrichment(
   skuIds: string[]
 ): Promise<Map<string, CompanySkuEnrichment>> {
-  const [skus, units] = await Promise.all([
+  const [skus, units, products] = await Promise.all([
     fetchAllPages<BackendSkuListItem>("/admin/skus", {}).catch(() => []),
     fetchAllPages<BackendUnitOfMeasure>("/admin/unit-of-measures", {}).catch(
       () => []
     ),
+    fetchAllPages<BackendCompanyProduct>("/admin/products", {}).catch(() => []),
   ])
   const unitById = new Map(units.map((unit) => [unit.id, unit]))
+  const productById = new Map(products.map((product) => [product.id, product]))
   const ids = skuIds.length > 0 ? skuIds : skus.map((sku) => sku.id)
   const latestBySku = new Map<string, CompanySkuRevisionDto>()
   await Promise.all(
@@ -309,9 +331,12 @@ async function loadCompanySkuEnrichment(
   for (const sku of skus) {
     const latest = latestBySku.get(sku.id)
     const unit = unitById.get(sku.base_unit_id)
+    const product = productById.get(sku.product_id)
+    if (!product) continue
     byId.set(sku.id, {
       skuId: sku.id,
       productId: sku.product_id,
+      productKind: product.product_kind,
       skuCode: sku.sku_no,
       skuName: latest?.name ?? sku.sku_no,
       specification: sku.specification_signature,
@@ -350,12 +375,67 @@ function sourceTypeLabel(t: string): string {
   return t
 }
 
-function changeTypeFromStatus(
-  status: string
+function changeTypeFromState(
+  status: string,
+  mapping?: BackendMapping,
+  offering?: BackendOffering
 ): "NEW" | "CHANGED" | "STOPPED" | "ERROR" | "UNCHANGED" {
   if (status === "STOPPED") return "STOPPED"
   if (status === "EXCEPTION") return "ERROR"
-  return "NEW"
+  if (!mapping || mapping.status !== "ACTIVE") return "NEW"
+  if (!offering || offering.status !== "ACTIVE") return "CHANGED"
+  return "UNCHANGED"
+}
+
+function workItemPriority(value: string | number): number {
+  if (typeof value === "number") return value
+  if (value === "URGENT") return 100
+  if (value === "HIGH") return 75
+  if (value === "LOW") return 25
+  return 50
+}
+
+function mapCatalogWorkItem(
+  row: BackendWorkItem,
+  product: BackendProduct,
+  offering?: BackendOffering
+): SupplierCatalogExceptionWorkItem {
+  const held = row.status === "DEFERRED"
+  return {
+    workItemId: row.id,
+    workItemType: "BUSINESS_EXCEPTION",
+    businessObjectType:
+      offering && row.business_object_id === offering.id
+        ? "SUPPLIER_OFFERING"
+        : "SUPPLIER_CATALOG_SKU",
+    subjectVersion: row.subject_version ?? String(product.version),
+    subjectHash: row.business_object_id,
+    workItemStatus:
+      row.status === "COMPLETED" || row.status === "CLOSED"
+        ? "COMPLETED"
+        : row.status === "PENDING"
+          ? "PENDING"
+          : "IN_PROGRESS",
+    dueAt: row.due_at ? secsToIso(row.due_at) : undefined,
+    claimedBy: row.owner_user_id
+      ? { userId: row.owner_user_id, displayName: row.owner_user_id }
+      : undefined,
+    allowedActions: [
+      "CLAIM",
+      "HOLD",
+      "RETURN_FOR_DATA_FIX",
+      "QUERY_ORIGINAL_RESULT",
+      "SAVE_EVIDENCE",
+      "CONFIRM_ERROR_RESOLVED",
+      "CONFIRM_STOP_SUPPLY",
+    ],
+    actionBlockers: [],
+    held,
+    reason: row.reason_code ?? "供应商商品业务异常",
+    impact: row.impact_summary ?? "需采购复核",
+    priority: workItemPriority(row.priority),
+    handlerKey: "supplier_catalog",
+  }
 }
 
 function mapAvailability(
@@ -374,11 +454,27 @@ function mapProductKind(
     : undefined
 }
 
-function emptyPublicationImpact() {
+function publicationImpact(
+  companySkuId?: string,
+  publications?: BackendPublication[] | null
+) {
+  const related = companySkuId
+    ? publications?.filter((publication) => publication.sku_id === companySkuId)
+    : undefined
+  const activePublicationCount = related
+    ? related.filter((publication) =>
+        ["mall_effective", "MALL_EFFECTIVE"].includes(publication.status)
+      ).length
+    : null
+  const pausedPublicationCount = related
+    ? related.filter((publication) =>
+        ["paused", "PAUSED"].includes(publication.status)
+      ).length
+    : null
   return {
-    activePublicationCount: 0,
-    pausedPublicationCount: 0,
-    historicalPaidOrderCount: 0,
+    activePublicationCount,
+    pausedPublicationCount,
+    historicalPaidOrderCount: null,
     safetyPauseTriggered: false,
     safetyPauseReasons: [] as string[],
     pauseSubResults: [] as Array<{
@@ -390,7 +486,11 @@ function emptyPublicationImpact() {
     }>,
     mallSalePriceAutoUpdate: false as const,
     moqCopiedToMallMinPurchase: false as const,
-    note: "发布影响由商品发布域承接；本接口不返回聚合。",
+    note: companySkuId
+      ? publications
+        ? "发布状态按当前公司 SKU 实时聚合；历史已支付订单由订单域保留，不在本读取中推断。"
+        : "当前账号无法读取商品发布聚合。"
+      : "供应商 SKU 尚未关联公司 SKU，不产生商城发布影响。",
   }
 }
 
@@ -642,6 +742,8 @@ function projectProductToItem(
   skuRevisions: Map<string, BackendSkuRevision>,
   mappings: BackendMapping[],
   offerings: BackendOffering[],
+  workItems: BackendWorkItem[],
+  publications: BackendPublication[] | null,
   supplierName: string,
   companySkuById?: Map<string, CompanySkuEnrichment>,
 ): SupplierCatalogItemView {
@@ -694,9 +796,19 @@ function projectProductToItem(
   }))
 
   const skuIds = new Set(skus.map((s) => s.id))
-  const mapping = mappings.find((m) => skuIds.has(m.supplier_catalog_sku_id))
-  const offering = offerings.find((o) => skuIds.has(o.supplier_catalog_sku_id))
-  const changeType = changeTypeFromStatus(product.status)
+  const mapping =
+    mappings.find(
+      (candidate) =>
+        candidate.status === "ACTIVE" &&
+        skuIds.has(candidate.supplier_catalog_sku_id)
+    ) ?? mappings.find((candidate) => skuIds.has(candidate.supplier_catalog_sku_id))
+  const offering =
+    offerings.find(
+      (candidate) =>
+        candidate.status === "ACTIVE" &&
+        skuIds.has(candidate.supplier_catalog_sku_id)
+    ) ?? offerings.find((candidate) => skuIds.has(candidate.supplier_catalog_sku_id))
+  const changeType = changeTypeFromState(product.status, mapping, offering)
 
   const mappingEnrichment = mapping?.sku_id
     ? companySkuById?.get(mapping.sku_id)
@@ -748,9 +860,26 @@ function projectProductToItem(
           stableId: offering.id,
           currentRevision: mapOffering(offering),
           revisionHistory: [mapOffering(offering)],
+          proposedDefaults: {
+            dropshipSupplyPriceGross:
+              offering.dropship_supply_price_gross ?? "",
+            bulkSupplyPriceGross: offering.bulk_supply_price_gross ?? "",
+            dropshipExpress: offering.dropship_express ?? undefined,
+            inputTaxRate: offering.input_tax_rate ?? "",
+            freightAmount: offering.freight_amount ?? "0.00",
+            serviceFeeAmount: offering.service_fee_amount ?? "0.00",
+            minimumOrderQuantity:
+              offering.bulk_minimum_order_quantity ?? "1",
+            supplyRegion: offering.supply_region ?? [],
+            productCapabilities: offering.product_capabilities ?? [],
+            validFrom:
+              offering.valid_from ?? secsToIso(offering.created_at).slice(0, 10),
+            validTo: offering.valid_to ?? undefined,
+            sessionDraftOnly: true as const,
+          },
         }
       : undefined,
-    publicationImpact: emptyPublicationImpact(),
+    publicationImpact: publicationImpact(mapping?.sku_id, publications),
     sourceContext: {
       intakeId: product.id,
       sourceReference: product.supplier_spu_code,
@@ -772,31 +901,27 @@ function projectProductToItem(
   }
 
   if (changeType === "ERROR" || changeType === "STOPPED") {
+    const workItem = workItems.find(
+      (candidate) =>
+        skuIds.has(candidate.business_object_id) ||
+        candidate.business_object_id === offering?.id
+    )
+    if (!workItem) {
+      return {
+        ...base,
+        changeType,
+        registrationBlocker: {
+          code: "WORK_ITEM_TYPE_UNREGISTERED",
+          message:
+            "异常或停供记录尚未派发正式待办，领取、暂挂和完成动作不可用。",
+          businessProcess: "OFFERING_REVIEW",
+        },
+      }
+    }
     return {
       ...base,
       changeType,
-      workItem: {
-        workItemId: `wi_catalog_${product.id}`,
-        workItemType: "BUSINESS_EXCEPTION",
-        businessObjectType: "SUPPLIER_CATALOG_SKU",
-        subjectVersion: String(product.version),
-        subjectHash: product.id,
-        workItemStatus: "PENDING",
-        allowedActions: [
-          "CLAIM",
-          "HOLD",
-          "RETURN_FOR_DATA_FIX",
-          "QUERY_ORIGINAL_RESULT",
-          "SAVE_EVIDENCE",
-          "CONFIRM_ERROR_RESOLVED",
-          "CONFIRM_STOP_SUPPLY",
-        ],
-        actionBlockers: [],
-        reason: product.status === "EXCEPTION" ? "来源异常" : "停止供应",
-        impact: "需采购复核",
-        priority: 50,
-        handlerKey: "supplier_catalog",
-      },
+      workItem: mapCatalogWorkItem(workItem, product, offering),
     }
   }
 
@@ -807,7 +932,8 @@ function projectProductToItem(
       registrationBlocker: {
         code: "WORK_ITEM_TYPE_UNREGISTERED",
         message: REGISTRATION_BLOCKER_MESSAGE,
-        businessProcess: "MAPPING",
+        businessProcess:
+          mapping?.status === "ACTIVE" ? "OFFERING_REVIEW" : "MAPPING",
       },
     }
   }
@@ -821,12 +947,9 @@ function projectProductToItem(
 async function loadQueueItems(
   query: SupplierCatalogQueueQuery
 ): Promise<SupplierCatalogItemView[]> {
-  const pageSize = query.pageSize ?? 50
-  const productPage = await apiGet<Page<BackendProduct>>(
+  const productPages = await fetchAllPages<BackendProduct>(
     "/admin/supplier-catalog/products",
     {
-      page: 1,
-      page_size: pageSize,
       q: query.q?.trim() || undefined,
       supplier_id: query.supplierId || undefined,
       source_type:
@@ -838,65 +961,56 @@ async function loadQueueItems(
 
   const items: SupplierCatalogItemView[] = []
 
-  // 本页可能存在的公司 SKU 关联：并行拉各 SPU 的 SKU，再按供应商 SKU 精确查映射，
-  // 最后对关联到的公司 SKU 拉取富化信息（编码/名称/单位/商品池价）。
-  const productPages = productPage.items
-  const pageSkuPages: BackendSku[][] = await Promise.all(
-    productPages.map((product) =>
-      apiGet<Page<BackendSku>>("/admin/supplier-catalog/skus", {
-        supplier_catalog_product_id: product.id,
-        page: 1,
-        page_size: 100,
-      })
-        .then((page) => page.items)
-        .catch(() => [] as BackendSku[])
-    )
-  )
-  const pageMappings = await Promise.all(
-    pageSkuPages.flatMap((skus) =>
-      skus.map((sku) =>
-        apiGet<Page<BackendMapping>>("/admin/supplier-catalog/mappings", {
-          supplier_catalog_sku_id: sku.id,
-          page: 1,
-          page_size: 100,
-        }).catch(() => ({
-          items: [] as BackendMapping[],
-          total: 0,
-          page: 1,
-          page_size: 100,
-        }))
-      )
-    )
-  )
+  // 目录、映射、供给与待办都完整翻页，队列总数和当前项不能由第一页猜测。
+  const [allSkus, allMappings, allOfferings, allWorkItems, allPublications] =
+    await Promise.all([
+    fetchAllPages<BackendSku>("/admin/supplier-catalog/skus").catch(
+      () => [] as BackendSku[]
+    ),
+    fetchAllPages<BackendMapping>("/admin/supplier-catalog/mappings").catch(
+      () => [] as BackendMapping[]
+    ),
+    fetchAllPages<BackendOffering>("/admin/supplier-catalog/offerings").catch(
+      () => [] as BackendOffering[]
+    ),
+    fetchAllPages<BackendWorkItem>("/admin/work-items", {
+      work_item_type: "BUSINESS_EXCEPTION",
+    }).catch(() => [] as BackendWorkItem[]),
+    fetchAllPages<BackendPublication>("/admin/product-publications").catch(
+      () => null
+    ),
+  ])
+  const skusByProduct = new Map<string, BackendSku[]>()
+  for (const sku of allSkus) {
+    const group = skusByProduct.get(sku.supplier_catalog_product_id) ?? []
+    group.push(sku)
+    skusByProduct.set(sku.supplier_catalog_product_id, group)
+  }
   const mappedSkuIds = new Set<string>()
-  for (const mappingPage of pageMappings) {
-    for (const mapping of mappingPage.items) {
-      if (mapping.sku_id) mappedSkuIds.add(mapping.sku_id)
-    }
+  for (const mapping of allMappings) {
+    if (mapping.sku_id) mappedSkuIds.add(mapping.sku_id)
   }
   const companySkuById = await loadCompanySkuEnrichment(
     Array.from(mappedSkuIds)
   )
+  const supplierNames = new Map<string, string>()
+  await Promise.all(
+    Array.from(new Set(productPages.map((product) => product.supplier_id))).map(
+      async (supplierId) => {
+        supplierNames.set(supplierId, await resolveSupplierName(supplierId))
+      }
+    )
+  )
 
-  for (const [productIndex, product] of productPages.entries()) {
-    const skuPage = pageSkuPages[productIndex] ?? []
+  for (const product of productPages) {
+    const skuPage = skusByProduct.get(product.id) ?? []
     const skuIds = new Set(skuPage.map((sku) => sku.id))
-    const mappings = pageMappings
-      .flatMap((page) => page.items)
-      .filter((mapping) => skuIds.has(mapping.supplier_catalog_sku_id))
-    const [offeringPage, supplierName] = await Promise.all([
-      apiGet<Page<BackendOffering>>("/admin/supplier-catalog/offerings", {
-        supplier_id: product.supplier_id,
-        page: 1,
-        page_size: 100,
-      }).catch(() => ({
-        items: [] as BackendOffering[],
-        total: 0,
-        page: 1,
-        page_size: 100,
-      })),
-      resolveSupplierName(product.supplier_id),
-    ])
+    const mappings = allMappings.filter((mapping) =>
+      skuIds.has(mapping.supplier_catalog_sku_id)
+    )
+    const offerings = allOfferings.filter((offering) =>
+      skuIds.has(offering.supplier_catalog_sku_id)
+    )
 
     const skuRevisions = new Map<string, BackendSkuRevision>()
     for (const s of skuPage) {
@@ -924,8 +1038,10 @@ async function loadQueueItems(
       skuPage,
       skuRevisions,
       mappings,
-      offeringPage.items,
-      supplierName,
+      offerings,
+      allWorkItems,
+      allPublications,
+      supplierNames.get(product.supplier_id) ?? product.supplier_id,
       companySkuById
     )
     items.push(item)
@@ -947,6 +1063,21 @@ async function loadQueueItems(
     )
   }
 
+  if (query.mappingStatus && query.mappingStatus !== "all") {
+    filtered = filtered.filter(
+      (item) =>
+        (item.mapping?.mappingStatus ?? "UNMAPPED") === query.mappingStatus
+    )
+  }
+
+  if (query.offeringStatus && query.offeringStatus !== "all") {
+    filtered = filtered.filter(
+      (item) =>
+        (item.offering?.currentRevision?.status ?? "MISSING") ===
+        query.offeringStatus
+    )
+  }
+
   if (query.q?.trim()) {
     const q = query.q.trim().toUpperCase()
     filtered = filtered.filter((i) => {
@@ -962,6 +1093,14 @@ async function loadQueueItems(
   }
 
   return filtered
+}
+
+function hasCatalogWorkItem(
+  item: SupplierCatalogItemView
+): item is SupplierCatalogItemView & {
+  workItem: SupplierCatalogExceptionWorkItem
+} {
+  return "workItem" in item && item.workItem !== undefined
 }
 
 // ─── Public API ───────────────────────────────────────────────────────────────
@@ -981,7 +1120,7 @@ export async function fetchSupplierCatalogQueue(
   if (query.currentWorkItemId) {
     const idx = items.findIndex(
       (i) =>
-        (i.changeType === "ERROR" || i.changeType === "STOPPED") &&
+        hasCatalogWorkItem(i) &&
         i.workItem.workItemId === query.currentWorkItemId
     )
     if (idx >= 0) {
@@ -1006,28 +1145,34 @@ export async function fetchSupplierCatalogQueue(
       : undefined
 
   const currentWorkItemId =
-    current &&
-    (current.changeType === "ERROR" || current.changeType === "STOPPED")
+    current && hasCatalogWorkItem(current)
       ? current.workItem.workItemId
       : undefined
 
-  // skuContext：若从公司 SKU 入口进入，尝试加载 SKU
+  // skuContext：按稳定 skuId 精确加载，不能用第一页第一条猜测当前 SKU。
   let skuContext: SupplierCatalogQueueView["skuContext"]
   if (query.skuId) {
     try {
-      const skus = await apiGet<Page<BackendSkuListItem>>("/admin/skus", {
-        page: 1,
-        page_size: 1,
-      })
-      const hit = skus.items.find((s) => s.id === query.skuId) ?? skus.items[0]
-      if (hit && hit.id === query.skuId) {
+      const enrichment = await loadCompanySkuEnrichment([query.skuId])
+      const hit = enrichment.get(query.skuId)
+      if (hit) {
         skuContext = {
-          productId: hit.product_id,
-          productName: hit.sku_no,
-          skuId: hit.id,
-          skuCode: hit.sku_no,
-          specification: hit.specification_signature,
-          baseUnit: hit.base_unit_id,
+          productId: hit.productId,
+          productName: hit.skuName,
+          productKind: hit.productKind,
+          skuId: hit.skuId,
+          skuCode: hit.skuCode,
+          specification: hit.specification,
+          baseUnit: hit.baseUnit,
+          barcode: hit.barcode,
+          poolEntry: hit.poolEntryId && hit.poolEntryRevisionId && hit.salesVisiblePriceGross
+            ? {
+                poolEntryId: hit.poolEntryId,
+                poolEntryRevisionId: hit.poolEntryRevisionId,
+                status: "ACTIVE",
+                salesVisiblePriceGross: hit.salesVisiblePriceGross,
+              }
+            : undefined,
         }
       }
     } catch {
@@ -1117,17 +1262,17 @@ export async function fetchSupplierCatalogCenter(input: {
     if (latest) skuRevisions.set(entry.sku.id, latest)
   }
 
-  const [offeringPage, supplierName, companySkuById] = await Promise.all([
-    apiGet<Page<BackendOffering>>("/admin/supplier-catalog/offerings", {
+  const [offerings, workItems, publications, supplierName, companySkuById] =
+    await Promise.all([
+    fetchAllPages<BackendOffering>("/admin/supplier-catalog/offerings", {
       supplier_id: product.supplier_id,
-      page: 1,
-      page_size: 100,
-    }).catch(() => ({
-      items: [] as BackendOffering[],
-      total: 0,
-      page: 1,
-      page_size: 100,
-    })),
+    }).catch(() => [] as BackendOffering[]),
+    fetchAllPages<BackendWorkItem>("/admin/work-items", {
+      work_item_type: "BUSINESS_EXCEPTION",
+    }).catch(() => [] as BackendWorkItem[]),
+    fetchAllPages<BackendPublication>("/admin/product-publications").catch(
+      () => null
+    ),
     resolveSupplierName(product.supplier_id),
     loadCompanySkuEnrichment(
       detail.mappings
@@ -1141,7 +1286,9 @@ export async function fetchSupplierCatalogCenter(input: {
     skus,
     skuRevisions,
     detail.mappings,
-    offeringPage.items,
+    offerings,
+    workItems,
+    publications,
     supplierName,
     companySkuById
   )
@@ -1398,7 +1545,7 @@ export async function completeSupplierCatalogWorkItem(input: {
         supplierProductId: detail.business_object_id,
         supplierCatalogSkuId: detail.business_object_id,
         auditEventId: `complete_${input.workItemId}`,
-        publicationImpact: emptyPublicationImpact(),
+        publicationImpact: publicationImpact(),
         reference: input.workItemId,
         completedAt: new Date().toISOString(),
         subjectHash: detail.subject_version ?? detail.id,
@@ -1476,6 +1623,9 @@ export async function createSupplierCatalogItem(
     sku_ids: string[]
     intake_batch_id: string
     intake_item_id: string
+    mapping_id?: string | null
+    offering_id?: string | null
+    offering_revision_id?: string | null
     replayed: boolean
     reference: string
     recorded_at: number
@@ -1499,22 +1649,99 @@ export async function createSupplierCatalogItem(
     valid_from: input.validFrom || null,
     valid_to: null,
     skus,
+    target_supply: input.targetSkuId
+      ? {
+          sku_id: input.targetSkuId,
+          input_tax_rate: input.inputTaxRate,
+          supply_region: input.supplyRegion ?? [],
+        }
+      : null,
     idempotency_key: input.idempotencyKey,
   })
-
-  // 可选：若指定目标公司 SKU，创建映射
-  if (input.targetSkuId && result.sku_ids[0]) {
-    await apiPost("/admin/supplier-catalog/mappings", {
-      supplier_catalog_sku_id: result.sku_ids[0],
-      sku_id: input.targetSkuId,
-      reason: "create_with_target",
-    }).catch(() => undefined)
-  }
 
   return {
     supplierProductId: result.product_id,
     supplierCatalogSkuId: result.sku_ids[0],
-    poolEntryChange: "NONE",
+    supplierOfferingRevisionId: result.offering_revision_id ?? undefined,
+    poolEntryChange: result.mapping_id ? "CREATED" : "NONE",
+    reference: result.reference,
+    recordedAt: secsToIso(result.recorded_at),
+  }
+}
+
+/** 将浏览器预检结果作为一个正式 Excel 批次原子写入。 */
+export async function importSupplierCatalogExcel(
+  input: SupplierCatalogExcelImportInput
+): Promise<SupplierCatalogExcelImportResult> {
+  const result = await apiPost<{
+    intake_batch_id: string
+    product_ids: string[]
+    imported_count: number
+    rejected_count: number
+    replayed: boolean
+    reference: string
+    recorded_at: number
+  }>("/admin/supplier-catalog/imports/excel", {
+    supplier_id: input.supplierId,
+    source_reference: input.sourceReference,
+    file_asset_id: input.fileAssetId,
+    products: input.preview.products.map((product) => ({
+      supplier_spu_code: product.supplierSpuCode,
+      name: product.name,
+      description: product.description ?? null,
+      source_product_kind: product.sourceProductKind ?? null,
+      source_category: product.sourceCategory ?? null,
+      source_brand: product.sourceBrand ?? null,
+      structured_attributes: product.attributes.map((attribute) => ({
+        attribute_name: attribute.name,
+        attribute_value: attribute.value,
+      })),
+      media: product.media
+        .filter((media) => Boolean(media.sourceUrl))
+        .map((media) => ({
+          usage: media.usage,
+          url: media.sourceUrl,
+          file_asset_id: media.fileAssetId ?? null,
+        })),
+      source_revision_token: product.sourceRevisionToken ?? null,
+      valid_from: product.validFrom ?? null,
+      valid_to: product.validTo ?? null,
+      skus: product.skus.map((row) => ({
+        row_no: row.rowNo,
+        sku: {
+          supplier_catalog_sku_id: null,
+          supplier_sku_code: row.supplierSkuCode,
+          name: row.name,
+          specification: row.specification,
+          source_base_unit: row.sourceBaseUnit ?? null,
+          barcode: row.barcode ?? null,
+          source_main_image_url: row.mainImageUrl ?? null,
+          source_main_image_asset_id: null,
+          dropship_floor_price_gross: row.dropshipFloorPriceGross ?? null,
+          bulk_floor_price_gross: row.bulkFloorPriceGross ?? null,
+          bulk_minimum_order_quantity: row.bulkMinimumOrderQuantity ?? null,
+          available_quantity: row.availableQuantity ?? null,
+          availability_status: row.availabilityStatus,
+          structured_attributes: row.attributes.map((attribute) => ({
+            attribute_name: attribute.name,
+            attribute_value: attribute.value,
+          })),
+        },
+      })),
+    })),
+    rejected_rows: input.preview.rejectedRows.map((row) => ({
+      row_no: row.rowNo,
+      supplier_sku_code: row.supplierSkuCode,
+      error_text: row.errorText,
+    })),
+    idempotency_key: input.idempotencyKey,
+  })
+  return {
+    intakeBatchId: result.intake_batch_id,
+    productIds: result.product_ids,
+    importedCount: result.imported_count,
+    rejectedCount: result.rejected_count,
+    replayed: result.replayed,
     reference: result.reference,
     recordedAt: secsToIso(result.recorded_at),
   }
@@ -1549,6 +1776,7 @@ export async function reviseSupplierCatalogProduct(
       skus: input.skus.map((s) => {
         const mainImage = skuMainImageFromWrite(s)
         return {
+          supplier_catalog_sku_id: s.id ?? null,
           supplier_sku_code: s.supplierSkuCode,
           name: input.name,
           specification: s.specification ?? input.specification,
@@ -1580,6 +1808,37 @@ export async function reviseSupplierCatalogProduct(
     reference: result.reference,
     recordedAt: secsToIso(result.recorded_at),
   }
+}
+
+/** 为既有供给追加不可变修订，并由后端执行资质门禁与幂等校验。 */
+export async function reviseSupplierOffering(input: ReviseSupplierOfferingInput) {
+  return apiPost<{
+    offering_id: string
+    revision_no: number
+    status: "ACTIVE" | "PAUSED" | "STOPPED"
+    version: number
+    reference: string
+  }>(
+    `/admin/supplier-catalog/offerings/${encodeURIComponent(input.offeringId)}/revisions`,
+    {
+      expected_revision_no: input.expectedRevisionNo,
+      dropship_supply_price_gross: input.dropshipSupplyPriceGross,
+      bulk_supply_price_gross: input.bulkSupplyPriceGross,
+      input_tax_rate: input.inputTaxRate,
+      bulk_minimum_order_quantity: input.bulkMinimumOrderQuantity,
+      supply_region: input.supplyRegion,
+      product_capabilities: input.productCapabilities,
+      valid_from: input.validFrom,
+      valid_to: input.validTo ?? null,
+      dropship_express: input.dropshipExpress ?? null,
+      freight_amount: input.freightAmount ?? null,
+      service_fee_amount: input.serviceFeeAmount ?? null,
+      available_quantity: input.availableQuantity ?? null,
+      status: input.status,
+      change_reason: input.changeReason,
+      idempotency_key: input.idempotencyKey,
+    }
+  )
 }
 
 export async function promoteSupplierProductToPool(

@@ -11,8 +11,7 @@ use entities::supplier_catalog::SupplierCatalogSkuRevision;
 use mongodb::bson::{doc, Bson, Regex};
 
 use super::dto::{
-    CompanySkuMatchCandidateView, PoolMatchStatus, SupplierProductPoolMatchView,
-    SupplierSkuPoolMatchView,
+    CompanySkuMatchCandidateView, PoolMatchStatus, SupplierProductPoolMatchView, SupplierSkuPoolMatchView,
 };
 use super::SupplierCatalogService;
 use crate::errors::{Error, Result};
@@ -45,10 +44,7 @@ impl SupplierCatalogService {
             .await?
             .ok_or_else(|| Error::NotFound("供应商商品不存在".to_string()))?;
 
-        let source_revision_no = self
-            .current_product_revision_no(&product_id)
-            .await?
-            .unwrap_or(0);
+        let source_revision_no = self.current_product_revision_no(&product_id).await?.unwrap_or(0);
 
         let skus = self
             .db
@@ -61,10 +57,7 @@ impl SupplierCatalogService {
                 &mut NoTransaction,
             )
             .await?;
-        let sku_ids: Vec<SupplierCatalogSkuId> = skus
-            .iter()
-            .map(|sku| sku.base.id.clone().into())
-            .collect();
+        let sku_ids: Vec<SupplierCatalogSkuId> = skus.iter().map(|sku| sku.base.id.clone().into()).collect();
         let revisions = self.current_sku_revisions(&sku_ids).await?;
 
         let mut items = Vec::with_capacity(skus.len());
@@ -260,12 +253,7 @@ impl SupplierCatalogService {
         {
             let keys: Vec<String> = by_sku.keys().cloned().collect();
             for key in keys {
-                let Some(sku) = self
-                    .db
-                    .skus()
-                    .find_by_id(&key, &mut NoTransaction)
-                    .await?
-                else {
+                let Some(sku) = self.db.skus().find_by_id(&key, &mut NoTransaction).await? else {
                     continue;
                 };
                 if let Some(uom) = self
@@ -274,9 +262,7 @@ impl SupplierCatalogService {
                     .find_by_id(sku.base_unit_id.as_ref(), &mut NoTransaction)
                     .await?
                 {
-                    let unit_hit = uom.name == unit
-                        || uom.unit_code == unit
-                        || uom.symbol == unit;
+                    let unit_hit = uom.name == unit || uom.unit_code == unit || uom.symbol == unit;
                     if unit_hit {
                         if let Some(entry) = by_sku.get_mut(&key) {
                             if !entry.match_signals.iter().any(|s| s == "单位一致") {
@@ -302,10 +288,7 @@ impl SupplierCatalogService {
     ///
     /// # 错误
     /// 查询失败时返回错误。
-    async fn search_sku_revisions_by_text(
-        &self,
-        text: &str,
-    ) -> Result<Vec<entities::catalog::SkuRevision>> {
+    async fn search_sku_revisions_by_text(&self, text: &str) -> Result<Vec<entities::catalog::SkuRevision>> {
         let pattern = regex_escape(text);
         let filter = doc! {
             "deleted_at": Bson::Int64(0),

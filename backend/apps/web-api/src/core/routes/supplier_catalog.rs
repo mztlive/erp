@@ -33,6 +33,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/supplier-catalog/imports/excel",
+            with_permission(
+                post(supplier_catalog::supplier_catalog_excel_import),
+                rbac,
+                supplier_catalog::supplier_catalog_excel_import_permission_key(),
+            ),
+        )
+        .route(
             "/supplier-catalog/products",
             with_permission(
                 post(supplier_catalog::supplier_catalog_product_create),

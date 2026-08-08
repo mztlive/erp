@@ -9,8 +9,7 @@
 //! 逐条落地数据模型 §6.14「必需约束与索引」：
 //! - `(supplier_id, supplier_spu_code)` 唯一、`(supplier_catalog_product_id, revision_no)` 唯一、
 //!   同一修订 `(media_usage, sort_order)` 唯一；
-//! - `(supplier_id, supplier_sku_code)` 唯一（稳定 SKU 未建模 `supplier_id`，
-//!   落地为 `(supplier_catalog_product_id, supplier_sku_code)` 唯一，见下方说明）；
+//! - `(supplier_id, supplier_sku_code)` 唯一；旧 SKU 文档在建索引前按所属 SPU 回填供应商；
 //! - `(supplier_catalog_sku_id, revision_no)` 唯一；
 //! - `status + source_updated_at`、`availability_status + source_updated_at` 新鲜度索引
 //!   （SKU 修订两字段齐备；SPU 级 `status` 位于稳定表、`source_updated_at` 位于
@@ -26,6 +25,7 @@
 //! SPU/SKU/供给是身份类稳定表，唯一约束采用**全局唯一索引**（与 accounts 的
 //! code 处理一致）：软删除后仍保留身份编码，避免复用破坏来源追溯与恢复语义。
 
+use futures_util::StreamExt;
 use mongodb::{
     bson::{doc, Document},
     options::IndexOptions,
@@ -64,6 +64,9 @@ pub(crate) const SUPPLIER_OFFERINGS: &str = <mongodb::Database as SupplierCatalo
 /// `supplier_offering_revision` 集合名。
 pub(crate) const SUPPLIER_OFFERING_REVISIONS: &str =
     <mongodb::Database as SupplierCatalogExt>::SUPPLIER_OFFERING_REVISIONS;
+/// `supplier_catalog_command` 集合名。
+pub(crate) const SUPPLIER_CATALOG_COMMANDS: &str =
+    <mongodb::Database as SupplierCatalogExt>::SUPPLIER_CATALOG_COMMANDS;
 
 /// 创建本域集合的幂等命名索引。
 ///
@@ -88,6 +91,7 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
         supplier_catalog_product_revision_media_indexes(),
     )
     .await?;
+    backfill_supplier_id_on_skus(db).await?;
     create_indexes(db, SUPPLIER_CATALOG_SKUS, supplier_catalog_sku_indexes()).await?;
     create_indexes(
         db,
@@ -115,7 +119,42 @@ pub(crate) async fn ensure(db: &Database) -> Result<()> {
         supplier_offering_revision_indexes(),
     )
     .await?;
+    create_indexes(db, SUPPLIER_CATALOG_COMMANDS, supplier_catalog_command_indexes()).await?;
     Ok(())
+}
+
+/// 按所属 SPU 为历史供应商 SKU 回填 `supplier_id`，使供应商级唯一索引可覆盖旧数据。
+async fn backfill_supplier_id_on_skus(db: &Database) -> Result<()> {
+    let products = db.collection::<Document>(SUPPLIER_CATALOG_PRODUCTS);
+    let skus = db.collection::<Document>(SUPPLIER_CATALOG_SKUS);
+    let mut cursor = products
+        .find(doc! {})
+        .projection(doc! { "id": 1, "supplier_id": 1 })
+        .await?;
+    while let Some(product) = cursor.next().await {
+        let product = product?;
+        let (Ok(product_id), Ok(supplier_id)) = (product.get_str("id"), product.get_str("supplier_id"))
+        else {
+            continue;
+        };
+        skus.update_many(
+            doc! {
+                "supplier_catalog_product_id": product_id,
+                "supplier_id": { "$exists": false },
+            },
+            doc! { "$set": { "supplier_id": supplier_id } },
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+/// 返回供应商商品库写命令幂等键唯一索引。
+fn supplier_catalog_command_indexes() -> Vec<IndexModel> {
+    vec![unique_index(
+        "uk_supplier_catalog_commands_idempotency_key",
+        doc! { "idempotency_key": 1 },
+    )]
 }
 
 /// 为单个集合创建一组幂等命名索引。
@@ -165,14 +204,20 @@ fn supplier_catalog_product_revision_media_indexes() -> Vec<IndexModel> {
 
 /// 返回 `supplier_catalog_sku` 的身份约束与列表查询索引。
 ///
-/// §6.14 要求 `(supplier_id, supplier_sku_code)` 唯一；P1 冻结实体
-/// `SupplierCatalogSku` 未建模 `supplier_id`（供应商归属经 SPU 间接表达），
-/// 单集合唯一索引只能落地 `(supplier_catalog_product_id, supplier_sku_code)`
-/// （同 SPU 下 SKU 编码唯一）。供应商级「同一供应商内 SKU 编码唯一」是
-/// `(supplier_id, supplier_spu_code)` 唯一 + 本索引的联合弱约束：同供应商内
-/// 跨 SPU 复用 SKU 编码需 P3 聚合校验或地基修订补 `supplier_id`（见 P2 报告）。
+/// `(supplier_id, supplier_sku_code)` 全局唯一；额外保留所属 SPU 查询/约束索引。
+/// 部分条件只排除无法关联到 SPU 的历史孤儿文档；所有新实体都必须写入 `supplier_id`。
 fn supplier_catalog_sku_indexes() -> Vec<IndexModel> {
     vec![
+        IndexModel::builder()
+            .keys(doc! { "supplier_id": 1, "supplier_sku_code": 1 })
+            .options(
+                IndexOptions::builder()
+                    .name("uk_supplier_catalog_skus_supplier_code".to_string())
+                    .unique(true)
+                    .partial_filter_expression(doc! { "supplier_id": { "$type": "string" } })
+                    .build(),
+            )
+            .build(),
         unique_index(
             "uk_supplier_catalog_skus_product_code",
             doc! { "supplier_catalog_product_id": 1, "supplier_sku_code": 1 },
@@ -317,10 +362,18 @@ mod tests {
     use mongodb::bson::doc;
 
     use super::{
-        supplier_catalog_intake_batch_indexes, supplier_catalog_intake_item_indexes,
-        supplier_catalog_product_indexes, supplier_catalog_sku_indexes,
+        supplier_catalog_command_indexes, supplier_catalog_intake_batch_indexes,
+        supplier_catalog_intake_item_indexes, supplier_catalog_product_indexes, supplier_catalog_sku_indexes,
         supplier_catalog_sku_revision_indexes, supplier_offering_indexes, supplier_product_mapping_indexes,
     };
+
+    #[test]
+    fn command_idempotency_key_is_unique() {
+        let indexes = supplier_catalog_command_indexes();
+        let index = indexes.first().unwrap();
+        assert_eq!(index.keys, doc! { "idempotency_key": 1 });
+        assert_eq!(index.options.as_ref().unwrap().unique, Some(true));
+    }
 
     #[test]
     fn product_identity_is_globally_unique_per_supplier() {
@@ -342,21 +395,22 @@ mod tests {
     }
 
     #[test]
-    fn sku_identity_unique_per_product_and_freshness_index_exists() {
+    fn sku_identity_is_unique_per_supplier_and_freshness_index_exists() {
         let indexes = supplier_catalog_sku_indexes();
 
         let identity = indexes
             .iter()
             .find(|index| {
                 index.options.as_ref().and_then(|options| options.name.as_deref())
-                    == Some("uk_supplier_catalog_skus_product_code")
+                    == Some("uk_supplier_catalog_skus_supplier_code")
             })
             .unwrap();
-        assert_eq!(
-            identity.keys,
-            doc! { "supplier_catalog_product_id": 1, "supplier_sku_code": 1 }
-        );
+        assert_eq!(identity.keys, doc! { "supplier_id": 1, "supplier_sku_code": 1 });
         assert_eq!(identity.options.as_ref().unwrap().unique, Some(true));
+        assert_eq!(
+            identity.options.as_ref().unwrap().partial_filter_expression,
+            Some(doc! { "supplier_id": { "$type": "string" } })
+        );
 
         let revision_indexes = supplier_catalog_sku_revision_indexes();
         assert!(revision_indexes
