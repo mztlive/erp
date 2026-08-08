@@ -586,7 +586,7 @@ function SupplyRelationshipListView({
 
       <BusinessTableFrame
         title={skuId ? "当前 SKU 的供应商供给" : "供应商商品"}
-        description="来源报价先保留为供应商事实；采购确认后，成本写入供给版本，销售可见价写入公司商品池版本。"
+        description="来源报价先保留为供应商记录；采购确认后，成本写入供给条件，销售可见价写入公司商品池。"
         toolbar={
           <ListToolbar
             search={

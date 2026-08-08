@@ -160,7 +160,7 @@ function OfferingConditionCard({
       <CardHeader className="border-b border-border/30 py-3">
         <CardTitle className="text-base">供给条件</CardTitle>
         <CardDescription>
-          供应商当前对商品池的供给；销售只读取公司商品池价格，不读取这里的采购成本。
+          供应商当前对商品池的供给；销售使用公司商品池价格，不使用这里的采购成本。
         </CardDescription>
       </CardHeader>
       <CardContent className="pt-4">
@@ -362,7 +362,7 @@ function MediaListEditor({
           <div>
             <Label className="text-sm font-medium">{label}</Label>
             <p className="mt-1 text-xs text-muted-foreground">
-              {hint ?? "支持多选与排序；入池时仅已归档媒体会预填到公司商品"}
+              {hint ?? "支持多选与排序；入池时仅已登记的图片会预填到公司商品"}
             </p>
           </div>
           <Badge variant="secondary">{value.length} 张</Badge>
@@ -1296,7 +1296,7 @@ export function SupplierProductCenterPage({
                     </Badge>
                   </div>
                   <CardDescription>
-                    同构字段越完整，入池匹配与人工核对越省事。
+                    资料信息越完整，入池匹配与人工核对越省事。
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1492,7 +1492,7 @@ export function SupplierProductCenterPage({
                           supplierSpuCode: event.target.value,
                         }))
                       }
-                      placeholder="可空；空时由 ERP 生成来源内稳定代码"
+                      placeholder="可空；留空时由系统自动生成编码"
                     />
                   </div>
                   <div className="space-y-1.5">
@@ -2089,7 +2089,7 @@ export function SupplierProductCenterPage({
                       offering={item.offering.currentRevision}
                     />
                   ) : null}
-                  <Card size="sm" className={surfacePanelClassName}>
+                  {/* <Card size="sm" className={surfacePanelClassName}>
                     <CardHeader className="border-b border-border/30 py-3">
                       <CardTitle className="text-base">映射与商品池</CardTitle>
                       <CardDescription>
@@ -2164,7 +2164,7 @@ export function SupplierProductCenterPage({
                         </Button>
                       ) : null}
                     </CardContent>
-                  </Card>
+                  </Card> */}
                 </section>
               ) : null}
             </div>

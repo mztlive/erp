@@ -510,8 +510,8 @@ function publicationImpact(
     moqCopiedToMallMinPurchase: false as const,
     note: companySkuId
       ? publications
-        ? "发布状态按当前公司 SKU 实时聚合；历史已支付订单由订单域保留，不在本读取中推断。"
-        : "当前账号无法读取商品发布聚合。"
+        ? "发布状态按当前公司 SKU 实时汇总；历史已支付订单仅作记录保留。"
+        : "当前账号暂时无法获取商品发布信息。"
       : "供应商 SKU 尚未关联公司 SKU，不产生商城发布影响。",
   }
 }
@@ -937,7 +937,7 @@ function projectProductToItem(
         registrationBlocker: {
           code: "WORK_ITEM_TYPE_UNREGISTERED",
           message:
-            "异常或停供记录尚未派发正式待办，领取、暂挂和完成动作不可用。",
+            "异常或停供记录尚未生成待办，领取、稍后处理和完成操作暂不可用。",
           businessProcess: "OFFERING_REVIEW",
         },
       }
@@ -1472,7 +1472,7 @@ export async function applySupplierCatalogWorkItemAction(input: {
       status: "failed",
       code: "BACKEND_GAP",
       message:
-        "该目录条目尚未注册为 work_item；无法执行任务内动作。请先由异常派发流程创建待办。",
+        "该供应商商品尚未生成待办，暂时无法执行处理操作。请先创建待办后再处理。",
     }
   }
 
@@ -1496,7 +1496,7 @@ export async function applySupplierCatalogWorkItemAction(input: {
         workItemStatus: "IN_PROGRESS",
         actionKind: "HOLD",
         heldAt: new Date().toISOString(),
-        resumeHint: "暂挂后可在统一任务队列恢复处理",
+        resumeHint: "稍后处理后，可在待办队列中继续处理",
         reference: input.workItemId,
       },
     }
@@ -1532,7 +1532,7 @@ export async function applySupplierCatalogWorkItemAction(input: {
       workItemId: input.workItemId,
       workItemStatus: "IN_PROGRESS",
       actionKind: input.action.kind,
-      resumeHint: "动作已记录",
+      resumeHint: "处理已记录",
       reference: input.workItemId,
     },
   }
@@ -1548,7 +1548,7 @@ export async function completeSupplierCatalogWorkItem(input: {
       status: "failed",
       code: "BACKEND_GAP",
       message:
-        "该目录条目尚未注册为 work_item；完成动作不可用。异常/停供确认需先有正式待办。",
+        "该供应商商品尚未生成待办，暂时无法完成处理。异常与停供确认需先有待办。",
     }
   }
 

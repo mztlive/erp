@@ -283,7 +283,7 @@ export function SupplierCatalogIntakeDialog({
       setExcelSourceReference(asset.fileAssetId)
       setExcelCommandKey(idempotencyKey("supplier-catalog-excel"))
     } catch (error) {
-      setExcelError(errorMessage(error, "Excel 解析或文件登记失败"))
+      setExcelError(errorMessage(error, "Excel 文件解析或上传失败"))
     } finally {
       setExcelPreparing(false)
     }
@@ -544,7 +544,7 @@ export function SupplierCatalogIntakeDialog({
                     0
                   )}{" "}
                   行 / {excelPreview.products.length} 个 SPU；错误{" "}
-                  {excelPreview.rejectedRows.length} 行。确认后合法行与错误清单一起形成正式批次。
+                  {excelPreview.rejectedRows.length} 行。确认后，合法行与错误清单将一起完成导入。
                 </p>
               </div>
               {excelPreview.rejectedRows.length > 0 ? (
@@ -578,7 +578,7 @@ export function SupplierCatalogIntakeDialog({
                   multiple={false}
                   disabled={sourceMediaUploading}
                   label="来源 SKU 主图"
-                  description={field.state.value || "可空；首次建品时若仍缺主图，必须补齐后才能保存"}
+                  description={field.state.value || "可空；首次创建公司商品时若仍缺主图，必须补齐后才能保存"}
                   onFilesSelected={(files) => {
                     void uploadSourceFiles("SKU_MAIN", files.slice(0, 1)).then(
                       (names) => {
@@ -891,7 +891,7 @@ export function RegisterSupplyForSkuDialog({
               {(field) => (
                 <field.TextField
                   label="一件代发供给价（含税运）*"
-                  description="同时保存为供应商目录底价和首版正式供给价"
+                  description="同时保存为供应商目录底价和首版供给价"
                 />
               )}
             </form.AppField>
@@ -899,7 +899,7 @@ export function RegisterSupplyForSkuDialog({
               {(field) => (
                 <field.TextField
                   label="集采供给价（含税）*"
-                  description="同时保存为供应商目录底价和首版正式供给价"
+                  description="同时保存为供应商目录底价和首版供给价"
                 />
               )}
             </form.AppField>

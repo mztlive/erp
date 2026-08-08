@@ -730,8 +730,8 @@ export const HOLD_REASON_OPTIONS = [
 
 export const RETURN_REASON_OPTIONS = [
   { value: "SOURCE_DATA_ERROR", label: "来源数据错误" },
-  { value: "PAYLOAD_INVALID", label: "结构/字段无效" },
-  { value: "SYNC_CORRUPT", label: "同步损坏" },
+  { value: "PAYLOAD_INVALID", label: "数据格式有误" },
+  { value: "SYNC_CORRUPT", label: "同步数据有误" },
   { value: "OTHER", label: "其他" },
 ] as const
 
@@ -739,4 +739,4 @@ export const REGISTRATION_BLOCKER_MESSAGE =
   "来源商品变化仍需采购复核；采购可以直接把新供应商商品加入公司商品池，异常数据必须先修复。"
 
 export const RECOVERY_BLOCKER_MESSAGE =
-  "替代供给选定人与恢复发布责任链尚未确认。系统按保守策略处理：可准备候选证据，但不得选定替代供给或从供应商商品库发起商品发布恢复。"
+  "尚未确定由谁选择替代供应商、由谁恢复发布。当前可准备候选方案，但不能选定替代供应商或恢复商城销售。"

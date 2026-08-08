@@ -271,7 +271,7 @@ export async function parseSupplierCatalogExcel(
       errors.push("供应商 SKU 编码在文件内重复")
     }
     if (productKind && !PRODUCT_KIND_VALUES.includes(productKind as ProductKind)) {
-      errors.push("商品类型必须为 PHYSICAL/VIRTUAL/OFFLINE_SERVICE/VOUCHER")
+      errors.push("商品类型填写有误（请填：实物/虚拟/服务/卡券）")
     }
     if (!isMoney(dropship)) errors.push("一件代发底价格式错误")
     if (!isMoney(bulk)) errors.push("集采底价格式错误")
@@ -279,7 +279,7 @@ export async function parseSupplierCatalogExcel(
     if (!isQuantity(available)) errors.push("可供数量格式错误")
     if (!isDate(validFrom) || !isDate(validTo)) errors.push("有效期必须为 YYYY-MM-DD")
     if (!["AVAILABLE", "UNAVAILABLE", "STOPPED", "STALE"].includes(availabilityStatus)) {
-      errors.push("可供状态非法")
+      errors.push("可供状态填写有误（请填：可供/不可供/已停供/信息待更新）")
     }
 
     const existing = products.get(supplierSpuCode)

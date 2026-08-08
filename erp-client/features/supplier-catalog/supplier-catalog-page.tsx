@@ -1067,7 +1067,7 @@ export function SupplierCatalogPage() {
         <div className="flex flex-wrap items-center gap-2">
           <div
             role="group"
-            aria-label="队列范围"
+            aria-label="待办范围"
             className="inline-flex rounded-lg bg-muted p-0.5 ring-1 ring-foreground/10"
           >
             <button
@@ -1229,7 +1229,7 @@ export function SupplierCatalogPage() {
                 : lastResult.outcome?.kind === "ACTION"
                   ? [
                       {
-                        label: "动作",
+                        label: "本次处理",
                         value: actionLabel(lastResult.outcome.actionKind),
                       },
                       {
@@ -1339,7 +1339,7 @@ export function SupplierCatalogPage() {
         ) : (
           <BusinessEmptyState
             kind="no-tasks"
-            title="当前队列已处理完"
+            title="当前待办已处理完"
             description="可切换变化类型或稍后处理范围，也可以返回工作台。"
             className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
             action={
@@ -1491,9 +1491,9 @@ export function SupplierCatalogPage() {
                   {item.publicationImpact.safetyPauseReasons
                     .map(safetyReasonLabel)
                     .join("、")} ·
-                  已暂停发布 {item.publicationImpact.pausedPublicationCount ?? "未聚合"} ·
-                  历史已支付{" "}
-                  {item.publicationImpact.historicalPaidOrderCount ?? "未聚合"} 笔历史记录保留
+                      已暂停发布 {item.publicationImpact.pausedPublicationCount ?? "待统计"} ·
+                      历史已支付订单{" "}
+                      {item.publicationImpact.historicalPaidOrderCount ?? "待统计"} 笔仅作记录保留
                 </p>
                 {item.publicationImpact.recoveryBlocker ? (
                   <p className="font-medium">
@@ -1644,7 +1644,7 @@ export function SupplierCatalogPage() {
                                 : "详情图"}
                             ：{media.fileName}
                             {media.archiveStatus !== "ARCHIVED"
-                              ? "（待归档）"
+                              ? "（待登记）"
                               : ""}
                           </Badge>
                         ))}
@@ -1716,14 +1716,14 @@ export function SupplierCatalogPage() {
                 <CardContent className="space-y-2 pt-4 text-sm">
                   <ul className="list-inside list-disc space-y-1 text-muted-foreground">
                     <li>
-                      在售 {item.publicationImpact.activePublicationCount ?? "未聚合"} ·
-                      已暂停 {item.publicationImpact.pausedPublicationCount ?? "未聚合"}
+                      在售 {item.publicationImpact.activePublicationCount ?? "待统计"} ·
+                      已暂停 {item.publicationImpact.pausedPublicationCount ?? "待统计"}
                     </li>
                     <li>
                       历史已支付订单{" "}
                       {item.publicationImpact.historicalPaidOrderCount == null
-                        ? "未聚合"
-                        : `${item.publicationImpact.historicalPaidOrderCount} 笔（记录只读）`}
+                        ? "待统计"
+                        : `${item.publicationImpact.historicalPaidOrderCount} 笔（仅保留记录）`}
                     </li>
                   </ul>
                   {item.publicationImpact.pauseSubResults.map((p) => (
@@ -1995,7 +1995,7 @@ export function SupplierCatalogPage() {
                       替代供应商候选
                     </CardTitle>
                     <CardDescription>
-                      当前仅可准备候选证据，暂不能选定替代供给
+                      当前仅可准备候选方案，暂不能选定替代供应商
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-2 pt-4">
