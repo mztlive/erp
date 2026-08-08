@@ -26,6 +26,15 @@ function taxRateLabel(value: string) {
   }).format(rate * 100)}%`
 }
 
+/** 过滤历史数据中误写入规格字段的内部标识，只向采购展示业务规格。 */
+function businessSpecification(line: SubmissionLineView) {
+  const value = line.specification?.trim()
+  if (!value || value === line.itemSku || /^[a-f\d]{24,}$/i.test(value)) {
+    return "未填写规格"
+  }
+  return value
+}
+
 /** 采购确认使用的不可变销售提交单据投影。 */
 export function ProcurementSalesDocument({
   task,
@@ -130,7 +139,7 @@ export function ProcurementSalesDocument({
             <div>
               <p className="font-medium">{line.itemName}</p>
               <p className="mt-1 text-xs text-muted-foreground">
-                {line.specification ?? "未填写规格"}
+                {businessSpecification(line)}
               </p>
             </div>
           ),

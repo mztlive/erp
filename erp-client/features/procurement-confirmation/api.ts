@@ -237,7 +237,10 @@ export type ProcurementSupplyOption = {
   costGross: string
   bulkCostGross: string
   dropshipCostGross: string
+  bulkMinimumOrderQuantity: string
   inputTaxRate: string
+  freightAmount: string
+  serviceFeeAmount: string
   capabilities: Array<{
     revisionId: string
     label: string
@@ -637,7 +640,11 @@ export const fetchProcurementSupplyOptions = async (
       "",
     bulkCostGross: offering.bulk_supply_price_gross ?? "",
     dropshipCostGross: offering.dropship_supply_price_gross ?? "",
+    bulkMinimumOrderQuantity:
+      offering.bulk_minimum_order_quantity ?? "1",
     inputTaxRate: offering.input_tax_rate ?? "",
+    freightAmount: offering.freight_amount ?? "0",
+    serviceFeeAmount: offering.service_fee_amount ?? "0",
     capabilities: capabilitiesBySupplier.get(offering.supplier_id) ?? [],
   }))
 }

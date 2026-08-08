@@ -980,15 +980,23 @@ impl SalesReviewService {
         let today = BusinessDate::today();
         let zero = Quantity::from_str("0").expect("静态零值必须合法");
         let mut quantities_by_revision: HashMap<String, (Option<Quantity>, Quantity)> = HashMap::new();
+        let mut resolved = Vec::with_capacity(lines.len());
         for line in lines {
             let (offering, revision) = self.current_confirmation_offering(line).await?;
             ensure_confirmation_line_sku(line, &offering, submission_lines)?;
-            ensure_confirmation_line_terms(line, &revision, submission_lines, today)?;
-            self.ensure_confirmation_capability(line, today).await?;
             let total = quantities_by_revision
                 .entry(revision.base.id.clone())
                 .or_insert((revision.available_quantity, zero));
             total.1 = Quantity::try_from(total.1.to_decimal() + line.confirmed_quantity.to_decimal())?;
+            resolved.push((line, revision));
+        }
+        for (line, revision) in resolved {
+            let procurement_quantity = quantities_by_revision
+                .get(&revision.base.id)
+                .map(|(_, quantity)| *quantity)
+                .ok_or_else(|| Error::BusinessLogicError("采购数量汇总结果缺失".to_string()))?;
+            ensure_confirmation_line_terms(line, &revision, procurement_quantity, submission_lines, today)?;
+            self.ensure_confirmation_capability(line, today).await?;
         }
         ensure_confirmation_capacity(&quantities_by_revision)?;
         Ok(())
@@ -1914,10 +1922,11 @@ fn ensure_confirmation_line_sku(
     )))
 }
 
-/// 校验确认行价格、税率、可供状态、有效期、MOQ 与销售承诺交期。
+/// 校验确认行价格、税率、可供状态、有效期与销售承诺交期。
 fn ensure_confirmation_line_terms(
     line: &ProcurementConfirmationLine,
     revision: &SupplierOfferingRevision,
+    procurement_quantity: Quantity,
     submission_lines: &[SalesOrderSubmissionLine],
     today: BusinessDate,
 ) -> Result<()> {
@@ -1930,26 +1939,15 @@ fn ensure_confirmation_line_terms(
             line.line_no
         )));
     }
-    let expected_price = match line.fulfillment_mode {
-        entities::sales_review::types::FulfillmentMode::CompanyWarehouse => revision.bulk_supply_price_gross,
-        entities::sales_review::types::FulfillmentMode::SupplierDirect
-        | entities::sales_review::types::FulfillmentMode::ElectronicDelivery
-        | entities::sales_review::types::FulfillmentMode::OfflineService => {
-            revision.dropship_supply_price_gross
-        }
+    let expected_price = if procurement_quantity >= revision.bulk_minimum_order_quantity {
+        revision.bulk_supply_price_gross
+    } else {
+        revision.dropship_supply_price_gross
     };
     if line.latest_cost_gross != expected_price || line.input_tax_rate != revision.input_tax_rate {
         return Err(Error::ValidationError(format!(
             "采购确认第 {} 行价格或税率已变化，请重新计算方案",
             line.line_no
-        )));
-    }
-    if line.fulfillment_mode == entities::sales_review::types::FulfillmentMode::CompanyWarehouse
-        && line.confirmed_quantity < revision.bulk_minimum_order_quantity
-    {
-        return Err(Error::ValidationError(format!(
-            "采购确认第 {} 行未达到集采起订量 {}",
-            line.line_no, revision.bulk_minimum_order_quantity
         )));
     }
     let submission_line = submission_lines

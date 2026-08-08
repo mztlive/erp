@@ -8,11 +8,9 @@ import {
   CheckIcon,
   CircleCheckIcon,
   FileSearchIcon,
-  PauseIcon,
   PlusIcon,
   SearchIcon,
   TriangleAlertIcon,
-  XIcon,
 } from "lucide-react"
 import { z } from "zod"
 
@@ -21,13 +19,11 @@ import {
   BusinessFailureState,
   BusinessStatusBadge,
   DataFreshness,
-  FormalActionConfirmDialog,
   FormalActionResult,
   ListToolbar,
   OptionCombobox,
   PageHeader,
   PageScaffold,
-  SequentialProcessBar,
   surfaceInsetClassName,
   surfacePanelClassName,
   ValidationSummary,
@@ -113,11 +109,11 @@ function capabilityCodeForMode(mode: FulfillmentMode) {
   return "physical"
 }
 
-function supplyCostForMode(
+function supplyCostForQuantity(
   option: ProcurementSupplyOption,
-  mode: FulfillmentMode
+  quantity: string
 ) {
-  return mode === "WAREHOUSE"
+  return Number(quantity) >= Number(option.bulkMinimumOrderQuantity)
     ? option.bulkCostGross
     : option.dropshipCostGross
 }
@@ -194,6 +190,8 @@ export function ProcurementConfirmationPage() {
     [scope, due, sort, orderNo, currentWorkItemId, queueContextId]
   )
 
+  const [confirmOpen, setConfirmOpen] = React.useState(false)
+
   const queueQuery = useProcurementConfirmationQuery(filters)
   const claimMutation = useClaimProcurementMutation()
   const saveMutation = useSaveProcurementConfirmationMutation()
@@ -209,7 +207,8 @@ export function ProcurementConfirmationPage() {
     view?.current ??
     tasks[0]
   const recommendationQuery = useProcurementRecommendationQuery(
-    task?.confirmation.confirmationId ?? ""
+    task?.confirmation.confirmationId ?? "",
+    confirmOpen
   )
   const recommendation = recommendationQuery.data
   const contractQuery = useContractCenterQuery(
@@ -236,7 +235,7 @@ export function ProcurementConfirmationPage() {
     []
   )
   const [dirty, setDirty] = React.useState(false)
-  const [confirmOpen, setConfirmOpen] = React.useState(false)
+  const [loadedPlanKey, setLoadedPlanKey] = React.useState<string | null>(null)
   const [rejectOpen, setRejectOpen] = React.useState(false)
   const [contractOpen, setContractOpen] = React.useState(false)
   const [advanceAfterConfirm, setAdvanceAfterConfirm] = React.useState(true)
@@ -259,30 +258,25 @@ export function ProcurementConfirmationPage() {
     if (!task) {
       setLineDrafts([])
       setDirty(false)
+      setLoadedPlanKey(null)
       return
     }
     setLineDrafts(task.confirmation.lines.map((line) => ({ ...line })))
     setDirty(false)
+    setLoadedPlanKey(null)
     setActionError(null)
     setSaveMessage(null)
   }, [task])
 
-  // 尚无人工保存分行时，以服务端可执行最低成本方案初始化草稿。
+  // 只有采购点击“确认通过”后才把最低成本方案装入可编辑草稿；关闭再打开时保留本次调整。
   React.useEffect(() => {
-    if (
-      !task ||
-      task.confirmation.lines.length > 0 ||
-      lineDrafts.length > 0 ||
-      dirty ||
-      !recommendation?.ready ||
-      recommendation.lines.length === 0
-    ) {
-      return
-    }
+    if (!confirmOpen || !task || !recommendation?.ready || dirty) return
+    const planKey = `${task.confirmation.confirmationId}:${recommendation.calculatedAt}`
+    if (loadedPlanKey === planKey) return
     setLineDrafts(recommendation.lines.map((line) => ({ ...line })))
-    setDirty(true)
-    setSaveMessage("已载入系统最低成本方案，请核对交期后保存")
-  }, [dirty, lineDrafts.length, recommendation, task])
+    setLoadedPlanKey(planKey)
+    setSaveMessage(null)
+  }, [confirmOpen, dirty, loadedPlanKey, recommendation, task])
 
   // 选项异步到达时仅回填展示名称，不覆盖用户已编辑的草稿字段。
   React.useEffect(() => {
@@ -513,6 +507,39 @@ export function ProcurementConfirmationPage() {
 
   const estimatedPurchase = recommendation?.estimatedPurchaseGross
 
+  const currentPlanSummary = React.useMemo(() => {
+    let purchaseGross = 0
+    const chargedGroups = new Set<string>()
+    const orderGroups = new Set<string>()
+    for (const line of lineDrafts) {
+      const quantity = Number(line.confirmedQuantity || 0)
+      const unitCost = Number(line.latestCostGross || 0)
+      if (Number.isFinite(quantity) && Number.isFinite(unitCost)) {
+        purchaseGross += quantity * unitCost
+      }
+      if (!line.offeringRevisionId || !line.supplierId) continue
+      const feeGroup = `${line.offeringRevisionId}:${line.fulfillmentMode}`
+      orderGroups.add(`${line.supplierId}:${line.fulfillmentMode}`)
+      if (chargedGroups.has(feeGroup)) continue
+      chargedGroups.add(feeGroup)
+      const offering = supplyOptions.find(
+        (option) =>
+          option.offeringRevisionId === line.offeringRevisionId
+      )
+      if (!offering) continue
+      purchaseGross += Number(offering.serviceFeeAmount || 0)
+      if (line.fulfillmentMode === "WAREHOUSE") {
+        purchaseGross += Number(offering.freightAmount || 0)
+      }
+    }
+    return {
+      purchaseGross,
+      grossMargin:
+        Number(task?.salesSubmission.grossAmount ?? 0) - purchaseGross,
+      orderCount: orderGroups.size,
+    }
+  }, [lineDrafts, supplyOptions, task?.salesSubmission.grossAmount])
+
   const updateLine = React.useCallback(
     (lineKey: string, patch: Partial<ConfirmationLineDraft>) => {
       setLineDrafts((prev) =>
@@ -521,6 +548,49 @@ export function ProcurementConfirmationPage() {
       setDirty(true)
     },
     []
+  )
+
+  const repriceDrafts = React.useCallback(
+    (drafts: ConfirmationLineDraft[]) => {
+      const quantityByOffering = new Map<string, number>()
+      for (const line of drafts) {
+        if (!line.offeringRevisionId) continue
+        quantityByOffering.set(
+          line.offeringRevisionId,
+          (quantityByOffering.get(line.offeringRevisionId) ?? 0) +
+            Number(line.confirmedQuantity || 0)
+        )
+      }
+      return drafts.map((line) => {
+        const offering = supplyOptions.find(
+          (option) =>
+            option.offeringRevisionId === line.offeringRevisionId
+        )
+        if (!offering) return line
+        return {
+          ...line,
+          latestCostGross: supplyCostForQuantity(
+            offering,
+            String(quantityByOffering.get(line.offeringRevisionId) ?? 0)
+          ),
+        }
+      })
+    },
+    [supplyOptions]
+  )
+
+  const updatePlanLine = React.useCallback(
+    (lineKey: string, patch: Partial<ConfirmationLineDraft>) => {
+      setLineDrafts((current) =>
+        repriceDrafts(
+          current.map((line) =>
+            line.lineKey === lineKey ? { ...line, ...patch } : line
+          )
+        )
+      )
+      setDirty(true)
+    },
+    [repriceDrafts]
   )
 
   const applyRecommendation = React.useCallback(() => {
@@ -544,7 +614,7 @@ export function ProcurementConfirmationPage() {
           )
           return {
             value: option.offeringRevisionId,
-            label: `${supplier?.supplierName ?? "供应商"} · 第 ${option.offeringRevisionNo} 版供给`,
+            label: `${supplier?.supplierName ?? "供应商"} · 一件代发 ${money.format(Number(option.dropshipCostGross))} / 集采 ${money.format(Number(option.bulkCostGross))}（满 ${option.bulkMinimumOrderQuantity}）`,
           }
         }),
     [supplierOptions, supplyOptions]
@@ -578,7 +648,7 @@ export function ProcurementConfirmationPage() {
       ).filter(
         (mode) =>
           !offering ||
-          (supplyCostForMode(offering, mode).length > 0 &&
+          (supplyCostForQuantity(offering, "1").length > 0 &&
             offering.capabilities.some(
               (capability) =>
                 capability.capabilityCode === capabilityCodeForMode(mode)
@@ -666,7 +736,7 @@ export function ProcurementConfirmationPage() {
   const handleSave = React.useCallback(async (): Promise<boolean> => {
     if (!task) return false
     if (!linesValid) {
-      setActionError("请先补齐供应商、数量、成本、税率、交期和有效能力后再保存")
+      setActionError("请先补齐供应商、数量、成本、税率、交期和供应资质后再保存")
       return false
     }
     try {
@@ -720,10 +790,26 @@ export function ProcurementConfirmationPage() {
 
   const handleApprove = React.useCallback(async () => {
     if (!task) return
+    if (!recommendation?.ready || recommendation.lines.length === 0) {
+      setActionError("当前采购方案还不能执行，请先处理方案中的问题")
+      return
+    }
+    if (!allCovered) {
+      setActionError("请先补齐每项商品的供应商、采购数量、交期和供应资质")
+      return
+    }
     setActionError(null)
     try {
       await ensureLease()
-      // guard 自动保存后编辑版本可能已 +1：终局提交前重读任务
+      await saveMutation.mutateAsync({
+        workItemId: task.workItemId,
+        confirmationId: task.confirmation.confirmationId,
+        submissionId: task.salesSubmission.submissionId,
+        expectedEditVersion: task.confirmation.editVersion,
+        lines: lineDrafts,
+      })
+      setDirty(false)
+      // 方案落库后编辑版本已变化：生成采购单前重读当前任务。
       const latestTask =
         (await queueQuery.refetch()).data?.tasks.find(
           (t) => t.workItemId === task.workItemId
@@ -750,13 +836,14 @@ export function ProcurementConfirmationPage() {
 
       const outcome = response.outcome
       if (outcome.kind !== "APPROVED_AND_SALES_EFFECTIVE") return
+      setConfirmOpen(false)
       setSessionLease(null)
       const approvedResult: ResultState = {
         status: "succeeded",
-        title: "采购确认已通过 · 采购单草稿已生成",
+        title: "采购确认已通过 · 采购单已生成",
         description: advanceAfterConfirm && autoNext
-          ? `销售单已生效，已生成 ${outcome.purchaseOrders.length} 张采购单草稿；队列将打开下一条。`
-          : `销售单已生效，已生成 ${outcome.purchaseOrders.length} 张采购单草稿，可直接核对后提交。`,
+          ? `销售单已生效，已生成 ${outcome.purchaseOrders.length} 张采购单；队列将打开下一条。`
+          : `销售单已生效，已生成 ${outcome.purchaseOrders.length} 张采购单，可直接核对后提交。`,
         reference: outcome.reference,
         outcome,
         stayOnItem: !(advanceAfterConfirm && autoNext),
@@ -774,10 +861,14 @@ export function ProcurementConfirmationPage() {
   }, [
     advanceAfterConfirm,
     advanceIfNeeded,
+    allCovered,
     autoNext,
     completeMutation,
     ensureLease,
+    lineDrafts,
     queueQuery,
+    recommendation,
+    saveMutation,
     task,
   ])
 
@@ -921,12 +1012,9 @@ export function ProcurementConfirmationPage() {
         !inField
       ) {
         event.preventDefault()
-        if (allCovered && activeLease) {
-          void (async () => {
-            if (!(await guardTerminalOpen())) return
-            setAdvanceAfterConfirm(autoNext)
-            setConfirmOpen(true)
-          })()
+        if (activeLease) {
+          setAdvanceAfterConfirm(autoNext)
+          setConfirmOpen(true)
         }
         return
       }
@@ -959,11 +1047,9 @@ export function ProcurementConfirmationPage() {
     return () => window.removeEventListener("keydown", onKey)
   }, [
     activeLease,
-    allCovered,
     autoNext,
     dirty,
     goToWorkItem,
-    guardTerminalOpen,
     handleSave,
     neighborId,
     orderNoInputRef,
@@ -980,20 +1066,9 @@ export function ProcurementConfirmationPage() {
 
   const formalPending =
     completeMutation.isPending ||
+    saveMutation.isPending ||
     deferMutation.isPending ||
     claimMutation.isPending
-
-  const leaseStatus = !task
-    ? "unclaimed"
-    : activeLease
-      ? "active"
-      : "unclaimed"
-
-  const leaseLabel = activeLease
-    ? "已领取 · 处理中"
-    : claimMutation.isPending
-      ? "正在取得处理权…"
-      : "待领取"
 
   const returnTo = buildReturnHref(
     new URLSearchParams(searchParams.toString())
@@ -1351,40 +1426,6 @@ export function ProcurementConfirmationPage() {
         )
       ) : task ? (
         <>
-          <SequentialProcessBar
-            current={context?.position ?? currentIndex + 1}
-            total={context?.total ?? tasks.length}
-            leaseStatus={leaseStatus}
-            leaseStatusLabel={leaseLabel}
-            processLabel="确认并生成采购单"
-            processNextLabel="生成后打开下一条"
-            processDisabled={formalPending || !allCovered || !activeLease}
-            pending={formalPending}
-            backLabel="返回工作台"
-            onBack={() => router.push("/workspace")}
-            onProcess={() => {
-              void (async () => {
-                if (!(await guardTerminalOpen())) return
-                setAdvanceAfterConfirm(autoNext)
-                setConfirmOpen(true)
-              })()
-            }}
-            onProcessNext={() => {
-              void (async () => {
-                if (!(await guardTerminalOpen())) return
-                setAdvanceAfterConfirm(true)
-                setConfirmOpen(true)
-              })()
-            }}
-            onReclaim={() => {
-              void ensureLease().catch((error) => {
-                setActionError(
-                  error instanceof Error ? error.message : "领取失败"
-                )
-              })
-            }}
-          />
-
           {/* 1440 双栏：左销售提交+分行，右决策摘要 sticky */}
           <div className="grid min-w-0 gap-3 md:gap-4 xl:grid-cols-[minmax(0,66fr)_minmax(17rem,34fr)]">
             <div className={`min-w-0 space-y-4 p-3 md:p-4 ${surfacePanelClassName}`}>
@@ -1419,12 +1460,11 @@ export function ProcurementConfirmationPage() {
                 }
               />
 
-              <Card className="min-w-0" size="sm">
+              <Card className="hidden min-w-0" size="sm">
                 <CardHeader className="border-b">
                   <div className="flex flex-wrap items-center gap-2">
                     <CardTitle>
                       <h2
-                        ref={headingRef}
                         tabIndex={-1}
                         className="outline-none"
                         aria-live="polite"
@@ -1506,10 +1546,10 @@ export function ProcurementConfirmationPage() {
                         id="confirm-lines-title"
                         className="text-sm font-semibold"
                       >
-                        采购确认分行
+                        采购明细
                       </h3>
                       <span className="text-xs text-muted-foreground">
-                      可按供应商拆分确认分行；覆盖按明细独立核算
+                      同一商品可向多个供应商采购；每条销售明细分别核对数量
                       </span>
                     </div>
 
@@ -1567,7 +1607,7 @@ export function ProcurementConfirmationPage() {
                             <div className="overflow-x-auto">
                               <table className="w-full min-w-[40rem] text-sm">
                                 <caption className="sr-only">
-                                  {subLine.itemName} 确认分行
+                                  {subLine.itemName} 采购明细
                                 </caption>
                                 <thead>
                                   <tr className="border-b border-border text-left text-xs text-muted-foreground">
@@ -1587,10 +1627,10 @@ export function ProcurementConfirmationPage() {
                                       预计交期
                                     </th>
                                     <th className="px-3 py-2 font-medium">
-                                      履约方式
+                                      交付方式
                                     </th>
                                     <th className="hidden px-3 py-2 font-medium lg:table-cell">
-                                      能力版本
+                                      供应资质
                                     </th>
                                     <th className="px-3 py-2 font-medium text-right">
                                       操作
@@ -1645,9 +1685,9 @@ export function ProcurementConfirmationPage() {
                                                 offering?.offeringRevisionId ?? "",
                                               latestCostGross:
                                                 offering
-                                                  ? supplyCostForMode(
+                                                  ? supplyCostForQuantity(
                                                       offering,
-                                                      line.fulfillmentMode
+                                                      line.confirmedQuantity
                                                     )
                                                   : "",
                                               inputTaxRate:
@@ -1656,7 +1696,7 @@ export function ProcurementConfirmationPage() {
                                                 onlyCapability?.revisionId ?? "",
                                               capabilitySummary:
                                                 onlyCapability?.label ??
-                                                "请选择有效能力版本",
+                                                "请选择有效供应资质",
                                               qualificationStatus:
                                                 onlyCapability
                                                   ? "VALID"
@@ -1667,7 +1707,7 @@ export function ProcurementConfirmationPage() {
                                             subLine.itemSku
                                           )}
                                           disabled={formalPending}
-                                          placeholder="选择当前供给"
+                                          placeholder="选择供应商报价"
                                           className="min-w-[12rem]"
                                         />
                                       </td>
@@ -1676,11 +1716,24 @@ export function ProcurementConfirmationPage() {
                                           className="num w-20"
                                           inputMode="decimal"
                                           value={line.confirmedQuantity}
-                                          onChange={(e) =>
+                                          onChange={(e) => {
+                                            const confirmedQuantity =
+                                              e.target.value
+                                            const offering = supplyOptions.find(
+                                              (option) =>
+                                                option.offeringRevisionId ===
+                                                line.offeringRevisionId
+                                            )
                                             updateLine(line.lineKey, {
-                                              confirmedQuantity: e.target.value,
+                                              confirmedQuantity,
+                                              latestCostGross: offering
+                                                ? supplyCostForQuantity(
+                                                    offering,
+                                                    confirmedQuantity
+                                                  )
+                                                : line.latestCostGross,
                                             })
-                                          }
+                                          }}
                                           disabled={formalPending}
                                           aria-label={`${line.supplierName} 确认数量`}
                                         />
@@ -1754,17 +1807,11 @@ export function ProcurementConfirmationPage() {
                                                 : undefined
                                             updateLine(line.lineKey, {
                                               fulfillmentMode,
-                                              latestCostGross: offering
-                                                ? supplyCostForMode(
-                                                    offering,
-                                                    fulfillmentMode
-                                                  )
-                                                : line.latestCostGross,
                                               capabilityRevisionId:
                                                 onlyCapability?.revisionId ?? "",
                                               capabilitySummary:
                                                 onlyCapability?.label ??
-                                                "请选择有效能力版本",
+                                                "请选择有效供应资质",
                                               qualificationStatus:
                                                 onlyCapability
                                                   ? "VALID"
@@ -1777,8 +1824,8 @@ export function ProcurementConfirmationPage() {
                                           size="sm"
                                           allowClear={false}
                                           disabled={formalPending}
-                                          aria-label="履约方式"
-                                          placeholder="履约方式"
+                                          aria-label="交付方式"
+                                          placeholder="交付方式"
                                           className="min-w-[8rem]"
                                         />
                                       </td>
@@ -1812,7 +1859,7 @@ export function ProcurementConfirmationPage() {
                                           )}
                                           size="sm"
                                           disabled={formalPending}
-                                          placeholder="选择能力"
+                                          placeholder="选择供应资质"
                                           className="min-w-[8rem]"
                                         />
                                       </td>
@@ -1878,6 +1925,97 @@ export function ProcurementConfirmationPage() {
             {/* 决策摘要：桌面 sticky；top 避开 sticky 处理条 */}
             <aside className="space-y-3 md:space-y-4 xl:sticky xl:top-16 xl:self-start">
               <Card size="sm" className={surfacePanelClassName}>
+                <CardHeader className="rounded-t-lg border-b border-border/30">
+                  <CardTitle>
+                    <h2
+                      ref={headingRef}
+                      tabIndex={-1}
+                      className="outline-none"
+                    >
+                      本次确认
+                    </h2>
+                  </CardTitle>
+                  <CardDescription>
+                    系统将在你点击确认通过后计算采购方案。
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <dl className="space-y-2 text-sm">
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-muted-foreground">销售单</dt>
+                      <dd className="font-medium">
+                        {task.salesSubmission.salesOrderNo}
+                      </dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-muted-foreground">商品明细</dt>
+                      <dd>{task.salesSubmission.lines.length} 项</dd>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <dt className="text-muted-foreground">销售含税金额</dt>
+                      <dd className="num">
+                        {money.format(Number(task.salesSubmission.grossAmount))}
+                      </dd>
+                    </div>
+                  </dl>
+                  <Alert variant="info">
+                    <CircleCheckIcon aria-hidden="true" />
+                    <AlertTitle>确认通过不会立即生成采购单</AlertTitle>
+                    <AlertDescription>
+                      系统会先展示成本最低的采购组合，只有再次确认该方案后才生成采购单。
+                    </AlertDescription>
+                  </Alert>
+                  <div
+                    className="grid grid-cols-3 gap-2"
+                    role="group"
+                    aria-label="本次确认操作"
+                  >
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      disabled={formalPending}
+                      onClick={() => {
+                        void (async () => {
+                          if (!(await guardTerminalOpen())) return
+                          setRejectOpen(true)
+                        })()
+                      }}
+                    >
+                      驳回
+                    </Button>
+                    <Button
+                      type="button"
+                      disabled={formalPending}
+                      onClick={() => {
+                        void ensureLease()
+                          .then(() => {
+                            setAdvanceAfterConfirm(autoNext)
+                            setConfirmOpen(true)
+                          })
+                          .catch((error) => {
+                            setActionError(
+                              error instanceof Error
+                                ? error.message
+                                : "领取任务失败"
+                            )
+                          })
+                      }}
+                    >
+                      确认通过
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={formalPending}
+                      onClick={() => void handleDefer()}
+                    >
+                      跳过
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card size="sm" className={cn(surfacePanelClassName, "hidden")}>
                 <CardHeader className="rounded-t-lg border-b border-border/30">
                   <CardTitle>决策摘要</CardTitle>
                   <CardDescription>
@@ -2072,85 +2210,413 @@ export function ProcurementConfirmationPage() {
             </Dialog>
           )}
 
-          {/* 底栏处理动作 */}
-          <div
-            className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-background/95 px-4 py-3 backdrop-blur md:-mx-5 md:px-5"
-            role="region"
-            aria-label="处理动作"
-          >
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleSave()}
-              disabled={formalPending || !dirty}
-            >
-              保存确认数据
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handleDefer()}
-              disabled={formalPending}
-            >
-              <PauseIcon data-icon="inline-start" aria-hidden="true" />
-              先跳过
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={() => {
-                void (async () => {
-                  if (!(await guardTerminalOpen())) return
-                  setRejectOpen(true)
-                })()
-              }}
-              disabled={formalPending}
-            >
-              <XIcon data-icon="inline-start" aria-hidden="true" />
-              驳回
-            </Button>
-            <Button
-              type="button"
-              onClick={() => {
-                void (async () => {
-                  if (!(await guardTerminalOpen())) return
-                  setAdvanceAfterConfirm(autoNext)
-                  setConfirmOpen(true)
-                })()
-              }}
-              disabled={formalPending || !allCovered || !activeLease}
-            >
-              <CheckIcon data-icon="inline-start" aria-hidden="true" />
-              确认通过并生成采购单
-            </Button>
-          </div>
+          <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+            <DialogContent className="max-h-[88vh] w-[calc(100vw-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-6xl">
+              <DialogHeader>
+                <DialogTitle>确认采购方案</DialogTitle>
+                <DialogDescription>
+                  销售单 {task.salesSubmission.salesOrderNo}。系统按采购数量匹配报价档位，并在可供范围内组合预计成本最低的采购方案。
+                </DialogDescription>
+              </DialogHeader>
 
-          <FormalActionConfirmDialog
-            open={confirmOpen}
-            onOpenChange={setConfirmOpen}
-            title="确认通过采购二次确认"
-            actionLabel="通过并生成采购单草稿"
-            confirmLabel={
-              advanceAfterConfirm
-                ? "生成采购单并打开下一条"
-                : "确认并生成采购单"
-            }
-            fromStatus={{ label: "待二次确认", tone: "warning" }}
-            toStatus={{ label: "销售已生效", tone: "success" }}
-            lockedFields={[
-              `销售单 ${task.salesSubmission.salesOrderNo} · 第 ${task.salesSubmission.submissionNo} 次提交`,
-              "确认分行供应商/数量/成本/交期",
-            ]}
-            effects={[
-              "形成采购确认通过记录与确认分行",
-              "销售提交原样形成版本并生效、形成应收",
-              "完成本次采购确认任务",
-              "按供应商与交付方式拆分并生成采购单草稿",
-            ]}
-            nextDepartment="采购单草稿核对与提交"
-            pending={completeMutation.isPending}
-            onConfirm={handleApprove}
-          />
+              {recommendationQuery.isPending ? (
+                <div className="rounded-lg border border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">
+                  正在核对供应商报价、起订量和可供数量…
+                </div>
+              ) : recommendationQuery.isError ? (
+                <BusinessFailureState
+                  kind="system"
+                  title="采购方案计算失败"
+                  description="暂时无法读取供应商报价，请重试。"
+                  onRetry={() => void recommendationQuery.refetch()}
+                />
+              ) : recommendation?.ready ? (
+                <div className="space-y-4">
+                  <Alert variant="success">
+                    <CircleCheckIcon aria-hidden="true" />
+                    <AlertTitle>
+                      当前方案将生成 {currentPlanSummary.orderCount} 张采购单
+                    </AlertTitle>
+                    <AlertDescription>
+                      当前采购含税 {money.format(currentPlanSummary.purchaseGross)}，预计毛利 {money.format(currentPlanSummary.grossMargin)}。
+                    </AlertDescription>
+                  </Alert>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-lg border border-border p-3">
+                      <p className="text-xs text-muted-foreground">销售含税金额</p>
+                      <p className="num mt-1 font-semibold">
+                        {money.format(Number(recommendation.salesGross))}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border p-3">
+                      <p className="text-xs text-muted-foreground">预计采购金额</p>
+                      <p className="num mt-1 font-semibold">
+                        {money.format(currentPlanSummary.purchaseGross)}
+                      </p>
+                    </div>
+                    <div className="rounded-lg border border-border p-3">
+                      <p className="text-xs text-muted-foreground">预计毛利</p>
+                      <p className="num mt-1 font-semibold">
+                        {money.format(currentPlanSummary.grossMargin)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <section className="space-y-3" aria-labelledby="editable-plan-title">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 id="editable-plan-title" className="font-semibold">
+                          当前采购安排
+                        </h3>
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          可以调整供应商、数量、交付方式和交期；采购价会按该供应商承接的合计数量自动重算。
+                        </p>
+                      </div>
+                      <Badge variant={dirty ? "secondary" : "outline"}>
+                        {dirty ? "已人工调整" : "系统初始方案"}
+                      </Badge>
+                    </div>
+
+                    {task.salesSubmission.lines.map((subLine) => {
+                      const planLines = lineDrafts.filter(
+                        (line) =>
+                          line.submissionLineId === subLine.submissionLineId
+                      )
+                      const lineCoverage = coverage.find(
+                        (item) =>
+                          item.submissionLineId === subLine.submissionLineId
+                      )
+                      return (
+                        <div
+                          key={subLine.submissionLineId}
+                          className="overflow-hidden rounded-lg border border-border"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-2 bg-muted/40 px-4 py-3">
+                            <div>
+                              <p className="font-medium">{subLine.itemName}</p>
+                              <p className="mt-1 text-xs text-muted-foreground">
+                                需要采购 {subLine.committedQuantity} {subLine.unit} · 客户交期 {subLine.requestedDeliveryDate}
+                              </p>
+                            </div>
+                            <Badge
+                              variant={
+                                lineCoverage?.complete
+                                  ? "secondary"
+                                  : "destructive"
+                              }
+                            >
+                              已安排 {lineCoverage?.confirmed ?? "0"}/{lineCoverage?.required ?? subLine.committedQuantity} {subLine.unit}
+                            </Badge>
+                          </div>
+
+                          <div className="space-y-3 p-3">
+                            {planLines.map((line) => {
+                              const offering = supplyOptions.find(
+                                (option) =>
+                                  option.offeringRevisionId ===
+                                  line.offeringRevisionId
+                              )
+                              const allocatedQuantity = lineDrafts
+                                .filter(
+                                  (item) =>
+                                    item.offeringRevisionId ===
+                                    line.offeringRevisionId
+                                )
+                                .reduce(
+                                  (total, item) =>
+                                    total + Number(item.confirmedQuantity || 0),
+                                  0
+                                )
+                              const usesBulkPrice = offering
+                                ? allocatedQuantity >=
+                                  Number(offering.bulkMinimumOrderQuantity)
+                                : false
+                              return (
+                                <div
+                                  key={line.lineKey}
+                                  className="grid min-w-0 gap-3 rounded-md border border-border p-3 md:grid-cols-2 lg:grid-cols-4"
+                                >
+                                  <div className="min-w-0 space-y-1.5 md:col-span-2 lg:col-span-2">
+                                    <Label>供应商报价</Label>
+                                    <OptionCombobox
+                                      value={
+                                        line.offeringRevisionId || undefined
+                                      }
+                                      onValueChange={(revisionId) => {
+                                        const nextOffering = supplyOptions.find(
+                                          (option) =>
+                                            option.offeringRevisionId ===
+                                            revisionId
+                                        )
+                                        const supplier = supplierOptions?.find(
+                                          (option) =>
+                                            option.supplierId ===
+                                            nextOffering?.supplierId
+                                        )
+                                        const matchingCapabilities =
+                                          nextOffering?.capabilities.filter(
+                                            (capability) =>
+                                              capability.capabilityCode ===
+                                              capabilityCodeForMode(
+                                                line.fulfillmentMode
+                                              )
+                                          ) ?? []
+                                        const capability =
+                                          matchingCapabilities.length === 1
+                                            ? matchingCapabilities[0]
+                                            : undefined
+                                        updatePlanLine(line.lineKey, {
+                                          supplierId:
+                                            nextOffering?.supplierId ?? "",
+                                          supplierName:
+                                            supplier?.supplierName ?? "",
+                                          offeringRevisionId:
+                                            nextOffering?.offeringRevisionId ??
+                                            "",
+                                          inputTaxRate:
+                                            nextOffering?.inputTaxRate ?? "",
+                                          capabilityRevisionId:
+                                            capability?.revisionId ?? "",
+                                          capabilitySummary:
+                                            capability?.label ??
+                                            "请选择供应资质",
+                                          qualificationStatus: capability
+                                            ? "VALID"
+                                            : "INVALID",
+                                        })
+                                      }}
+                                      options={offeringOptionsForSku(
+                                        subLine.itemSku
+                                      )}
+                                      disabled={formalPending}
+                                      placeholder="选择供应商报价"
+                                      className="w-full min-w-0"
+                                      inputClassName="h-9 min-h-9"
+                                    />
+                                  </div>
+
+                                  <div className="min-w-0 space-y-1.5">
+                                    <Label>采购数量</Label>
+                                    <Input
+                                      className="num h-9"
+                                      inputMode="decimal"
+                                      value={line.confirmedQuantity}
+                                      onChange={(event) =>
+                                        updatePlanLine(line.lineKey, {
+                                          confirmedQuantity:
+                                            event.target.value,
+                                        })
+                                      }
+                                      disabled={formalPending}
+                                    />
+                                  </div>
+
+                                  <div className="min-w-0 space-y-1.5">
+                                    <Label>含税单价</Label>
+                                    <div className="flex h-9 min-w-0 items-center justify-between gap-2 rounded-md border border-border bg-muted/30 px-3 text-sm">
+                                      <span className="num shrink-0 font-medium">
+                                        {line.latestCostGross
+                                          ? money.format(
+                                              Number(line.latestCostGross)
+                                            )
+                                          : "—"}
+                                      </span>
+                                      <span className="truncate text-xs text-muted-foreground">
+                                        {offering
+                                          ? usesBulkPrice
+                                            ? "集采价"
+                                            : "一件代发价"
+                                          : "选择供应商后计算"}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="min-w-0 space-y-1.5">
+                                    <Label>交付方式</Label>
+                                    <OptionCombobox
+                                      value={line.fulfillmentMode}
+                                      onValueChange={(value) => {
+                                        if (!value) return
+                                        const fulfillmentMode =
+                                          value as FulfillmentMode
+                                        const capabilities =
+                                          offering?.capabilities.filter(
+                                            (capability) =>
+                                              capability.capabilityCode ===
+                                              capabilityCodeForMode(
+                                                fulfillmentMode
+                                              )
+                                          ) ?? []
+                                        const capability =
+                                          capabilities.length === 1
+                                            ? capabilities[0]
+                                            : undefined
+                                        updatePlanLine(line.lineKey, {
+                                          fulfillmentMode,
+                                          capabilityRevisionId:
+                                            capability?.revisionId ?? "",
+                                          capabilitySummary:
+                                            capability?.label ??
+                                            "请选择供应资质",
+                                          qualificationStatus: capability
+                                            ? "VALID"
+                                            : "INVALID",
+                                        })
+                                      }}
+                                      options={fulfillmentOptionsForOffering(
+                                        line.offeringRevisionId
+                                      )}
+                                      allowClear={false}
+                                      disabled={formalPending}
+                                      placeholder="选择交付方式"
+                                      className="w-full min-w-0"
+                                      inputClassName="h-9 min-h-9"
+                                    />
+                                  </div>
+
+                                  <div className="min-w-0 space-y-1.5">
+                                    <Label>供应商交期</Label>
+                                    <DatePicker
+                                      value={
+                                        line.expectedDeliveryDate || undefined
+                                      }
+                                      onValueChange={(value) =>
+                                        updatePlanLine(line.lineKey, {
+                                          expectedDeliveryDate: value ?? "",
+                                        })
+                                      }
+                                      disabled={formalPending}
+                                      className="h-9 w-full min-w-0"
+                                    />
+                                  </div>
+
+                                  <div className="min-w-0 space-y-1.5">
+                                    <Label>供应资质</Label>
+                                    <OptionCombobox
+                                      value={
+                                        line.capabilityRevisionId || undefined
+                                      }
+                                      onValueChange={(revisionId) => {
+                                        const capability =
+                                          capabilityOptionsForOffering(
+                                            line.offeringRevisionId,
+                                            line.fulfillmentMode
+                                          ).find(
+                                            (option) =>
+                                              option.value === revisionId
+                                          )
+                                        updatePlanLine(line.lineKey, {
+                                          capabilityRevisionId:
+                                            revisionId ?? "",
+                                          capabilitySummary:
+                                            capability?.label ?? "",
+                                          qualificationStatus: revisionId
+                                            ? "VALID"
+                                            : "INVALID",
+                                        })
+                                      }}
+                                      options={capabilityOptionsForOffering(
+                                        line.offeringRevisionId,
+                                        line.fulfillmentMode
+                                      )}
+                                      disabled={formalPending}
+                                      placeholder="选择供应资质"
+                                      className="w-full min-w-0"
+                                      inputClassName="h-9 min-h-9"
+                                    />
+                                  </div>
+
+                                  <div className="flex min-w-0 items-end justify-end">
+                                    <Button
+                                      type="button"
+                                      size="sm"
+                                      variant="ghost"
+                                      disabled={
+                                        formalPending || planLines.length <= 1
+                                      }
+                                      onClick={() => removeLine(line.lineKey)}
+                                    >
+                                      删除
+                                    </Button>
+                                  </div>
+                                </div>
+                              )
+                            })}
+
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              disabled={formalPending}
+                              onClick={() =>
+                                addSplitLine(subLine.submissionLineId)
+                              }
+                            >
+                              <PlusIcon
+                                data-icon="inline-start"
+                                aria-hidden="true"
+                              />
+                              增加供应商
+                            </Button>
+                          </div>
+                        </div>
+                      )
+                    })}
+
+                    {clientBlocking.length > 0 ? (
+                      <ValidationSummary
+                        title="生成采购单前需要补齐"
+                        issues={clientBlocking}
+                      />
+                    ) : null}
+                  </section>
+
+                  {recommendation.warnings.length > 0 ? (
+                    <Alert variant="warning">
+                      <TriangleAlertIcon aria-hidden="true" />
+                      <AlertTitle>生成前请确认</AlertTitle>
+                      <AlertDescription>
+                        {recommendation.warnings.map((item) => item.message).join("；")}
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
+                </div>
+              ) : (
+                <Alert variant="destructive">
+                  <TriangleAlertIcon aria-hidden="true" />
+                  <AlertTitle>暂时无法形成完整采购方案</AlertTitle>
+                  <AlertDescription>
+                    {recommendation?.blockingIssues.map((item) => item.message).join("；") || "当前供应商报价或可供数量不足。"}
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              <DialogFooter>
+                <DialogClose render={<Button type="button" variant="outline" /> }>
+                  返回销售单
+                </DialogClose>
+                <Button
+                  type="button"
+                  disabled={
+                    !recommendation?.ready ||
+                    !allCovered ||
+                    recommendationQuery.isPending ||
+                    saveMutation.isPending ||
+                    completeMutation.isPending
+                  }
+                  onClick={() => void handleApprove()}
+                >
+                  <CheckIcon data-icon="inline-start" aria-hidden="true" />
+                  {saveMutation.isPending || completeMutation.isPending
+                      ? "正在生成采购单…"
+                      : advanceAfterConfirm
+                      ? "保存调整、生成采购单并打开下一条"
+                      : "保存调整并生成采购单"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
 
           <Dialog open={rejectOpen} onOpenChange={setRejectOpen}>
             <DialogContent className="sm:max-w-lg">

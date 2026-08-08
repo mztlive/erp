@@ -27,7 +27,7 @@ use super::{
 use crate::errors::{Error, Result};
 
 /// 推荐规则版本；变更成本目标或可行性过滤规则时必须递增。
-const SOURCING_POLICY_VERSION: &str = "LOWEST_FEASIBLE_LANDED_COST_V2";
+const SOURCING_POLICY_VERSION: &str = "LOWEST_FEASIBLE_LANDED_COST_V3";
 
 impl SalesReviewService {
     /// 计算采购二次确认的最低可执行成本方案。
@@ -401,6 +401,7 @@ fn split_allocation(
         fulfillment_mode: source.fulfillment_mode,
         quantity,
         unit_cost_gross: source.unit_cost_gross,
+        uses_bulk_price: source.uses_bulk_price,
         input_tax_rate: source.input_tax_rate,
         freight_amount,
         service_fee_amount,
@@ -449,17 +450,10 @@ fn candidate_from_offering(
         offering_revision_id: revision.base.id.clone().into(),
         capability_revision_id,
         fulfillment_mode: mode,
-        unit_cost_gross: if is_warehouse {
-            revision.bulk_supply_price_gross
-        } else {
-            revision.dropship_supply_price_gross
-        },
+        dropship_unit_cost_gross: revision.dropship_supply_price_gross,
+        bulk_unit_cost_gross: revision.bulk_supply_price_gross,
         input_tax_rate: revision.input_tax_rate,
-        minimum_quantity: if is_warehouse {
-            revision.bulk_minimum_order_quantity
-        } else {
-            Quantity::from_str("1")?
-        },
+        bulk_minimum_quantity: revision.bulk_minimum_order_quantity,
         available_quantity: revision.available_quantity,
         freight_amount: is_warehouse.then_some(revision.freight_amount).flatten(),
         service_fee_amount: revision.service_fee_amount,
@@ -507,8 +501,12 @@ fn recommendation_lines(
                 landed_gross: allocation.landed_gross.to_string(),
                 freight_amount: allocation.freight_amount.map(|amount| amount.to_string()),
                 service_fee_amount: allocation.service_fee_amount.map(|amount| amount.to_string()),
-                recommendation_reason:
-                    "同 SKU 需求汇总后满足当前供给、能力、数量和起订量条件，且含税落地成本最低".to_string(),
+                recommendation_reason: if allocation.uses_bulk_price {
+                    "本供应商承接数量已达到集采起订量，按集采价计算；综合商品价和费用后成本最低".to_string()
+                } else {
+                    "本供应商承接数量未达到集采起订量，按一件代发价计算；综合商品价和费用后成本最低"
+                        .to_string()
+                },
             });
         }
     }
@@ -626,6 +624,7 @@ mod tests {
             fulfillment_mode: FulfillmentMode::CompanyWarehouse,
             quantity: Quantity::from_str("10").unwrap(),
             unit_cost_gross: UnitPrice::from_str("9").unwrap(),
+            uses_bulk_price: true,
             input_tax_rate: Rate::from_str("0.13").unwrap(),
             freight_amount: Some(Amount::from_str("5").unwrap()),
             service_fee_amount: None,

@@ -27,12 +27,13 @@ export const procurementConfirmKeys = {
 
 /** 当前采购确认的后端最低可执行成本方案。 */
 export function useProcurementRecommendationQuery(
-  confirmationId: string
+  confirmationId: string,
+  enabled = true
 ) {
   return useQuery({
     queryKey: procurementConfirmKeys.recommendation(confirmationId),
     queryFn: () => fetchProcurementRecommendation(confirmationId),
-    enabled: confirmationId.length > 0,
+    enabled: enabled && confirmationId.length > 0,
   })
 }
 

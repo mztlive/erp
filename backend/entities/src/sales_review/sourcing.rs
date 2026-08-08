@@ -22,12 +22,14 @@ pub struct SourcingCandidate {
     pub capability_revision_id: SupplierCapabilityRevisionId,
     /// 本候选的履约方式。
     pub fulfillment_mode: FulfillmentMode,
-    /// 对应履约方式的含税供给单价。
-    pub unit_cost_gross: UnitPrice,
+    /// 未达到集采起订量时的一件代发含税单价。
+    pub dropship_unit_cost_gross: UnitPrice,
+    /// 达到集采起订量时的集采含税单价。
+    pub bulk_unit_cost_gross: UnitPrice,
     /// 进项税率。
     pub input_tax_rate: Rate,
-    /// 最小采购数量。
-    pub minimum_quantity: Quantity,
+    /// 启用集采价的最低采购数量。
+    pub bulk_minimum_quantity: Quantity,
     /// 最大可分配数量；空值表示当前候选可覆盖本次需求。
     pub available_quantity: Option<Quantity>,
     /// 本候选被采用一次时计入的运费。
@@ -62,6 +64,8 @@ pub struct SourcingAllocation {
     pub quantity: Quantity,
     /// 含税供给单价。
     pub unit_cost_gross: UnitPrice,
+    /// 当前分配是否达到起订量并采用集采价。
+    pub uses_bulk_price: bool,
     /// 进项税率。
     pub input_tax_rate: Rate,
     /// 本次分配计入的运费。
@@ -86,7 +90,8 @@ pub struct SourcingLinePlan {
 /// 计算单条销售提交行的最低可执行落地成本方案。
 ///
 /// 优先比较可独立覆盖全量需求的候选；同时构造按有效单位落地成本排序的拆分方案，
-/// 两者取总成本更低者。拆分只接受精确覆盖且每段满足 MOQ 的结果，不以超采掩盖缺口。
+/// 两者取总成本更低者。每段分配数量达到集采起订量时使用集采价，否则使用一件代发价；
+/// 交付方式不参与报价档位判断。
 ///
 /// # 参数
 /// * `line` - 需求数量与已通过外部事实过滤的候选
@@ -159,7 +164,7 @@ fn split_in_order(line: &SourcingLine, candidates: &[SourcingCandidate]) -> Resu
             .map(Quantity::to_decimal)
             .unwrap_or(line.required_quantity.to_decimal())
             .min(remaining);
-        if capacity < candidate.minimum_quantity.to_decimal() {
+        if capacity <= Decimal::ZERO {
             continue;
         }
         selected.push((candidate, Quantity::try_from(capacity)?));
@@ -202,7 +207,9 @@ fn plan_from_allocations(
 
 /// 将一个候选与数量转为正式分配。
 fn allocation(candidate: &SourcingCandidate, quantity: Quantity) -> Result<SourcingAllocation> {
-    let (product_gross, _, _) = line_amounts(candidate.unit_cost_gross, quantity, candidate.input_tax_rate);
+    let uses_bulk_price = quantity.to_decimal() >= candidate.bulk_minimum_quantity.to_decimal();
+    let unit_cost_gross = price_for_quantity(candidate, quantity);
+    let (product_gross, _, _) = line_amounts(unit_cost_gross, quantity, candidate.input_tax_rate);
     let landed_gross = optional_amounts(candidate)
         .into_iter()
         .fold(product_gross, Amount::checked_add);
@@ -212,7 +219,8 @@ fn allocation(candidate: &SourcingCandidate, quantity: Quantity) -> Result<Sourc
         capability_revision_id: candidate.capability_revision_id.clone(),
         fulfillment_mode: candidate.fulfillment_mode,
         quantity,
-        unit_cost_gross: candidate.unit_cost_gross,
+        unit_cost_gross,
+        uses_bulk_price,
         input_tax_rate: candidate.input_tax_rate,
         freight_amount: candidate.freight_amount,
         service_fee_amount: candidate.service_fee_amount,
@@ -220,12 +228,20 @@ fn allocation(candidate: &SourcingCandidate, quantity: Quantity) -> Result<Sourc
     })
 }
 
-/// 判断候选能否独立满足数量与 MOQ。
+/// 判断候选能否独立满足数量。
 fn candidate_covers(candidate: &SourcingCandidate, quantity: Quantity) -> bool {
-    let enough_capacity = candidate
+    candidate
         .available_quantity
-        .is_none_or(|available| available.to_decimal() >= quantity.to_decimal());
-    enough_capacity && quantity.to_decimal() >= candidate.minimum_quantity.to_decimal()
+        .is_none_or(|available| available.to_decimal() >= quantity.to_decimal())
+}
+
+/// 根据分配给当前供应商的实际采购数量选择报价档位。
+fn price_for_quantity(candidate: &SourcingCandidate, quantity: Quantity) -> UnitPrice {
+    if quantity.to_decimal() >= candidate.bulk_minimum_quantity.to_decimal() {
+        candidate.bulk_unit_cost_gross
+    } else {
+        candidate.dropship_unit_cost_gross
+    }
 }
 
 /// 返回候选的一次性费用。
@@ -257,9 +273,10 @@ fn effective_unit_cost(candidate: &SourcingCandidate, required: Quantity) -> Dec
     if quantity <= Decimal::ZERO {
         return Decimal::MAX;
     }
-    let product = candidate.unit_cost_gross.to_decimal() * quantity;
+    let quantity = Quantity::try_from(quantity).expect("候选排序数量已经校验为正数");
+    let product = price_for_quantity(candidate, quantity).to_decimal() * quantity.to_decimal();
     let fees = optional_amounts(candidate).fold(Decimal::ZERO, |sum, fee| sum + fee.to_decimal());
-    (product + fees) / quantity
+    (product + fees) / quantity.to_decimal()
 }
 
 /// 按总成本与稳定分配次序比较计划。
@@ -315,8 +332,9 @@ mod tests {
     fn candidate(
         supplier: &str,
         mode: FulfillmentMode,
-        price: &str,
-        minimum: &str,
+        dropship_price: &str,
+        bulk_price: &str,
+        bulk_minimum: &str,
         available: Option<&str>,
         freight: Option<&str>,
     ) -> SourcingCandidate {
@@ -325,9 +343,10 @@ mod tests {
             offering_revision_id: SupplierOfferingRevisionId::new(format!("offering-{supplier}")),
             capability_revision_id: SupplierCapabilityRevisionId::new(format!("capability-{supplier}")),
             fulfillment_mode: mode,
-            unit_cost_gross: UnitPrice::from_str(price).unwrap(),
+            dropship_unit_cost_gross: UnitPrice::from_str(dropship_price).unwrap(),
+            bulk_unit_cost_gross: UnitPrice::from_str(bulk_price).unwrap(),
             input_tax_rate: Rate::from_str("0.130000").unwrap(),
-            minimum_quantity: Quantity::from_str(minimum).unwrap(),
+            bulk_minimum_quantity: Quantity::from_str(bulk_minimum).unwrap(),
             available_quantity: available.map(|value| Quantity::from_str(value).unwrap()),
             freight_amount: freight.map(|value| Amount::from_str(value).unwrap()),
             service_fee_amount: None,
@@ -344,7 +363,8 @@ mod tests {
                     "cheap-unit-high-freight",
                     FulfillmentMode::CompanyWarehouse,
                     "8.0000",
-                    "1",
+                    "8.0000",
+                    "10",
                     None,
                     Some("50.00"),
                 ),
@@ -352,7 +372,8 @@ mod tests {
                     "best-landed",
                     FulfillmentMode::SupplierDirect,
                     "10.0000",
-                    "1",
+                    "10.0000",
+                    "10",
                     None,
                     None,
                 ),
@@ -365,14 +386,15 @@ mod tests {
     }
 
     #[test]
-    fn recommendation_rejects_bulk_below_moq_and_uses_direct_supply() {
+    fn recommendation_uses_dropship_price_below_bulk_minimum_regardless_of_mode() {
         let line = SourcingLine {
             submission_line_id: "line-1".to_string(),
             required_quantity: Quantity::from_str("3").unwrap(),
             candidates: vec![
                 candidate(
-                    "bulk",
+                    "warehouse",
                     FulfillmentMode::CompanyWarehouse,
+                    "5.0000",
                     "1.0000",
                     "10",
                     None,
@@ -381,8 +403,9 @@ mod tests {
                 candidate(
                     "direct",
                     FulfillmentMode::SupplierDirect,
-                    "5.0000",
-                    "1",
+                    "6.0000",
+                    "2.0000",
+                    "10",
                     None,
                     None,
                 ),
@@ -390,7 +413,29 @@ mod tests {
         };
 
         let plan = recommend_sourcing_line(&line).unwrap();
-        assert_eq!(plan.allocations[0].supplier_id.as_ref(), "direct");
+        assert_eq!(plan.allocations[0].supplier_id.as_ref(), "warehouse");
+        assert_eq!(plan.allocations[0].unit_cost_gross.to_string(), "5.0000");
+    }
+
+    #[test]
+    fn recommendation_uses_bulk_price_at_minimum_regardless_of_mode() {
+        let line = SourcingLine {
+            submission_line_id: "line-1".to_string(),
+            required_quantity: Quantity::from_str("10").unwrap(),
+            candidates: vec![candidate(
+                "direct",
+                FulfillmentMode::SupplierDirect,
+                "6.0000",
+                "2.0000",
+                "10",
+                None,
+                None,
+            )],
+        };
+
+        let plan = recommend_sourcing_line(&line).unwrap();
+        assert_eq!(plan.allocations[0].unit_cost_gross.to_string(), "2.0000");
+        assert_eq!(plan.landed_gross.to_string(), "20.00");
     }
 
     #[test]
@@ -403,7 +448,8 @@ mod tests {
                     "first",
                     FulfillmentMode::SupplierDirect,
                     "4.0000",
-                    "1",
+                    "4.0000",
+                    "10",
                     Some("6"),
                     None,
                 ),
@@ -411,7 +457,8 @@ mod tests {
                     "second",
                     FulfillmentMode::SupplierDirect,
                     "5.0000",
-                    "1",
+                    "5.0000",
+                    "10",
                     Some("4"),
                     None,
                 ),
@@ -421,6 +468,10 @@ mod tests {
         let plan = recommend_sourcing_line(&line).unwrap();
         assert_eq!(plan.allocations.len(), 2);
         assert_eq!(plan.landed_gross.to_string(), "44.00");
+        assert!(plan
+            .allocations
+            .iter()
+            .all(|allocation| allocation.unit_cost_gross.to_decimal() >= Decimal::from(4)));
     }
 
     #[test]
@@ -432,6 +483,7 @@ mod tests {
                 "short",
                 FulfillmentMode::SupplierDirect,
                 "4.0000",
+                "3.0000",
                 "1",
                 Some("3"),
                 None,
