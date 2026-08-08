@@ -217,6 +217,7 @@ type BackendSkuListItem = {
   base_unit_id: string
   specification_signature: string
   status: string
+  current_revision_id: string | null
   created_at: number
   version: number
 }
@@ -251,6 +252,16 @@ type CompanySkuRevisionDto = {
   version: number
 }
 
+/** 公司商品池资格查询行；只读取身份、精确修订与销售价。 */
+type SellableCompanySkuDto = {
+  sku_id: string
+  sku_revision_id: string
+  sales_visible_price_gross: string
+  effective_from: string
+  effective_to: string | null
+  supplier_count: number
+}
+
 /** 公司 SKU 富化信息：编码/名称/规格/单位/商品池价。 */
 type CompanySkuEnrichment = {
   skuId: string
@@ -261,9 +272,12 @@ type CompanySkuEnrichment = {
   specification: string
   baseUnit: string
   barcode?: string
+  skuRevisionNo?: number
   salesVisiblePriceGross?: string
-  poolEntryId?: string
-  poolEntryRevisionId?: string
+  sellableSkuRevisionId?: string
+  sellableEffectiveFrom?: string
+  sellableEffectiveTo?: string
+  activeSupplierCount?: number
 }
 
 /** 分页拉全后端列表（与 master-data 同款辅助，避免 100 条截断）。 */
@@ -296,32 +310,39 @@ async function fetchAllPages<T>(
 async function loadCompanySkuEnrichment(
   skuIds: string[]
 ): Promise<Map<string, CompanySkuEnrichment>> {
-  const [skus, units, products] = await Promise.all([
+  const [skus, units, products, sellableSkus] = await Promise.all([
     fetchAllPages<BackendSkuListItem>("/admin/skus", {}).catch(() => []),
     fetchAllPages<BackendUnitOfMeasure>("/admin/unit-of-measures", {}).catch(
       () => []
     ),
     fetchAllPages<BackendCompanyProduct>("/admin/products", {}).catch(() => []),
+    fetchAllPages<SellableCompanySkuDto>("/admin/sellable-skus", {}).catch(
+      () => []
+    ),
   ])
   const unitById = new Map(units.map((unit) => [unit.id, unit]))
   const productById = new Map(products.map((product) => [product.id, product]))
+  const sellableBySkuId = new Map(
+    sellableSkus.map((item) => [item.sku_id, item])
+  )
   const ids = skuIds.length > 0 ? skuIds : skus.map((sku) => sku.id)
-  const latestBySku = new Map<string, CompanySkuRevisionDto>()
+  const currentBySku = new Map<string, CompanySkuRevisionDto>()
   await Promise.all(
     ids.map(async (skuId) => {
       try {
-        const page = await apiGet<Page<CompanySkuRevisionDto>>(
+        const revisions = await fetchAllPages<CompanySkuRevisionDto>(
           "/admin/sku-revisions",
           {
             sku_id: skuId,
-            page: 1,
-            page_size: 1,
             sort_by: "revision_no",
             sort_dir: "desc",
           }
         )
-        const latest = page.items[0]
-        if (latest) latestBySku.set(skuId, latest)
+        const sku = skus.find((item) => item.id === skuId)
+        const current = sku?.current_revision_id
+          ? revisions.find((item) => item.id === sku.current_revision_id)
+          : undefined
+        if (current) currentBySku.set(skuId, current)
       } catch {
         // 无权限或不存在时省略
       }
@@ -329,25 +350,30 @@ async function loadCompanySkuEnrichment(
   )
   const byId = new Map<string, CompanySkuEnrichment>()
   for (const sku of skus) {
-    const latest = latestBySku.get(sku.id)
+    const current = currentBySku.get(sku.id)
     const unit = unitById.get(sku.base_unit_id)
     const product = productById.get(sku.product_id)
+    const sellable = sellableBySkuId.get(sku.id)
     if (!product) continue
     byId.set(sku.id, {
       skuId: sku.id,
       productId: sku.product_id,
       productKind: product.product_kind,
       skuCode: sku.sku_no,
-      skuName: latest?.name ?? sku.sku_no,
+      skuName: current?.name ?? sku.sku_no,
       specification: sku.specification_signature,
       baseUnit:
         unit?.name ?? unit?.symbol ?? unit?.unit_code ?? sku.base_unit_id,
-      barcode: latest?.barcode ?? undefined,
-      salesVisiblePriceGross: latest?.sales_visible_price_gross ?? undefined,
-      poolEntryId:
-        latest?.sales_visible_price_gross != null ? sku.id : undefined,
-      poolEntryRevisionId:
-        latest?.sales_visible_price_gross != null ? latest.id : undefined,
+      barcode: current?.barcode ?? undefined,
+      skuRevisionNo: current?.revision_no,
+      salesVisiblePriceGross:
+        sellable?.sales_visible_price_gross ??
+        current?.sales_visible_price_gross ??
+        undefined,
+      sellableSkuRevisionId: sellable?.sku_revision_id,
+      sellableEffectiveFrom: sellable?.effective_from,
+      sellableEffectiveTo: sellable?.effective_to ?? undefined,
+      activeSupplierCount: sellable?.supplier_count,
     })
   }
   return byId
@@ -362,10 +388,6 @@ const drafts = new Map<string, SessionCatalogDraft>()
 function secsToIso(secs?: number | null): string {
   if (secs == null || secs <= 0) return new Date(0).toISOString()
   return new Date(secs * 1000).toISOString()
-}
-
-function todayIso(): string {
-  return new Date().toISOString().slice(0, 10)
 }
 
 function sourceTypeLabel(t: string): string {
@@ -714,7 +736,7 @@ function mapMapping(
     skuId: m.sku_id,
     skuCode: enrichment?.skuCode,
     skuName: enrichment?.skuName,
-    skuRevisionId: enrichment?.poolEntryRevisionId,
+    skuRevisionId: enrichment?.sellableSkuRevisionId,
     specification: enrichment?.specification,
     baseUnit: enrichment?.baseUnit,
     approvedBy: m.approved_by ?? undefined,
@@ -822,16 +844,18 @@ function projectProductToItem(
         specification: mappingEnrichment.specification,
         baseUnit: mappingEnrichment.baseUnit,
         barcode: mappingEnrichment.barcode,
-        revisionNo: 1,
+        revisionNo: mappingEnrichment.skuRevisionNo ?? 0,
         similarityLabel: "已关联公司 SKU",
-        poolEntry: mappingEnrichment.poolEntryId
+        activeSupplierCount: mappingEnrichment.activeSupplierCount,
+        sellableSku: mappingEnrichment.sellableSkuRevisionId
           ? {
-              poolEntryId: mappingEnrichment.poolEntryId,
-              poolEntryRevisionId: mappingEnrichment.poolEntryRevisionId ?? "",
+              skuId: mappingEnrichment.skuId,
+              skuRevisionId: mappingEnrichment.sellableSkuRevisionId,
               status: "ACTIVE" as const,
               salesVisiblePriceGross:
                 mappingEnrichment.salesVisiblePriceGross ?? "",
-              validFrom: todayIso(),
+              validFrom: mappingEnrichment.sellableEffectiveFrom ?? "",
+              validTo: mappingEnrichment.sellableEffectiveTo,
             }
           : undefined,
       }
@@ -854,7 +878,7 @@ function projectProductToItem(
     },
     mapping: mapping ? mapMapping(mapping, mappingEnrichment) : undefined,
     skuCandidates: mappedCandidate ? [mappedCandidate] : [],
-    poolEntry: mappedCandidate?.poolEntry,
+    sellableSku: mappedCandidate?.sellableSku,
     offering: offering
       ? {
           stableId: offering.id,
@@ -1165,10 +1189,10 @@ export async function fetchSupplierCatalogQueue(
           specification: hit.specification,
           baseUnit: hit.baseUnit,
           barcode: hit.barcode,
-          poolEntry: hit.poolEntryId && hit.poolEntryRevisionId && hit.salesVisiblePriceGross
+          sellableSku: hit.sellableSkuRevisionId && hit.salesVisiblePriceGross
             ? {
-                poolEntryId: hit.poolEntryId,
-                poolEntryRevisionId: hit.poolEntryRevisionId,
+                skuId: hit.skuId,
+                skuRevisionId: hit.sellableSkuRevisionId,
                 status: "ACTIVE",
                 salesVisiblePriceGross: hit.salesVisiblePriceGross,
               }
@@ -1224,13 +1248,13 @@ export async function fetchCompanySkuOptions() {
     barcode: sku.barcode,
     brand: undefined as string | undefined,
     category: undefined as string | undefined,
-    revisionNo: 1,
+    revisionNo: sku.skuRevisionNo ?? 0,
     similarityLabel: "公司商品候选",
-    activeSupplierCount: 0,
-    poolEntry: sku.poolEntryId
+    activeSupplierCount: sku.activeSupplierCount,
+    sellableSku: sku.sellableSkuRevisionId
       ? ({
-          poolEntryId: sku.poolEntryId,
-          poolEntryRevisionId: sku.poolEntryRevisionId ?? "",
+          skuId: sku.skuId,
+          skuRevisionId: sku.sellableSkuRevisionId,
           status: "ACTIVE" as const,
           salesVisiblePriceGross: sku.salesVisiblePriceGross ?? "",
         })
@@ -1663,7 +1687,7 @@ export async function createSupplierCatalogItem(
     supplierProductId: result.product_id,
     supplierCatalogSkuId: result.sku_ids[0],
     supplierOfferingRevisionId: result.offering_revision_id ?? undefined,
-    poolEntryChange: result.mapping_id ? "CREATED" : "NONE",
+    companySkuChange: result.mapping_id ? "CREATED" : "NONE",
     reference: result.reference,
     recordedAt: secsToIso(result.recorded_at),
   }
@@ -1804,7 +1828,7 @@ export async function reviseSupplierCatalogProduct(
 
   return {
     supplierProductId: result.product_id,
-    poolEntryChange: "NONE",
+    companySkuChange: "NONE",
     reference: result.reference,
     recordedAt: secsToIso(result.recorded_at),
   }
@@ -1886,7 +1910,7 @@ export async function promoteSupplierProductToPool(
     companySkuId: input.targetSkuId,
     productKind: input.productKind,
     supplierOfferingRevisionId: `${approved.offering_id}:r${approved.offering_revision_no}`,
-    poolEntryChange: "CREATED",
+    companySkuChange: "CREATED",
     reference: approved.reference,
     recordedAt: new Date().toISOString(),
   }
@@ -1990,7 +2014,7 @@ export async function linkPromoteToCompanyPool(
     supplierOfferingRevisionId: first
       ? `${first.offering_id}:r${first.offering_revision_no}`
       : undefined,
-    poolEntryChange: "UNCHANGED",
+    companySkuChange: "UNCHANGED",
     activeSupplierCount: result.items.length,
     reference: result.reference,
     recordedAt: new Date(result.recorded_at * 1000).toISOString(),
@@ -2046,7 +2070,7 @@ export async function reversePromoteToCompanyPool(
     supplierOfferingRevisionId: first
       ? `${first.offering_id}:r${first.offering_revision_no}`
       : undefined,
-    poolEntryChange: "CREATED",
+    companySkuChange: "CREATED",
     reference: result.reference,
     recordedAt: new Date(result.recorded_at * 1000).toISOString(),
   }

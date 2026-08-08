@@ -9,6 +9,8 @@ export type SalesOrderDraftLineInput = {
   rowKey: string
   name: string
   sku: string
+  /** 公司商品池返回并由销售单锁定的精确 SKU 修订 ID。 */
+  skuRevisionId: string
   quantity: string
   unit: string
   unitPriceGross: string

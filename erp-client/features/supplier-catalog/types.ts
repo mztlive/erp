@@ -86,10 +86,10 @@ export type SkuCandidateView = Readonly<{
   matchSignals?: readonly string[]
   /** 当前已生效供给的供应商数量。 */
   activeSupplierCount?: number
-  /** 一个公司 SKU 最多一个商品池条目；多家供应商共享该条目。 */
-  poolEntry?: {
-    poolEntryId: string
-    poolEntryRevisionId: string
+  /** 当前公司 SKU 的销售资格投影；不产生独立商品池身份。 */
+  sellableSku?: {
+    skuId: string
+    skuRevisionId: string
     status: "ACTIVE" | "PAUSED" | "DISABLED"
     salesVisiblePriceGross: string
   }
@@ -334,10 +334,10 @@ export type SupplierCatalogItemBase = {
     revisionHistory: readonly SupplierOfferingRevisionView[]
     proposedDefaults?: SafeOfferingDraftView
   }
-  /** 被采购选入公司商品池后形成；销售只消费该投影，不读取采购成本。 */
-  poolEntry?: {
-    poolEntryId: string
-    poolEntryRevisionId: string
+  /** 公司 SKU 的销售资格投影；销售只消费该投影，不读取采购成本。 */
+  sellableSku?: {
+    skuId: string
+    skuRevisionId: string
     status: "ACTIVE" | "PAUSED" | "DISABLED"
     salesVisiblePriceGross: string
     validFrom: string
@@ -427,9 +427,9 @@ export type SupplierCatalogQueueView = Readonly<{
     carouselImages?: readonly string[]
     detailImages?: readonly string[]
     mainImage?: string
-    poolEntry?: {
-      poolEntryId: string
-      poolEntryRevisionId: string
+    sellableSku?: {
+      skuId: string
+      skuRevisionId: string
       status: "ACTIVE" | "PAUSED" | "DISABLED"
       salesVisiblePriceGross: string
     }
@@ -621,9 +621,6 @@ export type CreateSupplierCatalogItemInput = SupplierCatalogSpuContentFields &
     targetSkuName?: string
     targetSpecification?: string
     baseUnit?: string
-    salesVisiblePriceGross?: string
-    /** 已有商品池时默认沿用；只有显式 SET_PRICE 才允许形成新修订。 */
-    poolPriceAction?: "KEEP_EXISTING" | "SET_PRICE"
     minimumOrderQuantity: string
     /** 仅固定 SKU 入池/供给路径使用；非供应商商品目录字段 */
     supplyRegion?: string[]
@@ -663,10 +660,7 @@ export type PromoteSupplierProductInput = Readonly<{
   minimumOrderQuantity: string
   supplyRegion: string[]
   validFrom: string
-  salesVisiblePriceGross?: string
-  poolPriceAction: "KEEP_EXISTING" | "SET_PRICE"
   expectedSourceRevisionNo: number
-  expectedPoolEntryRevisionId?: string
   idempotencyKey: string
 }>
 
@@ -680,8 +674,7 @@ export type SupplierCatalogWriteResult = Readonly<{
   /** 入池/反向创建确认的商品类型。 */
   productKind?: string
   supplierOfferingRevisionId?: string
-  poolEntryRevisionId?: string
-  poolEntryChange: "NONE" | "CREATED" | "REVISED" | "UNCHANGED"
+  companySkuChange: "NONE" | "CREATED" | "REVISED" | "UNCHANGED"
   activeSupplierCount?: number
   reference: string
   recordedAt: string

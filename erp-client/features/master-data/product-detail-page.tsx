@@ -74,7 +74,6 @@ import {
   RegisterSupplyForSkuDialog,
   type FixedSku,
 } from "@/features/supplier-catalog/catalog-write-dialogs"
-import { useSupplierCatalogQueueQuery } from "@/features/supplier-catalog/queries"
 import { uploadFileAssetImage } from "@/features/file-assets/api"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { formatEffectiveRange } from "@/features/master-data/filter"
@@ -95,6 +94,7 @@ import {
   useCreateRevisionMutation,
   useMasterDataCenterQuery,
   useMasterDataListQuery,
+  useSkuSupplierCountsQuery,
 } from "@/features/master-data/queries"
 import type {
   MasterDataCenterView,
@@ -241,7 +241,10 @@ function scrollToProductSection(id: ProductEditorSectionId) {
 
 function productDetailToFields(detail: ProductDetailView): ProductFields {
   return {
+    lifecycleStatus: detail.lifecycleStatus,
+    productNo: detail.productNo,
     description: detail.description ?? "",
+    specification: detail.specification ?? "",
     baseUnitId: detail.baseUnitId,
     baseUnitCode: detail.baseUnitCode,
     baseUnit: detail.baseUnit,
@@ -627,12 +630,11 @@ export function ProductDetailPage({
   const unitOptionsQuery = useUnitOptionsQuery()
   const createMutation = useCreateMasterDataMutation()
   const reviseMutation = useCreateRevisionMutation()
-  const supplierCatalogQuery = useSupplierCatalogQueueQuery({
-    mode: "list",
-    changeType: "all",
-  })
 
   const data = detailQuery.data
+  const supplierCountsQuery = useSkuSupplierCountsQuery(
+    data?.productDetail?.skus.flatMap((sku) => (sku.skuId ? [sku.skuId] : [])) ?? []
+  )
   const lockVersion = data?.lockVersion
   const revisionId = data?.currentRevision.revisionId
   const [formError, setFormError] = React.useState<string | null>(null)
@@ -1467,6 +1469,26 @@ export function ProductDetailPage({
                     </p>
                     <div className="grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1.5 sm:col-span-2">
+                        <Label htmlFor="product-no">商品编号</Label>
+                        <Input
+                          id="product-no"
+                          value={fields.productNo}
+                          disabled={!isCreate}
+                          onChange={(event) =>
+                            setFields((previous) => ({
+                              ...previous,
+                              productNo: event.target.value,
+                            }))
+                          }
+                          placeholder="请输入全局唯一商品编号"
+                        />
+                        {!isCreate ? (
+                          <p className="text-xs text-muted-foreground">
+                            商品编号创建后不可修改。
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className="space-y-1.5 sm:col-span-2">
                         <Label htmlFor="product-name">名称</Label>
                         <Input
                           id="product-name"
@@ -2029,18 +2051,9 @@ export function ProductDetailPage({
                           </thead>
                           <tbody>
                             {fields.skus.map((sku, index) => {
-                              const supplierItems = sku.skuId
-                                ? (supplierCatalogQuery.data?.items ?? []).filter(
-                                    (item) => item.mapping?.skuId === sku.skuId,
-                                  )
-                                : []
-                              const supplierNames = Array.from(
-                                new Set(
-                                  supplierItems.map(
-                                    (item) => item.supplierProduct.supplier.name,
-                                  ),
-                                ),
-                              )
+                              const supplierCount = sku.skuId
+                                ? supplierCountsQuery.data?.get(sku.skuId)
+                                : 0
                               return (
                                 <tr
                                 key={`${sku.skuNo}-${index}`}
@@ -2154,11 +2167,11 @@ export function ProductDetailPage({
                                             />
                                           }
                                         >
-                                          {supplierCatalogQuery.isPending
+                                          {supplierCountsQuery.isPending
                                             ? "…"
-                                            : supplierCatalogQuery.isError
+                                            : supplierCountsQuery.isError
                                               ? "供给暂不可查"
-                                              : `${supplierItems.length} 家供应商`}
+                                              : `${supplierCount ?? 0} 家供应商`}
                                         </HoverCardTrigger>
                                         <HoverCardContent
                                           align="start"
@@ -2166,24 +2179,13 @@ export function ProductDetailPage({
                                         >
                                           <div>
                                             <p className="text-sm font-medium">
-                                              供应商列表
+                                              已启用供给关系
                                             </p>
-                                            {supplierNames.length > 0 ? (
-                                              <ul className="mt-2 space-y-1.5">
-                                                {supplierNames.map((supplierName) => (
-                                                  <li
-                                                    key={supplierName}
-                                                    className="text-sm text-muted-foreground"
-                                                  >
-                                                    {supplierName}
-                                                  </li>
-                                                ))}
-                                              </ul>
-                                            ) : (
-                                              <p className="mt-2 text-sm text-muted-foreground">
-                                                暂无供应商
-                                              </p>
-                                            )}
+                                            <p className="mt-2 text-sm text-muted-foreground">
+                                              {supplierCountsQuery.isError
+                                                ? "当前无法读取正式供给，请稍后重试。"
+                                                : `当前共有 ${supplierCount ?? 0} 家供应商具备已启用且已形成当前修订的供给关系；供应商及有效期明细以供给中心为准。`}
+                                            </p>
                                           </div>
                                           <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
                                             <Button
@@ -2227,11 +2229,6 @@ export function ProductDetailPage({
                                                     sku.mainImageAssetId,
                                                   mainImagePreviewUrl:
                                                     sku.mainImagePreviewUrl,
-                                                  salesVisiblePriceGross:
-                                                    sku.salePrice,
-                                                  hasPoolEntry: Boolean(
-                                                    sku.salePrice,
-                                                  ),
                                                 })
                                               }
                                             >
@@ -2248,11 +2245,11 @@ export function ProductDetailPage({
                                       </HoverCard>
                                     ) : (
                                       <Badge variant="outline">
-                                        {supplierCatalogQuery.isPending
+                                        {supplierCountsQuery.isPending
                                           ? "…"
-                                          : supplierCatalogQuery.isError
+                                          : supplierCountsQuery.isError
                                             ? "供给暂不可查"
-                                            : `${supplierItems.length} 家供应商`}
+                                            : `${supplierCount ?? 0} 家供应商`}
                                       </Badge>
                                     )}
                                     {!sku.skuId || isCreate ? (

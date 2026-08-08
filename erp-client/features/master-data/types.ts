@@ -256,6 +256,10 @@ export type ProductSpecDimension = Readonly<{
  */
 export type ProductSkuFields = Readonly<{
   skuId?: string
+  /** 当前 SKU 修订 ID；编辑既有行时作为乐观并发条件提交。 */
+  skuRevisionId?: string
+  /** 该行来自历史停用 SKU；再次启用时必须提交明确意图。 */
+  requiresExplicitReenable?: boolean
   /**
    * 规范化规格签名（`specification_signature`）：系统按规格属性组合派生，
    * 创建后不可变；用于判断某行能否延续原 `sku_id`。业务 UI 不展示、不手填。
@@ -288,8 +292,14 @@ export type ProductSkuFields = Readonly<{
 
 /** 商品（SPU）可写字段：规格组合出 SKU；无「规格标识」手填字段。 */
 export type ProductFields = Readonly<{
+  /** 商品稳定身份当前启停状态；编辑不得隐式改为启用。 */
+  lifecycleStatus: LifecycleStatus
+  /** 商品编号（product_no）；创建必填，创建后不可变。 */
+  productNo: string
   /** 公司审核后的商品描述；可由供应商来源资料预填，但保存后独立维护。 */
   description?: string
+  /** 公司审核后的 SPU 规格/服务内容；未展示编辑时仍须原样保留。 */
+  specification?: string
   /** `unit_of_measure` 稳定身份与代码；`baseUnit` 仅为显示快照。 */
   baseUnitId: string
   baseUnitCode: string
@@ -320,7 +330,10 @@ export type ProductFields = Readonly<{
 
 /** 对象中心展示用的商品详情投影。 */
 export type ProductDetailView = Readonly<{
+  lifecycleStatus: LifecycleStatus
+  productNo: string
   description?: string
+  specification?: string
   baseUnitId: string
   baseUnitCode: string
   baseUnit: string

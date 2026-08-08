@@ -103,6 +103,8 @@ export function rebuildSkusFromSpecs(input: {
     const matched = existingBySignature.get(signature)
     return {
       skuId: matched?.skuId,
+      skuRevisionId: matched?.skuRevisionId,
+      requiresExplicitReenable: matched?.requiresExplicitReenable,
       specificationSignature: signature,
       /** 系统默认生成；已有编号或用户覆盖则保留。 */
       skuNo: matched?.skuNo || `${prefix}-${String(index + 1).padStart(2, "0")}`,
@@ -122,7 +124,10 @@ export function rebuildSkusFromSpecs(input: {
 
 export function emptyProductFields(): ProductFields {
   return {
+    lifecycleStatus: "ENABLED",
+    productNo: "",
     description: "",
+    specification: "",
     baseUnitId: "",
     baseUnitCode: "",
     baseUnit: "",
@@ -181,6 +186,7 @@ export function productListFacts(fields: ProductFields): ReadonlyArray<{
   value: string
 }> {
   const facts: { label: string; value: string }[] = [
+    { label: "商品编号", value: fields.productNo },
     { label: "基础单位", value: fields.baseUnit },
     {
       label: "商品类型",
@@ -211,6 +217,7 @@ export function productListFacts(fields: ProductFields): ReadonlyArray<{
 
 /** 校验：每个启用 SKU 必须有主图；SPU 级字段完整。 */
 export function validateProductFields(fields: ProductFields): string | null {
+  if (!fields.productNo.trim()) return "请填写商品编号"
   if (!fields.productKind) return "请选择商品类型"
   if (!fields.baseUnitId.trim() || !fields.baseUnitCode.trim() || !fields.baseUnit.trim()) {
     return "请选择有效的基础单位"

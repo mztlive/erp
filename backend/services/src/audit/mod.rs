@@ -77,6 +77,29 @@ impl AuditActor {
         resource_type: &str,
         resource_id: String,
     ) -> Result<AuditLog> {
+        self.resource_log_with_message(action, resource_type, resource_id, None)
+    }
+
+    /// 在业务写入前构造并验证带业务说明的成功资源审计日志。
+    ///
+    /// # 参数
+    /// * `action` - Service 确定的动作名
+    /// * `resource_type` - Service 确定的资源类型
+    /// * `resource_id` - 本次操作目标
+    /// * `message` - 业务变更原因或执行说明
+    ///
+    /// # 返回值
+    /// 返回已通过领域校验、可直接持久化的审计日志。
+    ///
+    /// # 错误
+    /// 当操作人、资源或消息字段不符合领域约束时返回错误。
+    pub(crate) fn resource_log_with_message(
+        self,
+        action: &str,
+        resource_type: &str,
+        resource_id: String,
+        message: Option<String>,
+    ) -> Result<AuditLog> {
         if resource_id.trim().is_empty() {
             return Err(Error::ValidationError("资源ID不能为空".to_string()));
         }
@@ -90,7 +113,7 @@ impl AuditActor {
                 resource_type: resource_type.to_string(),
                 resource_id: Some(resource_id),
                 success: true,
-                message: None,
+                message,
             },
         )
         .map_err(Into::into)
@@ -185,6 +208,20 @@ mod tests {
         assert_eq!(log.resource_id.as_deref(), Some("customer-1"));
         assert!(log.success);
         assert!(log.message.is_none());
+    }
+
+    #[test]
+    fn audit_actor_preserves_validated_business_message() {
+        let log = AuditActor::new("admin-1".to_string(), "root".to_string(), AccountKind::Admin)
+            .resource_log_with_message(
+                "product.update",
+                "product",
+                "product-1".to_string(),
+                Some("恢复销售".to_string()),
+            )
+            .unwrap();
+
+        assert_eq!(log.message.as_deref(), Some("恢复销售"));
     }
 
     #[test]

@@ -15,7 +15,8 @@ use entities::catalog::{
 };
 use entities::common::time::BusinessDate;
 use entities::ids::{
-    FileAssetId, ProductBrandId, ProductCategoryId, ProductId, SkuAttributeId, SkuId, UnitOfMeasureId,
+    FileAssetId, ProductBrandId, ProductCategoryId, ProductId, SkuAttributeId, SkuId, SkuRevisionId,
+    UnitOfMeasureId,
 };
 use entities::money::{Amount, Quantity};
 use serde::{Deserialize, Serialize};
@@ -869,6 +870,15 @@ pub struct SpecEntryInput {
 /// SKU 输入行（W14 规格组合表的一行）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct ProductSkuInput {
+    /// 既有 SKU 的稳定 ID；创建或新增规格签名时必须为空。
+    #[serde(default)]
+    pub sku_id: Option<SkuId>,
+    /// 既有 SKU 的期望当前修订 ID；用于阻断并发覆盖。
+    #[serde(default)]
+    pub expected_sku_revision_id: Option<SkuRevisionId>,
+    /// 历史停用签名是否明确重新启用。
+    #[serde(default)]
+    pub reenable: bool,
     /// SKU 编号（全局唯一业务编码，允许手动覆盖）。
     #[validate(custom(function = "non_blank", message = "SKU编号不能为空"))]
     pub sku_no: String,
@@ -896,6 +906,8 @@ pub struct ProductSkuInput {
 /// 在一个事务内原子写入）。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct CreateProductRequest {
+    /// 创建原因，写入同一事务内的审计日志。
+    pub change_reason: Option<String>,
     /// 商品编号（全局唯一，创建后不可修改）。
     #[validate(custom(function = "non_blank", message = "商品编号不能为空"))]
     pub product_no: String,
@@ -940,6 +952,8 @@ pub struct UpdateProductRequest {
     /// 期望的乐观锁版本；与当前版本不一致时拒绝更新（409）。
     #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
     pub version: u64,
+    /// 重新启用历史停用 SKU 时的变更原因。
+    pub change_reason: Option<String>,
     /// 公司审核后的商品名称。
     #[validate(custom(function = "non_blank", message = "商品名称不能为空"))]
     pub name: String,
@@ -982,6 +996,8 @@ pub struct ProductView {
     pub product_kind: ProductKind,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 当前商品修订 ID。
+    pub current_revision_id: Option<String>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 乐观锁版本。
@@ -1002,6 +1018,7 @@ impl From<Product> for ProductView {
             product_no: product.product_no,
             product_kind: product.product_kind,
             status: product.stable.status,
+            current_revision_id: product.stable.current_revision_id,
             created_at: product.base.created_at,
             version: product.base.version,
         }
@@ -1094,10 +1111,20 @@ pub struct ProductRevisionView {
     pub revision_no: u32,
     /// 公司审核后的商品名称。
     pub name: String,
+    /// 公司审核后的商品描述。
+    pub description: Option<String>,
+    /// 公司审核后的规格或服务内容。
+    pub specification: Option<String>,
+    /// ERP 分类 ID。
+    pub category_id: String,
+    /// ERP 品牌 ID。
+    pub brand_id: String,
     /// 修订启停状态。
     pub status: EnableStatus,
     /// 生效开始日。
     pub effective_from: BusinessDate,
+    /// 生效结束日；空表示长期。
+    pub effective_to: Option<BusinessDate>,
     /// SPU 级媒体行（轮播/详情；由列表 handler 批量装配）。
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub media: Vec<ProductRevisionMediaView>,
@@ -1121,8 +1148,13 @@ impl From<ProductRevision> for ProductRevisionView {
             product_id: revision.product_id.to_string(),
             revision_no: revision.revision.revision_no,
             name: revision.name,
+            description: revision.description,
+            specification: revision.specification,
+            category_id: revision.category_id.to_string(),
+            brand_id: revision.brand_id.to_string(),
             status: revision.status,
             effective_from: revision.effective_from,
+            effective_to: revision.effective_to,
             media: Vec::new(),
             created_at: revision.base.created_at,
             version: revision.base.version,
@@ -1201,6 +1233,8 @@ pub struct SkuView {
     pub specification_signature: String,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 当前 SKU 修订 ID。
+    pub current_revision_id: Option<String>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 乐观锁版本。
@@ -1223,6 +1257,7 @@ impl From<Sku> for SkuView {
             base_unit_id: sku.base_unit_id.to_string(),
             specification_signature: sku.specification_signature,
             status: sku.stable.status,
+            current_revision_id: sku.stable.current_revision_id,
             created_at: sku.base.created_at,
             version: sku.base.version,
         }
@@ -1300,16 +1335,28 @@ pub struct SkuRevisionView {
     pub revision_no: u32,
     /// 公司审核后的 SKU 名称。
     pub name: String,
+    /// 公司审核后的 SKU 描述。
+    pub description: Option<String>,
+    /// 公司审核后的规格或服务内容。
+    pub specification: Option<String>,
     /// 条码原值。
     pub barcode: Option<String>,
     /// 来源 SKU 主图（已归档受控文件，D05）。
     pub source_main_image_asset_id: Option<String>,
+    /// 重量（千克）。
+    pub weight_kg: Option<entities::money::Quantity>,
+    /// 体积（立方米）。
+    pub volume_m3: Option<entities::money::Quantity>,
     /// 修订启停状态。
     pub status: EnableStatus,
     /// 公司对销售可见的含税价格（字符串形态）。
     pub sales_visible_price_gross: Option<Amount>,
+    /// 市场参考价。
+    pub market_price: Option<Amount>,
     /// 生效开始日。
     pub effective_from: BusinessDate,
+    /// 生效结束日；空表示长期。
+    pub effective_to: Option<BusinessDate>,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
     /// 乐观锁版本。
@@ -1330,14 +1377,20 @@ impl From<SkuRevision> for SkuRevisionView {
             sku_id: revision.sku_id.to_string(),
             revision_no: revision.revision.revision_no,
             name: revision.name,
+            description: revision.description,
+            specification: revision.specification,
             barcode: revision.barcode,
             source_main_image_asset_id: revision
                 .source_main_image_asset_id
                 .as_ref()
                 .map(|id| id.to_string()),
+            weight_kg: revision.weight_kg,
+            volume_m3: revision.volume_m3,
             status: revision.status,
             sales_visible_price_gross: revision.sales_visible_price_gross,
+            market_price: revision.market_price,
             effective_from: revision.effective_from,
+            effective_to: revision.effective_to,
             created_at: revision.base.created_at,
             version: revision.base.version,
         }

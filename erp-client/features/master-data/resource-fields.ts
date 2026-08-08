@@ -604,6 +604,9 @@ export function buildResourceFields(
     case "products":
       // 商品完整字段由商品表单页直接组装 ProductFields；此处仅兜底空结构。
       return {
+        lifecycleStatus: "ENABLED",
+        productNo: "",
+        specification: "",
         baseUnitId: "",
         baseUnitCode: "",
         baseUnit: pickField(values, "baseUnit") ?? "",

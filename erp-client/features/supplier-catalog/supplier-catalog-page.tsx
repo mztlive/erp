@@ -1007,8 +1007,6 @@ export function SupplierCatalogPage() {
               carouselImages: view.skuContext.carouselImages,
               detailImages: view.skuContext.detailImages,
               mainImage: view.skuContext.mainImage,
-              salesVisiblePriceGross: view.skuContext.poolEntry?.salesVisiblePriceGross,
-              hasPoolEntry: Boolean(view.skuContext.poolEntry),
             }}
           />
         ) : (

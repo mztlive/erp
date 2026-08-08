@@ -58,6 +58,7 @@ use crate::catalog::dto::SortDir;
 use crate::errors::{Error, Result};
 
 mod dto;
+mod sellable;
 
 pub use self::dto::{
     CreateProductBrandRequest, CreateProductCategoryRequest, CreateProductRequest, CreateSkuAttributeRequest,
@@ -72,6 +73,8 @@ pub use self::dto::{
     UpdateVoucherCategoryRequest, VoucherCategoryProfileListParams, VoucherCategoryProfileView,
     VoucherSkuInput,
 };
+pub(crate) use self::sellable::sellable_sku_invalid_error;
+pub use self::sellable::{SellableSkuListParams, SellableSkuView};
 
 /// 商品分类列表筛选条件类型（经 `CatalogExt` 关联类型跨 crate 可达）。
 type ProductCategoryFilter = <mongodb::Database as CatalogExt>::ProductCategoryFilter;
@@ -149,6 +152,8 @@ struct ResolvedSpecEntry {
 
 /// 商品（SPU）创建草稿（全部 ID 在事务外预生成，事务内只做写入）。
 struct ProductDraft {
+    /// 写入审计日志的创建原因。
+    change_reason: Option<String>,
     /// SPU 稳定身份。
     product: Product,
     /// 商品修订快照。
@@ -189,6 +194,8 @@ struct VoucherCategoryUpdateDraft {
 
 /// 商品规格编辑计划（数据模型 §6.3 全量替换语义）。
 struct SpecEditPlan {
+    /// 写入审计日志的变更原因。
+    change_reason: Option<String>,
     /// 修订后的 SPU。
     product: Product,
     /// 商品修订快照。
@@ -1218,6 +1225,7 @@ impl CatalogService {
                 product_no: row.product_no,
                 product_kind: row.product_kind,
                 status: row.status,
+                current_revision_id: row.current_revision_id,
                 created_at: row.created_at,
                 version: row.version,
             })
@@ -1335,8 +1343,13 @@ impl CatalogService {
                 product_id: row.product_id,
                 revision_no: row.revision_no,
                 name: row.name,
+                description: row.description,
+                specification: row.specification,
+                category_id: row.category_id,
+                brand_id: row.brand_id,
                 status: row.status,
                 effective_from: row.effective_from,
+                effective_to: row.effective_to,
                 media: media_by_revision.get(&row.id).cloned().unwrap_or_default(),
                 created_at: row.created_at,
                 version: row.version,
@@ -1383,6 +1396,7 @@ impl CatalogService {
                 base_unit_id: row.base_unit_id,
                 specification_signature: row.specification_signature,
                 status: row.status,
+                current_revision_id: row.current_revision_id,
                 created_at: row.created_at,
                 version: row.version,
             })
@@ -1434,11 +1448,17 @@ impl CatalogService {
                 sku_id: row.sku_id,
                 revision_no: row.revision_no,
                 name: row.name,
+                description: row.description,
+                specification: row.specification,
                 barcode: row.barcode,
                 source_main_image_asset_id: row.source_main_image_asset_id,
+                weight_kg: row.weight_kg,
+                volume_m3: row.volume_m3,
                 status: row.status,
                 sales_visible_price_gross: row.sales_visible_price_gross,
+                market_price: row.market_price,
                 effective_from: row.effective_from,
+                effective_to: row.effective_to,
                 created_at: row.created_at,
                 version: row.version,
             })
@@ -1754,6 +1774,14 @@ impl CatalogService {
             .collect::<Vec<_>>();
         let mut sku_items = Vec::with_capacity(req.skus.len());
         for sku_input in req.skus {
+            if sku_input.sku_id.is_some()
+                || sku_input.expected_sku_revision_id.is_some()
+                || sku_input.reenable
+            {
+                return Err(Error::ValidationError(
+                    "新建商品的 SKU 不得指定既有身份或重新启用意图".to_string(),
+                ));
+            }
             let item = self
                 .build_new_sku_item(
                     NewSkuContext {
@@ -1787,6 +1815,7 @@ impl CatalogService {
         )?;
         product.stable.current_revision_id = Some(revision.base.id.clone());
         Ok(ProductDraft {
+            change_reason: req.change_reason,
             product,
             revision,
             media,
@@ -1915,6 +1944,9 @@ impl CatalogService {
                     created_by: actor.id(),
                 },
                 ProductSkuInput {
+                    sku_id: None,
+                    expected_sku_revision_id: None,
+                    reenable: false,
                     sku_no: voucher_no,
                     base_unit_id: sku.base_unit_id,
                     barcode: sku.barcode,
@@ -2575,15 +2607,19 @@ impl CatalogService {
     /// # 错误
     /// 唯一索引冲突（409）或事务失败时返回错误并整体回滚。
     async fn write_product_draft(&self, draft: ProductDraft, actor: &AuditActor) -> Result<Product> {
-        let audit = actor
-            .clone()
-            .resource_log("product.create", "product", draft.product.base.id.clone())?;
         let ProductDraft {
+            change_reason,
             product,
             revision,
             media,
             sku_items,
         } = draft;
+        let audit = actor.clone().resource_log_with_message(
+            "product.create",
+            "product",
+            product.base.id.clone(),
+            change_reason,
+        )?;
         let db = self.db.clone();
         let client = db.client().clone();
         client
@@ -2996,6 +3032,10 @@ impl CatalogService {
         let mut sku_items = Vec::with_capacity(req.skus.len());
         let mut seen_signatures = std::collections::HashSet::new();
         let mut disable = Vec::new();
+        let change_reason = req.change_reason.as_deref().map(str::trim);
+        let audit_message = change_reason
+            .filter(|reason| !reason.is_empty())
+            .map(str::to_string);
         for sku_input in req.skus {
             let (signature, resolved) = self
                 .resolve_spec_entries(&req.category_id, &sku_input.spec_entries)
@@ -3006,6 +3046,7 @@ impl CatalogService {
             if let Some(mut existing_sku) = current_by_signature.get(&signature).cloned() {
                 // 保留/重新启用：沿用原 sku_id，追加修订；重新启用显式置 Active。
                 let reactivating = !existing_sku.is_active();
+                ensure_existing_sku_identity(&existing_sku, &sku_input, reactivating, change_reason)?;
                 self.ensure_barcode_available(&sku_input.barcode, Some(existing_sku.base.id.as_str()))
                     .await?;
                 let revision_no = self.next_sku_revision_no(&existing_sku.base.id).await?;
@@ -3039,6 +3080,14 @@ impl CatalogService {
                 });
             } else {
                 // 全新签名：分配新 SKU 身份。
+                if sku_input.sku_id.is_some()
+                    || sku_input.expected_sku_revision_id.is_some()
+                    || sku_input.reenable
+                {
+                    return Err(Error::ValidationError(
+                        "新增规格签名不得指定或猜测既有 SKU 身份".to_string(),
+                    ));
+                }
                 let item = self
                     .build_new_sku_item(
                         NewSkuContext {
@@ -3087,6 +3136,7 @@ impl CatalogService {
         product.stable.status = req.status;
         product.stable.touch(actor.id());
         Ok(SpecEditPlan {
+            change_reason: audit_message,
             product: product.clone(),
             revision,
             media,
@@ -3110,16 +3160,20 @@ impl CatalogService {
     /// # 错误
     /// 并发冲突（409）或事务失败时返回错误并整体回滚。
     async fn write_spec_edit_plan(&self, plan: SpecEditPlan, actor: &AuditActor) -> Result<Product> {
-        let audit = actor
-            .clone()
-            .resource_log("product.update", "product", plan.product.base.id.clone())?;
         let SpecEditPlan {
+            change_reason,
             mut product,
             revision,
             media,
             sku_items,
             mut disable,
         } = plan;
+        let audit = actor.clone().resource_log_with_message(
+            "product.update",
+            "product",
+            product.base.id.clone(),
+            change_reason,
+        )?;
         let db = self.db.clone();
         let client = db.client().clone();
         client
@@ -3310,6 +3364,55 @@ fn build_attribute_value_rows(
     Ok(rows)
 }
 
+/// 校验既有规格行的稳定身份、期望修订与显式重新启用意图。
+///
+/// # 参数
+/// * `existing` - 规范化签名命中的既有稳定 SKU
+/// * `input` - 客户端提交的 SKU 行
+/// * `reactivating` - 该 SKU 当前是否处于停用状态
+/// * `change_reason` - 请求级变更原因
+///
+/// # 返回
+/// 身份、修订与重新启用意图一致时返回 `Ok(())`。
+///
+/// # 错误
+/// 身份缺失/不匹配、期望修订过期、稳定字段被改动，或停用 SKU 未明确重新
+/// 启用并填写原因时返回验证或冲突错误。
+fn ensure_existing_sku_identity(
+    existing: &Sku,
+    input: &ProductSkuInput,
+    reactivating: bool,
+    change_reason: Option<&str>,
+) -> Result<()> {
+    if input.sku_id.as_ref().map(ToString::to_string).as_deref() != Some(existing.base.id.as_str()) {
+        return Err(Error::ValidationError(
+            "既有规格行必须携带匹配的稳定 sku_id".to_string(),
+        ));
+    }
+    let expected_revision = input.expected_sku_revision_id.as_ref().map(ToString::to_string);
+    if expected_revision.as_deref() != existing.stable.current_revision_id.as_deref() {
+        return Err(Error::ConflictError(
+            "SKU 修订已变化，请刷新商品后重试".to_string(),
+        ));
+    }
+    if input.sku_no.trim() != existing.sku_no || input.base_unit_id != existing.base_unit_id {
+        return Err(Error::ValidationError(
+            "SKU 编码和基础单位为稳定身份字段，编辑时不得修改".to_string(),
+        ));
+    }
+    if reactivating && (!input.reenable || change_reason.is_none_or(str::is_empty)) {
+        return Err(Error::ValidationError(
+            "重新启用历史停用 SKU 必须明确 reenable=true 并填写 change_reason".to_string(),
+        ));
+    }
+    if !reactivating && input.reenable {
+        return Err(Error::ValidationError(
+            "当前启用 SKU 不得提交重新启用意图".to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// 校验一组整数内无重复（用于媒体展示顺序等组合唯一前置检查）。
 ///
 /// # 参数
@@ -3333,13 +3436,51 @@ fn ensure_unique_sort_orders(values: impl Iterator<Item = i32>, label: &str) -> 
 
 #[cfg(test)]
 mod tests {
-    use super::{ensure_category_selection_exclusive, NewVoucherCategoryInput, ProductCategoryId};
+    use super::{
+        ensure_category_selection_exclusive, ensure_existing_sku_identity, EnableStatus,
+        NewVoucherCategoryInput, ProductCategoryId, ProductId, ProductSkuInput, Sku, SkuData, SkuId,
+        SkuRevisionId, UnitOfMeasureId,
+    };
 
     fn new_category_input() -> NewVoucherCategoryInput {
         NewVoucherCategoryInput {
             category_code: "VC-CAT".to_string(),
             parent_category_id: None,
             name: "卡券分类".to_string(),
+        }
+    }
+
+    fn existing_sku(status: EnableStatus) -> Sku {
+        let mut sku = Sku::new(
+            SkuId::new("sku-1"),
+            SkuData {
+                sku_no: "SKU-001".to_string(),
+                product_id: ProductId::new("product-1"),
+                base_unit_id: UnitOfMeasureId::new("unit-1"),
+                specification_signature: "color=red".to_string(),
+                status,
+            },
+            "tester",
+        )
+        .unwrap();
+        sku.stable.current_revision_id = Some("sku-rev-2".to_string());
+        sku
+    }
+
+    fn existing_input(reenable: bool) -> ProductSkuInput {
+        ProductSkuInput {
+            sku_id: Some(SkuId::new("sku-1")),
+            expected_sku_revision_id: Some(SkuRevisionId::new("sku-rev-2")),
+            reenable,
+            sku_no: "SKU-001".to_string(),
+            base_unit_id: UnitOfMeasureId::new("unit-1"),
+            barcode: None,
+            main_image_asset_id: None,
+            weight_kg: None,
+            volume_m3: None,
+            sales_visible_price_gross: None,
+            market_price: None,
+            spec_entries: Vec::new(),
         }
     }
 
@@ -3364,5 +3505,22 @@ mod tests {
             ensure_category_selection_exclusive(&None, &None).is_ok(),
             "两者都缺省时走共用卡券根分类"
         );
+    }
+
+    #[test]
+    fn existing_sku_requires_exact_current_revision() {
+        let sku = existing_sku(EnableStatus::Active);
+        let mut input = existing_input(false);
+        input.expected_sku_revision_id = Some(SkuRevisionId::new("stale-revision"));
+
+        assert!(ensure_existing_sku_identity(&sku, &input, false, None).is_err());
+    }
+
+    #[test]
+    fn disabled_sku_requires_explicit_reenable_and_reason() {
+        let sku = existing_sku(EnableStatus::Disabled);
+
+        assert!(ensure_existing_sku_identity(&sku, &existing_input(false), true, None).is_err());
+        assert!(ensure_existing_sku_identity(&sku, &existing_input(true), true, Some("恢复销售")).is_ok());
     }
 }

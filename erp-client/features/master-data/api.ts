@@ -110,6 +110,7 @@ type ProductDto = {
   product_no: string
   product_kind: ProductKind
   status: EnableStatus
+  current_revision_id: string | null
   created_at: number
   version: number
 }
@@ -119,8 +120,13 @@ type ProductRevisionDto = {
   product_id: string
   revision_no: number
   name: string
+  description: string | null
+  specification: string | null
+  category_id: string
+  brand_id: string
   status: EnableStatus
   effective_from: string
+  effective_to: string | null
   media?: Array<{
     id: string
     file_asset_id: string
@@ -139,6 +145,7 @@ type SkuDto = {
   base_unit_id: string
   specification_signature: string
   status: EnableStatus
+  current_revision_id: string | null
   created_at: number
   version: number
 }
@@ -148,13 +155,51 @@ type SkuRevisionDto = {
   sku_id: string
   revision_no: number
   name: string
+  description: string | null
+  specification: string | null
   barcode: string | null
   source_main_image_asset_id?: string | null
   status: EnableStatus
   sales_visible_price_gross: string | null
+  market_price: string | null
+  weight_kg: string | null
+  volume_m3: string | null
   effective_from: string
+  effective_to: string | null
   created_at: number
   version: number
+}
+
+type SellableSkuDto = {
+  sku_id: string
+  sku_version: number
+  sku_revision_id: string
+  sku_revision_no: number
+  sku_no: string
+  product_id: string
+  product_no: string
+  product_kind: ProductKind
+  name: string
+  specification: string | null
+  barcode: string | null
+  base_unit_id: string
+  base_unit_code: string | null
+  base_unit_name: string | null
+  sales_visible_price_gross: string
+  market_price: string | null
+  main_image_asset_id: string | null
+  effective_from: string
+  effective_to: string | null
+  supplier_count: number
+  supply_regions: string[]
+  eligibility_as_of: string
+}
+
+type SupplierOfferingSummaryDto = {
+  sku_id: string
+  supplier_id: string
+  status: string
+  current_revision_id: string | null
 }
 
 type VoucherCategoryProfileDto = {
@@ -610,6 +655,23 @@ const commonActions = (
   resource: MasterDataResource,
   lifecycle: LifecycleStatus
 ): Pick<MasterDataListItem, "allowedActions" | "actionBlockers"> => {
+  if (resource === "sellable-items") {
+    return {
+      allowedActions: ["VIEW", "EXPORT_ROW"],
+      actionBlockers: [
+        {
+          action: "CREATE_REVISION",
+          code: "SELLABLE_READ_ONLY",
+          message: "公司商品池由销售资格实时计算，请在公司商品中维护销售资料。",
+        },
+        {
+          action: "DISABLE",
+          code: "SELLABLE_READ_ONLY",
+          message: "公司商品池没有独立启停状态，请维护公司 SKU 或供应商供给。",
+        },
+      ],
+    }
+  }
   if (resource === "warehouses") {
     return {
       allowedActions: ["VIEW", "EXPORT_ROW"],
@@ -733,6 +795,20 @@ function wrapListResult(
 function isFutureDate(date: string | undefined): boolean {
   if (!date) return false
   return date > todayDateOnly()
+}
+
+/** 将后端规范化规格签名还原为 W14 可编辑的属性代码/值代码对。 */
+function parseSpecificationSignature(
+  signature: string
+): Array<{ attributeCode: string; valueCode: string }> {
+  if (!signature) return []
+  return signature.split("|").flatMap((entry) => {
+    const separator = entry.indexOf("=")
+    if (separator <= 0) return []
+    const attributeCode = entry.slice(0, separator).trim()
+    const valueCode = entry.slice(separator + 1).trim()
+    return attributeCode && valueCode ? [{ attributeCode, valueCode }] : []
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -864,58 +940,50 @@ function mapProductRow(
   }
 }
 
-function mapSkuAsSellable(
-  sku: SkuDto,
-  revision?: SkuRevisionDto,
-  product?: ProductDto,
-  baseUnitLabel?: string
-): MasterDataListItem {
-  const lifecycle = asLifecycle(sku.status)
-  // 优先用原始枚举码做筛选（前端 isVoucherKind 兼容中文标签）
-  const kindCode = product?.product_kind?.trim() || undefined
-  const kindLabel = productKindLabel(product?.product_kind)
+function mapSkuAsSellable(dto: SellableSkuDto): MasterDataListItem {
+  const lifecycle = "ENABLED" as const
+  const kindLabel = productKindLabel(dto.product_kind)
   return {
     objectType: "sellable-items",
-    stableId: sku.id,
-    stableNo: sku.sku_no,
-    name: revision?.name ?? sku.sku_no,
+    stableId: dto.sku_id,
+    stableNo: dto.sku_no,
+    name: dto.name,
     lifecycleStatus: lifecycle,
     lifecycleStatusLabel: lifecycleLabel(lifecycle),
     lifecycleTone: lifecycleTone(lifecycle),
     revisionTiming: "CURRENT",
     revisionTimingLabel: "当前生效",
-    currentRevisionId: revision?.id ?? sku.id,
-    displayedRevisionId: revision?.id ?? sku.id,
-    revisionNo: revision?.revision_no ?? sku.version,
-    effectiveFrom:
-      revision?.effective_from ?? tsToIso(sku.created_at).slice(0, 10),
+    currentRevisionId: dto.sku_revision_id,
+    displayedRevisionId: dto.sku_revision_id,
+    revisionNo: dto.sku_revision_no,
+    effectiveFrom: dto.effective_from,
+    effectiveTo: dto.effective_to ?? undefined,
     keyFacts: [
-      { label: "SKU", value: sku.sku_no },
+      { label: "SKU", value: dto.sku_no },
       {
         label: "销售可见价",
-        value: revision?.sales_visible_price_gross
-          ? `¥${revision.sales_visible_price_gross}`
-          : "—",
+        value: `¥${dto.sales_visible_price_gross}`,
       },
       {
         label: "商品编号",
-        value: product?.product_no ?? sku.product_id,
+        value: dto.product_no,
       },
-      ...(baseUnitLabel
-        ? [{ label: "基础单位", value: baseUnitLabel }]
+      ...(dto.base_unit_name || dto.base_unit_code
+        ? [{ label: "基础单位", value: dto.base_unit_name ?? dto.base_unit_code! }]
         : []),
       ...(kindLabel
         ? [{ label: "商品类型", value: kindLabel }]
         : []),
+      { label: "有效供应商", value: `${dto.supplier_count} 家` },
+      ...(dto.supply_regions.length > 0
+        ? [{ label: "可供区域", value: dto.supply_regions.join("、") }]
+        : []),
     ],
-    primaryBlocker:
-      lifecycle === "DISABLED" ? "已停用：不可进入销售选品" : undefined,
     selectorEligibility: [],
     ...commonActions("sellable-items", lifecycle),
-    lockVersion: sku.version,
-    metricTags: [lifecycle === "ENABLED" ? "enabled" : "disabled"],
-    // 存稳定码，便于销售建单按 VOUCHER 过滤
-    productKind: kindCode || kindLabel || undefined,
+    lockVersion: dto.sku_version,
+    metricTags: ["enabled"],
+    productKind: dto.product_kind,
   }
 }
 
@@ -1135,17 +1203,17 @@ async function listProducts(
   for (const product of products) {
     let revision: ProductRevisionDto | undefined
     try {
-      const revPage = await apiGet<BackendPage<ProductRevisionDto>>(
+      const revisions = await fetchAllPages<ProductRevisionDto>(
         "/admin/product-revisions",
         {
           product_id: product.id,
-          page: 1,
-          page_size: 1,
           sort_by: "revision_no",
           sort_dir: "desc",
         }
       )
-      revision = revPage.items[0]
+      revision = product.current_revision_id
+        ? revisions.find((item) => item.id === product.current_revision_id)
+        : undefined
     } catch {
       // leave revision undefined
     }
@@ -1157,70 +1225,11 @@ async function listProducts(
 async function listSellableItems(
   query: MasterDataListQuery
 ): Promise<MasterDataListItem[]> {
-  const status =
-    query.lifecycleStatus === "enabled"
-      ? "active"
-      : query.lifecycleStatus === "disabled"
-        ? "disabled"
-        : undefined
-  // 先按状态取；若后端状态字面量不一致导致空结果，回退为全量再客户端过滤
-  let skus = await fetchAllPages<SkuDto>("/admin/skus", {
-    status,
-    sku_no: query.q || undefined,
-  }).catch(() => [] as SkuDto[])
-  if (skus.length === 0 && status) {
-    skus = await fetchAllPages<SkuDto>("/admin/skus", {
-      sku_no: query.q || undefined,
-    }).catch(() => [] as SkuDto[])
-    if (query.lifecycleStatus === "enabled") {
-      skus = skus.filter((s) => asLifecycle(s.status) === "ENABLED")
-    } else if (query.lifecycleStatus === "disabled") {
-      skus = skus.filter((s) => asLifecycle(s.status) === "DISABLED")
-    }
-  }
-  if (skus.length === 0) return []
-
-  const [products, units] = await Promise.all([
-    fetchAllPages<ProductDto>("/admin/products", {}).catch(
-      () => [] as ProductDto[]
-    ),
-    fetchAllPages<UnitOfMeasureDto>("/admin/unit-of-measures", {}).catch(
-      () => [] as UnitOfMeasureDto[]
-    ),
-  ])
-  const productById = new Map(products.map((p) => [p.id, p]))
-  const unitById = new Map(units.map((u) => [u.id, u]))
-
-  const rows: MasterDataListItem[] = []
-  for (const sku of skus) {
-    let revision: SkuRevisionDto | undefined
-    try {
-      const revPage = await apiGet<BackendPage<SkuRevisionDto>>(
-        "/admin/sku-revisions",
-        {
-          sku_id: sku.id,
-          page: 1,
-          page_size: 1,
-          sort_by: "revision_no",
-          sort_dir: "desc",
-        }
-      )
-      revision = revPage.items[0]
-    } catch {
-      // ignore
-    }
-    const unit = unitById.get(sku.base_unit_id)
-    const baseUnitLabel = unit?.name ?? unit?.symbol ?? unit?.unit_code
-    rows.push(
-      mapSkuAsSellable(
-        sku,
-        revision,
-        productById.get(sku.product_id),
-        baseUnitLabel
-      )
-    )
-  }
-  return rows
+  if (query.lifecycleStatus === "disabled") return []
+  const rows = await fetchAllPages<SellableSkuDto>("/admin/sellable-skus", {
+    q: query.q || undefined,
+  })
+  return rows.map(mapSkuAsSellable)
 }
 
 async function listVoucherCategories(
@@ -1478,7 +1487,12 @@ async function centerProduct(
     "/admin/product-revisions",
     { product_id: stableId, sort_by: "revision_no", sort_dir: "desc" }
   )
-  const currentRev = revisions[0]
+  const currentRev = product.current_revision_id
+    ? revisions.find((revision) => revision.id === product.current_revision_id)
+    : undefined
+  if (!currentRev) {
+    throw new Error("商品当前修订不存在或已漂移，禁止以历史修订回填编辑表单")
+  }
   const skus = await fetchAllPages<SkuDto>("/admin/skus", {
     product_id: stableId,
   })
@@ -1492,7 +1506,6 @@ async function centerProduct(
   )
   const brands = await fetchAllPages<ProductBrandDto>("/admin/product-brands", {})
 
-  // Best-effort: current revision does not embed category/brand/specs.
   // SPU 媒体与 SKU 主图按 file_asset 引用解析为可访问地址。
   const carouselMedia = (currentRev?.media ?? [])
     .filter((m) => m.media_role === "carousel")
@@ -1526,39 +1539,69 @@ async function centerProduct(
   }
 
   const skuFields: ProductSkuFields[] = []
-  for (const sku of skus) {
-    let rev: SkuRevisionDto | undefined
-    try {
-      const page = await apiGet<BackendPage<SkuRevisionDto>>(
-        "/admin/sku-revisions",
-        {
-          sku_id: sku.id,
-          page: 1,
-          page_size: 1,
-          sort_by: "revision_no",
-          sort_dir: "desc",
-        }
+  const parsedSpecsBySku = new Map(
+    skus.map((sku) => [sku.id, parseSpecificationSignature(sku.specification_signature)])
+  )
+  const specNames = [
+    ...new Set(
+      [...parsedSpecsBySku.values()].flatMap((entries) =>
+        entries.map((entry) => entry.attributeCode)
       )
-      rev = page.items[0]
-    } catch {
-      // ignore
+    ),
+  ].sort((left, right) => left.localeCompare(right))
+  const specs = specNames.map((name) => ({
+    name,
+    values: [
+      ...new Set(
+        [...parsedSpecsBySku.values()].flatMap((entries) =>
+          entries
+            .filter((entry) => entry.attributeCode === name)
+            .map((entry) => entry.valueCode)
+        )
+      ),
+    ],
+  }))
+  for (const sku of skus) {
+    const skuRevisions = await fetchAllPages<SkuRevisionDto>(
+      "/admin/sku-revisions",
+      { sku_id: sku.id, sort_by: "revision_no", sort_dir: "desc" }
+    ).catch(() => [] as SkuRevisionDto[])
+    const rev = sku.current_revision_id
+      ? skuRevisions.find((revision) => revision.id === sku.current_revision_id)
+      : undefined
+    if (!rev) {
+      throw new Error(`SKU ${sku.sku_no} 的当前修订不存在或已漂移，禁止编辑`)
     }
     const unit = unitById.get(sku.base_unit_id)
+    const parsedSpecs = parsedSpecsBySku.get(sku.id) ?? []
+    const valuesByAttribute = new Map(
+      parsedSpecs.map((entry) => [entry.attributeCode, entry.valueCode])
+    )
+    const attributeValues = specNames.map(
+      (name) => valuesByAttribute.get(name) ?? ""
+    )
     const mainImageAssetId = rev?.source_main_image_asset_id?.trim()
     const mainAsset = mainImageAssetId
       ? await fetchFileAsset(mainImageAssetId)
       : null
     skuFields.push({
       skuId: sku.id,
+      skuRevisionId: rev?.id,
+      requiresExplicitReenable: asLifecycle(sku.status) === "DISABLED",
       specificationSignature: sku.specification_signature,
       skuNo: sku.sku_no,
-      attributeValues: [],
-      specLabel: sku.specification_signature || "（无规格）",
+      attributeValues,
+      specLabel:
+        (rev?.specification ??
+          parsedSpecs
+            .map((entry) => `${entry.attributeCode}：${entry.valueCode}`)
+            .join(" / ")) || "默认规格",
       barcode: rev?.barcode ?? undefined,
       mainImage: mainAsset?.file_name ?? "",
       mainImagePreviewUrl: mainAsset?.public_url ?? undefined,
       mainImageAssetId: mainAsset?.id ?? undefined,
       salePrice: rev?.sales_visible_price_gross ?? undefined,
+      marketPrice: rev?.market_price ?? undefined,
       baseUnit: unit?.name ?? unit?.symbol,
       lifecycleStatus: asLifecycle(sku.status),
     })
@@ -1568,38 +1611,42 @@ async function centerProduct(
     ? unitById.get(skus[0].base_unit_id)
     : undefined
 
-  // Category/brand IDs are not on ProductView — leave empty strings (backend gap).
+  const category = categories.find((item) => item.id === currentRev?.category_id)
+  const brand = brands.find((item) => item.id === currentRev?.brand_id)
   const productDetail = {
-    description: undefined as string | undefined,
+    lifecycleStatus: asLifecycle(product.status),
+    productNo: product.product_no,
+    description: currentRev?.description ?? undefined,
+    specification: currentRev?.specification ?? undefined,
     baseUnitId: primaryUnit?.id ?? "",
     baseUnitCode: primaryUnit?.unit_code ?? "",
     baseUnit: primaryUnit?.name ?? primaryUnit?.symbol ?? "",
-    categoryId: "",
-    category: "",
-    brandId: "",
-    brand: "",
+    categoryId: currentRev?.category_id ?? "",
+    category: category?.name ?? "",
+    brandId: currentRev?.brand_id ?? "",
+    brand: brand?.name ?? "",
     carouselImages,
     detailImages,
     carouselPreviewUrls,
     detailPreviewUrls,
     carouselFileAssetIds,
     detailFileAssetIds,
-    specs: [] as { name: string; values: readonly string[] }[],
+    specs,
     skus: skuFields,
   }
 
   const row = mapProductRow(product, currentRev)
-  const timeline: RevisionTimelineEntry[] = revisions.map((r, index) => ({
+  const timeline: RevisionTimelineEntry[] = revisions.map((r) => ({
     id: r.id,
     revisionNo: r.revision_no,
     revisionTiming:
-      index === 0
+      r.id === currentRev?.id
         ? isFutureDate(r.effective_from)
           ? ("FUTURE" as const)
           : ("CURRENT" as const)
         : ("HISTORICAL" as const),
     timingLabel:
-      index === 0
+      r.id === currentRev?.id
         ? isFutureDate(r.effective_from)
           ? "待生效"
           : "当前生效"
@@ -1607,14 +1654,11 @@ async function centerProduct(
     nameSnapshot: r.name,
     actor: "—",
     effectiveFrom: r.effective_from,
+    effectiveTo: r.effective_to ?? undefined,
     changeReason: "—",
-    isCurrent: index === 0,
+    isCurrent: r.id === currentRev?.id,
     lifecycleAtRevision: asLifecycle(r.status),
   }))
-
-  // silence unused if catalogs empty (kept for future enrichment)
-  void categories
-  void brands
 
   return baseCenter("products", row, {
     productKind: product.product_kind,
@@ -1634,6 +1678,7 @@ async function centerProduct(
       name: currentRev?.name ?? product.product_no,
       effectiveFrom:
         currentRev?.effective_from ?? tsToIso(product.created_at).slice(0, 10),
+      effectiveTo: currentRev?.effective_to ?? undefined,
       changeReason: "—",
       actor: "—",
       fields: row.keyFacts.map((f) => ({ label: f.label, value: f.value })),
@@ -1644,28 +1689,10 @@ async function centerProduct(
 async function centerSellable(
   stableId: string
 ): Promise<MasterDataCenterView | null> {
-  const skus = await fetchAllPages<SkuDto>("/admin/skus", {})
-  const sku = skus.find((s) => s.id === stableId)
-  if (!sku) return null
-  let revision: SkuRevisionDto | undefined
-  try {
-    const page = await apiGet<BackendPage<SkuRevisionDto>>(
-      "/admin/sku-revisions",
-      {
-        sku_id: sku.id,
-        page: 1,
-        page_size: 1,
-        sort_by: "revision_no",
-        sort_dir: "desc",
-      }
-    )
-    revision = page.items[0]
-  } catch {
-    // ignore
-  }
-  const products = await fetchAllPages<ProductDto>("/admin/products", {})
-  const product = products.find((p) => p.id === sku.product_id)
-  const row = mapSkuAsSellable(sku, revision, product)
+  const items = await fetchAllPages<SellableSkuDto>("/admin/sellable-skus", {})
+  const item = items.find((candidate) => candidate.sku_id === stableId)
+  if (!item) return null
+  const row = mapSkuAsSellable(item)
   return baseCenter("sellable-items", row)
 }
 
@@ -2158,19 +2185,28 @@ function mapProductMedia(
 }
 
 function mapProductSkus(fields: ProductFields) {
-  return fields.skus.map((sku) => ({
-    sku_no: sku.skuNo,
-    base_unit_id: fields.baseUnitId,
-    barcode: sku.barcode || null,
-    main_image_asset_id: sku.mainImageAssetId || null,
-    weight_kg: null,
-    volume_m3: null,
-    sales_visible_price_gross: sku.salePrice || null,
-    market_price: sku.marketPrice || null,
-    // Specs: frontend uses free-text dimensions; backend expects attribute codes.
-    // Empty entries → no-spec SKU. Full attribute dictionary wiring is a gap.
-    spec_entries: [] as { attribute_code: string; attribute_value_code: string }[],
-  }))
+  return fields.skus
+    .filter((sku) => sku.lifecycleStatus === "ENABLED")
+    .map((sku) => ({
+      sku_id: sku.skuId || null,
+      expected_sku_revision_id: sku.skuRevisionId || null,
+      reenable: Boolean(sku.skuId && sku.requiresExplicitReenable),
+      sku_no: sku.skuNo,
+      base_unit_id: fields.baseUnitId,
+      barcode: sku.barcode || null,
+      main_image_asset_id: sku.mainImageAssetId || null,
+      weight_kg: null,
+      volume_m3: null,
+      sales_visible_price_gross: sku.salePrice || null,
+      market_price: sku.marketPrice || null,
+      spec_entries: fields.specs.flatMap((spec, index) => {
+        const attributeCode = spec.name.trim()
+        const attributeValueCode = (sku.attributeValues[index] ?? "").trim()
+        return attributeCode && attributeValueCode
+          ? [{ attribute_code: attributeCode, attribute_value_code: attributeValueCode }]
+          : []
+      }),
+    }))
 }
 
 async function createProduct(
@@ -2200,19 +2236,14 @@ async function createProduct(
     }
   }
 
-  // product_no is required by backend; form does not collect it.
-  // Prefer first SKU 前缀；否则生成唯一业务编号（禁止从幂等键前缀截断）。
-  const productNo =
-    fields.skus[0]?.skuNo?.replace(/-?\d*$/, "").trim() ||
-    genBusinessCode("SPU")
-
   try {
     const created = await apiPost<ProductDto>("/admin/products", {
-      product_no: productNo,
+      change_reason: input.changeReason || "新建商品",
+      product_no: fields.productNo.trim(),
       product_kind: fields.productKind,
       name: input.name.trim(),
       description: fields.description || null,
-      specification: null,
+      specification: fields.specification || null,
       category_id: fields.categoryId,
       brand_id: fields.brandId,
       status: "active",
@@ -2225,11 +2256,14 @@ async function createProduct(
       detail_media: mapProductMedia(fields.detailImages, fields.detailFileAssetIds),
       skus: mapProductSkus(fields),
     })
+    if (!created.current_revision_id) {
+      throw new Error("商品创建成功但未返回当前修订，禁止伪造修订身份")
+    }
     return {
       outcome: "succeeded",
       stableId: created.id,
       stableNo: created.product_no,
-      revisionId: created.id,
+      revisionId: created.current_revision_id,
       revisionNo: 1,
       revisionState: isFutureDate(input.effectiveFrom) ? "FUTURE" : "CURRENT",
       effectiveFrom: input.effectiveFrom,
@@ -2558,6 +2592,32 @@ export async function fetchMasterDataList(
   return wrapListResult(query.resource, rows)
 }
 
+/** 按稳定 SKU 查询正式供给，返回当前启用供给的去重供应商数量。 */
+export async function fetchSkuSupplierCounts(
+  skuIds: readonly string[]
+): Promise<Map<string, number>> {
+  const uniqueIds = [...new Set(skuIds.filter(Boolean))]
+  const entries = await Promise.all(
+    uniqueIds.map(async (skuId) => {
+      const offerings = await fetchAllPages<SupplierOfferingSummaryDto>(
+        "/admin/supplier-catalog/offerings",
+        { sku_id: skuId }
+      )
+      const supplierIds = new Set(
+        offerings
+          .filter(
+            (offering) =>
+              offering.status === "ACTIVE" &&
+              Boolean(offering.current_revision_id)
+          )
+          .map((offering) => offering.supplier_id)
+      )
+      return [skuId, supplierIds.size] as const
+    })
+  )
+  return new Map(entries)
+}
+
 export async function fetchMasterDataCenter(
   resource: MasterDataResource,
   stableId: string
@@ -2745,12 +2805,14 @@ export async function createMasterDataRevision(
           `/admin/products/${input.stableId}`,
           {
             version: input.expectedLockVersion,
+            change_reason: input.changeReason,
             name: input.name.trim(),
             description: fields.description || null,
-            specification: null,
+            specification: fields.specification || null,
             category_id: fields.categoryId,
             brand_id: fields.brandId,
-            status: "active",
+            status:
+              fields.lifecycleStatus === "DISABLED" ? "disabled" : "active",
             effective_from: input.effectiveFrom,
             effective_to: input.effectiveTo || null,
             carousel_media: mapProductMedia(
@@ -2764,11 +2826,14 @@ export async function createMasterDataRevision(
             skus: mapProductSkus(fields),
           }
         )
+        if (!updated.current_revision_id) {
+          throw new Error("商品更新成功但未返回当前修订，禁止伪造修订身份")
+        }
         return {
           outcome: "succeeded",
           stableId: updated.id,
           stableNo: updated.product_no,
-          revisionId: updated.id,
+          revisionId: updated.current_revision_id,
           revisionNo: updated.version,
           revisionState: isFutureDate(input.effectiveFrom) ? "FUTURE" : "CURRENT",
           effectiveFrom: input.effectiveFrom,
@@ -3029,33 +3094,39 @@ export async function disableMasterDataObject(
           `/admin/products/${input.stableId}`,
           {
             version: input.expectedLockVersion,
+            change_reason: input.changeReason,
             name: center.name,
             description: detail?.description || null,
-            specification: null,
+            specification: detail?.specification || null,
             category_id: detail?.categoryId || "",
             brand_id: detail?.brandId || "",
             status: "disabled",
             effective_from: input.effectiveFrom,
-            effective_to: null,
-            carousel_media: [],
-            detail_media: [],
-            skus: (detail?.skus ?? []).map((sku) => ({
-              sku_no: sku.skuNo,
-              base_unit_id: detail?.baseUnitId || "",
-              barcode: sku.barcode || null,
-              weight_kg: null,
-              volume_m3: null,
-              sales_visible_price_gross: sku.salePrice || null,
-              market_price: sku.marketPrice || null,
-              spec_entries: [],
-            })),
+            effective_to: center.currentRevision.effectiveTo || null,
+            carousel_media: mapProductMedia(
+              detail?.carouselImages ?? [],
+              detail?.carouselFileAssetIds ?? {}
+            ),
+            detail_media: mapProductMedia(
+              detail?.detailImages ?? [],
+              detail?.detailFileAssetIds ?? {}
+            ),
+            skus: detail
+              ? mapProductSkus({
+                  ...detail,
+                  productKind: center.productKind ?? "",
+                })
+              : [],
           }
         )
+        if (!updated.current_revision_id) {
+          throw new Error("商品停用成功但未返回当前修订，禁止伪造修订身份")
+        }
         return {
           outcome: "succeeded",
           stableId: updated.id,
           stableNo: updated.product_no,
-          revisionId: updated.id,
+          revisionId: updated.current_revision_id,
           revisionNo: updated.version,
           revisionState: "CURRENT",
           effectiveFrom: input.effectiveFrom,

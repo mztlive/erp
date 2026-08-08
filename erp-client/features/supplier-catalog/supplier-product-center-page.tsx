@@ -2111,9 +2111,9 @@ export function SupplierProductCenterPage({
                               : "warning"
                           }
                         />
-                        {item.poolEntry ? (
+                        {item.sellableSku ? (
                           <Badge variant="secondary">
-                            商品池价 ¥{item.poolEntry.salesVisiblePriceGross}
+                            商品池价 ¥{item.sellableSku.salesVisiblePriceGross}
                           </Badge>
                         ) : (
                           <Badge variant="outline">未入池</Badge>

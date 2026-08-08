@@ -11,15 +11,38 @@ use axum::{
 use services::audit::AuditActor;
 use services::catalog::{
     CatalogService, CreateProductRequest, CreateVoucherCategoryRequest, PageView, ProductListParams,
-    ProductRevisionListParams, ProductRevisionView, ProductView, SkuListParams, SkuRevisionListParams,
-    SkuRevisionView, SkuView, UpdateProductRequest, UpdateVoucherCategoryRequest,
-    VoucherCategoryProfileListParams, VoucherCategoryProfileView,
+    ProductRevisionListParams, ProductRevisionView, ProductView, SellableSkuListParams, SellableSkuView,
+    SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView, UpdateProductRequest,
+    UpdateVoucherCategoryRequest, VoucherCategoryProfileListParams, VoucherCategoryProfileView,
 };
 
 use crate::{
     app_state::AppState,
     core::{errors::Result, response::ApiResponse},
 };
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "查询公司商品池",
+    resource = "sku",
+    action = "list"
+)]
+/// 查询符合销售资格的公司 SKU 只读投影。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `params` - 搜索、商品类型、资格业务日期与分页参数
+///
+/// # 返回
+/// 返回公司商品池分页视图，不包含采购成本与供应商身份。
+pub async fn sellable_sku_list(
+    State(state): State<AppState>,
+    Query(params): Query<SellableSkuListParams>,
+) -> Result<PageView<SellableSkuView>> {
+    let view = CatalogService::new(state.db()).sellable_sku_list(&params).await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
 
 #[permission_macros::permission(
     group = "商品与仓库",

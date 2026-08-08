@@ -433,6 +433,8 @@ pub struct SalesOrderWorkingCopyLineView {
     pub unit_snapshot: Option<String>,
     /// 正式销售项 SKU。
     pub sku_id: Option<SkuId>,
+    /// 下单锁定的精确 SKU 修订。
+    pub sku_revision_id: Option<entities::ids::SkuRevisionId>,
     /// 福利场景。
     pub welfare_scenario: Option<WelfareScenario>,
     /// 销售提交承诺的履约方式。

@@ -117,6 +117,7 @@ type BackendWorkingCopyLine = {
   spec_snapshot?: string | null
   unit_snapshot?: string | null
   sku_id?: string | null
+  sku_revision_id?: string | null
   quantity?: string | null
   base_unit_code?: string | null
   unit_price_gross?: string | null
@@ -1325,15 +1326,15 @@ export async function createSalesOrder(
         card_form: mapCardForm(line.cardForm || "电子卡"),
       }
     } else {
-      // 后端 GoodsLineFields 要求 sku_id / sku_revision_id；前端仅有 sku 文本。
-      // 若 sku 为空则无法建单，抛校验错误（契约缺口登记）。
+      // 公司商品池同时返回稳定 SKU 与精确当前修订，销售草稿锁定这一对身份。
       const skuId = line.sku.trim()
-      if (!skuId && input.intent === "SUBMIT") {
-        throwValidation("实物明细须提供 SKU 标识（sku_id）")
+      const skuRevisionId = line.skuRevisionId.trim()
+      if (!skuId || !skuRevisionId) {
+        throwValidation("实物明细须从公司商品池选择有效 SKU")
       }
       base.goods = {
-        sku_id: skuId || "unknown-sku",
-        sku_revision_id: skuId || "unknown-sku-revision",
+        sku_id: skuId,
+        sku_revision_id: skuRevisionId,
         welfare_scenario: mapWelfareScenarioCode(input.welfareScene),
         fulfillment_mode: mapFulfillmentMode(line.fulfillmentMode || "公司仓发"),
         fulfillment_due_at: dateToUnixSecs(line.dueDate),
@@ -1477,9 +1478,14 @@ export async function adjustProcurementRejectionDraft(input: {
         card_form: line.card_form ?? "ELECTRONIC",
       }
     } else {
+      const skuId = line.sku_id?.trim()
+      const skuRevisionId = line.sku_revision_id?.trim()
+      if (!skuId || !skuRevisionId) {
+        throwValidation("历史草稿缺少精确 SKU 修订，请重新从公司商品池选择商品")
+      }
       base.goods = {
-        sku_id: line.sku_id ?? "unknown-sku",
-        sku_revision_id: line.sku_id ?? "unknown-sku-revision",
+        sku_id: skuId,
+        sku_revision_id: skuRevisionId,
         welfare_scenario: null,
         fulfillment_mode: "COMPANY_WAREHOUSE",
         fulfillment_due_at: Math.floor(Date.now() / 1000),
@@ -1696,9 +1702,14 @@ export async function startSalesChangeOrder(input: {
           card_form: line.card_form ?? "ELECTRONIC",
         }
       } else {
+        const skuId = line.sku_id?.trim()
+        const skuRevisionId = line.sku_revision_id?.trim()
+        if (!skuId || !skuRevisionId) {
+          throwValidation("历史草稿缺少精确 SKU 修订，请重新从公司商品池选择商品")
+        }
         row.goods = {
-          sku_id: line.sku_id ?? "unknown-sku",
-          sku_revision_id: line.sku_id ?? "unknown-sku-revision",
+          sku_id: skuId,
+          sku_revision_id: skuRevisionId,
           welfare_scenario: null,
           fulfillment_mode: "COMPANY_WAREHOUSE",
           fulfillment_due_at: Math.floor(Date.now() / 1000),

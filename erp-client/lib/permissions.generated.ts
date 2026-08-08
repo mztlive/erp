@@ -1356,6 +1356,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "GET",
+                path: "/admin/sellable-skus",
+                description: "查询公司商品池",
+                permission: {
+                    resource: "sku",
+                    action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "GET",
                 path: "/admin/sku-revisions",
                 description: "查询SKU修订列表",
                 permission: {

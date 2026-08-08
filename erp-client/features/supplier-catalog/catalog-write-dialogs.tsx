@@ -70,8 +70,6 @@ type FixedSku = Readonly<{
   mainImageAssetId?: string
   /** SKU 主图可访问 URL。 */
   mainImagePreviewUrl?: string
-  salesVisiblePriceGross?: string
-  hasPoolEntry?: boolean
 }>
 
 const money = z
@@ -84,7 +82,7 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function buildIntakeSchema(requireSalesVisiblePrice: boolean) {
+function buildIntakeSchema() {
   return z.object({
     supplierId: z.string().min(1, "请选择供应商"),
     sourceReference: z.string(),
@@ -112,18 +110,6 @@ function buildIntakeSchema(requireSalesVisiblePrice: boolean) {
       .trim()
       .regex(/^\d+(?:\.\d{1,6})?$/, "请输入正确起订量"),
     inputTaxRate: z.string(),
-    salesVisiblePriceGross: z.string(),
-  }).superRefine((value, context) => {
-    if (
-      requireSalesVisiblePrice &&
-      !money.safeParse(value.salesVisiblePriceGross.trim()).success
-    ) {
-      context.addIssue({
-        code: "custom",
-        path: ["salesVisiblePriceGross"],
-        message: "该公司 SKU 尚未进入商品池，请填写销售可见价（最多 4 位小数）",
-      })
-    }
   })
 }
 
@@ -160,12 +146,10 @@ export function SupplierCatalogIntakeDialog({
   open,
   onOpenChange,
   sourceType,
-  fixedSku,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   sourceType: Exclude<SupplierCatalogSourceType, "API">
-  fixedSku?: FixedSku
 }) {
   const supplierQuery = useMasterDataListQuery({
     resource: "suppliers",
@@ -201,10 +185,10 @@ export function SupplierCatalogIntakeDialog({
       supplierSkuCode: "",
       name: "",
       description: "",
-      specification: fixedSku?.specification ?? "",
+      specification: "",
       category: "",
       brand: "",
-      sourceBaseUnit: fixedSku?.baseUnit ?? "",
+      sourceBaseUnit: "",
       barcode: "",
       attributeText: "",
       carouselImages: [] as string[],
@@ -215,10 +199,9 @@ export function SupplierCatalogIntakeDialog({
       bulkMinimumOrderQuantity: "1",
       minimumOrderQuantity: "1",
       inputTaxRate: "",
-      salesVisiblePriceGross: fixedSku?.hasPoolEntry ? "" : fixedSku?.salesVisiblePriceGross ?? "",
     },
     validators: {
-      onSubmit: buildIntakeSchema(Boolean(fixedSku && !fixedSku.hasPoolEntry)),
+      onSubmit: buildIntakeSchema(),
     },
     onSubmit: async ({ value }) => {
       const supplier = supplierQuery.data?.rows.find(
@@ -275,26 +258,8 @@ export function SupplierCatalogIntakeDialog({
         dropshipFloorPriceGross: value.dropshipFloorPriceGross.trim() || undefined,
         bulkFloorPriceGross: value.bulkFloorPriceGross.trim() || undefined,
         bulkMinimumOrderQuantity: value.bulkMinimumOrderQuantity.trim(),
-        confirmedCostGross: fixedSku
-          ? value.bulkFloorPriceGross.trim() ||
-            value.dropshipFloorPriceGross.trim()
-          : undefined,
         inputTaxRate: value.inputTaxRate.trim(),
-        supplyRegion: fixedSku ? ["全国"] : undefined,
         sourceReference: value.sourceReference.trim() || undefined,
-        targetSkuId: fixedSku?.skuId,
-        targetSkuCode: fixedSku?.skuCode,
-        targetSkuName: fixedSku?.skuName,
-        targetSpecification: fixedSku?.specification,
-        baseUnit: fixedSku?.baseUnit,
-        salesVisiblePriceGross: fixedSku
-          ? value.salesVisiblePriceGross.trim() || undefined
-          : undefined,
-        poolPriceAction: fixedSku
-          ? fixedSku.hasPoolEntry
-            ? "KEEP_EXISTING"
-            : "SET_PRICE"
-          : undefined,
         minimumOrderQuantity: value.minimumOrderQuantity.trim(),
         validFrom: todayIso(),
         idempotencyKey: idempotencyKey("supplier-catalog-intake"),
@@ -541,9 +506,7 @@ export function SupplierCatalogIntakeDialog({
                 <field.TextField
                   label="集采底价（含税）"
                   description={
-                    fixedSku
-                      ? "登记供给时默认用作采购确认成本"
-                      : "供应商商品资料保留双底价"
+                    "供应商商品资料保留双底价"
                   }
                 />
               )}
@@ -554,7 +517,7 @@ export function SupplierCatalogIntakeDialog({
             <form.AppField name="minimumOrderQuantity">
               {(field) => (
                 <field.TextField
-                  label={fixedSku ? "供给起订量 *" : "最小起订量 *"}
+                  label="最小起订量 *"
                 />
               )}
             </form.AppField>
@@ -566,23 +529,6 @@ export function SupplierCatalogIntakeDialog({
                 />
               )}
             </form.AppField>
-            {fixedSku?.hasPoolEntry ? (
-              <Alert className="sm:col-span-2">
-                <AlertTitle>沿用现有公司商品池价格</AlertTitle>
-                <AlertDescription>
-                  当前销售可见价 ¥{fixedSku.salesVisiblePriceGross ?? "—"}；本次只新增供应商映射和供给，不形成商品池价格修订。
-                </AlertDescription>
-              </Alert>
-            ) : fixedSku ? (
-              <form.AppField name="salesVisiblePriceGross">
-                {(field) => (
-                  <field.TextField
-                    label="销售可见价"
-                    description={`加入 ${fixedSku.skuCode} 的公司商品池价格；不等于采购成本`}
-                  />
-                )}
-              </form.AppField>
-            ) : null}
               </>
             ) : null}
           </div>
@@ -707,7 +653,7 @@ export function SupplierCatalogIntakeDialog({
             ) : (
               <form.AppForm>
                 <form.SubmitButton
-                  label={fixedSku ? "保存商品与供给" : "保存到供应商商品库"}
+                  label="保存到供应商商品库"
                   disabled={
                     createMutation.isPending ||
                     sourceMediaUploading ||
@@ -843,7 +789,6 @@ export function RegisterSupplyForSkuDialog({
         targetSkuName: fixedSku.skuName,
         targetSpecification: fixedSku.specification,
         baseUnit: fixedSku.baseUnit,
-        poolPriceAction: "KEEP_EXISTING",
         minimumOrderQuantity: value.minimumOrderQuantity.trim(),
         validFrom: "",
         idempotencyKey: idempotencyKey("register-supply-for-sku"),

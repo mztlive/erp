@@ -499,7 +499,7 @@ export function PromoteSupplierProductDialog({
         {result ? (
           <Alert>
             <AlertTitle>
-              {result.poolEntryChange === "UNCHANGED"
+              {result.companySkuChange === "UNCHANGED"
                 ? "关联入池成功"
                 : "反向入池成功"}
             </AlertTitle>

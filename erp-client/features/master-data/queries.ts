@@ -12,6 +12,7 @@ import {
   disableMasterDataObject,
   fetchMasterDataCenter,
   fetchMasterDataList,
+  fetchSkuSupplierCounts,
   queryMasterDataIdempotency,
   revealMasterDataSensitive,
 } from "@/features/master-data/api"
@@ -45,6 +46,13 @@ export function useMasterDataListQuery(query: MasterDataListQuery) {
   })
 }
 
+/** 导出时重新查询服务端，确保资格与权限按导出时点重新计算。 */
+export function useMasterDataExportMutation() {
+  return useMutation({
+    mutationFn: (query: MasterDataListQuery) => fetchMasterDataList(query),
+  })
+}
+
 export function useMasterDataCenterQuery(
   resource: MasterDataResource,
   stableId: string
@@ -53,6 +61,16 @@ export function useMasterDataCenterQuery(
     queryKey: masterDataKeys.detail(resource, stableId),
     queryFn: () => fetchMasterDataCenter(resource, stableId),
     enabled: Boolean(stableId),
+  })
+}
+
+/** W14 SKU 行的正式供给供应商数量，不从入库队列反推。 */
+export function useSkuSupplierCountsQuery(skuIds: readonly string[]) {
+  const normalized = [...new Set(skuIds.filter(Boolean))].sort()
+  return useQuery({
+    queryKey: [...masterDataKeys.all, "sku-supplier-counts", normalized],
+    queryFn: () => fetchSkuSupplierCounts(normalized),
+    enabled: normalized.length > 0,
   })
 }
 

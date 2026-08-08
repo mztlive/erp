@@ -60,6 +60,7 @@ import { MasterDataPreviewPanel } from "@/features/master-data/master-data-previ
 import { VoucherCategoryFormDialog } from "@/features/master-data/voucher-category-form-dialog"
 import {
   useMasterDataCenterQuery,
+  useMasterDataExportMutation,
   useMasterDataListQuery,
 } from "@/features/master-data/queries"
 import {
@@ -212,6 +213,8 @@ function MasterDataListWorkspace({
   const isVoucherCategoryResource = resource === "voucher-categories"
   /** 计量单位：列表 Dialog 更新/停用，无侧边预览、无独立详情入口。 */
   const isUnitOfMeasureResource = resource === "unit-of-measures"
+  /** 公司商品池为资格查询视图，只允许查看与导出。 */
+  const isSellableResource = resource === "sellable-items"
   const skipPreviewSheet =
     isProductResource ||
     isSupplierResource ||
@@ -345,6 +348,7 @@ function MasterDataListWorkspace({
     // metricKey 只做展示不做筛选：指标与 ToggleGroup 共用 lifecycleStatus 状态源
     metricKey: undefined,
   })
+  const exportMutation = useMasterDataExportMutation()
 
   const rows = React.useMemo(
     () => listQuery.data?.rows ?? [],
@@ -397,17 +401,34 @@ function MasterDataListWorkspace({
     return parts.join(" · ")
   }, [lifecycleStatus, q, resource, revisionTiming])
 
-  const handleExport = React.useCallback(() => {
+  const handleExport = React.useCallback(async () => {
     if (!listQuery.data || rows.length === 0) return
-    const csv = buildMasterDataExportCsv(rows, filterSnapshotLabel)
+    const refreshed = await exportMutation.mutateAsync({
+      resource,
+      q: q.trim() || undefined,
+      lifecycleStatus,
+      revisionTiming,
+    })
+    const exportRows = refreshed.rows
+    if (exportRows.length === 0) return
+    const csv = buildMasterDataExportCsv(exportRows, filterSnapshotLabel)
     downloadCsv(csv, `基础资料-${resourceLabel(resource)}`)
     const datePart = new Date().toISOString().slice(0, 10).replace(/-/g, "")
     setExportMeta({
       jobId: `导出-${datePart}-${String(Date.now() % 100000).padStart(5, "0")}`,
-      rowCount: rows.length,
+      rowCount: exportRows.length,
       filterSnapshotLabel,
     })
-  }, [filterSnapshotLabel, listQuery.data, resource, rows])
+  }, [
+    exportMutation,
+    filterSnapshotLabel,
+    lifecycleStatus,
+    listQuery.data,
+    q,
+    resource,
+    revisionTiming,
+    rows.length,
+  ])
 
   const columns = React.useMemo<ColumnDef<MasterDataListItem>[]>(
     () => [
@@ -580,6 +601,22 @@ function MasterDataListWorkspace({
           }
           return (
             <div className="flex flex-wrap gap-1">
+              {isSellableResource ? (
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    lastFocusedRowId.current = item.stableId
+                    setPreviewId(item.stableId)
+                  }}
+                >
+                  {masterDataCopy.actionView}
+                </Button>
+              ) : null}
+              {!isSellableResource ? (
+                <>
               <Button
                 type="button"
                 size="xs"
@@ -637,6 +674,8 @@ function MasterDataListWorkspace({
                   {masterDataCopy.actionDisable}
                 </Button>
               </DisabledActionHint>
+                </>
+              ) : null}
             </div>
           )
         },
@@ -648,6 +687,7 @@ function MasterDataListWorkspace({
       isBrandResource,
       isUnitOfMeasureResource,
       isVoucherCategoryResource,
+      isSellableResource,
       lastFocusedRowId,
       resource,
       router,
@@ -708,16 +748,16 @@ function MasterDataListWorkspace({
                 label: masterDataCopy.actionExport,
                 icon: DownloadIcon,
                 variant: "outline",
-                mobileVisibility: "hide",
+                mobileVisibility: "hide" as const,
                 disabled: rows.length === 0,
                 onClick: handleExport,
               },
-              {
+              ...(!isSellableResource ? [{
                 actionKey: "create",
                 label: isWarehouse
                   ? masterDataCopy.actionCreateClosed
                   : masterDataCopy.actionCreate,
-                mobileVisibility: "hide",
+                mobileVisibility: "hide" as const,
                 icon: PlusIcon,
                 // 仓库写门禁未开放：按钮真正禁用，不再进入注定失败的表单。
                 disabled: isWarehouse,
@@ -731,7 +771,7 @@ function MasterDataListWorkspace({
                     setCreateOpen(true)
                   }
                 },
-              },
+              }] : []),
             ]}
           />
         }
@@ -992,7 +1032,7 @@ function MasterDataListWorkspace({
                       : "点击「新建」创建第一份资料；历史记录会随资料保留。"
                   }
                   action={
-                    !hasActiveFilters && !isWarehouse ? (
+                    !hasActiveFilters && !isWarehouse && !isSellableResource ? (
                       <Button
                         type="button"
                         variant="secondary"
@@ -1170,7 +1210,8 @@ function MasterDataListWorkspace({
 
       {!isProductResource &&
       !isSupplierResource &&
-      !isVoucherCategoryResource ? (
+      !isVoucherCategoryResource &&
+      !isSellableResource ? (
         <MasterDataCreateDialog
           open={createOpen}
           onOpenChange={setCreateOpen}
@@ -1194,7 +1235,8 @@ function MasterDataListWorkspace({
       ) : null}
       {!isProductResource &&
       !isSupplierResource &&
-      !isVoucherCategoryResource ? (
+      !isVoucherCategoryResource &&
+      !isSellableResource ? (
         <MasterDataReviseDialog
           open={reviseTarget != null}
           onOpenChange={(open) => {
@@ -1204,7 +1246,7 @@ function MasterDataListWorkspace({
           target={reviseTarget}
         />
       ) : null}
-      {!isVoucherCategoryResource ? (
+      {!isVoucherCategoryResource && !isSellableResource ? (
         <MasterDataDisableDialog
           open={disableTarget != null}
           onOpenChange={(open) => {

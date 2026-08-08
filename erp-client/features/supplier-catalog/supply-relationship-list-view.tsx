@@ -186,7 +186,7 @@ function SupplyRelationshipListView({
   ).length
   const inPoolCount = new Set(
     items.flatMap((item) =>
-      item.poolEntry?.status === "ACTIVE" ? [item.poolEntry.poolEntryId] : []
+      item.sellableSku?.status === "ACTIVE" ? [item.sellableSku.skuId] : []
     )
   ).size
 
@@ -389,7 +389,7 @@ function SupplyRelationshipListView({
         meta: { label: "关联公司 SKU", width: "reference" },
         cell: ({ row }) => {
           const mapping = row.original.mapping
-          const poolEntry = row.original.poolEntry
+          const sellableSku = row.original.sellableSku
           const mapped = mapping?.mappingStatus === "ACTIVE"
           return (
             <div>
@@ -402,9 +402,9 @@ function SupplyRelationshipListView({
                   <span className="text-muted-foreground">待确认关联</span>
                 )}
               </div>
-              {poolEntry ? (
+              {sellableSku ? (
                 <div className="text-xs text-muted-foreground">
-                  商品池价 ¥{poolEntry.salesVisiblePriceGross}
+                  商品池价 ¥{sellableSku.salesVisiblePriceGross}
                 </div>
               ) : null}
             </div>
@@ -453,7 +453,7 @@ function SupplyRelationshipListView({
         enableSorting: false,
         cell: ({ row }) => (
           <div className="flex justify-end gap-1">
-            {!row.original.poolEntry && row.original.changeType !== "ERROR" ? (
+            {!row.original.sellableSku && row.original.changeType !== "ERROR" ? (
               <Button
                 type="button"
                 variant="secondary"

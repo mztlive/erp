@@ -139,6 +139,7 @@ const draftLineSchema = z.object({
   rowKey: z.string().min(1),
   name: z.string().trim().min(1, "请输入销售项目"),
   sku: z.string(),
+  skuRevisionId: z.string(),
   quantity: decimalInput("数量", 6, { positive: true }),
   unit: z.string().trim().min(1, "请输入单位"),
   unitPriceGross: decimalInput("含税单价", 4, { positive: true }),
@@ -154,6 +155,7 @@ const draftRowSchema = z.object({
   rowKey: z.string().min(1),
   name: z.string(),
   sku: z.string(),
+  skuRevisionId: z.string(),
   quantity: z.string(),
   unit: z.string(),
   unitPriceGross: z.string(),
@@ -339,6 +341,7 @@ function createEmptyLine(nature: SalesOrderNature): SalesOrderDraftLineInput {
     rowKey: `draft-line-${draftLineSequence}`,
     name: "",
     sku: "",
+    skuRevisionId: "",
     quantity: "1",
     /** 非卡券单位随 SKU 基础单位带出；卡券固定为张。建单页不可改。 */
     unit: nature === "card_voucher" ? "张" : "",
@@ -457,6 +460,7 @@ export function SalesOrderCreatePage({
         lifecycleStatusLabel: string
         lifecycleTone: StatusTone
         keyFacts: ReadonlyArray<{ label: string; value: string }>
+        currentRevisionId: string
       },
       options?: { forceUnit?: string }
     ) => {
@@ -469,6 +473,7 @@ export function SalesOrderCreatePage({
         p.keyFacts.find((f) => f.label === "商品类型")?.value
       return {
         productId: p.stableId,
+        revisionId: p.currentRevisionId,
         sku: p.stableNo,
         name: p.name,
         statusLabel: p.lifecycleStatusLabel,
@@ -1067,6 +1072,10 @@ export function SalesOrderCreatePage({
                                       // 提交 voucher_category_sku_id 用 SKU 稳定 id
                                       field.handleChange(id ?? "")
                                       form.setFieldValue(
+                                        `lineItems[${rowIndex}].skuRevisionId`,
+                                        category?.revisionId ?? ""
+                                      )
+                                      form.setFieldValue(
                                         `lineItems[${rowIndex}].name`,
                                         category?.name ?? ""
                                       )
@@ -1098,6 +1107,10 @@ export function SalesOrderCreatePage({
                                         )
                                       // 公司商品池稳定身份 = sku_id
                                       field.handleChange(id ?? "")
+                                      form.setFieldValue(
+                                        `lineItems[${rowIndex}].skuRevisionId`,
+                                        product?.revisionId ?? ""
+                                      )
                                       form.setFieldValue(
                                         `lineItems[${rowIndex}].name`,
                                         product?.name ?? ""

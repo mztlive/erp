@@ -10,6 +10,7 @@ export function buildMasterDataExportCsv(
     effectiveFrom: string
     effectiveTo?: string
     primaryBlocker?: string
+    keyFacts: ReadonlyArray<{ label: string; value: string }>
   }[],
   filterSnapshotLabel: string
 ): string {
@@ -23,6 +24,7 @@ export function buildMasterDataExportCsv(
     "生效开始",
     "生效结束",
     "不可用原因",
+    "业务事实",
   ]
     .map(quote)
     .join(",")
@@ -37,6 +39,7 @@ export function buildMasterDataExportCsv(
         row.effectiveFrom,
         row.effectiveTo ?? "长期",
         row.primaryBlocker ?? "",
+        row.keyFacts.map((fact) => `${fact.label}：${fact.value}`).join("；"),
       ]
         .map((v) => quote(v))
         .join(",")

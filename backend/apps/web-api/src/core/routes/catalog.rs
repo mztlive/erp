@@ -237,6 +237,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/sellable-skus",
+            with_permission(
+                get(catalog::product::sellable_sku_list),
+                rbac,
+                catalog::product::sellable_sku_list_permission_key(),
+            ),
+        )
+        .route(
             "/sku-revisions",
             with_permission(
                 get(catalog::product::sku_revision_list),

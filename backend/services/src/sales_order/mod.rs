@@ -19,14 +19,14 @@
 //! 幂等：提交入口按「同一工作副本已形成提交」去重，重复提交返回既有提交
 //! （AGENTS.md 外部依赖容错）；建单按 `order_no` 唯一索引兜底（409）。
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, ContractExt, CustomerExt, NoTransaction, SalesOrderExt, SalesReviewExt, Transactional,
-    WorkItemExt,
+    AccessControlExt, CatalogExt, ContractExt, CustomerExt, Executor, NoTransaction, SalesOrderExt,
+    SalesReviewExt, Transactional, WorkItemExt,
 };
-use entities::common::time::Instant;
+use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{ProcurementConfirmationId, SalesOrderReviewId, WorkItemId};
 use entities::money::Amount;
 use entities::sales_order::{
@@ -105,6 +105,7 @@ impl SalesOrderService {
         actor: &AuditActor,
     ) -> Result<SalesOrderDetailView> {
         req.validate()?;
+        self.ensure_sellable_draft_lines(&req.draft.lines).await?;
         let customer = self
             .db
             .customer_accounts()
@@ -158,9 +159,13 @@ impl SalesOrderService {
         let lines_for_tx = stable_lines.clone();
         let working_copy_for_tx = working_copy.clone();
         let working_copy_lines_for_tx = working_copy_lines.clone();
+        let sellable_refs_for_tx = Self::sellable_working_copy_refs(&working_copy_lines)?;
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    SalesOrderService::new(db.clone())
+                        .ensure_sellable_refs(&sellable_refs_for_tx, session)
+                        .await?;
                     db.sales_orders().create(&order_for_tx, session).await?;
                     for line in &lines_for_tx {
                         db.sales_order_lines().create(line, session).await?;
@@ -437,6 +442,7 @@ impl SalesOrderService {
                 "数据已被其他请求修改，请刷新后重试".to_string(),
             ));
         }
+        self.ensure_sellable_draft_lines(&req.draft.lines).await?;
 
         let snapshot = header_snapshot(&req.draft)?;
         let stable_lines = self
@@ -488,9 +494,13 @@ impl SalesOrderService {
         let db = self.db.clone();
         let client = db.client().clone();
         let lines_for_tx = lines.clone();
+        let sellable_refs_for_tx = Self::sellable_working_copy_refs(&lines)?;
         let working_copy = client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    SalesOrderService::new(db.clone())
+                        .ensure_sellable_refs(&sellable_refs_for_tx, session)
+                        .await?;
                     for mut old in old_lines {
                         db.sales_order_working_copy_lines()
                             .soft_delete(&mut old, session)
@@ -581,6 +591,7 @@ impl SalesOrderService {
             .sales_order_working_copy_lines()
             .list_lines_by_working_copy(&copy_id, &mut NoTransaction)
             .await?;
+        self.ensure_sellable_working_copy_lines(&copy_lines).await?;
         let existing_submissions = self
             .db
             .sales_order_submissions()
@@ -667,9 +678,13 @@ impl SalesOrderService {
         let submission_for_tx = submission.clone();
         let lines_for_tx = submission_lines.clone();
         let confirmation_for_tx = confirmation.clone();
+        let sellable_refs_for_tx = Self::sellable_working_copy_refs(&copy_lines)?;
         client
             .with_transaction(move |session| {
                 Box::pin(async move {
+                    SalesOrderService::new(db.clone())
+                        .ensure_sellable_refs(&sellable_refs_for_tx, session)
+                        .await?;
                     db.sales_order()
                         .submit_working_copy(&mut wc_for_tx, &submission_for_tx, &lines_for_tx, session)
                         .await?;
@@ -692,6 +707,72 @@ impl SalesOrderService {
             .await?;
 
         Ok(submission_view(submission, submission_lines))
+    }
+
+    /// 校验请求草稿中的实物及服务行仍引用公司商品池内的精确 SKU 修订。
+    async fn ensure_sellable_draft_lines(&self, lines: &[SalesOrderDraftLineRequest]) -> Result<()> {
+        let refs = lines
+            .iter()
+            .filter_map(|line| line.goods.as_ref())
+            .map(|goods| (goods.sku_id.to_string(), goods.sku_revision_id.to_string()))
+            .collect::<Vec<_>>();
+        self.ensure_sellable_refs(&refs, &mut NoTransaction).await
+    }
+
+    /// 提交前重新校验已保存工作副本的精确 SKU 修订资格。
+    async fn ensure_sellable_working_copy_lines(&self, lines: &[SalesOrderWorkingCopyLine]) -> Result<()> {
+        let refs = Self::sellable_working_copy_refs(lines)?;
+        self.ensure_sellable_refs(&refs, &mut NoTransaction).await
+    }
+
+    /// 从工作副本行提取必须成对存在的销售 SKU 与修订引用。
+    fn sellable_working_copy_refs(lines: &[SalesOrderWorkingCopyLine]) -> Result<Vec<(String, String)>> {
+        let refs = lines
+            .iter()
+            .filter(|line| line.line_type == LineType::GoodsService)
+            .map(|line| {
+                let sku_id = line
+                    .sku_id
+                    .as_ref()
+                    .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少 SKU", line.line_no)))?;
+                let revision_id = line
+                    .sku_revision_id
+                    .as_ref()
+                    .ok_or_else(|| Error::ValidationError(format!("第 {} 行缺少 SKU 修订", line.line_no)))?;
+                Ok((sku_id.to_string(), revision_id.to_string()))
+            })
+            .collect::<Result<Vec<_>>>()?;
+        Ok(refs)
+    }
+
+    /// 批量执行公司商品池资格校验并对缺失引用 fail-closed。
+    async fn ensure_sellable_refs(
+        &self,
+        refs: &[(String, String)],
+        executor: &mut dyn Executor,
+    ) -> Result<()> {
+        if refs.is_empty() {
+            return Ok(());
+        }
+        let expected = refs.iter().cloned().collect::<HashSet<_>>();
+        let qualified = self
+            .db
+            .catalog()
+            .find_sellable_sku_refs(refs, BusinessDate::today(), executor)
+            .await?
+            .into_iter()
+            .map(|row| (row.sku_id, row.sku_revision_id))
+            .collect::<HashSet<_>>();
+        let mut invalid = expected
+            .difference(&qualified)
+            .map(|(sku_id, _)| sku_id.clone())
+            .collect::<Vec<_>>();
+        invalid.sort();
+        if invalid.is_empty() {
+            Ok(())
+        } else {
+            Err(crate::catalog::sellable_sku_invalid_error(&invalid))
+        }
     }
 
     /// 作废销售单草稿（主状态 `DRAFT → VOIDED`；放弃有效工作副本）。
@@ -1389,6 +1470,7 @@ fn working_copy_line_view(line: SalesOrderWorkingCopyLine) -> SalesOrderWorkingC
         spec_snapshot: line.spec_snapshot,
         unit_snapshot: line.unit_snapshot,
         sku_id: line.sku_id,
+        sku_revision_id: line.sku_revision_id,
         welfare_scenario: line.welfare_scenario,
         fulfillment_mode: line.fulfillment_mode,
         fulfillment_due_at: line.fulfillment_due_at.map(|instant| instant.unix_secs() as u64),
@@ -1423,6 +1505,7 @@ fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopy
         spec_snapshot: line.spec_snapshot,
         unit_snapshot: line.unit_snapshot,
         sku_id: line.sku_id,
+        sku_revision_id: line.sku_revision_id,
         welfare_scenario: line.welfare_scenario,
         fulfillment_mode: line.fulfillment_mode,
         fulfillment_due_at: line.fulfillment_due_at.map(|instant| instant.unix_secs() as u64),

@@ -201,10 +201,9 @@ TaskTabs 身份：列表为 `master-data:{resource}`，对象为 `master-data:{r
 | 集采起订量 | 数字 | 是 | 仅约束集采；一件代发固定从 1 件起 |
 | 进项税率 | 税率输入 | 是 | 可由供应商开票资料或税务策略预填；采购可修改；无可靠来源时留空待填 |
 | 供给区域 | 区域选择 | 是 | 可由供应商能力或供给策略预填；采购可修改；无可靠来源时留空待填 |
-| 生效日期 | 日期（DatePicker，格式 `YYYY-MM-DD`） | 是 | 演示/客户端 mock 按本地业务日预填（新建/停用=今天，更新=当前生效日），正式环境由服务端业务日期预填；采购可修改；校验：格式合法且结束 ≥ 开始 |
 | 预填依据 | 只读来源标签 | 条件 | 任一正式供给条件被自动预填时显示，并提交该字段对应的来源类型、修订 ID 或服务端业务日期快照 |
 
-该对话框**不展示也不修改**销售可见价或市场价：两项价格只在公司 SKU 的 `sku_revision` 中由 W14 商品编辑页维护。两项供给价分别写入供给修订，不再自动择一生成单一采购确认成本。进项税率、供给区域和生效日期必须在对话框展示并允许采购修改：只有存在供应商开票资料/税务策略、供应商能力/供给策略或服务端业务日期等可靠来源时才自动预填，并携带来源策略版本或业务日期快照；没有可靠来源时保持空白且必填，缺失即 fail-closed。禁止静默使用 `0.13`、“全国”或浏览器当天。系统不设置供给方式字段，默认同时支持一件代发与集采。不在该对话框展示供应商商品媒体上传、来源描述、规格属性、条码等字段——这些字段若需维护，进入 W21 供应商商品中心全页编辑。服务端在同一事务创建或关联供应商商品及其精确的供应商目录 SKU（复制公司资料快照）+ `supplier_catalog_sku_id → sku_id` 映射 + 供给修订；不得只用供应商商品/SPU 标识代替 SKU 映射，也不得写入独立商品池条目或商品池修订。
+该对话框**不展示也不修改**销售可见价、市场价或供给生效区间：两项销售价格只在公司 SKU 的 `sku_revision` 中由 W14 商品编辑页维护；供给确认即生效，`valid_from` 必须由服务端业务日写入，`valid_to` 初始为空，客户端不得提交浏览器当天。两项供给价分别写入供给修订，不得折叠为单一采购确认成本。进项税率和供给区域只有存在供应商开票资料、税务策略、供应商能力或供给策略等可靠来源时才允许预填，并须携带对应版本化依据；没有可靠来源时保持空白且必填，缺失即 fail-closed。禁止静默使用 `0.13` 或“全国”。系统不设置供给方式字段，默认同时支持一件代发与集采。不在该对话框展示供应商商品媒体上传、来源描述、规格属性、条码等字段——这些字段若需维护，进入 W21 供应商商品中心全页编辑。服务端在同一事务创建或关联供应商商品及其精确的供应商目录 SKU（复制公司资料快照）+ `supplier_catalog_sku_id → sku_id` 映射 + 供给修订；不得只用供应商商品/SPU 标识代替 SKU 映射，也不得写入独立商品池条目或商品池修订。
 
 **与 W21 边界**：公司商品/SKU 的稳定身份、修订规则、`sales_visible_price_gross` / `market_price` 和字段校验仍归 W14；销售侧所谓「公司商品池」只是这些 SKU 的资格查询视图。W21 供应商 SKU 的“关联公司商品与供给”有两个分支：关联已有公司 SKU；或在无同款时复用 W14 校验创建公司商品/SKU。创建分支把名称、描述、来源商品类型、分类、品牌、单位、规格、条码及已归档图文等同字段自动预填，采购可二次修改；`product_kind`、销售可见价与市场价必须填写，并随新建 `sku_revision` 写入。提交由跨 W14/W21 原子命令创建公司商品/SKU、精确映射和双价供给。**正向路径**固定当前公司 SKU，只新增供应商 SKU 映射和供给：不得创建另一公司 SKU、独立商品池条目/修订，或顺带修改目标 `sku_revision` 的销售价格。
 两边写路径与修订所有权独立；后续任一侧来源变化不得自动覆盖另一侧修订。
@@ -408,7 +407,9 @@ type MasterDataRevisionResult = {
 }
 ```
 
-正式 API 必须按资源使用强类型字段，不得直接采用示例中的通用 `Record` 作为长期契约。商品与 SKU 的 `fields` 至少包含：`spu`、必填 `productKind`、可选 `description`、`baseUnit`（单位字典 ID/代码）、`categoryId`、`brandId`、规格维度、`skus[]`；`productKind` 写入 `product.product_kind`，创建后不可变，不得从 `categoryId` 推导。每个 SKU 含 `skuNo`（产品编码，系统生成可覆盖）、属性值、`mainImage`、可选 `barcode`、`salesVisiblePrice` 与 `marketPrice`；编辑既有且签名未变的行还须携带稳定 `skuId` 与 `expectedSkuRevisionId`，新增签名不得由客户端指定或猜测旧 `skuId`。历史停用签名再次出现时，服务端返回原 `skuId`、`skuNo`、`expectedSkuRevisionId`、`actionBlockers` 和 `requiresExplicitReenable=true`；提交必须包含明确重新启用意图与 `changeReason`。服务端规范化属性代码/值代码后核对签名，以商品期望修订和所有受影响 SKU 期望修订原子提交“保留 / 新建 / 重新启用 / 停用”集合；不得按 `skuNo`、数组位置或单行回退匹配身份。两项价格属于 `sku_revision`，不是独立商品池条目或修订。SPU 可含 `carouselImages` / `detailImages`。销售侧的「公司商品池」查询只投影 SKU 启用状态、当前 `salesVisiblePrice` 和有效 offering 所得资格，不产生独立 ID 或写入命令。商品与 SKU 契约**不得**包含默认 `supplierId`、`fulfillmentResponsibility`、`inputTaxRate`、`dropship*` 或 `bulk*` 供给字段；这些字段只进入 W21 的强类型 `supplier_offering` 契约。分类字段含 `code`、可选 `parent` / `productKind`；分类的适用类型只用于校验与筛选，不能成为公司商品类型的事实来源。品牌字段含 `code`。供应商 `fields` 至少包含：`company`（企业主体）、`contactName` / `contactPhone` / `address`、`settlement` / `capability` / `businessCategory` / `signingEntity` / `paymentEntity`、`qualification` / `contractFile` / `authorizationFile` / `foodLicense` / `legalPersonIdCard` 及对应合同与授权有效期、`taxNo` / `bankName` / `bankAccount` / `invoiceType` / `invoiceTaxRate`、`initialScore` / `supplierRating` / `currentScore`。所有表单使用 TanStack Form；生效区间、规格身份、基础单位、商品类型与分类兼容性、分类/品牌启用状态、主图完整性、供应商能力/资质及仓库占用由服务端最终校验。
+正式 API 必须按资源使用强类型字段，不得直接采用示例中的通用 `Record` 作为长期契约。商品与 SKU 的 `fields` 至少包含：`spu`、必填 `productKind`、可选 `description`、`baseUnit`（单位字典 ID/代码）、`categoryId`、`brandId`、规格维度、`skus[]`；`productKind` 写入 `product.product_kind`，创建后不可变，不得从 `categoryId` 推导。每个 SKU 含 `skuNo`（产品编码，系统生成可覆盖）、属性值、`mainImage`、可选 `barcode`、`salesVisiblePrice` 与 `marketPrice`；编辑既有且签名未变的行还须携带稳定 `skuId` 与 `expectedSkuRevisionId`，新增签名不得由客户端指定或猜测旧 `skuId`。历史停用签名再次出现时，服务端返回原 `skuId`、`skuNo`、`expectedSkuRevisionId`、`actionBlockers` 和 `requiresExplicitReenable=true`；提交必须包含明确重新启用意图与 `changeReason`。服务端规范化属性代码/值代码后核对签名，以商品期望修订和所有受影响 SKU 期望修订原子提交“保留 / 新建 / 重新启用 / 停用”集合；不得按 `skuNo`、数组位置或单行回退匹配身份。两项价格属于 `sku_revision`，不是独立商品池条目或修订。SPU 可含 `carouselImages` / `detailImages`。商品与 SKU 契约**不得**包含默认 `supplierId`、`fulfillmentResponsibility`、`inputTaxRate`、`dropship*` 或 `bulk*` 供给字段；这些字段只进入 W21 的强类型 `supplier_offering` 契约。分类字段含 `code`、可选 `parent` / `productKind`；分类的适用类型只用于校验与筛选，不能成为公司商品类型的事实来源。品牌字段含 `code`。供应商 `fields` 至少包含：`company`（企业主体）、`contactName` / `contactPhone` / `address`、`settlement` / `capability` / `businessCategory` / `signingEntity` / `paymentEntity`、`qualification` / `contractFile` / `authorizationFile` / `foodLicense` / `legalPersonIdCard` 及对应合同与授权有效期、`taxNo` / `bankName` / `bankAccount` / `invoiceType` / `invoiceTaxRate`、`initialScore` / `supplierRating` / `currentScore`。所有表单使用 TanStack Form；生效区间、规格身份、基础单位、商品类型与分类兼容性、分类/品牌启用状态、主图完整性、供应商能力/资质及仓库占用由服务端最终校验。
+
+公司商品池只读 API 固定为 `GET /admin/sellable-skus`。请求可包含 `q`、`product_kind`、`eligibility_as_of`、`page`、`page_size`；`eligibility_as_of` 缺省时由服务端取业务日。响应必须返回稳定 `sku_id`、`sku_version`、精确 `sku_revision_id`、`sku_revision_no`、修订生效区间、商品与 SKU 编码/名称、规格、基础单位、销售可见价、市场价、主图、有效供应商数量及供给区域。查询结果只允许包含同时满足以下条件的 SKU：稳定商品及其当前修订启用且处于有效区间；稳定 SKU 启用；稳定 SKU 指向的当前修订启用、处于有效区间且配置销售可见价；至少一条稳定 offering 启用，其当前修订可供且处于有效区间。API 不得投影供应商身份、采购成本、税率、起订量，不得产生独立商品池 ID、修订或写命令。销售单创建、草稿保存和提交必须使用同一资格规则校验 `sku_id + sku_revision_id` 精确对，并在各自写事务内复核；提交还须在形成提交快照前再次校验，任一引用失效即整单 fail-closed。
 
 当 `objectType/resource="warehouses"` 时，查询契约不变，但 `allowedActions` 不得包含创建、形成版本、停用或策略维护；所有仓库写命令必须由服务端以 `WAREHOUSE_WRITE_OWNER_UNCONFIRMED` fail-closed。客户端禁止通过通用 `CreateMasterDataRevisionCommand`、管理员身份或隐藏入口绕过该门禁。仅当权限策略已发布唯一业务写责任方时，才允许在 `allowedActions` 中出现对应写动作。
 
@@ -485,7 +486,7 @@ type MasterDataRevisionResult = {
 - [x] 列表能同时识别稳定身份、当前版本、启停生命周期、修订时序、生效区间和主要阻塞原因；“待生效”不会混入启停状态。
 - [x] 新建、更新资料（形成新版本）和停用均保留原因、操作者、时间与正式结果。
 - [x] 历史版本可读，当前名称变化不改变历史单据快照。
-- [ ] 商品与 SKU 使用详情页维护；`product_kind` 必须作为独立必填下拉并在创建后只读，禁止由分类派生；基础单位 / 分类 / 品牌为下拉且分类必须兼容商品类型；主图必填且以 1:1 小方块上传/预览，轮播图与详情图允许空；销售可见价与市场价必须写入 SKU 修订；每个已保存 SKU 的供给列只显示供应商数量，悬停面板展示供应商列表并可「添加供应商」或「查看全部供给」；库存列只有「查看库存」链接，禁止展示独立台账徽标；禁止以独立 `product_pool_entry` / `sellable-items` 作为稳定资源或写入对象，必须为公司 SKU 销售资格查询视图。
+- [ ] 商品与 SKU 使用详情页维护；`product_kind` 必须作为独立必填下拉并在创建后只读，禁止由分类派生；基础单位 / 分类 / 品牌为下拉且分类必须兼容商品类型；主图必填且以 1:1 小方块上传/预览，轮播图与详情图允许空；销售可见价与市场价必须写入 SKU 修订；每个已保存 SKU 的供给列只显示已启用且已形成当前修订的去重供应商数量，悬停面板解释统计口径并可「添加供应商」或「查看全部供给」，不得从供应商目录待办队列拼接名单；库存列只有「查看库存」链接，禁止展示独立台账徽标；禁止以独立 `product_pool_entry` / `sellable-items` 作为稳定资源或写入对象，必须为公司 SKU 销售资格查询视图。
 - [x] 商品分类、品牌可在 W14 独立维护，并作为 SKU 下拉数据源。
 - [x] 商品分类采用树形维护（父子关系、路径、防环）；业务组件提供 `CategoryCombobox`、`BrandCombobox`。
 - [ ] 有效期重叠、SKU 规格身份变化、基础单位变更和有库存仓库停用均被阻断并解释；规格编辑必须证明：签名未变保留 `skuId`、新签名分配新 `skuId`、移除签名停用旧 SKU 且保留历史、历史签名再次出现时明确展示并重新启用原 SKU；禁止按 `skuNo` 或单行回退重绑身份。重新启用缺少确认、原因或期望修订，或存在任一 `actionBlocker` 时，整次编辑必须回滚。
@@ -493,9 +494,9 @@ type MasterDataRevisionResult = {
 ### 12.2 业务页选用与 W14 边界
 
 - [x] W14 列表页头 **不提供**「哪里能选到 / 选择器影响」按钮或列表级业务选单演示面板。
-- [ ] 销售选品（W05）只返回 SKU 启用、当前 SKU 修订已配置销售可见价且至少存在一条当前有效 offering 的精确 `sku_revision_id`；该结果在销售侧称为公司商品池，不另建池条目或池修订。
+- [x] 销售选品（W05）只返回商品与 SKU 启用、当前修订处于有效区间、SKU 修订已配置销售可见价且至少存在一条当前有效 offering 的精确 `sku_revision_id`；该结果在销售侧称为公司商品池，不另建池条目或池修订。
 - [ ] 采购选择供应商（W07 / W08）时校验能力、有效资质和业务日期。
-- [ ] 业务提交时再次校验，不以浏览器缓存或 W14 详情摘要决定正式结果。
+- [x] 销售单创建、草稿保存和提交在写事务内再次校验精确 `sku_id + sku_revision_id`，不以浏览器缓存或 W14 详情摘要决定正式结果。
 - [x] 卡券类目只表达 ERP 销售项，不出现商城玩法字段。
 - [x] 仓库 SKU 策略只生成预警，不改变库存余额。
 - [x] 仓库资料与策略可查询，但所有仓库写操作必须 fail-closed；仓储和系统管理员均不得直接维护。
