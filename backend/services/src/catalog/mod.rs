@@ -4,9 +4,9 @@
 //! - 字典（分类/品牌/单位/规格属性/属性值）单集合 CRUD → `&mut NoTransaction`
 //!   （审计日志按 D01 既有写法独立写入）；
 //! - 商品创建与规格编辑：跨集合（products + product_revisions + 媒体 +
-//!   skus + sku_revisions + 规格属性值 + 审计）→
+//!   skus + sku_revisions + 审计）→
 //!   `database::Transactional::with_transaction`，保证「SPU 身份 + 修订快照 +
-//!   SKU 身份 + 规格值」原子可见（数据模型 §6.3）；
+//!   SKU 身份 + 规格签名」原子可见（数据模型 §6.3）；
 //! - 卡券类目原子创建：跨集合（[新建分类] + products + product_revisions +
 //!   唯一 SKU + sku_revisions + voucher_category_profile_revisions + 审计）→
 //!   `database::Transactional::with_transaction`，与商品创建同构（数据模型
@@ -14,7 +14,7 @@
 //!
 //! 业务规则来自 entities（`new()`/`update()` 已完成校验与规范化，
 //! `specification::compute_specification_signature` 计算签名），Service 只编排：
-//! 字典存在性与启用校验、分类-属性适用性、条码冲突、成环检测、规格签名分类
+//! 字典存在性与启用校验、条码冲突、成环检测、规格签名分类
 //! （保留/新增/重新启用/移除）与事务写入。跨域只调对方 Repository（D05
 //! `file_assets` 校验媒体引用；D02 `audit_logs` 写审计），禁止 Service 依赖 Service。
 
@@ -27,16 +27,11 @@ use entities::catalog::product_category::{ProductCategory, ProductCategoryData, 
 use entities::catalog::product_revision::{ProductRevision, ProductRevisionData};
 use entities::catalog::product_revision_media::{MediaRole, ProductRevisionMedia, ProductRevisionMediaData};
 use entities::catalog::sku::{Sku, SkuData, SkuUpdate};
-use entities::catalog::sku_attribute::{
-    AttributeValueType, SkuAttribute, SkuAttributeData, SkuAttributeUpdate,
-};
+use entities::catalog::sku_attribute::{SkuAttribute, SkuAttributeData, SkuAttributeUpdate};
 use entities::catalog::sku_attribute_value::{
     SkuAttributeValue, SkuAttributeValueData, SkuAttributeValueUpdate,
 };
 use entities::catalog::sku_revision::{SkuRevision, SkuRevisionData};
-use entities::catalog::sku_revision_attribute_value::{
-    SkuRevisionAttributeValue, SkuRevisionAttributeValueData,
-};
 use entities::catalog::specification::{compute_specification_signature, SpecSignatureEntry};
 use entities::catalog::unit_of_measure::{UnitOfMeasure, UnitOfMeasureData, UnitOfMeasureUpdate};
 use entities::catalog::voucher_category_profile_revision::{
@@ -44,8 +39,8 @@ use entities::catalog::voucher_category_profile_revision::{
 };
 use entities::catalog::{
     EnableStatus, ProductBrandId, ProductCategoryId, ProductId, ProductKind, ProductRevisionId,
-    ProductRevisionMediaId, SkuAttributeId, SkuAttributeValueId, SkuId, SkuRevisionAttributeValueId,
-    SkuRevisionId, UnitOfMeasureId, VoucherCategoryProfileRevisionId,
+    ProductRevisionMediaId, SkuAttributeId, SkuAttributeValueId, SkuId, SkuRevisionId, UnitOfMeasureId,
+    VoucherCategoryProfileRevisionId,
 };
 use entities::common::time::BusinessDate;
 use id_generator::next_id;
@@ -116,38 +111,20 @@ struct SkuEditItem {
     sku: Sku,
     /// 待写入的 SKU 修订。
     revision: SkuRevision,
-    /// 待写入的修订规格属性值。
-    attribute_values: Vec<SkuRevisionAttributeValue>,
 }
 
-/// 新 SKU 构建上下文（所属 SPU、名称快照、分类、生效区间、操作人）。
+/// 新 SKU 构建上下文（所属 SPU、名称快照、生效区间、操作人）。
 struct NewSkuContext<'a> {
     /// 所属 SPU。
     product_id: &'a ProductId,
     /// 商品名称（作为 SKU 修订名称快照）。
     product_name: &'a str,
-    /// ERP 分类（规格适用性校验）。
-    category_id: &'a ProductCategoryId,
     /// 生效起始日。
     effective_from: BusinessDate,
     /// 生效截止日。
     effective_to: Option<BusinessDate>,
     /// 操作人 ID。
     created_by: &'a str,
-}
-
-/// 一条已解析的规格属性-值（回填字典身份后进入签名计算与行写入）。
-struct ResolvedSpecEntry {
-    /// 规格属性代码（签名用）。
-    attribute_code: String,
-    /// 属性值代码（签名用；规范文本属性取文本原值）。
-    value_code: String,
-    /// 规格属性 ID。
-    attribute_id: SkuAttributeId,
-    /// 受控枚举属性值 ID（枚举属性使用）。
-    attribute_value_id: Option<SkuAttributeValueId>,
-    /// 规范文本属性值（文本属性使用）。
-    normalized_text_value: Option<String>,
 }
 
 /// 商品（SPU）创建草稿（全部 ID 在事务外预生成，事务内只做写入）。
@@ -1242,7 +1219,7 @@ impl CatalogService {
     ///
     /// 数据模型 §6.3：`product_no`/`sku_no`/`(product_id, specification_signature)`
     /// 唯一由唯一索引兜底（`DuplicateKey` → 409）；新签名分配新 `sku_id`；
-    /// 条码冲突阻断；分类必须允许商品类型；规格属性必须适用于所选分类。
+    /// 条码冲突阻断；分类必须允许商品类型；规格名和值在所属 SPU 内直接生效。
     ///
     /// # 参数
     /// * `req` - 创建请求
@@ -1773,6 +1750,7 @@ impl CatalogService {
             )
             .collect::<Vec<_>>();
         let mut sku_items = Vec::with_capacity(req.skus.len());
+        let mut seen_signatures = std::collections::HashSet::new();
         for sku_input in req.skus {
             if sku_input.sku_id.is_some()
                 || sku_input.expected_sku_revision_id.is_some()
@@ -1782,12 +1760,15 @@ impl CatalogService {
                     "新建商品的 SKU 不得指定既有身份或重新启用意图".to_string(),
                 ));
             }
+            let signature = specification_signature_for(&sku_input.spec_entries)?;
+            if !seen_signatures.insert(signature) {
+                return Err(Error::BusinessLogicError("规格集合中存在重复签名".to_string()));
+            }
             let item = self
                 .build_new_sku_item(
                     NewSkuContext {
                         product_id: &product_id,
                         product_name: &req.name,
-                        category_id: &req.category_id,
                         effective_from: req.effective_from,
                         effective_to: req.effective_to,
                         created_by: actor.id(),
@@ -1938,7 +1919,6 @@ impl CatalogService {
                 NewSkuContext {
                     product_id: &product_id,
                     product_name: &name,
-                    category_id: &category_id,
                     effective_from,
                     effective_to,
                     created_by: actor.id(),
@@ -2293,15 +2273,11 @@ impl CatalogService {
     ) -> Result<Vec<ProductRevisionMedia>> {
         let mut rows = Vec::with_capacity(inputs.len());
         for input in inputs {
-            let asset = self
-                .db
+            self.db
                 .file_assets()
                 .find_by_id(input.file_asset_id.as_ref(), &mut NoTransaction)
                 .await?
                 .ok_or_else(|| Error::NotFound("媒体文件不存在".to_string()))?;
-            if !asset.is_usable_for_business(entities::common::time::Instant::now()) {
-                return Err(Error::BusinessLogicError("媒体文件不可用于业务".to_string()));
-            }
             let row = ProductRevisionMedia::new(
                 ProductRevisionMediaId::new(next_id()),
                 ProductRevisionMediaData {
@@ -2359,25 +2335,23 @@ impl CatalogService {
         Ok(by_revision)
     }
 
-    /// 构造新 SKU 行（解析规格 → 计算签名 → 生成 SKU 身份 + 首个修订 + 规格值）。
+    /// 构造新 SKU 行（规范化自由规格 → 计算签名 → 生成 SKU 身份 + 首个修订）。
     ///
     /// # 参数
-    /// * `ctx` - 新 SKU 上下文（所属 SPU、名称快照、分类、生效区间、操作人）
+    /// * `ctx` - 新 SKU 上下文（所属 SPU、名称快照、生效区间、操作人）
     /// * `input` - SKU 输入行
     ///
     /// # 返回
     /// 返回 `Create` 动作的规格编辑行。
     ///
     /// # 错误
-    /// 规格属性/值不存在、签名冲突、条码冲突时返回错误。
+    /// 规格名/值非法、签名冲突、条码冲突时返回错误。
     async fn build_new_sku_item(
         &self,
         ctx: NewSkuContext<'_>,
         input: ProductSkuInput,
     ) -> Result<SkuEditItem> {
-        let (signature, resolved) = self
-            .resolve_spec_entries(ctx.category_id, &input.spec_entries)
-            .await?;
+        let signature = specification_signature_for(&input.spec_entries)?;
         self.ensure_barcode_available(&input.barcode, None).await?;
         let sku_id = SkuId::new(next_id());
         let revision_id = SkuRevisionId::new(next_id());
@@ -2400,7 +2374,6 @@ impl CatalogService {
                 effective_to: ctx.effective_to,
             },
         )?;
-        let attribute_values = build_attribute_value_rows(&revision_id, &resolved)?;
         let mut sku = Sku::new(
             sku_id,
             SkuData {
@@ -2417,116 +2390,7 @@ impl CatalogService {
             action: SkuEditAction::Create,
             sku,
             revision,
-            attribute_values,
         })
-    }
-
-    /// 解析规格属性-值对为字典身份并计算规范化签名。
-    ///
-    /// 枚举属性校验属性值存在且启用；文本属性以文本原值作为签名值；
-    /// 分类定义了适用属性时逐条校验归属；身份排序位按属性代码排序后落位。
-    ///
-    /// # 参数
-    /// * `category_id` - ERP 分类
-    /// * `entries` - 规格输入
-    ///
-    /// # 返回
-    /// 返回 `(签名输入, 解析后的属性值行)`。
-    ///
-    /// # 错误
-    /// 属性/值不存在、属性停用、不适用于分类或签名冲突时返回错误。
-    async fn resolve_spec_entries(
-        &self,
-        category_id: &ProductCategoryId,
-        entries: &[SpecEntryInput],
-    ) -> Result<(String, Vec<ResolvedSpecEntry>)> {
-        let applicable = self.applicable_attribute_ids(category_id).await?;
-        let mut resolved = Vec::with_capacity(entries.len());
-        for entry in entries {
-            let attribute = self
-                .db
-                .sku_attributes()
-                .find_one_by_field(
-                    "attribute_code",
-                    entry.attribute_code.trim().to_string(),
-                    &mut NoTransaction,
-                )
-                .await?
-                .ok_or_else(|| Error::NotFound(format!("规格属性不存在: {}", entry.attribute_code)))?;
-            if !attribute.is_active() {
-                return Err(Error::BusinessLogicError(format!(
-                    "规格属性已停用: {}",
-                    entry.attribute_code
-                )));
-            }
-            if !applicable.is_empty() && !applicable.contains(&attribute.base.id) {
-                return Err(Error::BusinessLogicError(format!(
-                    "规格属性不适用于该商品分类: {}",
-                    entry.attribute_code
-                )));
-            }
-            let value_code = entry.attribute_value_code.trim().to_string();
-            let resolved_entry = match attribute.value_type {
-                AttributeValueType::Enum => {
-                    let value = self
-                        .db
-                        .sku_attribute_values()
-                        .find_one(
-                            doc! { "attribute_id": attribute.base.id.clone(), "value_code": &value_code },
-                            &mut NoTransaction,
-                        )
-                        .await?
-                        .ok_or_else(|| Error::NotFound(format!("属性值不存在: {}", value_code)))?;
-                    ResolvedSpecEntry {
-                        attribute_code: attribute.attribute_code.clone(),
-                        value_code: value.value_code.clone(),
-                        attribute_id: attribute.base.id.clone().into(),
-                        attribute_value_id: Some(value.base.id.clone().into()),
-                        normalized_text_value: None,
-                    }
-                }
-                AttributeValueType::Text => ResolvedSpecEntry {
-                    attribute_code: attribute.attribute_code.clone(),
-                    value_code: value_code.clone(),
-                    attribute_id: attribute.base.id.clone().into(),
-                    attribute_value_id: None,
-                    normalized_text_value: Some(value_code.clone()),
-                },
-            };
-            resolved.push(resolved_entry);
-        }
-        let signature_entries: Vec<SpecSignatureEntry> = resolved
-            .iter()
-            .map(|entry| SpecSignatureEntry {
-                attribute_code: entry.attribute_code.clone(),
-                value_code: entry.value_code.clone(),
-            })
-            .collect();
-        let signature = compute_specification_signature(&signature_entries)?;
-        resolved.sort_by(|left, right| left.attribute_code.cmp(&right.attribute_code));
-        Ok((signature, resolved))
-    }
-
-    /// 查询分类定义的适用属性 ID 集合（未定义时返回空集合表示不限制）。
-    ///
-    /// # 参数
-    /// * `category_id` - ERP 分类
-    ///
-    /// # 返回
-    /// 返回适用属性 ID 集合。
-    ///
-    /// # 错误
-    /// 数据库查询失败时返回错误。
-    async fn applicable_attribute_ids(&self, category_id: &ProductCategoryId) -> Result<Vec<String>> {
-        let relations = self
-            .db
-            .product_category_attributes()
-            .find_by_category_ids(std::slice::from_ref(category_id), &mut NoTransaction)
-            .await?;
-        Ok(relations
-            .into_iter()
-            .map(|relation| relation.attribute_id.to_string())
-            .collect())
     }
 
     /// 校验条码未被其他在用 SKU 使用（数据模型 §6.3：冲突转人工，不自动合并）。
@@ -2631,12 +2495,7 @@ impl CatalogService {
                         .await?;
                     for item in &sku_items {
                         db.catalog()
-                            .create_sku_with_revision(
-                                &item.sku,
-                                &item.revision,
-                                &item.attribute_values,
-                                session,
-                            )
+                            .create_sku_with_revision(&item.sku, &item.revision, &[], session)
                             .await?;
                     }
                     db.audit_logs().create(&audit, session).await?;
@@ -2691,12 +2550,7 @@ impl CatalogService {
                         .create_product_revision_with_media(&revision, &[], session)
                         .await?;
                     db.catalog()
-                        .create_sku_with_revision(
-                            &sku_item.sku,
-                            &sku_item.revision,
-                            &sku_item.attribute_values,
-                            session,
-                        )
+                        .create_sku_with_revision(&sku_item.sku, &sku_item.revision, &[], session)
                         .await?;
                     db.voucher_category_profile_revisions()
                         .create(&voucher_revision, session)
@@ -3037,9 +2891,7 @@ impl CatalogService {
             .filter(|reason| !reason.is_empty())
             .map(str::to_string);
         for sku_input in req.skus {
-            let (signature, resolved) = self
-                .resolve_spec_entries(&req.category_id, &sku_input.spec_entries)
-                .await?;
+            let signature = specification_signature_for(&sku_input.spec_entries)?;
             if !seen_signatures.insert(signature.clone()) {
                 return Err(Error::BusinessLogicError("规格集合中存在重复签名".to_string()));
             }
@@ -3058,8 +2910,6 @@ impl CatalogService {
                     req.effective_to,
                     &sku_input,
                 )?;
-                let revision_id = SkuRevisionId::new(revision.base.id.clone());
-                let attribute_values = build_attribute_value_rows(&revision_id, &resolved)?;
                 if reactivating {
                     existing_sku.update(
                         SkuUpdate {
@@ -3076,7 +2926,6 @@ impl CatalogService {
                     },
                     sku: existing_sku,
                     revision,
-                    attribute_values,
                 });
             } else {
                 // 全新签名：分配新 SKU 身份。
@@ -3093,7 +2942,6 @@ impl CatalogService {
                         NewSkuContext {
                             product_id: &product_id,
                             product_name: &req.name,
-                            category_id: &req.category_id,
                             effective_from: req.effective_from,
                             effective_to: req.effective_to,
                             created_by: actor.id(),
@@ -3147,7 +2995,7 @@ impl CatalogService {
 
     /// 在单个事务内写入规格编辑计划。
     ///
-    /// 写新商品修订与媒体、按动作写 SKU 修订/规格值/状态，更新 SPU，
+    /// 写新商品修订与媒体、按动作写 SKU 修订/状态，更新 SPU，
     /// 移除签名的既有 SKU 转为停用，最后写审计日志；任一步失败整体回滚。
     ///
     /// # 参数
@@ -3187,19 +3035,11 @@ impl CatalogService {
                         match item.action {
                             SkuEditAction::Create => {
                                 db.catalog()
-                                    .create_sku_with_revision(
-                                        &item.sku,
-                                        &item.revision,
-                                        &item.attribute_values,
-                                        session,
-                                    )
+                                    .create_sku_with_revision(&item.sku, &item.revision, &[], session)
                                     .await?;
                             }
                             SkuEditAction::Keep | SkuEditAction::Reactivate => {
                                 db.sku_revisions().create(&item.revision, session).await?;
-                                for row in &item.attribute_values {
-                                    db.sku_revision_attribute_values().create(row, session).await?;
-                                }
                                 if item.action == SkuEditAction::Reactivate {
                                     let mut sku = item.sku.clone();
                                     db.skus().update(&mut sku, session).await?;
@@ -3332,36 +3172,26 @@ fn ensure_version(current: u64, expected: u64) -> Result<()> {
     Ok(())
 }
 
-/// 构造 SKU 修订规格属性值行（身份排序位 = 属性代码排序后的序号）。
+/// 根据请求中的 SPU 局部规格名和值计算 SKU 身份签名。
 ///
 /// # 参数
-/// * `revision_id` - 所属 SKU 修订
-/// * `resolved` - 已按属性代码排序的解析条目
+/// * `entries` - 一个 SKU 的全部规格名和值
 ///
 /// # 返回
-/// 返回规格属性值行集合。
+/// 返回去除首尾空白、按规格名和值排序后的规范化签名。
 ///
 /// # 错误
-/// 实体校验失败时返回错误。
-fn build_attribute_value_rows(
-    revision_id: &SkuRevisionId,
-    resolved: &[ResolvedSpecEntry],
-) -> Result<Vec<SkuRevisionAttributeValue>> {
-    let mut rows = Vec::with_capacity(resolved.len());
-    for (position, entry) in resolved.iter().enumerate() {
-        let row = SkuRevisionAttributeValue::new(
-            SkuRevisionAttributeValueId::new(next_id()),
-            SkuRevisionAttributeValueData {
-                sku_revision_id: revision_id.clone(),
-                sku_attribute_id: entry.attribute_id.clone(),
-                sku_attribute_value_id: entry.attribute_value_id.clone(),
-                normalized_text_value: entry.normalized_text_value.clone(),
-                identity_position: position as u32,
-            },
-        )?;
-        rows.push(row);
-    }
-    Ok(rows)
+/// 规格名/值为空、超长或同一规格名重复时返回验证错误。
+fn specification_signature_for(entries: &[SpecEntryInput]) -> Result<String> {
+    let signature_entries = entries
+        .iter()
+        .map(|entry| SpecSignatureEntry {
+            // 字段名为兼容既有 HTTP 契约保留；业务含义是 SPU 局部规格名和值。
+            attribute_code: entry.attribute_code.clone(),
+            value_code: entry.attribute_value_code.clone(),
+        })
+        .collect::<Vec<_>>();
+    Ok(compute_specification_signature(&signature_entries)?)
 }
 
 /// 校验既有规格行的稳定身份、期望修订与显式重新启用意图。
@@ -3437,9 +3267,9 @@ fn ensure_unique_sort_orders(values: impl Iterator<Item = i32>, label: &str) -> 
 #[cfg(test)]
 mod tests {
     use super::{
-        ensure_category_selection_exclusive, ensure_existing_sku_identity, EnableStatus,
-        NewVoucherCategoryInput, ProductCategoryId, ProductId, ProductSkuInput, Sku, SkuData, SkuId,
-        SkuRevisionId, UnitOfMeasureId,
+        ensure_category_selection_exclusive, ensure_existing_sku_identity, specification_signature_for,
+        EnableStatus, NewVoucherCategoryInput, ProductCategoryId, ProductId, ProductSkuInput, Sku, SkuData,
+        SkuId, SkuRevisionId, SpecEntryInput, UnitOfMeasureId,
     };
 
     fn new_category_input() -> NewVoucherCategoryInput {
@@ -3522,5 +3352,22 @@ mod tests {
 
         assert!(ensure_existing_sku_identity(&sku, &existing_input(false), true, None).is_err());
         assert!(ensure_existing_sku_identity(&sku, &existing_input(true), true, Some("恢复销售")).is_ok());
+    }
+
+    /// 商品规格直接使用请求中的 SPU 局部名称和值，不查询全局规格字典。
+    #[test]
+    fn specification_signature_uses_spu_local_spec_text() {
+        let entries = vec![
+            SpecEntryInput {
+                attribute_code: "颜色".to_string(),
+                attribute_value_code: "红色".to_string(),
+            },
+            SpecEntryInput {
+                attribute_code: "尺码".to_string(),
+                attribute_value_code: "L".to_string(),
+            },
+        ];
+
+        assert_eq!(specification_signature_for(&entries).unwrap(), "尺码=L|颜色=红色");
     }
 }

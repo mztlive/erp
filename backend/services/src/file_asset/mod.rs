@@ -8,9 +8,8 @@
 //! 上传落盘由 HTTP handler 在调用 Service 前完成，Service 只编排元数据。
 //!
 //! 跨域：只经 `DatabaseExt` 调对方域 Repository（P3-service-api §2）。本域依赖
-//! D02：附件关联前经 `db.business_documents()` 校验业务单据已注册；资产可用性
-//! 判定（安全检查通过 + 保留期内 + 未销毁）来自实体
-//! `FileAsset::is_usable_for_business`（entities 是规则权威）。
+//! D02：附件关联前经 `db.business_documents()` 校验业务单据已注册；文件资产的
+//! 安全检查、保留期与销毁状态只作治理记录，不阻断业务对象关联。
 
 use database::{AccessControlExt, DocumentRegistryExt, FileAssetExt, NoTransaction, Transactional};
 use entities::file_asset::{DocumentAttachment, FileAsset};
@@ -177,9 +176,8 @@ impl FileAssetService {
 
     /// 建立单据附件关联。
     ///
-    /// 关联事务内校验（§6.1）：业务单据必须已注册（D02 仓储读取）；资产必须
-    /// 安全检查通过、未销毁且仍在保留期内（实体 `is_usable_for_business`）。
-    /// 关联只追加不删除（§4.5.7 审计留痕）。
+    /// 关联前校验业务单据已注册且文件资产存在；安全检查、保留期与销毁状态
+    /// 不阻断关联。关联只追加不删除（§4.5.7 审计留痕）。
     ///
     /// # 参数
     /// * `req` - 关联请求
@@ -190,7 +188,6 @@ impl FileAssetService {
     ///
     /// # 错误
     /// * `NotFound` - 单据未注册或资产不存在
-    /// * `BusinessLogicError` - 资产不可用于关联正式业务对象
     pub async fn attach_to_document(
         &self,
         req: AttachToDocumentRequest,
@@ -198,17 +195,11 @@ impl FileAssetService {
     ) -> Result<DocumentAttachmentView> {
         req.validate()?;
         self.ensure_business_document_registered(&req.document_id).await?;
-        let asset = self
-            .db
+        self.db
             .file_assets()
             .find_by_id(&req.file_asset_id, &mut NoTransaction)
             .await?
             .ok_or_else(|| Error::NotFound("文件资产不存在".to_string()))?;
-        if !asset.is_usable_for_business(entities::common::time::Instant::now()) {
-            return Err(Error::BusinessLogicError(
-                "文件未通过安全检查或不在保留期内，不能关联正式业务对象".to_string(),
-            ));
-        }
         let attachment =
             DocumentAttachment::new(DocumentAttachmentId::new(next_id()), req.into_data(actor.id()))?;
         let audit = actor.clone().resource_log(

@@ -64,8 +64,7 @@ pub struct DocumentAttachmentData {
 
 /// 业务单据附件关联实体（数据模型 §6.1）。
 ///
-/// 只有安全检查通过且属于允许保留类别的 `file_asset` 才能关联正式业务对象
-/// （§6.1，由 P3 在关联事务中调用 `FileAsset::is_usable_for_business` 校验）；
+/// 文件资产存在即可建立关联；安全检查、保留期与销毁状态只作治理记录。
 /// 关联本身只追加不删除（§4.5.7 审计留痕）。
 #[derive(Debug, Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct DocumentAttachment {

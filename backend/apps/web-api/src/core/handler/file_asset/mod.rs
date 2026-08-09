@@ -217,7 +217,7 @@ pub async fn file_asset_register(
     resource = "document_attachment",
     action = "create"
 )]
-/// 建立单据附件关联（资产必须安全检查通过且在保留期内）。
+/// 建立单据附件关联（安全检查、保留期与销毁状态不阻断关联）。
 ///
 /// # 参数
 /// * `state` - 应用状态

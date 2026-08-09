@@ -71,6 +71,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { toast } from "@/components/ui/toast"
 import { MasterDataDisableDialog } from "@/features/master-data/master-data-action-dialog"
 import {
+  ProductInventoryPreviewSheet,
+  type ProductInventoryPreviewSku,
+} from "@/features/master-data/product-inventory-preview-sheet"
+import {
   RegisterSupplyForSkuDialog,
   type FixedSku,
 } from "@/features/supplier-offerings/offering-dialogs"
@@ -150,10 +154,12 @@ const PRODUCT_EDITOR_SECTIONS: ReadonlyArray<{
 function MoneyInput({
   value,
   onChange,
+  disabled = false,
   "aria-label": ariaLabel,
 }: {
   value: string
   onChange: (next: string) => void
+  disabled?: boolean
   "aria-label": string
 }) {
   const showPrefix = !value.trim().startsWith("¥")
@@ -167,6 +173,7 @@ function MoneyInput({
       <Input
         className={cn("h-8", showPrefix && "pl-6")}
         value={value}
+        disabled={disabled}
         onChange={(event) =>
           onChange(event.target.value.replaceAll("¥", ""))
         }
@@ -523,6 +530,7 @@ function SkuMainImageField({
   previewUrl,
   onChange,
   onFilesSelected,
+  disabled = false,
 }: {
   value: string
   /** 可访问预览地址（远程 URL 或本地 blob）；缺省回退文件名。 */
@@ -530,6 +538,7 @@ function SkuMainImageField({
   onChange: (next: string) => void
   /** 选择文件时透出原始文件（用于保存前上传）。 */
   onFilesSelected?: (files: File[]) => void
+  disabled?: boolean
 }) {
   return (
     <FileUpload
@@ -539,6 +548,7 @@ function SkuMainImageField({
       description="1:1"
       density="tile"
       className="aspect-square size-14"
+      disabled={disabled}
       previewSelectedImage
       preview={
         value
@@ -650,6 +660,9 @@ export function ProductDetailPage({
   const [pendingNav, setPendingNav] = React.useState<string | null>(null)
   const [supplierDialogSku, setSupplierDialogSku] =
     React.useState<FixedSku>()
+  const [inventoryOpen, setInventoryOpen] = React.useState(false)
+  const [inventoryInitialSkuId, setInventoryInitialSkuId] =
+    React.useState<string>()
   const [activeSection, setActiveSection] =
     React.useState<ProductEditorSectionId>("basic")
   const errorRef = React.useRef<HTMLDivElement | null>(null)
@@ -661,6 +674,7 @@ export function ProductDetailPage({
   /** 本会话选择但尚未上传的图片文件；保存时按 fileName / SKU 行号上传并回填。 */
   const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
   const pendingSkuFilesRef = React.useRef<Map<number, File>>(new Map())
+  const inventoryTriggerRef = React.useRef<HTMLButtonElement | null>(null)
   const rememberPendingFiles = React.useCallback((files: File[]) => {
     for (const file of files) {
       pendingFilesRef.current.set(file.name, file)
@@ -908,6 +922,22 @@ export function ProductDetailPage({
     [form.state.isDirty, router]
   )
 
+  const openInventoryPreview = React.useCallback(
+    (skuId: string | undefined, trigger: HTMLButtonElement) => {
+      inventoryTriggerRef.current = trigger
+      setInventoryInitialSkuId(skuId)
+      setInventoryOpen(true)
+    },
+    [],
+  )
+
+  const handleInventoryOpenChange = React.useCallback((open: boolean) => {
+    setInventoryOpen(open)
+    if (!open) {
+      globalThis.requestAnimationFrame(() => inventoryTriggerRef.current?.focus())
+    }
+  }, [])
+
   const listHref = "/master-data/products"
   const stickyOffsetPx = stickyHeaderHeight
   const sectionScrollMarginPx = stickyHeaderHeight + 56
@@ -989,6 +1019,7 @@ export function ProductDetailPage({
         const title = isCreate
           ? masterDataCopy.productCreateTitle
           : values.name || data?.name || "商品详情"
+        const fields = values.fields
         const requiredChecks = [
           values.name.trim().length >= 2,
           Boolean(values.fields.baseUnit.trim()),
@@ -1007,6 +1038,27 @@ export function ProductDetailPage({
         const completionPercent = Math.round(
           (completedChecks / requiredChecks.length) * 100,
         )
+        const inventoryPreviewSkus: ProductInventoryPreviewSku[] =
+          fields.productKind === "PHYSICAL"
+            ? fields.skus.flatMap((sku) =>
+                sku.skuId
+                  ? [
+                      {
+                        skuId: sku.skuId,
+                        skuNo: sku.skuNo,
+                        specLabel: sku.specLabel,
+                        baseUnit: sku.baseUnit || fields.baseUnit,
+                      },
+                    ]
+                  : [],
+              )
+            : []
+        const inventoryActionHint =
+          fields.productKind && fields.productKind !== "PHYSICAL"
+            ? "仅实物商品适用公司自有库存台账"
+            : inventoryPreviewSkus.length === 0
+              ? "选择实物商品类型并保存 SKU 后可查看正式库存"
+              : undefined
         const assistantIssues: ReadonlyArray<{
           section: ProductEditorSectionId
           title: string
@@ -1081,7 +1133,6 @@ export function ProductDetailPage({
         const effectiveFrom = values.effectiveFrom
         const effectiveTo = values.effectiveTo
         const changeReason = values.changeReason
-        const fields = values.fields
         const specDrafts = values.specDrafts
         const activeSpecs = fields.specs.filter(
           (spec) =>
@@ -1897,7 +1948,6 @@ export function ProductDetailPage({
 
                   <fieldset
                     className={cn(surfacePanelClassName, "min-w-0 max-w-full space-y-4 overflow-hidden p-5")}
-                    disabled={!canRevise}
                   >
                     <legend className="px-1 text-base font-semibold">
                       SKU
@@ -1921,6 +1971,7 @@ export function ProductDetailPage({
                           id="bulk-sale-price"
                           className="h-8 bg-background"
                           value={values.batchSalePrice}
+                          disabled={!canRevise}
                           onChange={(event) =>
                             form.setFieldValue(
                               "batchSalePrice",
@@ -1938,6 +1989,7 @@ export function ProductDetailPage({
                           id="bulk-market-price"
                           className="h-8 bg-background"
                           value={values.batchMarketPrice}
+                          disabled={!canRevise}
                           onChange={(event) =>
                             form.setFieldValue(
                               "batchMarketPrice",
@@ -1953,8 +2005,9 @@ export function ProductDetailPage({
                         size="sm"
                         className="self-end"
                         disabled={
-                          !values.batchSalePrice.trim() &&
-                          !values.batchMarketPrice.trim()
+                          !canRevise ||
+                          (!values.batchSalePrice.trim() &&
+                            !values.batchMarketPrice.trim())
                         }
                         onClick={applyBatchReferencePrices}
                       >
@@ -1965,9 +2018,16 @@ export function ProductDetailPage({
                         variant="outline"
                         size="sm"
                         className="self-end"
-                        render={<Link href="/inventory?view=balance" />}
+                        disabled={Boolean(inventoryActionHint)}
+                        title={inventoryActionHint}
+                        onClick={(event) =>
+                          openInventoryPreview(
+                            inventoryPreviewSkus[0]?.skuId,
+                            event.currentTarget,
+                          )
+                        }
                       >
-                        查看库存台账
+                        查看商品库存
                       </Button>
                     </div>
                     {fields.skus.length === 0 ? (
@@ -2081,6 +2141,7 @@ export function ProductDetailPage({
                                   <Input
                                     className="h-8"
                                     value={sku.skuNo}
+                                    disabled={!canRevise}
                                     onChange={(event) =>
                                       updateSku(index, {
                                         skuNo: event.target.value,
@@ -2094,6 +2155,7 @@ export function ProductDetailPage({
                                   <Input
                                     className="h-8"
                                     value={sku.barcode ?? ""}
+                                    disabled={!canRevise}
                                     onChange={(event) =>
                                       updateSku(index, {
                                         barcode:
@@ -2107,6 +2169,7 @@ export function ProductDetailPage({
                                   <SkuMainImageField
                                     value={sku.mainImage}
                                     previewUrl={sku.mainImagePreviewUrl}
+                                    disabled={!canRevise}
                                     onChange={(mainImage) =>
                                       updateSku(
                                         index,
@@ -2136,6 +2199,7 @@ export function ProductDetailPage({
                                 <td className="border-l border-border px-3 py-3">
                                   <MoneyInput
                                     value={sku.salePrice ?? ""}
+                                    disabled={!canRevise}
                                     onChange={(next) =>
                                       updateSku(index, {
                                         salePrice: next || undefined,
@@ -2147,6 +2211,7 @@ export function ProductDetailPage({
                                 <td className="px-3 py-3">
                                   <MoneyInput
                                     value={sku.marketPrice ?? ""}
+                                    disabled={!canRevise}
                                     onChange={(next) =>
                                       updateSku(index, {
                                         marketPrice: next || undefined,
@@ -2192,6 +2257,7 @@ export function ProductDetailPage({
                                               type="button"
                                               variant="outline"
                                               size="sm"
+                                              disabled={!canRevise}
                                               onClick={() =>
                                                 setSupplierDialogSku({
                                                   skuId: sku.skuId!,
@@ -2260,16 +2326,29 @@ export function ProductDetailPage({
                                   </div>
                                 </td>
                                 <td className="px-3 py-3">
-                                  {sku.skuId ? (
-                                    <Link
-                                      className="block text-xs text-primary hover:underline"
-                                      href={`/inventory?view=balance&skuId=${encodeURIComponent(sku.skuId)}`}
+                                  {fields.productKind &&
+                                  fields.productKind !== "PHYSICAL" ? (
+                                    <span className="block text-xs text-muted-foreground">
+                                      不适用
+                                    </span>
+                                  ) : sku.skuId ? (
+                                    <Button
+                                      type="button"
+                                      variant="link"
+                                      size="xs"
+                                      className="h-auto px-0 text-xs"
+                                      onClick={(event) =>
+                                        openInventoryPreview(
+                                          sku.skuId,
+                                          event.currentTarget,
+                                        )
+                                      }
                                     >
                                       查看库存
-                                    </Link>
+                                    </Button>
                                   ) : (
                                     <span className="block text-xs text-muted-foreground">
-                                      保存后维护
+                                      保存后可查看
                                     </span>
                                   )}
                                 </td>
@@ -2277,6 +2356,7 @@ export function ProductDetailPage({
                                   <div className="flex items-center gap-2">
                                     <Switch
                                       size="sm"
+                                      disabled={!canRevise}
                                       checked={
                                         sku.lifecycleStatus === "ENABLED"
                                       }
@@ -2520,6 +2600,14 @@ export function ProductDetailPage({
                 if (!open) setSupplierDialogSku(undefined)
               }}
               fixedSku={supplierDialogSku}
+            />
+            <ProductInventoryPreviewSheet
+              open={inventoryOpen}
+              onOpenChange={handleInventoryOpenChange}
+              productName={title}
+              productKind={fields.productKind}
+              skus={inventoryPreviewSkus}
+              initialSkuId={inventoryInitialSkuId}
             />
             <DiscardConfirmDialog
               open={discardOpen}

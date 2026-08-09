@@ -500,7 +500,7 @@ export async function fetchContractCenter(
       uploadedBy: file.created_by,
       uploadedAt: tsToIso(file.created_at),
       securityState,
-      canDownload: securityState === "done",
+      canDownload: true,
     })
   }
 

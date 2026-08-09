@@ -151,7 +151,7 @@ URL 只传稳定身份和显示状态，不传客户名称、验收数量、权�
 | `netAcceptedAllocatedQuantity` | 已验收数量 | `acceptance_fulfillment_allocation` 净 `APPLY - REVERSE` | 由服务端计算 |
 | `eligibleQuantity` | 本次最多可验收 | 服务端守恒结果 | 不得为负；提交时重验 |
 | `carrier` / `trackingNo` | 物流信息 | `delivery` | 电子/服务不显示空占位 |
-| `result` / `evidence` | 履约结果与凭证 | 电子/服务履约事实、附件 | 附件按权限与安全扫描状态开放 |
+| `result` / `evidence` | 履约结果与凭证 | 电子/服务履约事实、附件 | 附件按权限开放；安全扫描状态只展示 |
 
 ### 5.3 本次验收表单
 

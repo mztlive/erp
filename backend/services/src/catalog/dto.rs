@@ -855,15 +855,17 @@ pub struct ProductMediaInput {
     pub alt_text: Option<String>,
 }
 
-/// 规格属性-值对输入（按字典代码引用；P3 回填实体行并计算规范化签名）。
+/// SKU 规格名-值输入。
+///
+/// 规格在所属 SPU 内直接定义，不要求预先维护全局规格属性或枚举字典。
+/// HTTP 字段名为兼容既有契约继续使用 `attribute_code` / `attribute_value_code`。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SpecEntryInput {
-    /// 规格属性代码（`sku_attribute.attribute_code`）。
-    #[validate(custom(function = "non_blank", message = "规格属性代码不能为空"))]
+    /// SPU 局部规格名（例如“颜色”）。
+    #[validate(custom(function = "non_blank", message = "规格名不能为空"))]
     pub attribute_code: String,
-    /// 属性值代码（枚举属性取 `sku_attribute_value.value_code`；
-    /// 规范文本属性取文本原值）。
-    #[validate(custom(function = "non_blank", message = "规格属性值不能为空"))]
+    /// SPU 局部规格值（例如“红色”）。
+    #[validate(custom(function = "non_blank", message = "规格值不能为空"))]
     pub attribute_value_code: String,
 }
 

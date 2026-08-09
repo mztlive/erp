@@ -24,10 +24,14 @@ export const inventoryKeys = {
     [...inventoryKeys.all, "draft", stockAdjustmentId] as const,
 }
 
-export function useInventoryListQuery(query: InventoryQuery) {
+export function useInventoryListQuery(
+  query: InventoryQuery,
+  enabled = true,
+) {
   return useQuery({
     queryKey: inventoryKeys.list(query),
     queryFn: () => fetchInventoryList(query),
+    enabled,
   })
 }
 

@@ -276,7 +276,7 @@ erDiagram
 | `supplier_rating_revision` | 一期 | 供应商期初评分、评级和合作中评分历史 |
 | `contract` / `contract_revision` | 一期 | 客户合同和不可变版本 |
 | `product_category` / `product_brand` / `unit_of_measure` | 一期 | 商品分类、品牌和唯一基础单位字典 |
-| `sku_attribute` / `sku_attribute_value` / `product_category_attribute` | 一期 | SKU 规格属性、值及分类适用关系 |
+| `sku_attribute` / `sku_attribute_value` / `product_category_attribute` | 一期 | 可选的企业级规格标准字典及分类适用关系；不作为商品建档前置条件 |
 | `product` / `product_revision` / `product_revision_media` | 一期 | 商品 SPU 稳定身份、历史和版本化媒体 |
 | `sku` / `sku_revision` | 一期 | 商品、虚拟商品、服务、卡券类目的销售项身份 |
 | `sku_revision_attribute_value` | 一期 | SKU 修订的结构化规格取值 |
@@ -556,8 +556,9 @@ erDiagram
 | `expires_at` / `destroyed_at` | 到期和销毁审计 |
 | `created_by` / `created_at` | 创建审计 |
 
-只有安全检查通过且属于允许保留类别的文件才能关联正式业务对象。下载授权按当前业务
-对象、当前角色和当前数据范围重验；对象存储地址、签名 URL 和密钥正文不得写业务日志。
+文件资产存在即可关联正式业务对象；安全检查、保留期与销毁状态只作治理、查询和
+审计记录，不得阻断关联、归档、发布或下载。下载授权仍按当前业务对象、当前角色和
+当前数据范围重验；对象存储地址、签名 URL 和密钥正文不得写业务日志。
 
 ### 6.2 业务伙伴、客户归属和供应商资料
 
@@ -724,7 +725,7 @@ erDiagram
 
 ### 6.3 商品、SKU、卡券类目与公司商品池查询
 
-#### 商品分类、品牌、单位与规格字典
+#### 商品分类、品牌、单位与可选规格标准字典
 
 `product_category`：
 
@@ -755,7 +756,12 @@ W14 以**树形维护页**管理分类：父子关系不得成环；停用后仍
 | `quantity_scale` | 允许数量小数位 |
 | `status` | 启用/停用 |
 
-`sku_attribute` 与 `sku_attribute_value`：
+`sku_attribute` 与 `sku_attribute_value` 是可选的企业级规格标准化资料。普通 W14 商品创建、
+编辑以所属 SPU 内提交的“规格名 + 规格值”为准，不得要求先创建属性、枚举值或分类适用关系，
+也不得因标准字典缺失、停用或未关联分类而阻断商品保存。标准字典仅供后续检索归一、治理或
+外部数据映射使用，不是 SKU 身份的事实来源。
+
+标准字典字段：
 
 | 字段 | 说明 |
 | --- | --- |
@@ -771,10 +777,10 @@ W14 以**树形维护页**管理分类：父子关系不得成环；停用后仍
 - 同一属性下 `value_code` 唯一；
 - 分类父子关系不得形成环；
 - `product_category_attribute(category_id, attribute_id, required_flag, sort_order)`
-  保存多对多适用关系，组合唯一；
+  仅保存标准字典的多对多推荐/适用关系，组合唯一；
 - 停用字典值仍可被历史 SKU 修订引用；
 - 当前两期一个 SKU 只有一个基础单位，不建设单位换算表；
-- SKU 使用属性必须适用于其商品分类；
+- 只有显式执行企业级规格标准化映射时，映射属性才必须适用于商品分类；普通商品建档不执行该校验；
 - 名称可变时通过显示修订或审计留痕，稳定代码不得复用。
 
 #### `product`、`product_revision`、`sku`、`sku_revision`
@@ -817,8 +823,9 @@ W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中
   partial unique index，否则停用后会产生第二个同签名稳定 SKU；
 - `(product_id, revision_no)`、`(sku_id, revision_no)` 唯一；
 - 已被正式单据使用的 SKU 不得修改基础单位；停用旧 SKU 后新建；
-- 规格签名按属性代码、属性值代码排序后的规范化序列计算，不受显示顺序、名称或
-  旧系统 JSON 字段顺序影响；
+- 规格签名按所属 SPU 内的规格名、规格值排序后的规范化序列计算，不受显示顺序或
+  旧系统 JSON 字段顺序影响；HTTP 兼容字段 `attribute_code` / `attribute_value_code`
+  在商品命令中分别表示规格名和规格值，不要求对应全局字典代码；
 - 无规格 SKU 使用固定空规格签名，确保同一 SPU 最多一个无规格 SKU；
 - 规格属性变化代表另一个 SKU，不得通过修改同一 SKU 修订改变身份；
 - 商品规格编辑命令必须在一个事务内把提交前后的规范化签名集合分类为“保留、新增、重新启用、移除”：
@@ -864,7 +871,11 @@ W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中
 `voucher_category_profile_revision` 只保存 ERP 必需的卡券类目描述和启停信息，
 不保存限额、限购、绑定验证、补差限制、充值、过期展示等商城玩法。
 
-#### `sku_revision_attribute_value`
+#### `sku_revision_attribute_value`（可选标准化映射）
+
+该关系表保留给存量数据和显式的企业级规格标准化映射，不是普通商品建档的必写表。
+普通 W14 创建或编辑商品不得查询或写入本表来决定 SKU 身份；SKU 身份唯一以
+`sku.specification_signature` 为准。
 
 | 字段 | 说明 |
 | --- | --- |
@@ -873,17 +884,17 @@ W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中
 | `normalized_text_value` | 规范文本属性值；使用枚举值时为空 |
 | `identity_position` | 规范化排序位置 |
 
-必需约束与索引：
+显式写入标准化映射时适用的约束与索引：
 
 - `(sku_revision_id, sku_attribute_id)` 唯一；
 - 枚举值必须属于对应属性；枚举值与文本值只能使用一种；
-- 一个稳定 SKU 的所有修订必须计算出相同 `specification_signature`；
+- 一个稳定 SKU 的所有修订必须保持相同 `specification_signature`；
 - 规格集合变化不能改写既有 `sku_revision_attribute_value`：签名不变时追加同一 SKU 的修订，
   签名变化时创建新 SKU，并在同一商品编辑事务中停用已移除签名对应的旧 SKU；已停用签名
   再次出现时追加原 SKU 修订并重新启用，不能新建同签名身份；
 - `(sku_attribute_value_id, sku_revision_id)` 反向查询索引；
-- 旧 `properties` 无法解析、属性重复或值不存在时进入导入差异，不把原 JSON
-  直接写成正式规格关系。
+- 旧 `properties` 无法解析或属性重复时进入导入差异；全局标准值不存在只影响可选
+  标准化映射，不得阻断按原始规格名和值建立 SPU/SKU。
 
 #### 公司商品池（公司 `product` / `sku` 的销售查询视图）
 
@@ -956,7 +967,7 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 - `(contract_id, revision_no)` 唯一；
 - `customer_id + status + valid_to` 查询索引；
 - 合同只能通过上传已签署 PDF 归档，不提供正文新建、编辑、空草稿或提交生效；
-- PDF 扩展名、MIME、内容签名、20 MB 上限和安全扫描由服务端复验，正式版本不得关联非 PDF 正文；
+- PDF 扩展名、MIME、内容签名和 20 MB 上限由服务端复验，正式版本不得关联非 PDF 正文；安全检查状态只作治理记录；
 - 合同上传（W04 或 W05 建单页共用 Dialog）独立形成合同身份、首个不可变版本与 PDF 关联；W05 建单命令只引用已有 `contract_id` + `contract_revision_id`，不再内嵌随单上传；
 - 销售单保存具体 `contract_revision_id` 和关键结构化快照；
 - 一个合同允许关联多张销售单。
@@ -2448,7 +2459,7 @@ SKU 编码属于该身份，不需要供应商商品主档或映射中转。
 必需约束与索引：
 
 - `(product_publication_revision_id, media_role, sort_no)` 唯一；
-- 同一发布版本只能有一张主图，所有媒体都必须通过安全扫描并处于可用保留期；
+- 同一发布版本只能有一张主图；媒体安全检查状态与保留期只作治理记录，不阻断发布；
 - 发布后媒体引用不可原位替换，变更图片必须形成新发布修订。
 
 `product_publication_delivery`：

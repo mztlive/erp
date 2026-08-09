@@ -17,6 +17,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  FieldGroup,
+  FieldLegend,
+  FieldSeparator,
+  FieldSet,
+} from "@/components/ui/field"
 import { Label } from "@/components/ui/label"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
 import {
@@ -249,123 +255,166 @@ export function RegisterSupplyForSkuDialog({
         ) : null}
 
         <form
-          className="space-y-4"
+          className="space-y-6"
           onSubmit={(event) => {
             event.preventDefault()
             void form.handleSubmit()
           }}
         >
-          <div className="grid gap-4 sm:grid-cols-2">
-            {!fixedSku ? (
-              <form.AppField name="skuId">
-                {(field) => (
-                  <div className="space-y-1.5 sm:col-span-2">
-                    <Label>公司 SKU *</Label>
-                    <OptionCombobox
-                      value={field.state.value || null}
-                      onValueChange={(value) => field.handleChange(value ?? "")}
-                      options={skuOptions}
-                      placeholder={skuQuery.isPending ? "正在加载…" : "选择公司 SKU"}
-                      className="w-full"
-                    />
-                  </div>
-                )}
-              </form.AppField>
-            ) : null}
-            <form.AppField name="supplierId">
-              {(field) => (
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label>供应商 *</Label>
-                  <OptionCombobox
-                    value={field.state.value || null}
-                    onValueChange={(value) => field.handleChange(value ?? "")}
-                    options={supplierOptions}
-                    placeholder={supplierQuery.isPending ? "正在加载…" : "选择已启用供应商"}
-                    className="w-full"
-                  />
-                </div>
-              )}
-            </form.AppField>
-            <form.AppField name="supplierSkuCode">
-              {(field) => (
-                <field.TextField
-                  label="供应商 SKU 编码 *"
-                  description="用于下单、对账和履约快照"
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="supplierProductCode">
-              {(field) => <field.TextField label="供应商商品编码" />}
-            </form.AppField>
-            <form.AppField name="dropshipPrice">
-              {(field) => <field.TextField label="一件代发供给价（含税）*" />}
-            </form.AppField>
-            <form.AppField name="bulkPrice">
-              {(field) => <field.TextField label="集采供给价（含税）*" />}
-            </form.AppField>
-            <form.AppField name="minimumQuantity">
-              {(field) => <field.TextField label="集采起订量 *" />}
-            </form.AppField>
-            <form.AppField name="inputTaxPercentage">
-              {(field) => (
-                <field.TextField
-                  label="进项税率（%）*"
-                  description="例如 13 表示 13%"
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="supplyRegionText">
-              {(field) => (
-                <field.TextField
-                  label="可供区域 *"
-                  description="多个区域使用逗号分隔"
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="validFrom">
-              {(field) => <field.TextField type="date" label="生效日期 *" />}
-            </form.AppField>
-            <form.AppField name="validTo">
-              {(field) => <field.TextField type="date" label="失效日期" />}
-            </form.AppField>
-            <form.AppField name="dropshipExpress">
-              {(field) => <field.TextField label="一件代发快递说明" />}
-            </form.AppField>
-            <form.AppField name="freightAmount">
-              {(field) => <field.TextField label="运费" />}
-            </form.AppField>
-            <form.AppField name="serviceFeeAmount">
-              {(field) => <field.TextField label="服务费" />}
-            </form.AppField>
-            <form.AppField name="availabilityStatus">
-              {(field) => (
-                <div className="space-y-1.5">
-                  <Label>初始可供状态 *</Label>
-                  <OptionCombobox
-                    value={field.state.value}
-                    onValueChange={(value) =>
-                      field.handleChange((value ?? "AVAILABLE") as AvailabilityStatus)
-                    }
-                    options={Object.entries(AVAILABILITY_STATUS_LABELS).map(
-                      ([value, label]) => ({ value, label })
+          <FieldGroup>
+            <FieldSet>
+              <FieldLegend variant="label">基础信息</FieldLegend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                {!fixedSku ? (
+                  <form.AppField name="skuId">
+                    {(field) => (
+                      <div className="space-y-1.5 sm:col-span-2">
+                        <Label>公司 SKU *</Label>
+                        <OptionCombobox
+                          value={field.state.value || null}
+                          onValueChange={(value) => field.handleChange(value ?? "")}
+                          options={skuOptions}
+                          placeholder={skuQuery.isPending ? "正在加载…" : "选择公司 SKU"}
+                          className="w-full"
+                        />
+                      </div>
                     )}
-                    className="w-full"
-                  />
-                </div>
-              )}
-            </form.AppField>
-            <form.AppField name="availableQuantity">
-              {(field) => (
-                <field.TextField
-                  label="当前可供数量"
-                  description="留空表示供应商未提供数量上限"
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="changeReason">
-              {(field) => <field.TextField label="登记原因 *" />}
-            </form.AppField>
-          </div>
+                  </form.AppField>
+                ) : null}
+                <form.AppField name="supplierId">
+                  {(field) => (
+                    <div className="space-y-1.5 sm:col-span-2">
+                      <Label>供应商 *</Label>
+                      <OptionCombobox
+                        value={field.state.value || null}
+                        onValueChange={(value) => field.handleChange(value ?? "")}
+                        options={supplierOptions}
+                        placeholder={supplierQuery.isPending ? "正在加载…" : "选择已启用供应商"}
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+                </form.AppField>
+                <form.AppField name="supplierSkuCode">
+                  {(field) => (
+                    <field.TextField
+                      label="供应商 SKU 编码 *"
+                      description="用于下单、对账和履约快照"
+                    />
+                  )}
+                </form.AppField>
+                <form.AppField name="supplierProductCode">
+                  {(field) => <field.TextField label="供应商商品编码" />}
+                </form.AppField>
+              </div>
+            </FieldSet>
+
+            <FieldSeparator />
+
+            <FieldSet>
+              <FieldLegend variant="label">价格与条款</FieldLegend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <form.AppField name="dropshipPrice">
+                  {(field) => <field.TextField label="一件代发供给价（含税）*" />}
+                </form.AppField>
+                <form.AppField name="bulkPrice">
+                  {(field) => <field.TextField label="集采供给价（含税）*" />}
+                </form.AppField>
+                <form.AppField name="minimumQuantity">
+                  {(field) => <field.TextField label="集采起订量 *" />}
+                </form.AppField>
+                <form.AppField name="inputTaxPercentage">
+                  {(field) => (
+                    <field.TextField
+                      label="进项税率（%）*"
+                      description="例如 13 表示 13%"
+                    />
+                  )}
+                </form.AppField>
+              </div>
+            </FieldSet>
+
+            <FieldSeparator />
+
+            <FieldSet>
+              <FieldLegend variant="label">供应范围与时效</FieldLegend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <form.AppField name="supplyRegionText">
+                  {(field) => (
+                    <div className="sm:col-span-2">
+                      <field.TextField
+                        label="可供区域 *"
+                        description="多个区域使用逗号分隔"
+                      />
+                    </div>
+                  )}
+                </form.AppField>
+                <form.AppField name="validFrom">
+                  {(field) => <field.DateField label="生效日期 *" />}
+                </form.AppField>
+                <form.AppField name="validTo">
+                  {(field) => <field.DateField label="失效日期" />}
+                </form.AppField>
+              </div>
+            </FieldSet>
+
+            <FieldSeparator />
+
+            <FieldSet>
+              <FieldLegend variant="label">物流与费用</FieldLegend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <form.AppField name="dropshipExpress">
+                  {(field) => <field.TextField label="一件代发快递说明" />}
+                </form.AppField>
+                <form.AppField name="freightAmount">
+                  {(field) => <field.TextField label="运费" />}
+                </form.AppField>
+                <form.AppField name="serviceFeeAmount">
+                  {(field) => <field.TextField label="服务费" />}
+                </form.AppField>
+              </div>
+            </FieldSet>
+
+            <FieldSeparator />
+
+            <FieldSet>
+              <FieldLegend variant="label">可供状态与登记说明</FieldLegend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <form.AppField name="availabilityStatus">
+                  {(field) => (
+                    <div className="space-y-1.5">
+                      <Label>初始可供状态 *</Label>
+                      <OptionCombobox
+                        value={field.state.value}
+                        onValueChange={(value) =>
+                          field.handleChange((value ?? "AVAILABLE") as AvailabilityStatus)
+                        }
+                        options={Object.entries(AVAILABILITY_STATUS_LABELS).map(
+                          ([value, label]) => ({ value, label })
+                        )}
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+                </form.AppField>
+                <form.AppField name="availableQuantity">
+                  {(field) => (
+                    <field.TextField
+                      label="当前可供数量"
+                      description="留空表示供应商未提供数量上限"
+                    />
+                  )}
+                </form.AppField>
+                <form.AppField name="changeReason">
+                  {(field) => (
+                    <div className="sm:col-span-2">
+                      <field.TextField label="登记原因 *" />
+                    </div>
+                  )}
+                </form.AppField>
+              </div>
+            </FieldSet>
+          </FieldGroup>
 
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>
@@ -455,74 +504,105 @@ export function ReviseOfferingDialog({
           </Alert>
         ) : null}
         <form
-          className="space-y-4"
+          className="space-y-6"
           onSubmit={(event) => {
             event.preventDefault()
             void form.handleSubmit()
           }}
         >
-          <div className="grid gap-4 sm:grid-cols-2">
-            <form.AppField name="dropshipPrice">
-              {(field) => <field.TextField label="一件代发供给价（含税）*" />}
-            </form.AppField>
-            <form.AppField name="bulkPrice">
-              {(field) => <field.TextField label="集采供给价（含税）*" />}
-            </form.AppField>
-            <form.AppField name="minimumQuantity">
-              {(field) => <field.TextField label="集采起订量 *" />}
-            </form.AppField>
-            <form.AppField name="inputTaxPercentage">
-              {(field) => (
-                <field.TextField
-                  label="进项税率（%）*"
-                  description="例如 13 表示 13%"
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="supplyRegionText">
-              {(field) => (
-                <field.TextField
-                  label="可供区域 *"
-                  description="多个区域使用逗号分隔"
-                />
-              )}
-            </form.AppField>
-            <form.AppField name="validFrom">
-              {(field) => <field.TextField type="date" label="生效日期 *" />}
-            </form.AppField>
-            <form.AppField name="validTo">
-              {(field) => <field.TextField type="date" label="失效日期" />}
-            </form.AppField>
-            <form.AppField name="dropshipExpress">
-              {(field) => <field.TextField label="一件代发快递说明" />}
-            </form.AppField>
-            <form.AppField name="freightAmount">
-              {(field) => <field.TextField label="运费" />}
-            </form.AppField>
-            <form.AppField name="serviceFeeAmount">
-              {(field) => <field.TextField label="服务费" />}
-            </form.AppField>
-            <form.AppField name="status">
-              {(field) => (
-                <div className="space-y-1.5">
-                  <Label>供给关系状态 *</Label>
-                  <OptionCombobox
-                    value={field.state.value}
-                    onValueChange={(value) =>
-                      field.handleChange((value ?? "ACTIVE") as OfferingStatus)
-                    }
-                    options={Object.entries(OFFERING_STATUS_LABELS).map(
-                      ([value, label]) => ({ value, label })
-                    )}
-                    className="w-full"
-                  />
-                </div>
-              )}
-            </form.AppField>
-            <form.AppField name="changeReason">
-              {(field) => <field.TextField label="变更原因 *" />}
-            </form.AppField>
-          </div>
+          <FieldGroup>
+            <FieldSet>
+              <FieldLegend variant="label">价格与条款</FieldLegend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <form.AppField name="dropshipPrice">
+                  {(field) => <field.TextField label="一件代发供给价（含税）*" />}
+                </form.AppField>
+                <form.AppField name="bulkPrice">
+                  {(field) => <field.TextField label="集采供给价（含税）*" />}
+                </form.AppField>
+                <form.AppField name="minimumQuantity">
+                  {(field) => <field.TextField label="集采起订量 *" />}
+                </form.AppField>
+                <form.AppField name="inputTaxPercentage">
+                  {(field) => (
+                    <field.TextField
+                      label="进项税率（%）*"
+                      description="例如 13 表示 13%"
+                    />
+                  )}
+                </form.AppField>
+              </div>
+            </FieldSet>
+
+            <FieldSeparator />
+
+            <FieldSet>
+              <FieldLegend variant="label">供应范围与时效</FieldLegend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <form.AppField name="supplyRegionText">
+                  {(field) => (
+                    <div className="sm:col-span-2">
+                      <field.TextField
+                        label="可供区域 *"
+                        description="多个区域使用逗号分隔"
+                      />
+                    </div>
+                  )}
+                </form.AppField>
+                <form.AppField name="validFrom">
+                  {(field) => <field.DateField label="生效日期 *" />}
+                </form.AppField>
+                <form.AppField name="validTo">
+                  {(field) => <field.DateField label="失效日期" />}
+                </form.AppField>
+              </div>
+            </FieldSet>
+
+            <FieldSeparator />
+
+            <FieldSet>
+              <FieldLegend variant="label">物流与费用</FieldLegend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <form.AppField name="dropshipExpress">
+                  {(field) => <field.TextField label="一件代发快递说明" />}
+                </form.AppField>
+                <form.AppField name="freightAmount">
+                  {(field) => <field.TextField label="运费" />}
+                </form.AppField>
+                <form.AppField name="serviceFeeAmount">
+                  {(field) => <field.TextField label="服务费" />}
+                </form.AppField>
+              </div>
+            </FieldSet>
+
+            <FieldSeparator />
+
+            <FieldSet>
+              <FieldLegend variant="label">状态与说明</FieldLegend>
+              <div className="grid gap-4 sm:grid-cols-2">
+                <form.AppField name="status">
+                  {(field) => (
+                    <div className="space-y-1.5">
+                      <Label>供给关系状态 *</Label>
+                      <OptionCombobox
+                        value={field.state.value}
+                        onValueChange={(value) =>
+                          field.handleChange((value ?? "ACTIVE") as OfferingStatus)
+                        }
+                        options={Object.entries(OFFERING_STATUS_LABELS).map(
+                          ([value, label]) => ({ value, label })
+                        )}
+                        className="w-full"
+                      />
+                    </div>
+                  )}
+                </form.AppField>
+                <form.AppField name="changeReason">
+                  {(field) => <field.TextField label="变更原因 *" />}
+                </form.AppField>
+              </div>
+            </FieldSet>
+          </FieldGroup>
           <DialogFooter>
             <DialogClose render={<Button type="button" variant="outline" />}>
               取消

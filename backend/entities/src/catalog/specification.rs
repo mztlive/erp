@@ -1,6 +1,6 @@
 //! 规格签名与身份排序位值对象（数据模型 §6.3 必需约束）。
 //!
-//! - 规格签名按「属性代码、属性值代码排序后的规范化序列」计算，不受显示顺序、名称
+//! - 规格签名按「SPU 局部规格名、规格值排序后的规范化序列」计算，不受显示顺序
 //!   或旧系统 JSON 字段顺序影响；无规格 SKU 使用固定空规格签名
 //!   [`EMPTY_SPEC_SIGNATURE`]，确保同一 SPU 最多一个无规格 SKU；
 //! - `sku_revision_attribute_value.identity_position` 是规范化排序位置，跨行组合必须
@@ -16,22 +16,24 @@ pub const EMPTY_SPEC_SIGNATURE: &str = "";
 
 /// 规格签名最大长度。
 const SIGNATURE_MAX_LEN: usize = 512;
-/// 属性代码/属性值代码最大长度。
+/// 规格名/规格值最大长度。
 const CODE_MAX_LEN: usize = 64;
 
-/// 一条参与签名计算的规格属性-值对（P3 由字典代码回填后调用）。
+/// 一条参与签名计算的 SPU 局部规格名-值对。
+///
+/// 字段名为兼容既有内部调用保留，不表示必须引用全局字典代码。
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SpecSignatureEntry {
-    /// 属性代码。
+    /// SPU 局部规格名。
     pub attribute_code: String,
-    /// 属性值代码。
+    /// SPU 局部规格值。
     pub value_code: String,
 }
 
 /// 计算规范化规格签名。
 ///
 /// 规则（数据模型 §6.3）：空列表返回 [`EMPTY_SPEC_SIGNATURE`]；否则把每条
-/// `attribute_code=value_code` 按 `(attribute_code, value_code)` 字典序排序后以 `|`
+/// `规格名=规格值` 按 `(规格名, 规格值)` 字典序排序后以 `|`
 /// 连接。同一属性出现两次视为规格数据不一致，直接拒绝。
 ///
 /// # 参数
@@ -41,7 +43,7 @@ pub struct SpecSignatureEntry {
 /// 返回规范化后的签名（空规格为 [`EMPTY_SPEC_SIGNATURE`]）。
 ///
 /// # 错误
-/// 代码为空/超长，或同一属性代码出现多次时返回错误。
+/// 规格名/值为空或超长，或同一规格名出现多次时返回错误。
 pub fn compute_specification_signature(entries: &[SpecSignatureEntry]) -> Result<String> {
     if entries.is_empty() {
         return Ok(EMPTY_SPEC_SIGNATURE.to_string());
@@ -51,15 +53,15 @@ pub fn compute_specification_signature(entries: &[SpecSignatureEntry]) -> Result
     for entry in entries {
         let attribute_code = normalize_required_text(
             entry.attribute_code.clone(),
-            "属性代码不能为空",
+            "规格名不能为空",
             CODE_MAX_LEN,
-            "属性代码过长",
+            "规格名过长",
         )?;
         let value_code = normalize_required_text(
             entry.value_code.clone(),
-            "属性值代码不能为空",
+            "规格值不能为空",
             CODE_MAX_LEN,
-            "属性值代码过长",
+            "规格值过长",
         )?;
         normalized.push((attribute_code, value_code));
     }
@@ -69,7 +71,7 @@ pub fn compute_specification_signature(entries: &[SpecSignatureEntry]) -> Result
     let mut previous_attribute: Option<&str> = None;
     for (attribute_code, value_code) in &normalized {
         if previous_attribute == Some(attribute_code.as_str()) {
-            return Err(Error::from("同一属性在规格中出现多次"));
+            return Err(Error::from("同一规格名在 SKU 规格中出现多次"));
         }
         if !signature.is_empty() {
             signature.push('|');
@@ -141,7 +143,7 @@ pub fn validate_identity_positions(positions: &[u32]) -> Result<()> {
 
 /// 签名与排序位置的内部展示（调试用，不参与持久化）。
 impl fmt::Display for SpecSignatureEntry {
-    /// 以 `attribute_code=value_code` 形式展示。
+    /// 以 `规格名=规格值` 形式展示。
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(formatter, "{}={}", self.attribute_code, self.value_code)
     }
@@ -158,7 +160,7 @@ mod tests {
         }
     }
 
-    /// 签名按属性代码、属性值代码排序，且与输入顺序无关；空规格返回固定空签名。
+    /// 签名按规格名、规格值排序，且与输入顺序无关；空规格返回固定空签名。
     #[test]
     fn compute_signature_is_canonical_and_order_independent() {
         let unsorted = vec![
@@ -180,6 +182,17 @@ mod tests {
         assert_eq!(
             compute_specification_signature(&[]).unwrap(),
             EMPTY_SPEC_SIGNATURE
+        );
+    }
+
+    /// 中文自由规格不依赖预建字典即可形成稳定签名。
+    #[test]
+    fn compute_signature_accepts_spu_local_names_and_values() {
+        let entries = vec![entry(" 尺码 ", " L "), entry("颜色", " 红色 ")];
+
+        assert_eq!(
+            compute_specification_signature(&entries).unwrap(),
+            "尺码=L|颜色=红色"
         );
     }
 
@@ -211,7 +224,7 @@ mod tests {
         assert!(validate_identity_positions(&[0, 1, 3]).is_err());
     }
 
-    /// 签名中的代码去首尾空白并拒绝超长。
+    /// 签名中的规格名和值去首尾空白并拒绝超长。
     #[test]
     fn compute_signature_trims_codes_and_rejects_overlong() {
         let padded = vec![entry("  size  ", "  L  ")];

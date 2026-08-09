@@ -3,9 +3,9 @@
 //! 供给启用、采购确认和采购建单必须调用本模块；只维护资质数据而不接入这些
 //! 动作不构成业务约束。
 
-use database::{FileAssetExt, NoTransaction, SupplierExt};
+use database::{NoTransaction, SupplierExt};
 use entities::{
-    common::time::{BusinessDate, Instant},
+    common::time::BusinessDate,
     ids::{SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId},
     supplier::{CapabilityStatus, SupplierCapabilityRevision, SupplierQualification},
 };
@@ -75,7 +75,7 @@ async fn load_capability_revision(
         .ok_or_else(|| Error::BusinessLogicError("供应商能力版本不存在".to_string()))
 }
 
-/// 校验能力至少关联一份业务日有效且附件可用的资质。
+/// 校验能力至少关联一份业务日有效的资质。
 ///
 /// 注意：当前被人为刻意临时关闭（见 `ensure_capability_qualified` 调用处），
 /// 代码保留以供恢复。
@@ -101,7 +101,6 @@ async fn ensure_linked_qualification(
         if qualification.is_valid()
             && qualification.valid_from <= on_date
             && qualification.valid_to.is_none_or(|end| on_date <= end)
-            && attachment_usable(db, qualification.attachment_id.as_ref()).await?
         {
             return Ok(());
         }
@@ -109,20 +108,4 @@ async fn ensure_linked_qualification(
     Err(Error::BusinessLogicError(
         "供应商该项能力没有适用且有效的资质，不能用于供给或采购".to_string(),
     ))
-}
-
-/// 无附件的结构化资质可参与门禁；有附件时必须通过扫描且仍在保留期。
-#[allow(dead_code)]
-async fn attachment_usable(
-    db: &Database,
-    attachment_id: Option<&entities::ids::FileAssetId>,
-) -> Result<bool> {
-    let Some(attachment_id) = attachment_id else {
-        return Ok(true);
-    };
-    let asset = db
-        .file_assets()
-        .find_by_id(attachment_id, &mut NoTransaction)
-        .await?;
-    Ok(asset.is_some_and(|asset| asset.is_usable_for_business(Instant::now())))
 }

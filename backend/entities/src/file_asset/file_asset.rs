@@ -258,9 +258,8 @@ pub struct FileAssetData {
 /// 受控文件资产实体（数据模型 §6.1）。
 ///
 /// `storage_object_key` 与 `content_hmac` 按 §4.5 敏感数据处理：对象键自定义
-/// `Debug` 不输出正文；指纹必须为带密钥 HMAC。安全检查未通过的文件不得关联
-/// 正式业务对象（§6.1，由 P3 在关联事务中调用 [`FileAsset::is_usable_for_business`]
-/// 校验）。
+/// `Debug` 不输出正文；指纹必须为带密钥 HMAC。安全检查与保留信息用于治理、
+/// 查询和审计，不作为关联正式业务对象的前置条件。
 #[derive(Serialize, Deserialize, Clone, Entity, PartialEq, Eq)]
 pub struct FileAsset {
     #[serde(flatten)]
@@ -385,8 +384,7 @@ impl FileAsset {
 
     /// 标记销毁。
     ///
-    /// 销毁审计只记录一次；已销毁资产不得再用于业务关联（见
-    /// [`FileAsset::is_usable_for_business`]）。
+    /// 销毁审计只记录一次；销毁状态保留为治理记录，不影响既有或新增业务关联。
     ///
     /// # 参数
     /// * `at` - 销毁时刻
@@ -402,30 +400,6 @@ impl FileAsset {
         }
         self.destroyed_at = Some(at);
         Ok(())
-    }
-
-    /// 判断资产是否可用于关联正式业务对象。
-    ///
-    /// 数据模型 §6.1：只有安全检查通过且属于允许保留类别的文件才能关联正式
-    /// 业务对象。允许保留 = 长期保留，或未超过 `expires_at`；同时要求未销毁。
-    ///
-    /// # 参数
-    /// * `now` - 当前时刻
-    ///
-    /// # 返回
-    /// 安全检查通过、未销毁且仍在保留期内时返回 `true`。
-    pub fn is_usable_for_business(&self, now: Instant) -> bool {
-        if self.security_scan_status != SecurityScanStatus::Passed {
-            return false;
-        }
-        if self.destroyed_at.is_some() {
-            return false;
-        }
-        match (self.retention_class, self.expires_at) {
-            (RetentionClass::LongTerm, _) => true,
-            (_, Some(expires_at)) => now <= expires_at,
-            _ => false,
-        }
     }
 }
 
@@ -594,31 +568,16 @@ mod tests {
         assert!(ensure_transition(SecurityScanStatus::Pending, SecurityScanStatus::Pending).is_ok());
     }
 
-    /// 业务关联资格：安全检查通过 + 保留期内 + 未销毁。
+    /// 销毁审计只记录一次，且状态保留供治理查询。
     #[test]
-    fn usability_requires_scan_pass_and_retention_window() {
-        let now = Instant::from_unix_secs(1_702_000_000);
+    fn destroy_is_recorded_once() {
         let mut asset = FileAsset::new(FileAssetId::new("fa-1"), data()).unwrap();
-        assert!(!asset.is_usable_for_business(now), "待扫描不可关联");
-
-        asset.mark_scan_result(SecurityScanStatus::Passed).unwrap();
-        assert!(asset.is_usable_for_business(now));
-
-        assert!(
-            !asset.is_usable_for_business(Instant::from_unix_secs(1_704_000_000)),
-            "过期不可关联"
-        );
-
         asset.destroy(Instant::from_unix_secs(1_703_000_000)).unwrap();
-        assert!(!asset.is_usable_for_business(now), "已销毁不可关联");
+        assert_eq!(asset.destroyed_at, Some(Instant::from_unix_secs(1_703_000_000)));
         assert!(
             asset.destroy(Instant::from_unix_secs(1_703_000_000)).is_err(),
             "销毁审计只记录一次"
         );
-
-        let mut rejected = FileAsset::new(FileAssetId::new("fa-2"), data()).unwrap();
-        rejected.mark_scan_result(SecurityScanStatus::Rejected).unwrap();
-        assert!(!rejected.is_usable_for_business(now));
     }
 
     /// 裸摘要对比：指纹不等于无密钥 SHA-256，证明使用了带密钥 HMAC。

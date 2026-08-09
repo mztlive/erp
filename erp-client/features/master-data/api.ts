@@ -797,7 +797,7 @@ function isFutureDate(date: string | undefined): boolean {
   return date > todayDateOnly()
 }
 
-/** 将后端规范化规格签名还原为 W14 可编辑的属性代码/值代码对。 */
+/** 将后端规范化规格签名还原为 W14 可编辑的 SPU 局部规格名/值。 */
 function parseSpecificationSignature(
   signature: string
 ): Array<{ attributeCode: string; valueCode: string }> {

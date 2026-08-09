@@ -499,7 +499,7 @@ export function ContractDetailPage({
                     : ("processing" as const),
               errorMessage:
                 file.securityState === "quarantined"
-                  ? "安全检查未通过，已隔离，不可下载或作为生效依据。"
+                  ? "安全检查未通过，已记录隔离状态。"
                   : undefined,
               onOpen: undefined,
             }))}

@@ -65,7 +65,7 @@ impl SupplierProfileService {
     /// 创建 Party、Supplier 及其当前资料；全部写入与幂等结果原子提交。
     ///
     /// # Errors
-    /// 输入无效、引用主体停用、附件未通过安全检查、身份重复或事务失败时返回错误。
+    /// 输入无效、引用主体停用、附件不存在或敏感级别不匹配、身份重复或事务失败时返回错误。
     pub async fn create(
         &self,
         req: SaveSupplierProfileRequest,
@@ -85,7 +85,7 @@ impl SupplierProfileService {
         let supplier_no = required_create_identity(req.supplier_no.as_deref(), "供应商编号")?;
         self.ensure_party_active(&req.signing_entity_party_id).await?;
         self.ensure_party_active(&req.payment_entity_party_id).await?;
-        self.ensure_attachments_usable(&req.qualifications).await?;
+        self.ensure_attachment_references(&req.qualifications).await?;
         self.ensure_unique_inputs(&req)?;
 
         let idempotency_key = req.idempotency_key.clone();
@@ -110,7 +110,7 @@ impl SupplierProfileService {
     /// 修订完整供应商资料；全部写入与幂等结果原子提交。
     ///
     /// # Errors
-    /// 输入无效、乐观锁冲突、引用失效、附件不可用或事务失败时返回错误。
+    /// 输入无效、乐观锁冲突、引用失效、附件不存在或敏感级别不匹配时返回错误。
     pub async fn update(
         &self,
         supplier_id: &str,
@@ -124,7 +124,7 @@ impl SupplierProfileService {
         }
         self.ensure_party_active(&req.signing_entity_party_id).await?;
         self.ensure_party_active(&req.payment_entity_party_id).await?;
-        self.ensure_attachments_usable(&req.qualifications).await?;
+        self.ensure_attachment_references(&req.qualifications).await?;
         self.ensure_unique_inputs(&req)?;
         let idempotency_key = req.idempotency_key.clone();
         let prepared = self
@@ -286,8 +286,8 @@ impl SupplierProfileService {
         Ok(())
     }
 
-    /// 校验资质附件已通过扫描且仍在保留期内。
-    async fn ensure_attachments_usable(
+    /// 校验资质附件存在且敏感级别符合附件用途。
+    async fn ensure_attachment_references(
         &self,
         qualifications: &[SupplierProfileQualificationInput],
     ) -> Result<()> {
@@ -301,11 +301,6 @@ impl SupplierProfileService {
                 .find_by_id(attachment_id, &mut NoTransaction)
                 .await?
                 .ok_or_else(|| Error::NotFound("资质附件不存在，请先上传文件".to_string()))?;
-            if !asset.is_usable_for_business(Instant::now()) {
-                return Err(Error::BusinessLogicError(
-                    "资质附件尚未通过安全检查或已超过保留期".to_string(),
-                ));
-            }
             ensure_qualification_sensitivity(qualification, asset.sensitivity_class)?;
         }
         Ok(())

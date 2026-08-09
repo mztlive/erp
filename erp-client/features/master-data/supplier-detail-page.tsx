@@ -534,7 +534,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
   }, [data])
   /** 本会话选择但尚未上传的资质文件；保存时按文件名上传并回填 asset id。 */
   const pendingFilesRef = React.useRef<Map<string, File>>(new Map())
-  /** 保存失败后保留本会话已上传资产，重试时只复查后台扫描结果，不重复上传。 */
+  /** 保存失败后保留本会话已上传资产，重试时不重复上传。 */
   const uploadedAssetMapsRef = React.useRef<
     Record<string, Record<string, { assetId: string; url: string }>>
   >({})
