@@ -23,19 +23,21 @@ use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 
 use database::{
-    AccessControlExt, CatalogExt, ContractExt, CustomerExt, Executor, NoTransaction, SalesOrderExt,
-    SalesReviewExt, Transactional, WorkItemExt,
+    AccessControlExt, CatalogExt, ContractExt, CustomerExt, Executor, NoTransaction, ReceivableExt,
+    SalesOrderExt, SalesReviewExt, Transactional, WorkItemExt,
 };
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{ProcurementConfirmationId, SalesOrderReviewId, WorkItemId};
 use entities::money::Amount;
 use entities::sales_order::{
-    BusinessType, GoodsLineFields, LineType, SalesOrder, SalesOrderData, SalesOrderId, SalesOrderLine,
-    SalesOrderLineData, SalesOrderLineId, SalesOrderSubmission, SalesOrderSubmissionData,
-    SalesOrderSubmissionId, SalesOrderSubmissionLine, SalesOrderSubmissionLineData,
-    SalesOrderSubmissionLineId, SalesOrderWorkingCopy, SalesOrderWorkingCopyData, SalesOrderWorkingCopyId,
-    SalesOrderWorkingCopyLine, SalesOrderWorkingCopyLineData, SalesOrderWorkingCopyLineId,
-    SalesOrderWorkingCopyUpdate, VoucherLineDraft, WorkingPurpose,
+    BusinessType, CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress, GoodsLineFields,
+    InvoiceProgress, LineType, OriginSystem, ReviewStatus, SalesOrder, SalesOrderData, SalesOrderId,
+    SalesOrderLine, SalesOrderLineData, SalesOrderLineId, SalesOrderRevisionId, SalesOrderSubmission,
+    SalesOrderSubmissionData, SalesOrderSubmissionId, SalesOrderSubmissionLine,
+    SalesOrderSubmissionLineData, SalesOrderSubmissionLineId, SalesOrderWorkingCopy,
+    SalesOrderWorkingCopyData, SalesOrderWorkingCopyId, SalesOrderWorkingCopyLine,
+    SalesOrderWorkingCopyLineData, SalesOrderWorkingCopyLineId, SalesOrderWorkingCopyUpdate,
+    VoucherLineDraft, WorkingPurpose,
 };
 use entities::sales_review::{
     ProcurementConfirmation, ProcurementConfirmationData, SalesOrderReview, SalesOrderReviewData,
@@ -52,10 +54,11 @@ use crate::errors::{Error, Result};
 mod dto;
 
 pub use self::dto::{
-    CreateSalesOrderRequest, PageView, RevisionView, SalesOrderCreateIntent, SalesOrderDetailView,
-    SalesOrderDraftLineRequest, SalesOrderDraftRequest, SalesOrderLineView, SalesOrderListParams,
-    SalesOrderView, SalesOrderWorkingCopyLineView, SaveWorkingCopyRequest, SubmissionView,
-    SubmitSalesOrderRequest, VoidSalesOrderRequest, WorkingCopyView,
+    CloseEligibilityView, CreateSalesOrderRequest, PageView, RevisionView, SalesOrderCreateIntent,
+    SalesOrderDetailView, SalesOrderDraftLineRequest, SalesOrderDraftRequest, SalesOrderLineView,
+    SalesOrderListParams, SalesOrderStageSummary, SalesOrderStageView, SalesOrderView,
+    SalesOrderWorkingCopyLineView, SaveWorkingCopyRequest, SubmissionView, SubmitSalesOrderRequest,
+    VoidSalesOrderRequest, WorkingCopyView,
 };
 
 /// 销售单列表筛选条件类型（经 `SalesOrderExt` 关联类型跨 crate 可达）。
@@ -231,24 +234,29 @@ impl SalesOrderService {
         let items = page
             .items
             .into_iter()
-            .map(|row| SalesOrderView {
-                id: row.id,
-                order_no: row.order_no,
-                business_type: row.business_type,
-                origin_system: row.origin_system,
-                customer_id: row.customer_id,
-                contract_id: row.contract_id,
-                commercial_status: row.commercial_status,
-                review_status: row.review_status,
-                fulfillment_progress: row.fulfillment_progress,
-                collection_progress: row.collection_progress,
-                invoice_progress: row.invoice_progress,
-                close_status: row.close_status,
-                effective_at: row.effective_at,
-                closed_at: row.closed_at,
-                version: row.version,
-                created_at: row.created_at,
-                updated_at: row.updated_at,
+            .map(|row| {
+                let (code, label, tone) =
+                    stage_code_label_tone(row.commercial_status, row.review_status, row.close_status, row.fulfillment_progress);
+                SalesOrderView {
+                    id: row.id,
+                    order_no: row.order_no,
+                    business_type: row.business_type,
+                    origin_system: row.origin_system,
+                    customer_id: row.customer_id,
+                    contract_id: row.contract_id,
+                    commercial_status: row.commercial_status,
+                    review_status: row.review_status,
+                    fulfillment_progress: row.fulfillment_progress,
+                    collection_progress: row.collection_progress,
+                    invoice_progress: row.invoice_progress,
+                    close_status: row.close_status,
+                    effective_at: row.effective_at,
+                    closed_at: row.closed_at,
+                    version: row.version,
+                    created_at: row.created_at,
+                    updated_at: row.updated_at,
+                    stage: dto::SalesOrderStageSummary { code, label, tone },
+                }
             })
             .collect();
 
@@ -354,6 +362,61 @@ impl SalesOrderService {
 
         let owner_user_name = self.account_name(&owner_user_id).await?;
 
+        let (stage_owner_role, stage_owner_user_id, stage_due_at) = self
+            .resolve_stage_owner(order.review_status, submission_ids.first())
+            .await?;
+        let stage_owner_user_name = match stage_owner_user_id.as_deref() {
+            Some(user_id) => self.account_name(user_id).await?,
+            None => None,
+        };
+        let (stage_code, stage_label, stage_tone) = stage_code_label_tone(
+            order.stable.status,
+            order.review_status,
+            order.close_status,
+            order.fulfillment_progress,
+        );
+
+        let receivable_accounts = self
+            .db
+            .receivable_accounts()
+            .find_many(mongodb::bson::doc! { "sales_order_id": id }, &mut NoTransaction)
+            .await?;
+        let (settled_total, gross_total) = receivable_accounts.iter().fold(
+            (zero_amount(), zero_amount()),
+            |(settled, gross), account| {
+                (
+                    settled.checked_add(account.settled_total),
+                    gross.checked_add(account.gross_total),
+                )
+            },
+        );
+        let close_eligibility = compute_close_eligibility(
+            order.business_type,
+            order.stable.status,
+            order.close_status,
+            order.fulfillment_progress,
+            order.collection_progress,
+            order.invoice_progress,
+            settled_total,
+            gross_total,
+        );
+
+        let has_active_change_order = match order.stable.current_revision_id.as_ref() {
+            Some(revision_id) => self
+                .db
+                .sales_change_orders()
+                .find_in_progress_by_order_and_base(
+                    &order_id,
+                    &SalesOrderRevisionId::new(revision_id.clone()),
+                    &mut NoTransaction,
+                )
+                .await?
+                .is_some(),
+            None => false,
+        };
+        let (can_start_sales_change_order, change_order_blocker) =
+            compute_can_start_sales_change(order.origin_system, stage_code, stage_label, has_active_change_order);
+
         Ok(SalesOrderDetailView {
             id: order.base.id.clone(),
             order_no: order.order_no.clone(),
@@ -398,6 +461,18 @@ impl SalesOrderService {
                     created_at: revision.base.created_at,
                 })
                 .collect(),
+            stage: dto::SalesOrderStageView {
+                code: stage_code,
+                label: stage_label,
+                tone: stage_tone,
+                owner_role: stage_owner_role,
+                owner_user_id: stage_owner_user_id,
+                owner_user_name: stage_owner_user_name,
+                due_at: stage_due_at,
+            },
+            close_eligibility,
+            can_start_sales_change_order,
+            change_order_blocker,
         })
     }
 
@@ -901,6 +976,84 @@ impl SalesOrderService {
             .await?
             .map(|account| account.name))
     }
+
+    /// 解析当前审核轨阶段的责任角色/责任人/时限（详情页专用）。
+    ///
+    /// 按 `review_status` 找到对应的采购确认/审批记录，再按
+    /// `(business_object_type, business_object_id)` 查找命中的有效待办
+    /// （`WorkItemExt::list_active_by_object`）。找不到对应记录或待办时（例如
+    /// 尚未提交、已生效、或 `PENDING_LOW_MARGIN_SUPERIOR` 当前无生产代码路径会
+    /// 创建对应记录）返回全 `None`，不视为错误。
+    ///
+    /// # 参数
+    /// * `review_status` - 销售单当前审核轨阶段
+    /// * `latest_submission_id` - 最新一次提交；尚未提交过时为 `None`
+    ///
+    /// # 返回
+    /// 返回 `(责任角色, 责任人账号, 时限)`。
+    ///
+    /// # 错误
+    /// 数据库查询失败时返回仓储错误。
+    async fn resolve_stage_owner(
+        &self,
+        review_status: ReviewStatus,
+        latest_submission_id: Option<&SalesOrderSubmissionId>,
+    ) -> Result<(Option<String>, Option<String>, Option<u64>)> {
+        let Some(submission_id) = latest_submission_id else {
+            return Ok((None, None, None));
+        };
+
+        let business_object = match review_status {
+            ReviewStatus::PendingProcurementConfirmation => self
+                .db
+                .procurement_confirmations()
+                .find_pending_by_submission(submission_id, &mut NoTransaction)
+                .await?
+                .map(|confirmation| ("procurement_confirmation", confirmation.base.id)),
+            ReviewStatus::PendingSalesLeader => self
+                .db
+                .sales_order_reviews()
+                .find_by_submission_and_stage(submission_id, SalesReviewStage::SalesLeader, &mut NoTransaction)
+                .await?
+                .map(|review| ("sales_order_review", review.base.id)),
+            ReviewStatus::PendingOperations => self
+                .db
+                .sales_order_reviews()
+                .find_by_submission_and_stage(submission_id, SalesReviewStage::Operations, &mut NoTransaction)
+                .await?
+                .map(|review| ("sales_order_review", review.base.id)),
+            ReviewStatus::PendingLowMarginSuperior => self
+                .db
+                .sales_order_reviews()
+                .find_by_submission_and_stage(
+                    submission_id,
+                    SalesReviewStage::LowMarginSuperior,
+                    &mut NoTransaction,
+                )
+                .await?
+                .map(|review| ("sales_order_review", review.base.id)),
+            _ => None,
+        };
+
+        let Some((business_object_type, business_object_id)) = business_object else {
+            return Ok((None, None, None));
+        };
+
+        let items = self
+            .db
+            .work_items()
+            .list_active_by_object(business_object_type, &business_object_id, &mut NoTransaction)
+            .await?;
+
+        Ok(match items.first() {
+            Some(item) => (
+                item.owner_role.clone(),
+                item.owner_user_id.clone(),
+                item.due_at.map(|instant| instant.unix_secs() as u64),
+            ),
+            None => (None, None, None),
+        })
+    }
 }
 
 /// 按“有效草稿负责人 → 最新提交人 → 建单人”确定销售单详情负责人。
@@ -913,6 +1066,164 @@ fn detail_owner_user_id(
         .or(latest_submitter)
         .unwrap_or(created_by)
         .to_string()
+}
+
+/// 销售单当前阶段 `(code, label, tone)`（服务端权威计算）。
+///
+/// 移植自 erp-client `api.ts::mapPrimaryStatus`；用真实枚举类型消掉了原实现里
+/// 防御性的字符串兜底分支——后端只会产出这里覆盖到的枚举组合（`Draft` 恒配
+/// `NotSubmitted`，`PendingReview` 恒配非 `NotSubmitted` 的审核轨阶段，见
+/// `SalesOrder::submit_for_review`/`return_to_draft` 的不变式，两者不会交叉）。
+fn stage_code_label_tone(
+    commercial: CommercialStatus,
+    review: ReviewStatus,
+    close: CloseStatus,
+    fulfillment: FulfillmentProgress,
+) -> (&'static str, &'static str, &'static str) {
+    if close == CloseStatus::Closed {
+        return ("closed", "已关闭", "void");
+    }
+    if commercial == CommercialStatus::Voided {
+        return ("voided", "已作废", "void");
+    }
+    if commercial == CommercialStatus::Effective {
+        return if fulfillment == FulfillmentProgress::PartiallyFulfilled {
+            ("fulfilling", "履约中", "info")
+        } else {
+            ("effective", "已生效", "success")
+        };
+    }
+    match review {
+        ReviewStatus::PendingProcurementConfirmation => ("awaiting_confirm", "待二次确认", "warning"),
+        ReviewStatus::PendingLowMarginSuperior | ReviewStatus::Rejected => {
+            ("awaiting_sales", "待销售处理", "warning")
+        }
+        ReviewStatus::PendingSalesLeader => ("awaiting_sales_lead", "待销售领导审批", "warning"),
+        ReviewStatus::PendingOperations => ("awaiting_ops", "待运营审批", "warning"),
+        ReviewStatus::Approved => ("effective", "已生效", "success"),
+        ReviewStatus::NotSubmitted => ("draft", "草稿", "neutral"),
+    }
+}
+
+/// 结案资格判定（服务端权威；移植自 erp-client `close-eligibility.ts::computeCloseEligibility`）。
+///
+/// 规则（W05 §5.3/§12）：非卡券以客户验收完成判定交付；卡券以履约期限到期判定
+/// （不因已消费完提前算完成，`FulfillmentProgress::Completed` 由到期任务写入）；
+/// 结案门槛为交付完成且回款收齐，开票进度不参与。回款是否收齐优先看
+/// `collection_progress`，辅以应收子账合计兜底（两者任一满足即视为收齐，
+/// 与前端原实现的双重判断保持一致）。
+#[allow(clippy::too_many_arguments)]
+fn compute_close_eligibility(
+    business_type: BusinessType,
+    commercial: CommercialStatus,
+    close: CloseStatus,
+    fulfillment: FulfillmentProgress,
+    collection: CollectionProgress,
+    invoice: InvoiceProgress,
+    settled_total: Amount,
+    gross_total: Amount,
+) -> dto::CloseEligibilityView {
+    let invoice_complete = invoice == InvoiceProgress::Completed;
+    let fulfillment_done = fulfillment == FulfillmentProgress::Completed;
+    let collection_settled = collection == CollectionProgress::Settled;
+
+    if close == CloseStatus::Closed || commercial == CommercialStatus::Voided || commercial == CommercialStatus::Draft
+    {
+        let closed = close == CloseStatus::Closed;
+        let (blockers, note) = if closed {
+            (
+                Vec::new(),
+                "交付与回款都已完成，本单已自动结案。开票是否做完不影响结案。".to_string(),
+            )
+        } else if commercial == CommercialStatus::Voided {
+            (
+                vec!["本单已作废，不会再结案".to_string()],
+                "作废单只保留历史记录，不能结案，也不能恢复。".to_string(),
+            )
+        } else {
+            (
+                vec!["草稿尚未生效，谈不上结案".to_string()],
+                "草稿还没生效，先完成提交与确认。".to_string(),
+            )
+        };
+        return dto::CloseEligibilityView {
+            fulfillment_complete: closed || fulfillment_done,
+            receivable_settled: closed || collection_settled,
+            invoice_complete,
+            eligible_to_close: closed,
+            blockers,
+            note,
+        };
+    }
+
+    let fulfillment_complete = fulfillment_done;
+    let receivable_settled = collection_settled || settled_total >= gross_total;
+    let mut blockers = Vec::new();
+    if !fulfillment_complete {
+        blockers.push(
+            if business_type == BusinessType::Voucher {
+                "卡券还没到履约期限（持卡人是否消费完都不提前算交付完成）"
+            } else {
+                "客户验收还没做完"
+            }
+            .to_string(),
+        );
+    }
+    if !receivable_settled {
+        blockers.push("客户回款还没收齐".to_string());
+    }
+    let eligible_to_close = fulfillment_complete && receivable_settled;
+    let note = if eligible_to_close {
+        "交付和回款都齐了，系统会自动结案。发票开没开完都不挡结案，也无需人工点「关闭」。".to_string()
+    } else {
+        format!("还不能结案：{}。开票进度不参与是否结案。", blockers.join("；"))
+    };
+
+    dto::CloseEligibilityView {
+        fulfillment_complete,
+        receivable_settled,
+        invoice_complete,
+        eligible_to_close,
+        blockers,
+        note,
+    }
+}
+
+/// 是否可以发起销售变更单（服务端权威；移植自 close-eligibility.ts::canStartSalesChange）。
+///
+/// 已生效单不可直接编辑；ERP 开单的已生效单可发起销售变更（商城开单同步的
+/// 单据、尚在确认/审批中的单据、已有进行中变更单的单据均不可发起）。
+fn compute_can_start_sales_change(
+    origin_system: OriginSystem,
+    stage_code: &str,
+    stage_label: &str,
+    has_active_change_order: bool,
+) -> (bool, Option<String>) {
+    if origin_system != OriginSystem::Erp {
+        return (
+            false,
+            Some("这单由商城开单，商业数据同步中，本系统只能查看；改内容请在商城处理。".to_string()),
+        );
+    }
+    if matches!(stage_code, "draft" | "voided" | "closed") {
+        return (false, Some(format!("当前状态是「{stage_label}」，不能发起改单。")));
+    }
+    if matches!(
+        stage_code,
+        "awaiting_sales" | "awaiting_confirm" | "awaiting_sales_lead" | "awaiting_ops"
+    ) {
+        return (
+            false,
+            Some("本单还在确认/审批中，请先处理完当前待办，再发起改单。".to_string()),
+        );
+    }
+    if has_active_change_order {
+        return (
+            false,
+            Some("已有一笔改单在处理中，请等它走完再发起新的。".to_string()),
+        );
+    }
+    (true, None)
 }
 
 /// 汇总已舍入的行金额三元组（§4.2 铁律 2：表头只汇总已舍入的行金额）。
@@ -1521,7 +1832,18 @@ fn submission_line_view(line: SalesOrderSubmissionLine) -> SalesOrderWorkingCopy
 
 #[cfg(test)]
 mod tests {
-    use super::detail_owner_user_id;
+    use std::str::FromStr;
+
+    use entities::money::Amount;
+    use entities::sales_order::{
+        BusinessType, CloseStatus, CollectionProgress, CommercialStatus, FulfillmentProgress,
+        InvoiceProgress, OriginSystem, ReviewStatus,
+    };
+
+    use super::{
+        compute_can_start_sales_change, compute_close_eligibility, detail_owner_user_id,
+        stage_code_label_tone,
+    };
 
     #[test]
     fn detail_owner_prefers_working_copy_then_latest_submission_then_creator() {
@@ -1534,5 +1856,227 @@ mod tests {
             "submitter"
         );
         assert_eq!(detail_owner_user_id(None, None, "creator"), "creator");
+    }
+
+    #[test]
+    fn stage_closed_overrides_everything() {
+        let (code, label, tone) = stage_code_label_tone(
+            CommercialStatus::Effective,
+            ReviewStatus::Approved,
+            CloseStatus::Closed,
+            FulfillmentProgress::Completed,
+        );
+        assert_eq!((code, label, tone), ("closed", "已关闭", "void"));
+    }
+
+    #[test]
+    fn stage_voided() {
+        let (code, label, tone) = stage_code_label_tone(
+            CommercialStatus::Voided,
+            ReviewStatus::NotSubmitted,
+            CloseStatus::NotSatisfied,
+            FulfillmentProgress::NotStarted,
+        );
+        assert_eq!((code, label, tone), ("voided", "已作废", "void"));
+    }
+
+    #[test]
+    fn stage_effective_distinguishes_fulfilling() {
+        let fulfilling = stage_code_label_tone(
+            CommercialStatus::Effective,
+            ReviewStatus::Approved,
+            CloseStatus::NotSatisfied,
+            FulfillmentProgress::PartiallyFulfilled,
+        );
+        assert_eq!(fulfilling, ("fulfilling", "履约中", "info"));
+
+        let effective = stage_code_label_tone(
+            CommercialStatus::Effective,
+            ReviewStatus::Approved,
+            CloseStatus::NotSatisfied,
+            FulfillmentProgress::NotStarted,
+        );
+        assert_eq!(effective, ("effective", "已生效", "success"));
+    }
+
+    #[test]
+    fn stage_pending_review_branches() {
+        let cases = [
+            (
+                ReviewStatus::PendingProcurementConfirmation,
+                ("awaiting_confirm", "待二次确认", "warning"),
+            ),
+            (
+                ReviewStatus::PendingLowMarginSuperior,
+                ("awaiting_sales", "待销售处理", "warning"),
+            ),
+            (ReviewStatus::Rejected, ("awaiting_sales", "待销售处理", "warning")),
+            (
+                ReviewStatus::PendingSalesLeader,
+                ("awaiting_sales_lead", "待销售领导审批", "warning"),
+            ),
+            (
+                ReviewStatus::PendingOperations,
+                ("awaiting_ops", "待运营审批", "warning"),
+            ),
+            (ReviewStatus::Approved, ("effective", "已生效", "success")),
+            (ReviewStatus::NotSubmitted, ("draft", "草稿", "neutral")),
+        ];
+        for (review, expected) in cases {
+            let actual = stage_code_label_tone(
+                CommercialStatus::PendingReview,
+                review,
+                CloseStatus::NotSatisfied,
+                FulfillmentProgress::NotStarted,
+            );
+            assert_eq!(actual, expected, "review={review:?}");
+        }
+    }
+
+    #[test]
+    fn close_eligibility_closed_branch_is_always_eligible() {
+        let view = compute_close_eligibility(
+            BusinessType::GoodsService,
+            CommercialStatus::Effective,
+            CloseStatus::Closed,
+            FulfillmentProgress::NotStarted,
+            CollectionProgress::NotCollected,
+            InvoiceProgress::NotInvoiced,
+            Amount::from_str("0").unwrap(),
+            Amount::from_str("100").unwrap(),
+        );
+        assert!(view.eligible_to_close);
+        assert!(view.fulfillment_complete);
+        assert!(view.receivable_settled);
+        assert!(view.blockers.is_empty());
+    }
+
+    #[test]
+    fn close_eligibility_voided_and_draft_block_with_reason() {
+        let voided = compute_close_eligibility(
+            BusinessType::GoodsService,
+            CommercialStatus::Voided,
+            CloseStatus::NotSatisfied,
+            FulfillmentProgress::NotStarted,
+            CollectionProgress::NotCollected,
+            InvoiceProgress::NotInvoiced,
+            Amount::from_str("0").unwrap(),
+            Amount::from_str("100").unwrap(),
+        );
+        assert!(!voided.eligible_to_close);
+        assert_eq!(voided.blockers, vec!["本单已作废，不会再结案".to_string()]);
+
+        let draft = compute_close_eligibility(
+            BusinessType::GoodsService,
+            CommercialStatus::Draft,
+            CloseStatus::NotSatisfied,
+            FulfillmentProgress::NotStarted,
+            CollectionProgress::NotCollected,
+            InvoiceProgress::NotInvoiced,
+            Amount::from_str("0").unwrap(),
+            Amount::from_str("100").unwrap(),
+        );
+        assert!(!draft.eligible_to_close);
+        assert_eq!(draft.blockers, vec!["草稿尚未生效，谈不上结案".to_string()]);
+    }
+
+    #[test]
+    fn close_eligibility_goods_vs_voucher_blocker_text() {
+        let goods = compute_close_eligibility(
+            BusinessType::GoodsService,
+            CommercialStatus::Effective,
+            CloseStatus::NotSatisfied,
+            FulfillmentProgress::NotStarted,
+            CollectionProgress::NotCollected,
+            InvoiceProgress::NotInvoiced,
+            Amount::from_str("0").unwrap(),
+            Amount::from_str("100").unwrap(),
+        );
+        assert_eq!(goods.blockers[0], "客户验收还没做完");
+
+        let voucher = compute_close_eligibility(
+            BusinessType::Voucher,
+            CommercialStatus::Effective,
+            CloseStatus::NotSatisfied,
+            FulfillmentProgress::NotStarted,
+            CollectionProgress::NotCollected,
+            InvoiceProgress::NotInvoiced,
+            Amount::from_str("0").unwrap(),
+            Amount::from_str("100").unwrap(),
+        );
+        assert_eq!(
+            voucher.blockers[0],
+            "卡券还没到履约期限（持卡人是否消费完都不提前算交付完成）"
+        );
+    }
+
+    #[test]
+    fn close_eligibility_receivable_settled_falls_back_to_amount_comparison() {
+        // collection_progress 还没被标记 SETTLED，但应收子账合计已收齐——
+        // 与前端原实现的双重判断保持一致。
+        let view = compute_close_eligibility(
+            BusinessType::GoodsService,
+            CommercialStatus::Effective,
+            CloseStatus::NotSatisfied,
+            FulfillmentProgress::Completed,
+            CollectionProgress::PartiallyCollected,
+            InvoiceProgress::NotInvoiced,
+            Amount::from_str("100").unwrap(),
+            Amount::from_str("100").unwrap(),
+        );
+        assert!(view.receivable_settled);
+        assert!(view.eligible_to_close);
+    }
+
+    #[test]
+    fn close_eligibility_invoice_progress_never_blocks() {
+        let view = compute_close_eligibility(
+            BusinessType::GoodsService,
+            CommercialStatus::Effective,
+            CloseStatus::NotSatisfied,
+            FulfillmentProgress::Completed,
+            CollectionProgress::Settled,
+            InvoiceProgress::NotInvoiced,
+            Amount::from_str("100").unwrap(),
+            Amount::from_str("100").unwrap(),
+        );
+        assert!(view.eligible_to_close);
+        assert!(!view.invoice_complete);
+    }
+
+    #[test]
+    fn can_start_sales_change_blocks_mall_origin() {
+        let (allowed, reason) = compute_can_start_sales_change(OriginSystem::Mall, "effective", "已生效", false);
+        assert!(!allowed);
+        assert!(reason.unwrap().contains("商城"));
+    }
+
+    #[test]
+    fn can_start_sales_change_blocks_terminal_and_pending_stages() {
+        for code in ["draft", "voided", "closed"] {
+            let (allowed, reason) = compute_can_start_sales_change(OriginSystem::Erp, code, "任意", false);
+            assert!(!allowed, "stage={code}");
+            assert!(reason.is_some());
+        }
+        for code in [
+            "awaiting_sales",
+            "awaiting_confirm",
+            "awaiting_sales_lead",
+            "awaiting_ops",
+        ] {
+            let (allowed, _) = compute_can_start_sales_change(OriginSystem::Erp, code, "任意", false);
+            assert!(!allowed, "stage={code}");
+        }
+    }
+
+    #[test]
+    fn can_start_sales_change_blocks_active_change_order_else_allows() {
+        let (allowed, reason) = compute_can_start_sales_change(OriginSystem::Erp, "effective", "已生效", true);
+        assert!(!allowed);
+        assert!(reason.unwrap().contains("处理中"));
+
+        let (allowed, reason) = compute_can_start_sales_change(OriginSystem::Erp, "effective", "已生效", false);
+        assert!(allowed);
+        assert!(reason.is_none());
     }
 }

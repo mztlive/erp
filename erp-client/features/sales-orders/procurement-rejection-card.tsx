@@ -2,12 +2,7 @@
 
 import * as React from "react"
 import { z } from "zod"
-import {
-  BanIcon,
-  CircleDollarSignIcon,
-  RefreshCwIcon,
-  ShieldAlertIcon,
-} from "lucide-react"
+import { BanIcon, RefreshCwIcon, ShieldAlertIcon } from "lucide-react"
 
 import {
   DraftSaveIndicator,
@@ -33,7 +28,6 @@ import {
 import { Separator } from "@/components/ui/separator"
 import {
   useAdjustProcurementRejectionDraftMutation,
-  useDecideLowMarginManagerMutation,
   useResolveProcurementRejectionMutation,
 } from "@/features/sales-orders/queries"
 import type {
@@ -50,22 +44,12 @@ const REJECT_REASON_LABEL: Record<string, string> = {
   TERMS_UNCLEAR: "商业条件不清晰",
 }
 
-const WORK_ITEM_STATUS_LABEL: Record<string, string> = {
-  UNCLAIMED: "待领取",
-  CLAIMED: "处理中",
-  COMPLETED: "已完成",
-}
-
 const priceSchema = z.object({
   unitPriceGross: z
     .string()
     .trim()
     .regex(/^\d+(\.\d{1,2})?$/, "请输入有效含税单价"),
   note: z.string().trim().min(2, "请填写调整说明"),
-})
-
-const lowMarginSchema = z.object({
-  reason: z.string().trim().min(8, "请填写至少 8 字的理由"),
 })
 
 const voidSchema = z.object({
@@ -85,7 +69,7 @@ type ProcurementRejectionCardProps = {
 }
 
 /**
- * 采购驳回后三条处理方式：改完再报、低价请领导批、不做了作废。
+ * 采购驳回后两条处理方式：改完再报、不做了作废。
  */
 export function ProcurementRejectionCard({
   order,
@@ -93,23 +77,18 @@ export function ProcurementRejectionCard({
 }: ProcurementRejectionCardProps) {
   const resolveMutation = useResolveProcurementRejectionMutation()
   const adjustMutation = useAdjustProcurementRejectionDraftMutation()
-  const lowMarginDecision = useDecideLowMarginManagerMutation()
 
   const [result, setResult] = React.useState<FormalResult | null>(null)
   const [priceSavedAt, setPriceSavedAt] = React.useState<Date | null>(null)
   const [confirm, setConfirm] = React.useState<
     | null
     | {
-        action:
-          | "RESUBMIT_CHANGED_TERMS"
-          | "REQUEST_LOW_MARGIN_ACCEPTANCE"
-          | "VOID_AFTER_REJECTION"
+        action: "RESUBMIT_CHANGED_TERMS" | "VOID_AFTER_REJECTION"
         title: string
         effects: string[]
       }
   >(null)
   const [pendingPayload, setPendingPayload] = React.useState<{
-    lowMarginReason?: string
     voidReason?: string
   }>({})
   const [idempotencyKey] = React.useState(
@@ -138,23 +117,6 @@ export function ProcurementRejectionCard({
     },
   })
 
-  const lowMarginForm = useAppForm({
-    defaultValues: { reason: "" },
-    validators: { onChange: lowMarginSchema },
-    onSubmit: async ({ value }) => {
-      setPendingPayload({ lowMarginReason: value.reason.trim() })
-      setConfirm({
-        action: "REQUEST_LOW_MARGIN_ACCEPTANCE",
-        title: "确认：按原条件请领导批低毛利",
-        effects: [
-          "按被驳回时的商品与价格申请",
-          "交给销售上级确认是否接受低毛利",
-          "领导通过前不会再推给采购，本单也不会生效",
-        ],
-      })
-    },
-  })
-
   const voidForm = useAppForm({
     defaultValues: { reason: "" },
     validators: { onChange: voidSchema },
@@ -173,9 +135,6 @@ export function ProcurementRejectionCard({
   })
 
   const canResubmit = rejection.allowedActions.includes("RESUBMIT_CHANGED_TERMS")
-  const canLowMargin = rejection.allowedActions.includes(
-    "REQUEST_LOW_MARGIN_ACCEPTANCE"
-  )
   const canVoid = rejection.allowedActions.includes("VOID_AFTER_REJECTION")
   const resubmitBlocker = rejection.actionBlockers.find(
     (b) => b.action === "RESUBMIT_CHANGED_TERMS"
@@ -204,17 +163,15 @@ export function ProcurementRejectionCard({
           />
           <CardTitle>采购未通过，请销售处理</CardTitle>
           <Badge variant="warning">
-            {rejection.reviewStatus === "PENDING_LOW_MARGIN_MANAGER"
-              ? "等领导批低毛利"
-              : rejection.reviewStatus === "VOIDED"
-                ? "已作废"
-                : rejection.reviewStatus === "RESOLVED"
-                  ? "已处理"
-                  : "待你处理"}
+            {rejection.reviewStatus === "VOIDED"
+              ? "已作废"
+              : rejection.reviewStatus === "RESOLVED"
+                ? "已处理"
+                : "待你处理"}
           </Badge>
         </div>
         <CardDescription>
-          任选一种：改商品/改价后再报采购、按原条件请领导批低毛利，或作废本单。
+          任选一种：改商品/改价后再报采购，或作废本单。
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -320,85 +277,10 @@ export function ProcurementRejectionCard({
           </p>
         </section>
 
-        {rejection.reviewStatus === "PENDING_LOW_MARGIN_MANAGER" &&
-        rejection.activeLowMarginManagerTask ? (
-          <section
-            className="space-y-3 rounded-lg border border-info/30 bg-info-soft/30 p-3"
-            aria-label="领导批低毛利"
-          >
-            <div className="flex flex-wrap items-center gap-2">
-              <CircleDollarSignIcon className="size-4" aria-hidden="true" />
-              <h3 className="text-sm font-semibold">等销售领导批低毛利</h3>
-              <Badge variant="info">
-                {WORK_ITEM_STATUS_LABEL[
-                  rejection.activeLowMarginManagerTask.workItemStatus
-                ] ?? rejection.activeLowMarginManagerTask.workItemStatus}
-              </Badge>
-            </div>
-            <p className="text-xs text-muted-foreground">
-              按被驳回时的原条件申请。领导通过后才会再推给采购；驳回则回到下面三种处理方式。
-              {rejection.lowMarginSubmission
-                ? `（申请序号 #${rejection.lowMarginSubmission.submissionNo}）`
-                : null}
-            </p>
-            <div className="rounded-lg border border-dashed border-border p-3">
-              <p className="mb-2 text-xs font-medium text-muted-foreground">
-                领导决策
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={lowMarginDecision.isPending}
-                  onClick={async () => {
-                    const outcome = await lowMarginDecision.mutateAsync({
-                      salesOrderId: order.id,
-                      workItemId: rejection.activeLowMarginManagerTask!.workItemId,
-                      decision: "APPROVE",
-                      idempotencyKey: `${idempotencyKey}-lm-approve`,
-                    })
-                    setResult({
-                      status: "succeeded",
-                      title: "领导已同意低毛利",
-                      description: outcome.detail,
-                      reference: outcome.reference,
-                    })
-                  }}
-                >
-                  领导通过
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={lowMarginDecision.isPending}
-                  onClick={async () => {
-                    const outcome = await lowMarginDecision.mutateAsync({
-                      salesOrderId: order.id,
-                      workItemId: rejection.activeLowMarginManagerTask!.workItemId,
-                      decision: "REJECT",
-                      idempotencyKey: `${idempotencyKey}-lm-reject`,
-                      reason: "毛利仍不可接受",
-                    })
-                    setResult({
-                      status: "rejected",
-                      title: "领导未同意低毛利",
-                      description: outcome.detail,
-                      reference: outcome.reference,
-                    })
-                  }}
-                >
-                  领导驳回
-                </Button>
-              </div>
-            </div>
-          </section>
-        ) : null}
-
         {!resolved && rejection.reviewStatus === "REJECTED" ? (
           <>
             <Separator />
-            <div className="grid gap-4 lg:grid-cols-3">
+            <div className="grid gap-4 lg:grid-cols-2">
               <section className="space-y-3 rounded-lg border border-border p-3">
                 <div className="flex items-center gap-2">
                   <RefreshCwIcon className="size-4" aria-hidden="true" />
@@ -469,40 +351,6 @@ export function ProcurementRejectionCard({
 
               <section className="space-y-3 rounded-lg border border-border p-3">
                 <div className="flex items-center gap-2">
-                  <CircleDollarSignIcon className="size-4" aria-hidden="true" />
-                  <h3 className="text-sm font-semibold">按原条件请领导批</h3>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  不改商品和价格，接受较低毛利。先由销售领导批，通过前不会再推给采购。
-                </p>
-                <form
-                  className="space-y-3"
-                  onSubmit={(e) => {
-                    e.preventDefault()
-                    void lowMarginForm.handleSubmit()
-                  }}
-                >
-                  <lowMarginForm.AppField name="reason">
-                    {(field) => (
-                      <field.TextareaField
-                        label="为什么接受低毛利"
-                        rows={3}
-                        placeholder="说明业务依据、客户重要性等…"
-                      />
-                    )}
-                  </lowMarginForm.AppField>
-                  <lowMarginForm.AppForm>
-                    <lowMarginForm.SubmitButton
-                      label="提交给领导"
-                      pendingLabel="校验中"
-                      disabled={!canLowMargin}
-                    />
-                  </lowMarginForm.AppForm>
-                </form>
-              </section>
-
-              <section className="space-y-3 rounded-lg border border-border p-3">
-                <div className="flex items-center gap-2">
                   <BanIcon className="size-4" aria-hidden="true" />
                   <h3 className="text-sm font-semibold">不做了，作废本单</h3>
                 </div>
@@ -550,7 +398,7 @@ export function ProcurementRejectionCard({
           toStatus={{ label: "处理中", tone: "info" }}
           lockedFields={["销售单号", "被驳回的内容"]}
           effects={confirm?.effects ?? []}
-          nextDepartment="采购 / 销售领导"
+          nextDepartment="采购"
           onConfirm={async () => {
             if (!confirm) return
             try {
@@ -558,7 +406,6 @@ export function ProcurementRejectionCard({
                 salesOrderId: order.id,
                 action: confirm.action,
                 idempotencyKey: `${idempotencyKey}-${confirm.action}`,
-                lowMarginReason: pendingPayload.lowMarginReason,
                 voidReason: pendingPayload.voidReason,
               })
               setResult({
@@ -569,10 +416,7 @@ export function ProcurementRejectionCard({
                 title:
                   outcome.outcome === "CHANGED_TERMS_RESUBMITTED"
                     ? "已改完并再报给采购"
-                    : outcome.outcome ===
-                        "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
-                      ? "已提交，等领导批低毛利"
-                      : "本单已作废",
+                    : "本单已作废",
                 description: outcome.detail,
                 reference: outcome.reference,
               })

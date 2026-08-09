@@ -1435,21 +1435,12 @@ export function ProcurementConfirmationPage() {
               {task.salesSubmission.resubmissionContext ? (
                 <Alert variant="info">
                   <TriangleAlertIcon aria-hidden="true" />
-                  <AlertTitle>
-                    {task.salesSubmission.origin ===
-                    "LOW_MARGIN_MANAGER_APPROVED"
-                      ? "低毛利上级通过后重提 · 仍待采购确认"
-                      : "改品/改价后新提交 · 须重新确认"}
-                  </AlertTitle>
+                  <AlertTitle>改品/改价后新提交 · 须重新确认</AlertTitle>
                   <AlertDescription>
                     第 {task.salesSubmission.submissionNo} 次提交 ·{" "}
                     {task.salesSubmission.submittedAt} ·{" "}
-                    {task.salesSubmission.submittedByLabel}；上一驳回提交已作废
-                    。
-                    {task.salesSubmission.resubmissionContext
-                      .lowMarginManagerConfirmationEvidenceReference
-                      ? " 上级证据不能自动通过，仍需采购确认。"
-                      : " 不得复用旧确认分行。"}
+                    {task.salesSubmission.submittedByLabel}
+                    ；上一驳回提交已作废。不得复用旧确认分行。
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -2744,7 +2735,7 @@ function buildResultFacts(
         label: "驳回原因",
         value: `${REJECT_REASON_LABEL[outcome.rejectReasonCode]} · ${outcome.comment}`,
       },
-      { label: "销售下一步", value: "改品/改价后重提、申请低毛利上级确认或作废" },
+      { label: "销售下一步", value: "改品/改价后重提，或作废" },
     ]
   }
   return [

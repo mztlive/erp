@@ -344,6 +344,62 @@ pub struct SalesOrderView {
     pub created_at: u64,
     /// 更新时间（秒级时间戳）。
     pub updated_at: u64,
+    /// 当前阶段摘要（服务端权威计算，替代前端字符串拼接）。
+    pub stage: SalesOrderStageSummary,
+}
+
+/// 销售单当前阶段摘要（列表行）。
+///
+/// `code` 与 erp-client `filter-orders.ts::SALES_ORDER_STATUS_OPTIONS` 的 9 个
+/// 筛选码一一对应，前端筛选逻辑改为直接比较该码，不再维护一份中文 label 匹配。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SalesOrderStageSummary {
+    /// 阶段码：`draft`/`awaiting_confirm`/`awaiting_sales`/`awaiting_sales_lead`/
+    /// `awaiting_ops`/`fulfilling`/`effective`/`closed`/`voided`。
+    pub code: &'static str,
+    /// 中文展示文案。
+    pub label: &'static str,
+    /// 展示语气：`success`/`warning`/`info`/`void`/`neutral`。
+    pub tone: &'static str,
+}
+
+/// 销售单当前阶段详情（详情页；在摘要基础上附带责任人与时限）。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct SalesOrderStageView {
+    /// 阶段码，语义同 [`SalesOrderStageSummary::code`]。
+    pub code: &'static str,
+    /// 中文展示文案。
+    pub label: &'static str,
+    /// 展示语气。
+    pub tone: &'static str,
+    /// 当前责任岗位（来自命中的待办 `owner_role`）；无待办时为 `None`。
+    pub owner_role: Option<String>,
+    /// 当前责任人账号（来自命中的待办 `owner_user_id`）；未认领时为 `None`。
+    pub owner_user_id: Option<String>,
+    /// 当前责任人姓名。
+    pub owner_user_name: Option<String>,
+    /// 预计完成时限（秒级时间戳）；当前待办派发时尚未赋值时为 `None`。
+    pub due_at: Option<u64>,
+}
+
+/// 结案资格判定（服务端权威；移植自 erp-client `close-eligibility.ts`）。
+///
+/// 规则（W05 §5.3/§12）：非卡券以客户验收完成判定交付；卡券以履约期限到期判定
+/// （不因已消费完提前算完成）；结案门槛为交付完成且回款收齐，开票进度不参与。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct CloseEligibilityView {
+    /// 交付是否已完成。
+    pub fulfillment_complete: bool,
+    /// 应收是否已结清。
+    pub receivable_settled: bool,
+    /// 开票是否已完成（不影响 `eligible_to_close`）。
+    pub invoice_complete: bool,
+    /// 是否具备结案资格。
+    pub eligible_to_close: bool,
+    /// 阻塞原因（`eligible_to_close=false` 时非空）。
+    pub blockers: Vec<String>,
+    /// 面向用户的说明文案。
+    pub note: String,
 }
 
 /// 明细行视图（金额/数量/单价字符串序列化）。
@@ -578,6 +634,14 @@ pub struct SalesOrderDetailView {
     pub submissions: Vec<SubmissionView>,
     /// 版本历史（新版本在前）。
     pub revisions: Vec<RevisionView>,
+    /// 当前阶段详情（含责任人与时限）。
+    pub stage: SalesOrderStageView,
+    /// 结案资格判定。
+    pub close_eligibility: CloseEligibilityView,
+    /// 是否可以发起销售变更单。
+    pub can_start_sales_change_order: bool,
+    /// 不可发起销售变更单时的原因；可发起时为 `None`。
+    pub change_order_blocker: Option<String>,
 }
 
 #[cfg(test)]

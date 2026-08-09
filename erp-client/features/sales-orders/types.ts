@@ -120,7 +120,7 @@ export type ProcurementRejectionResolution = {
   rejectComment: string
   rejectedByLabel: string
   rejectedAt: string
-  reviewStatus: "REJECTED" | "PENDING_LOW_MARGIN_MANAGER" | "RESOLVED" | "VOIDED"
+  reviewStatus: "REJECTED" | "RESOLVED" | "VOIDED"
   draftDifference: {
     changedItemOrService: boolean
     changedSalesPrice: boolean
@@ -129,41 +129,12 @@ export type ProcurementRejectionResolution = {
   }
   estimatedCost?: string
   estimatedMarginPercent?: string
-  lowMarginSubmission?: {
-    submissionId: string
-    submissionNo: number
-    subjectHash: string
-    acceptanceReason: string
-    commercialTermsMatchRejectedSubmission: boolean
-  }
-  activeLowMarginManagerTask?: {
-    workItemId: string
-    workItemType: "LOW_MARGIN_MANAGER_CONFIRMATION"
-    workItemStatus: "UNCLAIMED" | "CLAIMED" | "COMPLETED"
-    claimedByLabel?: string
-    subjectHash: string
-    allowedActions: Array<"CLAIM" | "APPROVE" | "REJECT">
-    actionBlockers: ActionBlocker[]
-  }
-  fixedResolutions: readonly [
-    "RESUBMIT_CHANGED_TERMS",
-    "REQUEST_LOW_MARGIN_ACCEPTANCE",
-    "VOID_AFTER_REJECTION",
-  ]
-  allowedActions: Array<
-    | "RESUBMIT_CHANGED_TERMS"
-    | "REQUEST_LOW_MARGIN_ACCEPTANCE"
-    | "VOID_AFTER_REJECTION"
-  >
+  fixedResolutions: readonly ["RESUBMIT_CHANGED_TERMS", "VOID_AFTER_REJECTION"]
+  allowedActions: Array<"RESUBMIT_CHANGED_TERMS" | "VOID_AFTER_REJECTION">
   actionBlockers: ActionBlocker[]
   /** 已解决时的正式结果摘要（会话内） */
   resolutionOutcome?: {
-    outcome:
-      | "CHANGED_TERMS_RESUBMITTED"
-      | "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
-      | "VOIDED_AFTER_PROCUREMENT_REJECTION"
-      | "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED"
-      | "LOW_MARGIN_REJECTED_TO_SALES"
+    outcome: "CHANGED_TERMS_RESUBMITTED" | "VOIDED_AFTER_PROCUREMENT_REJECTION"
     reference: string
     detail: string
     newSubmissionNo?: number
@@ -227,7 +198,8 @@ export type SalesOrderListItem = {
   nature: SalesOrderNature
   /** 创建来源：商城（MALL）或本系统（ERP），创建后恒不变 */
   originSystem: SalesOrderOrigin
-  primaryStatus: { label: string; tone: StatusTone }
+  /** `code` 是服务端权威阶段码，与 `filter-orders.ts::SALES_ORDER_STATUS_OPTIONS` 对齐。 */
+  primaryStatus: { code: string; label: string; tone: StatusTone }
   fulfillment: ProgressTrack
   collection: ProgressTrack
   invoicing: ProgressTrack

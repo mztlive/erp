@@ -1013,11 +1013,7 @@ export async function completeProcurementDecision(input: {
       rejectedSubmissionId: input.decision.submissionId,
       rejectedSubjectHash: input.decision.subjectHash,
       workflowActionId: data.reference,
-      nextSalesResolutions: [
-        "RESUBMIT_CHANGED_TERMS",
-        "REQUEST_LOW_MARGIN_ACCEPTANCE",
-        "VOID_AFTER_REJECTION",
-      ],
+      nextSalesResolutions: ["RESUBMIT_CHANGED_TERMS", "VOID_AFTER_REJECTION"],
       reference: data.reference,
       rejectReasonCode: input.decision.rejectReasonCode,
       comment: input.decision.comment,

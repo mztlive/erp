@@ -12,10 +12,7 @@ export type RejectReasonCode =
   | "DELIVERY_UNMET"
   | "QUALIFICATION_INVALID"
 
-export type SubmissionOrigin =
-  | "INITIAL"
-  | "CHANGED_TERMS_AFTER_REJECTION"
-  | "LOW_MARGIN_MANAGER_APPROVED"
+export type SubmissionOrigin = "INITIAL" | "CHANGED_TERMS_AFTER_REJECTION"
 
 export type ConfirmationLineDraft = Readonly<{
   lineKey: string
@@ -104,7 +101,6 @@ export type ProcurementConfirmationTask = Readonly<{
       previousRejectedConfirmationId: string
       previousRejectedSubmissionId: string
       previousRejectedSubjectHash: string
-      lowMarginManagerConfirmationEvidenceReference?: string
     }
   }
   confirmation: {
@@ -206,11 +202,7 @@ export type FormalOutcome =
       rejectedSubmissionId: string
       rejectedSubjectHash: string
       workflowActionId: string
-      nextSalesResolutions: readonly [
-        "RESUBMIT_CHANGED_TERMS",
-        "REQUEST_LOW_MARGIN_ACCEPTANCE",
-        "VOID_AFTER_REJECTION",
-      ]
+      nextSalesResolutions: readonly ["RESUBMIT_CHANGED_TERMS", "VOID_AFTER_REJECTION"]
       /** 契约：驳回事务不得创建后继任务 */
       successorWorkItemId?: never
       reference: string
@@ -250,12 +242,6 @@ export const NEXT_SALES_RESOLUTION_COPY = [
     title: "改品 / 改价后重提",
     description:
       "销售与客户重新确认后，在销售单冻结新提交与新数据版本，再产生全新采购确认任务。",
-  },
-  {
-    code: "REQUEST_LOW_MARGIN_ACCEPTANCE" as const,
-    title: "照原条件申请低毛利上级确认",
-    description:
-      "先进入已注册 LOW_MARGIN_MANAGER_CONFIRMATION；上级通过后仍创建全新采购确认，不能替代本次采购决定。",
   },
   {
     code: "VOID_AFTER_REJECTION" as const,

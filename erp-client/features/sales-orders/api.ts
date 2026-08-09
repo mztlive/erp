@@ -84,6 +84,31 @@ type PageView<T> = {
   page_size: number
 }
 
+/** 服务端权威计算的当前阶段（替代前端字符串拼接）。 */
+type BackendStageSummary = {
+  code: string
+  label: string
+  tone: string
+}
+
+/** 详情页阶段视图：摘要 + 责任人 + 时限。 */
+type BackendStageView = BackendStageSummary & {
+  owner_role?: string | null
+  owner_user_id?: string | null
+  owner_user_name?: string | null
+  due_at?: number | null
+}
+
+/** 服务端权威计算的结案资格。 */
+type BackendCloseEligibility = {
+  fulfillment_complete: boolean
+  receivable_settled: boolean
+  invoice_complete: boolean
+  eligible_to_close: boolean
+  blockers: string[]
+  note: string
+}
+
 type BackendSalesOrderView = {
   id: string
   order_no: string
@@ -102,6 +127,7 @@ type BackendSalesOrderView = {
   version: number
   created_at: number
   updated_at: number
+  stage: BackendStageSummary
 }
 
 type BackendWorkingCopyLine = {
@@ -213,6 +239,10 @@ type BackendSalesOrderDetail = {
   working_copy?: BackendWorkingCopy | null
   submissions: BackendSubmission[]
   revisions: BackendRevision[]
+  stage: BackendStageView
+  close_eligibility: BackendCloseEligibility
+  can_start_sales_change_order: boolean
+  change_order_blocker?: string | null
 }
 
 type BackendContractDetail = {
@@ -310,22 +340,13 @@ type BackendBackgroundJob = {
 }
 
 type ProcurementResolutionOutcome = {
-  outcome:
-    | "CHANGED_TERMS_RESUBMITTED"
-    | "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED"
-    | "VOIDED_AFTER_PROCUREMENT_REJECTION"
-    | "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED"
-    | "LOW_MARGIN_REJECTED_TO_SALES"
+  outcome: "CHANGED_TERMS_RESUBMITTED" | "VOIDED_AFTER_PROCUREMENT_REJECTION"
   reference: string
   detail: string
   newSubmissionNo?: number
   newSubjectHash?: string
   newWorkItemId?: string
-  reviewStatus?:
-    | "REJECTED"
-    | "PENDING_LOW_MARGIN_MANAGER"
-    | "RESOLVED"
-    | "VOIDED"
+  reviewStatus?: "REJECTED" | "RESOLVED" | "VOIDED"
   primaryStatusLabel?: string
 }
 
@@ -395,49 +416,9 @@ function toneForStatus(label: string): StatusTone {
   return "neutral"
 }
 
-function mapPrimaryStatus(
-  commercial: string,
-  review: string,
-  close: string,
-  fulfillment: string
-): { label: string; tone: StatusTone } {
-  if (close === "CLOSED") return { label: "已关闭", tone: "void" }
-  if (commercial === "VOIDED") return { label: "已作废", tone: "void" }
-  if (commercial === "EFFECTIVE") {
-    if (fulfillment === "PARTIALLY_FULFILLED")
-      return { label: "履约中", tone: "info" }
-    return { label: "已生效", tone: "success" }
-  }
-  // 商业态仍为 DRAFT 时，只要已进入审核轨就按审核态展示（提交后常见组合）
-  if (
-    commercial === "DRAFT" ||
-    commercial === "PENDING_REVIEW" ||
-    commercial === "IN_REVIEW"
-  ) {
-    switch (review) {
-      case "PENDING_PROCUREMENT_CONFIRMATION":
-        return { label: "待二次确认", tone: "warning" }
-      case "PENDING_LOW_MARGIN_SUPERIOR":
-        return { label: "待销售处理", tone: "warning" }
-      case "PENDING_SALES_LEADER":
-        return { label: "待销售领导审批", tone: "warning" }
-      case "PENDING_OPERATIONS":
-        return { label: "待运营审批", tone: "warning" }
-      case "REJECTED":
-        return { label: "待销售处理", tone: "warning" }
-      case "APPROVED":
-        return { label: "已生效", tone: "success" }
-      case "NOT_SUBMITTED":
-      case "":
-        if (commercial === "DRAFT") return { label: "草稿", tone: "neutral" }
-        break
-      default:
-        if (review) return { label: "审核中", tone: "warning" }
-    }
-    if (commercial === "DRAFT") return { label: "草稿", tone: "neutral" }
-    return { label: "审核中", tone: "warning" }
-  }
-  return { label: "进行中", tone: "info" }
+/** 后端 `stage.tone` 映射为前端徽标语气；后端只产出 `neutral` 兜底值以外的语气。 */
+function mapStageTone(tone: string): StatusTone {
+  return tone as StatusTone
 }
 
 function mapFulfillment(code: string): ProgressTrack {
@@ -473,30 +454,32 @@ function mapInvoicing(code: string): ProgressTrack {
   }
 }
 
-function mapCloseEligibility(
-  close: string,
-  fulfillment: string,
-  collection: string
-): SalesOrderListItem["closeEligibility"] {
-  const fulfillmentComplete = fulfillment === "COMPLETED"
-  const receivableSettled = collection === "SETTLED"
-  const eligible =
-    close === "CLOSEABLE" ||
-    close === "CLOSED" ||
-    (fulfillmentComplete && receivableSettled)
-  const blockers: string[] = []
-  if (!fulfillmentComplete) blockers.push("履约尚未完成")
-  if (!receivableSettled) blockers.push("应收尚未结清")
-  return {
-    fulfillmentComplete,
-    receivableSettled,
+/**
+ * 结案条件卡只在详情页展示（`close-conditions-card.tsx`），列表行从不渲染
+ * 这个字段；纯列表拉取（`sales_order_list`）不携带后端权威结案资格，避免为
+ * 不可见字段逐行加查询成本。详情路径（`mapDetailToListItem`）会用
+ * `detail.close_eligibility` 覆盖这个占位值。
+ */
+const LIST_ROW_CLOSE_ELIGIBILITY_PLACEHOLDER: SalesOrderListItem["closeEligibility"] =
+  {
+    fulfillmentComplete: false,
+    receivableSettled: false,
     invoiceComplete: false,
-    eligibleToClose: eligible && close !== "CLOSED",
-    blockers,
-    note:
-      close === "CLOSED"
-        ? "本单已关闭。"
-        : "关闭条件：履约完成 + 应收结清；开票不阻塞关闭。",
+    eligibleToClose: false,
+    blockers: [],
+    note: "",
+  }
+
+function mapCloseEligibilityFromBackend(
+  backend: BackendCloseEligibility
+): SalesOrderListItem["closeEligibility"] {
+  return {
+    fulfillmentComplete: backend.fulfillment_complete,
+    receivableSettled: backend.receivable_settled,
+    invoiceComplete: backend.invoice_complete,
+    eligibleToClose: backend.eligible_to_close,
+    blockers: backend.blockers,
+    note: backend.note,
   }
 }
 
@@ -547,21 +530,25 @@ function mapRevisions(
 
 function defaultAllowedActions(
   commercial: string,
-  review: string,
-  close: string,
-  hasChange: boolean,
   hasCardApproval: boolean,
-  hasRejection: boolean
+  hasRejection: boolean,
+  /**
+   * 能否发起销售变更单——后端权威判定（`sales_order_detail` 的
+   * `can_start_sales_change_order`/`change_order_blocker`）。纯列表拉取没有
+   * 这份数据（避免为不可见的行内操作逐行查询），此时不下结论：既不放进
+   * `allowed` 也不放进 `blockers`，不在前端重新猜测规则。
+   */
+  startSalesChange?: { allowed: boolean; blocker?: string | null }
 ): { allowed: FormalAllowedAction[]; blockers: ActionBlocker[] } {
   const allowed: FormalAllowedAction[] = ["PRINT", "EXPORT", "VIEW_CLOSE_CONDITIONS"]
   const blockers: ActionBlocker[] = []
 
-  if (commercial === "EFFECTIVE" && close !== "CLOSED" && !hasChange) {
+  if (startSalesChange?.allowed) {
     allowed.push("START_SALES_CHANGE")
-  } else if (hasChange) {
+  } else if (startSalesChange && startSalesChange.blocker) {
     blockers.push({
       action: "START_SALES_CHANGE",
-      reason: "已有进行中的销售变更单。",
+      reason: startSalesChange.blocker,
     })
   }
 
@@ -599,29 +586,27 @@ function mapListItemFromBackend(
     activeCardSalesApproval?: CardSalesApproval | null
     activeChangeOrder?: SalesChangeOrderSummary | null
     customerContact?: string
+    closeEligibility?: BackendCloseEligibility
+    startSalesChange?: { allowed: boolean; blocker?: string | null }
   }
 ): SalesOrderListItem {
   const nature = mapNature(row.business_type)
   const originSystem = mapOrigin(row.origin_system)
-  const primaryStatus = mapPrimaryStatus(
-    row.commercial_status,
-    row.review_status,
-    row.close_status,
-    row.fulfillment_progress
-  )
+  const primaryStatus = {
+    code: row.stage.code,
+    label: row.stage.label,
+    tone: mapStageTone(row.stage.tone),
+  }
   const fulfillment = mapFulfillment(row.fulfillment_progress)
   const collection = mapCollection(row.collection_progress)
   const invoicing = mapInvoicing(row.invoice_progress)
-  const hasChange = Boolean(extras?.activeChangeOrder)
   const hasCard = Boolean(extras?.activeCardSalesApproval)
   const hasRejection = Boolean(extras?.procurementRejection)
   const { allowed, blockers } = defaultAllowedActions(
     row.commercial_status,
-    row.review_status,
-    row.close_status,
-    hasChange,
     hasCard,
-    hasRejection
+    hasRejection,
+    extras?.startSalesChange
   )
 
   const commercialReadOnly =
@@ -668,11 +653,9 @@ function mapListItemFromBackend(
       receipts: 0,
       invoices: 0,
     },
-    closeEligibility: mapCloseEligibility(
-      row.close_status,
-      row.fulfillment_progress,
-      row.collection_progress
-    ),
+    closeEligibility: extras?.closeEligibility
+      ? mapCloseEligibilityFromBackend(extras.closeEligibility)
+      : LIST_ROW_CLOSE_ELIGIBILITY_PLACEHOLDER,
     natureLocked: true,
     commercialReadOnly,
     commercialReadOnlyReason: commercialReadOnly
@@ -806,6 +789,7 @@ function mapDetailToListItem(
       version: detail.version,
       created_at: detail.created_at,
       updated_at: detail.created_at,
+      stage: detail.stage,
     },
     {
       customerName:
@@ -829,6 +813,11 @@ function mapDetailToListItem(
       activeChangeOrder: extras?.activeChangeOrder,
       settlementEntity:
         commercial.settlementPartyName || detail.settlement_party_id,
+      closeEligibility: detail.close_eligibility,
+      startSalesChange: {
+        allowed: detail.can_start_sales_change_order,
+        blocker: detail.change_order_blocker,
+      },
     }
   )
 }
@@ -884,16 +873,8 @@ function mapRejectedProcurement(
       commercialTermsUnchanged: true,
       diffSummary: [],
     },
-    fixedResolutions: [
-      "RESUBMIT_CHANGED_TERMS",
-      "REQUEST_LOW_MARGIN_ACCEPTANCE",
-      "VOID_AFTER_REJECTION",
-    ],
-    allowedActions: [
-      "RESUBMIT_CHANGED_TERMS",
-      "REQUEST_LOW_MARGIN_ACCEPTANCE",
-      "VOID_AFTER_REJECTION",
-    ],
+    fixedResolutions: ["RESUBMIT_CHANGED_TERMS", "VOID_AFTER_REJECTION"],
+    allowedActions: ["RESUBMIT_CHANGED_TERMS", "VOID_AFTER_REJECTION"],
     actionBlockers: [],
   }
 }
@@ -1386,17 +1367,10 @@ export async function createSalesOrder(
     body
   )
 
-  const status = mapPrimaryStatus(
-    created.commercial_status,
-    created.review_status,
-    created.close_status,
-    created.fulfillment_progress
-  )
-
   return {
     salesOrderId: created.id,
     documentNumber: created.order_no,
-    statusLabel: status.label,
+    statusLabel: created.stage.label,
     createdAt: new Date(created.created_at * 1000).toISOString(),
     reference: `SO-CREATE-${created.order_no}`,
   }
@@ -1521,12 +1495,8 @@ export async function adjustProcurementRejectionDraft(input: {
 
 export async function resolveProcurementRejection(input: {
   salesOrderId: string
-  action:
-    | "RESUBMIT_CHANGED_TERMS"
-    | "REQUEST_LOW_MARGIN_ACCEPTANCE"
-    | "VOID_AFTER_REJECTION"
+  action: "RESUBMIT_CHANGED_TERMS" | "VOID_AFTER_REJECTION"
   idempotencyKey: string
-  lowMarginReason?: string
   voidReason?: string
 }): Promise<ProcurementResolutionOutcome> {
   const detail = await apiGet<BackendSalesOrderDetail>(
@@ -1546,29 +1516,6 @@ export async function resolveProcurementRejection(input: {
     }
   }
 
-  if (input.action === "RESUBMIT_CHANGED_TERMS") {
-    const submission = await apiPost<{
-      id: string
-      submission_no: number
-    }>(`/admin/sales-orders/${input.salesOrderId}/submit`, {
-      version: detail.version,
-      idempotency_key: input.idempotencyKey,
-    })
-    return {
-      outcome: "CHANGED_TERMS_RESUBMITTED",
-      reference: `PR-RESUB-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
-      detail:
-        "已提交新版本进入采购二次确认；旧驳回记录保持历史。",
-      newSubmissionNo: submission.submission_no,
-      newSubjectHash: submission.id,
-      reviewStatus: "RESOLVED",
-      primaryStatusLabel: "待二次确认",
-    }
-  }
-
-  // REQUEST_LOW_MARGIN_ACCEPTANCE：后端无独立「申请低毛利」写入口；
-  // 提交后由审核轨进入 PENDING_LOW_MARGIN_SUPERIOR（若业务服务支持）。
-  // 此处执行 submit 并登记缺口：完整低毛利申请协议待后端补齐。
   const submission = await apiPost<{
     id: string
     submission_no: number
@@ -1576,53 +1523,14 @@ export async function resolveProcurementRejection(input: {
     version: detail.version,
     idempotency_key: input.idempotencyKey,
   })
-
   return {
-    outcome: "LOW_MARGIN_MANAGER_CONFIRMATION_CREATED",
-    reference: `PR-LM-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
-    detail:
-      input.lowMarginReason ??
-      "已提交并等待低毛利上级确认（若后端审核轨支持）。",
+    outcome: "CHANGED_TERMS_RESUBMITTED",
+    reference: `PR-RESUB-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
+    detail: "已提交新版本进入采购二次确认；旧驳回记录保持历史。",
     newSubmissionNo: submission.submission_no,
     newSubjectHash: submission.id,
-    reviewStatus: "PENDING_LOW_MARGIN_MANAGER",
-    primaryStatusLabel: "待销售处理",
-  }
-}
-
-export async function decideLowMarginManager(input: {
-  salesOrderId: string
-  workItemId: string
-  decision: "APPROVE" | "REJECT"
-  idempotencyKey: string
-  reason?: string
-}): Promise<ProcurementResolutionOutcome> {
-  // workItemId 在集成后映射为 sales_order_review.id（低毛利阶段）
-  const path =
-    input.decision === "APPROVE"
-      ? `/admin/sales-order-reviews/${input.workItemId}/approve`
-      : `/admin/sales-order-reviews/${input.workItemId}/reject`
-
-  await apiPost(path, {
-    decision_reason: input.reason ?? null,
-  })
-
-  if (input.decision === "APPROVE") {
-    return {
-      outcome: "LOW_MARGIN_APPROVED_AND_PROCUREMENT_RESUBMITTED",
-      reference: `LM-OK-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
-      detail: "上级已同意低毛利承接；销售单未直接生效，进入后续采购确认。",
-      reviewStatus: "RESOLVED",
-      primaryStatusLabel: "待二次确认",
-    }
-  }
-
-  return {
-    outcome: "LOW_MARGIN_REJECTED_TO_SALES",
-    reference: `LM-REJ-${input.idempotencyKey.slice(0, 8).toUpperCase()}`,
-    detail: `上级驳回低毛利承接（${input.reason ?? "未说明"}）。`,
-    reviewStatus: "REJECTED",
-    primaryStatusLabel: "待销售处理",
+    reviewStatus: "RESOLVED",
+    primaryStatusLabel: "待二次确认",
   }
 }
 

@@ -12,7 +12,6 @@ import {
   completeCardSalesApproval,
   createSalesOrder,
   createSalesOrderExportJob,
-  decideLowMarginManager,
   fetchSalesOrderDetail,
   fetchSalesOrders,
   resolveProcurementRejection,
@@ -93,21 +92,6 @@ export function useResolveProcurementRejectionMutation() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: resolveProcurementRejection,
-    onSuccess: async (_data, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: salesOrderKeys.detail(variables.salesOrderId),
-      })
-      await queryClient.invalidateQueries({
-        queryKey: salesOrderKeys.all,
-      })
-    },
-  })
-}
-
-export function useDecideLowMarginManagerMutation() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: decideLowMarginManager,
     onSuccess: async (_data, variables) => {
       await queryClient.invalidateQueries({
         queryKey: salesOrderKeys.detail(variables.salesOrderId),

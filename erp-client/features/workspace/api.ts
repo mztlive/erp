@@ -73,11 +73,6 @@ const TYPE_META: Record<
     family: "procurement",
     destination: "W07",
   },
-  LOW_MARGIN_MANAGER_CONFIRMATION: {
-    label: "低毛利上级确认",
-    family: "approval",
-    destination: "W05",
-  },
   PURCHASE_ORDER_REVIEW: {
     label: "采购单财务审核",
     family: "finance",

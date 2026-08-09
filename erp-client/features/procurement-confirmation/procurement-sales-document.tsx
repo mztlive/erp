@@ -109,12 +109,7 @@ export function ProcurementSalesDocument({
         {
           id: "origin",
           label: "提交来源",
-          value:
-            submission.origin === "INITIAL"
-              ? "首次提交"
-              : submission.origin === "LOW_MARGIN_MANAGER_APPROVED"
-                ? "低毛利确认后重提"
-                : "条款调整后重提",
+          value: submission.origin === "INITIAL" ? "首次提交" : "条款调整后重提",
         },
         {
           id: "line-count",

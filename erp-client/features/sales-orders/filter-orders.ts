@@ -54,18 +54,27 @@ export function matchesSalesOrderSearch(
   )
 }
 
-/** 主状态中文名 → 稳定枚举码（筛选比较用）。 */
-const STATUS_VALUE_BY_LABEL = new Map<string, SalesOrderStatusValue>(
-  SALES_ORDER_STATUS_OPTIONS.map((option) => [option.label, option.value])
-)
-
 function statusMatches(
-  label: string,
+  code: string,
   filter: SalesOrderStatusFilter
 ): boolean {
   if (filter === "all") return true
-  return STATUS_VALUE_BY_LABEL.get(label) === filter
+  return code === filter
 }
+
+/** “待处理”指标覆盖的阶段码：任一审核轨在途。 */
+const PENDING_STAGE_CODES: readonly SalesOrderStatusValue[] = [
+  "awaiting_confirm",
+  "awaiting_sales",
+  "awaiting_sales_lead",
+  "awaiting_ops",
+]
+
+/** “进行中”指标覆盖的阶段码：已生效（含履约中）。 */
+const IN_PROGRESS_STAGE_CODES: readonly SalesOrderStatusValue[] = [
+  "fulfilling",
+  "effective",
+]
 
 export function filterSalesOrders(
   orders: readonly SalesOrderListItem[],
@@ -90,33 +99,24 @@ export function filterSalesOrders(
     if (originFilter !== "all" && order.originSystem !== originFilter) {
       return false
     }
-    if (!statusMatches(order.primaryStatus.label, statusFilter)) {
+    if (!statusMatches(order.primaryStatus.code, statusFilter)) {
       return false
     }
     if (summaryFilter === "pending") {
-      if (
-        ![
-          "待二次确认",
-          "待销售处理",
-          "待销售领导审批",
-          "待运营审批",
-        ].includes(order.primaryStatus.label)
-      ) {
+      if (!PENDING_STAGE_CODES.includes(order.primaryStatus.code as SalesOrderStatusValue)) {
         return false
       }
     }
     if (summaryFilter === "inProgress") {
-      if (
-        !["履约中", "已生效"].includes(order.primaryStatus.label)
-      ) {
+      if (!IN_PROGRESS_STAGE_CODES.includes(order.primaryStatus.code as SalesOrderStatusValue)) {
         return false
       }
     }
     if (summaryFilter === "pendingCollection") {
       if (
         order.collection.label === "已结清" ||
-        order.primaryStatus.label === "草稿" ||
-        order.primaryStatus.label === "已作废"
+        order.primaryStatus.code === "draft" ||
+        order.primaryStatus.code === "voided"
       ) {
         return false
       }
@@ -141,7 +141,7 @@ export function filterSalesOrders(
       if (
         order.collection.label !== "待复核" &&
         order.invoicing.label !== "待复核" &&
-        order.primaryStatus.label !== "已作废"
+        order.primaryStatus.code !== "voided"
       ) {
         return false
       }
@@ -173,20 +173,15 @@ export function computeSalesOrderMetrics(orders: readonly SalesOrderListItem[]) 
   return {
     total: orders.length,
     pending: orders.filter((o) =>
-      [
-        "待二次确认",
-        "待销售处理",
-        "待销售领导审批",
-        "待运营审批",
-      ].includes(o.primaryStatus.label)
+      PENDING_STAGE_CODES.includes(o.primaryStatus.code as SalesOrderStatusValue)
     ).length,
     inProgress: orders.filter((o) =>
-      ["履约中", "已生效"].includes(o.primaryStatus.label)
+      IN_PROGRESS_STAGE_CODES.includes(o.primaryStatus.code as SalesOrderStatusValue)
     ).length,
     pendingCollection: orders.filter(
       (o) =>
-        o.primaryStatus.label !== "草稿" &&
-        o.primaryStatus.label !== "已作废" &&
+        o.primaryStatus.code !== "draft" &&
+        o.primaryStatus.code !== "voided" &&
         (o.collection.label === "未收" ||
           o.collection.label === "部分回款" ||
           o.collection.label === "待复核")

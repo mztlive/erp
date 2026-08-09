@@ -73,14 +73,6 @@ const TYPE_META: Record<
     processorGroup: "procurement",
     closeAllowed: false,
   },
-  LOW_MARGIN_MANAGER_CONFIRMATION: {
-    label: "低毛利上级确认",
-    family: "approval",
-    handlerKey: "low_margin",
-    handlerHref: "/sales/orders",
-    processorGroup: "sales_approval",
-    closeAllowed: false,
-  },
   PURCHASE_ORDER_REVIEW: {
     label: "采购单财务审核",
     family: "finance",
