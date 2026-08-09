@@ -11,11 +11,11 @@ futures-util = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
 chrono = { workspace = true }
-entity-core = { path = "../crates/entity-core" }
-entities = { path = "../entities" }
-regex = "1.12.3"
+entity-core = { workspace = true }
+entities = { workspace = true }
+regex = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
-test-support = { path = "../crates/test-support" }
+test-support = { workspace = true }

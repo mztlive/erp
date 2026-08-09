@@ -5,9 +5,9 @@ edition = "2021"
 
 
 [dependencies]
-entities = { path = "../entities" }
-id-generator = { path = "../crates/id-generator" }
-database = { path = "../database" }
+entities = { workspace = true }
+id-generator = { workspace = true }
+database = { workspace = true }
 casbin = { workspace = true }
 thiserror = { workspace = true }
 serde = { workspace = true }
@@ -20,7 +20,7 @@ aes-gcm = { workspace = true }
 base64 = { workspace = true }
 hmac = { workspace = true }
 sha2 = { workspace = true }
-regex = "1.12.3"
+regex = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros"] }
