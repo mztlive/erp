@@ -164,11 +164,11 @@ export function SafetyPausePanel({
                 className="mt-2"
                 render={
                   <Link
-                    href={`/procurement/supplier-catalog?workItemId=${encodeURIComponent(pause.followUpWorkItem.workItemId)}`}
+                    href={`/procurement/supplier-offerings?workItemId=${encodeURIComponent(pause.followUpWorkItem.workItemId)}`}
                   />
                 }
               >
-                前往供应商商品核对
+                前往供应商供给核对
               </Button>
             </div>
           ) : null}

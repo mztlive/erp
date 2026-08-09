@@ -167,7 +167,7 @@ function mapCapability(c: BackendCapability) {
     businessRequirementLabel: "未确认",
     version: String(c.version),
     productLevelNote:
-      "连接级能力声明 ≠ 每个商品可用；商品/供给/发布级能力见供应商商品库 / 商品发布",
+      "连接级能力声明 ≠ 每条供给可用；供给/发布级能力见供应商供给 / 商品发布",
   }
 }
 
@@ -678,13 +678,13 @@ export async function startCatalogSync(input: {
   connectionId: string
   idempotencyKey: string
 }): Promise<FormalOutcome> {
-  // 后端本域无目录同步触发端点（同步由 supplier_catalog intake 承接）
+  // 后端本域不触发供给同步；供给写入由供应商供给域承接。
   return {
     status: "blocked",
     code: "BACKEND_GAP",
     title: "目录同步尚未接入本页",
     message:
-      "供应商目录同步不在 supplier-api-connections 域；请到供应商商品库或集成任务中处理。",
+      "供应商供给同步不在 supplier-api-connections 域；请到供应商供给或集成任务中处理。",
     reference: input.connectionId,
   }
 }
@@ -729,7 +729,7 @@ export async function enableConnection(input: {
   return {
     status: "succeeded",
     title: "连接已启用",
-    message: "状态变为启用。不直接修改供应商商品、供给或历史订单。",
+    message: "状态变为启用。不直接修改供给关系或历史订单。",
     reference: updated.connection_code,
     connectionVersion: String(updated.version),
   }

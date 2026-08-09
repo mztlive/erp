@@ -42,7 +42,7 @@ const DOMAIN_MODULES: &[&str] = &[
     "returns",
     "legacy_import",
     "mall_sync",
-    "supplier_catalog",
+    "supplier_offering",
     "supplier_api",
     "publication",
     "projection",

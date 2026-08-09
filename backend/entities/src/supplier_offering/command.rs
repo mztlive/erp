@@ -1,4 +1,4 @@
-//! 供应商商品库写命令的幂等结果。
+//! 供应商供给写命令的幂等结果。
 
 use entity_core::BaseModel;
 use entity_macros::Entity;
@@ -11,9 +11,9 @@ const IDEMPOTENCY_KEY_MAX_LEN: usize = 128;
 const OPERATION_MAX_LEN: usize = 64;
 const FINGERPRINT_MAX_LEN: usize = 128;
 
-/// 已成功供应商商品库写命令的持久化数据。
+/// 已成功供给写命令的持久化数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SupplierCatalogCommandData {
+pub struct SupplierOfferingCommandData {
     /// 客户端生成的幂等键。
     pub idempotency_key: String,
     /// 稳定操作名。
@@ -24,9 +24,9 @@ pub struct SupplierCatalogCommandData {
     pub result_json: String,
 }
 
-/// 供应商商品库命令去重记录；必须与业务写入处于同一事务。
+/// 供给命令去重记录；必须与业务写入处于同一事务。
 #[derive(Debug, Clone, Serialize, Deserialize, Entity, PartialEq, Eq)]
-pub struct SupplierCatalogCommand {
+pub struct SupplierOfferingCommand {
     #[serde(flatten)]
     pub base: BaseModel,
     /// 客户端生成的幂等键。
@@ -39,12 +39,19 @@ pub struct SupplierCatalogCommand {
     pub result_json: String,
 }
 
-impl SupplierCatalogCommand {
+impl SupplierOfferingCommand {
     /// 创建已成功命令的去重记录。
     ///
-    /// # Errors
-    /// 幂等键、操作名、指纹或结果为空，或文本超过合同长度时返回错误。
-    pub fn new(id: impl Into<String>, data: SupplierCatalogCommandData) -> Result<Self> {
+    /// # 参数
+    /// * `id` - 命令主键
+    /// * `data` - 命令内容
+    ///
+    /// # 返回
+    /// 返回规范化后的命令记录。
+    ///
+    /// # 错误
+    /// 字段为空或超过合同长度时返回错误。
+    pub fn new(id: impl Into<String>, data: SupplierOfferingCommandData) -> Result<Self> {
         let idempotency_key = normalize_required_text(
             data.idempotency_key,
             "幂等键不能为空",
@@ -78,29 +85,29 @@ impl SupplierCatalogCommand {
 
 #[cfg(test)]
 mod tests {
-    use super::{SupplierCatalogCommand, SupplierCatalogCommandData};
+    use super::{SupplierOfferingCommand, SupplierOfferingCommandData};
 
     #[test]
     fn command_normalizes_identity_and_rejects_empty_result() {
-        let command = SupplierCatalogCommand::new(
+        let command = SupplierOfferingCommand::new(
             "command-1",
-            SupplierCatalogCommandData {
+            SupplierOfferingCommandData {
                 idempotency_key: " key-1 ".to_string(),
-                operation: " create_product ".to_string(),
+                operation: " create_offering ".to_string(),
                 request_fingerprint: " fingerprint ".to_string(),
-                result_json: "{\"product_id\":\"p1\"}".to_string(),
+                result_json: "{\"offering_id\":\"o1\"}".to_string(),
             },
         )
         .unwrap();
         assert_eq!(command.idempotency_key, "key-1");
-        assert_eq!(command.operation, "create_product");
+        assert_eq!(command.operation, "create_offering");
 
-        let invalid = SupplierCatalogCommandData {
+        let invalid = SupplierOfferingCommandData {
             idempotency_key: "key-2".to_string(),
-            operation: "create_product".to_string(),
+            operation: "create_offering".to_string(),
             request_fingerprint: "fingerprint".to_string(),
             result_json: " ".to_string(),
         };
-        assert!(SupplierCatalogCommand::new("command-2", invalid).is_err());
+        assert!(SupplierOfferingCommand::new("command-2", invalid).is_err());
     }
 }

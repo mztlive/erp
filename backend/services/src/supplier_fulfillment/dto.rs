@@ -8,7 +8,7 @@ use entities::common::source::SourceType;
 use entities::ids::{
     CostAllocationId, CostEntryId, MallAfterSalesRequestId, MallAfterSalesRequestLineId, MallOrderId,
     MallOrderItemId, PayableEntryId, PaymentAllocationId, SupplierAccountId, SupplierApiConnectionId,
-    SupplierCatalogSkuId, SupplierFulfillmentItemId, SupplierOfferingRevisionId,
+    SupplierFulfillmentItemId, SupplierOfferingRevisionId,
 };
 use entities::money::{Amount, Quantity, Rate, UnitPrice};
 use entities::supplier_fulfillment::{
@@ -255,8 +255,6 @@ pub struct PlaceFulfillmentItemRequest {
     pub mall_order_item_id: MallOrderItemId,
     /// 下单时固定的供给修订。
     pub supplier_offering_revision_id: SupplierOfferingRevisionId,
-    /// 供应商 SKU。
-    pub supplier_catalog_sku_id: SupplierCatalogSkuId,
     /// 整条明细数量（SKU 基础单位，最多 6 位小数）。
     pub quantity: Quantity,
     /// 下单含税单位成本快照（最多 4 位小数）。
@@ -310,8 +308,10 @@ pub struct SupplierFulfillmentItemView {
     pub mall_order_item_id: String,
     /// 下单时固定的供给修订。
     pub supplier_offering_revision_id: String,
-    /// 供应商 SKU。
-    pub supplier_catalog_sku_id: String,
+    /// 下单时固定的供应商侧订货 SKU 编码。
+    pub supplier_sku_code_snapshot: String,
+    /// 下单时固定的供应商侧商品编码。
+    pub supplier_product_code_snapshot: Option<String>,
     /// 整条明细数量。
     pub quantity: Quantity,
     /// 下单含税单位成本快照。
@@ -678,7 +678,6 @@ mod tests {
             "items": [{
                 "mall_order_item_id": "mall-item-1",
                 "supplier_offering_revision_id": "offering-rev-1",
-                "supplier_catalog_sku_id": "catalog-sku-1",
                 "quantity": "3.000000",
                 "unit_cost_snapshot_gross": "9.9900",
                 "input_tax_rate": "0.130000"

@@ -105,7 +105,7 @@ cargo test --workspace
 | A-G2 | 业务伙伴 | D07–D09 | `feat/erp-a-g2-party` |
 | A-G3 | 商品与仓库 | D10、D11 | `feat/erp-a-g3-catalog` |
 | A-G4 | 合同与销售 | D12–D14 | `feat/erp-a-g4-sales` |
-| A-G5 | 采购与供应商商品库 | D15、D24 | `feat/erp-a-g5-procurement` |
+| A-G5 | 采购与供应商供给 | D15、D24 | `feat/erp-a-g5-procurement` |
 | A-G6 | 履约与库存 | D16、D17 | `feat/erp-a-g6-fulfillment` |
 | A-G7 | 财务往来与成本 | D18–D21 | `feat/erp-a-g7-finance` |
 | A-G8 | 一期导入与商城同步 | D22、D23 | `feat/erp-a-g8-mall-sync` |

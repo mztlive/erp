@@ -25,7 +25,7 @@ use std::str::FromStr;
 
 use database::{
     AccessControlExt, NoTransaction, PurchaseOrderExt, ReceivableExt, SalesOrderExt, SalesReviewExt,
-    SupplierCatalogExt, SupplierExt, Transactional, WorkItemExt,
+    SupplierExt, SupplierOfferingExt, Transactional, WorkItemExt,
 };
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{
@@ -49,8 +49,8 @@ use entities::sales_review::{
     SalesReviewStage,
 };
 use entities::supplier::{CapabilityCode, CapabilityStatus};
-use entities::supplier_catalog::{
-    AvailabilityStatus, OfferingStatus, SupplierOffering, SupplierOfferingRevision,
+use entities::supplier_offering::{
+    OfferingStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision,
 };
 use entities::work_item::{WorkItem, WorkItemData, WorkItemPriority, WorkItemType};
 use id_generator::next_id;
@@ -982,20 +982,27 @@ impl SalesReviewService {
         let mut quantities_by_revision: HashMap<String, (Option<Quantity>, Quantity)> = HashMap::new();
         let mut resolved = Vec::with_capacity(lines.len());
         for line in lines {
-            let (offering, revision) = self.current_confirmation_offering(line).await?;
+            let (offering, revision, availability) = self.current_confirmation_offering(line).await?;
             ensure_confirmation_line_sku(line, &offering, submission_lines)?;
             let total = quantities_by_revision
                 .entry(revision.base.id.clone())
-                .or_insert((revision.available_quantity, zero));
+                .or_insert((availability.available_quantity, zero));
             total.1 = Quantity::try_from(total.1.to_decimal() + line.confirmed_quantity.to_decimal())?;
-            resolved.push((line, revision));
+            resolved.push((line, revision, availability));
         }
-        for (line, revision) in resolved {
+        for (line, revision, availability) in resolved {
             let procurement_quantity = quantities_by_revision
                 .get(&revision.base.id)
                 .map(|(_, quantity)| *quantity)
                 .ok_or_else(|| Error::BusinessLogicError("采购数量汇总结果缺失".to_string()))?;
-            ensure_confirmation_line_terms(line, &revision, procurement_quantity, submission_lines, today)?;
+            ensure_confirmation_line_terms(
+                line,
+                &revision,
+                &availability,
+                procurement_quantity,
+                submission_lines,
+                today,
+            )?;
             self.ensure_confirmation_capability(line, today).await?;
         }
         ensure_confirmation_capacity(&quantities_by_revision)?;
@@ -1006,7 +1013,11 @@ impl SalesReviewService {
     async fn current_confirmation_offering(
         &self,
         line: &ProcurementConfirmationLine,
-    ) -> Result<(SupplierOffering, SupplierOfferingRevision)> {
+    ) -> Result<(
+        SupplierOffering,
+        SupplierOfferingRevision,
+        SupplierOfferingAvailability,
+    )> {
         let revision_id = line
             .supplier_offering_revision_id
             .as_ref()
@@ -1033,7 +1044,13 @@ impl SalesReviewService {
                 line.line_no
             )));
         }
-        Ok((offering, revision))
+        let availability = self
+            .db
+            .supplier_offering_availabilities()
+            .find_by_offering_id(&revision.supplier_offering_id, &mut NoTransaction)
+            .await?
+            .ok_or_else(|| Error::ValidationError(format!("采购确认第 {} 行可供状态不存在", line.line_no)))?;
+        Ok((offering, revision, availability))
     }
 
     /// 校验确认行引用的供应商能力仍为当前启用版本。
@@ -1936,11 +1953,12 @@ fn ensure_confirmation_line_sku(
 fn ensure_confirmation_line_terms(
     line: &ProcurementConfirmationLine,
     revision: &SupplierOfferingRevision,
+    availability: &SupplierOfferingAvailability,
     procurement_quantity: Quantity,
     submission_lines: &[SalesOrderSubmissionLine],
     today: BusinessDate,
 ) -> Result<()> {
-    if revision.availability_status != AvailabilityStatus::Available
+    if !availability.is_available()
         || revision.valid_from > today
         || revision.valid_to.is_some_and(|valid_to| valid_to < today)
     {

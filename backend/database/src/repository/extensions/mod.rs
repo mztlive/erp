@@ -32,8 +32,8 @@ mod sales_review;
 mod source_registry;
 mod supplier;
 mod supplier_api;
-mod supplier_catalog;
 mod supplier_fulfillment;
+mod supplier_offering;
 mod supplier_settlement;
 mod warehouse;
 mod work_item;
@@ -67,8 +67,8 @@ pub use sales_review::SalesReviewExt;
 pub use source_registry::SourceRegistryExt;
 pub use supplier::SupplierExt;
 pub use supplier_api::SupplierApiExt;
-pub use supplier_catalog::SupplierCatalogExt;
 pub use supplier_fulfillment::SupplierFulfillmentExt;
+pub use supplier_offering::SupplierOfferingExt;
 pub use supplier_settlement::SupplierSettlementExt;
 pub use warehouse::WarehouseExt;
 pub use work_item::WorkItemExt;
@@ -107,7 +107,7 @@ pub trait DatabaseExt:
     + SourceRegistryExt
     + SupplierExt
     + SupplierApiExt
-    + SupplierCatalogExt
+    + SupplierOfferingExt
     + SupplierFulfillmentExt
     + SupplierSettlementExt
     + WarehouseExt
@@ -145,7 +145,7 @@ impl<
             + SourceRegistryExt
             + SupplierExt
             + SupplierApiExt
-            + SupplierCatalogExt
+            + SupplierOfferingExt
             + SupplierFulfillmentExt
             + SupplierSettlementExt
             + WarehouseExt

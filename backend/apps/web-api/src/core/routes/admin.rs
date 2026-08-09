@@ -15,7 +15,7 @@ use crate::{
             file_asset, fulfillment, integration_ops, inventory, legacy_import, mall_after_sales,
             mall_backfill, mall_order, mall_sync, party, payable, projection, publication, purchase_order,
             receivable, returns, sales_order, sales_review, source_registry, supplier, supplier_api,
-            supplier_catalog, supplier_fulfillment, supplier_settlement, warehouse, work_item,
+            supplier_fulfillment, supplier_offering, supplier_settlement, warehouse, work_item,
         },
     },
 };
@@ -60,7 +60,7 @@ pub fn routes(state: AppState) -> Router<AppState> {
         .merge(source_registry::routes(&rbac_service))
         .merge(supplier::routes(&rbac_service))
         .merge(supplier_api::routes(&rbac_service))
-        .merge(supplier_catalog::routes(&rbac_service))
+        .merge(supplier_offering::routes(&rbac_service))
         .merge(supplier_fulfillment::routes(&rbac_service))
         .merge(supplier_settlement::routes(&rbac_service))
         .merge(warehouse::routes(&rbac_service))

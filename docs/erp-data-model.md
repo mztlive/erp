@@ -9,8 +9,8 @@
 
 ## 1. 设计结论
 
-1. 两期只建设一套业务模型。Excel、API、手工录入统一进入供应商商品库；第二期在
-   第一期稳定身份和正式事实之上增加 API 来源、商城执行投影、商城消费、供应商订单
+1. 两期只建设一套业务模型。公司商品是唯一商品主数据；Excel、API、手工录入统一写入
+   公司 SKU 的供应商供给。第二期在第一期稳定身份和正式事实之上增加 API 来源、商城执行投影、商城消费、供应商订单
    和结算，不复制客户、商品、销售单、应收或应付。
 2. 卡券销售单与实物及服务销售单共用 `sales_order` 聚合。`business_type`
    表示卖什么，`origin_system` 表示最初创建入口（商城或 ERP），两个维度不得合并。
@@ -58,8 +58,7 @@
 | 应付 | `payable_account` | 应付分录、付款及核销、进项发票核销 | 采购单/供应商结算单、供应商 |
 | 退拒与纠错 | 对应处理单 | 退货、拒收、退款、冲正、红票、库存调整 | 原业务单据和原事实 |
 | 一期商城销售同步 | `mall_sales_sync_job` | 水位、原始快照、映射差异 | 来源商城、统一销售单 |
-| 供应商商品库 | `supplier_catalog_product` / `supplier_catalog_sku` | SPU/SKU 来源修订、映射、导入/同步批次 | 供应商、可选 API 连接、公司 SKU |
-| 供应商供给 | `supplier_offering` | 不可变供给修订 | 公司 SKU、供应商 SKU |
+| 供应商供给 | `supplier_offering` | 不可变商业条款修订、实时可供投影 | 公司 SKU、供应商、可选 API 连接 |
 | 商品发布 | `product_publication` | 不可变发布修订、商城投递 | SKU、供给修订、目标商城 |
 | 销售执行投影 | `sales_order_projection` | 投影修订、投递和接收确认 | 销售单版本、目标商城 |
 | 商城消费 | `mall_order` | 商品明细、支付来源、明细分摊、关键事实 | 卡实例、发布版本、销售单 |
@@ -107,13 +106,10 @@ erDiagram
     SALES_ORDER ||--o| SALES_ORDER_PROJECTION : "二期下发"
     SALES_ORDER_PROJECTION ||--o{ SALES_ORDER_PROJECTION_REVISION : "形成投影版本"
     SKU ||--o{ SKU_REVISION : "形成 SKU 修订（含销售可见价）"
-    SUPPLIER_ACCOUNT ||--o{ SUPPLIER_CATALOG_PRODUCT : "提供 SPU"
-    SUPPLIER_CATALOG_PRODUCT ||--|{ SUPPLIER_CATALOG_SKU : "包含供应商 SKU"
-    SUPPLIER_CATALOG_SKU ||--o{ SUPPLIER_PRODUCT_MAPPING : "映射公司 SKU"
-    SKU ||--o{ SUPPLIER_PRODUCT_MAPPING : "被供应商 SKU 映射"
+    SUPPLIER_ACCOUNT ||--o{ SUPPLIER_OFFERING : "提供供给"
     SKU ||--o{ SUPPLIER_OFFERING : "具有供给"
-    SUPPLIER_CATALOG_SKU ||--o{ SUPPLIER_OFFERING : "形成供给"
     SUPPLIER_OFFERING ||--o{ SUPPLIER_OFFERING_REVISION : "形成供给版本"
+    SUPPLIER_OFFERING ||--|| SUPPLIER_OFFERING_AVAILABILITY : "具有实时可供投影"
     SKU ||--o{ PRODUCT_PUBLICATION : "发布商城"
     PRODUCT_PUBLICATION ||--o{ PRODUCT_PUBLICATION_REVISION : "形成发布版本"
     SUPPLIER_OFFERING_REVISION ||--o{ PRODUCT_PUBLICATION_REVISION : "固定绑定"
@@ -288,7 +284,7 @@ erDiagram
 | `warehouse` / `warehouse_revision` | 一期 | 自有仓库基础资料 |
 | `warehouse_sku_policy` | 一期 | 仓库级 SKU 最低可用量预警策略，不承载库存余额 |
 
-### 5.3 一期业务单据、台账、供应商商品库与供给
+### 5.3 一期业务单据、台账与供应商供给
 
 | 表组 | 主要表 |
 | --- | --- |
@@ -303,12 +299,10 @@ erDiagram
 | 退拒纠错 | `sales_return_case`、`sales_return_line`、`purchase_return_order`、`purchase_return_line`、`customer_refund`、`supplier_refund`、`receipt_reversal`、`payment_reversal` |
 | 旧数据导入 | `legacy_import_batch`、`legacy_import_row`、`legacy_import_confirmation` |
 | 商城拉取 | `mall_sales_sync_job`、`mall_sales_sync_cursor`、`mall_sales_order_snapshot`、`mall_sales_reconciliation_job`、`mall_sales_reconciliation_item`、`master_mapping_task` |
-| 供应商商品库 | `supplier_catalog_product`、`supplier_catalog_product_revision`、`supplier_catalog_product_revision_media`、`supplier_catalog_sku`、`supplier_catalog_sku_revision`、`supplier_product_mapping`、`supplier_catalog_intake_batch`、`supplier_catalog_intake_item` |
-| 多供应商供给 | `supplier_offering`、`supplier_offering_revision` |
+| 多供应商供给 | `supplier_offering`、`supplier_offering_revision`、`supplier_offering_availability`、`supplier_offering_command` |
 
-供应商商品库、供应商 SKU 映射和多供应商供给全部在第一期启用。第一期来源仅开放
-`MANUAL` / `EXCEL`；API 连接、自动同步和 API 变化处理在第二期启用，但继续写入上述同一套
-稳定身份、修订、映射与供给表，不建立 API 专属目录或第二套供给表。
+供应商供给在第一期启用。第一期来源开放 `MANUAL` / `EXCEL`；API 连接和自动同步在
+第二期启用，但继续写入同一套供给身份、商业条款修订与可供投影，不建立 API 专属目录。
 
 ### 5.4 二期扩展
 
@@ -810,7 +804,7 @@ W14 以**树形维护页**管理分类：父子关系不得成环；停用后仍
 `specification_signature` 判断某行能否沿用原 `sku_id`，不得因 `sku_no` 相同、表格位置相同
 或当前只剩一行而复用旧身份。
 
-W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中保存一件代发或集采价格。供应商、一件代发/集采两项供给价、快递、进项税率、费用、集采起订量、区域、能力和有效期全部由 W21 的 `supplier_offering` 及其不可变修订维护；系统不设置 `supply_mode`，每条供给默认同时支持一件代发与集采。W14 仅按稳定 `sku_id` 提供关联摘要和进入 W21 的链接。同一 SKU 必须允许同时拥有多个供应商商品及多条独立供给；禁止用 SKU 上的一组字段覆盖多供应商供给。W14 SKU 表格中的“销售可见价”和“市场价”直接写入 `sku_revision`；公司商品池只是基于 SKU 修订和有效供给的销售查询视图。
+W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中保存一件代发或集采价格。供应商、一件代发/集采两项供给价、快递、进项税率、费用、集采起订量、区域、能力和有效期全部由 W21 的 `supplier_offering` 及其不可变修订维护；可供状态和数量由 `supplier_offering_availability` 维护。系统不设置 `supply_mode`，每条供给默认同时支持一件代发与集采。W14 仅按稳定 `sku_id` 提供关联摘要和进入 W21 的链接。同一 SKU 必须允许同时拥有多条独立供给；禁止用 SKU 上的一组字段覆盖多供应商供给。W14 SKU 表格中的“销售可见价”和“市场价”直接写入 `sku_revision`；公司商品池只是基于 SKU 修订和有效供给的销售查询视图。
 
 食品产品有效期、生产批次禁止进入 `product` / `sku` 主数据。批次事实仅走入库/库存域；本模型不建设主数据级批次/效期管理。
 
@@ -834,7 +828,7 @@ W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中
 - 重新启用不是静默副作用：命令必须显式携带原 `sku_id`、`expected_sku_revision_id` 和
   `change_reason`，服务端返回该 SKU 的 `action_blockers`；商品或必要字典已停用、资料完整性、
   库存/预占策略、合规限制、权限或并发校验未通过时整次规格编辑失败；
-- 重新启用沿用该 `sku_id` 的既有供应商 SKU 映射和历史供给引用，不迁移或复制关系；重新
+- 重新启用沿用该 `sku_id` 的历史供给引用，不迁移或复制关系；重新
   启用本身不保证销售资格，仍须按当前 SKU 修订、当前有效 offering、区域等条件重新派生；
 - 请求把既有 `sku_id` 绑定到不同签名、用相同 `sku_no` 恢复另一个签名的身份，或让一个
   既有/历史业务编码重绑到不同 SKU 时必须整体拒绝；`sku_no` 全局唯一约束不因停用而释放；
@@ -846,7 +840,7 @@ W14 不维护默认供应商，也不在 `product_revision` / `sku_revision` 中
 - `weight_kg`、`volume_m3` 必须使用定点小数且非负，禁止把旧 `double` 原样复制；
 - 正式商城销售价、供应商供给字段、库存、销量、利润标记不写入 `product` 或 `sku` 当前主表；`sku_revision.sales_visible_price_gross` 是公司销售可见价，`market_price` 仅为展示参考，不替代 W21 供给成本或 W22 渠道发布价。
 - 普通 W14 建品可按其场景规则决定市场价是否暂缺；但
-  `CreateCompanySkuAndMapSupplierCatalogSku` 表示立即创建可销售公司 SKU，因此其新
+  公司商品创建命令表示立即创建可销售公司 SKU，因此其新
   `sku_revision` 的 `market_price` 与 `sales_visible_price_gross` 均必填、均为非负定点金额，且不得
   从来源底价、正式供给价或彼此自动计算。
 - W14 商品与 SKU 表单的基础单位、分类、品牌必须分别引用 `unit_of_measure`、`product_category`、`product_brand` 的启用字典项（下拉），不得自由文本冒充字典身份。
@@ -2276,10 +2270,14 @@ SKU 和数量单位均经业务确认后才能成为本策略；否则仅留在�
 - 系统管理员可补拉和重试，但不能替代销售、运营、财务确认业务映射；
 - 差异解决后使用原快照和原幂等身份重新归集，不手工补建另一张销售单。
 
-### 6.14 统一供应商商品库、来源连接与供给
+### 6.14 供应商连接与供给
 
-Excel、API 和手工录入共同使用本节的供应商 SPU/SKU、映射和供给模型。
-`supplier_api_connection` 只属于 API 来源，不是供应商商品的必填父对象。
+公司 `product` / `sku` 是唯一商品主数据。系统不得建立供应商商品、供应商 SPU、
+供应商 SKU 主档或供应商商品到公司商品的映射。业务写入顺序固定为：先创建公司商品与
+SKU，再为具体公司 `sku_id` 添加供应商供给。
+
+Excel、API 和手工录入必须归一为同一 `supplier_offering` 写入合同。来源文件和 API
+报文只作为导入或集成证据保存，不形成另一套可编辑商品主数据。
 
 #### `supplier_api_connection` 与能力
 
@@ -2311,145 +2309,36 @@ Excel、API 和手工录入共同使用本节的供应商 SPU/SKU、映射和供
 - 业务表和普通日志不得保存连接密钥；
 - 业务模块只调用统一 Supplier Connector，不直接依赖供应商专用协议。
 
-#### `supplier_catalog_product`、`supplier_catalog_sku` 与修订
+#### `supplier_offering`
 
-`supplier_catalog_product` 保存供应商 SPU 稳定身份：
-
-| 字段 | 说明 |
-| --- | --- |
-| `supplier_id` | 来源供应商，必填 |
-| `source_type` | `EXCEL`、`API`、`MANUAL` |
-| `source_connection_id` | API 连接，可空；仅 `source_type = API` 可填写 |
-| `supplier_spu_code` | 供应商 SPU 编码；供应商未提供时由 ERP 生成来源内稳定代码 |
-| `status` | 正常、停止供应、异常 |
-| `current_revision_id` | 当前来源修订 |
-
-`supplier_catalog_product_revision` 保存来源 SPU 内容快照：`name`、`description`、可选
-`source_product_kind`、来源分类、来源品牌、结构化描述属性、`source_revision_token`、`source_updated_at`、
-规范化白名单字段的 keyed HMAC 和有效期。字段语义可与公司
-`product_revision` 高度重合，但必须保持独立修订和所有权；供应商变化不得直接覆盖公司
-商品。
-
-`source_product_kind` 只是供应商来源对商品业务作用的声明或采购手工归类：手工来源必填，
-Excel/API 来源允许为空。反向创建公司商品时，仅当存在来源 `source_product_kind` 才允许预填为
-公司 `product_kind` 草稿值；采购必须最终确认；不得根据来源分类或公司分类自动推导公司
-`product_kind`。
-
-**UI 同构约定（W21 供应商商品中心 ↔ W14 商品详情）**：两侧均按「基础信息 / 图文 /
-SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、规格维度**必须使用与公司商品相同的
-字典控件与规格编辑交互。规格维度笛卡尔积生成**多条供应商 SKU**；
-每条 SKU 在可编辑表格中维护编码、条码、**1:1 主图**与价格字段
-（`dropship_floor_price_gross` 一件代发底价含税运、`bulk_floor_price_gross` 集采底价含税、
-`bulk_minimum_order_quantity` 集采起订量）以及可供数量/状态，对应
-`supplier_catalog_sku_revision`，不得作为 SPU 级字段编辑。供应商商品目录**不**保存
-统一含税报价、进项税率、运费、其他费用、可供区域、预计发货、售后说明、商品能力。
-映射与公司 SKU 销售资格摘要在独立分区。中心页**不**作为供给版本时间线、发布影响或来源 diff
-的主展示面。W21 从供应商 SKU 入池时可选择已有公司 SKU；没有同款时进入显式“新建公司
-商品/SKU”分支，将两侧语义相同的来源字段预填为公司草稿，采购可二次修改，且必须补齐
-独立 `product_kind`、销售可见价与市场价。W14 也可从固定公司 SKU 发起 W21 创建供应商商品/SKU。写路径与表
-仍须分离：普通来源内容保存只形成 `supplier_catalog_*_revision`；只有显式入池复合命令可在
-同一事务中调用 W14 公司商品/SKU 创建能力，取得稳定 SKU ID 后建立精确
-`supplier_catalog_sku_id → sku_id` 映射并写供给修订；无同款分支同时创建含销售可见价与市场价的 `sku_revision`。
-
-`supplier_catalog_product_revision_media` 保存来源 SPU 图文：
-
-| 字段 | 说明 |
-| --- | --- |
-| `supplier_catalog_product_revision_id` | 所属供应商 SPU 来源修订 |
-| `media_usage` | `SPU_CAROUSEL`、`SPU_DETAIL` |
-| `file_asset_id` | 已归档受控文件；归档完成后必填 |
-| `source_url_snapshot` | 来源取回地址，可空；不得作为公司商品长期媒体值 |
-| `archive_status` | `PENDING_IMPORT`、`ARCHIVED`、`FAILED` |
-| `sort_order` | 同用途展示顺序 |
-
-同一修订下 `(media_usage, sort_order)` 唯一。短期签名 URL 必须先归档到
-`file_asset` 才能自动预填公司商品；归档失败或来源无图不阻断供应商目录入库，但会进入
-建品完整度提示。
-
-`supplier_catalog_sku` 保存供应商 SKU 稳定身份：
-
-| 字段 | 说明 |
-| --- | --- |
-| `supplier_catalog_product_id` | 所属供应商 SPU |
-| `supplier_sku_code` | 供应商 SKU 编码；在同一供应商内唯一 |
-| `current_revision_id` | 当前来源 SKU 修订 |
-| `status` | 正常、停止供应、异常 |
-
-`supplier_catalog_sku_revision` 保存来源 SKU 观察事实：
-
-| 字段 | 说明 |
-| --- | --- |
-| `supplier_catalog_sku_id` / `revision_no` | 稳定身份和 ERP 观察版本 |
-| `source_revision_token` | API/文件版本标识，可空 |
-| `name` / `specification` | 供应商商品名称和规格 |
-| `source_base_unit` / `barcode` | 供应商单位快照与条码；只用于匹配和预填，不作为公司稳定身份 |
-| `structured_attributes` | 已规范化的来源规格属性；无法规范化的原值只留受控来源摘要 |
-| `source_main_image_asset_id` / `main_image_archive_status` | 来源 SKU 主图及归档状态 |
-| `dropship_floor_price_gross` | 一件代发底价（含税运）；目录观察价，未确认前不是采购成本 |
-| `bulk_floor_price_gross` | 集采底价（含税） |
-| `bulk_minimum_order_quantity` | 集采起订量 |
-| `available_quantity` / `availability_status` | 来源库存或可供状态 |
-| `source_updated_at` / `received_at` | 来源更新时间与 ERP 接收时间；手工来源可相同 |
-| `source_payload_hmac` | 规范化白名单字段的 keyed HMAC |
-
-必需约束与索引：
-
-- `(supplier_id, supplier_spu_code)` 唯一；
-- `(supplier_id, supplier_sku_code)` 唯一；
-- `source_type <> API` 时 `source_connection_id IS NULL`；API 来源连接的供应商必须与商品供应商一致；
-- `(supplier_catalog_product_id, revision_no)` 唯一；
-- `(supplier_catalog_sku_id, revision_no)` 唯一；
-- 供应商有版本号时，供应商版本幂等唯一；没有版本号时使用
-  `source_payload_hmac` 幂等，不保存或比较原始明文；
-- `status + source_updated_at`、`availability_status + source_updated_at` 新鲜度索引；
-- 来源修订先进入供应商商品库，不直接修改公司 SKU 修订、公司商品销售查询或商城商品。
-- 供应商商品中心「详情即编辑」保存只追加来源修订，必须带期望来源修订号；不得顺带
-  写公司主档或已确认供给成本。
-- 入池可选择已有公司 SKU，或从当前供应商 SKU 显式创建新的公司商品/SKU。创建分支必须
-  固定精确 `supplier_catalog_sku_id` 与来源修订，自动预填所有语义相同字段，允许采购修改，
-  并要求独立 `product_kind`、销售可见价与市场价均非空；`product_kind` 不得由分类派生，
-  最终所选分类必须允许该类型；公司商品/SKU 及含销售可见价/市场价的 SKU 修订、映射、双价供给修订、
-   审计和幂等结果必须同一事务提交，任一步失败全部回滚；
-- 若业务需要采用供应商图文，须在 W14 手工创建公司商品修订并引用已归档 `file_asset`；
-  未归档 URL 不得作为公司长期媒体。启用公司 SKU 缺主图仍由 W14 阻断。
-- 供应商目录独有字段（代发/集采底价、集采起订量、可供数量/状态等）不得写入公司 `product`/`sku` 修订。
-
-#### `supplier_product_mapping`
-
-| 字段 | 说明 |
-| --- | --- |
-| `supplier_catalog_sku_id` | 供应商 SKU |
-| `sku_id` | ERP SKU |
-| `status` | 待审核、已生效、冲突、停用 |
-| `approved_by` / `approved_at` | 审核人和时间 |
-| `reason` | 映射依据 |
-
-必需约束与索引：
-
-- 同一供应商 SKU 同一时点只能映射一个公司 SKU；
-- 一个公司 SKU 可以映射多个供应商 SKU；
-- `supplier_catalog_sku_id → sku_id` 是唯一正式映射粒度；供应商 SPU 只作为页面容器、
-  检索条件和批量选择范围，不得写入映射关系替代供应商 SKU；
-- 同一供应商 SPU 下的不同供应商 SKU 可以分别映射不同公司 SKU；映射其中一个 SKU
-  不得隐式映射、覆盖或停用其兄弟 SKU；
-- 批量入池只是多条 SKU 级命令的集合；每一项都必须显式携带
-  `supplier_catalog_sku_id` 与目标 `sku_id`，并分别执行原子校验和幂等控制；
-- GTIN/条码、厂家货号、品牌型号、结构化规格和包装单位只产生匹配证据，不得仅按名称自动合并；完全相同可销售单位才允许多对一映射同一公司 SKU；
-- `(supplier_catalog_sku_id, status)`、`sku_id + status` 查询索引；
-- 变更映射不得反写已支付商城订单的 SKU 快照。
-
-#### `supplier_offering` 与 `supplier_offering_revision`
-
-`supplier_offering` 是“公司 SKU ↔ 供应商 SKU”的稳定供给关系。稳定表只保存
-身份、状态和当前修订指针；其余价格和条件都属于不可变修订。
+`supplier_offering` 是“公司 SKU ↔ 供应商”的稳定供给身份。供应商侧商品编码和订货
+SKU 编码属于该身份，不需要供应商商品主档或映射中转。
 
 | 字段 | 说明 |
 | --- | --- |
 | `sku_id` | ERP SKU |
 | `supplier_id` | 供应商 |
-| `supplier_catalog_sku_id` | 供应商 SKU |
+| `supplier_product_code` | 供应商侧商品编码，可空 |
+| `supplier_sku_code` | 供应商侧订货 SKU 编码，必填 |
+| `source_type` | `MANUAL`、`EXCEL`、`API` |
+| `source_connection_id` | API 来源连接；仅 `source_type = API` 时必填 |
 | `status` | 启用、暂停、停止 |
 | `current_revision_id` | 当前供给版本 |
+
+必需约束与索引：
+
+- `(supplier_id, supplier_sku_code)` 唯一；
+- `sku_id + status`、`supplier_id + status` 为查询索引；
+- API 来源连接必须启用且属于同一供应商；非 API 来源不得携带连接；
+- 供应商侧编码可以修改的业务变更必须新建供给身份；已形成订单继续保留原编码快照；
+- 新增供给只允许引用已存在且启用的公司 SKU，不得在同一命令中隐式创建商品。
+
+#### `supplier_offering_revision`
+
+供给价格、税率、起订量、区域、能力和有效期属于不可变商业条款修订：
+
+| 字段 | 说明 |
+| --- | --- |
 | `revision_no` | 修订号（修订表） |
 | `dropship_supply_price_gross` / `dropship_supply_price_net` | 采购确认的一件代发供给价；含税价已包含包装、发货等费用，不得重复登记物流费用 |
 | `bulk_supply_price_gross` / `bulk_supply_price_net` | 采购确认的集采供给价；与一件代发供给价同时存在、分别生效 |
@@ -2458,19 +2347,21 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 | `freight_amount` / `service_fee_amount` | 费用 |
 | `bulk_minimum_order_quantity` | 集采起订量，按 ERP 基本单位；一件代发固定从 1 件起，不另存起订量 |
 | `supply_region` | 可供区域 |
-| `availability_status` / `available_quantity` | 可供状态 |
 | `product_capabilities` | 商品级取消、退款、物流等能力 |
 | `valid_from` / `valid_to` | 有效期 |
 | `prefill_source_refs` | 按字段保存的可选结构化预填依据：`input_tax_rate` 引用 `supplier_commercial_profile_revision` 或税务策略修订，`supply_region` 引用 `supplier_capability_revision` 或供给区域策略修订，`valid_from` 保存服务端业务日期、时区和可选日历版本；只记录预填依据，不替代采购最终确认值 |
 
 必需约束与索引：
 
-- 稳定供给身份 `(sku_id, supplier_catalog_sku_id)` 唯一；
 - `(supplier_offering_id, revision_no)` 唯一；
-- 同一供给的有效期不得重叠；
-- `sku_id + status + valid_from + valid_to` 按消费时点和发布时点查询；
+- `supplier_offering.current_revision_id` 唯一指定当前商业条款；历史修订只用于追溯，不与当前
+  修订竞争；
+- 当前修订的 `valid_from + valid_to` 作为采购、发布和历史消费的时点门禁；切换到未来生效
+  修订后，生效日前不得使用该供给；
+- `sku_id + status` 与 `supplier_offering_id + valid_from + valid_to` 分别建立供给查询和修订
+  有效期索引；
 - 供货价变化形成新修订，不覆盖旧价；
-- 增加第二家供应商时只新增该供应商 SKU 的映射与供给，不覆盖第一家的供给，也不创建或修改公司商品/SKU 修订；销售资格始终由 SKU 修订与有效供给派生；
+- 增加第二家供应商时只新增供给，不覆盖第一家的供给，也不创建或修改公司商品/SKU 修订；
 - 不设置 `supply_mode`；每条有效供给修订必须同时具备一件代发供给价和集采供给价，两项价格不得互相覆盖或择一折叠；
 - `input_tax_rate`、`supply_region`、`valid_from` 必须显式进入命令和修订。存在可靠供应商
   开票资料、税务/供给策略或服务端业务日期时可以预填，但必须携带对应策略修订或业务日期
@@ -2478,19 +2369,40 @@ SKU·规格」分区维护同构内容字段，且**分类、品牌、单位、�
 - `prefill_source_refs` 必须与实际预填逐字段对应：税率来源只能是供应商商业资料修订或税务
   策略修订，区域来源只能是供应商能力修订或供给区域策略修订，生效日期来源只能是服务端
   业务日期快照；某字段发生自动预填时对应引用必填，未发生预填时不得伪造引用；
-- 禁止以 `0.13`、“全国”、浏览器本地日期或由来源底价推导的单一确认成本作为后端默认；
+- 禁止以隐含税率、区域、浏览器本地日期或单一确认成本作为后端默认；
 - 供应商、两项供给价、税费、集采起订量、区域、能力和有效期只写 `supplier_offering_revision`，不得复制回 `product_revision` / `sku_revision`；W14 仅消费按 `sku_id` 查询的关联投影；
 - `bulk_minimum_order_quantity > 0`；旧商城 `min_nums` 只有在采购确认了供应商、SKU、
   单位和起订语义后才可迁入本字段，未确认数据进入基础资料暂存审核；
 - 历史消费取标准成本时必须命中消费发生时点的有效修订，不得取当前价或就近价。
 
-#### `supplier_catalog_intake_batch` 与 `supplier_catalog_intake_item`
+#### `supplier_offering_availability`
 
-保存 Excel 导入、API 同步或手工批量录入的来源批次、文件/连接引用、来源版本、
-新增/变化/无变化/停止供应/异常分类、行号、处理结果和错误。批次必须包含
-`source_type`、`supplier_id` 和 `source_reference`；API 批次才允许连接 ID，Excel
-批次保存文件资产引用，手工单条也生成可审计批次。唯一键为
-`(source_type, supplier_id, source_reference)`；明细按“批次 + 供应商 SKU + 来源版本”唯一。
+可供状态和数量是每条供给唯一一行的高频可变投影，不属于商业条款版本：
+
+| 字段 | 说明 |
+| --- | --- |
+| `supplier_offering_id` | 所属供给，唯一 |
+| `availability_status` | 可供、不可供、停止供应、数据已过期 |
+| `available_quantity` | 当前可供数量；空表示供应商未返回数量上限 |
+| `source_updated_at` / `received_at` | 来源时间与 ERP 接收时间 |
+| `source_revision_token` | 来源版本标识，可空 |
+| `updated_by` | 人工或系统更新身份 |
+
+必需约束与索引：
+
+- `supplier_offering_id` 唯一；
+- 来源更新时间不得早于当前投影，乱序更新必须拒绝；
+- 可供数量不得为负；数量为零时不得参与采购选源；
+- 新增供给时，首版商业条款与初始可供投影必须和供给身份同一事务创建；
+- 更新可供投影不得追加商业条款修订；更新商业条款不得覆盖可供投影。
+
+#### 写入与审计
+
+- 手工、Excel 和 API 写入均使用 `supplier_offering_command.idempotency_key` 幂等；
+- Service 持有新增供给、追加条款修订和更新可供投影的事务边界；
+- Repository 只执行数据库访问，不自行开启、提交或中止事务；
+- 下游采购、发布和履约固定 `supplier_offering_revision_id`；履约明细另外固定
+  `supplier_sku_code_snapshot` 与可选 `supplier_product_code_snapshot`，不得引用已删除的供应商目录 SKU。
 
 ### 6.15 第二期 ERP 商品发布
 
@@ -3123,7 +3035,8 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | `supplier_fulfillment_order_id` | 供应商子订单 |
 | `mall_order_item_id` | 商城商品明细 |
 | `supplier_offering_revision_id` | 下单时固定供给 |
-| `supplier_catalog_sku_id` | 供应商 SKU |
+| `supplier_sku_code_snapshot` | 下单时固定的供应商订货 SKU 编码 |
+| `supplier_product_code_snapshot` | 下单时固定的供应商商品编码，可空 |
 | `quantity` | 整条明细数量 |
 | `unit_cost_snapshot_gross` / `cost_snapshot_total_gross` | 下单单位和明细成本快照 |
 | `input_tax_rate` | 下单成本进项税率 |
@@ -3637,19 +3550,13 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 
 ### 8.4 商城与供应商
 
-1. 供应商商品入库与入池：
-   - Excel、API、手工来源先按批次和来源身份幂等写供应商 SPU/SKU 修订；
-   - 单纯入库不得创建公司 SKU、公司商品销售查询记录或供给；
-   - 选择入池时先锁定精确供应商 SKU 来源修订并按版本化策略重验同款候选；已有目标分支
-     锁定公司 SKU，无同款分支在同一事务创建公司 product/SKU 及修订；
-   - 已有目标分支同一事务只写映射、双价 `supplier_offering_revision`、审计和幂等结果；
-   - 无同款分支要求同字段自动预填且允许采购修改，独立 `product_kind`、销售可见价与市场价必填；同一事务创建
-     公司 product/SKU 及含销售可见价/市场价的 SKU 修订、精确映射、双价 `supplier_offering_revision`、
-     审计和幂等结果；
-   - 增加第二家供应商不修改现有公司 SKU 修订；销售资格以当前 SKU 修订和有效供给实时派生，
-     不存在 `KEEP_EXISTING` / `SET_PRICE` 或商品池修订复用；
-   - 任一校验失败整体回滚，不允许留下孤立公司 SKU、有映射无供给或不具备销售资格却被销售查询返回的 SKU；
-   - 增加第二家供应商不得覆盖第一家的供给修订。
+1. 供应商供给登记：
+   - 公司商品与 SKU 必须先由 W14 创建；供给命令只引用稳定 `sku_id`；
+   - 手工、Excel、API 来源按幂等键写同一 `supplier_offering` 合同；
+   - 新增供给时，同一事务创建供给身份、首版商业条款、初始可供投影、审计和幂等结果；
+   - 追加商业条款修订必须校验期望修订号；更新可供投影必须校验来源时间和可选期望版本；
+   - 增加第二家供应商不修改现有公司 SKU 修订，也不覆盖第一家的供给；
+   - 任一校验失败整体回滚，不允许留下无首版条款或无初始可供投影的供给。
 2. 一期快照应用：
    - 保存不可变原始快照；
    - 完成基础资料和唯一明细校验；
@@ -3739,9 +3646,9 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 
 ### 9.4 商城、供应商与接口
 
-- Excel、API、手工录入的供应商商品共用同一 SPU/SKU 模型；API 连接只对 API 来源必填。
-- 一个供应商 SKU 同一时点只映射一个公司 SKU；一个公司 SKU 可以有多家供应商供给。
-- 来源代发/集采报价、采购确认后的两项供给价、`sku_revision.sales_visible_price_gross` 和商城发布价是不同事实，不得互相覆盖；供给价始终保留一件代发与集采两项，不以单一确认成本折叠。
+- 公司商品/SKU 是唯一商品主数据；Excel、API、手工录入共用同一供给模型；API 连接只对 API 来源必填。
+- 一个公司 SKU 可以有多家供应商供给；供应商订货编码直接属于供给身份。
+- 采购确认后的两项供给价、`sku_revision.sales_visible_price_gross` 和商城发布价是不同事实，不得互相覆盖；供给价始终保留一件代发与集采两项，不以单一确认成本折叠。
 - 销售查询和导出只读取符合资格的公司 SKU 修订；供应商成本不得出现在销售投影、搜索索引或导出。
 
 - 商城只发送五类成功结果事实，不发送处理中事实。
@@ -3768,7 +3675,7 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 | 应付、付款、进项票 | 采购单来源 | 增加供应商结算单来源 | 同一核销内核 |
 | 退货、拒收、退款、冲正、红票、库存调整 | 启用 | 复用 | 二期商城/供应商退款事实另行追加 |
 | 一期商城销售拉取 | 基线、增量、按月全量/按单抽查核对（含已关闭、作废及来源缺失） | 切换完成后停止 | 快照、核对差异和历史版本永久可查，水位封存 |
-| 供应商商品库、映射、供给 | Excel/手工来源启用 | 增加 API 来源和自动变化处理 | 复用同一供应商 SPU/SKU 与供给身份，不迁移成第二套表 |
+| 供应商供给 | Excel/手工来源启用 | 增加 API 来源和自动变化处理 | 复用同一供给身份、商业条款修订与可供投影，不建立供应商商品主档 |
 | 供应商 API 连接 | 仅登记供应商 API 能力 | 启用连接、同步与履约接口 | API 连接只作为来源元数据，不成为非 API 商品父对象 |
 | 商品发布与商城确认 | 不启用 | 启用 | 引用一期 SKU |
 | 销售执行投影 | 不启用 | 启用 | 以存量单切换时的当前 ERP 销售单版本作为第一份执行投影版本，不生成销售版本 |
@@ -3821,8 +3728,8 @@ T 起商城停止创建 B2B 销售单，全部 B2B 销售单统一由 ERP 服务
 - SPU/SKU 当前价格不直接成为 ERP 基础资料权威价格：
   商城售价进入发布修订，供应商成本进入供给修订，销售成交价进入销售版本；
 - 旧 `stock`、`total_stock` 不写 ERP 自有库存余额。自有库存以基准日实盘为期初流水，
-  外部可供库存进入供给修订或外部可供快照；
-- `supplier_type`、`supplier_sku_id` 通过供应商和供应商商品映射表达；
+  外部可供库存进入 `supplier_offering_availability`；
+- `supplier_type`、`supplier_sku_id` 经采购确认后分别映射供应商与 `supplier_offering.supplier_sku_code`；
 - 销量、虚拟销量、点击量、是否盈利不导入正式基础资料；
 - 重量和体积必须使用定点数和明确单位，禁止使用浮点数。
 

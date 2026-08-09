@@ -14,7 +14,7 @@
 //! 可观测错误并记录 `account` 上下文。
 //!
 //! 跨域协作只经 DatabaseExt 调对方域 Repository（P3 §2）：D25 `supplier_api`
-//! （连接与能力）、D29 `mall_order`（商城订单与明细）、D24 `supplier_catalog`
+//! （连接与能力）、D29 `mall_order`（商城订单与明细）、D24 `supplier_offering`
 //! （供给修订）、D30 `mall_after_sales`（售后申请与行，§6.19 净余额校验）、
 //! D34 `integration_ops`（inbox_message / integration_error_task）。
 //!
@@ -29,7 +29,7 @@ use std::sync::Arc;
 
 use database::{
     AccessControlExt, IntegrationOpsExt, MallAfterSalesExt, MallOrderExt, NoTransaction, SupplierApiExt,
-    SupplierCatalogExt, SupplierFulfillmentExt, Transactional,
+    SupplierFulfillmentExt, SupplierOfferingExt, Transactional,
 };
 use entities::common::source::SourceType;
 use entities::common::time::Instant;
@@ -293,8 +293,8 @@ impl SupplierFulfillmentService {
             tracing::info!(account = %actor.id(), order_no = %req.fulfillment_order_no, "下单幂等命中，返回原订单");
             return Ok(existing.into());
         }
-        let connection = self.ensure_placeable(&req).await?;
-        let (mut order, items, mut action) = self.build_place_facts(&req)?;
+        let (connection, offerings) = self.ensure_placeable(&req).await?;
+        let (mut order, items, mut action) = self.build_place_facts(&req, &offerings)?;
         let mut message = build_action_message(&action, &connection, InboxMessageStatus::Received)?;
         let audit = actor.clone().resource_log(
             "supplier_fulfillment.submit",
@@ -710,7 +710,13 @@ impl SupplierFulfillmentService {
     /// # 错误
     /// * `NotFound` - 连接/商城订单/明细/供给修订不存在
     /// * `BusinessLogicError` - 连接未启用、缺少下单能力或明细归属不一致
-    async fn ensure_placeable(&self, req: &PlaceFulfillmentOrderRequest) -> Result<SupplierApiConnection> {
+    async fn ensure_placeable(
+        &self,
+        req: &PlaceFulfillmentOrderRequest,
+    ) -> Result<(
+        SupplierApiConnection,
+        HashMap<String, entities::supplier_offering::SupplierOffering>,
+    )> {
         let connection = self
             .db
             .supplier_api_connections()
@@ -719,6 +725,11 @@ impl SupplierFulfillmentService {
             .ok_or_else(|| Error::NotFound("供应商连接不存在".to_string()))?;
         if !connection.is_active() {
             return Err(Error::BusinessLogicError("供应商连接未启用".to_string()));
+        }
+        if connection.supplier_id != req.supplier_id {
+            return Err(Error::BusinessLogicError(
+                "供应商连接不属于下单供应商".to_string(),
+            ));
         }
         let capabilities = self
             .db
@@ -732,20 +743,54 @@ impl SupplierFulfillmentService {
             .await?
             .ok_or_else(|| Error::NotFound("来源商城订单不存在".to_string()))?;
         self.ensure_mall_items(req).await?;
-        let offering_ids: Vec<String> = req
+        let revision_ids = req
             .items
             .iter()
             .map(|item| item.supplier_offering_revision_id.to_string())
-            .collect();
-        let found = self
+            .collect::<std::collections::HashSet<_>>();
+        let revisions = self
             .db
             .supplier_offering_revisions()
-            .find_many(doc! { "id": { "$in": offering_ids } }, &mut NoTransaction)
+            .find_many(
+                doc! { "id": { "$in": revision_ids.iter().cloned().collect::<Vec<_>>() } },
+                &mut NoTransaction,
+            )
             .await?;
-        if found.len() != req.items.len() {
+        if revisions.len() != revision_ids.len() {
             return Err(Error::NotFound("供应商供给修订不存在".to_string()));
         }
-        Ok(connection)
+        let offering_ids = revisions
+            .iter()
+            .map(|revision| revision.supplier_offering_id.to_string())
+            .collect::<std::collections::HashSet<_>>();
+        let offerings = self
+            .db
+            .supplier_offerings()
+            .find_many(
+                doc! { "id": { "$in": offering_ids.into_iter().collect::<Vec<_>>() } },
+                &mut NoTransaction,
+            )
+            .await?
+            .into_iter()
+            .map(|offering| (offering.base.id.clone(), offering))
+            .collect::<HashMap<_, _>>();
+        let mut by_revision = HashMap::with_capacity(revisions.len());
+        for revision in revisions {
+            let offering = offerings
+                .get(revision.supplier_offering_id.as_ref())
+                .ok_or_else(|| Error::NotFound("供应商供给不存在".to_string()))?;
+            let connection_matches = offering
+                .source_connection_id
+                .as_ref()
+                .is_none_or(|id| id == &req.connection_id);
+            if offering.supplier_id != req.supplier_id || !connection_matches {
+                return Err(Error::BusinessLogicError(
+                    "供给不属于下单供应商或供应商连接不匹配".to_string(),
+                ));
+            }
+            by_revision.insert(revision.base.id, offering.clone());
+        }
+        Ok((connection, by_revision))
     }
 
     /// 校验商城订单明细全部存在且归属该商城订单（D29 跨域读取）。
@@ -798,6 +843,7 @@ impl SupplierFulfillmentService {
     fn build_place_facts(
         &self,
         req: &PlaceFulfillmentOrderRequest,
+        offerings: &HashMap<String, entities::supplier_offering::SupplierOffering>,
     ) -> Result<(
         SupplierFulfillmentOrder,
         Vec<SupplierFulfillmentItem>,
@@ -823,7 +869,7 @@ impl SupplierFulfillmentService {
                 address_snapshot_fingerprint: req.address_snapshot_fingerprint.clone(),
             },
         )?;
-        let items = self.build_place_items(&order_id, req)?;
+        let items = self.build_place_items(&order_id, req, offerings)?;
         let action = SupplierOrderAction::new(
             SupplierOrderActionId::new(next_id()),
             SupplierOrderActionData {
@@ -861,30 +907,35 @@ impl SupplierFulfillmentService {
         &self,
         order_id: &SupplierFulfillmentOrderId,
         req: &PlaceFulfillmentOrderRequest,
+        offerings: &HashMap<String, entities::supplier_offering::SupplierOffering>,
     ) -> Result<Vec<SupplierFulfillmentItem>> {
         req.items
             .iter()
             .map(|item| {
+                let offering = offerings
+                    .get(item.supplier_offering_revision_id.as_ref())
+                    .ok_or_else(|| Error::NotFound("供应商供给不存在".to_string()))?;
                 let total = Amount::try_from(round_to_cent(
                     item.unit_cost_snapshot_gross.to_decimal() * item.quantity.to_decimal(),
                 ))
-                .map_err(|_| entities::Error::from("明细成本快照金额无效"))?;
+                .map_err(|_| Error::from(entities::Error::from("明细成本快照金额无效")))?;
                 SupplierFulfillmentItem::new(
                     SupplierFulfillmentItemId::new(next_id()),
                     SupplierFulfillmentItemData {
                         supplier_fulfillment_order_id: order_id.clone(),
                         mall_order_item_id: item.mall_order_item_id.clone(),
                         supplier_offering_revision_id: item.supplier_offering_revision_id.clone(),
-                        supplier_catalog_sku_id: item.supplier_catalog_sku_id.clone(),
+                        supplier_sku_code_snapshot: offering.supplier_sku_code.clone(),
+                        supplier_product_code_snapshot: offering.supplier_product_code.clone(),
                         quantity: item.quantity,
                         unit_cost_snapshot_gross: item.unit_cost_snapshot_gross,
                         cost_snapshot_total_gross: total,
                         input_tax_rate: item.input_tax_rate,
                     },
                 )
+                .map_err(Error::from)
             })
-            .collect::<std::result::Result<Vec<_>, entities::Error>>()
-            .map_err(crate::errors::Error::from)
+            .collect()
     }
 
     /// 构建取消/退款动作头。
@@ -1584,7 +1635,8 @@ fn item_view(item: SupplierFulfillmentItem) -> crate::supplier_fulfillment::dto:
         supplier_fulfillment_order_id: item.supplier_fulfillment_order_id.to_string(),
         mall_order_item_id: item.mall_order_item_id.to_string(),
         supplier_offering_revision_id: item.supplier_offering_revision_id.to_string(),
-        supplier_catalog_sku_id: item.supplier_catalog_sku_id.to_string(),
+        supplier_sku_code_snapshot: item.supplier_sku_code_snapshot,
+        supplier_product_code_snapshot: item.supplier_product_code_snapshot,
         quantity: item.quantity,
         unit_cost_snapshot_gross: item.unit_cost_snapshot_gross,
         cost_snapshot_total_gross: item.cost_snapshot_total_gross,

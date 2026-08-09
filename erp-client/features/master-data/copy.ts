@@ -207,7 +207,7 @@ export const masterDataCopy = {
   productSpecsHint:
     "添加规格维度（如颜色、规格），填写取值后自动组合出 SKU。无规格时保留一个默认 SKU。",
   productSkuHint:
-    "销售可见价属于公司商品池；每个 SKU 可关联多家供应商，采购成本、供给方式、税费和起订量按供应商商品资料独立维护，不写入商品版本。",
+    "销售可见价属于公司商品池；每个 SKU 可关联多家供应商，采购成本、供给方式、税费和起订量按供给关系独立维护，不写入商品版本。",
   productAddSpec: "添加规格",
   productRemoveSpec: "移除规格",
   productRebuildSkus: "按规格重新生成 SKU",
@@ -245,7 +245,7 @@ export const masterDataCopy = {
   fUnitSymbol: "单位符号",
   fQuantityScale: "数量小数位",
   unitListHint:
-    "计量单位供商品、供应商商品等表单选择基础单位；停用后业务页默认不可选，历史引用保留。单位代码创建后不可修改。",
+    "计量单位供公司商品等表单选择基础单位；停用后业务页默认不可选，历史引用保留。单位代码创建后不可修改。",
   fDescription: "类目描述",
   fSalesVisiblePrice: "销售可见价",
   fSupplierCount: "可供供应商数",

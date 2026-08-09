@@ -119,7 +119,7 @@ P4 前端联调与 P5 的投影实现/治理脚本可在 P6 之前并行推进�
 | I-G2 | 业务伙伴 | D07–D09 | C-G2 | `feat/erp-i-g2-party` |
 | I-G3 | 商品与仓库 | D10、D11 | C-G3 | `feat/erp-i-g3-catalog` |
 | I-G4 | 合同与销售 | D12–D14 | C-G4 | `feat/erp-i-g4-sales` |
-| I-G5 | 采购与供应商商品库 | D15、D24 | C-G5 | `feat/erp-i-g5-procurement` |
+| I-G5 | 采购与供应商供给 | D15、D24 | C-G5 | `feat/erp-i-g5-procurement` |
 | I-G6 | 履约与库存 | D16、D17 | C-G6 | `feat/erp-i-g6-fulfillment` |
 | I-G7 | 财务往来与成本 | D18–D21 | C-G7 | `feat/erp-i-g7-finance` |
 | I-G8 | 一期导入与商城同步 | D22、D23 | C-G8 | `feat/erp-i-g8-mall-sync` |

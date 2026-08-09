@@ -934,7 +934,7 @@ export function SupplierOrderCenterPage({
               <TableRow>
                 <TableHead>商品</TableHead>
                 <TableHead>数量</TableHead>
-                <TableHead>供应商商品</TableHead>
+                <TableHead>供应商订货编码</TableHead>
                 <TableHead>发布/供给版本</TableHead>
                 <TableHead className="text-right">下单成本（含税）</TableHead>
               </TableRow>

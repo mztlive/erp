@@ -588,7 +588,7 @@ export const fetchProcurementSupplyOptions = async (
   const offeringPages = await Promise.all(
     uniqueSkuIds.map((skuId) =>
       apiGet<BackendPage<BackendSupplierOffering>>(
-        "/admin/supplier-catalog/offerings",
+        "/admin/supplier-offerings",
         { sku_id: skuId, page: 1, page_size: 100 }
       )
     )

@@ -200,7 +200,7 @@ function defaultNavPermissionsFor(
     case "W20":
       return ["supplier_api_connection:list"]
     case "W21":
-      return ["supplier_catalog_product:list"]
+      return ["supplier_offering:list"]
     case "W22":
       return ["product_publication:list"]
     case "W23":
@@ -426,10 +426,10 @@ export const WORKSPACE_ROUTES: readonly WorkspaceRouteEntry[] = [
   },
   {
     id: "W21",
-    name: "供应商商品库与供给管理",
-    mode: "M2+M3+M4",
-    mainRoute: "/procurement/supplier-catalog",
-    navHref: "/procurement/supplier-catalog",
+    name: "供应商供给",
+    mode: "M2+M4",
+    mainRoute: "/procurement/supplier-offerings",
+    navHref: "/procurement/supplier-offerings",
   },
   {
     id: "W22",
@@ -548,7 +548,7 @@ export const WORKSPACE_NAV_GROUPS: readonly WorkspaceNavGroup[] =
       },
       {
         routeId: "W21",
-        label: "供应商商品库",
+        label: "供应商供给",
         icon: PackageSearchIcon,
       },
     ],

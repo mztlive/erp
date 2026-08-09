@@ -73,7 +73,7 @@ W 文件不得重定义业务状态机，也不得为了版面方便改变金额
 | W18 | 导入与期初 | M7 | `/governance/imports` | [w18-import-opening.md](w18-import-opening.md) | 已实现 |
 | W19 | 权限与审计 | M2 | `/system/access-audit` | [w19-permissions-audit.md](w19-permissions-audit.md) | 已实现 |
 | W20 | API 供应商连接 | M2 + M4 | `/supplier-api/connections` | [w20-supplier-api-connections.md](w20-supplier-api-connections.md) | 已实现 |
-| W21 | 供应商商品库与供给管理 | M2 + M3 + M4 | `/procurement/supplier-catalog` | [w21-supplier-catalog.md](w21-supplier-catalog.md) | 已实现 |
+| W21 | 供应商供给 | M2 + M4 | `/procurement/supplier-offerings` | [w21-supplier-offerings.md](w21-supplier-offerings.md) | 已实现 |
 | W22 | 商品发布 | M2 + M4 | `/commerce/publications` | [w22-product-publication.md](w22-product-publication.md) | 已实现 |
 | W23 | 执行投影 | M2 + M4 | `/commerce/execution-projections` | [w23-execution-projection.md](w23-execution-projection.md) | 已实现 |
 | W25 | 商城消费订单 | M2 + M4 | `/commerce/consumption-orders` | [w25-mall-consumption-orders.md](w25-mall-consumption-orders.md) | 已实现 |

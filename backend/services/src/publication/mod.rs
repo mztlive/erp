@@ -18,7 +18,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 
 use database::{
-    AccessControlExt, CatalogExt, IntegrationOpsExt, NoTransaction, PublicationExt, SupplierCatalogExt,
+    AccessControlExt, CatalogExt, IntegrationOpsExt, NoTransaction, PublicationExt, SupplierOfferingExt,
     Transactional,
 };
 use entities::ids::{

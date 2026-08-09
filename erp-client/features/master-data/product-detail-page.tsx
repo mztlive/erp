@@ -73,7 +73,7 @@ import { MasterDataDisableDialog } from "@/features/master-data/master-data-acti
 import {
   RegisterSupplyForSkuDialog,
   type FixedSku,
-} from "@/features/supplier-catalog/catalog-write-dialogs"
+} from "@/features/supplier-offerings/offering-dialogs"
 import { uploadFileAssetImage } from "@/features/file-assets/api"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { formatEffectiveRange } from "@/features/master-data/filter"
@@ -2232,11 +2232,11 @@ export function ProductDetailPage({
                                                 })
                                               }
                                             >
-                                              添加供应商
+                                              添加供给
                                             </Button>
                                             <Link
                                               className="text-xs text-primary hover:underline"
-                                              href={`/procurement/supplier-catalog?mode=list&skuId=${encodeURIComponent(sku.skuId)}&from=W14&returnTo=${encodeURIComponent(`/master-data/products/${stableId}#product-section-sku`)}`}
+                                              href={`/procurement/supplier-offerings?skuId=${encodeURIComponent(sku.skuId)}&returnTo=${encodeURIComponent(`/master-data/products/${stableId}#product-section-sku`)}`}
                                             >
                                               查看全部供给
                                             </Link>
@@ -2422,7 +2422,7 @@ export function ProductDetailPage({
                                         </div>
                                       ))}
                                       <p className="text-muted-foreground">
-                                        供应商、供给方式、成本、税费和起订量按供应商商品资料独立维护，不写入商品版本。
+                                        供应商、订货编码、成本、税费和起订量按供给关系独立维护，不写入商品版本。
                                       </p>
                                     </div>
                                   </details>

@@ -20,7 +20,7 @@ use mongodb::options::FindOptions;
 use mongodb::Database;
 use serde::{Deserialize, Serialize};
 
-use super::extensions::{CatalogExt, SupplierCatalogExt};
+use super::extensions::{CatalogExt, SupplierOfferingExt};
 use super::regex_filter::insert_literal_regex_filter;
 use super::{PageResult, Pagination, QueryFilter, Repository};
 use crate::executor::Executor;
@@ -35,7 +35,7 @@ use entities::catalog::{
 use entities::common::time::BusinessDate;
 use entities::ids::{ProductCategoryId, ProductId, ProductRevisionId, SkuAttributeId, SkuId};
 use entities::money::{Amount, Quantity};
-use entities::supplier_catalog::{AvailabilityStatus, OfferingStatus};
+use entities::supplier_offering::{AvailabilityStatus, OfferingStatus};
 
 /// `product_revision` 集合名（单一来源：`CatalogExt` 关联常量）。
 const PRODUCT_REVISIONS: &str = <mongodb::Database as CatalogExt>::PRODUCT_REVISIONS;
@@ -48,10 +48,13 @@ const SKU_REVISIONS: &str = <mongodb::Database as CatalogExt>::SKU_REVISIONS;
 /// `sku_revision_attribute_value` 集合名（单一来源：`CatalogExt` 关联常量）。
 const SKU_REVISION_ATTRIBUTE_VALUES: &str = <mongodb::Database as CatalogExt>::SKU_REVISION_ATTRIBUTE_VALUES;
 /// `supplier_offering` 集合名（公司商品池资格依赖的供给稳定身份）。
-const SUPPLIER_OFFERINGS: &str = <mongodb::Database as SupplierCatalogExt>::SUPPLIER_OFFERINGS;
+const SUPPLIER_OFFERINGS: &str = <mongodb::Database as SupplierOfferingExt>::SUPPLIER_OFFERINGS;
 /// `supplier_offering_revision` 集合名（公司商品池资格依赖的当前供给修订）。
 const SUPPLIER_OFFERING_REVISIONS: &str =
-    <mongodb::Database as SupplierCatalogExt>::SUPPLIER_OFFERING_REVISIONS;
+    <mongodb::Database as SupplierOfferingExt>::SUPPLIER_OFFERING_REVISIONS;
+/// `supplier_offering_availability` 集合名（公司商品池资格依赖的实时可供投影）。
+const SUPPLIER_OFFERING_AVAILABILITIES: &str =
+    <mongodb::Database as SupplierOfferingExt>::SUPPLIER_OFFERING_AVAILABILITIES;
 
 /// 公司商品池只读查询行。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -1874,6 +1877,7 @@ fn sellable_sku_pipeline(
     let keyword = initial_match.remove("__keyword");
     let as_of = eligibility_as_of.to_string();
     let not_deleted = NOT_DELETED_TIMESTAMP_BSON;
+    let zero_quantity = Bson::Decimal128("0".parse().expect("零必须可转换为 MongoDB Decimal128"));
     let mut after_lookups = Vec::new();
     if let Some(kind) = product_kind {
         after_lookups.push(doc! { "$match": { "product.product_kind": kind } });
@@ -2021,7 +2025,6 @@ fn sellable_sku_pipeline(
                                 "$match": {
                                     "$expr": { "$eq": ["$id", "$$revision_id"] },
                                     "deleted_at": not_deleted,
-                                    "availability_status": AvailabilityStatus::Available.as_str(),
                                     "valid_from": { "$lte": &as_of },
                                     "$or": [
                                         { "valid_to": null },
@@ -2033,6 +2036,25 @@ fn sellable_sku_pipeline(
                         }
                     },
                     { "$unwind": "$revision" },
+                    {
+                        "$lookup": {
+                            "from": SUPPLIER_OFFERING_AVAILABILITIES,
+                            "let": { "offering_id": "$id" },
+                            "pipeline": [{
+                                "$match": {
+                                    "$expr": { "$eq": ["$supplier_offering_id", "$$offering_id"] },
+                                    "deleted_at": not_deleted,
+                                    "availability_status": AvailabilityStatus::Available.as_str(),
+                                    "$or": [
+                                        { "available_quantity": null },
+                                        { "available_quantity": { "$gt": &zero_quantity } },
+                                    ],
+                                }
+                            }],
+                            "as": "availability"
+                        }
+                    },
+                    { "$unwind": "$availability" },
                     { "$project": { "_id": 0, "supplier_id": 1, "supply_region": "$revision.supply_region" } },
                 ],
                 "as": "offerings"
@@ -2436,6 +2458,8 @@ mod tests {
 
         assert!(json.contains("sales_visible_price_gross"));
         assert!(json.contains("availability_status"));
+        assert!(json.contains("available_quantity"));
+        assert!(json.contains("$gt"));
         assert!(json.contains("AVAILABLE"));
         assert!(json.contains("product_revision"));
         assert!(json.contains("supplier_count"));

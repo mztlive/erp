@@ -2968,134 +2968,14 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
         ],
     },
     {
-        name: "供应商商品库",
-        description: "供应商商品、SKU、映射、供给与入库批次管理",
+        name: "供应商供给",
+        description: "维护公司 SKU 的供应商供给、价格条款和可供状态",
         permissions: [
             {
                 module: "admin",
                 method: "GET",
-                path: "/admin/supplier-catalog/products",
-                description: "查询供应商 SPU 列表",
-                permission: {
-                    resource: "supplier_catalog_product",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-catalog/imports/excel",
-                description: "导入 Excel 供应商商品批次",
-                permission: {
-                    resource: "supplier_catalog_product",
-                    action: "import",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-catalog/products",
-                description: "创建供应商商品（Excel/API/手工入库）",
-                permission: {
-                    resource: "supplier_catalog_product",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/supplier-catalog/products/{id}",
-                description: "查询供应商 SPU 详情",
-                permission: {
-                    resource: "supplier_catalog_product",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-catalog/products/{id}/revisions",
-                description: "保存供应商商品来源修订",
-                permission: {
-                    resource: "supplier_catalog_product",
-                    action: "update",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/supplier-catalog/skus",
-                description: "查询供应商 SKU 列表",
-                permission: {
-                    resource: "supplier_catalog_sku",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/supplier-catalog/mappings",
-                description: "查询供应商 SKU 映射列表",
-                permission: {
-                    resource: "supplier_product_mapping",
-                    action: "list",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-catalog/mappings",
-                description: "创建供应商 SKU 映射",
-                permission: {
-                    resource: "supplier_product_mapping",
-                    action: "create",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-catalog/mappings/{id}/approve",
-                description: "确认映射并登记双价供给",
-                permission: {
-                    resource: "supplier_product_mapping",
-                    action: "approve",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-catalog/reverse-promote",
-                description: "反向入池（新建公司商品并登记映射与供给）",
-                permission: {
-                    resource: "supplier_product_mapping",
-                    action: "approve",
-                },
-            },
-            {
-                module: "admin",
-                method: "POST",
-                path: "/admin/supplier-catalog/link-promote",
-                description: "关联入池（挂已有公司 SKU 并登记供给）",
-                permission: {
-                    resource: "supplier_product_mapping",
-                    action: "approve",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/supplier-catalog/products/{id}/pool-match",
-                description: "查询供应商商品池内匹配状态",
-                permission: {
-                    resource: "supplier_catalog_product",
-                    action: "detail",
-                },
-            },
-            {
-                module: "admin",
-                method: "GET",
-                path: "/admin/supplier-catalog/offerings",
-                description: "查询供给列表",
+                path: "/admin/supplier-offerings",
+                description: "查询供应商供给列表",
                 permission: {
                     resource: "supplier_offering",
                     action: "list",
@@ -3104,8 +2984,18 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             {
                 module: "admin",
                 method: "POST",
-                path: "/admin/supplier-catalog/offerings/{id}/revisions",
-                description: "保存供给修订",
+                path: "/admin/supplier-offerings",
+                description: "新增供应商供给",
+                permission: {
+                    resource: "supplier_offering",
+                    action: "create",
+                },
+            },
+            {
+                module: "admin",
+                method: "POST",
+                path: "/admin/supplier-offerings/{id}/revisions",
+                description: "保存供应商供给条款",
                 permission: {
                     resource: "supplier_offering",
                     action: "update",
@@ -3113,12 +3003,12 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
-                method: "GET",
-                path: "/admin/supplier-catalog/intake-batches",
-                description: "查询供应商商品入库批次",
+                method: "POST",
+                path: "/admin/supplier-offerings/{id}/availability",
+                description: "更新供应商可供状态",
                 permission: {
-                    resource: "supplier_catalog_intake_batch",
-                    action: "list",
+                    resource: "supplier_offering_availability",
+                    action: "update",
                 },
             },
         ],

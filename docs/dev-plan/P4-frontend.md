@@ -63,7 +63,7 @@
 | F6 | W11、W12、W13 | `customer-receivables`、`supplier-payables`、`card-funds-review` | C-G7 | `feat/erp-f6-finance` |
 | F7 | W01、W02、W15、W16、W28 | `workspace`、`unified-task-queue`、`customer-quality`、`actual-profit-loss`、`card-business-analytics` | C-G1、C-G7、C-G10、P5 投影 | `feat/erp-f7-workbench-analytics` |
 | F8 | W17、W18、W19 | `mall-sync`、`import-opening`、`access-audit` | C-G1、C-G8 | `feat/erp-f8-sync-import-audit` |
-| F9 | W20、W21、W22、W23 | `supplier-api-connections`、`supplier-catalog`、`product-publications`、`execution-projections` | C-G5、C-G9 | `feat/erp-f9-supply-publication` |
+| F9 | W20、W21、W22、W23 | `supplier-api-connections`、`supplier-offerings`、`product-publications`、`execution-projections` | C-G5、C-G9 | `feat/erp-f9-supply-publication` |
 | F10 | W25、W26、W27、W29、W30 | `mall-consumption-orders`、`supplier-orders`、`supplier-settlements`、`integration-errors`、`history-backfill` | C-G10、C-G11、C-G12 | `feat/erp-f10-mall-supplier-ops` |
 
 工作量最大的是 F3（`sales-orders` 18 个文件，含验收工作台、变更单、卡券审批、

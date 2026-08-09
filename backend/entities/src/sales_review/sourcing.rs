@@ -210,9 +210,7 @@ fn allocation(candidate: &SourcingCandidate, quantity: Quantity) -> Result<Sourc
     let uses_bulk_price = quantity.to_decimal() >= candidate.bulk_minimum_quantity.to_decimal();
     let unit_cost_gross = price_for_quantity(candidate, quantity);
     let (product_gross, _, _) = line_amounts(unit_cost_gross, quantity, candidate.input_tax_rate);
-    let landed_gross = optional_amounts(candidate)
-        .into_iter()
-        .fold(product_gross, Amount::checked_add);
+    let landed_gross = optional_amounts(candidate).fold(product_gross, Amount::checked_add);
     Ok(SourcingAllocation {
         supplier_id: candidate.supplier_id.clone(),
         offering_revision_id: candidate.offering_revision_id.clone(),

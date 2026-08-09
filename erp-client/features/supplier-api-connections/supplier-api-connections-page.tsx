@@ -1329,10 +1329,10 @@ function ConnectionCenter({
             <p className="flex flex-wrap items-center gap-x-3">
               替代方案：
               <Link
-                href="/procurement/supplier-catalog"
+                href="/procurement/supplier-offerings"
                 className="text-primary underline-offset-2 hover:underline"
               >
-                供应商商品库
+                供应商供给
               </Link>
               <Link
                 href="/supplier-api/orders"
@@ -1718,10 +1718,10 @@ function OverviewSection({ conn }: { conn: ConnectionCenterView }) {
           <CardDescription>
             连接级能力声明不等于每个商品可用 ·{" "}
             <Link
-              href="/procurement/supplier-catalog"
+              href="/procurement/supplier-offerings"
               className="text-primary underline-offset-2 hover:underline"
             >
-              供应商商品库
+              供应商供给
             </Link>
             {" · "}
             <Link
@@ -1815,7 +1815,7 @@ function CapabilitiesSection({
         meta: { label: "边界" },
         cell: () => (
           <span className="text-xs text-muted-foreground">
-            连接级 ≠ 商品级 · 见供应商商品库/商品发布
+            连接级 ≠ 供给级 · 见供应商供给/商品发布
           </span>
         ),
       },
@@ -1835,7 +1835,7 @@ function CapabilitiesSection({
         <AlertTitle>能力边界</AlertTitle>
         <AlertDescription>
           下表为<strong>连接级</strong>
-          统一能力声明，不表示每个供应商商品都可用。商品/供给/发布级能力由供应商商品库 / 商品发布返回。能力启停由系统管理员配置。
+          统一能力声明，不表示每条供给都可用。供给/发布级能力由供应商供给 / 商品发布返回。能力启停由系统管理员配置。
         </AlertDescription>
       </Alert>
       <div className="flex justify-end">
@@ -2076,10 +2076,10 @@ function CatalogSection({
           <CardDescription>
             与连接状态分开展示 ·{" "}
             <Link
-              href={`/procurement/supplier-catalog?connectionId=${conn.connectionId}`}
+              href={`/procurement/supplier-offerings?connectionId=${conn.connectionId}`}
               className="inline-flex items-center gap-1 text-primary underline-offset-2 hover:underline"
             >
-              打开供应商商品库
+              打开供应商供给
               <ExternalLinkIcon className="size-3" aria-hidden="true" />
             </Link>
           </CardDescription>
@@ -2130,7 +2130,7 @@ function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
         {
           label: "活跃供给",
           value: conn.relatedImpact.activeOfferings,
-          href: "/procurement/supplier-catalog",
+          href: "/procurement/supplier-offerings",
         },
         {
           label: "生效发布",
@@ -2145,7 +2145,7 @@ function RelatedSection({ conn }: { conn: ConnectionCenterView }) {
         {
           label: "同步任务",
           value: conn.relatedImpact.activeSyncJobs,
-          href: "/procurement/supplier-catalog",
+          href: "/procurement/supplier-offerings",
         },
       ].map((item) => (
         <Card

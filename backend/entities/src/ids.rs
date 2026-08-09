@@ -158,17 +158,10 @@
 //! - `mall_sales_reconciliation_item` → `MallSalesReconciliationItemId`
 //! - `master_mapping_task` → `MasterMappingTaskId`
 //!
-//! D24 `supplier_catalog`：
-//! - `supplier_catalog_product` → `SupplierCatalogProductId`
-//! - `supplier_catalog_product_revision` → `SupplierCatalogProductRevisionId`
-//! - `supplier_catalog_product_revision_media` → `SupplierCatalogProductRevisionMediaId`
-//! - `supplier_catalog_sku` → `SupplierCatalogSkuId`
-//! - `supplier_catalog_sku_revision` → `SupplierCatalogSkuRevisionId`
-//! - `supplier_product_mapping` → `SupplierProductMappingId`
-//! - `supplier_catalog_intake_batch` → `SupplierCatalogIntakeBatchId`
-//! - `supplier_catalog_intake_item` → `SupplierCatalogIntakeItemId`
+//! D24 `supplier_offering`：
 //! - `supplier_offering` → `SupplierOfferingId`
 //! - `supplier_offering_revision` → `SupplierOfferingRevisionId`
+//! - `supplier_offering_availability` → `SupplierOfferingAvailabilityId`
 //!
 //! D25 `supplier_api`：
 //! - `supplier_api_connection` → `SupplierApiConnectionId`
@@ -472,17 +465,10 @@ id_type!(MallSalesReconciliationJobId);
 id_type!(MallSalesReconciliationItemId);
 id_type!(MasterMappingTaskId);
 
-// D24 supplier_catalog
-id_type!(SupplierCatalogProductId);
-id_type!(SupplierCatalogProductRevisionId);
-id_type!(SupplierCatalogProductRevisionMediaId);
-id_type!(SupplierCatalogSkuId);
-id_type!(SupplierCatalogSkuRevisionId);
-id_type!(SupplierProductMappingId);
-id_type!(SupplierCatalogIntakeBatchId);
-id_type!(SupplierCatalogIntakeItemId);
+// D24 supplier_offering
 id_type!(SupplierOfferingId);
 id_type!(SupplierOfferingRevisionId);
+id_type!(SupplierOfferingAvailabilityId);
 
 // D25 supplier_api
 id_type!(SupplierApiConnectionId);

@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{NoTransaction, PartyExt, SalesOrderExt, SupplierCatalogExt, SupplierExt};
+use database::{NoTransaction, PartyExt, SalesOrderExt, SupplierExt, SupplierOfferingExt};
 use entities::ids::{
     PurchaseOrderId, PurchaseOrderSubmissionId, PurchaseOrderSubmissionLineId, SalesOrderId,
     SupplierAccountId,
@@ -20,7 +20,7 @@ use entities::purchase_order::{
 };
 use entities::sales_order::SalesOrderSubmissionLine;
 use entities::sales_review::{FulfillmentMode, ProcurementConfirmationLine};
-use entities::supplier_catalog::SupplierOfferingRevision;
+use entities::supplier_offering::SupplierOfferingRevision;
 use id_generator::next_id;
 use mongodb::Database;
 

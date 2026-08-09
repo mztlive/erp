@@ -6,7 +6,7 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::str::FromStr;
 
-use database::{NoTransaction, PartyExt, SalesOrderExt, SalesReviewExt, SupplierCatalogExt, SupplierExt};
+use database::{NoTransaction, PartyExt, SalesOrderExt, SalesReviewExt, SupplierExt, SupplierOfferingExt};
 use entities::common::time::{BusinessDate, Instant};
 use entities::ids::{SkuId, SupplierAccountId, SupplierCapabilityRevisionId, SupplierOfferingId};
 use entities::money::{line_amounts, Amount, Quantity};
@@ -16,8 +16,8 @@ use entities::sales_review::{
     SourcingLinePlan,
 };
 use entities::supplier::CapabilityCode;
-use entities::supplier_catalog::{
-    AvailabilityStatus, OfferingStatus, SupplierOffering, SupplierOfferingRevision,
+use entities::supplier_offering::{
+    OfferingStatus, SupplierOffering, SupplierOfferingAvailability, SupplierOfferingRevision,
 };
 
 use super::{
@@ -27,7 +27,7 @@ use super::{
 use crate::errors::{Error, Result};
 
 /// 推荐规则版本；变更成本目标或可行性过滤规则时必须递增。
-const SOURCING_POLICY_VERSION: &str = "LOWEST_FEASIBLE_LANDED_COST_V3";
+const SOURCING_POLICY_VERSION: &str = "LOWEST_FEASIBLE_LANDED_COST_V4";
 
 impl SalesReviewService {
     /// 计算采购二次确认的最低可执行成本方案。
@@ -66,6 +66,7 @@ impl SalesReviewService {
             .await?;
         let offerings = self.active_offerings_for_submission(&submission_lines).await?;
         let revisions = self.current_offering_revisions(&offerings).await?;
+        let availabilities = self.current_offering_availabilities(&offerings).await?;
         let today = BusinessDate::today();
         let mut capability_cache = HashMap::new();
         let mut plans = Vec::new();
@@ -73,7 +74,14 @@ impl SalesReviewService {
 
         for group in group_submission_lines(&submission_lines) {
             match self
-                .recommend_submission_group(&group, &offerings, &revisions, today, &mut capability_cache)
+                .recommend_submission_group(
+                    &group,
+                    &offerings,
+                    &revisions,
+                    &availabilities,
+                    today,
+                    &mut capability_cache,
+                )
                 .await
             {
                 Ok(plan) => plans.extend(split_group_plan(&group, &plan)?),
@@ -169,12 +177,32 @@ impl SalesReviewService {
             .collect())
     }
 
+    /// 批量加载供给的实时可供投影。
+    async fn current_offering_availabilities(
+        &self,
+        offerings: &[SupplierOffering],
+    ) -> Result<HashMap<String, SupplierOfferingAvailability>> {
+        let offering_ids = offerings
+            .iter()
+            .map(|offering| SupplierOfferingId::new(offering.base.id.clone()))
+            .collect::<Vec<_>>();
+        Ok(self
+            .db
+            .supplier_offering_availabilities()
+            .find_by_offering_ids(&offering_ids, &mut NoTransaction)
+            .await?
+            .into_iter()
+            .map(|availability| (availability.supplier_offering_id.to_string(), availability))
+            .collect())
+    }
+
     /// 为同 SKU、同交付类别的销售提交行组构造候选并调用领域最低成本规则。
     async fn recommend_submission_group(
         &self,
         lines: &[&SalesOrderSubmissionLine],
         offerings: &[SupplierOffering],
         revisions: &HashMap<String, SupplierOfferingRevision>,
+        availabilities: &HashMap<String, SupplierOfferingAvailability>,
         today: BusinessDate,
         capability_cache: &mut HashMap<(String, String), Option<SupplierCapabilityRevisionId>>,
     ) -> Result<SourcingLinePlan> {
@@ -197,7 +225,10 @@ impl SalesReviewService {
             let Some(revision) = revisions.get(&offering.base.id) else {
                 continue;
             };
-            if !offering_revision_is_available(revision, today) {
+            let Some(availability) = availabilities.get(&offering.base.id) else {
+                continue;
+            };
+            if !offering_is_available(revision, availability, today) {
                 continue;
             }
             for mode in candidate_modes(line.fulfillment_mode) {
@@ -216,6 +247,7 @@ impl SalesReviewService {
                 candidates.push(candidate_from_offering(
                     offering,
                     revision,
+                    availability,
                     mode,
                     capability_revision_id,
                 )?);
@@ -250,7 +282,7 @@ impl SalesReviewService {
             let in_window = capability.valid_from <= today
                 && capability.valid_to.is_none_or(|valid_to| today <= valid_to);
             (capability.is_active() && in_window)
-                .then(|| capability.stable.current_revision_id)
+                .then_some(capability.stable.current_revision_id)
                 .flatten()
                 .map(SupplierCapabilityRevisionId::new)
         });
@@ -409,14 +441,15 @@ fn split_allocation(
     })
 }
 
-/// 判断供给修订当前可参与推荐。
-fn offering_revision_is_available(revision: &SupplierOfferingRevision, today: BusinessDate) -> bool {
-    revision.availability_status == AvailabilityStatus::Available
+/// 判断商业条款和实时可供投影当前是否都可参与推荐。
+fn offering_is_available(
+    revision: &SupplierOfferingRevision,
+    availability: &SupplierOfferingAvailability,
+    today: BusinessDate,
+) -> bool {
+    availability.is_available()
         && revision.valid_from <= today
         && revision.valid_to.is_none_or(|valid_to| today <= valid_to)
-        && revision
-            .available_quantity
-            .is_none_or(|quantity| !quantity.to_decimal().is_zero())
 }
 
 /// 按销售承诺类型给出允许采购比较的履约方式。
@@ -441,6 +474,7 @@ fn capability_for_mode(mode: FulfillmentMode) -> CapabilityCode {
 fn candidate_from_offering(
     offering: &SupplierOffering,
     revision: &SupplierOfferingRevision,
+    availability: &SupplierOfferingAvailability,
     mode: FulfillmentMode,
     capability_revision_id: SupplierCapabilityRevisionId,
 ) -> Result<SourcingCandidate> {
@@ -454,7 +488,7 @@ fn candidate_from_offering(
         bulk_unit_cost_gross: revision.bulk_supply_price_gross,
         input_tax_rate: revision.input_tax_rate,
         bulk_minimum_quantity: revision.bulk_minimum_order_quantity,
-        available_quantity: revision.available_quantity,
+        available_quantity: availability.available_quantity,
         freight_amount: is_warehouse.then_some(revision.freight_amount).flatten(),
         service_fee_amount: revision.service_fee_amount,
     })

@@ -69,7 +69,8 @@ type BackendItem = {
   supplier_fulfillment_order_id: string
   mall_order_item_id: string
   supplier_offering_revision_id: string
-  supplier_catalog_sku_id: string
+  supplier_sku_code_snapshot: string
+  supplier_product_code_snapshot?: string | null
   quantity: string
   unit_cost_snapshot_gross: string
   cost_snapshot_total_gross: string
@@ -320,12 +321,12 @@ function mapDetail(
     items: (d.items ?? []).map((it) => ({
       itemId: it.id,
       mallLineId: it.mall_order_item_id,
-      productName: it.supplier_catalog_sku_id,
-      skuCode: it.supplier_catalog_sku_id,
+      productName: it.supplier_product_code_snapshot ?? it.supplier_sku_code_snapshot,
+      skuCode: it.supplier_sku_code_snapshot,
       quantity: String(it.quantity),
       unit: "件",
-      supplierProductId: it.supplier_catalog_sku_id,
-      supplierProductName: it.supplier_catalog_sku_id,
+      supplierProductId: it.supplier_product_code_snapshot ?? it.supplier_sku_code_snapshot,
+      supplierProductName: it.supplier_product_code_snapshot ?? it.supplier_sku_code_snapshot,
       publicationVersion: "",
       supplyVersion: it.supplier_offering_revision_id,
       unitCostGross: String(it.unit_cost_snapshot_gross),

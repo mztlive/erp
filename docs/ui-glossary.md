@@ -1,7 +1,7 @@
 # UI 文案术语表
 
 > **状态**：基线 v1.3
-> **依据**：`erp-client` 全量扫描（2026-08-03）+ W21 入池双分支落地（2026-08-07）；`erp-ui-design.md` 的语言原则
+> **依据**：`erp-client` 全量扫描（2026-08-03）+ W21 供应商供给模型（2026-08-08）；`erp-ui-design.md` 的语言原则
 > **适用范围**：所有用户可见文案——按钮、状态条、提示、Alert、描述、列名、空态、toast、错误恢复指引
 > **不适用**：代码注释、数据模型字段名、内部错误对象 key、文档中的架构描述
 > **验收挂钩**：W 系列工作面文档 §12「页面文案不出现实现术语」
@@ -65,11 +65,8 @@
 | 任务仍在有效队列（PENDING） | `integration-errors/api.ts:799` | 任务仍在待处理列表，可稍后继续 |
 | 租约无效，请重新领取 | `fulfillment-operations/api.ts:944`、`procurement-confirmation/api.ts:322` | 操作已失效，请重新领取 |
 | fail-closed（用户可见） | 商品发布、权限审计等 | 结果未确认前禁止… / 按保守策略拒绝 |
-| subject_hash / 当前 subject_hash（UI 标签） | 卡券复核、供应商商品 | 数据版本 |
-| mappingTaskStatus / supplier_catalog_intake_batch 等字段名 | 商城同步、供应商商品库 | 业务中文描述 |
-| pool_status / MAPPED / HAS_CANDIDATES / UNMATCHED（用户可见原值） | 供应商商品库入池 | 已映射 / 有候选 / 未入池 |
-| reverse-promote / link-promote / pool-match（用户可见） | 供应商商品库 | 反向入池 / 关联入池 / 池内匹配（或按钮「入池」） |
-| expected_source_revision_no / supplier_catalog_sku_id（用户可见） | 供应商商品库 | 来源版本 / 供应商规格编号 |
+| subject_hash / 当前 subject_hash（UI 标签） | 卡券复核 | 数据版本 |
+| supplier_offering_availability / expected_revision_no（用户可见） | 供应商供给 | 当前可供情况 / 当前条款版本 |
 | Wxx 工作面编号（面向业务用户的提示） | 各页 mock / api message | 页面中文名（客户往来、接口错误中心…） |
 
 ### P2 · 长尾（批量替换）
@@ -123,7 +120,7 @@
 | cutoverId / rangeStart / T / rangeEnd（UI 标签） | `history-backfill-page.tsx`（任务身份与范围卡） | 切换编号 / 范围起点 / 截止时点 |
 | IN_PROGRESS / PENDING / COMPLETED（事实值） | `integration-errors/api.ts`（任务状态事实） | 处理中 / 待处理 / 已完成 |
 | REPLAY_ACCEPTED · 任务仍非终态 | `integration-errors/api.ts` | 已受理重新提交 · 任务尚未完成 |
-| RECOVERY_RESPONSIBILITY_UNCONFIRMED /（Q3） | `supplier-catalog/types.ts` 消息 | 恢复责任尚未确认 |
+| RECOVERY_RESPONSIBILITY_UNCONFIRMED /（Q3） | 错误消息 | 恢复责任尚未确认 |
 | SKU 修订 ID / 商城类目 ID / 唯一固定供给修订 ID | `publication-center-page.tsx` | …编号 |
 | 提交正式流程 | `sales-order-create-page.tsx` | 提交 |
 
@@ -164,7 +161,7 @@
 
 | 禁用词 | 出现位置 | 替换为 |
 | --- | --- | --- |
-| Q1–Q5 策略代号（Q1 复核策略 / Q4 策略配置 / Q5 未决 /（Q3）） | `access-audit*`、`supplier-settlements/api.ts`、`card-funds-review/types.ts`、`supplier-catalog/types.ts` | 写策略业务名（如「复核策略」「策略配置」） |
+| Q1–Q5 策略代号（Q1 复核策略 / Q4 策略配置 / Q5 未决 /（Q3）） | `access-audit*`、`supplier-settlements/api.ts`、`card-funds-review/types.ts` | 写策略业务名（如「复核策略」「策略配置」） |
 | 接口限流 / 重复回调 / 乱序回调 / 等待退避时间 | `domain.tsx`（W29 错误分类） | 调用次数受限 / 重复通知 / 通知顺序异常 / 请稍后重试 |
 | 报文 / 调用供应商下单接口 | `supplier-order-center-page.tsx`、`history-backfill-page.tsx`、mock | 消息内容 / 向供应商发起下单 |
 | 终态（用户可见） | `integration-errors*`、`supplier-orders*`、`unified-task-queue-page.tsx`、`mall-sync-page.tsx`、mock | 处理结果 / 处理完成 |
@@ -175,7 +172,7 @@
 | 会话（用户可见，非「核销」业务词场景） | `fulfillment-operations-page.tsx`、`product-publications*`、`mall-sync-page.tsx`、`card-funds-review-page.tsx`、`inventory-ledger-page.tsx`、mock | 本次操作 / 本次输入 / 本次登记 |
 | 核销会话 / 草稿会话（客户往来 / 供应商往来） | `customer-receivables*`、`supplier-payables*` | 本次核销 / 本次草稿 |
 | 工作面（用户可见） | `fulfillment-operations*`、`access-audit*`、`supplier-accounts-page.tsx` | 页面 |
-| 掩码（用户可见） | `customer-detail-page.tsx`、`access-audit*`、`ownership-migration*`、`purchase-order-preview-panel.tsx`、`supplier-order-center-page.tsx`、`mall-consumption-orders*`、`supplier-catalog*`、`contract-detail-page.tsx`、mock | 打码 / 隐藏 |
+| 掩码（用户可见） | `customer-detail-page.tsx`、`access-audit*`、`ownership-migration*`、`purchase-order-preview-panel.tsx`、`supplier-order-center-page.tsx`、`mall-consumption-orders*`、`contract-detail-page.tsx`、mock | 打码 / 隐藏 |
 | 复核策略未固化 | `access-audit*` | 复核策略未确定 |
 | 基线已过期 / 本地内容基线 | `workflow.tsx` | 数据已过期 / 你输入的内容版本 |
 | 同一事务落地 / 同事务 / 本事务 / 原子事务回滚 | `ownership-migration*`、`supplier-settlements*`、`card-funds-review*`、`procurement-confirmation*`、`unified-task-queue-page.tsx`、mock | 同一次提交 / 本次提交 / 同时生效 |
@@ -258,53 +255,46 @@
 | W12 | 供应商往来 |
 | W14 | 基础资料 / 公司商品 |
 | W18 | 导入与期初 |
-| W21 | 供应商商品库 |
+| W21 | 供应商供给 |
 | W23 | 执行信息 |
 | W26 | 供应商订单 |
 | W29 | 接口错误与对账中心 |
 
-### 3.7 供应商商品入池（W21）
+### 3.7 供应商供给（W21）
 
-> 业务词 **必须保留**：「公司商品池」「关联」「映射」「供给」「候选」「条码」「规格」「起订量」。  
-> 实现词 **禁止上屏**：`pool_status` 枚举原值、API 路径、`revision_no` 字段名、幂等键字面量。
+> 业务词 **必须保留**：「公司 SKU」「供应商」「订货编码」「供给」「商业条款」「可供」「起订量」。
+> 实现词 **禁止上屏**：API 路径、`revision_no`、`availability_version`、幂等键字面量。
 
 | 场景 | 标准文案 |
 | --- | --- |
-| 页头主按钮 | 入池 |
-| Dialog 标题 | 入池 |
-| Dialog 副文案 | 系统给出池内状态与匹配证据；有同款请关联已有公司商品规格，无同款再反向新建。确认后立即生效。 |
-| 分支：关联 | 关联已有 |
-| 分支：反向 | 反向新建 |
-| 提交·关联 | 确认关联入池 |
-| 提交·反向 | 确认反向入池 |
-| 状态·已有映射 | 已映射 |
-| 状态·有候选 | 有候选 |
-| 状态·无候选 | 未入池 |
-| 匹配证据列 | 条码一致 / 名称相近 / 规格相近 / 规格线索 / 单位一致（多条用顿号连接） |
-| 已映射行阻断 | 已映射，无需重复关联 |
-| 反向但有候选提示 | 有候选，建议改用关联 |
-| 反向提交二次确认 | 有 N 个规格存在公司商品候选，仍要反向新建吗？建议改用「关联已有」。 |
-| 缺起订量 | 缺少集采起订量，请先在商品中心补齐 |
-| 来源版本冲突 | 供应商商品来源版本已变化，请刷新后重试 |
+| 页头主按钮 | 添加供给 |
+| Dialog 标题 | 添加供给 |
+| Dialog 副文案 | 供给直接连接公司 SKU 与供应商；在此维护供应商订货编码、商业条款和当前可供情况。 |
+| 条款动作 | 修订条款 |
+| 可供动作 | 更新可供 |
+| 关系状态 | 启用 / 暂停 / 停止 |
+| 可供状态 | 可供 / 不可供 / 停止供应 / 数据已过期 |
+| 缺起订量 | 请填写集采起订量 |
+| 条款版本冲突 | 供给条款已被更新，请刷新后重试 |
+| 可供版本冲突 | 当前可供情况已被更新，请刷新后重试 |
 | 进项税率标签 / 占位 | 进项税率 * / 例如 13（右侧 `%`） |
 | 进项税率说明 | 填写整数百分比，提交时自动转为小数税率 |
-| 关联成功 | 关联入池成功 |
-| 反向成功 | 反向入池成功 / 已加入公司商品池 |
-| 打开公司商品 | 打开公司商品 |
-| 查看供应商商品 | 查看供应商商品 |
+| 添加成功 | 供给已添加 |
+| 条款成功 | 供给条款已保存 |
+| 可供成功 | 当前可供情况已更新 |
+| 查看供给 | 查看供给 |
 
 **用语约定（代码/API → UI）**
 
 | 内部说法 | 用户可见说法 |
 | --- | --- |
-| reverse promote / 反向创建聚合命令 | 反向新建 / 反向入池 |
-| link promote | 关联已有 / 关联入池 |
-| pool-match | 池内状态 / 匹配结果（不展示路径） |
 | company SKU | 公司规格 / 公司 SKU（列表可用「公司规格编号」） |
 | sales_visible_price_gross | 销售可见价 |
 | market_price | 市场价 |
 | dropship/bulk supply price | 代发供给价 / 集采供给价 |
 | bulk minimum order quantity | 集采起订量 / 起订量 |
+| supplier offering revision | 供给条款版本 |
+| supplier offering availability | 当前可供情况 |
 | 公司商品池（sellable-items 查询视图） | 公司商品池（**保留**，业务名；禁止写「sellable-items」） |
 
 ---

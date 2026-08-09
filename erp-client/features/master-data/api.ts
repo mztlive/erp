@@ -2600,7 +2600,7 @@ export async function fetchSkuSupplierCounts(
   const entries = await Promise.all(
     uniqueIds.map(async (skuId) => {
       const offerings = await fetchAllPages<SupplierOfferingSummaryDto>(
-        "/admin/supplier-catalog/offerings",
+        "/admin/supplier-offerings",
         { sku_id: skuId }
       )
       const supplierIds = new Set(

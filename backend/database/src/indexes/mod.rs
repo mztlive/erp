@@ -32,8 +32,8 @@ mod sales_review;
 mod source_registry;
 mod supplier;
 mod supplier_api;
-mod supplier_catalog;
 mod supplier_fulfillment;
+mod supplier_offering;
 mod supplier_settlement;
 mod warehouse;
 mod work_item;
@@ -75,7 +75,7 @@ pub async fn ensure_indexes(db: &mongodb::Database) -> crate::Result<()> {
     source_registry::ensure(db).await?;
     supplier::ensure(db).await?;
     supplier_api::ensure(db).await?;
-    supplier_catalog::ensure(db).await?;
+    supplier_offering::ensure(db).await?;
     supplier_fulfillment::ensure(db).await?;
     supplier_settlement::ensure(db).await?;
     warehouse::ensure(db).await?;

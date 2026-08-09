@@ -15,8 +15,8 @@ use crate::common::state::{ensure_transition, DocumentState};
 use crate::common::time::Instant;
 use crate::errors::{Error, Result};
 use crate::ids::{
-    MallOrderId, MallOrderItemId, SupplierAccountId, SupplierApiConnectionId, SupplierCatalogSkuId,
-    SupplierFulfillmentItemId, SupplierFulfillmentOrderId, SupplierOfferingRevisionId,
+    MallOrderId, MallOrderItemId, SupplierAccountId, SupplierApiConnectionId, SupplierFulfillmentItemId,
+    SupplierFulfillmentOrderId, SupplierOfferingRevisionId,
 };
 use crate::money::{round_to_cent, Amount, Quantity, Rate, UnitPrice};
 use crate::validation::{normalize_optional_text, normalize_required_text};
@@ -29,6 +29,8 @@ const EXTERNAL_ORDER_NO_MAX_LEN: usize = 64;
 const ADDRESS_ENCRYPTED_MAX_LEN: usize = 8192;
 /// 履约地址快照 HMAC 查询指纹最大长度。
 const ADDRESS_FINGERPRINT_MAX_LEN: usize = 128;
+/// 供应商侧商品与 SKU 编码快照最大长度。
+const SUPPLIER_ITEM_CODE_MAX_LEN: usize = 128;
 
 /// 供应商履约主线状态（数据模型 §6.19、§7.6）。
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -554,8 +556,10 @@ pub struct SupplierFulfillmentItemData {
     pub mall_order_item_id: MallOrderItemId,
     /// 下单时固定的供给修订。
     pub supplier_offering_revision_id: SupplierOfferingRevisionId,
-    /// 供应商 SKU。
-    pub supplier_catalog_sku_id: SupplierCatalogSkuId,
+    /// 下单时固定的供应商侧订货 SKU 编码。
+    pub supplier_sku_code_snapshot: String,
+    /// 下单时固定的供应商侧商品编码。
+    pub supplier_product_code_snapshot: Option<String>,
     /// 整条明细数量（SKU 基础单位，最多 6 位小数）。
     pub quantity: Quantity,
     /// 下单含税单位成本快照（最多 4 位小数）。
@@ -580,8 +584,10 @@ pub struct SupplierFulfillmentItem {
     pub mall_order_item_id: MallOrderItemId,
     /// 下单时固定的供给修订。
     pub supplier_offering_revision_id: SupplierOfferingRevisionId,
-    /// 供应商 SKU。
-    pub supplier_catalog_sku_id: SupplierCatalogSkuId,
+    /// 下单时固定的供应商侧订货 SKU 编码。
+    pub supplier_sku_code_snapshot: String,
+    /// 下单时固定的供应商侧商品编码。
+    pub supplier_product_code_snapshot: Option<String>,
     /// 整条明细数量。
     pub quantity: Quantity,
     /// 下单含税单位成本快照。
@@ -614,12 +620,24 @@ impl SupplierFulfillmentItem {
             data.unit_cost_snapshot_gross,
             data.cost_snapshot_total_gross,
         )?;
+        let supplier_sku_code_snapshot = normalize_required_text(
+            data.supplier_sku_code_snapshot,
+            "供应商 SKU 编码快照不能为空",
+            SUPPLIER_ITEM_CODE_MAX_LEN,
+            "供应商 SKU 编码快照过长",
+        )?;
+        let supplier_product_code_snapshot = normalize_optional_text(
+            data.supplier_product_code_snapshot,
+            "供应商商品编码快照",
+            SUPPLIER_ITEM_CODE_MAX_LEN,
+        )?;
         Ok(Self {
             base: BaseModel::new(id.to_string()),
             supplier_fulfillment_order_id: data.supplier_fulfillment_order_id,
             mall_order_item_id: data.mall_order_item_id,
             supplier_offering_revision_id: data.supplier_offering_revision_id,
-            supplier_catalog_sku_id: data.supplier_catalog_sku_id,
+            supplier_sku_code_snapshot,
+            supplier_product_code_snapshot,
             quantity: data.quantity,
             unit_cost_snapshot_gross: data.unit_cost_snapshot_gross,
             cost_snapshot_total_gross: data.cost_snapshot_total_gross,
@@ -722,7 +740,8 @@ mod tests {
             supplier_fulfillment_order_id: SupplierFulfillmentOrderId::new("order-1"),
             mall_order_item_id: MallOrderItemId::new("mall-item-1"),
             supplier_offering_revision_id: SupplierOfferingRevisionId::new("offering-rev-1"),
-            supplier_catalog_sku_id: SupplierCatalogSkuId::new("catalog-sku-1"),
+            supplier_sku_code_snapshot: "SUP-SKU-1".to_string(),
+            supplier_product_code_snapshot: Some("SUP-SPU-1".to_string()),
             quantity: Quantity::from_str("3.000000").unwrap(),
             unit_cost_snapshot_gross: UnitPrice::from_str("9.9900").unwrap(),
             cost_snapshot_total_gross: Amount::from_str("29.97").unwrap(),
@@ -1009,6 +1028,17 @@ mod tests {
         assert_eq!(item.quantity, Quantity::from_str("3.000000").unwrap());
         assert_eq!(item.cost_snapshot_total_gross, Amount::from_str("29.97").unwrap());
         assert_eq!(item.input_tax_rate, Rate::from_str("0.130000").unwrap());
+        assert_eq!(item.supplier_sku_code_snapshot, "SUP-SKU-1");
+        assert_eq!(item.supplier_product_code_snapshot.as_deref(), Some("SUP-SPU-1"));
+    }
+
+    #[test]
+    fn item_new_rejects_blank_supplier_sku_snapshot() {
+        let data = SupplierFulfillmentItemData {
+            supplier_sku_code_snapshot: "   ".to_string(),
+            ..sample_item_data()
+        };
+        assert!(SupplierFulfillmentItem::new(SupplierFulfillmentItemId::new("item-blank"), data).is_err());
     }
 
     #[test]
