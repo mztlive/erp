@@ -182,8 +182,7 @@ export function CustomerDetailPage({
       <PageScaffold>
         <PageHeader title="客户详情" />
         <BusinessFailureState
-          kind="system"
-          description="加载客户失败。"
+          error={query.error}
           action={
             <Button type="button" onClick={() => void query.refetch()}>
               重试

@@ -5,6 +5,7 @@ import { SearchIcon } from "lucide-react"
 import { z } from "zod"
 
 import { toFieldErrors, useAppForm } from "@/components/form"
+import { getErrorMessage } from "@/lib/api/errors"
 import {
   Alert,
   AlertDescription,
@@ -195,7 +196,7 @@ export function AccountFormDialog({
         onOpenChange(false)
       } catch (error) {
         setSubmitError(
-          error instanceof Error ? error.message : "操作失败，请重试。"
+          getErrorMessage(error, "操作失败，请重试。")
         )
       }
     },

@@ -344,9 +344,8 @@ export function CustomerCenterPage() {
 
       {directoryQuery.isError ? (
         <BusinessFailureState
-          kind="system"
           title="客户目录加载失败"
-          description="暂时拿不到客户数据，请重试；不会影响已保存的客户资料。"
+          error={directoryQuery.error}
           onRetry={() => {
             void directoryQuery.refetch()
           }}

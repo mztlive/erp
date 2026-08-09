@@ -33,6 +33,7 @@ import {
   SupplierCombobox,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import {
   Alert,
@@ -849,9 +850,8 @@ export function SupplierAccountsPage() {
     return (
       <PageScaffold>
         <BusinessFailureState
-          kind="system"
           title="供应商往来加载失败"
-          description="请重试。失败时不展示 0 元或先款条件已满足结论。"
+          error={listQuery.error}
           action={
             <Button
               type="button"
@@ -1556,7 +1556,7 @@ export function SupplierAccountsPage() {
         ) : detailQuery.isError ? (
           <div className="space-y-3 p-6">
             <p className="text-sm text-muted-foreground">
-              应付详情加载失败，请重试。
+              {getErrorMessage(detailQuery.error, "应付详情加载失败，请重试。")}
             </p>
             <Button
               type="button"

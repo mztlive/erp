@@ -603,6 +603,17 @@ export async function previewAccessChange(
   }
 }
 
+/** 读取当前角色绑定版本；不存在时返回空，禁止用猜测版本提交撤权。 */
+async function roleAssignmentVersion(
+  subjectId: string,
+  roleAssignmentId: string
+): Promise<number | null> {
+  const list = await apiGet<BackendUserRole[]>("/admin/user-roles", {
+    user_id: subjectId,
+  })
+  return list.find((binding) => binding.id === roleAssignmentId)?.version ?? null
+}
+
 export async function submitAccessChange(
   command: AccessChangeCommand
 ): Promise<AccessChangeOutcome> {
@@ -614,16 +625,16 @@ export async function submitAccessChange(
         message: "紧急撤权需要 USER + roleAssignmentId",
       }
     }
-    // 需要 version：先查 user-roles
-    let version = 1
-    try {
-      const list = await apiGet<BackendUserRole[]>("/admin/user-roles", {
-        user_id: command.subjectId,
-      })
-      const binding = list.find((b) => b.id === command.roleAssignmentId)
-      if (binding) version = binding.version
-    } catch {
-      /* use default */
+    const version = await roleAssignmentVersion(
+      command.subjectId,
+      command.roleAssignmentId
+    )
+    if (version == null) {
+      return {
+        outcome: "REJECTED",
+        code: "ROLE_ASSIGNMENT_NOT_FOUND",
+        message: "当前角色绑定不存在或已被其他操作撤销，请刷新后核对。",
+      }
     }
     await apiPost(
       `/admin/user-roles/${command.roleAssignmentId}/revoke`,
@@ -688,15 +699,16 @@ export async function submitAccessChange(
     "roleAssignmentId" in command &&
     command.roleAssignmentId
   ) {
-    let version = 1
-    try {
-      const list = await apiGet<BackendUserRole[]>("/admin/user-roles", {
-        user_id: command.subjectId,
-      })
-      const binding = list.find((b) => b.id === command.roleAssignmentId)
-      if (binding) version = binding.version
-    } catch {
-      /* default */
+    const version = await roleAssignmentVersion(
+      command.subjectId,
+      command.roleAssignmentId
+    )
+    if (version == null) {
+      return {
+        outcome: "REJECTED",
+        code: "ROLE_ASSIGNMENT_NOT_FOUND",
+        message: "当前角色绑定不存在或已被其他操作撤销，请刷新后核对。",
+      }
     }
     await apiPost(`/admin/user-roles/${command.roleAssignmentId}/revoke`, {
       version,
@@ -755,14 +767,10 @@ export async function submitAccessChange(
     // 权限目录变更：尝试更新 permission 停用/名称（有限）
     for (const change of command.changeSet) {
       if (change.operation === "REPLACE" && change.targetReference) {
-        try {
-          await apiPut(`/admin/permissions/${change.targetReference}`, {
-            version: 1,
-            disabled: change.valueReference === "disabled",
-          })
-        } catch {
-          /* version may conflict — surface as conflict below */
-        }
+        await apiPut(`/admin/permissions/${change.targetReference}`, {
+          version: 1,
+          disabled: change.valueReference === "disabled",
+        })
       }
     }
     const effectiveAt = instantToIso(Math.floor(Date.now() / 1000)) ?? ""

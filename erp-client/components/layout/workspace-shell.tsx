@@ -34,6 +34,7 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar"
 import { isNavItemActive } from "@/lib/nav-active"
+import { getErrorMessage } from "@/lib/api/errors"
 import { hasAnyPermission, hasPermission } from "@/lib/permissions"
 import {
   filterNavGroupsByPermissions,
@@ -122,7 +123,10 @@ function AppSidebarNav() {
         <SidebarGroupLabel className="sr-only">导航</SidebarGroupLabel>
         <SidebarGroupContent>
           <p className="px-2 py-3 text-xs text-muted-foreground">
-            无法加载权限，菜单暂不可用
+            {getErrorMessage(
+              profileQuery.error,
+              "无法加载权限，菜单暂不可用。"
+            )}
           </p>
         </SidebarGroupContent>
       </SidebarGroup>

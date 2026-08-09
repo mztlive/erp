@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:api-errors": "node --test --experimental-strip-types scripts/api-errors.test.mts"
   },
   "dependencies": {
     "@base-ui/react": "^1.6.0",

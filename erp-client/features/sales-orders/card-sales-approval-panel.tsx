@@ -35,6 +35,7 @@ import type {
   SalesOrderListItem,
 } from "@/features/sales-orders/types"
 import { leaseText } from "@/lib/ui-text"
+import { getErrorPresentation } from "@/lib/api/errors"
 
 const WORK_ITEM_STATUS_LABEL: Record<
   CardSalesApproval["workItemStatus"],
@@ -288,11 +289,15 @@ export function CardSalesApprovalPanel({
                 description: outcome.detail,
                 reference: outcome.reference,
               })
-            } catch {
+            } catch (error) {
+              const failure = getErrorPresentation(
+                error,
+                "审批未完成，请核对当前状态后再决定是否重试。"
+              )
               setResult({
                 status: "blocked",
-                title: leaseText.lostRefresh,
-                description: "请重新领取后再审批，不要重复提交。",
+                title: failure.title,
+                description: failure.description,
                 reference: order.documentNumber,
               })
             }
@@ -336,11 +341,15 @@ export function CardSalesApprovalPanel({
                 }`,
                 reference: outcome.reference,
               })
-            } catch {
+            } catch (error) {
+              const failure = getErrorPresentation(
+                error,
+                "驳回未完成，请核对当前状态后再决定是否重试。"
+              )
               setResult({
                 status: "blocked",
-                title: leaseText.lostRefresh,
-                description: "结果未确认，请勿重复提交；可刷新后重新领取再试。",
+                title: failure.title,
+                description: failure.description,
                 reference: order.documentNumber,
               })
             }

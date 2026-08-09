@@ -12,6 +12,7 @@ import {
   surfacePanelClassName,
 } from "@/components/business"
 import { toFieldErrors, useAppForm } from "@/components/form"
+import { getErrorMessage } from "@/lib/api/errors"
 import {
   Alert,
   AlertDescription,
@@ -98,7 +99,7 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
         router.push(ROLES_LIST_HREF)
       } catch (error) {
         setSubmitError(
-          error instanceof Error ? error.message : "操作失败，请重试。"
+          getErrorMessage(error, "操作失败，请重试。")
         )
       }
     },
@@ -132,9 +133,8 @@ export function RoleFormPage({ roleId }: { roleId: string | null }) {
           ]}
         />
         <BusinessFailureState
-          kind="system"
+          error={rolesQuery.error}
           title="角色信息加载失败"
-          description="请重试。"
           action={
             <Button
               type="button"

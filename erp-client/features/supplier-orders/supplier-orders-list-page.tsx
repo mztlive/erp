@@ -77,6 +77,7 @@ import {
   parseSupplierOrdersSearchParams,
 } from "@/features/supplier-orders/url-state"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 
 const SORT_COLUMN_TO_FIELD: Record<
   string,
@@ -817,7 +818,10 @@ export function SupplierOrdersListPage() {
           <div className="flex flex-wrap gap-2">
             {exportMutation.isError ? (
               <p className="w-full text-sm text-destructive" aria-live="polite">
-                导出任务创建失败，可按原筛选快照重试。
+                {getErrorMessage(
+                  exportMutation.error,
+                  "导出任务创建失败，可按原筛选快照重试。",
+                )}
               </p>
             ) : null}
             <Button
@@ -1031,9 +1035,8 @@ export function SupplierOrdersListPage() {
             errorState={
               listQuery.isError ? (
                 <BusinessFailureState
-                  kind="system"
                   title="供应商订单列表加载失败"
-                  description="无法取得列表数据，请重试。"
+                  error={listQuery.error}
                   action={
                     <Button
                       type="button"

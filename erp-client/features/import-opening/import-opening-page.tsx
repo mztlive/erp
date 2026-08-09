@@ -16,6 +16,7 @@ import {
   BackgroundJobProgress,
   BatchOperationResult,
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
@@ -559,10 +560,9 @@ function BatchListView({
         }
         table={
           listQuery.isError ? (
-            <BusinessEmptyState
-              kind="no-data"
+            <BusinessFailureState
               title="批次列表加载失败"
-              description="请重试。不会自行补造批次。"
+              error={listQuery.error}
               className="rounded-lg border-0 bg-transparent shadow-none ring-0"
               action={
                 <Button
@@ -634,12 +634,24 @@ function BatchDetailView({
     )
   }
 
-  if (detailQuery.isError || !batch) {
+  if (detailQuery.isError) {
+    return (
+      <PageScaffold>
+        <BusinessFailureState
+          title="批次加载失败"
+          error={detailQuery.error}
+          onRetry={() => void detailQuery.refetch()}
+        />
+      </PageScaffold>
+    )
+  }
+
+  if (!batch) {
     return (
       <PageScaffold>
         <BusinessEmptyState
           kind="no-data"
-          title="批次不存在或无权查看"
+          title="批次不存在"
           description="请返回列表或检查批次身份。"
           className="rounded-lg border-0 bg-transparent shadow-none ring-0"
           action={

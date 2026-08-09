@@ -11,6 +11,7 @@ import {
 
 import {
   BusinessEmptyState,
+  BusinessFailureState,
   DataFreshness,
   FormalActionConfirmDialog,
   FormalActionResult,
@@ -443,12 +444,27 @@ export function AllocationSession({
     )
   }
 
-  if (sessionQuery.isError || !session) {
+  if (sessionQuery.isError) {
+    return (
+      <BusinessFailureState
+        title="无法开始本次核销"
+        error={sessionQuery.error}
+        onRetry={() => void sessionQuery.refetch()}
+        action={
+          <Button type="button" variant="outline" onClick={onClose}>
+            返回列表
+          </Button>
+        }
+      />
+    )
+  }
+
+  if (!session) {
     return (
       <BusinessEmptyState
         kind="no-data"
-        title="无法开始本次核销"
-        description="供应商核销池加载失败，请返回列表重试。"
+        title="没有可核销内容"
+        description="请返回列表重新选择供应商往来。"
         action={
           <Button type="button" variant="outline" onClick={onClose}>
             返回列表

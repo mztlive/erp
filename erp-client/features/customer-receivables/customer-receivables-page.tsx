@@ -34,6 +34,7 @@ import {
   SettlementPartyCombobox,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { type ResultState } from "@/components/business/feedback"
 import {
@@ -330,7 +331,7 @@ export function CustomerReceivablesPage() {
         patchUrl({ sessionId: session.draftSessionId }, { replace: true })
       } catch (err) {
         setActionError(
-          err instanceof Error ? err.message : "无法开始本次核销"
+          getErrorMessage(err, "无法开始本次核销")
         )
       }
     })()
@@ -390,7 +391,7 @@ export function CustomerReceivablesPage() {
         counterpartyId: partyId,
       })
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "创建本次核销失败")
+      setActionError(getErrorMessage(err, "创建本次核销失败"))
     }
   }
 
@@ -850,9 +851,8 @@ export function CustomerReceivablesPage() {
     return (
       <PageScaffold>
         <BusinessFailureState
-          kind="system"
           title="客户往来加载失败"
-          description="请重试；失败时不展示任何结清或金额结论。"
+          error={listQuery.error}
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重试
@@ -1648,7 +1648,7 @@ export function CustomerReceivablesPage() {
         ) : detailQuery.isError ? (
           <div className="space-y-3 p-6">
             <p className="text-sm text-muted-foreground">
-              详情加载失败，请重试。
+              {getErrorMessage(detailQuery.error, "详情加载失败，请重试。")}
             </p>
             <Button
               type="button"

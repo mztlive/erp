@@ -44,6 +44,7 @@ import {
   surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { FilterChip } from "@/components/business/filter-chip"
 import {
@@ -293,7 +294,7 @@ export function CustomerQualityPage() {
   const [exportJob, setExportJob] = React.useState<CustomerQualityExportJob | null>(
     null
   )
-  const [refreshError, setRefreshError] = React.useState(false)
+  const [refreshError, setRefreshError] = React.useState<string | null>(null)
   const [periodWriteDone, setPeriodWriteDone] = React.useState(false)
   const rowFocusRef = React.useRef<string | null>(focusCustomerId ?? null)
 
@@ -461,12 +462,12 @@ export function CustomerQualityPage() {
   const refreshMutation = useRefreshCustomerQualityMutation()
 
   async function handleRefresh() {
-    setRefreshError(false)
+    setRefreshError(null)
     try {
       await refreshMutation.mutateAsync()
       await viewQuery.refetch()
-    } catch {
-      setRefreshError(true)
+    } catch (error) {
+      setRefreshError(getErrorMessage(error, "本次刷新未成功，已保留上次成功结果。"))
     }
   }
 
@@ -943,9 +944,8 @@ export function CustomerQualityPage() {
     return (
       <PageScaffold>
         <BusinessFailureState
-          kind="system"
           title="期间配置加载失败"
-          description="无法取得系统默认期间策略。请重试；不会静默采用自然年。"
+          error={periodPolicyQuery.error}
           action={
             <Button
               type="button"
@@ -1050,9 +1050,8 @@ export function CustomerQualityPage() {
     return (
       <PageScaffold>
         <BusinessFailureState
-          kind="projection"
           title="经营质量数据加载失败"
-          description="暂无可用结果。请重试或返回其它模块。"
+          error={viewQuery.error}
           action={
             <Button type="button" onClick={() => void viewQuery.refetch()}>
               重试
@@ -1185,7 +1184,7 @@ export function CustomerQualityPage() {
         <Alert variant="destructive">
           <AlertTitle>刷新失败</AlertTitle>
           <AlertDescription>
-            本次刷新未成功，已保留上次成功结果。请重试；业务记录未被修改。
+            {refreshError}
           </AlertDescription>
         </Alert>
       ) : null}
@@ -1225,15 +1224,6 @@ export function CustomerQualityPage() {
           </AlertDescription>
         </Alert>
       ) : null}
-      {viewQuery.isError ? (
-        <Alert variant="destructive">
-          <AlertTitle>数据更新失败</AlertTitle>
-          <AlertDescription>
-            已保留上次成功结果，未覆盖业务数据。请重试或调整筛选。
-          </AlertDescription>
-        </Alert>
-      ) : null}
-
       {/* Filters */}
       <Card size="sm" className={surfacePanelClassName}>
         <CardContent className="flex flex-col gap-3 pt-4">

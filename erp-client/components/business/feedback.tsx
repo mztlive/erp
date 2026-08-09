@@ -70,6 +70,7 @@ import {
   versionText,
   workspaceLabel,
 } from "@/lib/ui-text"
+import { getErrorPresentation } from "@/lib/api/errors"
 import { cn } from "@/lib/utils"
 
 type GuardedBusinessActionProps = Omit<
@@ -328,7 +329,9 @@ const failureStatePresets: Record<BusinessFailureKind, FailureStatePreset> = {
 }
 
 type BusinessFailureStateProps = {
-  kind: BusinessFailureKind
+  kind?: BusinessFailureKind
+  /** 原始请求异常；提供时统一覆盖错误分类和说明。 */
+  error?: unknown
   title?: React.ReactNode
   description?: React.ReactNode
   errorCode?: string
@@ -343,6 +346,7 @@ type BusinessFailureStateProps = {
 
 function BusinessFailureState({
   kind,
+  error,
   title,
   description,
   errorCode,
@@ -353,8 +357,12 @@ function BusinessFailureState({
   retryLabel = "重试",
   className,
 }: BusinessFailureStateProps) {
-  const preset = failureStatePresets[kind]
+  const presentation =
+    error === undefined ? undefined : getErrorPresentation(error)
+  const resolvedKind = presentation?.kind ?? kind ?? "system"
+  const preset = failureStatePresets[resolvedKind]
   const Icon = preset.icon
+  const resolvedErrorCode = errorCode ?? presentation?.code
 
   const resolvedAction =
     action ??
@@ -367,24 +375,30 @@ function BusinessFailureState({
   return (
     <Alert
       data-slot="business-failure-state"
-      data-kind={kind}
+      data-kind={resolvedKind}
       variant={preset.variant}
       className={className}
     >
       <Icon aria-hidden="true" />
       <AlertTitle className="flex flex-wrap items-center gap-2">
-        <span>{title ?? preset.title}</span>
+        <span>{title ?? presentation?.title ?? preset.title}</span>
         <StatusBadge tone={preset.tone} label={preset.label} />
       </AlertTitle>
       <AlertDescription>
         <div className="flex flex-col gap-3">
-          <p>{description ?? preset.description}</p>
-          {errorCode || nextResponsible ? (
+          <p>{presentation?.description ?? description ?? preset.description}</p>
+          {resolvedErrorCode || presentation?.requestId || nextResponsible ? (
             <dl className="grid gap-1 text-xs">
-              {errorCode ? (
+              {resolvedErrorCode ? (
                 <div className="flex flex-wrap gap-1">
                   <dt className="font-medium">错误编号：</dt>
-                  <dd className="num font-mono">{errorCode}</dd>
+                  <dd className="num font-mono">{resolvedErrorCode}</dd>
+                </div>
+              ) : null}
+              {presentation?.requestId ? (
+                <div className="flex flex-wrap gap-1">
+                  <dt className="font-medium">请求编号：</dt>
+                  <dd className="num font-mono">{presentation.requestId}</dd>
                 </div>
               ) : null}
               {nextResponsible ? (

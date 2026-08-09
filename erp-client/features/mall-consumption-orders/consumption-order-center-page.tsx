@@ -364,9 +364,8 @@ export function ConsumptionOrderCenterPage({
     return (
       <PageScaffold>
         <BusinessFailureState
-          kind="system"
           title="加载失败"
-          description="无法读取消费订单详情。"
+          error={detailQuery.error}
           action={
             <div className="flex flex-wrap gap-2">
               <Button

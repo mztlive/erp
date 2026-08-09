@@ -183,6 +183,7 @@ impl IntoResponse for Error {
         let body = ApiResponse::<()> {
             status: http_status.as_u16(),
             message,
+            code: Some(self.error_code().to_string()),
             data: None,
             success: false,
         };
@@ -196,6 +197,23 @@ impl IntoResponse for Error {
             }
         }
         response
+    }
+}
+
+impl Error {
+    /// 返回稳定的外部错误码；不得依赖可变的用户提示文案判断错误类型。
+    fn error_code(&self) -> &'static str {
+        match self {
+            Error::Internal(_) | Error::Repository(_) => "INTERNAL_ERROR",
+            Error::BadRequest(_) | Error::Validation(_) => "INVALID_REQUEST",
+            Error::NotFound(_) => "NOT_FOUND",
+            Error::Conflict(_) => "CONFLICT",
+            Error::Unprocessable(_) | Error::Logic(_) => "BUSINESS_RULE_BLOCKED",
+            Error::Forbidden(_) => "PERMISSION_DENIED",
+            Error::Unauthorized(_) => "UNAUTHENTICATED",
+            Error::OutcomeUnknown(_) => "OUTCOME_UNKNOWN",
+            Error::RateLimited(_) => "RATE_LIMITED",
+        }
     }
 }
 
@@ -252,30 +270,54 @@ mod tests {
     #[test]
     fn maps_http_status_code_correctly() {
         let cases = [
-            (Error::BadRequest("x".into()), StatusCode::BAD_REQUEST),
-            (Error::NotFound("x".into()), StatusCode::NOT_FOUND),
-            (Error::Conflict("x".into()), StatusCode::CONFLICT),
-            (Error::Unprocessable("x".into()), StatusCode::UNPROCESSABLE_ENTITY),
-            (Error::Forbidden("x".into()), StatusCode::FORBIDDEN),
-            (Error::Unauthorized("x".into()), StatusCode::UNAUTHORIZED),
+            (
+                Error::BadRequest("x".into()),
+                StatusCode::BAD_REQUEST,
+                "INVALID_REQUEST",
+            ),
+            (Error::NotFound("x".into()), StatusCode::NOT_FOUND, "NOT_FOUND"),
+            (Error::Conflict("x".into()), StatusCode::CONFLICT, "CONFLICT"),
+            (
+                Error::Unprocessable("x".into()),
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "BUSINESS_RULE_BLOCKED",
+            ),
+            (
+                Error::Forbidden("x".into()),
+                StatusCode::FORBIDDEN,
+                "PERMISSION_DENIED",
+            ),
+            (
+                Error::Unauthorized("x".into()),
+                StatusCode::UNAUTHORIZED,
+                "UNAUTHENTICATED",
+            ),
             (
                 Error::RateLimited(crate::core::rate_limit::Error::ConcurrencyExceeded),
                 StatusCode::TOO_MANY_REQUESTS,
+                "RATE_LIMITED",
             ),
             (
                 Error::Logic(entities::Error::from("x")),
                 StatusCode::UNPROCESSABLE_ENTITY,
+                "BUSINESS_RULE_BLOCKED",
             ),
-            (Error::Internal("x".into()), StatusCode::INTERNAL_SERVER_ERROR),
+            (
+                Error::Internal("x".into()),
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "INTERNAL_ERROR",
+            ),
             (
                 Error::OutcomeUnknown(database::Error::CommitOutcomeUnknown(
                     mongodb::error::Error::custom("unknown"),
                 )),
                 StatusCode::INTERNAL_SERVER_ERROR,
+                "OUTCOME_UNKNOWN",
             ),
         ];
 
-        for (err, expected_status) in cases {
+        for (err, expected_status, expected_code) in cases {
+            assert_eq!(err.error_code(), expected_code);
             let response = err.into_response();
             assert_eq!(response.status(), expected_status);
         }

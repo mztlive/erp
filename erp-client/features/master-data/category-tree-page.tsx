@@ -54,10 +54,7 @@ import {
   downloadCsv,
   useMasterDataListQuery,
 } from "@/features/master-data/queries"
-import {
-  MASTER_DATA_RESOURCES,
-  type MasterDataListItem,
-} from "@/features/master-data/types"
+import type { MasterDataListItem } from "@/features/master-data/types"
 
 
 function TreeRow({
@@ -163,11 +160,7 @@ function TreeRow({
   )
 }
 
-export function CategoryTreePage({
-  navRef,
-}: {
-  navRef: React.RefObject<HTMLElement | null>
-}) {
+export function CategoryTreePage() {
   const [search, setSearch] = React.useState("")
   const [lifecycleStatus, setLifecycleStatus] = React.useState<
     "enabled" | "disabled" | "all"
@@ -293,8 +286,7 @@ export function CategoryTreePage({
       <PageScaffold density="compact">
         <PageHeader title={masterDataCopy.pageTitle("商品分类")} />
         <BusinessFailureState
-          kind="system"
-          description={masterDataCopy.centerLoadFail}
+          error={listQuery.error}
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重试

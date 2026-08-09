@@ -617,15 +617,10 @@ export async function claimIntegrationTask(input: {
   subjectVersion?: string
 }): Promise<ClaimResult> {
   const version = Number(input.subjectVersion) || 1
-  // Prefer integration-specific hold/transfer ownership; claim via work-items
-  try {
-    await apiPost(
-      `/admin/work-items/${encodeURIComponent(input.workItemId)}/claim`,
-      { version }
-    )
-  } catch {
-    // task id may be error-task id not work-item id — ignore if 404
-  }
+  await apiPost(
+    `/admin/work-items/${encodeURIComponent(input.workItemId)}/claim`,
+    { version }
+  )
   return { workItemId: input.workItemId }
 }
 

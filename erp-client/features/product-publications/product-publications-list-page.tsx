@@ -13,6 +13,7 @@ import {
 
 import {
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
@@ -657,10 +658,9 @@ export function ProductPublicationsListPage() {
           listQuery.isPending ? (
             <div className="h-64 animate-pulse rounded-lg bg-muted" aria-busy />
           ) : listQuery.isError ? (
-            <BusinessEmptyState
-              kind="no-data"
+            <BusinessFailureState
               title="加载失败"
-              description="无法读取商品发布列表。"
+              error={listQuery.error}
               className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
               action={
                 <Button

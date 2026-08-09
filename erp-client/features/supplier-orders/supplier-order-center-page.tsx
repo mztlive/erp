@@ -72,6 +72,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { clearAddressReveal } from "@/features/supplier-orders/api"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { cn } from "@/lib/utils"
 import {
   useAddNoteMutation,
@@ -348,8 +349,7 @@ export function SupplierOrderCenterPage({
       setResult({
         status: "rejected",
         title: "查询未完成",
-        description:
-          error instanceof Error ? error.message : "查询失败，请稍后重试",
+        description: getErrorMessage(error, "查询失败，请稍后重试"),
       })
     }
   }
@@ -403,8 +403,7 @@ export function SupplierOrderCenterPage({
       setResult({
         status: "rejected",
         title: "重发未完成",
-        description:
-          error instanceof Error ? error.message : "重发失败，请稍后重试",
+        description: getErrorMessage(error, "重发失败，请稍后重试"),
       })
     }
   }
@@ -457,8 +456,7 @@ export function SupplierOrderCenterPage({
       setResult({
         status: "rejected",
         title: "售后动作未提交",
-        description:
-          error instanceof Error ? error.message : "提交失败，请稍后重试",
+        description: getErrorMessage(error, "提交失败，请稍后重试"),
       })
     }
   }
@@ -479,8 +477,7 @@ export function SupplierOrderCenterPage({
       setResult({
         status: "rejected",
         title: "地址揭示失败",
-        description:
-          error instanceof Error ? error.message : "操作失败，请稍后重试",
+        description: getErrorMessage(error, "操作失败，请稍后重试"),
       })
     }
   }
@@ -499,9 +496,8 @@ export function SupplierOrderCenterPage({
     return (
       <PageScaffold>
         <BusinessFailureState
-          kind="system"
           title="供应商订单加载失败"
-          description="系统暂时无法取得订单数据，请重试。"
+          error={query.error}
           action={
             <Button type="button" onClick={() => void query.refetch()}>
               重试

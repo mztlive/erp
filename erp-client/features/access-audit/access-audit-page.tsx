@@ -38,6 +38,7 @@ import {
   surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { type ResultState } from "@/components/business/feedback"
 import { useAppForm } from "@/components/form"
@@ -643,7 +644,7 @@ export function AccessAuditPage() {
         form.reset()
         setChangeOpen(true)
       } catch (err) {
-        setActionError(err instanceof Error ? err.message : "影响预览失败")
+        setActionError(getErrorMessage(err, "影响预览失败"))
       }
     },
     [previewMutation, form]
@@ -745,7 +746,7 @@ export function AccessAuditPage() {
       setPendingCommand(null)
       setImpact(null)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "提交失败")
+      setActionError(getErrorMessage(err, "提交失败"))
     }
   }, [
     pendingCommand,
@@ -1399,8 +1400,7 @@ export function AccessAuditPage() {
       <PageScaffold density="compact">
         <PageHeader title="权限与审计" />
         <BusinessFailureState
-          kind="system"
-          description="加载权限/审计数据失败。"
+          error={pageQuery.error}
           action={
             <Button
               type="button"
@@ -2075,8 +2075,7 @@ export function AccessAuditPage() {
           <div className="h-40 animate-pulse rounded-lg bg-muted" />
         ) : effectiveQuery.isError ? (
           <BusinessFailureState
-            kind="system"
-            description="加载有效权限失败。"
+            error={effectiveQuery.error}
             action={
               <Button
                 type="button"

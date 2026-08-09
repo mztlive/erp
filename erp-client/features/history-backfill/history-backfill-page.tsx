@@ -18,6 +18,7 @@ import {
 import {
   BackgroundJobProgress,
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
   CostCoverageNotice,
@@ -818,10 +819,9 @@ function JobListView({
         }
         table={
           listQuery.isError ? (
-            <BusinessEmptyState
-              kind="no-data"
+            <BusinessFailureState
               title="任务列表加载失败"
-              description="请重试。不会自行补造任务。"
+              error={listQuery.error}
               className="rounded-lg border-0 bg-transparent shadow-none ring-0"
               action={
                 <Button
@@ -1091,7 +1091,19 @@ function JobDetailView({
     )
   }
 
-  if (detailQuery.isError || !job) {
+  if (detailQuery.isError) {
+    return (
+      <PageScaffold>
+        <BusinessFailureState
+          title="任务加载失败"
+          error={detailQuery.error}
+          onRetry={() => void detailQuery.refetch()}
+        />
+      </PageScaffold>
+    )
+  }
+
+  if (!job) {
     return (
       <PageScaffold>
         <BusinessEmptyState

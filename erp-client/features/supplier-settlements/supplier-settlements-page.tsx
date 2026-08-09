@@ -45,6 +45,7 @@ import {
   surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { cn } from "@/lib/utils"
 import { useAppForm } from "@/components/form"
 import {
@@ -554,9 +555,8 @@ function SettlementList({
       <PageScaffold>
         <PageHeader title="API 供应商结算" description="加载失败" />
         <BusinessFailureState
-          kind="system"
           title="结算列表加载失败"
-          description="请重试。"
+          error={listQuery.error}
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重试
@@ -1222,9 +1222,8 @@ function SettlementCenter({
           返回列表
         </Button>
         <BusinessFailureState
-          kind="system"
           title="结算单加载失败"
-          description="系统暂时无法取得单据数据，请重试或返回列表。"
+          error={detailQuery.error}
           action={
             <Button type="button" onClick={() => void detailQuery.refetch()}>
               重试
@@ -1278,8 +1277,7 @@ function SettlementCenter({
       setResult({
         status: "rejected",
         title: "刷新试算未完成",
-        description:
-          error instanceof Error ? error.message : "刷新失败，请稍后重试",
+        description: getErrorMessage(error, "刷新失败，请稍后重试"),
       })
     }
   }
@@ -1303,8 +1301,7 @@ function SettlementCenter({
       setResult({
         status: "rejected",
         title: "结论登记未完成",
-        description:
-          error instanceof Error ? error.message : "提交失败，请稍后重试",
+        description: getErrorMessage(error, "提交失败，请稍后重试"),
       })
     }
   }
@@ -1330,8 +1327,7 @@ function SettlementCenter({
       setResult({
         status: "rejected",
         title: "证据保存未完成",
-        description:
-          error instanceof Error ? error.message : "保存失败，请稍后重试",
+        description: getErrorMessage(error, "保存失败，请稍后重试"),
       })
     }
   }
@@ -1937,10 +1933,10 @@ function SettlementCenter({
                         setResult({
                           status: "rejected",
                           title: "领取任务未完成",
-                          description:
-                            error instanceof Error
-                              ? error.message
-                              : "领取失败，请稍后重试",
+                          description: getErrorMessage(
+                            error,
+                            "领取失败，请稍后重试",
+                          ),
                         })
                       }
                     }}

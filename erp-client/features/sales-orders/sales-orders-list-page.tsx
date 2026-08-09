@@ -783,9 +783,8 @@ export function SalesOrdersListPage() {
         table={
           ordersQuery.isError ? (
             <BusinessFailureState
-              kind="system"
               title="销售单列表加载失败"
-              description="暂时拿不到销售单数据，请重试；失败不影响已保存的单据。"
+              error={ordersQuery.error}
               onRetry={() => {
                 void ordersQuery.refetch()
               }}

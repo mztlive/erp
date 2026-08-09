@@ -20,6 +20,7 @@ import {
   type EditableLineItemColumn,
 } from "@/components/business"
 import { cn } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/api/errors"
 import { toFieldErrors, useAppForm } from "@/components/form"
 import { useSelector } from "@tanstack/react-form"
 import type { StandardSchemaV1Issue } from "@tanstack/react-form"
@@ -398,7 +399,7 @@ function calculateTotals(
 }
 
 function errorMessage(error: unknown): string {
-  if (!(error instanceof Error)) return "创建失败，请重试。"
+  const message = getErrorMessage(error, "创建失败，请重试。")
   const messages: Record<string, string> = {
     CONTRACT_NOT_SELECTABLE: "所选合同已不可用于新建销售单，请刷新后重选。",
     CONTRACT_REVISION_NOT_FOUND: "所选合同修订不存在，请刷新合同后重试。",
@@ -407,7 +408,7 @@ function errorMessage(error: unknown): string {
     LINE_ITEM_INVALID: "销售明细不完整，请检查项目、数量、单位和价格。",
     VOUCHER_REQUIRES_EXACTLY_ONE_LINE: "卡券销售单必须恰好一条明细。",
   }
-  return messages[error.message] ?? error.message
+  return messages[message] ?? message
 }
 
 export function SalesOrderCreatePage({
@@ -525,13 +526,16 @@ export function SalesOrderCreatePage({
       (voucherCategoriesQuery.data?.rows.length ?? 0) === 0 &&
       sellableQuery.isPending)
   const productPickerEmptyLabel = sellableQuery.isError
-    ? "商品列表加载失败，请刷新重试"
+    ? getErrorMessage(sellableQuery.error, "商品列表加载失败，请刷新重试")
     : productComboboxItems.length === 0
       ? "暂无可用的实物/服务 SKU（已排除卡券）"
       : "没有符合条件的商品"
   const voucherPickerEmptyLabel = voucherCategoriesQuery.isError &&
     sellableQuery.isError
-    ? "卡券类目加载失败，请刷新重试"
+    ? getErrorMessage(
+        voucherCategoriesQuery.error,
+        getErrorMessage(sellableQuery.error, "卡券类目加载失败，请刷新重试"),
+      )
     : voucherCategoryComboboxItems.length === 0
       ? "暂无可用的卡券类目"
       : "没有符合条件的卡券类目"
@@ -768,7 +772,20 @@ export function SalesOrderCreatePage({
           <CircleAlertIcon aria-hidden="true" />
           <AlertTitle>有效合同加载失败</AlertTitle>
           <AlertDescription>
-            暂时不能选择合同。可点击加号上传新合同，或刷新页面后重试。
+            {getErrorMessage(
+              contractsQuery.error,
+              "暂时不能选择合同。可点击加号上传新合同，或刷新页面后重试。",
+            )}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
+      {profileQuery.isError ? (
+        <Alert variant="destructive">
+          <CircleAlertIcon aria-hidden="true" />
+          <AlertTitle>当前用户信息加载失败</AlertTitle>
+          <AlertDescription>
+            {getErrorMessage(profileQuery.error, "无法获取当前登录用户，请刷新后重试。")}
           </AlertDescription>
         </Alert>
       ) : null}

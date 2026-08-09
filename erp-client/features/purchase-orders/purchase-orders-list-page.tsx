@@ -649,9 +649,8 @@ export function PurchaseOrdersListPage() {
           }
         />
         <BusinessFailureState
-          kind="system"
           title="列表加载失败"
-          description="未能加载采购单列表，请重试；若持续失败可稍后再来。"
+          error={listQuery.error}
           onRetry={() => void listQuery.refetch()}
         />
       </PageScaffold>

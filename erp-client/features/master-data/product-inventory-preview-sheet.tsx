@@ -130,9 +130,8 @@ export function ProductInventoryPreviewSheet({
     if (inventoryQuery.isError || !data) {
       return (
         <BusinessFailureState
-          kind="system"
           title="商品库存暂时无法读取"
-          description="商品编辑内容仍然保留，可重试库存查询。"
+          error={inventoryQuery.error}
           onRetry={() => void inventoryQuery.refetch()}
           className="m-5"
         />

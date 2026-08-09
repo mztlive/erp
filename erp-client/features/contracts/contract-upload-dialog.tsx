@@ -45,6 +45,7 @@ import {
 import { useAccountProfileQuery } from "@/features/auth/queries"
 import { usePartyOptionsQuery } from "@/hooks/use-options"
 import { hasPermission } from "@/lib/permissions"
+import { getErrorMessage } from "@/lib/api/errors"
 
 const uploadSchema = z
   .object({
@@ -74,14 +75,14 @@ const uploadSchema = z
   })
 
 function uploadErrorMessage(error: unknown): string {
-  if (!(error instanceof Error)) return "上传失败，请使用原任务号重试。"
-  if (error.message === "CONTRACT_NO_EXISTS") {
+  const message = getErrorMessage(error, "上传失败，请使用原任务号重试。")
+  if (message === "CONTRACT_NO_EXISTS") {
     return "该合同编号已存在，请打开已有合同核对；重复编号不能新建合同。"
   }
-  if (error.message === "CONTRACT_VALIDITY_INVALID") {
+  if (message === "CONTRACT_VALIDITY_INVALID") {
     return "有效期止不能早于有效期起。"
   }
-  return error.message
+  return message
 }
 
 export type ContractUploadDialogProps = {

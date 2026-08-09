@@ -68,6 +68,7 @@ import {
   ORIGIN_LABEL,
 } from "@/features/sales-orders/labels"
 import { sumFixed } from "@/lib/fixed-decimal"
+import { getErrorPresentation } from "@/lib/api/errors"
 import { cn } from "@/lib/utils"
 
 type SectionId =
@@ -245,9 +246,8 @@ export function SalesOrderDetailPage({
       <PageScaffold>
         <PageHeader title="销售单" />
         <BusinessFailureState
-          kind="system"
           title="销售单加载失败"
-          description="暂时拿不到这张销售单的数据，请重试；单据本身不受影响。"
+          error={query.error}
           onRetry={() => {
             void query.refetch()
           }}
@@ -963,11 +963,15 @@ export function SalesOrderDetailPage({
               description: `已进入「${change.statusLabel}」。当前版本对客户仍然有效。`,
               reference: change.id,
             })
-          } catch {
+          } catch (error) {
+            const failure = getErrorPresentation(
+              error,
+              "改单未创建，请刷新后重试。"
+            )
             setResult({
               status: "blocked",
-              title: "无法创建改单",
-              description: changeBlocker?.reason ?? "请刷新后重试。",
+              title: failure.title,
+              description: failure.description,
               reference: order.documentNumber,
             })
           }

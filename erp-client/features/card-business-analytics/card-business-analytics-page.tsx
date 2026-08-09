@@ -49,6 +49,7 @@ import {
   surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { useCustomerDirectoryQuery } from "@/features/customers/queries"
 import { useAccountProfileQuery } from "@/features/auth/queries"
@@ -370,7 +371,7 @@ export function CardBusinessAnalyticsPage() {
   )
   const [exportPreviewOpen, setExportPreviewOpen] = React.useState(false)
   const [basisSheetOpen, setBasisSheetOpen] = React.useState(false)
-  const [refreshFailed, setRefreshFailed] = React.useState(false)
+  const [refreshFailed, setRefreshFailed] = React.useState<string | null>(null)
   const [refreshing, setRefreshing] = React.useState(false)
 
   const customerDirectoryQuery = useCustomerDirectoryQuery({
@@ -562,11 +563,11 @@ export function CardBusinessAnalyticsPage() {
 
   async function handleRefresh() {
     setRefreshing(true)
-    setRefreshFailed(false)
+    setRefreshFailed(null)
     try {
       await viewQuery.refetch()
-    } catch {
-      setRefreshFailed(true)
+    } catch (error) {
+      setRefreshFailed(getErrorMessage(error, "刷新失败，已保留上次成功数据。"))
     } finally {
       setRefreshing(false)
     }
@@ -853,9 +854,8 @@ export function CardBusinessAnalyticsPage() {
     return (
       <PageScaffold>
         <BusinessFailureState
-          kind="system"
+          error={basisQuery.error}
           title="日期口径配置加载失败"
-          description="无法取得系统默认日期口径。请重试；不会自动采用本月或消费发生日。"
           action={
             <Button
               type="button"
@@ -958,7 +958,7 @@ export function CardBusinessAnalyticsPage() {
 
   const freshnessUi = data
     ? mapFreshnessUi(data.freshness.state, {
-        refreshFailed,
+        refreshFailed: Boolean(refreshFailed),
         refreshing,
         breached: data.freshness.slaState === "BREACHED",
       })
@@ -1274,9 +1274,8 @@ export function CardBusinessAnalyticsPage() {
 
       {viewQuery.isError && !data ? (
         <BusinessFailureState
-          kind="system"
+          error={viewQuery.error}
           title="卡券经营数据加载失败"
-          description="当前无可展示的结果。请重试或调整筛选。"
           action={
             <Button type="button" onClick={() => void viewQuery.refetch()}>
               重试
@@ -1298,7 +1297,7 @@ export function CardBusinessAnalyticsPage() {
               </AlertTitle>
               <AlertDescription>
                 {refreshFailed
-                  ? "保留上次成功数据供只读查阅。不覆盖金额。"
+                  ? refreshFailed
                   : `更新延迟 ${data.freshness.lagSeconds}s 超过固定上限 ${data.freshness.maxLagSeconds}s（${
                       data.freshness.slaState === "BREACHED"
                         ? "已超时"
@@ -1343,7 +1342,10 @@ export function CardBusinessAnalyticsPage() {
             <Alert variant="destructive">
               <AlertTitle>数据更新失败</AlertTitle>
               <AlertDescription>
-                已保留上次成功结果供只读查阅，未覆盖任何金额。请重试或调整筛选。
+                {getErrorMessage(
+                  viewQuery.error,
+                  "已保留上次成功结果供只读查阅，未覆盖任何金额。请重试或调整筛选。"
+                )}
               </AlertDescription>
             </Alert>
           ) : null}

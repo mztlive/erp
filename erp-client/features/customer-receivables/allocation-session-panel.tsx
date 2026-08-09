@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import {
   usePostAllocationMutation,
   useResolvePostUnknownMutation,
@@ -301,7 +302,7 @@ export function AllocationSessionPanel({
       setDraftSavedAt(next.savedAt)
       baselineRef.current = snapshot()
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "保存草稿失败")
+      setActionError(getErrorMessage(err, "保存草稿失败"))
     }
   }
 
@@ -343,7 +344,7 @@ export function AllocationSessionPanel({
       })
       applyPostResult(res)
     } catch (err) {
-      setActionError(err instanceof Error ? err.message : "提交失败")
+      setActionError(getErrorMessage(err, "提交失败"))
       setConfirmOpen(false)
     }
   }

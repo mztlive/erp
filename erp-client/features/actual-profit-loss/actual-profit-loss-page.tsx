@@ -45,6 +45,7 @@ import {
   surfacePanelClassName,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import {
   Alert,
@@ -317,7 +318,7 @@ export function ActualProfitLossPage() {
   const [exportJob, setExportJob] = React.useState<ProfitLossExportJob | null>(
     null
   )
-  const [refreshFailed, setRefreshFailed] = React.useState(false)
+  const [refreshFailed, setRefreshFailed] = React.useState<string | null>(null)
   const [refreshing, setRefreshing] = React.useState(false)
   const rowFocusRef = React.useRef<Map<string, HTMLElement | null>>(new Map())
   const restoreFocusIdRef = React.useRef<string | null>(null)
@@ -450,7 +451,7 @@ export function ActualProfitLossPage() {
     [sort]
   )
 
-  const [exportFailed, setExportFailed] = React.useState(false)
+  const [exportFailed, setExportFailed] = React.useState<string | null>(null)
 
   // 关闭 detail 后恢复焦点
   React.useEffect(() => {
@@ -731,7 +732,7 @@ export function ActualProfitLossPage() {
 
   const freshnessUi = data
     ? mapFreshnessState(data.freshness.state, {
-        refreshFailed,
+        refreshFailed: Boolean(refreshFailed),
         refreshing,
       })
     : { uiState: "unknown" as const, statusLabel: "等待查询" }
@@ -772,12 +773,12 @@ export function ActualProfitLossPage() {
 
   async function handleRefresh() {
     setRefreshing(true)
-    setRefreshFailed(false)
+    setRefreshFailed(null)
     try {
       await viewQuery.refetch()
       await basisQuery.refetch()
-    } catch {
-      setRefreshFailed(true)
+    } catch (error) {
+      setRefreshFailed(getErrorMessage(error, "刷新失败，已保留上次成功数据。"))
     } finally {
       setRefreshing(false)
     }
@@ -786,7 +787,7 @@ export function ActualProfitLossPage() {
   async function handleExport() {
     if (!data || !plQuery || !analysisReady) return
     if (!data.fieldPermissions.canExport) return
-    setExportFailed(false)
+    setExportFailed(null)
     try {
       const job = await exportMutation.mutateAsync({
         query: plQuery,
@@ -837,8 +838,8 @@ export function ActualProfitLossPage() {
       anchor.download = `实际盈亏-非卡券不含税-${wm.periodFrom}_${wm.periodTo}.csv`
       anchor.click()
       URL.revokeObjectURL(url)
-    } catch {
-      setExportFailed(true)
+    } catch (error) {
+      setExportFailed(getErrorMessage(error, "未能生成导出文件，请稍后重试。"))
     }
   }
 
@@ -876,9 +877,8 @@ export function ActualProfitLossPage() {
           ]}
         />
         <BusinessFailureState
-          kind="system"
+          error={basisQuery.error}
           title="期间归属口径配置读取失败"
-          description="无法读取期间归属口径配置，分析与导出已暂停。"
           action={
             <Button type="button" onClick={() => void basisQuery.refetch()}>
               重试
@@ -1132,9 +1132,8 @@ export function ActualProfitLossPage() {
 
           {viewQuery.isError && !data ? (
             <BusinessFailureState
-              kind="system"
+              error={viewQuery.error}
               title="盈亏数据加载失败"
-              description="当前无可展示的结果。请重试或返回其他模块。"
               action={
                 <Button type="button" onClick={() => void viewQuery.refetch()}>
                   重试
@@ -1152,7 +1151,7 @@ export function ActualProfitLossPage() {
                   </AlertTitle>
                   <AlertDescription>
                     {refreshFailed
-                          ? "保留上次成功数据供只读查阅；可再次刷新。不会用本页估算覆盖金额。"
+                          ? refreshFailed
                       : `数据更新于 ${formatDateTime(data.freshness.projectedAt, "full")}，来源已于 ${formatDateTime(data.freshness.sourceWatermark, "full")} 更新。`}
                   </AlertDescription>
                 </Alert>
@@ -1180,7 +1179,10 @@ export function ActualProfitLossPage() {
                 <Alert variant="destructive">
                   <AlertTitle>数据更新失败</AlertTitle>
                   <AlertDescription>
-                    已保留上次成功结果，未覆盖业务数据。请重试或调整筛选。
+                    {getErrorMessage(
+                      viewQuery.error,
+                      "已保留上次成功结果，未覆盖业务数据。请重试或调整筛选。"
+                    )}
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -1189,7 +1191,7 @@ export function ActualProfitLossPage() {
                 <Alert variant="destructive">
                   <AlertTitle>导出失败</AlertTitle>
                   <AlertDescription>
-                    未能生成导出文件，请稍后重试；业务数据未受影响。
+                    {exportFailed}
                   </AlertDescription>
                 </Alert>
               ) : null}
@@ -1845,7 +1847,10 @@ export function ActualProfitLossPage() {
             <Alert variant="destructive">
               <AlertTitle>成本记录加载失败</AlertTitle>
               <AlertDescription>
-                未能读取本条销售单的成本记录。请重试；不影响已展示金额。
+                {getErrorMessage(
+                  costEntriesQuery.error,
+                  "未能读取本条销售单的成本记录。请重试；不影响已展示金额。"
+                )}
                 <Button
                   type="button"
                   size="sm"

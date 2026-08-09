@@ -79,6 +79,7 @@ import type {
   SupplierFields,
 } from "@/features/master-data/types"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { usePartyOptionsQuery } from "@/hooks/use-options"
 import { hasPermission } from "@/lib/permissions"
 import { cn } from "@/lib/utils"
@@ -151,7 +152,7 @@ function SensitiveEditableField({
       setRevealError(null)
       setRevealed(true)
     } catch (error) {
-      setRevealError(error instanceof Error ? error.message : "无权查看")
+      setRevealError(getErrorMessage(error, "无权查看"))
     }
   }
 
@@ -675,7 +676,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
         } as SupplierFields
       } catch (error) {
         setFormError(
-          error instanceof Error ? error.message : "资质文件上传失败",
+          getErrorMessage(error, "资质文件上传失败"),
         )
         return
       }
@@ -834,7 +835,7 @@ export function SupplierDetailPage({ stableId }: { stableId: string }) {
       <PageScaffold density="compact">
         <PageHeader title="供应商详情" />
         <BusinessFailureState
-          kind="system"
+          error={detailQuery.isError ? detailQuery.error : undefined}
           description={
             detailQuery.isError
               ? masterDataCopy.centerLoadFail

@@ -690,8 +690,7 @@ export function PublicationCenterPage({
       <PageScaffold>
         <PageHeader title="商品发布" />
         <BusinessFailureState
-          kind="system"
-          description="加载发布对象失败。"
+          error={detailQuery.error}
           action={
             <Button
               type="button"

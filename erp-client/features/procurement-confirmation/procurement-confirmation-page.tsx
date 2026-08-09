@@ -29,6 +29,7 @@ import {
   ValidationSummary,
 } from "@/components/business"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { cn } from "@/lib/utils"
 import { useSupplierOptionsQuery } from "@/hooks/use-options"
 import { useAppForm } from "@/components/form"
@@ -356,8 +357,11 @@ export function ProcurementConfirmationPage() {
           claimedByLabel: lease.claimedByLabel,
         })
       })
-      .catch(() => {
-        setActionError("领取处理权失败，请点击「领取任务」重试")
+      .catch((error) => {
+        if (cancelled) return
+        setActionError(
+          getErrorMessage(error, "领取处理权失败，请点击「领取任务」重试"),
+        )
       })
     return () => {
       cancelled = true
@@ -753,7 +757,7 @@ export function ProcurementConfirmationPage() {
       setActionError(null)
       return true
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "保存失败")
+      setActionError(getErrorMessage(error, "保存失败"))
       return false
     }
   }, [ensureLease, lineDrafts, linesValid, saveMutation, task])
@@ -856,7 +860,7 @@ export function ProcurementConfirmationPage() {
         setFinishedResult(null)
       }
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "通过失败")
+      setActionError(getErrorMessage(error, "通过失败"))
     }
   }, [
     advanceAfterConfirm,
@@ -924,7 +928,7 @@ export function ProcurementConfirmationPage() {
           setFinishedResult(null)
         }
       } catch (error) {
-        setActionError(error instanceof Error ? error.message : "驳回失败")
+        setActionError(getErrorMessage(error, "驳回失败"))
       }
     },
     [advanceIfNeeded, autoNext, completeMutation, ensureLease, queueQuery, task]
@@ -977,7 +981,7 @@ export function ProcurementConfirmationPage() {
       })
       if (nextId) goToWorkItem(nextId)
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "跳过失败")
+      setActionError(getErrorMessage(error, "跳过失败"))
     }
   }, [
     dirty,
@@ -1095,9 +1099,8 @@ export function ProcurementConfirmationPage() {
       <PageScaffold>
         <PageHeader title="采购二次确认" description="队列加载失败" />
         <BusinessFailureState
-          kind="system"
           title="队列加载失败"
-          description="未能加载采购确认队列。请重试；若持续失败，可返回工作台稍后再来。"
+          error={queueQuery.error}
           onRetry={() => void queueQuery.refetch()}
           action={
             <Button
@@ -1993,11 +1996,7 @@ export function ProcurementConfirmationPage() {
                             setConfirmOpen(true)
                           })
                           .catch((error) => {
-                            setActionError(
-                              error instanceof Error
-                                ? error.message
-                                : "领取任务失败"
-                            )
+                            setActionError(getErrorMessage(error, "领取任务失败"))
                           })
                       }}
                     >
@@ -2225,9 +2224,8 @@ export function ProcurementConfirmationPage() {
                 </div>
               ) : recommendationQuery.isError ? (
                 <BusinessFailureState
-                  kind="system"
                   title="采购方案计算失败"
-                  description="暂时无法读取供应商报价，请重试。"
+                  error={recommendationQuery.error}
                   onRetry={() => void recommendationQuery.refetch()}
                 />
               ) : recommendation?.ready ? (

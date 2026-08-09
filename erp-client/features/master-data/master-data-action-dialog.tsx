@@ -72,6 +72,7 @@ import type {
 } from "@/features/master-data/types"
 import type { BrandFields } from "@/features/master-data/types"
 import { cn } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/api/errors"
 
 function newIdempotencyKey(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`
@@ -774,7 +775,7 @@ export function MasterDataCreateDialog({
           setResult({
             outcome: "blocked",
             code: "MEDIA_UPLOAD_FAILED",
-            message: error instanceof Error ? error.message : "Logo 上传失败",
+            message: getErrorMessage(error, "Logo 上传失败"),
           })
           return
         }
@@ -1045,7 +1046,7 @@ export function MasterDataReviseDialog({
           setResult({
             outcome: "blocked",
             code: "MEDIA_UPLOAD_FAILED",
-            message: error instanceof Error ? error.message : "Logo 上传失败",
+            message: getErrorMessage(error, "Logo 上传失败"),
           })
           return
         }

@@ -92,6 +92,7 @@ import {
 import { SourceSystemsCard } from "@/features/mall-sync/source-systems-card"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { type ResultState } from "@/components/business/feedback"
 import {
@@ -444,7 +445,7 @@ export function MallSyncPage() {
         subjectVersion: lease.subjectVersion,
       })
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "领取失败")
+      setActionError(getErrorMessage(e, "领取失败"))
     }
   }
 

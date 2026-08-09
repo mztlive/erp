@@ -735,9 +735,8 @@ export function ContractsListPage() {
         table={
           contractsQuery.isError ? (
             <BusinessFailureState
-              kind="system"
               title="合同列表加载失败"
-              description="暂时拿不到合同数据，请重试；失败不影响已保存的合同。"
+              error={contractsQuery.error}
               onRetry={() => {
                 void contractsQuery.refetch()
               }}

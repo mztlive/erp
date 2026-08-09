@@ -588,9 +588,8 @@ export function PurchaseOrderDetailPage({
       <PageScaffold>
         <PageHeader title="采购单" description="详情加载失败" />
         <BusinessFailureState
-          kind="system"
           title="详情加载失败"
-          description="未能加载采购单详情。请重试；若持续失败，可返回列表稍后再来。"
+          error={query.error}
           onRetry={() => void query.refetch()}
           action={
             <Button

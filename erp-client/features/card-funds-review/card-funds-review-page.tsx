@@ -17,6 +17,7 @@ import {
   AllocationWorkspace,
   BusinessDiffPanel,
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   DataFreshness,
   DiscardConfirmDialog,
@@ -96,6 +97,7 @@ import {
 } from "@/features/card-funds-review/queries"
 import { freshnessText, openWorkspaceLabel, versionText } from "@/lib/ui-text"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 
 const money = new Intl.NumberFormat("zh-CN", {
   style: "currency",
@@ -324,8 +326,9 @@ export function CardFundsReviewPage() {
         }
         setLeaseEpoch((n) => n + 1)
       })
-      .catch(() => {
-        /* 保持未领取 */
+      .catch((error) => {
+        if (cancelled) return
+        setActionError(getErrorMessage(error, "任务领取失败，请重试"))
       })
     return () => {
       cancelled = true
@@ -541,7 +544,7 @@ export function CardFundsReviewPage() {
           window.setTimeout(() => advanceIfNeeded(true), 2200)
         }
       } catch (error) {
-        setActionError(error instanceof Error ? error.message : "完成失败")
+        setActionError(getErrorMessage(error, "完成失败"))
       }
     },
     [
@@ -609,7 +612,7 @@ export function CardFundsReviewPage() {
           window.setTimeout(() => advanceIfNeeded(true), 2200)
         }
       } catch (error) {
-        setActionError(error instanceof Error ? error.message : "驳回失败")
+        setActionError(getErrorMessage(error, "驳回失败"))
       }
     },
   })
@@ -642,7 +645,7 @@ export function CardFundsReviewPage() {
       })
       // 暂挂不自动移动；结果面板给出可见反馈，用户按「下一项」或 j/k 继续
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "跳过失败")
+      setActionError(getErrorMessage(error, "跳过失败"))
     }
   }, [comment, ensureLease, holdMutation, neighborId, task])
 
@@ -690,7 +693,7 @@ export function CardFundsReviewPage() {
         ...lease,
       }
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "登记回款失败")
+      setActionError(getErrorMessage(error, "登记回款失败"))
     }
   }, [
     allocLines,
@@ -733,7 +736,7 @@ export function CardFundsReviewPage() {
         stayOnItem: true,
       })
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "登记发票失败")
+      setActionError(getErrorMessage(error, "登记发票失败"))
     }
   }, [
     allocLines,
@@ -760,7 +763,7 @@ export function CardFundsReviewPage() {
       )
       setEvidenceDirty(false)
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "保存证据失败")
+      setActionError(getErrorMessage(error, "保存证据失败"))
     }
   }, [
     comment,
@@ -878,10 +881,11 @@ export function CardFundsReviewPage() {
   if (queueQuery.isError) {
     return (
       <PageScaffold>
-        <PageHeader title="卡券票款复核" description="队列加载失败" />
-        <Button type="button" onClick={() => void queueQuery.refetch()}>
-          重试
-        </Button>
+        <PageHeader title="卡券票款复核" />
+        <BusinessFailureState
+          error={queueQuery.error}
+          onRetry={() => void queueQuery.refetch()}
+        />
       </PageScaffold>
     )
   }
@@ -1213,7 +1217,7 @@ export function CardFundsReviewPage() {
             onReclaim={() => {
               void ensureLease().catch((error) => {
                 setActionError(
-                  error instanceof Error ? error.message : "领取失败"
+                  getErrorMessage(error, "领取失败")
                 )
               })
             }}

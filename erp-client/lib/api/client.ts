@@ -16,12 +16,12 @@
  */
 
 import {
+  createApiError,
   fromAuth,
   fromFetchError,
   fromHttpResponse,
   fromParse,
 } from "@/lib/api/errors"
-import type { ApiError } from "@/lib/api/errors"
 import { toQueryString } from "@/lib/api/paging"
 import { getToken, notifyUnauthorized } from "@/lib/api/session"
 
@@ -41,6 +41,8 @@ export const getApiBaseUrl = (): string =>
 export interface ApiResponseEnvelope<T> {
   status: number
   errorMessage: string
+  code?: string
+  requestId?: string
   data: T | null
   success: boolean
 }
@@ -130,12 +132,17 @@ export const apiFetch = async <T>(
 
   // 业务失败（信封 success=false，携带后端 errorMessage）
   if (envelope && envelope.success === false) {
-    throw {
+    if (typeof envelope.status === "number" && envelope.status >= 400) {
+      throw fromHttpResponse(envelope.status, parsed)
+    }
+    throw createApiError({
       kind: "Validation",
       message: envelope.errorMessage || "请求未通过业务校验",
       status: envelope.status,
+      code: envelope.code,
+      requestId: envelope.requestId,
       responseData: envelope,
-    } satisfies ApiError
+    })
   }
 
   // 成功：优先取信封 data，非信封形态（如纯 JSON 接口）直接返回原体

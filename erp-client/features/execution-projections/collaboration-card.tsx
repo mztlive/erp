@@ -30,6 +30,7 @@ import {
   RECONCILIATION_LABEL,
 } from "@/features/execution-projections/types"
 import { openWorkspaceLabel } from "@/lib/ui-text"
+import { getErrorMessage } from "@/lib/api/errors"
 
 /**
  * W05 协同子区：单张销售单当前执行信息与商城接收状态（只读）。
@@ -66,7 +67,10 @@ export function SalesOrderCollaborationCard({
           <RadarIcon aria-hidden="true" />
           <AlertTitle>数据加载失败</AlertTitle>
           <AlertDescription>
-            无法读取执行信息与商城接收状态，请刷新后重试。
+            {getErrorMessage(
+              query.error,
+              "无法读取执行信息与商城接收状态，请刷新后重试。",
+            )}
           </AlertDescription>
         </Alert>
       </DocumentSection>
@@ -294,7 +298,10 @@ export function SalesOrderCollaborationCard({
               <Alert variant="destructive" role="alert" className="py-2">
                 <AlertTitle className="text-sm">消费情况加载失败</AlertTitle>
                 <AlertDescription className="text-xs">
-                  无法读取商城消费订单汇总，请刷新后重试。
+                  {getErrorMessage(
+                    consumptionQuery.error,
+                    "无法读取商城消费订单汇总，请刷新后重试。",
+                  )}
                 </AlertDescription>
               </Alert>
             ) : (

@@ -15,6 +15,7 @@ import {
 import {
   BackgroundJobProgress,
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
@@ -77,6 +78,7 @@ import {
 import { cn } from "@/lib/utils"
 import { openWorkspaceLabel, resultText, versionText } from "@/lib/ui-text"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { type ResultState } from "@/components/business/feedback"
 
 type PendingAction =
@@ -634,7 +636,7 @@ export function ExecutionProjectionsPage() {
       setResult({
         status: "blocked",
         title: resultText.operationBlocked,
-        description: err instanceof Error ? err.message : "请刷新后重试",
+        description: getErrorMessage(err, "请刷新后重试"),
         reference: row.projectionNo,
         facts: [
           { label: "对象", value: row.salesOrderNo },
@@ -673,7 +675,7 @@ export function ExecutionProjectionsPage() {
       setResult({
         status: "blocked",
         title: "批量操作被阻断",
-        description: err instanceof Error ? err.message : "请重试",
+        description: getErrorMessage(err, "请重试"),
         reference: "bulk",
         facts: [],
       })
@@ -700,14 +702,10 @@ export function ExecutionProjectionsPage() {
     return (
       <PageScaffold density="compact">
         <PageHeader title="执行信息" description="列表加载失败" />
-        <Button
-          type="button"
-          variant="secondary"
-          className="rounded-lg shadow-none"
-          onClick={() => void listQuery.refetch()}
-        >
-          重试
-        </Button>
+        <BusinessFailureState
+          error={listQuery.error}
+          onRetry={() => void listQuery.refetch()}
+        />
       </PageScaffold>
     )
   }
@@ -1169,11 +1167,16 @@ export function ExecutionProjectionsPage() {
       >
         {detailQuery.isPending ? (
           <div className="h-48 animate-pulse rounded-lg bg-muted" />
-        ) : detailQuery.isError || !detail ? (
+        ) : detailQuery.isError ? (
+          <BusinessFailureState
+            error={detailQuery.error}
+            onRetry={() => void detailQuery.refetch()}
+          />
+        ) : !detail ? (
           <BusinessEmptyState
             kind="no-data"
             title="无法加载数据"
-            description="数据不存在或无权访问。"
+            description="数据不存在。"
           />
         ) : (
           <div className="flex flex-col gap-4">

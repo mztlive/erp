@@ -49,6 +49,7 @@ import {
   revisionTimingFilterLabel,
 } from "@/features/master-data/copy"
 import { resourceLabel } from "@/features/master-data/data"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { formatEffectiveRange } from "@/features/master-data/filter"
 import { CategoryTreePage } from "@/features/master-data/category-tree-page"
 import {
@@ -68,8 +69,22 @@ import {
   type MasterDataListItem,
   type MasterDataResource,
 } from "@/features/master-data/types"
+import { hasPermission } from "@/lib/permissions"
+import { getErrorMessage } from "@/lib/api/errors"
 
 const VALID = new Set(MASTER_DATA_RESOURCES.map((item) => item.key))
+
+const CREATE_PERMISSION_BY_RESOURCE: Partial<
+  Record<MasterDataResource, string>
+> = {
+  products: "product:create",
+  categories: "product_category:create",
+  brands: "product_brand:create",
+  "unit-of-measures": "unit_of_measure:create",
+  "voucher-categories": "voucher_category_profile:create",
+  suppliers: "supplier:create",
+  warehouses: "warehouse:create",
+}
 
 function isResource(value: string): value is MasterDataResource {
   return VALID.has(value as MasterDataResource)
@@ -173,7 +188,7 @@ export function MasterDataPage({ resource }: { resource: string }) {
 
   /** 商品分类：树形维护，不走扁平列表。 */
   if (resource === "categories") {
-    return <CategoryTreePage navRef={navRef} />
+    return <CategoryTreePage />
   }
 
   return (
@@ -203,6 +218,7 @@ function MasterDataListWorkspace({
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
+  const accountQuery = useAccountProfileQuery()
   /** 商品（SPU）走详情页，不用侧边 sheet。 */
   const isProductResource = resource === "products"
   /** 供应商走详情页（查看与编辑同一页面），不用侧边 sheet / 编辑弹窗。 */
@@ -215,6 +231,18 @@ function MasterDataListWorkspace({
   const isUnitOfMeasureResource = resource === "unit-of-measures"
   /** 公司商品池为资格查询视图，只允许查看与导出。 */
   const isSellableResource = resource === "sellable-items"
+  const createPermission = CREATE_PERMISSION_BY_RESOURCE[resource]
+  const canCreate = createPermission
+    ? hasPermission(accountQuery.data?.permissions, createPermission)
+    : false
+  const createBlockedReason = accountQuery.isPending
+    ? "正在核对创建权限，请稍候。"
+    : accountQuery.isError
+      ? getErrorMessage(
+          accountQuery.error,
+          "暂时无法核对创建权限，请刷新后重试。",
+        )
+      : "当前账号没有新建此类资料的权限。"
   const skipPreviewSheet =
     isProductResource ||
     isSupplierResource ||
@@ -760,10 +788,12 @@ function MasterDataListWorkspace({
                 mobileVisibility: "hide" as const,
                 icon: PlusIcon,
                 // 仓库写门禁未开放：按钮真正禁用，不再进入注定失败的表单。
-                disabled: isWarehouse,
+                disabled: isWarehouse || !canCreate,
                 title: isWarehouse
                   ? masterDataCopy.warehouseWriteBody
-                  : undefined,
+                  : !canCreate
+                    ? createBlockedReason
+                    : undefined,
                 onClick: () => {
                   if (isProductResource || isSupplierResource) {
                     router.push(`/master-data/${resource}/new`)
@@ -1010,8 +1040,7 @@ function MasterDataListWorkspace({
             errorState={
               listLoadFailed ? (
                 <BusinessFailureState
-                  kind="system"
-                  description={masterDataCopy.centerLoadFail}
+                  error={listQuery.error}
                   onRetry={() => void listQuery.refetch()}
                 />
               ) : undefined
@@ -1032,7 +1061,10 @@ function MasterDataListWorkspace({
                       : "点击「新建」创建第一份资料；历史记录会随资料保留。"
                   }
                   action={
-                    !hasActiveFilters && !isWarehouse && !isSellableResource ? (
+                    !hasActiveFilters &&
+                    !isWarehouse &&
+                    !isSellableResource &&
+                    canCreate ? (
                       <Button
                         type="button"
                         variant="secondary"

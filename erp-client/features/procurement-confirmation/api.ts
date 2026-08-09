@@ -6,6 +6,7 @@
 
 import { apiGet, apiPost, apiPut } from "@/lib/api"
 import type { ApiError } from "@/lib/api"
+import { getErrorMessage } from "@/lib/api/errors"
 import type {
   ConfirmationLineDraft,
   CoverageByLine,
@@ -265,7 +266,7 @@ function isApiError(error: unknown): error is ApiError {
 
 function apiErrorMessage(error: unknown): string {
   if (!isApiError(error)) {
-    return error instanceof Error ? error.message : "请求失败"
+    return getErrorMessage(error, "请求失败")
   }
   const data = error.responseData as
     | { errorMessage?: string }

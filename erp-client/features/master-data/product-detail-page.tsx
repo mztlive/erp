@@ -79,6 +79,7 @@ import {
   type FixedSku,
 } from "@/features/supplier-offerings/offering-dialogs"
 import { uploadFileAssetImage } from "@/features/file-assets/api"
+import { useAccountProfileQuery } from "@/features/auth/queries"
 import { masterDataCopy } from "@/features/master-data/copy"
 import { formatEffectiveRange } from "@/features/master-data/filter"
 import {
@@ -115,6 +116,8 @@ import {
 } from "@/features/master-data/types"
 import { cn } from "@/lib/utils"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage, getErrorPresentation } from "@/lib/api/errors"
+import { hasPermission } from "@/lib/permissions"
 import { useUnitOptionsQuery } from "@/hooks/use-options"
 
 function newIdempotencyKey(prefix: string): string {
@@ -615,6 +618,7 @@ export function ProductDetailPage({
 }) {
   const router = useRouter()
   const isCreate = stableId === "new"
+  const accountQuery = useAccountProfileQuery()
   const detailQuery = useMasterDataCenterQuery(
     "products",
     isCreate ? "" : stableId,
@@ -648,6 +652,9 @@ export function ProductDetailPage({
   const lockVersion = data?.lockVersion
   const revisionId = data?.currentRevision.revisionId
   const [formError, setFormError] = React.useState<string | null>(null)
+  const [formErrorTitle, setFormErrorTitle] = React.useState(
+    "填写检查未通过"
+  )
   const [checkPassed, setCheckPassed] = React.useState(false)
   const [result, setResult] = React.useState<MasterDataMutationResult | null>(
     null,
@@ -781,6 +788,7 @@ export function ProductDetailPage({
       const nextFields = applySpecsFromDrafts(value.specDrafts, value.fields)
       const validation = validateProductEditor(value, nextFields)
       if (validation) {
+        setFormErrorTitle("填写检查未通过")
         setFormError(validation)
         return
       }
@@ -840,9 +848,9 @@ export function ProductDetailPage({
         }
         setResult(response)
       } catch (error) {
-        setFormError(
-          error instanceof Error ? error.message : "保存失败，请稍后重试",
-        )
+        const failure = getErrorPresentation(error, "保存失败，请稍后重试。")
+        setFormErrorTitle(failure.title)
+        setFormError(failure.description)
       } finally {
         setUploadingMedia(false)
       }
@@ -943,9 +951,16 @@ export function ProductDetailPage({
   const sectionScrollMarginPx = stickyHeaderHeight + 56
   const pending =
     createMutation.isPending || reviseMutation.isPending || uploadingMedia
+  const granted = accountQuery.data?.permissions
+  const canCreate = hasPermission(granted, "product:create")
+  const hasUpdatePermission = hasPermission(granted, "product:update")
   const canRevise =
-    isCreate || (data?.allowedActions.includes("CREATE_REVISION") ?? false)
-  const canDisable = data?.allowedActions.includes("DISABLE") ?? false
+    isCreate
+      ? canCreate
+      : hasUpdatePermission &&
+        (data?.allowedActions.includes("CREATE_REVISION") ?? false)
+  const canDisable =
+    hasUpdatePermission && (data?.allowedActions.includes("DISABLE") ?? false)
   const reviseBlocker = data?.actionBlockers.find(
     (b) => b.action === "CREATE_REVISION",
   )
@@ -961,6 +976,7 @@ export function ProductDetailPage({
     form.setFieldValue("fields", nextFields)
     const validation = validateProductEditor(values, nextFields)
     if (validation) {
+      setFormErrorTitle("填写检查未通过")
       setFormError(validation)
       return
     }
@@ -989,7 +1005,7 @@ export function ProductDetailPage({
       <PageScaffold>
         <PageHeader title="商品详情" />
         <BusinessFailureState
-          kind="system"
+          error={detailQuery.isError ? detailQuery.error : undefined}
           description={
             detailQuery.isError
               ? masterDataCopy.centerLoadFail
@@ -1006,6 +1022,40 @@ export function ProductDetailPage({
               </Button>
             )
           }
+        />
+      </PageScaffold>
+    )
+  }
+
+  if (isCreate && accountQuery.isPending) {
+    return (
+      <PageScaffold>
+        <PageHeader title="新建商品" description="正在核对创建权限" />
+        <div className="h-40 animate-pulse rounded-lg bg-muted" aria-busy />
+      </PageScaffold>
+    )
+  }
+
+  if (isCreate && accountQuery.isError) {
+    return (
+      <PageScaffold>
+        <PageHeader title="新建商品" />
+        <BusinessFailureState
+          error={accountQuery.error}
+          onRetry={() => void accountQuery.refetch()}
+        />
+      </PageScaffold>
+    )
+  }
+
+  if (isCreate && !canCreate) {
+    return (
+      <PageScaffold>
+        <PageHeader title="新建商品" />
+        <BusinessFailureState
+          kind="permission"
+          description="当前账号没有创建商品的权限，请联系管理员或有权限的同事。"
+          action={<Button render={<Link href={listHref} />}>返回列表</Button>}
         />
       </PageScaffold>
     )
@@ -1236,7 +1286,11 @@ export function ProductDetailPage({
                         size="sm"
                         variant="outline"
                         disabled={!canDisable}
-                        title={disableBlocker?.message}
+                        title={
+                          !hasUpdatePermission
+                            ? "当前账号没有维护商品资料的权限。"
+                            : disableBlocker?.message
+                        }
                         onClick={() => setDisableOpen(true)}
                       >
                         <BanIcon data-icon="inline-start" aria-hidden />
@@ -1486,7 +1540,7 @@ export function ProductDetailPage({
                     <div ref={errorRef}>
                       <Alert variant="destructive">
                         <CircleAlertIcon aria-hidden />
-                        <AlertTitle>填写检查未通过</AlertTitle>
+                        <AlertTitle>{formErrorTitle}</AlertTitle>
                         <AlertDescription>{formError}</AlertDescription>
                       </Alert>
                     </div>
@@ -2248,7 +2302,10 @@ export function ProductDetailPage({
                                             </p>
                                             <p className="mt-2 text-sm text-muted-foreground">
                                               {supplierCountsQuery.isError
-                                                ? "当前无法读取正式供给，请稍后重试。"
+                                                ? getErrorMessage(
+                                                    supplierCountsQuery.error,
+                                                    "当前无法读取正式供给，请稍后重试。",
+                                                  )
                                                 : `当前共有 ${supplierCount ?? 0} 家供应商具备已启用且已形成当前修订的供给关系；供应商及有效期明细以供给中心为准。`}
                                             </p>
                                           </div>

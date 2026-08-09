@@ -86,6 +86,7 @@ import {
   typeParamValue,
 } from "@/features/fulfillment-operations/filters"
 import { cn } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/api/errors"
 import {
   buildPostedFacts,
   clientValidation,
@@ -282,8 +283,9 @@ export function FulfillmentOperationsPage() {
         }
         setLeaseEpoch((n) => n + 1)
       })
-      .catch(() => {
-        /* 未领取 */
+      .catch((error) => {
+        if (cancelled) return
+        setActionError(getErrorMessage(error, "任务领取失败，请重试"))
       })
     return () => {
       cancelled = true
@@ -406,7 +408,7 @@ export function FulfillmentOperationsPage() {
       setActionError(null)
       return true
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "保存失败")
+      setActionError(getErrorMessage(error, "保存失败"))
       return false
     }
   }, [draft, ensureLease, saveMutation, task])
@@ -473,7 +475,7 @@ export function FulfillmentOperationsPage() {
         advanceIfNeeded(true, response.outcome.nextWorkItemId, true)
       }
     } catch (error) {
-      setActionError(error instanceof Error ? error.message : "没能提交成功")
+      setActionError(getErrorMessage(error, "没能提交成功"))
     }
   }, [
     advanceIfNeeded,
@@ -530,7 +532,7 @@ export function FulfillmentOperationsPage() {
         })
         if (nextId) goToWorkItem(nextId, true)
       } catch (error) {
-        setActionError(error instanceof Error ? error.message : "没能跳过")
+        setActionError(getErrorMessage(error, "没能跳过"))
       }
     },
     [
@@ -748,8 +750,7 @@ export function FulfillmentOperationsPage() {
       <PageScaffold>
         <PageHeader title={header.label} description="队列加载失败" />
         <BusinessFailureState
-          kind="system"
-          description="队列加载失败。数据可能不是最新，可重新加载后重试。"
+          error={queueQuery.error}
           action={
             <Button
               type="button"
@@ -1180,7 +1181,7 @@ export function FulfillmentOperationsPage() {
               onProcessNext={() => setConfirmOpen(true)}
               onReclaim={() => {
                 void ensureLease().catch((e) =>
-                  setActionError(e instanceof Error ? e.message : "没能接手这一条")
+                  setActionError(getErrorMessage(e, "没能接手这一条"))
                 )
               }}
             />

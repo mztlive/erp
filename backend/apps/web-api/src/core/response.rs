@@ -10,6 +10,8 @@ pub struct ApiResponse<T> {
     pub status: u16,
     #[serde(rename = "errorMessage")]
     pub message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<String>,
     pub data: Option<T>,
     pub success: bool,
 }
@@ -37,6 +39,7 @@ impl ApiResponse<()> {
         Self {
             status: 200,
             message: "OK".to_string(),
+            code: None,
             data: None,
             success: true,
         }
@@ -49,7 +52,8 @@ impl ApiResponse<()> {
     pub fn unauthorized() -> Self {
         Self {
             status: 401,
-            message: "Unauthorized".to_string(),
+            message: "登录状态已失效，请重新登录".to_string(),
+            code: Some("UNAUTHENTICATED".to_string()),
             data: None,
             success: false,
         }
@@ -63,6 +67,7 @@ impl ApiResponse<()> {
         Self {
             status: 500,
             message: "系统内部错误".to_string(),
+            code: Some("INTERNAL_ERROR".to_string()),
             data: None,
             success: false,
         }
@@ -75,7 +80,8 @@ impl ApiResponse<()> {
     pub fn permission_denied() -> Self {
         Self {
             status: 403,
-            message: "Permission denied".to_string(),
+            message: "当前账号没有执行此操作的权限".to_string(),
+            code: Some("PERMISSION_DENIED".to_string()),
             data: None,
             success: false,
         }
@@ -94,6 +100,7 @@ impl<T> ApiResponse<T> {
         Self {
             status: 200,
             message: "OK".to_string(),
+            code: None,
             data: Some(data),
             success: true,
         }
@@ -144,7 +151,8 @@ mod tests {
             body,
             json!({
                 "status": 403,
-                "errorMessage": "Permission denied",
+                "errorMessage": "当前账号没有执行此操作的权限",
+                "code": "PERMISSION_DENIED",
                 "data": null,
                 "success": false
             })

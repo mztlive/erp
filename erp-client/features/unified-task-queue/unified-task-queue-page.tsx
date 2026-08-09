@@ -29,6 +29,7 @@ import {
   WorkTaskItem,
 } from "@/components/business"
 import { cn } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/api/errors"
 import { useAppForm } from "@/components/form"
 import {
   Alert,
@@ -349,7 +350,7 @@ export function UnifiedTaskQueuePage() {
         setLastResult({
           status: "failed",
           title: "提交失败",
-          description: error instanceof Error ? error.message : "未知错误",
+          description: getErrorMessage(error, "未知错误"),
           reference: item.id,
         })
         return
@@ -671,8 +672,7 @@ export function UnifiedTaskQueuePage() {
       <PageScaffold>
         <PageHeader title="统一待办队列" description="队列加载失败" />
         <BusinessFailureState
-          kind="system"
-          description="待办队列暂时无法加载，业务记录未被修改。请重试，或返回工作台稍后再来。"
+          error={queueQuery.error}
           action={
             <div className="flex flex-wrap gap-2">
               <Button

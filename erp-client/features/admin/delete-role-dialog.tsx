@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { getErrorMessage } from "@/lib/api/errors"
 
 import {
   Alert,
@@ -57,7 +58,7 @@ export function DeleteRoleDialog({
                 onOpenChange(false)
               } catch (e) {
                 setError(
-                  e instanceof Error ? e.message : "删除失败，请重试。"
+                  getErrorMessage(e, "删除失败，请重试。")
                 )
               }
             }}

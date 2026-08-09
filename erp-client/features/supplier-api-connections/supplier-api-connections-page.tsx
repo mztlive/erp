@@ -106,6 +106,7 @@ import {
 import { useSupplierOptionsQuery } from "@/hooks/use-options"
 import { freshnessText } from "@/lib/ui-text"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { type ResultState } from "@/components/business/feedback"
 
 function outcomeToResult(outcome: FormalOutcome): ResultState {
@@ -495,9 +496,8 @@ function ConnectionList({
       <PageScaffold density="compact">
         <PageHeader title="API 供应商连接" description="加载失败" />
         <BusinessFailureState
-          kind="system"
           title="连接列表加载失败"
-          description="请重试。"
+          error={listQuery.error}
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重试
@@ -995,9 +995,8 @@ function ConnectionCenter({
     return (
       <PageScaffold>
         <BusinessFailureState
-          kind="system"
           title="连接详情加载失败"
-          description="请重试"
+          error={centerQuery.error}
           action={
             <Button type="button" onClick={() => void centerQuery.refetch()}>
               重试
@@ -1394,7 +1393,10 @@ function ConnectionCenter({
               <Alert variant="destructive" role="alert">
                 <AlertTitle>引用选项加载失败</AlertTitle>
                 <AlertDescription>
-                  无法取得密钥管理引用列表，请重试后再选择。
+                  {getErrorMessage(
+                    listQuery.error,
+                    "无法取得密钥管理引用列表，请重试后再选择。",
+                  )}
                 </AlertDescription>
               </Alert>
             ) : null}
@@ -1467,7 +1469,10 @@ function ConnectionCenter({
               <Alert variant="destructive" role="alert">
                 <AlertTitle>引用选项加载失败</AlertTitle>
                 <AlertDescription>
-                  无法取得地址配置引用列表，请重试后再选择。
+                  {getErrorMessage(
+                    listQuery.error,
+                    "无法取得地址配置引用列表，请重试后再选择。",
+                  )}
                 </AlertDescription>
               </Alert>
             ) : null}

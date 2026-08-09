@@ -176,8 +176,7 @@ function MasterDataCenterBody({
       <PageScaffold>
         <PageHeader title="基础资料详情" />
         <BusinessFailureState
-          kind="system"
-          description={masterDataCopy.centerLoadFail}
+          error={query.error}
           action={
             <Button type="button" onClick={() => void query.refetch()}>
               重试

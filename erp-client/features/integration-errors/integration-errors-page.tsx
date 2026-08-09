@@ -15,6 +15,7 @@ import {
   AuditTimeline,
   BusinessDiffPanel,
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   DataFreshness,
   FormalActionConfirmDialog,
@@ -35,6 +36,7 @@ import {
 } from "@/components/business"
 import { TRANSFER_ROLE_OPTIONS } from "@/lib/business-options"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { leaseText, freshnessText } from "@/lib/ui-text"
 import {
   Alert,
@@ -524,8 +526,9 @@ export function IntegrationErrorsPage({
         leaseRef.current = session
         setActiveLease(session)
       })
-      .catch(() => {
-        setActionError("任务领取失败，请重试")
+      .catch((error) => {
+        if (cancelled) return
+        setActionError(getErrorMessage(error, "任务领取失败，请重试"))
       })
     return () => {
       cancelled = true
@@ -658,7 +661,7 @@ export function IntegrationErrorsPage({
         if (next) goToItem(next)
       }
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "动作失败")
+      setActionError(getErrorMessage(e, "动作失败"))
     }
   }
 
@@ -763,14 +766,22 @@ export function IntegrationErrorsPage({
     return (
       <PageScaffold>
         <PageHeader title="接口错误与对账中心" description="加载失败" />
-        <Button
-          type="button"
-          variant="secondary"
-          className="rounded-lg shadow-none"
-          onClick={() => void queueQuery.refetch()}
-        >
-          重试
-        </Button>
+        <BusinessFailureState
+          error={queueQuery.error}
+          onRetry={() => void queueQuery.refetch()}
+        />
+      </PageScaffold>
+    )
+  }
+
+  if (focusMode && detailItemQuery.isError) {
+    return (
+      <PageScaffold>
+        <PageHeader title="接口错误与对账中心" description="任务加载失败" />
+        <BusinessFailureState
+          error={detailItemQuery.error}
+          onRetry={() => void detailItemQuery.refetch()}
+        />
       </PageScaffold>
     )
   }
@@ -838,7 +849,7 @@ export function IntegrationErrorsPage({
       })
       afterResult(result)
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "转交失败")
+      setActionError(getErrorMessage(e, "转交失败"))
       throw e
     }
   }
@@ -866,7 +877,7 @@ export function IntegrationErrorsPage({
       })
       afterResult(result)
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "关闭失败")
+      setActionError(getErrorMessage(e, "关闭失败"))
       throw e
     }
   }
@@ -927,7 +938,7 @@ export function IntegrationErrorsPage({
       })
       afterResult(result)
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "解决失败")
+      setActionError(getErrorMessage(e, "解决失败"))
       throw e
     }
   }
@@ -971,7 +982,7 @@ export function IntegrationErrorsPage({
       })
       afterResult(result)
     } catch (e) {
-      setActionError(e instanceof Error ? e.message : "对账确认失败")
+      setActionError(getErrorMessage(e, "对账确认失败"))
       throw e
     }
   }
@@ -1430,7 +1441,7 @@ export function IntegrationErrorsPage({
                   onReclaim={() => {
                     void ensureLease().catch((e) =>
                       setActionError(
-                        e instanceof Error ? e.message : "领取失败"
+                        getErrorMessage(e, "领取失败")
                       )
                     )
                   }}

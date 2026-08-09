@@ -18,6 +18,7 @@ import {
   BackgroundJobProgress,
   BatchImpactPreview,
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   BusinessTableFrame,
   DataFreshness,
@@ -1064,10 +1065,9 @@ export function ConsumptionOrdersListPage() {
                   aria-busy
                 />
               ) : listQuery.isError ? (
-                <BusinessEmptyState
-                  kind="no-data"
+                <BusinessFailureState
                   title="查询失败"
-                  description="保留上次成功数据或重试。"
+                  error={listQuery.error}
                   className="rounded-lg border-0 bg-transparent p-6 shadow-none ring-0"
                   action={
                     <Button

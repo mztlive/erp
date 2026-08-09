@@ -124,9 +124,8 @@ export function ContractDetailPage({
       <PageScaffold>
         <PageHeader title="合同" />
         <BusinessFailureState
-          kind="system"
           title="合同加载失败"
-          description="暂时拿不到这份合同的数据，请重试；合同记录不受影响。"
+          error={query.error}
           onRetry={() => {
             void query.refetch()
           }}

@@ -398,8 +398,7 @@ export function WorkspaceHomePage() {
     return (
       <PageScaffold>
         <BusinessFailureState
-          kind="system"
-          description="今日工作台暂时无法加载，请重试。业务记录未被修改。"
+          error={dashboardQuery.error}
           action={
             <Button type="button" variant="outline" onClick={refresh}>
               重试

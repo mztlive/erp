@@ -37,6 +37,7 @@ import {
 import { FilterChip } from "@/components/business/filter-chip"
 import { useAppForm } from "@/components/form"
 import { formatDateTime } from "@/lib/datetime"
+import { getErrorMessage } from "@/lib/api/errors"
 import { patchUrl as patchSearchParams } from "@/lib/patch-search-params"
 import { type ResultState } from "@/components/business/feedback"
 import {
@@ -526,7 +527,7 @@ export function InventoryLedgerPage() {
         setPreviewBalanceId(null)
       } catch (err) {
         setActionError(
-          err instanceof Error ? err.message : "创建调整草稿失败"
+          getErrorMessage(err, "创建调整草稿失败")
         )
       }
     },
@@ -1040,7 +1041,7 @@ export function InventoryLedgerPage() {
       <PageScaffold>
         <PageHeader title="库存台账" description="加载失败" />
         <BusinessFailureState
-          kind="system"
+          error={listQuery.error}
           action={
             <Button type="button" onClick={() => void listQuery.refetch()}>
               重试

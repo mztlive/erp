@@ -13,6 +13,7 @@ import {
 
 import {
   BusinessEmptyState,
+  BusinessFailureState,
   BusinessStatusBadge,
   DataFreshness,
   DiscardConfirmDialog,
@@ -644,17 +645,26 @@ export function AcceptanceWorkspace({
     )
   }
 
-  if (workspaceQuery.isError || !view) {
+  if (workspaceQuery.isError) {
     return (
-      <BusinessEmptyState
-        kind="no-data"
+      <BusinessFailureState
         title="验收内容加载失败"
-        description="暂时拿不到可验收的交付记录。请重试，或返回销售单。"
+        error={workspaceQuery.error}
         action={
           <Button type="button" onClick={() => void workspaceQuery.refetch()}>
             重试
           </Button>
         }
+      />
+    )
+  }
+
+  if (!view) {
+    return (
+      <BusinessEmptyState
+        kind="no-data"
+        title="暂无可验收内容"
+        description="请返回销售单检查当前状态。"
       />
     )
   }
@@ -1443,4 +1453,3 @@ export function AcceptanceWorkspace({
     </div>
   )
 }
-

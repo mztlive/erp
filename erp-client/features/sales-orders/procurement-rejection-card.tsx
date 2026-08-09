@@ -41,6 +41,7 @@ import type {
   SalesOrderListItem,
 } from "@/features/sales-orders/types"
 import { resultText } from "@/lib/ui-text"
+import { getErrorMessage } from "@/lib/api/errors"
 
 const REJECT_REASON_LABEL: Record<string, string> = {
   MARGIN_TOO_LOW: "预计毛利过低",
@@ -577,7 +578,7 @@ export function ProcurementRejectionCard({
               })
             } catch (error) {
               const message =
-                error instanceof Error ? error.message : "操作失败"
+                getErrorMessage(error, "操作失败")
               setResult({
                 status: "blocked",
                 title: resultText.operationBlocked,

@@ -227,9 +227,8 @@ export function SupplierOfferingsPage() {
         table={
           query.isError ? (
             <BusinessFailureState
-              kind="system"
               title="供给列表加载失败"
-              description="暂时无法读取供给关系，请重试。"
+              error={query.error}
               onRetry={() => void query.refetch()}
             />
           ) : items.length === 0 && !query.isPending ? (

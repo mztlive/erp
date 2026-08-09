@@ -67,6 +67,7 @@ import {
 } from "@/components/ui/status-badge"
 import { leaseText, sequentialText } from "@/lib/ui-text"
 import { cn } from "@/lib/utils"
+import { getErrorMessage } from "@/lib/api/errors"
 
 type ControllableDialogProps = {
   open?: boolean
@@ -125,13 +126,7 @@ function normalizeStatus(
 
 /** 把提交异常转成可读消息；未知异常给通用下一步指引。 */
 function messageFromError(error: unknown): string {
-  if (error instanceof Error && error.message.trim().length > 0) {
-    return error.message
-  }
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error
-  }
-  return "操作未完成，请稍后重试。"
+  return getErrorMessage(error, "操作未完成，请稍后重试。")
 }
 
 type WorkflowDetailListProps = {
