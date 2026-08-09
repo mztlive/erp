@@ -1949,7 +1949,7 @@ export function ProductDetailPage({
                                 公司商品池价格
                               </th>
                               <th
-                                colSpan={3}
+                                colSpan={4}
                                 className="border-l border-border px-3 py-2 font-medium"
                               >
                                 关联与状态
@@ -1990,6 +1990,9 @@ export function ProductDetailPage({
                               </th>
                               <th className="min-w-28 px-3 py-2 font-medium">
                                 库存
+                              </th>
+                              <th className="min-w-24 px-3 py-2 font-medium">
+                                上架
                               </th>
                               <th className="min-w-24 px-3 py-2 font-medium">
                                 启用
@@ -2241,6 +2244,19 @@ export function ProductDetailPage({
                                       保存后可查看
                                     </span>
                                   )}
+                                </td>
+                                <td className="px-3 py-3">
+                                  <Badge
+                                    variant={
+                                      sku.listingStatus === "LISTED"
+                                        ? "success"
+                                        : "secondary"
+                                    }
+                                  >
+                                    {sku.listingStatus === "LISTED"
+                                      ? "已上架"
+                                      : "已下架"}
+                                  </Badge>
                                 </td>
                                 <td className="px-3 py-3">
                                   <div className="flex items-center gap-2">

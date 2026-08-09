@@ -133,6 +133,22 @@ impl FileAssetService {
         Ok(asset.into())
     }
 
+    /// 查询文件预览所需元数据并记录敏感读取审计。
+    ///
+    /// 实际对象存储读取仍由 HTTP handler 在事务外执行；本方法只负责元数据
+    /// 存在性校验与读取行为审计。
+    ///
+    /// # Errors
+    /// 文件不存在或审计日志写入失败时返回错误。
+    pub async fn file_asset_preview(&self, id: &str, actor: &AuditActor) -> Result<FileAssetView> {
+        let view = self.file_asset_detail(id).await?;
+        let audit = actor
+            .clone()
+            .resource_log("file_asset.preview", "file_asset", id.to_string())?;
+        self.db.audit_logs().create(&audit, &mut NoTransaction).await?;
+        Ok(view)
+    }
+
     /// 登记文件资产（元数据登记，文件已由上传 handler 落盘）。
     ///
     /// 登记是纯元数据写入（单集合 + 审计日志）；同对象键重复登记由唯一索引

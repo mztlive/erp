@@ -38,9 +38,9 @@ use entities::catalog::voucher_category_profile_revision::{
     VoucherCategoryProfileRevision, VoucherCategoryProfileRevisionData,
 };
 use entities::catalog::{
-    EnableStatus, ProductBrandId, ProductCategoryId, ProductId, ProductKind, ProductRevisionId,
-    ProductRevisionMediaId, SkuAttributeId, SkuAttributeValueId, SkuId, SkuRevisionId, UnitOfMeasureId,
-    VoucherCategoryProfileRevisionId,
+    EnableStatus, ListingStatus, ProductBrandId, ProductCategoryId, ProductId, ProductKind,
+    ProductListingStatus, ProductRevisionId, ProductRevisionMediaId, SkuAttributeId, SkuAttributeValueId,
+    SkuId, SkuRevisionId, UnitOfMeasureId, VoucherCategoryProfileRevisionId,
 };
 use entities::common::time::BusinessDate;
 use id_generator::next_id;
@@ -53,20 +53,21 @@ use crate::catalog::dto::SortDir;
 use crate::errors::{Error, Result};
 
 mod dto;
+mod listing;
 mod sellable;
 
 pub use self::dto::{
     CreateProductBrandRequest, CreateProductCategoryRequest, CreateProductRequest, CreateSkuAttributeRequest,
     CreateSkuAttributeValueRequest, CreateUnitOfMeasureRequest, CreateVoucherCategoryRequest,
     MoveProductCategoryRequest, NewVoucherCategoryInput, PageView, ProductBrandListParams, ProductBrandView,
-    ProductCategoryListParams, ProductCategoryView, ProductListParams, ProductMediaInput,
+    ProductCategoryListParams, ProductCategoryView, ProductListParams, ProductListingView, ProductMediaInput,
     ProductRevisionListParams, ProductRevisionMediaView, ProductRevisionView, ProductSkuInput, ProductView,
     SkuAttributeListParams, SkuAttributeValueListParams, SkuAttributeValueView, SkuAttributeView,
     SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView, SpecEntryInput, UnitOfMeasureListParams,
-    UnitOfMeasureView, UpdateProductBrandRequest, UpdateProductCategoryRequest, UpdateProductRequest,
-    UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest, UpdateUnitOfMeasureRequest,
-    UpdateVoucherCategoryRequest, VoucherCategoryProfileListParams, VoucherCategoryProfileView,
-    VoucherSkuInput,
+    UnitOfMeasureView, UpdateProductBrandRequest, UpdateProductCategoryRequest, UpdateProductListingRequest,
+    UpdateProductRequest, UpdateSkuAttributeRequest, UpdateSkuAttributeValueRequest, UpdateSkuListingRequest,
+    UpdateUnitOfMeasureRequest, UpdateVoucherCategoryRequest, VoucherCategoryProfileListParams,
+    VoucherCategoryProfileView, VoucherSkuInput,
 };
 pub(crate) use self::sellable::sellable_sku_invalid_error;
 pub use self::sellable::{SellableSkuListParams, SellableSkuView};
@@ -1194,17 +1195,31 @@ impl CatalogService {
             .products()
             .search_products(&filter, &mut NoTransaction)
             .await?;
+        let product_ids = page
+            .items
+            .iter()
+            .map(|row| ProductId::new(row.id.clone()))
+            .collect::<Vec<_>>();
+        let listing_by_product = self.product_listing_views(&product_ids).await?;
         let items = page
             .items
             .into_iter()
-            .map(|row| ProductView {
-                id: row.id,
-                product_no: row.product_no,
-                product_kind: row.product_kind,
-                status: row.status,
-                current_revision_id: row.current_revision_id,
-                created_at: row.created_at,
-                version: row.version,
+            .map(|row| {
+                let listing = listing_by_product.get(&row.id);
+                ProductView {
+                    id: row.id,
+                    product_no: row.product_no,
+                    product_kind: row.product_kind,
+                    status: row.status,
+                    listing_status: listing
+                        .map(|view| view.listing_status)
+                        .unwrap_or(ProductListingStatus::Unlisted),
+                    listed_sku_count: listing.map_or(0, |view| view.listed_sku_count),
+                    sku_count: listing.map_or(0, |view| view.sku_count),
+                    current_revision_id: row.current_revision_id,
+                    created_at: row.created_at,
+                    version: row.version,
+                }
             })
             .collect();
         Ok(PageView {
@@ -1237,7 +1252,7 @@ impl CatalogService {
         req.validate()?;
         let draft = self.build_product_draft(req, actor).await?;
         let product = self.write_product_draft(draft, actor).await?;
-        Ok(product.into())
+        self.product_view(product).await
     }
 
     /// 规格编辑商品（数据模型 §6.3 全量替换语义，跨集合事务）。
@@ -1270,7 +1285,7 @@ impl CatalogService {
         ensure_version(product.base.version, req.version)?;
         let plan = self.build_spec_edit_plan(&mut product, req, actor).await?;
         let product = self.write_spec_edit_plan(plan, actor).await?;
-        Ok(product.into())
+        self.product_view(product).await
     }
 
     /// 分页查询商品修订列表。
@@ -1343,7 +1358,7 @@ impl CatalogService {
     /// 分页查询 SKU 列表。
     ///
     /// # 参数
-    /// * `params` - 查询参数（`sku_no`/`product_id`/`status` 扁平筛选）
+    /// * `params` - 查询参数（`sku_no`/`product_id`/`status`/`listing_status` 扁平筛选）
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
@@ -1357,6 +1372,7 @@ impl CatalogService {
             sku_no: query.sku_no,
             product_id: query.product_id,
             status: query.status,
+            listing_status: query.listing_status,
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
@@ -1373,6 +1389,7 @@ impl CatalogService {
                 base_unit_id: row.base_unit_id,
                 specification_signature: row.specification_signature,
                 status: row.status,
+                listing_status: row.listing_status,
                 current_revision_id: row.current_revision_id,
                 created_at: row.created_at,
                 version: row.version,
@@ -2382,6 +2399,7 @@ impl CatalogService {
                 base_unit_id: input.base_unit_id,
                 specification_signature: signature,
                 status: EnableStatus::Active,
+                listing_status: ListingStatus::Unlisted,
             },
             ctx.created_by,
         )?;
@@ -3268,8 +3286,8 @@ fn ensure_unique_sort_orders(values: impl Iterator<Item = i32>, label: &str) -> 
 mod tests {
     use super::{
         ensure_category_selection_exclusive, ensure_existing_sku_identity, specification_signature_for,
-        EnableStatus, NewVoucherCategoryInput, ProductCategoryId, ProductId, ProductSkuInput, Sku, SkuData,
-        SkuId, SkuRevisionId, SpecEntryInput, UnitOfMeasureId,
+        EnableStatus, ListingStatus, NewVoucherCategoryInput, ProductCategoryId, ProductId, ProductSkuInput,
+        Sku, SkuData, SkuId, SkuRevisionId, SpecEntryInput, UnitOfMeasureId,
     };
 
     fn new_category_input() -> NewVoucherCategoryInput {
@@ -3289,6 +3307,7 @@ mod tests {
                 base_unit_id: UnitOfMeasureId::new("unit-1"),
                 specification_signature: "color=red".to_string(),
                 status,
+                listing_status: ListingStatus::Unlisted,
             },
             "tester",
         )

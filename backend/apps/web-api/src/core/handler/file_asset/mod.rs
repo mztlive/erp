@@ -8,7 +8,13 @@
 //! （TRANSACTIONS.md：事务闭包内禁止文件 I/O）。
 
 use axum::{
+    body::Body,
     extract::{Multipart, Path, Query, State},
+    http::{
+        header::{CACHE_CONTROL, CONTENT_TYPE, X_CONTENT_TYPE_OPTIONS},
+        HeaderValue, StatusCode,
+    },
+    response::Response,
     Extension, Json,
 };
 use services::{
@@ -76,6 +82,60 @@ pub async fn file_asset_detail(
     let mut view = FileAssetService::new(state.db()).file_asset_detail(&id).await?;
     prepare_asset_response(&state, &mut view);
     Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "文件资产",
+    group_desc = "文件元数据、单据附件与安全检查",
+    desc = "预览文件资产内容",
+    resource = "file_asset",
+    action = "preview"
+)]
+/// 在鉴权与审计后以内联内容响应返回文件资产；对象存储键不进入响应。
+///
+/// # Errors
+/// 文件不存在、已拒绝/隔离、审计失败或对象存储读取失败时返回错误。
+pub async fn file_asset_preview(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+) -> std::result::Result<Response, Error> {
+    let view = FileAssetService::new(state.db())
+        .file_asset_preview(&id, &actor)
+        .await?;
+    if !matches!(
+        view.content_type.as_str(),
+        "image/jpeg" | "image/png" | "image/webp" | "application/pdf"
+    ) {
+        return Err(Error::Unprocessable("当前文件类型不支持在线预览".to_string()));
+    }
+    if matches!(
+        view.security_scan_status,
+        entities::file_asset::SecurityScanStatus::Rejected
+            | entities::file_asset::SecurityScanStatus::Quarantined
+    ) {
+        return Err(Error::Unprocessable("文件未通过安全检查，不能预览".to_string()));
+    }
+    let content = state
+        .storage()
+        .read(&view.storage_object_key)
+        .await
+        .map_err(|storage_error| {
+            error!(error = %storage_error, file_asset_id = %id, "Failed to read file asset preview");
+            Error::Internal("Object storage operation failed".to_string())
+        })?;
+    let content_type = HeaderValue::from_str(&view.content_type)
+        .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream"));
+    let mut response = Response::new(Body::from(content));
+    *response.status_mut() = StatusCode::OK;
+    response.headers_mut().insert(CONTENT_TYPE, content_type);
+    response
+        .headers_mut()
+        .insert(CACHE_CONTROL, HeaderValue::from_static("private, no-store"));
+    response
+        .headers_mut()
+        .insert(X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    Ok(response)
 }
 
 #[permission_macros::permission(

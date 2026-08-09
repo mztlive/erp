@@ -116,6 +116,7 @@ export function rebuildSkusFromSpecs(input: {
       salePrice: matched?.salePrice,
       marketPrice: matched?.marketPrice,
       baseUnit: matched?.baseUnit ?? input.baseUnit,
+      listingStatus: matched?.listingStatus ?? "UNLISTED",
       lifecycleStatus: matched?.lifecycleStatus ?? "ENABLED",
     }
   })
@@ -149,6 +150,7 @@ export function emptyProductFields(): ProductFields {
         attributeValues: [],
         specLabel: "默认规格",
         mainImage: "",
+        listingStatus: "UNLISTED",
         lifecycleStatus: "ENABLED",
       },
     ],

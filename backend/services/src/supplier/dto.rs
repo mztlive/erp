@@ -508,6 +508,17 @@ pub struct SupplierProfileAddressInput {
     pub contact_name: Option<String>,
 }
 
+/// 根级供应商资料中的默认银行账户输入。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct SupplierProfileBankAccountInput {
+    /// 银行名称。
+    #[validate(custom(function = "non_blank", message = "银行名称不能为空"))]
+    pub bank_name: String,
+    /// 银行账号明文；仅在请求处理期间存在。
+    #[validate(custom(function = "non_blank", message = "银行账号不能为空"))]
+    pub account_number: String,
+}
+
 /// 根级供应商资料中的资质输入。
 #[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct SupplierProfileQualificationInput {
@@ -577,6 +588,11 @@ pub struct SaveSupplierProfileRequest {
     /// 修订时明确停用当前税务档案；不能与非空 `tax_no` 同时提交。
     #[serde(default)]
     pub clear_tax_profile: bool,
+    /// 默认银行账户；`None` 表示创建时不填、修订时保留。
+    pub bank_account: Option<SupplierProfileBankAccountInput>,
+    /// 修订时明确停用当前银行账户；不能与 `bank_account` 同时提交。
+    #[serde(default)]
+    pub clear_bank_account: bool,
     /// 结算方式。
     pub settlement_mode: SettlementMode,
     /// 对账周期。
@@ -628,7 +644,9 @@ pub struct SupplierProfileMutationView {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_sort, SortDir};
+    use validator::Validate;
+
+    use super::{normalize_sort, SortDir, SupplierProfileBankAccountInput};
 
     #[test]
     fn sort_whitelist_rejects_unknown_fields_and_directions() {
@@ -641,5 +659,26 @@ mod tests {
         .unwrap();
         assert_eq!(field, "supplier_no");
         assert_eq!(direction, SortDir::Asc);
+    }
+
+    #[test]
+    fn supplier_profile_bank_account_requires_bank_and_account_number() {
+        let valid = SupplierProfileBankAccountInput {
+            bank_name: "中国银行".to_string(),
+            account_number: "6222000000000000".to_string(),
+        };
+        assert!(valid.validate().is_ok());
+
+        let missing_bank = SupplierProfileBankAccountInput {
+            bank_name: " ".to_string(),
+            account_number: "6222000000000000".to_string(),
+        };
+        assert!(missing_bank.validate().is_err());
+
+        let missing_account_number = SupplierProfileBankAccountInput {
+            bank_name: "中国银行".to_string(),
+            account_number: " ".to_string(),
+        };
+        assert!(missing_account_number.validate().is_err());
     }
 }

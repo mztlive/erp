@@ -13,16 +13,16 @@ use entities::{
     common::time::Instant,
     field_update::FieldUpdate,
     ids::{
-        PartyAddressId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId, SupplierAccountId,
-        SupplierCapabilityId, SupplierCapabilityRevisionId, SupplierCommercialProfileRevisionId,
-        SupplierQualificationCapabilityId, SupplierQualificationId, SupplierQualificationRevisionId,
-        SupplierRatingRevisionId,
+        PartyAddressId, PartyBankAccountId, PartyContactId, PartyId, PartyRevisionId, PartyTaxProfileId,
+        SupplierAccountId, SupplierCapabilityId, SupplierCapabilityRevisionId,
+        SupplierCommercialProfileRevisionId, SupplierQualificationCapabilityId, SupplierQualificationId,
+        SupplierQualificationRevisionId, SupplierRatingRevisionId,
     },
     party::{
         AddressType, EffectiveRecordStatus, Party, PartyAddress, PartyAddressData, PartyAddressUpdate,
-        PartyContact, PartyContactData, PartyContactUpdate, PartyData, PartyKind, PartyRevision,
-        PartyRevisionData, PartyStatus, PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate,
-        PartyUpdate,
+        PartyBankAccount, PartyBankAccountData, PartyBankAccountUpdate, PartyContact, PartyContactData,
+        PartyContactUpdate, PartyData, PartyKind, PartyRevision, PartyRevisionData, PartyStatus,
+        PartyTaxProfile, PartyTaxProfileData, PartyTaxProfileUpdate, PartyUpdate,
     },
     supplier::{
         CapabilityStatus, QualificationStatus, SupplierAccount, SupplierAccountData, SupplierAccountStatus,
@@ -72,7 +72,7 @@ impl SupplierProfileService {
         actor: &AuditActor,
     ) -> Result<SupplierProfileMutationView> {
         self.validate_request(&req)?;
-        if req.clear_contact || req.clear_address || req.clear_tax_profile {
+        if req.clear_contact || req.clear_address || req.clear_tax_profile || req.clear_bank_account {
             return Err(Error::ValidationError(
                 "创建供应商时不能提交清空既有资料的意图".to_string(),
             ));
@@ -260,11 +260,17 @@ impl SupplierProfileService {
         {
             return Err(Error::ValidationError("税务档案不能同时替换和清空".to_string()));
         }
+        if req.clear_bank_account && req.bank_account.is_some() {
+            return Err(Error::ValidationError("银行账户不能同时替换和清空".to_string()));
+        }
         if let Some(contact) = &req.contact {
             contact.validate()?;
         }
         if let Some(address) = &req.address {
             address.validate()?;
+        }
+        if let Some(bank_account) = &req.bank_account {
+            bank_account.validate()?;
         }
         for qualification in &req.qualifications {
             qualification.validate()?;
@@ -368,6 +374,7 @@ impl SupplierProfileService {
         let contact = self.create_contact(&req, &party_id, actor.id())?;
         let address = self.create_address(&req, &party_id, actor.id())?;
         let tax_profile = create_tax_profile(&req, &party_id, actor.id())?;
+        let bank_account = self.create_bank_account(&req, &party_id, actor.id())?;
         let capabilities = create_capabilities(&req, &supplier_id, actor.id())?;
         let (qualifications, qualification_revisions, qualification_links) =
             create_qualifications(&req, &supplier_id, &capabilities.ids, actor.id())?;
@@ -401,6 +408,7 @@ impl SupplierProfileService {
             contact,
             address,
             tax_profile,
+            bank_account,
             capabilities: capabilities.items,
             capability_revisions: capabilities.revisions,
             qualifications,
@@ -471,6 +479,38 @@ impl SupplierProfileService {
         )?;
         address.address_ciphertext = self.sensitive_data.encrypt(&input.address)?;
         Ok(Some(address))
+    }
+
+    /// 构造并加密默认银行账户。
+    fn create_bank_account(
+        &self,
+        req: &SaveSupplierProfileRequest,
+        party_id: &PartyId,
+        actor_id: &str,
+    ) -> Result<Option<PartyBankAccount>> {
+        let Some(input) = &req.bank_account else {
+            return Ok(None);
+        };
+        let account_number = input.account_number.trim();
+        let mut account = PartyBankAccount::new(
+            PartyBankAccountId::new(next_id()),
+            PartyBankAccountData {
+                bank_account_no: format!("BA-{}", next_id()),
+                party_id: party_id.clone(),
+                account_name: req.legal_name.clone(),
+                bank_name: input.bank_name.clone(),
+                bank_branch_name: None,
+                account_number: account_number.to_string(),
+                valid_from: req.effective_from,
+                valid_to: None,
+                is_default: true,
+                status: EffectiveRecordStatus::Active,
+            },
+            self.sensitive_data.fingerprint_key(),
+            actor_id,
+        )?;
+        account.account_number_ciphertext = self.sensitive_data.encrypt(account_number)?;
+        Ok(Some(account))
     }
 
     /// 加载当前聚合并构造修订事务载荷。
@@ -581,7 +621,7 @@ impl SupplierProfileService {
         ))
     }
 
-    /// 构造联系人、地址与税务事实的追加/停用变更。
+    /// 构造联系人、地址、税务与银行账户事实的追加/停用变更。
     async fn prepare_party_facts(
         &self,
         party_id: &PartyId,
@@ -617,10 +657,19 @@ impl SupplierProfileService {
             changes.tax_profiles = self
                 .db
                 .party_tax_profiles()
-                .find_many(party_filter, &mut NoTransaction)
+                .find_many(party_filter.clone(), &mut NoTransaction)
                 .await?;
             disable_tax_profiles(&mut changes.tax_profiles, actor_id)?;
             changes.new_tax_profile = create_tax_profile(req, party_id, actor_id)?;
+        }
+        if req.bank_account.is_some() || req.clear_bank_account {
+            changes.bank_accounts = self
+                .db
+                .party_bank_accounts()
+                .find_many(party_filter, &mut NoTransaction)
+                .await?;
+            disable_bank_accounts(&mut changes.bank_accounts, actor_id)?;
+            changes.new_bank_account = self.create_bank_account(req, party_id, actor_id)?;
         }
         Ok(changes)
     }
@@ -912,6 +961,7 @@ struct PreparedCreate {
     contact: Option<PartyContact>,
     address: Option<PartyAddress>,
     tax_profile: Option<PartyTaxProfile>,
+    bank_account: Option<PartyBankAccount>,
     capabilities: Vec<SupplierCapability>,
     capability_revisions: Vec<SupplierCapabilityRevision>,
     qualifications: Vec<SupplierQualification>,
@@ -939,6 +989,9 @@ impl PreparedCreate {
         }
         if let Some(tax_profile) = &self.tax_profile {
             db.party_tax_profiles().create(tax_profile, session).await?;
+        }
+        if let Some(bank_account) = &self.bank_account {
+            db.party_bank_accounts().create(bank_account, session).await?;
         }
         for revision in &self.capability_revisions {
             db.supplier_capability_revisions()
@@ -983,6 +1036,8 @@ struct PartyFactChanges {
     new_address: Option<PartyAddress>,
     tax_profiles: Vec<PartyTaxProfile>,
     new_tax_profile: Option<PartyTaxProfile>,
+    bank_accounts: Vec<PartyBankAccount>,
+    new_bank_account: Option<PartyBankAccount>,
 }
 
 /// 能力当前集合变更及其不可变快照。
@@ -1125,6 +1180,12 @@ impl PartyFactChanges {
         }
         if let Some(item) = &self.new_tax_profile {
             db.party_tax_profiles().create(item, session).await?;
+        }
+        for item in &mut self.bank_accounts {
+            db.party_bank_accounts().update(item, session).await?;
+        }
+        if let Some(item) = &self.new_bank_account {
+            db.party_bank_accounts().create(item, session).await?;
         }
         Ok(())
     }
@@ -1289,6 +1350,22 @@ fn disable_tax_profiles(items: &mut Vec<PartyTaxProfile>, actor_id: &str) -> Res
     for item in items.iter_mut().filter(|item| item.is_active()) {
         item.update(
             PartyTaxProfileUpdate {
+                status: Some(EffectiveRecordStatus::Disabled),
+                valid_to: FieldUpdate::Unchanged,
+                is_default: Some(false),
+            },
+            actor_id,
+        )?;
+    }
+    Ok(())
+}
+
+/// 停用既有银行账户事实行，供新默认事实行接替。
+fn disable_bank_accounts(items: &mut Vec<PartyBankAccount>, actor_id: &str) -> Result<()> {
+    items.retain(PartyBankAccount::is_active);
+    for item in items.iter_mut().filter(|item| item.is_active()) {
+        item.update(
+            PartyBankAccountUpdate {
                 status: Some(EffectiveRecordStatus::Disabled),
                 valid_to: FieldUpdate::Unchanged,
                 is_default: Some(false),

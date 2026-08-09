@@ -23,9 +23,9 @@ pub mod profile;
 pub use self::dto::{
     CommercialProfileView, PageView, RevealSupplierSensitiveRequest, SaveSupplierProfileRequest,
     SupplierCapabilityView, SupplierDetailView, SupplierListParams, SupplierProfileAddressInput,
-    SupplierProfileContactInput, SupplierProfileMutationView, SupplierProfileQualificationInput,
-    SupplierProfileRatingInput, SupplierQualificationView, SupplierRatingView, SupplierSensitiveFieldView,
-    SupplierSensitiveRevealView, SupplierView,
+    SupplierProfileBankAccountInput, SupplierProfileContactInput, SupplierProfileMutationView,
+    SupplierProfileQualificationInput, SupplierProfileRatingInput, SupplierQualificationView,
+    SupplierRatingView, SupplierSensitiveFieldView, SupplierSensitiveRevealView, SupplierView,
 };
 
 use self::dto::SortDir;

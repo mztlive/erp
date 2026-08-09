@@ -221,6 +221,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/products/{id}/listing-status",
+            with_permission(
+                put(catalog::product::product_listing_update),
+                rbac,
+                catalog::product::product_listing_update_permission_key(),
+            ),
+        )
+        .route(
             "/product-revisions",
             with_permission(
                 get(catalog::product::product_revision_list),
@@ -234,6 +242,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
                 get(catalog::product::sku_list),
                 rbac,
                 catalog::product::sku_list_permission_key(),
+            ),
+        )
+        .route(
+            "/skus/{id}/listing-status",
+            with_permission(
+                put(catalog::product::sku_listing_update),
+                rbac,
+                catalog::product::sku_listing_update_permission_key(),
             ),
         )
         .route(

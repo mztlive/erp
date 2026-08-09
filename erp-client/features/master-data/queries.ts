@@ -15,6 +15,7 @@ import {
   fetchSkuSupplierCounts,
   queryMasterDataIdempotency,
   revealMasterDataSensitive,
+  updateProductListingStatus,
 } from "@/features/master-data/api"
 import type {
   CreateMasterDataInput,
@@ -22,6 +23,7 @@ import type {
   DisableMasterDataInput,
   MasterDataListQuery,
   MasterDataResource,
+  ProductListingStatus,
 } from "@/features/master-data/types"
 import { optionKeys } from "@/hooks/use-options"
 
@@ -121,6 +123,20 @@ export function useDisableMasterDataMutation() {
       if (result.outcome === "succeeded" || result.outcome === "conflict") {
         await invalidateMasterDataCaches(queryClient)
       }
+    },
+  })
+}
+
+/** 商品列表整组上/下架，成功后同步商品列表、详情与公司商品池。 */
+export function useProductListingMutation() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: {
+      productId: string
+      listingStatus: Exclude<ProductListingStatus, "PARTIALLY_LISTED">
+    }) => updateProductListingStatus(input.productId, input.listingStatus),
+    onSuccess: async () => {
+      await invalidateMasterDataCaches(queryClient)
     },
   })
 }

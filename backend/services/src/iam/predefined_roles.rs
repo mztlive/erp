@@ -170,6 +170,7 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "file_asset:list",
     "file_asset:create",
     "file_asset:detail",
+    "file_asset:preview",
     "file_asset:update",
     "document_attachment:list",
     "document_attachment:create",
@@ -204,6 +205,7 @@ const PROCUREMENT_PERMISSIONS: &[&str] = &[
     "party_tax_profile:*",
     "party_bank_account:*",
     "supplier:*",
+    "supplier_sensitive:reveal",
     // 确认与采购
     "contract:detail",
     "sales_order:list",
@@ -492,7 +494,42 @@ pub async fn ensure_predefined_roles(rbac: &SharedRbacService) -> Result<()> {
         seed_one(rbac, role).await?;
     }
     upgrade_customer_role_boundaries(rbac).await?;
+    upgrade_procurement_role_permissions(rbac).await?;
     Ok(())
+}
+
+/// 仅为仍保持历史默认种子的采购角色补齐当前供应商维护权限。
+async fn upgrade_procurement_role_permissions(rbac: &SharedRbacService) -> Result<()> {
+    let desired = parse_permissions(PROCUREMENT_PERMISSIONS)?;
+    for previous in procurement_legacy_permission_snapshots(&desired)? {
+        upgrade_exact(rbac, "role-procurement", previous, desired.clone()).await?;
+    }
+    Ok(())
+}
+
+/// 构造可安全识别的历史采购默认权限快照。
+fn procurement_legacy_permission_snapshots(desired: &[Permission]) -> Result<Vec<Vec<Permission>>> {
+    let before_sensitive_reveal =
+        remove_permissions(desired, &["file_asset:preview", "supplier_sensitive:reveal"]);
+    let mut catalog_era = remove_permissions(
+        desired,
+        &[
+            "supplier_sensitive:reveal",
+            "file_asset:preview",
+            "supplier_offering_availability:*",
+            "supplier_offering_cost:detail",
+        ],
+    );
+    for permission in [
+        "supplier_catalog_cost:detail",
+        "supplier_catalog_intake_batch:list",
+        "supplier_catalog_product:*",
+        "supplier_catalog_sku:list",
+        "supplier_product_mapping:*",
+    ] {
+        catalog_era.push(Permission::parse(permission)?);
+    }
+    Ok(vec![before_sensitive_reveal, catalog_era])
 }
 
 /// 仅为仍保持旧默认种子的角色收紧客户范围并补齐字段级权限。
@@ -562,7 +599,7 @@ async fn upgrade_exact(
         .upgrade_seeded_role_permissions_if_exact(role_id, previous, desired)
         .await?
     {
-        tracing::info!(role_id, "predefined customer permissions upgraded");
+        tracing::info!(role_id, "predefined role permissions upgraded");
     }
     Ok(())
 }
@@ -621,7 +658,8 @@ pub(super) fn predefined_role_ids() -> Vec<&'static str> {
 #[cfg(test)]
 mod tests {
     use super::{
-        parse_permissions, predefined_role_ids, PREDEFINED_ROLES, PROCUREMENT_PERMISSIONS, SALES_PERMISSIONS,
+        parse_permissions, predefined_role_ids, procurement_legacy_permission_snapshots, PREDEFINED_ROLES,
+        PROCUREMENT_PERMISSIONS, SALES_PERMISSIONS,
     };
     use entities::{Permission, PermissionSet};
 
@@ -662,6 +700,29 @@ mod tests {
         let permissions = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
         let cost = PermissionSet::new([Permission::parse("supplier_offering_cost:detail").unwrap()]);
         assert!(permissions.covers(&cost));
+    }
+
+    #[test]
+    fn procurement_permissions_include_supplier_write_and_sensitive_reveal() {
+        let permissions = PermissionSet::new(parse_permissions(PROCUREMENT_PERMISSIONS).unwrap());
+        for required in ["supplier:update", "supplier_sensitive:reveal"] {
+            let required = PermissionSet::new([Permission::parse(required).unwrap()]);
+            assert!(permissions.covers(&required));
+        }
+    }
+
+    #[test]
+    fn procurement_legacy_snapshots_cover_current_database_seed() {
+        let desired = parse_permissions(PROCUREMENT_PERMISSIONS).unwrap();
+        let snapshots = procurement_legacy_permission_snapshots(&desired).unwrap();
+        assert_eq!(snapshots[0].len(), desired.len() - 2);
+        assert_eq!(snapshots[1].len(), 67);
+        assert!(snapshots[1]
+            .iter()
+            .any(|permission| permission.to_string() == "supplier_catalog_cost:detail"));
+        assert!(!snapshots[1]
+            .iter()
+            .any(|permission| permission.to_string() == "supplier_sensitive:reveal"));
     }
 
     #[test]

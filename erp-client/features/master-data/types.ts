@@ -35,6 +35,10 @@ export const PRODUCT_KIND_LABELS: Readonly<Record<ProductKind, string>> = {
 }
 
 export type LifecycleStatus = "ENABLED" | "DISABLED"
+export type ProductListingStatus =
+  | "LISTED"
+  | "PARTIALLY_LISTED"
+  | "UNLISTED"
 export type RevisionTiming = "CURRENT" | "FUTURE" | "HISTORICAL"
 
 export type MasterDataSectionId =
@@ -74,6 +78,12 @@ export type MasterDataListItem = Readonly<{
   lifecycleStatus: LifecycleStatus
   lifecycleStatusLabel: string
   lifecycleTone: StatusTone
+  /** 商品列表专用：从当前启用 SKU 继承的上架状态。 */
+  listingStatus?: ProductListingStatus
+  /** 商品列表专用：当前已上架 SKU 数。 */
+  listedSkuCount?: number
+  /** 商品列表专用：当前启用 SKU 总数。 */
+  skuCount?: number
   /** Only for FUTURE revisions that will change lifecycle. */
   scheduledLifecycleStatus?: LifecycleStatus
   scheduledLifecycleLabel?: string
@@ -287,6 +297,8 @@ export type ProductSkuFields = Readonly<{
   /** 市场价（参考展示，非正式发布价）。 */
   marketPrice?: string
   baseUnit?: string
+  /** 独立于启停状态的 SKU 上架状态。 */
+  listingStatus?: "LISTED" | "UNLISTED"
   lifecycleStatus: LifecycleStatus
 }>
 
@@ -477,6 +489,7 @@ export type SupplierFields = Readonly<{
   clearTaxProfile?: boolean
   bankName?: string
   bankAccount?: string
+  clearBankAccount?: boolean
   invoiceType?: string
   invoiceTaxRate?: string
   initialScore?: string

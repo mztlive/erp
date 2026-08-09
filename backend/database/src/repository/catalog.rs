@@ -28,8 +28,8 @@ use crate::{mongo_ops, Result};
 
 use entities::catalog::sku_attribute::AttributeValueType;
 use entities::catalog::{
-    EnableStatus, Product, ProductBrand, ProductCategory, ProductCategoryAttribute, ProductKind,
-    ProductRevision, ProductRevisionMedia, Sku, SkuAttribute, SkuAttributeValue, SkuRevision,
+    EnableStatus, ListingStatus, Product, ProductBrand, ProductCategory, ProductCategoryAttribute,
+    ProductKind, ProductRevision, ProductRevisionMedia, Sku, SkuAttribute, SkuAttributeValue, SkuRevision,
     SkuRevisionAttributeValue, UnitOfMeasure, VoucherCategoryProfileRevision,
 };
 use entities::common::time::BusinessDate;
@@ -1163,12 +1163,20 @@ pub struct SkuRow {
     pub specification_signature: String,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 上架状态；旧文档缺失值按原有可售行为兼容为已上架。
+    #[serde(default = "legacy_sku_listing_status")]
+    pub listing_status: ListingStatus,
     /// 当前 SKU 修订 ID。
     pub current_revision_id: Option<String>,
     /// 乐观锁版本。
     pub version: u64,
     /// 创建时间（秒级时间戳）。
     pub created_at: u64,
+}
+
+/// 上架概念引入前的 SKU 投影行保持原有可售行为。
+fn legacy_sku_listing_status() -> ListingStatus {
+    ListingStatus::Listed
 }
 
 /// SKU 列表筛选条件。
@@ -1180,6 +1188,8 @@ pub struct SkuFilter {
     pub product_id: Option<String>,
     /// 启停状态；`None` 表示不筛选。
     pub status: Option<EnableStatus>,
+    /// 上架状态；`None` 表示不筛选。
+    pub listing_status: Option<ListingStatus>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -1203,6 +1213,13 @@ impl QueryFilter for SkuFilter {
         }
         if let Some(status) = self.status {
             filter.insert("status", status.as_str());
+        }
+        if let Some(listing_status) = self.listing_status {
+            let value = match listing_status {
+                ListingStatus::Listed => doc! { "$in": [ListingStatus::Listed.as_str(), null] },
+                ListingStatus::Unlisted => doc! { "$eq": ListingStatus::Unlisted.as_str() },
+            };
+            filter.insert("listing_status", value);
         }
         filter
     }
@@ -1250,6 +1267,32 @@ impl<'a> Repository<'a, ProductRevisionMedia> {
 }
 
 impl<'a> Repository<'a, Sku> {
+    /// 批量查询一组商品下的全部 SKU。
+    ///
+    /// # 参数
+    /// * `product_ids` - 商品稳定 ID 集合
+    /// * `executor` - 数据访问执行器，由 Service 决定事务边界
+    ///
+    /// # 返回
+    /// 返回匹配的未删除 SKU 实体。
+    ///
+    /// # 错误
+    /// MongoDB 查询或反序列化失败时返回错误。
+    pub async fn find_by_product_ids(
+        &self,
+        product_ids: &[ProductId],
+        executor: &mut dyn Executor,
+    ) -> Result<Vec<Sku>> {
+        if product_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.find_many(
+            in_filter("product_id", product_ids.iter().map(ToString::to_string)),
+            executor,
+        )
+        .await
+    }
+
     /// 分页检索 SKU 列表（投影查询）。
     ///
     /// 只返回 [`SkuRow`] 所需的列表字段；排序字段白名单化
@@ -1838,6 +1881,7 @@ fn sellable_sku_match(
     let mut filter = doc! {
         "deleted_at": NOT_DELETED_TIMESTAMP_BSON,
         "status": EnableStatus::Active.as_str(),
+        "listing_status": { "$in": [ListingStatus::Listed.as_str(), null] },
         "current_revision_id": { "$ne": null },
     };
     if !refs.is_empty() {
@@ -2331,6 +2375,7 @@ fn sku_projection() -> Document {
         "base_unit_id": 1,
         "specification_signature": 1,
         "status": 1,
+        "listing_status": 1,
         "current_revision_id": 1,
         "version": 1,
         "created_at": 1,
@@ -2377,10 +2422,10 @@ fn voucher_revision_projection() -> Document {
 mod tests {
     use super::{
         sellable_sku_match, sellable_sku_pipeline, sort_doc, QueryFilter, SkuAttributeFilter,
-        SkuAttributeValueFilter, SkuRevisionFilter,
+        SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter, SkuRow,
     };
     use entities::catalog::sku_attribute::AttributeValueType;
-    use entities::catalog::{EnableStatus, ProductKind};
+    use entities::catalog::{EnableStatus, ListingStatus, ProductKind};
     use entities::common::time::BusinessDate;
     use mongodb::bson::doc;
 
@@ -2443,12 +2488,50 @@ mod tests {
     }
 
     #[test]
+    fn sku_filter_applies_listing_status() {
+        let filter = SkuFilter {
+            sku_no: None,
+            product_id: Some("product-1".to_string()),
+            status: Some(EnableStatus::Active),
+            listing_status: Some(ListingStatus::Listed),
+            page: 1,
+            page_size: 20,
+            sort_by: None,
+            sort_ascending: false,
+        };
+
+        let document = filter.to_doc();
+        assert_eq!(document.get_str("product_id").unwrap(), "product-1");
+        assert_eq!(document.get_str("status").unwrap(), "active");
+        let listing = document.get_document("listing_status").unwrap();
+        assert_eq!(listing.get_array("$in").unwrap().len(), 2);
+    }
+
+    #[test]
+    fn legacy_sku_row_without_listing_status_is_treated_as_listed() {
+        let row: SkuRow = mongodb::bson::from_document(doc! {
+            "id": "sku-1",
+            "sku_no": "SKU-001",
+            "product_id": "product-1",
+            "base_unit_id": "unit-1",
+            "specification_signature": "",
+            "status": "active",
+            "current_revision_id": "sku-revision-1",
+            "version": 1_i64,
+            "created_at": 1_i64,
+        })
+        .unwrap();
+
+        assert_eq!(row.listing_status, ListingStatus::Listed);
+    }
+
+    #[test]
     fn sort_doc_applies_direction() {
         assert_eq!(sort_doc("created_at", false), doc! { "created_at": -1 });
         assert_eq!(sort_doc("sku_no", true), doc! { "sku_no": 1 });
     }
 
-    /// 公司商品池管道同时约束 SKU 修订、有效供给，并禁止投影采购成本。
+    /// 公司商品池管道同时约束 SKU 已上架、当前修订与有效供给，并禁止投影采购成本。
     #[test]
     fn sellable_sku_pipeline_is_fail_closed_and_cost_safe() {
         let date = BusinessDate::from_ymd(2026, 8, 8).unwrap();
@@ -2457,6 +2540,8 @@ mod tests {
         let json = format!("{pipeline:?}");
 
         assert!(json.contains("sales_visible_price_gross"));
+        assert!(json.contains("listing_status"));
+        assert!(json.contains("listed"));
         assert!(json.contains("availability_status"));
         assert!(json.contains("available_quantity"));
         assert!(json.contains("$gt"));

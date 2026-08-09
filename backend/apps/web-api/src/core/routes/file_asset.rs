@@ -58,6 +58,14 @@ pub fn routes(rbac: &SharedRbacService) -> Router<AppState> {
             ),
         )
         .route(
+            "/file-assets/{id}/preview",
+            with_permission(
+                get(file_asset::file_asset_preview),
+                rbac,
+                file_asset::file_asset_preview_permission_key(),
+            ),
+        )
+        .route(
             "/file-assets/{id}/scan-result",
             with_permission(
                 put(file_asset::file_asset_scan_result),

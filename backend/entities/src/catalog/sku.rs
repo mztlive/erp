@@ -9,7 +9,7 @@ use entity_macros::Entity;
 use serde::{Deserialize, Serialize};
 
 use crate::catalog::specification::validate_specification_signature;
-use crate::catalog::status::EnableStatus;
+use crate::catalog::status::{EnableStatus, ListingStatus};
 use crate::common::stable::StableBase;
 use crate::errors::Result;
 use crate::ids::{ProductId, SkuId, UnitOfMeasureId};
@@ -17,6 +17,11 @@ use crate::validation::normalize_required_text;
 
 /// SKU 编号最大长度。
 const SKU_NO_MAX_LEN: usize = 64;
+
+/// 上架概念引入前的 SKU 均视为延续原有可售行为，读取时兼容为已上架。
+fn legacy_listing_status() -> ListingStatus {
+    ListingStatus::Listed
+}
 
 /// SKU 创建数据。
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -31,6 +36,8 @@ pub struct SkuData {
     pub specification_signature: String,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 上架状态；新建 SKU 缺省应明确传入 `Unlisted`。
+    pub listing_status: ListingStatus,
 }
 
 /// SKU 更新数据。
@@ -58,6 +65,9 @@ pub struct Sku {
     pub base_unit_id: UnitOfMeasureId,
     /// 规范化规格签名（创建后不可变）。
     pub specification_signature: String,
+    /// 上架状态；旧数据缺少字段时按原有可售行为兼容为已上架。
+    #[serde(default = "legacy_listing_status")]
+    pub listing_status: ListingStatus,
 }
 
 impl PartialEq for Sku {
@@ -72,6 +82,7 @@ impl PartialEq for Sku {
             && self.product_id == other.product_id
             && self.base_unit_id == other.base_unit_id
             && self.specification_signature == other.specification_signature
+            && self.listing_status == other.listing_status
     }
 }
 
@@ -92,11 +103,15 @@ impl Sku {
     /// 返回新建的 SKU 实体。
     ///
     /// # 错误
-    /// 当 sku_no 为空/超长，或规格签名不是规范化形态时返回错误。
+    /// 当 sku_no 为空/超长、规格签名不是规范化形态，或停用 SKU 被标记为
+    /// 已上架时返回错误。
     pub fn new(id: SkuId, data: SkuData, created_by: impl Into<String>) -> Result<Self> {
         let sku_no = normalize_required_text(data.sku_no, "SKU编号不能为空", SKU_NO_MAX_LEN, "SKU编号过长")?;
         let signature = data.specification_signature.trim().to_string();
         validate_specification_signature(&signature)?;
+        if data.listing_status.is_listed() && !data.status.is_active() {
+            return Err("停用的 SKU 不能上架".into());
+        }
 
         Ok(Self {
             base: BaseModel::new(id.to_string()),
@@ -105,6 +120,7 @@ impl Sku {
             product_id: data.product_id,
             base_unit_id: data.base_unit_id,
             specification_signature: signature,
+            listing_status: data.listing_status,
         })
     }
 
@@ -122,6 +138,9 @@ impl Sku {
     pub fn update(&mut self, update: SkuUpdate, updated_by: impl Into<String>) -> Result<()> {
         if let Some(status) = update.status {
             self.stable.status = status;
+            if !status.is_active() {
+                self.listing_status = ListingStatus::Unlisted;
+            }
         }
         self.stable.touch(updated_by);
         Ok(())
@@ -133,6 +152,35 @@ impl Sku {
     /// 状态为 `Active` 时返回 `true`。
     pub fn is_active(&self) -> bool {
         self.stable.status().is_active()
+    }
+
+    /// 切换 SKU 上架状态。
+    ///
+    /// 停用 SKU 不允许上架；幂等提交不会增加实体版本。
+    ///
+    /// # 参数
+    /// * `listing_status` - 目标上架状态
+    /// * `updated_by` - 本次操作人
+    ///
+    /// # 返回
+    /// 状态发生变化时返回 `true`，幂等提交返回 `false`。
+    ///
+    /// # 错误
+    /// 停用 SKU 尝试上架时返回领域错误。
+    pub fn set_listing_status(
+        &mut self,
+        listing_status: ListingStatus,
+        updated_by: impl Into<String>,
+    ) -> Result<bool> {
+        if listing_status.is_listed() && !self.is_active() {
+            return Err("停用的 SKU 不能上架".into());
+        }
+        if self.listing_status == listing_status {
+            return Ok(false);
+        }
+        self.listing_status = listing_status;
+        self.stable.touch(updated_by);
+        Ok(true)
     }
 
     /// 判断是否为无规格 SKU。
@@ -158,6 +206,7 @@ mod tests {
             base_unit_id: UnitOfMeasureId::new("uom-1"),
             specification_signature: "size=L|color=红色".to_string(),
             status: EnableStatus::Active,
+            listing_status: ListingStatus::Unlisted,
         }
     }
 
@@ -172,6 +221,7 @@ mod tests {
         assert_eq!(sku.specification_signature, "size=L|color=红色");
         assert!(!sku.is_no_spec());
         assert!(sku.is_active());
+        assert_eq!(sku.listing_status, ListingStatus::Unlisted);
     }
 
     /// happy path：无规格 SKU 使用固定空规格签名，空白输入规范化为空签名。
@@ -232,10 +282,65 @@ mod tests {
         .unwrap();
 
         assert!(!sku.is_active());
+        assert_eq!(sku.listing_status, ListingStatus::Unlisted);
         assert_eq!(sku.sku_no, "SKU-2025-001");
         assert_eq!(sku.base_unit_id, UnitOfMeasureId::new("uom-1"));
         assert_eq!(sku.specification_signature, "size=L|color=红色");
         assert_eq!(sku.stable.updated_by, "admin-2");
+    }
+
+    /// 上架状态独立切换，幂等提交不触碰版本。
+    #[test]
+    fn listing_status_changes_independently_and_idempotently() {
+        let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
+
+        assert!(sku.set_listing_status(ListingStatus::Listed, "admin-2").unwrap());
+        let version = sku.base.version;
+        assert!(sku.listing_status.is_listed());
+        assert!(!sku.set_listing_status(ListingStatus::Listed, "admin-3").unwrap());
+        assert_eq!(sku.base.version, version);
+        assert_eq!(sku.stable.updated_by, "admin-2");
+    }
+
+    /// 停用 SKU 自动下架，且不能在停用状态下重新上架。
+    #[test]
+    fn disabled_sku_is_unlisted_and_cannot_be_listed() {
+        let mut sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
+        sku.set_listing_status(ListingStatus::Listed, "admin-2").unwrap();
+        sku.update(
+            SkuUpdate {
+                status: Some(EnableStatus::Disabled),
+            },
+            "admin-3",
+        )
+        .unwrap();
+
+        assert_eq!(sku.listing_status, ListingStatus::Unlisted);
+        assert!(sku.set_listing_status(ListingStatus::Listed, "admin-4").is_err());
+    }
+
+    /// 构造阶段拒绝“停用但已上架”的非法组合。
+    #[test]
+    fn new_rejects_disabled_but_listed_sku() {
+        let invalid = SkuData {
+            status: EnableStatus::Disabled,
+            listing_status: ListingStatus::Listed,
+            ..data()
+        };
+
+        assert!(Sku::new(SkuId::new("sku-1"), invalid, "admin-1").is_err());
+    }
+
+    /// 上架概念引入前的旧文档缺字段时保持原有可售行为。
+    #[test]
+    fn legacy_document_without_listing_status_is_treated_as_listed() {
+        let sku = Sku::new(SkuId::new("sku-1"), data(), "admin-1").unwrap();
+        let mut value = serde_json::to_value(sku).unwrap();
+        value.as_object_mut().unwrap().remove("listing_status");
+
+        let restored: Sku = serde_json::from_value(value).unwrap();
+
+        assert_eq!(restored.listing_status, ListingStatus::Listed);
     }
 
     /// 状态机：合法迁移通过，邻接矩阵对称闭合。

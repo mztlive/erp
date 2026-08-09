@@ -210,6 +210,10 @@ fn product_revision_media_indexes() -> Vec<IndexModel> {
 fn sku_indexes() -> Vec<IndexModel> {
     vec![
         unique_index("uk_skus_sku_no", doc! { "sku_no": 1 }),
+        named_index(
+            "idx_skus_listing_status",
+            doc! { "listing_status": 1, "status": 1, "product_id": 1 },
+        ),
         // (product_id, specification_signature) 在全部生命周期记录上永久唯一：
         // 不得实现为仅约束启用行的 partial unique index（数据模型 §6.3）。
         unique_index(
@@ -332,6 +336,11 @@ mod tests {
             .unwrap();
         assert_eq!(spec.keys, doc! { "product_id": 1, "specification_signature": 1 });
         assert_eq!(spec.options.as_ref().unwrap().unique, Some(true));
+        assert!(sku_indexes.iter().any(|index| {
+            index.options.as_ref().and_then(|options| options.name.as_deref())
+                == Some("idx_skus_listing_status")
+                && index.keys == doc! { "listing_status": 1, "status": 1, "product_id": 1 }
+        }));
     }
 
     #[test]

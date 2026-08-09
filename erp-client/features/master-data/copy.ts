@@ -96,7 +96,7 @@ export const masterDataCopy = {
     `共 ${count} 条 · 可按启用状态、版本状态筛选 · 按 / 搜索 · 回车打开详情`,
   searchAria: "搜索基础资料",
   sellableItemsHint:
-    "公司商品池 = 采购发布给销售的可售项（价格对销售可见）；商品与 SKU = SPU / SKU 主档。两者相互关联，商品池价格来自商品主档的销售可见价。",
+    "公司商品池只显示已上架、资料有效且当前有供给关系的 SKU；销售可见价来自公司商品主档，采购成本不会在这里展示。",
   filterLifecycleAria: "启用状态",
   filterVersionAria: "版本状态",
   versionAll: "版本：全部",
@@ -207,7 +207,7 @@ export const masterDataCopy = {
   productSpecsHint:
     "添加规格维度（如颜色、规格），填写取值后自动组合出 SKU。无规格时保留一个默认 SKU。",
   productSkuHint:
-    "销售可见价属于公司商品池；每个 SKU 可关联多家供应商，采购成本、供给方式、税费和起订量按供给关系独立维护，不写入商品版本。",
+    "SKU 的上架状态与启用状态分别管理；公司商品池只读取已上架且当前有供给关系的 SKU。采购成本、供给方式、税费和起订量按供给关系独立维护。",
   productAddSpec: "添加规格",
   productRemoveSpec: "移除规格",
   productRebuildSkus: "按规格重新生成 SKU",

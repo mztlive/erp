@@ -31,6 +31,7 @@ import type {
   MasterDataResource,
   ProductFields,
   ProductKind,
+  ProductListingStatus,
   ProductSkuFields,
   RevisionTimelineEntry,
   SellableItemFields,
@@ -110,9 +111,19 @@ type ProductDto = {
   product_no: string
   product_kind: ProductKind
   status: EnableStatus
+  listing_status: "listed" | "partially_listed" | "unlisted"
+  listed_sku_count: number
+  sku_count: number
   current_revision_id: string | null
   created_at: number
   version: number
+}
+
+type ProductListingDto = {
+  product_id: string
+  listing_status: "listed" | "partially_listed" | "unlisted"
+  listed_sku_count: number
+  sku_count: number
 }
 
 type ProductRevisionDto = {
@@ -145,6 +156,7 @@ type SkuDto = {
   base_unit_id: string
   specification_signature: string
   status: EnableStatus
+  listing_status: "listed" | "unlisted"
   current_revision_id: string | null
   created_at: number
   version: number
@@ -618,14 +630,21 @@ const parseScore100 = (raw: string | undefined): number | undefined => {
   return n
 }
 
-/** 将用户输入的百分数或小数统一为后端 [0, 1) 税率字符串。 */
+/** 将用户输入的整数百分数转换为后端 [0, 1) 税率字符串。 */
 const normalizeTaxRate = (raw: string | undefined): string => {
   const text = (raw ?? "").trim().replace(/%$/, "")
   if (!text) return "0.13"
+  if (!/^(0|[1-9]\d?)$/.test(text)) return "0.13"
   const value = Number(text)
-  if (!Number.isFinite(value) || value < 0) return "0.13"
-  const decimal = value >= 1 ? value / 100 : value
-  return decimal >= 1 ? "0.13" : String(decimal)
+  return String(value / 100)
+}
+
+/** 将后端 [0, 1) 税率转换为页面百分数输入值。 */
+const taxRatePercent = (raw: string | null | undefined): string => {
+  if (!raw?.trim()) return ""
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value < 0 || value >= 1) return ""
+  return String(Math.round(value * 100))
 }
 
 const pickDefaultOrFirst = <T extends { is_default?: boolean }>(
@@ -908,6 +927,7 @@ function mapProductRow(
   revision?: ProductRevisionDto
 ): MasterDataListItem {
   const lifecycle = asLifecycle(dto.status)
+  const listingStatus = dto.listing_status.toUpperCase() as ProductListingStatus
   const future = revision ? isFutureDate(revision.effective_from) : false
   return {
     objectType: "products",
@@ -917,6 +937,9 @@ function mapProductRow(
     lifecycleStatus: lifecycle,
     lifecycleStatusLabel: lifecycleLabel(lifecycle),
     lifecycleTone: lifecycleTone(lifecycle),
+    listingStatus,
+    listedSkuCount: dto.listed_sku_count,
+    skuCount: dto.sku_count,
     revisionTiming: future ? "FUTURE" : "CURRENT",
     revisionTimingLabel: future ? "待生效" : "当前生效",
     currentRevisionId: revision?.id ?? dto.id,
@@ -926,6 +949,10 @@ function mapProductRow(
     keyFacts: [
       { label: "商品编号", value: dto.product_no },
       { label: "商品类型", value: productKindLabel(dto.product_kind) },
+      {
+        label: "上架 SKU",
+        value: `${dto.listed_sku_count}/${dto.sku_count}`,
+      },
     ],
     primaryBlocker: lifecycle === "DISABLED" ? "已停用：历史引用保留" : undefined,
     selectorEligibility: [],
@@ -1230,6 +1257,19 @@ async function listSellableItems(
     q: query.q || undefined,
   })
   return rows.map(mapSkuAsSellable)
+}
+
+/** 整组切换 SPU 下全部当前启用 SKU 的上架状态。 */
+export async function updateProductListingStatus(
+  productId: string,
+  listingStatus: Exclude<ProductListingStatus, "PARTIALLY_LISTED">,
+): Promise<ProductListingDto> {
+  return apiPut<ProductListingDto>(
+    `/admin/products/${encodeURIComponent(productId)}/listing-status`,
+    {
+      listing_status: listingStatus === "LISTED" ? "listed" : "unlisted",
+    },
+  )
 }
 
 async function listVoucherCategories(
@@ -1603,6 +1643,8 @@ async function centerProduct(
       salePrice: rev?.sales_visible_price_gross ?? undefined,
       marketPrice: rev?.market_price ?? undefined,
       baseUnit: unit?.name ?? unit?.symbol,
+      listingStatus:
+        sku.listing_status === "listed" ? "LISTED" : "UNLISTED",
       lifecycleStatus: asLifecycle(sku.status),
     })
   }
@@ -1793,10 +1835,14 @@ async function centerSupplier(
   const contact = pickDefaultOrFirst(contacts)
   const bank = pickDefaultOrFirst(banks)
   const taxProfile = pickDefaultOrFirst(taxProfiles)
-  // 评级按 revision_no 取最新
-  const rating = [...ratings].sort(
+  const sortedRatings = [...ratings].sort(
     (a, b) => (b.revision_no ?? 0) - (a.revision_no ?? 0)
-  )[0]
+  )
+  const rating = sortedRatings[0]
+  const initialRating = [...sortedRatings]
+    .reverse()
+    .find((item) => item.initial_score != null)
+  const invoiceTaxRatePercent = taxRatePercent(profile?.invoice_tax_rate)
 
   const capabilityLabels = capabilities
     .map((c) => capabilityLabel(c.capability_code))
@@ -1868,7 +1914,7 @@ async function centerSupplier(
     fact("联系电话", contact?.telephone),
     fact("结算方式", settlementLabel(profile?.settlement_mode)),
     fact("发票类型", invoiceLabel(profile?.invoice_type)),
-    fact("发票税点", profile?.invoice_tax_rate),
+    fact("发票税点", invoiceTaxRatePercent),
     fact("能力", capabilityLabels),
     fact("经营类目", businessCategory || null),
     fact("公司签约主体", profile?.signing_entity_party_id),
@@ -1890,7 +1936,9 @@ async function centerSupplier(
     fact("供应商评级", ratingLabel(rating?.rating)),
     fact(
       "合作期初评分",
-      rating?.initial_score != null ? String(rating.initial_score) : null
+      initialRating?.initial_score != null
+        ? String(initialRating.initial_score)
+        : null
     ),
     fact(
       "合作中评分",
@@ -1914,7 +1962,7 @@ async function centerSupplier(
     },
     {
       label: "发票税点",
-      value: profile?.invoice_tax_rate ?? "—",
+      value: invoiceTaxRatePercent ? `${invoiceTaxRatePercent}%` : "—",
     },
     { label: "能力", value: capabilityLabels || "—" },
     {
@@ -2469,6 +2517,14 @@ async function createSupplier(
         clear_address: false,
         tax_no: fields.taxNo?.trim() || null,
         clear_tax_profile: false,
+        bank_account:
+          fields.bankName?.trim() && fields.bankAccount?.trim()
+            ? {
+                bank_name: fields.bankName.trim(),
+                account_number: fields.bankAccount.trim(),
+              }
+            : null,
+        clear_bank_account: false,
         settlement_mode: settlementToBackend(fields.settlement),
         reconciliation_cycle: "monthly",
         payment_term_snapshot: buildPaymentTermSnapshot(
@@ -2892,6 +2948,14 @@ export async function createMasterDataRevision(
             clear_address: fields.clearAddress === true,
             tax_no: fields.taxNo?.trim() || null,
             clear_tax_profile: fields.clearTaxProfile === true,
+            bank_account:
+              fields.bankName?.trim() && fields.bankAccount?.trim()
+                ? {
+                    bank_name: fields.bankName.trim(),
+                    account_number: fields.bankAccount.trim(),
+                  }
+                : null,
+            clear_bank_account: fields.clearBankAccount === true,
             settlement_mode: settlementToBackend(fields.settlement),
             reconciliation_cycle: "monthly",
             payment_term_snapshot: buildPaymentTermSnapshot(
@@ -2909,9 +2973,9 @@ export async function createMasterDataRevision(
               capabilityCodes,
             ),
             rating:
-              fields.supplierRating || fields.currentScore
+              fields.supplierRating || fields.currentScore || fields.initialScore
                 ? {
-                    initial_score: null,
+                    initial_score: parseScore100(fields.initialScore) ?? null,
                     rating: ratingToBackend(fields.supplierRating),
                     current_score: parseScore100(fields.currentScore) ?? 0,
                     valid_from: effectiveFrom,

@@ -10,8 +10,9 @@
 
 use entities::catalog::product_revision_media::MediaRole;
 use entities::catalog::{
-    EnableStatus, Product, ProductBrand, ProductCategory, ProductKind, ProductRevision, Sku, SkuAttribute,
-    SkuAttributeValue, SkuRevision, UnitOfMeasure, VoucherCategoryProfileRevision,
+    EnableStatus, ListingStatus, ProductBrand, ProductCategory, ProductKind, ProductListingStatus,
+    ProductRevision, Sku, SkuAttribute, SkuAttributeValue, SkuRevision, UnitOfMeasure,
+    VoucherCategoryProfileRevision,
 };
 use entities::common::time::BusinessDate;
 use entities::ids::{
@@ -998,6 +999,12 @@ pub struct ProductView {
     pub product_kind: ProductKind,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 从当前启用 SKU 继承的上架状态。
+    pub listing_status: ProductListingStatus,
+    /// 当前已上架 SKU 数。
+    pub listed_sku_count: u32,
+    /// 当前启用 SKU 总数。
+    pub sku_count: u32,
     /// 当前商品修订 ID。
     pub current_revision_id: Option<String>,
     /// 创建时间（秒级时间戳）。
@@ -1006,25 +1013,34 @@ pub struct ProductView {
     pub version: u64,
 }
 
-impl From<Product> for ProductView {
-    /// 从实体构造响应视图。
-    ///
-    /// # 参数
-    /// * `product` - 商品实体
-    ///
-    /// # 返回
-    /// 返回响应视图。
-    fn from(product: Product) -> Self {
-        Self {
-            id: product.base.id,
-            product_no: product.product_no,
-            product_kind: product.product_kind,
-            status: product.stable.status,
-            current_revision_id: product.stable.current_revision_id,
-            created_at: product.base.created_at,
-            version: product.base.version,
-        }
-    }
+/// SPU 下全部当前启用 SKU 的上/下架请求。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UpdateProductListingRequest {
+    /// 目标上架状态；一次性应用于 SPU 下全部当前启用 SKU。
+    pub listing_status: ListingStatus,
+}
+
+/// 单个 SKU 上/下架请求。
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+pub struct UpdateSkuListingRequest {
+    /// SKU 期望乐观锁版本。
+    #[validate(range(min = 1, message = "乐观锁版本必须大于 0"))]
+    pub version: u64,
+    /// 目标上架状态。
+    pub listing_status: ListingStatus,
+}
+
+/// SPU 继承上架状态响应。
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct ProductListingView {
+    /// 商品稳定 ID。
+    pub product_id: String,
+    /// 从当前启用 SKU 继承的状态。
+    pub listing_status: ProductListingStatus,
+    /// 当前已上架 SKU 数。
+    pub listed_sku_count: u32,
+    /// 当前启用 SKU 总数。
+    pub sku_count: u32,
 }
 
 /// 商品列表查询参数。
@@ -1235,6 +1251,8 @@ pub struct SkuView {
     pub specification_signature: String,
     /// 启停状态。
     pub status: EnableStatus,
+    /// SKU 上架状态。
+    pub listing_status: ListingStatus,
     /// 当前 SKU 修订 ID。
     pub current_revision_id: Option<String>,
     /// 创建时间（秒级时间戳）。
@@ -1259,6 +1277,7 @@ impl From<Sku> for SkuView {
             base_unit_id: sku.base_unit_id.to_string(),
             specification_signature: sku.specification_signature,
             status: sku.stable.status,
+            listing_status: sku.listing_status,
             current_revision_id: sku.stable.current_revision_id,
             created_at: sku.base.created_at,
             version: sku.base.version,
@@ -1275,6 +1294,8 @@ pub struct SkuListParams {
     pub product_id: Option<ProductId>,
     /// 启停状态筛选。
     pub status: Option<EnableStatus>,
+    /// 上架状态筛选。
+    pub listing_status: Option<ListingStatus>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -1296,6 +1317,8 @@ pub(crate) struct SkuListQuery {
     pub product_id: Option<String>,
     /// 启停状态筛选。
     pub status: Option<EnableStatus>,
+    /// 上架状态筛选。
+    pub listing_status: Option<ListingStatus>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -1316,6 +1339,7 @@ impl SkuListParams {
             sku_no: normalized_text(self.sku_no.as_deref()),
             product_id: self.product_id.as_ref().map(|id| id.to_string()),
             status: self.status,
+            listing_status: self.listing_status,
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -1683,7 +1707,7 @@ impl VoucherCategoryProfileListParams {
 #[cfg(test)]
 mod tests {
     use super::{normalize_sort, SortDir};
-    use entities::catalog::ProductKind;
+    use entities::catalog::{ListingStatus, ProductKind};
     use validator::Validate;
 
     #[test]
@@ -1750,6 +1774,17 @@ mod tests {
         }))
         .unwrap();
         assert!(params.validate().is_err());
+    }
+
+    #[test]
+    fn sku_params_accept_listing_status_filter() {
+        let params: super::SkuListParams = serde_json::from_value(serde_json::json!({
+            "listing_status": "listed",
+        }))
+        .unwrap();
+        let query = params.normalized().unwrap();
+
+        assert_eq!(query.listing_status, Some(ListingStatus::Listed));
     }
 
     #[test]

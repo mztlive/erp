@@ -535,6 +535,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "GET",
+                path: "/admin/file-assets/{id}/preview",
+                description: "预览文件资产内容",
+                permission: {
+                    resource: "file_asset",
+                    action: "preview",
+                },
+            },
+            {
+                module: "admin",
                 method: "PUT",
                 path: "/admin/file-assets/{id}/scan-result",
                 description: "记录安全检查结果",
@@ -1335,6 +1345,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
             },
             {
                 module: "admin",
+                method: "PUT",
+                path: "/admin/products/{id}/listing-status",
+                description: "整组上下架商品SKU",
+                permission: {
+                    resource: "product",
+                    action: "update",
+                },
+            },
+            {
+                module: "admin",
                 method: "GET",
                 path: "/admin/product-revisions",
                 description: "查询商品修订列表",
@@ -1351,6 +1371,16 @@ export const PERMISSION_GROUPS: PermissionGroup[] = [
                 permission: {
                     resource: "sku",
                     action: "list",
+                },
+            },
+            {
+                module: "admin",
+                method: "PUT",
+                path: "/admin/skus/{id}/listing-status",
+                description: "上下架单个SKU",
+                permission: {
+                    resource: "product",
+                    action: "update",
                 },
             },
             {

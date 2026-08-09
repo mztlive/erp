@@ -38,6 +38,7 @@ import {
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { Switch } from "@/components/ui/switch"
 import {
   buildMasterDataExportCsv,
   downloadCsv,
@@ -63,6 +64,7 @@ import {
   useMasterDataCenterQuery,
   useMasterDataExportMutation,
   useMasterDataListQuery,
+  useProductListingMutation,
 } from "@/features/master-data/queries"
 import {
   MASTER_DATA_RESOURCES,
@@ -377,6 +379,11 @@ function MasterDataListWorkspace({
     metricKey: undefined,
   })
   const exportMutation = useMasterDataExportMutation()
+  const productListingMutation = useProductListingMutation()
+  const [listingError, setListingError] = React.useState<string | null>(null)
+  const canUpdateProductListing =
+    isProductResource &&
+    hasPermission(accountQuery.data?.permissions, "product:update")
 
   const rows = React.useMemo(
     () => listQuery.data?.rows ?? [],
@@ -458,6 +465,31 @@ function MasterDataListWorkspace({
     rows.length,
   ])
 
+  const updateProductListing = React.useCallback(
+    async (item: MasterDataListItem, listed: boolean) => {
+      if (
+        !listed &&
+        !window.confirm(
+          `下架后，商品「${item.name}」下的全部 SKU 都会退出公司商品池。确定继续？`,
+        )
+      ) {
+        return
+      }
+      setListingError(null)
+      try {
+        await productListingMutation.mutateAsync({
+          productId: item.stableId,
+          listingStatus: listed ? "LISTED" : "UNLISTED",
+        })
+      } catch (error) {
+        setListingError(
+          getErrorMessage(error, "上架状态更新失败，请刷新后重试。"),
+        )
+      }
+    },
+    [productListingMutation],
+  )
+
   const columns = React.useMemo<ColumnDef<MasterDataListItem>[]>(
     () => [
       {
@@ -515,6 +547,52 @@ function MasterDataListWorkspace({
           </div>
         ),
       },
+      ...(isProductResource
+        ? [
+            {
+              id: "listing",
+              header: "上架状态",
+              meta: { label: "上架状态" },
+              cell: ({ row }: { row: { original: MasterDataListItem } }) => {
+                const item = row.original
+                const inherited = item.listingStatus ?? "UNLISTED"
+                const pending =
+                  productListingMutation.isPending &&
+                  productListingMutation.variables?.productId === item.stableId
+                const label =
+                  inherited === "LISTED"
+                    ? "已上架"
+                    : inherited === "PARTIALLY_LISTED"
+                      ? "部分上架"
+                      : "已下架"
+                return (
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      size="sm"
+                      checked={inherited === "LISTED"}
+                      disabled={
+                        pending ||
+                        !canUpdateProductListing ||
+                        (item.lifecycleStatus !== "ENABLED" &&
+                          inherited === "UNLISTED") ||
+                        (item.skuCount ?? 0) === 0
+                      }
+                      onCheckedChange={(checked) =>
+                        void updateProductListing(item, checked)
+                      }
+                      aria-label={`${item.name}整组上架状态`}
+                    />
+                    <span className="whitespace-nowrap text-xs text-muted-foreground">
+                      {pending
+                        ? "更新中…"
+                        : `${label} ${item.listedSkuCount ?? 0}/${item.skuCount ?? 0}`}
+                    </span>
+                  </div>
+                )
+              },
+            } satisfies ColumnDef<MasterDataListItem>,
+          ]
+        : []),
       {
         id: "revisionTiming",
         header: masterDataCopy.colVersionState,
@@ -716,11 +794,15 @@ function MasterDataListWorkspace({
       isUnitOfMeasureResource,
       isVoucherCategoryResource,
       isSellableResource,
+      canUpdateProductListing,
       lastFocusedRowId,
+      productListingMutation.isPending,
+      productListingMutation.variables,
       resource,
       router,
       rows,
       showEffectiveColumn,
+      updateProductListing,
     ]
   )
 
@@ -851,6 +933,12 @@ function MasterDataListWorkspace({
       {resource === "sellable-items" ? (
         <p className="text-sm text-muted-foreground">
           {masterDataCopy.sellableItemsHint}
+        </p>
+      ) : null}
+
+      {isProductResource && listingError ? (
+        <p className="text-sm text-destructive" role="alert">
+          {listingError}
         </p>
       ) : null}
 

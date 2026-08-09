@@ -11,9 +11,10 @@ use axum::{
 use services::audit::AuditActor;
 use services::catalog::{
     CatalogService, CreateProductRequest, CreateVoucherCategoryRequest, PageView, ProductListParams,
-    ProductRevisionListParams, ProductRevisionView, ProductView, SellableSkuListParams, SellableSkuView,
-    SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView, UpdateProductRequest,
-    UpdateVoucherCategoryRequest, VoucherCategoryProfileListParams, VoucherCategoryProfileView,
+    ProductListingView, ProductRevisionListParams, ProductRevisionView, ProductView, SellableSkuListParams,
+    SellableSkuView, SkuListParams, SkuRevisionListParams, SkuRevisionView, SkuView,
+    UpdateProductListingRequest, UpdateProductRequest, UpdateSkuListingRequest, UpdateVoucherCategoryRequest,
+    VoucherCategoryProfileListParams, VoucherCategoryProfileView,
 };
 
 use crate::{
@@ -129,6 +130,35 @@ pub async fn product_update(
 #[permission_macros::permission(
     group = "商品与仓库",
     group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "整组上下架商品SKU",
+    resource = "product",
+    action = "update"
+)]
+/// 一次切换商品下全部当前启用 SKU 的上架状态。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - 商品稳定 ID
+/// * `req` - 全部 SKU 的目标上架状态
+///
+/// # 返回
+/// 返回 SPU 从当前启用 SKU 继承得到的上架状态与数量。
+pub async fn product_listing_update(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateProductListingRequest>,
+) -> Result<ProductListingView> {
+    let view = CatalogService::new(state.db())
+        .product_listing_update(&id, req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
     desc = "查询商品修订列表",
     resource = "product_revision",
     action = "list"
@@ -163,7 +193,7 @@ pub async fn product_revision_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`sku_no`/`product_id`/`status` 扁平传递）
+/// * `query` - 分页与筛选参数（`sku_no`/`product_id`/`status`/`listing_status` 扁平传递）
 ///
 /// # 返回
 /// 返回契约形状的分页视图。
@@ -174,6 +204,35 @@ pub async fn sku_list(
     let page = CatalogService::new(state.db()).sku_list(&params).await?;
 
     Ok(ApiResponse::ok_with_data(page))
+}
+
+#[permission_macros::permission(
+    group = "商品与仓库",
+    group_desc = "公司商品池、商品、类目、供应商与仓库基础资料",
+    desc = "上下架单个SKU",
+    resource = "product",
+    action = "update"
+)]
+/// 切换单个 SKU 的上架状态。
+///
+/// # 参数
+/// * `state` - 应用状态
+/// * `actor` - 已通过鉴权的审计操作人
+/// * `id` - SKU 稳定 ID
+/// * `req` - 期望版本与目标上架状态
+///
+/// # 返回
+/// 返回更新后的 SKU 视图。
+pub async fn sku_listing_update(
+    State(state): State<AppState>,
+    Extension(actor): Extension<AuditActor>,
+    Path(id): Path<String>,
+    Json(req): Json<UpdateSkuListingRequest>,
+) -> Result<SkuView> {
+    let view = CatalogService::new(state.db())
+        .sku_listing_update(&id, req, &actor)
+        .await?;
+    Ok(ApiResponse::ok_with_data(view))
 }
 
 #[permission_macros::permission(
