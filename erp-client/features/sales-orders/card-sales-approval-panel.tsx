@@ -84,6 +84,8 @@ export function CardSalesApprovalPanel({
     title: string
     description: string
     reference: string
+    /** 下一责任岗位/人；已生效（终态）不设置。 */
+    nextResponsible?: string
   } | null>(null)
   const [confirmApprove, setConfirmApprove] = React.useState(false)
   const [confirmReject, setConfirmReject] = React.useState(false)
@@ -145,6 +147,9 @@ export function CardSalesApprovalPanel({
             facts={[
               { label: "销售单", value: order.documentNumber },
               { label: "审批环节", value: CARD_APPROVAL_TYPE_LABEL[approval.workItemType] },
+              ...(result.nextResponsible
+                ? [{ label: "下一步", value: result.nextResponsible }]
+                : []),
             ]}
           />
         ) : null}
@@ -288,6 +293,10 @@ export function CardSalesApprovalPanel({
                     : "运营已通过，销售单已生效",
                 description: outcome.detail,
                 reference: outcome.reference,
+                nextResponsible:
+                  outcome.outcome === "MANAGER_APPROVED"
+                    ? "运营"
+                    : "票款与商城执行",
               })
             } catch (error) {
               const failure = getErrorPresentation(
@@ -340,6 +349,7 @@ export function CardSalesApprovalPanel({
                     : ""
                 }`,
                 reference: outcome.reference,
+                nextResponsible: "销售",
               })
             } catch (error) {
               const failure = getErrorPresentation(

@@ -439,6 +439,13 @@ export function AcceptanceWorkspace({
               label: "剩余待验收",
               value: `${result.remainingEligibleCount} 批`,
             },
+            {
+              label: "下一步",
+              value:
+                overall === "PASS"
+                  ? "系统按履约进度自动判断结案"
+                  : "销售协同处理验收异常",
+            },
           ],
         })
         setSelected(new Map())

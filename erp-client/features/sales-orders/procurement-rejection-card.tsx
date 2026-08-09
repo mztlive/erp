@@ -61,6 +61,8 @@ type FormalResult = {
   title: string
   description: string
   reference: string
+  /** 下一责任岗位/人；终态动作（作废）不设置。 */
+  nextResponsible?: string
 }
 
 type ProcurementRejectionCardProps = {
@@ -187,6 +189,9 @@ export function ProcurementRejectionCard({
                 label: "被驳回的那一版",
                 value: `第 ${rejection.rejectedSubmissionNo} 次报给采购`,
               },
+              ...(result.nextResponsible
+                ? [{ label: "下一步", value: result.nextResponsible }]
+                : []),
             ]}
           />
         ) : null}
@@ -419,6 +424,10 @@ export function ProcurementRejectionCard({
                     : "本单已作废",
                 description: outcome.detail,
                 reference: outcome.reference,
+                nextResponsible:
+                  outcome.outcome === "CHANGED_TERMS_RESUBMITTED"
+                    ? "采购重新确认"
+                    : undefined,
               })
             } catch (error) {
               const message =

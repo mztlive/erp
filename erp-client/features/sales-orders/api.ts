@@ -39,6 +39,12 @@ export type SalesOrderDetailView = SalesOrderListItem & {
   permissionVersion: string
   sourceAsOf: string
   queriedAt: string
+  /** 当前阶段责任角色（后端固定码，如 `procurement`/`sales_leader`/`operations`）；无待办时为 `null`。 */
+  stageOwnerRole?: string | null
+  stageOwnerUserId?: string | null
+  stageOwnerUserName?: string | null
+  /** 当前阶段预计完成时限（秒级时间戳）；未设置时为 `null`。 */
+  stageDueAt?: number | null
 }
 
 export type SalesOrdersListQuery = {
@@ -1242,6 +1248,10 @@ export async function fetchSalesOrderDetail(
     permissionVersion: PERMISSION_VERSION,
     sourceAsOf: queriedAt,
     queriedAt,
+    stageOwnerRole: detail.stage.owner_role,
+    stageOwnerUserId: detail.stage.owner_user_id,
+    stageOwnerUserName: detail.stage.owner_user_name,
+    stageDueAt: detail.stage.due_at,
   }
 }
 
