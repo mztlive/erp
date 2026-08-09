@@ -19,7 +19,6 @@ import {
   ClipboardCheckIcon,
   GripVerticalIcon,
   ImageIcon,
-  PackageOpenIcon,
   PlusIcon,
   SaveIcon,
   XIcon,
@@ -43,13 +42,6 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
   FileUpload,
   imagePreviewSource,
 } from "@/components/ui/file-upload"
@@ -64,7 +56,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Progress, ProgressLabel } from "@/components/ui/progress"
 import { StatusBadge } from "@/components/ui/status-badge"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
@@ -1070,24 +1061,6 @@ export function ProductDetailPage({
           ? masterDataCopy.productCreateTitle
           : values.name || data?.name || "商品详情"
         const fields = values.fields
-        const requiredChecks = [
-          values.name.trim().length >= 2,
-          Boolean(values.fields.baseUnit.trim()),
-          Boolean(values.fields.category.trim()),
-          Boolean(values.fields.brand.trim()),
-          Boolean(values.fields.productKind),
-          values.fields.skus.length > 0,
-          values.fields.skus.every(
-            (sku) =>
-              sku.lifecycleStatus !== "ENABLED" ||
-              Boolean(sku.mainImage.trim()),
-          ),
-          values.changeReason.trim().length >= 2,
-        ]
-        const completedChecks = requiredChecks.filter(Boolean).length
-        const completionPercent = Math.round(
-          (completedChecks / requiredChecks.length) * 100,
-        )
         const inventoryPreviewSkus: ProductInventoryPreviewSku[] =
           fields.productKind === "PHYSICAL"
             ? fields.skus.flatMap((sku) =>
@@ -1109,43 +1082,6 @@ export function ProductDetailPage({
             : inventoryPreviewSkus.length === 0
               ? "选择实物商品类型并保存 SKU 后可查看正式库存"
               : undefined
-        const assistantIssues: ReadonlyArray<{
-          section: ProductEditorSectionId
-          title: string
-          description: string
-        }> = [
-          ...(!requiredChecks[0] ||
-          !requiredChecks[1] ||
-          !requiredChecks[2] ||
-          !requiredChecks[3] ||
-          !requiredChecks[4]
-            ? [
-                {
-                  section: "basic" as const,
-                  title: "基础信息待完善",
-                  description: "名称、单位、商品类型、分类和品牌是必填项。",
-                },
-              ]
-            : []),
-          ...(!requiredChecks[5] || !requiredChecks[6]
-            ? [
-                {
-                  section: "sku" as const,
-                  title: "SKU 主图待完善",
-                  description: "至少保留一个 SKU，启用 SKU 必须有主图。",
-                },
-              ]
-            : []),
-          ...(!requiredChecks[7]
-            ? [
-                {
-                  section: "effective" as const,
-                  title: "变更原因待填写",
-                  description: "保存后会形成新版本，需要留下变更依据。",
-                },
-              ]
-            : []),
-        ]
         const setName = (next: string) => form.setFieldValue("name", next)
         const setEffectiveFrom = (next: string) =>
           form.setFieldValue("effectiveFrom", next)
@@ -1396,110 +1332,7 @@ export function ProductDetailPage({
                   />
                 ) : null}
 
-                <div className="grid gap-4 xl:grid-cols-4">
-                  <aside
-                    className="space-y-4 xl:sticky xl:self-start xl:max-h-[calc(100dvh-var(--product-sticky-offset)-1rem)] xl:overflow-y-auto"
-                    style={{ top: stickyOffsetPx + 16 }}
-                  >
-                  <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-border/30">
-                      <div className="flex items-center justify-between gap-2">
-                        <CardTitle className="flex items-center gap-2">
-                          <ClipboardCheckIcon className="size-4" aria-hidden />
-                          填写助手
-                        </CardTitle>
-                        <Badge
-                          variant={
-                            assistantIssues.length === 0
-                              ? "success"
-                              : "secondary"
-                          }
-                        >
-                          {completedChecks}/{requiredChecks.length}
-                        </Badge>
-                      </div>
-                      <CardDescription>
-                        保存前核对必填项，点击问题可直接定位。
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <Progress value={completionPercent}>
-                        <ProgressLabel>完成度</ProgressLabel>
-                        <span className="ml-auto text-sm text-muted-foreground tabular-nums">
-                          {completionPercent}%
-                        </span>
-                      </Progress>
-                      {assistantIssues.length > 0 ? (
-                        <div className="space-y-2">
-                          {assistantIssues.map((issue) => (
-                            <button
-                              key={issue.section}
-                              type="button"
-                              className="flex w-full gap-2 rounded-lg border border-border bg-background p-3 text-left transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                              onClick={() => {
-                                setActiveSection(issue.section)
-                                scrollToProductSection(issue.section)
-                              }}
-                            >
-                              <CircleAlertIcon
-                                className="mt-0.5 size-4 shrink-0 text-warning-foreground"
-                                aria-hidden
-                              />
-                              <span className="min-w-0">
-                                <span className="block text-sm font-medium">
-                                  {issue.title}
-                                </span>
-                                <span className="mt-1 block text-xs text-muted-foreground">
-                                  {issue.description}
-                                </span>
-                              </span>
-                            </button>
-                          ))}
-                        </div>
-                      ) : (
-                        <Alert variant="success">
-                          <CheckCircle2Icon aria-hidden />
-                          <AlertTitle>必填项已完成</AlertTitle>
-                          <AlertDescription>
-                            可以继续检查并保存当前版本。
-                          </AlertDescription>
-                        </Alert>
-                      )}
-                    </CardContent>
-                  </Card>
-
-                  <Card size="sm" className={surfacePanelClassName}>
-                    <CardHeader className="border-b border-border/30">
-                      <CardTitle className="flex items-center gap-2">
-                        <PackageOpenIcon className="size-4" aria-hidden />
-                        商品摘要
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3 text-sm">
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">商品类型</span>
-                        <span>
-                          {fields.productKind
-                            ? PRODUCT_KIND_LABELS[fields.productKind]
-                            : "待选择"}
-                        </span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">SKU 数量</span>
-                        <span className="num">{fields.skus.length}</span>
-                      </div>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">基础单位</span>
-                        <span>{fields.baseUnit || "待选择"}</span>
-                      </div>
-                      <p className="border-t border-border/30 pt-3 text-xs text-muted-foreground">
-                        规格由规格项自动组合；图片、价格和条码随商品版本一起保存。
-                      </p>
-                    </CardContent>
-                  </Card>
-                </aside>
-
-                <div className="min-w-0 space-y-4 xl:col-span-3">
+                <div className="min-w-0 space-y-4">
                   <nav
                     aria-label="商品编辑分区"
                     className={cn(
@@ -2637,7 +2470,6 @@ export function ProductDetailPage({
                       </DocumentSection>
                     </section>
                   ) : null}
-                  </div>
                 </div>
               </div>
             </form>
