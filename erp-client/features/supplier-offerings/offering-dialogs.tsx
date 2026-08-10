@@ -1,7 +1,6 @@
 "use client"
 
 import * as React from "react"
-import Link from "next/link"
 import { z } from "zod"
 
 import { OptionCombobox } from "@/components/business"
@@ -24,6 +23,7 @@ import {
   FieldSet,
 } from "@/components/ui/field"
 import { Label } from "@/components/ui/label"
+import { toast } from "@/components/ui/toast"
 import { useMasterDataListQuery } from "@/features/master-data/queries"
 import {
   useCompanySkuOptionsQuery,
@@ -137,7 +137,6 @@ export function RegisterSupplyForSkuDialog({
   const skuQuery = useCompanySkuOptionsQuery(open && !fixedSku)
   const mutation = useCreateSupplierOfferingMutation()
   const [submitError, setSubmitError] = React.useState<string | null>(null)
-  const [createdOfferingId, setCreatedOfferingId] = React.useState<string | null>(null)
   const form = useAppForm({
     defaultValues: {
       skuId: fixedSku?.skuId ?? "",
@@ -162,7 +161,7 @@ export function RegisterSupplyForSkuDialog({
     onSubmit: async ({ value }) => {
       setSubmitError(null)
       try {
-        const result = await mutation.mutateAsync({
+        await mutation.mutateAsync({
           sku_id: fixedSku?.skuId ?? value.skuId,
           supplier_id: value.supplierId,
           supplier_product_code: value.supplierProductCode.trim() || null,
@@ -186,7 +185,14 @@ export function RegisterSupplyForSkuDialog({
           change_reason: value.changeReason.trim(),
           idempotency_key: idempotencyKey("create-supplier-offering"),
         })
-        setCreatedOfferingId(result.offering_id)
+        toast.add({
+          title: "供给已添加",
+          description:
+            "公司 SKU 与供应商之间的供给关系、首版条款和初始可供状态已同时生效。",
+          type: "success",
+          timeout: 4000,
+        })
+        onOpenChange(false)
       } catch (error) {
         setSubmitError(errorMessage(error, "供给登记失败，请稍后重试"))
       }
@@ -211,32 +217,6 @@ export function RegisterSupplyForSkuDialog({
             供给直接连接公司 SKU 与供应商；供应商订货编码、商业条款和当前可供情况在此维护。
           </DialogDescription>
         </DialogHeader>
-
-        {createdOfferingId ? (
-          <Alert>
-            <AlertTitle>供给已添加</AlertTitle>
-            <AlertDescription>
-              公司 SKU 与供应商之间的供给关系、首版条款和初始可供状态已同时生效。
-            </AlertDescription>
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="mt-3"
-              render={
-                <Link
-                  href={
-                    fixedSku
-                      ? `/procurement/supplier-offerings?skuId=${encodeURIComponent(fixedSku.skuId)}`
-                      : "/procurement/supplier-offerings"
-                  }
-                />
-              }
-            >
-              查看供给
-            </Button>
-          </Alert>
-        ) : null}
 
         {fixedSku ? (
           <div className="rounded-lg border bg-muted/40 px-3 py-2 text-sm">
@@ -443,7 +423,7 @@ export function RegisterSupplyForSkuDialog({
             <form.AppForm>
               <form.SubmitButton
                 label="保存供给"
-                disabled={mutation.isPending || Boolean(createdOfferingId)}
+                disabled={mutation.isPending}
               />
             </form.AppForm>
           </DialogFooter>
