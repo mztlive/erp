@@ -39,6 +39,8 @@ export type ProductListingStatus =
   | "LISTED"
   | "PARTIALLY_LISTED"
   | "UNLISTED"
+export type ProductListingFilter = "listed" | "partially_listed" | "unlisted"
+export type ProductSkuCoverageFilter = "complete" | "partial" | "none"
 export type RevisionTiming = "CURRENT" | "FUTURE" | "HISTORICAL"
 
 export type MasterDataSectionId =
@@ -146,6 +148,14 @@ export type MasterDataListQuery = Readonly<{
   lifecycleStatus?: "enabled" | "disabled" | "all"
   revisionTiming?: "current" | "future" | "all"
   metricKey?: string
+  productKind?: ProductKind
+  productCategoryId?: string
+  productBrandId?: string
+  productSupplierId?: string
+  productListingStatus?: ProductListingFilter
+  productSupplyCoverage?: ProductSkuCoverageFilter
+  productSalesPriceMin?: string
+  productSalesPriceMax?: string
 }>
 
 export type MasterDataListResult = Readonly<{
@@ -173,6 +183,25 @@ export type ProductListSkuSummary = Readonly<{
   specification: string
   baseUnit: string
   salesVisiblePriceGross?: string
+}>
+
+/** 商品列表筛选使用的归属与有效供给供应商选项。 */
+export type ProductFilterOptions = Readonly<{
+  categories: readonly Readonly<{
+    value: string
+    label: string
+    keywords: string
+  }>[]
+  brands: readonly Readonly<{
+    value: string
+    label: string
+    keywords: string
+  }>[]
+  suppliers: readonly Readonly<{
+    value: string
+    label: string
+    keywords: string
+  }>[]
 }>
 
 export type RevisionTimelineEntry = Readonly<{

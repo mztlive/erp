@@ -12,6 +12,7 @@ import {
   disableMasterDataObject,
   fetchMasterDataCenter,
   fetchMasterDataList,
+  fetchProductFilterOptions,
   fetchProductListSkus,
   fetchSkuSupplierCounts,
   queryMasterDataIdempotency,
@@ -56,6 +57,15 @@ export function useProductListSkusQuery(productIds: readonly string[]) {
     queryKey: [...masterDataKeys.all, "product-list-skus", normalized],
     queryFn: () => fetchProductListSkus(normalized),
     enabled: normalized.length > 0,
+  })
+}
+
+/** 商品列表筛选的启用分类、品牌与供应商选项。 */
+export function useProductFilterOptionsQuery(enabled: boolean) {
+  return useQuery({
+    queryKey: [...masterDataKeys.all, "product-filter-options"],
+    queryFn: fetchProductFilterOptions,
+    enabled,
   })
 }
 

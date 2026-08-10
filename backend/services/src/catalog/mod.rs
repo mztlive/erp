@@ -39,8 +39,8 @@ use entities::catalog::voucher_category_profile_revision::{
 };
 use entities::catalog::{
     EnableStatus, ListingStatus, ProductBrandId, ProductCategoryId, ProductId, ProductKind,
-    ProductListingStatus, ProductRevisionId, ProductRevisionMediaId, SkuAttributeId, SkuAttributeValueId,
-    SkuId, SkuRevisionId, UnitOfMeasureId, VoucherCategoryProfileRevisionId,
+    ProductRevisionId, ProductRevisionMediaId, SkuAttributeId, SkuAttributeValueId, SkuId, SkuRevisionId,
+    UnitOfMeasureId, VoucherCategoryProfileRevisionId,
 };
 use entities::common::time::BusinessDate;
 use id_generator::next_id;
@@ -1171,7 +1171,7 @@ impl CatalogService {
     /// 分页查询商品列表。
     ///
     /// # 参数
-    /// * `params` - 查询参数（`product_no`/`product_kind`/`status` 扁平筛选）
+    /// * `params` - 商品、当前修订与当前启用 SKU 的扁平筛选参数
     ///
     /// # 返回
     /// 返回契约形状的分页视图。
@@ -1183,8 +1183,16 @@ impl CatalogService {
         let query = params.normalized()?;
         let filter = ProductFilter {
             product_no: query.product_no,
+            keyword: query.keyword,
             product_kind: query.product_kind,
+            category_id: query.category_id,
+            brand_id: query.brand_id,
+            supplier_id: query.supplier_id,
             status: query.status,
+            listing_status: query.listing_status,
+            supply_coverage: query.supply_coverage,
+            sales_price_min: query.sales_price_min,
+            sales_price_max: query.sales_price_max,
             page: query.paging.page,
             page_size: query.paging.page_size,
             sort_by: Some(query.paging.sort_by.to_string()),
@@ -1192,34 +1200,28 @@ impl CatalogService {
         };
         let page = self
             .db
-            .products()
+            .catalog()
             .search_products(&filter, &mut NoTransaction)
             .await?;
-        let product_ids = page
-            .items
-            .iter()
-            .map(|row| ProductId::new(row.id.clone()))
-            .collect::<Vec<_>>();
-        let listing_by_product = self.product_listing_views(&product_ids).await?;
         let items = page
             .items
             .into_iter()
-            .map(|row| {
-                let listing = listing_by_product.get(&row.id);
-                ProductView {
-                    id: row.id,
-                    product_no: row.product_no,
-                    product_kind: row.product_kind,
-                    status: row.status,
-                    listing_status: listing
-                        .map(|view| view.listing_status)
-                        .unwrap_or(ProductListingStatus::Unlisted),
-                    listed_sku_count: listing.map_or(0, |view| view.listed_sku_count),
-                    sku_count: listing.map_or(0, |view| view.sku_count),
-                    current_revision_id: row.current_revision_id,
-                    created_at: row.created_at,
-                    version: row.version,
-                }
+            .map(|row| ProductView {
+                id: row.id,
+                product_no: row.product_no,
+                product_kind: row.product_kind,
+                name: row.name,
+                category_id: row.category_id,
+                brand_id: row.brand_id,
+                status: row.status,
+                listing_status: row.listing_status,
+                listed_sku_count: row.listed_sku_count,
+                sku_count: row.sku_count,
+                supplied_sku_count: row.supplied_sku_count,
+                priced_sku_count: row.priced_sku_count,
+                current_revision_id: row.current_revision_id,
+                created_at: row.created_at,
+                version: row.version,
             })
             .collect();
         Ok(PageView {

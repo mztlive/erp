@@ -11,7 +11,7 @@
 use entities::catalog::product_revision_media::MediaRole;
 use entities::catalog::{
     EnableStatus, ListingStatus, ProductBrand, ProductCategory, ProductKind, ProductListingStatus,
-    ProductRevision, Sku, SkuAttribute, SkuAttributeValue, SkuRevision, UnitOfMeasure,
+    ProductRevision, Sku, SkuAttribute, SkuAttributeValue, SkuCoverageStatus, SkuRevision, UnitOfMeasure,
     VoucherCategoryProfileRevision,
 };
 use entities::common::time::BusinessDate;
@@ -997,6 +997,12 @@ pub struct ProductView {
     pub product_no: String,
     /// 商品业务类型。
     pub product_kind: ProductKind,
+    /// 当前商品名称；没有当前修订时为空。
+    pub name: Option<String>,
+    /// 当前商品分类；没有当前修订时为空。
+    pub category_id: Option<String>,
+    /// 当前商品品牌；没有当前修订时为空。
+    pub brand_id: Option<String>,
     /// 启停状态。
     pub status: EnableStatus,
     /// 从当前启用 SKU 继承的上架状态。
@@ -1005,6 +1011,10 @@ pub struct ProductView {
     pub listed_sku_count: u32,
     /// 当前启用 SKU 总数。
     pub sku_count: u32,
+    /// 当前存在有效供给关系的启用 SKU 数。
+    pub supplied_sku_count: u32,
+    /// 当前已填写销售价的启用 SKU 数。
+    pub priced_sku_count: u32,
     /// 当前商品修订 ID。
     pub current_revision_id: Option<String>,
     /// 创建时间（秒级时间戳）。
@@ -1048,10 +1058,26 @@ pub struct ProductListingView {
 pub struct ProductListParams {
     /// 商品编号字面量筛选（忽略大小写）。
     pub product_no: Option<String>,
+    /// 商品与 SKU 统一关键字（商品编号/名称、SKU 编号/名称/规格/条码）。
+    pub keyword: Option<String>,
     /// 商品业务类型筛选。
     pub product_kind: Option<ProductKind>,
+    /// 当前商品分类筛选。
+    pub category_id: Option<String>,
+    /// 当前商品品牌筛选。
+    pub brand_id: Option<String>,
+    /// 当前启用 SKU 的有效供给供应商筛选。
+    pub supplier_id: Option<String>,
     /// 启停状态筛选。
     pub status: Option<EnableStatus>,
+    /// 从当前启用 SKU 继承的上架状态筛选。
+    pub listing_status: Option<ProductListingStatus>,
+    /// 当前启用 SKU 的有效供给覆盖状态。
+    pub supply_coverage: Option<SkuCoverageStatus>,
+    /// 当前启用 SKU 销售价下限（含）。
+    pub sales_price_min: Option<Amount>,
+    /// 当前启用 SKU 销售价上限（含）。
+    pub sales_price_max: Option<Amount>,
     /// 页码（1 起）。
     #[validate(range(min = 1, message = "页码必须大于0"))]
     pub page: Option<u64>,
@@ -1069,10 +1095,26 @@ pub struct ProductListParams {
 pub(crate) struct ProductListQuery {
     /// 商品编号筛选。
     pub product_no: Option<String>,
+    /// 商品与 SKU 统一关键字。
+    pub keyword: Option<String>,
     /// 商品业务类型筛选。
     pub product_kind: Option<ProductKind>,
+    /// 当前商品分类筛选。
+    pub category_id: Option<String>,
+    /// 当前商品品牌筛选。
+    pub brand_id: Option<String>,
+    /// 有效供给供应商筛选。
+    pub supplier_id: Option<String>,
     /// 启停状态筛选。
     pub status: Option<EnableStatus>,
+    /// SKU 继承上架状态筛选。
+    pub listing_status: Option<ProductListingStatus>,
+    /// 有效供给覆盖筛选。
+    pub supply_coverage: Option<SkuCoverageStatus>,
+    /// 销售价下限（含）。
+    pub sales_price_min: Option<Amount>,
+    /// 销售价上限（含）。
+    pub sales_price_max: Option<Amount>,
     /// 分页与排序参数。
     pub paging: PageParams,
 }
@@ -1089,10 +1131,19 @@ impl ProductListParams {
     /// 排序字段不在白名单或排序方向非法时返回 `ValidationError`。
     pub(crate) fn normalized(&self) -> Result<ProductListQuery> {
         let (sort_by, sort_dir) = normalize_sort(&self.sort_by, &self.sort_dir, PRODUCT_SORT_FIELDS)?;
+        validate_sales_price_range(self.sales_price_min, self.sales_price_max)?;
         Ok(ProductListQuery {
             product_no: normalized_text(self.product_no.as_deref()),
+            keyword: normalized_text(self.keyword.as_deref()),
             product_kind: self.product_kind,
+            category_id: normalized_text(self.category_id.as_deref()),
+            brand_id: normalized_text(self.brand_id.as_deref()),
+            supplier_id: normalized_text(self.supplier_id.as_deref()),
             status: self.status,
+            listing_status: self.listing_status,
+            supply_coverage: self.supply_coverage,
+            sales_price_min: self.sales_price_min,
+            sales_price_max: self.sales_price_max,
             paging: PageParams {
                 page: page_or_default(self.page),
                 page_size: page_size_or_default(self.page_size),
@@ -1101,6 +1152,19 @@ impl ProductListParams {
             },
         })
     }
+}
+
+/// 校验商品列表销售价区间。
+fn validate_sales_price_range(minimum: Option<Amount>, maximum: Option<Amount>) -> Result<()> {
+    if minimum.is_some_and(|value| value.to_decimal().is_sign_negative())
+        || maximum.is_some_and(|value| value.to_decimal().is_sign_negative())
+    {
+        return Err(Error::ValidationError("销售价不能小于 0".to_string()));
+    }
+    if matches!((minimum, maximum), (Some(minimum), Some(maximum)) if minimum > maximum) {
+        return Err(Error::ValidationError("最低销售价不能高于最高销售价".to_string()));
+    }
+    Ok(())
 }
 
 /// 商品修订媒体响应视图。
@@ -1707,7 +1771,7 @@ impl VoucherCategoryProfileListParams {
 #[cfg(test)]
 mod tests {
     use super::{normalize_sort, SortDir};
-    use entities::catalog::{ListingStatus, ProductKind};
+    use entities::catalog::{ListingStatus, ProductKind, ProductListingStatus, SkuCoverageStatus};
     use validator::Validate;
 
     #[test]
@@ -1753,17 +1817,44 @@ mod tests {
     fn product_params_normalize_filters_and_defaults() {
         let params: super::ProductListParams = serde_json::from_value(serde_json::json!({
             "product_no": " P-1 ",
+            "keyword": " 礼盒 ",
             "product_kind": "PHYSICAL",
+            "category_id": " category-1 ",
+            "brand_id": " brand-1 ",
+            "supplier_id": " supplier-1 ",
             "status": "active",
+            "listing_status": "partially_listed",
+            "supply_coverage": "complete",
+            "sales_price_min": "100.00",
+            "sales_price_max": "200.00",
         }))
         .unwrap();
         let query = params.normalized().unwrap();
         assert_eq!(query.product_no.as_deref(), Some("P-1"));
+        assert_eq!(query.keyword.as_deref(), Some("礼盒"));
         assert_eq!(query.product_kind, Some(ProductKind::Physical));
+        assert_eq!(query.category_id.as_deref(), Some("category-1"));
+        assert_eq!(query.brand_id.as_deref(), Some("brand-1"));
+        assert_eq!(query.supplier_id.as_deref(), Some("supplier-1"));
+        assert_eq!(query.listing_status, Some(ProductListingStatus::PartiallyListed));
+        assert_eq!(query.supply_coverage, Some(SkuCoverageStatus::Complete));
+        assert_eq!(query.sales_price_min.unwrap().to_string(), "100.00");
+        assert_eq!(query.sales_price_max.unwrap().to_string(), "200.00");
         assert_eq!(query.paging.page, 1);
         assert_eq!(query.paging.page_size, 20);
         assert_eq!(query.paging.sort_by, "created_at");
         assert_eq!(query.paging.sort_dir, SortDir::Desc);
+    }
+
+    #[test]
+    fn product_params_reject_inverted_sales_price_range() {
+        let params: super::ProductListParams = serde_json::from_value(serde_json::json!({
+            "sales_price_min": "200.00",
+            "sales_price_max": "100.00",
+        }))
+        .unwrap();
+
+        assert!(params.normalized().is_err());
     }
 
     #[test]

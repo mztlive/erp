@@ -29,8 +29,9 @@ use crate::{mongo_ops, Result};
 use entities::catalog::sku_attribute::AttributeValueType;
 use entities::catalog::{
     EnableStatus, ListingStatus, Product, ProductBrand, ProductCategory, ProductCategoryAttribute,
-    ProductKind, ProductRevision, ProductRevisionMedia, Sku, SkuAttribute, SkuAttributeValue, SkuRevision,
-    SkuRevisionAttributeValue, UnitOfMeasure, VoucherCategoryProfileRevision,
+    ProductKind, ProductListingStatus, ProductRevision, ProductRevisionMedia, Sku, SkuAttribute,
+    SkuAttributeValue, SkuCoverageStatus, SkuRevision, SkuRevisionAttributeValue, UnitOfMeasure,
+    VoucherCategoryProfileRevision,
 };
 use entities::common::time::BusinessDate;
 use entities::ids::{ProductCategoryId, ProductId, ProductRevisionId, SkuAttributeId, SkuId};
@@ -915,8 +916,24 @@ pub struct ProductRow {
     pub product_no: String,
     /// 商品业务类型。
     pub product_kind: ProductKind,
+    /// 当前商品名称。
+    pub name: Option<String>,
+    /// 当前商品分类 ID。
+    pub category_id: Option<String>,
+    /// 当前商品品牌 ID。
+    pub brand_id: Option<String>,
     /// 启停状态。
     pub status: EnableStatus,
+    /// 从当前启用 SKU 继承的上架状态。
+    pub listing_status: ProductListingStatus,
+    /// 当前已上架 SKU 数。
+    pub listed_sku_count: u32,
+    /// 当前启用 SKU 总数。
+    pub sku_count: u32,
+    /// 当前存在有效供给关系的启用 SKU 数。
+    pub supplied_sku_count: u32,
+    /// 当前已填写销售价的启用 SKU 数。
+    pub priced_sku_count: u32,
     /// 当前商品修订 ID。
     pub current_revision_id: Option<String>,
     /// 乐观锁版本。
@@ -925,15 +942,47 @@ pub struct ProductRow {
     pub created_at: u64,
 }
 
+/// 商品列表聚合分页结果。
+#[derive(Debug, Deserialize)]
+struct ProductFacet {
+    /// 当前页数据。
+    items: Vec<ProductRow>,
+    /// 总数聚合行。
+    total: Vec<ProductTotal>,
+}
+
+/// 商品列表总数聚合行。
+#[derive(Debug, Deserialize)]
+struct ProductTotal {
+    /// 符合筛选的商品数量。
+    count: i64,
+}
+
 /// 商品列表筛选条件。
 #[derive(Debug, Clone)]
 pub struct ProductFilter {
     /// 商品编号字面量正则（忽略大小写）；`None` 表示不筛选。
     pub product_no: Option<String>,
+    /// 商品与 SKU 统一关键字；`None` 表示不筛选。
+    pub keyword: Option<String>,
     /// 商品业务类型；`None` 表示不筛选。
     pub product_kind: Option<ProductKind>,
+    /// 当前商品分类；`None` 表示不筛选。
+    pub category_id: Option<String>,
+    /// 当前商品品牌；`None` 表示不筛选。
+    pub brand_id: Option<String>,
+    /// 当前启用 SKU 的有效供给供应商；`None` 表示不筛选。
+    pub supplier_id: Option<String>,
     /// 启停状态；`None` 表示不筛选。
     pub status: Option<EnableStatus>,
+    /// 当前启用 SKU 继承上架状态；`None` 表示不筛选。
+    pub listing_status: Option<ProductListingStatus>,
+    /// 当前启用 SKU 的有效供给覆盖状态；`None` 表示不筛选。
+    pub supply_coverage: Option<SkuCoverageStatus>,
+    /// 当前启用 SKU 销售价下限（含）；`None` 表示无下限。
+    pub sales_price_min: Option<Amount>,
+    /// 当前启用 SKU 销售价上限（含）；`None` 表示无上限。
+    pub sales_price_max: Option<Amount>,
     /// 页码（1 起）。
     pub page: u64,
     /// 单页条数。
@@ -969,43 +1018,6 @@ impl Pagination for ProductFilter {
     /// 返回 `(page, page_size)` 元组。
     fn page_and_size(&self) -> (u64, u64) {
         (self.page, u64::from(self.page_size))
-    }
-}
-
-impl<'a> Repository<'a, Product> {
-    /// 分页检索商品列表（投影查询）。
-    ///
-    /// 只返回 [`ProductRow`] 所需的列表字段；排序字段白名单化
-    /// （`created_at`/`product_no`）。
-    ///
-    /// # 参数
-    /// * `filter` - 筛选与分页条件
-    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
-    ///
-    /// # 返回
-    /// 返回当前页投影行与满足筛选条件的总数。
-    ///
-    /// # 错误
-    /// 当 MongoDB 查询、游标读取或计数失败时返回错误。
-    pub async fn search_products(
-        &self,
-        filter: &ProductFilter,
-        executor: &mut dyn Executor,
-    ) -> Result<PageResult<ProductRow>> {
-        let options = FindOptions::builder()
-            .sort(product_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending))
-            .skip(filter.skip())
-            .limit(filter.limit())
-            .projection(product_projection())
-            .build();
-        let collection = self.collection().clone_with_type::<ProductRow>();
-        let items = mongo_ops::find_many(&collection, filter.to_doc(), options, executor).await?;
-        let total = mongo_ops::count_documents(&self.collection(), filter.to_doc(), executor).await?;
-
-        Ok(PageResult {
-            items,
-            total: total as i64,
-        })
     }
 }
 
@@ -1673,6 +1685,69 @@ impl<'a> CatalogRepository<'a> {
         Self { db }
     }
 
+    /// 分页查询商品及当前启用 SKU 的聚合筛选结果。
+    ///
+    /// 统一关键字覆盖商品编号/名称与 SKU 编号/名称/规格/条码；上架状态、
+    /// 供给覆盖和销售价区间均按当前启用 SKU 实时派生，不在商品主表冗余落库。
+    ///
+    /// # 参数
+    /// * `filter` - 商品、当前修订与 SKU 聚合筛选条件
+    /// * `executor` - 数据访问执行器，由 Service 决定是否位于事务中
+    ///
+    /// # 返回
+    /// 返回当前页商品投影与满足筛选条件的总数。
+    ///
+    /// # 错误
+    /// MongoDB 聚合、游标读取或结果反序列化失败时返回错误。
+    pub async fn search_products(
+        &self,
+        filter: &ProductFilter,
+        executor: &mut dyn Executor,
+    ) -> Result<PageResult<ProductRow>> {
+        let facet = self
+            .aggregate_products(product_list_pipeline(filter), executor)
+            .await?;
+        Ok(PageResult {
+            items: facet.items,
+            total: facet.total.first().map_or(0, |row| row.count),
+        })
+    }
+
+    /// 执行商品列表类型化聚合并收集唯一的 facet 结果。
+    async fn aggregate_products(
+        &self,
+        pipeline: Vec<Document>,
+        executor: &mut dyn Executor,
+    ) -> Result<ProductFacet> {
+        let collection = self
+            .db
+            .collection::<Product>(<mongodb::Database as CatalogExt>::PRODUCTS);
+        let rows = match executor.session() {
+            Some(session) => {
+                collection
+                    .aggregate(pipeline)
+                    .with_type::<ProductFacet>()
+                    .session(&mut *session)
+                    .await?
+                    .stream(session)
+                    .try_collect::<Vec<_>>()
+                    .await?
+            }
+            None => {
+                collection
+                    .aggregate(pipeline)
+                    .with_type::<ProductFacet>()
+                    .await?
+                    .try_collect::<Vec<_>>()
+                    .await?
+            }
+        };
+        Ok(rows.into_iter().next().unwrap_or(ProductFacet {
+            items: Vec::new(),
+            total: Vec::new(),
+        }))
+    }
+
     /// 分页查询销售可用的公司 SKU。
     ///
     /// 资格固定为：稳定 SKU 启用、当前 SKU 修订启用且处于生效区间并已配置
@@ -1872,6 +1947,300 @@ fn normalized_barcode(barcode: &str) -> &str {
 fn in_filter(field: &str, values: impl IntoIterator<Item = String>) -> Document {
     let values: Vec<Bson> = values.into_iter().map(Bson::String).collect();
     doc! { field: { "$in": values } }
+}
+
+/// 构造商品列表的当前修订与 SKU 聚合管道。
+fn product_list_pipeline(filter: &ProductFilter) -> Vec<Document> {
+    let not_deleted = NOT_DELETED_TIMESTAMP_BSON;
+    let mut pipeline = vec![
+        doc! { "$match": filter.to_doc() },
+        product_revision_lookup(not_deleted),
+        doc! { "$unwind": { "path": "$product_revision", "preserveNullAndEmptyArrays": true } },
+    ];
+    append_product_revision_filters(&mut pipeline, filter);
+    pipeline.extend([
+        product_sku_lookup(not_deleted),
+        doc! {
+            "$set": {
+                "sku_count": { "$size": "$skus" },
+                "listed_sku_count": {
+                    "$size": {
+                        "$filter": {
+                            "input": "$skus",
+                            "as": "sku",
+                            "cond": "$$sku.is_listed",
+                        }
+                    }
+                },
+                "supplied_sku_count": {
+                    "$size": {
+                        "$filter": {
+                            "input": "$skus",
+                            "as": "sku",
+                            "cond": "$$sku.is_supplied",
+                        }
+                    }
+                },
+                "priced_sku_count": {
+                    "$size": {
+                        "$filter": {
+                            "input": "$skus",
+                            "as": "sku",
+                            "cond": "$$sku.is_priced",
+                        }
+                    }
+                },
+            }
+        },
+        doc! {
+            "$set": {
+                "listing_status": {
+                    "$switch": {
+                        "branches": [
+                            {
+                                "case": {
+                                    "$and": [
+                                        { "$gt": ["$sku_count", 0] },
+                                        { "$eq": ["$listed_sku_count", "$sku_count"] },
+                                    ]
+                                },
+                                "then": ProductListingStatus::Listed.as_str(),
+                            },
+                            {
+                                "case": { "$gt": ["$listed_sku_count", 0] },
+                                "then": ProductListingStatus::PartiallyListed.as_str(),
+                            },
+                        ],
+                        "default": ProductListingStatus::Unlisted.as_str(),
+                    }
+                }
+            }
+        },
+    ]);
+    append_product_aggregate_filters(&mut pipeline, filter);
+    pipeline.push(product_facet(filter));
+    pipeline
+}
+
+/// 构造商品当前修订关联，列表只读取稳定商品指向的当前版本。
+fn product_revision_lookup(not_deleted: i64) -> Document {
+    doc! {
+        "$lookup": {
+            "from": PRODUCT_REVISIONS,
+            "let": { "revision_id": "$current_revision_id" },
+            "pipeline": [{
+                "$match": {
+                    "$expr": { "$eq": ["$id", "$$revision_id"] },
+                    "deleted_at": not_deleted,
+                }
+            }],
+            "as": "product_revision",
+        }
+    }
+}
+
+/// 构造当前启用 SKU、当前 SKU 修订与有效供给关系的批量关联。
+fn product_sku_lookup(not_deleted: i64) -> Document {
+    doc! {
+        "$lookup": {
+            "from": SKUS,
+            "let": { "product_id": "$id" },
+            "pipeline": [
+                {
+                    "$match": {
+                        "$expr": { "$eq": ["$product_id", "$$product_id"] },
+                        "deleted_at": not_deleted,
+                        "status": EnableStatus::Active.as_str(),
+                    }
+                },
+                {
+                    "$lookup": {
+                        "from": SKU_REVISIONS,
+                        "let": { "revision_id": "$current_revision_id" },
+                        "pipeline": [{
+                            "$match": {
+                                "$expr": { "$eq": ["$id", "$$revision_id"] },
+                                "deleted_at": not_deleted,
+                            }
+                        }],
+                        "as": "revision",
+                    }
+                },
+                { "$unwind": { "path": "$revision", "preserveNullAndEmptyArrays": true } },
+                {
+                    "$lookup": {
+                        "from": SUPPLIER_OFFERINGS,
+                        "let": { "sku_id": "$id" },
+                        "pipeline": [{
+                            "$match": {
+                                "$expr": { "$eq": ["$sku_id", "$$sku_id"] },
+                                "deleted_at": not_deleted,
+                                "status": OfferingStatus::Active.as_str(),
+                                "current_revision_id": { "$ne": null },
+                            }
+                        }, {
+                            "$project": { "_id": 0, "supplier_id": 1 }
+                        }],
+                        "as": "offerings",
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 0,
+                        "sku_no": 1,
+                        "specification_signature": 1,
+                        "revision": 1,
+                        "sales_price": "$revision.sales_visible_price_gross",
+                        "supplier_ids": { "$setUnion": ["$offerings.supplier_id", []] },
+                        "is_listed": {
+                            "$eq": [
+                                { "$ifNull": ["$listing_status", ListingStatus::Listed.as_str()] },
+                                ListingStatus::Listed.as_str(),
+                            ]
+                        },
+                        "is_supplied": { "$gt": [{ "$size": "$offerings" }, 0] },
+                        "is_priced": {
+                            "$ne": [
+                                { "$ifNull": ["$revision.sales_visible_price_gross", null] },
+                                null,
+                            ]
+                        },
+                    }
+                },
+            ],
+            "as": "skus",
+        }
+    }
+}
+
+/// 追加只依赖当前商品修订的分类与品牌筛选。
+fn append_product_revision_filters(pipeline: &mut Vec<Document>, filter: &ProductFilter) {
+    if let Some(category_id) = &filter.category_id {
+        pipeline.push(doc! { "$match": { "product_revision.category_id": category_id } });
+    }
+    if let Some(brand_id) = &filter.brand_id {
+        pipeline.push(doc! { "$match": { "product_revision.brand_id": brand_id } });
+    }
+}
+
+/// 追加统一关键字与 SKU 聚合状态筛选。
+fn append_product_aggregate_filters(pipeline: &mut Vec<Document>, filter: &ProductFilter) {
+    if let Some(keyword) = filter.keyword.as_deref() {
+        let pattern = regex::escape(keyword);
+        pipeline.push(doc! {
+            "$match": {
+                "$or": [
+                    { "product_no": { "$regex": &pattern, "$options": "i" } },
+                    { "product_revision.name": { "$regex": &pattern, "$options": "i" } },
+                    { "skus.sku_no": { "$regex": &pattern, "$options": "i" } },
+                    { "skus.specification_signature": { "$regex": &pattern, "$options": "i" } },
+                    { "skus.revision.name": { "$regex": &pattern, "$options": "i" } },
+                    { "skus.revision.specification": { "$regex": &pattern, "$options": "i" } },
+                    { "skus.revision.barcode": { "$regex": &pattern, "$options": "i" } },
+                ]
+            }
+        });
+    }
+    if let Some(status) = filter.listing_status {
+        pipeline.push(doc! { "$match": { "listing_status": status.as_str() } });
+    }
+    if let Some(supplier_id) = &filter.supplier_id {
+        pipeline.push(doc! { "$match": { "skus.supplier_ids": supplier_id } });
+    }
+    append_coverage_filter(pipeline, "supplied_sku_count", filter.supply_coverage);
+    append_sales_price_filter(pipeline, filter.sales_price_min, filter.sales_price_max);
+}
+
+/// 追加销售价闭区间筛选；商品下至少一个当前启用 SKU 的销售价必须落入区间。
+fn append_sales_price_filter(pipeline: &mut Vec<Document>, minimum: Option<Amount>, maximum: Option<Amount>) {
+    if minimum.is_none() && maximum.is_none() {
+        return;
+    }
+    let mut range = Document::new();
+    if let Some(minimum) = minimum {
+        range.insert("$gte", amount_filter_bson(minimum));
+    }
+    if let Some(maximum) = maximum {
+        range.insert("$lte", amount_filter_bson(maximum));
+    }
+    pipeline.push(doc! {
+        "$match": {
+            "skus": {
+                "$elemMatch": { "sales_price": range }
+            }
+        }
+    });
+}
+
+/// 把查询金额转换为与库内价格一致的 BSON Decimal128。
+fn amount_filter_bson(amount: Amount) -> Bson {
+    Bson::Decimal128(
+        amount
+            .to_string()
+            .parse()
+            .expect("合法 Amount 必须可转换为 MongoDB Decimal128"),
+    )
+}
+
+/// 追加完整、部分或无覆盖筛选；空 SKU 集合只属于无覆盖。
+fn append_coverage_filter(
+    pipeline: &mut Vec<Document>,
+    count_field: &str,
+    coverage: Option<SkuCoverageStatus>,
+) {
+    let count_ref = format!("${count_field}");
+    let expression = match coverage {
+        Some(SkuCoverageStatus::Complete) => doc! {
+            "$and": [
+                { "$gt": ["$sku_count", 0] },
+                { "$eq": [count_ref, "$sku_count"] },
+            ]
+        },
+        Some(SkuCoverageStatus::Partial) => doc! {
+            "$and": [
+                { "$gt": [&count_ref, 0] },
+                { "$lt": [count_ref, "$sku_count"] },
+            ]
+        },
+        Some(SkuCoverageStatus::None) => doc! { "$eq": [count_ref, 0] },
+        None => return,
+    };
+    pipeline.push(doc! { "$match": { "$expr": expression } });
+}
+
+/// 构造商品列表分页、排序与投影 facet。
+fn product_facet(filter: &ProductFilter) -> Document {
+    let item_stages = vec![
+        doc! { "$sort": product_sort_doc(filter.sort_by.as_deref(), filter.sort_ascending) },
+        doc! { "$skip": filter.skip() as i64 },
+        doc! { "$limit": filter.limit() },
+        doc! {
+            "$project": {
+                "_id": 0,
+                "id": 1,
+                "product_no": 1,
+                "product_kind": 1,
+                "name": "$product_revision.name",
+                "category_id": "$product_revision.category_id",
+                "brand_id": "$product_revision.brand_id",
+                "status": 1,
+                "listing_status": 1,
+                "listed_sku_count": 1,
+                "sku_count": 1,
+                "supplied_sku_count": 1,
+                "priced_sku_count": 1,
+                "current_revision_id": 1,
+                "version": 1,
+                "created_at": 1,
+            }
+        },
+    ];
+    doc! {
+        "$facet": {
+            "items": item_stages,
+            "total": [{ "$count": "count" }],
+        }
+    }
 }
 
 /// 构造公司商品池聚合的稳定 SKU 前置过滤。
@@ -2337,19 +2706,6 @@ fn product_category_attribute_projection() -> Document {
     }
 }
 
-/// 商品列表投影字段。
-fn product_projection() -> Document {
-    doc! {
-        "id": 1,
-        "product_no": 1,
-        "product_kind": 1,
-        "status": 1,
-        "current_revision_id": 1,
-        "version": 1,
-        "created_at": 1,
-    }
-}
-
 /// 商品修订列表投影字段。
 fn product_revision_projection() -> Document {
     doc! {
@@ -2424,13 +2780,18 @@ fn voucher_revision_projection() -> Document {
 #[cfg(test)]
 mod tests {
     use super::{
-        sellable_sku_match, sellable_sku_pipeline, sort_doc, QueryFilter, SkuAttributeFilter,
-        SkuAttributeValueFilter, SkuFilter, SkuRevisionFilter, SkuRow,
+        amount_filter_bson, product_list_pipeline, sellable_sku_match, sellable_sku_pipeline, sort_doc,
+        ProductFilter, QueryFilter, SkuAttributeFilter, SkuAttributeValueFilter, SkuFilter,
+        SkuRevisionFilter, SkuRow,
     };
     use entities::catalog::sku_attribute::AttributeValueType;
-    use entities::catalog::{EnableStatus, ListingStatus, ProductKind};
+    use entities::catalog::{
+        EnableStatus, ListingStatus, ProductKind, ProductListingStatus, SkuCoverageStatus,
+    };
     use entities::common::time::BusinessDate;
-    use mongodb::bson::doc;
+    use entities::money::Amount;
+    use mongodb::bson::{doc, Bson};
+    use std::str::FromStr;
 
     #[test]
     fn sku_attribute_filter_applies_optional_fields_and_deleted_filter() {
@@ -2532,6 +2893,51 @@ mod tests {
     fn sort_doc_applies_direction() {
         assert_eq!(sort_doc("created_at", false), doc! { "created_at": -1 });
         assert_eq!(sort_doc("sku_no", true), doc! { "sku_no": 1 });
+    }
+
+    /// 商品列表统一搜索必须覆盖商品与 SKU 字段，并在分页前应用聚合筛选。
+    #[test]
+    fn product_list_pipeline_applies_keyword_and_sku_coverage_filters() {
+        let filter = ProductFilter {
+            product_no: None,
+            keyword: Some("礼盒.*".to_string()),
+            product_kind: Some(ProductKind::Physical),
+            category_id: Some("category-1".to_string()),
+            brand_id: Some("brand-1".to_string()),
+            supplier_id: Some("supplier-1".to_string()),
+            status: Some(EnableStatus::Active),
+            listing_status: Some(ProductListingStatus::PartiallyListed),
+            supply_coverage: Some(SkuCoverageStatus::Complete),
+            sales_price_min: Some(Amount::from_str("100.00").unwrap()),
+            sales_price_max: Some(Amount::from_str("200.00").unwrap()),
+            page: 2,
+            page_size: 20,
+            sort_by: Some("product_no".to_string()),
+            sort_ascending: true,
+        };
+        let pipeline = product_list_pipeline(&filter);
+        let json = format!("{pipeline:?}");
+
+        assert!(json.contains("product_revision.name"));
+        assert!(json.contains("skus.sku_no"));
+        assert!(json.contains("skus.revision.barcode"));
+        assert!(json.contains("supplied_sku_count"));
+        assert!(json.contains("priced_sku_count"));
+        assert!(json.contains("sales_price"));
+        assert!(json.contains("$gte"));
+        assert!(json.contains("$lte"));
+        let Bson::Decimal128(minimum) = amount_filter_bson(Amount::from_str("100.00").unwrap()) else {
+            panic!("销售价筛选值必须使用 Decimal128");
+        };
+        assert_eq!(minimum.to_string(), "100.00");
+        assert!(json.contains("partially_listed"));
+        assert!(json.contains("category-1"));
+        assert!(json.contains("brand-1"));
+        assert!(json.contains("supplier_ids"));
+        assert!(json.contains("supplier-1"));
+        assert!(json.contains("礼盒"));
+        assert!(!json.contains("礼盒.*"));
+        assert!(json.contains("$facet"));
     }
 
     /// 公司商品池管道同时约束 SKU 已上架、当前修订与有效供给，并禁止投影采购成本。

@@ -30,6 +30,7 @@ import type {
   MasterDataMutationResult,
   MasterDataResource,
   ProductFields,
+  ProductFilterOptions,
   ProductKind,
   ProductListSkuSummary,
   ProductListingStatus,
@@ -111,10 +112,15 @@ type ProductDto = {
   id: string
   product_no: string
   product_kind: ProductKind
+  name?: string | null
+  category_id?: string | null
+  brand_id?: string | null
   status: EnableStatus
   listing_status: "listed" | "partially_listed" | "unlisted"
   listed_sku_count: number
   sku_count: number
+  supplied_sku_count?: number
+  priced_sku_count?: number
   current_revision_id: string | null
   created_at: number
   version: number
@@ -934,11 +940,12 @@ function mapProductRow(
   const lifecycle = asLifecycle(dto.status)
   const listingStatus = dto.listing_status.toUpperCase() as ProductListingStatus
   const future = revision ? isFutureDate(revision.effective_from) : false
+  const productName = revision?.name ?? dto.name ?? dto.product_no
   return {
     objectType: "products",
     stableId: dto.id,
     stableNo: dto.product_no,
-    name: revision?.name ?? dto.product_no,
+    name: productName,
     lifecycleStatus: lifecycle,
     lifecycleStatusLabel: lifecycleLabel(lifecycle),
     lifecycleTone: lifecycleTone(lifecycle),
@@ -957,6 +964,14 @@ function mapProductRow(
       {
         label: "上架 SKU",
         value: `${dto.listed_sku_count}/${dto.sku_count}`,
+      },
+      {
+        label: "有供给 SKU",
+        value: `${dto.supplied_sku_count ?? 0}/${dto.sku_count}`,
+      },
+      {
+        label: "已填销售价 SKU",
+        value: `${dto.priced_sku_count ?? 0}/${dto.sku_count}`,
       },
     ],
     primaryBlocker: lifecycle === "DISABLED" ? "已停用：历史引用保留" : undefined,
@@ -1247,33 +1262,63 @@ async function listProducts(
         : undefined
   const products = await fetchAllPages<ProductDto>("/admin/products", {
     status,
-    product_no: query.q || undefined,
+    keyword: query.q || undefined,
+    product_kind: query.productKind,
+    category_id: query.productCategoryId,
+    brand_id: query.productBrandId,
+    supplier_id: query.productSupplierId,
+    listing_status: query.productListingStatus,
+    supply_coverage: query.productSupplyCoverage,
+    sales_price_min: query.productSalesPriceMin,
+    sales_price_max: query.productSalesPriceMax,
   })
-  if (products.length === 0) return []
+  return products.map((product) => mapProductRow(product))
+}
 
-  // Enrich with latest revision names (revision list has no product_id multi-filter;
-  // fetch per product for small pages; for larger sets fall back to product_no).
-  const rows: MasterDataListItem[] = []
-  for (const product of products) {
-    let revision: ProductRevisionDto | undefined
-    try {
-      const revisions = await fetchAllPages<ProductRevisionDto>(
-        "/admin/product-revisions",
-        {
-          product_id: product.id,
-          sort_by: "revision_no",
-          sort_dir: "desc",
-        }
-      )
-      revision = product.current_revision_id
-        ? revisions.find((item) => item.id === product.current_revision_id)
-        : undefined
-    } catch {
-      // leave revision undefined
-    }
-    rows.push(mapProductRow(product, revision))
+/** 读取商品筛选使用的启用分类、品牌与供应商选项。 */
+export async function fetchProductFilterOptions(): Promise<ProductFilterOptions> {
+  const [categories, brands, suppliers] = await Promise.all([
+    fetchAllPages<ProductCategoryDto>("/admin/product-categories", {
+      status: "active",
+      sort_by: "name",
+      sort_dir: "asc",
+    }),
+    fetchAllPages<ProductBrandDto>("/admin/product-brands", {
+      status: "active",
+      sort_by: "name",
+      sort_dir: "asc",
+    }),
+    fetchAllPages<SupplierDto>("/admin/suppliers", {
+      status: "active",
+    }),
+  ])
+  const supplierOptions = suppliers
+    .map((supplier) => ({
+      value: supplier.id,
+      label: supplier.short_name ?? supplier.legal_name ?? supplier.supplier_no,
+      keywords: [
+        supplier.supplier_no,
+        supplier.party_no,
+        supplier.short_name,
+        supplier.legal_name,
+      ]
+        .filter(Boolean)
+        .join(" "),
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label, "zh-CN"))
+  return {
+    categories: categories.map((category) => ({
+      value: category.id,
+      label: category.name,
+      keywords: `${category.category_code} ${category.name}`,
+    })),
+    brands: brands.map((brand) => ({
+      value: brand.id,
+      label: brand.name,
+      keywords: `${brand.brand_code} ${brand.name}`,
+    })),
+    suppliers: supplierOptions,
   }
-  return rows
 }
 
 /**

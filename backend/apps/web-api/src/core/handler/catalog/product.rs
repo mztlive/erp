@@ -56,7 +56,7 @@ pub async fn sellable_sku_list(
 ///
 /// # 参数
 /// * `state` - 应用状态
-/// * `query` - 分页与筛选参数（`product_no`/`product_kind`/`status` 扁平传递）
+/// * `query` - 商品、当前修订与当前启用 SKU 的分页筛选参数
 ///
 /// # 返回
 /// 返回契约形状的分页视图（`items`/`total`/`page`/`page_size`）。

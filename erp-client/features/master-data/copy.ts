@@ -39,7 +39,7 @@ export function masterDataSearchPlaceholder(
     case "warehouses":
       return "仓库代码、名称"
     case "products":
-      return "编号、名称、SKU"
+      return "商品编号/名称，SKU 编号/名称/规格/条码"
     case "voucher-categories":
       return "编号、名称、SKU"
     case "sellable-items":
@@ -94,6 +94,8 @@ export const masterDataCopy = {
   pageTitle: (resourceLabel: string) => `基础资料 · ${resourceLabel}`,
   listDescription: (count: number) =>
     `共 ${count} 条 · 可按启用状态、版本状态筛选 · 按 / 搜索 · 回车打开详情`,
+  productListDescription: (count: number) =>
+    `共 ${count} 条 · 筛选按商品归属、状态与 SKU 条件分组 · 回车打开详情`,
   searchAria: "搜索基础资料",
   sellableItemsHint:
     "公司商品池只显示已上架、资料有效且当前有供给关系的 SKU；销售价来自公司商品主档，采购成本不会在这里展示。",

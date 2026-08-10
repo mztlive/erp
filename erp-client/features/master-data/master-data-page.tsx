@@ -20,6 +20,7 @@ import {
   BusinessTableFrame,
   DataFreshness,
   DataTable,
+  FixedOptionRadioFilter,
   FormalActionResult,
   ListToolbar,
   MetricFilterItem,
@@ -34,9 +35,11 @@ import {
 } from "@/components/business"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   InputGroup,
   InputGroupAddon,
+  InputGroupButton,
   InputGroupInput,
 } from "@/components/ui/input-group"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -70,13 +73,17 @@ import {
   useMasterDataCenterQuery,
   useMasterDataExportMutation,
   useMasterDataListQuery,
+  useProductFilterOptionsQuery,
   useProductListSkusQuery,
   useProductListingMutation,
 } from "@/features/master-data/queries"
 import {
   MASTER_DATA_RESOURCES,
+  PRODUCT_KIND_LABELS,
+  PRODUCT_KIND_VALUES,
   type MasterDataListItem,
   type MasterDataResource,
+  type ProductKind,
   type ProductListSkuSummary,
 } from "@/features/master-data/types"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
@@ -93,6 +100,80 @@ const CNY_FORMATTER = new Intl.NumberFormat("zh-CN", {
   minimumFractionDigits: 2,
   maximumFractionDigits: 4,
 })
+
+const PRODUCT_KIND_FILTER_OPTIONS = PRODUCT_KIND_VALUES.map((value) => ({
+  value,
+  label: PRODUCT_KIND_LABELS[value],
+}))
+
+const PRODUCT_KIND_RADIO_FILTER_OPTIONS = [
+  { value: "all", label: "全部" },
+  ...PRODUCT_KIND_FILTER_OPTIONS,
+] as const
+
+const PRODUCT_LISTING_FILTER_OPTIONS = [
+  { value: "listed", label: "全部已上架" },
+  { value: "partially_listed", label: "部分已上架" },
+  { value: "unlisted", label: "全部未上架" },
+] as const
+
+const PRODUCT_COVERAGE_FILTER_OPTIONS = [
+  { value: "complete", label: "全部 SKU 有供给" },
+  { value: "partial", label: "部分 SKU 有供给" },
+  { value: "none", label: "所有 SKU 均无供给" },
+] as const
+
+const PRODUCT_LISTING_RADIO_FILTER_OPTIONS = [
+  { value: "all", label: "全部" },
+  ...PRODUCT_LISTING_FILTER_OPTIONS,
+] as const
+
+const PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS = [
+  { value: "all", label: "全部" },
+  ...PRODUCT_COVERAGE_FILTER_OPTIONS,
+] as const
+
+const LIFECYCLE_RADIO_FILTER_OPTIONS = [
+  { value: "all", label: "全部" },
+  { value: "enabled", label: masterDataCopy.lifecycleEnabled },
+  { value: "disabled", label: masterDataCopy.lifecycleDisabled },
+] as const
+
+const REVISION_TIMING_RADIO_FILTER_OPTIONS = [
+  { value: "all", label: "全部" },
+  { value: "current", label: "当前生效" },
+  { value: "future", label: "待生效" },
+] as const
+
+/** 校验销售价输入，并使用分值整数比较上下界，避免浮点误差。 */
+function productSalesPriceRangeError(
+  minimum: string,
+  maximum: string
+): string | null {
+  const pricePattern = /^\d+(?:\.\d{1,2})?$/
+  if (minimum && !pricePattern.test(minimum)) {
+    return "最低价应为最多两位小数的非负金额"
+  }
+  if (maximum && !pricePattern.test(maximum)) {
+    return "最高价应为最多两位小数的非负金额"
+  }
+  const normalizedParts = (value: string): readonly [string, string] => {
+    const [yuan, fraction = ""] = value.split(".")
+    return [yuan.replace(/^0+(?=\d)/, ""), fraction.padEnd(2, "0")]
+  }
+  if (minimum && maximum) {
+    const [minimumYuan, minimumFraction] = normalizedParts(minimum)
+    const [maximumYuan, maximumFraction] = normalizedParts(maximum)
+    const minimumIsHigher =
+      minimumYuan.length > maximumYuan.length ||
+      (minimumYuan.length === maximumYuan.length &&
+        (minimumYuan > maximumYuan ||
+          (minimumYuan === maximumYuan &&
+            minimumFraction > maximumFraction)))
+    if (minimumIsHigher) return "最低价不能高于最高价"
+  }
+  return null
+}
 
 function productSkuPriceRange(
   skus: readonly ProductListSkuSummary[],
@@ -304,6 +385,36 @@ function MasterDataListWorkspace({
     revisionTimingParam === "current" || revisionTimingParam === "future"
       ? revisionTimingParam
       : "all"
+  const productKind = isProductResource
+    ? PRODUCT_KIND_VALUES.find(
+        (value) => value === searchParams.get("productKind")
+      )
+    : undefined
+  const productCategoryId = isProductResource
+    ? searchParams.get("productCategoryId")?.trim() || undefined
+    : undefined
+  const productBrandId = isProductResource
+    ? searchParams.get("productBrandId")?.trim() || undefined
+    : undefined
+  const productSupplierId = isProductResource
+    ? searchParams.get("productSupplierId")?.trim() || undefined
+    : undefined
+  const productListingStatus = isProductResource
+    ? PRODUCT_LISTING_FILTER_OPTIONS.find(
+        (option) => option.value === searchParams.get("productListingStatus")
+      )?.value
+    : undefined
+  const productSupplyCoverage = isProductResource
+    ? PRODUCT_COVERAGE_FILTER_OPTIONS.find(
+        (option) => option.value === searchParams.get("productSupplyCoverage")
+      )?.value
+    : undefined
+  const productSalesPriceMin = isProductResource
+    ? searchParams.get("productSalesPriceMin")?.trim() || undefined
+    : undefined
+  const productSalesPriceMax = isProductResource
+    ? searchParams.get("productSalesPriceMax")?.trim() || undefined
+    : undefined
   /** 指标态保留在 URL：与 lifecycleStatus 同源写入，只做展示不做筛选。 */
   const metricKey = searchParams.get("metricKey") ?? "all"
   const pageParamRaw = Number(searchParams.get("page"))
@@ -313,6 +424,12 @@ function MasterDataListWorkspace({
       : 0
 
   const [searchDraft, setSearchDraft] = React.useState(q)
+  const [productSalesPriceMinDraft, setProductSalesPriceMinDraft] =
+    React.useState(productSalesPriceMin ?? "")
+  const [productSalesPriceMaxDraft, setProductSalesPriceMaxDraft] =
+    React.useState(productSalesPriceMax ?? "")
+  const [productSalesPriceError, setProductSalesPriceError] =
+    React.useState<string | null>(null)
   const [pagination, setPagination] = React.useState<PaginationState>({
     pageIndex: pageParamIndex,
     pageSize: 20,
@@ -372,33 +489,67 @@ function MasterDataListWorkspace({
     [patchUrl, resetPagination, revisionTiming]
   )
 
+  const changeProductKind = React.useCallback(
+    (next: ProductKind | null) => {
+      if (next === productKind) return
+      patchUrl({ productKind: next, page: null })
+      resetPagination()
+    },
+    [patchUrl, productKind, resetPagination]
+  )
+
+  const applyProductSalesPriceRange = React.useCallback(() => {
+    const minimum = productSalesPriceMinDraft.trim()
+    const maximum = productSalesPriceMaxDraft.trim()
+    const error = productSalesPriceRangeError(minimum, maximum)
+    setProductSalesPriceError(error)
+    if (error) return
+    patchUrl({
+      productSalesPriceMin: minimum || null,
+      productSalesPriceMax: maximum || null,
+      page: null,
+    })
+    resetPagination()
+  }, [
+    patchUrl,
+    productSalesPriceMaxDraft,
+    productSalesPriceMinDraft,
+    resetPagination,
+  ])
+
   const clearAllFilters = React.useCallback(() => {
     setSearchDraft("")
+    setProductSalesPriceMinDraft("")
+    setProductSalesPriceMaxDraft("")
+    setProductSalesPriceError(null)
     patchUrl({
       q: null,
       lifecycleStatus: null,
       metricKey: null,
       revisionTiming: null,
+      productKind: null,
+      productCategoryId: null,
+      productBrandId: null,
+      productSupplierId: null,
+      productListingStatus: null,
+      productSupplyCoverage: null,
+      productSalesPriceMin: null,
+      productSalesPriceMax: null,
       page: null,
     })
     resetPagination()
   }, [patchUrl, resetPagination])
 
-  // URL 回填草稿（后退/前进）；输入中不被覆盖：URL 只在防抖落盘后变化
+  // URL 回填草稿（后退/前进）；输入内容只在显式提交搜索后写入 URL。
   React.useEffect(() => {
     setSearchDraft(q)
   }, [q])
 
-  // P3 搜索：300ms 防抖写 URL，Enter 兜底（/ 聚焦在页面级已挂）
   React.useEffect(() => {
-    const handle = globalThis.setTimeout(() => {
-      if (searchDraft.trim() === q) return
-      patchUrl({ q: searchDraft.trim() || null, page: null })
-      resetPagination()
-    }, 300)
-    return () => globalThis.clearTimeout(handle)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- patchUrl 以当前 URL 快照为准
-  }, [searchDraft])
+    setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
+    setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
+    setProductSalesPriceError(null)
+  }, [productSalesPriceMax, productSalesPriceMin])
 
   // URL page 回读（后退/前进/分享恢复）
   React.useEffect(() => {
@@ -418,9 +569,19 @@ function MasterDataListWorkspace({
     q: q.trim() || undefined,
     lifecycleStatus,
     revisionTiming,
+    productKind,
+    productCategoryId,
+    productBrandId,
+    productSupplierId,
+    productListingStatus,
+    productSupplyCoverage,
+    productSalesPriceMin,
+    productSalesPriceMax,
     // metricKey 只做展示不做筛选：指标与 ToggleGroup 共用 lifecycleStatus 状态源
     metricKey: undefined,
   })
+  const productFilterOptionsQuery =
+    useProductFilterOptionsQuery(isProductResource)
   const exportMutation = useMasterDataExportMutation()
   const productListingMutation = useProductListingMutation()
   const [listingError, setListingError] = React.useState<string | null>(null)
@@ -482,7 +643,27 @@ function MasterDataListWorkspace({
       ),
     [supplierOfferingsQuery.data],
   )
-
+  const selectedCategoryLabel = React.useMemo(
+    () =>
+      productFilterOptionsQuery.data?.categories.find(
+        (option) => option.value === productCategoryId
+      )?.label ?? productCategoryId,
+    [productCategoryId, productFilterOptionsQuery.data?.categories]
+  )
+  const selectedBrandLabel = React.useMemo(
+    () =>
+      productFilterOptionsQuery.data?.brands.find(
+        (option) => option.value === productBrandId
+      )?.label ?? productBrandId,
+    [productBrandId, productFilterOptionsQuery.data?.brands]
+  )
+  const selectedSupplierLabel = React.useMemo(
+    () =>
+      (productFilterOptionsQuery.data?.suppliers ?? []).find(
+        (option) => option.value === productSupplierId
+      )?.label ?? productSupplierId,
+    [productFilterOptionsQuery.data?.suppliers, productSupplierId]
+  )
   /** 指标与当前搜索/启停/版本筛选同步，避免「全部 3」与表格行数矛盾。 */
   const syncedMetrics = React.useMemo(() => {
     const base = listQuery.data?.metrics ?? []
@@ -509,10 +690,42 @@ function MasterDataListWorkspace({
       `分类=${resourceLabel(resource)}`,
       `启用状态=${lifecycleFilterLabel(lifecycleStatus)}`,
       `版本状态=${revisionTimingFilterLabel(revisionTiming)}`,
+      ...(productKind ? [`商品类型=${PRODUCT_KIND_LABELS[productKind]}`] : []),
+      ...(selectedCategoryLabel ? [`商品分类=${selectedCategoryLabel}`] : []),
+      ...(selectedBrandLabel ? [`品牌=${selectedBrandLabel}`] : []),
+      ...(selectedSupplierLabel ? [`供应商=${selectedSupplierLabel}`] : []),
+      ...(productListingStatus
+        ? [
+            `上架状态=${PRODUCT_LISTING_FILTER_OPTIONS.find((option) => option.value === productListingStatus)?.label}`,
+          ]
+        : []),
+      ...(productSupplyCoverage
+        ? [
+            `供给覆盖=${PRODUCT_COVERAGE_FILTER_OPTIONS.find((option) => option.value === productSupplyCoverage)?.label}`,
+          ]
+        : []),
+      ...(productSalesPriceMin || productSalesPriceMax
+        ? [
+            `销售价=${productSalesPriceMin ? `¥${productSalesPriceMin}` : "不限"}–${productSalesPriceMax ? `¥${productSalesPriceMax}` : "不限"}`,
+          ]
+        : []),
       q.trim() ? `搜索=${q.trim()}` : "搜索=空",
     ]
     return parts.join(" · ")
-  }, [lifecycleStatus, q, resource, revisionTiming])
+  }, [
+    lifecycleStatus,
+    productKind,
+    productListingStatus,
+    productSalesPriceMax,
+    productSalesPriceMin,
+    productSupplyCoverage,
+    q,
+    resource,
+    revisionTiming,
+    selectedBrandLabel,
+    selectedCategoryLabel,
+    selectedSupplierLabel,
+  ])
 
   const handleExport = React.useCallback(async () => {
     if (!listQuery.data || rows.length === 0) return
@@ -521,6 +734,14 @@ function MasterDataListWorkspace({
       q: q.trim() || undefined,
       lifecycleStatus,
       revisionTiming,
+      productKind,
+      productCategoryId,
+      productBrandId,
+      productSupplierId,
+      productListingStatus,
+      productSupplyCoverage,
+      productSalesPriceMin,
+      productSalesPriceMax,
     })
     const exportRows = refreshed.rows
     if (exportRows.length === 0) return
@@ -537,6 +758,14 @@ function MasterDataListWorkspace({
     filterSnapshotLabel,
     lifecycleStatus,
     listQuery.data,
+    productBrandId,
+    productCategoryId,
+    productKind,
+    productListingStatus,
+    productSupplierId,
+    productSalesPriceMax,
+    productSalesPriceMin,
+    productSupplyCoverage,
     q,
     resource,
     revisionTiming,
@@ -1073,7 +1302,17 @@ function MasterDataListWorkspace({
   const hasActiveFilters =
     q.trim() !== "" ||
     lifecycleStatus !== "all" ||
-    revisionTiming !== "all"
+    revisionTiming !== "all" ||
+    Boolean(
+      productKind ||
+      productCategoryId ||
+      productBrandId ||
+      productSupplierId ||
+      productListingStatus ||
+      productSupplyCoverage ||
+      productSalesPriceMin ||
+      productSalesPriceMax
+    )
   const metrics = syncedMetrics
   const noDataWithCreate = !listLoadFailed && rows.length === 0
 
@@ -1139,7 +1378,6 @@ function MasterDataListWorkspace({
           />
         }
       />
-
 
       {isWarehouse ? (
         <FormalActionResult
@@ -1261,7 +1499,11 @@ function MasterDataListWorkspace({
 
       <BusinessTableFrame
         title={`${resourceLabel(resource)}列表`}
-        description={masterDataCopy.listDescription(rows.length)}
+        description={
+          isProductResource
+            ? masterDataCopy.productListDescription(rows.length)
+            : masterDataCopy.listDescription(rows.length)
+        }
         toolbar={
           <ListToolbar
             search={
@@ -1284,57 +1526,279 @@ function MasterDataListWorkspace({
                     placeholder={masterDataSearchPlaceholder(resource)}
                     aria-label={masterDataCopy.searchAria}
                   />
+                  <InputGroupAddon align="inline-end">
+                    <InputGroupButton type="submit" aria-label="执行搜索">
+                      搜索
+                    </InputGroupButton>
+                  </InputGroupAddon>
                 </InputGroup>
               </form>
             }
             filters={
-              <>
-                <ToggleGroup
-                  value={[lifecycleStatus]}
-                  onValueChange={(values) => {
-                    const next =
-                      (values[0] as typeof lifecycleStatus | undefined) ??
-                      "all"
-                    changeLifecycle(next)
-                  }}
-                  variant="outline"
-                  size="sm"
-                  spacing={0}
-                  aria-label={masterDataCopy.filterLifecycleAria}
+              !isProductResource ? (
+                <>
+                  <ToggleGroup
+                    value={[lifecycleStatus]}
+                    onValueChange={(values) => {
+                      const next =
+                        (values[0] as typeof lifecycleStatus | undefined) ??
+                        "all"
+                      changeLifecycle(next)
+                    }}
+                    variant="outline"
+                    size="sm"
+                    spacing={0}
+                    aria-label={masterDataCopy.filterLifecycleAria}
+                  >
+                    <ToggleGroupItem value="all">全部</ToggleGroupItem>
+                    <ToggleGroupItem value="enabled">
+                      {masterDataCopy.lifecycleEnabled}
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="disabled">
+                      {masterDataCopy.lifecycleDisabled}
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                  <OptionCombobox
+                    className="w-[10.5rem]"
+                    value={revisionTiming}
+                    aria-label={masterDataCopy.filterVersionAria}
+                    onValueChange={(v) => {
+                      changeRevisionTiming(
+                        (v ?? "all") as typeof revisionTiming
+                      )
+                    }}
+                    options={[
+                      { value: "all", label: masterDataCopy.versionAll },
+                      {
+                        value: "current",
+                        label: masterDataCopy.versionCurrent,
+                      },
+                      {
+                        value: "future",
+                        label: masterDataCopy.versionFuture,
+                      },
+                    ]}
+                    size="sm"
+                    allowClear={false}
+                    placeholder={masterDataCopy.versionAll}
+                  />
+                </>
+              ) : undefined
+            }
+            secondary={
+              isProductResource ? (
+                <div
+                  className="w-full divide-y divide-border/60"
+                  aria-label="商品与 SKU 筛选条件"
                 >
-                  <ToggleGroupItem value="all">全部</ToggleGroupItem>
-                  <ToggleGroupItem value="enabled">
-                    {masterDataCopy.lifecycleEnabled}
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="disabled">
-                    {masterDataCopy.lifecycleDisabled}
-                  </ToggleGroupItem>
-                </ToggleGroup>
-                <OptionCombobox
-                  className="w-[10.5rem]"
-                  value={revisionTiming}
-                  aria-label={masterDataCopy.filterVersionAria}
-                  onValueChange={(v) => {
-                    changeRevisionTiming(
-                      (v ?? "all") as typeof revisionTiming
-                    )
-                  }}
-                  options={[
-                    { value: "all", label: masterDataCopy.versionAll },
-                    {
-                      value: "current",
-                      label: masterDataCopy.versionCurrent,
-                    },
-                    {
-                      value: "future",
-                      label: masterDataCopy.versionFuture,
-                    },
-                  ]}
-                  size="sm"
-                  allowClear={false}
-                  placeholder={masterDataCopy.versionAll}
-                />
-              </>
+                  <section
+                    className="grid gap-2 px-1 py-2 md:grid-cols-[5rem_minmax(0,1fr)] md:items-start"
+                    aria-labelledby="product-filter-group-ownership"
+                  >
+                    <h3
+                      id="product-filter-group-ownership"
+                      className="text-xs font-medium text-muted-foreground md:pt-2.5"
+                    >
+                      商品归属
+                    </h3>
+                    <div className="min-w-0 space-y-2">
+                      <FixedOptionRadioFilter
+                        label="类型"
+                        value={productKind ?? "all"}
+                        onValueChange={(value) =>
+                          changeProductKind(value === "all" ? null : value)
+                        }
+                        options={PRODUCT_KIND_RADIO_FILTER_OPTIONS}
+                      />
+                      <div className="grid min-w-0 gap-2 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:items-center">
+                        <span className="text-sm text-muted-foreground">
+                          分类与品牌
+                        </span>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <OptionCombobox
+                            className="w-44"
+                            value={productCategoryId ?? null}
+                            aria-label="商品分类"
+                            onValueChange={(value) => {
+                              patchUrl({
+                                productCategoryId: value,
+                                page: null,
+                              })
+                              resetPagination()
+                            }}
+                            options={
+                              productFilterOptionsQuery.data?.categories ?? []
+                            }
+                            loading={productFilterOptionsQuery.isPending}
+                            placeholder="全部分类"
+                            searchPlaceholder="搜索分类名称或代码"
+                          />
+                          <OptionCombobox
+                            className="w-44"
+                            value={productBrandId ?? null}
+                            aria-label="商品品牌"
+                            onValueChange={(value) => {
+                              patchUrl({ productBrandId: value, page: null })
+                              resetPagination()
+                            }}
+                            options={
+                              productFilterOptionsQuery.data?.brands ?? []
+                            }
+                            loading={productFilterOptionsQuery.isPending}
+                            placeholder="全部品牌"
+                            searchPlaceholder="搜索品牌名称或代码"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section
+                    className="grid gap-2 px-1 py-2 md:grid-cols-[5rem_minmax(0,1fr)] md:items-start"
+                    aria-labelledby="product-filter-group-status"
+                  >
+                    <h3
+                      id="product-filter-group-status"
+                      className="text-xs font-medium text-muted-foreground md:pt-2.5"
+                    >
+                      状态
+                    </h3>
+                    <div className="min-w-0 space-y-2">
+                      <FixedOptionRadioFilter
+                        label="启停"
+                        value={lifecycleStatus}
+                        onValueChange={changeLifecycle}
+                        options={LIFECYCLE_RADIO_FILTER_OPTIONS}
+                        aria-label={masterDataCopy.filterLifecycleAria}
+                      />
+                      <FixedOptionRadioFilter
+                        label="版本"
+                        value={revisionTiming}
+                        onValueChange={changeRevisionTiming}
+                        options={REVISION_TIMING_RADIO_FILTER_OPTIONS}
+                        aria-label={masterDataCopy.filterVersionAria}
+                      />
+                      <FixedOptionRadioFilter
+                        label="上架"
+                        value={productListingStatus ?? "all"}
+                        onValueChange={(value) => {
+                          patchUrl({
+                            productListingStatus:
+                              value === "all" ? null : value,
+                            page: null,
+                          })
+                          resetPagination()
+                        }}
+                        options={PRODUCT_LISTING_RADIO_FILTER_OPTIONS}
+                      />
+                    </div>
+                  </section>
+
+                  <section
+                    className="grid gap-2 px-1 py-2 md:grid-cols-[5rem_minmax(0,1fr)] md:items-start"
+                    aria-labelledby="product-filter-group-sku"
+                  >
+                    <h3
+                      id="product-filter-group-sku"
+                      className="text-xs font-medium text-muted-foreground md:pt-2.5"
+                    >
+                      SKU 条件
+                    </h3>
+                    <div className="min-w-0 space-y-2">
+                      <FixedOptionRadioFilter
+                        label="供给覆盖"
+                        value={productSupplyCoverage ?? "all"}
+                        onValueChange={(value) => {
+                          patchUrl({
+                            productSupplyCoverage:
+                              value === "all" ? null : value,
+                            page: null,
+                          })
+                          resetPagination()
+                        }}
+                        options={PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS}
+                      />
+                      <div className="grid min-w-0 gap-2 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:items-center">
+                        <span className="text-sm text-muted-foreground">
+                          供应商
+                        </span>
+                        <OptionCombobox
+                          className="w-52"
+                          value={productSupplierId ?? null}
+                          onValueChange={(value) => {
+                            patchUrl({
+                              productSupplierId: value,
+                              page: null,
+                            })
+                            resetPagination()
+                          }}
+                          options={
+                            productFilterOptionsQuery.data?.suppliers ?? []
+                          }
+                          loading={productFilterOptionsQuery.isPending}
+                          placeholder="全部供应商"
+                          searchPlaceholder="搜索供应商名称或代码"
+                        />
+                      </div>
+                      <form
+                        className="grid min-w-0 gap-2 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:items-center"
+                        onSubmit={(event) => {
+                          event.preventDefault()
+                          applyProductSalesPriceRange()
+                        }}
+                      >
+                        <span className="text-sm text-muted-foreground">
+                          销售价
+                        </span>
+                        <div className="flex flex-wrap items-center gap-1.5 text-sm">
+                          <Input
+                            className="w-28"
+                            value={productSalesPriceMinDraft}
+                            onChange={(event) => {
+                              setProductSalesPriceMinDraft(event.target.value)
+                              setProductSalesPriceError(null)
+                            }}
+                            inputMode="decimal"
+                            autoComplete="off"
+                            placeholder="最低价"
+                            aria-label="最低销售价"
+                            aria-invalid={Boolean(productSalesPriceError)}
+                            aria-describedby="product-sales-price-error"
+                          />
+                          <span className="text-muted-foreground">至</span>
+                          <Input
+                            className="w-28"
+                            value={productSalesPriceMaxDraft}
+                            onChange={(event) => {
+                              setProductSalesPriceMaxDraft(event.target.value)
+                              setProductSalesPriceError(null)
+                            }}
+                            inputMode="decimal"
+                            autoComplete="off"
+                            placeholder="最高价"
+                            aria-label="最高销售价"
+                            aria-invalid={Boolean(productSalesPriceError)}
+                            aria-describedby="product-sales-price-error"
+                          />
+                          <span className="text-muted-foreground">元</span>
+                          <Button type="submit" variant="outline">
+                            应用
+                          </Button>
+                          {productSalesPriceError ? (
+                            <span
+                              id="product-sales-price-error"
+                              className="basis-full text-xs text-destructive"
+                              role="alert"
+                            >
+                              {productSalesPriceError}
+                            </span>
+                          ) : null}
+                        </div>
+                      </form>
+                    </div>
+                  </section>
+                </div>
+              ) : undefined
             }
             actions={
               <>

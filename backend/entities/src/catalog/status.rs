@@ -140,6 +140,65 @@ impl ProductListingStatus {
         }
         Self::Unlisted
     }
+
+    /// 返回用于查询与传输的稳定代码。
+    ///
+    /// # 返回
+    /// 返回 `listed`、`partially_listed` 或 `unlisted`。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Listed => "listed",
+            Self::PartiallyListed => "partially_listed",
+            Self::Unlisted => "unlisted",
+        }
+    }
+}
+
+/// 当前启用 SKU 在某一资料维度上的覆盖状态。
+///
+/// 没有启用 SKU 时按 [`Self::None`] 处理，避免把空集合误判为完整。
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SkuCoverageStatus {
+    /// 每个当前启用 SKU 都具备目标资料。
+    Complete,
+    /// 仅部分当前启用 SKU 具备目标资料。
+    Partial,
+    /// 没有当前启用 SKU 具备目标资料，或商品没有当前启用 SKU。
+    #[default]
+    None,
+}
+
+impl SkuCoverageStatus {
+    /// 按已覆盖数量与当前启用 SKU 总数计算覆盖状态。
+    ///
+    /// # 参数
+    /// * `covered_sku_count` - 已具备目标资料的 SKU 数
+    /// * `sku_count` - 当前启用 SKU 总数
+    ///
+    /// # 返回
+    /// 返回完整、部分或无覆盖状态。
+    pub fn inherited(covered_sku_count: u32, sku_count: u32) -> Self {
+        if sku_count > 0 && covered_sku_count == sku_count {
+            return Self::Complete;
+        }
+        if covered_sku_count > 0 {
+            return Self::Partial;
+        }
+        Self::None
+    }
+
+    /// 返回用于查询与传输的稳定代码。
+    ///
+    /// # 返回
+    /// 返回 `complete`、`partial` 或 `none`。
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Complete => "complete",
+            Self::Partial => "partial",
+            Self::None => "none",
+        }
+    }
 }
 
 #[cfg(test)]
@@ -199,5 +258,16 @@ mod tests {
             ProductListingStatus::inherited(0, 0),
             ProductListingStatus::Unlisted
         );
+        assert_eq!(ProductListingStatus::PartiallyListed.as_str(), "partially_listed");
+    }
+
+    /// SKU 资料覆盖状态必须区分完整、部分与无覆盖，空集合不能视为完整。
+    #[test]
+    fn sku_coverage_status_is_inherited_from_counts() {
+        assert_eq!(SkuCoverageStatus::inherited(2, 2), SkuCoverageStatus::Complete);
+        assert_eq!(SkuCoverageStatus::inherited(1, 2), SkuCoverageStatus::Partial);
+        assert_eq!(SkuCoverageStatus::inherited(0, 2), SkuCoverageStatus::None);
+        assert_eq!(SkuCoverageStatus::inherited(0, 0), SkuCoverageStatus::None);
+        assert_eq!(SkuCoverageStatus::Complete.as_str(), "complete");
     }
 }
