@@ -84,7 +84,9 @@ import {
   type MasterDataListItem,
   type MasterDataResource,
   type ProductKind,
+  type ProductListingFilter,
   type ProductListSkuSummary,
+  type ProductSkuCoverageFilter,
 } from "@/features/master-data/types"
 import { RegisterSupplyForSkuDialog } from "@/features/supplier-offerings/offering-dialogs"
 import { useSupplierOfferingsForSkusQuery } from "@/features/supplier-offerings/queries"
@@ -424,6 +426,31 @@ function MasterDataListWorkspace({
       : 0
 
   const [searchDraft, setSearchDraft] = React.useState(q)
+  // 商品筛选面板为"编辑草稿 + 点击搜索才提交"模式：以下均为本地草稿，
+  // 与 URL 事实源的同步只发生在挂载、外部 URL 变化（后退/清除）与提交时。
+  const [productKindDraft, setProductKindDraft] = React.useState<
+    ProductKind | "all"
+  >(productKind ?? "all")
+  const [lifecycleStatusDraft, setLifecycleStatusDraft] = React.useState<
+    "enabled" | "disabled" | "all"
+  >(lifecycleStatus)
+  const [revisionTimingDraft, setRevisionTimingDraft] = React.useState<
+    "current" | "future" | "all"
+  >(revisionTiming)
+  const [productListingStatusDraft, setProductListingStatusDraft] =
+    React.useState<ProductListingFilter | "all">(productListingStatus ?? "all")
+  const [productSupplyCoverageDraft, setProductSupplyCoverageDraft] =
+    React.useState<ProductSkuCoverageFilter | "all">(
+      productSupplyCoverage ?? "all"
+    )
+  const [productCategoryIdDraft, setProductCategoryIdDraft] = React.useState<
+    string | null
+  >(productCategoryId ?? null)
+  const [productBrandIdDraft, setProductBrandIdDraft] = React.useState<
+    string | null
+  >(productBrandId ?? null)
+  const [productSupplierIdDraft, setProductSupplierIdDraft] =
+    React.useState<string | null>(productSupplierId ?? null)
   const [productSalesPriceMinDraft, setProductSalesPriceMinDraft] =
     React.useState(productSalesPriceMin ?? "")
   const [productSalesPriceMaxDraft, setProductSalesPriceMaxDraft] =
@@ -489,22 +516,30 @@ function MasterDataListWorkspace({
     [patchUrl, resetPagination, revisionTiming]
   )
 
-  const changeProductKind = React.useCallback(
-    (next: ProductKind | null) => {
-      if (next === productKind) return
-      patchUrl({ productKind: next, page: null })
-      resetPagination()
-    },
-    [patchUrl, productKind, resetPagination]
-  )
-
-  const applyProductSalesPriceRange = React.useCallback(() => {
+  /** 商品筛选面板整体提交：点击"搜索"才把全部草稿字段一次性写入 URL。 */
+  const applyProductFilters = React.useCallback(() => {
     const minimum = productSalesPriceMinDraft.trim()
     const maximum = productSalesPriceMaxDraft.trim()
     const error = productSalesPriceRangeError(minimum, maximum)
     setProductSalesPriceError(error)
     if (error) return
     patchUrl({
+      q: searchDraft.trim() || null,
+      productKind: productKindDraft === "all" ? null : productKindDraft,
+      lifecycleStatus:
+        lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
+      metricKey: lifecycleStatusDraft === "all" ? null : lifecycleStatusDraft,
+      revisionTiming:
+        revisionTimingDraft === "all" ? null : revisionTimingDraft,
+      productListingStatus:
+        productListingStatusDraft === "all" ? null : productListingStatusDraft,
+      productSupplyCoverage:
+        productSupplyCoverageDraft === "all"
+          ? null
+          : productSupplyCoverageDraft,
+      productCategoryId: productCategoryIdDraft,
+      productBrandId: productBrandIdDraft,
+      productSupplierId: productSupplierIdDraft,
       productSalesPriceMin: minimum || null,
       productSalesPriceMax: maximum || null,
       page: null,
@@ -512,13 +547,30 @@ function MasterDataListWorkspace({
     resetPagination()
   }, [
     patchUrl,
-    productSalesPriceMaxDraft,
-    productSalesPriceMinDraft,
     resetPagination,
+    searchDraft,
+    productKindDraft,
+    lifecycleStatusDraft,
+    revisionTimingDraft,
+    productListingStatusDraft,
+    productSupplyCoverageDraft,
+    productCategoryIdDraft,
+    productBrandIdDraft,
+    productSupplierIdDraft,
+    productSalesPriceMinDraft,
+    productSalesPriceMaxDraft,
   ])
 
   const clearAllFilters = React.useCallback(() => {
     setSearchDraft("")
+    setProductKindDraft("all")
+    setLifecycleStatusDraft("all")
+    setRevisionTimingDraft("all")
+    setProductListingStatusDraft("all")
+    setProductSupplyCoverageDraft("all")
+    setProductCategoryIdDraft(null)
+    setProductBrandIdDraft(null)
+    setProductSupplierIdDraft(null)
     setProductSalesPriceMinDraft("")
     setProductSalesPriceMaxDraft("")
     setProductSalesPriceError(null)
@@ -546,10 +598,29 @@ function MasterDataListWorkspace({
   }, [q])
 
   React.useEffect(() => {
+    setProductKindDraft(productKind ?? "all")
+    setLifecycleStatusDraft(lifecycleStatus)
+    setRevisionTimingDraft(revisionTiming)
+    setProductListingStatusDraft(productListingStatus ?? "all")
+    setProductSupplyCoverageDraft(productSupplyCoverage ?? "all")
+    setProductCategoryIdDraft(productCategoryId ?? null)
+    setProductBrandIdDraft(productBrandId ?? null)
+    setProductSupplierIdDraft(productSupplierId ?? null)
     setProductSalesPriceMinDraft(productSalesPriceMin ?? "")
     setProductSalesPriceMaxDraft(productSalesPriceMax ?? "")
     setProductSalesPriceError(null)
-  }, [productSalesPriceMax, productSalesPriceMin])
+  }, [
+    productKind,
+    lifecycleStatus,
+    revisionTiming,
+    productListingStatus,
+    productSupplyCoverage,
+    productCategoryId,
+    productBrandId,
+    productSupplierId,
+    productSalesPriceMax,
+    productSalesPriceMin,
+  ])
 
   // URL page 回读（后退/前进/分享恢复）
   React.useEffect(() => {
@@ -1505,37 +1576,225 @@ function MasterDataListWorkspace({
             : masterDataCopy.listDescription(rows.length)
         }
         toolbar={
-          <ListToolbar
-            search={
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  if (searchDraft.trim() === q) return
-                  patchUrl({ q: searchDraft.trim() || null, page: null })
-                  resetPagination()
-                }}
-              >
-                <InputGroup>
-                  <InputGroupAddon>
-                    <SearchIcon aria-hidden="true" />
-                  </InputGroupAddon>
-                  <InputGroupInput
-                    ref={searchInputRef}
-                    value={searchDraft}
-                    onChange={(e) => setSearchDraft(e.target.value)}
-                    placeholder={masterDataSearchPlaceholder(resource)}
-                    aria-label={masterDataCopy.searchAria}
-                  />
-                  <InputGroupAddon align="inline-end">
-                    <InputGroupButton type="submit" aria-label="执行搜索">
-                      搜索
-                    </InputGroupButton>
-                  </InputGroupAddon>
-                </InputGroup>
-              </form>
-            }
-            filters={
-              !isProductResource ? (
+          isProductResource ? (
+            <form
+              onSubmit={(event) => {
+                event.preventDefault()
+                applyProductFilters()
+              }}
+            >
+              <ListToolbar
+                search={undefined}
+                filters={undefined}
+                secondary={
+                  <div
+                    className="flex w-full flex-col gap-3 rounded-lg border border-border/60 bg-muted/30 px-3 py-3"
+                    aria-label="商品筛选条件"
+                  >
+                    <InputGroup>
+                      <InputGroupAddon>
+                        <SearchIcon aria-hidden="true" />
+                      </InputGroupAddon>
+                      <InputGroupInput
+                        ref={searchInputRef}
+                        value={searchDraft}
+                        onChange={(e) => setSearchDraft(e.target.value)}
+                        placeholder={masterDataSearchPlaceholder(resource)}
+                        aria-label={masterDataCopy.searchAria}
+                      />
+                    </InputGroup>
+                    <FixedOptionRadioFilter
+                      label="类型"
+                      value={productKindDraft}
+                      onValueChange={setProductKindDraft}
+                      options={PRODUCT_KIND_RADIO_FILTER_OPTIONS}
+                    />
+                    <FixedOptionRadioFilter
+                      label="启停"
+                      value={lifecycleStatusDraft}
+                      onValueChange={setLifecycleStatusDraft}
+                      options={LIFECYCLE_RADIO_FILTER_OPTIONS}
+                      aria-label={masterDataCopy.filterLifecycleAria}
+                    />
+                    <FixedOptionRadioFilter
+                      label="版本"
+                      value={revisionTimingDraft}
+                      onValueChange={setRevisionTimingDraft}
+                      options={REVISION_TIMING_RADIO_FILTER_OPTIONS}
+                      aria-label={masterDataCopy.filterVersionAria}
+                    />
+                    <FixedOptionRadioFilter
+                      label="上架"
+                      value={productListingStatusDraft}
+                      onValueChange={setProductListingStatusDraft}
+                      options={PRODUCT_LISTING_RADIO_FILTER_OPTIONS}
+                    />
+                    <FixedOptionRadioFilter
+                      label="供给覆盖"
+                      value={productSupplyCoverageDraft}
+                      onValueChange={setProductSupplyCoverageDraft}
+                      options={PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS}
+                    />
+
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                      <label className="flex min-w-0 flex-col gap-1.5 text-sm">
+                        <span className="text-muted-foreground">分类</span>
+                        <OptionCombobox
+                          className="w-full"
+                          value={productCategoryIdDraft}
+                          aria-label="商品分类"
+                          onValueChange={setProductCategoryIdDraft}
+                          options={
+                            productFilterOptionsQuery.data?.categories ?? []
+                          }
+                          loading={productFilterOptionsQuery.isPending}
+                          placeholder="全部分类"
+                          searchPlaceholder="搜索分类名称或代码"
+                        />
+                      </label>
+                      <label className="flex min-w-0 flex-col gap-1.5 text-sm">
+                        <span className="text-muted-foreground">品牌</span>
+                        <OptionCombobox
+                          className="w-full"
+                          value={productBrandIdDraft}
+                          aria-label="商品品牌"
+                          onValueChange={setProductBrandIdDraft}
+                          options={
+                            productFilterOptionsQuery.data?.brands ?? []
+                          }
+                          loading={productFilterOptionsQuery.isPending}
+                          placeholder="全部品牌"
+                          searchPlaceholder="搜索品牌名称或代码"
+                        />
+                      </label>
+                      <label className="flex min-w-0 flex-col gap-1.5 text-sm">
+                        <span className="text-muted-foreground">供应商</span>
+                        <OptionCombobox
+                          className="w-full"
+                          value={productSupplierIdDraft}
+                          aria-label="供应商"
+                          onValueChange={setProductSupplierIdDraft}
+                          options={
+                            productFilterOptionsQuery.data?.suppliers ?? []
+                          }
+                          loading={productFilterOptionsQuery.isPending}
+                          placeholder="全部供应商"
+                          searchPlaceholder="搜索供应商名称或代码"
+                        />
+                      </label>
+                      <div className="flex min-w-0 flex-col gap-1.5 text-sm">
+                        <span className="text-muted-foreground">销售价</span>
+                        <div className="flex items-center gap-1.5">
+                          <Input
+                            className="w-0 min-w-0 flex-1"
+                            value={productSalesPriceMinDraft}
+                            onChange={(event) => {
+                              setProductSalesPriceMinDraft(
+                                event.target.value
+                              )
+                              setProductSalesPriceError(null)
+                            }}
+                            inputMode="decimal"
+                            autoComplete="off"
+                            placeholder="最低价"
+                            aria-label="最低销售价"
+                            aria-invalid={Boolean(productSalesPriceError)}
+                            aria-describedby="product-sales-price-error"
+                          />
+                          <span className="text-muted-foreground">至</span>
+                          <Input
+                            className="w-0 min-w-0 flex-1"
+                            value={productSalesPriceMaxDraft}
+                            onChange={(event) => {
+                              setProductSalesPriceMaxDraft(
+                                event.target.value
+                              )
+                              setProductSalesPriceError(null)
+                            }}
+                            inputMode="decimal"
+                            autoComplete="off"
+                            placeholder="最高价"
+                            aria-label="最高销售价"
+                            aria-invalid={Boolean(productSalesPriceError)}
+                            aria-describedby="product-sales-price-error"
+                          />
+                        </div>
+                        {productSalesPriceError ? (
+                          <span
+                            id="product-sales-price-error"
+                            className="text-xs text-destructive"
+                            role="alert"
+                          >
+                            {productSalesPriceError}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end">
+                      <Button type="submit" size="sm">
+                        <SearchIcon
+                          data-icon="inline-start"
+                          aria-hidden="true"
+                        />
+                        搜索
+                      </Button>
+                    </div>
+                  </div>
+                }
+                actions={
+                  <>
+                    <span
+                      className="text-xs text-muted-foreground"
+                      aria-live="polite"
+                    >
+                      {resourceLabel(resource)} · {rows.length} 条
+                    </span>
+                    {hasActiveFilters ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        onClick={clearAllFilters}
+                      >
+                        清除筛选
+                      </Button>
+                    ) : null}
+                  </>
+                }
+              />
+            </form>
+          ) : (
+            <ListToolbar
+              search={
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    if (searchDraft.trim() === q) return
+                    patchUrl({ q: searchDraft.trim() || null, page: null })
+                    resetPagination()
+                  }}
+                >
+                  <InputGroup>
+                    <InputGroupAddon>
+                      <SearchIcon aria-hidden="true" />
+                    </InputGroupAddon>
+                    <InputGroupInput
+                      ref={searchInputRef}
+                      value={searchDraft}
+                      onChange={(e) => setSearchDraft(e.target.value)}
+                      placeholder={masterDataSearchPlaceholder(resource)}
+                      aria-label={masterDataCopy.searchAria}
+                    />
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupButton type="submit" aria-label="执行搜索">
+                        搜索
+                      </InputGroupButton>
+                    </InputGroupAddon>
+                  </InputGroup>
+                </form>
+              }
+              filters={
                 <>
                   <ToggleGroup
                     value={[lifecycleStatus]}
@@ -1583,224 +1842,8 @@ function MasterDataListWorkspace({
                     placeholder={masterDataCopy.versionAll}
                   />
                 </>
-              ) : undefined
-            }
-            secondary={
-              isProductResource ? (
-                <div
-                  className="w-full divide-y divide-border/60"
-                  aria-label="商品与 SKU 筛选条件"
-                >
-                  <section
-                    className="grid gap-2 px-1 py-2 md:grid-cols-[5rem_minmax(0,1fr)] md:items-start"
-                    aria-labelledby="product-filter-group-ownership"
-                  >
-                    <h3
-                      id="product-filter-group-ownership"
-                      className="text-xs font-medium text-muted-foreground md:pt-2.5"
-                    >
-                      商品归属
-                    </h3>
-                    <div className="min-w-0 space-y-2">
-                      <FixedOptionRadioFilter
-                        label="类型"
-                        value={productKind ?? "all"}
-                        onValueChange={(value) =>
-                          changeProductKind(value === "all" ? null : value)
-                        }
-                        options={PRODUCT_KIND_RADIO_FILTER_OPTIONS}
-                      />
-                      <div className="grid min-w-0 gap-2 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:items-center">
-                        <span className="text-sm text-muted-foreground">
-                          分类与品牌
-                        </span>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <OptionCombobox
-                            className="w-44"
-                            value={productCategoryId ?? null}
-                            aria-label="商品分类"
-                            onValueChange={(value) => {
-                              patchUrl({
-                                productCategoryId: value,
-                                page: null,
-                              })
-                              resetPagination()
-                            }}
-                            options={
-                              productFilterOptionsQuery.data?.categories ?? []
-                            }
-                            loading={productFilterOptionsQuery.isPending}
-                            placeholder="全部分类"
-                            searchPlaceholder="搜索分类名称或代码"
-                          />
-                          <OptionCombobox
-                            className="w-44"
-                            value={productBrandId ?? null}
-                            aria-label="商品品牌"
-                            onValueChange={(value) => {
-                              patchUrl({ productBrandId: value, page: null })
-                              resetPagination()
-                            }}
-                            options={
-                              productFilterOptionsQuery.data?.brands ?? []
-                            }
-                            loading={productFilterOptionsQuery.isPending}
-                            placeholder="全部品牌"
-                            searchPlaceholder="搜索品牌名称或代码"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </section>
-
-                  <section
-                    className="grid gap-2 px-1 py-2 md:grid-cols-[5rem_minmax(0,1fr)] md:items-start"
-                    aria-labelledby="product-filter-group-status"
-                  >
-                    <h3
-                      id="product-filter-group-status"
-                      className="text-xs font-medium text-muted-foreground md:pt-2.5"
-                    >
-                      状态
-                    </h3>
-                    <div className="min-w-0 space-y-2">
-                      <FixedOptionRadioFilter
-                        label="启停"
-                        value={lifecycleStatus}
-                        onValueChange={changeLifecycle}
-                        options={LIFECYCLE_RADIO_FILTER_OPTIONS}
-                        aria-label={masterDataCopy.filterLifecycleAria}
-                      />
-                      <FixedOptionRadioFilter
-                        label="版本"
-                        value={revisionTiming}
-                        onValueChange={changeRevisionTiming}
-                        options={REVISION_TIMING_RADIO_FILTER_OPTIONS}
-                        aria-label={masterDataCopy.filterVersionAria}
-                      />
-                      <FixedOptionRadioFilter
-                        label="上架"
-                        value={productListingStatus ?? "all"}
-                        onValueChange={(value) => {
-                          patchUrl({
-                            productListingStatus:
-                              value === "all" ? null : value,
-                            page: null,
-                          })
-                          resetPagination()
-                        }}
-                        options={PRODUCT_LISTING_RADIO_FILTER_OPTIONS}
-                      />
-                    </div>
-                  </section>
-
-                  <section
-                    className="grid gap-2 px-1 py-2 md:grid-cols-[5rem_minmax(0,1fr)] md:items-start"
-                    aria-labelledby="product-filter-group-sku"
-                  >
-                    <h3
-                      id="product-filter-group-sku"
-                      className="text-xs font-medium text-muted-foreground md:pt-2.5"
-                    >
-                      SKU 条件
-                    </h3>
-                    <div className="min-w-0 space-y-2">
-                      <FixedOptionRadioFilter
-                        label="供给覆盖"
-                        value={productSupplyCoverage ?? "all"}
-                        onValueChange={(value) => {
-                          patchUrl({
-                            productSupplyCoverage:
-                              value === "all" ? null : value,
-                            page: null,
-                          })
-                          resetPagination()
-                        }}
-                        options={PRODUCT_COVERAGE_RADIO_FILTER_OPTIONS}
-                      />
-                      <div className="grid min-w-0 gap-2 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:items-center">
-                        <span className="text-sm text-muted-foreground">
-                          供应商
-                        </span>
-                        <OptionCombobox
-                          className="w-52"
-                          value={productSupplierId ?? null}
-                          onValueChange={(value) => {
-                            patchUrl({
-                              productSupplierId: value,
-                              page: null,
-                            })
-                            resetPagination()
-                          }}
-                          options={
-                            productFilterOptionsQuery.data?.suppliers ?? []
-                          }
-                          loading={productFilterOptionsQuery.isPending}
-                          placeholder="全部供应商"
-                          searchPlaceholder="搜索供应商名称或代码"
-                        />
-                      </div>
-                      <form
-                        className="grid min-w-0 gap-2 sm:grid-cols-[4.5rem_minmax(0,1fr)] sm:items-center"
-                        onSubmit={(event) => {
-                          event.preventDefault()
-                          applyProductSalesPriceRange()
-                        }}
-                      >
-                        <span className="text-sm text-muted-foreground">
-                          销售价
-                        </span>
-                        <div className="flex flex-wrap items-center gap-1.5 text-sm">
-                          <Input
-                            className="w-28"
-                            value={productSalesPriceMinDraft}
-                            onChange={(event) => {
-                              setProductSalesPriceMinDraft(event.target.value)
-                              setProductSalesPriceError(null)
-                            }}
-                            inputMode="decimal"
-                            autoComplete="off"
-                            placeholder="最低价"
-                            aria-label="最低销售价"
-                            aria-invalid={Boolean(productSalesPriceError)}
-                            aria-describedby="product-sales-price-error"
-                          />
-                          <span className="text-muted-foreground">至</span>
-                          <Input
-                            className="w-28"
-                            value={productSalesPriceMaxDraft}
-                            onChange={(event) => {
-                              setProductSalesPriceMaxDraft(event.target.value)
-                              setProductSalesPriceError(null)
-                            }}
-                            inputMode="decimal"
-                            autoComplete="off"
-                            placeholder="最高价"
-                            aria-label="最高销售价"
-                            aria-invalid={Boolean(productSalesPriceError)}
-                            aria-describedby="product-sales-price-error"
-                          />
-                          <span className="text-muted-foreground">元</span>
-                          <Button type="submit" variant="outline">
-                            应用
-                          </Button>
-                          {productSalesPriceError ? (
-                            <span
-                              id="product-sales-price-error"
-                              className="basis-full text-xs text-destructive"
-                              role="alert"
-                            >
-                              {productSalesPriceError}
-                            </span>
-                          ) : null}
-                        </div>
-                      </form>
-                    </div>
-                  </section>
-                </div>
-              ) : undefined
-            }
-            actions={
+              }
+              actions={
               <>
                 <span
                   className="text-xs text-muted-foreground"
@@ -1821,6 +1864,7 @@ function MasterDataListWorkspace({
               </>
             }
           />
+          )
         }
         table={
           <DataTable
